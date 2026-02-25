@@ -38,21 +38,16 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.JoinOperator;
-import com.starrocks.analysis.SlotId;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TableRef;
-import com.starrocks.analysis.TupleId;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.IdGenerator;
-import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.JoinOperator;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.operator.UKFKConstraints;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TJoinDistributionMode;
@@ -61,6 +56,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -72,12 +68,13 @@ import java.util.stream.Collectors;
 public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNode {
     private static final Logger LOG = LogManager.getLogger(JoinNode.class);
 
-    protected final TableRef innerRef;
     protected final JoinOperator joinOp;
     // predicates of the form 'a=b' or 'a<=>b'
     protected List<BinaryPredicate> eqJoinConjuncts = Lists.newArrayList();
     // join conjuncts from the JOIN clause that aren't equi-join predicates
     protected List<Expr> otherJoinConjuncts;
+    // ASOF JOIN temporal inequality condition for finding closest match (only one per ASOF JOIN)
+    protected BinaryPredicate asofJoinConjunct;
     protected boolean isPushDown;
     protected DistributionMode distrMode;
     protected String colocateReason = ""; // if can not do colocate join, set reason here
@@ -97,6 +94,11 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     // The partitionByExprs which need to check the probe side for partition join.
     protected List<Expr> probePartitionByExprs;
     protected boolean canLocalShuffle = false;
+    protected Map<SlotId, Expr> commonSlotMap;
+
+    // Only meaningful for skew join: 0=left child, 1=right child, -1=unknown/not skew join.
+    // TODO: Support runtime filters for right-skew joins safely, instead of disabling them.
+    protected int skewSideChildIndex = -1;
 
     public List<RuntimeFilterDescription> getBuildRuntimeFilters() {
         return buildRuntimeFilters;
@@ -106,39 +108,6 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         buildRuntimeFilters.removeIf(RuntimeFilterDescription::isHasRemoteTargets);
     }
 
-    public JoinNode(String planNodename, PlanNodeId id, PlanNode outer, PlanNode inner, TableRef innerRef,
-                    List<Expr> eqJoinConjuncts, List<Expr> otherJoinConjuncts) {
-        super(id, planNodename);
-        Preconditions.checkArgument(eqJoinConjuncts != null && !eqJoinConjuncts.isEmpty());
-        Preconditions.checkArgument(otherJoinConjuncts != null);
-        tupleIds.addAll(outer.getTupleIds());
-        tupleIds.addAll(inner.getTupleIds());
-        this.innerRef = innerRef;
-        this.joinOp = innerRef.getJoinOp();
-        for (Expr eqJoinPredicate : eqJoinConjuncts) {
-            Preconditions.checkArgument(eqJoinPredicate instanceof BinaryPredicate);
-            this.eqJoinConjuncts.add((BinaryPredicate) eqJoinPredicate);
-        }
-        this.distrMode = DistributionMode.NONE;
-        this.otherJoinConjuncts = otherJoinConjuncts;
-        children.add(outer);
-        children.add(inner);
-        this.isPushDown = false;
-
-        // Inherits all the nullable tuple from the children
-        // Mark tuples that form the "nullable" side of the outer join as nullable.
-        nullableTupleIds.addAll(inner.getNullableTupleIds());
-        nullableTupleIds.addAll(outer.getNullableTupleIds());
-        if (joinOp.equals(JoinOperator.FULL_OUTER_JOIN)) {
-            nullableTupleIds.addAll(outer.getTupleIds());
-            nullableTupleIds.addAll(inner.getTupleIds());
-        } else if (joinOp.equals(JoinOperator.LEFT_OUTER_JOIN)) {
-            nullableTupleIds.addAll(inner.getTupleIds());
-        } else if (joinOp.equals(JoinOperator.RIGHT_OUTER_JOIN)) {
-            nullableTupleIds.addAll(outer.getTupleIds());
-        }
-    }
-
     public JoinNode(String planNodename, PlanNodeId id, PlanNode outer, PlanNode inner, JoinOperator joinOp,
                     List<Expr> eqJoinConjuncts, List<Expr> otherJoinConjuncts) {
         super(id, planNodename);
@@ -146,7 +115,6 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         tupleIds.addAll(outer.getTupleIds());
         tupleIds.addAll(inner.getTupleIds());
 
-        innerRef = null;
         this.joinOp = joinOp;
         for (Expr eqJoinPredicate : eqJoinConjuncts) {
             Preconditions.checkArgument(eqJoinPredicate instanceof BinaryPredicate);
@@ -190,8 +158,16 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
         JoinOperator joinOp = getJoinOp();
         PlanNode inner = getChild(1);
-        if (!joinOp.isInnerJoin() && !joinOp.isLeftSemiJoin() && !joinOp.isRightJoin() && !joinOp.isCrossJoin()) {
+        if (!joinOp.isAnyInnerJoin() && !joinOp.isLeftSemiJoin() && !joinOp.isRightJoin() && !joinOp.isCrossJoin()) {
             return;
+        }
+
+        // TODO: Enable RF for right-skew joins once we can guarantee GRF contains skew values or
+        //       RF pushdown won't cross the split boundary into the skew branch.
+        if (this instanceof HashJoinNode hashJoinNode) {
+            if (hashJoinNode.isSkewJoin() && getSkewSideChildIndex() == 1) {
+                return;
+            }
         }
 
         if (distrMode.equals(DistributionMode.PARTITIONED) || distrMode.equals(DistributionMode.SHUFFLE_HASH_BUCKET)) {
@@ -207,6 +183,21 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
             }
         }
 
+        // if this is skew join's broadcast join and corresponding shuffle join decide not to generate grf
+        // this join node should not generate grf either
+        if (this instanceof HashJoinNode) {
+            HashJoinNode hashJoinNode = (HashJoinNode) this;
+            if (hashJoinNode.isSkewBroadJoin()) {
+                if (hashJoinNode.getSkewJoinFriend() != null) {
+                    HashJoinNode skewShuffleJoin = hashJoinNode.getSkewJoinFriend();
+                    if (skewShuffleJoin.getBuildRuntimeFilters() == null ||
+                            skewShuffleJoin.getBuildRuntimeFilters().isEmpty()) {
+                        return;
+                    }
+                }
+            }
+        }
+
         for (int i = 0; i < eqJoinConjuncts.size(); ++i) {
             BinaryPredicate joinConjunct = eqJoinConjuncts.get(i);
             Preconditions.checkArgument(BinaryPredicate.IS_EQ_NULL_PREDICATE.apply(joinConjunct) ||
@@ -214,6 +205,7 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
 
             RuntimeFilterDescription rf = new RuntimeFilterDescription(sessionVariable);
             rf.setBuildPlanNodeId(this.id.asInt());
+            rf.setBuildPlanNode(this);
             rf.setExprOrder(i);
             rf.setJoinMode(distrMode);
             rf.setEqualCount(eqJoinConjuncts.size());
@@ -226,7 +218,7 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
                 rf.setFilterId(runtimeFilterIdIdGenerator.getNextId().asInt());
                 ArrayList<TupleId> buildTupleIds = inner.getTupleIds();
                 // swap left and right if necessary, and always push down right.
-                if (!left.isBoundByTupleIds(buildTupleIds)) {
+                if (!ExprUtils.isBoundByTupleIds(left, buildTupleIds)) {
                     Expr temp = left;
                     left = right;
                     right = temp;
@@ -239,6 +231,13 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
                         new RuntimeFilterPushDownContext(rf, descTbl, execGroupSets);
                 if (getChild(0).pushDownRuntimeFilters(rfPushDownCxt, right, probePartitionByExprs)) {
                     buildRuntimeFilters.add(rf);
+                    // record i->rf in eqJoinConjunctsIndexToRf for skew shuffle join
+                    if (this instanceof HashJoinNode) {
+                        HashJoinNode hashJoinNode = (HashJoinNode) this;
+                        if (hashJoinNode.isSkewShuffleJoin()) {
+                            hashJoinNode.getEqJoinConjunctsIndexToRfId().put(i, rf.getFilterId());
+                        }
+                    }
                 }
             } else {
                 // For cross-join, the filter could only be pushed down to left side when
@@ -246,7 +245,7 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
                 if (!(left instanceof SlotRef)) {
                     continue;
                 }
-                if (!right.isBoundByTupleIds(getChild(1).getTupleIds())) {
+                if (!ExprUtils.isBoundByTupleIds(right, getChild(1).getTupleIds())) {
                     continue;
                 }
 
@@ -274,12 +273,12 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
             Expr lhs = eqConjunct.getChild(0);
             Expr rhs = eqConjunct.getChild(1);
             // distinguish lhs/rhs belongs to left child or right child to decrease iterative times.
-            if ((lhs instanceof SlotRef) && expr.isBound(((SlotRef) lhs).getSlotId()) ||
-                    (rhs instanceof SlotRef) && expr.isBound(((SlotRef) rhs).getSlotId())) {
-                if (lhs.isBoundByTupleIds(getChild(childIdx).getTupleIds())) {
+            if ((lhs instanceof SlotRef) && ExprUtils.isBound(expr, ((SlotRef) lhs).getSlotId()) ||
+                    (rhs instanceof SlotRef) && ExprUtils.isBound(expr, ((SlotRef) rhs).getSlotId())) {
+                if (ExprUtils.isBoundByTupleIds(lhs, getChild(childIdx).getTupleIds())) {
                     newSlotExprs.add(lhs);
                 }
-                if (rhs.isBoundByTupleIds(getChild(childIdx).getTupleIds())) {
+                if (ExprUtils.isBoundByTupleIds(rhs, getChild(childIdx).getTupleIds())) {
                     newSlotExprs.add(rhs);
                 }
             }
@@ -319,7 +318,7 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         int slotId = probeSlotRefExpr.getSlotId().asInt();
         boolean probeExprIsNotJoinColumn = eqJoinConjuncts.stream()
                 .filter(conj -> conj.getOp().equals(BinaryType.EQ))
-                .noneMatch(conj -> conj.getUsedSlotIds().contains(slotId));
+                .noneMatch(conj -> ExprUtils.getUsedSlotIds(conj).contains(slotId));
 
         if (probeExprIsNotJoinColumn) {
             return Optional.empty();
@@ -337,11 +336,11 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
                                                                 Expr probeExpr,
                                                                 List<Expr> partitionByExprs) {
         List<Integer> sides = ImmutableList.of();
-        if (joinOp.isLeftAntiJoin() || joinOp.isLeftOuterJoin()) {
+        if (joinOp.isLeftAntiJoin() || joinOp.isAnyLeftOuterJoin()) {
             sides = ImmutableList.of(0);
         } else if (joinOp.isRightAntiJoin() || joinOp.isRightOuterJoin()) {
             sides = ImmutableList.of(1);
-        } else if (joinOp.isInnerJoin() || joinOp.isSemiJoin() || joinOp.isCrossJoin()) {
+        } else if (joinOp.isAnyInnerJoin() || joinOp.isSemiJoin() || joinOp.isCrossJoin()) {
             sides = ImmutableList.of(0, 1);
         }
 
@@ -378,7 +377,7 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
             return false;
         }
 
-        if (probeExpr.isBoundByTupleIds(getTupleIds())) {
+        if (ExprUtils.isBoundByTupleIds(probeExpr, getTupleIds())) {
 
             Optional<Boolean> pushDownResult = pushDownRuntimeFilterBilaterally(context, probeExpr, partitionByExprs);
             if (pushDownResult.isEmpty()) {
@@ -437,12 +436,13 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         partitionExprs = exprs;
     }
 
-    @Override
-    public void init(Analyzer analyzer) throws UserException {
+    public void setAsofJoinConjunct(Expr asofJoinConjunct) {
+        Preconditions.checkArgument(asofJoinConjunct instanceof BinaryPredicate);
+        this.asofJoinConjunct = (BinaryPredicate) asofJoinConjunct;
     }
 
     @Override
-    public void computeStats(Analyzer analyzer) {
+    public void computeStats() {
     }
 
     @Override
@@ -475,6 +475,18 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         this.ukfkProperty = ukfkProperty;
     }
 
+    public void setCommonSlotMap(Map<SlotId, Expr> commonSlotMap) {
+        this.commonSlotMap = commonSlotMap;
+    }
+
+    public int getSkewSideChildIndex() {
+        return skewSideChildIndex;
+    }
+
+    public void setSkewSideChildIndex(int skewSideChildIndex) {
+        this.skewSideChildIndex = skewSideChildIndex;
+    }
+
     @Override
     protected String getNodeExplainString(String detailPrefix, TExplainLevel detailLevel) {
         String distrModeStr =
@@ -494,20 +506,34 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         for (BinaryPredicate eqJoinPredicate : eqJoinConjuncts) {
             output.append(detailPrefix).append("equal join conjunct: ");
             if (detailLevel.equals(TExplainLevel.VERBOSE)) {
-                output.append(eqJoinPredicate.explain());
+                output.append(explainExpr(detailLevel, List.of(eqJoinPredicate)));
             } else {
-                output.append(eqJoinPredicate.toSql());
+                output.append(explainExpr(eqJoinPredicate));
             }
             output.append("\n");
         }
+
+        if (asofJoinConjunct != null) {
+            output.append(detailPrefix).append("asof join conjunct: ");
+            output.append(explainExpr(detailLevel, List.of(asofJoinConjunct))).append("\n");
+        }
+
         if (!otherJoinConjuncts.isEmpty()) {
-            output.append(detailPrefix + "other join predicates: ").append(
-                    getVerboseExplain(otherJoinConjuncts, detailLevel) + "\n");
+            output.append(detailPrefix).append("other join predicates: ")
+                    .append(explainExpr(detailLevel, otherJoinConjuncts)).append("\n");
         }
         if (!conjuncts.isEmpty()) {
             output.append(detailPrefix).append("other predicates: ")
-                    .append(getVerboseExplain(conjuncts, detailLevel))
+                    .append(explainExpr(detailLevel, conjuncts))
                     .append("\n");
+        }
+
+        if (commonSlotMap != null && !commonSlotMap.isEmpty()) {
+            output.append(detailPrefix).append("  common sub expr:").append("\n");
+            for (Map.Entry<SlotId, Expr> entry : commonSlotMap.entrySet()) {
+                output.append(detailPrefix).append("  <slot ").append(entry.getKey().toString()).append("> : ")
+                        .append(explainExpr(entry.getValue())).append("\n");
+            }
         }
 
         if (detailLevel == TExplainLevel.VERBOSE) {
@@ -598,5 +624,10 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
 
     public void setOutputSlots(List<Integer> outputSlots) {
         this.outputSlots = outputSlots;
+    }
+
+    @Override
+    public boolean needCollectExecStats() {
+        return true;
     }
 }

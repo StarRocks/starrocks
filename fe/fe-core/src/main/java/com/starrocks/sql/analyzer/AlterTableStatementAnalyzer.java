@@ -16,13 +16,14 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Sets;
 import com.starrocks.alter.AlterOpType;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.DdlException;
+import com.starrocks.catalog.TableName;
+import com.starrocks.catalog.TableOperation;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterClause;
@@ -30,6 +31,7 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DropIndexClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.common.MetaUtils;
 
 import java.util.List;
@@ -39,9 +41,13 @@ import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_BF_COLUMNS;
 
 public class AlterTableStatementAnalyzer {
     public static void analyze(AlterTableStmt statement, ConnectContext context) {
-        TableName tbl = statement.getTbl();
-        MetaUtils.normalizationTableName(context, tbl);
-        MetaUtils.checkNotSupportCatalog(tbl.getCatalog(), "ALTER");
+        TableRef tableRef = statement.getTableRef();
+        if (tableRef == null) {
+            throw new SemanticException("Table reference is null");
+        }
+        tableRef = AnalyzerUtils.normalizedTableRef(tableRef, context);
+        statement.setTableRef(tableRef);
+        TableName tbl = TableName.fromTableRef(tableRef);
 
         List<AlterClause> alterClauseList = statement.getAlterClauseList();
         if (alterClauseList == null || alterClauseList.isEmpty()) {
@@ -50,17 +56,23 @@ public class AlterTableStatementAnalyzer {
 
         checkAlterOpConflict(alterClauseList);
 
-        Database db = MetaUtils.getDatabase(context, tbl);
-        if (alterClauseList.stream().map(AlterClause::getOpType).anyMatch(AlterOpType::needCheckCapacity)) {
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, tbl.getCatalog(), tbl.getDb());
+        if (db == null) {
+            throw new SemanticException("Database %s is not found", tbl.getCatalogAndDb());
+        }
+
+        if (alterClauseList.stream().map(AlterOpType::getOpType).anyMatch(AlterOpType::needCheckCapacity)) {
             try {
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().checkClusterCapacity();
-                db.checkQuota();
-            } catch (DdlException e) {
+                GlobalStateMgr.getCurrentState().getLocalMetastore().checkDataSizeQuota(db);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().checkReplicaQuota(db);
+            } catch (StarRocksException e) {
                 throw new SemanticException(e.getMessage());
             }
         }
 
         Table table = MetaUtils.getSessionAwareTable(context, null, tbl);
+        MetaUtils.checkNotSupportCatalog(table, TableOperation.ALTER);
         if (table.isTemporaryTable()) {
             throw new SemanticException("temporary table doesn't support alter table statement");
         }
@@ -82,9 +94,9 @@ public class AlterTableStatementAnalyzer {
     private static void checkAlterOpConflict(List<AlterClause> alterClauses) {
         Set<AlterOpType> checkedAlterOpTypes = Sets.newHashSet();
         for (AlterClause alterClause : alterClauses) {
-            AlterOpType opType = alterClause.getOpType();
+            AlterOpType opType = AlterOpType.getOpType(alterClause);
             for (AlterOpType currentOp : checkedAlterOpTypes) {
-                if (!AlterOpType.COMPATIBITLITY_MATRIX[currentOp.ordinal()][opType.ordinal()]) {
+                if (!AlterOpType.COMPATIBILITY_MATRIX[currentOp.ordinal()][opType.ordinal()]) {
                     throw new SemanticException("Alter operation " + opType + " conflicts with operation " + currentOp);
                 }
             }

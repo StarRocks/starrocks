@@ -1,4 +1,4 @@
--- name: test_bucket_agg
+-- name: test_bucket_agg @mac
 set pipeline_dop=1;
 
 CREATE TABLE `t0` (

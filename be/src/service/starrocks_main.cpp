@@ -32,7 +32,6 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include <aws/core/Aws.h>
 #include <gperftools/malloc_extension.h>
 #include <sys/file.h>
 #include <unistd.h>
@@ -44,31 +43,38 @@
 #include <curl/curl.h>
 #include <thrift/TOutput.h>
 
+#ifndef __APPLE__
+#include <aws/core/Aws.h>
+
+#include "fs/s3/poco_http_client_factory.h"
+#endif
+
 #include <boost/algorithm/string.hpp>
 
 #include "agent/agent_server.h"
 #include "agent/heartbeat_server.h"
 #include "agent/status.h"
+#include "base/failpoint/fail_point.h"
+#include "base/uid_util.h"
 #include "common/config.h"
-#include "common/daemon.h"
 #include "common/logging.h"
+#include "common/process_exit.h"
 #include "common/status.h"
+#include "common/system/backend_options.h"
+#include "common/util/debug_util.h"
+#include "common/util/thrift_server.h"
 #include "exec/pipeline/query_context.h"
 #include "runtime/exec_env.h"
 #include "runtime/heartbeat_flags.h"
 #include "runtime/jdbc_driver_manager.h"
 #include "runtime/memory/roaring_hook.h"
-#include "service/backend_options.h"
+#include "service/daemon.h"
 #include "service/service.h"
 #include "service/staros_worker.h"
 #include "storage/options.h"
 #include "storage/storage_engine.h"
-#include "util/debug_util.h"
-#include "util/failpoint/fail_point.h"
 #include "util/logging.h"
 #include "util/thrift_rpc_helper.h"
-#include "util/thrift_server.h"
-#include "util/uid_util.h"
 
 #if !defined(__clang__) && defined(__GNUC__) && !_GLIBCXX_USE_CXX11_ABI
 #error _GLIBCXX_USE_CXX11_ABI must be non-zero
@@ -90,6 +96,7 @@ static void thrift_output(const char* x) {
 }
 } // namespace starrocks
 
+#ifndef __APPLE__
 static Aws::Utils::Logging::LogLevel parse_aws_sdk_log_level(const std::string& s) {
     Aws::Utils::Logging::LogLevel levels[] = {
             Aws::Utils::Logging::LogLevel::Off,   Aws::Utils::Logging::LogLevel::Fatal,
@@ -108,6 +115,7 @@ static Aws::Utils::Logging::LogLevel parse_aws_sdk_log_level(const std::string& 
     }
     return level;
 }
+#endif
 
 extern int meta_tool_main(int argc, char** argv);
 
@@ -199,6 +207,7 @@ int main(int argc, char** argv) {
         exit(-1);
     }
 
+#ifndef __APPLE__
     Aws::SDKOptions aws_sdk_options;
     // it is already initialized beforehead
     aws_sdk_options.httpOptions.initAndCleanupCurl = false;
@@ -212,6 +221,10 @@ int main(int argc, char** argv) {
         aws_sdk_options.httpOptions.compliantRfc3986Encoding = true;
     }
     Aws::InitAPI(aws_sdk_options);
+    if (starrocks::config::enable_poco_client_for_aws_sdk) {
+        Aws::Http::SetHttpClientFactory(std::make_shared<starrocks::poco::PocoHttpClientFactory>());
+    }
+#endif
 
     std::vector<starrocks::StorePath> paths;
     auto olap_res = starrocks::parse_conf_store_paths(starrocks::config::storage_root_path, &paths);
@@ -252,12 +265,14 @@ int main(int argc, char** argv) {
     // cn need to support all ops for cloudnative table, so just start_be
     starrocks::start_be(paths, as_cn);
 
-    if (starrocks::k_starrocks_exit_quick.load()) {
-        LOG(INFO) << "BE is shutting down，will exit quickly";
+    if (starrocks::process_quick_exit_in_progress()) {
+        LOG(INFO) << "BE is shutting down, will exit quickly";
         exit(0);
     }
 
+#ifndef __APPLE__
     Aws::ShutdownAPI(aws_sdk_options);
+#endif
 
     return 0;
 }

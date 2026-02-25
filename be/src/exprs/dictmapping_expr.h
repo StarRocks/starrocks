@@ -44,6 +44,8 @@ public:
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
 
+    bool is_dictmapping_expr() const override { return true; }
+
     template <class Rewrite>
     Status rewrite(Rewrite&& rewriter) {
         std::call_once(*_rewrite_once_flag, [&]() {

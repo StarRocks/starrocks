@@ -14,12 +14,11 @@
 
 #pragma once
 
-#include "column/chunk.h"
+#include "base/phmap/phmap.h"
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
 #include "exec/exec_node.h"
-#include "exec/join_hash_map.h"
-#include "util/phmap/phmap.h"
+#include "exec/join/join_hash_table.h"
 
 namespace starrocks {
 
@@ -58,12 +57,12 @@ private:
 
     static bool _has_null(const ColumnPtr& column);
 
-    void _init_hash_table_param(HashTableParam* param);
+    void _init_hash_table_param(HashTableParam* param, RuntimeState* runtime_state);
     // local join includes: broadcast join and colocate join.
     Status _create_implicit_local_join_runtime_filters(RuntimeState* state);
     void _final_update_profile() {
         if (_probe_chunk_count > 0) {
-            COUNTER_SET(_avg_input_probe_chunk_size, int64_t(_probe_rows_counter->value() / _probe_chunk_count));
+            COUNTER_SET(_avg_input_probe_chunk_size, int64_t(COUNTER_VALUE(_probe_rows_counter) / _probe_chunk_count));
         } else {
             COUNTER_SET(_avg_input_probe_chunk_size, int64_t(0));
         }
@@ -113,8 +112,16 @@ private:
     TJoinDistributionMode::type _distribution_mode = TJoinDistributionMode::NONE;
     std::set<SlotId> _output_slots;
 
+    ExprContext* _asof_join_condition_build_expr_ctx = nullptr;
+    ExprContext* _asof_join_condition_probe_expr_ctx = nullptr;
+    TExprOpcode::type _asof_join_condition_op = TExprOpcode::INVALID_OPCODE;
+
     bool _is_push_down = false;
     bool _enable_late_materialization = false;
+
+    bool _enable_partition_hash_join = false;
+
+    bool _is_skew_join = false;
 
     JoinHashTable _ht;
 
@@ -136,6 +143,8 @@ private:
     bool _probe_eos = false; // probe table scan finished;
     size_t _runtime_join_filter_pushdown_limit = 1024000;
 
+    std::map<SlotId, ExprContext*> _common_expr_ctxs;
+
     RuntimeProfile::Counter* _build_timer = nullptr;
     RuntimeProfile::Counter* _build_ht_timer = nullptr;
     RuntimeProfile::Counter* _copy_right_table_chunk_timer = nullptr;
@@ -143,6 +152,7 @@ private:
     RuntimeProfile::Counter* _merge_input_chunk_timer = nullptr;
     RuntimeProfile::Counter* _probe_timer = nullptr;
     RuntimeProfile::Counter* _search_ht_timer = nullptr;
+    RuntimeProfile::Counter* _probe_counter = nullptr;
     RuntimeProfile::Counter* _output_build_column_timer = nullptr;
     RuntimeProfile::Counter* _output_probe_column_timer = nullptr;
     RuntimeProfile::Counter* _build_rows_counter = nullptr;

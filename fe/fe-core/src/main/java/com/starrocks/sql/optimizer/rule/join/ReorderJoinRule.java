@@ -14,14 +14,15 @@
 
 package com.starrocks.sql.optimizer.rule.join;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.JoinOperator;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -41,19 +42,19 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleType;
-import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+
+import static com.starrocks.sql.optimizer.statistics.StatisticsCalcUtils.ensureStatistics;
 
 public class ReorderJoinRule extends Rule {
     public ReorderJoinRule() {
@@ -156,6 +157,12 @@ public class ReorderJoinRule extends Rule {
             if (copyIntoMemo) {
                 context.getMemo().copyIn(innerJoinRoot.getGroupExpression().getGroup(), joinExpr);
             } else {
+                joinExpr.deriveLogicalPropertyItself();
+                ExpressionContext expressionContext = new ExpressionContext(joinExpr);
+                StatisticsCalculator statisticsCalculator =
+                        new StatisticsCalculator(expressionContext, context.getColumnRefFactory(), context);
+                statisticsCalculator.estimatorStats();
+                joinExpr.setStatistics(expressionContext.getStatistics());
                 return Optional.of(joinExpr);
             }
         }
@@ -166,6 +173,10 @@ public class ReorderJoinRule extends Rule {
     // it adopts JoinReorderCardinalityPreserving algorithm to reorder multi-joins to adapt to table pruning.
     public OptExpression rewrite(OptExpression input, OptimizerContext context) {
         return rewrite(input, JoinReorderFactory.createJoinReorderCardinalityPreserving(), context);
+    }
+
+    public OptExpression rewriteForDistinctJoin(OptExpression input, OptimizerContext context) {
+        return rewrite(input, JoinReorderFactory.createJoinReorderDrivingTable(), context);
     }
 
     public OptExpression rewrite(OptExpression input, JoinReorderFactory joinReorderFactory, OptimizerContext context) {
@@ -183,8 +194,22 @@ public class ReorderJoinRule extends Rule {
                 if (!multiJoinNode.checkDependsPredicate()) {
                     continue;
                 }
-                Optional<OptExpression> newChild =
-                        enumerate(joinReorderFactory.create(context), context, child, multiJoinNode, false);
+
+                List<JoinOrder> orderAlgorithms = joinReorderFactory.create(context, multiJoinNode);
+                Optional<OptExpression> newChild = Optional.empty();
+                for (JoinOrder orderAlgorithm : orderAlgorithms) {
+                    newChild = enumerate(orderAlgorithm, context, child, multiJoinNode, false);
+                    if (newChild.isEmpty()) {
+                        break;
+                    }
+                    // If there is no statistical information, the DP and greedy reorder algorithm are disabled,
+                    // and the query plan degenerates to the left deep tree
+                    if (Utils.hasUnknownColumnsStats(innerJoinRoot.first) &&
+                            (!FeConstants.runningUnitTest || FeConstants.isReplayFromQueryDump)) {
+                        break;
+                    }
+                }
+
                 if (newChild.isPresent()) {
                     int prevNumCrossJoins =
                             Utils.countJoinNodeSize(child, Sets.newHashSet(JoinOperator.CROSS_JOIN));
@@ -226,15 +251,18 @@ public class ReorderJoinRule extends Rule {
                         (!FeConstants.runningUnitTest || FeConstants.isReplayFromQueryDump)) {
                     continue;
                 }
-
-                if (multiJoinNode.getAtoms().size() <= context.getSessionVariable().getCboMaxReorderNodeUseDP()
+                int atomSize = multiJoinNode.getAtoms().size();
+                // Hard cap DP join reorder to avoid pathological cases.
+                // DP enumerates bipartitions (exponential); also the subset enumeration uses a long mask.
+                if (atomSize <= 62 && atomSize <= context.getSessionVariable().getCboMaxReorderNodeUseDP()
                         && context.getSessionVariable().isCboEnableDPJoinReorder()) {
                     // 10 table join reorder takes more than 100ms,
                     // so the join reorder using dp is currently controlled below 10.
                     enumerate(new JoinReorderDP(context), context, innerJoinRoot, multiJoinNode, true);
                 }
 
-                if (context.getSessionVariable().isCboEnableGreedyJoinReorder()) {
+                if (context.getSessionVariable().isCboEnableGreedyJoinReorder() &&
+                        multiJoinNode.getAtoms().size() <= context.getSessionVariable().getCboMaxReorderNodeUseGreedy()) {
                     enumerate(new JoinReorderGreedy(context), context, innerJoinRoot, multiJoinNode, true);
                 }
             }
@@ -315,8 +343,10 @@ public class ReorderJoinRule extends Rule {
 
             requireColumns = ((LogicalJoinOperator) optExpression.getOp()).getRequiredChildInputColumns();
             requireColumns.union(newOutputColumns);
-            OptExpression left = rewrite(optExpression.inputAt(0), (ColumnRefSet) requireColumns.clone());
-            OptExpression right = rewrite(optExpression.inputAt(1), (ColumnRefSet) requireColumns.clone());
+            OptExpression left = rewrite(optExpression.inputAt(0), requireColumns.clone());
+            OptExpression right = rewrite(optExpression.inputAt(1), requireColumns.clone());
+            ensureStatistics(left, optimizerContext);
+            ensureStatistics(right, optimizerContext);
 
             OptExpression joinOpt = OptExpression.create(joinOperator, Lists.newArrayList(left, right));
             joinOpt.deriveLogicalPropertyItself();
@@ -336,16 +366,26 @@ public class ReorderJoinRule extends Rule {
             LogicalProperty newProperty = new LogicalProperty(optExpression.getLogicalProperty());
             newProperty.setOutputColumns(newCols);
 
-            Statistics newStats = Statistics.buildFrom(optExpression.getStatistics()).build();
-            Iterator<Map.Entry<ColumnRefOperator, ColumnStatistic>>
-                    iterator = newStats.getColumnStatistics().entrySet().iterator();
-            while (iterator.hasNext()) {
-                Map.Entry<ColumnRefOperator, ColumnStatistic> columnStatistic = iterator.next();
-                if (!newCols.contains(columnStatistic.getKey())) {
-                    iterator.remove();
-                }
+            if (!Optional.ofNullable(optExpression.getStatistics()).isPresent()) {
+                ExpressionContext expressionContext = new ExpressionContext(optExpression);
+                StatisticsCalculator statisticsCalculator = new StatisticsCalculator(
+                        expressionContext, optimizerContext.getColumnRefFactory(), optimizerContext);
+                statisticsCalculator.estimatorStats();
+                optExpression.setStatistics(expressionContext.getStatistics());
             }
-
+            Preconditions.checkState(optExpression.getStatistics() != null);
+            Statistics oldStats = optExpression.getStatistics();
+            Statistics.Builder newStatsBuilder = Statistics.builder()
+                    .setOutputRowCount(oldStats.getOutputRowCount())
+                    .setTableRowCountMayInaccurate(oldStats.isTableRowCountMayInaccurate())
+                    .setShadowColumns(oldStats.getShadowColumns())
+                    .addMultiColumnStatistics(oldStats.getMultiColumnCombinedStats());
+            oldStats.getColumnStatistics().forEach((col, stat) -> {
+                if (newCols.contains(col)) {
+                    newStatsBuilder.addColumnStatistic(col, stat);
+                }
+            });
+            Statistics newStats = newStatsBuilder.build();
             Operator.Builder builder = OperatorBuilderFactory.build(operator);
             Operator newOp = builder.withOperator(operator)
                     .setProjection(new Projection(newOutputProjections))
@@ -397,6 +437,8 @@ public class ReorderJoinRule extends Rule {
 
             OptExpression left = rewrite(optExpression.inputAt(0));
             OptExpression right = rewrite(optExpression.inputAt(1));
+            ensureStatistics(left, optimizerContext);
+            ensureStatistics(right, optimizerContext);
 
             ColumnRefSet outputColumns = new ColumnRefSet();
             if (optExpression.getOp().getProjection() != null) {

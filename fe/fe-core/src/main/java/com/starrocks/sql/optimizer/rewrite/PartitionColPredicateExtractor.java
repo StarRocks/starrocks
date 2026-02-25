@@ -16,7 +16,6 @@ package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -37,7 +36,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static com.starrocks.analysis.BinaryType.EQ_FOR_NULL;
+import static com.starrocks.sql.ast.expression.BinaryType.EQ_FOR_NULL;
 
 /**
  * Extract predicate tree only with partition key or boolean constant
@@ -52,8 +51,7 @@ public class PartitionColPredicateExtractor extends ScalarOperatorVisitor<Scalar
 
     private final ColumnRefSet partitionColumnSet;
 
-    public PartitionColPredicateExtractor(List<Column> partitionColumns, RangePartitionInfo rangePartitionInfo,
-                                          Map<Column, ColumnRefOperator> columnMetaToColRefMap) {
+    public PartitionColPredicateExtractor(List<Column> partitionColumns, Map<Column, ColumnRefOperator> columnMetaToColRefMap) {
         List<ColumnRefOperator> columnRefOperators = Lists.newArrayList();
         Column partitionColumn = partitionColumns.get(0);
         for (ColumnRefOperator columnRefOperator : columnMetaToColRefMap.values()) {
@@ -256,5 +254,4 @@ public class PartitionColPredicateExtractor extends ScalarOperatorVisitor<Scalar
         }
         return false;
     }
-
 }

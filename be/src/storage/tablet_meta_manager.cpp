@@ -45,9 +45,14 @@
 #include <string>
 #include <vector>
 
+#include "base/coding.h"
+#include "base/failpoint/fail_point.h"
+#include "base/url_coding.h"
+#include "base/utility/defer_op.h"
 #include "common/compiler_util.h"
 #include "common/logging.h"
 #include "common/tracer.h"
+#include "common/util/debug_util.h"
 #include "fmt/format.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/strings/numbers.h"
@@ -60,11 +65,6 @@
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_updates.h"
-#include "util/coding.h"
-#include "util/debug_util.h"
-#include "util/defer_op.h"
-#include "util/failpoint/fail_point.h"
-#include "util/url_coding.h"
 
 namespace starrocks {
 
@@ -455,6 +455,23 @@ Status TabletMetaManager::walk_until_timeout(
     return meta->iterate(META_COLUMN_FAMILY_INDEX, HEADER_PREFIX, traverse_header_func, timeout_sec);
 }
 
+Status TabletMetaManager::walk_with_compact_on_timeout(
+        KVStore* meta,
+        std::function<bool(long /*tablet_id*/, long /*schema_hash*/, std::string_view /*meta*/)> const& func,
+        int64_t timeout_sec) {
+    auto traverse_header_func = [&func](std::string_view key, std::string_view value) -> StatusOr<bool> {
+        TTabletId tablet_id;
+        TSchemaHash schema_hash;
+        if (!decode_tablet_meta_key(key, &tablet_id, &schema_hash)) {
+            LOG(WARNING) << "invalid tablet_meta key:" << key;
+            return true;
+        }
+        return func(tablet_id, schema_hash, value);
+    };
+    return meta->iterate_with_compact_on_timeout(META_COLUMN_FAMILY_INDEX, HEADER_PREFIX, traverse_header_func,
+                                                 timeout_sec);
+}
+
 std::string json_to_string(const rapidjson::Value& val_obj) {
     rapidjson::StringBuffer buf;
     rapidjson::Writer<rapidjson::StringBuffer> writer(buf);
@@ -771,8 +788,11 @@ void decode_delta_column_group_key(std::string_view enc_key, TTabletId* tablet_i
     *version = INT64_MAX - BigEndian::ToHost64(UNALIGNED_LOAD64(enc_key.data() + 80));
 }
 
+DEFINE_FAIL_POINT(tablet_meta_manager_rowset_commit_internal_error);
 Status TabletMetaManager::rowset_commit(DataDir* store, TTabletId tablet_id, int64_t logid, EditVersionMetaPB* edit,
                                         const RowsetMetaPB& rowset, const string& rowset_meta_key) {
+    FAIL_POINT_TRIGGER_RETURN(tablet_meta_manager_rowset_commit_internal_error,
+                              Status::InternalError("inject tablet_meta_manager_rowset_commit_internal_error"));
     WriteBatch batch;
     auto handle = store->get_meta()->handle(META_COLUMN_FAMILY_INDEX);
     string logkey = encode_meta_log_key(tablet_id, logid);
@@ -1180,8 +1200,8 @@ StatusOr<size_t> TabletMetaManager::delete_del_vector_before_version(KVStore* me
     }
     RETURN_IF_ERROR(meta->write_batch(&batch));
     if (num_delete > 0) {
-        LOG(INFO) << "delete_del_vector_before_version version:" << version << " tablet:" << tablet_id
-                  << vlog_delvec_maplist.str();
+        VLOG(1) << "delete_del_vector_before_version version:" << version << " tablet:" << tablet_id
+                << vlog_delvec_maplist.str();
     }
     return num_delete;
 }
@@ -1746,6 +1766,14 @@ Status TabletMetaManager::remove_tablet_persistent_index_meta(DataDir* store, TT
     return meta->write_batch(&batch);
 }
 
+Status TabletMetaManager::put_pending_rowset_meta(DataDir* store, WriteBatch* batch, TTabletId tablet_id,
+                                                  int64_t version, const RowsetMetaPB& rowset) {
+    auto h = store->get_meta()->handle(META_COLUMN_FAMILY_INDEX);
+    auto k = encode_meta_pending_rowset_key(tablet_id, version);
+    auto v = rowset.SerializeAsString();
+    return to_status(batch->Put(h, k, v));
+}
+
 // methods for operating pending commits
 Status TabletMetaManager::pending_rowset_commit(DataDir* store, TTabletId tablet_id, int64_t version,
                                                 const RowsetMetaPB& rowset, const string& rowset_meta_key) {
@@ -1804,6 +1832,20 @@ Status TabletMetaManager::clear_pending_rowset(DataDir* store, WriteBatch* batch
     auto lower = encode_meta_pending_rowset_key(tablet_id, 0);
     auto upper = encode_meta_pending_rowset_key(tablet_id, INT64_MAX);
     return store->get_meta()->OptDeleteRange(META_COLUMN_FAMILY_INDEX, lower, upper, batch);
+}
+
+Status TabletMetaManager::get_committed_rowset_meta_value(DataDir* store, int64_t tablet_id, uint32_t rowset_seg_id,
+                                                          std::string* meta_value) {
+    std::string rowset_key = encode_meta_rowset_key(tablet_id, rowset_seg_id);
+    RETURN_IF_ERROR(store->get_meta()->get(META_COLUMN_FAMILY_INDEX, rowset_key, meta_value));
+    return Status::OK();
+}
+
+Status TabletMetaManager::get_pending_committed_rowset_meta_value(DataDir* store, int64_t tablet_id, int64_t version,
+                                                                  std::string* meta_value) {
+    std::string rowset_key = encode_meta_pending_rowset_key(tablet_id, version);
+    RETURN_IF_ERROR(store->get_meta()->get(META_COLUMN_FAMILY_INDEX, rowset_key, meta_value));
+    return Status::OK();
 }
 
 } // namespace starrocks

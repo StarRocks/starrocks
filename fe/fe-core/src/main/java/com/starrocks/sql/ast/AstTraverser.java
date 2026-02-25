@@ -14,12 +14,11 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.Subquery;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.Subquery;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 
-public class AstTraverser<R, C> implements AstVisitor<R, C> {
+public class AstTraverser<R, C> implements AstVisitorExtendInterface<R, C> {
 
     // ---------------------------------------- Query Statement --------------------------------------------------------------
 
@@ -69,6 +68,11 @@ public class AstTraverser<R, C> implements AstVisitor<R, C> {
     }
 
     @Override
+    public R visitAlterTaskStatement(AlterTaskStmt statement, C context) {
+        return null;
+    }
+
+    @Override
     public R visitCreatePipeStatement(CreatePipeStmt statement, C context) {
         if (statement.getInsertStmt() != null) {
             visit(statement.getInsertStmt(), context);
@@ -87,7 +91,31 @@ public class AstTraverser<R, C> implements AstVisitor<R, C> {
         return null;
     }
 
-    // ------------------------------------------- Relation ----------------------------------==------------------------
+    // ------------------------------------------- DDL Statement -------------------------------------------------------
+
+    @Override
+    public R visitAlterTableStatement(AlterTableStmt statement, C context) {
+        statement.getAlterClauseList().forEach(x -> visit(x, context));
+        return null;
+    }
+
+    @Override
+    public R visitAlterViewStatement(AlterViewStmt statement, C context) {
+        if (statement.getAlterClause() != null) {
+            visit(statement.getAlterClause(), context);
+        }
+        return null;
+    }
+
+    @Override
+    public R visitAlterMaterializedViewStatement(AlterMaterializedViewStmt statement, C context) {
+        if (statement.getAlterTableClause() != null) {
+            visit(statement.getAlterTableClause(), context);
+        }
+        return null;
+    }
+
+    // ------------------------------------------- Relation ------------------------------------------------------------
 
     @Override
     public R visitSelect(SelectRelation node, C context) {
@@ -136,7 +164,7 @@ public class AstTraverser<R, C> implements AstVisitor<R, C> {
     }
 
     @Override
-    public R visitSubquery(SubqueryRelation node, C context) {
+    public R visitSubqueryRelation(SubqueryRelation node, C context) {
         return visit(node.getQueryStatement(), context);
     }
 
@@ -151,6 +179,10 @@ public class AstTraverser<R, C> implements AstVisitor<R, C> {
 
     @Override
     public R visitCTE(CTERelation node, C context) {
+        if (node.isRecursive() && !node.isAnchor()) {
+            // For recursive CTE, only traverse the non-recursive part (anchor member)
+            return null;
+        }
         return visit(node.getCteQueryStatement(), context);
     }
 
@@ -168,7 +200,7 @@ public class AstTraverser<R, C> implements AstVisitor<R, C> {
     }
 
     @Override
-    public R visitSubquery(Subquery node, C context) {
+    public R visitSubqueryExpr(Subquery node, C context) {
         return visit(node.getQueryStatement(), context);
     }
 }

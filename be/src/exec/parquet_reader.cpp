@@ -18,16 +18,18 @@
 #include <arrow/status.h>
 #include <gutil/strings/substitute.h>
 
+#include <memory>
 #include <utility>
 
 #include "common/config.h"
 #include "common/logging.h"
-#include "exec/file_scanner.h"
+#include "common/runtime_profile.h"
+#include "exec/file_scanner/file_scanner.h"
 #include "fmt/format.h"
 #include "parquet/schema.h"
 #include "parquet_schema_builder.h"
 #include "runtime/descriptors.h"
-#include "util/runtime_profile.h"
+#include "util/byte_buffer.h"
 
 namespace starrocks {
 // ====================================================================================================================
@@ -48,7 +50,7 @@ ParquetReaderWrap::ParquetReaderWrap(std::shared_ptr<arrow::io::RandomAccessFile
           _read_offset(read_offset),
           _read_size(read_size) {
     _parquet = std::move(parquet_file);
-    _properties = parquet::ReaderProperties();
+    _properties = ::parquet::ReaderProperties();
     _filename = (reinterpret_cast<ParquetChunkFile*>(_parquet.get()))->filename();
 }
 
@@ -75,7 +77,7 @@ Status ParquetReaderWrap::next_selected_row_group() {
 
 Status ParquetReaderWrap::_init_parquet_reader() {
     try {
-        parquet::ArrowReaderProperties arrow_reader_properties;
+        ::parquet::ArrowReaderProperties arrow_reader_properties;
         /*
         * timestamp unit to use for INT96-encoded timestamps in parquet.
         * SECOND, MICRO, MILLI, NANO
@@ -109,9 +111,9 @@ Status ParquetReaderWrap::_init_parquet_reader() {
         arrow_reader_properties.set_cache_options(cache_options);
 
         // new file reader for parquet file
-        auto st = parquet::arrow::FileReader::Make(arrow::default_memory_pool(),
-                                                   parquet::ParquetFileReader::Open(_parquet, _properties),
-                                                   arrow_reader_properties, &_reader);
+        auto st = ::parquet::arrow::FileReader::Make(arrow::default_memory_pool(),
+                                                     ::parquet::ParquetFileReader::Open(_parquet, _properties),
+                                                     arrow_reader_properties, &_reader);
         if (!st.ok()) {
             std::ostringstream oss;
             oss << "Failed to create parquet file reader. error: " << st.ToString() << ", filename: " << _filename;
@@ -151,7 +153,7 @@ Status ParquetReaderWrap::_init_parquet_reader() {
         }
 
         return Status::OK();
-    } catch (parquet::ParquetException& e) {
+    } catch (::parquet::ParquetException& e) {
         std::stringstream str_error;
         str_error << "Init parquet reader fail. " << e.what() << ", filename: " << _filename;
         LOG(WARNING) << str_error.str();
@@ -193,7 +195,7 @@ Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>
             }
         }
         return Status::OK();
-    } catch (parquet::ParquetException& e) {
+    } catch (::parquet::ParquetException& e) {
         std::stringstream str_error;
         str_error << "Init parquet reader fail. " << e.what();
         LOG(WARNING) << str_error.str() << " filename: " << _filename;
@@ -202,7 +204,12 @@ Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>
 }
 
 Status ParquetReaderWrap::get_schema(std::vector<SlotDescriptor>* schema) {
-    RETURN_IF_ERROR(_init_parquet_reader());
+    auto st = _init_parquet_reader();
+    // Initializing a reader on empty Parquet files (with 0 row groups) returns EOF,
+    // but the file schema is still available
+    if (!st.ok() && !(st.is_end_of_file() && _file_metadata != nullptr)) {
+        return st;
+    }
 
     const auto& file_schema = _file_metadata->schema();
 
@@ -246,11 +253,11 @@ Status ParquetReaderWrap::column_indices(const std::vector<SlotDescriptor*>& tup
             for (auto index : iter->second) {
                 _parquet_column_ids.emplace_back(index);
             }
-        } else {
+        } else if (!_invalid_as_null) {
             std::stringstream str_error;
             str_error << "Column: " << slot_desc->col_name() << " is not found in file: " << _filename;
             LOG(WARNING) << str_error.str();
-            return Status::InvalidArgument(str_error.str());
+            return Status::NotFound(str_error.str());
         }
     }
     return Status::OK();
@@ -419,16 +426,22 @@ arrow::Result<int64_t> ParquetChunkFile::Tell() const {
 }
 
 arrow::Result<std::shared_ptr<arrow::Buffer>> ParquetChunkFile::Read(int64_t nbytes) {
-    auto buffer_res = arrow::AllocateBuffer(nbytes, arrow::default_memory_pool());
-    ARROW_RETURN_NOT_OK(buffer_res);
-    std::shared_ptr<arrow::Buffer> read_buf = std::move(buffer_res.ValueOrDie());
-    arrow::Result<int64_t> bytes_read_res = ReadAt(_pos, nbytes, read_buf->mutable_data());
-    ARROW_RETURN_NOT_OK(bytes_read_res);
+    auto tracker = CurrentThread::mem_tracker();
+    if (tracker == nullptr) {
+        return arrow::Status::ExecutionError("current thread memory tracker Not Found when allocate arrow Buffer");
+    }
+    std::unique_ptr<arrow::Buffer> buffer_res;
+    ARROW_RETURN_NOT_OK(arrow::AllocateBuffer(nbytes, arrow::default_memory_pool()).Value(&buffer_res));
+    std::shared_ptr<arrow::Buffer> read_buf(buffer_res.release(), MemTrackerDeleter(tracker));
+    int64_t bytes_read_res = 0;
+    ARROW_RETURN_NOT_OK(ReadAt(_pos, nbytes, read_buf->mutable_data()).Value(&bytes_read_res));
     // If bytes_read is equal with read_buf's capacity, we just assign
-    if (bytes_read_res.ValueOrDie() == nbytes) {
+    if (bytes_read_res == nbytes) {
         return std::move(read_buf);
     } else {
-        return arrow::SliceBuffer(read_buf, 0, bytes_read_res.ValueOrDie());
+        std::shared_ptr<arrow::Buffer> slice_buf(new arrow::Buffer(read_buf, 0, bytes_read_res),
+                                                 MemTrackerDeleter(tracker));
+        return slice_buf;
     }
 }
 

@@ -17,9 +17,11 @@
 
 package com.starrocks.mysql.privilege;
 
-import com.starrocks.sql.ast.UserIdentity;
-import org.junit.Assert;
-import org.junit.Test;
+import com.starrocks.authentication.UserIdentityUtils;
+import com.starrocks.catalog.UserIdentity;
+import com.starrocks.thrift.TUserIdentity;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class UserIdentityTest {
 
@@ -28,16 +30,28 @@ public class UserIdentityTest {
         UserIdentity userIdent = new UserIdentity("cmy", "192.%");
 
         String str = "'" + "cmy" + "'@'192.%'";
-        Assert.assertEquals(str, userIdent.toString());
+        Assertions.assertEquals(str, userIdent.toString());
 
-        UserIdentity userIdent2 = UserIdentity.fromString(str);
-        Assert.assertEquals(userIdent2.toString(), userIdent.toString());
+        UserIdentity userIdent2 = UserIdentityUtils.fromString(str);
+        Assertions.assertEquals(userIdent2.toString(), userIdent.toString());
 
         String str2 = "'walletdc_write'@['cluster-leida.orp.all']";
-        userIdent = UserIdentity.fromString(str2);
-        Assert.assertNotNull(userIdent);
-        Assert.assertTrue(userIdent.isDomain());
-        Assert.assertEquals(str2, userIdent.toString());
+        userIdent = UserIdentityUtils.fromString(str2);
+        Assertions.assertNotNull(userIdent);
+        Assertions.assertTrue(userIdent.isDomain());
+        Assertions.assertEquals(str2, userIdent.toString());
     }
 
+    @Test
+    public void testEphemeralFlagRoundTrip() {
+        UserIdentity ephemeralIdentity = UserIdentity.createEphemeralUserIdent("ldap_user", "10.0.%");
+
+        TUserIdentity thriftIdentity = UserIdentityUtils.toThrift(ephemeralIdentity);
+        Assertions.assertTrue(thriftIdentity.isSetIs_ephemeral());
+        Assertions.assertTrue(thriftIdentity.isIs_ephemeral());
+
+        UserIdentity roundTrip = UserIdentityUtils.fromThrift(thriftIdentity);
+        Assertions.assertEquals(ephemeralIdentity.toString(), roundTrip.toString());
+        Assertions.assertTrue(roundTrip.isEphemeral());
+    }
 }

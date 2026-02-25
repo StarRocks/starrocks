@@ -14,6 +14,7 @@
 
 #include "storage/local_primary_key_recover.h"
 
+#include "fs/key_cache.h"
 #include "storage/chunk_helper.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/update_manager.h"
@@ -78,7 +79,8 @@ Status LocalPrimaryKeyRecover::rowset_iterator(
         // NOT acquire rowset reference because tbalet already in error state, rowset reclaim should stop
         // NOT apply delvec when create segment iterator
         // 1. get iterator for each segment
-        auto res = rowset->get_segment_iterators2(pkey_schema, _tablet->tablet_schema(), nullptr,
+        // Use MetaLoadMode::NONE to skip loading delete vectors and DCGs during recovery
+        auto res = rowset->get_segment_iterators2(pkey_schema, _tablet->tablet_schema(), MetaLoadMode::NONE,
                                                   latest_applied_major_version, &stats);
         if (!res.ok()) {
             return res.status();
@@ -91,7 +93,12 @@ Status LocalPrimaryKeyRecover::rowset_iterator(
         std::vector<uint32_t> delidxs;
         for (int idx = 0; idx < rowset->num_delete_files(); idx++) {
             auto path = Rowset::segment_del_file_path(rowset->rowset_path(), rowset->rowset_id(), idx);
-            ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(path));
+            RandomAccessFileOptions opts;
+            auto& encryption_meta = rowset->rowset_meta()->get_delfile_encryption_meta(idx);
+            if (!encryption_meta.empty()) {
+                ASSIGN_OR_RETURN(opts.encryption_info, KeyCache::instance().unwrap_encryption_meta(encryption_meta));
+            }
+            ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(opts, path));
             del_rfs.push_back(std::move(read_file));
             delidxs.push_back(rowset->rowset_meta()->get_meta_pb_without_schema().delfile_idxes(idx));
         }
@@ -135,6 +142,10 @@ Status LocalPrimaryKeyRecover::finalize_delvec(const PrimaryIndex::DeletesMap& n
 
 int64_t LocalPrimaryKeyRecover::tablet_id() {
     return _tablet->tablet_id();
+}
+
+StatusOr<PrimaryKeyEncodingType> LocalPrimaryKeyRecover::primary_key_encoding_type() const {
+    return PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1;
 }
 
 } // namespace starrocks

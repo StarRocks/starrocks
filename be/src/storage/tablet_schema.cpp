@@ -43,6 +43,7 @@
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/metadata_util.h"
+#include "storage/primary_key_encoder.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/type_utils.h"
 #include "tablet_meta.h"
@@ -94,12 +95,16 @@ uint32_t TabletColumn::get_field_length_by_type(LogicalType type, uint32_t strin
     case TYPE_DECIMALV2:
     case TYPE_DECIMAL128:
         return 16;
+    case TYPE_DECIMAL256:
+    case TYPE_INT256:
+        return 32;
     case TYPE_CHAR:
         return string_length;
     case TYPE_VARCHAR:
     case TYPE_HLL:
     case TYPE_PERCENTILE:
     case TYPE_JSON:
+    case TYPE_VARIANT:
     case TYPE_VARBINARY:
         return string_length + sizeof(get_olap_string_max_length());
     case TYPE_ARRAY:
@@ -133,9 +138,13 @@ TabletColumn::TabletColumn(const TabletColumn& rhs)
           _index_length(rhs._index_length),
           _precision(rhs._precision),
           _scale(rhs._scale),
+          _extended_info(rhs._extended_info ? std::make_unique<ExtendedColumnInfo>(*rhs._extended_info) : nullptr),
           _flags(rhs._flags) {
     if (rhs._extra_fields != nullptr) {
         _extra_fields = new ExtraFields(*rhs._extra_fields);
+    }
+    if (rhs._agg_state_desc != nullptr) {
+        _agg_state_desc = new AggStateDesc(*rhs._agg_state_desc);
     }
 }
 
@@ -148,11 +157,13 @@ TabletColumn::TabletColumn(TabletColumn&& rhs) noexcept
           _index_length(rhs._index_length),
           _precision(rhs._precision),
           _scale(rhs._scale),
+          _extended_info(std::move(rhs._extended_info)),
           _flags(rhs._flags),
-          _extra_fields(rhs._extra_fields) {
+          _extra_fields(rhs._extra_fields),
+          _agg_state_desc(rhs._agg_state_desc) {
     rhs._extra_fields = nullptr;
+    rhs._agg_state_desc = nullptr;
 }
-
 TabletColumn::TabletColumn(const ColumnPB& column) {
     init_from_pb(column);
 }
@@ -163,6 +174,7 @@ TabletColumn::TabletColumn(const TColumn& column) {
 
 TabletColumn::~TabletColumn() {
     delete _extra_fields;
+    delete _agg_state_desc;
 }
 
 void TabletColumn::swap(TabletColumn* rhs) {
@@ -177,6 +189,8 @@ void TabletColumn::swap(TabletColumn* rhs) {
     swap(_scale, rhs->_scale);
     swap(_flags, rhs->_flags);
     swap(_extra_fields, rhs->_extra_fields);
+    swap(_agg_state_desc, rhs->_agg_state_desc);
+    swap(_extended_info, rhs->_extended_info);
 }
 
 TabletColumn& TabletColumn::operator=(const TabletColumn& rhs) {
@@ -243,6 +257,13 @@ void TabletColumn::init_from_pb(const ColumnPB& column) {
         sub_column.init_from_pb(column.children_columns(i));
         add_sub_column(std::move(sub_column));
     }
+    // agg state type info
+    if (column.has_agg_state_desc()) {
+        VLOG(2) << "column contains agg state type info, add into extra fields";
+        auto& agg_state_desc_pb = column.agg_state_desc();
+        auto desc = AggStateDesc::from_protobuf(agg_state_desc_pb);
+        _agg_state_desc = new AggStateDesc(std::move(desc));
+    }
 }
 
 void TabletColumn::init_from_thrift(const TColumn& tcolumn) {
@@ -279,6 +300,11 @@ void TabletColumn::to_schema_pb(ColumnPB* column) const {
     column->set_has_bitmap_index(has_bitmap_index());
     for (int i = 0; i < subcolumn_count(); i++) {
         subcolumn(i).to_schema_pb(column->add_children_columns());
+    }
+    if (has_agg_state_desc()) {
+        auto* agg_state_desc = get_agg_state_desc();
+        auto* agg_state_pb = column->mutable_agg_state_desc();
+        agg_state_desc->to_protobuf(agg_state_pb);
     }
 }
 
@@ -350,15 +376,30 @@ std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchemaCSPtr& src_
     if (src_tablet_schema->has_bf_fpp()) {
         partial_tablet_schema_pb.set_bf_fpp(src_tablet_schema->bf_fpp());
     }
+    partial_tablet_schema_pb.set_primary_key_encoding_type(
+            PrimaryKeyEncoder::pb_from_encoding_type(src_tablet_schema->primary_key_encoding_type()));
     std::vector<ColumnId> sort_key_idxes;
+    // from referenced column name to index, used for build sort key idxes later.
+    std::map<std::string, uint32_t> col_name_to_idx;
     uint32_t cid = 0;
     for (const auto referenced_column_id : referenced_column_ids) {
         auto* tablet_column = partial_tablet_schema_pb.add_column();
         src_tablet_schema->column(referenced_column_id).to_schema_pb(tablet_column);
-        if (src_tablet_schema->column(referenced_column_id).is_sort_key()) {
-            sort_key_idxes.emplace_back(cid);
+        col_name_to_idx[tablet_column->name()] = cid++;
+    }
+    // build sort key idxes
+    for (const auto& sort_key_idx : src_tablet_schema->sort_key_idxes()) {
+        std::string col_name = std::string(src_tablet_schema->column(sort_key_idx).name());
+        if (col_name_to_idx.count(col_name) <= 0) {
+            // sort key column is not in referenced column, skip it.
+            continue;
         }
-        cid++;
+        sort_key_idxes.emplace_back(col_name_to_idx[col_name]);
+    }
+    const auto* indexes = src_tablet_schema->indexes();
+    for (const auto& index : *indexes) {
+        TabletIndexPB* index_pb = partial_tablet_schema_pb.add_table_indices();
+        index.to_schema_pb(index_pb);
     }
     partial_tablet_schema_pb.mutable_sort_key_idxes()->Add(sort_key_idxes.begin(), sort_key_idxes.end());
     return std::make_shared<TabletSchema>(partial_tablet_schema_pb);
@@ -509,6 +550,16 @@ void TabletSchema::_init_from_pb(const TabletSchemaPB& schema) {
         _bf_fpp = BLOOM_FILTER_DEFAULT_FPP;
     }
     _schema_version = schema.schema_version();
+
+    if (schema.has_primary_key_encoding_type()) {
+        _primary_key_encoding_type = PrimaryKeyEncoder::encoding_type_from_pb(schema.primary_key_encoding_type());
+    } else if (schema.keys_type() == KeysType::PRIMARY_KEYS) {
+        // Compatibility fallback: schemas created before `primary_key_encoding_type` was introduced.
+        // PRIMARY_KEYS tables used V1 encoding historically, so default to V1 when the field is absent.
+        _primary_key_encoding_type = PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1;
+    } else {
+        _primary_key_encoding_type = PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
+    }
 }
 
 Status TabletSchema::_build_current_tablet_schema(int64_t schema_id, int32_t version,
@@ -520,6 +571,7 @@ Status TabletSchema::_build_current_tablet_schema(int64_t schema_id, int32_t ver
     _num_rows_per_row_block = ori_tablet_schema.num_rows_per_row_block();
     _compression_type = ori_tablet_schema.compression_type();
     _compression_level = ori_tablet_schema.compression_level();
+    _primary_key_encoding_type = ori_tablet_schema._primary_key_encoding_type;
 
     // todo(yixiu): unique_id
     _next_column_unique_id = ori_tablet_schema.next_column_unique_id();
@@ -602,6 +654,9 @@ void TabletSchema::to_schema_pb(TabletSchemaPB* tablet_schema_pb) const {
         auto* tablet_index_pb = tablet_schema_pb->add_table_indices();
         index.to_schema_pb(tablet_index_pb);
     }
+    // for simplicity, we always persist the primary key encoding type even for non-cloud-native tables
+    tablet_schema_pb->set_primary_key_encoding_type(
+            PrimaryKeyEncoder::pb_from_encoding_type(_primary_key_encoding_type));
 }
 
 Status TabletSchema::get_indexes_for_column(int32_t col_unique_id,
@@ -729,6 +784,7 @@ bool operator==(const TabletSchema& a, const TabletSchema& b) {
     if (a._has_bf_fpp) {
         if (std::abs(a._bf_fpp - b._bf_fpp) > 1e-6) return false;
     }
+    if (a._primary_key_encoding_type != b._primary_key_encoding_type) return false;
     return true;
 }
 
@@ -748,6 +804,16 @@ bool operator!=(const TabletSchema& a, const TabletSchema& b) {
     return !(a == b);
 }
 
+bool TabletSchema::has_separate_sort_key() const {
+    RETURN_IF(_sort_key_idxes.size() != _num_key_columns, true);
+    for (size_t i = 0; i < _sort_key_idxes.size(); ++i) {
+        if (_sort_key_idxes[i] != i) {
+            return true;
+        }
+    }
+    return false;
+}
+
 std::string TabletSchema::debug_string() const {
     std::stringstream ss;
     ss << "column=[";
@@ -761,6 +827,7 @@ std::string TabletSchema::debug_string() const {
        << ",num_key_columns=" << _num_key_columns << ",num_short_key_columns=" << _num_short_key_columns
        << ",num_rows_per_row_block=" << _num_rows_per_row_block << ",next_column_unique_id=" << _next_column_unique_id
        << ",has_bf_fpp=" << _has_bf_fpp << ",bf_fpp=" << _bf_fpp;
+    ss << ",primary_key_encoding_type=" << static_cast<int32_t>(_primary_key_encoding_type);
     return ss.str();
 }
 

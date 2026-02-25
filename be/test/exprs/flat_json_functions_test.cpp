@@ -20,6 +20,8 @@
 #include <string>
 #include <vector>
 
+#include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "butil/time.h"
 #include "column/const_column.h"
 #include "column/map_column.h"
@@ -34,17 +36,21 @@
 #include "gtest/gtest-param-test.h"
 #include "gutil/casts.h"
 #include "gutil/strings/strip.h"
-#include "testutil/assert.h"
+#include "types/json_value.h"
 #include "types/logical_type.h"
-#include "util/defer_op.h"
-#include "util/json.h"
 #include "util/json_flattener.h"
 
 namespace starrocks {
 
 class FlatJsonQueryTestFixture2
         : public ::testing::TestWithParam<std::tuple<std::string, std::vector<std::string>, std::vector<LogicalType>,
-                                                     std::string, std::string>> {};
+                                                     std::string, std::string>> {
+    void SetUp() override {
+        config::enable_json_flat_complex_type = true;
+        config::json_flat_sparsity_factor = 0.9;
+    }
+    void TearDown() override { config::enable_json_flat_complex_type = false; }
+};
 
 TEST_P(FlatJsonQueryTestFixture2, flat_json_query) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
@@ -73,7 +79,7 @@ TEST_P(FlatJsonQueryTestFixture2, flat_json_query) {
     jf.flatten(json_col.get());
     flat_json_ptr->set_flat_columns(param_flat_path, param_flat_type, jf.mutable_result());
 
-    Columns columns{flat_json, builder.build(true)};
+    Columns columns{std::move(flat_json), builder.build(true)};
 
     ctx.get()->set_constant_columns(columns);
     std::ignore =
@@ -144,7 +150,10 @@ INSTANTIATE_TEST_SUITE_P(FlatJsonQueryTest, FlatJsonQueryTestFixture2,
 // clang-format on
 
 class FlatJsonQueryErrorTestFixture
-        : public ::testing::TestWithParam<std::tuple<std::string, std::vector<std::string>, std::string>> {};
+        : public ::testing::TestWithParam<std::tuple<std::string, std::vector<std::string>, std::string>> {
+    void SetUp() override { config::enable_json_flat_complex_type = true; }
+    void TearDown() override { config::enable_json_flat_complex_type = false; }
+};
 
 TEST_P(FlatJsonQueryErrorTestFixture, json_query) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
@@ -177,7 +186,7 @@ TEST_P(FlatJsonQueryErrorTestFixture, json_query) {
     jf.flatten(json_col.get());
     flat_json_ptr->set_flat_columns(param_flat_path, param_flat_type, jf.mutable_result());
 
-    Columns columns{flat_json, builder.build(true)};
+    Columns columns{std::move(flat_json), builder.build(true)};
 
     ctx.get()->set_constant_columns(columns);
     std::ignore =
@@ -203,7 +212,10 @@ INSTANTIATE_TEST_SUITE_P(
 
 class FlatJsonExistsTestFixture2
         : public ::testing::TestWithParam<
-                  std::tuple<std::string, std::vector<std::string>, std::vector<LogicalType>, std::string, bool>> {};
+                  std::tuple<std::string, std::vector<std::string>, std::vector<LogicalType>, std::string, bool>> {
+    void SetUp() override { config::enable_json_flat_complex_type = true; }
+    void TearDown() override { config::enable_json_flat_complex_type = false; }
+};
 
 TEST_P(FlatJsonExistsTestFixture2, flat_json_exists_test) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
@@ -229,11 +241,11 @@ TEST_P(FlatJsonExistsTestFixture2, flat_json_exists_test) {
     flat_json_ptr->set_flat_columns(param_flat_path, param_flat_type, jf.mutable_result());
 
     Columns columns;
-    columns.push_back(flat_json);
+    columns.emplace_back(std::move(flat_json));
     if (!param_path.empty()) {
         auto path_column = BinaryColumn::create();
         path_column->append(param_path);
-        columns.push_back(path_column);
+        columns.emplace_back(std::move(path_column));
     }
 
     ctx.get()->set_constant_columns(columns);
@@ -283,7 +295,10 @@ INSTANTIATE_TEST_SUITE_P(FlatJsonExistsTest, FlatJsonExistsTestFixture2,
 
 class FlatJsonLengthTestFixture2
         : public ::testing::TestWithParam<
-                  std::tuple<std::string, std::vector<std::string>, std::vector<LogicalType>, std::string, int>> {};
+                  std::tuple<std::string, std::vector<std::string>, std::vector<LogicalType>, std::string, int>> {
+    void SetUp() override { config::enable_json_flat_complex_type = true; }
+    void TearDown() override { config::enable_json_flat_complex_type = false; }
+};
 
 TEST_P(FlatJsonLengthTestFixture2, flat_json_length_test) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
@@ -309,11 +324,11 @@ TEST_P(FlatJsonLengthTestFixture2, flat_json_length_test) {
     flat_json_ptr->set_flat_columns(param_flat_path, param_flat_type, jf.mutable_result());
 
     Columns columns;
-    columns.push_back(flat_json);
+    columns.emplace_back(std::move(flat_json));
     if (!param_path.empty()) {
         auto path_column = BinaryColumn::create();
         path_column->append(param_path);
-        columns.push_back(path_column);
+        columns.emplace_back(std::move(path_column));
     }
 
     // ctx.get()->set_constant_columns(columns);
@@ -341,7 +356,10 @@ INSTANTIATE_TEST_SUITE_P(FlatJsonLengthTest, FlatJsonLengthTestFixture2,
 
 class FlatJsonKeysTestFixture2
         : public ::testing::TestWithParam<std::tuple<std::string, std::string, std::vector<std::string>,
-                                                     std::vector<LogicalType>, std::string>> {};
+                                                     std::vector<LogicalType>, std::string>> {
+    void SetUp() override { config::enable_json_flat_complex_type = true; }
+    void TearDown() override { config::enable_json_flat_complex_type = false; }
+};
 
 TEST_P(FlatJsonKeysTestFixture2, json_keys) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
@@ -367,7 +385,7 @@ TEST_P(FlatJsonKeysTestFixture2, json_keys) {
     auto flat_json = JsonColumn::create();
     auto flat_json_ptr = flat_json.get();
 
-    Columns columns{flat_json, builder.build(true)};
+    Columns columns{std::move(flat_json), builder.build(true)};
 
     JsonFlattener jf(param_flat_path, param_flat_type, false);
     jf.flatten(json_column.get());
@@ -416,6 +434,8 @@ using GetJsonXXXParam = std::tuple<std::string, std::string, std::vector<std::st
 class FlatGetJsonXXXTestFixture2 : public ::testing::TestWithParam<GetJsonXXXParam> {
 public:
     StatusOr<Columns> setup() {
+        config::enable_json_flat_complex_type = true;
+        config::enable_lazy_dynamic_flat_json = true; // Enable hyper extraction path to test _extract_with_hyper
         _ctx = std::unique_ptr<FunctionContext>(FunctionContext::create_test_context());
         auto ints = JsonColumn::create();
         ColumnBuilder<TYPE_VARCHAR> builder(1);
@@ -444,7 +464,7 @@ public:
         jf.flatten(ints.get());
         flat_json_ptr->set_flat_columns(flat_path, flat_type, jf.mutable_result());
 
-        Columns columns{flat_json, builder.build(true)};
+        Columns columns{std::move(flat_json), builder.build(true)};
 
         _ctx->set_constant_columns(columns);
         std::ignore = JsonFunctions::native_json_path_prepare(_ctx.get(),
@@ -453,6 +473,7 @@ public:
     }
 
     void tear_down() {
+        config::enable_json_flat_complex_type = false;
         ASSERT_TRUE(JsonFunctions::native_json_path_close(
                             _ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
@@ -574,13 +595,23 @@ INSTANTIATE_TEST_SUITE_P(GetJsonXXXTest, FlatGetJsonXXXTestFixture2,
         std::make_tuple(R"( {"k1": false} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_JSON}, 0, 0, "false", 0.0),
         std::make_tuple(R"( {"k1": true} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_VARCHAR}, 1, -1, "true", -1),
         std::make_tuple(R"( {"k1": false} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_VARCHAR}, 0, -1, "false", -1),
-        std::make_tuple(R"( {"k1": "value" } )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_VARCHAR}, -1, -1, R"( value )", -1)
+        std::make_tuple(R"( {"k1": "value" } )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_VARCHAR}, -1, -1, R"( value )", -1),
+        // Test case to cover the bug fix: empty flat_path should not cause crash when calling substr(1)
+        // When path is "$", flat_path will be empty, and calling substr(1) on empty string would throw std::out_of_range
+        std::make_tuple(R"( {"k1": 1} )", "$", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_BIGINT}, -1, -1, "NULL", -1)
     ));
 // clang-format on
 
 class FlatJsonDeriverPaths
         : public ::testing::TestWithParam<
-                  std::tuple<std::string, std::string, std::vector<std::string>, std::vector<LogicalType>>> {};
+                  std::tuple<std::string, std::string, std::vector<std::string>, std::vector<LogicalType>>> {
+public:
+    void SetUp() override {
+        config::enable_json_flat_complex_type = true;
+        config::json_flat_sparsity_factor = 0.9;
+    }
+    void TearDown() override { config::enable_json_flat_complex_type = false; }
+};
 
 TEST_P(FlatJsonDeriverPaths, flat_json_path_test) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
@@ -615,9 +646,9 @@ INSTANTIATE_TEST_SUITE_P(FlatJsonPathDeriver, FlatJsonDeriverPaths,
     ::testing::Values(
         std::make_tuple(R"({ "k1": 1, "k2": 2 })", R"({ "k1": 3, "k2": 4 })", std::vector<std::string> {"k1", "k2"}, std::vector<LogicalType> {TYPE_BIGINT, TYPE_BIGINT}),
         std::make_tuple(R"({ "k1": "v1" })",  R"({ "k1": "v33" })", std::vector<std::string> {"k1"}, std::vector<LogicalType> {TYPE_VARCHAR}),
-        std::make_tuple(R"({ "k1": {"k2": 1} })",  R"({ "k1": 123 })", std::vector<std::string> {}, std::vector<LogicalType> {}),
+        std::make_tuple(R"({ "k1": {"k2": 1} })",  R"({ "k1": 123 })", std::vector<std::string> {"k1"}, std::vector<LogicalType> {TYPE_JSON}),
         std::make_tuple(R"({ "k1": "v1" })",  R"({ "k1": 1.123 })", std::vector<std::string> {"k1"}, std::vector<LogicalType> {TYPE_JSON}),
-        std::make_tuple(R"({ "k1": {"k2": 1} })", R"({ "k1": 1.123 })", std::vector<std::string> {}, std::vector<LogicalType> {}),
+        std::make_tuple(R"({ "k1": {"k2": 1} })", R"({ "k1": 1.123 })", std::vector<std::string> {"k1"}, std::vector<LogicalType> {TYPE_JSON}),
         std::make_tuple(R"({ "k1": [1,2,3] })", R"({ "k1": "v33" })", std::vector<std::string> {"k1"}, std::vector<LogicalType> {TYPE_JSON}),
 
         std::make_tuple(R"({ "k1": "v1", "k2": [3,4,5], "k3": 1, "k4": 1.2344 })",  

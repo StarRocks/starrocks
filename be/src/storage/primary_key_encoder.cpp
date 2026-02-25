@@ -48,65 +48,14 @@
 #include "gutil/stringprintf.h"
 #include "storage/dictionary_cache_manager.h"
 #include "storage/tablet_schema.h"
-#include "types/date_value.hpp"
+#include "types/date_value.h"
 
 namespace starrocks {
 
 constexpr uint8_t SORT_KEY_NULL_FIRST_MARKER = 0x00;
 constexpr uint8_t SORT_KEY_NORMAL_MARKER = 0x01;
 
-template <class UT>
-UT to_bigendian(UT v);
-
-template <>
-uint8_t to_bigendian(uint8_t v) {
-    return v;
-}
-template <>
-uint16_t to_bigendian(uint16_t v) {
-    return BigEndian::FromHost16(v);
-}
-template <>
-uint32_t to_bigendian(uint32_t v) {
-    return BigEndian::FromHost32(v);
-}
-template <>
-uint64_t to_bigendian(uint64_t v) {
-    return BigEndian::FromHost64(v);
-}
-template <>
-uint128_t to_bigendian(uint128_t v) {
-    return BigEndian::FromHost128(v);
-}
-
-template <class T>
-void encode_integral(const T& v, std::string* dest) {
-    if constexpr (std::is_signed<T>::value) {
-        typedef typename std::make_unsigned<T>::type UT;
-        UT uv = v;
-        uv ^= static_cast<UT>(1) << (sizeof(UT) * 8 - 1);
-        uv = to_bigendian(uv);
-        dest->append(reinterpret_cast<const char*>(&uv), sizeof(uv));
-    } else {
-        T nv = to_bigendian(v);
-        dest->append(reinterpret_cast<const char*>(&nv), sizeof(nv));
-    }
-}
-
-template <class T>
-void decode_integral(Slice* src, T* v) {
-    if constexpr (std::is_signed<T>::value) {
-        typedef typename std::make_unsigned<T>::type UT;
-        UT uv = *(UT*)(src->data);
-        uv = to_bigendian(uv);
-        uv ^= static_cast<UT>(1) << (sizeof(UT) * 8 - 1);
-        *v = uv;
-    } else {
-        T nv = *(T*)(src->data);
-        *v = to_bigendian(nv);
-    }
-    src->remove_prefix(sizeof(T));
-}
+using namespace encoding_utils;
 
 template <int LEN>
 static bool SSEEncodeChunk(const uint8_t** srcp, uint8_t** dstp) {
@@ -164,7 +113,8 @@ static inline void EncodeChunkLoop(const uint8_t** srcp, uint8_t** dstp, int len
     }
 }
 
-inline void encode_slice(const Slice& s, std::string* dst, bool is_last) {
+// Implementation of encoding_utils::encode_slice
+void encoding_utils::encode_slice(const Slice& s, std::string* dst, bool is_last) {
     if (is_last) {
         dst->append(s.data, s.size);
     } else {
@@ -285,11 +235,12 @@ bool PrimaryKeyEncoder::is_supported(const Schema& schema, const std::vector<Col
     return true;
 }
 
-LogicalType PrimaryKeyEncoder::encoded_primary_key_type(const Schema& schema, const std::vector<ColumnId>& key_idxes) {
+LogicalType PrimaryKeyEncoder::encoded_primary_key_type(const Schema& schema, const std::vector<ColumnId>& key_idxes,
+                                                        PrimaryKeyEncodingType encoding_type) {
     if (!is_supported(schema, key_idxes)) {
         return TYPE_NONE;
     }
-    if (key_idxes.size() == 1) {
+    if (key_idxes.size() == 1 && encoding_type == PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1) {
         if (!schema.sort_key_idxes().empty() && schema.field(schema.sort_key_idxes()[0])->is_nullable()) {
             return TYPE_VARCHAR;
         }
@@ -298,8 +249,12 @@ LogicalType PrimaryKeyEncoder::encoded_primary_key_type(const Schema& schema, co
     return TYPE_VARCHAR;
 }
 
-size_t PrimaryKeyEncoder::get_encoded_fixed_size(const Schema& schema) {
+size_t PrimaryKeyEncoder::get_encoded_fixed_size(const Schema& schema, PrimaryKeyEncodingType encoding_type) {
     size_t ret = 0;
+    if (encoding_type == PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2) {
+        return ret;
+    }
+
     size_t n = schema.num_key_fields();
     for (size_t i = 0; i < n; i++) {
         auto t = schema.field(i)->type()->type();
@@ -311,58 +266,60 @@ size_t PrimaryKeyEncoder::get_encoded_fixed_size(const Schema& schema) {
     return ret;
 }
 
-Status PrimaryKeyEncoder::create_column(const Schema& schema, std::unique_ptr<Column>* pcolumn, bool large_column) {
+Status PrimaryKeyEncoder::create_column(const Schema& schema, MutableColumnPtr* pcolumn,
+                                        PrimaryKeyEncodingType encoding_type, bool large_column) {
     std::vector<ColumnId> key_idxes(schema.num_key_fields());
     for (ColumnId i = 0; i < schema.num_key_fields(); ++i) {
         key_idxes[i] = i;
     }
-    return PrimaryKeyEncoder::create_column(schema, pcolumn, key_idxes, large_column);
+    return PrimaryKeyEncoder::create_column(schema, pcolumn, key_idxes, encoding_type, large_column);
 }
 
-Status PrimaryKeyEncoder::create_column(const Schema& schema, std::unique_ptr<Column>* pcolumn,
-                                        const std::vector<ColumnId>& key_idxes, bool large_column) {
+Status PrimaryKeyEncoder::create_column(const Schema& schema, MutableColumnPtr* pcolumn,
+                                        const std::vector<ColumnId>& key_idxes, PrimaryKeyEncodingType encoding_type,
+                                        bool large_column) {
     if (!is_supported(schema, key_idxes)) {
         return Status::NotSupported("type not supported for primary key encoding");
     }
     // TODO: let `Chunk::column_from_field_type` and `Chunk::column_from_field` return a
-    // `std::unique_ptr<Column>` instead of `std::shared_ptr<Column>`, in order to reuse
+    // `MutableColumnPtr` instead of `std::shared_ptr<Column>`, in order to reuse
     // its code here.
-    if (key_idxes.size() == 1) {
+    if (key_idxes.size() == 1 && encoding_type == PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1) {
         // simple encoding
         // integer's use fixed length original column
         // varchar use binary
         auto type = schema.field(key_idxes[0])->type()->type();
         switch (type) {
         case TYPE_BOOLEAN:
-            *pcolumn = BooleanColumn::create_mutable();
+            *pcolumn = BooleanColumn::create();
             break;
         case TYPE_TINYINT:
-            *pcolumn = Int8Column::create_mutable();
+            *pcolumn = Int8Column::create();
             break;
         case TYPE_SMALLINT:
-            *pcolumn = Int16Column::create_mutable();
+            *pcolumn = Int16Column::create();
             break;
         case TYPE_INT:
-            *pcolumn = Int32Column::create_mutable();
+            *pcolumn = Int32Column::create();
             break;
         case TYPE_BIGINT:
-            *pcolumn = Int64Column::create_mutable();
+            *pcolumn = Int64Column::create();
             break;
         case TYPE_LARGEINT:
-            *pcolumn = Int128Column::create_mutable();
+            *pcolumn = Int128Column::create();
             break;
         case TYPE_VARCHAR:
             if (large_column) {
-                *pcolumn = std::make_unique<LargeBinaryColumn>();
+                *pcolumn = LargeBinaryColumn::create();
             } else {
-                *pcolumn = std::make_unique<BinaryColumn>();
+                *pcolumn = BinaryColumn::create();
             }
             break;
         case TYPE_DATE:
-            *pcolumn = DateColumn::create_mutable();
+            *pcolumn = DateColumn::create();
             break;
         case TYPE_DATETIME:
-            *pcolumn = TimestampColumn::create_mutable();
+            *pcolumn = TimestampColumn::create();
             break;
         default:
             return Status::NotSupported(StringPrintf("primary key type not support: %s", logical_type_to_string(type)));
@@ -371,9 +328,9 @@ Status PrimaryKeyEncoder::create_column(const Schema& schema, std::unique_ptr<Co
         // composite keys encoding to binary
         // TODO(cbl): support fixed length encoded keys, e.g. (int32, int32) => int64
         if (large_column) {
-            *pcolumn = std::make_unique<LargeBinaryColumn>();
+            *pcolumn = LargeBinaryColumn::create();
         } else {
-            *pcolumn = std::make_unique<BinaryColumn>();
+            *pcolumn = BinaryColumn::create();
         }
     }
     return Status::OK();
@@ -448,19 +405,20 @@ static void prepare_ops_datas(const Schema& schema, const std::vector<ColumnId>&
     }
 }
 
-void PrimaryKeyEncoder::encode(const Schema& schema, const Chunk& chunk, size_t offset, size_t len, Column* dest) {
-    if (schema.num_key_fields() == 1) {
-        // simple encoding, src & dest should have same type
+void PrimaryKeyEncoder::encode(const Schema& schema, const Chunk& chunk, size_t offset, size_t len, Column* dest,
+                               PrimaryKeyEncodingType encoding_type) {
+    if (schema.num_key_fields() == 1 && encoding_type == PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1) {
+        // simple encoding without big-endian transformation
         auto& src = chunk.get_column_by_index(0);
         if (dest->is_large_binary() && src->is_binary()) {
             auto& bdest = down_cast<LargeBinaryColumn&>(*dest);
-            auto& bsrc = down_cast<BinaryColumn&>(*src);
+            const auto& bsrc = down_cast<const BinaryColumn&>(*src);
             for (size_t i = 0; i < len; i++) {
                 bdest.append(bsrc.get_slice(offset + i));
             }
         } else if (dest->is_binary() && src->is_large_binary()) {
             auto& bdest = down_cast<BinaryColumn&>(*dest);
-            auto& bsrc = down_cast<LargeBinaryColumn&>(*src);
+            const auto& bsrc = down_cast<const LargeBinaryColumn&>(*src);
             for (size_t i = 0; i < len; i++) {
                 bdest.append(bsrc.get_slice(offset + i));
             }
@@ -468,6 +426,7 @@ void PrimaryKeyEncoder::encode(const Schema& schema, const Chunk& chunk, size_t 
             dest->append(*src, offset, len);
         }
     } else {
+        // For V2 or multi-column: always use big-endian encoding
         DCHECK(dest->is_binary() || dest->is_large_binary()) << "dest column should be binary";
         int ncol = schema.num_key_fields();
         std::vector<EncodeOp> ops(ncol);
@@ -508,7 +467,7 @@ Status PrimaryKeyEncoder::encode_sort_key(const Schema& schema, const Chunk& chu
     std::vector<EncodeOp> ops(ncol);
     std::vector<const void*> datas(ncol);
     prepare_ops_datas(schema, schema.sort_key_idxes(), chunk, &ops, &datas);
-    std::vector<std::shared_ptr<Column>> cols(ncol);
+    Columns cols(ncol);
     for (int i = 0; i < ncol; i++) {
         cols[i] = chunk.get_column_by_index(schema.sort_key_idxes()[i]);
     }
@@ -577,8 +536,8 @@ Status PrimaryKeyEncoder::encode_sort_key(const Schema& schema, const Chunk& chu
 }
 
 void PrimaryKeyEncoder::encode_selective(const Schema& schema, const Chunk& chunk, const uint32_t* indexes, size_t len,
-                                         Column* dest) {
-    if (schema.num_key_fields() == 1) {
+                                         Column* dest, PrimaryKeyEncodingType encoding_type) {
+    if (schema.num_key_fields() == 1 && encoding_type == PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1) {
         // simple encoding, src & dest should have same type
         auto& src = chunk.get_column_by_index(0);
         dest->append_selective(*src, indexes, 0, len);
@@ -619,10 +578,10 @@ void PrimaryKeyEncoder::encode_selective(const Schema& schema, const Chunk& chun
 }
 
 bool PrimaryKeyEncoder::encode_exceed_limit(const Schema& schema, const Chunk& chunk, size_t offset, size_t len,
-                                            const size_t limit_size) {
+                                            const size_t limit_size, PrimaryKeyEncodingType encoding_type) {
     int ncol = schema.num_key_fields();
     std::vector<const void*> datas(ncol, nullptr);
-    if (ncol == 1) {
+    if (ncol == 1 && encoding_type == PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1) {
         if (schema.field(0)->type()->type() == TYPE_VARCHAR) {
             const Slice* keys =
                     static_cast<const Slice*>(static_cast<const void*>(chunk.get_column_by_index(0)->raw_data()));
@@ -679,7 +638,7 @@ Status decode_internal(const Schema& schema, const T& bkeys, size_t offset, size
         Slice s = bkeys.get_slice(offset + i);
         bool skip_decode = (value_encode_flags != nullptr && (*value_encode_flags)[i] == SKIP_DECODE_FLAG);
         for (int j = 0; j < ncol; j++) {
-            auto& column = *(dest->get_column_by_index(j));
+            auto& column = *(dest->get_column_raw_ptr_by_index(j));
             if (skip_decode) {
                 column.append_default();
                 continue;
@@ -755,10 +714,10 @@ Status decode_internal(const Schema& schema, const T& bkeys, size_t offset, size
 }
 
 Status PrimaryKeyEncoder::decode(const Schema& schema, const Column& keys, size_t offset, size_t len, Chunk* dest,
-                                 std::vector<uint8_t>* value_encode_flags) {
-    if (schema.num_key_fields() == 1) {
+                                 PrimaryKeyEncodingType encoding_type, std::vector<uint8_t>* value_encode_flags) {
+    if (schema.num_key_fields() == 1 && encoding_type == PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1) {
         // simple decoding, src & dest should have same type
-        dest->get_column_by_index(0)->append(keys, offset, len);
+        dest->get_column_raw_ptr_by_index(0)->append(keys, offset, len);
     } else {
         RETURN_ERROR_IF_FALSE(keys.is_binary() || keys.is_large_binary());
         if (keys.is_binary()) {

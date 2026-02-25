@@ -18,13 +18,14 @@
 #include <memory>
 
 #include "common/config.h"
+#include "common/thread/threadpool.h"
 #include "exec/pipeline/scan/chunk_buffer_limiter.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/stream/scan/stream_scan_operator.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "runtime/global_dict/parser.h"
 #include "util/priority_thread_pool.hpp"
-#include "util/threadpool.h"
 
 namespace starrocks {
 
@@ -73,6 +74,17 @@ Status ConnectorScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
         _io_tasks_per_scan_operator = query_options.connector_io_tasks_per_scan_operator;
     }
     _estimate_scan_row_bytes();
+
+    if (tnode.__isset.lake_scan_node) {
+        if (tnode.lake_scan_node.__isset.enable_topn_filter_back_pressure &&
+            tnode.lake_scan_node.enable_topn_filter_back_pressure) {
+            _enable_topn_filter_back_pressure = true;
+            _back_pressure_max_rounds = tnode.lake_scan_node.back_pressure_max_rounds;
+            _back_pressure_num_rows = tnode.lake_scan_node.back_pressure_num_rows;
+            _back_pressure_throttle_time = tnode.lake_scan_node.back_pressure_throttle_time;
+            _back_pressure_throttle_time_upper_bound = tnode.lake_scan_node.back_pressure_throttle_time_upper_bound;
+        }
+    }
 
     return Status::OK();
 }
@@ -279,9 +291,6 @@ Status ConnectorScanNode::_start_scan_thread(RuntimeState* state) {
 }
 
 Status ConnectorScanNode::_create_and_init_scanner(RuntimeState* state, TScanRange& scan_range) {
-    if (scan_range.__isset.broker_scan_range) {
-        scan_range.broker_scan_range.params.__set_non_blocking_read(false);
-    }
     connector::DataSourcePtr data_source = _data_source_provider->create_data_source(scan_range);
     data_source->set_predicates(_conjunct_ctxs);
     data_source->set_runtime_filters(&_runtime_filter_collector);
@@ -391,7 +400,7 @@ bool ConnectorScanNode::_submit_scanner(ConnectorScanner* scanner, bool blockabl
     const TQueryOptions& query_options = runtime_state()->query_options();
     if (query_options.query_type == TQueryType::LOAD && query_options.load_job_type == TLoadJobType::STREAM_LOAD &&
         config::enable_streaming_load_thread_pool) {
-        VLOG(1) << "Submit streaming load scanner, fragment: " << print_id(runtime_state()->fragment_instance_id());
+        VLOG(2) << "Submit streaming load scanner, fragment: " << print_id(runtime_state()->fragment_instance_id());
         return _submit_streaming_load_scanner(scanner, blockable);
     }
 
@@ -448,7 +457,7 @@ bool ConnectorScanNode::_submit_streaming_load_scanner(ConnectorScanner* scanner
                 return true;
             }
         }
-        VLOG(1) << "Failed to submit scanner for streaming load with block mode, "
+        VLOG(2) << "Failed to submit scanner for streaming load with block mode, "
                 << "fragment: " << print_id(runtime_state()->fragment_instance_id()) << ", first status: " << status
                 << ", last status: " << block_status;
         // always return true for blockable which is same as that in _submit_scanner
@@ -682,6 +691,13 @@ void ConnectorScanNode::_init_counter() {
     _profile.scanner_queue_counter = ADD_COUNTER(_runtime_profile, "ScannerQueueCounter", TUnit::UNIT);
 }
 
+int ConnectorScanNode::io_tasks_per_scan_operator() const {
+    if (_data_source_provider->sorted_by_keys_per_tablet()) {
+        return 1;
+    }
+    return starrocks::ScanNode::io_tasks_per_scan_operator();
+}
+
 bool ConnectorScanNode::always_shared_scan() const {
     return _data_source_provider->always_shared_scan();
 }
@@ -690,7 +706,6 @@ StatusOr<pipeline::MorselQueuePtr> ConnectorScanNode::convert_scan_range_to_mors
         const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
         bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
         size_t num_total_scan_ranges) {
-    _data_source_provider->peek_scan_ranges(scan_ranges);
     return _data_source_provider->convert_scan_range_to_morsel_queue(
             scan_ranges, node_id, pipeline_dop, enable_tablet_internal_parallel, tablet_internal_parallel_mode,
             num_total_scan_ranges);

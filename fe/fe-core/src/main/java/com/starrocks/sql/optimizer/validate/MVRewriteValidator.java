@@ -24,6 +24,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializedViewRewriter;
 import com.starrocks.sql.optimizer.task.TaskContext;
 import org.apache.commons.collections.CollectionUtils;
@@ -36,10 +37,15 @@ import java.util.stream.Collectors;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.collectMaterializedViews;
 
 public class MVRewriteValidator {
-    private static final MVRewriteValidator INSTANCE = new MVRewriteValidator();
+    //    private static final MVRewriteValidator INSTANCE = new MVRewriteValidator();
+    //
+    //    public static MVRewriteValidator getInstance() {
+    //        return INSTANCE;
+    //    }
+    private List<LogicalOlapScanOperator> allLogicalOlapScanOperators;
 
-    public static MVRewriteValidator getInstance() {
-        return INSTANCE;
+    public MVRewriteValidator(List<LogicalOlapScanOperator> allLogicalOlapScanOperators) {
+        this.allLogicalOlapScanOperators = allLogicalOlapScanOperators;
     }
 
     private static boolean isUpdateMaterializedViewMetrics(ConnectContext connectContext) {
@@ -79,7 +85,7 @@ public class MVRewriteValidator {
         List<MaterializedView> mvs = collectMaterializedViews(physicalPlan);
         // To avoid queries that query the materialized view directly, only consider materialized views
         // that are not used in rewriting before.
-        Set<Long> beforeTableIds = optimizerContext.getAllLogicalOlapScanOperators().stream()
+        Set<Long> beforeTableIds = allLogicalOlapScanOperators.stream()
                 .map(op -> op.getTable().getId())
                 .collect(Collectors.toSet());
         if (CollectionUtils.isNotEmpty(mvs)) {
@@ -130,7 +136,7 @@ public class MVRewriteValidator {
         }
 
         List<MaterializedView> mvs = collectMaterializedViews(physicalPlan);
-        Set<Long> beforeTableIds = taskContext.getOptimizerContext().getAllLogicalOlapScanOperators().stream()
+        Set<Long> beforeTableIds = allLogicalOlapScanOperators.stream()
                 .map(op -> op.getTable().getId())
                 .collect(Collectors.toSet());
 

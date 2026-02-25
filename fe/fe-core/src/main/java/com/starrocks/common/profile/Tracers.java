@@ -20,6 +20,7 @@ import com.starrocks.qe.ConnectContext;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Function;
 
 public class Tracers {
@@ -28,7 +29,7 @@ public class Tracers {
     }
 
     public enum Module {
-        NONE, ALL, BASE, OPTIMIZER, SCHEDULER, ANALYZE, MV, EXTERNAL, PARSER
+        NONE, ALL, BASE, OPTIMIZER, SCHEDULER, CLIENT, ANALYZE, MV, EXTERNAL, PARSER
     }
 
     private static final Tracer EMPTY_TRACER = new Tracer() {
@@ -79,16 +80,21 @@ public class Tracers {
         return THREAD_LOCAL.get();
     }
 
+    public static void set(Tracers tracers) {
+        THREAD_LOCAL.set(tracers);
+    }
+
     /**
      * Init tracer with context and mode.
      * @param context connect context
-     * @param mode tracer mode
+     * @param modeStr tracer mode
      * @param moduleStr tracer module
      */
-    public static void init(ConnectContext context, Mode mode, String moduleStr) {
+    public static void init(ConnectContext context, String modeStr, String moduleStr) {
         boolean enableProfile =
                 context.getSessionVariable().isEnableProfile() || context.getSessionVariable().isEnableBigQueryProfile();
         boolean checkMV = context.getSessionVariable().isEnableMaterializedViewRewriteOrError();
+        Mode mode = getTraceMode(modeStr);
         Module module = getTraceModule(moduleStr);
         init(mode, module, enableProfile, checkMV);
     }
@@ -115,6 +121,7 @@ public class Tracers {
             tracers.moduleMask |= 1 << Module.BASE.ordinal();
             tracers.moduleMask |= 1 << Module.EXTERNAL.ordinal();
             tracers.moduleMask |= 1 << Module.SCHEDULER.ordinal();
+            tracers.moduleMask |= 1 << Module.CLIENT.ordinal();
             tracers.moduleMask |= 1 << Module.MV.ordinal();
 
             tracers.modeMask |= 1 << Mode.TIMER.ordinal();
@@ -150,8 +157,35 @@ public class Tracers {
         return (tracers.moduleMask & 1 << m.ordinal()) != 0;
     }
 
+    public static void enableTraceModule(Module m) {
+        if (m == null || m == Module.NONE) {
+            return;
+        }
+        Tracers tracers = THREAD_LOCAL.get();
+        tracers.moduleMask |= 1 << m.ordinal();
+    }
+
+    public static void enableTraceMode(Mode m) {
+        if (m == null || m == Mode.NONE) {
+            return;
+        }
+        Tracers tracers = THREAD_LOCAL.get();
+        tracers.modeMask |= 1 << m.ordinal();
+    }
+
     public static void close() {
         THREAD_LOCAL.remove();
+    }
+
+    private static Mode getTraceMode(String str) {
+        try {
+            if (str != null) {
+                return Mode.valueOf(str.toUpperCase());
+            }
+        } catch (Exception e) {
+            return Mode.NONE;
+        }
+        return Mode.NONE;
     }
 
     private static Module getTraceModule(String str) {
@@ -195,6 +229,13 @@ public class Tracers {
         tracers.tracer(module, Mode.LOGS).log(func, args);
     }
 
+    // lazy log, use it if you want to avoid construct log string when log is disabled
+    public static void log(Tracers tracers, Module module, Function<Object[], String> func, Object... args) {
+        synchronized (tracers) {
+            tracers.tracer(module, Mode.LOGS).log(func, args);
+        }
+    }
+
     public static void log(String log, Object... args) {
         Tracers tracers = THREAD_LOCAL.get();
         tracers.tracer(Module.BASE, Mode.TIMER).log(log, args);
@@ -218,7 +259,7 @@ public class Tracers {
         tracers.tracer(module, Mode.VARS).record(name, value);
     }
 
-    public static void count(Module module, String name, int count) {
+    public static void count(Module module, String name, long count) {
         Tracers tracers = THREAD_LOCAL.get();
         tracers.tracer(module, Mode.VARS).count(name, count);
     }
@@ -256,6 +297,11 @@ public class Tracers {
     public static void toRuntimeProfile(RuntimeProfile profile) {
         Tracers tracers = THREAD_LOCAL.get();
         tracers.allTracer[1].toRuntimeProfile(profile);
+    }
+
+    public static Optional<Timer> getSpecifiedTimer(String name) {
+        Tracers tracers = THREAD_LOCAL.get();
+        return tracers.allTracer[1].getSpecifiedTimer(name);
     }
 
     public static String getTrace(Mode mode) {

@@ -16,12 +16,12 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/parallel_test.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
-#include "testutil/parallel_test.h"
 
 namespace starrocks {
 
@@ -108,7 +108,7 @@ PARALLEL_TEST(BinaryColumnTest, test_get_data) {
     for (int i = 0; i < 100; i++) {
         column->append(std::string("str:").append(std::to_string(i)));
     }
-    auto& slices = column->get_data();
+    auto& slices = ColumnHelper::as_raw_column<BinaryColumn>(column.get())->get_data();
     for (int i = 0; i < slices.size(); ++i) {
         ASSERT_EQ(std::string("str:").append(std::to_string(i)), slices[i].to_string());
     }
@@ -136,13 +136,13 @@ PARALLEL_TEST(BinaryColumnTest, test_filter) {
 
     Filter filter;
     for (int k = 0; k < 100; ++k) {
-        filter.push_back(k % 2);
+        filter.emplace_back(k % 2);
     }
 
     column->filter(filter);
     ASSERT_EQ(50, column->size());
 
-    std::vector<Slice>& slices = column->get_data();
+    const auto& slices = ColumnHelper::as_raw_column<BinaryColumn>(column.get())->get_data();
 
     for (int i = 0; i < 50; ++i) {
         ASSERT_EQ(std::to_string(i * 2 + 1), slices[i].to_string());
@@ -153,17 +153,27 @@ PARALLEL_TEST(BinaryColumnTest, test_filter) {
 PARALLEL_TEST(BinaryColumnTest, test_append_strings) {
     std::vector<Slice> values{{"hello"}, {"starrocks"}};
     auto c1 = BinaryColumn::create();
-    ASSERT_TRUE(c1->append_strings(values));
+    ASSERT_TRUE(c1->append_strings(values.data(), values.size()));
     ASSERT_EQ(values.size(), c1->size());
     for (size_t i = 0; i < values.size(); i++) {
-        ASSERT_EQ(values[i], c1->get_data()[i]);
+        ASSERT_EQ(values[i], ColumnHelper::as_raw_column<BinaryColumn>(c1.get())->get_data()[i]);
+    }
+
+    std::vector<Slice> values2{{"abcd"}, {"123456"}};
+    ASSERT_TRUE(c1->append_strings(values2.data(), values2.size()));
+    ASSERT_EQ(values.size() + values2.size(), c1->size());
+    for (size_t i = 0; i < values.size(); i++) {
+        ASSERT_EQ(values[i], ColumnHelper::as_raw_column<BinaryColumn>(c1.get())->get_data()[i]);
+    }
+    for (size_t i = 0; i < values2.size(); i++) {
+        ASSERT_EQ(values2[i], ColumnHelper::as_raw_column<BinaryColumn>(c1.get())->get_data()[i + 2]);
     }
 
     // Nullable BinaryColumn
     auto c2 = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-    ASSERT_TRUE(c2->append_strings(values));
+    ASSERT_TRUE(c2->append_strings(values.data(), values.size()));
     ASSERT_EQ(values.size(), c2->size());
-    auto* c = reinterpret_cast<BinaryColumn*>(c2->mutable_data_column());
+    auto* c = reinterpret_cast<BinaryColumn*>(c2->data_column_raw_ptr());
     for (size_t i = 0; i < values.size(); i++) {
         ASSERT_EQ(values[i], c->get_data()[i]);
     }
@@ -195,6 +205,17 @@ PARALLEL_TEST(BinaryColumnTest, test_append_nulls) {
 }
 
 // NOLINTNEXTLINE
+PARALLEL_TEST(BinaryColumnTest, test_murmur_hash) {
+    auto column = BinaryColumn::create();
+    column->append_string("iceberg");
+
+    std::vector<uint32_t> hash_values(1);
+    column->murmur_hash3_x86_32(hash_values.data(), 0, 1);
+
+    ASSERT_EQ(1210000089, hash_values[0]);
+}
+
+// NOLINTNEXTLINE
 PARALLEL_TEST(BinaryColumnTest, test_append_defaults) {
     // BinaryColumn
     auto c1 = BinaryColumn::create();
@@ -219,8 +240,8 @@ PARALLEL_TEST(BinaryColumnTest, test_compare_at) {
     std::vector<Slice> strings{{"bbb"}, {"bbc"}, {"ccc"}};
     auto c1 = BinaryColumn::create();
     auto c2 = BinaryColumn::create();
-    c1->append_strings(strings);
-    c2->append_strings(strings);
+    c1->append_strings(strings.data(), strings.size());
+    c2->append_strings(strings.data(), strings.size());
     for (size_t i = 0; i < strings.size(); i++) {
         ASSERT_EQ(0, c1->compare_at(i, i, *c2, -1));
         ASSERT_EQ(0, c2->compare_at(i, i, *c1, -1));
@@ -282,7 +303,7 @@ PARALLEL_TEST(BinaryColumnTest, test_filter_range) {
 
     column->filter_range(filter, 0, 66);
 
-    auto* binary_column = ColumnHelper::as_raw_column<BinaryColumn>(column);
+    auto* binary_column = ColumnHelper::as_raw_column<BinaryColumn>(column.get());
     auto& data = binary_column->get_data();
     for (size_t i = 0; i < 63; i++) {
         ASSERT_EQ(data[i], "a");
@@ -317,8 +338,8 @@ PARALLEL_TEST(BinaryColumnTest, test_assign) {
     std::vector<Slice> strings{{"bbb"}, {"bbc"}, {"ccc"}};
     auto c1 = BinaryColumn::create();
     auto c2 = BinaryColumn::create();
-    c1->append_strings(strings);
-    c2->append_strings(strings);
+    c1->append_strings(strings.data(), strings.size());
+    c2->append_strings(strings.data(), strings.size());
 
     c1->assign(c1->size(), 0);
     for (size_t i = 0; i < strings.size(); i++) {
@@ -335,12 +356,12 @@ PARALLEL_TEST(BinaryColumnTest, test_assign) {
 PARALLEL_TEST(BinaryColumnTest, test_reset_column) {
     std::vector<Slice> strings{{"bbb"}, {"bbc"}, {"ccc"}};
     auto c1 = BinaryColumn::create();
-    c1->append_strings(strings);
+    c1->append_strings(strings.data(), strings.size());
     c1->set_delete_state(DEL_PARTIAL_SATISFIED);
 
     c1->reset_column();
     ASSERT_EQ(0, c1->size());
-    ASSERT_EQ(0, c1->get_data().size());
+    ASSERT_EQ(0, ColumnHelper::as_raw_column<BinaryColumn>(c1.get())->get_data().size());
     ASSERT_EQ(DEL_NOT_SATISFIED, c1->delete_state());
 }
 
@@ -348,7 +369,7 @@ PARALLEL_TEST(BinaryColumnTest, test_reset_column) {
 PARALLEL_TEST(BinaryColumnTest, test_swap_column) {
     std::vector<Slice> strings{{"bbb"}, {"bbc"}, {"ccc"}};
     auto c1 = BinaryColumn::create();
-    c1->append_strings(strings);
+    c1->append_strings(strings.data(), strings.size());
     c1->set_delete_state(DEL_PARTIAL_SATISFIED);
 
     auto c2 = BinaryColumn::create();
@@ -356,11 +377,11 @@ PARALLEL_TEST(BinaryColumnTest, test_swap_column) {
     c1->swap_column(*c2);
 
     ASSERT_EQ(0, c1->size());
-    ASSERT_EQ(0, c1->get_data().size());
+    ASSERT_EQ(0, ColumnHelper::as_raw_column<BinaryColumn>(c1.get())->get_data().size());
     ASSERT_EQ(DEL_NOT_SATISFIED, c1->delete_state());
 
     ASSERT_EQ(3, c2->size());
-    ASSERT_EQ(3, c2->get_data().size());
+    ASSERT_EQ(3, ColumnHelper::as_raw_column<BinaryColumn>(c2.get())->get_data().size());
     ASSERT_EQ(DEL_PARTIAL_SATISFIED, c2->delete_state());
     ASSERT_EQ("bbb", c2->get_slice(0));
     ASSERT_EQ("bbc", c2->get_slice(1));
@@ -370,19 +391,19 @@ PARALLEL_TEST(BinaryColumnTest, test_swap_column) {
 // NOLINTNEXTLINE
 PARALLEL_TEST(BinaryColumnTest, test_slice_cache) {
     auto c1 = BinaryColumn::create();
-    c1->get_data().reserve(10);
+    ColumnHelper::as_raw_column<BinaryColumn>(c1.get())->get_data().reserve(10);
     c1->append_default();
     ASSERT_FALSE(c1->_slices_cache);
     ASSERT_EQ(c1->get_offset().size(), 2);
 
     auto c2 = BinaryColumn::create();
-    c2->get_data().reserve(10);
+    ColumnHelper::as_raw_column<BinaryColumn>(c2.get())->get_data().reserve(10);
     c2->append_default(5);
     ASSERT_FALSE(c2->_slices_cache);
     ASSERT_EQ(c2->get_offset().size(), 6);
 
     auto c3 = BinaryColumn::create();
-    c3->get_data().reserve(10);
+    ColumnHelper::as_raw_column<BinaryColumn>(c3.get())->get_data().reserve(10);
     c3->append(Slice("1"));
     ASSERT_FALSE(c3->_slices_cache);
     ASSERT_EQ(c3->get_offset().size(), 2);
@@ -405,15 +426,15 @@ PARALLEL_TEST(BinaryColumnTest, test_copy_constructor) {
     c1->append_datum("def");
 
     // trigger cache building.
-    auto slices = c1->get_data();
+    auto slices = ColumnHelper::as_raw_column<BinaryColumn>(c1.get())->get_data();
     ASSERT_EQ("abc", slices[0]);
     ASSERT_EQ("def", slices[1]);
 
-    auto c2(*c1);
+    auto c2 = BinaryColumn::static_pointer_cast(c1->clone());
 
     c1.reset();
-    slices = c2.get_data();
-    ASSERT_EQ(2, c2.size());
+    slices = c2->get_data();
+    ASSERT_EQ(2, c2->size());
     ASSERT_EQ("abc", slices[0]);
     ASSERT_EQ("def", slices[1]);
 }
@@ -425,7 +446,7 @@ PARALLEL_TEST(BinaryColumnTest, test_move_constructor) {
     c1->append_datum("def");
 
     // trigger cache building.
-    auto slices = c1->get_data();
+    auto slices = ColumnHelper::as_raw_column<BinaryColumn>(c1.get())->get_data();
     ASSERT_EQ("abc", slices[0]);
     ASSERT_EQ("def", slices[1]);
 
@@ -445,16 +466,15 @@ PARALLEL_TEST(BinaryColumnTest, test_copy_assignment) {
     c1->append_datum("def");
 
     // trigger cache building.
-    auto slices = c1->get_data();
+    auto slices = ColumnHelper::as_raw_column<BinaryColumn>(c1.get())->get_data();
     ASSERT_EQ("abc", slices[0]);
     ASSERT_EQ("def", slices[1]);
 
-    BinaryColumn c2;
-    c2 = *c1;
+    auto c2 = BinaryColumn::static_pointer_cast(c1->clone());
 
     c1.reset();
-    slices = c2.get_data();
-    ASSERT_EQ(2, c2.size());
+    slices = c2->get_data();
+    ASSERT_EQ(2, c2->size());
     ASSERT_EQ("abc", slices[0]);
     ASSERT_EQ("def", slices[1]);
 }
@@ -466,7 +486,7 @@ PARALLEL_TEST(BinaryColumnTest, test_move_assignment) {
     c1->append_datum("def");
 
     // trigger cache building.
-    auto slices = c1->get_data();
+    auto slices = ColumnHelper::as_raw_column<BinaryColumn>(c1.get())->get_data();
     ASSERT_EQ("abc", slices[0]);
     ASSERT_EQ("def", slices[1]);
 
@@ -487,7 +507,7 @@ PARALLEL_TEST(BinaryColumnTest, test_clone) {
     c1->append_datum("def");
 
     // trigger cache building.
-    auto slices = c1->get_data();
+    auto slices = ColumnHelper::as_raw_column<BinaryColumn>(c1.get())->get_data();
     ASSERT_EQ("abc", slices[0]);
     ASSERT_EQ("def", slices[1]);
 
@@ -508,12 +528,12 @@ PARALLEL_TEST(BinaryColumnTest, test_clone_shared) {
     c1->append_datum("def");
 
     // trigger cache building.
-    auto slices = c1->get_data();
+    auto slices = ColumnHelper::as_raw_column<BinaryColumn>(c1.get())->get_data();
     ASSERT_EQ("abc", slices[0]);
     ASSERT_EQ("def", slices[1]);
 
-    auto c2 = c1->clone_shared();
-    ASSERT_TRUE(c2.unique());
+    auto c2 = c1->clone();
+    ASSERT_TRUE(c2->use_count() == 1);
 
     c1.reset();
 
@@ -530,7 +550,7 @@ PARALLEL_TEST(BinaryColumnTest, test_clone_empty) {
     c1->append_datum("def");
 
     // trigger cache building.
-    auto slices = c1->get_data();
+    auto slices = ColumnHelper::as_raw_column<BinaryColumn>(c1.get())->get_data();
     ASSERT_EQ("abc", slices[0]);
     ASSERT_EQ("def", slices[1]);
 
@@ -634,13 +654,13 @@ PARALLEL_TEST(BinaryColumnTest, test_replicate) {
     c1->append_datum("def");
 
     Offsets offsets;
-    offsets.push_back(0);
-    offsets.push_back(3);
-    offsets.push_back(5);
+    offsets.emplace_back(0);
+    offsets.emplace_back(3);
+    offsets.emplace_back(5);
 
-    auto c2 = c1->replicate(offsets);
+    auto c2 = c1->replicate(offsets).value();
 
-    auto slices = down_cast<BinaryColumn*>(c2.get())->get_data();
+    auto slices = down_cast<const BinaryColumn*>(c2.get())->get_data();
     ASSERT_EQ(5, c2->size());
     ASSERT_EQ("abc", slices[0]);
     ASSERT_EQ("abc", slices[1]);
@@ -658,5 +678,45 @@ PARALLEL_TEST(BinaryColumnTest, test_reference_memory_usage) {
 
     ASSERT_EQ(0, column->Column::reference_memory_usage());
 }
+
+class BinaryColumnAppendSelectiveTestFixture : public ::testing::TestWithParam<std::tuple<uint32_t>> {};
+
+TEST_P(BinaryColumnAppendSelectiveTestFixture, test_append_selective) {
+    const uint32_t num_rows = std::get<0>(GetParam());
+
+    auto src_col = BinaryColumn::create();
+    for (uint32_t i = 0; i < num_rows; i++) {
+        const size_t str_len = i % 16 + 8; // Length between 8 and 23
+        std::string str(str_len, 'a' + (i % 26));
+        src_col->append(str);
+    }
+
+    std::vector<uint32_t> indexes;
+    indexes.reserve(num_rows / 16);
+    for (uint32_t i = 0; i < num_rows; i++) {
+        if (i % 16 == 0) {
+            indexes.emplace_back(i);
+        }
+    }
+
+    auto dst_col = BinaryColumn::create();
+
+    dst_col->append_selective(*src_col, indexes.data(), 0, static_cast<uint32_t>(indexes.size()));
+    const size_t num_dst_rows = dst_col->size();
+    ASSERT_EQ(indexes.size(), num_dst_rows);
+    for (uint32_t i = 0; i < num_dst_rows; i++) {
+        ASSERT_EQ(src_col->get_slice(indexes[i]), dst_col->get_slice(i));
+    }
+
+    dst_col->append_selective(*src_col, indexes.data(), 10, static_cast<uint32_t>(indexes.size()) - 10);
+    ASSERT_EQ(num_dst_rows + indexes.size() - 10, dst_col->size());
+    for (uint32_t i = 10; i < indexes.size(); i++) {
+        ASSERT_EQ(src_col->get_slice(indexes[i]), dst_col->get_slice(num_dst_rows + i - 10));
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(BinaryColumnAppendSelectiveTest, BinaryColumnAppendSelectiveTestFixture,
+                         ::testing::Values(std::make_tuple(2048), std::make_tuple(4096), std::make_tuple(40960),
+                                           std::make_tuple(4 * 1024 * 1024 + 10)));
 
 } // namespace starrocks

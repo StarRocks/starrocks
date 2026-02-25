@@ -27,6 +27,7 @@ namespace starrocks {
 
 class Tablet;
 class HashIndex;
+class ParallelPublishContext;
 
 const uint64_t ROWID_MASK = 0xffffffff;
 
@@ -53,6 +54,10 @@ public:
     //
     // [thread-safe]
     void unload();
+    void unload_without_lock();
+
+    // Whether index is normally loaded
+    bool is_loaded();
 
     // insert new primary keys into this index. caller need to make sure key doesn't exists
     // in index
@@ -69,6 +74,10 @@ public:
 
     Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
                   DeletesMap* deletes);
+
+    // support parallel upsert with thread pool
+    Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, IOStat* stat = nullptr,
+                  ParallelPublishContext* ctx = nullptr);
 
     // replace old values and insert when key not exist.
     // Used in compaction apply & publish.
@@ -124,11 +133,12 @@ public:
 
     Status prepare(const EditVersion& version, size_t n);
 
-    Status commit(PersistentIndexMetaPB* index_meta);
+    Status commit(PersistentIndexMetaPB* index_meta, IOStat* stat = nullptr);
 
     Status on_commited();
 
-    Status major_compaction(DataDir* data_dir, int64_t tablet_id, std::shared_timed_mutex* mutex);
+    Status major_compaction(DataDir* data_dir, int64_t tablet_id, std::shared_timed_mutex* mutex,
+                            IOStat* stat = nullptr);
 
     Status abort();
 
@@ -153,17 +163,22 @@ public:
 
     Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb);
 
+    Status get_load_status() { return _status; }
+
     // only for ut
     void set_status(bool loaded, Status st) {
         _loaded = loaded;
         _status = st;
     }
 
+    // Return the pointer of specific position of slice array.
+    static const Slice* build_persistent_keys(const Column& pks, size_t key_size, uint32_t idx_begin, uint32_t idx_end,
+                                              std::vector<Slice>* key_slices);
+
+    bool need_rebuild() const;
+
 protected:
     void _set_schema(const Schema& pk_schema);
-    // Return the pointer of specific position of slice array.
-    const Slice* _build_persistent_keys(const Column& pks, uint32_t idx_begin, uint32_t idx_end,
-                                        std::vector<Slice>* key_slices) const;
 
 private:
     Status _do_load(Tablet* tablet);
@@ -178,6 +193,9 @@ private:
 
     Status _upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin,
                                          uint32_t idx_end, DeletesMap* deletes, IOStat* stat);
+
+    Status _upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin,
+                                         uint32_t idx_end, IOStat* stat, ParallelPublishContext* ctx);
 
     Status _erase_persistent_index(const Column& key_col, DeletesMap* deletes);
 
@@ -200,9 +218,9 @@ protected:
     Status _status;
     int64_t _tablet_id = 0;
     std::shared_ptr<PersistentIndex> _persistent_index;
+    size_t _key_size = 0;
 
 private:
-    size_t _key_size = 0;
     int64_t _table_id = 0;
     Schema _pk_schema;
     LogicalType _enc_pk_type = TYPE_UNKNOWN;

@@ -16,13 +16,13 @@
 
 #include <utility>
 
-#include "exec/aggregator.h"
+#include "base/concurrency/race_detect.h"
+#include "exec/aggregator_fwd.h"
 #include "exec/pipeline/aggregate/aggregate_distinct_blocking_sink_operator.h"
 #include "exec/pipeline/aggregate/aggregate_distinct_blocking_source_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/source_operator.h"
 #include "storage/chunk_helper.h"
-#include "util/race_detect.h"
 
 namespace starrocks::pipeline {
 class SpillableAggregateDistinctBlockingSinkOperator : public AggregateDistinctBlockingSinkOperator {
@@ -38,6 +38,7 @@ public:
     Status set_finishing(RuntimeState* state) override;
 
     Status prepare(RuntimeState* state) override;
+    Status prepare_local_state(RuntimeState* state) override { return Status::OK(); }
     void close(RuntimeState* state) override;
 
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
@@ -87,6 +88,8 @@ public:
     Status prepare(RuntimeState* state) override;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
+
+    bool support_event_scheduler() const override { return false; }
 
 private:
     ObjectPool _pool;
@@ -143,6 +146,8 @@ public:
     Status prepare(RuntimeState* state) override;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
+
+    bool support_event_scheduler() const override { return false; }
 
 private:
     AggregatorFactoryPtr _hash_aggregator_factory;

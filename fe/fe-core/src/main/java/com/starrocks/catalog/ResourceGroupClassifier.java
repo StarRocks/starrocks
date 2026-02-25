@@ -209,7 +209,7 @@ public class ResourceGroupClassifier {
         if (CollectionUtils.isNotEmpty(databaseIds)) {
             String str = databaseIds.stream()
                     .map(id ->
-                            Optional.ofNullable(GlobalStateMgr.getCurrentState().getDb(id))
+                            Optional.ofNullable(GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(id))
                                     .map(Database::getFullName)
                                     .orElse("unknown"))
                     .collect(Collectors.joining(","));

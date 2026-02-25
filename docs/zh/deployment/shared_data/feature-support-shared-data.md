@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 sidebar_label: "能力边界"
 ---
 
@@ -84,6 +84,7 @@ StarRocks 支持以下对象存储服务的存储卷：
   - AWS S3
   - GCS、OSS、OBS、COS、TOS、KS3、MinIO 和 Ceph S3
 - Azure Blob Storage（从 v3.1.1 起支持）：`azblob://<azblob_path>`
+- Azure Data Lake Storage Gen2（从 v3.4.1 起支持）：`adls2://<file_system_name>/<dir_name>`
 
 #### 认证
 
@@ -97,6 +98,9 @@ StarRocks 支持以下对象存储服务的存储卷：
 - GCS、OSS、OBS、COS、TOS、KS3、MinIO 和 Ceph S3
   - 访问密钥
 - Azure Blob Storage
+  - Shared Key
+  - Shared Access Signatures（SAS）
+- Azure Data Lake Storage Gen2
   - Shared Key
   - Shared Access Signatures（SAS）
 
@@ -182,7 +186,7 @@ CANCEL COMPACTION WHERE TXN_ID = 123;
 
 ### 手动 Compaction
 
-从 v3.1 开始，StarRocks 支持通过 SQL 语句手动 Compaction。可以指定表或分区进行 Compaction。有关详细信息，请参阅 [手动 Compaction](../../sql-reference/sql-statements/data-definition/ALTER_TABLE.md#手动-compaction)。
+从 v3.1 开始，StarRocks 支持通过 SQL 语句手动 Compaction。可以指定表或分区进行 Compaction。有关详细信息，请参阅 [手动 Compaction](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md#手动-compaction)。
 
 ## 主键表
 
@@ -191,7 +195,7 @@ CANCEL COMPACTION WHERE TXN_ID = 123;
 | **功能**       | **支持起始版本** | **说明**                                                     |
 | -------------- | ---------------- | ------------------------------------------------------------ |
 | 主键表          | v3.1.0           |                                                              |
-| 主键索引持久化 | v3.2.0<br />v3.1.3 | <ul><li>目前，存算分离集群支持在本地磁盘上持久化主键索引。</li><li>远程存储持久化将在未来版本中支持。</li></ul> |
+| 主键索引持久化 | v3.2.0<br />v3.1.3<br />v3.3.2 |                                                              |
 | 部分更新       | v3.1.0           | 存算分离集群从 v3.1.0 开始支持行模式的部分更新，从 v3.3.1 开始支持列模式的部分更新。   |
 | 条件更新       | v3.1.0           | 目前仅支持“大于”条件。                                       |
 | 行列混存       | ❌                | 将在未来版本中支持。                                         |
@@ -221,7 +225,7 @@ SSB 1TB 数据集
 
 :::note
 
-以下性能测试中使用的数据集和查询来自于 [Star Schema Benchmark](../../benchmarking/SSB_Benchmarking.md/#test-sql-and-table-creation-statements)。
+以下性能测试中使用的数据集和查询来自于 [Star Schema Benchmark](../../benchmarking/SSB_Benchmarking.md#test-sql-and-table-creation-statements)。
 
 :::
 
@@ -256,6 +260,5 @@ SSB 1TB 数据集
 - 全文倒排索引
 - 行列混存
 - 全局字典对象
-- 生成列
 - 备份和恢复
 

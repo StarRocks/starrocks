@@ -21,7 +21,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -34,70 +33,73 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import com.starrocks.type.IntegerType;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 
 public class MaterializedViewRuleTest extends PlanTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW lo_count_mv as " +
-                "select LO_ORDERDATE,count(LO_LINENUMBER) from lineorder_flat_for_mv group by LO_ORDERDATE;");
+                    "select LO_ORDERDATE,count(LO_LINENUMBER) from lineorder_flat_for_mv group by LO_ORDERDATE;");
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW lo_count_key_mv as " +
-                "select LO_ORDERDATE, LO_ORDERKEY, count(LO_LINENUMBER) from lineorder_flat_for_mv" +
-                " group by LO_ORDERDATE, LO_ORDERKEY;");
+                    "select LO_ORDERDATE, LO_ORDERKEY, count(LO_LINENUMBER) from lineorder_flat_for_mv" +
+                    " group by LO_ORDERDATE, LO_ORDERKEY;");
     }
 
     @Test
     public void testMaterializedViewWithCountSelection() throws Exception {
         String sql = "select LO_ORDERDATE,count(LO_LINENUMBER) from lineorder_flat_for_mv group by LO_ORDERDATE;";
         ExecPlan plan = getExecPlan(sql);
-        Assert.assertTrue(plan != null);
-        Assert.assertEquals(1, plan.getScanNodes().size());
-        Assert.assertTrue(plan.getScanNodes().get(0) instanceof OlapScanNode);
+        Assertions.assertTrue(plan != null);
+        Assertions.assertEquals(1, plan.getScanNodes().size());
+        Assertions.assertTrue(plan.getScanNodes().get(0) instanceof OlapScanNode);
         OlapScanNode olapScanNode = (OlapScanNode) plan.getScanNodes().get(0);
-        Long selectedIndexid = olapScanNode.getSelectedIndexId();
+        Long selectedIndexid = olapScanNode.getSelectedIndexMetaId();
         GlobalStateMgr globalStateMgr = starRocksAssert.getCtx().getGlobalStateMgr();
-        Database database = globalStateMgr.getDb("test");
-        Table table = database.getTable("lineorder_flat_for_mv");
-        Assert.assertTrue(table instanceof OlapTable);
+        Database database = globalStateMgr.getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(database.getFullName(), "lineorder_flat_for_mv");
+        Assertions.assertTrue(table instanceof OlapTable);
         OlapTable baseTable = (OlapTable) table;
-        Assert.assertEquals(baseTable.getIndexIdByName("lo_count_mv"), selectedIndexid);
+        Assertions.assertEquals(baseTable.getIndexMetaIdByName("lo_count_mv"), selectedIndexid);
     }
 
     @Test
     public void testKeyColumnsMatch() throws Exception {
         GlobalStateMgr globalStateMgr = starRocksAssert.getCtx().getGlobalStateMgr();
-        Database database = globalStateMgr.getDb("test");
-        Table table = database.getTable("lineorder_flat_for_mv");
+        Database database = globalStateMgr.getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(database.getFullName(), "lineorder_flat_for_mv");
         OlapTable baseTable = (OlapTable) table;
 
         String sql = "select LO_ORDERDATE, sum(case when LO_ORDERKEY=0 then 0 else 1 end) as test, " +
-                "sum(case when LO_ORDERKEY=1 then 1 else 0 end) as nontest " +
-                " from lineorder_flat_for_mv group by LO_ORDERDATE;";
+                    "sum(case when LO_ORDERKEY=1 then 1 else 0 end) as nontest " +
+                    " from lineorder_flat_for_mv group by LO_ORDERDATE;";
         ExecPlan plan = getExecPlan(sql);
         OlapScanNode olapScanNode = (OlapScanNode) plan.getScanNodes().get(0);
-        Long selectedIndexid = olapScanNode.getSelectedIndexId();
-        Assert.assertNotEquals(baseTable.getIndexIdByName("lo_count_key_mv"), selectedIndexid);
+        Long selectedIndexid = olapScanNode.getSelectedIndexMetaId();
+        Assertions.assertNotEquals(baseTable.getIndexMetaIdByName("lo_count_key_mv"), selectedIndexid);
     }
 
     @Test
     public void testCount1Rewrite() {
         ColumnRefFactory tmpRefFactory = new ColumnRefFactory();
-        ColumnRefOperator queryColumnRef = tmpRefFactory.create("count", Type.INT, false);
-        ColumnRefOperator mvColumnRef = tmpRefFactory.create("count", Type.INT, false);
-        Column mvColumn = new Column("k1", Type.INT);
+        ColumnRefOperator queryColumnRef = tmpRefFactory.create("count", IntegerType.INT, false);
+        ColumnRefOperator mvColumnRef = tmpRefFactory.create("count", IntegerType.INT, false);
+        Column mvColumn = new Column("k1", IntegerType.INT);
         List<ScalarOperator> arguments = Lists.newArrayList();
         arguments.add(queryColumnRef);
-        CallOperator aggCall = new CallOperator(FunctionSet.COUNT, Type.BIGINT, arguments);
+        CallOperator aggCall = new CallOperator(FunctionSet.COUNT, IntegerType.BIGINT, arguments);
         MaterializedViewRule.RewriteContext rewriteContext =
-                new MaterializedViewRule.RewriteContext(aggCall, queryColumnRef, mvColumnRef, mvColumn);
-        ColumnRefOperator dsColumnRef = tmpRefFactory.create("ds", Type.INT, false);
+                    new MaterializedViewRule.RewriteContext(aggCall, queryColumnRef, mvColumnRef, mvColumn);
+        ColumnRefOperator dsColumnRef = tmpRefFactory.create("ds", IntegerType.INT, false);
         List<ColumnRefOperator> groupKeys = Lists.newArrayList();
         groupKeys.add(dsColumnRef);
 
@@ -105,8 +107,8 @@ public class MaterializedViewRuleTest extends PlanTestBase {
         ConstantOperator one = ConstantOperator.createInt(1);
         List<ScalarOperator> countAgruments = Lists.newArrayList();
         countAgruments.add(one);
-        CallOperator countOne = new CallOperator(FunctionSet.COUNT, Type.BIGINT, countAgruments);
-        ColumnRefOperator countOneKey = tmpRefFactory.create("countKey", Type.BIGINT, false);
+        CallOperator countOne = new CallOperator(FunctionSet.COUNT, IntegerType.BIGINT, countAgruments);
+        ColumnRefOperator countOneKey = tmpRefFactory.create("countKey", IntegerType.BIGINT, false);
         aggregates.put(countOneKey, countOne);
         LogicalAggregationOperator aggregationOperator = new LogicalAggregationOperator(AggType.GLOBAL, groupKeys, aggregates);
         OptExpression aggExpr = OptExpression.create(aggregationOperator);
@@ -114,12 +116,12 @@ public class MaterializedViewRuleTest extends PlanTestBase {
         try {
             rewriter.rewrite(aggExpr, rewriteContext);
         } catch (NoSuchElementException e) {
-            Assert.assertTrue(false);
+            Assertions.assertTrue(false);
         }
 
-        CallOperator countStar = new CallOperator(FunctionSet.COUNT, Type.BIGINT, Lists.newArrayList());
+        CallOperator countStar = new CallOperator(FunctionSet.COUNT, IntegerType.BIGINT, Lists.newArrayList());
         aggregates.clear();
-        ColumnRefOperator countStarkey = tmpRefFactory.create("countStar", Type.BIGINT, false);
+        ColumnRefOperator countStarkey = tmpRefFactory.create("countStar", IntegerType.BIGINT, false);
         aggregates.put(countStarkey, countStar);
         LogicalAggregationOperator aggregationOperator2 = new LogicalAggregationOperator(AggType.GLOBAL, groupKeys, aggregates);
         OptExpression aggExpr2 = OptExpression.create(aggregationOperator2);
@@ -127,12 +129,12 @@ public class MaterializedViewRuleTest extends PlanTestBase {
         try {
             rewriter2.rewrite(aggExpr2, rewriteContext);
         } catch (NoSuchElementException e) {
-            Assert.assertTrue(false);
+            Assertions.assertTrue(false);
         }
 
-        CallOperator sumDs = new CallOperator(FunctionSet.SUM, Type.BIGINT, arguments);
+        CallOperator sumDs = new CallOperator(FunctionSet.SUM, IntegerType.BIGINT, arguments);
         aggregates.clear();
-        ColumnRefOperator sumKey = tmpRefFactory.create("sumKey", Type.BIGINT, false);
+        ColumnRefOperator sumKey = tmpRefFactory.create("sumKey", IntegerType.BIGINT, false);
         aggregates.put(sumKey, sumDs);
         LogicalAggregationOperator aggregationOperator3 = new LogicalAggregationOperator(AggType.GLOBAL, groupKeys, aggregates);
         OptExpression aggExpr3 = OptExpression.create(aggregationOperator3);
@@ -140,7 +142,7 @@ public class MaterializedViewRuleTest extends PlanTestBase {
         try {
             rewriter3.rewrite(aggExpr3, rewriteContext);
         } catch (NoSuchElementException e) {
-            Assert.assertTrue(false);
+            Assertions.assertTrue(false);
         }
     }
 }

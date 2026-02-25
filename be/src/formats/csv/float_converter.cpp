@@ -14,21 +14,21 @@
 
 #include "formats/csv/float_converter.h"
 
+#include "base/string/string_parser.hpp"
 #include "column/fixed_length_column.h"
 #include "common/logging.h"
-#include "util/string_parser.hpp"
 
 namespace starrocks::csv {
 
 template <typename T>
-Status FloatConverter<T>::write_string(OutputStream* os, const Column& column, size_t row_num,
+Status FloatConverter<T>::write_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
                                        const Options& options) const {
     auto float_column = down_cast<const FixedLengthColumn<DataType>*>(&column);
-    return os->write(float_column->get_data()[row_num]);
+    return os->write(float_column->immutable_data()[row_num]);
 }
 
 template <typename T>
-Status FloatConverter<T>::write_quoted_string(OutputStream* os, const Column& column, size_t row_num,
+Status FloatConverter<T>::write_quoted_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
                                               const Options& options) const {
     return write_string(os, column, row_num, options);
 }

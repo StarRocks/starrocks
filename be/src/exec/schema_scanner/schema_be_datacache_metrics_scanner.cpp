@@ -15,10 +15,14 @@
 #include "exec/schema_scanner/schema_be_datacache_metrics_scanner.h"
 
 #include "agent/master_info.h"
-#include "block_cache/block_cache.h"
-#include "column/datum.h"
+#include "cache/datacache.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/string_value.h"
+#include "runtime/exec_env.h"
+#include "types/datum.h"
+
+#ifdef WITH_STARCACHE
+#include "cache/disk_cache/starcache_engine.h"
+#endif
 
 namespace starrocks {
 
@@ -31,7 +35,7 @@ TypeDescriptor SchemaBeDataCacheMetricsScanner::_used_bytes_detail_type = TypeDe
 
 SchemaScanner::ColumnDesc SchemaBeDataCacheMetricsScanner::_s_columns[] = {
         {"BE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64), false},
-        {"STATUS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"STATUS", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"DISK_QUOTA_BYTES", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64), true},
         {"DISK_USED_BYTES", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64), true},
         {"MEM_QUOTA_BYTES", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64), true},
@@ -59,31 +63,29 @@ Status SchemaBeDataCacheMetricsScanner::get_next(ChunkPtr* chunk, bool* eos) {
 
     DatumArray row{};
     std::string status{};
-    DataCacheMetrics metrics{};
+    StarCacheMetrics metrics{};
 
     row.emplace_back(_be_id);
 
-    if (config::datacache_enable) {
-        const BlockCache* cache = BlockCache::instance();
-        // retrive different priority's used bytes from level = 2 metrics
-        metrics = cache->cache_metrics(2);
+    // TODO: Support LRUCacheEngine
+    auto* mem_cache = DataCache::GetInstance()->local_mem_cache();
+    DataCacheMemMetrics mem_metrics;
+    if (mem_cache != nullptr && mem_cache->is_initialized()) {
+        mem_metrics = mem_cache->cache_metrics();
+    }
+    auto* disk_cache = DataCache::GetInstance()->local_disk_cache();
+    if (disk_cache != nullptr && disk_cache->is_initialized()) {
+        auto* starcache = reinterpret_cast<StarCacheEngine*>(disk_cache);
+        // retrieve different priority's used bytes from level = 2 metrics
+        metrics = starcache->starcache_metrics(2);
 
-        switch (metrics.status) {
-        case DataCacheStatus::NORMAL:
-            status = "Normal";
-            break;
-        case DataCacheStatus::UPDATING:
-            status = "Updating";
-            break;
-        default:
-            status = "Abnormal";
-        }
+        status = DataCacheStatusUtils::to_string(static_cast<DataCacheStatus>(metrics.status));
 
         row.emplace_back(Slice(status));
         row.emplace_back(metrics.disk_quota_bytes);
         row.emplace_back(metrics.disk_used_bytes);
-        row.emplace_back(metrics.mem_quota_bytes);
-        row.emplace_back(metrics.mem_used_bytes);
+        row.emplace_back(mem_metrics.mem_quota_bytes);
+        row.emplace_back(mem_metrics.mem_used_bytes);
         row.emplace_back(metrics.meta_used_bytes);
 
         const auto& dir_spaces = metrics.disk_dir_spaces;
@@ -117,7 +119,7 @@ Status SchemaBeDataCacheMetricsScanner::get_next(ChunkPtr* chunk, bool* eos) {
     }
 
     for (const auto& [slot_id, index] : (*chunk)->get_slot_id_to_index_map()) {
-        const ColumnPtr& column = (*chunk)->get_column_by_slot_id(slot_id);
+        auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(slot_id);
         column->append_datum(row[slot_id - 1]);
     }
 

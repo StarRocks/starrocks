@@ -15,17 +15,18 @@
 package com.starrocks.analysis;
 
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.ShowBrokerStmt;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class ShowBrokerStmtTest {
     private static ConnectContext connectContext;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         connectContext = UtFrameUtils.createDefaultCtx();
     }
@@ -33,15 +34,15 @@ public class ShowBrokerStmtTest {
     @Test
     public void testNormal() throws Exception {
         ShowBrokerStmt stmt = (ShowBrokerStmt)UtFrameUtils.parseStmtWithNewParser("show broker", connectContext);
-        ShowResultSetMetaData metaData = stmt.getMetaData();
-        Assert.assertNotNull(metaData);
-        Assert.assertEquals(7, metaData.getColumnCount());
-        Assert.assertEquals("Name", metaData.getColumn(0).getName());
-        Assert.assertEquals("IP", metaData.getColumn(1).getName());
-        Assert.assertEquals("Port", metaData.getColumn(2).getName());
-        Assert.assertEquals("Alive", metaData.getColumn(3).getName());
-        Assert.assertEquals("LastStartTime", metaData.getColumn(4).getName());
-        Assert.assertEquals("LastUpdateTime", metaData.getColumn(5).getName());
-        Assert.assertEquals("ErrMsg", metaData.getColumn(6).getName());
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
+        Assertions.assertNotNull(metaData);
+        Assertions.assertEquals(7, metaData.getColumnCount());
+        Assertions.assertEquals("Name", metaData.getColumn(0).getName());
+        Assertions.assertEquals("IP", metaData.getColumn(1).getName());
+        Assertions.assertEquals("Port", metaData.getColumn(2).getName());
+        Assertions.assertEquals("Alive", metaData.getColumn(3).getName());
+        Assertions.assertEquals("LastStartTime", metaData.getColumn(4).getName());
+        Assertions.assertEquals("LastUpdateTime", metaData.getColumn(5).getName());
+        Assertions.assertEquals("ErrMsg", metaData.getColumn(6).getName());
     }
 }

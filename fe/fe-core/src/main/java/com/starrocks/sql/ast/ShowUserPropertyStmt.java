@@ -15,16 +15,12 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.UserProperty;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -36,9 +32,6 @@ import java.util.Map;
 //  syntax:
 //      SHOW PROPERTY [FOR user] [LIKE key pattern]
 public class ShowUserPropertyStmt extends ShowStmt {
-    public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("Key").add("Value").build();
-
     private String user;
     private String pattern;
 
@@ -98,16 +91,7 @@ public class ShowUserPropertyStmt extends ShowStmt {
     }
 
     @Override
-    public ShowResultSetMetaData getMetaData() {
-        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        for (String col : TITLE_NAMES) {
-            builder.addColumn(new Column(col, ScalarType.createVarchar(30)));
-        }
-        return builder.build();
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowUserPropertyStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowUserPropertyStatement(this, context);
     }
 }

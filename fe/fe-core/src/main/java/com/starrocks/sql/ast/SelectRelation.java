@@ -14,19 +14,15 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.AnalyticExpr;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.GroupByClause;
-import com.starrocks.analysis.LimitElement;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.SlotRef;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.FieldId;
 import com.starrocks.sql.analyzer.Scope;
+import com.starrocks.sql.ast.expression.AnalyticExpr;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.parser.NodePosition;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -78,12 +74,6 @@ public class SelectRelation extends QueryRelation {
     private Relation relation;
 
     private Map<Expr, FieldId> columnReferences;
-
-    /**
-     *  materializeExpressionToColumnRef stores the mapping relationship
-     *  between generated expressions and generated columns
-     */
-    private Map<Expr, SlotRef> generatedExprToColumnRef = new HashMap<>();
 
     public SelectRelation(
             SelectList selectList,
@@ -160,13 +150,15 @@ public class SelectRelation extends QueryRelation {
 
         this.columnReferences = analyzeState.getColumnReferences();
 
-        this.generatedExprToColumnRef = analyzeState.getGeneratedExprToColumnRef();
-
         this.setScope(analyzeState.getOutputScope());
     }
 
     public Expr getPredicate() {
         return predicate;
+    }
+
+    public void setPredicate(Expr predicate) {
+        this.predicate = predicate;
     }
 
     public Expr getHaving() {
@@ -239,7 +231,7 @@ public class SelectRelation extends QueryRelation {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitSelect(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitSelect(this, context);
     }
 
     public void setOutputExpr(List<Expr> outputExpr) {
@@ -306,9 +298,5 @@ public class SelectRelation extends QueryRelation {
     @Override
     public List<Expr> getOutputExpression() {
         return outputExpr;
-    }
-
-    public Map<Expr, SlotRef> getGeneratedExprToColumnRef() {
-        return generatedExprToColumnRef;
     }
 }

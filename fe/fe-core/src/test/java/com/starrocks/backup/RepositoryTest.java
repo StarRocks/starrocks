@@ -35,7 +35,6 @@
 package com.starrocks.backup;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.AnalysisException;
@@ -48,21 +47,15 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
 import java.io.PrintWriter;
 import java.sql.Timestamp;
 import java.util.List;
-import java.util.Map;
 
 public class RepositoryTest {
 
@@ -77,7 +70,7 @@ public class RepositoryTest {
     @Mocked
     private BlobStorage storage;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         List<String> files = Lists.newArrayList();
         files.add("1.dat");
@@ -107,12 +100,12 @@ public class RepositoryTest {
     public void testGet() {
         repo = new Repository(10000, "repo", false, location, storage);
 
-        Assert.assertEquals(repoId, repo.getId());
-        Assert.assertEquals(name, repo.getName());
-        Assert.assertEquals(false, repo.isReadOnly());
-        Assert.assertEquals(location, repo.getLocation());
-        Assert.assertEquals(null, repo.getErrorMsg());
-        Assert.assertTrue(System.currentTimeMillis() - repo.getCreateTime() < 1000);
+        Assertions.assertEquals(repoId, repo.getId());
+        Assertions.assertEquals(name, repo.getName());
+        Assertions.assertEquals(false, repo.isReadOnly());
+        Assertions.assertEquals(location, repo.getLocation());
+        Assertions.assertEquals(null, repo.getErrorMsg());
+        Assertions.assertTrue(System.currentTimeMillis() - repo.getCreateTime() < 1000);
     }
 
     @Test
@@ -138,7 +131,7 @@ public class RepositoryTest {
 
         Status st = repo.initRepository();
         System.out.println(st);
-        Assert.assertTrue(st.ok());
+        Assertions.assertTrue(st.ok());
     }
 
     @Test
@@ -155,18 +148,18 @@ public class RepositoryTest {
         // "location/__starrocks_repository_repo_name/__ss_my_sp1/__info_2018-01-01-08-00-00"
         String expected = location + "/" + repo.prefixRepo + name + "/" + Repository.PREFIX_SNAPSHOT_DIR
                 + label + "/" + Repository.PREFIX_JOB_INFO + createTime2;
-        Assert.assertEquals(expected, repo.assembleJobInfoFilePath(label, creastTs));
+        Assertions.assertEquals(expected, repo.assembleJobInfoFilePath(label, creastTs));
 
         // meta info
         expected = location + "/" + repo.prefixRepo + name + "/" + Repository.PREFIX_SNAPSHOT_DIR
                 + label + "/" + Repository.FILE_META_INFO;
-        Assert.assertEquals(expected, repo.assembleMetaInfoFilePath(label));
+        Assertions.assertEquals(expected, repo.assembleMetaInfoFilePath(label));
 
         // snapshot path
         // /location/__starrocks_repository_repo_name/__ss_my_ss1/__ss_content/__db_10001/__tbl_10020/__part_10031/__idx_10032/__10023/__3481721
         expected = location + "/" + repo.prefixRepo + name + "/" + Repository.PREFIX_SNAPSHOT_DIR
                 + label + "/" + "__ss_content/__db_1/__tbl_2/__part_3/__idx_4/__5/__7";
-        Assert.assertEquals(expected, repo.assembleRemoteSnapshotPath(label, info));
+        Assertions.assertEquals(expected, repo.assembleRemoteSnapshotPath(label, info));
     }
 
     @Test
@@ -180,8 +173,8 @@ public class RepositoryTest {
         };
 
         repo = new Repository(10000, "repo", false, location, storage);
-        Assert.assertTrue(repo.ping());
-        Assert.assertTrue(repo.getErrorMsg() == null);
+        Assertions.assertTrue(repo.ping());
+        Assertions.assertTrue(repo.getErrorMsg() == null);
     }
 
     @Test
@@ -203,9 +196,9 @@ public class RepositoryTest {
         repo = new Repository(10000, "repo", false, location, storage);
         List<String> snapshotNames = Lists.newArrayList();
         Status st = repo.listSnapshots(snapshotNames);
-        Assert.assertTrue(st.ok());
-        Assert.assertEquals(1, snapshotNames.size());
-        Assert.assertEquals("a", snapshotNames.get(0));
+        Assertions.assertTrue(st.ok());
+        Assertions.assertEquals(1, snapshotNames.size());
+        Assertions.assertEquals("a", snapshotNames.get(0));
     }
 
     @Test
@@ -232,12 +225,12 @@ public class RepositoryTest {
             out.print("a");
         } catch (FileNotFoundException e) {
             e.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         }
         try {
             String remoteFilePath = location + "/remote_file";
             Status st = repo.upload(localFilePath, remoteFilePath);
-            Assert.assertTrue(st.ok());
+            Assertions.assertTrue(st.ok());
         } finally {
             File file = new File(localFilePath);
             file.delete();
@@ -253,7 +246,7 @@ public class RepositoryTest {
                 out.print("a");
             } catch (FileNotFoundException e) {
                 e.printStackTrace();
-                Assert.fail();
+                Assertions.fail();
             }
 
             new Expectations() {
@@ -276,7 +269,7 @@ public class RepositoryTest {
             repo = new Repository(10000, "repo", false, location, storage);
             String remoteFilePath = location + "/remote_file";
             Status st = repo.download(remoteFilePath, localFilePath);
-            Assert.assertTrue(st.ok());
+            Assertions.assertTrue(st.ok());
         } finally {
             localFile.delete();
         }
@@ -286,7 +279,7 @@ public class RepositoryTest {
     public void testGetInfo() {
         repo = new Repository(10000, "repo", false, location, storage);
         List<String> infos = repo.getInfo();
-        Assert.assertTrue(infos.size() == ShowRepositoriesStmt.TITLE_NAMES.size());
+        Assertions.assertTrue(infos.size() == ShowRepositoriesStmt.TITLE_NAMES.size());
     }
 
     @Test
@@ -316,45 +309,11 @@ public class RepositoryTest {
         String timestamp = "";
         try {
             List<List<String>> infos = repo.getSnapshotInfos(snapshotName, timestamp, null);
-            Assert.assertEquals(2, infos.size());
+            Assertions.assertEquals(2, infos.size());
 
         } catch (SemanticException e) {
             e.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         }
     }
-
-    @Test
-    public void testPersist() {
-        Map<String, String> properties = Maps.newHashMap();
-        properties.put("bos_endpoint", "http://gz.bcebos.com");
-        properties.put("bos_accesskey", "a");
-        properties.put("bos_secret_accesskey", "b");
-        BlobStorage storage = new BlobStorage(brokerName, properties);
-        repo = new Repository(10000, "repo", false, location, storage);
-
-        File file = new File("./Repository");
-        try {
-            DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
-            repo.write(out);
-            out.flush();
-            out.close();
-
-            DataInputStream in = new DataInputStream(new FileInputStream(file));
-            Repository newRepo = Repository.read(in);
-            in.close();
-
-            Assert.assertEquals(repo.getName(), newRepo.getName());
-            Assert.assertEquals(repo.getId(), newRepo.getId());
-            Assert.assertEquals(repo.getLocation(), newRepo.getLocation());
-
-        } catch (IOException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
-            Assert.fail();
-        } finally {
-            file.delete();
-        }
-    }
-
 }

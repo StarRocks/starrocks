@@ -12,67 +12,116 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <gutil/strings/fastmem.h>
+#include "column/fixed_length_column_base.h"
 
-#include "column/column_helper.h"
-#include "column/fixed_length_column.h"
+#include "base/hash/hash_util.hpp"
+#include "base/simd/gather.h"
+#include "base/types/decimal12.h"
+#include "base/types/int128.h"
+#include "base/types/int256.h"
+#include "column/column_filter_range.h"
+#include "column/column_sorter_comparator.h"
+#include "column/mysql_row_buffer.h"
+#include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
-#include "exec/sorting/sort_helper.h"
+#include "common/config.h"
 #include "gutil/casts.h"
-#include "runtime/large_int_value.h"
-#include "storage/decimal12.h"
-#include "util/hash_util.hpp"
-#include "util/mysql_row_buffer.h"
-#include "util/value_generator.h"
+#include "gutil/strings/fastmem.h"
+#include "gutil/strings/substitute.h"
+#include "types/value_generator.h"
 
 namespace starrocks {
 
 template <typename T>
-StatusOr<ColumnPtr> FixedLengthColumnBase<T>::upgrade_if_overflow() {
-    if (capacity_limit_reached()) {
-        return Status::InternalError("Size of FixedLengthColumn exceed the limit");
-    } else {
-        return nullptr;
-    }
+StatusOr<MutableColumnPtr> FixedLengthColumnBase<T>::upgrade_if_overflow() {
+    RETURN_IF_ERROR(capacity_limit_reached());
+    return nullptr;
 }
 
 template <typename T>
 void FixedLengthColumnBase<T>::append(const Column& src, size_t offset, size_t count) {
-    const auto& num_src = down_cast<const FixedLengthColumnBase<T>&>(src);
-    _data.insert(_data.end(), num_src._data.begin() + offset, num_src._data.begin() + offset + count);
+    DCHECK(this != &src);
+
+    auto& datas = get_data();
+    const size_t orig_size = datas.size();
+    raw::stl_vector_resize_uninitialized(&datas, orig_size + count);
+
+    const T* src_data = reinterpret_cast<const T*>(src.raw_data());
+    strings::memcpy_inlined(datas.data() + orig_size, src_data + offset, count * sizeof(T));
 }
 
 template <typename T>
 void FixedLengthColumnBase<T>::append_selective(const Column& src, const uint32_t* indexes, uint32_t from,
                                                 uint32_t size) {
+    DCHECK(this != &src);
+
+    indexes += from;
+    auto& datas = get_data();
+    const size_t orig_size = datas.size();
+    raw::stl_vector_resize_uninitialized(&datas, orig_size + size);
+    auto* dest_data = datas.data() + orig_size;
+
     const T* src_data = reinterpret_cast<const T*>(src.raw_data());
-    size_t orig_size = _data.size();
-    _data.resize(orig_size + size);
-    for (size_t i = 0; i < size; ++i) {
-        _data[orig_size + i] = src_data[indexes[from + i]];
-    }
+    SIMDGather::gather(dest_data, src_data, indexes, size);
 }
 
 template <typename T>
 void FixedLengthColumnBase<T>::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) {
-    const T* src_data = reinterpret_cast<const T*>(src.raw_data());
-    size_t orig_size = _data.size();
-    _data.resize(orig_size + size);
+    DCHECK(this != &src);
+
+    auto& datas = get_data();
+
+    size_t orig_size = datas.size();
+    datas.resize(orig_size + size);
+
+    const auto& src_col = down_cast<const FixedLengthColumnBase<T>&>(src);
+    const auto src_datas = src_col.immutable_data();
+    const T* src_data = src_datas.data();
+
     for (size_t i = 0; i < size; ++i) {
-        _data[orig_size + i] = src_data[index];
+        datas[orig_size + i] = src_data[index];
     }
+}
+
+template <typename T>
+size_t FixedLengthColumnBase<T>::append_numbers(const ContainerResource& res) {
+    bool could_apply_opt = config::enable_zero_copy_from_page_cache && res.owned() && res.is_aligned<T>();
+    if (could_apply_opt && empty() && _resource.empty()) {
+        DCHECK(res.length() % sizeof(ValueType) == 0);
+        _resource.acquire(res);
+        _resource.set_data(res.data());
+        _resource.set_length(res.length() / sizeof(ValueType));
+        return _resource.length();
+    } else {
+        return append_numbers(res.data(), res.length());
+    }
+}
+
+template <typename T>
+void FixedLengthColumnBase<T>::append_default() {
+    auto& datas = get_data();
+    datas.emplace_back(DefaultValueGenerator<ValueType>::next_value());
+}
+
+template <typename T>
+void FixedLengthColumnBase<T>::append_default(size_t count) {
+    auto& datas = get_data();
+    datas.resize(datas.size() + count, DefaultValueGenerator<ValueType>::next_value());
 }
 
 //TODO(fzh): optimize copy using SIMD
 template <typename T>
-ColumnPtr FixedLengthColumnBase<T>::replicate(const std::vector<uint32_t>& offsets) {
+StatusOr<MutableColumnPtr> FixedLengthColumnBase<T>::replicate(const Buffer<uint32_t>& offsets) {
     auto dest = this->clone_empty();
     auto& dest_data = down_cast<FixedLengthColumnBase<T>&>(*dest);
-    dest_data._data.resize(offsets.back());
+    auto& dest_datas = dest_data.get_data();
+
+    const auto datas = this->immutable_data();
+    dest_datas.resize(offsets.back());
     size_t orig_size = offsets.size() - 1; // this->size() may be large than offsets->size() -1
     for (auto i = 0; i < orig_size; ++i) {
         for (auto j = offsets[i]; j < offsets[i + 1]; ++j) {
-            dest_data._data[j] = _data[i];
+            dest_datas[j] = datas[i];
         }
     }
     return dest;
@@ -80,21 +129,25 @@ ColumnPtr FixedLengthColumnBase<T>::replicate(const std::vector<uint32_t>& offse
 
 template <typename T>
 void FixedLengthColumnBase<T>::fill_default(const Filter& filter) {
+    auto& datas = get_data();
+
     T val = DefaultValueGenerator<T>::next_value();
     for (size_t i = 0; i < filter.size(); i++) {
         if (filter[i] == 1) {
-            _data[i] = val;
+            datas[i] = val;
         }
     }
 }
 
 template <typename T>
-Status FixedLengthColumnBase<T>::fill_range(const Buffer<T>& ids, const std::vector<uint8_t>& filter) {
-    DCHECK_EQ(filter.size(), _data.size());
+Status FixedLengthColumnBase<T>::fill_range(const std::vector<T>& ids, const Filter& filter) {
+    auto& datas = get_data();
+
+    DCHECK_EQ(filter.size(), datas.size());
     size_t j = 0;
-    for (size_t i = 0; i < _data.size(); ++i) {
+    for (size_t i = 0; i < datas.size(); ++i) {
         if (filter[i] == 1) {
-            _data[i] = ids[j];
+            datas[i] = ids[j];
             ++j;
         }
     }
@@ -105,39 +158,50 @@ Status FixedLengthColumnBase<T>::fill_range(const Buffer<T>& ids, const std::vec
 
 template <typename T>
 void FixedLengthColumnBase<T>::update_rows(const Column& src, const uint32_t* indexes) {
-    const T* src_data = reinterpret_cast<const T*>(src.raw_data());
+    auto& datas = get_data();
+
+    const auto& src_col = down_cast<const FixedLengthColumnBase<T>&>(src);
+    const auto src_datas = src_col.immutable_data();
+    const T* src_data = src_datas.data();
+
     size_t replace_num = src.size();
     for (uint32_t i = 0; i < replace_num; ++i) {
         DCHECK_LT(indexes[i], _data.size());
-        _data[indexes[i]] = src_data[i];
+        datas[indexes[i]] = src_data[i];
     }
 }
 
 template <typename T>
 size_t FixedLengthColumnBase<T>::filter_range(const Filter& filter, size_t from, size_t to) {
-    auto size = ColumnHelper::filter_range<T>(filter, _data.data(), from, to);
-    this->resize(size);
+    // TODO: FIXME
+    const auto src = immutable_data();
+    raw::stl_vector_resize_uninitialized(&_data, src.size());
+    auto size = column_filter_range::filter_range<T>(filter, _data.data(), src.data(), from, to);
+    _data.resize(size);
+    _resource.reset();
     return size;
 }
 
 template <typename T>
 int FixedLengthColumnBase<T>::compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const {
-    DCHECK_LT(left, _data.size());
-    DCHECK_LT(right, rhs.size());
-    DCHECK(dynamic_cast<const FixedLengthColumnBase<T>*>(&rhs) != nullptr);
-    T x = _data[left];
-    T y = down_cast<const FixedLengthColumnBase<T>&>(rhs)._data[right];
+    const auto lhs_datas = this->immutable_data();
+    const auto rhs_datas = down_cast<const FixedLengthColumnBase<T>&>(rhs).immutable_data();
+    DCHECK_LT(left, lhs_datas.size());
+    DCHECK_LT(right, rhs_datas.size());
+    T x = lhs_datas[left];
+    T y = rhs_datas[right];
     return SorterComparator<T>::compare(x, y);
 }
 
 template <typename T>
-uint32_t FixedLengthColumnBase<T>::serialize(size_t idx, uint8_t* pos) {
-    memcpy(pos, &_data[idx], sizeof(T));
+uint32_t FixedLengthColumnBase<T>::serialize(size_t idx, uint8_t* pos) const {
+    const auto datas = this->immutable_data();
+    memcpy(pos, &datas[idx], sizeof(T));
     return sizeof(T);
 }
 
 template <typename T>
-uint32_t FixedLengthColumnBase<T>::serialize_default(uint8_t* pos) {
+uint32_t FixedLengthColumnBase<T>::serialize_default(uint8_t* pos) const {
     ValueType value{};
     memcpy(pos, &value, sizeof(T));
     return sizeof(T);
@@ -145,9 +209,9 @@ uint32_t FixedLengthColumnBase<T>::serialize_default(uint8_t* pos) {
 
 template <typename T>
 void FixedLengthColumnBase<T>::serialize_batch(uint8_t* __restrict__ dst, Buffer<uint32_t>& slice_sizes,
-                                               size_t chunk_size, uint32_t max_one_row_size) {
+                                               size_t chunk_size, uint32_t max_one_row_size) const {
     uint32_t* sizes = slice_sizes.data();
-    T* __restrict__ src = _data.data();
+    const T* __restrict__ src = this->immutable_data().data();
 
     for (size_t i = 0; i < chunk_size; ++i) {
         memcpy(dst + i * max_one_row_size + sizes[i], src + i, sizeof(T));
@@ -161,9 +225,9 @@ void FixedLengthColumnBase<T>::serialize_batch(uint8_t* __restrict__ dst, Buffer
 template <typename T>
 void FixedLengthColumnBase<T>::serialize_batch_with_null_masks(uint8_t* __restrict__ dst, Buffer<uint32_t>& slice_sizes,
                                                                size_t chunk_size, uint32_t max_one_row_size,
-                                                               uint8_t* null_masks, bool has_null) {
+                                                               const uint8_t* null_masks, bool has_null) const {
     uint32_t* sizes = slice_sizes.data();
-    T* __restrict__ src = _data.data();
+    const T* __restrict__ src = this->immutable_data().data();
 
     if (!has_null) {
         for (size_t i = 0; i < chunk_size; ++i) {
@@ -190,9 +254,10 @@ void FixedLengthColumnBase<T>::serialize_batch_with_null_masks(uint8_t* __restri
 
 template <typename T>
 size_t FixedLengthColumnBase<T>::serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval,
-                                                             size_t start, size_t count) {
+                                                             uint32_t max_row_size, size_t start, size_t count) const {
     const size_t value_size = sizeof(T);
-    const auto& key_data = get_data();
+    DCHECK_EQ(max_row_size, value_size);
+    const auto key_data = this->immutable_data();
     uint8_t* buf = dst + byte_offset;
     for (size_t i = start; i < start + count; ++i) {
         strings::memcpy_inlined(buf, &key_data[i], value_size);
@@ -205,66 +270,49 @@ template <typename T>
 const uint8_t* FixedLengthColumnBase<T>::deserialize_and_append(const uint8_t* pos) {
     T value{};
     memcpy(&value, pos, sizeof(T));
-    _data.emplace_back(value);
+    this->get_data().emplace_back(value);
     return pos + sizeof(T);
 }
 
 template <typename T>
 void FixedLengthColumnBase<T>::deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) {
-    raw::make_room(&_data, chunk_size);
+    auto& datas = this->get_data();
+    raw::make_room(&datas, chunk_size);
     for (size_t i = 0; i < chunk_size; ++i) {
-        memcpy(&_data[i], srcs[i].data, sizeof(T));
+        memcpy(&datas[i], srcs[i].data, sizeof(T));
         srcs[i].data = srcs[i].data + sizeof(T);
     }
 }
 
 template <typename T>
-void FixedLengthColumnBase<T>::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
-    for (uint32_t i = from; i < to; ++i) {
-        hash[i] = HashUtil::fnv_hash(&_data[i], sizeof(ValueType), hash[i]);
-    }
-}
-
-// Must same with RawValue::zlib_crc32
-template <typename T>
-void FixedLengthColumnBase<T>::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
-    for (uint32_t i = from; i < to; ++i) {
-        if constexpr (IsDate<T> || IsTimestamp<T>) {
-            std::string str = _data[i].to_string();
-            hash[i] = HashUtil::zlib_crc_hash(str.data(), static_cast<int32_t>(str.size()), hash[i]);
-        } else if constexpr (IsDecimal<T>) {
-            int64_t int_val = _data[i].int_value();
-            int32_t frac_val = _data[i].frac_value();
-            uint32_t seed = HashUtil::zlib_crc_hash(&int_val, sizeof(int_val), hash[i]);
-            hash[i] = HashUtil::zlib_crc_hash(&frac_val, sizeof(frac_val), seed);
-        } else {
-            hash[i] = HashUtil::zlib_crc_hash(&_data[i], sizeof(ValueType), hash[i]);
-        }
-    }
-}
-
-template <typename T>
 int64_t FixedLengthColumnBase<T>::xor_checksum(uint32_t from, uint32_t to) const {
+    const auto datas = this->immutable_data();
+
     int64_t xor_checksum = 0;
     if constexpr (IsDate<T>) {
         for (size_t i = from; i < to; ++i) {
-            xor_checksum ^= _data[i].to_date_literal();
+            xor_checksum ^= datas[i].to_date_literal();
         }
     } else if constexpr (IsTimestamp<T>) {
         for (size_t i = from; i < to; ++i) {
-            xor_checksum ^= _data[i].to_timestamp_literal();
+            xor_checksum ^= datas[i].to_timestamp_literal();
         }
     } else if constexpr (IsDecimal<T>) {
         for (size_t i = from; i < to; ++i) {
-            xor_checksum ^= _data[i].int_value();
-            xor_checksum ^= _data[i].frac_value();
+            xor_checksum ^= datas[i].int_value();
+            xor_checksum ^= datas[i].frac_value();
         }
     } else if constexpr (is_signed_integer<T>) {
-        const T* src = reinterpret_cast<const T*>(_data.data());
+        const T* src = reinterpret_cast<const T*>(datas.data());
         for (size_t i = from; i < to; ++i) {
             if constexpr (std::is_same_v<T, int128_t>) {
                 xor_checksum ^= static_cast<int64_t>(src[i] >> 64);
                 xor_checksum ^= static_cast<int64_t>(src[i] & ULLONG_MAX);
+            } else if constexpr (std::is_same_v<T, int256_t>) {
+                xor_checksum ^= static_cast<int64_t>(src[i].high >> 64);
+                xor_checksum ^= static_cast<int64_t>(src[i].high & ULLONG_MAX);
+                xor_checksum ^= static_cast<int64_t>(src[i].low >> 64);
+                xor_checksum ^= static_cast<int64_t>(src[i].low & ULLONG_MAX);
             } else {
                 xor_checksum ^= src[i];
             }
@@ -276,43 +324,48 @@ int64_t FixedLengthColumnBase<T>::xor_checksum(uint32_t from, uint32_t to) const
 
 template <typename T>
 void FixedLengthColumnBase<T>::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
+    const auto datas = this->immutable_data();
     if constexpr (IsDecimal<T>) {
-        buf->push_decimal(_data[idx].to_string());
+        buf->push_decimal(datas[idx].to_string());
     } else if constexpr (IsDate<T>) {
-        buf->push_date(_data[idx], is_binary_protocol);
+        buf->push_date(datas[idx], is_binary_protocol);
     } else if constexpr (IsTimestamp<T>) {
-        buf->push_timestamp(_data[idx], is_binary_protocol);
+        buf->push_timestamp(datas[idx], is_binary_protocol);
     } else if constexpr (std::is_arithmetic_v<T>) {
-        buf->push_number(_data[idx], is_binary_protocol);
+        buf->push_number(datas[idx], is_binary_protocol);
     } else {
-        std::string s = _data[idx].to_string();
+        std::string s = datas[idx].to_string();
         buf->push_string(s.data(), s.size());
     }
 }
 
 template <typename T>
 void FixedLengthColumnBase<T>::remove_first_n_values(size_t count) {
-    size_t remain_size = _data.size() - count;
+    // TODO: avoid memcpy here
+    auto& datas = this->get_data();
+    size_t remain_size = datas.size() - count;
     memmove(_data.data(), _data.data() + count, remain_size * sizeof(T));
     _data.resize(remain_size);
 }
 
 template <typename T>
 std::string FixedLengthColumnBase<T>::debug_item(size_t idx) const {
+    const auto datas = this->immutable_data();
     std::stringstream ss;
     if constexpr (sizeof(T) == 1) {
         // for bool, int8_t
-        ss << (int)_data[idx];
+        ss << (int)datas[idx];
     } else {
-        ss << _data[idx];
+        ss << datas[idx];
     }
     return ss.str();
 }
 
 template <>
 std::string FixedLengthColumnBase<int128_t>::debug_item(size_t idx) const {
+    const auto datas = this->immutable_data();
     std::stringstream ss;
-    starrocks::operator<<(ss, _data[idx]);
+    starrocks::operator<<(ss, datas[idx]);
     return ss.str();
 }
 
@@ -332,6 +385,15 @@ std::string FixedLengthColumnBase<T>::debug_string() const {
 }
 
 template <typename T>
+Status FixedLengthColumnBase<T>::capacity_limit_reached() const {
+    if (_data.size() > Column::MAX_CAPACITY_LIMIT) {
+        return Status::CapacityLimitExceed(strings::Substitute("row count of fixed length column exceend the limit: $0",
+                                                               std::to_string(Column::MAX_CAPACITY_LIMIT)));
+    }
+    return Status::OK();
+}
+
+template <typename T>
 std::string FixedLengthColumnBase<T>::get_name() const {
     if constexpr (IsDecimal<T>) {
         return "decimal";
@@ -341,6 +403,8 @@ std::string FixedLengthColumnBase<T>::get_name() const {
         return "timestamp";
     } else if constexpr (IsInt128<T>) {
         return "int128";
+    } else if constexpr (IsInt256<T>) {
+        return "int256";
     } else if constexpr (std::is_floating_point_v<T>) {
         return "float-" + std::to_string(sizeof(T));
     } else {
@@ -359,6 +423,7 @@ template class FixedLengthColumnBase<int32_t>;
 template class FixedLengthColumnBase<int64_t>;
 template class FixedLengthColumnBase<int96_t>;
 template class FixedLengthColumnBase<int128_t>;
+template class FixedLengthColumnBase<int256_t>;
 
 template class FixedLengthColumnBase<float>;
 template class FixedLengthColumnBase<double>;

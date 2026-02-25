@@ -20,6 +20,7 @@
 #include "common/statusor.h"
 #include "exec/write_combined_txn_log.h"
 #include "exprs/expr.h"
+#include "exprs/expr_executor.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -42,10 +43,13 @@ TabletSinkSender::TabletSinkSender(PUniqueId load_id, int64_t txn_id, IndexIdToT
 
 Status TabletSinkSender::send_chunk(const OlapTableSchemaParam* schema,
                                     const std::vector<OlapTablePartition*>& partitions,
-                                    const std::vector<uint32_t>& tablet_indexes,
+                                    const std::vector<uint32_t>& record_hashes,
                                     const std::vector<uint16_t>& validate_select_idx,
                                     std::unordered_map<int64_t, std::set<int64_t>>& index_id_partition_id,
                                     Chunk* chunk) {
+    // Range distribution is handled by the base class implementation for RangeTabletSinkSender
+    // Normal hash distribution continues here
+
     size_t num_rows = chunk->num_rows();
     size_t selection_size = validate_select_idx.size();
     if (selection_size == 0) {
@@ -58,8 +62,10 @@ Status TabletSinkSender::send_chunk(const OlapTableSchemaParam* schema,
             auto* index = schema->indexes()[i];
             for (size_t j = 0; j < selection_size; ++j) {
                 uint16_t selection = validate_select_idx[j];
-                index_id_partition_id[index->index_id].emplace(partitions[selection]->id);
-                _tablet_ids[selection] = partitions[selection]->indexes[i].tablets[tablet_indexes[selection]];
+                const auto* partition = partitions[selection];
+                index_id_partition_id[index->index_id].emplace(partition->id);
+                const auto& tablet_ids = partition->indexes[i].tablet_ids;
+                _tablet_ids[selection] = tablet_ids[record_hashes[selection] % tablet_ids.size()];
             }
             RETURN_IF_ERROR(_send_chunk_by_node(chunk, _channels[i], validate_select_idx));
         }
@@ -68,8 +74,10 @@ Status TabletSinkSender::send_chunk(const OlapTableSchemaParam* schema,
         for (size_t i = 0; i < index_size; ++i) {
             auto* index = schema->indexes()[i];
             for (size_t j = 0; j < num_rows; ++j) {
-                index_id_partition_id[index->index_id].emplace(partitions[j]->id);
-                _tablet_ids[j] = partitions[j]->indexes[i].tablets[tablet_indexes[j]];
+                const auto* partition = partitions[j];
+                index_id_partition_id[index->index_id].emplace(partition->id);
+                const auto& tablet_ids = partition->indexes[i].tablet_ids;
+                _tablet_ids[j] = tablet_ids[record_hashes[j] % tablet_ids.size()];
             }
             RETURN_IF_ERROR(_send_chunk_by_node(chunk, _channels[i], validate_select_idx));
         }
@@ -138,7 +146,7 @@ Status TabletSinkSender::_send_chunk_by_node(Chunk* chunk, IndexChannel* channel
 
 Status TabletSinkSender::try_open(RuntimeState* state) {
     // Prepare the exprs to run.
-    RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_output_expr_ctxs, state));
     RETURN_IF_ERROR(_partition_params->open(state));
     for_each_index_channel([](NodeChannel* ch) { ch->try_open(); });
     return Status::OK();
@@ -176,7 +184,7 @@ Status TabletSinkSender::open_wait() {
         });
 
         if (index_channel->has_intolerable_failure()) {
-            LOG(WARNING) << "Open channel failed. load_id: " << _load_id << ", error: " << err_st.to_string();
+            LOG(WARNING) << "Open channel failed. load_id: " << print_id(_load_id) << ", error: " << err_st.to_string();
             return err_st;
         }
     }
@@ -283,10 +291,10 @@ bool TabletSinkSender::is_close_done() {
 Status TabletSinkSender::close_wait(RuntimeState* state, Status close_status, TabletSinkProfile* ts_profile,
                                     bool write_txn_log) {
     Status status = std::move(close_status);
+    // BE id -> add_batch method counter
+    std::unordered_map<int64_t, AddBatchCounter> node_add_batch_counter_map;
+    int64_t serialize_batch_ns = 0, actual_consume_ns = 0;
     if (status.ok()) {
-        // BE id -> add_batch method counter
-        std::unordered_map<int64_t, AddBatchCounter> node_add_batch_counter_map;
-        int64_t serialize_batch_ns = 0, actual_consume_ns = 0;
         {
             SCOPED_TIMER(ts_profile->close_timer);
             Status err_st = Status::OK();
@@ -324,33 +332,35 @@ Status TabletSinkSender::close_wait(RuntimeState* state, Status close_status, Ta
 
             status.update(_write_combined_txn_log());
         }
-
-        // only if status is ok can we call this _profile->total_time_counter().
-        // if status is not ok, this sink may not be prepared, so that _profile is null
-        SCOPED_TIMER(ts_profile->runtime_profile->total_time_counter());
-        COUNTER_SET(ts_profile->serialize_chunk_timer, serialize_batch_ns);
-        COUNTER_SET(ts_profile->send_rpc_timer, actual_consume_ns);
-
-        int64_t total_server_rpc_time_us = 0;
-        int64_t total_server_wait_memtable_flush_time_us = 0;
-        // print log of add batch time of all node, for tracing load performance easily
-        std::stringstream ss;
-        ss << "Olap table sink statistics. load_id: " << print_id(_load_id) << ", txn_id: " << _txn_id
-           << ", add chunk time(ms)/wait lock time(ms)/num: ";
-        for (auto const& pair : node_add_batch_counter_map) {
-            total_server_rpc_time_us += pair.second.add_batch_execution_time_us;
-            total_server_wait_memtable_flush_time_us += pair.second.add_batch_wait_memtable_flush_time_us;
-            ss << "{" << pair.first << ":(" << (pair.second.add_batch_execution_time_us / 1000) << ")("
-               << (pair.second.add_batch_wait_lock_time_us / 1000) << ")(" << pair.second.add_batch_num << ")} ";
-        }
-        ts_profile->server_rpc_timer->update(total_server_rpc_time_us * 1000);
-        ts_profile->server_wait_flush_timer->update(total_server_wait_memtable_flush_time_us * 1000);
-        LOG(INFO) << ss.str();
     } else {
-        for_each_index_channel([&status](NodeChannel* ch) { ch->cancel(status); });
+        for_each_index_channel(
+                [&status, &node_add_batch_counter_map, &serialize_batch_ns, &actual_consume_ns](NodeChannel* ch) {
+                    ch->cancel(status);
+                    ch->time_report(&node_add_batch_counter_map, &serialize_batch_ns, &actual_consume_ns);
+                });
     }
 
-    Expr::close(_output_expr_ctxs, state);
+    SCOPED_TIMER(ts_profile->runtime_profile->total_time_counter());
+    COUNTER_SET(ts_profile->serialize_chunk_timer, serialize_batch_ns);
+    COUNTER_SET(ts_profile->send_rpc_timer, actual_consume_ns);
+
+    int64_t total_server_rpc_time_us = 0;
+    int64_t total_server_wait_memtable_flush_time_us = 0;
+    // print log of add batch time of all node, for tracing load performance easily
+    std::stringstream ss;
+    ss << "Olap table sink statistics. load_id: " << print_id(_load_id) << ", txn_id: " << _txn_id
+       << ", add chunk time(ms)/wait lock time(ms)/num: ";
+    for (auto const& pair : node_add_batch_counter_map) {
+        total_server_rpc_time_us += pair.second.add_batch_execution_time_us;
+        total_server_wait_memtable_flush_time_us += pair.second.add_batch_wait_memtable_flush_time_us;
+        ss << "{" << pair.first << ":(" << (pair.second.add_batch_execution_time_us / 1000) << ")("
+           << (pair.second.add_batch_wait_lock_time_us / 1000) << ")(" << pair.second.add_batch_num << ")} ";
+    }
+    COUNTER_UPDATE(ts_profile->server_rpc_timer, total_server_rpc_time_us * 1000);
+    COUNTER_UPDATE(ts_profile->server_wait_flush_timer, total_server_wait_memtable_flush_time_us * 1000);
+    LOG(INFO) << ss.str();
+
+    ExprExecutor::close(_output_expr_ctxs, state);
     if (_partition_params) {
         _partition_params->close(state);
     }
@@ -370,6 +380,10 @@ bool TabletSinkSender::get_immutable_partition_ids(std::set<int64_t>* partition_
 }
 
 Status TabletSinkSender::_write_combined_txn_log() {
+    if (config::enable_put_combinded_txn_log_parallel) {
+        return write_combined_txn_log_parallel(_txn_log_map);
+    }
+
     for (const auto& [partition_id, logs] : _txn_log_map) {
         (void)partition_id;
         RETURN_IF_ERROR(write_combined_txn_log(logs));

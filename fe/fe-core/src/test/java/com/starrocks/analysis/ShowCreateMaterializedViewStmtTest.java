@@ -28,7 +28,6 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -97,10 +96,10 @@ public class ShowCreateMaterializedViewStmtTest {
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
         currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
-        Table table = currentState.getDb("test").getTable("mv9");
+        Table table = currentState.getLocalMetastore().getDb("test").getTable("mv9");
         List<String> createTableStmt = Lists.newArrayList();
         AstToStringBuilder.getDdlStmt(table, createTableStmt, null, null, false, true);
-        Assert.assertEquals("CREATE MATERIALIZED VIEW `mv9` (`k1`, `k2`)\n" +
+        Assertions.assertEquals("CREATE MATERIALIZED VIEW `mv9` (`k1`, `k2`)\n" +
                 "DISTRIBUTED BY HASH(`k1`) BUCKETS 10 \n" +
                 "REFRESH MANUAL\n" +
                 "PROPERTIES (\n" +
@@ -110,8 +109,7 @@ public class ShowCreateMaterializedViewStmtTest {
                 "\"foreign_key_constraints\" = \"default_catalog.test.tbl1(k1) REFERENCES default_catalog.test.tbl2(k1)\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
                 ")\n" +
-                "AS SELECT `tbl1`.`k1`, `tbl2`.`k2`\n" +
-                "FROM `test`.`tbl1` INNER JOIN `test`.`tbl2` ON `tbl1`.`k1` = `tbl2`.`k1`;", createTableStmt.get(0));
+                "AS select tbl1.k1, tbl2.k2 from tbl1 join tbl2 on tbl1.k1 = tbl2.k1;", createTableStmt.get(0));
     }
 
     @Test
@@ -125,10 +123,10 @@ public class ShowCreateMaterializedViewStmtTest {
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
         currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
-        Table table = currentState.getDb("test").getTable("mv10");
+        Table table = currentState.getLocalMetastore().getDb("test").getTable("mv10");
         List<String> createTableStmt = Lists.newArrayList();
         AstToStringBuilder.getDdlStmt(table, createTableStmt, null, null, false, true);
-        Assert.assertEquals("CREATE MATERIALIZED VIEW `mv10` (`c1`, `c2`)\n" +
+        Assertions.assertEquals("CREATE MATERIALIZED VIEW `mv10` (`c1`, `c2`)\n" +
                         "DISTRIBUTED BY HASH(`c1`) BUCKETS 10 \n" +
                         "REFRESH MANUAL\n" +
                         "PROPERTIES (\n" +
@@ -138,8 +136,7 @@ public class ShowCreateMaterializedViewStmtTest {
                         "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) REFERENCES hive0.partitioned_db2.t2(c2)\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
-                        "AS SELECT `hive0`.`partitioned_db2`.`t2`.`c1`, `hive0`.`partitioned_db`.`t1`.`c2`\n" +
-                        "FROM `hive0`.`partitioned_db`.`t1` INNER JOIN `hive0`.`partitioned_db2`.`t2` ON `hive0`.`partitioned_db`.`t1`.`c2` = `hive0`.`partitioned_db2`.`t2`.`c2`;",
+                        "AS select t2.c1, t1.c2 from hive0.partitioned_db.t1 join hive0.partitioned_db2.t2 on t1.c2 = t2.c2;",
                 createTableStmt.get(0));
     }
 
@@ -154,10 +151,10 @@ public class ShowCreateMaterializedViewStmtTest {
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
         currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
-        Table table = currentState.getDb("test").getTable("mv8");
+        Table table = currentState.getLocalMetastore().getDb("test").getTable("mv8");
         List<String> createTableStmt = Lists.newArrayList();
         AstToStringBuilder.getDdlStmt(table, createTableStmt, null, null, false, true);
-        Assert.assertEquals(createTableStmt.get(0),
+        Assertions.assertEquals(createTableStmt.get(0),
                 "CREATE MATERIALIZED VIEW `mv8` (`l_orderkey`, `l_partkey`, `l_shipdate`)\n" +
                         "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10 \n" +
                         "REFRESH MANUAL\n" +
@@ -166,8 +163,7 @@ public class ShowCreateMaterializedViewStmtTest {
                         "\"replication_num\" = \"1\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
                         ")\n" +
-                        "AS SELECT `lineitem`.`l_orderkey`, `lineitem`.`l_partkey`, `lineitem`.`l_shipdate`\n" +
-                        "FROM `hive0`.`tpch`.`lineitem`;");
+                        "AS select l_orderkey,l_partkey,l_shipdate from hive0.tpch.lineitem;");
         ctx.getGlobalStateMgr().setMetadataMgr(oldMetadataMgr);
     }
 
@@ -206,6 +202,39 @@ public class ShowCreateMaterializedViewStmtTest {
         Assertions.assertTrue(createTableStmt.get(0).contains(partitionBy), createTableStmt.get(0));
         Assertions.assertTrue(createTableStmt.get(0).contains(distribute), createTableStmt.get(0));
         Assertions.assertTrue(createTableStmt.get(0).contains(select), createTableStmt.get(0));
+    }
+
+    @Test
+    public void testMvUniqueConstraintsTableNotExist() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE test.tbl_constraint_test\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values less than('2020-02-01'),\n" +
+                        "    PARTITION p2 values less than('2020-03-01')\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
+
+        String createMvSql = "create materialized view mv_constraint_test " +
+                "distributed by hash(k1) buckets 10 " +
+                "refresh manual " +
+                "properties(\"unique_constraints\" = \"tbl_constraint_test.k1\", " +
+                "\"foreign_key_constraints\" = \"tbl1(k1) REFERENCES tbl_constraint_test(k1)\") " +
+                "as select tbl1.k1, tbl_constraint_test.k2 " +
+                "from tbl1 join tbl_constraint_test on tbl1.k1 = tbl_constraint_test.k1;";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
+        GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
+        currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
+        Table table = currentState.getLocalMetastore().getDb("test").getTable("mv_constraint_test");
+        Assertions.assertEquals("k1", table.getUniqueConstraints().get(0).getUniqueColumnNames(table).get(0));
+
+        starRocksAssert.dropTable("tbl_constraint_test");
+        Assertions.assertThrows(SemanticException.class, () -> table.getUniqueConstraints().get(0).getUniqueColumnNames(table));
     }
 
     public static Stream<Arguments> genTestArguments() {

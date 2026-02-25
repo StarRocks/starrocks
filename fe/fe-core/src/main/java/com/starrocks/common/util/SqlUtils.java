@@ -17,7 +17,26 @@
 
 package com.starrocks.common.util;
 
+import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.TableName;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SetNamesVar;
+import com.starrocks.sql.ast.SetStmt;
+import com.starrocks.sql.ast.SetTransaction;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.InformationFunction;
+import com.starrocks.sql.ast.expression.VariableExpr;
+import com.starrocks.statistic.StatsConstants;
+import org.apache.commons.lang3.StringUtils;
+
 public class SqlUtils {
+
+    private static final int SQL_PREFIX_LENGTH = 128;
+
     public static String escapeUnquote(String ident) {
         return ident.replaceAll("``", "`");
     }
@@ -34,5 +53,69 @@ public class SqlUtils {
         }
         sb.append('`');
         return sb.toString();
+    }
+
+    /**
+     * Return the prefix of a sql if it's too long
+     */
+    public static String sqlPrefix(String sql) {
+        if (StringUtils.isEmpty(sql) || sql.length() < SQL_PREFIX_LENGTH) {
+            return sql;
+        }
+        return sql.substring(0, SQL_PREFIX_LENGTH) + "...";
+    }
+
+    /**
+     *  Pre-query SQL is the SQL sent before the user queries, such as select @@xxx (JDBC) and set query_timeout=xxx.
+     *  Do not close the connection after such query during graceful exit
+     *  because user queries will be sent on this connection after such query.
+     * @param parsedStmt parseStmt
+     * @return true/false
+     */
+    public static boolean isPreQuerySQL(StatementBase parsedStmt) {
+        if (parsedStmt instanceof QueryStatement queryStatement) {
+            if (queryStatement.getQueryRelation() != null
+                    && (queryStatement.getQueryRelation() instanceof SelectRelation selectRelation)) {
+                if (selectRelation.getSelectList() != null && !selectRelation.getSelectList().getItems().isEmpty()) {
+                    Expr itemExpr = selectRelation.getSelectList().getItems().get(0).getExpr();
+                    if (itemExpr != null) {
+                        if (itemExpr instanceof VariableExpr) {
+                            return true;
+                        } else if (itemExpr instanceof InformationFunction informationFunction) {
+                            return informationFunction.getFuncType().equalsIgnoreCase("connection_id")
+                                    || informationFunction.getFuncType().equalsIgnoreCase("session_id")
+                                    ||
+                                    informationFunction.getFuncType().equalsIgnoreCase(FunctionSet.CURRENT_WAREHOUSE);
+                        }
+                    }
+                }
+            }
+        }
+
+        if (parsedStmt instanceof SetStmt setStmt) {
+            return setStmt.getSetListItems().stream().anyMatch(item ->
+                    (item instanceof SetNamesVar
+                            || item instanceof SetTransaction
+                            || item instanceof SystemVariable));
+        }
+
+        return false;
+    }
+
+    /**
+     * Return true if the SQL queries any table under information_schema.
+     */
+    public static boolean isInformationQuery(StatementBase parsedStmt) {
+        if (parsedStmt instanceof QueryStatement queryStatement) {
+            if (queryStatement.getQueryRelation() != null &&
+                    queryStatement.getQueryRelation() instanceof SelectRelation selectRelation) {
+                if (selectRelation.getRelation() instanceof TableRelation tableRelation) {
+                    TableName tableName = tableRelation.getName();
+                    return tableName != null
+                            && StatsConstants.INFORMATION_SCHEMA.equalsIgnoreCase(tableName.getDb());
+                }
+            }
+        }
+        return false;
     }
 }

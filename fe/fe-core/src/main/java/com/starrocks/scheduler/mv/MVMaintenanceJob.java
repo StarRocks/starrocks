@@ -21,11 +21,9 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
@@ -54,8 +52,6 @@ import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -115,17 +111,9 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
         this.plan = Preconditions.checkNotNull(view.getMaintenancePlan());
     }
 
-    public static MVMaintenanceJob read(DataInput input) throws IOException {
-        MVMaintenanceJob job = GsonUtils.GSON.fromJson(Text.readString(input), MVMaintenanceJob.class);
-        job.state = new AtomicReference<>();
-        job.inSchedule = new AtomicBoolean();
-        job.state.set(job.getSerializedState());
-        return job;
-    }
-
     // TODO recover the entire job state, include execution plan
     public void restore() {
-        Table table = GlobalStateMgr.getCurrentState().getDb(dbId).getTable(viewId);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, viewId);
         Preconditions.checkState(table != null && table.isMaterializedView());
         this.view = (MaterializedView) table;
         this.serializedState = JobState.INIT;
@@ -232,7 +220,7 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
         // Build connection context
         this.connectContext = StatisticUtils.buildConnectContext();
         this.connectContext.setNeedQueued(false);
-        Database db = GlobalStateMgr.getCurrentState().getDb(view.getDbId());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(view.getDbId());
         this.connectContext.getSessionVariable().setQueryTimeoutS(MV_QUERY_TIMEOUT);
         if (db != null) {
             this.connectContext.setDatabase(db.getFullName());
@@ -243,7 +231,7 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
         List<PlanFragment> fragments = execPlan.getFragments();
         List<ScanNode> scanNodes = execPlan.getScanNodes();
         TDescriptorTable descTable = execPlan.getDescTbl().toThrift();
-        JobSpec jobSpec = JobSpec.Factory.fromMVMaintenanceJobSpec(connectContext, fragments, scanNodes, descTable);
+        JobSpec jobSpec = JobSpec.Factory.fromMVMaintenanceJobSpec(connectContext, fragments, scanNodes, descTable, execPlan);
         this.queryCoordinator = new CoordinatorPreprocessor(connectContext, jobSpec, false);
         this.epochCoordinator = new TxnBasedEpochCoordinator(this);
     }
@@ -267,7 +255,7 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
             // NOTE use a fake transaction id, the real one would be generated when epoch started
             long fakeTransactionId = 1;
             long dbId = getView().getDbId();
-            long timeout = context.getSessionVariable().getQueryTimeoutS();
+            long timeout = context.getExecTimeout();
             dataSink.init(context.getExecutionId(), fakeTransactionId, dbId, timeout);
             dataSink.complete();
         }
@@ -365,7 +353,7 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
     private void setMVMaintenanceTasksInfo(TMVMaintenanceTasks request,
                                            MVMaintenanceTask task) {
         // Request information
-        String dbName = GlobalStateMgr.getCurrentState().getDb(view.getDbId()).getFullName();
+        String dbName = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(view.getDbId()).getFullName();
 
         request.setDb_name(dbName);
         request.setMv_name(view.getName());
@@ -500,11 +488,8 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
         return Objects.hash(jobId, viewId, epoch, state.get());
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        serializedState = state.get();
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
+
+
 
     @Override
     public void gsonPostProcess() throws IOException {

@@ -15,14 +15,20 @@
 package com.starrocks.scheduler.history;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
+import com.google.gson.JsonSyntaxException;
 import com.starrocks.common.Config;
-import com.starrocks.load.pipe.filelist.RepoExecutor;
+import com.starrocks.common.FeConstants;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.persist.TaskRunStatus;
+import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TGetTasksParams;
+import com.starrocks.thrift.TRequestPagination;
+import com.starrocks.thrift.TResultBatch;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
@@ -30,11 +36,13 @@ import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.commons.lang3.StringEscapeUtils;
 import org.apache.logging.log4j.util.Strings;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.nio.ByteBuffer;
 import java.text.MessageFormat;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -42,32 +50,25 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class TaskRunHistoryTest {
 
     @BeforeAll
     public static void beforeAll() {
         UtFrameUtils.createMinStarRocksCluster();
+        FeConstants.runningUnitTest = false;
     }
 
     @Test
     public void testTaskRunStatusSerialization() {
         TaskRunStatus status = new TaskRunStatus();
         String json = status.toJSON();
-        assertEquals("{\"taskId\":0,\"createTime\":0,\"expireTime\":0,\"priority\":0,\"mergeRedundant\":false," +
-                "\"source\":\"CTAS\",\"errorCode\":0,\"finishTime\":0,\"processStartTime\":0," +
-                "\"state\":\"PENDING\",\"progress\":0,\"mvExtraMessage\":{\"forceRefresh\":false," +
-                "\"mvPartitionsToRefresh\":[],\"refBasePartitionsToRefreshMap\":{}," +
-                "\"basePartitionsToRefreshMap\":{},\"processStartTime\":0,\"executeOption\":{\"priority\":0," +
-                "\"isMergeRedundant\":true,\"isManual\":false,\"isSync\":false,\"isReplay\":false}}}", json);
-
         TaskRunStatus b = TaskRunStatus.fromJson(json);
         assertEquals(status.toJSON(), b.toJSON());
     }
 
     @Test
-    public void testCRUD(@Mocked RepoExecutor repo) {
+    public void testCRUD(@Mocked SimpleExecutor repo) {
         TaskRunStatus status = new TaskRunStatus();
         status.setQueryId("aaa");
         status.setTaskName("t1");
@@ -97,7 +98,8 @@ public class TaskRunHistoryTest {
         new Expectations() {
             {
                 repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
-                        "get_json_string(history_content_json, 'dbName') = 'default_cluster:d1'");
+                        "get_json_string(history_content_json, 'dbName') = 'default_cluster:d1' " +
+                        "ORDER BY create_time DESC LIMIT 10000");
             }
         };
         params.setDb("d1");
@@ -106,7 +108,8 @@ public class TaskRunHistoryTest {
         new Expectations() {
             {
                 repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
-                        "task_state = 'SUCCESS'");
+                        "task_state = 'SUCCESS'" +
+                        " ORDER BY create_time DESC LIMIT 10000");
             }
         };
         params.setDb(null);
@@ -116,7 +119,8 @@ public class TaskRunHistoryTest {
         new Expectations() {
             {
                 repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
-                        "task_name = 't1'");
+                        "task_name = 't1'" +
+                        " ORDER BY create_time DESC LIMIT 10000");
             }
         };
         params.setDb(null);
@@ -127,7 +131,8 @@ public class TaskRunHistoryTest {
         new Expectations() {
             {
                 repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
-                        "task_run_id = 'q1'");
+                        "task_run_id = 'q1'" +
+                        " ORDER BY create_time DESC LIMIT 10000");
             }
         };
         params.setDb(null);
@@ -146,15 +151,25 @@ public class TaskRunHistoryTest {
             }
         };
         history.lookupByTaskNames(dbName, taskNames);
+
+        // test for pagination argument
+        params.setPagination(new TRequestPagination());
+        params.getPagination().setLimit(100);
+        new Expectations() {
+            {
+                repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
+                        "task_run_id = 'q1' LIMIT 100");
+            }
+        };
+        history.lookup(params);
     }
 
     @Test
-    public void testKeeper(@Mocked RepoExecutor repo) {
+    public void testKeeper(@Mocked SimpleExecutor repo) {
         TableKeeper keeper = TaskRunHistoryTable.createKeeper();
         assertEquals(StatsConstants.STATISTICS_DB_NAME, keeper.getDatabaseName());
         assertEquals(TaskRunHistoryTable.TABLE_NAME, keeper.getTableName());
         assertEquals(TaskRunHistoryTable.CREATE_TABLE, keeper.getCreateTableSql());
-        assertEquals(TaskRunHistoryTable.TABLE_REPLICAS, keeper.getTableReplicas());
 
         // database not exists
         new Expectations() {
@@ -164,10 +179,10 @@ public class TaskRunHistoryTest {
             }
         };
         keeper.run();
-        assertFalse(keeper.isDatabaseExisted());
+        assertFalse(keeper.checkTableExists());
 
         // create table
-        keeper.setDatabaseExisted(true);
+        new StatisticsMetaManager().createStatisticsTablesForTest();
         new Expectations() {
             {
                 repo.executeDDL("CREATE TABLE IF NOT EXISTS _statistics_.task_run_history (task_id bigint NOT NULL, " +
@@ -180,7 +195,6 @@ public class TaskRunHistoryTest {
             }
         };
         keeper.run();
-        assertTrue(keeper.isTableExisted());
         assertFalse(keeper.isTableCorrected());
 
         new MockUp<SystemInfoService>() {
@@ -194,7 +208,7 @@ public class TaskRunHistoryTest {
     }
 
     @Test
-    public void testHistoryVacuum(@Mocked RepoExecutor repo) {
+    public void testHistoryVacuum(@Mocked SimpleExecutor repo) {
         new MockUp<TableKeeper>() {
             @Mock
             public boolean isReady() {
@@ -220,29 +234,7 @@ public class TaskRunHistoryTest {
         history.addHistory(run2);
         assertEquals(2, history.getInMemoryHistory().size());
 
-        // run the normal vacuum
-        new Expectations() {
-            {
-                repo.executeDML(
-                        "INSERT INTO _statistics_.task_run_history (task_id, task_run_id, task_name, task_state, " +
-                                "create_time, finish_time, expire_time, history_content_json) VALUES(0, 'q2', 't2'," +
-                                " 'SUCCESS', '1970-01-01 08:00:00', '1970-01-01 08:00:00', '2024-07-05 15:38:00', " +
-                                "'{\\\"queryId\\\":\\\"q2\\\",\\\"taskId\\\":0,\\\"taskName\\\":\\\"t2\\\"," +
-                                "\\\"createTime\\\":0," +
-                                "\\\"expireTime\\\":1720165080904,\\\"priority\\\":0,\\\"mergeRedundant\\\":false," +
-                                "\\\"source\\\":\\\"CTAS\\\",\\\"errorCode\\\":0,\\\"finishTime\\\":0,\\\"" +
-                                "processStartTime\\\":0," +
-                                "\\\"state\\\":\\\"SUCCESS\\\",\\\"progress\\\":0,\\\"mvExtraMessage\\\":{\\\"" +
-                                "forceRefresh\\\":false," +
-                                "\\\"mvPartitionsToRefresh\\\":[],\\\"refBasePartitionsToRefreshMap\\\":{}," +
-                                "\\\"basePartitionsToRefreshMap\\\":{},\\\"processStartTime\\\":0," +
-                                "\\\"executeOption\\\":{\\\"priority\\\":0,\\\"isMergeRedundant\\\":true,\\\"" +
-                                "isManual\\\":false," +
-                                "\\\"isSync\\\":false,\\\"isReplay\\\":false}}}')");
-
-            }
-        };
-        history.vacuum();
+        history.vacuum(true);
         assertEquals(1, history.getInMemoryHistory().size());
 
         // vacuum failed
@@ -258,8 +250,28 @@ public class TaskRunHistoryTest {
         run3.setTaskName("t3");
         run3.setState(Constants.TaskRunState.SUCCESS);
         history.addHistory(run3);
-        history.vacuum();
+        history.vacuum(true);
         assertEquals(2, history.getInMemoryHistory().size());
+    }
+
+    @Test
+    public void testHistoryVacuumSkipArchive(@Mocked SimpleExecutor repo) {
+        new MockUp<TableKeeper>() {
+            @Mock
+            public boolean isReady() {
+                return true;
+            }
+        };
+
+        TaskRunHistory history = new TaskRunHistory();
+        TaskRunStatus run = new TaskRunStatus();
+        run.setExpireTime(System.currentTimeMillis() + 10000);
+        run.setQueryId("q3");
+        run.setTaskName("t3");
+        run.setState(Constants.TaskRunState.SUCCESS);
+        history.addHistory(run);
+        history.vacuum(false);
+        assertEquals(1, history.getInMemoryHistory().size());
     }
 
     @Test
@@ -284,8 +296,8 @@ public class TaskRunHistoryTest {
         assertEquals(2, history.getInMemoryHistory().size());
 
         // run, trigger the expiration
-        history.vacuum();
-        Assert.assertEquals(0, history.getInMemoryHistory().size());
+        history.vacuum(true);
+        Assertions.assertEquals(0, history.getInMemoryHistory().size());
 
         Config.enable_task_history_archive = true;
     }
@@ -317,7 +329,7 @@ public class TaskRunHistoryTest {
             List<TaskRunStatus> ans = TaskRunStatus.TaskRunStatusJSONRecord.fromJson(jsonString).data;
             Preconditions.checkArgument(ans == null);
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Expected a string but was BEGIN_OBJECT at line 1 column 568"));
+            Assertions.assertInstanceOf(JsonSyntaxException.class, e);
         }
     }
 
@@ -328,10 +340,8 @@ public class TaskRunHistoryTest {
         properties.put("datacache", "{\"enable\": \"true\"}");
         status.setProperties(properties);
         String json = GsonUtils.GSON.toJson(status);
-        System.out.println(json);
         TaskRunStatus dst = GsonUtils.GSON.fromJson(json, TaskRunStatus.class);
-        System.out.println(dst);
-        Assert.assertEquals(json, GsonUtils.GSON.toJson(status));
+        Assertions.assertEquals(json, GsonUtils.GSON.toJson(status));
     }
     @Test
     public void testCase1() {
@@ -340,9 +350,102 @@ public class TaskRunHistoryTest {
         properties.put("datacache", "{\"enable\": \"true\"}");
         status.setProperties(properties);
         String json = GsonUtils.GSON.toJson(status);
-        System.out.println(json);
         String res = MessageFormat.format("{0}", Strings.quote(status.toJSON()));
-        System.out.println(res);
-        Assert.assertTrue(res.contains("\"datacache\":\"{\\\"enable\\\": \\\"true\\\"}\""));
+        Assertions.assertTrue(res.contains("\"datacache\":\"{\\\"enable\\\": \\\"true\\\"}\""));
+    }
+
+    private TaskRunStatus createTaskRunStatus(long createdTime) {
+        TaskRunStatus status = new TaskRunStatus();
+        status.setCreateTime(createdTime);
+        status.setExpireTime(createdTime + 10000);
+        status.setQueryId("q1");
+        status.setTaskName("t1");
+        status.setState(Constants.TaskRunState.SUCCESS);
+        return status;
+    }
+
+    @Test
+    public void testLookByTaskNamesOrder(@Mocked SimpleExecutor repo) {
+        new MockUp<TableKeeper>() {
+            @Mock
+            public boolean isReady() {
+                return true;
+            }
+        };
+
+        TaskRunHistoryTable history = new TaskRunHistoryTable();
+        List<TaskRunStatus> taskRuns = Lists.newArrayList();
+        for (int i = 0; i < 10; i++) {
+            TaskRunStatus status = createTaskRunStatus(i);
+            taskRuns.add(status);
+        }
+        // shuffle the taskRuns' order
+        Collections.shuffle(taskRuns);
+        new MockUp<SimpleExecutor>() {
+            @Mock
+            public List<TResultBatch> executeDQL(String sql) {
+                TaskRunStatus.TaskRunStatusJSONRecord record = new TaskRunStatus.TaskRunStatusJSONRecord();
+                record.data = taskRuns;
+                String json = GsonUtils.GSON.toJson(record);
+
+                TResultBatch resultBatch = new TResultBatch();
+                ByteBuffer buffer = ByteBuffer.wrap(json.getBytes());
+                resultBatch.setRows(Lists.newArrayList(buffer));
+                return Lists.newArrayList(resultBatch);
+            }
+        };
+        // lookup by task names
+        String dbName = "";
+        Set<String> taskNames = Set.of("t1", "t2");
+        List<TaskRunStatus> result = history.lookupByTaskNames(dbName, taskNames);
+        Assertions.assertEquals(10, result.size());
+        // result always sorted by createTime desc
+        for (int i = 0; i < 10; i++) {
+            Assertions.assertEquals(9 - i, result.get(i).getCreateTime());
+        }
+    }
+
+    @Test
+    public void testLookOrder(@Mocked SimpleExecutor repo) {
+        new MockUp<TableKeeper>() {
+            @Mock
+            public boolean isReady() {
+                return true;
+            }
+        };
+
+        TaskRunHistoryTable history = new TaskRunHistoryTable();
+        List<TaskRunStatus> taskRuns = Lists.newArrayList();
+        for (int i = 0; i < 10; i++) {
+            TaskRunStatus status = createTaskRunStatus(i);
+            taskRuns.add(status);
+        }
+
+        // shuffle the taskRuns' order
+        Collections.shuffle(taskRuns);
+
+        new MockUp<SimpleExecutor>() {
+            @Mock
+            public List<TResultBatch> executeDQL(String sql) {
+                TaskRunStatus.TaskRunStatusJSONRecord record = new TaskRunStatus.TaskRunStatusJSONRecord();
+                record.data = taskRuns;
+                String json = GsonUtils.GSON.toJson(record);
+                TResultBatch resultBatch = new TResultBatch();
+                ByteBuffer buffer = ByteBuffer.wrap(json.getBytes());
+                resultBatch.setRows(Lists.newArrayList(buffer));
+                return Lists.newArrayList(resultBatch);
+            }
+        };
+        // lookup by params
+        TGetTasksParams params = new TGetTasksParams();
+        params.setDb(null);
+        params.setState(null);
+        params.setTask_name("t1");
+        List<TaskRunStatus> result = history.lookup(params);
+        Assertions.assertEquals(10, result.size());
+        // result always sorted by createTime desc
+        for (int i = 0; i < 10; i++) {
+            Assertions.assertEquals(9 - i, result.get(i).getCreateTime());
+        }
     }
 }

@@ -23,12 +23,20 @@
 #include "exec/pipeline/set/union_passthrough_operator.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 
 namespace starrocks {
 UnionNode::UnionNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ExecNode(pool, tnode, descs),
           _first_materialized_child_idx(tnode.union_node.first_materialized_child_idx),
-          _tuple_id(tnode.union_node.tuple_id) {}
+          _tuple_id(tnode.union_node.tuple_id) {
+    if (tnode.union_node.local_exchanger_type == TLocalExchangerType::PASSTHROUGH) {
+        _pass_through_type = pipeline::LocalExchanger::PassThroughType::RANDOM;
+    } else {
+        _pass_through_type = pipeline::LocalExchanger::PassThroughType::DIRECT;
+    }
+}
 
 UnionNode::~UnionNode() {
     if (runtime_state() != nullptr) {
@@ -42,15 +50,24 @@ Status UnionNode::init(const TPlanNode& tnode, RuntimeState* state) {
     const auto& const_expr_lists = tnode.union_node.const_expr_lists;
     for (const auto& exprs : const_expr_lists) {
         std::vector<ExprContext*> ctxs;
-        RETURN_IF_ERROR(Expr::create_expr_trees(_pool, exprs, &ctxs, state));
+        RETURN_IF_ERROR(ExprFactory::create_expr_trees(_pool, exprs, &ctxs, state));
         _const_expr_lists.push_back(ctxs);
     }
 
     const auto& result_expr_lists = tnode.union_node.result_expr_lists;
     for (const auto& exprs : result_expr_lists) {
         std::vector<ExprContext*> ctxs;
-        RETURN_IF_ERROR(Expr::create_expr_trees(_pool, exprs, &ctxs, state));
+        RETURN_IF_ERROR(ExprFactory::create_expr_trees(_pool, exprs, &ctxs, state));
         _child_expr_lists.push_back(ctxs);
+    }
+
+    if (tnode.union_node.__isset.local_partition_by_exprs) {
+        auto& local_partition_by_exprs = tnode.union_node.local_partition_by_exprs;
+        for (auto& texprs : local_partition_by_exprs) {
+            std::vector<ExprContext*> ctxs;
+            RETURN_IF_ERROR(ExprFactory::create_expr_trees(_pool, texprs, &ctxs, state));
+            _local_partition_by_exprs.push_back(ctxs);
+        }
     }
 
     if (tnode.union_node.__isset.pass_through_slot_maps) {
@@ -85,11 +102,11 @@ Status UnionNode::prepare(RuntimeState* state) {
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(_tuple_id);
 
     for (const vector<ExprContext*>& exprs : _const_expr_lists) {
-        RETURN_IF_ERROR(Expr::prepare(exprs, state));
+        RETURN_IF_ERROR(ExprExecutor::prepare(exprs, state));
     }
 
     for (auto& _child_expr_list : _child_expr_lists) {
-        RETURN_IF_ERROR(Expr::prepare(_child_expr_list, state));
+        RETURN_IF_ERROR(ExprExecutor::prepare(_child_expr_list, state));
     }
 
     return Status::OK();
@@ -101,11 +118,11 @@ Status UnionNode::open(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::open(state));
 
     for (const vector<ExprContext*>& exprs : _const_expr_lists) {
-        RETURN_IF_ERROR(Expr::open(exprs, state));
+        RETURN_IF_ERROR(ExprExecutor::open(exprs, state));
     }
 
     for (const vector<ExprContext*>& exprs : _child_expr_lists) {
-        RETURN_IF_ERROR(Expr::open(exprs, state));
+        RETURN_IF_ERROR(ExprExecutor::open(exprs, state));
     }
 
     if (!_children.empty()) {
@@ -171,10 +188,10 @@ void UnionNode::close(RuntimeState* state) {
         return;
     }
     for (auto& exprs : _child_expr_lists) {
-        Expr::close(exprs, state);
+        ExprExecutor::close(exprs, state);
     }
     for (auto& exprs : _const_expr_lists) {
-        Expr::close(exprs, state);
+        ExprExecutor::close(exprs, state);
     }
     ExecNode::close(state);
 }
@@ -296,10 +313,10 @@ Status UnionNode::_move_const_chunk(ChunkPtr& dest_chunk) {
 void UnionNode::_clone_column(ChunkPtr& dest_chunk, const ColumnPtr& src_column, const SlotDescriptor* dest_slot,
                               size_t row_count) {
     if (src_column->is_nullable() || !dest_slot->is_nullable()) {
-        dest_chunk->append_column(src_column->clone_shared(), dest_slot->id());
+        dest_chunk->append_column((std::move(*src_column)).mutate(), dest_slot->id());
     } else {
         ColumnPtr nullable_column =
-                NullableColumn::create(src_column->clone_shared(), NullColumn::create(row_count, 0));
+                NullableColumn::create((std::move(*src_column)).mutate(), NullColumn::create(row_count, 0));
         dest_chunk->append_column(nullable_column, dest_slot->id());
     }
 }
@@ -320,16 +337,16 @@ void UnionNode::_move_column(ChunkPtr& dest_chunk, ColumnPtr& src_column, const 
             auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(src_column);
             // Note: we must create a new column every time here,
             // because VectorizedLiteral always return a same shared_ptr and we will modify it later.
-            ColumnPtr new_column = ColumnHelper::create_column(dest_slot->type(), dest_slot->is_nullable());
+            MutableColumnPtr new_column = ColumnHelper::create_column(dest_slot->type(), dest_slot->is_nullable());
             new_column->append(*const_column->data_column(), 0, 1);
             new_column->assign(row_count, 0);
             dest_chunk->append_column(std::move(new_column), dest_slot->id());
         } else {
             if (dest_slot->is_nullable()) {
-                ColumnPtr nullable_column = NullableColumn::create(src_column, NullColumn::create(row_count, 0));
+                auto nullable_column = NullableColumn::create(std::move(src_column), NullColumn::create(row_count, 0));
                 dest_chunk->append_column(std::move(nullable_column), dest_slot->id());
             } else {
-                dest_chunk->append_column(src_column, dest_slot->id());
+                dest_chunk->append_column(std::move(src_column), dest_slot->id());
             }
         }
     }
@@ -347,7 +364,12 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
     // UnionPassthroughOperator is used for the passthrough sub-node.
     for (; i < _first_materialized_child_idx; i++) {
         auto child_ops = child(i)->decompose_to_pipeline(context);
-        child_ops = context->maybe_interpolate_grouped_exchange(_id, child_ops);
+        if (!_local_partition_by_exprs.empty()) {
+            child_ops = context->maybe_interpolate_local_bucket_shuffle_exchange(
+                    context->runtime_state(), _id, child_ops, _local_partition_by_exprs[i]);
+        } else {
+            child_ops = context->maybe_interpolate_grouped_exchange(_id, child_ops);
+        }
         operators_list.emplace_back(child_ops);
 
         UnionPassthroughOperator::SlotMap* dst2src_slot_map = nullptr;
@@ -373,6 +395,7 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
     // ProjectOperatorFactory is used for the materialized sub-node.
     for (; i < _children.size(); i++) {
         auto child_ops = child(i)->decompose_to_pipeline(context);
+        std::vector<ExprContext*> partition_by_exprs;
         child_ops = context->maybe_interpolate_grouped_exchange(_id, child_ops);
         operators_list.emplace_back(child_ops);
 
@@ -420,12 +443,20 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
         this->init_runtime_filter_for_operator(operators_list[i].back().get(), context, rc_rf_probe_collector);
     }
 
-    auto final_operators = context->maybe_gather_pipelines_to_one(runtime_state(), id(), operators_list);
+    if (limit() != -1) {
+        for (size_t i = 0; i < operators_list.size(); ++i) {
+            operators_list[i].emplace_back(
+                    std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+        }
+    }
+
+    auto final_operators =
+            context->maybe_gather_pipelines_to_one(runtime_state(), id(), operators_list, _pass_through_type);
+
     if (limit() != -1) {
         final_operators.emplace_back(
                 std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }
-
     return final_operators;
 }
 

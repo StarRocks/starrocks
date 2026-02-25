@@ -75,3 +75,18 @@ from (select c1 from (values(map())) as t(c1)) t;
 
 select map_concat(c1, map(named_struct('1',2), named_struct('A', [map([],[[named_struct('C', [[map()]])]])])))
 from (select c1 from (values(map())) as t(c1)) t;
+
+-- test map_entries
+CREATE TABLE test_map(
+    col_int INT,
+    col_map MAP<VARCHAR(50),INT>
+  )
+DUPLICATE KEY(col_int)
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO test_map VALUES
+(1,map{"a":1,"b":2}),
+(2,map{"c":3}),
+(3,map{"d":4,"e":5});
+SELECT col_int, map_entries(col_map) FROM test_map ORDER BY col_int;
+SELECT col_int, map_entries(col_map), unnest FROM test_map, unnest(map_entries(col_map)) as unnest  ORDER BY col_int;

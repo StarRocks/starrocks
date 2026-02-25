@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Compile StarRocks with Docker
@@ -19,6 +19,9 @@ Different branches of StarRocks correspond to different development environment 
   | **Branch name** | **Image name**              |
   | --------------- | ----------------------------------- |
   | main            | starrocks/dev-env-ubuntu:latest     |
+  | branch-3.5      | starrocks/dev-env-ubuntu:3.5-latest |
+  | branch-3.4      | starrocks/dev-env-ubuntu:3.4-latest |
+  | branch-3.3      | starrocks/dev-env-ubuntu:3.3-latest |
   | branch-3.2      | starrocks/dev-env-ubuntu:3.2-latest |
   | branch-3.1      | starrocks/dev-env-ubuntu:3.1-latest |
   | branch-3.0      | starrocks/dev-env-ubuntu:3.0-latest |
@@ -29,6 +32,9 @@ Different branches of StarRocks correspond to different development environment 
   | **Branch name** | **Image name**                       |
   | --------------- | ------------------------------------ |
   | main            | starrocks/dev-env-centos7:latest     |
+  | branch-3.5      | starrocks/dev-env-centos7:3.5-latest |
+  | branch-3.4      | starrocks/dev-env-centos7:3.4-latest |
+  | branch-3.3      | starrocks/dev-env-centos7:3.3-latest |
   | branch-3.2      | starrocks/dev-env-centos7:3.2-latest |
   | branch-3.1      | starrocks/dev-env-centos7:3.1-latest |
   | branch-3.0      | starrocks/dev-env-centos7:3.0-latest |
@@ -45,7 +51,7 @@ Before compiling StarRocks, make sure the following requirements are satisfied:
 - **Software**
 
   - Your machine must be running on Ubuntu 22.04 or CentOS 7.9.
-  - You must have Docker installed on your machine.
+  - You must have Docker installed on your machine and version v20.10.10 at least.
 
 ## Step 1: Download the image
 

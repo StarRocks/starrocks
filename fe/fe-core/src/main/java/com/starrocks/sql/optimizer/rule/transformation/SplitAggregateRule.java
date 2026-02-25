@@ -19,9 +19,9 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
@@ -33,11 +33,13 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
+import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static com.starrocks.qe.SessionVariableConstants.AggregationStage.AUTO;
 import static com.starrocks.qe.SessionVariableConstants.AggregationStage.TWO_STAGE;
@@ -49,8 +51,8 @@ public abstract class SplitAggregateRule extends TransformationRule {
         super(ruleType, Pattern.create(OperatorType.LOGICAL_AGGR, OperatorType.PATTERN_LEAF));
     }
 
-    protected Map<ColumnRefOperator, CallOperator> createNormalAgg(AggType aggType,
-                                                                   Map<ColumnRefOperator, CallOperator> aggregationMap) {
+    public Map<ColumnRefOperator, CallOperator> createNormalAgg(AggType aggType,
+                                                                Map<ColumnRefOperator, CallOperator> aggregationMap) {
         Map<ColumnRefOperator, CallOperator> newAggregationMap = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregationMap.entrySet()) {
             ColumnRefOperator column = entry.getKey();
@@ -89,7 +91,7 @@ public abstract class SplitAggregateRule extends TransformationRule {
     // We should pass '20191111' to update and merge phase aggregator in BE both.
     protected static void appendConstantColumns(List<ScalarOperator> arguments, CallOperator aggregation) {
         if (aggregation.getChildren().size() > 1) {
-            aggregation.getChildren().stream().filter(ScalarOperator::isConstantRef).forEach(arguments::add);
+            aggregation.getChildren().stream().filter(ScalarOperator::isConstant).forEach(arguments::add);
         }
     }
 
@@ -99,12 +101,14 @@ public abstract class SplitAggregateRule extends TransformationRule {
         return af.getIntermediateType() == null ? af.getReturnType() : af.getIntermediateType();
     }
 
-    protected boolean isSuitableForTwoStageDistinct(OptExpression input, LogicalAggregationOperator operator,
-                                                  List<ColumnRefOperator> distinctColumns) {
+    protected boolean isSuitableForTwoStageDistinct(ConnectContext connectContext,
+                                                    OptExpression input,
+                                                    LogicalAggregationOperator operator,
+                                                    List<ColumnRefOperator> distinctColumns) {
         if (distinctColumns.isEmpty()) {
             return true;
         }
-        int aggMode = ConnectContext.get().getSessionVariable().getNewPlannerAggStage();
+        int aggMode = connectContext.getSessionVariable().getNewPlannerAggStage();
         for (CallOperator callOperator : operator.getAggregations().values()) {
             if (callOperator.isDistinct() && !canGenerateTwoStageAggregate(callOperator)) {
                 return false;
@@ -112,6 +116,35 @@ public abstract class SplitAggregateRule extends TransformationRule {
         }
 
         if (aggMode == TWO_STAGE.ordinal()) {
+            return true;
+        }
+
+        // 1. Only single node in the cluster
+        // 2. With GROUP-BY clause, otherwise the second-stage cannot be parallelized
+        // 3. CBO_ENABLE_SINGLE_NODE_PREFER_TWO_STAGE_AGGREGATE is enabled
+        if (!Utils.isRunningInUnitTest()
+                && aggMode == AUTO.ordinal()
+                && Utils.isSingleNodeExecution(connectContext)
+                && CollectionUtils.isNotEmpty(operator.getGroupingKeys())
+                && connectContext.getSessionVariable().isCboEnableSingleNodePreferTwoStageAggregate()) {
+            // for single node's distinct, we prefer two phase agg when partition by column in exchange is not skew.
+            // since in such case, there is no scale problem.
+            // otherwise prefer four phase agg in isThreeStageMoreEfficient() since it has the best scalability.
+            List<ColumnRefOperator> partitionByColumns = operator.getPartitionByColumns();
+            Statistics inputStatistics = input.getGroupExpression().inputAt(0).getStatistics();
+            List<ColumnStatistic> partitionByColumnStatistics = partitionByColumns
+                    .stream()
+                    .map(inputStatistics::getColumnStatistic)
+                    .collect(Collectors.toList());
+            if (partitionByColumnStatistics.stream().anyMatch(ColumnStatistic::isUnknown)) {
+                return true;
+            }
+            double aggOutputRow =
+                    StatisticsCalculator.computeGroupByStatistics(partitionByColumns, inputStatistics, Maps.newHashMap());
+            // if partition by column's ndv is too small, two phase agg may not scale
+            if (aggOutputRow <= LOW_AGGREGATE_EFFECT_COEFFICIENT * 10) {
+                return false;
+            }
             return true;
         }
 

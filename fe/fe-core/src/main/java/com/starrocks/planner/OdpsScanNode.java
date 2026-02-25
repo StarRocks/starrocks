@@ -19,7 +19,6 @@ import com.aliyun.odps.table.read.split.impl.IndexedInputSplit;
 import com.aliyun.odps.table.read.split.impl.RowRangeInputSplit;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.OdpsTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.connector.CatalogConnector;
@@ -95,7 +94,7 @@ public class OdpsScanNode extends ScanNode {
         OdpsSplitsInfo splitsInfo = remoteFileDesc.getOdpsSplitsInfo();
         if (splitsInfo.isEmpty()) {
             LOG.warn("There is no odps splits on {}.{} and predicate: [{}]",
-                    table.getDbName(), table.getTableName(), predicate);
+                    table.getCatalogDBName(), table.getCatalogTableName(), predicate);
             return;
         }
         Map<String, String> commonSplitInfo = new HashMap<>();
@@ -112,11 +111,13 @@ public class OdpsScanNode extends ScanNode {
                 case SIZE:
                     IndexedInputSplit split = (IndexedInputSplit) inputSplit;
                     splitInfo.put("split_index", String.valueOf(split.getSplitIndex()));
+                    hdfsScanRange.setOffset(split.getSplitIndex());
                     break;
                 case ROW_OFFSET:
                     RowRangeInputSplit split1 = (RowRangeInputSplit) inputSplit;
                     splitInfo.put("start_index", String.valueOf(split1.getRowRange().getStartIndex()));
                     splitInfo.put("num_record", String.valueOf(split1.getRowRange().getNumRecord()));
+                    hdfsScanRange.setOffset(split1.getRowRange().getStartIndex());
                     break;
                 default:
                     throw new StarRocksConnectorException(
@@ -155,7 +156,7 @@ public class OdpsScanNode extends ScanNode {
     @Override
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
         StringBuilder output = new StringBuilder();
-        output.append(prefix).append("TABLE: ").append(table.getDbName()).append(".").append(table.getTableName())
+        output.append(prefix).append("TABLE: ").append(table.getCatalogDBName()).append(".").append(table.getCatalogTableName())
                 .append("\n");
         return output.toString();
     }
@@ -170,14 +171,13 @@ public class OdpsScanNode extends ScanNode {
         msg.node_type = TPlanNodeType.HDFS_SCAN_NODE;
         THdfsScanNode tHdfsScanNode = new THdfsScanNode();
         tHdfsScanNode.setTuple_id(desc.getId().asInt());
-        tHdfsScanNode.setCan_use_min_max_count_opt(false);
 
         String explainString = getExplainString(conjuncts);
         LOG.info("Explain string: " + explainString);
         tHdfsScanNode.setSql_predicates(explainString);
 
         if (table != null) {
-            tHdfsScanNode.setTable_name(table.getTableName());
+            tHdfsScanNode.setTable_name(table.getCatalogTableName());
         }
         HdfsScanNode.setScanOptimizeOptionToThrift(tHdfsScanNode, this);
         TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();

@@ -16,10 +16,13 @@ package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SortInfo;
+import com.starrocks.connector.BucketProperty;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.thrift.TBucketProperty;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TRuntimeFilterBuildJoinMode;
 import com.starrocks.thrift.TRuntimeFilterBuildType;
@@ -50,11 +53,21 @@ import static com.starrocks.planner.JoinNode.DistributionMode.SHUFFLE_HASH_BUCKE
 public class RuntimeFilterDescription {
     public enum RuntimeFilterType {
         TOPN_FILTER,
-        JOIN_FILTER
+        JOIN_FILTER,
+        AGG_IN_FILTER;
+
+        public boolean isTopNFilter() {
+            return TOPN_FILTER.equals(this);
+        }
+
+        public boolean isAggInFilter() {
+            return AGG_IN_FILTER.equals(this);
+        }
     }
 
     private int filterId;
     private int buildPlanNodeId;
+    private PlanNode buildPlanNode;
     private Expr buildExpr;
     private int exprOrder; // order of expr in eq conjuncts.
     private final Map<Integer, Expr> nodeIdToProbeExpr;
@@ -73,11 +86,20 @@ public class RuntimeFilterDescription {
     private long buildCardinality;
     private SessionVariable sessionVariable;
 
+    // TODO: remove me
     private boolean onlyLocal;
+
+    private long topn;
 
     // ExecGroupInfo. used for check build colocate runtime filter
     private boolean isBuildFromColocateGroup = false;
     private int execGroupId = -1;
+
+
+    private boolean isBroadCastInSkew = false;
+
+    // only set when isBroadCastInSkew is true, and the value is the id of shuffle join's corresponding filter id
+    private int skew_shuffle_filter_id = -1;
 
     private RuntimeFilterType type;
 
@@ -86,6 +108,7 @@ public class RuntimeFilterDescription {
     private List<Integer> bucketSeqToInstance = Lists.newArrayList();
     private List<Integer> bucketSeqToDriverSeq = Lists.newArrayList();
     private List<Integer> bucketSeqToPartition = Lists.newArrayList();
+    private List<BucketProperty> bucketProperties = Lists.newArrayList();
     // partitionByExprs are used for computing partition ids in probe side when
     // join's equal conjuncts size > 1.
     private final Map<Integer, List<Expr>> nodeIdToParitionByExprs = Maps.newHashMap();
@@ -141,12 +164,68 @@ public class RuntimeFilterDescription {
         this.type = type;
     }
 
-    public SortInfo getSortInfo() {
-        return sortInfo;
-    }
-
     public void setSortInfo(SortInfo sortInfo) {
         this.sortInfo = sortInfo;
+    }
+
+    public void setTopN(long value) {
+        this.topn = value;
+    }
+
+    public long getTopN() {
+        return this.topn;
+    }
+
+    public boolean isTopNSortAsc() {
+        return sortInfo != null && sortInfo.getIsAscOrder().get(exprOrder);
+    }
+
+    public boolean isTopNullsFirst() {
+        return sortInfo != null && sortInfo.getNullsFirst().get(exprOrder);
+    }
+
+    public PlanNode getBuildPlanNode() {
+        return buildPlanNode;
+    }
+
+    public void setBuildPlanNode(PlanNode buildPlanNode) {
+        this.buildPlanNode = buildPlanNode;
+        inferBroadcastJoinInSkew();
+    }
+
+    public int getSkew_shuffle_filter_id() {
+        return skew_shuffle_filter_id;
+    }
+
+    public void setSkew_shuffle_filter_id(int skew_shuffle_filter_id) {
+        this.skew_shuffle_filter_id = skew_shuffle_filter_id;
+    }
+
+    private void inferBroadcastJoinInSkew() {
+        if (buildPlanNode != null && buildPlanNode instanceof HashJoinNode) {
+            HashJoinNode hashJoinNode = (HashJoinNode) buildPlanNode;
+            if (hashJoinNode.isSkewJoin() && hashJoinNode.getDistrMode() == JoinNode.DistributionMode.BROADCAST) {
+                isBroadCastInSkew = true;
+                return;
+            }
+        }
+
+        isBroadCastInSkew = false;
+    }
+
+    public boolean isBroadCastJoinInSkew() {
+        return isBroadCastInSkew;
+    }
+
+    public boolean isShuffleJoinInSkew() {
+        if (buildPlanNode != null && buildPlanNode instanceof HashJoinNode) {
+            HashJoinNode hashJoinNode = (HashJoinNode) buildPlanNode;
+            if (hashJoinNode.isSkewJoin() && hashJoinNode.getDistrMode() == PARTITIONED) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public boolean canProbeUse(PlanNode node, RuntimeFilterPushDownContext rfPushCtx) {
@@ -154,7 +233,7 @@ public class RuntimeFilterDescription {
             return false;
         }
 
-        if (RuntimeFilterType.TOPN_FILTER.equals(runtimeFilterType()) && node instanceof OlapScanNode) {
+        if (runtimeFilterType().isTopNFilter() && node instanceof OlapScanNode) {
             ((OlapScanNode) node).setOrderHint(isAscFilter());
         }
         // if we don't across exchange node, that's to say this is in local fragment instance.
@@ -189,7 +268,8 @@ public class RuntimeFilterDescription {
 
     // return true if Node could accept the Filter
     public boolean canAcceptFilter(PlanNode node, RuntimeFilterPushDownContext rfPushCtx) {
-        if (RuntimeFilterType.TOPN_FILTER.equals(runtimeFilterType())) {
+        // TODO: Support TopN runtime filter for other nodes
+        if (runtimeFilterType().isTopNFilter() || runtimeFilterType().isAggInFilter()) {
             if (node instanceof ScanNode) {
                 ScanNode scanNode = (ScanNode) node;
                 return scanNode.supportTopNRuntimeFilter();
@@ -197,8 +277,9 @@ public class RuntimeFilterDescription {
                 return false;
             }
         }
-        if (isBuildFromColocateGroup) {
-            int probeExecGroupId = rfPushCtx.getExecGroup(node.getId().asInt()).getGroupId().asInt();
+        // colocate runtime filter couldn't apply to other exec groups
+        if (isBuildFromColocateGroup && joinMode.equals(COLOCATE)) {
+            int probeExecGroupId = rfPushCtx.getExecGroupId(node.getId().asInt()).asInt();
             if (execGroupId != probeExecGroupId) {
                 return false;
             }
@@ -207,17 +288,17 @@ public class RuntimeFilterDescription {
         return true;
     }
 
-    public boolean isNullLast() {
-        if (sortInfo != null) {
-            return !sortInfo.getNullsFirst().get(0);
-        } else {
-            return false;
-        }
-    }
-
     public boolean isAscFilter() {
         if (sortInfo != null) {
             return sortInfo.getIsAscOrder().get(0);
+        } else {
+            return true;
+        }
+    }
+
+    public boolean isNullsFirst() {
+        if (sortInfo != null) {
+            return sortInfo.getNullsFirst().get(0);
         } else {
             return true;
         }
@@ -276,6 +357,10 @@ public class RuntimeFilterDescription {
         exprOrder = order;
     }
 
+    public int getExprOrder() {
+        return exprOrder;
+    }
+
     public void setJoinMode(JoinNode.DistributionMode mode) {
         joinMode = mode;
     }
@@ -321,6 +406,10 @@ public class RuntimeFilterDescription {
         this.bucketSeqToPartition = bucketSeqToPartition;
     }
 
+    public void setBucketProperties(List<BucketProperty> bucketProperties) {
+        this.bucketProperties = bucketProperties;
+    }
+
     public List<Integer> getBucketSeqToInstance() {
         return this.bucketSeqToInstance;
     }
@@ -350,8 +439,17 @@ public class RuntimeFilterDescription {
         this.execGroupId = buildExecGroupId;
     }
 
+    public void clearExecGroupInfo() {
+        this.isBuildFromColocateGroup = false;
+        this.execGroupId = -1;
+    }
+
     public boolean canPushAcrossExchangeNode() {
         if (onlyLocal) {
+            return false;
+        }
+        // skew join's broadcast join rf can not be pushed across exchange node
+        if (isBroadCastInSkew) {
             return false;
         }
         switch (joinMode) {
@@ -398,7 +496,7 @@ public class RuntimeFilterDescription {
         StringBuilder sb = new StringBuilder();
         sb.append("filter_id = ").append(filterId);
         if (probeNodeId >= 0) {
-            sb.append(", probe_expr = (").append(nodeIdToProbeExpr.get(probeNodeId).toSql()).append(")");
+            sb.append(", probe_expr = (").append(ExprToSql.toSql(nodeIdToProbeExpr.get(probeNodeId))).append(")");
             if (isCanUsePartitionByExprs() && nodeIdToParitionByExprs.containsKey(probeNodeId) &&
                     !nodeIdToParitionByExprs.get(probeNodeId).isEmpty()) {
                 sb.append(", partition_exprs = (");
@@ -406,15 +504,15 @@ public class RuntimeFilterDescription {
                 for (int i = 0; i < partitionByExprs.size(); i++) {
                     Expr partitionByExpr = partitionByExprs.get(i);
                     if (i != partitionByExprs.size() - 1) {
-                        sb.append(partitionByExpr.toSql() + ",");
+                        sb.append(ExprToSql.toSql(partitionByExpr) + ",");
                     } else {
-                        sb.append(partitionByExpr.toSql());
+                        sb.append(ExprToSql.toSql(partitionByExpr));
                     }
                 }
                 sb.append(")");
             }
         } else {
-            sb.append(", build_expr = (").append(buildExpr.toSql()).append(")");
+            sb.append(", build_expr = (").append(ExprToSql.toSql(buildExpr)).append(")");
             sb.append(", remote = ").append(hasRemoteTargets);
         }
         return sb.toString();
@@ -485,6 +583,13 @@ public class RuntimeFilterDescription {
         if (bucketSeqToPartition != null && !bucketSeqToPartition.isEmpty()) {
             layout.setBucketseq_to_partition(bucketSeqToPartition);
         }
+        if (bucketProperties != null && !bucketProperties.isEmpty()) {
+            List<TBucketProperty> tBucketProperties = new ArrayList<>();
+            for (BucketProperty bucketProperty : bucketProperties) {
+                tBucketProperties.add(bucketProperty.toThrift());
+            }
+            layout.setBucket_properties(tBucketProperties);
+        }
         return layout;
     }
 
@@ -492,11 +597,11 @@ public class RuntimeFilterDescription {
         TRuntimeFilterDescription t = new TRuntimeFilterDescription();
         t.setFilter_id(filterId);
         if (buildExpr != null) {
-            t.setBuild_expr(buildExpr.treeToThrift());
+            t.setBuild_expr(ExprToThrift.treeToThrift(buildExpr));
         }
         t.setExpr_order(exprOrder);
         for (Map.Entry<Integer, Expr> entry : nodeIdToProbeExpr.entrySet()) {
-            t.putToPlan_node_id_to_target_expr(entry.getKey(), entry.getValue().treeToThrift());
+            t.putToPlan_node_id_to_target_expr(entry.getKey(), ExprToThrift.treeToThrift(entry.getValue()));
         }
         t.setHas_remote_targets(hasRemoteTargets);
         t.setBuild_plan_node_id(buildPlanNodeId);
@@ -519,7 +624,7 @@ public class RuntimeFilterDescription {
 
         assert (joinMode != JoinNode.DistributionMode.NONE);
         if (joinMode.equals(BROADCAST)) {
-            t.setBuild_join_mode(TRuntimeFilterBuildJoinMode.BORADCAST);
+            t.setBuild_join_mode(TRuntimeFilterBuildJoinMode.BROADCAST);
         } else if (joinMode.equals(LOCAL_HASH_BUCKET)) {
             t.setBuild_join_mode(TRuntimeFilterBuildJoinMode.LOCAL_HASH_BUCKET);
         } else if (joinMode.equals(PARTITIONED)) {
@@ -535,17 +640,27 @@ public class RuntimeFilterDescription {
             for (Map.Entry<Integer, List<Expr>> entry : nodeIdToParitionByExprs.entrySet()) {
                 if (entry.getValue() != null && !entry.getValue().isEmpty()) {
                     t.putToPlan_node_id_to_partition_by_exprs(entry.getKey(),
-                            Expr.treesToThrift(entry.getValue()));
+                            ExprToThrift.treesToThrift(entry.getValue()));
                 }
             }
         }
 
         t.setBuild_from_group_execution(isBuildFromColocateGroup);
 
-        if (RuntimeFilterType.TOPN_FILTER.equals(runtimeFilterType())) {
+        if (runtimeFilterType().isTopNFilter()) {
             t.setFilter_type(TRuntimeFilterBuildType.TOPN_FILTER);
+            t.setIs_asc(isTopNSortAsc());
+            t.setIs_nulls_first(isTopNullsFirst());
+            t.setLimit(topn);
+        } else if (runtimeFilterType().isAggInFilter()) {
+            t.setFilter_type(TRuntimeFilterBuildType.AGG_FILTER);
         } else {
             t.setFilter_type(TRuntimeFilterBuildType.JOIN_FILTER);
+        }
+
+        t.setIs_broad_cast_join_in_skew(isBroadCastInSkew);
+        if (isBroadCastInSkew) {
+            t.setSkew_shuffle_filter_id(skew_shuffle_filter_id);
         }
 
         return t;

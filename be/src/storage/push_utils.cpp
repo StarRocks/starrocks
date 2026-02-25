@@ -49,7 +49,7 @@ Status PushBrokerReader::init(const TBrokerScanRange& t_scan_range, const TPushR
     _runtime_profile = _runtime_state->runtime_profile();
     _runtime_profile->set_name("PushBrokerReader");
 
-    _runtime_state->init_mem_trackers(dummy_id);
+    _runtime_state->init_mem_trackers(dummy_id, ExecEnv::GetInstance()->query_pool_mem_tracker());
 
     // init tuple desc
     auto tuple_id = t_scan_range.params.dest_tuple_id;
@@ -136,9 +136,9 @@ ColumnPtr PushBrokerReader::_build_hll_column(const ColumnPtr& column) {
 
 ColumnPtr PushBrokerReader::_padding_char_column(const ColumnPtr& column, const SlotDescriptor* slot_desc,
                                                  size_t num_rows) {
-    Column* data_column = ColumnHelper::get_data_column(column.get());
-    auto* binary = down_cast<BinaryColumn*>(data_column);
-    Offsets& offset = binary->get_offset();
+    const Column* data_column = ColumnHelper::get_data_column(column.get());
+    const auto* binary = down_cast<const BinaryColumn*>(data_column);
+    const auto offsets = binary->get_offset();
     uint32_t len = slot_desc->type().len;
 
     // Padding 0 to CHAR field, the storage bitmap index and zone map need it.
@@ -149,10 +149,10 @@ ColumnPtr PushBrokerReader::_padding_char_column(const ColumnPtr& column, const 
     new_bytes.assign(num_rows * len, 0); // padding 0
 
     uint32_t from = 0;
-    Bytes& bytes = binary->get_bytes();
+    auto bytes = binary->get_immutable_bytes();
     for (size_t i = 0; i < num_rows; ++i) {
-        uint32_t copy_data_len = std::min(len, offset[i + 1] - offset[i]);
-        strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset[i], copy_data_len);
+        uint32_t copy_data_len = std::min(len, offsets[i + 1] - offsets[i]);
+        strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offsets[i], copy_data_len);
         from += len; // no copy data will be 0
     }
 
@@ -161,8 +161,8 @@ ColumnPtr PushBrokerReader::_padding_char_column(const ColumnPtr& column, const 
     }
 
     if (slot_desc->is_nullable()) {
-        auto* nullable_column = down_cast<NullableColumn*>(column.get());
-        return NullableColumn::create(new_binary, nullable_column->null_column());
+        auto* nullable_column = down_cast<const NullableColumn*>(column.get());
+        return NullableColumn::create(std::move(new_binary), nullable_column->null_column());
     }
     return new_binary;
 }
@@ -174,11 +174,11 @@ Status PushBrokerReader::_convert_chunk(const ChunkPtr& from, ChunkPtr* to) {
     size_t num_rows = from->num_rows();
     for (int i = 0; i < from->num_columns(); ++i) {
         auto from_col = from->get_column_by_index(i);
-        auto to_col = (*to)->get_column_by_index(i);
+        auto* to_col = (*to)->get_column_raw_ptr_by_index(i);
 
         const SlotDescriptor* slot_desc = _tuple_desc->slots().at(i);
         const TypeDescriptor& type_desc = slot_desc->type();
-        from_col = ColumnHelper::unfold_const_column(type_desc, num_rows, from_col);
+        from_col = ColumnHelper::unfold_const_column(type_desc, num_rows, std::move(from_col));
 
         switch (type_desc.type) {
         case TYPE_OBJECT:

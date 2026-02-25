@@ -36,7 +36,7 @@ package com.starrocks.http.action;
 
 import com.google.common.base.Strings;
 import com.google.re2j.Pattern;
-import com.starrocks.StarRocksFE;
+import com.starrocks.common.Config;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -130,7 +130,7 @@ public class StaticResourceAction extends WebBaseAction {
     }
 
     public static void registerAction(ActionController controller) throws IllegalArgException {
-        String httpDir = StarRocksFE.STARROCKS_HOME_DIR + "/webroot";
+        String httpDir = Config.STARROCKS_HOME_DIR + "/webroot";
         StaticResourceAction action = new StaticResourceAction(controller, httpDir + "/static");
         controller.registerHandler(HttpMethod.GET, "/static/js", action);
         controller.registerHandler(HttpMethod.GET, "/static/css", action);

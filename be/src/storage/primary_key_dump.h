@@ -84,7 +84,7 @@ public:
     // deserialize pk column and pk index from dump file.
     static Status deserialize_pkcol_pkindex_from_meta(
             const std::string& dump_filepath, const PrimaryKeyDumpPB& dump_pb,
-            const std::function<void(const Chunk&)>& column_key_func,
+            const std::function<void(uint32_t, const Chunk&)>& column_key_func,
             const std::function<void(const std::string&, const PartialKVsPB&)>& index_kvs_func);
 
     std::string dump_filepath() const { return _dump_filepath; }

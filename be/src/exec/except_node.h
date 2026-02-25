@@ -16,19 +16,19 @@
 
 #include <unordered_set>
 
-#include "column/chunk.h"
+#include "base/hash/hash_std.hpp"
+#include "base/phmap/phmap.h"
+#include "base/string/slice.h"
 #include "column/column_hash.h"
 #include "column/column_helper.h"
 #include "column/type_traits.h"
 #include "exec/except_hash_set.h"
+#include "exec/exec_node.h"
 #include "exec/olap_common.h"
 #include "exec/pipeline/operator.h"
 #include "exprs/expr_context.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
-#include "util/hash_util.hpp"
-#include "util/phmap/phmap.h"
-#include "util/slice.h"
 
 namespace starrocks {
 class DescriptorTbl;
@@ -73,6 +73,7 @@ private:
     const TupleDescriptor* _tuple_desc;
     // Exprs materialized by this node. The i-th result expr list refers to the i-th child.
     std::vector<std::vector<ExprContext*>> _child_expr_lists;
+    std::vector<std::vector<ExprContext*>> _local_partition_by_exprs;
 
     struct ExceptColumnTypes {
         TypeDescriptor result_type;

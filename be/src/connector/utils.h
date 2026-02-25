@@ -26,7 +26,7 @@
 #include "formats/parquet/parquet_file_writer.h"
 #include "formats/utils.h"
 #include "fs/fs.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::connector {
 
@@ -37,7 +37,20 @@ public:
             const std::vector<std::unique_ptr<ColumnEvaluator>>& column_evaluators, Chunk* chunk,
             bool support_null_partition);
 
+    static StatusOr<std::string> iceberg_make_partition_name(
+            const std::vector<std::string>& partition_column_names,
+            const std::vector<std::unique_ptr<ColumnEvaluator>>& column_evaluators,
+            const std::vector<std::string>& transform_exprs, Chunk* chunk, bool support_null_partition,
+            std::vector<int8_t>& field_is_null);
+
     static StatusOr<std::string> column_value(const TypeDescriptor& type_desc, const ColumnPtr& column, int idx);
+
+    static StatusOr<std::string> iceberg_column_value(const TypeDescriptor& type_desc, const ColumnPtr& column,
+                                                      const int idx, const std::string& transform_expr,
+                                                      int8_t& is_null);
+
+    template <typename T>
+    static StatusOr<std::string> format_decimal_value(T value, int scale);
 };
 
 class IcebergUtils {
@@ -90,6 +103,12 @@ public:
 
     // location = base_path/{query_id}_{be_number}_{driver_id}_index.file_suffix
     std::string get() { return fmt::format("{}/{}_{}.{}", _base_path, _file_name_prefix, _index++, _file_name_suffix); }
+
+    std::string root_location(const std::string& partition) {
+        return fmt::format("{}/{}", _base_path, PathUtils::remove_trailing_slash(partition));
+    }
+
+    std::string root_location() { return fmt::format("{}", PathUtils::remove_trailing_slash(_base_path)); }
 
 private:
     const std::string _base_path;

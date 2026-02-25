@@ -14,12 +14,16 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
-import org.junit.Test;
+import org.apache.commons.lang3.StringUtils;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class TracerTest extends PlanTestBase {
     @Test
     public void testTracerDefault() throws Exception {
+        Tracers.close();
         String sql = "SELECT * from t0 join test_all_type on t0.v1 = test_all_type.t1d where t0.v1 = 1;";
         getFragmentPlan(sql);
         String pr = Tracers.printScopeTimer();
@@ -28,8 +32,9 @@ public class TracerTest extends PlanTestBase {
 
     @Test
     public void testTracerTimerNone1() throws Exception {
+        connectContext.getSessionVariable().setBigQueryProfileThreshold("0s");
         Tracers.register(connectContext);
-        Tracers.init(connectContext, Tracers.Mode.TIMER, "xx");
+        Tracers.init(connectContext, "TIMER", "xx");
         String sql = "SELECT * from t0 join test_all_type on t0.v1 = test_all_type.t1d where t0.v1 = 1;";
         getFragmentPlan(sql);
         String pr = Tracers.printScopeTimer();
@@ -39,8 +44,9 @@ public class TracerTest extends PlanTestBase {
 
     @Test
     public void testTracerTimerNone2() throws Exception {
+        connectContext.getSessionVariable().setBigQueryProfileThreshold("0s");
         Tracers.register(connectContext);
-        Tracers.init(connectContext, Tracers.Mode.TIMER, "None");
+        Tracers.init(connectContext, "TIMER", "None");
         String sql = "SELECT * from t0 join test_all_type on t0.v1 = test_all_type.t1d where t0.v1 = 1;";
         getFragmentPlan(sql);
         String pr = Tracers.printScopeTimer();
@@ -51,7 +57,7 @@ public class TracerTest extends PlanTestBase {
     @Test
     public void testTracerTimerBase() throws Exception {
         Tracers.register(connectContext);
-        Tracers.init(connectContext, Tracers.Mode.TIMER, "Base");
+        Tracers.init(connectContext, "TIMER", "Base");
         String sql = "SELECT * from t0 join test_all_type on t0.v1 = test_all_type.t1d where t0.v1 = 1;";
         getFragmentPlan(sql);
         String pr = Tracers.printScopeTimer();
@@ -62,7 +68,7 @@ public class TracerTest extends PlanTestBase {
     @Test
     public void testTracerTimerOptimizer() throws Exception {
         Tracers.register(connectContext);
-        Tracers.init(connectContext, Tracers.Mode.TIMER, "Optimizer");
+        Tracers.init(connectContext, "TIMER", "Optimizer");
         String sql = "SELECT * from t0 join test_all_type on t0.v1 = test_all_type.t1d where t0.v1 = 1;";
         getFragmentPlan(sql);
         String pr = Tracers.printScopeTimer();
@@ -73,7 +79,7 @@ public class TracerTest extends PlanTestBase {
     @Test
     public void testTracerTimingBase() throws Exception {
         Tracers.register(connectContext);
-        Tracers.init(connectContext, Tracers.Mode.TIMING, "Base");
+        Tracers.init(connectContext, "TIMING", "Base");
         String sql = "SELECT * from t0 join test_all_type on t0.v1 = test_all_type.t1d where t0.v1 = 1;";
         getFragmentPlan(sql);
         String pr = Tracers.printTiming();
@@ -84,7 +90,7 @@ public class TracerTest extends PlanTestBase {
     @Test
     public void testTracerLogOptimizer() throws Exception {
         Tracers.register(connectContext);
-        Tracers.init(connectContext, Tracers.Mode.TIMING, "Optimizer");
+        Tracers.init(connectContext, "TIMING", "Optimizer");
         String sql = "SELECT * from t0 join test_all_type on t0.v1 = test_all_type.t1d where t0.v1 = 1;";
         getFragmentPlan(sql);
         String pr = Tracers.printLogs();
@@ -96,7 +102,7 @@ public class TracerTest extends PlanTestBase {
     @Test
     public void testTracerLog1Optimizer() throws Exception {
         Tracers.register(connectContext);
-        Tracers.init(connectContext, Tracers.Mode.LOGS, "Optimizer");
+        Tracers.init(connectContext, "LOGS", "Optimizer");
         String sql = "select l_returnflag, sum(l_quantity) as sum_qty,\n" +
                 "    sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge\n" +
                 "from lineitem\n" +
@@ -113,7 +119,7 @@ public class TracerTest extends PlanTestBase {
     @Test
     public void testTracerLogAnalyze() throws Exception {
         Tracers.register(connectContext);
-        Tracers.init(connectContext, Tracers.Mode.LOGS, "Analyze");
+        Tracers.init(connectContext, "LOGS", "Analyze");
         String sql = "select l_returnflag, sum(l_quantity) as sum_qty,\n" +
                 "    sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge\n" +
                 "from lineitem\n" +
@@ -124,5 +130,25 @@ public class TracerTest extends PlanTestBase {
         String pr = Tracers.printLogs();
         Tracers.close();
         assertContains(pr, "QueryStatement");
+    }
+
+    @Test
+    public void testTracerMulti() throws Exception {
+        Tracers.register(connectContext);
+        String sql = "select l_returnflag, sum(l_quantity) as sum_qty,\n" +
+                "    sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge\n" +
+                "from lineitem\n" +
+                "where l_shipdate <= date '1998-12-01'\n" +
+                "group by l_returnflag \n" +
+                "order by l_returnflag;";
+        Tracers.init(Tracers.Mode.TIMER, Tracers.Module.BASE, false, false);
+        getFragmentPlan(sql);
+        try (Timer t = Tracers.watchScope(Tracers.Module.BASE, "thisIsPrivilegeCheckCall")) {
+            getFragmentPlan(sql);
+        }
+        String ss = Tracers.printScopeTimer();
+        System.out.println(ss);
+        Assertions.assertEquals(2, StringUtils.countMatches(ss, "Parser"));
+        Assertions.assertEquals(2, StringUtils.countMatches(ss, "Planner"));
     }
 }

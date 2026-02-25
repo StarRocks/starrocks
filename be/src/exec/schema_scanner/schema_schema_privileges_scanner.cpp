@@ -15,18 +15,17 @@
 #include "exec/schema_scanner/schema_schema_privileges_scanner.h"
 
 #include "exec/schema_scanner/schema_helper.h"
-#include "runtime/string_value.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaSchemaPrivilegesScanner::_s_db_privs_columns[] = {
         //   name,       type,          size
-        {"GRANTEE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"TABLE_CATALOG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"TABLE_SCHEMA", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"PRIVILEGE_TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"IS_GRANTABLE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"GRANTEE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"TABLE_CATALOG", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"TABLE_SCHEMA", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"PRIVILEGE_TYPE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"IS_GRANTABLE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
 };
 
 SchemaSchemaPrivilegesScanner::SchemaSchemaPrivilegesScanner()
@@ -57,48 +56,48 @@ Status SchemaSchemaPrivilegesScanner::fill_chunk(ChunkPtr* chunk) {
         case 1: {
             // GRANTEE
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(1);
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(1);
                 const std::string* str = &db_priv_desc.user_ident_str;
                 Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             }
             break;
         }
         case 2: {
             // TABLE_CATALOG
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(2);
-                fill_data_column_with_null(column.get());
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(2);
+                fill_data_column_with_null(column);
             }
             break;
         }
         case 3: {
             // TABLE_SCHEMA
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(3);
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(3);
                 const std::string* str = &db_priv_desc.db_name;
                 Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             }
             break;
         }
         case 4: {
             // PRIVILEGE_TYPE
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(4);
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(4);
                 const std::string* str = &db_priv_desc.priv;
                 Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             }
             break;
         }
         case 5: {
             // IS_GRANTABLE
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(5);
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(5);
                 const char* str = db_priv_desc.is_grantable ? "YES" : "NO";
                 Slice value(str, strlen(str));
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             }
             break;
         }

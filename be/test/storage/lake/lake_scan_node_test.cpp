@@ -14,6 +14,8 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
+#include "base/testutil/id_generator.h"
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
@@ -27,8 +29,6 @@
 #include "storage/lake/tablet_writer.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
-#include "testutil/assert.h"
-#include "testutil/id_generator.h"
 
 namespace starrocks::lake {
 
@@ -94,8 +94,8 @@ public:
         c2->append_numbers(k1.data(), k1.size() * sizeof(int));
         c3->append_numbers(v1.data(), v1.size() * sizeof(int));
 
-        Chunk chunk0({c0, c1}, _schema);
-        Chunk chunk1({c2, c3}, _schema);
+        Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
+        Chunk chunk1({std::move(c2), std::move(c3)}, _schema);
 
         ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_metadata->id()));
 
@@ -116,7 +116,7 @@ public:
             ASSERT_OK(writer->write(chunk1));
             ASSERT_OK(writer->finish());
 
-            auto files = writer->files();
+            const auto& files = writer->segments();
             ASSERT_EQ(2, files.size());
 
             // add rowset metadata
@@ -125,8 +125,8 @@ public:
             rowset->set_id(1);
             rowset->set_num_rows(k0.size() + k1.size());
             auto* segs = rowset->mutable_segments();
-            for (auto& file : writer->files()) {
-                segs->Add(std::move(file.path));
+            for (auto& file : writer->segments()) {
+                segs->Add()->assign(file.path);
             }
 
             writer->close();

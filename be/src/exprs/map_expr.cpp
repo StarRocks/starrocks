@@ -14,12 +14,12 @@
 
 #include "exprs/map_expr.h"
 
+#include "base/container/raw_container.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
 #include "column/map_column.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 
@@ -35,7 +35,7 @@ StatusOr<ColumnPtr> MapExpr::evaluate_checked(ExprContext* context, Chunk* chunk
     }
 
     bool all_const = true;
-    std::vector<ColumnPtr> pairs_columns(num_pairs);
+    Columns pairs_columns(num_pairs);
     for (size_t i = 0; i < num_pairs; i++) {
         ASSIGN_OR_RETURN(auto col, _children[i]->evaluate_checked(context, chunk));
         num_rows = std::max(num_rows, col->size());
@@ -45,7 +45,7 @@ StatusOr<ColumnPtr> MapExpr::evaluate_checked(ExprContext* context, Chunk* chunk
 
     for (size_t i = 0; i < num_pairs; i++) {
         pairs_columns[i] = ColumnHelper::cast_to_nullable_column(
-                ColumnHelper::unfold_const_column(_type.children[i % 2], num_rows, pairs_columns[i]));
+                ColumnHelper::unfold_const_column(_type.children[i % 2], num_rows, std::move(pairs_columns[i])));
     }
 
     auto key_col = ColumnHelper::create_column(_type.children[0], true);
@@ -74,8 +74,8 @@ StatusOr<ColumnPtr> MapExpr::evaluate_checked(ExprContext* context, Chunk* chunk
             offsets->append(curr_offset);
         }
     } else if (num_pairs > 0) { // avoid copying for only one pair
-        key_col = pairs_columns[0];
-        value_col = pairs_columns[1];
+        key_col = std::move(*pairs_columns[0]).mutate();
+        value_col = std::move(*pairs_columns[1]).mutate();
         for (size_t i = 0; i < num_rows; ++i) {
             curr_offset++;
             offsets->append(curr_offset);
@@ -86,7 +86,7 @@ StatusOr<ColumnPtr> MapExpr::evaluate_checked(ExprContext* context, Chunk* chunk
         }
     }
 
-    auto res = std::make_shared<MapColumn>(std::move(key_col), std::move(value_col), std::move(offsets));
+    auto res = MapColumn::create(std::move(key_col), std::move(value_col), std::move(offsets));
 
     if (all_const) {
         res->assign(num_rows, 0);

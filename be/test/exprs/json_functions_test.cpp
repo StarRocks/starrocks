@@ -22,22 +22,24 @@
 #include <string>
 #include <vector>
 
+#include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "butil/time.h"
+#include "column/column.h"
 #include "column/const_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/config.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "gtest/gtest-param-test.h"
 #include "gutil/casts.h"
 #include "gutil/strings/strip.h"
-#include "testutil/assert.h"
+#include "types/json_value.h"
 #include "types/logical_type.h"
-#include "util/defer_op.h"
-#include "util/json.h"
 #include "util/json_flattener.h"
 
 namespace starrocks {
@@ -691,11 +693,11 @@ TEST_P(FlatJsonExistsTestFixture, flat_json_exists_test) {
     flat_json_ptr->set_flat_columns(param_flat_path, param_flat_type, jf.mutable_result());
 
     Columns columns;
-    columns.push_back(flat_json);
+    columns.emplace_back(flat_json);
     if (!param_path.empty()) {
         auto path_column = BinaryColumn::create();
         path_column->append(param_path);
-        columns.push_back(path_column);
+        columns.emplace_back(path_column);
     }
 
     ctx.get()->set_constant_columns(columns);
@@ -766,11 +768,11 @@ TEST_F(JsonFunctionsTest, flat_json_invalid_path_test) {
     flat_json_ptr->set_flat_columns(param_flat_path, param_flat_type, jf.mutable_result());
 
     Columns columns;
-    columns.push_back(flat_json);
+    columns.emplace_back(flat_json);
     if (!param_path.empty()) {
         auto path_column = BinaryColumn::create();
         path_column->append(param_path);
-        columns.push_back(ConstColumn::create(path_column));
+        columns.emplace_back(ConstColumn::create(path_column));
     }
 
     ctx.get()->set_constant_columns(columns);
@@ -779,7 +781,9 @@ TEST_F(JsonFunctionsTest, flat_json_invalid_path_test) {
         return;
     }
 
+    config::enable_lazy_dynamic_flat_json = false;
     auto ret = JsonFunctions::json_exists(ctx.get(), columns);
+    config::enable_lazy_dynamic_flat_json = true;
     ASSERT_TRUE(JsonFunctions::native_json_path_close(
                         ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
@@ -813,11 +817,11 @@ TEST_F(JsonFunctionsTest, flat_json_invalid_constant_json_test) {
     flat_json_ptr->set_flat_columns(param_flat_path, param_flat_type, jf.mutable_result());
 
     Columns columns;
-    columns.push_back(ConstColumn::create(flat_json, 2));
+    columns.emplace_back(ConstColumn::create(flat_json, 2));
     if (!param_path.empty()) {
         auto path_column = BinaryColumn::create();
         path_column->append(param_path);
-        columns.push_back(ConstColumn::create(path_column, 2));
+        columns.emplace_back(ConstColumn::create(path_column, 2));
     }
 
     ctx.get()->set_constant_columns(columns);
@@ -858,14 +862,14 @@ TEST_F(JsonFunctionsTest, flat_json_variable_path_test) {
     flat_json_ptr->set_flat_columns(param_flat_path, param_flat_type, jf.mutable_result());
 
     Columns columns;
-    columns.push_back(flat_json);
+    columns.emplace_back(flat_json);
     flat_json->assign(10, 0);
 
     if (!param_path.empty()) {
         auto path_column = BinaryColumn::create();
         path_column->append(param_path);
         path_column->assign(10, 0);
-        columns.push_back(path_column);
+        columns.emplace_back(path_column);
     }
 
     ASSERT_TRUE(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -904,14 +908,14 @@ TEST_F(JsonFunctionsTest, flat_json_invalid_variable_path_test) {
     flat_json_ptr->set_flat_columns(param_flat_path, param_flat_type, jf.mutable_result());
 
     Columns columns;
-    columns.push_back(flat_json);
+    columns.emplace_back(flat_json);
     flat_json->assign(2, 0);
 
     if (!param_path.empty()) {
         auto path_column = BinaryColumn::create();
         path_column->append(param_path);
         path_column->append("$.k3");
-        columns.push_back(path_column);
+        columns.emplace_back(path_column);
     }
 
     ASSERT_TRUE(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -952,13 +956,13 @@ TEST_F(JsonFunctionsTest, flat_json_invalid_null_path_test) {
     flat_json_ptr->set_flat_columns(param_flat_path, param_flat_type, jf.mutable_result());
 
     Columns columns;
-    columns.push_back(flat_json);
+    columns.emplace_back(flat_json);
     flat_json->assign(2, 0);
 
     if (!param_path.empty()) {
         auto path_column = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
         path_column->append_nulls(2);
-        columns.push_back(path_column);
+        columns.emplace_back(path_column);
     }
 
     ASSERT_TRUE(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -999,12 +1003,12 @@ TEST_F(JsonFunctionsTest, flat_json_constant_path_test) {
     flat_json_ptr->set_flat_columns(param_flat_path, param_flat_type, jf.mutable_result());
 
     Columns columns;
-    columns.push_back(flat_json);
+    columns.emplace_back(flat_json);
 
     if (!param_path.empty()) {
         auto path_column = BinaryColumn::create();
         path_column->append(param_path);
-        columns.push_back(ConstColumn::create(path_column, 1));
+        columns.emplace_back(ConstColumn::create(path_column, 1));
     }
 
     ASSERT_TRUE(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -1243,11 +1247,11 @@ TEST_P(JsonLengthTestFixture, json_length_test) {
     json_column->append(&*json);
 
     Columns columns;
-    columns.push_back(json_column);
+    columns.emplace_back(json_column);
     if (!param_path.empty()) {
         auto path_column = BinaryColumn::create();
         path_column->append(param_path);
-        columns.push_back(path_column);
+        columns.emplace_back(path_column);
     }
 
     // ctx.get()->set_constant_columns(columns);
@@ -1308,11 +1312,11 @@ TEST_P(FlatJsonLengthTestFixture, flat_json_length_test) {
     flat_json_ptr->set_flat_columns(param_flat_path, param_flat_type, jf.mutable_result());
 
     Columns columns;
-    columns.push_back(flat_json);
+    columns.emplace_back(flat_json);
     if (!param_path.empty()) {
         auto path_column = BinaryColumn::create();
         path_column->append(param_path);
-        columns.push_back(path_column);
+        columns.emplace_back(path_column);
     }
 
     // ctx.get()->set_constant_columns(columns);
@@ -1353,11 +1357,11 @@ TEST_P(JsonKeysTestFixture, json_keys) {
     json_column->append(&*json);
 
     Columns columns;
-    columns.push_back(json_column);
+    columns.emplace_back(json_column);
     if (!param_path.empty()) {
         auto path_column = BinaryColumn::create();
         path_column->append(param_path);
-        columns.push_back(path_column);
+        columns.emplace_back(path_column);
     }
 
     Status st = JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
@@ -1542,8 +1546,8 @@ TEST_F(JsonFunctionsTest, struct_to_json) {
     Columns fields{NullableColumn::create(Int64Column::create(), NullColumn::create()),
                    NullableColumn::create(BinaryColumn::create(), NullColumn::create())};
     auto struct_column = StructColumn::create(fields, names);
-    struct_column->append_datum(DatumStruct{int64_t(1), Slice("park")});
-    struct_column->append_datum(DatumStruct{int64_t(2), Slice("menlo")});
+    struct_column->as_mutable_ptr()->append_datum(DatumStruct{int64_t(1), Slice("park")});
+    struct_column->as_mutable_ptr()->append_datum(DatumStruct{int64_t(2), Slice("menlo")});
 
     // Cast to JSON
     Columns input_columns{struct_column};
@@ -1568,7 +1572,7 @@ TEST_F(JsonFunctionsTest, map_to_json) {
     {
         auto key_column = NullableColumn::create(Int64Column::create(), NullColumn::create());
         auto val_column = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-        auto struct_column = MapColumn::create(key_column, val_column, UInt32Column::create());
+        auto struct_column = MapColumn::create(std::move(key_column), std::move(val_column), UInt32Column::create());
 
         DatumMap map1;
         map1[int64_t(1)] = Slice("menlo");
@@ -1599,7 +1603,7 @@ TEST_F(JsonFunctionsTest, map_to_json) {
     {
         auto key_column = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
         auto val_column = NullableColumn::create(Int64Column::create(), NullColumn::create());
-        auto struct_column = MapColumn::create(key_column, val_column, UInt32Column::create());
+        auto struct_column = MapColumn::create(std::move(key_column), std::move(val_column), UInt32Column::create());
 
         DatumMap map1;
         map1[Slice("menlo")] = int64_t(1);
@@ -1626,5 +1630,541 @@ TEST_F(JsonFunctionsTest, map_to_json) {
         ASSERT_EQ(R"({"palo": 3})", json2.get_json()->to_string_uncheck());
     }
 }
+
+TEST_F(JsonFunctionsTest, query_json_obj) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    ColumnBuilder<TYPE_VARCHAR> builder(1);
+    builder.append("has_active_email");
+
+    std::vector<std::string> param_flat_path{"other"};
+    std::vector<LogicalType> param_flat_type{LogicalType::TYPE_JSON};
+
+    auto flat_json1 = JsonColumn::create();
+    ASSIGN_OR_ABORT(auto jj1, JsonValue::parse(R"({"a1": 1, "b1": 2})"));
+    down_cast<JsonColumn*>(flat_json1.get())->append(jj1);
+
+    auto remain = JsonColumn::create();
+    ASSIGN_OR_ABORT(auto jj2, JsonValue::parse(R"({"has_active_email": false, "c1": 3})"));
+    down_cast<JsonColumn*>(remain.get())->append(jj2);
+
+    MutableColumns flat_js;
+    flat_js.emplace_back(flat_json1->as_mutable_ptr());
+    flat_js.emplace_back(remain->as_mutable_ptr());
+
+    auto json_col = JsonColumn::create();
+    json_col->set_flat_columns(param_flat_path, param_flat_type, std::move(flat_js));
+
+    Columns columns{std::move(json_col), builder.build(true)};
+
+    ctx.get()->set_constant_columns(columns);
+    std::ignore =
+            JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+
+    ASSIGN_OR_ABORT(ColumnPtr result, JsonFunctions::get_native_json_bool(ctx.get(), columns));
+    ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+
+    ASSERT_EQ(result->debug_string(), "[0]");
+}
+
+// Test parameters for json_remove function
+// Note: Implementation supports:
+// - Top-level object key removal (e.g., $.key)
+// - Nested path removal (e.g., $.outer.inner1)
+// - Array element removal (e.g., $.arr[2])
+// - Mixed path removal from nested structures
+struct JsonRemoveTestParam {
+    std::string json_input;
+    std::vector<std::string> paths_to_remove;
+    std::string expected_result;
+    std::string description;
+};
+
+class JsonRemoveTestFixture : public ::testing::TestWithParam<JsonRemoveTestParam> {};
+
+TEST_P(JsonRemoveTestFixture, json_remove) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto param = GetParam();
+
+    // Create JSON column
+    auto json_column = ColumnHelper::cast_to_nullable_column(JsonColumn::create());
+    if (param.json_input == "null") {
+        json_column->append_nulls(1);
+    } else {
+        auto json = JsonValue::parse(param.json_input);
+        ASSERT_TRUE(json.ok()) << "Failed to parse JSON: " << param.json_input;
+        json_column->append_datum(Datum(&json.value()));
+    }
+
+    // Create columns with JSON and all paths
+    Columns columns{json_column};
+    for (const auto& path : param.paths_to_remove) {
+        auto path_column = ColumnHelper::cast_to_nullable_column(BinaryColumn::create());
+        if (path == "null") {
+            path_column->append_nulls(1);
+        } else {
+            path_column->append_datum(Datum(Slice(path)));
+        }
+        columns.emplace_back(path_column);
+    }
+
+    // Prepare JSON path context
+    ASSERT_TRUE(JsonFunctions::native_json_path_prepare(
+                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+
+    // Execute json_remove function
+    ColumnPtr result = JsonFunctions::json_remove(ctx.get(), columns).value();
+    ASSERT_TRUE(!!result) << "json_remove returned null result for: " << param.description;
+
+    // Verify result
+    Datum datum = result->get(0);
+    if (param.expected_result == "null") {
+        ASSERT_TRUE(datum.is_null()) << "Expected null result for: " << param.description;
+    } else {
+        ASSERT_FALSE(datum.is_null()) << "Result should not be null for: " << param.description;
+        std::string json_str = datum.get_json()->to_string().value();
+
+        // Parse and re-serialize both JSON strings to normalize key ordering
+        auto expected_json = JsonValue::parse(param.expected_result);
+        auto actual_json = JsonValue::parse(json_str);
+
+        ASSERT_TRUE(expected_json.ok()) << "Failed to parse expected JSON: " << param.expected_result;
+        ASSERT_TRUE(actual_json.ok()) << "Failed to parse actual JSON: " << json_str;
+
+        std::string normalized_expected = expected_json->to_string().value();
+        std::string normalized_actual = actual_json->to_string().value();
+
+        ASSERT_EQ(normalized_expected, normalized_actual)
+                << "Test: " << param.description << "\nExpected: " << normalized_expected
+                << "\nActual: " << normalized_actual;
+    }
+
+    // Clean up JSON path context
+    ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+}
+
+// clang-format off
+INSTANTIATE_TEST_SUITE_P(
+        JsonRemoveTests, JsonRemoveTestFixture,
+        ::testing::Values(
+                JsonRemoveTestParam{
+                        "null", // JSON input is null
+                        {"$.a"}, // Any path (should not matter)
+                        "null", // Expected result
+                        "Null input JSON should result in null output"},
+                JsonRemoveTestParam{
+                        R"({"foo": 123, "bar": 456})", // JSON input
+                        {"null"}, // paths_to_remove is null
+                        R"({"foo": 123, "bar": 456})", // Expected result (no change)
+                        "No paths to remove: output should be identical to input"
+                },
+                JsonRemoveTestParam{
+                        R"({"a": 1, "b": [10, 20, 30]})", 
+                        {"$.a"}, 
+                        R"({"b": [10, 20, 30]})", // Expected result
+                        "Remove single key from object"},
+                JsonRemoveTestParam{
+                        R"({"a": 1, "b": [10, 20, 30], "c": "test"})",
+                        {"$.a", "$.c"},
+                        R"({"b": [10, 20, 30]})", // Expected result
+                        "Remove multiple keys from object"},
+                JsonRemoveTestParam{
+                        R"({"a": 1, "b": 2})", 
+                        {"invalid_path"}, 
+                        R"({"a": 1, "b": 2})", // Expected result (invalid path ignored)
+                        "Invalid path should be ignored"},
+                JsonRemoveTestParam{
+                        R"({"x": 100, "y": 200, "z": 300})",
+                        {"$.y"},
+                        R"({"x": 100, "z": 300})", // Expected result
+                        "Remove middle key from object"},
+                JsonRemoveTestParam{
+                        R"({"single": "value"})",
+                        {"$.single"},
+                        R"({})", // Expected result (empty object)
+                        "Remove single key from single-key object"},
+                        // TODO
+                JsonRemoveTestParam{
+                        R"([1, 2, 3, {"a": 10, "b": 20}])", // JSON input is an array
+                        {"$[0]", "$[1]"}, // Try to remove array elements
+                        R"([3, {"a": 10, "b": 20}])", // Expected result
+                        "Remove array elements from array"},
+                JsonRemoveTestParam{
+                        R"({"outer": {"inner1": 1, "inner2": 2}, "keep": 42})",
+                        {"$.outer.inner1"},
+                        R"({"keep": 42, "outer": {"inner2": 2}})", // Expected result
+                        "Remove nested key from nested object"},
+                JsonRemoveTestParam{
+                        R"({"deep": {"level1": {"level2": {"level3": "value"}}}})",
+                        {"$.deep.level1.level2"},
+                        R"({"deep": {"level1": {}}})", // Expected result
+                        "Remove deeply nested object"},
+                JsonRemoveTestParam{
+                        R"({"arr": [0, 1, 2, 3, 4]})",
+                        {"$.arr[2]"},
+                        R"({"arr": [0, 1, 3, 4]})", // Expected result
+                        "Remove middle element from array"},
+                JsonRemoveTestParam{
+                        R"({"mixed": {"obj": {"key": "value"}, "arr": [1, 2, 3]}})",
+                        {"$.mixed.obj.key", "$.mixed.arr[1]"},
+                        R"({"mixed": {"obj": {}, "arr": [1, 3]}})", // Expected result
+                        "Remove mixed paths from nested structure"},
+                JsonRemoveTestParam{
+                        R"({"top_level": "value", "nested": {"inner": "data"}})",
+                        {"$.top_level"},
+                        R"({"nested": {"inner": "data"}})", // Expected result
+                        "Remove top-level key from object"},
+                JsonRemoveTestParam{
+                        R"({"key1": "value1", "key2": "value2", "key3": "value3"})",
+                        {"$.key1", "$.key3"},
+                        R"({"key2": "value2"})", // Expected result
+                        "Remove multiple top-level keys from object"},
+                JsonRemoveTestParam{
+                        R"({"nested": {"a": 1, "b": 2, "c": 3}, "other": "value"})",
+                        {"$.nested.b", "$.nested.c"},
+                        R"({"nested": {"a": 1}, "other": "value"})", // Expected result
+                        "Remove multiple nested keys from object"},
+                JsonRemoveTestParam{
+                        R"({"array": [{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}, {"id": 3, "name": "Charlie"}]})",
+                        {"$.array[1]"},
+                        R"({"array": [{"id": 1, "name": "Alice"}, {"id": 3, "name": "Charlie"}]})", // Expected result
+                        "Remove object from array"},
+                JsonRemoveTestParam{
+                        R"({"complex": {"users": [{"id": 1}, {"id": 2}], "settings": {"theme": "dark", "lang": "en"}}})",
+                        {"$.complex.users[0]", "$.complex.settings.theme"},
+                        R"({"complex": {"users": [{"id": 2}], "settings": {"lang": "en"}}})", // Expected result
+                        "Remove mixed paths from complex nested structure"},
+                JsonRemoveTestParam{
+                        R"({"a.b": {"c": 1}, "d": 2})",
+                        {"$.\"a.b\""},
+                        R"({"d": 2})", // Expected result
+                        "Remove key from object where path contains a dot character"},
+                JsonRemoveTestParam{
+                        R"({"a.b": {"c": 1}, "d": 2})",
+                        {"$.\"a.b\".c"},
+                        R"({"a.b": {}, "d": 2})", // Expected result
+                        "Remove key from object where path contains a dot character"},
+                JsonRemoveTestParam{
+                        R"({"outer": {"a.b": {"x": 10, "y": 20}}, "other": 5})",
+                        {"$.outer.\"a.b\".y"},
+                        R"({"outer": {"a.b": {"x": 10}}, "other": 5})", // Expected result
+                        "Remove nested key where intermediate path contains a dot character"}
+        ));
+// clang-format on
+
+// Test cases for json_contains function
+class JsonContainsTestFixture : public ::testing::TestWithParam<std::tuple<std::string, std::string, bool>> {};
+
+TEST_P(JsonContainsTestFixture, json_contains) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto target_json = JsonColumn::create();
+    auto candidate_json = JsonColumn::create();
+
+    std::string param_target = std::get<0>(GetParam());
+    std::string param_candidate = std::get<1>(GetParam());
+    bool param_contains = std::get<2>(GetParam());
+
+    auto target = JsonValue::parse(param_target);
+    auto candidate = JsonValue::parse(param_candidate);
+    ASSERT_TRUE(target.ok());
+    ASSERT_TRUE(candidate.ok());
+
+    target_json->append(&*target);
+    candidate_json->append(&*candidate);
+
+    Columns columns{target_json, candidate_json};
+
+    ColumnPtr result = JsonFunctions::json_contains(ctx.get(), columns).value();
+    ASSERT_TRUE(!!result);
+
+    if (param_contains) {
+        ASSERT_TRUE((bool)result->get(0).get_uint8());
+    } else {
+        ASSERT_FALSE((bool)result->get(0).get_uint8());
+    }
+}
+
+// clang-format off
+INSTANTIATE_TEST_SUITE_P(
+        JsonContainsTest, JsonContainsTestFixture,
+        ::testing::Values(
+                // Basic scalar contains
+                std::make_tuple(R"("hello")", R"("hello")", true), 
+                std::make_tuple(R"("hello")", R"("world")", false),
+                std::make_tuple("123", "123", true), 
+                std::make_tuple("123", "456", false),
+                std::make_tuple("true", "true", true), 
+                std::make_tuple("true", "false", false),
+                std::make_tuple("null", "null", true),
+
+                // Object contains
+                std::make_tuple(R"({"a": 1, "b": 2})", R"({"a": 1})", true),
+                std::make_tuple(R"({"a": 1, "b": 2})", R"({"b": 2})", true),
+                std::make_tuple(R"({"a": 1, "b": 2})", R"({"a": 1, "b": 2})", true),
+                std::make_tuple(R"({"a": 1, "b": 2})", R"({"c": 3})", false),
+                std::make_tuple(R"({"a": 1, "b": 2})", R"({"a": 2})", false),
+
+                // Test cases for objects with multiple keys
+                std::make_tuple(R"({"a": 1, "b": 2, "c": 3})", R"({"a": 1, "b": 2})", true),
+                std::make_tuple(R"({"a": 1, "b": 2, "c": 3})", R"({"b": 2, "c": 3})", true),
+                std::make_tuple(R"({"a": 1, "b": 2, "c": 3})", R"({"a": 1, "c": 3})", true),
+                std::make_tuple(R"({"a": 1, "b": 2, "c": 3})", R"({"a": 1, "b": 2, "c": 3})", true),
+                std::make_tuple(R"({"a": 1, "b": 2, "c": 3})", R"({"a": 1, "b": 2, "d": 4})", false),
+                std::make_tuple(R"({"a": 1, "b": 2, "c": 3})", R"({"a": 2, "b": 2})", false),
+                std::make_tuple(R"({"a": 1, "b": 2, "c": 3})", R"({"a": 1, "b": 3})", false),
+
+                // Array contains
+                std::make_tuple(R"([1, 2, 3])", R"([1, 2])", true), 
+                std::make_tuple(R"([1, 2, 3])", R"([2, 3])", true),
+                std::make_tuple(R"([1, 2, 3])", R"([1, 2, 3])", true),
+                std::make_tuple(R"([1, 2, 3])", R"([4, 5])", false), 
+                std::make_tuple(R"([1, "2", 3])", "2", true),
+                std::make_tuple(R"([1, 2, 3])", "4", false),
+
+                // Nested structures
+                std::make_tuple(R"({"a": [1, 2], "b": {"c": 3}})", R"({"a": [1]})", false), // partial array match
+                std::make_tuple(R"({"a": [1, 2], "b": {"c": 3}})", R"({"b": {"c": 3}})", true),
+                std::make_tuple(R"([{"a": 1}, {"b": 2}])", R"([{"a": 1}])", true),
+                std::make_tuple(R"([{"a": 1}, {"b": 2}])", R"({"a": 1})", true),
+                std::make_tuple(R"([{"a": 1}, {"b": 2}])", R"({"a": 2})", false),
+                std::make_tuple(R"([{"a": 1}, {"b": 2}])", R"({"a": 1, "b": 2})", true),
+                std::make_tuple(R"([{"a": 1}, {"b": 2}])", R"({"a": 1, "b": 3})", false),
+                std::make_tuple(R"([{"a": 1}, {"b": 2}])", R"({"a": 1, "b": 2, "c": 3})", false),
+                std::make_tuple(R"([{"a": 1}, {"b": 2}])", R"({"a": 1, "b": 2, "c": 3})", false),
+
+                // Nested structures: these cases do not perform recursive containment checks
+                // (i.e., the function does not search for sub-objects deeply nested within the target)
+                std::make_tuple(R"({"x": {"a": 1}})", R"({"a": 1})", false),
+                std::make_tuple(R"({"x": {"a": 1}})", R"({"b": 2})", false),
+                std::make_tuple(R"([{"x": {"a": 1}}])", R"({"a": 1})", false),
+                std::make_tuple(R"([{"x": {"a": 1}}])", R"({"b": 2})", false))
+);
+// clang-format on
+
+struct JsonSetTestParam {
+    std::string json_input;
+    std::vector<std::pair<std::string, std::string>> path_value_pairs;
+    std::string expected_result;
+    std::string description;
+};
+
+class JsonSetTestFixture : public ::testing::TestWithParam<JsonSetTestParam> {};
+
+TEST_P(JsonSetTestFixture, json_set) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto param = GetParam();
+
+    auto json_column = ColumnHelper::cast_to_nullable_column(JsonColumn::create());
+    bool input_is_sql_null = (param.json_input == "SQL_NULL");
+
+    if (input_is_sql_null) {
+        json_column->append_nulls(1);
+    } else {
+        auto json = JsonValue::parse(param.json_input);
+        ASSERT_TRUE(json.ok()) << "Failed to parse input JSON: " << param.json_input;
+        json_column->append_datum(Datum(&json.value()));
+    }
+
+    Columns columns{json_column};
+
+    for (const auto& pair : param.path_value_pairs) {
+        auto path_column = ColumnHelper::cast_to_nullable_column(JsonColumn::create());
+        if (pair.first == "SQL_NULL") {
+            path_column->append_nulls(1);
+        } else {
+            std::string json_path_str = "\"" + pair.first + "\"";
+            auto path_json = JsonValue::parse(json_path_str);
+            ASSERT_TRUE(path_json.ok()) << "Failed to parse path JSON: " << json_path_str;
+            path_column->append_datum(Datum(&path_json.value()));
+        }
+        columns.emplace_back(path_column);
+
+        auto val_column = ColumnHelper::cast_to_nullable_column(JsonColumn::create());
+        if (pair.second == "SQL_NULL") {
+            val_column->append_nulls(1);
+        } else {
+            auto val_json = JsonValue::parse(pair.second);
+            ASSERT_TRUE(val_json.ok()) << "Failed to parse value JSON: " << pair.second;
+            val_column->append_datum(Datum(&val_json.value()));
+        }
+        columns.emplace_back(val_column);
+    }
+
+    ASSERT_TRUE(JsonFunctions::native_json_path_prepare(
+                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+
+    auto result_status = JsonFunctions::json_set(ctx.get(), columns);
+
+    if (param.expected_result == "SQL_ERROR") {
+        ASSERT_FALSE(result_status.ok());
+    } else {
+        ASSERT_TRUE(result_status.ok()) << result_status.status().to_string();
+        ColumnPtr result = result_status.value();
+        ASSERT_TRUE(!!result);
+
+        Datum datum = result->get(0);
+        if (param.expected_result == "SQL_NULL") {
+            ASSERT_TRUE(datum.is_null()) << "Expected NULL result but got: " << datum.get_json()->to_string().value();
+        } else {
+            ASSERT_FALSE(datum.is_null()) << "Expected " << param.expected_result << " but got NULL";
+            std::string actual_str = datum.get_json()->to_string().value();
+
+            auto expected_json = JsonValue::parse(param.expected_result);
+            auto actual_json = JsonValue::parse(actual_str);
+            ASSERT_TRUE(expected_json.ok());
+            ASSERT_TRUE(actual_json.ok());
+
+            ASSERT_EQ(expected_json->to_string().value(), actual_json->to_string().value())
+                    << "Description: " << param.description;
+        }
+    }
+
+    ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+}
+
+INSTANTIATE_TEST_SUITE_P(
+        JsonSetTests, JsonSetTestFixture,
+        ::testing::Values(
+                JsonSetTestParam{R"({"a": 1})", {{"$.a", "2"}}, R"({"a": "2"})", "Update existing key"},
+                JsonSetTestParam{R"({"a": 1})", {{"$.b", "2"}}, R"({"a": 1, "b": "2"})", "Insert new key"},
+
+                JsonSetTestParam{
+                        R"({"arr": [10, 20]})", {{"$.arr[1]", "99"}}, R"({"arr": [10, "99"]})", "Update array index"},
+                JsonSetTestParam{R"({"arr": [10, 20]})",
+                                 {{"$.arr[5]", "30"}},
+                                 R"({"arr": [10, 20, "30"]})",
+                                 "Append to array (index > size)"},
+                JsonSetTestParam{R"({"arr": []})", {{"$.arr[0]", "1"}}, R"({"arr": ["1"]})", "Append to empty array"},
+
+                JsonSetTestParam{
+                        R"({"a": {"b": 1}})", {{"$.a.b", "2"}}, R"({"a": {"b": "2"}})", "Update nested object"},
+                JsonSetTestParam{R"({"a": [{"b": 1}, {"b": 2}]})",
+                                 {{"$.a[1].b", "3"}},
+                                 R"({"a": [{"b": 1}, {"b": "3"}]})",
+                                 "Update object inside array (Recursion test)"},
+                JsonSetTestParam{R"({"a": [1, [2, 3]]})",
+                                 {{"$.a[1][0]", "4"}},
+                                 R"({"a": [1, ["4", 3]]})",
+                                 "Update nested array"},
+
+                JsonSetTestParam{
+                        R"({"a": 1})", {{"$.a[0]", "2"}}, R"({"a": 1})", "Array selector on scalar (should ignore)"},
+                JsonSetTestParam{R"([1, 2])", {{"$.a", "2"}}, R"([1, 2])", "Key selector on array (should ignore)"},
+
+                JsonSetTestParam{
+                        R"({"a": 1})", {{"$.b.c", "2"}}, R"({"a": 1})", "Insert nested missing path (should ignore)"},
+
+                JsonSetTestParam{R"({"a": 1, "b": {}})",
+                                 {{"$.b.c", "2"}},
+                                 R"({"a": 1, "b": {"c": "2"}})",
+                                 "Insert nested key into existing parent"},
+
+                JsonSetTestParam{
+                        R"({"a": 1})", {{"$.a", "2"}, {"$.b", "3"}}, R"({"a": "2", "b": "3"})", "Chained updates"},
+
+                JsonSetTestParam{"SQL_NULL", {{"$.a", "1"}}, "SQL_NULL", "Input is SQL NULL"},
+                JsonSetTestParam{R"({"a": 1})", {{"SQL_NULL", "1"}}, "SQL_NULL", "Path is SQL NULL"},
+                JsonSetTestParam{R"({"a": 1})", {{"$.a", "SQL_NULL"}}, "SQL_NULL", "Value is SQL NULL"},
+                JsonSetTestParam{"null", {{"$.a", "1"}}, "null", "Input is JSON null"},
+
+                JsonSetTestParam{R"({"a": 1})", {{"$", R"({"b": 2})"}}, R"({"b": 2})", "Replace root"},
+                JsonSetTestParam{R"([1, 2])", {{"$[0]", "3"}}, R"(["3", 2])", "Update root array index"},
+                JsonSetTestParam{R"([1, 2])", {{"$[5]", "3"}}, R"([1, 2, "3"])", "Append to root array"},
+
+                JsonSetTestParam{
+                        R"({"a": [1]})", {{"$.a[0]", "2"}}, R"({"a": ["2"]})", "Exact index match in object array"},
+                JsonSetTestParam{R"({"a": 1})",
+                                 {{"$[0]", "1"}},
+                                 R"({"a": 1})",
+                                 "Root array selector on object (should ignore)"}));
+
+struct JsonPrettyTestParam {
+    std::string input_json;
+    std::string expected_output;
+    bool is_null;
+    std::string description;
+};
+
+class JsonPrettyTestFixture : public ::testing::TestWithParam<JsonPrettyTestParam> {};
+
+TEST_P(JsonPrettyTestFixture, json_pretty) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto param = GetParam();
+
+    Columns columns;
+    auto json_col = JsonColumn::create();
+
+    if (param.is_null) {
+        auto nullable_json = ColumnHelper::cast_to_nullable_column(json_col);
+        nullable_json->append_nulls(1);
+        columns.emplace_back(nullable_json);
+    } else {
+        auto json_val = JsonValue::parse(param.input_json);
+        ASSERT_TRUE(json_val.ok()) << "Failed to parse input JSON: " << param.input_json;
+        json_col->append(&*json_val);
+        columns.emplace_back(json_col);
+    }
+
+    auto result = JsonFunctions::json_pretty(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+
+    auto res_col = result.value();
+
+    if (param.is_null) {
+        ASSERT_TRUE(res_col->is_null(0)) << "Expected NULL result for: " << param.description;
+    } else {
+        ASSERT_FALSE(res_col->is_null(0));
+        auto v_col = ColumnHelper::cast_to<TYPE_VARCHAR>(res_col);
+        std::string actual = v_col->get_data()[0].to_string();
+
+        ASSERT_EQ(param.expected_output, actual) << "Test Description: " << param.description << "\nExpected:\n"
+                                                 << param.expected_output << "\nActual:\n"
+                                                 << actual;
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(JsonPrettyTest, JsonPrettyTestFixture,
+                         ::testing::Values(JsonPrettyTestParam{R"({"a":1})",
+                                                               R"({
+  "a" : 1
+})",
+                                                               false, "Simple object formatting (Space before colon)"},
+                                           JsonPrettyTestParam{R"([1,2])",
+                                                               R"([
+  1,
+  2
+])",
+                                                               false, "Simple array formatting"},
+                                           JsonPrettyTestParam{R"({"b":3, "a":[1,2]})",
+                                                               R"({
+  "a" : [
+    1,
+    2
+  ],
+  "b" : 3
+})",
+                                                               false,
+                                                               "Nested structure formatting & Alphabetical sorting"},
+                                           JsonPrettyTestParam{R"({"key": "value with { braces }"})",
+                                                               R"({
+  "key" : "value with { braces }"
+})",
+                                                               false, "Braces inside string value should be preserved"},
+                                           JsonPrettyTestParam{R"({})",
+                                                               R"({
+})",
+                                                               false, "Empty object (Occupies lines)"},
+                                           JsonPrettyTestParam{R"([])",
+                                                               R"([
+])",
+                                                               false, "Empty array (Occupies lines)"},
+                                           JsonPrettyTestParam{"", "", true, "Null input should return null"}));
 
 } // namespace starrocks

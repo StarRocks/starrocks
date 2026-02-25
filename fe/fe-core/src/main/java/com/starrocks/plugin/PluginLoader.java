@@ -18,7 +18,7 @@
 package com.starrocks.plugin;
 
 import com.google.common.base.Strings;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 
 import java.io.IOException;
 import java.nio.file.FileSystems;
@@ -79,15 +79,15 @@ public abstract class PluginLoader {
         this.pluginContext = new PluginContext();
     }
 
-    public abstract void install() throws UserException, IOException;
+    public abstract void install() throws StarRocksException, IOException;
 
-    public abstract void uninstall() throws IOException, UserException;
+    public abstract void uninstall() throws IOException, StarRocksException;
 
     public boolean isDynamicPlugin() {
         return false;
     }
 
-    public PluginInfo getPluginInfo() throws IOException, UserException {
+    public PluginInfo getPluginInfo() throws IOException, StarRocksException {
         return pluginInfo;
     }
 
@@ -108,14 +108,14 @@ public abstract class PluginLoader {
         return status;
     }
 
-    public void pluginInstallValid() throws UserException {
+    public void pluginInstallValid() throws StarRocksException {
 
     }
 
-    public void pluginUninstallValid() throws UserException {
+    public void pluginUninstallValid() throws StarRocksException {
         // check plugin flags
         if (plugin != null && (plugin.flags() & Plugin.PLUGIN_NOT_DYNAMIC_UNINSTALL) > 0) {
-            throw new UserException("plugin " + pluginInfo + " not allow dynamic uninstall");
+            throw new StarRocksException("plugin " + pluginInfo + " not allow dynamic uninstall");
         }
     }
 

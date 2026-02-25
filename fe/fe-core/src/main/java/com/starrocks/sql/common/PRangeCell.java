@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.common;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Range;
 import com.starrocks.catalog.PartitionKey;
 
@@ -22,11 +23,19 @@ import java.util.Objects;
 /**
  * {@link PRangeCell} contains the range partition's value which contains a `PartitionKey` range.
  */
-public final class PRangeCell extends PCell implements Comparable<PRangeCell> {
+public final class PRangeCell extends PCell {
     private final Range<PartitionKey> range;
 
     public PRangeCell(Range<PartitionKey> partitionKeyRange) {
         this.range = partitionKeyRange;
+    }
+
+    public static PRangeCell of(PartitionKey partitionKey) {
+        return new PRangeCell(Range.singleton(partitionKey));
+    }
+
+    public static PRangeCell of(Range<PartitionKey> partitionKeyRange) {
+        return new PRangeCell(partitionKeyRange);
     }
 
     public Range<PartitionKey> getRange() {
@@ -40,11 +49,15 @@ public final class PRangeCell extends PCell implements Comparable<PRangeCell> {
      *   2. Choose two interact partition ranges as `equal` to let callers handle it directly.
      */
     @Override
-    public int compareTo(PRangeCell o) {
-        if (isIntersected(o)) {
-            return 0;
+    public int compareTo(PCell o) {
+        Preconditions.checkArgument(o instanceof PRangeCell,
+                "Cannot compare PRangeCell with other type of PCell: %s", o.getClass().getName());
+        PRangeCell other = (PRangeCell) o;
+        int res = this.range.lowerEndpoint().compareTo(other.range.lowerEndpoint());
+        if (res != 0) {
+            return res;
         }
-        return this.range.lowerEndpoint().compareTo(o.range.lowerEndpoint());
+        return this.range.upperEndpoint().compareTo(other.range.upperEndpoint());
     }
 
     /**
@@ -57,9 +70,30 @@ public final class PRangeCell extends PCell implements Comparable<PRangeCell> {
      *         && other.lowerBound.compareTo(upperBound) <= 0;
      *   }
      */
-    public boolean isIntersected(PRangeCell o) {
-        return this.range.upperEndpoint().compareTo(o.range.lowerEndpoint()) > 0 &&
-                this.range.lowerEndpoint().compareTo(o.range.upperEndpoint()) < 0;
+    @Override
+    public boolean isIntersected(PCell o) {
+        if (!(o instanceof PRangeCell)) {
+            return false;
+        }
+        PRangeCell other = (PRangeCell) o;
+        return this.range.upperEndpoint().compareTo(other.range.lowerEndpoint()) > 0 &&
+                this.range.lowerEndpoint().compareTo(other.range.upperEndpoint()) < 0;
+    }
+
+    /**
+     * Check two partition ranges are `overlapped`, which means they are intersected and not equal.
+     * eg:
+     * this is aligned with other:
+     * this :     |--------------|
+     * other:     |----|
+     * this :     |--------------|
+     * other:     |--------------|
+     * this is unaligned with other:
+     * this :     |--------------|
+     * other:  |----|
+     */
+    public boolean isUnAligned(PCell o) {
+        return isIntersected(o) && !equals(o);
     }
 
     @Override
@@ -81,8 +115,13 @@ public final class PRangeCell extends PCell implements Comparable<PRangeCell> {
 
     @Override
     public String toString() {
-        return "PRangeCell{" +
-                "range=" + range +
-                '}';
+        return "[%s-%s]".formatted(toString(range.lowerEndpoint()), toString(range.upperEndpoint()));
+    }
+
+    private String toString(PartitionKey partitionKey) {
+        if (partitionKey == null) {
+            return "null";
+        }
+        return partitionKey.toSql();
     }
 }

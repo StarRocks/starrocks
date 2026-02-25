@@ -34,22 +34,19 @@
 
 #include "util/compression/block_compression.h"
 
+#include "common/config.h"
+
 #ifdef __x86_64__
 #include <libdeflate.h>
 #endif
-#include <lz4/lz4.h>
-#include <lz4/lz4frame.h>
-#include <snappy/snappy-sinksource.h>
-#include <snappy/snappy.h>
 #include <zlib.h>
-#include <zstd/zstd.h>
-#include <zstd/zstd_errors.h>
 
+#include "base/coding.h"
+#include "base/string/faststring.h"
 #include "gutil/endian.h"
 #include "gutil/strings/substitute.h"
-#include "util/coding.h"
 #include "util/compression/compression_context_pool_singletons.h"
-#include "util/faststring.h"
+#include "util/compression/compression_headers.h"
 namespace orc {
 uint64_t lzoDecompress(const char* inputAddress, const char* inputLimit, char* outputAddress, char* outputLimit);
 } // namespace orc
@@ -148,7 +145,7 @@ private:
             }
         }
 
-        int32_t acceleration = 1;
+        int32_t acceleration = config::lz4_acceleration;
         size_t compressed_size =
                 LZ4_compress_fast_continue(ctx, input.data, output->data, input.size, output->size, acceleration);
 

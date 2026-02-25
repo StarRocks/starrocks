@@ -56,7 +56,9 @@ if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" 
     set(SOURCE_FILES ${SOURCE_FILES} atomicops-internals-x86.cc)
 endif()
 
-add_library(Gutil STATIC ${SOURCE_FILES})
+SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
+
+ADD_BE_LIB(Gutil ${SOURCE_FILES})
 
 set_target_properties(Gutil PROPERTIES COMPILE_FLAGS "-funsigned-char -Wno-deprecated -Wno-char-subscripts")
 # target_link_libraries(Gutil glog protobuf rt)

@@ -16,17 +16,16 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CancelRefreshDictionaryStmt;
 import com.starrocks.sql.ast.CreateDictionaryStmt;
 import com.starrocks.sql.ast.DropDictionaryStmt;
 import com.starrocks.sql.ast.RefreshDictionaryStmt;
 import com.starrocks.sql.ast.ShowDictionaryStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.type.Type;
 
 import java.util.List;
 
@@ -35,7 +34,7 @@ public class DictionaryAnalyzer {
         new DictionaryAnalyzer.DictionaryAnalyzerVisitor().visit(stmt, session);
     }
 
-    static class DictionaryAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class DictionaryAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
         @Override
         public Void visitCreateDictionaryStatement(CreateDictionaryStmt statement, ConnectContext context) {
             String dictionaryName = statement.getDictionaryName();
@@ -49,13 +48,13 @@ public class DictionaryAnalyzer {
             }
 
             String queryableObject = statement.getQueryableObject();
-            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, context.getDatabase());
+            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, context.getDatabase());
             if (db == null) {
                 throw new SemanticException("USE a Database before CREATE DICTIONARY");
             }
             
             Table tbl = GlobalStateMgr.getCurrentState().getMetadataMgr().
-                                getTable(catalogName, context.getDatabase(), queryableObject);
+                                getTable(context, catalogName, context.getDatabase(), queryableObject);
             if (tbl == null) {
                 throw new SemanticException(queryableObject + " does not exist");
             }

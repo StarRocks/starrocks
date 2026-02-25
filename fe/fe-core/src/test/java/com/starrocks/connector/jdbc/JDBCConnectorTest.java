@@ -19,8 +19,8 @@ import com.starrocks.catalog.JDBCResource;
 import com.starrocks.common.FeConstants;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -35,13 +35,13 @@ public class JDBCConnectorTest {
         properties.put(JDBCResource.USER, "root");
         properties.put(JDBCResource.PASSWORD, "123456");
         ConnectorContext context = new ConnectorContext("jdbcmysql", "jdbc", properties);
-        Assert.assertThrows(StarRocksConnectorException.class, () -> new JDBCConnector(context));
+        Assertions.assertThrows(StarRocksConnectorException.class, () -> new JDBCConnector(context));
         properties.put(JDBCResource.DRIVER_URL, "xxxx");
         try {
             new JDBCConnector(context);
         } catch (Exception e) {
             System.out.println(e.getMessage());
-            Assert.fail();
+            Assertions.fail();
         }
     }
 }

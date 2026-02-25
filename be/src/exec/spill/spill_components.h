@@ -15,8 +15,10 @@
 #pragma once
 
 #include <functional>
+#include <memory>
 #include <queue>
 
+#include "base/concurrency/race_detect.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "exec/spill/block_manager.h"
@@ -31,7 +33,6 @@
 #include "fmt/format.h"
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
-#include "util/race_detect.h"
 
 namespace starrocks::spill {
 class Spiller;
@@ -178,6 +179,8 @@ public:
 
 public:
     struct FlushContext : public SpillIOTaskContext {
+        FlushContext(std::shared_ptr<Spiller> spiller_) : spiller(std::move(spiller_)) {}
+        std::shared_ptr<Spiller> spiller;
         std::shared_ptr<SpillOutputDataStream> output;
         std::shared_ptr<BlockGroup> block_group;
         InputStreamPtr input_stream;
@@ -303,6 +306,7 @@ public:
 
 public:
     struct PartitionedFlushContext : public SpillIOTaskContext {
+        PartitionedFlushContext(std::shared_ptr<Spiller> spiller_) : spiller(std::move(spiller_)) {}
         // used in spill stage
         struct SpillStageContext {
             size_t processing_idx{};
@@ -327,6 +331,7 @@ public:
         PartitionedFlushContext(PartitionedFlushContext&&) = default;
         PartitionedFlushContext& operator=(PartitionedFlushContext&&) = default;
 
+        std::shared_ptr<Spiller> spiller;
         SpillStageContext spill_stage_ctx;
         SplitStageContext split_stage_ctx;
     };
@@ -346,6 +351,9 @@ private:
 
     Status _split_input_partitions(workgroup::YieldContext& ctx, SerdeContext& context,
                                    const std::vector<SpilledPartition*>& splitting_partitions);
+
+    Status _pick_and_compact_skew_partitions(std::vector<SpilledPartition*>& partitions);
+    Status _compact_skew_chunks(size_t num_rows, std::vector<ChunkPtr>& chunks, AggregatorParamsPtr& aggregator_params);
 
     // split partition by hash
     // hash-based partitioning can have significant degradation in the case of heavily skewed data.
@@ -380,6 +388,7 @@ private:
 
     // level to partition
     std::map<int, std::vector<SpilledPartitionPtr>> _level_to_partitions;
+    size_t _total_partition_num = 0;
 
     std::unordered_map<int, SpilledPartition*> _id_to_partitions;
 

@@ -18,24 +18,23 @@
 #include <utility>
 #include <vector>
 
-#include "column/chunk.h"
+#include "base/string/string_parser.hpp"
 #include "column/column.h" // Column
-#include "column/datum.h"
 #include "column/type_traits.h"
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "gen_cpp/Opcodes_types.h"
-#include "runtime/decimalv3.h"
 #include "storage/index/inverted/inverted_index_iterator.h"
 #include "storage/index/inverted/inverted_reader.h"
 #include "storage/olap_common.h" // ColumnId
 #include "storage/range.h"
-#include "storage/type_traits.h"
 #include "storage/types.h"
 #include "storage/zone_map_detail.h"
+#include "types/datum.h"
+#include "types/decimalv3.h"
+#include "types/json_value.h"
 #include "types/logical_type.h"
-#include "util/json.h"
-#include "util/string_parser.hpp"
+#include "types/type_traits.h"
 
 class Roaring;
 
@@ -48,6 +47,7 @@ class RuntimeState;
 class SlotDescriptor;
 class BitmapIndexIterator;
 struct NgramBloomFilterReaderOptions;
+class RuntimeFilterProbeDescriptor;
 } // namespace starrocks
 
 namespace starrocks {
@@ -79,6 +79,7 @@ enum class PredicateType {
     kExpr = 13,
     kTrue = 14,
     kMap = 15,
+    kPlaceHolder = 16,
 };
 
 std::ostream& operator<<(std::ostream& os, PredicateType p);
@@ -219,6 +220,7 @@ public:
     // bitmap index or bloom filter, the predicate operand should be right-padded with '\0'.
     virtual bool padding_zeros(size_t column_length) { return false; }
     const TypeInfo* type_info() const { return _type_info.get(); }
+    TypeInfoPtr type_info_ptr() const { return _type_info; }
 
 protected:
     constexpr static const char* kMsgTooManyItems = "too many bitmap filter items";
@@ -245,11 +247,35 @@ ColumnPredicate* new_column_cmp_predicate(PredicateType predicate, const TypeInf
 
 ColumnPredicate* new_column_in_predicate(const TypeInfoPtr& type, ColumnId id,
                                          const std::vector<std::string>& operands);
+
+ColumnPredicate* new_dictionary_code_in_predicate(const TypeInfoPtr& type, ColumnId id,
+                                                  const std::vector<int32_t>& operands, size_t size);
 ColumnPredicate* new_column_not_in_predicate(const TypeInfoPtr& type, ColumnId id,
                                              const std::vector<std::string>& operands);
 ColumnPredicate* new_column_null_predicate(const TypeInfoPtr& type, ColumnId, bool is_null);
 
 ColumnPredicate* new_column_dict_conjuct_predicate(const TypeInfoPtr& type_info, ColumnId id,
                                                    std::vector<uint8_t> dict_mapping);
+
+ColumnPredicate* new_column_placeholder_predicate(const TypeInfoPtr& type_info, ColumnId id);
+
+ColumnPredicate* new_column_eq_predicate_from_datum(const TypeInfoPtr& type, ColumnId id, const Datum& operand);
+ColumnPredicate* new_column_ne_predicate_from_datum(const TypeInfoPtr& type, ColumnId id, const Datum& operand);
+ColumnPredicate* new_column_lt_predicate_from_datum(const TypeInfoPtr& type, ColumnId id, const Datum& operand);
+ColumnPredicate* new_column_le_predicate_from_datum(const TypeInfoPtr& type, ColumnId id, const Datum& operand);
+ColumnPredicate* new_column_gt_predicate_from_datum(const TypeInfoPtr& type, ColumnId id, const Datum& operand);
+ColumnPredicate* new_column_ge_predicate_from_datum(const TypeInfoPtr& type, ColumnId id, const Datum& operand);
+ColumnPredicate* new_column_in_predicate_from_datum(const TypeInfoPtr& type, ColumnId id,
+                                                    const std::vector<Datum>& operands);
+ColumnPredicate* new_column_not_in_predicate_from_datum(const TypeInfoPtr& type, ColumnId id,
+                                                        const std::vector<Datum>& operands);
+
+Status compound_and_predicates_evaluate(const std::vector<const ColumnPredicate*>& predicates, const Column* col,
+                                        uint8_t* selection, uint16_t* selected_idx, uint16_t from, uint16_t to);
+
+template <LogicalType LT>
+class Bitset;
+template <LogicalType LT>
+ColumnPredicate* new_bitset_in_predicate(const TypeInfoPtr& type_info, ColumnId id, const Bitset<LT>& bitset);
 
 } //namespace starrocks

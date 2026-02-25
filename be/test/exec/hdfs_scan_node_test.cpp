@@ -18,13 +18,18 @@
 #include <memory>
 
 #include "column/column_helper.h"
+#include "common/system/disk_info.h"
+#include "common/system/mem_info.h"
 #include "exec/connector_scan_node.h"
+#include "exec/pipeline/fragment_context.h"
 #include "runtime/descriptor_helper.h"
+#include "runtime/descriptors_ext.h"
 #include "runtime/exec_env.h"
+#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_state.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/storage_engine.h"
-#include "util/disk_info.h"
-#include "util/mem_info.h"
+#include "util/global_metrics_registry.h"
 
 //TODO: test multi thread
 //TODO: test runtime filter
@@ -34,6 +39,7 @@ public:
     void SetUp() override {
         config::enable_system_metrics = false;
         config::enable_metric_calculator = false;
+        GlobalMetricsRegistry::instance()->metrics()->set_collect_hook_enabled(true);
 
         _exec_env = ExecEnv::GetInstance();
 
@@ -53,6 +59,7 @@ private:
     static ChunkPtr _create_chunk();
 
     std::shared_ptr<RuntimeState> _runtime_state = nullptr;
+    std::unique_ptr<FragmentDictState> _fragment_dict_state;
     HdfsTableDescriptor* _table_desc = nullptr;
     ObjectPool* _pool = nullptr;
     std::shared_ptr<MemTracker> _mem_tracker = nullptr;
@@ -72,10 +79,10 @@ ChunkPtr HdfsScanNodeTest::_create_chunk() {
     auto col2 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), true);
     auto col3 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR), true);
     auto col4 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME), true);
-    chunk->append_column(col1, 0);
-    chunk->append_column(col2, 1);
-    chunk->append_column(col3, 2);
-    chunk->append_column(col4, 3);
+    chunk->append_column(std::move(col1), 0);
+    chunk->append_column(std::move(col2), 1);
+    chunk->append_column(std::move(col3), 2);
+    chunk->append_column(std::move(col4), 3);
 
     return chunk;
 }
@@ -137,9 +144,15 @@ void HdfsScanNodeTest::_create_runtime_state() {
     TQueryOptions query_options;
     TQueryGlobals query_globals;
     _runtime_state = std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, _exec_env);
+    _fragment_dict_state = std::make_unique<FragmentDictState>();
+    _runtime_state->set_fragment_dict_state(_fragment_dict_state.get());
     TUniqueId id;
     _mem_tracker = std::make_shared<MemTracker>(-1, "olap scanner test");
     _runtime_state->init_mem_trackers(id);
+    pipeline::FragmentContext* fragment_context = _runtime_state->obj_pool()->add(new pipeline::FragmentContext());
+    fragment_context->set_pred_tree_params({true, true});
+    _runtime_state->set_fragment_ctx(fragment_context);
+    _runtime_state->set_fragment_dict_state(_fragment_dict_state.get());
 }
 
 std::shared_ptr<TPlanNode> HdfsScanNodeTest::_create_tplan_node() {

@@ -16,18 +16,18 @@
 
 #include <atomic>
 
+#include "base/string/faststring.h"
+#include "base/time/time.h"
+#include "base/uid_util.h"
 #include "column/chunk.h"
+#include "common/runtime_profile.h"
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/current_thread.h"
 #include "runtime/data_stream_recvr.h"
 #include "runtime/exec_env.h"
 #include "util/compression/block_compression.h"
-#include "util/faststring.h"
 #include "util/logging.h"
-#include "util/runtime_profile.h"
-#include "util/time.h"
-#include "util/uid_util.h"
 
 namespace starrocks {
 
@@ -559,8 +559,16 @@ void DataStreamRecvr::PipelineSenderQueue::close() {
     clean_buffer_queues();
 }
 
+struct ClosureDeleter {
+    void operator()(google::protobuf::Closure* p) const { p->Run(); };
+};
+
 void DataStreamRecvr::PipelineSenderQueue::clean_buffer_queues() {
+    // avoid run closure in lock scope
+    std::vector<std::unique_ptr<google::protobuf::Closure, ClosureDeleter>> closures;
+
     std::lock_guard<Mutex> l(_lock);
+    tls_thread_status.set_mem_tracker(nullptr);
     auto& metrics = _recvr->_metrics[0];
     for (size_t i = 0; i < _chunk_queues.size(); i++) {
         auto& chunk_queue = _chunk_queues[i];
@@ -570,7 +578,7 @@ void DataStreamRecvr::PipelineSenderQueue::clean_buffer_queues() {
             if (chunk_queue.try_dequeue(item)) {
                 if (item.closure != nullptr) {
                     COUNTER_UPDATE(metrics.closure_block_timer, MonotonicNanos() - item.queue_enter_time);
-                    item.closure->Run();
+                    closures.emplace_back(item.closure);
                     chunk_queue_state.blocked_closure_num--;
                 }
                 --_total_chunks;
@@ -584,7 +592,7 @@ void DataStreamRecvr::PipelineSenderQueue::clean_buffer_queues() {
             for (auto& item : chunk_queue) {
                 if (item.closure != nullptr) {
                     COUNTER_UPDATE(metrics.closure_block_timer, MonotonicNanos() - item.queue_enter_time);
-                    item.closure->Run();
+                    closures.emplace_back(item.closure);
                 }
             }
             chunk_queue.clear();
@@ -814,6 +822,7 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
             _total_chunks++;
             // Double check here for short circuit compatibility without introducing a critical section
             if (_chunk_queue_states[index].is_short_circuited.load(std::memory_order_relaxed)) {
+                tls_thread_status.set_mem_tracker(nullptr);
                 short_circuit(index);
                 // We cannot early-return for short circuit, it may occur for parts of parallelism,
                 // and the other parallelism may need to proceed.

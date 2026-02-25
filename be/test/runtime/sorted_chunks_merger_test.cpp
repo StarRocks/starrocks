@@ -16,13 +16,14 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/datum_tuple.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
+#include "exprs/expr_executor.h"
 #include "runtime/runtime_state.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -33,15 +34,15 @@ public:
 
         const auto& int_type_desc = TypeDescriptor(TYPE_INT);
         const auto& varchar_type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
-        ColumnPtr col_cust_key_1 = ColumnHelper::create_column(int_type_desc, false);
-        ColumnPtr col_cust_key_2 = ColumnHelper::create_column(int_type_desc, false);
-        ColumnPtr col_cust_key_3 = ColumnHelper::create_column(int_type_desc, false);
-        ColumnPtr col_nation_1 = ColumnHelper::create_column(varchar_type_desc, true);
-        ColumnPtr col_nation_2 = ColumnHelper::create_column(varchar_type_desc, true);
-        ColumnPtr col_nation_3 = ColumnHelper::create_column(varchar_type_desc, true);
-        ColumnPtr col_region_1 = ColumnHelper::create_column(varchar_type_desc, true);
-        ColumnPtr col_region_2 = ColumnHelper::create_column(varchar_type_desc, true);
-        ColumnPtr col_region_3 = ColumnHelper::create_column(varchar_type_desc, true);
+        MutableColumnPtr col_cust_key_1 = ColumnHelper::create_column(int_type_desc, false);
+        MutableColumnPtr col_cust_key_2 = ColumnHelper::create_column(int_type_desc, false);
+        MutableColumnPtr col_cust_key_3 = ColumnHelper::create_column(int_type_desc, false);
+        MutableColumnPtr col_nation_1 = ColumnHelper::create_column(varchar_type_desc, true);
+        MutableColumnPtr col_nation_2 = ColumnHelper::create_column(varchar_type_desc, true);
+        MutableColumnPtr col_nation_3 = ColumnHelper::create_column(varchar_type_desc, true);
+        MutableColumnPtr col_region_1 = ColumnHelper::create_column(varchar_type_desc, true);
+        MutableColumnPtr col_region_2 = ColumnHelper::create_column(varchar_type_desc, true);
+        MutableColumnPtr col_region_3 = ColumnHelper::create_column(varchar_type_desc, true);
 
         col_cust_key_1->append_datum(int32_t(71));
         col_cust_key_1->append_datum(int32_t(70));
@@ -100,9 +101,9 @@ public:
             map[i] = i;
         }
 
-        _chunk_1 = std::make_shared<Chunk>(columns_1, map);
-        _chunk_2 = std::make_shared<Chunk>(columns_2, map);
-        _chunk_3 = std::make_shared<Chunk>(columns_3, map);
+        _chunk_1 = std::make_shared<Chunk>(std::move(columns_1), map);
+        _chunk_2 = std::make_shared<Chunk>(std::move(columns_2), map);
+        _chunk_3 = std::make_shared<Chunk>(std::move(columns_3), map);
 
         auto* expr1 = new ColumnRef(TypeDescriptor(TYPE_VARCHAR), 2); // refer to region
         auto* expr2 = new ColumnRef(TypeDescriptor(TYPE_VARCHAR), 1); // refer to nation
@@ -124,8 +125,8 @@ public:
 
         _runtime_state = _create_runtime_state();
 
-        ASSERT_OK(Expr::prepare(_sort_exprs, _runtime_state.get()));
-        ASSERT_OK(Expr::open(_sort_exprs, _runtime_state.get()));
+        ASSERT_OK(ExprExecutor::prepare(_sort_exprs, _runtime_state.get()));
+        ASSERT_OK(ExprExecutor::open(_sort_exprs, _runtime_state.get()));
     }
 
     void TearDown() override {
@@ -185,7 +186,8 @@ TEST_F(SortedChunksMergerTest, one_supplier) {
             size_t row_num = src_chunk->num_rows();
             *cnk = src_chunk->clone_empty_with_slot(row_num).release();
             for (size_t c = 0; c < src_chunk->num_columns(); ++c) {
-                (*cnk)->get_column_by_index(c)->append(*(src_chunk->get_column_by_index(c)), 0, row_num);
+                (*cnk)->get_column_raw_ptr_by_index(c)->append(*(src_chunk->get_column_raw_ptr_by_index(c)), 0,
+                                                               row_num);
             }
             ++chunk_index;
         } else {
@@ -225,13 +227,14 @@ TEST_F(SortedChunksMergerTest, two_suppliers) {
     ChunkHasSuppliers has_suppliers;
     std::vector<ChunkPtr> chunks = {_chunk_1, _chunk_2};
     for (auto& chunk : chunks) {
-        auto supplier = [&chunks, &chunk](Chunk** cnk) -> Status {
+        auto supplier = [&chunk](Chunk** cnk) -> Status {
             if (chunk != nullptr) {
                 ChunkPtr& src_chunk = chunk;
                 size_t row_num = src_chunk->num_rows();
                 *cnk = src_chunk->clone_empty_with_slot(row_num).release();
                 for (size_t c = 0; c < src_chunk->num_columns(); ++c) {
-                    (*cnk)->get_column_by_index(c)->append(*(src_chunk->get_column_by_index(c)), 0, row_num);
+                    (*cnk)->get_column_raw_ptr_by_index(c)->append(*(src_chunk->get_column_raw_ptr_by_index(c)), 0,
+                                                                   row_num);
                 }
                 chunk = nullptr;
             } else {
@@ -275,13 +278,14 @@ TEST_F(SortedChunksMergerTest, three_suppliers) {
     ChunkHasSuppliers has_suppliers;
     std::vector<ChunkPtr> chunks = {_chunk_1, _chunk_2, _chunk_3};
     for (auto& chunk : chunks) {
-        auto supplier = [&chunks, &chunk](Chunk** cnk) -> Status {
+        auto supplier = [&chunk](Chunk** cnk) -> Status {
             if (chunk != nullptr) {
                 ChunkPtr& src_chunk = chunk;
                 size_t row_num = src_chunk->num_rows();
                 *cnk = src_chunk->clone_empty_with_slot(row_num).release();
                 for (size_t c = 0; c < src_chunk->num_columns(); ++c) {
-                    (*cnk)->get_column_by_index(c)->append(*(src_chunk->get_column_by_index(c)), 0, row_num);
+                    (*cnk)->get_column_raw_ptr_by_index(c)->append(*(src_chunk->get_column_raw_ptr_by_index(c)), 0,
+                                                                   row_num);
                 }
                 chunk = nullptr;
             } else {

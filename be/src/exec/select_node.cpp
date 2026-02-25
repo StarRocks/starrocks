@@ -37,7 +37,9 @@
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/select_operator.h"
+#include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr.h"
+#include "exprs/expr_factory.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -49,6 +51,18 @@ SelectNode::~SelectNode() {
     if (runtime_state() != nullptr) {
         ExecNode::close(runtime_state());
     }
+}
+
+Status SelectNode::init(const TPlanNode& tnode, RuntimeState* state) {
+    RETURN_IF_ERROR(ExecNode::init(tnode, state));
+    if (tnode.__isset.select_node && tnode.select_node.__isset.common_slot_map) {
+        for (const auto& [key, val] : tnode.select_node.common_slot_map) {
+            ExprContext* context;
+            RETURN_IF_ERROR(ExprFactory::create_expr_tree(_pool, val, &context, state, true));
+            _common_expr_ctxs.insert({key, context});
+        }
+    }
+    return Status::OK();
 }
 
 Status SelectNode::prepare(RuntimeState* state) {
@@ -81,7 +95,7 @@ Status SelectNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     }
     {
         SCOPED_TIMER(_conjunct_evaluate_timer);
-        RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
+        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
     }
     _num_rows_returned += (*chunk)->num_rows();
 
@@ -108,8 +122,8 @@ pipeline::OpFactories SelectNode::decompose_to_pipeline(pipeline::PipelineBuilde
 
     OpFactories operators = _children[0]->decompose_to_pipeline(context);
 
-    operators.emplace_back(
-            std::make_shared<SelectOperatorFactory>(context->next_operator_id(), id(), std::move(_conjunct_ctxs)));
+    operators.emplace_back(std::make_shared<SelectOperatorFactory>(
+            context->next_operator_id(), id(), std::move(_conjunct_ctxs), std::move(_common_expr_ctxs)));
 
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));

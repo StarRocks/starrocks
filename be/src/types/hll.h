@@ -35,19 +35,19 @@
 #pragma once
 
 #include <cmath>
+#include <cstddef>
 #include <cstdio>
 #include <memory>
 #include <string>
 #include <vector>
 
+#include "base/phmap/phmap.h"
+#include "base/status.h"
 #include "common/compiler_util.h"
 #include "common/logging.h"
-#include "datasketches/hll.hpp"
+#include "common/mem_chunk.h"
 #include "gutil/macros.h"
-#include "runtime/memory/mem_chunk.h"
-#include "runtime/memory/mem_chunk_allocator.h"
 #include "types/constexpr.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 
@@ -90,6 +90,15 @@ enum HllDataType {
 
 class HyperLogLog {
 public:
+    using RegistersAllocateFn = bool (*)(size_t size, void* ctx, MemChunk* chunk);
+    using RegistersFreeFn = void (*)(const MemChunk& chunk, void* ctx);
+
+    struct RegistersAllocator {
+        RegistersAllocateFn allocate = nullptr;
+        RegistersFreeFn free = nullptr;
+        void* ctx = nullptr;
+    };
+
     HyperLogLog() = default;
     HyperLogLog(const HyperLogLog& other);
 
@@ -142,10 +151,17 @@ public:
 
     uint64_t serialize_size() const { return max_serialized_size(); }
 
-    uint64_t mem_usage() const { return max_serialized_size(); }
+    int64_t mem_usage() const { return max_serialized_size(); }
 
     // common interface
     void clear();
+
+    // Register the allocator used by HLL register buffers.
+    // This is a process-global setting and can only be set once.
+    // Returns OK on success, otherwise detailed reason if it has already been
+    // registered or
+    // if there are live register chunks allocated by default allocator.
+    static Status set_registers_allocator(RegistersAllocator allocator);
 
 private:
     using ElementSet = phmap::flat_hash_set<uint64_t>;
@@ -158,10 +174,12 @@ private:
 
     // This field is much space consumming(HLL_REGISTERS_COUNT), we create
     // it only when it is really needed.
-    // Allocate memory by MemChunkAllocator in order to reuse memory.
     MemChunk _registers;
 
 private:
+    bool _allocate_registers(size_t size);
+    void _free_registers();
+
     void _convert_explicit_to_register();
 
     // update one hash value into this registers
@@ -175,79 +193,6 @@ private:
         auto first_one_bit = (uint8_t)(__builtin_ctzl(hash_value) + 1);
         _registers.data[idx] = std::max((uint8_t)_registers.data[idx], first_one_bit);
     }
-};
-
-const static datasketches::target_hll_type HLL_TGT_TYPE = datasketches::HLL_6;
-
-class DataSketchesHll {
-public:
-    DataSketchesHll() = default;
-
-    DataSketchesHll(const DataSketchesHll& other) : _sketch(other._sketch) {}
-
-    DataSketchesHll& operator=(const DataSketchesHll& other) {
-        if (this != &other) {
-            this->_sketch = other._sketch;
-        }
-        return *this;
-    }
-
-    DataSketchesHll(DataSketchesHll&& other) noexcept : _sketch(std::move(other._sketch)) {}
-
-    DataSketchesHll& operator=(DataSketchesHll&& other) noexcept {
-        if (this != &other) {
-            this->_sketch = std::move(other._sketch);
-        }
-        return *this;
-    }
-
-    explicit DataSketchesHll(uint64_t hash_value) { this->_sketch.update(hash_value); }
-
-    explicit DataSketchesHll(const Slice& src);
-
-    ~DataSketchesHll() = default;
-
-    // Add a hash value to this HLL value
-    // NOTE: input must be a hash_value
-    void update(uint64_t hash_value);
-
-    void merge(const DataSketchesHll& other);
-
-    // Return max size of serialized binary
-    size_t max_serialized_size() const;
-
-    // Input slice should have enough capacity for serialize, which
-    // can be got through max_serialized_size(). If insufficient buffer
-    // is given, this will cause process crash.
-    // Return actual size of serialized binary.
-    size_t serialize(uint8_t* dst) const;
-
-    // Now, only empty HLL support this funciton.
-    bool deserialize(const Slice& slice);
-
-    int64_t estimate_cardinality() const;
-
-    static std::string empty() {
-        static DataSketchesHll hll;
-        std::string buf;
-        hll.serialize((uint8_t*)buf.c_str());
-        return buf;
-    }
-
-    // No need to check is_valid for datasketches HLL,
-    // return ture for compatibility.
-    static bool is_valid(const Slice& slice);
-
-    // only for debug
-    std::string to_string() const;
-
-    uint64_t serialize_size() const;
-
-    // common interface
-    void clear() { _sketch.reset(); }
-
-private:
-    datasketches::hll_sketch _sketch{HLL_LOG_K, HLL_TGT_TYPE};
 };
 
 } // namespace starrocks

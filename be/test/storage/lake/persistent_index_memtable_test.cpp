@@ -16,7 +16,8 @@
 
 #include <gtest/gtest.h>
 
-#include "testutil/assert.h"
+#include "base/testutil/assert.h"
+#include "storage/lake/persistent_index_sstable.h"
 
 namespace starrocks::lake {
 
@@ -143,6 +144,27 @@ TEST(PersistentIndexMemtableTest, test_replace) {
     for (int i = 0; i < N; i++) {
         ASSERT_EQ(replace_values[i], new_get_values[i]);
     }
+}
+
+TEST(PersistentIndexMemtableTest, test_memory_usage) {
+    auto memtable = std::make_unique<PersistentIndexMemtable>();
+    {
+        using Key = uint64_t;
+        const int N = 1000;
+        vector<Key> keys;
+        vector<Slice> key_slices;
+        vector<IndexValue> values;
+        vector<size_t> idxes;
+        keys.reserve(N);
+        key_slices.reserve(N);
+        for (int i = 0; i < N; i++) {
+            keys.emplace_back(i);
+            values.emplace_back(i * 2);
+            key_slices.emplace_back((uint8_t*)(&keys[i]), sizeof(Key));
+        }
+        ASSERT_OK(memtable->insert(N, key_slices.data(), values.data(), -1));
+    }
+    ASSERT_TRUE(memtable->memory_usage() < 100000 && memtable->memory_usage() > 0);
 }
 
 } // namespace starrocks::lake

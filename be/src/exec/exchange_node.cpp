@@ -35,17 +35,18 @@
 #include "exec/exchange_node.h"
 
 #include "column/chunk.h"
+#include "common/runtime_profile.h"
 #include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/exchange/exchange_merge_sort_source_operator.h"
 #include "exec/pipeline/exchange/exchange_parallel_merge_source_operator.h"
 #include "exec/pipeline/exchange/exchange_source_operator.h"
 #include "exec/pipeline/limit_operator.h"
+#include "exec/pipeline/offset_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/data_stream_recvr.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 
@@ -61,7 +62,6 @@ ExchangeNode::ExchangeNode(ObjectPool* pool, const TPlanNode& tnode, const Descr
           _offset(tnode.exchange_node.__isset.offset ? tnode.exchange_node.offset : 0),
           _num_rows_skipped(0) {
     DCHECK_GE(_offset, 0);
-    DCHECK(_is_merging || (_offset == 0));
 }
 
 Status ExchangeNode::init(const TPlanNode& tnode, RuntimeState* state) {
@@ -196,7 +196,7 @@ Status ExchangeNode::get_next_merging(RuntimeState* state, ChunkPtr* chunk, bool
             *chunk = tmp_chunk->clone_empty_with_slot(size);
             for (size_t c = 0; c < tmp_chunk->num_columns(); ++c) {
                 const ColumnPtr& src = tmp_chunk->get_column_by_index(c);
-                ColumnPtr& dest = (*chunk)->get_column_by_index(c);
+                auto* dest = (*chunk)->get_column_raw_ptr_by_index(c);
                 dest->append(*src, offset_in_chunk, size);
                 // resize constant column as same as other non-constant columns, so Chunk::num_rows()
                 // can return a right number if this ConstColumn is the first column of the chunk.
@@ -254,11 +254,21 @@ pipeline::OpFactories ExchangeNode::decompose_to_pipeline(pipeline::PipelineBuil
                 query_ctx->enable_pipeline_level_shuffle());
         exchange_source_op->set_degree_of_parallelism(context->degree_of_parallelism());
         operators.emplace_back(exchange_source_op);
+
+        if (_offset > 0) {
+            operators.emplace_back(std::make_shared<OffsetOperatorFactory>(context->next_operator_id(), id(), _offset));
+        }
+
     } else {
-        if (_is_parallel_merge || _sort_exec_exprs.is_constant_lhs_ordering()) {
+        if ((_is_parallel_merge || _sort_exec_exprs.is_constant_lhs_ordering()) &&
+            !_sort_exec_exprs.lhs_ordering_expr_ctxs().empty()) {
             auto exchange_merge_sort_source_operator = std::make_shared<ExchangeParallelMergeSourceOperatorFactory>(
                     context->next_operator_id(), id(), _num_senders, _input_row_desc, &_sort_exec_exprs, _is_asc_order,
                     _nulls_first, _offset, _limit);
+            if (_texchange_node.__isset.parallel_merge_late_materialize_mode) {
+                exchange_merge_sort_source_operator->set_materialized_mode(
+                        _texchange_node.parallel_merge_late_materialize_mode);
+            }
             exchange_merge_sort_source_operator->set_degree_of_parallelism(context->degree_of_parallelism());
             operators.emplace_back(std::move(exchange_merge_sort_source_operator));
             // This particular exchange source will be executed in a concurrent way, and finally we need to gather them into one
@@ -286,6 +296,7 @@ pipeline::OpFactories ExchangeNode::decompose_to_pipeline(pipeline::PipelineBuil
         may_add_chunk_accumulate_operator(operators, context, id());
     }
 
+    operators = context->maybe_interpolate_debug_ops(runtime_state(), _id, operators);
     operators = context->maybe_interpolate_collect_stats(runtime_state(), id(), operators);
 
     return operators;

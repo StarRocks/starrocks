@@ -19,6 +19,7 @@ import com.starrocks.proto.AbortCompactionRequest;
 import com.starrocks.proto.AbortCompactionResponse;
 import com.starrocks.proto.CompactRequest;
 import com.starrocks.proto.CompactResponse;
+import com.starrocks.proto.CompactStat;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.transaction.TabletCommitInfo;
 import org.apache.commons.collections.CollectionUtils;
@@ -38,10 +39,10 @@ import java.util.stream.Collectors;
  */
 public class CompactionTask {
     private static final Logger LOG = LogManager.getLogger(CompactionTask.class);
-    private final long nodeId;
-    private final LakeService rpcChannel;
+    protected final long nodeId;
+    protected final LakeService rpcChannel;
     private final CompactRequest request;
-    private Future<CompactResponse> responseFuture;
+    protected Future<CompactResponse> responseFuture;
 
     // FOR TEST
     public CompactionTask(long nodeId) {
@@ -54,6 +55,14 @@ public class CompactionTask {
         this.nodeId = nodeId;
         this.rpcChannel = Objects.requireNonNull(rpcChannel, "rpcChannel is null");
         this.request = Objects.requireNonNull(request, "request is null");
+        this.responseFuture = null;
+    }
+
+    public CompactionTask(long nodeId, LakeService rpcChannel) {
+        this.nodeId = nodeId;
+        this.rpcChannel = Objects.requireNonNull(rpcChannel, "rpcChannel is null");
+        this.request = null;
+        this.responseFuture = null;
     }
 
     enum TaskResult {
@@ -121,7 +130,7 @@ public class CompactionTask {
             abortRequest.txnId = request.txnId;
             try {
                 Future<AbortCompactionResponse> ignored = rpcChannel.abortCompaction(abortRequest);
-                LOG.info("aborted compaction task, txn_id: {}, node: {}", request.txnId, nodeId);
+                LOG.info("abort compaction task successfully sent, txn_id: {}, node: {}", request.txnId, nodeId);
             } catch (Exception e) {
                 LOG.warn("fail to abort compaction task, txn_id: {}, node: {} error: {}", request.txnId,
                         nodeId, e.getMessage());
@@ -135,5 +144,29 @@ public class CompactionTask {
 
     public int tabletCount() {
         return request.tabletIds.size();
+    }
+
+    public List<CompactStat> getCompactStats() {
+        if (!isDone()) {
+            return null;
+        }
+        try {
+            CompactResponse response = responseFuture.get();
+            return response.compactStats;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    public long getSuccessCompactInputFileSize() {
+        if (!isDone()) {
+            return 0;
+        }
+        try {
+            CompactResponse response = responseFuture.get();
+            return response.successCompactionInputFileSize;
+        } catch (Exception e) {
+            return 0;
+        }        
     }
 }

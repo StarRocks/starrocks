@@ -21,23 +21,24 @@
 #include "column/column.h"
 #include "column/object_column.h"
 #include "column/vectorized_fwd.h"
+#include "types/json_value.h"
 #include "types/logical_type.h"
-#include "util/json.h"
 
 namespace starrocks {
 
 // JsonColumn column for JSON type
 // format_version 1: store each JSON in binary encoding individually
 // format_version 2: TODO columnar encoding for JSON
-class JsonColumn final : public ColumnFactory<ObjectColumn<JsonValue>, JsonColumn, Column> {
+class JsonColumn final : public CowFactory<ColumnFactory<ObjectColumn<JsonValue>, JsonColumn>, JsonColumn, Column> {
 public:
     using ValueType = JsonValue;
-    using SuperClass = ColumnFactory<ObjectColumn<JsonValue>, JsonColumn, Column>;
+    using SuperClass = CowFactory<ColumnFactory<ObjectColumn<JsonValue>, JsonColumn>, JsonColumn, Column>;
     using BaseClass = JsonColumnBase;
+    using ImmContainer = ObjectDataProxyContainer;
 
     JsonColumn() = default;
     explicit JsonColumn(size_t size) : SuperClass(size) {}
-    JsonColumn(const JsonColumn& rhs) : SuperClass(rhs) {}
+    DISALLOW_COPY(JsonColumn);
 
     JsonColumn(JsonColumn&& rhs) noexcept : SuperClass(std::move(rhs)) {
         _flat_columns = std::move(rhs._flat_columns);
@@ -46,8 +47,7 @@ public:
     }
 
     MutableColumnPtr clone() const override;
-    MutableColumnPtr clone_empty() const override;
-    ColumnPtr clone_shared() const override;
+    MutableColumnPtr clone_empty() const override { return this->create(); }
 
     void append_datum(const Datum& datum) override;
     void put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_t idx,
@@ -57,9 +57,9 @@ public:
 
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
     uint32_t serialize_size(size_t idx) const override;
-    uint32_t serialize(size_t idx, uint8_t* pos) override;
+    uint32_t serialize(size_t idx, uint8_t* pos) const override;
     void serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
-                         uint32_t max_one_row_size) override;
+                         uint32_t max_one_row_size) const override;
 
     // json column & flat column may used
     std::string debug_item(size_t idx) const override;
@@ -89,10 +89,11 @@ public:
 
     void append_default(size_t count) override;
 
+    // json column support dict-encode
+    bool append_strings_overflow(const Slice* data, size_t size, size_t max_length) override;
+
     size_t filter_range(const Filter& filter, size_t from, size_t to) override;
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
-
-    void fnv_hash(uint32_t* seed, uint32_t from, uint32_t to) const override;
 
     size_t container_memory_usage() const override;
     size_t reference_memory_usage() const override;
@@ -101,11 +102,11 @@ public:
     void swap_column(Column& rhs) override;
     void reset_column() override;
 
-    bool capacity_limit_reached(std::string* msg = nullptr) const override;
+    Status capacity_limit_reached() const override;
     void check_or_die() const override;
 
     // support flat json on storage
-    bool is_flat_json() const { return !_flat_column_paths.empty(); }
+    bool is_flat_json() const { return !_flat_columns.empty(); }
 
     ColumnPtr& get_flat_field(const std::string& path);
 
@@ -113,9 +114,12 @@ public:
 
     LogicalType get_flat_field_type(const std::string& path) const;
 
-    Columns& get_flat_fields() { return _flat_columns; };
-
-    const Columns& get_flat_fields() const { return _flat_columns; };
+    Columns get_flat_fields() const {
+        Columns columns;
+        columns.reserve(_flat_columns.size());
+        columns.assign(_flat_columns.begin(), _flat_columns.end());
+        return columns;
+    };
 
     ColumnPtr& get_flat_field(int index);
 
@@ -134,13 +138,21 @@ public:
     bool has_remain() const { return _flat_columns.size() == (_flat_column_paths.size() + 1); }
 
     void set_flat_columns(const std::vector<std::string>& paths, const std::vector<LogicalType>& types,
-                          const Columns& flat_columns);
+                          MutableColumns&& flat_columns);
+
+    bool is_equallity_schema(const Column* other) const;
 
     std::string debug_flat_paths() const;
 
+    void mutate_each_subcolumn() override {
+        for (auto& column : _flat_columns) {
+            column = (std::move(*column)).mutate();
+        }
+    }
+
 private:
     // flat-columns[sub_columns, remain_column]
-    Columns _flat_columns;
+    std::vector<Column::WrappedPtr> _flat_columns;
 
     // flat-column paths, doesn't contains remain column
     std::vector<std::string> _flat_column_paths;

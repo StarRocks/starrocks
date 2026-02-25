@@ -14,25 +14,26 @@
 
 #include "formats/csv/boolean_converter.h"
 
+#include "base/string/string_parser.hpp"
 #include "column/fixed_length_column.h"
 #include "common/logging.h"
-#include "util/string_parser.hpp"
 
 namespace starrocks::csv {
 
-Status BooleanConverter::write_string(OutputStream* os, const Column& column, size_t row_num,
+Status BooleanConverter::write_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
                                       const Options& options) const {
     const static Slice kTrue("true");
     const static Slice kFalse("false");
     auto boolean_col = down_cast<const FixedLengthColumn<uint8_t>*>(&column);
+    const auto bool_data = boolean_col->immutable_data();
     if (LIKELY(options.bool_alpha)) {
-        return os->write(boolean_col->get_data()[row_num] ? kTrue : kFalse);
+        return os->write(bool_data[row_num] ? kTrue : kFalse);
     } else {
-        return os->write<int16_t>(boolean_col->get_data()[row_num]);
+        return os->write<int16_t>(bool_data[row_num]);
     }
 }
 
-Status BooleanConverter::write_quoted_string(OutputStream* os, const Column& column, size_t row_num,
+Status BooleanConverter::write_quoted_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
                                              const Options& options) const {
     return write_string(os, column, row_num, options);
 }

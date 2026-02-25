@@ -14,7 +14,9 @@
 
 #include "storage/primary_key_dump.h"
 
+#include <functional>
 #include <memory>
+#include <thread>
 
 #include "fs/fs.h"
 #include "fs/fs_util.h"
@@ -30,10 +32,16 @@
 #include "storage/tablet.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_updates.h"
-#include "storage/type_traits.h"
 #include "types/logical_type.h"
+#include "types/type_traits.h"
 
 namespace starrocks {
+
+// Helper function to safely convert pthread_t to string representation on macOS
+static std::string pthread_to_string() {
+    std::hash<std::thread::id> hasher;
+    return std::to_string(hasher(std::this_thread::get_id()));
+}
 
 PrimaryKeyDump::PrimaryKeyDump(Tablet* tablet) {
     _tablet = tablet;
@@ -159,7 +167,7 @@ public:
     PrimaryKeyChunkDumper(PrimaryKeyColumnPB* pk_column_pb) : _pk_column_pb(pk_column_pb) {}
     ~PrimaryKeyChunkDumper() { (void)fs::delete_file(_tmp_file); }
     Status init(const TabletSchemaCSPtr& tablet_schema, const std::string& tablet_path) {
-        _tmp_file = tablet_path + "/PrimaryKeyChunkDumper_" + std::to_string(static_cast<int64_t>(pthread_self()));
+        _tmp_file = tablet_path + "/PrimaryKeyChunkDumper_" + pthread_to_string();
         (void)fs::delete_file(_tmp_file);
         ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(tablet_path));
         WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::OpenMode::CREATE_OR_OPEN_WITH_TRUNCATE};
@@ -210,7 +218,7 @@ public:
 
 private:
     Status _copy_to_tmp_file(const std::string& dump_filepath, const PrimaryKeyColumnPB& pk_column_pb) {
-        _tmp_file = "./PrimaryKeyChunkReader_" + std::to_string(static_cast<int64_t>(pthread_self()));
+        _tmp_file = "./PrimaryKeyChunkReader_" + pthread_to_string();
         (void)fs::delete_file(_tmp_file);
         RETURN_IF_ERROR(fs::copy_file_by_range(dump_filepath, _tmp_file, pk_column_pb.page().offset(),
                                                pk_column_pb.page().size()));
@@ -248,7 +256,8 @@ Status PrimaryKeyDump::_dump_segment_keys() {
     auto chunk = chunk_shared_ptr.get();
     for (auto& rowset : *rowset_map) {
         RowsetReleaseGuard guard(rowset.second);
-        auto res = rowset.second->get_segment_iterators2(pkey_schema, tablet_schema, nullptr, 0, &stats);
+        // Use MetaLoadMode::NONE since we only need to dump primary keys, no metadata required
+        auto res = rowset.second->get_segment_iterators2(pkey_schema, tablet_schema, MetaLoadMode::NONE, 0, &stats);
         if (!res.ok()) {
             return res.status();
         }
@@ -344,7 +353,7 @@ Status PrimaryKeyDump::read_deserialize_from_file(const std::string& dump_filepa
 
 Status PrimaryKeyDump::deserialize_pkcol_pkindex_from_meta(
         const std::string& dump_filepath, const PrimaryKeyDumpPB& dump_pb,
-        const std::function<void(const Chunk&)>& column_key_func,
+        const std::function<void(uint32_t, const Chunk&)>& column_key_func,
         const std::function<void(const std::string&, const PartialKVsPB&)>& index_kvs_func) {
     std::unique_ptr<RandomAccessFile> rfile;
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dump_filepath));
@@ -367,7 +376,7 @@ Status PrimaryKeyDump::deserialize_pkcol_pkindex_from_meta(
             } else if (!st.ok()) {
                 return st;
             } else {
-                column_key_func(*chunk);
+                column_key_func(primary_key_column.segment_id(), *chunk);
             }
         }
     }

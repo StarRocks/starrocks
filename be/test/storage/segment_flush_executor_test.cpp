@@ -19,10 +19,13 @@
 
 #include <utility>
 
+#include "base/testutil/assert.h"
 #include "column/datum_tuple.h"
 #include "fs/fs_util.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/runtime_state.h"
+#include "runtime/starrocks_metrics.h"
+#include "service/brpc_service_test_util.h"
 #include "storage/async_delta_writer.h"
 #include "storage/chunk_helper.h"
 #include "storage/rowset/rowset_factory.h"
@@ -34,8 +37,6 @@
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 #include "storage/txn_manager.h"
-#include "testutil/assert.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -61,7 +62,7 @@ public:
         }
     }
 
-    Status prepare_primary_tablet_segment_dir(std::string path) {
+    Status prepare_primary_tablet_segment_dir(const std::string& path) {
         _primary_tablet_segment_dir = std::move(path);
         RETURN_IF_ERROR(fs::remove_all(_primary_tablet_segment_dir));
         return fs::create_directories(_primary_tablet_segment_dir);
@@ -84,7 +85,7 @@ public:
         c0.__set_is_key(true);
         c0.__set_is_allow_null(false);
         c0.column_type.type = TPrimitiveType::INT;
-        request.tablet_schema.columns.push_back(c0);
+        request.tablet_schema.columns.emplace_back(c0);
 
         auto st = StorageEngine::instance()->create_tablet(request);
         CHECK(st.ok()) << st.to_string();
@@ -158,7 +159,7 @@ public:
         auto schema = ChunkHelper::convert_schema(tablet->tablet_schema(), column_indexes);
         auto chunk = ChunkHelper::new_chunk(schema, num_rows);
         for (auto i = 0; i < num_rows; ++i) {
-            chunk->columns()[0]->append_datum(Datum(static_cast<int32_t>(i)));
+            chunk->mutable_columns()[0]->append_datum(Datum(static_cast<int32_t>(i)));
         }
         ASSERT_OK(rowset_writer->flush_chunk(*chunk, segment_pb));
         rowset = rowset_writer->build().value();
@@ -179,11 +180,11 @@ public:
     }
 
     Status get_prepared_rowset(int64_t tablet_id, int64_t txn_id, int64_t partition_id, RowsetSharedPtr* rowset) {
-        std::map<TabletInfo, RowsetSharedPtr> tablet_infos;
+        std::map<TabletInfo, std::pair<RowsetSharedPtr, bool>> tablet_infos;
         StorageEngine::instance()->txn_manager()->get_txn_related_tablets(txn_id, partition_id, &tablet_infos);
         for (auto& [tablet_info, rs] : tablet_infos) {
             if (tablet_info.tablet_id == tablet_id) {
-                (*rowset) = rs;
+                (*rowset) = rs.first;
                 return Status::OK();
             }
         }
@@ -204,7 +205,7 @@ public:
         auto res = segment->new_iterator(schema, seg_options);
         ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
 
-        auto seg_iterator = res.value();
+        const auto& seg_iterator = res.value();
         ASSERT_TRUE(seg_iterator->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
         auto chunk = ChunkHelper::new_chunk(seg_iterator->schema(), 100);
         int count = 0;
@@ -231,19 +232,6 @@ protected:
     std::string _primary_tablet_segment_dir;
     RuntimeState _runtime_state;
     ObjectPool _pool;
-};
-
-class MockClosure : public ::google::protobuf::Closure {
-public:
-    MockClosure() = default;
-    ~MockClosure() override = default;
-
-    void Run() override { _run.store(true); }
-
-    bool has_run() { return _run.load(); }
-
-private:
-    std::atomic_bool _run = false;
 };
 
 TEST_F(SegmentFlushExecutorTest, test_write_and_commit_segment) {

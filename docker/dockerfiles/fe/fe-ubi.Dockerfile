@@ -58,7 +58,7 @@ COPY --from=artifacts --chown=$USER:$GROUP /release/fe_artifacts/ $STARROCKS_ROO
 COPY --chown=$USER:$GROUP docker/dockerfiles/fe/*.sh $STARROCKS_ROOT/
 
 # Create directory for FE metadata
-RUN mkdir -p /opt/starrocks/fe/meta
+RUN mkdir -p $STARROCKS_ROOT/fe/meta
 
 # run as root by default
 USER $RUN_AS_USER

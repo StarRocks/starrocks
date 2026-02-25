@@ -2,7 +2,7 @@
 
 StarRocks is built by an open and friendly community. We are dedicated to building a collaborative, inspiring, and exuberant open-source community for our members. Everyone is more than welcome to join our community to get help and to contribute to StarRocks.
 
-## Table of content
+## Table of contents
 
 - [How to contribute](#How-to-contribute)
 - [Contributing guideline](#Contributing-guideline)

@@ -15,20 +15,19 @@
 #include "exec/schema_scanner/schema_be_logs_scanner.h"
 
 #include "agent/master_info.h"
+#include "base/time/time.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/string_value.h"
 #include "types/logical_type.h"
-#include "util/thread.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaBeLogsScanner::_s_columns[] = {
         {"BE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
-        {"LEVEL", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"LEVEL", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"TIMESTAMP", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"TID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
-        {"LOG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"LOG", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
 };
 
 SchemaBeLogsScanner::SchemaBeLogsScanner()
@@ -48,7 +47,7 @@ Status SchemaBeLogsScanner::start(RuntimeState* state) {
     if (_param->log_end_ts > 0) {
         end_ts = _param->log_end_ts;
     }
-    string level;
+    string level = "I";
     string pattern;
     if (_param->log_level != nullptr) {
         level = *_param->log_level;
@@ -88,33 +87,33 @@ Status SchemaBeLogsScanner::fill_chunk(ChunkPtr* chunk) {
             if (slot_id < 1 || slot_id > 5) {
                 return Status::InternalError(strings::Substitute("invalid slot id:$0", slot_id));
             }
-            ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
+            auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(slot_id);
             switch (slot_id) {
             case 1: {
                 // be id
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&_be_id);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&_be_id);
                 break;
             }
             case 2: {
                 // level
                 Slice v(&info.level, 1);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&v);
                 break;
             }
             case 3: {
                 // timestamp
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.timestamp);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.timestamp);
                 break;
             }
             case 4: {
                 // tid
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.thread_id);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.thread_id);
                 break;
             }
             case 5: {
                 // log
                 Slice v(info.log);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&v);
                 break;
             }
             default:

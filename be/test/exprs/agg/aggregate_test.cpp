@@ -18,48 +18,10 @@
 #include <cmath>
 #include <memory>
 
-#include "column/array_column.h"
-#include "column/column_builder.h"
-#include "column/fixed_length_column.h"
-#include "column/nullable_column.h"
-#include "column/vectorized_fwd.h"
-#include "exprs/agg/aggregate_factory.h"
-#include "exprs/agg/aggregate_state_allocator.h"
-#include "exprs/agg/any_value.h"
-#include "exprs/agg/array_agg.h"
-#include "exprs/agg/group_concat.h"
-#include "exprs/agg/maxmin.h"
-#include "exprs/agg/nullable_aggregate.h"
-#include "exprs/agg/sum.h"
-#include "exprs/anyval_util.h"
-#include "exprs/arithmetic_operation.h"
-#include "exprs/function_context.h"
-#include "gen_cpp/Data_types.h"
-#include "gen_cpp/Types_types.h"
-#include "gutil/casts.h"
-#include "runtime/mem_pool.h"
-#include "runtime/time_types.h"
-#include "testutil/function_utils.h"
-#include "types/bitmap_value.h"
-#include "util/slice.h"
-#include "util/thrift_util.h"
-#include "util/unaligned_access.h"
+#include "exprs/agg/base_aggregate_test.h"
 
 namespace starrocks {
 // adaptor to TypeDescriptor
-struct UTRawType {
-    LogicalType type;
-    int precision;
-    int scale;
-    operator TypeDescriptor() {
-        TypeDescriptor type_desc;
-        type_desc.type = type;
-        type_desc.precision = precision;
-        type_desc.scale = scale;
-        return type_desc;
-    }
-};
-
 class AggregateTest : public testing::Test {
 public:
     AggregateTest() = default;
@@ -81,251 +43,6 @@ private:
     FunctionContext* ctx{};
     std::unique_ptr<CountingAllocatorWithHook> _allocator;
 };
-
-class ManagedAggrState {
-public:
-    ~ManagedAggrState() { _func->destroy(_ctx, _state); }
-    static std::unique_ptr<ManagedAggrState> create(FunctionContext* ctx, const AggregateFunction* func) {
-        return std::make_unique<ManagedAggrState>(ctx, func);
-    }
-    AggDataPtr state() { return _state; }
-
-private:
-    ManagedAggrState(FunctionContext* ctx, const AggregateFunction* func) : _ctx(ctx), _func(func) {
-        _state = _mem_pool.allocate_aligned(func->size(), func->alignof_size());
-        _func->create(_ctx, _state);
-    }
-    FunctionContext* _ctx;
-    const AggregateFunction* _func;
-    MemPool _mem_pool;
-    AggDataPtr _state;
-};
-
-template <typename T>
-ColumnPtr gen_input_column1() {
-    using DataColumn = typename ColumnTraits<T>::ColumnType;
-    auto column = DataColumn::create();
-    for (int i = 0; i < 1024; i++) {
-        column->append(i);
-    }
-    column->append(100);
-    column->append(200);
-    return column;
-}
-
-template <LogicalType LT>
-ColumnPtr gen_input_decimal_column1(const FunctionContext::TypeDesc* type_desc) {
-    auto column = RunTimeColumnType<LT>::create(type_desc->precision, type_desc->scale);
-    for (int i = 0; i < 1024; i++) {
-        column->append(i);
-    }
-    column->append(100);
-    column->append(200);
-    return column;
-}
-
-template <typename T>
-ColumnPtr gen_input_column2() {
-    using DataColumn = typename ColumnTraits<T>::ColumnType;
-    auto column = DataColumn::create();
-    for (int i = 2000; i < 3000; i++) {
-        column->append(i);
-    }
-    return column;
-}
-
-template <>
-ColumnPtr gen_input_column1<Slice>() {
-    auto column = BinaryColumn::create();
-    std::vector<Slice> strings{{"ddd"}, {"ddd"}, {"eeeee"}, {"ff"}, {"ff"}, {"ddd"}};
-    column->append_strings(strings);
-    return column;
-}
-
-template <>
-ColumnPtr gen_input_column2<Slice>() {
-    auto column2 = BinaryColumn::create();
-    std::vector<Slice> strings2{{"kkk"}, {"k"}, {"kk"}, {"kkk"}};
-    column2->append_strings(strings2);
-    return column2;
-}
-
-template <>
-ColumnPtr gen_input_column1<DecimalV2Value>() {
-    auto column = DecimalColumn::create();
-    column->append(DecimalV2Value(1));
-    column->append(DecimalV2Value(2));
-    column->append(DecimalV2Value(3));
-    return column;
-}
-
-template <>
-ColumnPtr gen_input_column2<DecimalV2Value>() {
-    auto column2 = DecimalColumn::create();
-    column2->append(DecimalV2Value(7));
-    column2->append(DecimalV2Value(8));
-    column2->append(DecimalV2Value(3));
-    return column2;
-}
-
-template <>
-ColumnPtr gen_input_column1<TimestampValue>() {
-    auto column = TimestampColumn::create();
-    for (int j = 0; j < 20; ++j) {
-        column->append(TimestampValue::create(2000 + j, 1, 1, 0, 30, 30));
-    }
-    column->append(TimestampValue::create(2000, 1, 1, 0, 30, 30));
-    column->append(TimestampValue::create(2001, 1, 1, 0, 30, 30));
-    return column;
-}
-
-template <>
-ColumnPtr gen_input_column2<TimestampValue>() {
-    auto column = TimestampColumn::create();
-    for (int j = 0; j < 20; ++j) {
-        column->append(TimestampValue::create(1000 + j, 1, 1, 0, 30, 30));
-    }
-    column->append(TimestampValue::create(2000, 1, 1, 0, 30, 30));
-    column->append(TimestampValue::create(1000, 1, 1, 0, 30, 30));
-    return column;
-}
-
-template <>
-ColumnPtr gen_input_column1<DateValue>() {
-    auto column = DateColumn::create();
-    for (int j = 0; j < 20; ++j) {
-        column->append(DateValue::create(2000 + j, 1, 1));
-    }
-    column->append(DateValue::create(2000, 1, 1));
-    column->append(DateValue::create(2001, 1, 1));
-    return column;
-}
-
-template <>
-ColumnPtr gen_input_column2<DateValue>() {
-    auto column = DateColumn::create();
-    for (int j = 0; j < 20; ++j) {
-        column->append(DateValue::create(1000 + j, 1, 1));
-    }
-    column->append(DateValue::create(2000, 1, 1));
-    column->append(DateValue::create(1000, 1, 1));
-    return column;
-}
-
-template <LogicalType LT>
-ColumnPtr gen_input_decimal_column2(const FunctionContext::TypeDesc* type_desc) {
-    auto column = RunTimeColumnType<LT>::create(type_desc->precision, type_desc->scale);
-    for (int i = 2000; i < 3000; i++) {
-        column->append(i);
-    }
-    return column;
-}
-
-template <typename T, typename TResult>
-void test_agg_function(FunctionContext* ctx, const AggregateFunction* func, TResult update_result1,
-                       TResult update_result2, TResult merge_result) {
-    int64_t mem_usage = 0;
-    ctx->set_mem_usage_counter(&mem_usage);
-    using ResultColumn = typename ColumnTraits<TResult>::ColumnType;
-    auto result_column = ResultColumn::create();
-
-    // update input column 1
-    auto aggr_state = ManagedAggrState::create(ctx, func);
-    ColumnPtr column;
-    column = gen_input_column1<T>();
-    const Column* row_column = column.get();
-    func->update_batch_single_state(ctx, row_column->size(), &row_column, aggr_state->state());
-    func->finalize_to_column(ctx, aggr_state->state(), result_column.get());
-    ASSERT_EQ(update_result1, result_column->get_data()[0]);
-
-    // update input column 2
-    auto aggr_state2 = ManagedAggrState::create(ctx, func);
-    ColumnPtr column2;
-    column2 = gen_input_column2<T>();
-    row_column = column2.get();
-    func->update_batch_single_state(ctx, row_column->size(), &row_column, aggr_state2->state());
-    func->finalize_to_column(ctx, aggr_state2->state(), result_column.get());
-    ASSERT_EQ(update_result2, result_column->get_data()[1]);
-
-    // merge column 1 and column 2
-    ColumnPtr serde_column = BinaryColumn::create();
-    std::string func_name = func->get_name();
-    if (func_name == "count" || func_name == "sum" || func_name == "maxmin") {
-        serde_column = ResultColumn::create();
-    }
-
-    func->serialize_to_column(ctx, aggr_state->state(), serde_column.get());
-    func->merge(ctx, serde_column.get(), aggr_state2->state(), 0);
-    func->finalize_to_column(ctx, aggr_state2->state(), result_column.get());
-    ASSERT_EQ(merge_result, result_column->get_data()[2]);
-}
-
-template <LogicalType LT, typename TResult = RunTimeCppType<TYPE_DECIMAL128>, typename = DecimalLTGuard<LT>>
-void test_decimal_agg_function(FunctionContext* ctx, const AggregateFunction* func, TResult update_result1,
-                               TResult update_result2, TResult merge_result) {
-    using ResultColumn = RunTimeColumnType<TYPE_DECIMAL128>;
-    const auto& result_type = ctx->get_return_type();
-    auto result_column = ResultColumn::create(result_type.precision, result_type.scale);
-
-    // update input column 1
-    auto aggr_state = ManagedAggrState::create(ctx, func);
-    ColumnPtr column = gen_input_decimal_column1<LT>(ctx->get_arg_type(0));
-    const Column* row_column = column.get();
-    func->update_batch_single_state(ctx, row_column->size(), &row_column, aggr_state->state());
-    func->finalize_to_column(ctx, aggr_state->state(), result_column.get());
-    ASSERT_EQ(update_result1, result_column->get_data()[0]);
-
-    // update input column 2
-    auto aggr_state2 = ManagedAggrState::create(ctx, func);
-    ColumnPtr column2 = gen_input_decimal_column2<LT>(ctx->get_arg_type(0));
-    row_column = column2.get();
-    func->update_batch_single_state(ctx, row_column->size(), &row_column, aggr_state2->state());
-    func->finalize_to_column(ctx, aggr_state2->state(), result_column.get());
-    ASSERT_EQ(update_result2, result_column->get_data()[1]);
-
-    // merge column 1 and column 2
-    ColumnPtr serde_column = BinaryColumn::create();
-    std::string func_name = func->get_name();
-    if (func_name == "count" || func_name == "sum" || func_name == "decimal_sum" || func_name == "maxmin") {
-        serde_column = ResultColumn::create(result_type.precision, result_type.scale);
-    }
-
-    func->serialize_to_column(ctx, aggr_state->state(), serde_column.get());
-    func->merge(ctx, serde_column.get(), aggr_state2->state(), 0);
-    func->finalize_to_column(ctx, aggr_state2->state(), result_column.get());
-    ASSERT_EQ(merge_result, result_column->get_data()[2]);
-}
-
-template <typename T, typename TResult>
-void test_agg_variance_function(FunctionContext* ctx, const AggregateFunction* func, TResult update_result1,
-                                TResult update_result2, TResult merge_result) {
-    using ResultColumn = typename ColumnTraits<TResult>::ColumnType;
-    auto result_column = ResultColumn::create();
-
-    auto state = ManagedAggrState::create(ctx, func);
-    // update input column 1
-    ColumnPtr column = gen_input_column1<T>();
-    const Column* row_column = column.get();
-    func->update_batch_single_state(ctx, row_column->size(), &row_column, state->state());
-    func->finalize_to_column(ctx, state->state(), result_column.get());
-    ASSERT_EQ(update_result1, result_column->get_data()[0]);
-
-    // update input column 2
-    auto state2 = ManagedAggrState::create(ctx, func);
-    ColumnPtr column2 = gen_input_column2<T>();
-    row_column = column2.get();
-    func->update_batch_single_state(ctx, row_column->size(), &row_column, state2->state());
-    func->finalize_to_column(ctx, state2->state(), result_column.get());
-    ASSERT_EQ(update_result2, result_column->get_data()[1]);
-
-    // merge column 1 and column 2
-    ColumnPtr serde_column = BinaryColumn::create();
-    func->serialize_to_column(ctx, state->state(), serde_column.get());
-    func->merge(ctx, serde_column.get(), state2->state(), 0);
-    func->finalize_to_column(ctx, state2->state(), result_column.get());
-    ASSERT_TRUE(std::abs(merge_result - result_column->get_data()[2]) < 1e-8);
-}
-
 TEST_F(AggregateTest, test_count) {
     const AggregateFunction* func = get_aggregate_function("count", TYPE_BIGINT, TYPE_BIGINT, false);
     test_agg_function<int16_t, int64_t>(ctx, func, 1026, 1000, 2026);
@@ -678,8 +395,8 @@ TEST_F(AggregateTest, test_stddev_samp) {
     }
 }
 
-TEST_F(AggregateTest, test_maxby) {
-    const AggregateFunction* func = get_aggregate_function("max_by", TYPE_VARCHAR, TYPE_INT, false);
+void test_max_by_helper(FunctionContext* ctx, const char* max_by_name) {
+    const AggregateFunction* func = get_aggregate_function(max_by_name, TYPE_VARCHAR, TYPE_INT, false);
     auto result_column = Int32Column::create();
     auto aggr_state = ManagedAggrState::create(ctx, func);
     auto int_column = Int32Column::create();
@@ -688,7 +405,7 @@ TEST_F(AggregateTest, test_maxby) {
     }
     auto varchar_column = BinaryColumn::create();
     std::vector<Slice> strings{{"aaa"}, {"ddd"}, {"zzzz"}, {"ff"}, {"ff"}, {"ddd"}, {"ddd"}, {"ddd"}, {"ddd"}, {""}};
-    varchar_column->append_strings(strings);
+    varchar_column->append_strings(strings.data(), strings.size());
     Columns columns;
     columns.emplace_back(int_column);
     columns.emplace_back(varchar_column);
@@ -702,7 +419,7 @@ TEST_F(AggregateTest, test_maxby) {
     ASSERT_EQ(2, result_column->get_data()[0]);
 
     //test nullable column
-    func = get_aggregate_function("max_by", TYPE_DECIMALV2, TYPE_DOUBLE, false);
+    func = get_aggregate_function(max_by_name, TYPE_DECIMALV2, TYPE_DOUBLE, false);
     aggr_state = ManagedAggrState::create(ctx, func);
     auto data_column1 = DoubleColumn::create();
     auto null_column1 = NullColumn::create();
@@ -734,8 +451,16 @@ TEST_F(AggregateTest, test_maxby) {
     ASSERT_EQ(98.11, nullable_result_column->data_column()->get(0).get<double>());
 }
 
-TEST_F(AggregateTest, test_minby) {
-    const AggregateFunction* func = get_aggregate_function("min_by", TYPE_VARCHAR, TYPE_INT, false);
+TEST_F(AggregateTest, test_max_by) {
+    test_max_by_helper(ctx, "max_by");
+}
+
+TEST_F(AggregateTest, test_max_by_v2) {
+    test_max_by_helper(ctx, "max_by_v2");
+}
+
+void test_min_by_helper(FunctionContext* ctx, const char* min_by_name) {
+    const AggregateFunction* func = get_aggregate_function(min_by_name, TYPE_VARCHAR, TYPE_INT, false);
     auto result_column = Int32Column::create();
     auto aggr_state = ManagedAggrState::create(ctx, func);
     auto int_column = Int32Column::create();
@@ -744,7 +469,7 @@ TEST_F(AggregateTest, test_minby) {
     }
     auto varchar_column = BinaryColumn::create();
     std::vector<Slice> strings{{"ccc"}, {"aaa"}, {"ddd"}, {"zzzz"}, {"ff"}, {"ff"}, {"ddd"}, {"ddd"}, {"ddd"}, {"ddd"}};
-    varchar_column->append_strings(strings);
+    varchar_column->append_strings(strings.data(), strings.size());
     Columns columns;
     columns.emplace_back(int_column);
     columns.emplace_back(varchar_column);
@@ -758,7 +483,7 @@ TEST_F(AggregateTest, test_minby) {
     ASSERT_EQ(1, result_column->get_data()[0]);
 
     //test nullable column
-    func = get_aggregate_function("min_by", TYPE_DECIMALV2, TYPE_DOUBLE, false);
+    func = get_aggregate_function(min_by_name, TYPE_DECIMALV2, TYPE_DOUBLE, false);
     aggr_state = ManagedAggrState::create(ctx, func);
     auto data_column1 = DoubleColumn::create();
     auto null_column1 = NullColumn::create();
@@ -790,8 +515,16 @@ TEST_F(AggregateTest, test_minby) {
     ASSERT_EQ(1.11, nullable_result_column->data_column()->get(0).get<double>());
 }
 
-TEST_F(AggregateTest, test_maxby_with_nullable_aggregator) {
-    const AggregateFunction* func = get_aggregate_function("max_by", TYPE_VARCHAR, TYPE_INT, true);
+TEST_F(AggregateTest, test_min_by) {
+    test_min_by_helper(ctx, "min_by");
+}
+
+TEST_F(AggregateTest, test_min_by_v2) {
+    test_min_by_helper(ctx, "min_by_v2");
+}
+
+void test_max_by_with_nullable_aggregator_helper(FunctionContext* ctx, const char* max_by_name) {
+    const AggregateFunction* func = get_aggregate_function(max_by_name, TYPE_VARCHAR, TYPE_INT, true);
     auto* ctx_with_args0 = FunctionContext::create_test_context(
             {UTRawType{.type = TYPE_INT}, UTRawType{.type = TYPE_VARCHAR}}, UTRawType{.type = TYPE_INT});
     std::unique_ptr<FunctionContext> gc_ctx0(ctx_with_args0);
@@ -804,7 +537,7 @@ TEST_F(AggregateTest, test_maxby_with_nullable_aggregator) {
     }
     auto varchar_column = BinaryColumn::create();
     std::vector<Slice> strings{{"aaa"}, {"ddd"}, {"zzzz"}, {"ff"}, {"ff"}, {"ddd"}, {"ddd"}, {"ddd"}, {"ddd"}, {""}};
-    varchar_column->append_strings(strings);
+    varchar_column->append_strings(strings.data(), strings.size());
     Columns columns;
     columns.emplace_back(int_column);
     columns.emplace_back(varchar_column);
@@ -818,7 +551,7 @@ TEST_F(AggregateTest, test_maxby_with_nullable_aggregator) {
     ASSERT_EQ(2, result_column->get_data()[0]);
 
     //test nullable column
-    func = get_aggregate_function("max_by", TYPE_DECIMALV2, TYPE_DOUBLE, true);
+    func = get_aggregate_function(max_by_name, TYPE_DECIMALV2, TYPE_DOUBLE, true);
     auto* ctx_with_args1 = FunctionContext::create_test_context(
             {UTRawType{.type = TYPE_DOUBLE}, UTRawType{.type = TYPE_DECIMALV2, .precision = 38, .scale = 9}},
             UTRawType{.type = TYPE_DOUBLE});
@@ -854,9 +587,15 @@ TEST_F(AggregateTest, test_maxby_with_nullable_aggregator) {
     func->finalize_to_column(ctx_with_args1, aggr_state->state(), nullable_result_column.get());
     ASSERT_EQ(98.11, nullable_result_column->data_column()->get(0).get<double>());
 }
+TEST_F(AggregateTest, test_max_by_with_nullable_aggregator) {
+    test_max_by_with_nullable_aggregator_helper(ctx, "max_by");
+}
+TEST_F(AggregateTest, test_max_by_v2_with_nullable_aggregator) {
+    test_max_by_with_nullable_aggregator_helper(ctx, "max_by_v2");
+}
 
-TEST_F(AggregateTest, test_minby_with_nullable_aggregator) {
-    const AggregateFunction* func = get_aggregate_function("min_by", TYPE_VARCHAR, TYPE_INT, true);
+void test_min_by_with_nullable_aggregator_helper(FunctionContext* ctx, const char* min_by_name) {
+    const AggregateFunction* func = get_aggregate_function(min_by_name, TYPE_VARCHAR, TYPE_INT, true);
     auto* ctx_with_args0 = FunctionContext::create_test_context(
             {UTRawType{.type = TYPE_INT}, UTRawType{.type = TYPE_VARCHAR}}, UTRawType{.type = TYPE_INT});
     std::unique_ptr<FunctionContext> gc_ctx0(ctx_with_args0);
@@ -869,7 +608,7 @@ TEST_F(AggregateTest, test_minby_with_nullable_aggregator) {
     }
     auto varchar_column = BinaryColumn::create();
     std::vector<Slice> strings{{"xxx"}, {"aaa"}, {"ddd"}, {"zzzz"}, {"ff"}, {"ff"}, {"ddd"}, {"ddd"}, {"ddd"}, {"ddd"}};
-    varchar_column->append_strings(strings);
+    varchar_column->append_strings(strings.data(), strings.size());
     Columns columns;
     columns.emplace_back(int_column);
     columns.emplace_back(varchar_column);
@@ -883,7 +622,7 @@ TEST_F(AggregateTest, test_minby_with_nullable_aggregator) {
     ASSERT_EQ(1, result_column->get_data()[0]);
 
     //test nullable column
-    func = get_aggregate_function("min_by", TYPE_DECIMALV2, TYPE_DOUBLE, true);
+    func = get_aggregate_function(min_by_name, TYPE_DECIMALV2, TYPE_DOUBLE, true);
     auto* ctx_with_args1 = FunctionContext::create_test_context(
             {UTRawType{.type = TYPE_DOUBLE}, UTRawType{.type = TYPE_DECIMALV2, .precision = 38, .scale = 9}},
             UTRawType{.type = TYPE_DOUBLE});
@@ -920,6 +659,12 @@ TEST_F(AggregateTest, test_minby_with_nullable_aggregator) {
     ASSERT_EQ(1.11, nullable_result_column->data_column()->get(0).get<double>());
 }
 
+TEST_F(AggregateTest, test_min_by_with_nullable_aggregator) {
+    test_min_by_with_nullable_aggregator_helper(ctx, "min_by");
+}
+TEST_F(AggregateTest, test_min_by_v2_with_nullable_aggregator) {
+    test_min_by_with_nullable_aggregator_helper(ctx, "min_by_v2");
+}
 TEST_F(AggregateTest, test_max) {
     const AggregateFunction* func = get_aggregate_function("max", TYPE_SMALLINT, TYPE_SMALLINT, false);
     test_agg_function<int16_t, int16_t>(ctx, func, 1023, 2999, 2999);
@@ -1098,12 +843,10 @@ TEST_F(AggregateTest, test_decimal_multi_distinct_sum) {
 
 TEST_F(AggregateTest, test_window_funnel) {
     std::vector<TypeDescriptor> arg_types = {
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_BIGINT)),
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DATETIME)),
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_INT)),
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_ARRAY))};
+            TypeDescriptor::from_logical_type(TYPE_BIGINT), TypeDescriptor::from_logical_type(TYPE_DATETIME),
+            TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor::from_logical_type(TYPE_ARRAY)};
 
-    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_INT));
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_INT);
     std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
     const AggregateFunction* func = get_aggregate_function("window_funnel", TYPE_DATETIME, TYPE_INT, false);
@@ -1146,7 +889,8 @@ TEST_F(AggregateTest, test_window_funnel) {
     raw_column[3] = column4.get();
 
     using ResultColumn = typename ColumnTraits<int32_t>::ColumnType;
-    auto result_column = ResultColumn::create();
+    using ResultColumnPtr = typename ResultColumn::MutablePtr;
+    ResultColumnPtr result_column = ResultColumn::create();
     auto state = ManagedAggrState::create(ctx, func);
     func->update(local_ctx.get(), raw_column.data(), state->state(), 0);
     func->finalize_to_column(local_ctx.get(), state->state(), result_column.get());
@@ -1200,7 +944,7 @@ TEST_F(AggregateTest, test_dict_merge) {
 
     std::set<std::string> origin_data;
     std::set<int> ids;
-    auto binary_column = down_cast<BinaryColumn*>(data_col->data_column().get());
+    auto binary_column = down_cast<const BinaryColumn*>(data_col->data_column().get());
     for (int i = 0; i < binary_column->size(); ++i) {
         auto slice = binary_column->get_slice(i);
         origin_data.emplace(slice.data, slice.size);
@@ -1260,7 +1004,7 @@ TEST_F(AggregateTest, test_sum_nullable) {
 
     const Column& result_data_column = result_column->data_column_ref();
     const auto& result_data = static_cast<const Int64Column&>(result_data_column);
-    ASSERT_EQ(4950, result_data.get_data()[0]);
+    ASSERT_EQ(4950, result_data.immutable_data()[0]);
 }
 
 TEST_F(AggregateTest, test_count_nullable) {
@@ -1308,7 +1052,7 @@ TEST_F(AggregateTest, test_bitmap_nullable) {
     const Column& result_data_column = result_column->data_column_ref();
     const auto& result_data = static_cast<const Int64Column&>(result_data_column);
     ASSERT_EQ(false, result_column->is_null(0));
-    ASSERT_EQ(50, result_data.get_data()[0]);
+    ASSERT_EQ(50, result_data.immutable_data()[0]);
 }
 
 TEST_F(AggregateTest, test_group_concat) {
@@ -1336,11 +1080,10 @@ TEST_F(AggregateTest, test_group_concat) {
 }
 
 TEST_F(AggregateTest, test_group_concat_const_seperator) {
-    std::vector<TypeDescriptor> arg_types = {
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR)),
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR))};
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+                                             TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
 
-    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR));
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
     std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
     const AggregateFunction* group_concat_function =
@@ -1382,10 +1125,9 @@ TEST_F(AggregateTest, test_group_concat_const_seperator) {
 }
 
 TEST_F(AggregateTest, test_percentile_cont) {
-    std::vector<TypeDescriptor> arg_types = {
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE)),
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE))};
-    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE));
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_DOUBLE),
+                                             TypeDescriptor::from_logical_type(TYPE_DOUBLE)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_DOUBLE);
     std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
     const AggregateFunction* func = get_aggregate_function("percentile_cont", TYPE_DOUBLE, TYPE_DOUBLE, false);
@@ -1422,9 +1164,9 @@ TEST_F(AggregateTest, test_percentile_cont) {
 
     // merge column 1 and column 2
     auto result_column = DoubleColumn::create();
-    ColumnPtr serde_column1 = BinaryColumn::create();
+    MutableColumnPtr serde_column1 = BinaryColumn::create();
     func->serialize_to_column(local_ctx.get(), state1->state(), serde_column1.get());
-    ColumnPtr serde_column2 = BinaryColumn::create();
+    MutableColumnPtr serde_column2 = BinaryColumn::create();
     func->serialize_to_column(local_ctx.get(), state2->state(), serde_column2.get());
 
     func->merge(local_ctx.get(), serde_column1.get(), state3->state(), 0);
@@ -1437,10 +1179,9 @@ TEST_F(AggregateTest, test_percentile_cont) {
 }
 
 TEST_F(AggregateTest, test_percentile_cont_1) {
-    std::vector<TypeDescriptor> arg_types = {
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE)),
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE))};
-    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE));
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_DOUBLE),
+                                             TypeDescriptor::from_logical_type(TYPE_DOUBLE)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_DOUBLE);
     std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
     const AggregateFunction* func = get_aggregate_function("percentile_cont", TYPE_DOUBLE, TYPE_DOUBLE, false);
@@ -1477,9 +1218,9 @@ TEST_F(AggregateTest, test_percentile_cont_1) {
 
     // merge column 1 and column 2
     auto result_column = DoubleColumn::create();
-    ColumnPtr serde_column1 = BinaryColumn::create();
+    MutableColumnPtr serde_column1 = BinaryColumn::create();
     func->serialize_to_column(local_ctx.get(), state1->state(), serde_column1.get());
-    ColumnPtr serde_column2 = BinaryColumn::create();
+    MutableColumnPtr serde_column2 = BinaryColumn::create();
     func->serialize_to_column(local_ctx.get(), state2->state(), serde_column2.get());
 
     func->merge(local_ctx.get(), serde_column1.get(), state3->state(), 0);
@@ -1492,10 +1233,9 @@ TEST_F(AggregateTest, test_percentile_cont_1) {
 }
 
 TEST_F(AggregateTest, test_percentile_cont_2) {
-    std::vector<TypeDescriptor> arg_types = {
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE)),
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE))};
-    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE));
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_DOUBLE),
+                                             TypeDescriptor::from_logical_type(TYPE_DOUBLE)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_DOUBLE);
     std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
     const AggregateFunction* func = get_aggregate_function("percentile_cont", TYPE_DOUBLE, TYPE_DOUBLE, false);
@@ -1525,10 +1265,9 @@ TEST_F(AggregateTest, test_percentile_cont_2) {
 }
 
 TEST_F(AggregateTest, test_percentile_disc) {
-    std::vector<TypeDescriptor> arg_types = {
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE)),
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE))};
-    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE));
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_DOUBLE),
+                                             TypeDescriptor::from_logical_type(TYPE_DOUBLE)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_DOUBLE);
     std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
     const AggregateFunction* func = get_aggregate_function("percentile_disc", TYPE_DOUBLE, TYPE_DOUBLE, false);
@@ -1563,7 +1302,7 @@ TEST_F(AggregateTest, test_percentile_disc) {
     func->update_batch_single_state(local_ctx.get(), data_column2->size(), raw_columns2.data(), state2->state());
 
     // merge column 1 and column 2
-    ColumnPtr serde_column = BinaryColumn::create();
+    MutableColumnPtr serde_column = BinaryColumn::create();
     auto result_column = DoubleColumn::create();
     func->serialize_to_column(local_ctx.get(), state1->state(), serde_column.get());
     func->merge(local_ctx.get(), serde_column.get(), state2->state(), 0);
@@ -1661,7 +1400,7 @@ TEST_F(AggregateTest, test_bitmap_intersect) {
 }
 
 template <typename T>
-ColumnPtr gen_histogram_column() {
+MutableColumnPtr gen_histogram_column() {
     using DataColumn = typename ColumnTraits<T>::ColumnType;
     auto column = DataColumn::create();
     for (int i = 0; i < 1024; i++) {
@@ -1676,13 +1415,11 @@ ColumnPtr gen_histogram_column() {
     return column;
 }
 
-TEST_F(AggregateTest, test_histogram) {
-    std::vector<TypeDescriptor> arg_types = {
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_BIGINT)),
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_INT)),
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE)),
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_INT))};
-    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR));
+TEST_F(AggregateTest, test_histogram_none) {
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_BIGINT),
+                                             TypeDescriptor::from_logical_type(TYPE_INT),
+                                             TypeDescriptor::from_logical_type(TYPE_DOUBLE)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
     std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
     const AggregateFunction* histogram_function = get_aggregate_function("histogram", TYPE_BIGINT, TYPE_VARCHAR, true);
@@ -1691,24 +1428,20 @@ TEST_F(AggregateTest, test_histogram) {
     auto data_column = gen_histogram_column<int64_t>();
     auto const1 = ColumnHelper::create_const_column<TYPE_INT>(10, data_column->size());
     auto const2 = ColumnHelper::create_const_column<TYPE_DOUBLE>(1, data_column->size());
-    auto const3 = ColumnHelper::create_const_column<TYPE_INT>(2, data_column->size());
 
     Columns const_columns;
     const_columns.emplace_back(data_column);
-    const_columns.emplace_back(const1); // first column
+    const_columns.emplace_back(const1);
     const_columns.emplace_back(const2);
-    const_columns.emplace_back(const3); // 3rd const column
     local_ctx->set_constant_columns(const_columns);
 
     std::vector<const Column*> raw_columns;
-    raw_columns.resize(4);
+    raw_columns.resize(3);
     raw_columns[0] = data_column.get();
     raw_columns[1] = const1.get();
     raw_columns[2] = const2.get();
-    raw_columns[3] = const3.get();
-    for (int i = 0; i < data_column->size(); ++i) {
-        histogram_function->update(local_ctx.get(), raw_columns.data(), state->state(), i);
-    }
+    histogram_function->update_batch_single_state(local_ctx.get(), data_column->size(), raw_columns.data(),
+                                                  state->state());
 
     auto result_column = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
     histogram_function->finalize_to_column(local_ctx.get(), state->state(), result_column.get());
@@ -1717,6 +1450,170 @@ TEST_F(AggregateTest, test_histogram) {
             "\"405\",\"408\",\"1\"],[\"406\",\"507\",\"510\",\"1\"],[\"508\",\"609\",\"612\",\"1\"],[\"610\",\"711\","
             "\"714\",\"1\"],[\"712\",\"813\",\"816\",\"1\"],[\"814\",\"915\",\"918\",\"1\"],[\"916\",\"1017\",\"1020\","
             "\"1\"],[\"1018\",\"1023\",\"1026\",\"1\"]]']",
+            result_column->debug_string());
+}
+
+TEST_F(AggregateTest, test_histogram_sample) {
+    std::vector<std::string> estimators = {"DUJ1", "LINEAR", "POLYNOMIAL", "GEE"};
+    for (const std::string& estimator : estimators) {
+        std::vector<TypeDescriptor> arg_types = {
+                TypeDescriptor::from_logical_type(TYPE_BIGINT), TypeDescriptor::from_logical_type(TYPE_INT),
+                TypeDescriptor::from_logical_type(TYPE_DOUBLE), TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+        auto return_type = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
+        std::unique_ptr<FunctionContext> local_ctx(
+                FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+        const AggregateFunction* histogram_function =
+                get_aggregate_function("histogram", TYPE_BIGINT, TYPE_VARCHAR, true);
+        auto state = ManagedAggrState::create(ctx, histogram_function);
+
+        auto data_column = gen_histogram_column<int64_t>();
+        auto const1 = ColumnHelper::create_const_column<TYPE_INT>(10, data_column->size());
+        auto const2 = ColumnHelper::create_const_column<TYPE_DOUBLE>(1, data_column->size());
+        auto const3 = ColumnHelper::create_const_column<TYPE_VARCHAR>(estimator, data_column->size());
+
+        Columns const_columns;
+        const_columns.emplace_back(data_column);
+        const_columns.emplace_back(const1);
+        const_columns.emplace_back(const2);
+        const_columns.emplace_back(const3);
+        local_ctx->set_constant_columns(const_columns);
+
+        std::vector<const Column*> raw_columns;
+        raw_columns.resize(4);
+        raw_columns[0] = data_column.get();
+        raw_columns[1] = const1.get();
+        raw_columns[2] = const2.get();
+        raw_columns[3] = const3.get();
+        histogram_function->update_batch_single_state(local_ctx.get(), data_column->size(), raw_columns.data(),
+                                                      state->state());
+
+        auto result_column = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+        histogram_function->finalize_to_column(local_ctx.get(), state->state(), result_column.get());
+        ASSERT_EQ(
+                "['[[\"0\",\"100\",\"102\",\"2\",\"101\"],[\"101\",\"201\",\"204\",\"1\",\"101\"],[\"202\",\"303\""
+                ",\"306\",\"1\",\"102\"],[\"304\",\"405\",\"408\",\"1\",\"102\"],[\"406\",\"507\",\"510\",\"1\""
+                ",\"102\"],[\"508\",\"609\",\"612\",\"1\",\"102\"],[\"610\",\"711\",\"714\",\"1\",\"102\"],[\"712\""
+                ",\"813\",\"816\",\"1\",\"102\"],[\"814\",\"915\",\"918\",\"1\",\"102\"],[\"916\",\"1017\",\"1020\""
+                ",\"1\",\"102\"],[\"1018\",\"1023\",\"1026\",\"1\",\"6\"]]']",
+                result_column->debug_string());
+    }
+}
+
+TEST_F(AggregateTest, test_histogram_hll_ndv) {
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_BIGINT),
+                                             TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    const AggregateFunction* histogram_hll_ndv_function =
+            get_aggregate_function("histogram_hll_ndv", TYPE_BIGINT, TYPE_VARCHAR, true);
+    auto state = ManagedAggrState::create(ctx, histogram_hll_ndv_function);
+
+    auto data_column = gen_histogram_column<int64_t>();
+    auto const1 = ColumnHelper::create_const_column<TYPE_VARCHAR>(
+            "[[\"0\",\"100\",\"102\",\"2\"],[\"101\",\"201\",\"204\",\"1\"],[\"202\",\"303\",\"306\",\"1\"],[\"304\","
+            "\"405\",\"408\",\"1\"],[\"406\",\"507\",\"510\",\"1\"],[\"508\",\"609\",\"612\",\"1\"],[\"610\",\"711\","
+            "\"714\",\"1\"],[\"712\",\"813\",\"816\",\"1\"],[\"814\",\"915\",\"918\",\"1\"],[\"916\",\"1017\",\"1020\","
+            "\"1\"],[\"1018\",\"1023\",\"1026\",\"1\"]]",
+            data_column->size());
+
+    Columns const_columns;
+    const_columns.emplace_back(data_column);
+    const_columns.emplace_back(const1);
+    local_ctx->set_constant_columns(const_columns);
+
+    std::vector<const Column*> raw_columns;
+    raw_columns.resize(2);
+    raw_columns[0] = data_column.get();
+    raw_columns[1] = const1.get();
+    histogram_hll_ndv_function->update_batch_single_state(local_ctx.get(), data_column->size(), raw_columns.data(),
+                                                          state->state());
+
+    auto result_column = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    histogram_hll_ndv_function->finalize_to_column(local_ctx.get(), state->state(), result_column.get());
+
+    ASSERT_EQ(
+            "['[[\"0\",\"100\",\"102\",\"2\",\"101\"],[\"101\",\"201\",\"204\",\"1\",\"101\"],[\"202\",\"303\",\"306\","
+            "\"1\",\"102\"],[\"304\",\"405\",\"408\",\"1\",\"102\"],[\"406\",\"507\",\"510\",\"1\",\"102\"],[\"508\","
+            "\"609\",\"612\",\"1\",\"102\"],[\"610\",\"711\",\"714\",\"1\",\"102\"],[\"712\",\"813\",\"816\",\"1\","
+            "\"102\"],[\"814\",\"915\",\"918\",\"1\",\"102\"],[\"916\",\"1017\",\"1020\",\"1\",\"102\"],[\"1018\","
+            "\"1023\",\"1026\",\"1\",\"6\"]]']",
+            result_column->debug_string());
+
+    // reset and try different buckets.
+    histogram_hll_ndv_function->reset(local_ctx.get(), const_columns, state->state());
+
+    auto const2 = ColumnHelper::create_const_column<TYPE_VARCHAR>(R"([["0","1023","1026","1"]])", data_column->size());
+
+    const_columns.clear();
+    const_columns.emplace_back(data_column);
+    const_columns.emplace_back(const2);
+    local_ctx->set_constant_columns(const_columns);
+
+    raw_columns[1] = const2.get();
+    histogram_hll_ndv_function->update_batch_single_state(local_ctx.get(), data_column->size(), raw_columns.data(),
+                                                          state->state());
+
+    result_column = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    histogram_hll_ndv_function->finalize_to_column(local_ctx.get(), state->state(), result_column.get());
+
+    ASSERT_EQ("['[[\"0\",\"1023\",\"1026\",\"1\",\"1011\"]]']", result_column->debug_string());
+}
+
+MutableColumnPtr gen_histogram_string_column() {
+    auto column = BinaryColumn::create();
+    for (int i = 0; i < 1024; i++) {
+        if (i == 100) {
+            column->append("100");
+        }
+        if (i == 200) {
+            column->append("200");
+        }
+        column->append(std::to_string(i));
+    }
+    return column;
+}
+
+TEST_F(AggregateTest, test_histogram_hll_ndv_with_strings) {
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+                                             TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    const AggregateFunction* histogram_hll_ndv_function =
+            get_aggregate_function("histogram_hll_ndv", TYPE_VARCHAR, TYPE_VARCHAR, true);
+    auto state = ManagedAggrState::create(ctx, histogram_hll_ndv_function);
+
+    auto data_column = gen_histogram_string_column();
+    auto const1 = ColumnHelper::create_const_column<TYPE_VARCHAR>(
+            "[[\"0\",\"100\",\"102\",\"2\"],[\"101\",\"201\",\"204\",\"1\"],[\"202\",\"303\",\"306\",\"1\"],[\"304\","
+            "\"405\",\"408\",\"1\"],[\"406\",\"507\",\"510\",\"1\"],[\"508\",\"609\",\"612\",\"1\"],[\"610\",\"711\","
+            "\"714\",\"1\"],[\"712\",\"813\",\"816\",\"1\"],[\"814\",\"915\",\"918\",\"1\"],[\"916\",\"1017\",\"1020\","
+            "\"1\"],[\"1018\",\"1023\",\"1026\",\"1\"]]",
+            data_column->size());
+
+    Columns const_columns;
+    const_columns.emplace_back(data_column);
+    const_columns.emplace_back(const1);
+    local_ctx->set_constant_columns(const_columns);
+
+    std::vector<const Column*> raw_columns;
+    raw_columns.resize(2);
+    raw_columns[0] = data_column.get();
+    raw_columns[1] = const1.get();
+    histogram_hll_ndv_function->update_batch_single_state(local_ctx.get(), data_column->size(), raw_columns.data(),
+                                                          state->state());
+
+    auto result_column = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    histogram_hll_ndv_function->finalize_to_column(local_ctx.get(), state->state(), result_column.get());
+
+    ASSERT_EQ(
+            "['[[\"0\",\"100\",\"102\",\"2\",\"4\"],[\"101\",\"201\",\"204\",\"1\",\"126\"],[\"202\",\"303\",\"306\","
+            "\"1\",\"113\"],[\"304\",\"405\",\"408\",\"1\",\"113\"],[\"406\",\"507\",\"510\",\"1\",\"113\"],[\"508\","
+            "\"609\",\"612\",\"1\",\"113\"],[\"610\",\"711\",\"714\",\"1\",\"113\"],[\"712\",\"813\",\"816\",\"1\","
+            "\"113\"],[\"814\",\"915\",\"918\",\"1\",\"113\"],[\"916\",\"1017\",\"1020\",\"1\",\"1\"],[\"1018\","
+            "\"1023\",\"1026\",\"1\",\"1\"]]']",
             result_column->debug_string());
 }
 
@@ -1763,27 +1660,28 @@ TEST_F(AggregateTest, test_bitmap_intersect_nullable) {
 template <typename T, typename TResult>
 void test_non_deterministic_agg_function(FunctionContext* ctx, const AggregateFunction* func) {
     using ResultColumn = typename ColumnTraits<TResult>::ColumnType;
+    using ResultColumnPtr = typename ResultColumn::MutablePtr;
     using ExpeactedResultColumnType = typename ColumnTraits<T>::ColumnType;
     auto state = ManagedAggrState::create(ctx, func);
     // update input column 1
     auto result_column1 = ResultColumn::create();
-    ColumnPtr column = gen_input_column1<T>();
+    auto column = gen_input_column1<T>();
     const Column* row_column = column.get();
     func->update_batch_single_state(ctx, row_column->size(), &row_column, state->state());
     func->finalize_to_column(ctx, state->state(), result_column1.get());
 
-    auto expected_column1 = down_cast<const ExpeactedResultColumnType&>(row_column[0]);
+    const auto& expected_column1 = down_cast<const ExpeactedResultColumnType&>(row_column[0]);
     ASSERT_EQ(expected_column1.get_data()[0], result_column1->get_data()[0]);
 
     // update input column 2
-    auto result_column2 = ResultColumn::create();
+    ResultColumnPtr result_column2 = ResultColumn::create();
     auto state2 = ManagedAggrState::create(ctx, func);
-    ColumnPtr column2 = gen_input_column2<T>();
+    MutableColumnPtr column2 = gen_input_column2<T>();
     row_column = column2.get();
     func->update_batch_single_state(ctx, row_column->size(), &row_column, state2->state());
     func->finalize_to_column(ctx, state2->state(), result_column2.get());
 
-    auto expected_column2 = down_cast<const ExpeactedResultColumnType&>(row_column[0]);
+    const auto& expected_column2 = down_cast<const ExpeactedResultColumnType&>(row_column[0]);
     ASSERT_EQ(expected_column2.get_data()[0], result_column2->get_data()[0]);
 
     // merge column 1 and column 2
@@ -1828,11 +1726,10 @@ TEST_F(AggregateTest, test_any_value) {
 }
 
 TEST_F(AggregateTest, test_exchange_bytes) {
-    std::vector<TypeDescriptor> arg_types = {
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR)),
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_BIGINT))};
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+                                             TypeDescriptor::from_logical_type(TYPE_BIGINT)};
 
-    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_BIGINT));
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_BIGINT);
     std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
     const AggregateFunction* exchange_bytes_function =
@@ -1866,15 +1763,13 @@ TEST_F(AggregateTest, test_exchange_bytes) {
 }
 
 TEST_F(AggregateTest, test_array_aggV2) {
-    std::vector<TypeDescriptor> arg_types = {
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR)),
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_INT))};
-
-    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_ARRAY));
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+                                             TypeDescriptor::from_logical_type(TYPE_INT)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_ARRAY);
     std::unique_ptr<RuntimeState> runtime_state = std::make_unique<RuntimeState>();
     std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
-    std::vector<bool> is_asc_order{0};
-    std::vector<bool> nulls_first{1};
+    std::vector<bool> is_asc_order{false};
+    std::vector<bool> nulls_first{true};
     local_ctx->set_is_asc_order(is_asc_order);
     local_ctx->set_nulls_first(nulls_first);
     local_ctx->set_runtime_state(runtime_state.get());
@@ -1885,7 +1780,7 @@ TEST_F(AggregateTest, test_array_aggV2) {
     // nullable columns input
     {
         auto char_type = TypeDescriptor::create_varchar_type(30);
-        auto char_column = ColumnHelper::create_column(char_type, true);
+        MutableColumnPtr char_column = ColumnHelper::create_column(char_type, true);
         char_column->append_datum(Datum());
         char_column->append_datum("bcd");
         char_column->append_datum("cdrdfe");
@@ -1893,7 +1788,7 @@ TEST_F(AggregateTest, test_array_aggV2) {
         char_column->append_datum("esfg");
 
         auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
-        auto int_column = ColumnHelper::create_column(int_type, true);
+        MutableColumnPtr int_column = ColumnHelper::create_column(int_type, true);
         int_column->append_datum(Datum());
         int_column->append_datum(9);
         int_column->append_datum(Datum());
@@ -1901,9 +1796,9 @@ TEST_F(AggregateTest, test_array_aggV2) {
         int_column->append_datum(6);
 
         std::vector<const Column*> raw_columns;
-        std::vector<ColumnPtr> columns;
-        columns.push_back(char_column);
-        columns.push_back(int_column);
+        Columns columns;
+        columns.emplace_back(char_column);
+        columns.emplace_back(int_column);
         raw_columns.resize(2);
         raw_columns[0] = char_column.get();
         raw_columns[1] = int_column.get();
@@ -1919,11 +1814,11 @@ TEST_F(AggregateTest, test_array_aggV2) {
 
         TypeDescriptor type_array_char;
         type_array_char.type = LogicalType::TYPE_ARRAY;
-        type_array_char.children.emplace_back(TypeDescriptor(LogicalType::TYPE_VARCHAR));
+        type_array_char.children.emplace_back(LogicalType::TYPE_VARCHAR);
 
         TypeDescriptor type_array_int;
         type_array_int.type = LogicalType::TYPE_ARRAY;
-        type_array_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
+        type_array_int.children.emplace_back(LogicalType::TYPE_INT);
 
         TypeDescriptor type_struct_char_int;
         type_struct_char_int.type = LogicalType::TYPE_STRUCT;
@@ -1931,7 +1826,7 @@ TEST_F(AggregateTest, test_array_aggV2) {
         type_struct_char_int.children.emplace_back(type_array_int);
         type_struct_char_int.field_names.emplace_back("vchar");
         type_struct_char_int.field_names.emplace_back("int");
-        auto res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
+        MutableColumnPtr res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
         array_agg_func->serialize_to_column(local_ctx.get(), state->state(), res_struct_col.get());
         ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(),
                          "[{vchar:[NULL,'bcd','cdrdfe',NULL,'esfg'],int:[NULL,9,NULL,7,6]}]"),
@@ -1942,13 +1837,13 @@ TEST_F(AggregateTest, test_array_aggV2) {
                                                  res_struct_col->size());
 
         res_struct_col->resize(0);
-        array_agg_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
+        array_agg_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), res_struct_col);
         ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(),
                          "[{vchar:[NULL],int:[NULL]}, {vchar:['bcd'],int:[9]}, {vchar:['cdrdfe'],int:[NULL]}, "
                          "{vchar:[NULL],int:[7]}, {vchar:['esfg'],int:[6]}]"),
                   0);
 
-        auto res_array_col = ColumnHelper::create_column(type_array_char, false);
+        MutableColumnPtr res_array_col = ColumnHelper::create_column(type_array_char, false);
         array_agg_func->finalize_to_column(local_ctx.get(), state->state(), res_array_col.get());
         ASSERT_EQ(strcmp(res_array_col->debug_string().c_str(), "[[NULL,'cdrdfe','bcd',NULL,'esfg']]"), 0);
     }
@@ -1956,7 +1851,7 @@ TEST_F(AggregateTest, test_array_aggV2) {
     state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
     {
         auto char_type = TypeDescriptor::create_varchar_type(30);
-        auto char_column = ColumnHelper::create_column(char_type, false);
+        MutableColumnPtr char_column = ColumnHelper::create_column(char_type, false);
         char_column->append_datum("");
         char_column->append_datum("bcd");
         char_column->append_datum("cdrdfe");
@@ -1964,7 +1859,7 @@ TEST_F(AggregateTest, test_array_aggV2) {
         char_column->append_datum("esfg");
 
         auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
-        auto int_column = ColumnHelper::create_column(int_type, false);
+        MutableColumnPtr int_column = ColumnHelper::create_column(int_type, false);
         int_column->append_datum(2);
         int_column->append_datum(9);
         int_column->append_datum(5);
@@ -1972,9 +1867,9 @@ TEST_F(AggregateTest, test_array_aggV2) {
         int_column->append_datum(6);
 
         std::vector<const Column*> raw_columns;
-        std::vector<ColumnPtr> columns;
-        columns.push_back(char_column);
-        columns.push_back(int_column);
+        Columns columns;
+        columns.emplace_back(char_column);
+        columns.emplace_back(int_column);
         raw_columns.resize(2);
         raw_columns[0] = char_column.get();
         raw_columns[1] = int_column.get();
@@ -1990,11 +1885,11 @@ TEST_F(AggregateTest, test_array_aggV2) {
 
         TypeDescriptor type_array_char;
         type_array_char.type = LogicalType::TYPE_ARRAY;
-        type_array_char.children.emplace_back(TypeDescriptor(LogicalType::TYPE_VARCHAR));
+        type_array_char.children.emplace_back(LogicalType::TYPE_VARCHAR);
 
         TypeDescriptor type_array_int;
         type_array_int.type = LogicalType::TYPE_ARRAY;
-        type_array_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
+        type_array_int.children.emplace_back(LogicalType::TYPE_INT);
 
         TypeDescriptor type_struct_char_int;
         type_struct_char_int.type = LogicalType::TYPE_STRUCT;
@@ -2002,7 +1897,7 @@ TEST_F(AggregateTest, test_array_aggV2) {
         type_struct_char_int.children.emplace_back(type_array_int);
         type_struct_char_int.field_names.emplace_back("vchar");
         type_struct_char_int.field_names.emplace_back("int");
-        auto res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
+        MutableColumnPtr res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
         array_agg_func->serialize_to_column(local_ctx.get(), state->state(), res_struct_col.get());
         ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(),
                          "[{vchar:['','bcd','cdrdfe','Datum()','esfg'],int:[2,9,5,7,6]}]"),
@@ -2013,7 +1908,7 @@ TEST_F(AggregateTest, test_array_aggV2) {
                                                  res_struct_col->size());
 
         res_struct_col->resize(0);
-        array_agg_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
+        array_agg_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), res_struct_col);
         ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(),
                          "[{vchar:[''],int:[2]}, {vchar:['bcd'],int:[9]}, {vchar:['cdrdfe'],int:[5]}, "
                          "{vchar:['Datum()'],int:[7]}, {vchar:['esfg'],int:[6]}]"),
@@ -2023,13 +1918,13 @@ TEST_F(AggregateTest, test_array_aggV2) {
 
     // append only column + const column
     {
-        auto char_column = ColumnHelper::create_const_null_column(2);
+        MutableColumnPtr char_column = ColumnHelper::create_const_null_column(2);
         auto int_column = ColumnHelper::create_const_column<TYPE_INT>(3, 2);
 
         std::vector<const Column*> raw_columns;
-        std::vector<ColumnPtr> columns;
-        columns.push_back(char_column);
-        columns.push_back(int_column);
+        Columns columns;
+        columns.emplace_back(char_column);
+        columns.emplace_back(int_column);
         raw_columns.resize(2);
         raw_columns[0] = char_column.get();
         raw_columns[1] = int_column.get();
@@ -2047,11 +1942,11 @@ TEST_F(AggregateTest, test_array_aggV2) {
 
         TypeDescriptor type_array_char;
         type_array_char.type = LogicalType::TYPE_ARRAY;
-        type_array_char.children.emplace_back(TypeDescriptor(LogicalType::TYPE_VARCHAR));
+        type_array_char.children.emplace_back(LogicalType::TYPE_VARCHAR);
 
         TypeDescriptor type_array_int;
         type_array_int.type = LogicalType::TYPE_ARRAY;
-        type_array_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
+        type_array_int.children.emplace_back(LogicalType::TYPE_INT);
 
         TypeDescriptor type_struct_char_int;
         type_struct_char_int.type = LogicalType::TYPE_STRUCT;
@@ -2059,7 +1954,7 @@ TEST_F(AggregateTest, test_array_aggV2) {
         type_struct_char_int.children.emplace_back(type_array_int);
         type_struct_char_int.field_names.emplace_back("vchar");
         type_struct_char_int.field_names.emplace_back("int");
-        auto res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
+        MutableColumnPtr res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
         array_agg_func->serialize_to_column(local_ctx.get(), state->state(), res_struct_col.get());
         ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(),
                          "[{vchar:['','bcd','cdrdfe','Datum()','esfg',NULL,NULL],int:[2,9,5,7,6,3,3]}]"),
@@ -2070,11 +1965,11 @@ TEST_F(AggregateTest, test_array_aggV2) {
                                                  res_struct_col->size());
 
         res_struct_col->resize(0);
-        array_agg_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
+        array_agg_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), res_struct_col);
         ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(), "[{vchar:[NULL],int:[3]}, {vchar:[NULL],int:[3]}]"),
                   0);
 
-        auto res_array_col = ColumnHelper::create_column(type_array_char, false);
+        MutableColumnPtr res_array_col = ColumnHelper::create_column(type_array_char, false);
         array_agg_func->finalize_to_column(local_ctx.get(), state->state(), res_array_col.get());
         ASSERT_EQ(strcmp(res_array_col->debug_string().c_str(), "[['bcd','Datum()','esfg','cdrdfe',NULL,NULL,'']]"), 0);
     }
@@ -2082,13 +1977,13 @@ TEST_F(AggregateTest, test_array_aggV2) {
     // only column + const column
     state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
     {
-        auto char_column = ColumnHelper::create_const_null_column(2);
+        MutableColumnPtr char_column = ColumnHelper::create_const_null_column(2);
         auto int_column = ColumnHelper::create_const_column<TYPE_INT>(3, 2);
 
         std::vector<const Column*> raw_columns;
-        std::vector<ColumnPtr> columns;
-        columns.push_back(char_column);
-        columns.push_back(int_column);
+        Columns columns;
+        columns.emplace_back(char_column);
+        columns.emplace_back(int_column);
         raw_columns.resize(2);
         raw_columns[0] = char_column.get();
         raw_columns[1] = int_column.get();
@@ -2104,11 +1999,11 @@ TEST_F(AggregateTest, test_array_aggV2) {
 
         TypeDescriptor type_array_char;
         type_array_char.type = LogicalType::TYPE_ARRAY;
-        type_array_char.children.emplace_back(TypeDescriptor(LogicalType::TYPE_VARCHAR));
+        type_array_char.children.emplace_back(LogicalType::TYPE_VARCHAR);
 
         TypeDescriptor type_array_int;
         type_array_int.type = LogicalType::TYPE_ARRAY;
-        type_array_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
+        type_array_int.children.emplace_back(LogicalType::TYPE_INT);
 
         TypeDescriptor type_struct_char_int;
         type_struct_char_int.type = LogicalType::TYPE_STRUCT;
@@ -2116,7 +2011,7 @@ TEST_F(AggregateTest, test_array_aggV2) {
         type_struct_char_int.children.emplace_back(type_array_int);
         type_struct_char_int.field_names.emplace_back("vchar");
         type_struct_char_int.field_names.emplace_back("int");
-        auto res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
+        MutableColumnPtr res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
         array_agg_func->serialize_to_column(local_ctx.get(), state->state(), res_struct_col.get());
         ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(), "[{vchar:[NULL,NULL],int:[3,3]}]"), 0);
 
@@ -2125,7 +2020,7 @@ TEST_F(AggregateTest, test_array_aggV2) {
                                                  res_struct_col->size());
 
         res_struct_col->resize(0);
-        array_agg_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
+        array_agg_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), res_struct_col);
         ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(), "[{vchar:[NULL],int:[3]}, {vchar:[NULL],int:[3]}]"),
                   0);
     }
@@ -2133,7 +2028,7 @@ TEST_F(AggregateTest, test_array_aggV2) {
     // append nullable columns input
     {
         auto char_type = TypeDescriptor::create_varchar_type(30);
-        auto char_column = ColumnHelper::create_column(char_type, true);
+        MutableColumnPtr char_column = ColumnHelper::create_column(char_type, true);
         char_column->append_datum(Datum());
         char_column->append_datum("bcd");
         char_column->append_datum("cdrdfe");
@@ -2141,7 +2036,7 @@ TEST_F(AggregateTest, test_array_aggV2) {
         char_column->append_datum("esfg");
 
         auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
-        auto int_column = ColumnHelper::create_column(int_type, true);
+        MutableColumnPtr int_column = ColumnHelper::create_column(int_type, true);
         int_column->append_datum(Datum());
         int_column->append_datum(9);
         int_column->append_datum(Datum());
@@ -2149,9 +2044,9 @@ TEST_F(AggregateTest, test_array_aggV2) {
         int_column->append_datum(6);
 
         std::vector<const Column*> raw_columns;
-        std::vector<ColumnPtr> columns;
-        columns.push_back(char_column);
-        columns.push_back(int_column);
+        Columns columns;
+        columns.emplace_back(char_column);
+        columns.emplace_back(int_column);
         raw_columns.resize(2);
         raw_columns[0] = char_column.get();
         raw_columns[1] = int_column.get();
@@ -2169,11 +2064,11 @@ TEST_F(AggregateTest, test_array_aggV2) {
 
         TypeDescriptor type_array_char;
         type_array_char.type = LogicalType::TYPE_ARRAY;
-        type_array_char.children.emplace_back(TypeDescriptor(LogicalType::TYPE_VARCHAR));
+        type_array_char.children.emplace_back(LogicalType::TYPE_VARCHAR);
 
         TypeDescriptor type_array_int;
         type_array_int.type = LogicalType::TYPE_ARRAY;
-        type_array_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
+        type_array_int.children.emplace_back(LogicalType::TYPE_INT);
 
         TypeDescriptor type_struct_char_int;
         type_struct_char_int.type = LogicalType::TYPE_STRUCT;
@@ -2181,7 +2076,7 @@ TEST_F(AggregateTest, test_array_aggV2) {
         type_struct_char_int.children.emplace_back(type_array_int);
         type_struct_char_int.field_names.emplace_back("vchar");
         type_struct_char_int.field_names.emplace_back("int");
-        auto res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
+        MutableColumnPtr res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
         array_agg_func->serialize_to_column(local_ctx.get(), state->state(), res_struct_col.get());
         ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(),
                          "[{vchar:[NULL,NULL,NULL,'bcd','cdrdfe',NULL,'esfg'],int:[3,3,NULL,9,NULL,7,6]}]"),
@@ -2192,21 +2087,25 @@ TEST_F(AggregateTest, test_array_aggV2) {
                                                  res_struct_col->size());
 
         res_struct_col->resize(0);
-        array_agg_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
+        array_agg_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), res_struct_col);
         ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(),
                          "[{vchar:[NULL],int:[NULL]}, {vchar:['bcd'],int:[9]}, {vchar:['cdrdfe'],int:[NULL]}, "
                          "{vchar:[NULL],int:[7]}, {vchar:['esfg'],int:[6]}]"),
                   0);
 
-        auto res_array_col = ColumnHelper::create_column(type_array_char, false);
+        MutableColumnPtr res_array_col = ColumnHelper::create_column(type_array_char, false);
         array_agg_func->finalize_to_column(local_ctx.get(), state->state(), res_array_col.get());
-        ASSERT_EQ(strcmp(res_array_col->debug_string().c_str(), "[['cdrdfe',NULL,'bcd',NULL,'esfg',NULL,NULL]]"), 0);
+        // the order of the equal elements is not guaranteed(eg: int column is null), we need to check the order of the elements in the array.
+        std::set<std::string> expected_strings = {"[['cdrdfe',NULL,'bcd',NULL,'esfg',NULL,NULL]]",
+                                                  "[[NULL,'cdrdfe','bcd',NULL,'esfg',NULL,NULL]]"};
+        ASSERT_TRUE(expected_strings.contains(res_array_col->debug_string().c_str()))
+                << ", actual: " << res_array_col->debug_string().c_str();
     }
     // nullable columns input with cancelled
     {
         auto state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
         auto char_type = TypeDescriptor::create_varchar_type(30);
-        auto char_column = ColumnHelper::create_column(char_type, true);
+        MutableColumnPtr char_column = ColumnHelper::create_column(char_type, true);
         char_column->append_datum(Datum());
         char_column->append_datum("bcd");
         char_column->append_datum("cdrdfe");
@@ -2214,7 +2113,7 @@ TEST_F(AggregateTest, test_array_aggV2) {
         char_column->append_datum("esfg");
 
         auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
-        auto int_column = ColumnHelper::create_column(int_type, true);
+        MutableColumnPtr int_column = ColumnHelper::create_column(int_type, true);
         int_column->append_datum(Datum());
         int_column->append_datum(9);
         int_column->append_datum(Datum());
@@ -2222,9 +2121,9 @@ TEST_F(AggregateTest, test_array_aggV2) {
         int_column->append_datum(6);
 
         std::vector<const Column*> raw_columns;
-        std::vector<ColumnPtr> columns;
-        columns.push_back(char_column);
-        columns.push_back(int_column);
+        Columns columns;
+        columns.emplace_back(char_column);
+        columns.emplace_back(int_column);
         raw_columns.resize(2);
         raw_columns[0] = char_column.get();
         raw_columns[1] = int_column.get();
@@ -2240,11 +2139,11 @@ TEST_F(AggregateTest, test_array_aggV2) {
 
         TypeDescriptor type_array_char;
         type_array_char.type = LogicalType::TYPE_ARRAY;
-        type_array_char.children.emplace_back(TypeDescriptor(LogicalType::TYPE_VARCHAR));
+        type_array_char.children.emplace_back(LogicalType::TYPE_VARCHAR);
 
         TypeDescriptor type_array_int;
         type_array_int.type = LogicalType::TYPE_ARRAY;
-        type_array_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
+        type_array_int.children.emplace_back(LogicalType::TYPE_INT);
 
         TypeDescriptor type_struct_char_int;
         type_struct_char_int.type = LogicalType::TYPE_STRUCT;
@@ -2252,7 +2151,7 @@ TEST_F(AggregateTest, test_array_aggV2) {
         type_struct_char_int.children.emplace_back(type_array_int);
         type_struct_char_int.field_names.emplace_back("vchar");
         type_struct_char_int.field_names.emplace_back("int");
-        auto res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
+        MutableColumnPtr res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
         array_agg_func->serialize_to_column(local_ctx.get(), state->state(), res_struct_col.get());
         ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(),
                          "[{vchar:[NULL,'bcd','cdrdfe',NULL,'esfg'],int:[NULL,9,NULL,7,6]}]"),
@@ -2262,30 +2161,263 @@ TEST_F(AggregateTest, test_array_aggV2) {
         array_agg_func->merge_batch_single_state(local_ctx.get(), state->state(), res_struct_col.get(), 0,
                                                  res_struct_col->size());
         res_struct_col->resize(0);
-        array_agg_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
+        array_agg_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), res_struct_col);
         ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(),
                          "[{vchar:[NULL],int:[NULL]}, {vchar:['bcd'],int:[9]}, {vchar:['cdrdfe'],int:[NULL]}, "
                          "{vchar:[NULL],int:[7]}, {vchar:['esfg'],int:[6]}]"),
                   0);
 
-        auto res_array_col = ColumnHelper::create_column(type_array_char, false);
+        MutableColumnPtr res_array_col = ColumnHelper::create_column(type_array_char, false);
         local_ctx->state()->set_is_cancelled(true);
         array_agg_func->finalize_to_column(local_ctx.get(), state->state(), res_array_col.get());
         ASSERT_TRUE(local_ctx->has_error());
     }
 }
 
-TEST_F(AggregateTest, test_group_concatV2) {
-    std::vector<TypeDescriptor> arg_types = {
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR)),
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR)),
-            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_INT))};
-
-    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR));
+TEST_F(AggregateTest, test_array_aggV2_multi_order_by) {
+    // Test array_agg2 with multiple ORDER BY columns
+    // array_agg(varchar_col order by int_col, varchar_col2)
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+                                             TypeDescriptor::from_logical_type(TYPE_INT),
+                                             TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_ARRAY);
     std::unique_ptr<RuntimeState> runtime_state = std::make_unique<RuntimeState>();
     std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
-    std::vector<bool> is_asc_order{0};
-    std::vector<bool> nulls_first{1};
+
+    // Set ORDER BY: first column DESC, second column ASC, both with NULLS FIRST
+    std::vector<bool> is_asc_order{false, true};
+    std::vector<bool> nulls_first{true, true};
+    local_ctx->set_is_asc_order(is_asc_order);
+    local_ctx->set_nulls_first(nulls_first);
+    local_ctx->set_runtime_state(runtime_state.get());
+
+    const AggregateFunction* array_agg_func = get_aggregate_function("array_agg2", TYPE_BIGINT, TYPE_ARRAY, false);
+    auto state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
+
+    {
+        // Test data:
+        // varchar_col: ["a", "b", "c", "d", "e"]
+        // int_col:     [10, 10, 20, 20, NULL]
+        // varchar_col2:["x", "y", "x", "z", "w"]
+        // Expected order after sorting by int_col DESC NULLS FIRST, varchar_col2 ASC NULLS FIRST:
+        // - First by int_col DESC NULLS FIRST: [NULL, 20, 20, 10, 10]
+        // - Then by varchar_col2 ASC (for same int_col):
+        //   * NULL("w") -> 20("x") -> 20("z") -> 10("x") -> 10("y")
+        // Result: ["e", "c", "d", "a", "b"]
+        auto char_type = TypeDescriptor::create_varchar_type(30);
+        MutableColumnPtr char_column = ColumnHelper::create_column(char_type, true);
+        char_column->append_datum("a");
+        char_column->append_datum("b");
+        char_column->append_datum("c");
+        char_column->append_datum("d");
+        char_column->append_datum("e");
+
+        auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+        MutableColumnPtr int_column = ColumnHelper::create_column(int_type, true);
+        int_column->append_datum(10);
+        int_column->append_datum(10);
+        int_column->append_datum(20);
+        int_column->append_datum(20);
+        int_column->append_datum(Datum());
+
+        MutableColumnPtr char_column2 = ColumnHelper::create_column(char_type, false);
+        char_column2->append_datum("x");
+        char_column2->append_datum("y");
+        char_column2->append_datum("x");
+        char_column2->append_datum("z");
+        char_column2->append_datum("w");
+
+        std::vector<const Column*> raw_columns;
+        std::vector<ColumnPtr> columns;
+        columns.emplace_back(char_column);
+        columns.emplace_back(int_column);
+        columns.emplace_back(char_column2);
+        raw_columns.resize(3);
+        raw_columns[0] = char_column.get();
+        raw_columns[1] = int_column.get();
+        raw_columns[2] = char_column2.get();
+
+        // test update
+        array_agg_func->update_batch_single_state(local_ctx.get(), char_column->size(), raw_columns.data(),
+                                                  state->state());
+        auto agg_state = (ArrayAggAggregateStateV2*)(state->state());
+        ASSERT_EQ(agg_state->data_columns.size(), 3);
+        ASSERT_EQ((agg_state->data_columns)[0]->debug_string(), char_column->debug_string());
+        ASSERT_EQ((agg_state->data_columns)[1]->debug_string(), int_column->debug_string());
+        ASSERT_EQ((agg_state->data_columns)[2]->debug_string(), char_column2->debug_string());
+
+        // Test serialize to STRUCT format
+        TypeDescriptor type_array_varchar;
+        type_array_varchar.type = LogicalType::TYPE_ARRAY;
+        type_array_varchar.children.emplace_back(LogicalType::TYPE_VARCHAR);
+
+        TypeDescriptor type_array_int;
+        type_array_int.type = LogicalType::TYPE_ARRAY;
+        type_array_int.children.emplace_back(LogicalType::TYPE_INT);
+
+        TypeDescriptor type_struct;
+        type_struct.type = LogicalType::TYPE_STRUCT;
+        type_struct.children.emplace_back(type_array_varchar);
+        type_struct.children.emplace_back(type_array_int);
+        type_struct.children.emplace_back(type_array_varchar);
+        type_struct.field_names.emplace_back("vchar");
+        type_struct.field_names.emplace_back("int");
+        type_struct.field_names.emplace_back("vchar2");
+
+        MutableColumnPtr res_struct_col = ColumnHelper::create_column(type_struct, true);
+        array_agg_func->serialize_to_column(local_ctx.get(), state->state(), res_struct_col.get());
+        ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(),
+                         "[{vchar:['a','b','c','d','e'],int:[10,10,20,20,NULL],vchar2:['x','y','x','z','w']}]"),
+                  0);
+
+        // Test merge
+        state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
+        array_agg_func->merge_batch_single_state(local_ctx.get(), state->state(), res_struct_col.get(), 0,
+                                                 res_struct_col->size());
+
+        // Test convert_to_serialize_format
+        res_struct_col->resize(0);
+        array_agg_func->convert_to_serialize_format(local_ctx.get(), columns, char_column->size(), res_struct_col);
+        ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(),
+                         "[{vchar:['a'],int:[10],vchar2:['x']}, {vchar:['b'],int:[10],vchar2:['y']}, "
+                         "{vchar:['c'],int:[20],vchar2:['x']}, {vchar:['d'],int:[20],vchar2:['z']}, "
+                         "{vchar:['e'],int:[NULL],vchar2:['w']}]"),
+                  0);
+
+        // Test finalize - should be sorted by int_col DESC NULLS FIRST, then varchar_col2 ASC
+        // Order: NULL("w") -> 20("x") -> 20("z") -> 10("x") -> 10("y")
+        // Result: ["e", "c", "d", "a", "b"]
+        MutableColumnPtr res_array_col = ColumnHelper::create_column(type_array_varchar, false);
+        array_agg_func->finalize_to_column(local_ctx.get(), state->state(), res_array_col.get());
+        ASSERT_EQ(strcmp(res_array_col->debug_string().c_str(), "[['e','c','d','a','b']]"), 0);
+    }
+
+    // Test with DISTINCT
+    {
+        // Expected behavior with DISTINCT:
+        // - DISTINCT is applied on varchar_col (the first argument), regardless of ORDER BY values
+        // - After sorting by int_col ASC NULLS LAST, then varchar_col2 DESC NULLS FIRST:
+        //   Order: 10("zz") -> 10("zy") -> 10("xx") -> 15("zx") -> 15("xz") -> 20("yy") -> 20("xy")
+        //   Values: ["b", "d", "a", "d", "c", "a", "b"]
+        // - Then DISTINCT removes duplicates based on varchar_col value:
+        //   "b" appears twice -> keep first one (at position with 10,"zz")
+        //   "d" appears twice -> keep first one (at position with 10,"zy")
+        //   "a" appears twice -> keep first one (at position with 10,"xx")
+        // Result: ["b", "d", "a", "c"] (duplicates removed, keeping first occurrence after sorting)
+        std::vector<bool> is_asc_order2{true, false};
+        std::vector<bool> nulls_first2{false, true};
+        local_ctx->set_is_asc_order(is_asc_order2);
+        local_ctx->set_nulls_first(nulls_first2);
+        local_ctx->set_is_distinct(true); // Enable DISTINCT
+        local_ctx->set_runtime_state(runtime_state.get());
+
+        state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
+
+        auto char_type = TypeDescriptor::create_varchar_type(30);
+        MutableColumnPtr char_column = ColumnHelper::create_column(char_type, false);
+        // Add duplicate values: "a" appears twice, "b" appears twice, "c" appears once
+        char_column->append_datum("a");
+        char_column->append_datum("a"); // duplicate
+        char_column->append_datum("b");
+        char_column->append_datum("b"); // duplicate
+        char_column->append_datum("c");
+        char_column->append_datum("d");
+        char_column->append_datum("d"); // duplicate
+
+        auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+        MutableColumnPtr int_column = ColumnHelper::create_column(int_type, true);
+        int_column->append_datum(10);
+        int_column->append_datum(20); // different order by value for duplicate "a"
+        int_column->append_datum(10);
+        int_column->append_datum(20); // different order by value for duplicate "b"
+        int_column->append_datum(15);
+        int_column->append_datum(10);
+        int_column->append_datum(15); // same order by value for duplicate "d"
+
+        MutableColumnPtr char_column2 = ColumnHelper::create_column(char_type, false);
+        char_column2->append_datum("xx");
+        char_column2->append_datum("yy");
+        char_column2->append_datum("zz");
+        char_column2->append_datum("xy");
+        char_column2->append_datum("xz");
+        char_column2->append_datum("zy");
+        char_column2->append_datum("zx");
+
+        std::vector<const Column*> raw_columns;
+        std::vector<ColumnPtr> columns;
+        columns.emplace_back(char_column);
+        columns.emplace_back(int_column);
+        columns.emplace_back(char_column2);
+        raw_columns.resize(3);
+        raw_columns[0] = char_column.get();
+        raw_columns[1] = int_column.get();
+        raw_columns[2] = char_column2.get();
+
+        // test update
+        array_agg_func->update_batch_single_state(local_ctx.get(), char_column->size(), raw_columns.data(),
+                                                  state->state());
+        auto agg_state = (ArrayAggAggregateStateV2*)(state->state());
+        ASSERT_EQ(agg_state->data_columns.size(), 3);
+        ASSERT_EQ((agg_state->data_columns)[0]->debug_string(), char_column->debug_string());
+        ASSERT_EQ((agg_state->data_columns)[1]->debug_string(), int_column->debug_string());
+        ASSERT_EQ((agg_state->data_columns)[2]->debug_string(), char_column2->debug_string());
+
+        // Test serialize to STRUCT format
+        TypeDescriptor type_array_varchar;
+        type_array_varchar.type = LogicalType::TYPE_ARRAY;
+        type_array_varchar.children.emplace_back(LogicalType::TYPE_VARCHAR);
+
+        TypeDescriptor type_array_int;
+        type_array_int.type = LogicalType::TYPE_ARRAY;
+        type_array_int.children.emplace_back(LogicalType::TYPE_INT);
+
+        TypeDescriptor type_struct;
+        type_struct.type = LogicalType::TYPE_STRUCT;
+        type_struct.children.emplace_back(type_array_varchar);
+        type_struct.children.emplace_back(type_array_int);
+        type_struct.children.emplace_back(type_array_varchar);
+        type_struct.field_names.emplace_back("vchar");
+        type_struct.field_names.emplace_back("int");
+        type_struct.field_names.emplace_back("vchar2");
+
+        MutableColumnPtr res_struct_col = ColumnHelper::create_column(type_struct, true);
+        array_agg_func->serialize_to_column(local_ctx.get(), state->state(), res_struct_col.get());
+        ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(),
+                         "[{vchar:['a','a','b','b','c','d','d'],int:[10,20,10,20,15,10,15],vchar2:['xx','yy','zz','xy',"
+                         "'xz','zy','zx']}]"),
+                  0);
+
+        // Test merge
+        state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
+        array_agg_func->merge_batch_single_state(local_ctx.get(), state->state(), res_struct_col.get(), 0,
+                                                 res_struct_col->size());
+
+        // Test convert_to_serialize_format
+        res_struct_col->resize(0);
+        array_agg_func->convert_to_serialize_format(local_ctx.get(), columns, char_column->size(), res_struct_col);
+        ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(),
+                         "[{vchar:['a'],int:[10],vchar2:['xx']}, {vchar:['a'],int:[20],vchar2:['yy']}, "
+                         "{vchar:['b'],int:[10],vchar2:['zz']}, {vchar:['b'],int:[20],vchar2:['xy']}, "
+                         "{vchar:['c'],int:[15],vchar2:['xz']}, {vchar:['d'],int:[10],vchar2:['zy']}, "
+                         "{vchar:['d'],int:[15],vchar2:['zx']}]"),
+                  0);
+
+        MutableColumnPtr res_array_col = ColumnHelper::create_column(type_array_varchar, false);
+        array_agg_func->finalize_to_column(local_ctx.get(), state->state(), res_array_col.get());
+        ASSERT_EQ(strcmp(res_array_col->debug_string().c_str(), "[['b','d','a','c']]"), 0);
+    }
+}
+
+TEST_F(AggregateTest, test_group_concatV2) {
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+                                             TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+                                             TypeDescriptor::from_logical_type(TYPE_INT)};
+
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
+    std::unique_ptr<RuntimeState> runtime_state = std::make_unique<RuntimeState>();
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+    std::vector<bool> is_asc_order{false};
+    std::vector<bool> nulls_first{true};
     local_ctx->set_is_asc_order(is_asc_order);
     local_ctx->set_nulls_first(nulls_first);
     local_ctx->set_runtime_state(runtime_state.get());
@@ -2296,7 +2428,7 @@ TEST_F(AggregateTest, test_group_concatV2) {
     // nullable columns input
     {
         auto char_type = TypeDescriptor::create_varchar_type(30);
-        auto char_column = ColumnHelper::create_column(char_type, true);
+        MutableColumnPtr char_column = ColumnHelper::create_column(char_type, true);
         char_column->append_datum(Datum());
         char_column->append_datum("bcd");
         char_column->append_datum("cdrdfe");
@@ -2306,7 +2438,7 @@ TEST_F(AggregateTest, test_group_concatV2) {
         auto sep_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(",", 5);
 
         auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
-        auto int_column = ColumnHelper::create_column(int_type, true);
+        MutableColumnPtr int_column = ColumnHelper::create_column(int_type, true);
         int_column->append_datum(Datum());
         int_column->append_datum(9);
         int_column->append_datum(Datum());
@@ -2314,10 +2446,10 @@ TEST_F(AggregateTest, test_group_concatV2) {
         int_column->append_datum(6);
 
         std::vector<const Column*> raw_columns;
-        std::vector<ColumnPtr> columns;
-        columns.push_back(char_column);
-        columns.push_back(sep_column);
-        columns.push_back(int_column);
+        Columns columns;
+        columns.emplace_back(char_column);
+        columns.emplace_back(sep_column);
+        columns.emplace_back(int_column);
         raw_columns.resize(3);
         raw_columns[0] = char_column.get();
         raw_columns[1] = sep_column.get();
@@ -2334,11 +2466,11 @@ TEST_F(AggregateTest, test_group_concatV2) {
 
         TypeDescriptor type_array_char;
         type_array_char.type = LogicalType::TYPE_ARRAY;
-        type_array_char.children.emplace_back(TypeDescriptor(LogicalType::TYPE_VARCHAR));
+        type_array_char.children.emplace_back(LogicalType::TYPE_VARCHAR);
 
         TypeDescriptor type_array_int;
         type_array_int.type = LogicalType::TYPE_ARRAY;
-        type_array_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
+        type_array_int.children.emplace_back(LogicalType::TYPE_INT);
 
         TypeDescriptor type_struct_char_int;
         type_struct_char_int.type = LogicalType::TYPE_STRUCT;
@@ -2348,7 +2480,7 @@ TEST_F(AggregateTest, test_group_concatV2) {
         type_struct_char_int.field_names.emplace_back("vchar");
         type_struct_char_int.field_names.emplace_back("sep");
         type_struct_char_int.field_names.emplace_back("int");
-        auto res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
+        MutableColumnPtr res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
         gc_func->serialize_to_column(local_ctx.get(), state->state(), res_struct_col.get());
         ASSERT_EQ(res_struct_col->debug_string(), "[{vchar:['bcd','cdrdfe','esfg'],sep:[',',',',','],int:[9,NULL,6]}]");
 
@@ -2357,12 +2489,12 @@ TEST_F(AggregateTest, test_group_concatV2) {
                                           res_struct_col->size());
 
         res_struct_col->resize(0);
-        gc_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
+        gc_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), res_struct_col);
         ASSERT_EQ(res_struct_col->debug_string(),
                   "[NULL, {vchar:['bcd'],sep:[','],int:[9]}, {vchar:['cdrdfe'],sep:[','],int:[NULL]}, "
                   "NULL, {vchar:['esfg'],sep:[','],int:[6]}]");
 
-        auto res_col = ColumnHelper::create_column(char_type, false);
+        MutableColumnPtr res_col = ColumnHelper::create_column(char_type, false);
         gc_func->finalize_to_column(local_ctx.get(), state->state(), res_col.get());
         ASSERT_EQ(res_col->debug_string(), "['cdrdfe,bcd,esfg']");
     }
@@ -2371,7 +2503,7 @@ TEST_F(AggregateTest, test_group_concatV2) {
     state = ManagedAggrState::create(local_ctx.get(), gc_func);
     {
         auto char_type = TypeDescriptor::create_varchar_type(30);
-        auto char_column = ColumnHelper::create_column(char_type, false);
+        MutableColumnPtr char_column = ColumnHelper::create_column(char_type, false);
         char_column->append_datum("");
         char_column->append_datum("bcd");
         char_column->append_datum("cdrdfe");
@@ -2381,7 +2513,7 @@ TEST_F(AggregateTest, test_group_concatV2) {
         auto sep_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(",", 5);
 
         auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
-        auto int_column = ColumnHelper::create_column(int_type, false);
+        MutableColumnPtr int_column = ColumnHelper::create_column(int_type, false);
         int_column->append_datum(2);
         int_column->append_datum(9);
         int_column->append_datum(5);
@@ -2389,10 +2521,10 @@ TEST_F(AggregateTest, test_group_concatV2) {
         int_column->append_datum(6);
 
         std::vector<const Column*> raw_columns;
-        std::vector<ColumnPtr> columns;
-        columns.push_back(char_column);
-        columns.push_back(sep_column);
-        columns.push_back(int_column);
+        Columns columns;
+        columns.emplace_back(char_column);
+        columns.emplace_back(sep_column);
+        columns.emplace_back(int_column);
         raw_columns.resize(3);
         raw_columns[0] = char_column.get();
         raw_columns[1] = sep_column.get();
@@ -2408,11 +2540,11 @@ TEST_F(AggregateTest, test_group_concatV2) {
 
         TypeDescriptor type_array_char;
         type_array_char.type = LogicalType::TYPE_ARRAY;
-        type_array_char.children.emplace_back(TypeDescriptor(LogicalType::TYPE_VARCHAR));
+        type_array_char.children.emplace_back(LogicalType::TYPE_VARCHAR);
 
         TypeDescriptor type_array_int;
         type_array_int.type = LogicalType::TYPE_ARRAY;
-        type_array_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
+        type_array_int.children.emplace_back(LogicalType::TYPE_INT);
 
         TypeDescriptor type_struct_char_int;
         type_struct_char_int.type = LogicalType::TYPE_STRUCT;
@@ -2422,7 +2554,7 @@ TEST_F(AggregateTest, test_group_concatV2) {
         type_struct_char_int.field_names.emplace_back("vchar");
         type_struct_char_int.field_names.emplace_back("sep");
         type_struct_char_int.field_names.emplace_back("int");
-        auto res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
+        MutableColumnPtr res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
         gc_func->serialize_to_column(local_ctx.get(), state->state(), res_struct_col.get());
         ASSERT_EQ(res_struct_col->debug_string(),
                   "[{vchar:['','bcd','cdrdfe','Datum()','esfg'],sep:[',',',',',',',',','],int:[2,9,5,7,6]}]");
@@ -2432,12 +2564,12 @@ TEST_F(AggregateTest, test_group_concatV2) {
                                           res_struct_col->size());
 
         res_struct_col->resize(0);
-        gc_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
+        gc_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), res_struct_col);
         ASSERT_EQ(res_struct_col->debug_string(),
                   "[{vchar:[''],sep:[','],int:[2]}, {vchar:['bcd'],sep:[','],int:[9]}, "
                   "{vchar:['cdrdfe'],sep:[','],int:[5]}, {vchar:['Datum()'],sep:[','],int:[7]}, "
                   "{vchar:['esfg'],sep:[','],int:[6]}]");
-        auto res_col = ColumnHelper::create_column(char_type, false);
+        MutableColumnPtr res_col = ColumnHelper::create_column(char_type, false);
         gc_func->finalize_to_column(local_ctx.get(), state->state(), res_col.get());
         ASSERT_EQ(res_col->debug_string(), "['bcd,Datum(),esfg,cdrdfe,']");
     }
@@ -2446,15 +2578,15 @@ TEST_F(AggregateTest, test_group_concatV2) {
     state = ManagedAggrState::create(local_ctx.get(), gc_func);
     // append only column + const column
     {
-        auto char_column = ColumnHelper::create_const_null_column(2);
+        MutableColumnPtr char_column = ColumnHelper::create_const_null_column(2);
         auto int_column = ColumnHelper::create_const_column<TYPE_INT>(3, 2);
         auto sep_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(",", 2);
 
         std::vector<const Column*> raw_columns;
-        std::vector<ColumnPtr> columns;
-        columns.push_back(char_column);
-        columns.push_back(sep_column);
-        columns.push_back(int_column);
+        Columns columns;
+        columns.emplace_back(char_column);
+        columns.emplace_back(sep_column);
+        columns.emplace_back(int_column);
         raw_columns.resize(3);
         raw_columns[0] = char_column.get();
         raw_columns[1] = sep_column.get();
@@ -2468,11 +2600,11 @@ TEST_F(AggregateTest, test_group_concatV2) {
 
         TypeDescriptor type_array_char;
         type_array_char.type = LogicalType::TYPE_ARRAY;
-        type_array_char.children.emplace_back(TypeDescriptor(LogicalType::TYPE_VARCHAR));
+        type_array_char.children.emplace_back(LogicalType::TYPE_VARCHAR);
 
         TypeDescriptor type_array_int;
         type_array_int.type = LogicalType::TYPE_ARRAY;
-        type_array_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
+        type_array_int.children.emplace_back(LogicalType::TYPE_INT);
 
         TypeDescriptor type_struct_char_int;
         type_struct_char_int.type = LogicalType::TYPE_STRUCT;
@@ -2482,7 +2614,7 @@ TEST_F(AggregateTest, test_group_concatV2) {
         type_struct_char_int.field_names.emplace_back("vchar");
         type_struct_char_int.field_names.emplace_back("sep");
         type_struct_char_int.field_names.emplace_back("int");
-        auto res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
+        MutableColumnPtr res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
         gc_func->serialize_to_column(local_ctx.get(), state->state(), res_struct_col.get());
         ASSERT_EQ(res_struct_col->size(), 1); // empty also need output
 
@@ -2491,7 +2623,7 @@ TEST_F(AggregateTest, test_group_concatV2) {
                                           res_struct_col->size());
 
         res_struct_col->resize(0);
-        gc_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
+        gc_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), res_struct_col);
         ASSERT_EQ(res_struct_col->debug_string(), "[NULL, NULL]");
 
         auto res_col = ColumnHelper::create_column(TypeDescriptor(LogicalType::TYPE_VARCHAR), true);
@@ -2505,7 +2637,7 @@ TEST_F(AggregateTest, test_group_concatV2) {
     // nullable columns input with cancelled
     {
         auto char_type = TypeDescriptor::create_varchar_type(30);
-        auto char_column = ColumnHelper::create_column(char_type, true);
+        MutableColumnPtr char_column = ColumnHelper::create_column(char_type, true);
         char_column->append_datum(Datum());
         char_column->append_datum("bcd");
         char_column->append_datum("cdrdfe");
@@ -2515,7 +2647,7 @@ TEST_F(AggregateTest, test_group_concatV2) {
         auto sep_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(",", 5);
 
         auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
-        auto int_column = ColumnHelper::create_column(int_type, true);
+        MutableColumnPtr int_column = ColumnHelper::create_column(int_type, true);
         int_column->append_datum(Datum());
         int_column->append_datum(9);
         int_column->append_datum(Datum());
@@ -2523,10 +2655,10 @@ TEST_F(AggregateTest, test_group_concatV2) {
         int_column->append_datum(6);
 
         std::vector<const Column*> raw_columns;
-        std::vector<ColumnPtr> columns;
-        columns.push_back(char_column);
-        columns.push_back(sep_column);
-        columns.push_back(int_column);
+        Columns columns;
+        columns.emplace_back(char_column);
+        columns.emplace_back(sep_column);
+        columns.emplace_back(int_column);
         raw_columns.resize(3);
         raw_columns[0] = char_column.get();
         raw_columns[1] = sep_column.get();
@@ -2543,11 +2675,11 @@ TEST_F(AggregateTest, test_group_concatV2) {
 
         TypeDescriptor type_array_char;
         type_array_char.type = LogicalType::TYPE_ARRAY;
-        type_array_char.children.emplace_back(TypeDescriptor(LogicalType::TYPE_VARCHAR));
+        type_array_char.children.emplace_back(LogicalType::TYPE_VARCHAR);
 
         TypeDescriptor type_array_int;
         type_array_int.type = LogicalType::TYPE_ARRAY;
-        type_array_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
+        type_array_int.children.emplace_back(LogicalType::TYPE_INT);
 
         TypeDescriptor type_struct_char_int;
         type_struct_char_int.type = LogicalType::TYPE_STRUCT;
@@ -2557,7 +2689,7 @@ TEST_F(AggregateTest, test_group_concatV2) {
         type_struct_char_int.field_names.emplace_back("vchar");
         type_struct_char_int.field_names.emplace_back("sep");
         type_struct_char_int.field_names.emplace_back("int");
-        auto res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
+        MutableColumnPtr res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
         gc_func->serialize_to_column(local_ctx.get(), state->state(), res_struct_col.get());
         ASSERT_EQ(res_struct_col->debug_string(), "[{vchar:['bcd','cdrdfe','esfg'],sep:[',',',',','],int:[9,NULL,6]}]");
 
@@ -2566,12 +2698,12 @@ TEST_F(AggregateTest, test_group_concatV2) {
                                           res_struct_col->size());
 
         res_struct_col->resize(0);
-        gc_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
+        gc_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), res_struct_col);
         ASSERT_EQ(res_struct_col->debug_string(),
                   "[NULL, {vchar:['bcd'],sep:[','],int:[9]}, {vchar:['cdrdfe'],sep:[','],int:[NULL]}, "
                   "NULL, {vchar:['esfg'],sep:[','],int:[6]}]");
 
-        auto res_col = ColumnHelper::create_column(char_type, false);
+        MutableColumnPtr res_col = ColumnHelper::create_column(char_type, false);
         local_ctx->state()->set_is_cancelled(true);
         gc_func->finalize_to_column(local_ctx.get(), state->state(), res_col.get());
         ASSERT_TRUE(local_ctx->has_error());
@@ -2597,12 +2729,16 @@ TEST_F(AggregateTest, test_array_agg) {
     auto elem = BinaryColumn::create();
     auto offsets = UInt32Column::create(0);
     auto result_column = ArrayColumn::create(ColumnHelper::cast_to_nullable_column(elem), offsets);
-    agg_function->finalize_to_column(ctx, state->state(), result_column.get());
+    agg_function->finalize_to_column(ctx, state->state(), result_column->as_mutable_raw_ptr());
 
+    // Access the element column through the ArrayColumn's elements, which is a NullableColumn
+    const auto& elements_column = result_column->elements();
+    const auto& nullable_elements = down_cast<const NullableColumn&>(elements_column);
+    const auto& result_data_column = down_cast<const BinaryColumn&>(*nullable_elements.data_column());
     for (int i = 0; i < 6; i++) {
         std::string val("starrocks");
         val.append(std::to_string(i));
-        ASSERT_EQ(val, elem->get_slice(i).to_string());
+        ASSERT_EQ(val, result_data_column.get_slice(i).to_string());
     }
 }
 
@@ -2628,9 +2764,14 @@ TEST_F(AggregateTest, test_array_agg_distinct) {
     auto elem = BinaryColumn::create();
     auto offsets = UInt32Column::create(0);
     auto result_column = ArrayColumn::create(ColumnHelper::cast_to_nullable_column(elem), offsets);
-    agg_function->finalize_to_column(ctx, state->state(), result_column.get());
+    agg_function->finalize_to_column(ctx, state->state(), result_column->as_mutable_raw_ptr());
 
-    ASSERT_EQ(6, elem->size());
+    // Access the element column through the ArrayColumn's elements, which is a NullableColumn
+    const auto& elements_column = result_column->elements();
+    const auto& nullable_elements = down_cast<const NullableColumn&>(elements_column);
+    const auto& result_data_column = down_cast<const BinaryColumn&>(*nullable_elements.data_column());
+
+    ASSERT_EQ(6, result_data_column.size());
 }
 
 TEST_F(AggregateTest, test_array_agg_nullable) {
@@ -2652,7 +2793,7 @@ TEST_F(AggregateTest, test_array_agg_nullable) {
     auto elem = Int32Column::create();
     auto offsets = UInt32Column::create(0);
     auto result_column = ArrayColumn::create(ColumnHelper::cast_to_nullable_column(elem), offsets);
-    func->finalize_to_column(ctx, state->state(), result_column.get());
+    func->finalize_to_column(ctx, state->state(), result_column->as_mutable_raw_ptr());
 
     ASSERT_EQ(1024, offsets->get_data().back());
 }
@@ -2677,9 +2818,96 @@ TEST_F(AggregateTest, test_array_agg_nullable_distinct) {
     auto offsets = UInt32Column::create(0);
     auto result_column = ArrayColumn::create(ColumnHelper::cast_to_nullable_column(elem), offsets);
 
-    func->finalize_to_column(ctx, state->state(), result_column.get());
+    func->finalize_to_column(ctx, state->state(), result_column->as_mutable_raw_ptr());
 
     ASSERT_EQ(26, offsets->get_data().back());
+}
+
+TEST_F(AggregateTest, test_get_aggregate_function_by_type) {
+    {
+        std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+                                                 TypeDescriptor::from_logical_type(TYPE_INT)};
+        auto return_type = TypeDescriptor::from_logical_type(TYPE_ARRAY);
+        auto* array_agg_func =
+                get_aggregate_function("array_agg2", return_type, arg_types, true, TFunctionBinaryType::BUILTIN);
+        ASSERT_TRUE(array_agg_func != nullptr);
+    }
+    {
+        std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+        auto return_type = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
+        auto* agg_func =
+                get_aggregate_function("group_concat", return_type, arg_types, true, TFunctionBinaryType::BUILTIN);
+        ASSERT_TRUE(agg_func != nullptr);
+    }
+    {
+        std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_SMALLINT)};
+        auto return_type = TypeDescriptor::from_logical_type(TYPE_DOUBLE);
+        auto* agg_func = get_aggregate_function("avg", return_type, arg_types, true, TFunctionBinaryType::BUILTIN);
+        ASSERT_TRUE(agg_func != nullptr);
+    }
+}
+
+TEST_F(AggregateTest, test_ds_theta_count_distinct) {
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_DOUBLE)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_BIGINT);
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    const AggregateFunction* func = get_aggregate_function("ds_theta_count_distinct", TYPE_DOUBLE, TYPE_BIGINT, false);
+    ASSERT_EQ("ds_theta_count_distinct", func->get_name());
+    auto reset_state = ManagedAggrState::create(ctx, func);
+    func->reset(local_ctx.get(), Columns{}, reset_state->state());
+    auto convert_data_column = DoubleColumn::create();
+    convert_data_column->append(1.0);
+    convert_data_column->append(2.0);
+    MutableColumnPtr convert_result_column = BinaryColumn::create();
+    func->convert_to_serialize_format(local_ctx.get(), Columns{convert_data_column}, 2, convert_result_column);
+    const AggregateFunction* str_arg_func =
+            get_aggregate_function("ds_theta_count_distinct", TYPE_VARCHAR, TYPE_BIGINT, false);
+    auto ubswf_state = ManagedAggrState::create(ctx, str_arg_func);
+    std::vector<TypeDescriptor> str_arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    std::unique_ptr<FunctionContext> str_local_ctx(
+            FunctionContext::create_test_context(std::move(str_arg_types), return_type));
+    auto ubswf_data_column = BinaryColumn::create();
+    ubswf_data_column->append("abc");
+    ubswf_data_column->append("bcd");
+    std::vector<const Column*> ubswf_raw_columns;
+    ubswf_raw_columns.resize(1);
+    ubswf_raw_columns[0] = ubswf_data_column.get();
+    str_arg_func->update_batch_single_state_with_frame(str_local_ctx.get(), ubswf_state->state(),
+                                                       ubswf_raw_columns.data(), 0, 0, 0, 2);
+    auto data_column1 = DoubleColumn::create();
+    data_column1->append(2.0);
+    data_column1->append(3.0);
+    data_column1->append(4.0);
+
+    auto data_column2 = DoubleColumn::create();
+    data_column2->append(5.0);
+    data_column2->append(6.0);
+
+    auto state1 = ManagedAggrState::create(ctx, func);
+    std::vector<const Column*> raw_columns1;
+    raw_columns1.resize(1);
+    raw_columns1[0] = data_column1.get();
+    func->update_batch_single_state(local_ctx.get(), data_column1->size(), raw_columns1.data(), state1->state());
+
+    auto state2 = ManagedAggrState::create(ctx, func);
+    std::vector<const Column*> raw_columns2;
+    raw_columns2.resize(1);
+    raw_columns2[0] = data_column2.get();
+    func->update_batch_single_state(local_ctx.get(), data_column2->size(), raw_columns2.data(), state2->state());
+
+    auto state3 = ManagedAggrState::create(ctx, func);
+    auto result_column = Int64Column::create();
+    MutableColumnPtr serde_column1 = BinaryColumn::create();
+    func->serialize_to_column(local_ctx.get(), state1->state(), serde_column1.get());
+    MutableColumnPtr serde_column2 = BinaryColumn::create();
+    func->serialize_to_column(local_ctx.get(), state2->state(), serde_column2.get());
+
+    func->merge(local_ctx.get(), serde_column1.get(), state3->state(), 0);
+    func->merge(local_ctx.get(), serde_column2.get(), state3->state(), 0);
+
+    func->finalize_to_column(local_ctx.get(), state3->state(), result_column.get());
+    ASSERT_EQ(5, result_column->get_data()[0]);
 }
 
 } // namespace starrocks

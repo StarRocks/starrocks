@@ -15,25 +15,24 @@
 package com.starrocks.scheduler.mv;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.common.StarRocksLoggerFactory;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.sql.common.PartitionNameSetMap;
 import com.starrocks.sql.plan.ExecPlan;
-import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.parquet.Strings;
 
 import java.util.Collection;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -43,15 +42,13 @@ import java.util.stream.Collectors;
  */
 public class MVTraceUtils {
 
-    private static final Logger LOG = LogManager.getLogger(MVTraceUtils.class);
-
     /**
      * Extract refreshed/scanned base table and its refreshed partition names
      * NOTE: this is used to trace in task_runs.
      */
-    public static Map<String, Set<String>> getBaseTableRefreshedPartitionsByExecPlan(MaterializedView mv,
-                                                                                     ExecPlan execPlan) {
-        Map<String, Set<String>> baseTableRefreshPartitionNames = Maps.newHashMap();
+    public static PartitionNameSetMap getBaseTableRefreshedPartitionsByExecPlan(MaterializedView mv,
+                                                                                ExecPlan execPlan) {
+        PartitionNameSetMap baseTableRefreshPartitionNames = PartitionNameSetMap.of();
         List<ScanNode> scanNodes = execPlan.getScanNodes();
         for (ScanNode scanNode : scanNodes) {
             if (scanNode instanceof OlapScanNode) {
@@ -59,8 +56,7 @@ public class MVTraceUtils {
                 OlapTable olapTable = olapScanNode.getOlapTable();
                 if (olapScanNode.getSelectedPartitionNames() != null &&
                         !olapScanNode.getSelectedPartitionNames().isEmpty()) {
-                    baseTableRefreshPartitionNames.put(olapTable.getName(),
-                            new HashSet<>(olapScanNode.getSelectedPartitionNames()));
+                    baseTableRefreshPartitionNames.put(olapTable.getName(), olapScanNode.getSelectedPartitionNames());
                 } else {
                     List<Long> selectedPartitionIds = olapScanNode.getSelectedPartitionIds();
                     Set<String> selectedPartitionNames = selectedPartitionIds.stream()
@@ -94,7 +90,7 @@ public class MVTraceUtils {
         List<String> partitionColumnNames = hiveTable.getPartitionColumnNames();
         List<String> selectedPartitionNames;
         if (hiveTable.isUnPartitioned()) {
-            selectedPartitionNames = Lists.newArrayList(hiveTable.getTableName());
+            selectedPartitionNames = Lists.newArrayList(hiveTable.getCatalogTableName());
         } else {
             Collection<Long> selectedPartitionIds = hdfsScanNode.getScanNodePredicates().getSelectedPartitionIds();
             List<PartitionKey> selectedPartitionKey = Lists.newArrayList();
@@ -106,5 +102,22 @@ public class MVTraceUtils {
                     PartitionUtil.toHivePartitionName(partitionColumnNames, partitionKey)).collect(Collectors.toList());
         }
         return selectedPartitionNames;
+    }
+
+    public static String getLogPrefix(MaterializedView mv) {
+        if (mv == null || Strings.isNullOrEmpty(mv.getName())) {
+            return "";
+        } else {
+            StringBuilder sb = new StringBuilder();
+            sb.append(" [").append(mv.getName()).append("] ");
+            return sb.toString();
+        }
+    }
+
+    /**
+     * Get logger with mv name prefix.
+     */
+    public static Logger getLogger(MaterializedView mv, Class<?> clazz) {
+        return StarRocksLoggerFactory.INSTANCE.getLogger(clazz, getLogPrefix(mv));
     }
 }

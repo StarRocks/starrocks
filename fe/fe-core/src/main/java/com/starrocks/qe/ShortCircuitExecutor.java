@@ -18,11 +18,12 @@
 package com.starrocks.qe;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
-import com.starrocks.qe.scheduler.WorkerProvider;
+import com.starrocks.qe.scheduler.LazyWorkerProvider;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.Backend;
@@ -57,12 +58,12 @@ public class ShortCircuitExecutor {
 
     protected Map<String, RuntimeProfile> perBeExecutionProfile;
 
-    protected final WorkerProvider workerProvider;
+    protected final LazyWorkerProvider workerProvider;
 
     protected ShortCircuitExecutor(ConnectContext context, PlanFragment planFragment,
                                    List<TScanRangeLocations> scanRangeLocations, TDescriptorTable tDescriptorTable,
                                    boolean isBinaryRow,
-                                   boolean enableProfile, String protocol, WorkerProvider workerProvider) {
+                                   boolean enableProfile, String protocol, LazyWorkerProvider workerProvider) {
         this.context = context;
         this.planFragment = planFragment;
         this.scanRangeLocations = scanRangeLocations;
@@ -81,7 +82,7 @@ public class ShortCircuitExecutor {
     public static ShortCircuitExecutor create(ConnectContext context, List<PlanFragment> fragments, List<ScanNode> scanNodes,
                                               TDescriptorTable tDescriptorTable, boolean isBinaryRow, boolean enableProfile,
                                               String protocol,
-                                              WorkerProvider workerProvider) {
+                                              LazyWorkerProvider workerProvider) {
         if (fragments.size() != 1 || !fragments.get(0).isShortCircuit()) {
             return null;
         }
@@ -95,7 +96,7 @@ public class ShortCircuitExecutor {
         return null;
     }
 
-    public void exec() throws Exception {
+    public void exec() throws StarRocksException, StarRocksPlannerException {
         throw new StarRocksPlannerException("Not implement ShortCircuit Executor class", ErrorType.INTERNAL_ERROR);
     }
 

@@ -17,12 +17,11 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -43,8 +42,12 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.sql.optimizer.rewrite.scalar.FoldConstantsRule;
+import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedPredicateRule;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.type.Type;
 
 import java.util.Collections;
 import java.util.HashSet;
@@ -147,7 +150,6 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
                 .setOutputColumnRefOp(outputs)
                 .setChildOutputColumns(childOutputs)
                 .setLimit(aggregate.getLimit())
-                .setPredicate(aggregate.getPredicate())
                 .build();
         return OptExpression.create(union, repeatConsume, selectConsume);
     }
@@ -184,7 +186,6 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
         builder.setType(AggType.GLOBAL)
                 .setGroupingKeys(allGroupByRefs)
                 .setAggregations(aggregate.getAggregations())
-                .setPredicate(aggregate.getPredicate())
                 .setPartitionByColumns(partitionRefs);
         LogicalAggregationOperator allColumnRefsAggregate = builder.build();
         // cte produce
@@ -234,9 +235,10 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
         LogicalProjectOperator projectOperator = new LogicalProjectOperator(projectMap);
         OptExpression result = OptExpression.create(projectOperator, OptExpression.create(consume));
 
-        if (null != repeat.getPredicate()) {
+        ScalarOperator predicate = Utils.compoundAnd(repeat.getPredicate(), aggregate.getPredicate());
+        if (null != predicate) {
             ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(outputs);
-            ScalarOperator predicate = rewriter.rewrite(repeat.getPredicate());
+            predicate = rewriter.rewrite(predicate);
             return OptExpression.create(new LogicalFilterOperator(predicate), result);
         }
         return result;
@@ -245,7 +247,7 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
     /*
      * select a, b, c, d, null, sum(x) x from t group by rollup(a, b, c, d)
      */
-    private OptExpression buildSubRepeatConsume(ColumnRefFactory factory,
+    public OptExpression buildSubRepeatConsume(ColumnRefFactory factory,
                                                 Map<ColumnRefOperator, ColumnRefOperator> outputs,
                                                 LogicalAggregationOperator aggregate, LogicalRepeatOperator repeat,
                                                 int cteId) {
@@ -287,8 +289,14 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
 
         ScalarOperator predicate = null;
         if (null != repeat.getPredicate()) {
-            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(outputs);
+            Map<ColumnRefOperator, ScalarOperator> replaceMap = Maps.newHashMap(outputs);
+            nullRefs.forEach(c -> replaceMap.put(c, ConstantOperator.createNull(c.getType())));
+
+            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(replaceMap);
             predicate = rewriter.rewrite(repeat.getPredicate());
+
+            ScalarOperatorRewriter r = new ScalarOperatorRewriter();
+            predicate = r.rewrite(predicate, List.of(new FoldConstantsRule(), new SimplifiedPredicateRule()));
         }
 
         LogicalRepeatOperator newRepeat = LogicalRepeatOperator.builder()
@@ -303,7 +311,7 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
         Map<ColumnRefOperator, CallOperator> aggregations = Maps.newHashMap();
         aggregate.getAggregations().forEach((k, v) -> {
             ColumnRefOperator x = factory.create(k, k.getType(), k.isNullable());
-            Function aggFunc = Expr.getBuiltinFunction(v.getFnName(), new Type[] {k.getType()},
+            Function aggFunc = ExprUtils.getBuiltinFunction(v.getFnName(), new Type[] {k.getType()},
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 
             Preconditions.checkState(aggFunc instanceof AggregateFunction);
@@ -319,10 +327,18 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
 
         List<ColumnRefOperator> groupings = aggregate.getGroupingKeys().stream()
                 .filter(c -> !nullRefs.contains(c)).map(outputs::get).collect(Collectors.toList());
+
+        if (null != aggregate.getPredicate()) {
+            Map<ColumnRefOperator, ScalarOperator> replaceMap = Maps.newHashMap(outputs);
+            nullRefs.forEach(c -> replaceMap.put(c, ConstantOperator.createNull(c.getType())));
+            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(replaceMap);
+            predicate = rewriter.rewrite(aggregate.getPredicate());
+        }
         LogicalAggregationOperator newAggregate = LogicalAggregationOperator.builder()
                 .setAggregations(aggregations)
                 .setGroupingKeys(groupings)
                 .setType(AggType.GLOBAL)
+                .setPredicate(predicate)
                 .setPartitionByColumns(groupings)
                 .build();
 

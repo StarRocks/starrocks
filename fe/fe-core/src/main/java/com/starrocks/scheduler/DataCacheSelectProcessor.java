@@ -14,7 +14,7 @@
 
 package com.starrocks.scheduler;
 
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.datacache.DataCacheSelectExecutor;
 import com.starrocks.datacache.DataCacheSelectMetrics;
@@ -31,7 +31,7 @@ public class DataCacheSelectProcessor extends BaseTaskRunProcessor {
     private static final Logger LOG = LogManager.getLogger(DataCacheSelectProcessor.class);
 
     @Override
-    public void processTaskRun(TaskRunContext context) throws Exception {
+    public Constants.TaskRunState processTaskRun(TaskRunContext context) throws Exception {
         StmtExecutor executor = null;
         try {
             ConnectContext ctx = context.getCtx();
@@ -49,12 +49,12 @@ public class DataCacheSelectProcessor extends BaseTaskRunProcessor {
                     .setDb(ctx.getDatabase());
 
             Tracers.register(ctx);
-            Tracers.init(ctx, Tracers.Mode.TIMER, null);
+            Tracers.init(ctx, "TIMER", null);
             executor = ctx.executeSql(context.getDefinition());
 
             if (ctx.getState().isError()) {
                 // throw exception if StmtExecutor execute failed
-                throw new UserException(ctx.getState().getErrorMessage());
+                throw new StarRocksException(ctx.getState().getErrorMessage());
             }
 
             // Cache select's metrics is held by sub StmtExecutor
@@ -64,6 +64,7 @@ public class DataCacheSelectProcessor extends BaseTaskRunProcessor {
             DataCacheSelectStatement dataCacheSelectStatement = (DataCacheSelectStatement) executor.getParsedStmt();
             boolean isVerbose = dataCacheSelectStatement.isVerbose();
             context.getStatus().setExtraMessage(metrics.debugString(isVerbose));
+            return Constants.TaskRunState.SUCCESS;
         } finally {
             Tracers.close();
             if (executor != null) {
@@ -76,17 +77,17 @@ public class DataCacheSelectProcessor extends BaseTaskRunProcessor {
     }
 
     @NotNull
-    private static DataCacheSelectMetrics getDataCacheSelectMetrics(StmtExecutor executor) throws UserException {
+    private static DataCacheSelectMetrics getDataCacheSelectMetrics(StmtExecutor executor) throws StarRocksException {
         List<StmtExecutor> subExecutors = executor.getSubStmtExecutors();
 
         if (subExecutors.size() != 1) {
-            throw new UserException("No sub executor in DataCache Select");
+            throw new StarRocksException("No sub executor in DataCache Select");
         }
 
         DataCacheSelectMetrics metrics = subExecutors.get(0).getCoordinator().getDataCacheSelectMetrics();
 
         if (metrics == null) {
-            throw new UserException("Can't retrieve DataCache select metrics");
+            throw new StarRocksException("Can't retrieve DataCache select metrics");
         }
         return metrics;
     }

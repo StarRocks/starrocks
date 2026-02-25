@@ -16,7 +16,10 @@
 
 #include <utility>
 
+#include "base/failpoint/fail_point.h"
+#include "base/testutil/assert.h"
 #include "column/datum_convert.h"
+#include "exprs/expr_factory.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gtest/gtest.h"
@@ -28,7 +31,6 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/txn_manager.h"
-#include "testutil/assert.h"
 #include "testutil/column_test_helper.h"
 #include "testutil/schema_test_helper.h"
 #include "testutil/tablet_test_helper.h"
@@ -46,11 +48,11 @@ class SchemaChangeTest : public testing::Test {
     void TearDown() override {}
 
 protected:
-    void add_key_column(TCreateTabletReq* request, std::string column_name, TPrimitiveType::type type);
-    void add_value_column(TCreateTabletReq* request, std::string column_name, TPrimitiveType::type type,
+    void add_key_column(TCreateTabletReq* request, const std::string& column_name, TPrimitiveType::type type);
+    void add_value_column(TCreateTabletReq* request, const std::string& column_name, TPrimitiveType::type type,
                           TKeysType::type keys_type = TKeysType::DUP_KEYS);
-    void add_value_column_with_index(TCreateTabletReq* request, std::string column_name, TPrimitiveType::type type,
-                                     TKeysType::type keys_type = TKeysType::DUP_KEYS);
+    void add_value_column_with_index(TCreateTabletReq* request, const std::string& column_name,
+                                     TPrimitiveType::type type, TKeysType::type keys_type = TKeysType::DUP_KEYS);
 
     void create_base_tablet(TTabletId tablet_id, TKeysType::type type, TStorageType::type);
     void create_dest_tablet_with_index(TTabletId base_tablet_id, TTabletId new_tablet_id, TKeysType::type type);
@@ -62,7 +64,7 @@ protected:
     template <typename T>
     void test_convert_to_varchar(LogicalType type, int type_size, T val, const std::string& expect_val);
     template <typename T>
-    void test_convert_from_varchar(LogicalType type, int type_size, std::string val, T expect_val);
+    void test_convert_from_varchar(LogicalType type, int type_size, const std::string& val, T expect_val);
     std::vector<SlotDescriptor*> gen_base_slots();
     TAlterTabletReqV2 gen_alter_tablet_req(TTabletId base_tablet_id, TTabletId new_tablet_id, Version version);
     RowsetId next_rowset_id() const { return _storage_engine->next_rowset_id(); }
@@ -111,23 +113,24 @@ std::vector<SlotDescriptor*> SchemaChangeTest::gen_base_slots() {
     return slots;
 }
 
-void SchemaChangeTest::add_key_column(TCreateTabletReq* request, std::string column_name, TPrimitiveType::type type) {
+void SchemaChangeTest::add_key_column(TCreateTabletReq* request, const std::string& column_name,
+                                      TPrimitiveType::type type) {
     TColumn col = SchemaTestHelper::gen_key_column(column_name, type);
-    request->tablet_schema.columns.push_back(col);
+    request->tablet_schema.columns.emplace_back(col);
 }
 
-void SchemaChangeTest::add_value_column(TCreateTabletReq* request, std::string column_name, TPrimitiveType::type type,
-                                        TKeysType::type keys_type) {
+void SchemaChangeTest::add_value_column(TCreateTabletReq* request, const std::string& column_name,
+                                        TPrimitiveType::type type, TKeysType::type keys_type) {
     TColumn col;
     if (keys_type == TKeysType::DUP_KEYS) {
         col = SchemaTestHelper::gen_value_column_for_dup_table(column_name, type);
     } else {
         col = SchemaTestHelper::gen_value_column_for_agg_table(column_name, type);
     }
-    request->tablet_schema.columns.push_back(col);
+    request->tablet_schema.columns.emplace_back(col);
 }
 
-void SchemaChangeTest::add_value_column_with_index(TCreateTabletReq* request, std::string column_name,
+void SchemaChangeTest::add_value_column_with_index(TCreateTabletReq* request, const std::string& column_name,
                                                    TPrimitiveType::type type, TKeysType::type keys_type) {
     TColumn col;
     if (keys_type == TKeysType::DUP_KEYS) {
@@ -136,7 +139,7 @@ void SchemaChangeTest::add_value_column_with_index(TCreateTabletReq* request, st
         col = SchemaTestHelper::gen_value_column_for_agg_table(column_name, type);
     }
     col.__set_has_bitmap_index(true);
-    request->tablet_schema.columns.push_back(col);
+    request->tablet_schema.columns.emplace_back(col);
 }
 
 void SchemaChangeTest::create_base_tablet(TTabletId tablet_id, TKeysType::type type, TStorageType::type storage_type) {
@@ -205,7 +208,8 @@ void SchemaChangeTest::test_convert_to_varchar(LogicalType type, int type_size, 
 }
 
 template <typename T>
-void SchemaChangeTest::test_convert_from_varchar(LogicalType type, int type_size, std::string val, T expect_val) {
+void SchemaChangeTest::test_convert_from_varchar(LogicalType type, int type_size, const std::string& val,
+                                                 T expect_val) {
     auto src_tablet_schema = gen_tablet_schema("c1", "VARCHAR", "REPLACE", 255);
     auto dst_tablet_schema = gen_tablet_schema("c2", logical_type_to_string(type), "REPLACE", type_size);
 
@@ -421,8 +425,8 @@ TEST_F(SchemaChangeTest, convert_int_to_bitmap) {
 
     ChunkPtr src_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(src_tablet_schema), 4096);
     ChunkPtr dst_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(dst_tablet_schema), 4096);
-    ColumnPtr& src_col = src_chunk->get_column_by_index(0);
-    ColumnPtr& dst_col = dst_chunk->get_column_by_index(0);
+    Column* src_col = src_chunk->get_column_raw_ptr_by_index(0);
+    Column* dst_col = dst_chunk->get_column_raw_ptr_by_index(0);
     Field f1 = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
     Field f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
 
@@ -431,7 +435,7 @@ TEST_F(SchemaChangeTest, convert_int_to_bitmap) {
     src_col->append_datum(src_datum);
 
     auto converter = get_materialized_converter(TYPE_INT, OLAP_MATERIALIZE_TYPE_BITMAP);
-    Status st = converter->convert_materialized(src_col, dst_col, f1.type().get());
+    Status st = converter->convert_materialized(std::move(src_col), dst_col, f1.type().get());
     ASSERT_TRUE(st.ok());
 
     Datum dst_datum = dst_col->get(0);
@@ -445,8 +449,8 @@ TEST_F(SchemaChangeTest, convert_varchar_to_hll) {
 
     ChunkPtr src_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(src_tablet_schema), 4096);
     ChunkPtr dst_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(dst_tablet_schema), 4096);
-    ColumnPtr& src_col = src_chunk->get_column_by_index(0);
-    ColumnPtr& dst_col = dst_chunk->get_column_by_index(0);
+    Column* src_col = src_chunk->get_column_raw_ptr_by_index(0);
+    Column* dst_col = dst_chunk->get_column_raw_ptr_by_index(0);
     Field f1 = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
     Field f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
 
@@ -457,7 +461,7 @@ TEST_F(SchemaChangeTest, convert_varchar_to_hll) {
     src_col->append_datum(src_datum);
 
     auto converter = get_materialized_converter(TYPE_VARCHAR, OLAP_MATERIALIZE_TYPE_HLL);
-    Status st = converter->convert_materialized(src_col, dst_col, f1.type().get());
+    Status st = converter->convert_materialized(std::move(src_col), dst_col, f1.type().get());
     ASSERT_TRUE(st.ok());
 
     Datum dst_datum = dst_col->get(0);
@@ -471,8 +475,8 @@ TEST_F(SchemaChangeTest, convert_int_to_count) {
 
     ChunkPtr src_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(src_tablet_schema), 4096);
     ChunkPtr dst_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(dst_tablet_schema), 4096);
-    ColumnPtr& src_col = src_chunk->get_column_by_index(0);
-    ColumnPtr& dst_col = dst_chunk->get_column_by_index(0);
+    Column* src_col = src_chunk->get_column_raw_ptr_by_index(0);
+    Column* dst_col = dst_chunk->get_column_raw_ptr_by_index(0);
     Field f1 = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
     Field f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
 
@@ -481,7 +485,7 @@ TEST_F(SchemaChangeTest, convert_int_to_count) {
     src_col->append_datum(src_datum);
 
     auto converter = get_materialized_converter(TYPE_INT, OLAP_MATERIALIZE_TYPE_COUNT);
-    Status st = converter->convert_materialized(src_col, dst_col, f1.type().get());
+    Status st = converter->convert_materialized(std::move(src_col), dst_col, f1.type().get());
     ASSERT_TRUE(st.ok());
 
     Datum dst_datum = dst_col->get(0);
@@ -632,8 +636,8 @@ TEST_F(SchemaChangeTest, convert_varchar_to_json) {
     for (const auto& json_str : test_cases) {
         JsonValue expected = JsonValue::parse(json_str).value();
 
-        BinaryColumn::Ptr src_column = BinaryColumn::create();
-        JsonColumn::Ptr dst_column = JsonColumn::create();
+        auto src_column = BinaryColumn::create();
+        auto dst_column = JsonColumn::create();
         src_column->append(json_str);
 
         auto converter = get_type_converter(TYPE_VARCHAR, TYPE_JSON);
@@ -647,8 +651,8 @@ TEST_F(SchemaChangeTest, convert_varchar_to_json) {
 TEST_F(SchemaChangeTest, convert_json_to_varchar) {
     std::string json_str = "{\"a\": 1}";
     JsonValue json = JsonValue::parse(json_str).value();
-    JsonColumn::Ptr src_column = JsonColumn::create();
-    BinaryColumn::Ptr dst_column = BinaryColumn::create();
+    auto src_column = JsonColumn::create();
+    auto dst_column = BinaryColumn::create();
     src_column->append(&json);
 
     auto converter = get_type_converter(TYPE_JSON, TYPE_VARCHAR);
@@ -711,8 +715,8 @@ TEST_F(SchemaChangeTest, schema_change_with_materialized_column_old_style) {
 
     ExprContext* ctx = nullptr;
 
-    Status st =
-            Expr::create_expr_tree(chunk_changer.get_object_pool(), t_expr, &ctx, chunk_changer.get_runtime_state());
+    Status st = ExprFactory::create_expr_tree(chunk_changer.get_object_pool(), t_expr, &ctx,
+                                              chunk_changer.get_runtime_state());
     DCHECK(st.ok()) << st.message();
     st = ctx->prepare(chunk_changer.get_runtime_state());
     DCHECK(st.ok()) << st.message();
@@ -824,10 +828,10 @@ TEST_F(SchemaChangeTest, overlapping_direct_schema_change) {
         auto c1 = ColumnTestHelper::build_column<int32_t>({0, 1, 2, 3});
         auto c2 = ColumnTestHelper::build_column<int32_t>({0, 1, 2, 3});
         auto c3 = ColumnTestHelper::build_column<int32_t>({0, 1, 2, 3});
-        chunk.append_column(c0, 0);
-        chunk.append_column(c1, 1);
-        chunk.append_column(c2, 2);
-        chunk.append_column(c3, 3);
+        chunk.append_column(std::move(c0), 0);
+        chunk.append_column(std::move(c1), 1);
+        chunk.append_column(std::move(c2), 2);
+        chunk.append_column(std::move(c3), 3);
 
         std::vector<uint32_t> idxs{0, 1, 2, 3};
         ASSERT_OK(delta_writer->write(chunk, idxs.data(), 0, 4));
@@ -840,11 +844,11 @@ TEST_F(SchemaChangeTest, overlapping_direct_schema_change) {
     auto base_tablet = _tablet_mgr->get_tablet(base_tablet_id);
 
     {
-        std::map<TabletInfo, RowsetSharedPtr> tablet_related_rs;
+        std::map<TabletInfo, std::pair<RowsetSharedPtr, bool>> tablet_related_rs;
         _txn_mgr->get_txn_related_tablets(txn_id, partition_id, &tablet_related_rs);
         for (auto& tablet_rs : tablet_related_rs) {
-            ASSERT_OK(
-                    _txn_mgr->publish_txn(partition_id, base_tablet, txn_id, version.second, tablet_rs.second, 10000));
+            ASSERT_OK(_txn_mgr->publish_txn(partition_id, base_tablet, txn_id, version.second, tablet_rs.second.first,
+                                            10000));
         }
     }
 
@@ -853,6 +857,40 @@ TEST_F(SchemaChangeTest, overlapping_direct_schema_change) {
     ASSERT_TRUE(base_rowset->is_overlapped());
 
     create_dest_tablet_with_index(base_tablet_id, new_tablet_id, TKeysType::DUP_KEYS);
+
+    {
+        SchemaChangeHandler handler;
+        TAlterTabletReqV2 req1 = gen_alter_tablet_req(100003, 100004, version);
+        ASSERT_FALSE(handler.process_alter_tablet(req1).ok());
+
+        TAlterTabletReqV2 req2 = gen_alter_tablet_req(base_tablet_id, 100004, version);
+        ASSERT_FALSE(handler.process_alter_tablet(req2).ok());
+
+        TTabletId new_tablet_id2 = 1405;
+        create_dest_tablet_with_index(base_tablet_id, new_tablet_id2, TKeysType::DUP_KEYS);
+        auto new_tablet = _tablet_mgr->get_tablet(new_tablet_id2);
+        ASSERT_TRUE(new_tablet != nullptr);
+        new_tablet->set_tablet_state(TabletState::TABLET_RUNNING);
+
+        TAlterTabletReqV2 req3 = gen_alter_tablet_req(base_tablet_id, new_tablet_id2, version);
+        ASSERT_FALSE(handler.process_alter_tablet(req3).ok());
+        new_tablet->set_tablet_state(TabletState::TABLET_NOTREADY);
+
+        PFailPointTriggerMode trigger_mode;
+        trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+        auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get("add_rowset_failed");
+        fp->setMode(trigger_mode);
+        ASSERT_FALSE(handler.process_alter_tablet(req3).ok());
+
+        trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+        fp->setMode(trigger_mode);
+        fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get("add_rowset_already_exist");
+        trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+        fp->setMode(trigger_mode);
+        ASSERT_TRUE(handler.process_alter_tablet(req3).ok());
+        trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+        fp->setMode(trigger_mode);
+    }
 
     TAlterTabletReqV2 req = gen_alter_tablet_req(base_tablet_id, new_tablet_id, version);
 

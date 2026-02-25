@@ -21,7 +21,9 @@
 #include <queue>
 #include <vector>
 
+#include "base/concurrency/blocking_queue.hpp"
 #include "column/vectorized_fwd.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "exec/spill/block_manager.h"
 #include "exec/spill/common.h"
@@ -36,9 +38,7 @@
 #include "fs/fs.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
-#include "util/blocking_queue.hpp"
 #include "util/compression/block_compression.h"
-#include "util/runtime_profile.h"
 
 #define GET_METRICS(remote, metrics, key) (remote ? metrics.remote_##key : metrics.local_##key)
 
@@ -131,6 +131,13 @@ public:
     RuntimeProfile::Counter* mem_table_finalize_timer = nullptr;
     RuntimeProfile::Counter* flush_task_yield_times = nullptr;
     RuntimeProfile::Counter* restore_task_yield_times = nullptr;
+    RuntimeProfile::Counter* skew_mem_table_count = nullptr;
+    RuntimeProfile::LowWaterMarkCounter* skew_mem_table_skew_ratio = nullptr;
+    RuntimeProfile::Counter* skew_mem_table_merge_timer = nullptr;
+    RuntimeProfile::Counter* skew_mem_table_input_rows = nullptr;
+    RuntimeProfile::Counter* skew_mem_table_output_rows = nullptr;
+    RuntimeProfile::Counter* skew_mem_table_input_bytes = nullptr;
+    RuntimeProfile::Counter* skew_mem_table_output_bytes = nullptr;
 };
 
 // major spill interfaces
@@ -193,9 +200,11 @@ public:
         return _writer->set_flush_all_call_back(flush_call_back);
     }
 
-    bool has_output_data() { return _reader->has_output_data(); }
+    bool has_output_data() { return is_cancel() || _reader->has_output_data(); }
 
     size_t spilled_append_rows() const { return _spilled_append_rows; }
+
+    size_t& mutable_spilled_append_rows() { return _spilled_append_rows; }
 
     size_t restore_read_rows() const { return _restore_read_rows; }
 
@@ -238,6 +247,11 @@ public:
     Status reset_state(RuntimeState* state);
 
     size_t max_sorted_block_cnt() const { return _max_sorted_block_cnt; }
+
+    void release() {
+        _writer.reset();
+        _reader.reset();
+    }
 
 private:
     Status _acquire_input_stream(RuntimeState* state);

@@ -28,10 +28,14 @@
 
 namespace starrocks {
 
-class BlockCache;
+class LocalDiskCacheEngine;
+class LocalMemCacheEngine;
+
+// TODO: support mem metrics
 class DataCacheAction : public HttpHandler {
 public:
-    explicit DataCacheAction(ExecEnv* exec_env) : _exec_env(exec_env) {}
+    explicit DataCacheAction(LocalDiskCacheEngine* disk_cache, LocalMemCacheEngine* mem_cache)
+            : _disk_cache(disk_cache), _mem_cache(mem_cache) {}
     ~DataCacheAction() override = default;
 
     void handle(HttpRequest* req) override;
@@ -39,11 +43,13 @@ public:
 private:
     bool _check_request(HttpRequest* req);
     void _handle(HttpRequest* req, const std::function<void(rapidjson::Document& root)>& func);
-    void _handle_stat(HttpRequest* req, BlockCache* cache);
+    void _handle_stat(HttpRequest* req);
     void _handle_app_stat(HttpRequest* req);
     void _handle_error(HttpRequest* req, const std::string& error_msg);
+    static double _calc_rate(size_t total, size_t count);
 
-    ExecEnv* _exec_env;
+    LocalDiskCacheEngine* _disk_cache;
+    LocalMemCacheEngine* _mem_cache;
 };
 
 } // namespace starrocks

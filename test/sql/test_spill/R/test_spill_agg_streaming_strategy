@@ -66,3 +66,49 @@ select count(*), sum(x) from (select sum(k1) x from (select * from t1 union all 
 admin disable failpoint 'spill_always_selection_streaming';
 -- result:
 -- !result
+create table t2 (
+    c0 INT,
+    c1 BIGINT NOT NULL
+) DUPLICATE KEY(c0) DISTRIBUTED BY RANDOM BUCKETS 3 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t2 SELECT generate_series, 650000 - generate_series FROM TABLE(generate_series(1,  650000));
+-- result:
+-- !result
+admin enable failpoint 'spill_always_selection_streaming';
+-- result:
+-- !result
+set enable_spill=true;
+-- result:
+-- !result
+set pipeline_dop=1;
+-- result:
+-- !result
+set spill_mode='force';
+-- result:
+-- !result
+set streaming_preaggregation_mode='auto';
+-- result:
+-- !result
+set enable_agg_spill_preaggregation=true;
+-- result:
+-- !result
+insert into blackhole() select c0, sum(c1) from t2 group by c0;
+-- result:
+-- !result
+select count(distinct c0), c1 from t2 group by c1 order by c1 desc limit 10;
+-- result:
+1	649999
+1	649998
+1	649997
+1	649996
+1	649995
+1	649994
+1	649993
+1	649992
+1	649991
+1	649990
+-- !result
+admin disable failpoint 'spill_always_selection_streaming';
+-- result:
+-- !result

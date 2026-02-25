@@ -19,10 +19,10 @@
 #include <cstdint>
 #include <string>
 #include <thread>
+#include <vector>
 
-#include "column/vectorized_fwd.h"
+#include "base/coding.h"
 #include "types/bitmap_value_detail.h"
-#include "util/coding.h"
 
 namespace starrocks {
 

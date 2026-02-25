@@ -45,7 +45,7 @@ private:
     template <class ContextFactory, class SinkFactory, class SourceFactory>
     std::vector<std::shared_ptr<pipeline::OperatorFactory>> _decompose_to_pipeline(
             pipeline::PipelineBuilderContext* context, bool is_partition_topn, bool is_partition_skewed,
-            bool is_merging, bool enable_parallel_merge);
+            bool is_merging, bool enable_parallel_merge, bool is_per_pipeline);
 
     Status _consume_chunks(RuntimeState* state, ExecNode* child);
     const TPlanNode& _tnode;
@@ -64,6 +64,8 @@ private:
     // also added to TopNNode to hint that local shuffle operator is prepended to TopNNode in
     // order to eliminate merging operation in pipeline execution engine.
     std::vector<ExprContext*> _analytic_partition_exprs;
+
+    std::vector<ExprContext*> _local_partition_exprs;
 
     // Cached descriptor for the materialized tuple. Assigned in Prepare().
     TupleDescriptor* _materialized_tuple_desc;

@@ -18,10 +18,9 @@ namespace starrocks::pipeline {
 
 Status MultiCastLocalExchangeSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
-    if (_driver_sequence == 0) {
-        RETURN_IF_ERROR(_exchanger->init_metrics(_unique_metrics.get()));
-    }
+    RETURN_IF_ERROR(_exchanger->init_metrics(_unique_metrics.get(), _driver_sequence == 0));
     _exchanger->open_sink_operator();
+    _exchanger->observable().attach_sink_observer(state, observer());
     return Status::OK();
 }
 
@@ -30,6 +29,7 @@ bool MultiCastLocalExchangeSinkOperator::need_input() const {
 }
 
 Status MultiCastLocalExchangeSinkOperator::set_finishing(RuntimeState* state) {
+    auto notify = _exchanger->observable().defer_notify_source();
     if (!_is_finished) {
         _is_finished = true;
         _exchanger->close_sink_operator();
@@ -42,7 +42,17 @@ StatusOr<ChunkPtr> MultiCastLocalExchangeSinkOperator::pull_chunk(RuntimeState* 
 }
 
 Status MultiCastLocalExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+    auto notify = _exchanger->observable().defer_notify_source();
     return _exchanger->push_chunk(chunk, _driver_sequence);
 }
 
+Status MultiCastLocalExchangeSinkOperatorFactory::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(OperatorFactory::prepare(state));
+    RETURN_IF_ERROR(_exchanger->prepare(state));
+    return Status::OK();
+}
+void MultiCastLocalExchangeSinkOperatorFactory::close(RuntimeState* state) {
+    _exchanger->close(state);
+    OperatorFactory::close(state);
+}
 } // namespace starrocks::pipeline

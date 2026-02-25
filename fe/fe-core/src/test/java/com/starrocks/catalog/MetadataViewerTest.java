@@ -35,23 +35,29 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.BinaryType;
 import com.starrocks.backup.CatalogMocker;
-import com.starrocks.catalog.Replica.ReplicaStatus;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
+import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.ReplicaStatus;
+import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -73,7 +79,7 @@ public class MetadataViewerTest {
 
     private static Database db;
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws NoSuchMethodException, SecurityException, InstantiationException,
             IllegalAccessException, IllegalArgumentException, InvocationTargetException, AnalysisException {
         Class[] argTypes = new Class[] {String.class, String.class, List.class, ReplicaStatus.class, BinaryType.class};
@@ -87,7 +93,7 @@ public class MetadataViewerTest {
         db = CatalogMocker.mockDb();
     }
 
-    @Before
+    @BeforeEach
     public void before() {
 
         new Expectations() {
@@ -96,9 +102,13 @@ public class MetadataViewerTest {
                 minTimes = 0;
                 result = globalStateMgr;
 
-                globalStateMgr.getDb(anyString);
+                globalStateMgr.getLocalMetastore().getDb(anyString);
                 minTimes = 0;
                 result = db;
+
+                globalStateMgr.getLocalMetastore().getTable(anyString, anyString);
+                minTimes = 0;
+                result = db.getTable(CatalogMocker.TEST_TBL_NAME);
             }
         };
 
@@ -122,18 +132,17 @@ public class MetadataViewerTest {
         Object[] args = new Object[] {CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME, partitions, null,
                 null};
         List<List<String>> result = (List<List<String>>) getTabletStatusMethod.invoke(null, args);
-        Assert.assertEquals(3, result.size());
-        System.out.println(result);
+        Assertions.assertEquals(3, result.size());
 
         args = new Object[] {CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME, partitions, ReplicaStatus.DEAD,
                 BinaryType.EQ};
         result = (List<List<String>>) getTabletStatusMethod.invoke(null, args);
-        Assert.assertEquals(3, result.size());
+        Assertions.assertEquals(3, result.size());
 
         args = new Object[] {CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME, partitions, ReplicaStatus.DEAD,
                 BinaryType.NE};
         result = (List<List<String>>) getTabletStatusMethod.invoke(null, args);
-        Assert.assertEquals(0, result.size());
+        Assertions.assertEquals(0, result.size());
     }
 
     @Test
@@ -141,8 +150,7 @@ public class MetadataViewerTest {
             throws IllegalAccessException, IllegalArgumentException, InvocationTargetException {
         Object[] args = new Object[] {CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME, null};
         List<List<String>> result = (List<List<String>>) getTabletDistributionMethod.invoke(null, args);
-        Assert.assertEquals(3, result.size());
-        System.out.println(result);
+        Assertions.assertEquals(3, result.size());
     }
 
     @Test
@@ -168,7 +176,7 @@ public class MetadataViewerTest {
                 minTimes = 0;
                 result = warehouseId;
 
-                GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+                GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(anyLong);
                 minTimes = 0;
                 result = Lists.newArrayList(10003L, 10004L, 10005L);
             }
@@ -176,7 +184,111 @@ public class MetadataViewerTest {
 
         Object[] args = new Object[] {CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME, null};
         List<List<String>> result = (List<List<String>>) getTabletDistributionMethod.invoke(null, args);
-        Assert.assertEquals(3, result.size());
+        Assertions.assertEquals(3, result.size());
     }
 
+    @Test
+    public void testGetTabletStatusWithStatement() throws Exception {
+        // Test with null where clause
+        TableName tableName = new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME);
+        QualifiedName qualifiedName = QualifiedName.of(List.of(tableName.getDb(), tableName.getTbl()));
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+        AdminShowReplicaStatusStmt stmt = new AdminShowReplicaStatusStmt(tableRef, null);
+
+        List<List<String>> result = MetadataViewer.getTabletStatus(stmt, connectContext);
+        Assertions.assertEquals(3, result.size());
+    }
+
+    @Test
+    public void testGetTabletStatusWithWhereClause() throws Exception {
+        // Test with where clause: status = 'DEAD'
+        TableName tableName = new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME);
+        QualifiedName qualifiedName = QualifiedName.of(List.of(tableName.getDb(), tableName.getTbl()));
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+
+        // Create where clause: status = 'DEAD'
+        SlotRef leftChild = new SlotRef(tableName, "status");
+        StringLiteral rightChild = new StringLiteral("DEAD");
+        BinaryPredicate where = new BinaryPredicate(BinaryType.EQ, leftChild, rightChild);
+
+        AdminShowReplicaStatusStmt stmt = new AdminShowReplicaStatusStmt(tableRef, where);
+
+        List<List<String>> result = MetadataViewer.getTabletStatus(stmt, connectContext);
+        Assertions.assertEquals(3, result.size());
+    }
+
+    @Test
+    public void testGetTabletStatusWithNotEqualWhereClause() throws Exception {
+        // Test with where clause: status != 'DEAD'
+        TableName tableName = new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME);
+        QualifiedName qualifiedName = QualifiedName.of(List.of(tableName.getDb(), tableName.getTbl()));
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+
+        // Create where clause: status != 'DEAD'
+        SlotRef leftChild = new SlotRef(tableName, "status");
+        StringLiteral rightChild = new StringLiteral("DEAD");
+        BinaryPredicate where = new BinaryPredicate(BinaryType.NE, leftChild, rightChild);
+
+        AdminShowReplicaStatusStmt stmt = new AdminShowReplicaStatusStmt(tableRef, where);
+
+        List<List<String>> result = MetadataViewer.getTabletStatus(stmt, connectContext);
+        Assertions.assertEquals(0, result.size());
+    }
+
+    @Test
+    public void testGetTabletStatusWithInvalidStatusFilter() throws Exception {
+        // Test with where clause: status = 'INVALID_STATUS'
+        TableName tableName = new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME);
+        QualifiedName qualifiedName = QualifiedName.of(List.of(tableName.getDb(), tableName.getTbl()));
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+
+        // Create where clause: status = 'INVALID_STATUS'
+        SlotRef leftChild = new SlotRef(tableName, "status");
+        StringLiteral rightChild = new StringLiteral("INVALID_STATUS");
+        BinaryPredicate where = new BinaryPredicate(BinaryType.EQ, leftChild, rightChild);
+
+        AdminShowReplicaStatusStmt stmt = new AdminShowReplicaStatusStmt(tableRef, where);
+
+        List<List<String>> result = MetadataViewer.getTabletStatus(stmt, connectContext);
+        // Should return all results since invalid status filter is treated as null
+        Assertions.assertEquals(3, result.size());
+    }
+
+    @Test
+    public void testGetTabletStatusWithNonStatusColumn() throws Exception {
+        // Test with where clause on non-status column: name = 'test'
+        TableName tableName = new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME);
+        QualifiedName qualifiedName = QualifiedName.of(List.of(tableName.getDb(), tableName.getTbl()));
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+
+        // Create where clause: name = 'test' (not status column)
+        SlotRef leftChild = new SlotRef(tableName, "name");
+        StringLiteral rightChild = new StringLiteral("test");
+        BinaryPredicate where = new BinaryPredicate(BinaryType.EQ, leftChild, rightChild);
+
+        AdminShowReplicaStatusStmt stmt = new AdminShowReplicaStatusStmt(tableRef, where);
+
+        List<List<String>> result = MetadataViewer.getTabletStatus(stmt, connectContext);
+        // Should return all results since non-status column filter is ignored
+        Assertions.assertEquals(3, result.size());
+    }
+
+    @Test
+    public void testGetTabletStatusWithOKStatus() throws Exception {
+        // Test with where clause: status = 'OK'
+        TableName tableName = new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME);
+        QualifiedName qualifiedName = QualifiedName.of(List.of(tableName.getDb(), tableName.getTbl()));
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+
+        // Create where clause: status = 'OK'
+        SlotRef leftChild = new SlotRef(tableName, "status");
+        StringLiteral rightChild = new StringLiteral("OK");
+        BinaryPredicate where = new BinaryPredicate(BinaryType.EQ, leftChild, rightChild);
+
+        AdminShowReplicaStatusStmt stmt = new AdminShowReplicaStatusStmt(tableRef, where);
+
+        List<List<String>> result = MetadataViewer.getTabletStatus(stmt, connectContext);
+        // Should return 0 results since no replicas have OK status in the mock
+        Assertions.assertEquals(0, result.size());
+    }
 }

@@ -14,19 +14,21 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
+#include "base/testutil/id_generator.h"
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
+#include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
+#include "storage/lake/versioned_tablet.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
-#include "testutil/assert.h"
-#include "testutil/id_generator.h"
 
 namespace starrocks::lake {
 
@@ -35,7 +37,7 @@ using namespace starrocks;
 class LakeTabletTest : public TestBase {
 public:
     LakeTabletTest() : TestBase(kTestDirectory) {
-        _tablet_metadata = std::make_unique<TabletMetadata>();
+        _tablet_metadata = std::make_shared<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
         //
@@ -92,8 +94,8 @@ public:
         c2->append_numbers(k1.data(), k1.size() * sizeof(int));
         c3->append_numbers(v1.data(), v1.size() * sizeof(int));
 
-        Chunk chunk0({c0, c1}, _schema);
-        Chunk chunk1({c2, c3}, _schema);
+        Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
+        Chunk chunk1({std::move(c2), std::move(c3)}, _schema);
 
         ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
 
@@ -114,7 +116,7 @@ public:
             ASSERT_OK(writer->write(chunk1));
             ASSERT_OK(writer->finish());
 
-            auto files = writer->files();
+            const auto& files = writer->segments();
             ASSERT_EQ(2, files.size());
 
             // add rowset metadata
@@ -123,8 +125,8 @@ public:
             rowset->set_id(1);
             rowset->set_num_rows(k0.size() + k1.size());
             auto* segs = rowset->mutable_segments();
-            for (auto& file : writer->files()) {
-                segs->Add(std::move(file.path));
+            for (const auto& file : writer->segments()) {
+                segs->Add()->assign(file.path);
             }
 
             writer->close();
@@ -138,7 +140,7 @@ public:
 protected:
     constexpr static const char* const kTestDirectory = "test_lake_tablet";
 
-    std::unique_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
 };
@@ -149,6 +151,21 @@ TEST_F(LakeTabletTest, test_get_tablet_num_rows) {
     ASSIGN_OR_ABORT(auto num_rows_with_version,
                     _tablet_mgr->get_tablet_num_rows(_tablet_metadata->id(), _tablet_metadata->version()));
     ASSERT_EQ(num_rows_with_version, 34);
+}
+
+TEST_F(LakeTabletTest, test_get_basic_info) {
+    create_rowsets_for_testing();
+
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+    auto info = tablet.get_basic_info();
+    ASSERT_EQ(info.tablet_id, _tablet_metadata->id());
+    ASSERT_EQ(info.num_version, 1);
+    ASSERT_EQ(info.max_version, 2);
+    ASSERT_EQ(info.num_rowset, 1);
+    ASSERT_EQ(info.num_segment, 2);
+    ASSERT_EQ(info.num_row, 34);
+    ASSERT_EQ(info.state, 1);
+    ASSERT_EQ(info.type, KeysType::DUP_KEYS);
 }
 
 } // namespace starrocks::lake

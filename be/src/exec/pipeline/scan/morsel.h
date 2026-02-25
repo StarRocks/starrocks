@@ -14,18 +14,19 @@
 
 #pragma once
 
+#include <mutex>
 #include <optional>
 
 #include "exec/query_cache/ticket_checker.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/mem_pool.h"
 #include "storage/olap_common.h"
+#include "storage/olap_tuple.h"
 #include "storage/range.h"
 #include "storage/rowset/segment_group.h"
 #include "storage/seek_range.h"
 #include "storage/tablet.h"
 #include "storage/tablet_reader_params.h"
-#include "storage/tuple.h"
 
 namespace starrocks {
 
@@ -151,10 +152,10 @@ public:
         }
     }
 
-    ~ScanMorsel() override = default;
-
     ScanMorsel(int32_t plan_node_id, const TScanRangeParams& scan_range)
             : ScanMorsel(plan_node_id, scan_range.scan_range) {}
+
+    ~ScanMorsel() override = default;
 
     TScanRange* get_scan_range() { return _scan_range.get(); }
 
@@ -180,6 +181,10 @@ public:
 
     bool is_ticket_checker_entered() const { return _ticket_checker_entered; }
     void set_ticket_checker_entered(bool v) { _ticket_checker_entered = v; }
+
+    static void build_scan_morsels(int node_id, const std::vector<TScanRangeParams>& scan_ranges,
+                                   bool accept_empty_scan_ranges, pipeline::Morsels* morsels, bool* has_more_morsel);
+    static bool has_more_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges);
 
 private:
     std::unique_ptr<TScanRange> _scan_range;
@@ -244,6 +249,10 @@ public:
 
     virtual bool is_shared() const = 0;
     virtual bool could_local_shuffle() const = 0;
+
+    virtual Status append_morsels(int driver_seq, Morsels&& morsels);
+    virtual void set_has_more(bool v) {}
+    virtual bool reach_limit() const { return false; }
 };
 
 class SharedMorselQueueFactory final : public MorselQueueFactory {
@@ -257,6 +266,10 @@ public:
 
     bool is_shared() const override { return true; }
     bool could_local_shuffle() const override { return true; }
+
+    Status append_morsels(int driver_seq, Morsels&& morsels) override;
+    void set_has_more(bool v) override;
+    bool reach_limit() const override;
 
 private:
     MorselQueuePtr _queue;
@@ -279,6 +292,10 @@ public:
 
     bool is_shared() const override { return false; }
     bool could_local_shuffle() const override { return _could_local_shuffle; }
+
+    Status append_morsels(int driver_seq, Morsels&& morsels) override;
+    void set_has_more(bool v) override;
+    bool reach_limit() const override;
 
 private:
     std::vector<MorselQueuePtr> _queue_per_driver_seq;
@@ -303,6 +320,9 @@ public:
 
     bool could_local_shuffle() const override { return _could_local_shuffle; }
 
+    Status append_morsels(int driver_seq, Morsels&& morsels) override;
+    void set_has_more(bool v) override;
+
 private:
     std::vector<MorselQueuePtr> _queue_per_driver_seq;
     const bool _could_local_shuffle;
@@ -323,11 +343,15 @@ public:
     MorselQueue(Morsels&& morsels) : _morsels(std::move(morsels)), _num_morsels(_morsels.size()) {}
     virtual ~MorselQueue() = default;
 
+    // NOTE: some subclasses of MorselQueue nest another MorselQueue, such as BucketSequenceMorselQueue.
+    // When adding a new virtual method, DO NOT forget to invoke it on the nested MorselQueue as well.
+
     virtual std::vector<TInternalScanRange*> prepare_olap_scan_ranges() const;
     virtual void set_key_ranges(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges) {}
-    virtual void set_key_ranges(TabletReaderParams::RangeStartOperation _range_start_op,
-                                TabletReaderParams::RangeEndOperation _range_end_op,
-                                std::vector<OlapTuple> _range_start_key, std::vector<OlapTuple> _range_end_key) {}
+    virtual void set_key_ranges(const TabletReaderParams::RangeStartOperation& range_start_op,
+                                const TabletReaderParams::RangeEndOperation& range_end_op,
+                                const std::vector<OlapTuple>& range_start_key,
+                                const std::vector<OlapTuple>& range_end_key) {}
     virtual void set_tablets(const std::vector<BaseTabletSharedPtr>& tablets) { _tablets = tablets; }
     virtual void set_tablet_rowsets(const std::vector<std::vector<BaseRowsetSharedPtr>>& tablet_rowsets) {
         _tablet_rowsets = tablet_rowsets;
@@ -342,15 +366,28 @@ public:
     virtual void unget(MorselPtr&& morsel);
     virtual std::string name() const = 0;
     virtual StatusOr<bool> ready_for_next() const { return true; }
-    virtual void append_morsels(Morsels&& morsels) {}
+    virtual Status append_morsels(Morsels&& morsels);
     virtual Type type() const = 0;
+    virtual void set_tablet_schema(const TabletSchemaCSPtr& tablet_schema) {
+        DCHECK(tablet_schema != nullptr);
+        _tablet_schema = tablet_schema;
+    }
+    // is there any more scan ranges delivered from FE to be processed?
+    bool has_more() const { return _has_more; }
+    void set_has_more(bool v) { _has_more = v; }
+    // do scan operator emit enough rows that we can stop processing scan ranges?
+    void set_reach_limit(bool v) { _reach_limit = v; }
+    bool reach_limit() const { return _reach_limit; }
 
 protected:
+    std::atomic<bool> _has_more = false;
+    std::atomic<bool> _reach_limit = false;
     Morsels _morsels;
     size_t _num_morsels = 0;
     MorselPtr _unget_morsel = nullptr;
     std::vector<BaseTabletSharedPtr> _tablets;
     std::vector<std::vector<BaseRowsetSharedPtr>> _tablet_rowsets;
+    TabletSchemaCSPtr _tablet_schema = nullptr;
 };
 
 // The morsel queue with a fixed number of morsels, which is determined in the constructor.
@@ -377,6 +414,13 @@ public:
         _morsel_queue->set_key_ranges(key_ranges);
     }
 
+    void set_key_ranges(const TabletReaderParams::RangeStartOperation& range_start_op,
+                        const TabletReaderParams::RangeEndOperation& range_end_op,
+                        const std::vector<OlapTuple>& range_start_key,
+                        const std::vector<OlapTuple>& range_end_key) override {
+        _morsel_queue->set_key_ranges(range_start_op, range_end_op, range_start_key, range_end_key);
+    }
+
     void set_tablets(const std::vector<BaseTabletSharedPtr>& tablets) override { _morsel_queue->set_tablets(tablets); }
 
     void set_tablet_rowsets(const std::vector<std::vector<BaseRowsetSharedPtr>>& tablet_rowsets) override {
@@ -394,15 +438,21 @@ public:
     StatusOr<MorselPtr> try_get() override;
     std::string name() const override;
     StatusOr<bool> ready_for_next() const override;
-    void append_morsels(Morsels&& morsels) override { _morsel_queue->append_morsels(std::move(morsels)); }
+    Status append_morsels(Morsels&& morsels) override { return _morsel_queue->append_morsels(std::move(morsels)); }
     Type type() const override { return BUCKET_SEQUENCE; }
+
+    void set_tablet_schema(const TabletSchemaCSPtr& tablet_schema) override {
+        MorselQueue::set_tablet_schema(tablet_schema);
+        _morsel_queue->set_tablet_schema(tablet_schema);
+    }
 
 private:
     StatusOr<int64_t> _peek_sequence_id() const;
+    mutable std::mutex _mutex;
 
-    int64_t _current_sequence = -1;
     MorselQueuePtr _morsel_queue;
     query_cache::TicketCheckerPtr _ticket_checker;
+    int64_t _current_sequence = -1;
 };
 
 class SplitMorselQueue : public MorselQueue {
@@ -444,9 +494,10 @@ public:
     ~PhysicalSplitMorselQueue() override = default;
 
     void set_key_ranges(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges) override;
-    void set_key_ranges(TabletReaderParams::RangeStartOperation _range_start_op,
-                        TabletReaderParams::RangeEndOperation _range_end_op, std::vector<OlapTuple> _range_start_key,
-                        std::vector<OlapTuple> _range_end_key) override;
+    void set_key_ranges(const TabletReaderParams::RangeStartOperation& range_start_op,
+                        const TabletReaderParams::RangeEndOperation& range_end_op,
+                        const std::vector<OlapTuple>& range_start_key,
+                        const std::vector<OlapTuple>& range_end_key) override;
     bool empty() const override { return _unget_morsel == nullptr && _tablet_idx >= _tablets.size(); }
     StatusOr<MorselPtr> try_get() override;
 
@@ -501,9 +552,10 @@ public:
     ~LogicalSplitMorselQueue() override = default;
 
     void set_key_ranges(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges) override;
-    void set_key_ranges(TabletReaderParams::RangeStartOperation range_start_op,
-                        TabletReaderParams::RangeEndOperation range_end_op, std::vector<OlapTuple> range_start_key,
-                        std::vector<OlapTuple> range_end_key) override;
+    void set_key_ranges(const TabletReaderParams::RangeStartOperation& range_start_op,
+                        const TabletReaderParams::RangeEndOperation& range_end_op,
+                        const std::vector<OlapTuple>& range_start_key,
+                        const std::vector<OlapTuple>& range_end_key) override;
     bool empty() const override { return _unget_morsel == nullptr && _tablet_idx >= _tablets.size(); }
     StatusOr<MorselPtr> try_get() override;
 
@@ -555,10 +607,11 @@ private:
 
 class DynamicMorselQueue final : public MorselQueue {
 public:
-    explicit DynamicMorselQueue(Morsels&& morsels) {
-        append_morsels(std::move(morsels));
+    explicit DynamicMorselQueue(Morsels&& morsels, bool has_more) {
+        (void)append_morsels(std::move(morsels));
         _size = _num_morsels = _queue.size();
         _degree_of_parallelism = _num_morsels;
+        _has_more = has_more;
     }
 
     ~DynamicMorselQueue() override = default;
@@ -566,7 +619,7 @@ public:
     StatusOr<MorselPtr> try_get() override;
     void unget(MorselPtr&& morsel) override;
     std::string name() const override { return "dynamic_morsel_queue"; }
-    void append_morsels(Morsels&& morsels) override;
+    Status append_morsels(Morsels&& morsels) override;
     void set_ticket_checker(const query_cache::TicketCheckerPtr& ticket_checker) override {
         _ticket_checker = ticket_checker;
     }

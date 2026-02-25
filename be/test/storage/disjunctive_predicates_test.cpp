@@ -18,13 +18,14 @@
 
 #include <memory>
 
+#include "base/simd/simd.h"
+#include "column/chunk.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
-#include "simd/simd.h"
 #include "storage/column_predicate.h"
 #include "types/logical_type.h"
-#include "util/value_generator.h"
+#include "types/value_generator.h"
 
 namespace starrocks {
 struct SegDataGenerator {
@@ -49,11 +50,11 @@ TEST(DisjunctivePredicatesTest, TwoPredicateTest) {
     ContainerIniter<SegDataGenerator, RunTimeColumnType<TYPE0>::Container, chunk_size>::init(column0->get_data());
     ContainerIniter<SegDataGeneratorWithRange<4>, RunTimeColumnType<TYPE1>::Container, chunk_size>::init(
             column1->get_data());
-    Columns columns = {column0, column1};
+    Columns columns = {std::move(column0), std::move(column1)};
     Chunk::SlotHashMap hash_map;
     hash_map[0] = 0;
     hash_map[1] = 1;
-    auto chunk = std::make_shared<Chunk>(columns, hash_map);
+    auto chunk = std::make_shared<Chunk>(std::move(columns), hash_map);
     chunk->_cid_to_index[0] = 0;
     chunk->_cid_to_index[1] = 1;
 

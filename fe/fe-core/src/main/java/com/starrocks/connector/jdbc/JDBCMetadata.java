@@ -16,22 +16,25 @@ package com.starrocks.connector.jdbc;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.DateLiteral;
-import com.starrocks.analysis.IntLiteral;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
-import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import org.apache.logging.log4j.LogManager;
@@ -43,6 +46,8 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 public class JDBCMetadata implements ConnectorMetadata {
@@ -53,17 +58,21 @@ public class JDBCMetadata implements ConnectorMetadata {
     JDBCSchemaResolver schemaResolver;
     private String catalogName;
 
+    private JDBCMetaCache<String, Database> dbCache;
     private JDBCMetaCache<JDBCTableName, List<String>> partitionNamesCache;
     private JDBCMetaCache<JDBCTableName, Integer> tableIdCache;
     private JDBCMetaCache<JDBCTableName, Table> tableInstanceCache;
     private JDBCMetaCache<JDBCTableName, List<Partition>> partitionInfoCache;
 
     private HikariDataSource dataSource;
+    private static final ExecutorService NETWORK_TIMEOUT_EXECUTOR = Executors.newSingleThreadExecutor(
+            new ThreadFactoryBuilder().setDaemon(true).setNameFormat("jdbc-network-timeout-%d").build());
+    private static final List<String> SUPPORTED_SCHEMA_RESOLVERS =
+            ImmutableList.of("postgresql", "mysql", "oracle", "sqlserver", "clickhouse");
 
     public JDBCMetadata(Map<String, String> properties, String catalogName) {
         this(properties, catalogName, null);
     }
-
 
     public JDBCMetadata(Map<String, String> properties, String catalogName, HikariDataSource dataSource) {
         this.properties = properties;
@@ -75,22 +84,7 @@ public class JDBCMetadata implements ConnectorMetadata {
             LOG.warn(e.getMessage(), e);
             throw new StarRocksConnectorException("doesn't find class: " + e.getMessage());
         }
-        if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("mysql")) {
-            schemaResolver = new MysqlSchemaResolver();
-        } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("postgresql")) {
-            schemaResolver = new PostgresSchemaResolver();
-        } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("mariadb")) {
-            schemaResolver = new MysqlSchemaResolver();
-        } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("clickhouse")) {
-            schemaResolver = new ClickhouseSchemaResolver(properties);
-        } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("oracle")) {
-            schemaResolver = new OracleSchemaResolver();
-        } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("sqlserver")) {
-            schemaResolver = new SqlServerSchemaResolver();
-        } else {
-            LOG.warn("{} not support yet", properties.get(JDBCResource.DRIVER_CLASS));
-            throw new StarRocksConnectorException(properties.get(JDBCResource.DRIVER_CLASS) + " not support yet");
-        }
+        schemaResolver = createSchemaResolver();
         if (dataSource == null) {
             dataSource = createHikariDataSource();
         }
@@ -108,6 +102,63 @@ public class JDBCMetadata implements ConnectorMetadata {
         return driverName;
     }
 
+    /**
+     * Creates the appropriate SchemaResolver based on configuration.
+     * Priority:
+     * 1. If schema_resolver property is specified, use that resolver
+     * 2. Otherwise, auto-detect based on driver class name
+     */
+    private JDBCSchemaResolver createSchemaResolver() {
+        // Check for explicit schema_resolver property first
+        String schemaResolverType = properties.get(JDBCResource.SCHEMA_RESOLVER);
+        if (schemaResolverType != null && !schemaResolverType.trim().isEmpty()) {
+            return createSchemaResolverFromProperty(schemaResolverType.trim());
+        }
+
+        // Fall back to driver class name detection
+        String driverClass = properties.get(JDBCResource.DRIVER_CLASS).toLowerCase();
+        if (driverClass.contains("mysql")) {
+            return new MysqlSchemaResolver();
+        } else if (driverClass.contains("postgresql")) {
+            return new PostgresSchemaResolver();
+        } else if (driverClass.contains("mariadb")) {
+            return new MysqlSchemaResolver();
+        } else if (driverClass.contains("clickhouse")) {
+            return new ClickhouseSchemaResolver(properties);
+        } else if (driverClass.contains("oracle")) {
+            return new OracleSchemaResolver();
+        } else if (driverClass.contains("sqlserver")) {
+            return new SqlServerSchemaResolver();
+        } else {
+            LOG.warn("{} not support yet", properties.get(JDBCResource.DRIVER_CLASS));
+            throw new StarRocksConnectorException(properties.get(JDBCResource.DRIVER_CLASS) + " not support yet");
+        }
+    }
+
+    /**
+     * Creates a SchemaResolver from the explicitly specified resolver type.
+     * @param resolverType the type of resolver (e.g., "postgresql", "mysql")
+     * @return the appropriate JDBCSchemaResolver instance
+     */
+    private JDBCSchemaResolver createSchemaResolverFromProperty(String resolverType) {
+        switch (resolverType.toLowerCase()) {
+            case "postgresql":
+                return new PostgresSchemaResolver();
+            case "mysql":
+                return new MysqlSchemaResolver();
+            case "oracle":
+                return new OracleSchemaResolver();
+            case "sqlserver":
+                return new SqlServerSchemaResolver();
+            case "clickhouse":
+                return new ClickhouseSchemaResolver(properties);
+            default:
+                throw new StarRocksConnectorException(
+                        "Unknown schema_resolver: " + resolverType +
+                        ". Supported values: " + String.join(", ", SUPPORTED_SCHEMA_RESOLVERS));
+        }
+    }
+
     String getJdbcUrl() {
         String jdbcUrl = properties.get(JDBCResource.URI);
         // use org.mariadb.jdbc.Driver for mysql because of gpl protocol
@@ -118,6 +169,7 @@ public class JDBCMetadata implements ConnectorMetadata {
     }
 
     private void createMetaAsyncCacheInstances(Map<String, String> properties) {
+        dbCache = new JDBCMetaCache<>(properties, false);
         partitionNamesCache = new JDBCMetaCache<>(properties, false);
         tableIdCache = new JDBCMetaCache<>(properties, true);
         tableInstanceCache = new JDBCMetaCache<>(properties, false);
@@ -142,11 +194,23 @@ public class JDBCMetadata implements ConnectorMetadata {
         config.setMaximumPoolSize(Config.jdbc_connection_pool_size);
         config.setMinimumIdle(Config.jdbc_minimum_idle_connections);
         config.setIdleTimeout(Config.jdbc_connection_idle_timeout_ms);
+        config.setConnectionTimeout(Config.jdbc_connection_timeout_ms);
         return new HikariDataSource(config);
     }
 
     public Connection getConnection() throws SQLException {
-        return dataSource.getConnection();
+        Connection connection = dataSource.getConnection();
+        try {
+            // Set network timeout only when it's configured (>=0)
+            if (Config.jdbc_network_timeout_ms >= 0L) {
+                int networkTimeoutMs = (int) Math.min(Config.jdbc_network_timeout_ms, (long) Integer.MAX_VALUE);
+                connection.setNetworkTimeout(NETWORK_TIMEOUT_EXECUTOR, networkTimeoutMs);
+            }
+        } catch (SQLException e) {
+            connection.close();
+            throw e;
+        }
+        return connection;
     }
 
     @Override
@@ -155,7 +219,7 @@ public class JDBCMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listDbNames() {
+    public List<String> listDbNames(ConnectContext context) {
         try (Connection connection = getConnection()) {
             return Lists.newArrayList(schemaResolver.listSchemas(connection));
         } catch (SQLException e) {
@@ -164,20 +228,46 @@ public class JDBCMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public Database getDb(String name) {
-        try {
-            if (listDbNames().contains(name)) {
-                return new Database(0, name);
-            } else {
-                return null;
+    public Database getDb(ConnectContext context, String name) {
+        // NOTE: We use manual cache control (getIfPresent + put) instead of the lambda-based approach
+        // for the following reason:
+        //
+        // The lambda in getTable() can return null when the table doesn't exist, but JDBCMetaCache.get()
+        // uses Objects.requireNonNull() which throws NullPointerException when the lambda returns null.
+        //
+        // For getDb(), we need to return null for non-existent databases (a valid result, not an error),
+        // so we manually control the cache to avoid the NPE issue:
+        // 1. Use getIfPresent() to check cache without triggering the lambda
+        // 2. On cache miss, query directly and only cache successful (non-null) results
+        // 3. Return null for non-existent databases or SQLException without caching
+
+        // Check cache first
+        Database cached = dbCache.getIfPresent(name);
+        if (cached != null) {
+            return cached;
+        }
+
+        // Cache miss - query directly
+        try (Connection connection = getConnection()) {
+            if (schemaResolver.databaseExists(connection, name)) {
+                Database db = new Database(0, name);
+                // Only cache on success to avoid caching null values
+                dbCache.put(name, db);
+                return db;
             }
-        } catch (StarRocksConnectorException e) {
+            // Database doesn't exist - don't cache null
+            return null;
+        } catch (SQLException e) {
+            // From getConnection() or databaseExists()
+            LOG.warn("Failed to check database existence for {}.{}: {}",
+                    catalogName, name, e.getMessage());
+            // Exception occurred - don't cache null
             return null;
         }
     }
 
     @Override
-    public List<String> listTableNames(String dbName) {
+    public List<String> listTableNames(ConnectContext context, String dbName) {
         try (Connection connection = getConnection()) {
             try (ResultSet resultSet = schemaResolver.getTables(connection, dbName)) {
                 ImmutableList.Builder<String> list = ImmutableList.builder();
@@ -193,12 +283,12 @@ public class JDBCMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public Table getTable(String dbName, String tblName) {
+    public Table getTable(ConnectContext context, String dbName, String tblName) {
         JDBCTableName jdbcTable = new JDBCTableName(null, dbName, tblName);
         return tableInstanceCache.get(jdbcTable,
                 k -> {
-                    try (Connection connection = getConnection()) {
-                        ResultSet columnSet = schemaResolver.getColumns(connection, dbName, tblName);
+                    try (Connection connection = getConnection();
+                            ResultSet columnSet = schemaResolver.getColumns(connection, dbName, tblName)) {
                         List<Column> fullSchema = schemaResolver.convertToSRTable(columnSet);
                         List<Column> partitionColumns = Lists.newArrayList();
                         if (schemaResolver.isSupportPartitionInformation()) {
@@ -220,7 +310,7 @@ public class JDBCMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String databaseName, String tableName, TableVersionRange version) {
+    public List<String> listPartitionNames(String databaseName, String tableName, ConnectorMetadatRequestContext requestContext) {
         return partitionNamesCache.get(new JDBCTableName(null, databaseName, tableName),
                 k -> {
                     try (Connection connection = getConnection()) {
@@ -253,7 +343,7 @@ public class JDBCMetadata implements ConnectorMetadata {
     public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
         JDBCTable jdbcTable = (JDBCTable) table;
         List<Partition> partitions = partitionInfoCache.get(
-                new JDBCTableName(null, jdbcTable.getDbName(), jdbcTable.getName()),
+                new JDBCTableName(null, jdbcTable.getCatalogDBName(), jdbcTable.getName()),
                 k -> {
                     try (Connection connection = getConnection()) {
                         List<Partition> partitionsForCache = schemaResolver.getPartitions(connection, table);
@@ -266,8 +356,8 @@ public class JDBCMetadata implements ConnectorMetadata {
                     }
                 });
 
-        String maxInt = IntLiteral.createMaxValue(Type.INT).getStringValue();
-        String maxDate = DateLiteral.createMaxValue(Type.DATE).getStringValue();
+        String maxInt = IntLiteral.createMaxValue(IntegerType.INT).getStringValue();
+        String maxDate = DateLiteral.createMaxValue(DateType.DATE).getStringValue();
 
         ImmutableList.Builder<PartitionInfo> list = ImmutableList.builder();
         if (partitions.isEmpty()) {
@@ -292,7 +382,7 @@ public class JDBCMetadata implements ConnectorMetadata {
     @Override
     public void refreshTable(String srDbName, Table table, List<String> partitionNames, boolean onlyCachedPartitions) {
         JDBCTable jdbcTable = (JDBCTable) table;
-        JDBCTableName jdbcTableName = new JDBCTableName(null, jdbcTable.getDbName(), jdbcTable.getName());
+        JDBCTableName jdbcTableName = new JDBCTableName(null, jdbcTable.getCatalogDBName(), jdbcTable.getName());
         if (!onlyCachedPartitions) {
             tableInstanceCache.invalidate(jdbcTableName);
         }
@@ -302,5 +392,12 @@ public class JDBCMetadata implements ConnectorMetadata {
 
     public void refreshCache(Map<String, String> properties) {
         createMetaAsyncCacheInstances(properties);
+    }
+
+    @Override
+    public void shutdown() {
+        if (dataSource != null) {
+            dataSource.close();
+        }
     }
 }

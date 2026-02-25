@@ -16,28 +16,71 @@ package com.starrocks.qe.scheduler.slot;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.common.Config;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNode;
+import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DefaultCoordinator;
+import com.starrocks.sql.optimizer.cost.feature.CostPredictor;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import org.apache.commons.lang3.EnumUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.optimizer.Utils.computeMaxLEPower2;
+import static com.starrocks.sql.optimizer.Utils.computeMinGEPower2;
 
 public class SlotEstimatorFactory {
+    private static final Logger LOG = LogManager.getLogger(SlotEstimatorFactory.class);
+
+    public enum EstimatorPolicy {
+        MBE, // memory-based slots estimator
+        PBE, // parallel-based slots estimator
+        MAX, // max of memory and parallel based slots estimator
+        MIN; // min of memory and parallel based slots estimator
+
+        public static EstimatorPolicy createDefault() {
+            return MAX;
+        }
+
+        public static EstimatorPolicy create(String value) {
+            return EnumUtils.getEnumIgnoreCase(EstimatorPolicy.class, value);
+        }
+
+        public SlotEstimator createEstimator() {
+            switch (this) {
+                case MBE:
+                    return new MemoryBasedSlotsEstimator();
+                case PBE:
+                    return new ParallelismBasedSlotsEstimator();
+                case MAX:
+                    return new MaxSlotsEstimator(new MemoryBasedSlotsEstimator(), new ParallelismBasedSlotsEstimator());
+                case MIN:
+                    return new MinSlotsEstimator(new MemoryBasedSlotsEstimator(), new ParallelismBasedSlotsEstimator());
+                default:
+                    throw new IllegalArgumentException("Unknown EstimatorPolicy: " + this);
+            }
+        }
+    }
+
     public static SlotEstimator create(QueryQueueOptions opts) {
         if (!opts.isEnableQueryQueueV2()) {
             return new DefaultSlotEstimator();
         }
-        return new MaxSlotsEstimator(new MemoryBasedSlotsEstimator(), new ParallelismBasedSlotsEstimator());
+
+        EstimatorPolicy policy = EstimatorPolicy.create(Config.query_queue_slots_estimator_strategy);
+        if (policy == null) {
+            policy = EstimatorPolicy.createDefault();
+        }
+        return policy.createEstimator();
     }
 
     public static class DefaultSlotEstimator implements SlotEstimator {
@@ -50,10 +93,24 @@ public class SlotEstimatorFactory {
     public static class MemoryBasedSlotsEstimator implements SlotEstimator {
         @Override
         public int estimateSlots(QueryQueueOptions opts, ConnectContext context, DefaultCoordinator coord) {
-            final long planMemCosts = (long) context.getAuditEventBuilder().build().planMemCosts;
-            long numSlotsPerWorker = planMemCosts / opts.v2().getNumWorkers() / opts.v2().getMemBytesPerSlot();
+            long memCost;
+            boolean isCostPredictorAvailable = CostPredictor.getServiceBasedCostPredictor().isAvailable();
+            if (isCostPredictorAvailable && coord.getPredictedCost() > 0) {
+                memCost = coord.getPredictedCost();
+            } else {
+                if (isCostPredictorAvailable) {
+                    LOG.warn("Cost predictor is available, but predicted cost is not set. " +
+                            "Using planCpuCosts as the fallback.");
+                }
+                // The estimate of planMemCosts is typically an underestimation, often several orders of magnitude smaller than
+                // the actual memory usage, whereas planCpuCosts tends to be relatively larger.
+                // Therefore, the maximum value between the two is used as the estimate for memory.
+                memCost = (long) Math.max(context.getAuditEventBuilder().build().planMemCosts,
+                        context.getAuditEventBuilder().build().planCpuCosts);
+            }
+            long numSlotsPerWorker = memCost / opts.v2().getMemBytesPerSlot();
             numSlotsPerWorker = Math.max(numSlotsPerWorker, 0);
-            numSlotsPerWorker = computeMaxLEPower2((int) numSlotsPerWorker);
+            numSlotsPerWorker = computeMinGEPower2((int) numSlotsPerWorker);
 
             long numSlots = numSlotsPerWorker * opts.v2().getNumWorkers();
             numSlots = Math.max(numSlots, 1);
@@ -66,7 +123,7 @@ public class SlotEstimatorFactory {
     public static class ParallelismBasedSlotsEstimator implements SlotEstimator {
         @Override
         public int estimateSlots(QueryQueueOptions opts, ConnectContext context, DefaultCoordinator coord) {
-            Map<PlanFragmentId, FragmentContext> fragmentContexts = collectFragmentContexts(coord);
+            Map<PlanFragmentId, FragmentContext> fragmentContexts = collectFragmentContexts(opts, coord);
             int numSlots = fragmentContexts.values().stream()
                     .mapToInt(fragmentContext -> estimateFragmentSlots(opts, fragmentContext))
                     .max().orElse(1);
@@ -111,13 +168,14 @@ public class SlotEstimatorFactory {
             return (int) (sourceNode.getCardinality() / opts.v2().getNumRowsPerSlot());
         }
 
-        private static Map<PlanFragmentId, FragmentContext> collectFragmentContexts(DefaultCoordinator coord) {
+        private static Map<PlanFragmentId, FragmentContext> collectFragmentContexts(QueryQueueOptions opts,
+                                                                                    DefaultCoordinator coord) {
             PlanFragment rootFragment = coord.getExecutionDAG().getRootFragment().getPlanFragment();
             PlanNode rootNode = rootFragment.getPlanRoot();
 
             Map<PlanFragmentId, FragmentContext> contexts = Maps.newHashMap();
             collectFragmentSourceNodes(rootNode, contexts);
-            calculateFragmentWorkers(rootFragment, contexts);
+            calculateFragmentWorkers(opts, rootFragment, contexts);
 
             return contexts;
         }
@@ -132,8 +190,9 @@ public class SlotEstimatorFactory {
             node.getChildren().forEach(child -> collectFragmentSourceNodes(child, contexts));
         }
 
-        private static void calculateFragmentWorkers(PlanFragment fragment, Map<PlanFragmentId, FragmentContext> contexts) {
-            fragment.getChildren().forEach(child -> calculateFragmentWorkers(child, contexts));
+        private static void calculateFragmentWorkers(QueryQueueOptions opts, PlanFragment fragment,
+                                                     Map<PlanFragmentId, FragmentContext> contexts) {
+            fragment.getChildren().forEach(child -> calculateFragmentWorkers(opts, child, contexts));
 
             FragmentContext context = contexts.get(fragment.getFragmentId());
             if (context == null) {
@@ -148,6 +207,10 @@ public class SlotEstimatorFactory {
                         .map(TScanRangeLocation::getBackend_id)
                         .collect(Collectors.toSet())
                         .size();
+            } else if (leftMostNode instanceof ScanNode && ((ScanNode) leftMostNode).isConnectorScanNode()) {
+                // TODO: get the actual number of files for connector scan nodes.
+                int numWorkers = (int) leftMostNode.getCardinality() / opts.v2().getNumRowsPerSlot();
+                context.numWorkers = Math.max(1, Math.min(numWorkers, opts.v2().getNumWorkers()));
             } else if (fragment.isGatherFragment()) {
                 context.numWorkers = 1;
             } else {
@@ -180,6 +243,22 @@ public class SlotEstimatorFactory {
             return Arrays.stream(estimators)
                     .mapToInt(estimator -> estimator.estimateSlots(opts, context, coord))
                     .max()
+                    .orElse(1);
+        }
+    }
+
+    public static class MinSlotsEstimator implements SlotEstimator {
+        private final SlotEstimator[] estimators;
+
+        public MinSlotsEstimator(SlotEstimator... estimators) {
+            this.estimators = estimators;
+        }
+
+        @Override
+        public int estimateSlots(QueryQueueOptions opts, ConnectContext context, DefaultCoordinator coord) {
+            return Arrays.stream(estimators)
+                    .mapToInt(estimator -> estimator.estimateSlots(opts, context, coord))
+                    .min()
                     .orElse(1);
         }
     }

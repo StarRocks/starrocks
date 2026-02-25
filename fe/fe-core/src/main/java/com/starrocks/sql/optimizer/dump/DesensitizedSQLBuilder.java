@@ -18,10 +18,6 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.SubfieldExpr;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.DistributionInfo;
@@ -33,15 +29,14 @@ import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.JDBCTable;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.View;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.PrintableMap;
@@ -52,11 +47,10 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
-import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.QueryAnalyzer;
 import com.starrocks.sql.ast.CTERelation;
-import com.starrocks.sql.ast.FieldReference;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectList;
@@ -68,9 +62,15 @@ import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FieldReference;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.SubfieldExpr;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.formatter.AST2SQLVisitor;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.statistic.StatsConstants;
+import com.starrocks.type.PrimitiveType;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
@@ -84,6 +84,7 @@ import java.util.StringJoiner;
 import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
 
+import static com.starrocks.catalog.DefaultExpr.isValidDefaultFunction;
 import static java.util.stream.Collectors.toList;
 
 public class DesensitizedSQLBuilder {
@@ -94,12 +95,10 @@ public class DesensitizedSQLBuilder {
 
     private static final String TABLE_ALIAS = "table alias";
 
-
-
     public static String desensitizeSQL(StatementBase statement, Map<String, String> desensitizedDict) {
         Map<TableName, Table> tables = AnalyzerUtils.collectAllTableAndViewWithAlias(statement);
         boolean sameCatalogDb = tables.keySet().stream().map(TableName::getCatalogAndDb).distinct().count() == 1;
-        return new DesensitizedSQLVisitor(sameCatalogDb, false, desensitizedDict).visit(statement);
+        return new DesensitizedSQLVisitor(sameCatalogDb, true, desensitizedDict).visit(statement);
     }
 
     public static String desensitizeViewDef(View view, Map<String, String> desensitizedDict, ConnectContext connectContext) {
@@ -107,21 +106,22 @@ public class DesensitizedSQLBuilder {
         new QueryAnalyzer(connectContext).analyze(stmt);
         Map<TableName, Table> tables = AnalyzerUtils.collectAllTableAndViewWithAlias(stmt);
         boolean sameCatalogDb = tables.keySet().stream().map(TableName::getCatalogAndDb).distinct().count() == 1;
-        return new DesensitizedSQLVisitor(sameCatalogDb, false, desensitizedDict).desensitizeViewDef(stmt);
+        return new DesensitizedSQLVisitor(sameCatalogDb, true, desensitizedDict).desensitizeViewDef(stmt);
     }
 
     public static String desensitizeTableDef(Pair<String, Table> pair, Map<String, String> desensitizedDict) {
         Table table = pair.second;
-        DesensitizedSQLVisitor visitor = new DesensitizedSQLVisitor(true, true, desensitizedDict);
+        DesensitizedSQLVisitor visitor = new DesensitizedSQLVisitor(true, false, desensitizedDict);
         String tableDef = "";
         if (table.isMaterializedView()) {
-            visitor = new DesensitizedSQLVisitor(true, false, desensitizedDict);
+            visitor = new DesensitizedSQLVisitor(true, true, desensitizedDict);
             tableDef = visitor.desensitizeMvDef(table);
         } else if (table.getType() == Table.TableType.MYSQL || table.getType() == Table.TableType.ELASTICSEARCH
                 || table.getType() == Table.TableType.BROKER || table.getType() == Table.TableType.HIVE
                 || table.getType() == Table.TableType.HUDI || table.getType() == Table.TableType.ICEBERG
                 || table.getType() == Table.TableType.JDBC
-                || table.getType() == Table.TableType.FILE) {
+                || table.getType() == Table.TableType.FILE
+                || table.getType() == Table.TableType.BENCHMARK) {
             tableDef = visitor.desensitizeExternalTableDef(pair.first, table);
         } else if (table instanceof OlapTable) {
             tableDef = visitor.desensitizeOlapTableDef(pair.first, (OlapTable) pair.second);
@@ -150,12 +150,13 @@ public class DesensitizedSQLBuilder {
         return desensitizedDict.get(colName);
     }
 
-    public static class DesensitizedSQLVisitor extends AstToSQLBuilder.AST2SQLBuilderVisitor {
+    public static class DesensitizedSQLVisitor extends AST2SQLVisitor {
 
         private final Map<String, String> desensitizedDict;
 
-        public DesensitizedSQLVisitor(boolean simple, boolean withoutTbl, Map<String, String> desensitizedDict) {
-            super(simple, withoutTbl, true);
+        public DesensitizedSQLVisitor(boolean simple, boolean withTbl, Map<String, String> desensitizedDict) {
+            options.setColumnSimplifyTableName(simple);
+            options.setColumnWithTableName(withTbl);
             this.desensitizedDict = desensitizedDict;
         }
 
@@ -347,7 +348,7 @@ public class DesensitizedSQLBuilder {
         }
 
         @Override
-        public String visitSubquery(SubqueryRelation node, Void context) {
+        public String visitSubqueryRelation(SubqueryRelation node, Void context) {
             StringBuilder sqlBuilder = new StringBuilder("(" + visit(node.getQueryStatement()) + ")");
 
             if (node.getAlias() != null) {
@@ -580,7 +581,7 @@ public class DesensitizedSQLBuilder {
                         .append("\" = \"");
                 final List<String> cols = Lists.newArrayList();
                 materializedView.getTableProperty().getUniqueConstraints()
-                        .forEach(e -> cols.addAll(e.getUniqueColumnNames()));
+                        .forEach(e -> cols.addAll(e.getUniqueColumnNames(materializedView)));
                 List<String> desensitizedCols = Lists.newArrayList();
                 cols.forEach(e -> desensitizedCols.add(desensitizeValue(e, COLUMN)));
                 sb.append(Joiner.on(", ").join(desensitizedCols)).append("\"");
@@ -607,7 +608,7 @@ public class DesensitizedSQLBuilder {
 
             sb.append("\n)");
             String define = materializedView.getSimpleDefineSql();
-            if (StringUtils.isEmpty(define) || !simple) {
+            if (StringUtils.isEmpty(define) || !options.isColumnSimplifyTableName()) {
                 define = materializedView.getViewDefineSql();
             }
             StatementBase stmt = SqlParser.parse(define, SessionVariable.DEFAULT_SESSION_VARIABLE).get(0);
@@ -663,7 +664,7 @@ public class DesensitizedSQLBuilder {
             sb.append(desensitizeDistributionInfo(olapTable.getIdToColumn(), distributionInfo));
 
             // order by
-            MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
+            MaterializedIndexMeta index = olapTable.getIndexMetaByMetaId(olapTable.getBaseIndexMetaId());
             if (index.getSortKeyIdxes() != null) {
                 sb.append("\nORDER BY(");
                 List<String> sortKeysColumnNames = Lists.newArrayList();
@@ -726,7 +727,7 @@ public class DesensitizedSQLBuilder {
                         .append("\" = \"");
                 final List<String> cols = Lists.newArrayList();
                 olapTable.getTableProperty().getUniqueConstraints()
-                        .forEach(e -> cols.addAll(e.getUniqueColumnNames()));
+                        .forEach(e -> cols.addAll(e.getUniqueColumnNames(olapTable)));
                 List<String> desensitizedCols = Lists.newArrayList();
                 cols.forEach(e -> desensitizedCols.add(desensitizeValue(e, COLUMN)));
                 sb.append(Joiner.on(", ").join(desensitizedCols)).append("\"");
@@ -755,9 +756,13 @@ public class DesensitizedSQLBuilder {
             if (column.getDefaultExpr() == null && column.isAutoIncrement()) {
                 sb.append("AUTO_INCREMENT ");
             } else if (column.getDefaultExpr() != null) {
-                if ("now()".equalsIgnoreCase(column.getDefaultExpr().getExpr())) {
+                if (isValidDefaultFunction(column.getDefaultExpr().getExpr())) {
                     // compatible with mysql
-                    sb.append("DEFAULT ").append("CURRENT_TIMESTAMP").append(" ");
+                    if (column.getDefaultExpr().hasArgs()) {
+                        sb.append("DEFAULT ").append(column.getDefaultExpr().getExpr()).append(" ");
+                    } else {
+                        sb.append("DEFAULT ").append("CURRENT_TIMESTAMP").append(" ");
+                    }
                 } else {
                     sb.append("DEFAULT ").append("(").append(column.getDefaultExpr().getExpr()).append(") ");
                 }
@@ -821,8 +826,8 @@ public class DesensitizedSQLBuilder {
 
         private String desensitizeColumnName(TableName tableName, String fieldName, String aliasName) {
             String res = "";
-            if (tableName != null && !withoutTbl) {
-                if (!simple) {
+            if (tableName != null && options.isColumnWithTableName()) {
+                if (!options.isColumnSimplifyTableName()) {
                     res = desensitizeTableName(tableName);
                 } else {
                     res = "tbl_" + desensitizeValue(tableName.getTbl(), "table");

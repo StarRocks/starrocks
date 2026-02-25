@@ -36,20 +36,20 @@ package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.DecommissionBackendClause;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.HostPort;
 import com.starrocks.system.SystemInfoService;
 import io.netty.handler.codec.http.HttpMethod;
 
@@ -78,8 +78,7 @@ public class CheckDecommissionAction extends RestBaseAction {
     @Override
     public void executeWithoutPassword(BaseRequest request, BaseResponse response)
             throws DdlException, AccessDeniedException {
-        UserIdentity currentUser = ConnectContext.get().getCurrentUserIdentity();
-        Authorizer.checkSystemAction(currentUser, null, PrivilegeType.OPERATE);
+        Authorizer.checkSystemAction(ConnectContext.get(), PrivilegeType.OPERATE);
 
         String hostPorts = request.getSingleParameter(HOST_PORTS);
         if (Strings.isNullOrEmpty(hostPorts)) {
@@ -93,13 +92,16 @@ public class CheckDecommissionAction extends RestBaseAction {
 
         try {
             DecommissionBackendClause decommissionBackendClause = new DecommissionBackendClause(Lists.newArrayList(hostPortArr));
-            List<Pair<String, Integer>> hostPortPairs = Arrays.stream(hostPortArr)
-                    .map(hostPort -> SystemInfoService.validateHostAndPort(hostPort, false)).collect(Collectors.toList());
+            List<HostPort> hostPortPairs = Arrays.stream(hostPortArr)
+                    .map(hostPort -> {
+                        Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort, false);
+                        return new HostPort(pair.first, pair.second);
+                    }).collect(Collectors.toList());
             decommissionBackendClause.setHostPortPairs(hostPortPairs);
 
             GlobalStateMgr.getCurrentState().getAlterJobMgr().getClusterHandler().process(
                     Lists.newArrayList(decommissionBackendClause), null, null);
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             throw new DdlException(e.getMessage());
         }
 

@@ -16,7 +16,7 @@
 
 #include <utility>
 
-#include "util/filesystem_util.h"
+#include "base/path/filesystem_util.h"
 
 namespace starrocks {
 

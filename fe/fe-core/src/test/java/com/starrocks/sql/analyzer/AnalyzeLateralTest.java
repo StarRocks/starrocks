@@ -18,16 +18,16 @@ import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeLateralTest {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -53,6 +53,8 @@ public class AnalyzeLateralTest {
         analyzeFail("select  unnest(split('1,2,3',','))", "Table function cannot be used in expression");
         analyzeFail("select a.* from unnest(split('1,2,3',',')) a",
                 "Table function must be used with lateral join");
+        analyzeFail("select * from unnest(split('1,2,3',',')) a, t0",
+                "Table function cannot appear on the left side of a join");
 
         analyzeFail("select * from t0,unnest(bitmap_to_array(bitmap_union(to_bitmap(v1))))",
                 "Table Function clause cannot contain aggregations");
@@ -75,7 +77,7 @@ public class AnalyzeLateralTest {
         StatementBase stmt =
                 analyzeSuccess("select * from tarray, unnest(v3, ['a', 'b', 'c']) as t(unnest_1, unnest_2)");
         QueryRelation queryRelation = ((QueryStatement) stmt).getQueryRelation();
-        Assert.assertEquals("[v1, v2, v3, v4, v5, unnest_1, unnest_2]", queryRelation.getColumnOutputNames().toString());
+        Assertions.assertEquals("[v1, v2, v3, v4, v5, unnest_1, unnest_2]", queryRelation.getColumnOutputNames().toString());
 
         analyzeFail("select * from tarray, unnest(v3, ['a', 'b', 'c']) as t(unnest_1)",
                 "table t has 2 columns available but 1 columns specified");

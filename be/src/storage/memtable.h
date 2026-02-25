@@ -14,14 +14,16 @@
 
 #pragma once
 
+#include <atomic>
 #include <ostream>
 
-#include "column/chunk.h"
+#include "column/vectorized_fwd.h"
 #include "exec/sorting/sort_permute.h"
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "storage/chunk_aggregator.h"
 #include "storage/olap_define.h"
+#include "storage/primary_key_encoding_types.h"
 
 namespace starrocks {
 
@@ -29,6 +31,46 @@ class SlotDescriptor;
 class TabletSchema;
 
 class MemTableSink;
+
+struct MemtableStats {
+    // The number of insert operation
+    std::atomic_int32_t insert_count = 0;
+    // Accumulated time to insert
+    std::atomic_int64_t insert_time_ns = 0;
+    // Time to finalize
+    std::atomic_int64_t finalize_time_ns = 0;
+    // The number of sort operation
+    std::atomic_int32_t sort_count = 0;
+    // Accumulated time to sort
+    std::atomic_int64_t sort_time_ns = 0;
+    // The number of agg operation
+    std::atomic_int32_t agg_count = 0;
+    // Accumulated time to aggregate
+    std::atomic_int64_t agg_time_ns = 0;
+    // Time to flush the memtable
+    std::atomic_int64_t flush_time_ns = 0;
+    // IO time for flush
+    std::atomic_int64_t io_time_ns = 0;
+    // Memory size to flush
+    std::atomic_int64_t flush_memory_size = 0;
+    // Disk size to flush
+    std::atomic_int64_t flush_disk_size = 0;
+
+    MemtableStats& operator+=(const MemtableStats& other) {
+        insert_count += other.insert_count;
+        insert_time_ns += other.insert_time_ns;
+        finalize_time_ns += other.finalize_time_ns;
+        sort_count += other.sort_count;
+        sort_time_ns += other.sort_time_ns;
+        agg_count += other.agg_count;
+        agg_time_ns += other.agg_time_ns;
+        flush_time_ns += other.flush_time_ns;
+        io_time_ns += other.io_time_ns;
+        flush_memory_size += other.flush_memory_size;
+        flush_disk_size += other.flush_disk_size;
+        return *this;
+    }
+};
 
 class MemTable {
 public:
@@ -43,6 +85,8 @@ public:
 
     ~MemTable();
 
+    Status prepare(PrimaryKeyEncodingType pk_encoding_type);
+
     int64_t tablet_id() const { return _tablet_id; }
 
     // the total memory used (contain tmp chunk and aggregator chunk)
@@ -56,7 +100,8 @@ public:
     // return true suggests caller should flush this memory table
     StatusOr<bool> insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size);
 
-    Status flush(SegmentPB* seg_info = nullptr);
+    Status flush(SegmentPB* seg_info = nullptr, bool eos = false, int64_t* flush_data_size = nullptr,
+                 int64_t slot_idx = -1);
 
     Status finalize();
 
@@ -71,6 +116,8 @@ public:
 
     bool check_supported_column_partial_update(const Chunk& chunk);
 
+    const MemtableStats& get_stat() const { return _stats; }
+
 private:
     Status _merge();
 
@@ -78,10 +125,9 @@ private:
     Status _sort_column_inc(bool by_sort_key = false);
     void _append_to_sorted_chunk(Chunk* src, Chunk* dest, bool is_final);
 
-    void _init_aggregator_if_needed();
     void _aggregate(bool is_final);
 
-    Status _split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, std::unique_ptr<Column>* deletes);
+    Status _split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, MutableColumnPtr* deletes);
 
     ChunkPtr _chunk;
     ChunkPtr _result_chunk;
@@ -105,7 +151,7 @@ private:
     uint64_t _merge_count = 0;
 
     bool _has_op_slot = false;
-    std::unique_ptr<Column> _deletes;
+    MutableColumnPtr _deletes;
 
     std::string _merge_condition;
 
@@ -123,6 +169,9 @@ private:
     size_t _chunk_bytes_usage = 0;
     size_t _aggregator_memory_usage = 0;
     size_t _aggregator_bytes_usage = 0;
+
+    MemtableStats _stats;
+    PrimaryKeyEncodingType _pk_encoding_type = PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const MemTable& table) {

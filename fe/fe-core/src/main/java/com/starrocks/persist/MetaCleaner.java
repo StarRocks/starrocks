@@ -74,7 +74,7 @@ public class MetaCleaner {
                     }
                     long version = Long.parseLong(filename.substring(filename.lastIndexOf('.') + 1));
 
-                    if (version < imageDeleteVersion) {
+                    if (version <= imageDeleteVersion) {
                         if (file.delete()) {
                             LOG.info(file.getAbsoluteFile() + " deleted.");
                         } else {

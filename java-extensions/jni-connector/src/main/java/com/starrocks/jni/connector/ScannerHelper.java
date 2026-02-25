@@ -20,7 +20,9 @@ import java.io.File;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.Function;
 
 public class ScannerHelper {
@@ -36,6 +38,20 @@ public class ScannerHelper {
             }
         }).toArray(URL[]::new);
         ClassLoader classLoader = new ChildFirstClassLoader(jars, ClassLoader.getSystemClassLoader());
+        return classLoader;
+    }
+
+    public static ClassLoader createModuleClassLoader(String moduleName) {
+        String basePath = System.getenv("STARROCKS_HOME");
+        List<File> preloadFiles = new ArrayList<>();
+        preloadFiles.add(new File(basePath + "/lib/jni-packages/starrocks-hadoop-ext.jar"));
+        File dir = new File(basePath + "/lib/" + moduleName);
+        preloadFiles.addAll(Arrays.asList(Objects.requireNonNull(dir.listFiles())));
+        dir = new File(basePath + "/lib/common-runtime-lib");
+        preloadFiles.addAll(Arrays.asList(Objects.requireNonNull(dir.listFiles())));
+        dir = new File(basePath + "/lib/hadoop/common");
+        preloadFiles.addAll(Arrays.asList(Objects.requireNonNull(dir.listFiles())));
+        ClassLoader classLoader = ScannerHelper.createChildFirstClassLoader(preloadFiles, moduleName);
         return classLoader;
     }
 

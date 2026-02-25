@@ -21,8 +21,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
 
-import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 
 public class TransactionIdGenerator implements GsonPostProcessable {
@@ -40,15 +38,15 @@ public class TransactionIdGenerator implements GsonPostProcessable {
 
     // performance is more quickly
     public synchronized long getNextTransactionId() {
-        if (nextId < batchEndId) {
-            ++nextId;
-            return nextId;
-        } else {
-            batchEndId = batchEndId + BATCH_ID_INTERVAL;
-            GlobalStateMgr.getCurrentState().getEditLog().logSaveTransactionId(batchEndId);
-            ++nextId;
-            return nextId;
+        if (nextId >= batchEndId) {
+            long newBatchEndId = batchEndId + BATCH_ID_INTERVAL;
+            GlobalStateMgr.getCurrentState().getEditLog().logSaveTransactionId(newBatchEndId,
+                    wal -> {
+                        batchEndId = newBatchEndId;
+                    });
         }
+        ++nextId;
+        return nextId;
     }
 
     public synchronized long peekNextTransactionId() {
@@ -62,15 +60,8 @@ public class TransactionIdGenerator implements GsonPostProcessable {
         }
     }
 
-    // this two function used to read snapshot or write snapshot
-    public void write(DataOutput out) throws IOException {
-        out.writeLong(batchEndId);
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        batchEndId = in.readLong();
-        // maybe a little rough
-        nextId = batchEndId;
+    protected long getBatchEndId() {
+        return batchEndId;
     }
 
     @Override

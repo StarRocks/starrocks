@@ -15,16 +15,17 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.sql.analyzer.Analyzer;
-import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.formatter.AST2SQLVisitor;
+import com.starrocks.sql.formatter.FormatOptions;
 import com.starrocks.sql.parser.SqlParser;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class SelectUsingAliasTest extends PlanTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
     }
@@ -45,8 +46,9 @@ public class SelectUsingAliasTest extends PlanTestBase {
         sql = "select 'x' as a, 1 as b, null as c, cast(b as smallInt) as d " +
                 "from test_all_type where a is not null";
         String aliasInWhereSql = sql;
-        Assert.assertThrows("Column 'a' cannot be resolved", SemanticException.class,
-                () -> getFragmentPlan(aliasInWhereSql));
+        Assertions.assertThrows(SemanticException.class,
+                () -> getFragmentPlan(aliasInWhereSql),
+                "Column 'a' cannot be resolved");
 
         // test alias in function
         sql = "select t1a as t1a, trim(t1a) as a, a as b, concat(a,',',b) as e, b as d from test_all_type";
@@ -92,7 +94,7 @@ public class SelectUsingAliasTest extends PlanTestBase {
                 "select trim(t1a) as a from test_all_type group by a" +
                 ") b";
         String cyclicAliasSql = sql;
-        Assert.assertThrows("Cyclic aliases", SemanticException.class, () -> getFragmentPlan(cyclicAliasSql));
+        Assertions.assertThrows(SemanticException.class, () -> getFragmentPlan(cyclicAliasSql), "Cyclic aliases");
     }
 
     @Test
@@ -190,7 +192,7 @@ public class SelectUsingAliasTest extends PlanTestBase {
                 "select trim(t1a) as a from test_all_type group by a" +
                 ") b";
         String cyclicAliasSql = sql;
-        Assert.assertThrows("Cyclic aliases", SemanticException.class, () -> getFragmentPlan(cyclicAliasSql));
+        Assertions.assertThrows(SemanticException.class, () -> getFragmentPlan(cyclicAliasSql), "Cyclic aliases");
 
         // test alias is same as column name and in group by
         sql = "select t1a, trim(t1a) as t1C,count(*) from test_all_type group by t1a, t1c";
@@ -206,25 +208,60 @@ public class SelectUsingAliasTest extends PlanTestBase {
         testSqlRewrite(sql, "SELECT v1 AS v, v2 AS v\nFROM test.t0");
 
         // test duplicate alias and ambiguous in order by
-        Assert.assertThrows("column 'v' is ambiguous", SemanticException.class,
-                () -> getFragmentPlan("select v1 as v, v2 as v from t0 order by v"));
+        Assertions.assertThrows(SemanticException.class,
+                () -> getFragmentPlan("select v1 as v, v2 as v from t0 order by v"),
+                "column 'v' is ambiguous");
 
         // test duplicate alias and ambiguous in group by
-        Assert.assertThrows("column 'v' is ambiguous", SemanticException.class,
-                () -> getFragmentPlan("select v1 as v, v2 as v from t0 group by v"));
+        Assertions.assertThrows(SemanticException.class,
+                () -> getFragmentPlan("select v1 as v, v2 as v from t0 group by v"),
+                "column 'v' is ambiguous");
 
         // test duplicate alias and ambiguous in function
-        Assert.assertThrows("column 'v' is ambiguous", SemanticException.class,
-                () -> getFragmentPlan("select v1 as v, v2 as v, concat(trim(v),',') from t0"));
+        Assertions.assertThrows(SemanticException.class,
+                () -> getFragmentPlan("select v1 as v, v2 as v, concat(trim(v),',') from t0"),
+                "column 'v' is ambiguous");
 
         // test duplicate alias and ambiguous in function
-        Assert.assertThrows("column 'v' is ambiguous", SemanticException.class,
-                () -> getFragmentPlan("select trim(v1) as v, trim(v2) as v, concat(trim(v),',') from t0"));
+        Assertions.assertThrows(SemanticException.class,
+                () -> getFragmentPlan("select trim(v1) as v, trim(v2) as v, concat(trim(v),',') from t0"),
+                "column 'v' is ambiguous");
 
         // test normal alias not ambiguous
         sql = "select trim(v1) as v, concat(v,',') from t0";
         testSqlRewrite(sql, "SELECT trim(v1) AS v, concat(trim(v1), ',') AS concat(trim(test.t0.v1), ',')\n" +
                 "FROM test.t0");
+    }
+
+    @Test
+    public void testAliasSameAsColumnName() throws Exception {
+        // test duplicate alias is same as column name
+        String sql = "select v1 v1, v2 + 1 v1, abs(v1) from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "1:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 4> : 2: v2 + 1\n" +
+                "  |  <slot 5> : abs(1: v1)");
+
+        sql = "select v1 v1, v1 v1, abs(v1) from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "1:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 4> : abs(1: v1)");
+
+        Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
+            // test duplicate alias is different from column name
+            String duplicateAlias = "select v1 v1, v2 v1, abs(v1) from t0 order by v1";
+            getFragmentPlan(duplicateAlias);
+        });
+        Assertions.assertTrue(exception.getMessage().contains("Column 'v1' is ambiguous."), exception.getMessage());
+
+        exception = Assertions.assertThrows(SemanticException.class, () -> {
+            // test duplicate alias is different from column name
+            String duplicateAlias = "select v1 v4, v2 + 1 v4, abs(v4) from t0";
+            getFragmentPlan(duplicateAlias);
+        });
+        Assertions.assertTrue(exception.getMessage().contains("Column v4 is ambiguous"), exception.getMessage());
     }
 
     private void testSqlRewrite(String sql, String expected) {
@@ -234,7 +271,9 @@ public class SelectUsingAliasTest extends PlanTestBase {
     private void testSqlRewrite(String sql, String expected, boolean withoutTbl) {
         StatementBase stmt = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
         Analyzer.analyze(stmt, connectContext);
-        String afterSql = new AstToSQLBuilder.AST2SQLBuilderVisitor(false, withoutTbl, true).visit(stmt);
-        Assert.assertEquals(expected, afterSql.replaceAll("`", ""));
+        String afterSql = AST2SQLVisitor.withOptions(
+                FormatOptions.allEnable().setColumnSimplifyTableName(false).setColumnWithTableName(!withoutTbl)
+                        .setEnableDigest(false)).visit(stmt);
+        Assertions.assertEquals(expected, afterSql.replaceAll("`", ""));
     }
 }

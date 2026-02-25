@@ -36,13 +36,13 @@
 
 #include <vector>
 
+#include "base/string/slice.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "gen_cpp/segment.pb.h"
-#include "io/seekable_input_stream.h"
+#include "io/core/seekable_input_stream.h"
 #include "storage/rowset/page_handle.h"
 #include "storage/rowset/page_pointer.h"
-#include "util/slice.h"
 namespace starrocks {
 
 class BlockCompressionCodec;
@@ -64,9 +64,6 @@ struct PageReadOptions {
     bool verify_checksum = true;
     // whether to use page cache in read path
     bool use_page_cache = true;
-    // if true, use DURABLE CachePriority in page cache
-    // currently used for in memory olap table
-    bool kept_in_memory = false;
     // page encoding type
     EncodingTypePB encoding_type = UNKNOWN_ENCODING;
 
@@ -119,5 +116,9 @@ public:
     static Status read_and_decompress_page(const PageReadOptions& opts, PageHandle* handle, Slice* body,
                                            PageFooterPB* footer);
 };
+
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+Status drop_local_cache_data(const std::string& fname);
+#endif
 
 } // namespace starrocks

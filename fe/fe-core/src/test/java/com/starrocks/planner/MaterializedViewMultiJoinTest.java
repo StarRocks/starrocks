@@ -21,20 +21,20 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.plan.PlanTestBase;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class MaterializedViewMultiJoinTest extends MaterializedViewTestBase {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         MaterializedViewTestBase.beforeClass();
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
         prepareDatas();
     }
 
-    @AfterClass
+    @AfterAll
     public static void afterClass() {
         try {
             starRocksAssert.dropTable("tbl_1");
@@ -111,7 +111,7 @@ public class MaterializedViewMultiJoinTest extends MaterializedViewTestBase {
                 "\"replication_num\"=\"1\",\n" +
                 "\"in_memory\"=\"false\",\n" +
                 "\"storage_format\"=\"DEFAULT\",\n" +
-                "\"enable_persistent_index\"=\"false\",\n" +
+                "\"enable_persistent_index\"=\"true\",\n" +
                 "\"compression\"=\"LZ4\"\n" +
                 ")");
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1 \n" +
@@ -352,7 +352,8 @@ public class MaterializedViewMultiJoinTest extends MaterializedViewTestBase {
                 "AS SELECT " +
                 "sum(p1.p1_col4) AS p1_col4\n" +
                 "FROM " +
-                "tbl_1 AS p1 ");
+                        "tbl_1 AS p1 ",
+                true, true);
         String query = "select sum(p1.p1_col4) from tbl_1 p1";
         starRocksAssert.query(query).explainContains(mvName);
 
@@ -378,7 +379,8 @@ public class MaterializedViewMultiJoinTest extends MaterializedViewTestBase {
                 "AS SELECT " +
                 "sum(p1.p1_col4) AS p1_col4\n" +
                 "FROM tbl_1 AS p1 " +
-                "JOIN tbl_2 AS p2");
+                        "JOIN tbl_2 AS p2",
+                true, true);
         String query = "select sum(p1.p1_col4) from tbl_1 p1 JOIN tbl_2 AS p2";
         starRocksAssert.query(query).explainContains(mvName);
 
@@ -409,7 +411,8 @@ public class MaterializedViewMultiJoinTest extends MaterializedViewTestBase {
                     "PROPERTIES (\n" +
                     "\"replication_num\"=\"1\"\n" +
                     ")\n" +
-                    "AS " + query);
+                            "AS " + query,
+                    true, true);
 
             int limit = SessionVariable.DEFAULT_SESSION_VARIABLE.getMaterializedViewJoinSameTablePermutationLimit();
             if (numTables >= limit) {

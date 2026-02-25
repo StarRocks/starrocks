@@ -20,8 +20,10 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PartitionNames;
 import com.starrocks.catalog.Table;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.common.VectorSearchOptions;
+import com.starrocks.sql.ast.TableSampleClause;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -35,7 +37,7 @@ import java.util.Objects;
 
 public final class LogicalOlapScanOperator extends LogicalScanOperator {
     private DistributionSpec distributionSpec;
-    private long selectedIndexId;
+    private long selectedIndexMetaId;
     private List<Long> selectedPartitionId;
     private PartitionNames partitionNames;
     private boolean hasTableHints;
@@ -45,11 +47,14 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
     private List<ScalarOperator> prunedPartitionPredicates;
     private boolean usePkIndex;
+    private TableSampleClause sample;
 
     // record if this scan is derived from SplitScanORToUnionRule
     private boolean fromSplitOR;
 
     private long gtid = 0;
+
+    private VectorSearchOptions vectorSearchOptions = new VectorSearchOptions();
 
     // Only for UT
     public LogicalOlapScanOperator(Table table) {
@@ -64,7 +69,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             long limit,
             ScalarOperator predicate) {
         this(table, colRefToColumnMetaMap, columnMetaToColRefMap, distributionSpec, limit, predicate,
-                ((OlapTable) table).getBaseIndexId(),
+                ((OlapTable) table).getBaseIndexMetaId(),
                 null,
                 null,
                 false,
@@ -81,7 +86,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             DistributionSpec distributionSpec,
             long limit,
             ScalarOperator predicate,
-            long selectedIndexId,
+            long selectedIndexMetaId,
             List<Long> selectedPartitionId,
             PartitionNames partitionNames,
             boolean hasTableHints,
@@ -94,7 +99,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
         Preconditions.checkState(table instanceof OlapTable);
         this.distributionSpec = distributionSpec;
-        this.selectedIndexId = selectedIndexId;
+        this.selectedIndexMetaId = selectedIndexMetaId;
         this.selectedPartitionId = selectedPartitionId;
         this.partitionNames = partitionNames;
         this.hasTableHints = hasTableHints;
@@ -114,8 +119,8 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         return distributionSpec;
     }
 
-    public long getSelectedIndexId() {
-        return selectedIndexId;
+    public long getSelectedIndexMetaId() {
+        return selectedIndexMetaId;
     }
 
     public List<Long> getSelectedPartitionId() {
@@ -164,6 +169,26 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         return fromSplitOR;
     }
 
+    public VectorSearchOptions getVectorSearchOptions() {
+        return vectorSearchOptions;
+    }
+
+    public void setVectorSearchOptions(VectorSearchOptions vectorSearchOptions) {
+        this.vectorSearchOptions = vectorSearchOptions;
+    }
+
+    public TableSampleClause getSample() {
+        return sample;
+    }
+
+    public void setSample(TableSampleClause sample) {
+        this.sample = sample;
+    }
+
+    public boolean isSample() {
+        return sample != null && sample.isUseSampling();
+    }
+
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalOlapScan(this, context);
@@ -180,20 +205,21 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         }
 
         LogicalOlapScanOperator that = (LogicalOlapScanOperator) o;
-        return selectedIndexId == that.selectedIndexId &&
+        return selectedIndexMetaId == that.selectedIndexMetaId &&
                 gtid == that.gtid &&
                 Objects.equals(distributionSpec, that.distributionSpec) &&
                 Objects.equals(selectedPartitionId, that.selectedPartitionId) &&
                 Objects.equals(partitionNames, that.partitionNames) &&
                 Objects.equals(selectedTabletId, that.selectedTabletId) &&
+                Objects.equals(sample, that.sample) &&
                 Objects.equals(hintsTabletIds, that.hintsTabletIds) &&
                 Objects.equals(hintsReplicaIds, that.hintsReplicaIds);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), selectedIndexId, gtid, selectedPartitionId,
-                selectedTabletId, hintsTabletIds, hintsReplicaIds);
+        return Objects.hash(super.hashCode(), selectedIndexMetaId, gtid, selectedPartitionId,
+                selectedTabletId, hintsTabletIds, hintsReplicaIds, sample);
     }
 
     public static Builder builder() {
@@ -212,7 +238,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             super.withOperator(scanOperator);
 
             builder.distributionSpec = scanOperator.distributionSpec;
-            builder.selectedIndexId = scanOperator.selectedIndexId;
+            builder.selectedIndexMetaId = scanOperator.selectedIndexMetaId;
             builder.gtid = scanOperator.gtid;
             builder.selectedPartitionId = scanOperator.selectedPartitionId;
             builder.partitionNames = scanOperator.partitionNames;
@@ -222,11 +248,14 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             builder.hintsReplicaIds = scanOperator.hintsReplicaIds;
             builder.prunedPartitionPredicates = scanOperator.prunedPartitionPredicates;
             builder.usePkIndex = scanOperator.usePkIndex;
+            builder.fromSplitOR = scanOperator.fromSplitOR;
+            builder.vectorSearchOptions = scanOperator.vectorSearchOptions;
+            builder.sample = scanOperator.getSample();
             return this;
         }
 
         public Builder setSelectedIndexId(long selectedIndexId) {
-            builder.selectedIndexId = selectedIndexId;
+            builder.selectedIndexMetaId = selectedIndexId;
             return this;
         }
 
@@ -286,6 +315,11 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
         public Builder setUsePkIndex(boolean usePkIndex) {
             builder.usePkIndex = usePkIndex;
+            return this;
+        }
+
+        public Builder setSample(TableSampleClause sample) {
+            builder.sample = sample;
             return this;
         }
     }

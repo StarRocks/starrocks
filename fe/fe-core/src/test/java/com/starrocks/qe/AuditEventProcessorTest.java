@@ -40,16 +40,17 @@ import com.starrocks.plugin.AuditEvent;
 import com.starrocks.plugin.AuditEvent.EventType;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 
-public class AuditEventProcessorTest {
+public class AuditEventProcessorTest extends StarRocksTestBase {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
     }
@@ -71,10 +72,10 @@ public class AuditEventProcessorTest {
                 .setStmt("select * from tbl1")
                 .setCatalog("catalog1").build();
 
-        Assert.assertEquals("127.0.0.1", event.clientIp);
-        Assert.assertEquals(200000, event.scanRows);
-        Assert.assertEquals("catalog1", event.catalog);
-        Assert.assertEquals("user2", event.authorizedUser);
+        Assertions.assertEquals("127.0.0.1", event.clientIp);
+        Assertions.assertEquals(200000, event.scanRows);
+        Assertions.assertEquals("catalog1", event.catalog);
+        Assertions.assertEquals("user2", event.authorizedUser);
     }
 
     @Test
@@ -99,7 +100,7 @@ public class AuditEventProcessorTest {
                 Config.audit_log_json_format = true;
                 auditLogBuilder.exec(event);
             }
-            Assert.assertEquals(EventType.CONNECTION,  event.type);
+            Assertions.assertEquals(EventType.CONNECTION,  event.type);
         }
     }
 
@@ -126,8 +127,8 @@ public class AuditEventProcessorTest {
                 Config.audit_log_json_format = true;
                 auditLogBuilder.exec(event);
             }
-            Assert.assertEquals(6 * 1000000000L, event.cpuCostNs);
-            Assert.assertEquals(5, event.bigQueryLogCPUSecondThreshold);
+            Assertions.assertEquals(6 * 1000000000L, event.cpuCostNs);
+            Assertions.assertEquals(5, event.bigQueryLogCPUSecondThreshold);
         }
     }
 
@@ -135,8 +136,8 @@ public class AuditEventProcessorTest {
     public void testAuditLogBuilder() throws IOException {
         try (AuditLogBuilder auditLogBuilder = new AuditLogBuilder()) {
             PluginInfo pluginInfo = auditLogBuilder.getPluginInfo();
-            Assert.assertEquals(DigitalVersion.fromString("0.12.0"), pluginInfo.getVersion());
-            Assert.assertEquals(DigitalVersion.fromString("1.8.31"), pluginInfo.getJavaVersion());
+            Assertions.assertEquals(DigitalVersion.fromString("0.12.0"), pluginInfo.getVersion());
+            Assertions.assertEquals(DigitalVersion.fromString("1.8.31"), pluginInfo.getJavaVersion());
             long start = System.currentTimeMillis();
             for (int i = 0; i < 10000; i++) {
                 AuditEvent event = new AuditEvent.AuditEventBuilder().setEventType(EventType.AFTER_QUERY)
@@ -157,7 +158,7 @@ public class AuditEventProcessorTest {
                 }
             }
             long total = System.currentTimeMillis() - start;
-            System.out.println("total(ms): " + total + ", avg: " + total / 10000.0);
+            logSysInfo("total(ms): " + total + ", avg: " + total / 10000.0);
         }
     }
 
@@ -182,6 +183,6 @@ public class AuditEventProcessorTest {
             processor.handleAuditEvent(event);
         }
         long total = System.currentTimeMillis() - start;
-        System.out.println("total(ms): " + total + ", avg: " + total / 10000.0);
+        logSysInfo("total(ms): " + total + ", avg: " + total / 10000.0);
     }
 }

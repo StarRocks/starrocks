@@ -16,18 +16,18 @@
 
 #include <random>
 
+#include "base/testutil/assert.h"
 #include "column/nullable_column.h"
 #include "common/config.h"
+#include "common/util/thrift_util.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/group_execution/execution_group_builder.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/workgroup/work_group.h"
 #include "exprs/function_context.h"
 #include "storage/chunk_helper.h"
-#include "testutil/assert.h"
 #include "types/date_value.h"
 #include "types/timestamp_value.h"
-#include "util/thrift_util.h"
 
 namespace starrocks::pipeline {
 
@@ -78,7 +78,7 @@ void PipelineTestBase::_prepare() {
     const auto& query_id = params.query_id;
     const auto& fragment_id = params.fragment_instance_id;
 
-    _query_ctx = _exec_env->query_context_mgr()->get_or_register(query_id);
+    ASSIGN_OR_ASSERT_FAIL(_query_ctx, _exec_env->query_context_mgr()->get_or_register(query_id));
     _query_ctx->set_total_fragments(1);
     _query_ctx->set_delivery_expire_seconds(60);
     _query_ctx->set_query_expire_seconds(60);
@@ -94,7 +94,7 @@ void PipelineTestBase::_prepare() {
     _fragment_ctx->set_runtime_state(
             std::make_unique<RuntimeState>(_request.params.query_id, _request.params.fragment_instance_id,
                                            _request.query_options, _request.query_globals, _exec_env));
-    _fragment_ctx->set_workgroup(workgroup::WorkGroupManager::instance()->get_default_workgroup());
+    _fragment_ctx->set_workgroup(ExecEnv::GetInstance()->workgroup_manager()->get_default_workgroup());
 
     _fragment_future = _fragment_ctx->finish_future();
     _runtime_state = _fragment_ctx->runtime_state();
@@ -104,6 +104,7 @@ void PipelineTestBase::_prepare() {
     _runtime_state->set_be_number(_request.backend_num);
     _runtime_state->set_query_ctx(_query_ctx);
     _runtime_state->set_fragment_ctx(_fragment_ctx);
+    _runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
 
     _obj_pool = _runtime_state->obj_pool();
 
@@ -120,8 +121,10 @@ void PipelineTestBase::_prepare() {
 }
 
 void PipelineTestBase::_execute() {
-    _fragment_ctx->iterate_drivers(
-            [state = _fragment_ctx->runtime_state()](const DriverPtr& driver) { CHECK_OK(driver->prepare(state)); });
+    _fragment_ctx->iterate_drivers([state = _fragment_ctx->runtime_state()](const DriverPtr& driver) {
+        CHECK_OK(driver->prepare(state));
+        CHECK_OK(driver->prepare_local_state(state));
+    });
 
     _fragment_ctx->iterate_drivers(
             [exec_env = _exec_env](const DriverPtr& driver) { exec_env->wg_driver_executor()->submit(driver.get()); });
@@ -142,12 +145,11 @@ ChunkPtr PipelineTestBase::_create_and_fill_chunk(const std::vector<SlotDescript
     // add data
     for (size_t i = 0; i < slots.size(); ++i) {
         auto* slot = slots[i];
-        auto& column = chunk->columns()[i];
+        auto* data_column = chunk->get_column_raw_ptr_by_index(i);
 
-        Column* data_column = column.get();
         if (data_column->is_nullable()) {
             auto* nullable_column = down_cast<NullableColumn*>(data_column);
-            data_column = nullable_column->data_column().get();
+            data_column = nullable_column->data_column_raw_ptr();
         }
 
         for (size_t j = 0; j < row_num; ++j) {
@@ -302,8 +304,11 @@ ChunkPtr PipelineTestBase::_create_and_fill_chunk(size_t row_num) {
     CHECK(deserialize_thrift_msg(buf, &len, TProtocolType::JSON, &tbl).ok());
 
     std::vector<SlotDescriptor> slots;
+    phmap::flat_hash_set<SlotId> seen_slots;
     for (auto& t_slot : tbl.slotDescriptors) {
-        slots.emplace_back(t_slot);
+        if (auto [_, is_new] = seen_slots.insert(t_slot.id); is_new) {
+            slots.emplace_back(t_slot);
+        }
     }
 
     std::vector<SlotDescriptor*> p_slots;

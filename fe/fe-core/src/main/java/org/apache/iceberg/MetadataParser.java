@@ -26,7 +26,6 @@ import com.starrocks.rpc.ConfigurableSerDesFactory;
 import com.starrocks.thrift.TIcebergMetadata;
 import com.starrocks.thrift.TMetadataEntry;
 import com.starrocks.thrift.TResultBatch;
-import de.javakaffee.kryoserializers.UnmodifiableCollectionsSerializer;
 import org.apache.iceberg.expressions.ResidualEvaluator;
 import org.apache.iceberg.metrics.ScanMetrics;
 import org.apache.iceberg.metrics.ScanMetricsUtil;
@@ -242,7 +241,6 @@ public class MetadataParser {
         ByteBuffer keyMetadata = thrift.isSetKey_metadata() ? ByteBuffer.wrap(thrift.getKey_metadata()) : null;
 
         BaseFile<?> baseFile;
-        // TODO(stephen): add keyMetadata field
         if (content == FileContent.DATA) {
             baseFile = new GenericDataFile(
                     specId,
@@ -253,6 +251,7 @@ public class MetadataParser {
                     metrics,
                     keyMetadata,
                     splitOffsets,
+                    null,
                     null);
         } else {
             baseFile = new GenericDeleteFile(
@@ -266,7 +265,10 @@ public class MetadataParser {
                     equalityFieldIds,
                     sortId,
                     splitOffsets,
-                    keyMetadata
+                    keyMetadata,
+                    null,
+                    null,
+                    null
             );
         }
 

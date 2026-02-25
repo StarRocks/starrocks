@@ -30,3 +30,48 @@ select @var2;
 
 with tx as (select @var2 as x)
 select /*+ SET_USER_VARIABLE(@var2 = (select count(*) from (select l.c0 from t0 l join t0 r on l.c0 = r.c0 ) tb)) */ * from tx;
+
+CREATE TABLE `always1` (
+  `c0` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+
+insert into always1 values(1);
+
+CREATE TABLE `alwaysnull` (
+  `c0` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+
+insert into alwaysnull values(null);
+
+select      /*+ set_user_variable(@a = (select c0 * 0.1 from always1)) */ percentile_approx(c0, @a) is not null  from t0;
+select      /*+ set_user_variable(@a = (select c0 * 0.1 from alwaysnull)) */ percentile_approx(c0, @a)  from t0;
+select      percentile_approx(c0, cast(null as double))  from t0;
+
+
+CREATE TABLE `pk1` (
+  `c0` int(11) COMMENT "",
+  `dt` int(11) COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+insert into pk1 values (1,1);
+
+with cte as (select* from pk1)
+update /*+ set_user_variable(@a = (select 2)) */ pk1 set dt = @a where c0 = 1;
+select * from pk1;

@@ -14,22 +14,20 @@
 
 package com.starrocks.memory;
 
-import com.starrocks.StarRocksFE;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
+import one.profiler.AsyncProfiler;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
 import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.lang.management.ManagementFactory;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -40,91 +38,101 @@ public class ProcProfileCollector extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(ProcProfileCollector.class);
     private static final String CPU_FILE_NAME_PREFIX = "cpu-profile-";
     private static final String MEM_FILE_NAME_PREFIX = "mem-profile-";
+    private static final long LOG_INTERVAL = 3600 * 1000L;
 
     private final SimpleDateFormat profileTimeFormat = new SimpleDateFormat("yyyyMMdd-HHmmss");
     private final String profileLogDir;
 
-    private long lastCollectTime = -1;
-
-    private boolean initialized = false;
+    private long lastLogTime = -1;
 
     public ProcProfileCollector() {
-        super("ProcProfileCollector");
+        super("proc-profile-collector", 1000L);
         profileLogDir = Config.sys_log_dir + "/proc_profile";
     }
 
     @Override
     protected void runAfterCatalogReady() {
-        if (!initialized) {
-            File file = new File(profileLogDir);
-            file.mkdirs();
-            initialized = true;
+        File file = new File(profileLogDir);
+        file.mkdirs();
+        prepareLibrary();
+
+        if (Config.proc_profile_cpu_enable) {
+            collectCPUProfile();
         }
 
-        if (lastCollectTime == -1L
-                || (System.currentTimeMillis() - lastCollectTime > Config.proc_profile_collect_interval_s * 1000)) {
-
-            lastCollectTime = System.currentTimeMillis();
-
-            if (Config.proc_profile_cpu_enable) {
-                collectCPUProfile();
-            }
-
-            if (Config.proc_profile_mem_enable) {
-                collectMemProfile();
-            }
+        if (Config.proc_profile_mem_enable) {
+            collectMemProfile();
         }
 
         deleteExpiredFiles();
     }
 
+    public String getProfileLogDir() {
+        return profileLogDir;
+    }
+
+    // AsyncProfiler depends on the native library libasyncProfiler.so, which is bundled inside the JAR.
+    // By default, it extracts this library to the /tmp directory in order to load it.
+    // However, if /tmp is mounted with the "noexec" option, loading the library will fail.
+    // To avoid this issue, we explicitly set 'one.profiler.extractPath' to a directory with execute permissions.
+    // See prepareLibrary() for how the extraction path is set to a safer default under STARROCKS_HOME.
+    // See https://github.com/StarRocks/starrocks/issues/64502
+    private void prepareLibrary() {
+        final String libPathProperty = "one.profiler.extractPath";
+        String value = System.getProperty(libPathProperty);
+        if (StringUtils.isEmpty(value)) {
+            String dir = Config.STARROCKS_HOME_DIR + "/bin/";
+            if (StringUtils.isNotEmpty(Config.STARROCKS_HOME_DIR) && new File(dir).exists()) {
+                System.setProperty(libPathProperty, dir);
+                LOG.info("change the system property {} to {}", libPathProperty, dir);
+            }
+        }
+    }
+
+    private static String genStartCommand(String event, String fileName, int jstackDepth) {
+        return String.format("start,quiet,event=%s,loglevel=error,cstack=vm,jstackdepth=%d,file=%s",
+                event, jstackDepth, fileName);
+    }
+
     private void collectMemProfile() {
         String fileName = MEM_FILE_NAME_PREFIX + currentTimeString() + ".html";
-        collectProfile(StarRocksFE.STARROCKS_HOME_DIR + "/bin/profiler.sh",
-                "-e", "alloc",
-                "-d", String.valueOf(Config.proc_profile_collect_time_s),
-                "-f", profileLogDir + "/" +  fileName,
-                getPid());
+        AsyncProfiler profiler = AsyncProfiler.getInstance();
+        try {
+            profiler.execute(genStartCommand(
+                    "alloc,alloc=2m", profileLogDir + "/" + fileName, Config.proc_profile_jstack_depth));
+            Thread.sleep(Config.proc_profile_collect_time_s * 1000L);
+            profiler.execute(String.format("stop,file=%s", profileLogDir + "/" + fileName));
+        } catch (Exception e) {
+            checkAndLog(() -> LOG.warn("collect memory profile failed, reason: {}", e.getMessage()));
+            throw new RuntimeException("Failed to collect memory profile", e);
+        }
 
         try {
             compressFile(fileName);
         } catch (IOException e) {
-            LOG.warn("compress file {} failed", fileName, e);
+            checkAndLog(() -> LOG.warn("compress memory file {} failed, reason: {}", fileName, e.getMessage()));
+            throw new RuntimeException("Failed to compress memory profile", e);
         }
     }
 
     private void collectCPUProfile() {
         String fileName = CPU_FILE_NAME_PREFIX + currentTimeString() + ".html";
-        collectProfile(StarRocksFE.STARROCKS_HOME_DIR + "/bin/profiler.sh",
-                "-e", "cpu",
-                "-d", String.valueOf(Config.proc_profile_collect_time_s),
-                "-f", profileLogDir + "/" +  fileName,
-                getPid());
+        AsyncProfiler profiler = AsyncProfiler.getInstance();
+        try {
+            profiler.execute(genStartCommand(
+                    "cpu", profileLogDir + "/" + fileName, Config.proc_profile_jstack_depth));
+            Thread.sleep(Config.proc_profile_collect_time_s * 1000L);
+            profiler.execute(String.format("stop,file=%s", profileLogDir + "/" + fileName));
+        } catch (Exception e) {
+            checkAndLog(() -> LOG.warn("collect cpu profile failed, reason: {}", e.getMessage()));
+            throw new RuntimeException("Failed to collect CPU profile", e);
+        }
 
         try {
             compressFile(fileName);
         } catch (IOException e) {
-            LOG.warn("compress file {} failed", fileName, e);
-        }
-    }
-
-    private void collectProfile(String... command) {
-        try {
-            ProcessBuilder processBuilder = new ProcessBuilder(command);
-            Process process = processBuilder.start();
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                StringBuilder sb = new StringBuilder();
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    sb.append(line).append("\n");
-                }
-                if (sb.length() > 0) {
-                    LOG.info("collect profile output: {}", sb.toString());
-                }
-            }
-            process.waitFor();
-        } catch (IOException | InterruptedException e) {
-            LOG.warn("collect profile failed", e);
+            checkAndLog(() -> LOG.warn("compress file {} failed, reason: {}", fileName, e.getMessage()));
+            throw new RuntimeException("Failed to compress CPU profile", e);
         }
     }
 
@@ -153,7 +161,11 @@ public class ProcProfileCollector extends FrontendDaemon {
         File dir = new File(profileLogDir);
         List<File> validFiles = new ArrayList<>();
         long totalSize = 0;
-        for (File file : dir.listFiles()) {
+        File[] files = dir.listFiles();
+        if (files == null) {
+            return;
+        }
+        for (File file : files) {
             if (file.getName().startsWith(CPU_FILE_NAME_PREFIX)
                     || file.getName().startsWith(MEM_FILE_NAME_PREFIX)) {
                 validFiles.add(file);
@@ -194,10 +206,10 @@ public class ProcProfileCollector extends FrontendDaemon {
                 : fileName.substring(MEM_FILE_NAME_PREFIX.length(), fileName.indexOf("."));
     }
 
-    private String getPid() {
-        return ManagementFactory
-                .getRuntimeMXBean()
-                .getName()
-                .split("@")[0];
+    private void checkAndLog(Runnable runnable) {
+        if (System.currentTimeMillis() - lastLogTime > LOG_INTERVAL) {
+            runnable.run();
+            lastLogTime = System.currentTimeMillis();
+        }
     }
 }

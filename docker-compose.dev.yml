@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  starrocks-dev:
+    image: ${STARROCKS_DEV_ENV_IMAGE:-starrocks/dev-env-ubuntu:latest}
+    container_name: starrocks-dev-env
+    volumes:
+      - .:/workspace
+      - ~/.m2:/tmp/.m2
+      - starrocks-maven-cache:/root/.m2
+      - starrocks-build-cache:/workspace/output
+    working_dir: /workspace
+    environment:
+      - STARROCKS_HOME=/workspace
+      - HOME=/tmp
+    user: "${UID:-1000}:${GID:-1000}"
+    stdin_open: true
+    tty: true
+    command: /bin/bash
+    networks:
+      - starrocks-dev
+
+  # Service for building Frontend
+  build-fe:
+    extends: starrocks-dev
+    container_name: starrocks-build-fe
+    command: ./build.sh --fe
+
+  # Service for building Backend
+  build-be:
+    extends: starrocks-dev
+    container_name: starrocks-build-be
+    command: ./build.sh --be
+
+  # Service for running tests
+  test-fe:
+    extends: starrocks-dev
+    container_name: starrocks-test-fe
+    command: ./run-fe-ut.sh
+
+  test-be:
+    extends: starrocks-dev
+    container_name: starrocks-test-be
+    command: ./run-be-ut.sh
+
+volumes:
+  starrocks-maven-cache:
+    driver: local
+  starrocks-build-cache:
+    driver: local
+
+networks:
+  starrocks-dev:
+    driver: bridge

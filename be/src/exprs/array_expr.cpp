@@ -41,7 +41,7 @@ public:
         }
 
         bool all_const = true;
-        std::vector<ColumnPtr> element_columns(num_elements);
+        Columns element_columns(num_elements);
         for (size_t i = 0; i < num_elements; i++) {
             ASSIGN_OR_RETURN(auto col, _children[i]->evaluate_checked(context, chunk));
             output_rows = std::max(output_rows, col->size());
@@ -51,7 +51,8 @@ public:
 
         int cal_rows = all_const ? 1 : output_rows;
         for (size_t i = 0; i < num_elements; i++) {
-            element_columns[i] = ColumnHelper::unfold_const_column(element_type, cal_rows, element_columns[i]);
+            element_columns[i] =
+                    ColumnHelper::unfold_const_column(element_type, cal_rows, std::move(element_columns[i]));
         }
 
         auto array_elements = ColumnHelper::create_column(element_type, true);

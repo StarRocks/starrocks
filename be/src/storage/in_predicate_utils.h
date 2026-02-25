@@ -14,11 +14,11 @@
 
 #pragma once
 
+#include "base/string/string_parser.hpp"
 #include "column/hash_set.h"
-#include "runtime/decimalv3.h"
-#include "storage/type_traits.h"
 #include "storage/types.h"
-#include "util/string_parser.hpp"
+#include "types/decimalv3.h"
+#include "types/type_traits.h"
 
 namespace starrocks {
 
@@ -140,6 +140,22 @@ inline Converter<typename CppTypeTraits<field_type>::CppType> strings_to_decimal
         auto st = DecimalV3Cast::from_string_with_overflow_allowed<CppType>(&v, scale, s.data(), s.size());
         CHECK_EQ(false, st);
         result.push_back(v);
+    }
+    return result;
+}
+
+template <LogicalType field_type>
+inline Converter<typename CppTypeTraits<field_type>::CppType> datums_to_set(const std::vector<Datum>& values) {
+    using CppType = typename CppTypeTraits<field_type>::CppType;
+    // ColumnRangeBuilder treats TINYINT and BOOLEAN as INT.
+    constexpr auto MappingLogicalType =
+            field_type == TYPE_TINYINT || field_type == TYPE_BOOLEAN ? TYPE_INT : field_type;
+    using MappingCppType = typename CppTypeTraits<MappingLogicalType>::CppType;
+
+    Converter<CppType> result;
+    for (const auto& v : values) {
+        const auto value = static_cast<CppType>(v.get<MappingCppType>());
+        result.push_back(value);
     }
     return result;
 }

@@ -18,7 +18,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
@@ -44,13 +43,17 @@ import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.statistic.StatsConstants;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.DecimalType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.optimizer.statistics.CachedStatisticStorageTest.DEFAULT_CREATE_TABLE_TEMPLATE;
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class PredicateReorderRuleTest {
 
@@ -69,7 +72,7 @@ public class PredicateReorderRuleTest {
     private static StarRocksAssert starRocksAssert;
     private static SessionVariable sessionVariable;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
 
         Config.alter_scheduler_interval_millisecond = 1;
@@ -107,7 +110,7 @@ public class PredicateReorderRuleTest {
                         ");");
         CreateDbStmt dbStmt = new CreateDbStmt(false, StatsConstants.STATISTICS_DB_NAME);
         try {
-            GlobalStateMgr.getCurrentState().getMetadata().createDb(dbStmt.getFullDbName());
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(dbStmt.getFullDbName());
         } catch (DdlException e) {
             return;
         }
@@ -117,13 +120,13 @@ public class PredicateReorderRuleTest {
 
         columnRefFactory = new ColumnRefFactory();
 
-        v1 = columnRefFactory.create("v1", Type.INT, true);
-        v2 = columnRefFactory.create("v2", Type.INT, true);
-        v3 = columnRefFactory.create("v3", Type.DECIMALV2, true);
-        v4 = columnRefFactory.create("v4", Type.BOOLEAN, true);
-        v5 = columnRefFactory.create("v5", Type.BOOLEAN, false);
-        v6 = columnRefFactory.create("v6", Type.BOOLEAN, false);
-        v7 = columnRefFactory.create("v7", Type.DATETIME, false);
+        v1 = columnRefFactory.create("v1", IntegerType.INT, true);
+        v2 = columnRefFactory.create("v2", IntegerType.INT, true);
+        v3 = columnRefFactory.create("v3", DecimalType.DECIMALV2, true);
+        v4 = columnRefFactory.create("v4", BooleanType.BOOLEAN, true);
+        v5 = columnRefFactory.create("v5", BooleanType.BOOLEAN, false);
+        v6 = columnRefFactory.create("v6", BooleanType.BOOLEAN, false);
+        v7 = columnRefFactory.create("v7", DateType.DATETIME, false);
 
         Statistics.Builder builder = Statistics.builder();
         builder.setOutputRowCount(10000);
@@ -139,8 +142,8 @@ public class PredicateReorderRuleTest {
 
         GlobalStateMgr catalog = GlobalStateMgr.getCurrentState();
         CachedStatisticStorage cachedStatisticStorage = new CachedStatisticStorage();
-        OlapTable t0 = (OlapTable) catalog.getDb("test").getTable("t0");
-        OlapTable t1 = (OlapTable) catalog.getDb("test").getTable("t1");
+        OlapTable t0 = (OlapTable) catalog.getLocalMetastore().getDb("test").getTable("t0");
+        OlapTable t1 = (OlapTable) catalog.getLocalMetastore().getDb("test").getTable("t1");
         cachedStatisticStorage.addColumnStatistic(t0, v1.getName(), statistics.getColumnStatistic(v1));
         cachedStatisticStorage.addColumnStatistic(t0, v2.getName(), statistics.getColumnStatistic(v2));
         cachedStatisticStorage.addColumnStatistic(t1, v1.getName(), statistics.getColumnStatistic(v1));
@@ -156,7 +159,7 @@ public class PredicateReorderRuleTest {
 
         sessionVariable.enablePredicateReorder();
 
-        OlapTable t0 = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test").getTable("t0");
+        OlapTable t0 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("t0");
 
         PredicateReorderRule predicateReorderRule = new PredicateReorderRule(sessionVariable);
 
@@ -230,8 +233,8 @@ public class PredicateReorderRuleTest {
     public void testHashJoinPredicateReorder() {
         sessionVariable.enablePredicateReorder();
 
-        OlapTable t0 = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test").getTable("t0");
-        OlapTable t1 = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test").getTable("t1");
+        OlapTable t0 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("t0");
+        OlapTable t1 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("t1");
 
         PredicateReorderRule predicateReorderRule = new PredicateReorderRule(sessionVariable);
 
@@ -239,14 +242,14 @@ public class PredicateReorderRuleTest {
         ConstantOperator constantOperatorDouble0 = ConstantOperator.createDouble(150);
 
         // t0.v1 + t1.v1 = 15
-        CastOperator castOperatorV10 = new CastOperator(Type.BIGINT, v1);
-        CastOperator castOperatorV11 = new CastOperator(Type.BIGINT, v1);
-        CallOperator add0 = new CallOperator("add", Type.BIGINT, Lists.newArrayList(castOperatorV10, castOperatorV11));
+        CastOperator castOperatorV10 = new CastOperator(IntegerType.BIGINT, v1);
+        CastOperator castOperatorV11 = new CastOperator(IntegerType.BIGINT, v1);
+        CallOperator add0 = new CallOperator("add", IntegerType.BIGINT, Lists.newArrayList(castOperatorV10, castOperatorV11));
         BinaryPredicateOperator intEq0 = BinaryPredicateOperator.eq(add0, constantOperatorInt0);
         // t0.v2 + t1.v2 = 150
-        CastOperator castOperatorV20 = new CastOperator(Type.BIGINT, v2);
-        CastOperator castOperatorV21 = new CastOperator(Type.BIGINT, v2);
-        CallOperator add1 = new CallOperator("add", Type.BIGINT, Lists.newArrayList(castOperatorV20, castOperatorV21));
+        CastOperator castOperatorV20 = new CastOperator(IntegerType.BIGINT, v2);
+        CastOperator castOperatorV21 = new CastOperator(IntegerType.BIGINT, v2);
+        CallOperator add1 = new CallOperator("add", IntegerType.BIGINT, Lists.newArrayList(castOperatorV20, castOperatorV21));
         BinaryPredicateOperator intEq1 = BinaryPredicateOperator.eq(add1, constantOperatorDouble0);
 
         ScalarOperator and = CompoundPredicateOperator.and(intEq0, intEq1);

@@ -15,12 +15,12 @@
 package com.starrocks.scheduler;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
-import com.starrocks.sql.common.PListCell;
+import com.starrocks.sql.common.PCellSetMapping;
+import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.common.PartitionNameSetMap;
 import com.starrocks.sql.plan.ExecPlan;
 
 import java.util.Map;
@@ -30,23 +30,24 @@ public class MvTaskRunContext extends TaskRunContext {
 
     // all the RefBaseTable's partition name to its intersected materialized view names.
     //baseTable -> basePartition -> mvPartitions
-    private Map<Table, Map<String, Set<String>>> refBaseTableMVIntersectedPartitions;
+    private Map<Table, PCellSetMapping> refBaseTableMVIntersectedPartitions;
     // all the materialized view's partition name to its intersected RefBaseTable's partition names.
     //mvPartition -> baseTable -> basePartitions
-    private Map<String, Map<Table, Set<String>>> mvRefBaseTableIntersectedPartitions;
-    // all the RefBaseTable's partition name to its partition key range.
-    private Map<Table, Map<String, Range<PartitionKey>>> refBaseTableRangePartitionMap;
-    private Map<String, Range<PartitionKey>> mvRangePartitionMap;
+    private Map<String, Map<Table, PCellSortedSet>> mvRefBaseTableIntersectedPartitions;
+    // all the RefBaseTable's partition name to its partition range/list cell.
+    private Map<Table, PCellSortedSet> refBaseTableToCellMap;
+    // mv to its partition range/list cell.
+    private PCellSortedSet mvToCellMap;
 
-    // all the RefBaseTable's partition name to its list partition keys.
-    private Map<Table, Map<String, PListCell>> refBaseTableListPartitionMap;
     // the external ref base table's mv partition name to original partition names map because external
     // table supports multi partition columns, one converted partition name(mv partition name) may have
     // multi original partition names.
-    private Map<Table, Map<String, Set<String>>> externalRefBaseTableMVPartitionMap;
+    private Map<Table, PartitionNameSetMap> externalRefBaseTableMVPartitionMap;
 
     private String nextPartitionStart = null;
     private String nextPartitionEnd = null;
+    // The next list partition values to be processed
+    private String nextPartitionValues = null;
     private ExecPlan execPlan = null;
 
     private int partitionTTLNumber = TableProperty.INVALID;
@@ -55,26 +56,26 @@ public class MvTaskRunContext extends TaskRunContext {
         super(context);
     }
 
-    public Map<Table, Map<String, Set<String>>> getRefBaseTableMVIntersectedPartitions() {
+    public Map<Table, PCellSetMapping> getRefBaseTableMVIntersectedPartitions() {
         return refBaseTableMVIntersectedPartitions;
     }
 
     public void setRefBaseTableMVIntersectedPartitions(
-            Map<Table, Map<String, Set<String>>> refBaseTableMVIntersectedPartitions) {
+            Map<Table, PCellSetMapping> refBaseTableMVIntersectedPartitions) {
         this.refBaseTableMVIntersectedPartitions = refBaseTableMVIntersectedPartitions;
     }
 
-    public Map<String, Map<Table, Set<String>>> getMvRefBaseTableIntersectedPartitions() {
+    public Map<String, Map<Table, PCellSortedSet>> getMvRefBaseTableIntersectedPartitions() {
         return mvRefBaseTableIntersectedPartitions;
     }
 
     public void setMvRefBaseTableIntersectedPartitions(
-            Map<String, Map<Table, Set<String>>> mvRefBaseTableIntersectedPartitions) {
+            Map<String, Map<Table, PCellSortedSet>> mvRefBaseTableIntersectedPartitions) {
         this.mvRefBaseTableIntersectedPartitions = mvRefBaseTableIntersectedPartitions;
     }
 
     public boolean hasNextBatchPartition() {
-        return nextPartitionStart != null && nextPartitionEnd != null;
+        return (nextPartitionStart != null && nextPartitionEnd != null) || (nextPartitionValues != null);
     }
 
     public String getNextPartitionStart() {
@@ -93,38 +94,37 @@ public class MvTaskRunContext extends TaskRunContext {
         this.nextPartitionEnd = nextPartitionEnd;
     }
 
-    public Map<Table, Map<String, Range<PartitionKey>>> getRefBaseTableRangePartitionMap() {
-        return refBaseTableRangePartitionMap;
+    public String getNextPartitionValues() {
+        return nextPartitionValues;
     }
 
-    public void setRefBaseTableRangePartitionMap(
-            Map<Table, Map<String, Range<PartitionKey>>> refBaseTableRangePartitionMap) {
-        this.refBaseTableRangePartitionMap = refBaseTableRangePartitionMap;
+    public void setNextPartitionValues(String nextPartitionValues) {
+        this.nextPartitionValues = nextPartitionValues;
     }
 
-    public Map<Table, Map<String, PListCell>> getRefBaseTableListPartitionMap() {
-        return refBaseTableListPartitionMap;
+    public Map<Table, PCellSortedSet> getRefBaseTableToCellMap() {
+        return refBaseTableToCellMap;
     }
 
-    public void setRefBaseTableListPartitionMap(Map<Table, Map<String, PListCell>> refBaseTableListPartitionMap) {
-        this.refBaseTableListPartitionMap = refBaseTableListPartitionMap;
+    public void setRefBaseTableToCellMap(Map<Table, PCellSortedSet> refBaseTableToCellMap) {
+        this.refBaseTableToCellMap = refBaseTableToCellMap;
     }
 
-    public Map<Table, Map<String, Set<String>>> getExternalRefBaseTableMVPartitionMap() {
+    public Map<Table, PartitionNameSetMap> getExternalRefBaseTableMVPartitionMap() {
         return externalRefBaseTableMVPartitionMap;
     }
 
     public void setExternalRefBaseTableMVPartitionMap(
-            Map<Table, Map<String, Set<String>>> externalRefBaseTableMVPartitionMap) {
+            Map<Table, PartitionNameSetMap> externalRefBaseTableMVPartitionMap) {
         this.externalRefBaseTableMVPartitionMap = externalRefBaseTableMVPartitionMap;
     }
 
-    public Map<String, Range<PartitionKey>> getMvRangePartitionMap() {
-        return mvRangePartitionMap;
+    public PCellSortedSet getMVToCellMap() {
+        return mvToCellMap;
     }
 
-    public void setMvRangePartitionMap(Map<String, Range<PartitionKey>> mvRangePartitionMap) {
-        this.mvRangePartitionMap = mvRangePartitionMap;
+    public void setMVToCellMap(PCellSortedSet mvToCellMap) {
+        this.mvToCellMap = mvToCellMap;
     }
 
     public ExecPlan getExecPlan() {

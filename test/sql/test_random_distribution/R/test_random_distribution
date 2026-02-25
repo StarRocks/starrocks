@@ -1,13 +1,11 @@
+
 -- name: test_non_dup_random
 create table t1(k int, v int) duplicate key(k);
 -- result:
 -- !result
-create table t2(k int, v int) primary key(k);
--- result:
--- !result
 create table t2(k int, v int) primary key(k) distributed by random buckets 20;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 45 to line 1, column 75. Detail message: Random distribution must be used in DUP_KEYS or AGG_KEYS without replace.')
+E: (1064, 'Getting analyzing error from line 1, column 45 to line 1, column 75. Detail message: PRIMARY KEY must use hash distribution.')
 -- !result
 create table t3(k int, v int) unique key(k);
 -- result:
@@ -15,7 +13,7 @@ E: (1064, 'Getting analyzing error. Detail message: Currently not support defaul
 -- !result
 create table t3(k int, v int) unique key(k) distributed by random buckets 20;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 44 to line 1, column 74. Detail message: Random distribution must be used in DUP_KEYS or AGG_KEYS without replace.')
+E: (1064, 'Getting analyzing error from line 1, column 44 to line 1, column 74. Detail message: UNIQUE KEY must use hash distribution.')
 -- !result
 create table t4(k int, v int sum) aggregate key(k);
 -- result:
@@ -23,10 +21,16 @@ E: (1064, 'Getting analyzing error. Detail message: Currently not support defaul
 -- !result
 create table t4(k int, v int sum) aggregate key(k) distributed by random buckets 20;
 -- result:
+E: (1064, 'Getting analyzing error from line 1, column 51 to line 1, column 81. Detail message: AGGREGATE KEY must use hash distribution.')
 -- !result
-drop table t4;
+create table t5(k int, v int sum) aggregate key(k) distributed by hash(k);
 -- result:
 -- !result
+alter table t5 distributed by random buckets 20;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 15 to line 1, column 45. Detail message: AGGREGATE KEY must use hash distribution.')
+-- !result
+
 -- name: test_create_default_random_distribution_table
 create table t(k int, v int);
 -- result:
@@ -38,7 +42,7 @@ select * from t;
 -- result:
 1	1
 -- !result
--- name: test_automatic_partition_random_distribute
+-- name: test_automatic_partition_random_distribute @native
 create table t(k date, v int) partition by date_trunc('day', k) properties('replication_num'='3');
 -- result:
 -- !result
@@ -60,7 +64,7 @@ DUPLICATE KEY(`k`, `v`)
 PARTITION BY date_trunc('day', k)
 DISTRIBUTED BY RANDOM
 PROPERTIES (
-"bucket_size" = "4294967296",
+"bucket_size" = "1073741824",
 "compression" = "LZ4",
 "fast_schema_evolution" = "true",
 "replicated_storage" = "true",
@@ -84,7 +88,7 @@ insert into t values(1,1),(1,2);
 select * from tva;
 -- result:
 -- !result
--- name: test_add_partition
+-- name: test_add_partition @native
 create table t(k int, v int) partition by range(k) (partition p1 values less than ("0")) distributed by random buckets 10;
 -- result:
 -- !result
@@ -99,7 +103,7 @@ PARTITION BY RANGE(`k`)
 (PARTITION p1 VALUES [("-2147483648"), ("0")))
 DISTRIBUTED BY RANDOM BUCKETS 10
 PROPERTIES (
-"bucket_size" = "4294967296",
+"bucket_size" = "1073741824",
 "compression" = "LZ4",
 "fast_schema_evolution" = "true",
 "replicated_storage" = "true",
@@ -121,7 +125,7 @@ PARTITION BY RANGE(`k`)
 PARTITION p2 VALUES [("0"), ("20")))
 DISTRIBUTED BY RANDOM BUCKETS 10
 PROPERTIES (
-"bucket_size" = "4294967296",
+"bucket_size" = "1073741824",
 "compression" = "LZ4",
 "fast_schema_evolution" = "true",
 "replicated_storage" = "true",
@@ -144,7 +148,7 @@ PARTITION p2 VALUES [("0"), ("20")),
 PARTITION p3 VALUES [("20"), ("30")))
 DISTRIBUTED BY RANDOM BUCKETS 10
 PROPERTIES (
-"bucket_size" = "4294967296",
+"bucket_size" = "1073741824",
 "compression" = "LZ4",
 "fast_schema_evolution" = "true",
 "replicated_storage" = "true",
@@ -168,7 +172,7 @@ PARTITION p3 VALUES [("20"), ("30")),
 PARTITION p4 VALUES [("30"), ("40")))
 DISTRIBUTED BY RANDOM BUCKETS 10
 PROPERTIES (
-"bucket_size" = "4294967296",
+"bucket_size" = "1073741824",
 "compression" = "LZ4",
 "fast_schema_evolution" = "true",
 "replicated_storage" = "true",
@@ -189,7 +193,7 @@ select * from t;
 -1	-1
 5	5
 -- !result
--- name: test_create_random_distribution_table
+-- name: test_create_random_distribution_table @native
 create table t(k int, v int);
 -- result:
 -- !result
@@ -211,7 +215,7 @@ t3	CREATE TABLE `t3` (
 DUPLICATE KEY(`k`)
 DISTRIBUTED BY RANDOM BUCKETS 10
 PROPERTIES (
-"bucket_size" = "4294967296",
+"bucket_size" = "1073741824",
 "compression" = "LZ4",
 "fast_schema_evolution" = "true",
 "replicated_storage" = "true",
@@ -233,14 +237,14 @@ t5	CREATE TABLE `t5` (
 DUPLICATE KEY(`k`, `v`)
 DISTRIBUTED BY RANDOM BUCKETS 10
 PROPERTIES (
-"bucket_size" = "4294967296",
+"bucket_size" = "1073741824",
 "compression" = "LZ4",
 "fast_schema_evolution" = "true",
 "replicated_storage" = "true",
 "replication_num" = "3"
 );
 -- !result
--- name: test_partition_random_distribution
+-- name: test_partition_random_distribution @native
 create table t(k int, v int) partition by range(k) (partition p1 values less than ("0"));
 -- result:
 -- !result
@@ -261,7 +265,7 @@ PARTITION BY RANGE(`k`)
 (PARTITION p1 VALUES [("-2147483648"), ("0")))
 DISTRIBUTED BY RANDOM BUCKETS 10
 PROPERTIES (
-"bucket_size" = "4294967296",
+"bucket_size" = "1073741824",
 "compression" = "LZ4",
 "fast_schema_evolution" = "true",
 "replicated_storage" = "true",
@@ -347,10 +351,7 @@ insert into t values(1,1);
 create materialized view tva REFRESH ASYNC as select k, sum(v) from t group by k;
 -- result:
 -- !result
-select sleep(2);
--- result:
-1
--- !result
+REFRESH MATERIALIZED VIEW tva WITH SYNC MODE;
  explain select sum(v) from t;
 -- result:
 [REGEX].*rollup: tva.*

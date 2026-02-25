@@ -15,6 +15,7 @@
 #include "storage/local_tablet_reader.h"
 
 #include "gen_cpp/internal_service.pb.h"
+#include "runtime/current_thread.h"
 #include "serde/protobuf_serde.h"
 #include "storage/chunk_helper.h"
 #include "storage/primary_index.h"
@@ -114,9 +115,11 @@ Status LocalTabletReader::multi_get(const Chunk& keys, const std::vector<uint32_
     for (size_t i = 0; i < tablet_schema->num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }
-    std::unique_ptr<Column> pk_column;
-    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(*tablet_schema->schema(), &pk_column));
-    PrimaryKeyEncoder::encode(*tablet_schema->schema(), keys, 0, keys.num_rows(), pk_column.get());
+    MutableColumnPtr pk_column;
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(*tablet_schema->schema(), &pk_column,
+                                                     PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1));
+    PrimaryKeyEncoder::encode(*tablet_schema->schema(), keys, 0, keys.num_rows(), pk_column.get(),
+                              PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
 
     // search pks in pk index to get rowids
     EditVersion edit_version;
@@ -137,18 +140,28 @@ Status LocalTabletReader::multi_get(const Chunk& keys, const std::vector<uint32_
     vector<uint32_t> idxes;
     plan_read_by_rssid(rowids, found, rowids_by_rssid, idxes);
 
-    auto read_column_schema = ChunkHelper::convert_schema(tablet_schema, value_column_ids);
-    std::vector<std::unique_ptr<Column>> read_columns(value_column_ids.size());
+    vector<std::pair<uint32_t, uint32_t>> value_column_ids_by_order_with_orig_idx;
+    for (uint32_t i = 0; i < value_column_ids.size(); ++i) {
+        value_column_ids_by_order_with_orig_idx.emplace_back(value_column_ids[i], i);
+    }
+    std::sort(value_column_ids_by_order_with_orig_idx.begin(), value_column_ids_by_order_with_orig_idx.end());
+    vector<uint32_t> value_column_ids_by_order;
+    for (const auto& p : value_column_ids_by_order_with_orig_idx) {
+        value_column_ids_by_order.push_back(p.first);
+    }
+    auto read_column_schema = ChunkHelper::convert_schema(tablet_schema, value_column_ids_by_order);
+    MutableColumns read_columns(value_column_ids_by_order.size());
     for (uint32_t i = 0; i < read_columns.size(); ++i) {
         read_columns[i] = ChunkHelper::column_from_field(*read_column_schema.field(i).get())->clone_empty();
     }
-    RETURN_IF_ERROR(_tablet->updates()->get_column_values(value_column_ids, _version, false, rowids_by_rssid,
+    RETURN_IF_ERROR(_tablet->updates()->get_column_values(value_column_ids_by_order, _version, false, rowids_by_rssid,
                                                           &read_columns, nullptr, tablet_schema));
 
     // reorder read values to input keys' order and put into values output parameter
     values.reset();
-    for (size_t col_idx = 0; col_idx < value_column_ids.size(); col_idx++) {
-        values.get_column_by_index(col_idx)->append_selective(*read_columns[col_idx], idxes.data(), 0, idxes.size());
+    for (size_t col_idx = 0; col_idx < value_column_ids_by_order.size(); col_idx++) {
+        auto* dest_col = values.get_column_raw_ptr_by_index(value_column_ids_by_order_with_orig_idx[col_idx].second);
+        dest_col->append_selective(*read_columns[col_idx], idxes.data(), 0, idxes.size());
     }
     int64_t t_end = MonotonicMillis();
     LOG(INFO) << strings::Substitute("multi_get tablet:$0 version:$1 #columns:$2 #rows:$3 found:$4 time:$5ms",

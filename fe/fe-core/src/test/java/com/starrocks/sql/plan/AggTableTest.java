@@ -15,10 +15,10 @@
 
 package com.starrocks.sql.plan;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.fail;
 
 public class AggTableTest extends PlanTestBase {
     public static void assertTestAggOFF(String sql, String reason) {
@@ -163,5 +163,26 @@ public class AggTableTest extends PlanTestBase {
     public void testSingleAgg19() throws Exception {
         String sql = getFragmentPlan("select NDV(v2) from test_agg group by k1");
         assertTestAggOFF(sql, "Aggregation function NDV just work on key column");
+    }
+
+    @Test
+    public void testMultiDistinctCountWithSum() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `reproduce` (\n" +
+                "  `id` int(11) NULL COMMENT \"\",\n" +
+                "  `v2` int(11) NULL COMMENT \"\",\n" +
+                "  `v3` int(11) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`id`, `v2`, `v3`)\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+
+        String sql = "select COUNT(distinct (case WHEN 1=2 THEN v2 else null end)) AS x0, " +
+                      "COUNT(distinct (case WHEN (true) THEN v2 else null end)) AS x1, " +
+                      "SUM((case WHEN (true) THEN v3 else null end)) " +
+                      "FROM reproduce";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "output: multi_distinct_count(NULL), multi_distinct_count(2: v2), sum(3: v3)");
     }
 }

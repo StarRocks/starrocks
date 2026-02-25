@@ -35,6 +35,7 @@
 #pragma once
 
 #include "column_reader.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "io/shared_buffered_input_stream.h"
 #include "storage/olap_common.h"
@@ -43,7 +44,6 @@
 #include "storage/range.h"
 #include "storage/rowset/common.h"
 #include "types/logical_type.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 
@@ -61,7 +61,9 @@ struct ColumnIteratorOptions {
     // reader statistics
     OlapReaderStatistics* stats = nullptr;
     bool use_page_cache = false;
-    LakeIOOptions lake_io_opts{.fill_data_cache = true};
+    // temporary data does not allow caching
+    bool temporary_data = false;
+    LakeIOOptions lake_io_opts{.fill_data_cache = true, .skip_disk_cache = false};
 
     // check whether column pages are all dictionary encoding.
     bool check_dict_encoding = false;
@@ -77,6 +79,7 @@ struct ColumnIteratorOptions {
 
     ReaderType reader_type = READER_QUERY;
     int chunk_size = DEFAULT_CHUNK_SIZE;
+    bool has_preaggregation = true;
 };
 
 // Base iterator to read one column data
@@ -105,48 +108,21 @@ public:
 
     virtual Status next_batch(const SparseRange<>& range, Column* dst);
 
+    virtual StatusOr<std::vector<std::pair<int64_t, int64_t>>> get_io_range_vec(const SparseRange<>& range,
+                                                                                Column* dst) {
+        return Status::NotSupported("Not Implemented");
+    }
+
     Status convert_sparse_range_to_io_range(const SparseRange<>& range) {
         if (auto sharedBufferStream = dynamic_cast<io::SharedBufferedInputStream*>(_opts.read_file);
             sharedBufferStream == nullptr) {
             return Status::OK();
         }
 
-        auto reader = get_column_reader();
-        if (reader == nullptr) {
-            // should't happen
-            LOG(INFO) << "column reader nullptr, filename: " << _opts.read_file->filename();
-            return Status::OK();
-        }
-
         std::vector<io::SharedBufferedInputStream::IORange> result;
-        std::vector<std::pair<int, int>> page_index;
-        int prev_page_index = -1;
-        for (auto index = 0; index < range.size(); index++) {
-            auto row_start = range[index].begin();
-            auto row_end = range[index].end() - 1;
-            OrdinalPageIndexIterator iter_start;
-            OrdinalPageIndexIterator iter_end;
-            RETURN_IF_ERROR(reader->seek_at_or_before(row_start, &iter_start));
-            RETURN_IF_ERROR(reader->seek_at_or_before(row_end, &iter_end));
-
-            if (prev_page_index == iter_start.page_index()) {
-                // merge page index
-                page_index.back().second = iter_end.page_index();
-            } else {
-                page_index.emplace_back(std::make_pair(iter_start.page_index(), iter_end.page_index()));
-            }
-
-            prev_page_index = iter_end.page_index();
-        }
-
-        for (auto pair : page_index) {
-            OrdinalPageIndexIterator iter_start;
-            OrdinalPageIndexIterator iter_end;
-            RETURN_IF_ERROR(reader->seek_by_page_index(pair.first, &iter_start));
-            RETURN_IF_ERROR(reader->seek_by_page_index(pair.second, &iter_end));
-            auto offset = iter_start.page().offset;
-            auto size = iter_end.page().offset - offset + iter_end.page().size;
-            io::SharedBufferedInputStream::IORange io_range(offset, size);
+        ASSIGN_OR_RETURN(auto vec, get_io_range_vec(range, nullptr));
+        for (auto e : vec) {
+            io::SharedBufferedInputStream::IORange io_range(e.first, e.second);
             result.emplace_back(io_range);
         }
 
@@ -155,12 +131,18 @@ public:
 
     virtual ordinal_t get_current_ordinal() const = 0;
 
+    virtual bool has_zone_map() const { return false; }
+
     /// Store the row ranges that satisfy the given predicates into |row_ranges|.
     /// |pred_relation| is the relation among |predicates|, it can be AND or OR.
     virtual Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                               const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
-                                              CompoundNodeType pred_relation) {
-        row_ranges->add({0, static_cast<rowid_t>(num_rows())});
+                                              CompoundNodeType pred_relation, const Range<>* src_range = nullptr) {
+        if (src_range == nullptr) {
+            row_ranges->add({0, static_cast<rowid_t>(num_rows())});
+        } else {
+            row_ranges->add(*src_range);
+        }
         return Status::OK();
     }
 
@@ -237,13 +219,24 @@ public:
     // NOTE: The default implementation is not high-performant.
     virtual Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values);
 
+    // if column is low dictionary column
+    // this interface will return string if is local dictionary column
+    // and return glocal dict value if is global dictionary column
     Status fetch_values_by_rowid(const Column& rowids, Column* values);
 
+    // this interface will return local dict value with given rowids without any translate
+    // just like next_dict_codes but with given rowids
     virtual Status fetch_dict_codes_by_rowid(const rowid_t* rowids, size_t size, Column* values) {
         return Status::NotSupported("");
     }
 
     Status fetch_dict_codes_by_rowid(const Column& rowids, Column* values);
+
+    // used for predicate late-materialization
+    // for low dictionary column, predicate will be rewritten by local dictionary,
+    // so predicate evaluation needs to read local dictionary values if this is a low dictionary column,
+    // This method will return local dictionary value if this is a low dictionary column
+    virtual Status fetch_values_by_rowid_for_predicate_evaluate(const Column& rowids, Column* values);
 
     // for Struct type (Struct)
     virtual Status next_batch(size_t* n, Column* dst, ColumnAccessPath* path) { return next_batch(n, dst); }
@@ -254,9 +247,36 @@ public:
 
     virtual Status fetch_subfield_by_rowid(const rowid_t* rowids, size_t size, Column* values) { return Status::OK(); }
 
+    virtual Status null_count(size_t* count) { return Status::OK(); };
+
+    // RAW interface, should be used carefully
+    virtual ColumnReader* get_column_reader() {
+        CHECK(false) << "unreachable";
+        return nullptr;
+    }
+
+    // Return the name of this column iterator for debugging and logging purposes
+    virtual std::string name() const { return "ColumnIterator"; }
+
+    virtual Status next_batch_with_filter(const SparseRange<>& range, Column* dst,
+                                          const std::vector<const ColumnPredicate*>& compound_and_predicates,
+                                          Buffer<uint8_t>* selection, Buffer<uint16_t>* selected_idx,
+                                          size_t* processed_rows) {
+        return Status::NotSupported("ColumnIterator Doesn't Support next_batch_with_filter");
+    }
+
+    virtual void reserve_col(size_t n, Column* column) { column->reserve(n); }
+
+    // Check if this column iterator supports push down predicate with given compound_and_predicates
+    // This is used to determine if next_batch_with_filter can be called for late materialization optimization
+    virtual bool support_push_down_predicate(const std::vector<const ColumnPredicate*>& compound_and_predicates) {
+        return false;
+    }
+
 protected:
     ColumnIteratorOptions _opts;
-    virtual ColumnReader* get_column_reader() { return nullptr; };
 };
+
+using ColumnIteratorUPtr = std::unique_ptr<ColumnIterator>;
 
 } // namespace starrocks

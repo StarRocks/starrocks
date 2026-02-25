@@ -14,9 +14,9 @@
 
 package com.starrocks.benchmark;
 
-import com.carrotsearch.junitbenchmarks.BenchmarkOptions;
-import com.carrotsearch.junitbenchmarks.BenchmarkRule;
+import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
+import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
@@ -24,37 +24,45 @@ import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.TaskRunBuilder;
 import com.starrocks.scheduler.TaskRunScheduler;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteTestBase;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Ignore;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.TestRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
+import org.openjdk.jmh.annotations.Benchmark;
+import org.openjdk.jmh.annotations.BenchmarkMode;
+import org.openjdk.jmh.annotations.Fork;
+import org.openjdk.jmh.annotations.Measurement;
+import org.openjdk.jmh.annotations.Mode;
+import org.openjdk.jmh.annotations.Scope;
+import org.openjdk.jmh.annotations.State;
+import org.openjdk.jmh.annotations.Warmup;
 
-@Ignore
-public class TaskSchedulerBench extends MvRewriteTestBase {
+@State(Scope.Benchmark)
+@BenchmarkMode(Mode.AverageTime)
+@Fork(1)
+@Warmup(iterations = 1)
+@Measurement(iterations = 1)
+@Disabled
+public class TaskSchedulerBench extends MVTestBase {
 
     // private static final int TASK_NUM = Config.task_runs_queue_length;
     private static final int TASK_NUM = 10;
 
-    @Rule
-    public TestRule benchRun = new BenchmarkRule();
-
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
-        MvRewriteTestBase.beforeClass();
+        MVTestBase.beforeClass();
         Config.task_runs_concurrency = TASK_NUM;
         LOG.info("prepared {} tasks", TASK_NUM);
     }
 
-    @Before
+    @BeforeEach
     public void before() {
         starRocksAssert.getCtx().getSessionVariable().setEnableQueryDump(false);
     }
 
     private static ExecuteOption makeExecuteOption(boolean isMergeRedundant, boolean isSync) {
-        ExecuteOption executeOption = new ExecuteOption(isMergeRedundant);
+        ExecuteOption executeOption = new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(), isMergeRedundant,
+                Maps.newHashMap());
         executeOption.setSync(isSync);
         return executeOption;
     }
@@ -68,8 +76,7 @@ public class TaskSchedulerBench extends MvRewriteTestBase {
         return taskRun;
     }
 
-    @Test
-    @BenchmarkOptions(warmupRounds = 1, benchmarkRounds = 1)
+    @Benchmark
     public void testTaskSchedulerWithDifferentTaskIds() {
         TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
         TaskRunScheduler taskRunScheduler = tm.getTaskRunScheduler();
@@ -88,8 +95,7 @@ public class TaskSchedulerBench extends MvRewriteTestBase {
         }
     }
 
-    @Test
-    @BenchmarkOptions(warmupRounds = 1, benchmarkRounds = 1)
+    @Benchmark
     public void testTaskSchedulerWithSameTaskIdsAndMergeable() {
         TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
         TaskRunScheduler taskRunScheduler = tm.getTaskRunScheduler();
@@ -108,8 +114,7 @@ public class TaskSchedulerBench extends MvRewriteTestBase {
         }
     }
 
-    @Test
-    @BenchmarkOptions(warmupRounds = 1, benchmarkRounds = 1)
+    @Benchmark
     public void testTaskSchedulerWithSameTaskIdsAndNoMergeable() {
         TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
         TaskRunScheduler taskRunScheduler = tm.getTaskRunScheduler();

@@ -15,12 +15,15 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.TupleDescriptor;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.OlapScanNode;
+import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.qe.DefaultCoordinator;
+import com.starrocks.qe.scheduler.NonRecoverableException;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
+import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TNetworkAddress;
@@ -29,20 +32,26 @@ import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.cngroup.CRAcquireContext;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import mockit.Mock;
+import mockit.MockUp;
 import org.jetbrains.annotations.NotNull;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class ShortCircuitTest extends PlanTestBase {
 
     private static boolean OLD_VALUE;
 
     @Test
-    public void testShortcircuit() throws Exception {
+    public void testShortCircuit() throws Exception {
         connectContext.getSessionVariable().setEnableShortCircuit(true);
         connectContext.getSessionVariable().setPreferComputeNode(true);
         connectContext.getSessionVariable().setCboUseDBLock(true);
@@ -52,12 +61,12 @@ public class ShortCircuitTest extends PlanTestBase {
         // project support short circuit
         String sql = "select pk1 || v3 from tprimary1 where pk1=20";
         String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("Short Circuit Scan: true"));
+        Assertions.assertTrue(planFragment.contains("Short Circuit Scan: true"));
 
         // boolean filter
         sql = "select pk1 || v3 from tprimary_bool where pk1=20 and pk2=false";
         planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("Short Circuit Scan: true"));
+        Assertions.assertTrue(planFragment.contains("Short Circuit Scan: true"));
 
         // boolean filter
         sql = "select pk1 || v3 from tprimary_bool where pk1=33 and pk2=true";
@@ -71,23 +80,53 @@ public class ShortCircuitTest extends PlanTestBase {
         //  support short circuit
         sql = "select * from tprimary1 where pk1 in (20)";
         planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("Short Circuit Scan: true"));
+        Assertions.assertTrue(planFragment.contains("Short Circuit Scan: true"));
 
         //  support limit short circuit
         sql = "select * from tprimary1 where pk1 in (20) limit 10";
         planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("Short Circuit Scan: true"));
+        Assertions.assertTrue(planFragment.contains("Short Circuit Scan: true"));
 
         //  support limit short circuit
         sql = "select * from tprimary1 where pk1 in (20, 30) limit 10";
         planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("Short Circuit Scan: true"));
+        Assertions.assertTrue(planFragment.contains("Short Circuit Scan: true"));
 
         // complex convert for short circuit
         sql = "select * from tprimary_bool where pk1 = 1 and pk2 = true " +
                 "and pk1 =(select pk1 from tprimary_bool where pk1 = 2 and pk2 = true) ";
         planFragment = getFragmentPlan(sql);
-        Assert.assertFalse(planFragment.contains("Short Circuit Scan: true"));
+        Assertions.assertFalse(planFragment.contains("Short Circuit Scan: true"));
+    }
+
+    @Test
+    public void testShortCircuitForShareData() throws Exception {
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeResource acquireComputeResource(CRAcquireContext acquireContext) {
+                return WarehouseManager.DEFAULT_RESOURCE;
+            }
+        };
+
+        OLD_VALUE = FeConstants.runningUnitTest;
+        FeConstants.runningUnitTest = false;
+
+        {
+            String sql = "select /*+SET_VAR(enable_short_circuit=true)*/ pk1 || v3 from tprimary1 where pk1=20";
+            String planFragment = getFragmentPlan(sql);
+            Assertions.assertTrue(planFragment.contains("Short Circuit Scan: true"));
+        }
+
+        Config.run_mode = RunMode.SHARED_DATA.getName();
+        RunMode.detectRunMode();
+        try {
+            String sql = "select /*+SET_VAR(enable_short_circuit=true)*/ pk1 || v3 from tprimary1 where pk1=20";
+            String planFragment = getFragmentPlan(sql);
+            Assertions.assertFalse(planFragment.contains("Short Circuit Scan: true"));
+        } finally {
+            Config.run_mode = RunMode.SHARED_NOTHING.getName();
+            RunMode.detectRunMode();
+        }
     }
 
     @Test
@@ -104,16 +143,41 @@ public class ShortCircuitTest extends PlanTestBase {
 
         OlapScanNode scanNode = OlapScanNode.createOlapScanNodeByLocation(execPlan.getNextNodeId(), tupleDescriptor,
                 "OlapScanNodeForShortCircuit", ImmutableList.of(scanRangeLocations),
-                WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                WarehouseManager.DEFAULT_RESOURCE);
         List<Long> selectPartitionIds = ImmutableList.of(1L);
         scanNode.setSelectedPartitionIds(selectPartitionIds);
 
         DefaultCoordinator coord = new DefaultCoordinator.Factory().createQueryScheduler(connectContext,
-                execPlan.getFragments(), ImmutableList.of(scanNode), execPlan.getDescTbl().toThrift());
-        coord.startScheduling();
+                execPlan.getFragments(), ImmutableList.of(scanNode), execPlan.getDescTbl().toThrift(), execPlan);
+        coord.exec();
 
         ExecutionFragment execFragment = coord.getExecutionDAG().getRootFragment();
-        Assert.assertEquals(true, execFragment.getPlanFragment().isShortCircuit());
+        Assertions.assertTrue(execFragment.getPlanFragment().isShortCircuit());
+    }
+
+    @Test
+    public void testNoAliveBackend() throws Exception {
+        String sql = "select * from tprimary where pk=20";
+        connectContext.setExecutionId(new TUniqueId(0x33, 0x0));
+        ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(connectContext, sql).second;
+        TScanRangeLocations scanRangeLocations = gettScanRangeLocations(99999); // non-existent backend id
+
+        DescriptorTable desc = new DescriptorTable();
+        TupleDescriptor tupleDescriptor = desc.createTupleDescriptor();
+        tupleDescriptor.setTable(getTable("tprimary"));
+
+        OlapScanNode scanNode = OlapScanNode.createOlapScanNodeByLocation(execPlan.getNextNodeId(), tupleDescriptor,
+                "OlapScanNodeForShortCircuit", ImmutableList.of(scanRangeLocations),
+                WarehouseManager.DEFAULT_RESOURCE);
+        List<Long> selectPartitionIds = ImmutableList.of(1L);
+        scanNode.setSelectedPartitionIds(selectPartitionIds);
+
+        DefaultCoordinator coord = new DefaultCoordinator.Factory().createQueryScheduler(connectContext,
+                execPlan.getFragments(), ImmutableList.of(scanNode), execPlan.getDescTbl().toThrift(), execPlan);
+        assertThatThrownBy(coord::exec)
+                .isInstanceOf(NonRecoverableException.class)
+                .hasMessageContaining("No alive backend for short-circuit query. " +
+                        "Backend node not found. Check if any backend node is down.backend:");
     }
 
     @NotNull
@@ -146,15 +210,15 @@ public class ShortCircuitTest extends PlanTestBase {
 
         OlapScanNode scanNode = OlapScanNode.createOlapScanNodeByLocation(execPlan.getNextNodeId(), tupleDescriptor,
                 "OlapScanNodeForShortCircuit", ImmutableList.of(scanRangeLocations),
-                WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                WarehouseManager.DEFAULT_RESOURCE);
 
         DefaultCoordinator coord = new DefaultCoordinator.Factory().createQueryScheduler(connectContext,
-                execPlan.getFragments(), ImmutableList.of(scanNode), execPlan.getDescTbl().toThrift());
-        coord.startScheduling();
-        Assert.assertTrue(coord.getNext().isEos());
+                execPlan.getFragments(), ImmutableList.of(scanNode), execPlan.getDescTbl().toThrift(), execPlan);
+        coord.exec();
+        Assertions.assertTrue(coord.getNext().isEos());
     }
 
-    @AfterClass
+    @AfterAll
     public static void afterClass() {
         FeConstants.runningUnitTest = OLD_VALUE;
     }

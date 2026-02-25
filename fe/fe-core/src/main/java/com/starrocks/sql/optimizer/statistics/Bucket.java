@@ -15,17 +15,29 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
+import java.util.Optional;
+
 public class Bucket {
     private final double lower;
     private final double upper;
     private final Long count;
     private final Long upperRepeats;
+    private final Optional<Long> distinctCount;
 
     public Bucket(double lower, double upper, Long count, Long upperRepeats) {
         this.lower = lower;
         this.upper = upper;
         this.count = count;
         this.upperRepeats = upperRepeats;
+        this.distinctCount = Optional.empty();
+    }
+
+    public Bucket(double lower, double upper, Long count, Long upperRepeats, Long distinctCount) {
+        this.lower = lower;
+        this.upper = upper;
+        this.count = count;
+        this.upperRepeats = upperRepeats;
+        this.distinctCount = Optional.of(distinctCount);
     }
 
     public double getLower() {
@@ -42,5 +54,25 @@ public class Bucket {
 
     public Long getUpperRepeats() {
         return upperRepeats;
+    }
+
+    public Optional<Long> getRowCountInBucket(double value, Long previousBucketCount, double distinctValuesCount,
+                                              boolean useFixedPointEstimation) {
+        if (lower <= value && value < upper) {
+            long rowCount = count - previousBucketCount - upperRepeats;
+
+            if (distinctCount.isPresent()) {
+                distinctValuesCount = (double) distinctCount.get() - 1;
+            } else if (useFixedPointEstimation) {
+                distinctValuesCount = upper - lower;
+            }
+
+            rowCount = (long) Math.ceil(Math.max(1, rowCount / Math.max(1, distinctValuesCount)));
+            return Optional.of(rowCount);
+        } else if (upper == value) {
+            return Optional.of(upperRepeats);
+        }
+
+        return Optional.empty();
     }
 }

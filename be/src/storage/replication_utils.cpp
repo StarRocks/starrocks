@@ -20,6 +20,10 @@
 #include "agent/agent_server.h"
 #endif
 
+#include "base/debug/trace.h"
+#include "base/network/network_util.h"
+#include "base/string/string_parser.hpp"
+#include "common/system/backend_options.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/BackendService.h"
@@ -29,8 +33,7 @@
 #include "gutil/strings/substitute.h"
 #include "http/http_client.h"
 #include "runtime/client_cache.h"
-#include "service/backend_options.h"
-#include "util/string_parser.hpp"
+#include "runtime/exec_env.h"
 #include "util/thrift_rpc_helper.h"
 
 namespace starrocks {
@@ -118,7 +121,10 @@ static Status download_remote_file(
 
         RETURN_IF_ERROR(client->init(remote_file_url));
         client->set_timeout_ms(timeout_sec * 1000);
-        RETURN_IF_ERROR(client->download([&](const void* data, size_t size) { return converter->append(data, size); }));
+        RETURN_IF_ERROR(client->download([&](const void* data, size_t size) { return converter->append(data, size); },
+                                         config::replication_min_speed_limit_kbps,
+                                         config::replication_min_speed_time_seconds,
+                                         config::replication_max_speed_limit_kbps));
         RETURN_IF_ERROR(converter->close());
         return Status::OK();
     };
@@ -217,12 +223,11 @@ Status ReplicationUtils::release_remote_snapshot(const std::string& ip, int32_t 
     return {result.status};
 }
 
-Status ReplicationUtils::download_remote_snapshot(
-        const std::string& host, int32_t http_port, const std::string& remote_token,
-        const std::string& remote_snapshot_path, TTabletId remote_tablet_id, TSchemaHash remote_schema_hash,
-        const std::function<StatusOr<std::unique_ptr<FileStreamConverter>>(const std::string& file_name,
-                                                                           uint64_t file_size)>& file_converters,
-        DataDir* data_dir) {
+Status ReplicationUtils::download_remote_snapshot(const std::string& host, int32_t http_port,
+                                                  const std::string& remote_token,
+                                                  const std::string& remote_snapshot_path, TTabletId remote_tablet_id,
+                                                  TSchemaHash remote_schema_hash,
+                                                  const FileConverterCreatorFunc& file_converters, DataDir* data_dir) {
     if (UNLIKELY(StorageEngine::instance()->bg_worker_stopped())) {
         return Status::InternalError("Process is going to quit. The download remote snapshot will stop");
     }
@@ -244,9 +249,9 @@ Status ReplicationUtils::download_remote_snapshot(
     return Status::OK();
 #else
 
-    std::string remote_url_prefix =
-            strings::Substitute("http://$0:$1$2?token=$3&type=V2&file=$4/$5/$6/", host, http_port, HTTP_REQUEST_PREFIX,
-                                remote_token, remote_snapshot_path, remote_tablet_id, remote_schema_hash);
+    std::string remote_url_prefix = strings::Substitute(
+            "http://$0$1?token=$2&type=V2&file=$3/$4/$5/", get_host_port(host, http_port), HTTP_REQUEST_PREFIX,
+            remote_token, remote_snapshot_path, remote_tablet_id, remote_schema_hash);
 
     std::vector<string> file_name_list;
     std::vector<int64_t> file_size_list;
@@ -277,12 +282,13 @@ Status ReplicationUtils::download_remote_snapshot(
         }
 
         total_file_size += file_size;
-        uint64_t estimate_timeout_sec = file_size / config::download_low_speed_limit_kbps / 1024;
-        if (estimate_timeout_sec < config::download_low_speed_time) {
-            estimate_timeout_sec = config::download_low_speed_time;
+        int32_t min_speed_kbps = std::max(config::replication_min_speed_limit_kbps, 1);
+        uint64_t estimate_timeout_sec = file_size / min_speed_kbps / 1024;
+        if (estimate_timeout_sec < config::replication_min_speed_time_seconds) {
+            estimate_timeout_sec = config::replication_min_speed_time_seconds;
         }
 
-        VLOG(1) << "Downloading " << remote_file_url << ", bytes: " << file_size
+        VLOG(2) << "Downloading " << remote_file_name << ", bytes: " << file_size
                 << ", timeout: " << estimate_timeout_sec << "s";
 
         RETURN_IF_ERROR(download_remote_file(remote_file_url, estimate_timeout_sec,
@@ -318,8 +324,8 @@ StatusOr<std::string> ReplicationUtils::download_remote_snapshot_file(
 #else
 
     std::string remote_file_url = strings::Substitute(
-            "http://$0:$1$2?token=$3&type=V2&file=$4/$5/$6/$7", host, http_port, HTTP_REQUEST_PREFIX, remote_token,
-            remote_snapshot_path, remote_tablet_id, remote_schema_hash, file_name);
+            "http://$0$1?token=$2&type=V2&file=$3/$4/$5/$6", get_host_port(host, http_port), HTTP_REQUEST_PREFIX,
+            remote_token, remote_snapshot_path, remote_tablet_id, remote_schema_hash, file_name);
 
     std::string file_content;
     file_content.reserve(4 * 1024 * 1024);
@@ -332,6 +338,72 @@ StatusOr<std::string> ReplicationUtils::download_remote_snapshot_file(
     RETURN_IF_ERROR(HttpClient::execute_with_retry(DOWNLOAD_FILE_MAX_RETRY, 1, download_cb));
     return file_content;
 #endif
+}
+
+Status ReplicationUtils::download_lake_segment_file(const std::string& src_file_path, const std::string& src_file_name,
+                                                    size_t src_file_size, const std::shared_ptr<FileSystem>& src_fs,
+                                                    const FileConverterCreatorFunc& file_converters,
+                                                    size_t* final_file_size) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("lake_replication_download_segment_cost_us");
+    TRACE("Start download_lake_segment_file, src_file: $0", src_file_path);
+
+    ASSIGN_OR_RETURN(auto src_file, src_fs->new_random_access_file(src_file_path));
+    if (src_file_size == 0) {
+        VLOG(3) << "No src file size for " << src_file_path << ", try to get it from file system";
+        ASSIGN_OR_RETURN(src_file_size, src_file->get_size());
+    }
+
+    VLOG(3) << "Start reading lake segment file, src file: " << src_file_path << ", src file size: " << src_file_size;
+    ASSIGN_OR_RETURN(auto converter, file_converters(src_file_name, src_file_size));
+    if (converter == nullptr) {
+        if (final_file_size != nullptr) {
+            *final_file_size = src_file_size;
+        }
+        return Status::OK();
+    }
+
+    int64_t offset = 0;
+    // assert min size is 1MB, if config value is greater than 1MB, use it
+    const size_t buff_size = std::max<size_t>(config::lake_replication_read_buffer_size, 1 * 1024 * 1024);
+    char* buf = new char[buff_size];
+    std::unique_ptr<char[]> guard(buf);
+    int64_t read_count = 0;
+
+    while (true) {
+        if (offset >= src_file_size) {
+            break;
+        }
+        int64_t count = std::min<size_t>(buff_size, src_file_size - offset);
+
+        // Record read_at_fully request count and latency
+        {
+            TRACE_COUNTER_SCOPE_LATENCY_US("lake_replication_read_io_cost_us");
+            RETURN_IF_ERROR(src_file->read_at_fully(offset, buf, count));
+            read_count++;
+        }
+        TRACE_COUNTER_INCREMENT("lake_replication_read_io_count", 1);
+
+        offset += count;
+
+        // Record converter append latency
+        {
+            TRACE_COUNTER_SCOPE_LATENCY_US("lake_replication_write_io_cost_us");
+            RETURN_IF_ERROR(converter->append(buf, count));
+        }
+    }
+
+    TRACE_COUNTER_INCREMENT("lake_replication_total_read_io_count", read_count);
+    RETURN_IF_ERROR(converter->close());
+
+    // Get the final output file size after conversion
+    uint64_t output_size = converter->final_output_file_size();
+    if (final_file_size != nullptr) {
+        *final_file_size = output_size;
+    }
+
+    TRACE("Finish download_lake_segment_file, read_count: $0, final_size: $1", read_count, output_size);
+
+    return Status::OK();
 }
 
 Status ReplicationUtils::convert_rowset_txn_meta(RowsetTxnMetaPB* rowset_txn_meta,

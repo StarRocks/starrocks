@@ -32,12 +32,24 @@ private:
                     bool is_vertical_merge, bool is_key);
 
 public:
-    ChunkAggregator(const Schema* schema, uint32_t reserve_rows, uint32_t max_aggregate_rows, double factor);
+    explicit ChunkAggregator(const Schema* schema, uint32_t reserve_rows, uint32_t max_aggregate_rows, double factor);
 
-    ChunkAggregator(const Schema* schema, uint32_t max_aggregate_rows, double factor);
+    explicit ChunkAggregator(const Schema* schema, uint32_t max_aggregate_rows, double factor);
 
-    ChunkAggregator(const Schema* schema, uint32_t max_aggregate_rows, double factor, bool is_vertical_merge,
-                    bool is_key);
+    explicit ChunkAggregator(const Schema* schema, uint32_t max_aggregate_rows, double factor, bool is_vertical_merge,
+                             bool is_key);
+
+    Status prepare();
+
+    static StatusOr<std::unique_ptr<ChunkAggregator>> create(const Schema* schema, uint32_t reserve_rows,
+                                                             uint32_t max_aggregate_rows, double factor);
+    static StatusOr<std::unique_ptr<ChunkAggregator>> create(const Schema* schema, uint32_t reserve_rows,
+                                                             uint32_t max_aggregate_rows, double factor,
+                                                             bool is_vertical_merge, bool is_key);
+    static StatusOr<std::unique_ptr<ChunkAggregator>> create(const Schema* schema, uint32_t max_aggregate_rows,
+                                                             double factor);
+    static StatusOr<std::unique_ptr<ChunkAggregator>> create(const Schema* schema, uint32_t max_aggregate_rows,
+                                                             double factor, bool is_vertical_merge, bool is_key);
 
     void update_source(ChunkPtr& chunk) { update_source(chunk, nullptr); }
     // |source_masks| is used if |_is_vertical_merge| is true.

@@ -48,9 +48,13 @@
 #include "agent/report_task.h"
 #include "agent/resource_group_usage_recorder.h"
 #include "agent/task_signatures_manager.h"
-#include "block_cache/block_cache.h"
-#include "block_cache/datacache_utils.h"
+#include "base/simd/simd.h"
+#include "cache/datacache.h"
+#include "cache/datacache_utils.h"
 #include "common/status.h"
+#include "common/system/backend_options.h"
+#include "common/thread/thread.h"
+#include "common/util/misc.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/workgroup/work_group.h"
 #include "fs/fs_util.h"
@@ -58,7 +62,7 @@
 #include "gen_cpp/Types_types.h"
 #include "runtime/exec_env.h"
 #include "runtime/snapshot_loader.h"
-#include "service/backend_options.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/data_dir.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/olap_common.h"
@@ -69,21 +73,30 @@
 #include "storage/task/engine_clone_task.h"
 #include "storage/update_manager.h"
 #include "storage/utils.h"
-#include "util/misc.h"
-#include "util/starrocks_metrics.h"
-#include "util/thread.h"
 
 namespace starrocks {
 
 namespace {
-static void wait_for_notify_small_steps(int32_t timeout_sec, bool from_report_tablet_thread,
-                                        const std::function<bool()>& stop_waiting) {
-    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(timeout_sec);
+static void wait_for_disk_report_notify(const std::function<bool()>& stop_waiting) {
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(config::report_disk_state_interval_seconds);
     bool notified = false;
     do {
         // take 1 second per step
-        notified = StorageEngine::instance()->wait_for_report_notify(1, from_report_tablet_thread);
+        notified = StorageEngine::instance()->wait_for_report_notify(1, false);
     } while (!notified && std::chrono::steady_clock::now() < deadline && !stop_waiting());
+}
+
+static void wait_for_tablet_report_notify(const std::function<bool()>& stop_waiting) {
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(config::report_tablet_interval_seconds);
+    bool notified = false;
+    do {
+        // take 1 second per step
+        notified = StorageEngine::instance()->wait_for_report_notify(1, true);
+    } while (!notified
+             // if the regular report is stopped, there will be no deadline
+             && (ReportOlapTableTaskWorkerPool::is_regular_report_stopped() ||
+                 std::chrono::steady_clock::now() < deadline) &&
+             !stop_waiting());
 }
 } // namespace
 
@@ -185,8 +198,8 @@ void TaskWorkerPool<AgentTaskRequest>::submit_task(const TAgentTaskRequest& task
         // Set the receiving time of task so that we can determine whether it is timed out later
         auto new_task = _convert_task(task, time(nullptr));
         size_t task_count = _push_task(std::move(new_task));
-        LOG(INFO) << "Submit task success. type=" << type_str << ", signature=" << signature
-                  << ", task_count_in_queue=" << task_count;
+        VLOG(1) << "Submit task success. type=" << type_str << ", signature=" << signature
+                << ", task_count_in_queue=" << task_count;
     } else {
         LOG(INFO) << "Submit task failed, already exists type=" << type_str << ", signature=" << signature;
     }
@@ -306,15 +319,19 @@ void* PushTaskWorkerPool::_worker_thread_callback(void* arg_this) {
             continue;
         }
         auto& push_req = agent_task_req->task_req;
-
         LOG(INFO) << "get push task. signature: " << agent_task_req->signature << " priority: " << priority
                   << " push_type: " << push_req.push_type;
         std::vector<TTabletInfo> tablet_infos;
 
+#ifndef __APPLE__
         EngineBatchLoadTask engine_task(push_req, &tablet_infos, agent_task_req->signature, &status,
                                         GlobalEnv::GetInstance()->load_mem_tracker());
         // EngineBatchLoadTask execute always return OK
         (void)(StorageEngine::instance()->execute_task(&engine_task));
+#else
+        LOG(WARNING) << "push is not supported on MacOS, signature: " << agent_task_req->signature;
+        status = STARROCKS_ERROR;
+#endif
 
         if (status == STARROCKS_PUSH_HAD_LOADED) {
             // remove the task and not return to fe
@@ -389,8 +406,8 @@ void* DeleteTaskWorkerPool::_worker_thread_callback(void* arg_this) {
 
             int num_of_remove_task = 0;
             if (push_req.push_type == TPushType::CANCEL_DELETE) {
-                LOG(INFO) << "get delete push task. remove delete task txn_id: " << push_req.transaction_id
-                          << " priority: " << priority << " push_type: " << push_req.push_type;
+                VLOG(3) << "get delete push task. remove delete task txn_id: " << push_req.transaction_id
+                        << " priority: " << priority << " push_type: " << push_req.push_type;
 
                 std::lock_guard l(worker_pool_this->_worker_thread_lock);
                 auto& tasks = worker_pool_this->_tasks;
@@ -423,13 +440,18 @@ void* DeleteTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         }
         auto& push_req = agent_task_req->task_req;
 
-        LOG(INFO) << "get delete push task. signature: " << agent_task_req->signature << " priority: " << priority
-                  << " push_type: " << push_req.push_type;
+        VLOG(3) << "get delete push task. signature: " << agent_task_req->signature << " priority: " << priority
+                << " push_type: " << push_req.push_type;
         std::vector<TTabletInfo> tablet_infos;
+#ifndef __APPLE__
         EngineBatchLoadTask engine_task(push_req, &tablet_infos, agent_task_req->signature, &status,
                                         GlobalEnv::GetInstance()->load_mem_tracker());
         // EngineBatchLoadTask execute always return OK
         (void)(StorageEngine::instance()->execute_task(&engine_task));
+#else
+        LOG(WARNING) << "delete is not supported on MacOS, signature: " << agent_task_req->signature;
+        status = STARROCKS_ERROR;
+#endif
 
         if (status == STARROCKS_PUSH_HAD_LOADED) {
             // remove the task and not return to fe
@@ -499,7 +521,7 @@ void* PublishVersionTaskWorkerPool::_worker_thread_callback(void* arg_this) {
     std::unordered_set<DataDir*> affected_dirs;
     std::vector<TFinishTaskRequest> finish_task_requests;
     int64_t batch_publish_latency = 0;
-
+    std::vector<int64_t> finished_txn;
     while (true) {
         uint32_t wait_time = config::wait_apply_time;
         {
@@ -523,8 +545,8 @@ void* PublishVersionTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         }
 
         const auto& publish_version_task = *priority_tasks.top();
-        LOG(INFO) << "get publish version task txn_id: " << publish_version_task.task_req.transaction_id
-                  << " priority queue size: " << priority_tasks.size();
+        VLOG(1) << "get publish version task txn_id: " << publish_version_task.task_req.transaction_id
+                << " priority queue size: " << priority_tasks.size();
         bool enable_sync_publish = publish_version_task.task_req.enable_sync_publish;
         if (enable_sync_publish) {
             wait_time = 0;
@@ -540,6 +562,7 @@ void* PublishVersionTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         finish_task_request.__set_signature(publish_version_task.signature);
 
         batch_publish_latency += MonotonicMillis() - start_ts;
+        finished_txn.emplace_back(publish_version_task.task_req.transaction_id);
         priority_tasks.pop();
 
         if (!enable_sync_publish) {
@@ -554,9 +577,9 @@ void* PublishVersionTaskWorkerPool::_worker_thread_callback(void* arg_this) {
                     remove_task_info(finish_task_request.task_type, finish_task_request.signature);
                 }
                 int64_t t2 = MonotonicMillis();
-                LOG(INFO) << "batch flush " << finish_task_requests.size()
-                          << " txn publish task(s). #dir:" << affected_dirs.size() << " flush:" << t1 - t0
-                          << "ms finish_task_rpc:" << t2 - t1 << "ms";
+                VLOG(1) << "batch flush " << finish_task_requests.size()
+                        << " txn publish task(s). #dir:" << affected_dirs.size() << " flush:" << t1 - t0
+                        << "ms finish_task_rpc:" << t2 - t1 << "ms";
                 finish_task_requests.clear();
                 affected_dirs.clear();
                 batch_publish_latency = 0;
@@ -573,9 +596,17 @@ void* PublishVersionTaskWorkerPool::_worker_thread_callback(void* arg_this) {
                 StorageEngine::instance()->wake_finish_publish_vesion_thread();
                 affected_dirs.clear();
                 batch_publish_latency = 0;
-                LOG(INFO) << "batch submit " << finish_task_size << " finish publish version task "
-                          << "txn publish task(s). #dir:" << affected_dirs.size() << " flush:" << t1 - t0 << "ms";
+                VLOG(1) << "batch submit " << finish_task_size << " finish publish version task "
+                        << "txn publish task(s). #dir:" << affected_dirs.size() << " flush:" << t1 - t0 << "ms";
             }
+        }
+        if (priority_tasks.empty() || finished_txn.size() > PUBLISH_VERSION_BATCH_SIZE) {
+            std::stringstream ss;
+            for (auto& txn_id : finished_txn) {
+                ss << txn_id << ",";
+            }
+            LOG(INFO) << "publish version finished transactions: [" << ss.str() << "]";
+            finished_txn.clear();
         }
     }
     return nullptr;
@@ -665,8 +696,7 @@ void* ReportDiskStateTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         }
 
         // wait for notifying until timeout
-        wait_for_notify_small_steps(config::report_disk_state_interval_seconds, false,
-                                    [&] { return worker_pool_this->_stopped.load(); });
+        wait_for_disk_report_notify([&] { return worker_pool_this->_stopped.load(); });
     }
 
     return nullptr;
@@ -695,8 +725,7 @@ void* ReportOlapTableTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         if (!st_report.ok()) {
             LOG(WARNING) << "Fail to report all tablets info, err=" << st_report.to_string();
             // wait for notifying until timeout
-            wait_for_notify_small_steps(config::report_tablet_interval_seconds, true,
-                                        [&] { return worker_pool_this->_stopped.load(); });
+            wait_for_tablet_report_notify([&] { return worker_pool_this->_stopped.load(); });
             continue;
         }
         int64_t max_compaction_score =
@@ -713,16 +742,17 @@ void* ReportOlapTableTaskWorkerPool::_worker_thread_callback(void* arg_this) {
             LOG(WARNING) << "Fail to report olap table state to " << master_address.hostname << ":"
                          << master_address.port << ", err=" << status;
         } else {
-            LOG(INFO) << "Report tablets successfully, report version: " << report_version;
+            VLOG(1) << "Report tablets successfully, report version: " << report_version;
         }
 
         // wait for notifying until timeout
-        wait_for_notify_small_steps(config::report_tablet_interval_seconds, true,
-                                    [&] { return worker_pool_this->_stopped.load(); });
+        wait_for_tablet_report_notify([&] { return worker_pool_this->_stopped.load(); });
     }
 
     return nullptr;
 }
+
+std::atomic<bool> ReportOlapTableTaskWorkerPool::_regular_report_stopped(false);
 
 void* ReportWorkgroupTaskWorkerPool::_worker_thread_callback(void* arg_this) {
     auto* worker_pool_this = (ReportWorkgroupTaskWorkerPool*)arg_this;
@@ -741,7 +771,7 @@ void* ReportWorkgroupTaskWorkerPool::_worker_thread_callback(void* arg_this) {
 
         StarRocksMetrics::instance()->report_workgroup_requests_total.increment(1);
         request.__set_report_version(g_report_version.load(std::memory_order_relaxed));
-        auto workgroups = workgroup::WorkGroupManager::instance()->list_workgroups();
+        auto workgroups = ExecEnv::GetInstance()->workgroup_manager()->list_workgroups();
         request.__set_active_workgroups(workgroups);
         request.__set_backend(BackendOptions::get_localBackend());
         TMasterResult result;
@@ -753,7 +783,7 @@ void* ReportWorkgroupTaskWorkerPool::_worker_thread_callback(void* arg_this) {
                          << ", err=" << status;
         }
         if (result.__isset.workgroup_ops) {
-            workgroup::WorkGroupManager::instance()->apply(result.workgroup_ops);
+            ExecEnv::GetInstance()->workgroup_manager()->apply(result.workgroup_ops);
         }
         nap_sleep(config::report_workgroup_interval_seconds,
                   [worker_pool_this] { return worker_pool_this->_stopped.load(); });
@@ -809,6 +839,7 @@ void* ReportResourceUsageTaskWorkerPool::_worker_thread_callback(void* arg_this)
 }
 
 void* ReportDataCacheMetricsTaskWorkerPool::_worker_thread_callback(void* arg_this) {
+#ifndef __APPLE__
     const auto* worker_pool_this = static_cast<ReportDataCacheMetricsTaskWorkerPool*>(arg_this);
 
     TReportRequest request;
@@ -828,14 +859,22 @@ void* ReportDataCacheMetricsTaskWorkerPool::_worker_thread_callback(void* arg_th
         request.__set_report_version(g_report_version.load(std::memory_order_relaxed));
 
         TDataCacheMetrics t_metrics{};
-        if (config::datacache_enable) {
-            const BlockCache* cache = BlockCache::instance();
-            const DataCacheMetrics& metrics = cache->cache_metrics();
-            DataCacheUtils::set_metrics_from_thrift(t_metrics, metrics);
-        } else {
-            t_metrics.__set_status(TDataCacheStatus::DISABLED);
-        }
+        const LocalDiskCacheEngine* disk_cache = DataCache::GetInstance()->local_disk_cache();
+        const LocalMemCacheEngine* mem_cache = DataCache::GetInstance()->local_mem_cache();
+        bool disk_cache_inited = disk_cache != nullptr && disk_cache->is_initialized();
+        bool mem_cache_inited = mem_cache != nullptr && mem_cache->is_initialized();
 
+        if (!disk_cache_inited && !mem_cache_inited) {
+            t_metrics.__set_status(TDataCacheStatus::DISABLED);
+        } else {
+            if (mem_cache_inited) {
+                t_metrics.__set_status(TDataCacheStatus::NORMAL);
+                DataCacheUtils::set_metrics_to_thrift(t_metrics, mem_cache->cache_metrics());
+            }
+            if (disk_cache_inited) {
+                DataCacheUtils::set_metrics_to_thrift(t_metrics, disk_cache->cache_metrics());
+            }
+        }
         request.__set_datacache_metrics(t_metrics);
 
         TMasterResult result;
@@ -849,7 +888,7 @@ void* ReportDataCacheMetricsTaskWorkerPool::_worker_thread_callback(void* arg_th
         size_t sleep_secs = config::report_datacache_metrics_interval_ms / 1000;
         nap_sleep(sleep_secs, [&]() { return worker_pool_this->_stopped.load(); });
     }
-
+#endif // __APPLE__
     return nullptr;
 }
 

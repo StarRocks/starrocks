@@ -1,12 +1,14 @@
 # Dependencies
+oldsidebars.json
 /node_modules
 
 # Production
 /build
 /docs
 **/versioned_docs/**
-**/docusaurus-plugin-content-docs/**
+**/docusaurus-plugin-content-docs/current/**
 i18n/zh/docusaurus-plugin-content-docs-releasenotes/current/*.md
+i18n/zh/docusaurus-plugin-content-blog/**
 /static/releasenotes
 /releasenotes
 /common

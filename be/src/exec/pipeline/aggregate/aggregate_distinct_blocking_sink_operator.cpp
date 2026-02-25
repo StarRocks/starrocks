@@ -14,20 +14,27 @@
 
 #include "aggregate_distinct_blocking_sink_operator.h"
 
+#include "base/concurrency/race_detect.h"
 #include "runtime/current_thread.h"
-#include "util/race_detect.h"
 
 namespace starrocks::pipeline {
 
 Status AggregateDistinctBlockingSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
-    RETURN_IF_ERROR(_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get()));
-    return _aggregator->open(state);
+    _aggregator->attach_sink_observer(state, this->_observer);
+    return Status::OK();
+}
+
+Status AggregateDistinctBlockingSinkOperator::prepare_local_state(RuntimeState* state) {
+    RETURN_IF_ERROR(Operator::prepare_local_state(state));
+    RETURN_IF_ERROR(_aggregator->prepare(state, _unique_metrics.get()));
+    RETURN_IF_ERROR(_aggregator->open(state));
+    return Status::OK();
 }
 
 void AggregateDistinctBlockingSinkOperator::close(RuntimeState* state) {
     auto* counter = ADD_COUNTER(_unique_metrics, "HashTableMemoryUsage", TUnit::BYTES);
-    counter->set(_aggregator->hash_set_memory_usage());
+    COUNTER_SET(counter, _aggregator->hash_set_memory_usage());
     _aggregator->unref(state);
     Operator::close(state);
 }
@@ -35,6 +42,7 @@ void AggregateDistinctBlockingSinkOperator::close(RuntimeState* state) {
 Status AggregateDistinctBlockingSinkOperator::set_finishing(RuntimeState* state) {
     if (_is_finished) return Status::OK();
     ONCE_DETECT(_set_finishing_once);
+    auto notify = _aggregator->defer_notify_source();
     auto defer = DeferOp([this]() {
         COUNTER_UPDATE(_aggregator->input_row_count(), _aggregator->num_input_rows());
         _aggregator->sink_complete();

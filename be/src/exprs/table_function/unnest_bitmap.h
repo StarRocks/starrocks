@@ -19,7 +19,7 @@
 #include "column/type_traits.h"
 #include "common/config.h"
 #include "exprs/table_function/table_function.h"
-#include "runtime/integer_overflow_arithmetics.h"
+#include "types/integer_overflow_arithmetics.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -46,7 +46,7 @@ public:
     Status open(RuntimeState* runtime_state, TableFunctionState* state) const override { return Status::OK(); }
 
     Status close(RuntimeState* runtime_state, TableFunctionState* state) const override {
-        SAFE_DELETE(state);
+        delete state;
         return Status::OK();
     }
 
@@ -96,7 +96,7 @@ public:
 
         res_data_col->resize(cur_size);
         res_offset_col->append(cur_size);
-        return std::make_pair(Columns{std::move(res_data_col)}, res_offset_col);
+        return std::make_pair(Columns{std::move(res_data_col)}, std::move(res_offset_col));
     }
 };
 } // namespace starrocks

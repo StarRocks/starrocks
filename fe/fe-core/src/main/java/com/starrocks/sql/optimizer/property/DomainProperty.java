@@ -62,7 +62,10 @@ public class DomainProperty {
             if (domainMap.containsKey(entry.getValue()) && !entry.getValue().equals(entry.getKey())) {
                 ReplaceShuttle shuttle = new ReplaceShuttle(Map.of(entry.getValue(), entry.getKey()));
                 ScalarOperator rewriteResult = shuttle.rewrite(domainMap.get(entry.getValue()).getPredicateDesc());
-                newDomainMap.put(entry.getKey(), new DomainWrapper(rewriteResult));
+                if (rewriteResult != null) {
+                    newDomainMap.put(entry.getKey(),
+                            new DomainWrapper(rewriteResult, domainMap.get(entry.getValue()).isNeedDeriveRange()));
+                }
             }
         }
         ColumnRefSet outputCols = new ColumnRefSet(columnRefMap.keySet());
@@ -102,22 +105,24 @@ public class DomainProperty {
     }
 
     public static class DomainWrapper {
-        private ScalarOperator predicateDesc;
+        private final ScalarOperator predicateDesc;
+
+        private final boolean needDeriveRange;
 
         @Nullable
-        private RangeExtractor.RangeDescriptor rangeDesc;
+        private final RangeExtractor.RangeDescriptor rangeDesc;
 
-        private boolean withNull;
 
-        public DomainWrapper(ScalarOperator predicateDesc) {
-            this(predicateDesc, false);
-        }
-
-        public DomainWrapper(ScalarOperator predicateDesc, boolean withNull) {
+        public DomainWrapper(ScalarOperator predicateDesc, boolean needDeriveRange) {
             this.predicateDesc = predicateDesc;
-            this.rangeDesc = deriveRange(predicateDesc);
-            this.withNull = withNull;
+            this.needDeriveRange = needDeriveRange;
+            if (needDeriveRange) {
+                this.rangeDesc = deriveRange(predicateDesc);
+            } else {
+                this.rangeDesc = new RangeExtractor.RangeDescriptor(ConstantOperator.FALSE);
+            }
         }
+
 
         public ScalarOperator getPredicateDesc() {
             return predicateDesc;
@@ -127,20 +132,20 @@ public class DomainProperty {
             return rangeDesc;
         }
 
-        public void setWithNull(boolean withNull) {
-            this.withNull = withNull;
+        public boolean isNeedDeriveRange() {
+            return needDeriveRange;
         }
 
         public DomainWrapper andValueWrapper(DomainWrapper domainWrapper) {
             ScalarOperator newScalarOperator = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND,
                     predicateDesc, domainWrapper.predicateDesc);
-            return new DomainWrapper(newScalarOperator);
+            return new DomainWrapper(newScalarOperator, needDeriveRange || domainWrapper.needDeriveRange);
         }
 
         public DomainWrapper orValueWrapper(DomainWrapper domainWrapper) {
             ScalarOperator newScalarOperator = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR,
                     predicateDesc, domainWrapper.predicateDesc);
-            return new DomainWrapper(newScalarOperator, withNull || domainWrapper.withNull);
+            return new DomainWrapper(newScalarOperator, needDeriveRange && domainWrapper.needDeriveRange);
         }
 
         private RangeExtractor.RangeDescriptor deriveRange(ScalarOperator scalarOperator) {

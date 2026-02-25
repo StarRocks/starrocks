@@ -15,13 +15,8 @@
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.List;
 
 public class DisableTableRecoveryInfo implements Writable {
@@ -30,16 +25,6 @@ public class DisableTableRecoveryInfo implements Writable {
 
     public DisableTableRecoveryInfo(List<Long> tableIds) {
         this.tableIds = tableIds;
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
-
-    public static DisableTableRecoveryInfo read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, DisableTableRecoveryInfo.class);
     }
 
     public List<Long> getTableIds() {

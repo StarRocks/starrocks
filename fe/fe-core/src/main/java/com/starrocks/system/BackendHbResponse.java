@@ -38,10 +38,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
 import com.starrocks.thrift.TStatusCode;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
-
 /**
  * Backend heartbeat response contains Backend's be port, http port and brpc port
  */
@@ -55,6 +51,8 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
     private int httpPort;
     @SerializedName(value = "brpcPort")
     private int brpcPort;
+    @SerializedName(value = "arrowFlightPort")
+    private int arrowFlightPort;
 
     @SerializedName(value = "starletPort")
     private int starletPort;
@@ -78,8 +76,9 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
 
     public BackendHbResponse(long beId, int bePort, int httpPort, int brpcPort,
                              int starletPort, long hbTime, String version, int cpuCores, long memLimitBytes,
-                             boolean isSetStoragePath) {
+                             boolean isSetStoragePath, int arrowFlightPort) {
         this(beId, bePort, httpPort, brpcPort, starletPort, hbTime, version, cpuCores, memLimitBytes);
+        this.arrowFlightPort = arrowFlightPort;
         this.isSetStoragePath = isSetStoragePath;
     }
 
@@ -132,6 +131,10 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
         return brpcPort;
     }
 
+    public int getArrowFlightPort() {
+        return arrowFlightPort;
+    }
+
     public int getStarletPort() {
         return starletPort;
     }
@@ -160,28 +163,7 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
         this.statusCode = statusCode;
     }
 
-    public static BackendHbResponse read(DataInput in) throws IOException {
-        BackendHbResponse result = new BackendHbResponse();
-        result.readFields(in);
-        return result;
-    }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-        out.writeLong(beId);
-        out.writeInt(bePort);
-        out.writeInt(httpPort);
-        out.writeInt(brpcPort);
-    }
 
-    @Override
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        beId = in.readLong();
-        bePort = in.readInt();
-        httpPort = in.readInt();
-        brpcPort = in.readInt();
-    }
 
 }

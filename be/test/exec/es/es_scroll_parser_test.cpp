@@ -20,10 +20,14 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/runtime_state.h"
 
+#ifndef __clang__
 DIAGNOSTIC_PUSH
 DIAGNOSTIC_IGNORE("-Wclass-memaccess")
+#endif
 #include <rapidjson/document.h>
+#ifndef __clang__
 DIAGNOSTIC_POP
+#endif
 
 namespace starrocks {
 
@@ -87,7 +91,7 @@ TEST_F(ScrollParserTest, ArrayTest) {
 
     auto get_parsed_column = [&scroll_parser](const rapidjson::Document& document, const TypeDescriptor& t,
                                               bool pure_doc_value) {
-        ColumnPtr column = ColumnHelper::create_column(t, true);
+        MutableColumnPtr column = ColumnHelper::create_column(t, true);
         if (pure_doc_value) {
             const rapidjson::Value& val = document["fields"]["array"];
             EXPECT_TRUE(scroll_parser->_append_value_from_json_val(column.get(), t, val, pure_doc_value).ok());
@@ -108,7 +112,7 @@ TEST_F(ScrollParserTest, ArrayTest) {
         //     }
         // }
 
-        auto validator = [](const ColumnPtr& col) {
+        auto validator = [](const MutableColumnPtr& col) {
             auto arr = col->get(0).get_array();
             EXPECT_EQ(1, arr.size());
             EXPECT_EQ(1, arr[0].get_int8());
@@ -134,7 +138,7 @@ TEST_F(ScrollParserTest, ArrayTest) {
         //     }
         // }
 
-        auto validator = [](const ColumnPtr& col) {
+        auto validator = [](const MutableColumnPtr& col) {
             auto arr = col->get(0).get_array();
             EXPECT_EQ(3, arr.size());
             EXPECT_EQ(1, arr[0].get_int8());
@@ -162,7 +166,7 @@ TEST_F(ScrollParserTest, ArrayTest) {
         //     }
         // }
 
-        auto validator = [](const ColumnPtr& col) {
+        auto validator = [](const MutableColumnPtr& col) {
             auto arr = col->get(0).get_array();
             EXPECT_EQ(3, arr.size());
             EXPECT_EQ(1, arr[0].get_int8());
@@ -190,7 +194,7 @@ TEST_F(ScrollParserTest, ArrayTest) {
         //     }
         // }
 
-        auto validator = [](const ColumnPtr& col) {
+        auto validator = [](const MutableColumnPtr& col) {
             auto arr = col->get(0).get_array();
             EXPECT_EQ(2, arr.size());
             EXPECT_EQ(1, arr[0].get_int8());
@@ -217,7 +221,7 @@ TEST_F(ScrollParserTest, ArrayTest) {
         //     }
         // }
 
-        auto validator = [](const ColumnPtr& col) {
+        auto validator = [](const MutableColumnPtr& col) {
             auto arr = col->get(0).get_array();
             EXPECT_EQ(0, arr.size());
         };

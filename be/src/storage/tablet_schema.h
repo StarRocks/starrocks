@@ -39,16 +39,17 @@
 #include <string_view>
 #include <vector>
 
-#include "column/chunk.h"
+#include "base/string/c_string.h"
+#include "column/column_access_path.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/descriptors.pb.h"
 #include "gen_cpp/olap_file.pb.h"
+#include "runtime/agg_state_desc.h"
 #include "storage/aggregate_type.h"
 #include "storage/olap_define.h"
+#include "storage/primary_key_encoding_types.h"
 #include "storage/tablet_index.h"
-#include "storage/type_utils.h"
 #include "storage/types.h"
-#include "util/c_string.h"
 #include "util/once.h"
 
 namespace starrocks {
@@ -59,11 +60,22 @@ class SegmentReaderWriterTest;
 class POlapTableIndexSchema;
 class TColumn;
 
+struct ExtendedColumnInfo {
+    ExtendedColumnInfo(ColumnAccessPath* access_path, int32_t source_column_uid)
+            : access_path(access_path), source_column_uid(source_column_uid) {
+        DCHECK(access_path != nullptr);
+    }
+
+    ColumnAccessPath* access_path = nullptr;
+    int32_t source_column_uid = -1;
+};
+
 class TabletColumn {
     struct ExtraFields {
         std::string default_value;
         std::vector<TabletColumn> sub_columns;
         bool has_default_value = false;
+        bool is_virtual_column = false;
     };
 
 public:
@@ -159,6 +171,16 @@ public:
         ext->default_value = std::move(value);
     }
 
+    bool is_virtual_column() const { return _extra_fields && _extra_fields->is_virtual_column; }
+
+    void set_is_virtual_column(bool is_virtual) {
+        ExtraFields* ext = _get_or_alloc_extra_fields();
+        ext->is_virtual_column = is_virtual;
+    }
+
+    bool has_agg_state_desc() const { return _agg_state_desc != nullptr; }
+    AggStateDesc* get_agg_state_desc() const { return _agg_state_desc; }
+
     void add_sub_column(const TabletColumn& sub_column);
     void add_sub_column(TabletColumn&& sub_column);
     uint32_t subcolumn_count() const { return _extra_fields ? _extra_fields->sub_columns.size() : 0; }
@@ -192,6 +214,11 @@ public:
     }
 
     bool is_support_checksum() const;
+
+    // Extended column from the access path
+    bool is_extended() const { return !!_extended_info; }
+    void set_extended_info(std::unique_ptr<ExtendedColumnInfo> info) { _extended_info = std::move(info); }
+    const ExtendedColumnInfo* extended_info() const { return _extended_info.get(); }
 
 private:
     inline static const std::string kEmptyDefaultValue;
@@ -237,9 +264,13 @@ private:
     ColumnPrecision _precision = 0;
     ColumnScale _scale = 0;
 
+    // Extended access path column
+    std::unique_ptr<ExtendedColumnInfo> _extended_info;
+
     uint8_t _flags = 0;
 
     ExtraFields* _extra_fields = nullptr;
+    AggStateDesc* _agg_state_desc = nullptr;
 };
 
 bool operator==(const TabletColumn& a, const TabletColumn& b);
@@ -298,6 +329,17 @@ public:
     double bf_fpp() const { return _bf_fpp; }
     CompressionTypePB compression_type() const { return _compression_type; }
     int compression_level() const { return _compression_level; }
+
+    bool has_valid_primary_key_encoding_type() const {
+        return _primary_key_encoding_type != PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
+    }
+    PrimaryKeyEncodingType primary_key_encoding_type() const { return _primary_key_encoding_type; }
+    StatusOr<PrimaryKeyEncodingType> primary_key_encoding_type_or_error() const {
+        if (!has_valid_primary_key_encoding_type()) {
+            return Status::InternalError("tablet schema has no available primary key encoding type");
+        }
+        return _primary_key_encoding_type;
+    }
     void append_column(TabletColumn column);
 
     int32_t schema_version() const { return _schema_version; }
@@ -324,6 +366,8 @@ public:
         }
     }
     void set_num_short_key_columns(uint16_t num_short_key_columns) { _num_short_key_columns = num_short_key_columns; }
+
+    bool has_separate_sort_key() const;
 
     std::string debug_string() const;
 
@@ -387,6 +431,8 @@ private:
     mutable std::unique_ptr<starrocks::Schema> _schema;
     mutable std::once_flag _init_schema_once_flag;
     int32_t _schema_version = -1;
+
+    PrimaryKeyEncodingType _primary_key_encoding_type = PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
 };
 
 bool operator==(const TabletSchema& a, const TabletSchema& b);

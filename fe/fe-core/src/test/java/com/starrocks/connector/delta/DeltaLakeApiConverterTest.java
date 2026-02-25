@@ -15,23 +15,24 @@
 package com.starrocks.connector.delta;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.catalog.ArrayType;
-import com.starrocks.catalog.MapType;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.StructType;
-import com.starrocks.catalog.Type;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarbinaryType;
 import io.delta.kernel.types.BinaryType;
 import io.delta.kernel.types.DataType;
 import io.delta.kernel.types.IntegerType;
 import io.delta.kernel.types.StringType;
 import io.delta.kernel.types.StructField;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
 import static com.starrocks.connector.ColumnTypeConverter.fromDeltaLakeType;
+import static io.delta.kernel.internal.util.ColumnMapping.COLUMN_MAPPING_MODE_NONE;
 
 public class DeltaLakeApiConverterTest {
     @Test
@@ -41,8 +42,8 @@ public class DeltaLakeApiConverterTest {
                 true
         );
 
-        Type srType = fromDeltaLakeType(deltaType);
-        Assert.assertEquals(srType, new ArrayType(ScalarType.createType(PrimitiveType.INT)));
+        Type srType = fromDeltaLakeType(deltaType, COLUMN_MAPPING_MODE_NONE);
+        Assertions.assertEquals(srType, new ArrayType(com.starrocks.type.IntegerType.INT));
     }
 
     @Test
@@ -59,8 +60,8 @@ public class DeltaLakeApiConverterTest {
                 true
         );
 
-        Type srType = fromDeltaLakeType(deltaType);
-        Assert.assertTrue(srType.isUnknown());
+        Type srType = fromDeltaLakeType(deltaType, COLUMN_MAPPING_MODE_NONE);
+        Assertions.assertTrue(srType.isUnknown());
     }
 
     @Test
@@ -71,9 +72,9 @@ public class DeltaLakeApiConverterTest {
                 true
         );
 
-        Type srType = fromDeltaLakeType(deltaType);
-        Assert.assertEquals(srType,
-                new MapType(ScalarType.createType(PrimitiveType.INT), ScalarType.createType(PrimitiveType.VARBINARY)));
+        Type srType = fromDeltaLakeType(deltaType, COLUMN_MAPPING_MODE_NONE);
+        Assertions.assertEquals(srType,
+                new MapType(com.starrocks.type.IntegerType.INT, VarbinaryType.VARBINARY));
     }
 
     @Test
@@ -84,9 +85,9 @@ public class DeltaLakeApiConverterTest {
         );
         DataType deltaType = new io.delta.kernel.types.StructType(fields);
 
-        Type srType = fromDeltaLakeType(deltaType);
-        Assert.assertEquals(srType, new StructType(ImmutableList.of(
-                ScalarType.createType(PrimitiveType.INT),
-                ScalarType.createDefaultCatalogString())));
+        Type srType = fromDeltaLakeType(deltaType, COLUMN_MAPPING_MODE_NONE);
+        Assertions.assertEquals(srType, new StructType(ImmutableList.of(
+                com.starrocks.type.IntegerType.INT,
+                TypeFactory.createDefaultCatalogString())));
     }
 }

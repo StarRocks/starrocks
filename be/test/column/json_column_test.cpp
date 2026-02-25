@@ -20,16 +20,18 @@
 
 #include <vector>
 
+#include "base/testutil/assert.h"
+#include "base/testutil/parallel_test.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
+#include "column/mysql_row_buffer.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
-#include "runtime/types.h"
-#include "testutil/assert.h"
-#include "testutil/parallel_test.h"
-#include "util/json.h"
+#include "types/json_value.h"
+#include "types/type_descriptor.h"
+#include "velocypack/vpack.h"
 
 namespace starrocks {
 
@@ -242,6 +244,36 @@ PARALLEL_TEST(JsonColumnTest, test_compare_array) {
     EXPECT_LT(array1.compare(array2), 0);
 }
 
+PARALLEL_TEST(JsonColumnTest, test_compare_array_large_integers) {
+    // Test comparison with large integers to avoid overflow issues
+    // This tests the bug where comparing [1] < [9223372036854775807] would incorrectly return false
+    auto small_int_array = JsonValue::parse("[1]").value();
+    auto large_int_array = JsonValue::parse("[9223372036854775807]").value(); // INT64_MAX
+    auto medium_large_int_array = JsonValue::parse("[922337203685477580]").value();
+    auto medium_int_array = JsonValue::parse("[92233720368547758]").value();
+
+    // Small integer should be less than large integer
+    EXPECT_LT(small_int_array.compare(large_int_array), 0);
+    EXPECT_LT(small_int_array.compare(medium_large_int_array), 0);
+    EXPECT_LT(small_int_array.compare(medium_int_array), 0);
+
+    // Large integer should be greater than small integer
+    EXPECT_GT(large_int_array.compare(small_int_array), 0);
+    EXPECT_GT(medium_large_int_array.compare(small_int_array), 0);
+    EXPECT_GT(medium_int_array.compare(small_int_array), 0);
+
+    // Test with negative numbers
+    auto neg_small_int_array = JsonValue::parse("[-1]").value();
+    auto neg_large_int_array = JsonValue::parse("[-9223372036854775808]").value(); // INT64_MIN
+
+    EXPECT_GT(neg_small_int_array.compare(neg_large_int_array), 0);
+    EXPECT_LT(neg_large_int_array.compare(neg_small_int_array), 0);
+
+    // Compare positive and negative
+    EXPECT_GT(small_int_array.compare(neg_small_int_array), 0);
+    EXPECT_LT(neg_small_int_array.compare(small_int_array), 0);
+}
+
 PARALLEL_TEST(JsonColumnTest, test_compare_object) {
     auto obj0 = JsonValue::parse("{}").value();
     auto obj1 = JsonValue::parse(R"( {"a": 1} )").value();
@@ -315,8 +347,8 @@ PARALLEL_TEST(JsonColumnTest, test_column_builder) {
         builder.append(&json);
         auto result = builder.build(false);
 
-        JsonColumn::Ptr json_column_ptr = ColumnHelper::cast_to<TYPE_JSON>(result);
-        JsonColumn* json_column = json_column_ptr.get();
+        JsonColumn::MutablePtr json_column_ptr = ColumnHelper::cast_to<TYPE_JSON>(std::move(result));
+        auto json_column = ColumnHelper::as_raw_column<JsonColumn>(json_column_ptr.get());
         ASSERT_EQ(1, json_column->size());
         ASSERT_EQ(0, json_column->get_object(0)->compare(json));
     }
@@ -355,11 +387,11 @@ PARALLEL_TEST(JsonColumnTest, test_column_builder) {
             ASSERT_EQ(0, copy->compare_at(0, 0, *column, 0));
             ASSERT_FALSE(copy->is_nullable());
 
-            JsonColumn::Ptr json_column_ptr = ColumnHelper::cast_to<TYPE_JSON>(copy);
+            auto json_column_ptr = ColumnHelper::cast_to<TYPE_JSON>(copy);
             ASSERT_EQ(1, json_column_ptr->size());
             ASSERT_EQ(0, json_column_ptr->compare_at(0, 0, *column, 0));
 
-            JsonColumn* json_column = ColumnHelper::cast_to_raw<TYPE_JSON>(copy);
+            JsonColumn* json_column = ColumnHelper::cast_to_raw<TYPE_JSON>(copy.get());
             ASSERT_EQ(1, json_column->size());
             ASSERT_EQ(0, json_column->compare_at(0, 0, *column, 0));
         }
@@ -423,6 +455,8 @@ INSTANTIATE_TEST_SUITE_P(JsonConvertTest, JsonConvertTestFixture,
                                     std::make_tuple(R"({"a": ""})"),
                                     std::make_tuple(R"({"a": [1, 2, 3]})"),
                                     std::make_tuple(R"({"a": {"b": 1}})"),
+                                    // unsigned integer
+                                    std::make_tuple(R"({"a": 18446744073709551615})"),
 
                                     // empty key
                                     std::make_tuple(R"({"a": {"": ""}})"),
@@ -431,5 +465,33 @@ INSTANTIATE_TEST_SUITE_P(JsonConvertTest, JsonConvertTestFixture,
 
                                  // clang-format on
                                  ));
+
+PARALLEL_TEST(JsonConvertTest, convert_from_simdjson_big_integer) {
+    using namespace simdjson;
+    ondemand::parser parser;
+
+    // a is simdjson::ondemand::number_type::big_integer, and should be converted to double
+    auto big_integer_str = R"({"a": 10000000000000000000000000000000000000000})"_padded;
+    ondemand::document big_integer_doc = parser.iterate(big_integer_str);
+    ondemand::object big_integer_obj = big_integer_doc.get_object();
+    auto big_integer_json = JsonValue::from_simdjson(&big_integer_obj);
+    ASSERT_TRUE(big_integer_json.ok());
+
+    // a is simdjson::ondemand::number_type::floating_point_number
+    auto double_str = R"({"a": 10000000000000000000000000000000000000000.0})"_padded;
+    ondemand::document double_doc = parser.iterate(double_str);
+    ondemand::object double_obj = double_doc.get_object();
+    auto double_json = JsonValue::from_simdjson(&double_obj);
+    ASSERT_TRUE(double_json.ok());
+
+    ASSERT_EQ(double_json.value().to_string_uncheck(), big_integer_json.value().to_string_uncheck());
+
+    // a is simdjson::ondemand::number_type::big_integer, but is overflow for double
+    padded_string double_overflow_str = strings::Substitute("{\"a\":$0}", std::string(400, '1'));
+    ondemand::document double_overflow_doc = parser.iterate(double_overflow_str);
+    ondemand::object double_overflow_obj = double_overflow_doc.get_object();
+    auto double_overflow_json = JsonValue::from_simdjson(&double_overflow_obj);
+    ASSERT_FALSE(double_overflow_json.ok());
+}
 
 } // namespace starrocks

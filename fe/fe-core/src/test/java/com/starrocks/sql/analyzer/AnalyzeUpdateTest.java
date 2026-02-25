@@ -15,30 +15,30 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.catalog.Type;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AggregateType;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.type.IntegerType;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -46,7 +46,7 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeUpdateTest {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
     }
@@ -69,6 +69,11 @@ public class AnalyzeUpdateTest {
         analyzeSuccess("update tprimary set v2 = v2 + 1 where v1 = 'aaa'");
 
         analyzeSuccess("update tprimary set v3 = [231,4321,42] where pk = 1");
+    }
+
+    @Test
+    public void testUpdateSingleColumnMultipleTimesInSingleUpdateStatement() {
+        analyzeSuccess("UPDATE tprimary set v1 = 'v1', v1 = 'v1v1' WHERE pk = 1");
     }
 
     @Test
@@ -114,10 +119,10 @@ public class AnalyzeUpdateTest {
                 long tabletId = 10L;
                 // Schema
                 List<Column> columns = Lists.newArrayList();
-                Column k1 = new Column("k1", Type.INT, true, null, "0", "");
+                Column k1 = new Column("k1", IntegerType.INT, true, null, "0", "");
                 columns.add(k1);
-                columns.add(new Column("k2", Type.BIGINT, true, null, "0", ""));
-                columns.add(new Column("v2", Type.BIGINT, false, AggregateType.SUM, "0", ""));
+                columns.add(new Column("k2", IntegerType.BIGINT, true, null, "0", ""));
+                columns.add(new Column("v2", IntegerType.BIGINT, false, AggregateType.SUM, "0", ""));
 
                 // Tablet
                 Tablet tablet = new LakeTablet(tabletId);
@@ -125,7 +130,7 @@ public class AnalyzeUpdateTest {
                 // Index
                 MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
                 TabletMeta tabletMeta =
-                        new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.HDD, true);
+                        new TabletMeta(dbId, tableId, partitionId, indexId, TStorageMedium.HDD, true);
                 index.addTablet(tablet, tabletMeta);
 
                 // Partition

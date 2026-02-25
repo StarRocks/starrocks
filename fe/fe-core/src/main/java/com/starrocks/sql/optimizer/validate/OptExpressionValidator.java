@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.optimizer.validate;
 
-import com.starrocks.catalog.Type;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
@@ -34,6 +33,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
+import com.starrocks.type.DateType;
+import com.starrocks.type.Type;
 
 import java.util.List;
 import java.util.Map;
@@ -51,12 +52,6 @@ public class OptExpressionValidator extends OptExpressionVisitor<OptExpression, 
     }
 
     public void validate(OptExpression root) {
-        // TODO(packy92)
-        //  The tree-based rewriting rules in RBO may modify the child node but not update the
-        //  parent node, resulting in the statistical cache calculated by the previous rules
-        //  not being refreshed, which may affect the calculation of statistical information in memo.
-        //  Just clear it before into memo.
-        root.clearStatsAndInitOutputInfo();
         visit(root, null);
     }
 
@@ -129,6 +124,10 @@ public class OptExpressionValidator extends OptExpressionVisitor<OptExpression, 
     public OptExpression visitLogicalUnion(OptExpression optExpression, Void context) {
         LogicalUnionOperator unionOperator = (LogicalUnionOperator) optExpression.getOp();
         List<ColumnRefOperator> resultCols = unionOperator.getOutputColumnRefOp();
+        if (optExpression.getInputs().isEmpty()) {
+            ErrorReport.reportValidateException(ErrorCode.ERR_PLAN_VALIDATE_ERROR,
+                    ErrorType.INTERNAL_ERROR, optExpression, "union operator has no child");
+        }
         for (List<ColumnRefOperator> childCols : unionOperator.getChildOutputColumns()) {
             if (resultCols.size() != childCols.size()) {
                 ErrorReport.reportValidateException(ErrorCode.ERR_PLAN_VALIDATE_ERROR,
@@ -160,6 +159,11 @@ public class OptExpressionValidator extends OptExpressionVisitor<OptExpression, 
 
     @Override
     public OptExpression visitLogicalValues(OptExpression optExpression, Void context) {
+        return commonValidate(optExpression);
+    }
+
+    @Override
+    public OptExpression visitLogicalRawValues(OptExpression optExpression, Void context) {
         return commonValidate(optExpression);
     }
 
@@ -242,7 +246,7 @@ public class OptExpressionValidator extends OptExpressionVisitor<OptExpression, 
             if (needDateValidate()
                     && ("str_to_date".equals(fnName) || "str2date".equals(fnName))
                     && call.getChild(0).isConstantRef()) {
-                checkDateType((ConstantOperator) call.getChild(0), Type.DATETIME);
+                checkDateType((ConstantOperator) call.getChild(0), DateType.DATETIME);
             } else {
                 super.visitCall(call, context);
             }

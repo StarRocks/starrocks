@@ -1,0 +1,6 @@
+position: 130 # float position is supported
+label: 'Backup and restore'
+collapsible: true
+collapsed: true
+link:
+  type: generated-index

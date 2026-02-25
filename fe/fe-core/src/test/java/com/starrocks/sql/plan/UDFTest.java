@@ -15,19 +15,30 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.FunctionName;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.TableFunction;
-import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.analyzer.CreateFunctionAnalyzer;
+import com.starrocks.sql.analyzer.DropStmtAnalyzer;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.CreateFunctionStmt;
+import com.starrocks.sql.ast.DropFunctionStmt;
 import com.starrocks.sql.ast.HdfsURI;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.thrift.TFunctionBinaryType;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
+import com.starrocks.utframe.UtFrameUtils;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
@@ -35,7 +46,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 public class UDFTest extends PlanTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         starRocksAssert.withTable("CREATE TABLE tab0 (" +
@@ -72,9 +83,9 @@ public class UDFTest extends PlanTestBase {
             List<String> colNames = new ArrayList<>();
             colNames.add("table_function");
             List<Type> argTypes = new ArrayList<>();
-            argTypes.add(Type.VARCHAR);
+            argTypes.add(VarcharType.VARCHAR);
             List<Type> retTypes = new ArrayList<>();
-            retTypes.add(Type.VARCHAR);
+            retTypes.add(VarcharType.VARCHAR);
             final TableFunction tableFunction = new TableFunction(functionName, colNames, argTypes, retTypes);
             functionSet.addBuiltin(tableFunction);
         }
@@ -84,33 +95,36 @@ public class UDFTest extends PlanTestBase {
 
         sql = "select table_function from tab0,table_function(c_0_3)";
         explain = getVerboseExplain(sql);
-        Assert.assertTrue(explain.contains("  1:Project"));
-        Assert.assertTrue(explain.contains("  |  output columns:\n" +
+        Assertions.assertTrue(explain.contains("  1:Project"));
+        Assertions.assertTrue(explain.contains("  |  output columns:\n" +
                 "  |  17 <-> cast([4: c_0_3, BOOLEAN, false] as VARCHAR)"));
 
         sql = "select table_function from tab0, table_function(c_0_3 + 3)";
         explain = getVerboseExplain(sql);
-        Assert.assertTrue(
+        Assertions.assertTrue(
                 explain.contains("  |  17 <-> cast(cast([4: c_0_3, BOOLEAN, false] as SMALLINT) + 3 as VARCHAR)"));
 
         sql = "select v1,v2,v3,t.unnest,o.unnest from t0,unnest([1,2,3]) t, unnest([4,5,6]) o ";
         explain = getFragmentPlan(sql);
-        Assert.assertTrue(explain.contains("TableValueFunction"));
+        Assertions.assertTrue(explain.contains("TableValueFunction"));
     }
 
     @Test
     public void testMultiUnnest() throws Exception {
         String sql = "with t as (select [1,2,3] as a, [4,5,6] as b, [4,5,6] as c) select * from t,unnest(a,b,c)";
-        PhysicalTableFunctionOperator tp = (PhysicalTableFunctionOperator) getExecPlan(sql).getPhysicalPlan().getOp();
+        ExecPlan execPlan = getExecPlan(sql);
+        PhysicalTableFunctionOperator tp = (PhysicalTableFunctionOperator) execPlan.getPhysicalPlan().getOp();
 
-        Assert.assertEquals(3, tp.getFnParamColumnRefs().size());
-        Assert.assertEquals("[2, 4, 4]",
+        Assertions.assertEquals(3, tp.getFnParamColumnRefs().size());
+        Assertions.assertEquals("[8, 9, 10]",
                 tp.getFnParamColumnRefs().stream().map(ColumnRefOperator::getId).collect(Collectors.toList()).toString());
+        Assertions.assertTrue(execPlan.getOptExpression(2).getStatistics().getColumnStatistics().values()
+                .stream().anyMatch(x -> !x.isUnknown()));
 
         sql = "select * from tarray, unnest(v3, v3)";
         tp = (PhysicalTableFunctionOperator) getExecPlan(sql).getPhysicalPlan().getOp();
-        Assert.assertEquals(2, tp.getFnParamColumnRefs().size());
-        Assert.assertEquals("[3, 3]",
+        Assertions.assertEquals(2, tp.getFnParamColumnRefs().size());
+        Assertions.assertEquals("[3, 3]",
                 tp.getFnParamColumnRefs().stream().map(ColumnRefOperator::getId).collect(Collectors.toList()).toString());
 
         sql = "WITH t AS (\n" +
@@ -120,19 +134,19 @@ public class UDFTest extends PlanTestBase {
                 "GROUP BY v3 )\n" +
                 "select unnest.a, unnest.b from t, unnest(a, b) as unnest(a, b);";
         tp = (PhysicalTableFunctionOperator) getExecPlan(sql).getPhysicalPlan().getOp();
-        Assert.assertEquals(2, tp.getFnParamColumnRefs().size());
-        Assert.assertEquals("[4, 4]",
+        Assertions.assertEquals(2, tp.getFnParamColumnRefs().size());
+        Assertions.assertEquals("[4, 4]",
                 tp.getFnParamColumnRefs().stream().map(ColumnRefOperator::getId).collect(Collectors.toList()).toString());
     }
 
     @Test
     public void testFunctionSerialized() {
         FunctionName functionName = new FunctionName("db", "fn");
-        List<Type> argList = Lists.newArrayList(Type.INT);
+        List<Type> argList = Lists.newArrayList(IntegerType.INT);
 
         TableFunction tableFunction = new TableFunction(functionName,
                 Lists.newArrayList(functionName.getFunction()),
-                argList, Lists.newArrayList(Type.INT));
+                argList, Lists.newArrayList(IntegerType.INT));
         tableFunction.setBinaryType(TFunctionBinaryType.SRJAR);
         tableFunction.setChecksum("abc");
         tableFunction.setLocation(new HdfsURI("file://"));
@@ -140,8 +154,77 @@ public class UDFTest extends PlanTestBase {
 
         String json = GsonUtils.GSON.toJson(tableFunction);
         TableFunction tableFunctionReload = GsonUtils.GSON.fromJson(json, TableFunction.class);
-        Assert.assertEquals(tableFunction.getFunctionName(), tableFunctionReload.getFunctionName());
-        Assert.assertEquals(tableFunction.getArgs()[0], tableFunctionReload.getArgs()[0]);
-        Assert.assertEquals(tableFunction.getLocation().toString(), tableFunctionReload.getLocation().toString());
+        Assertions.assertEquals(tableFunction.getFunctionName(), tableFunctionReload.getFunctionName());
+        Assertions.assertEquals(tableFunction.getArgs()[0], tableFunctionReload.getArgs()[0]);
+        Assertions.assertEquals(tableFunction.getLocation().toString(), tableFunctionReload.getLocation().toString());
     }
+
+    @Test
+    public void testSqlFunction1() throws Exception {
+        try {
+            String viewDef = "CREATE FUNCTION view_func(x string, y string) RETURNS concat(upper(x), lower(y));";
+            Config.enable_udf = true;
+            CreateFunctionStmt createFunctionStmt =
+                    (CreateFunctionStmt) UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(viewDef, connectContext);
+            CreateFunctionAnalyzer analyzer = new CreateFunctionAnalyzer();
+            analyzer.analyze(createFunctionStmt, connectContext);
+            DDLStmtExecutor.execute(createFunctionStmt, connectContext);
+
+            String sql = "select view_func(c_0_3, c_0_7) from tab0;";
+            String plan = getFragmentPlan(sql, viewDef);
+
+            assertContains(plan, "concat(upper(CAST(4: c_0_3 AS VARCHAR)), lower(CAST(8: c_0_7 AS VARCHAR)))");
+        } finally {
+            String dropViewFunc = "DROP FUNCTION IF EXISTS view_func(string, string);";
+            DropFunctionStmt dropFunctionStmt =
+                    (DropFunctionStmt) UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(dropViewFunc, connectContext);
+            DropStmtAnalyzer.analyze(dropFunctionStmt, connectContext);
+            DDLStmtExecutor.execute(dropFunctionStmt, connectContext);
+
+            Assertions.assertThrows(SemanticException.class, () -> {
+                String sql = "select view_func(c_0_3, c_0_7) from tab0;";
+                getFragmentPlan(sql, dropViewFunc);
+            });
+            Config.enable_udf = false;
+        }
+    }
+
+    @Test
+    public void testSqlFunction2() throws Exception {
+        try {
+            String viewDef = "CREATE FUNCTION view_func(y string) RETURNS concat('Name_', lower(y));";
+            Config.enable_udf = true;
+            CreateFunctionStmt createFunctionStmt =
+                    (CreateFunctionStmt) UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(viewDef, connectContext);
+            CreateFunctionAnalyzer analyzer = new CreateFunctionAnalyzer();
+            analyzer.analyze(createFunctionStmt, connectContext);
+            DDLStmtExecutor.execute(createFunctionStmt, connectContext);
+
+            String sql = "select view_func(c_0_7) from tab0;";
+            String plan = getFragmentPlan(sql, viewDef);
+
+            assertContains(plan, "concat('Name_', lower(CAST(8: c_0_7 AS VARCHAR)))");
+        } finally {
+            String dropViewFunc = "DROP FUNCTION IF EXISTS view_func(string);";
+            DropFunctionStmt dropFunctionStmt =
+                    (DropFunctionStmt) UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(dropViewFunc, connectContext);
+            DropStmtAnalyzer.analyze(dropFunctionStmt, connectContext);
+            DDLStmtExecutor.execute(dropFunctionStmt, connectContext);
+
+            Assertions.assertThrows(SemanticException.class, () -> {
+                String sql = "select view_func(c_0_7) from tab0;";
+                getFragmentPlan(sql, dropViewFunc);
+            });
+            Config.enable_udf = false;
+        }
+    }
+
+    @Test
+    public void testSqlFunctionDuplicate() {
+        AnalyzeTestUtil.connectContext = connectContext;
+        AnalyzeTestUtil.starRocksAssert = starRocksAssert;
+        AnalyzeTestUtil.analyzeFail("CREATE FUNCTION view_func(y string, y string) RETURNS concat('Name_', lower(y));");
+        AnalyzeTestUtil.analyzeFail("CREATE FUNCTION view_func(y string) RETURNS concat('Name_', lower(z));");
+    }
+
 }

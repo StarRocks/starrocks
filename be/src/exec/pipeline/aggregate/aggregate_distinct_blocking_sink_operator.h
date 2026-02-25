@@ -42,11 +42,13 @@ public:
     Status set_finishing(RuntimeState* state) override;
 
     Status prepare(RuntimeState* state) override;
+    Status prepare_local_state(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
     Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
+    AggregatorPtr& aggregator() { return _aggregator; }
 
 protected:
     // It is used to perform aggregation algorithms shared by
@@ -73,6 +75,8 @@ public:
 
     ~AggregateDistinctBlockingSinkOperatorFactory() override = default;
 
+    bool support_event_scheduler() const override { return true; }
+
     Status prepare(RuntimeState* state) override {
         RETURN_IF_ERROR(OperatorFactory::prepare(state));
         return Status::OK();
@@ -83,6 +87,8 @@ public:
                 _aggregator_factory->get_or_create(driver_sequence), this, _id, _plan_node_id, driver_sequence,
                 _aggregator_factory->get_shared_limit_countdown());
     }
+
+    AggregatorFactoryPtr& aggregator_factory() { return _aggregator_factory; }
 
 private:
     AggregatorFactoryPtr _aggregator_factory = nullptr;

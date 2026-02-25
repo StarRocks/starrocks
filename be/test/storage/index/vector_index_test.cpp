@@ -19,6 +19,8 @@
 #include <tenann/factory/index_factory.h>
 #endif
 
+#include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "column/column_helper.h"
 #include "runtime/mem_pool.h"
 #include "storage/index/index_descriptor.h"
@@ -26,7 +28,6 @@
 #include "storage/index/vector/vector_index_writer.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bitmap_index_writer.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -64,21 +65,21 @@ protected:
         DeferOp op([&] { ASSERT_TRUE(fs::path_exist(path)); });
 
         std::unique_ptr<VectorIndexWriter> vector_index_writer;
-        VectorIndexWriter::create(tablet_index, path, false, &vector_index_writer);
+        VectorIndexWriter::create(tablet_index, path, true, &vector_index_writer);
         CHECK_OK(vector_index_writer->init());
 
         // construct columns
-        std::shared_ptr<FixedLengthColumn<float>> element = std::make_shared<FixedLengthColumn<float>>();
+        auto element = FixedLengthColumn<float>::create();
         element->append(1);
         element->append(2);
         element->append(3);
-        NullColumnPtr null_column = std::make_shared<NullColumn>(element->size(), 0);
-        std::shared_ptr<NullableColumn> nullable_column = std::make_shared<NullableColumn>(element, null_column);
-        std::shared_ptr<UInt32Column> offsets = std::make_shared<UInt32Column>();
+        auto null_column = NullColumn::create(element->size(), 0);
+        auto nullable_column = NullableColumn::create(std::move(element), std::move(null_column));
+        auto offsets = UInt32Column::create();
         offsets->append(0);
         offsets->append(3);
         for (int i = 0; i < 10; i++) {
-            std::shared_ptr<FixedLengthColumn<float>> e = std::make_shared<FixedLengthColumn<float>>();
+            auto e = FixedLengthColumn<float>::create();
             e->append(i + 1.1);
             e->append(i + 2.2);
             e->append(i + 3.3);
@@ -86,9 +87,9 @@ protected:
             offsets->append((i + 2) * 3);
         }
 
-        ArrayColumn array_column(nullable_column, offsets);
+        auto array_column = ArrayColumn::create(std::move(nullable_column), std::move(offsets));
 
-        CHECK_OK(vector_index_writer->append(array_column));
+        CHECK_OK(vector_index_writer->append(*array_column));
 
         ASSERT_EQ(vector_index_writer->size(), 11);
 
@@ -127,7 +128,7 @@ TEST_F(VectorIndexWriterTest, test_write_vector_index) {
         auto status = get_vector_meta(tablet_index, empty_meta);
 
         CHECK_OK(status);
-        auto meta = status.value();
+        const auto& meta = status.value();
 
         // read and search index
         tenann::IndexReaderRef index_reader = tenann::IndexFactory::CreateReaderFromMeta(meta);

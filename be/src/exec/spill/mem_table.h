@@ -18,7 +18,7 @@
 #include <memory>
 #include <utility>
 
-#include "column/column_helper.h"
+#include "column/chunk_slice.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "exec/sorting/sort_permute.h"
@@ -115,6 +115,8 @@ public:
     void reset() override;
 
     StatusOr<std::shared_ptr<SpillInputStream>> as_input_stream(bool shared) override;
+
+    std::vector<ChunkPtr>& get_chunks() { return _chunks; }
 
 private:
     size_t _processed_index = 0;

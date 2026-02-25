@@ -12,54 +12,86 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.authentication;
 
+import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.StarRocksFE;
-import com.starrocks.common.Config;
+import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.authorization.PrivilegeException;
+import com.starrocks.authorization.UserPrivilegeCollectionV2;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
-import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.persist.AlterUserInfo;
+import com.starrocks.persist.CreateUserInfo;
+import com.starrocks.persist.EditLog;
+import com.starrocks.persist.GroupProviderLog;
 import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.SecurityIntegrationPersistInfo;
+import com.starrocks.persist.metablock.MapEntryConsumer;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
-import com.starrocks.privilege.AuthorizationMgr;
-import com.starrocks.privilege.PrivilegeException;
-import com.starrocks.privilege.UserPrivilegeCollectionV2;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropUserStmt;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.UserRef;
+import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
+import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.File;
 import java.io.IOException;
-import java.net.URL;
-import java.net.URLClassLoader;
-import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class AuthenticationMgr {
     private static final Logger LOG = LogManager.getLogger(AuthenticationMgr.class);
     public static final String ROOT_USER = "root";
-    public static final long DEFAULT_MAX_CONNECTION_FOR_EXTERNAL_USER = 100;
+    public static final long DEFAULT_MAX_CONNECTION_FOR_EXTERNAL_USER = 1000;
 
     // core data structure
     // user identity -> all the authentication information
     // will be manually serialized one by one
     protected Map<UserIdentity, UserAuthenticationInfo> userToAuthenticationInfo;
+
+    // For legacy reason, user property are set by username instead of full user identity.
+    @SerializedName(value = "m")
+    private Map<String, UserProperty> userNameToProperty = new HashMap<>();
+
+    @SerializedName("gp")
+    protected Map<String, GroupProvider> nameToGroupProviderMap = new ConcurrentHashMap<>();
+
+    @SerializedName("sim")
+    protected Map<String, SecurityIntegration> nameToSecurityIntegrationMap = new ConcurrentHashMap<>();
+
+    // resolve hostname to ip
+    private Map<String, Set<String>> hostnameToIpSet = new HashMap<>();
+    private final ReentrantReadWriteLock hostnameToIpLock = new ReentrantReadWriteLock();
+
+    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+
+    // set by load() to distinguish brand-new environment with upgraded environment
+    private boolean isLoaded = false;
+
+    public AuthenticationMgr() {
+        // default user
+        userToAuthenticationInfo = new UserAuthInfoTreeMap();
+        UserAuthenticationInfo info = new UserAuthenticationInfo(UserRef.ROOT, null);
+        userToAuthenticationInfo.put(UserIdentity.ROOT, info);
+        userNameToProperty.put(UserIdentity.ROOT.getUser(), new UserProperty());
+    }
 
     private static class UserAuthInfoTreeMap extends TreeMap<UserIdentity, UserAuthenticationInfo> {
         public UserAuthInfoTreeMap() {
@@ -99,42 +131,6 @@ public class AuthenticationMgr {
         }
     }
 
-    // For legacy reason, user property are set by username instead of full user identity.
-    @SerializedName(value = "m")
-    private Map<String, UserProperty> userNameToProperty = new HashMap<>();
-
-    // resolve hostname to ip
-    private Map<String, Set<String>> hostnameToIpSet = new HashMap<>();
-    private final ReentrantReadWriteLock hostnameToIpLock = new ReentrantReadWriteLock();
-
-    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
-
-    // set by load() to distinguish brand-new environment with upgraded environment
-    private boolean isLoaded = false;
-
-    public AuthenticationMgr() {
-        // default plugin
-        AuthenticationProviderFactory.installPlugin(
-                PlainPasswordAuthenticationProvider.PLUGIN_NAME, new PlainPasswordAuthenticationProvider());
-        AuthenticationProviderFactory.installPlugin(
-                LDAPAuthProviderForNative.PLUGIN_NAME, new LDAPAuthProviderForNative());
-        AuthenticationProviderFactory.installPlugin(
-                KerberosAuthenticationProvider.PLUGIN_NAME, new KerberosAuthenticationProvider());
-
-        // default user
-        userToAuthenticationInfo = new UserAuthInfoTreeMap();
-        UserAuthenticationInfo info = new UserAuthenticationInfo();
-        try {
-            info.setOrigUserHost(ROOT_USER, UserAuthenticationInfo.ANY_HOST);
-        } catch (AuthenticationException e) {
-            throw new RuntimeException("should not happened!", e);
-        }
-        info.setAuthPlugin(PlainPasswordAuthenticationProvider.PLUGIN_NAME);
-        info.setPassword(MysqlPassword.EMPTY_PASSWORD);
-        userToAuthenticationInfo.put(UserIdentity.ROOT, info);
-        userNameToProperty.put(UserIdentity.ROOT.getUser(), new UserProperty());
-    }
-
     private void readLock() {
         lock.readLock().lock();
     }
@@ -161,30 +157,16 @@ public class AuthenticationMgr {
     }
 
     /**
-     * Get max connection number of the user, if the user is ephemeral, i.e. the user is saved in SR,
-     * but some external system, like LDAP, return default max connection number
-     * @param currUserIdentity user identity of current connection
-     * @return max connection number of the user
-     */
-    public long getMaxConn(UserIdentity currUserIdentity) {
-        if (currUserIdentity.isEphemeral()) {
-            return DEFAULT_MAX_CONNECTION_FOR_EXTERNAL_USER;
-        } else {
-            String userName = currUserIdentity.getUser();
-            return getMaxConn(userName);
-        }
-    }
-
-    /**
      * Get max connection number based on plain username, the user should be an internal user,
      * if the user doesn't exist in SR, it will throw an exception.
+     *
      * @param userName plain username saved in SR
      * @return max connection number of the user
      */
     public long getMaxConn(String userName) {
         UserProperty userProperty = userNameToProperty.get(userName);
         if (userProperty == null) {
-            throw new SemanticException("Unknown user: " + userName);
+            return DEFAULT_MAX_CONNECTION_FOR_EXTERNAL_USER;
         } else {
             return userNameToProperty.get(userName).getMaxConn();
         }
@@ -224,51 +206,21 @@ public class AuthenticationMgr {
         }
     }
 
-    private UserIdentity checkPasswordForNative(
-            String remoteUser, String remoteHost, byte[] remotePasswd, byte[] randomString) {
-        Map.Entry<UserIdentity, UserAuthenticationInfo> matchedUserIdentity =
-                getBestMatchedUserIdentity(remoteUser, remoteHost);
-        if (matchedUserIdentity == null) {
-            LOG.debug("cannot find user {}@{}", remoteUser, remoteHost);
-        } else {
-            try {
-                AuthenticationProvider provider =
-                        AuthenticationProviderFactory.create(matchedUserIdentity.getValue().getAuthPlugin());
-                provider.authenticate(remoteUser, remoteHost, remotePasswd, randomString,
-                        matchedUserIdentity.getValue());
-                return matchedUserIdentity.getKey();
-            } catch (AuthenticationException e) {
-                LOG.debug("failed to authenticate for native, user: {}@{}, error: {}",
-                        remoteUser, remoteHost, e.getMessage());
-            }
-        }
-
-        return null;
-    }
-
-    public UserIdentity checkPassword(String remoteUser, String remoteHost, byte[] remotePasswd, byte[] randomString) {
-        return checkPasswordForNative(remoteUser, remoteHost, remotePasswd, randomString);
-    }
-
-    public UserIdentity checkPlainPassword(String remoteUser, String remoteHost, String remotePasswd) {
-        return checkPassword(remoteUser, remoteHost,
-                remotePasswd.getBytes(StandardCharsets.UTF_8), null);
-    }
-
     public void createUser(CreateUserStmt stmt) throws DdlException {
-        UserIdentity userIdentity = stmt.getUserIdentity();
-        UserAuthenticationInfo info = stmt.getAuthenticationInfo();
+        UserRef user = stmt.getUser();
+        UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
+        UserAuthenticationInfo info = new UserAuthenticationInfo(user, stmt.getAuthOption());
         writeLock();
         try {
             if (userToAuthenticationInfo.containsKey(userIdentity)) {
                 // Existence verification has been performed in the Analyzer stage. If it exists here,
                 // it may be that other threads have performed the same operation, and return directly here
-                LOG.info("Operation CREATE USER failed for " + stmt.getUserIdentity()
-                        + " : user " + stmt.getUserIdentity() + " already exists");
+                LOG.info("Operation CREATE USER failed for " + stmt.getUser()
+                        + " : user " + stmt.getUser() + " already exists");
                 return;
             }
 
-            UserProperty userProperty = null;
+            UserProperty userProperty;
             String userName = userIdentity.getUser();
             if (userNameToProperty.containsKey(userName)) {
                 userProperty = userNameToProperty.get(userName);
@@ -277,14 +229,8 @@ public class AuthenticationMgr {
             }
 
             if (stmt.getProperties() != null) {
-                // If we create the user with properties, we need to call userProperty.update to check and update userProperty.
-                // If there are failures, update method will throw an exception
-                userProperty.update(userIdentity, UserProperty.changeToPairList(stmt.getProperties()));
+                userProperty.update(UserProperty.changeToPairList(stmt.getProperties()));
             }
-
-            // If all checks are passed, we can add the user to the userToAuthenticationInfo and userNameToProperty
-            userToAuthenticationInfo.put(userIdentity, info);
-            userNameToProperty.put(userName, userProperty);
 
             GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
             AuthorizationMgr authorizationManager = globalStateMgr.getAuthorizationMgr();
@@ -294,9 +240,14 @@ public class AuthenticationMgr {
 
             short pluginId = authorizationManager.getProviderPluginId();
             short pluginVersion = authorizationManager.getProviderPluginVersion();
+            final UserProperty finalUserProperty = userProperty;
             globalStateMgr.getEditLog().logCreateUser(
-                    userIdentity, info, userProperty, collection, pluginId, pluginVersion);
-
+                    new CreateUserInfo(userIdentity, info, userProperty, collection, pluginId, pluginVersion),
+                    wal -> {
+                        userToAuthenticationInfo.put(userIdentity, info);
+                        userNameToProperty.put(userName, finalUserProperty);
+                        authorizationManager.setUserPrivilegeCollection(userIdentity, collection);
+                    });
         } catch (PrivilegeException e) {
             throw new DdlException("failed to create user " + userIdentity + " : " + e.getMessage(), e);
         } finally {
@@ -317,58 +268,62 @@ public class AuthenticationMgr {
                 return;
             }
 
-            updateUserNoLock(userIdentity, userAuthenticationInfo, true);
-            if (properties != null && properties.size() > 0) {
+            UserProperty.UpdateInfo updateInfo = null;
+            if (properties != null && !properties.isEmpty()) {
                 UserProperty userProperty = userNameToProperty.get(userIdentity.getUser());
-                userProperty.update(userIdentity, UserProperty.changeToPairList(properties));
+                updateInfo = userProperty.checkUpdate(UserProperty.changeToPairList(properties));
             }
-            GlobalStateMgr.getCurrentState().getEditLog().logAlterUser(userIdentity, userAuthenticationInfo, properties);
-        } catch (AuthenticationException e) {
-            throw new DdlException("failed to alter user " + userIdentity, e);
+            final UserProperty.UpdateInfo finalUpdateInfo = updateInfo;
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterUser(
+                    new AlterUserInfo(userIdentity, userAuthenticationInfo, properties),
+                    wal -> {
+                        // update user authentication info
+                        userToAuthenticationInfo.put(userIdentity, userAuthenticationInfo);
+                        if (finalUpdateInfo != null) {
+                            UserProperty userProperty = userNameToProperty.get(userIdentity.getUser());
+                            userProperty.update(finalUpdateInfo);
+                        }
+                    });
         } finally {
             writeUnlock();
-        }
-    }
-
-    private void updateUserPropertyNoLock(String user, List<Pair<String, String>> properties, boolean isReplay)
-            throws DdlException {
-        UserProperty userProperty = userNameToProperty.getOrDefault(user, null);
-        if (userProperty == null) {
-            throw new DdlException("user '" + user + "' doesn't exist");
-        }
-        if (isReplay) {
-            userProperty.updateForReplayJournal(properties);
-        } else {
-            userProperty.update(user, properties);
         }
     }
 
     public void updateUserProperty(String user, List<Pair<String, String>> properties) throws DdlException {
         try {
             writeLock();
-            updateUserPropertyNoLock(user, properties, false);
-            UserPropertyInfo propertyInfo = new UserPropertyInfo(user, properties);
-            GlobalStateMgr.getCurrentState().getEditLog().logUpdateUserPropertyV2(propertyInfo);
+            UserProperty userProperty = userNameToProperty.getOrDefault(user, null);
+            if (userProperty == null) {
+                throw new DdlException("user '" + user + "' doesn't exist");
+            }
+            UserProperty.UpdateInfo result = userProperty.checkUpdate(properties);
+            GlobalStateMgr.getCurrentState().getEditLog().logUpdateUserPropertyV2(
+                    new UserPropertyInfo(user, properties), wal -> userProperty.update(result));
             LOG.info("finished to update user '{}' with properties: {}", user, properties);
         } finally {
             writeUnlock();
         }
     }
 
-    public void replayUpdateUserProperty(UserPropertyInfo info) throws DdlException {
+    public void replayUpdateUserProperty(UserPropertyInfo info) {
         try {
             writeLock();
-            updateUserPropertyNoLock(info.getUser(), info.getProperties(), true);
+            UserProperty userProperty = userNameToProperty.getOrDefault(info.getUser(), null);
+            if (userProperty == null) {
+                return;
+            }
+
+            userProperty.updateForReplayJournal(info.getProperties());
         } finally {
             writeUnlock();
         }
     }
 
     public void replayAlterUser(UserIdentity userIdentity, UserAuthenticationInfo info,
-                                Map<String, String> properties) throws AuthenticationException {
+                                Map<String, String> properties) {
         writeLock();
         try {
-            updateUserNoLock(userIdentity, info, true);
+            userToAuthenticationInfo.put(userIdentity, info);
             // updateForReplayJournal will catch all exceptions when replaying user properties
             UserProperty userProperty = userNameToProperty.get(userIdentity.getUser());
             userProperty.updateForReplayJournal(UserProperty.changeToPairList(properties));
@@ -377,14 +332,16 @@ public class AuthenticationMgr {
         }
     }
 
-    public void dropUser(DropUserStmt stmt) throws DdlException {
-        UserIdentity userIdentity = stmt.getUserIdentity();
+    public void dropUser(DropUserStmt stmt) {
+        UserRef user = stmt.getUser();
         writeLock();
         try {
-            dropUserNoLock(userIdentity);
-            // drop user privilege as well
-            GlobalStateMgr.getCurrentState().getAuthorizationMgr().onDropUser(userIdentity);
-            GlobalStateMgr.getCurrentState().getEditLog().logDropUser(userIdentity);
+            UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
+            GlobalStateMgr.getCurrentState().getEditLog().logDropUser(userIdentity, wal -> {
+                dropUserNoLock(userIdentity);
+                // drop user privilege as well
+                GlobalStateMgr.getCurrentState().getAuthorizationMgr().onDropUser(userIdentity);
+            });
         } finally {
             writeUnlock();
         }
@@ -404,7 +361,7 @@ public class AuthenticationMgr {
     private void dropUserNoLock(UserIdentity userIdentity) {
         // 1. remove from userToAuthenticationInfo
         if (!userToAuthenticationInfo.containsKey(userIdentity)) {
-            LOG.info("Operation DROP USER failed for " + userIdentity + " : user " + userIdentity + " not exists");
+            LOG.info("Operation DROP USER failed for {} : user {} not exists", userIdentity, userIdentity);
             return;
         }
         userToAuthenticationInfo.remove(userIdentity);
@@ -427,8 +384,7 @@ public class AuthenticationMgr {
             throws AuthenticationException, PrivilegeException {
         writeLock();
         try {
-            info.analyze();
-            updateUserNoLock(userIdentity, info, false);
+            userToAuthenticationInfo.put(userIdentity, info);
             if (userProperty != null) {
                 userNameToProperty.put(userIdentity.getUser(), userProperty);
             }
@@ -439,20 +395,6 @@ public class AuthenticationMgr {
         } finally {
             writeUnlock();
         }
-    }
-
-    private void updateUserNoLock(UserIdentity userIdentity, UserAuthenticationInfo info, boolean shouldExists)
-            throws AuthenticationException {
-        if (userToAuthenticationInfo.containsKey(userIdentity)) {
-            if (!shouldExists) {
-                throw new AuthenticationException("user " + userIdentity.getUser() + " already exists");
-            }
-        } else {
-            if (shouldExists) {
-                throw new AuthenticationException("failed to find user " + userIdentity.getUser());
-            }
-        }
-        userToAuthenticationInfo.put(userIdentity, info);
     }
 
     private boolean hasUserNameNoLock(String userName) {
@@ -507,54 +449,6 @@ public class AuthenticationMgr {
         return userToAuthenticationInfo;
     }
 
-    private Class<?> authClazz = null;
-    public static final String KRB5_AUTH_CLASS_NAME = "com.starrocks.plugins.auth.KerberosAuthentication";
-    public static final String KRB5_AUTH_JAR_PATH = StarRocksFE.STARROCKS_HOME_DIR + "/lib/starrocks-kerberos.jar";
-
-    public boolean isSupportKerberosAuth() {
-        if (!Config.enable_authentication_kerberos) {
-            LOG.error("enable_authentication_kerberos need to be set to true");
-            return false;
-        }
-
-        if (Config.authentication_kerberos_service_principal.isEmpty()) {
-            LOG.error("authentication_kerberos_service_principal must be set in config");
-            return false;
-        }
-
-        if (Config.authentication_kerberos_service_key_tab.isEmpty()) {
-            LOG.error("authentication_kerberos_service_key_tab must be set in config");
-            return false;
-        }
-
-        if (authClazz == null) {
-            try {
-                File jarFile = new File(KRB5_AUTH_JAR_PATH);
-                if (!jarFile.exists()) {
-                    LOG.error("Can not found jar file at {}", KRB5_AUTH_JAR_PATH);
-                    return false;
-                } else {
-                    ClassLoader loader = URLClassLoader.newInstance(
-                            new URL[] {
-                                    jarFile.toURL()
-                            },
-                            getClass().getClassLoader()
-                    );
-                    authClazz = Class.forName(AuthenticationMgr.KRB5_AUTH_CLASS_NAME, true, loader);
-                }
-            } catch (Exception e) {
-                LOG.error("Failed to load {}", AuthenticationMgr.KRB5_AUTH_CLASS_NAME, e);
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    public Class<?> getAuthClazz() {
-        return authClazz;
-    }
-
     public void saveV2(ImageWriter imageWriter) throws IOException {
         try {
             // 1 json for myself,1 json for number of users, 2 json for each user(kv)
@@ -579,30 +473,33 @@ public class AuthenticationMgr {
     }
 
     public void loadV2(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        AuthenticationMgr ret = null;
-        try {
-            // 1 json for myself
-            ret = reader.readJson(AuthenticationMgr.class);
-            ret.userToAuthenticationInfo = new UserAuthInfoTreeMap();
-            // 1 json for num user
-            int numUser = reader.readInt();
-            LOG.info("loading {} users", numUser);
-            for (int i = 0; i != numUser; ++i) {
-                // 2 json for each user(kv)
-                UserIdentity userIdentity = reader.readJson(UserIdentity.class);
-                UserAuthenticationInfo userAuthenticationInfo = reader.readJson(UserAuthenticationInfo.class);
-                userAuthenticationInfo.analyze();
-                ret.userToAuthenticationInfo.put(userIdentity, userAuthenticationInfo);
-            }
-        } catch (AuthenticationException e) {
-            throw new RuntimeException(e);
-        }
+        // 1 json for myself
+        AuthenticationMgr ret = reader.readJson(AuthenticationMgr.class);
+        ret.userToAuthenticationInfo = new UserAuthInfoTreeMap();
+
+        LOG.info("loading users");
+        reader.readMap(UserIdentity.class, UserAuthenticationInfo.class,
+                (MapEntryConsumer<UserIdentity, UserAuthenticationInfo>) (userIdentity, userAuthenticationInfo) -> {
+                    ret.userToAuthenticationInfo.put(userIdentity, userAuthenticationInfo);
+                });
+
         LOG.info("loaded {} users", ret.userToAuthenticationInfo.size());
 
         // mark data is loaded
         this.isLoaded = true;
         this.userNameToProperty = ret.userNameToProperty;
         this.userToAuthenticationInfo = ret.userToAuthenticationInfo;
+
+        this.nameToSecurityIntegrationMap = ret.nameToSecurityIntegrationMap;
+        this.nameToGroupProviderMap = ret.nameToGroupProviderMap;
+
+        for (Map.Entry<String, GroupProvider> entry : nameToGroupProviderMap.entrySet()) {
+            try {
+                entry.getValue().init();
+            } catch (Exception e) {
+                LOG.error("failed to init group provider", e);
+            }
+        }
     }
 
     public UserProperty getUserProperty(String userName) {
@@ -623,5 +520,148 @@ public class AuthenticationMgr {
         }
 
         return matchedUserIdentity.getKey();
+    }
+
+    //=========================================== Security Integration ==================================================
+
+    public void createSecurityIntegration(String name,
+                                          Map<String, String> propertyMap) throws DdlException {
+        if (nameToSecurityIntegrationMap.containsKey(name)) {
+            throw new DdlException("security integration '" + name + "' already exists");
+        }
+        SecurityIntegration securityIntegration = SecurityIntegrationFactory.createSecurityIntegration(name, propertyMap);
+        EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+        editLog.logCreateSecurityIntegration(new SecurityIntegrationPersistInfo(name, propertyMap), wal -> {
+            nameToSecurityIntegrationMap.put(name, securityIntegration);
+        });
+        LOG.info("finished to create security integration '{}'", securityIntegration.toString());
+    }
+
+    public void replayCreateSecurityIntegration(String name, Map<String, String> propertyMap) {
+        SecurityIntegration securityIntegration = SecurityIntegrationFactory.createSecurityIntegration(name, propertyMap);
+        nameToSecurityIntegrationMap.put(name, securityIntegration);
+    }
+
+    public void alterSecurityIntegration(String name, Map<String, String> alterProps) throws DdlException {
+        SecurityIntegration securityIntegration = nameToSecurityIntegrationMap.get(name);
+        if (securityIntegration == null) {
+            throw new DdlException("security integration '" + name + "' not found");
+        } else {
+            // COW
+            Map<String, String> newProps = Maps.newHashMap(securityIntegration.getPropertyMap());
+            // update props
+            newProps.putAll(alterProps);
+            SecurityIntegration newSecurityIntegration = SecurityIntegrationFactory.createSecurityIntegration(name, newProps);
+            EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+            editLog.logAlterSecurityIntegration(new SecurityIntegrationPersistInfo(name, alterProps), wal -> {
+                // update map
+                nameToSecurityIntegrationMap.put(name, newSecurityIntegration);
+            });
+            LOG.info("finished to alter security integration '{}' with updated properties {}", name, alterProps);
+        }
+    }
+
+
+
+    public void dropSecurityIntegration(String name) throws DdlException {
+        if (!nameToSecurityIntegrationMap.containsKey(name)) {
+            throw new DdlException("security integration '" + name + "' not found");
+        }
+
+        EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+        editLog.logDropSecurityIntegration(new SecurityIntegrationPersistInfo(name, null), wal -> {
+            nameToSecurityIntegrationMap.remove(name);
+        });
+        LOG.info("finished to drop security integration '{}'", name);
+    }
+
+    public SecurityIntegration getSecurityIntegration(String name) {
+        return nameToSecurityIntegrationMap.get(name);
+    }
+
+    public Set<SecurityIntegration> getAllSecurityIntegrations() {
+        return new HashSet<>(nameToSecurityIntegrationMap.values());
+    }
+
+    public void replayAlterSecurityIntegration(String name, Map<String, String> alterProps) {
+        SecurityIntegration securityIntegration = nameToSecurityIntegrationMap.get(name);
+        if (securityIntegration != null) {
+            // COW
+            Map<String, String> newProps = Maps.newHashMap(securityIntegration.getPropertyMap());
+            // update props
+            newProps.putAll(alterProps);
+            SecurityIntegration newSecurityIntegration =
+                    SecurityIntegrationFactory.createSecurityIntegration(name, newProps);
+            // update map
+            nameToSecurityIntegrationMap.put(name, newSecurityIntegration);
+            LOG.info("finished to replay alter security integration '{}' with updated properties {}",
+                    name, alterProps);
+        }
+    }
+
+    public void replayDropSecurityIntegration(String name) throws DdlException {
+        nameToSecurityIntegrationMap.remove(name);
+    }
+
+    // ---------------------------------------- Group Provider Statement --------------------------------------
+
+    public void createGroupProviderStatement(CreateGroupProviderStmt stmt, ConnectContext context) throws DdlException {
+        // Check if group provider already exists
+        if (this.nameToGroupProviderMap.containsKey(stmt.getName())) {
+            if (stmt.isIfNotExists()) {
+                // If IF NOT EXISTS is specified, silently return without error
+                return;
+            } else {
+                throw new DdlException("Group provider '" + stmt.getName() + "' already exists");
+            }
+        }
+
+        GroupProvider groupProvider = GroupProviderFactory.createGroupProvider(stmt.getName(), stmt.getPropertyMap());
+        groupProvider.init();
+
+        GlobalStateMgr.getCurrentState().getEditLog().logCreateGroupProvider(
+                new GroupProviderLog(stmt.getName(), stmt.getPropertyMap()),
+                wal -> nameToGroupProviderMap.put(stmt.getName(), groupProvider));
+    }
+
+    public void replayCreateGroupProvider(String name, Map<String, String> properties) {
+        GroupProvider groupProvider = GroupProviderFactory.createGroupProvider(name, properties);
+        try {
+            groupProvider.init();
+            this.nameToGroupProviderMap.put(name, groupProvider);
+        } catch (DdlException e) {
+            LOG.error("Failed to create group provider '{}'", name, e);
+        }
+    }
+
+    public void dropGroupProviderStatement(DropGroupProviderStmt stmt, ConnectContext context) throws DdlException {
+        GroupProvider groupProvider = this.nameToGroupProviderMap.get(stmt.getName());
+        if (groupProvider == null) {
+            if (stmt.isIfExists()) {
+                // If IF EXISTS is specified, silently return without error
+                return;
+            } else {
+                throw new DdlException("Group provider '" + stmt.getName() + "' does not exist");
+            }
+        }
+
+        groupProvider.destroy();
+
+        GlobalStateMgr.getCurrentState().getEditLog().logDropGroupProvider(
+                new GroupProviderLog(stmt.getName(), null),
+                wal -> nameToGroupProviderMap.remove(stmt.getName()));
+    }
+
+    public void replayDropGroupProvider(String name) {
+        GroupProvider groupProvider = this.nameToGroupProviderMap.remove(name);
+        groupProvider.destroy();
+    }
+
+    public List<GroupProvider> getAllGroupProviders() {
+        return new ArrayList<>(nameToGroupProviderMap.values());
+    }
+
+    public GroupProvider getGroupProvider(String name) {
+        return nameToGroupProviderMap.get(name);
     }
 }

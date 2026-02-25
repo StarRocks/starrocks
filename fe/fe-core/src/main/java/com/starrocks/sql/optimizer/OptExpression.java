@@ -26,6 +26,7 @@ import com.starrocks.sql.optimizer.property.DomainProperty;
 import com.starrocks.sql.optimizer.rule.mv.KeyInference;
 import com.starrocks.sql.optimizer.rule.mv.MVOperatorProperty;
 import com.starrocks.sql.optimizer.rule.mv.ModifyInference;
+import com.starrocks.sql.optimizer.rule.tvr.common.TvrOptMeta;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 
 import java.util.List;
@@ -57,10 +58,17 @@ public class OptExpression {
     private List<PhysicalPropertySet> requiredProperties;
     // MV Operator property, inferred from best plan
     private MVOperatorProperty mvOperatorProperty;
+
+    // the actual output property of this expression
     private PhysicalPropertySet outputProperty;
+
     private UKFKConstraints constraints;
 
-    private Boolean isShortCircuit = false;
+    // the flag if its parent has required data distribution property for this expression
+    private boolean existRequiredDistribution = true;
+
+    // the TvrOptMeta of this expression
+    private TvrOptMeta tvrOptMeta;
 
     private OptExpression() {
     }
@@ -70,23 +78,34 @@ public class OptExpression {
         this.inputs = Lists.newArrayList();
     }
 
-    public static OptExpression create(Operator op, OptExpression... inputs) {
+    public static OptExpression create(Operator op, TvrOptMeta tvrOptMeta, OptExpression... inputs) {
         OptExpression expr = new OptExpression(op);
         expr.inputs = Lists.newArrayList(inputs);
+        expr.tvrOptMeta = tvrOptMeta;
         return expr;
     }
 
-    public static OptExpression createForShortCircuit(Operator op, OptExpression input, boolean isShortCircuit) {
+    public static OptExpression createWithoutTvr(Operator op, OptExpression... inputs) {
+        return create(op, TvrOptMeta.UNSUPPORTED, inputs);
+    }
+
+    public static OptExpression createWithoutTvr(Operator op, List<OptExpression> inputs) {
+        return create(op, TvrOptMeta.UNSUPPORTED, inputs);
+    }
+
+    public static OptExpression create(Operator op, OptExpression... inputs) {
+        return create(op, null, inputs);
+    }
+
+    public static OptExpression create(Operator op, TvrOptMeta tvrOptMeta, List<OptExpression> inputs) {
         OptExpression expr = new OptExpression(op);
-        expr.inputs = Lists.newArrayList(input);
-        expr.setShortCircuit(isShortCircuit);
+        expr.inputs = inputs;
+        expr.tvrOptMeta = tvrOptMeta;
         return expr;
     }
 
     public static OptExpression create(Operator op, List<OptExpression> inputs) {
-        OptExpression expr = new OptExpression(op);
-        expr.inputs = inputs;
-        return expr;
+        return create(op, null, inputs);
     }
 
     public OptExpression(GroupExpression groupExpression, List<OptExpression> inputs) {
@@ -160,6 +179,15 @@ public class OptExpression {
         getRowOutputInfo();
     }
 
+    public void clearAndInitOutputInfo() {
+        for (OptExpression optExpression : inputs) {
+            optExpression.clearAndInitOutputInfo();
+        }
+        op.clearRowOutputInfo();
+        property.setOutputColumns(new ColumnRefSet(getRowOutputInfo().getOutputColRefs()));
+    }
+
+
     public void setRequiredProperties(List<PhysicalPropertySet> requiredProperties) {
         this.requiredProperties = requiredProperties;
     }
@@ -225,14 +253,6 @@ public class OptExpression {
         this.cost = cost;
     }
 
-    public Boolean getShortCircuit() {
-        return isShortCircuit;
-    }
-
-    public void setShortCircuit(Boolean shortCircuit) {
-        isShortCircuit = shortCircuit;
-    }
-
     @Override
     public String toString() {
         return op + " child size " + inputs.size();
@@ -246,18 +266,29 @@ public class OptExpression {
         return debugString("", "", limitLine);
     }
 
+    public boolean isExistRequiredDistribution() {
+        return existRequiredDistribution;
+    }
+
+    public void setExistRequiredDistribution(boolean existRequiredDistribution) {
+        this.existRequiredDistribution = existRequiredDistribution;
+    }
+
+    public TvrOptMeta getTvrMeta() {
+        return tvrOptMeta;
+    }
+
     private String debugString(String headlinePrefix, String detailPrefix, int limitLine) {
         StringBuilder sb = new StringBuilder();
         sb.append(headlinePrefix).append(op.accept(new DebugOperatorTracer(), null));
         limitLine -= 1;
-        sb.append('\n');
         if (limitLine <= 0 || inputs.isEmpty()) {
             return sb.toString();
         }
-
         String childHeadlinePrefix = detailPrefix + "->  ";
         String childDetailPrefix = detailPrefix + "    ";
         for (OptExpression input : inputs) {
+            sb.append('\n');
             sb.append(input.debugString(childHeadlinePrefix, childDetailPrefix, limitLine));
         }
         return sb.toString();
@@ -280,6 +311,7 @@ public class OptExpression {
             optExpression.groupExpression = other.groupExpression;
             optExpression.requiredProperties = other.requiredProperties;
             optExpression.mvOperatorProperty = other.mvOperatorProperty;
+            optExpression.outputProperty = other.outputProperty;
             return this;
         }
 
@@ -305,6 +337,11 @@ public class OptExpression {
 
         public Builder setCost(double cost) {
             optExpression.cost = cost;
+            return this;
+        }
+
+        public Builder setRequiredProperties(List<PhysicalPropertySet> requiredProperties) {
+            optExpression.requiredProperties = requiredProperties;
             return this;
         }
 

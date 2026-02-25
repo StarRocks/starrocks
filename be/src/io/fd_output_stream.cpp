@@ -18,11 +18,11 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include "base/concurrency/stopwatch.hpp"
 #include "common/logging.h"
 #include "gutil/macros.h"
-#include "io/io_error.h"
+#include "io/core/io_error.h"
 #include "io/io_profiler.h"
-#include "util/stopwatch.hpp"
 
 namespace starrocks::io {
 
@@ -82,8 +82,15 @@ Status FdOutputStream::skip(int64_t /*count*/) {
 
 Status FdOutputStream::do_sync_if_needed() {
     if (_sync_file_on_close) {
+#ifdef __APPLE__
+        const char* sync_op = "fsync";
+        // macOS lacks fdatasync; fallback to fsync for durability guarantees.
+        if (::fsync(_fd) != 0) {
+#else
+        const char* sync_op = "fdatasync";
         if (::fdatasync(_fd) != 0) {
-            return io_error(fmt::format("fdatasync({})", _fd), errno);
+#endif
+            return io_error(fmt::format("{}({})", sync_op, _fd), errno);
         }
     }
     if (!_sync_dir.empty()) {

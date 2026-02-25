@@ -17,6 +17,7 @@ package com.starrocks.common.proc;
 import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.lake.StarOSAgent;
+import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
@@ -27,10 +28,10 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.warehouse.DefaultWarehouse;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -50,7 +51,9 @@ public class ComputeNodeProcDirTest {
     @Mocked
     private RunMode runMode;
 
-    @Before
+    private final VariableMgr variableMgr = new VariableMgr();
+
+    @BeforeEach
     public void setUp() {
         b1 = new ComputeNode(1000, "host1", 10000);
         b1.updateOnce(10001, 10003, 10005);
@@ -80,6 +83,10 @@ public class ComputeNodeProcDirTest {
                 globalStateMgr.getStarOSAgent();
                 minTimes = 0;
                 result = starOsAgent;
+
+                globalStateMgr.getVariableMgr();
+                minTimes = 0;
+                result = variableMgr;
             }
         };
 
@@ -93,7 +100,7 @@ public class ComputeNodeProcDirTest {
 
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
         // systemInfoService = null;
     }
@@ -119,11 +126,11 @@ public class ComputeNodeProcDirTest {
 
         ComputeNodeProcDir dir = new ComputeNodeProcDir(systemInfoService);
         ProcResult result = dir.fetchResult();
-        Assert.assertNotNull(result);
-        Assert.assertTrue(result instanceof BaseProcResult);
+        Assertions.assertNotNull(result);
+        Assertions.assertTrue(result instanceof BaseProcResult);
         int columnIndex = getTabletNumColumnIndex(result.getColumnNames());
         // no "TabletNum" column in shared-nothing mode
-        Assert.assertEquals(-1, columnIndex);
+        Assertions.assertEquals(-1, columnIndex);
     }
 
     @Test
@@ -147,12 +154,12 @@ public class ComputeNodeProcDirTest {
 
         ComputeNodeProcDir dir = new ComputeNodeProcDir(systemInfoService);
         ProcResult result = dir.fetchResult();
-        Assert.assertNotNull(result);
-        Assert.assertTrue(result instanceof BaseProcResult);
+        Assertions.assertNotNull(result);
+        Assertions.assertTrue(result instanceof BaseProcResult);
         int columnIndex = getTabletNumColumnIndex(result.getColumnNames());
-        Assert.assertTrue(columnIndex >= 0);
+        Assertions.assertTrue(columnIndex >= 0);
         for (List<String> row : result.getRows()) {
-            Assert.assertEquals(String.valueOf(tabletNumSharedData), row.get(columnIndex));
+            Assertions.assertEquals(String.valueOf(tabletNumSharedData), row.get(columnIndex));
         }
     }
 

@@ -54,6 +54,8 @@ public abstract class MetricVisitor {
 
     public abstract void visitHistogram(String name, Histogram histogram);
 
+    public abstract void visitHistogram(HistogramMetric histogram);
+
     public abstract void getNodeInfo();
 
     public abstract String build();

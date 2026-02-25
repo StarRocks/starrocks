@@ -169,7 +169,7 @@ public abstract class SingleTableRewriteBaseRule extends BaseMaterializedViewRew
                 if (isAggregate) {
                     MaterializedView mv = (MaterializedView) scanOperator.getTable();
                     List<MvPlanContext> planContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(
-                            mv, optimizerContext.getSessionVariable().isEnableMaterializedViewPlanCache());
+                            optimizerContext.getSessionVariable(), mv);
                     for (MvPlanContext planContext : planContexts) {
                         if (planContext.getLogicalPlan().getOp() instanceof LogicalAggregationOperator) {
                             LogicalAggregationOperator aggregationOperator = planContext.getLogicalPlan().getOp().cast();

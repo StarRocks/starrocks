@@ -16,7 +16,7 @@
 
 #include <fmt/format.h>
 
-#include <vector>
+#include <set>
 
 #include "common/status.h"
 #include "storage/lake/tablet_manager.h"
@@ -28,7 +28,7 @@ class TabletManager;
 template <typename T>
 class MetadataIterator {
 public:
-    explicit MetadataIterator(TabletManager* manager, int64_t tablet_id, std::vector<std::string> files)
+    explicit MetadataIterator(TabletManager* manager, int64_t tablet_id, std::set<std::string> files)
             : _manager(manager), _tablet_id(tablet_id), _files(std::move(files)), _iter(_files.begin()){};
 
     bool has_next() const { return _iter != _files.end(); }
@@ -46,8 +46,10 @@ private:
 
     TabletManager* _manager;
     int64_t _tablet_id;
-    std::vector<std::string> _files;
-    std::vector<std::string>::iterator _iter;
+    // Use sorted set
+    std::set<std::string> _files;
+    std::set<std::string>::iterator _iter;
+    int64_t _max_gtid = 0;
 };
 
 } // namespace starrocks::lake

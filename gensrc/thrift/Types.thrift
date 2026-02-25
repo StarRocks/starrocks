@@ -41,6 +41,7 @@ typedef i32 TPlanNodeId
 typedef i32 TTupleId
 typedef i32 TSlotId
 typedef i64 TTableId
+typedef i64 TDatabaseId
 typedef i64 TTabletId
 typedef i64 TVersion
 typedef i64 TVersionHash
@@ -100,7 +101,10 @@ enum TPrimitiveType {
   DECIMAL128,
   JSON,
   FUNCTION,
-  VARBINARY
+  VARBINARY,
+  DECIMAL256,
+  INT256,
+  VARIANT
 }
 
 enum TTypeNodeType {
@@ -127,6 +131,10 @@ struct TStructField {
     1: optional string name
     2: optional string comment
     3: optional i32 id
+    // physical_name is used to store the physical name of the field in the storage layer.
+    // for example, the physical name of a struct field in a parquet file.
+    // used in delta lake column mapping name mode
+    4: optional string physical_name
 }
 
 struct TTypeNode {
@@ -163,7 +171,8 @@ enum TAggregationType {
     NONE,
     BITMAP_UNION,
     REPLACE_IF_NOT_NULL,
-    PERCENTILE_UNION
+    PERCENTILE_UNION,
+    AGG_STATE_UNION
 }
 
 enum TPushType {
@@ -208,6 +217,8 @@ enum TTaskType {
     REMOTE_SNAPSHOT,
     REPLICATE_SNAPSHOT,
     UPDATE_SCHEMA,
+    COMPACTION_CONTROL,
+    EXTERNAL_CLUSTER_SNAPSHOT,
     NUM_TASK_TYPE
 }
 
@@ -327,6 +338,14 @@ struct TTableFunction {
   3: optional bool is_left_join
 }
 
+struct TAggStateDesc {
+    1: optional string agg_func_name
+    2: optional list<TTypeDesc> arg_types
+    3: optional TTypeDesc ret_type
+    4: optional bool result_nullable
+    5: optional i32 func_version
+}
+
 // Represents a function in the Catalog.
 struct TFunction {
   // Fully qualified function name.
@@ -359,6 +378,7 @@ struct TFunction {
 
   11: optional i64 id
   12: optional string checksum
+  13: optional TAggStateDesc agg_state_desc
 
   // Builtin Function id, used to mark the function in the vectorization engine,
   // and it's different with `id` because `id` is use for serialized and cache
@@ -414,7 +434,8 @@ enum TTableType {
     ICEBERG_SNAPSHOTS_TABLE,
     ICEBERG_MANIFESTS_TABLE,
     ICEBERG_FILES_TABLE,
-    ICEBERG_PARTITIONS_TABLE
+    ICEBERG_PARTITIONS_TABLE,
+    BENCHMARK_TABLE
 }
 
 enum TKeysType {
@@ -422,6 +443,12 @@ enum TKeysType {
     DUP_KEYS,
     UNIQUE_KEYS,
     AGG_KEYS
+}
+
+enum TPrimaryKeyEncodingType {
+    PK_ENCODING_TYPE_NONE = 0,
+    PK_ENCODING_TYPE_V1 = 1,
+    PK_ENCODING_TYPE_V2 = 2
 }
 
 enum TPriority {
@@ -515,6 +542,7 @@ enum TCompressionType {
     BZIP2 = 10;
     LZO = 11; // Deprecated
     BROTLI = 12;
+    AUTO = 13;
 }
 
 enum TWriteQuorumType {
@@ -557,6 +585,12 @@ struct TIcebergColumnStats {
     6: optional map<i32, binary> upper_bounds;
 }
 
+enum TIcebergFileContent {
+    DATA,
+    POSITION_DELETES,
+    EQUALITY_DELETES,
+}
+
 struct TIcebergDataFile {
     1: optional string path
     2: optional string format
@@ -565,6 +599,9 @@ struct TIcebergDataFile {
     5: optional string partition_path;
     6: optional list<i64> split_offsets;
     7: optional TIcebergColumnStats column_stats;
+    8: optional string partition_null_fingerprint;
+    9: optional TIcebergFileContent file_content;
+    10: optional string referenced_data_file;
 }
 
 struct THiveFileInfo {
@@ -581,6 +618,7 @@ struct TSinkCommitInfo {
 
     100: optional bool is_overwrite;
     101: optional string staging_dir
+    102: optional bool is_rewrite;
 }
 
 struct TSnapshotInfo {
@@ -592,4 +630,42 @@ struct TSnapshotInfo {
 enum TTxnType {
     TXN_NORMAL = 0,
     TXN_REPLICATION = 1
+}
+
+enum TNodeType {
+    Backend = 0,
+    Compute = 1
+}
+
+struct TParquetOptions {
+    // parquet row group max size in bytes
+    1: optional i64 parquet_max_group_bytes
+    2: optional TCompressionType compression_type
+    3: optional bool use_dict
+    // for files table function
+    4: optional string version
+}
+
+enum TVariantType {
+    NORMAL_VALUE = 0,
+    NULL_VALUE = 1,
+    MINIMUM = 2,
+    MAXIMUM = 3,
+}
+
+struct TVariant {
+    1: optional TTypeDesc type
+    2: optional string value
+    3: optional TVariantType variant_type
+}
+
+struct TTuple {
+    1: optional list<TVariant> values
+}
+
+struct TTabletRange {
+    1: optional TTuple lower_bound
+    2: optional TTuple upper_bound
+    3: optional bool lower_bound_included
+    4: optional bool upper_bound_included
 }

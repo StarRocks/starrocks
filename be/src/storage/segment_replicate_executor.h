@@ -18,14 +18,13 @@
 #include <memory>
 #include <vector>
 
+#include "base/brpc/reusable_closure.h"
+#include "base/concurrency/spinlock.h"
 #include "common/status.h"
-#include "gen_cpp/doris_internal_service.pb.h"
+#include "common/thread/threadpool.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "storage/olap_define.h"
 #include "util/internal_service_recoverable_stub.h"
-#include "util/reusable_closure.h"
-#include "util/spinlock.h"
-#include "util/threadpool.h"
 
 namespace starrocks {
 
@@ -42,25 +41,33 @@ public:
     ReplicateChannel(const DeltaWriterOptions* opt, std::string host, int32_t port, int64_t node_id);
     ~ReplicateChannel();
 
-    Status sync_segment(SegmentPB* segment, butil::IOBuf& data, bool eos,
-                        std::vector<std::unique_ptr<PTabletInfo>>* replicate_tablet_infos,
-                        std::vector<std::unique_ptr<PTabletInfo>>* failed_tablet_infos);
-
     Status async_segment(SegmentPB* segment, butil::IOBuf& data, bool eos,
                          std::vector<std::unique_ptr<PTabletInfo>>* replicate_tablet_infos,
                          std::vector<std::unique_ptr<PTabletInfo>>* failed_tablet_infos);
 
-    void cancel();
+    void cancel(const Status& status);
 
     int64_t node_id() { return _node_id; }
 
     std::string debug_string();
+
+    Status get_status() {
+        std::lock_guard l(_status_lock);
+        return _st;
+    }
 
 private:
     Status _init();
     void _send_request(SegmentPB* segment, butil::IOBuf& data, bool eos);
     Status _wait_response(std::vector<std::unique_ptr<PTabletInfo>>* replicate_tablet_infos,
                           std::vector<std::unique_ptr<PTabletInfo>>* failed_tablet_infos);
+
+    void _set_status(const Status& status) {
+        std::lock_guard l(_status_lock);
+        if (_st.ok()) _st = status;
+    }
+
+    std::unique_ptr<MemTracker> _mem_tracker;
 
     const DeltaWriterOptions* _opt;
     const std::string _host;
@@ -69,10 +76,19 @@ private:
 
     ReusableClosure<PTabletWriterAddSegmentResult>* _closure = nullptr;
     std::shared_ptr<PInternalService_RecoverableStub> _stub;
-    MemTracker* _mem_tracker = nullptr;
 
     bool _inited = false;
+
+    mutable SpinLock _status_lock;
     Status _st = Status::OK();
+};
+
+struct SegmentReplicateStat {
+    std::atomic_int32_t num_pending_tasks{0};
+    std::atomic_int32_t num_running_tasks{0};
+    std::atomic_int32_t num_finished_tasks{0};
+    std::atomic_int64_t pending_time_ns{0};
+    std::atomic_int64_t execute_time_ns{0};
 };
 
 class ReplicateToken {
@@ -102,6 +118,8 @@ public:
         if (_status.ok()) _status = status;
     }
 
+    Status get_replica_status(int64_t node_id) const;
+
     std::string debug_string();
 
     const std::vector<std::unique_ptr<PTabletInfo>>* replicated_tablet_infos() const {
@@ -111,6 +129,10 @@ public:
     const std::vector<std::unique_ptr<PTabletInfo>>* failed_tablet_infos() const { return &_failed_tablet_infos; }
 
     const std::vector<int64_t> replica_node_ids() const { return _replica_node_ids; }
+
+    const std::set<int64_t> failed_node_ids() const { return _failed_node_id; }
+
+    const SegmentReplicateStat& get_stat() const { return _stat; }
 
 private:
     friend class SegmentReplicateTask;
@@ -125,7 +147,8 @@ private:
 
     const DeltaWriterOptions* _opt;
 
-    std::vector<std::unique_ptr<ReplicateChannel>> _replicate_channels;
+    // node id -> channel
+    std::unordered_map<int64_t, std::unique_ptr<ReplicateChannel>> _replicate_channels;
 
     std::vector<std::unique_ptr<PTabletInfo>> _replicated_tablet_infos;
     std::vector<std::unique_ptr<PTabletInfo>> _failed_tablet_infos;
@@ -136,6 +159,8 @@ private:
 
     int64_t _max_fail_replica_num;
     std::vector<int64_t> _replica_node_ids;
+
+    SegmentReplicateStat _stat;
 };
 
 class SegmentReplicateExecutor {

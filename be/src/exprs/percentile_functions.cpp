@@ -19,10 +19,8 @@
 #include "column/column_viewer.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/percentile_cont.h"
-#include "gutil/strings/substitute.h"
 #include "types/logical_type.h"
-#include "util/percentile_value.h"
-#include "util/string_parser.hpp"
+#include "types/percentile_value.h"
 
 namespace starrocks {
 
@@ -40,7 +38,7 @@ StatusOr<ColumnPtr> PercentileFunctions::percentile_hash(FunctionContext* contex
     }
 
     if (ColumnHelper::is_all_const(columns)) {
-        return ConstColumn::create(percentile_column, columns[0]->size());
+        return ConstColumn::create(std::move(percentile_column), columns[0]->size());
     } else {
         return percentile_column;
     }
@@ -97,3 +95,5 @@ struct LCPercentileExtracter {
 };
 
 } // namespace starrocks
+
+#include "gen_cpp/opcode/PercentileFunctions.inc"

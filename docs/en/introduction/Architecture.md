@@ -1,6 +1,7 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
+import QSOverview from '../_assets/commonMarkdown/quickstart-overview-tip.mdx'
 
 # Architecture
 
@@ -18,7 +19,7 @@ StarRocks supports shared-nothing (Each BE has a portion of the data on its loca
 
 Local storage provides improved query latency for real-time queries.
 
-As a typical massively parallel processing (MPP) database StarRocks supports the shared-nothing architecture. In this architecture, BEs are responsible for both data storage and computation. Direct access to local data on the BE mode allows for local computation, avoiding data transfer and data copying, and providing ultra-fast query and analytics performance. This architecture supports multi-replica data storage, enhancing the cluster's ability to handle high-concurrency queries and ensuring data reliability. It is well-suited for scenarios that pursue optimal query performance.
+As a typical massively parallel processing (MPP) database StarRocks supports the shared-nothing architecture. In this architecture, BEs are responsible for both data storage and computation. Direct access to local data on the BE mode allows for local computation, avoiding data transfer and data copying, and providing ultra-fast query and analytics performance. This architecture supports multi-replica data storage, enhancing the cluster's ability to handle high concurrency queries and ensuring data reliability. It is well-suited for scenarios that pursue optimal query performance.
 
 ![shared-data-arch](../_assets/shared-nothing.png)
 
@@ -31,13 +32,13 @@ In the shared-nothing architecture, StarRocks consists of two types of nodes: FE
 
 ##### FE
 
-FEs are responsible for metadata management, client connection management, query planning, and query scheduling. Each FE stores and maintains a complete copy of the metadata in its memory, which guarantees indiscriminate services among the FEs. FEs can work as the leader, followers, and observers. Followers can elect a leader according to the Paxos-like BDB JE protocol. BDB JE is short for Berkeley DB Java Edition.
+FEs are responsible for metadata management, client connection management, query planning, and query scheduling. Each FE uses BDB JE (Berkeley DB Java Edition) to store and maintain a complete copy of the metadata in its memory, ensuring consistent services across all FEs. FEs can work as the leader, followers, and observers. If the leader node crashes, with followers electing a leader based on the Raft protocol.
 
-| **FE Role** | **Metadata management** | **Leader election**                |
-| ----------- | ----------------------- | ---------------------------------- |
-| Leader      | The leader FE reads and writes metadata. Follower and observer FEs can only read metadata. They route metadata write requests to the leader FE. The leader FE updates the metadata and then uses BDE JE to synchronize the metadata changes to the follower and observer FEs. Data writes are considered successful only after the metadata changes are synchronized to more than half of the follower FEs. | The leader FE, technically speaking, is also a follower node and is elected from follower FEs. To perform leader election, more than half of the follower FEs in the cluster must be active. When the leader FE fails, follower FEs will start another round of leader election. |
-| Follower    | Followers can only read metadata. They synchronize and replay logs from the leader FE to update metadata. | Followers participate in leader election, which requires more than half of the followers in the cluster be active. |
-| Observer   | Observers synchronize and replay logs from the leader FE to update metadata.     | Observers are mainly used to increase the query concurrency of the cluster. Observers do not participate in leader election and therefore, will not add leader selection pressure to the cluster.|
+| **FE Role** | **Metadata management**                                                                                                                                                                                                                                                                                                                                                                                                | **Leader election**                |
+| ----------- |------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------| ---------------------------------- |
+| Leader      | The leader FE reads and writes metadata. Follower and observer FEs can only read metadata. They route metadata write requests to the leader FE. The leader FE updates the metadata and then uses the Raft protocol to synchronize the metadata changes to the follower and observer FEs. Data writes are considered successful only after the metadata changes are synchronized to more than half of the follower FEs. | The leader FE, technically speaking, is also a follower node and is elected from follower FEs. To perform leader election, more than half of the follower FEs in the cluster must be active. When the leader FE fails, follower FEs will start another round of leader election. |
+| Follower    | Followers can only read metadata. They synchronize and replay logs from the leader FE to update metadata.                                                                                                                                                                                                                                                                                                              | Followers participate in leader election, which requires more than half of the followers in the cluster be active. |
+| Observer   | Observers synchronize and replay logs from the leader FE to update metadata.                                                                                                                                                                                                                                                                                                                                           | Observers are mainly used to increase the query concurrency of the cluster. Observers do not participate in leader election and therefore, will not add leader selection pressure to the cluster.|
 
 ##### BE
 
@@ -51,7 +52,7 @@ BEs are responsible for data storage and SQL execution.
 
 Object storage and HDFS provide cost, reliability, and scalability benefits. In addition to the scalability of storage, CN nodes can be added and removed without the need to rebalance data since storage and compute are separate. 
 
-In the shared-data architecture, BEs are replaced with "compute nodes (CNs)" which are responsible only for data compute tasks and caching hot data. Data is stored in low-cost and reliable remote storage systems such as Amazon S3, GCP, Azure Blob Storage, MinIO, etc. When the cache is hit, query performance is comparable to that of the shared-nothing architecture. CN nodes can be added or removed on demand within seconds. This architecture reduces storage cost, ensures better resource isolation, and high elasticity and scalability.
+In the shared-data architecture, BEs are replaced with "compute nodes (CNs)" which are responsible only for data compute tasks and caching hot data. Data is stored in low-cost and reliable remote storage systems such as Amazon S3, Google Cloud Storage, Azure Blob Storage, MinIO, etc. When the cache is hit, query performance is comparable to that of the shared-nothing architecture. CN nodes can be added or removed on demand within seconds. This architecture reduces storage cost, ensures better resource isolation, and high elasticity and scalability.
 
 The shared-data architecture maintains as simple an architecture as its shared-nothing counterpart. It consists of only two types of nodes: FE and CN. The only difference is users have to provision backend object storage.
 
@@ -79,7 +80,4 @@ Queries against hot data scan the cache directly and then the local disk, while 
 
 Caching can be enabled when creating tables. If caching is enabled, data will be written to both the local disk and backend object storage. During queries, the CN nodes first read data from the local disk. If the data is not found, it will be retrieved from the backend object storage and simultaneously cached on the local disk.
 
-## Learn by doing
-
-- Give [shared-data](../quick_start/shared-data.md) a try using MinIO for object storage.
-- Kubernetes users can use the [Helm quick start](../quick_start/helm.md) and deploy three FEs and three BEs in a shared-nothing architecture using persistent volumes.
+<QSOverview />

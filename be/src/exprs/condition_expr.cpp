@@ -20,26 +20,27 @@
 #include "column/column_viewer.h"
 #include "column/const_column.h"
 #include "column/nullable_column.h"
+#include "column/simd_selector.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
+#include "exprs/expr_factory.h"
 #include "gutil/casts.h"
-#include "runtime/types.h"
-#include "simd/selector.h"
 #include "types/logical_type.h"
+#include "types/percentile_value.h"
+#include "types/type_descriptor.h"
 #include "util/dispatch.h"
-#include "util/percentile_value.h"
 
 namespace starrocks {
 
 template <bool isConstC0, bool isConst1, LogicalType Type>
 struct SelectIfOP {
     static ColumnPtr eval(ColumnPtr& value0, ColumnPtr& value1, ColumnPtr& selector, const TypeDescriptor& type_desc) {
-        [[maybe_unused]] Filter& select_vec = ColumnHelper::merge_nullable_filter(selector.get());
+        [[maybe_unused]] Filter& select_vec = ColumnHelper::merge_nullable_filter(selector->as_mutable_raw_ptr());
         [[maybe_unused]] auto* input_data0 = ColumnHelper::get_data_column(value0.get());
         [[maybe_unused]] auto* input_data1 = ColumnHelper::get_data_column(value1.get());
 
-        ColumnPtr res = ColumnHelper::create_column(type_desc, false);
+        MutableColumnPtr res = ColumnHelper::create_column(type_desc, false);
         auto* res_col = down_cast<RunTimeColumnType<Type>*>(res.get());
         auto& res_data = res_col->get_data();
         res_data.resize(select_vec.size());
@@ -49,15 +50,20 @@ struct SelectIfOP {
             SIMD_selector<Type>::select_if(select_vec.data(), res_data, v0, v1);
         } else if constexpr (isConstC0 && !isConst1) {
             auto v0 = ColumnHelper::get_const_value<Type>(value0);
-            auto* raw_col1 = down_cast<RunTimeColumnType<Type>*>(input_data1);
+            // Use const_cast for read-only access to avoid data copy
+            auto* raw_col1 =
+                    const_cast<RunTimeColumnType<Type>*>(down_cast<const RunTimeColumnType<Type>*>(input_data1));
             SIMD_selector<Type>::select_if(select_vec.data(), res_data, v0, raw_col1->get_data());
         } else if constexpr (!isConstC0 && isConst1) {
-            auto* raw_col0 = down_cast<RunTimeColumnType<Type>*>(input_data0);
+            auto* raw_col0 =
+                    const_cast<RunTimeColumnType<Type>*>(down_cast<const RunTimeColumnType<Type>*>(input_data0));
             auto v1 = ColumnHelper::get_const_value<Type>(value1);
             SIMD_selector<Type>::select_if(select_vec.data(), res_data, raw_col0->get_data(), v1);
         } else if constexpr (!isConstC0 && !isConst1) {
-            auto* raw_col0 = down_cast<RunTimeColumnType<Type>*>(input_data0);
-            auto* raw_col1 = down_cast<RunTimeColumnType<Type>*>(input_data1);
+            auto* raw_col0 =
+                    const_cast<RunTimeColumnType<Type>*>(down_cast<const RunTimeColumnType<Type>*>(input_data0));
+            auto* raw_col1 =
+                    const_cast<RunTimeColumnType<Type>*>(down_cast<const RunTimeColumnType<Type>*>(input_data1));
             SIMD_selector<Type>::select_if(select_vec.data(), res_data, raw_col0->get_data(), raw_col1->get_data());
         }
         return res;
@@ -81,12 +87,12 @@ public:
 
         int null_count = ColumnHelper::count_nulls(lhs);
         if (null_count == 0) {
-            return lhs->clone();
+            return Column::mutate(std::move(lhs));
         }
 
         ASSIGN_OR_RETURN(auto rhs, _children[1]->evaluate_checked(context, ptr));
         if (null_count == lhs->size()) {
-            return rhs->clone();
+            return Column::mutate(std::move(rhs));
         }
 
         Columns list = {lhs, rhs};
@@ -120,18 +126,18 @@ private:
         auto num_rows = inputs[0]->size();
         Columns columns;
         for (const auto& col : inputs) {
-            columns.push_back(ColumnHelper::unfold_const_column(this->type(), num_rows, col));
+            columns.push_back(ColumnHelper::unfold_const_column(this->type(), num_rows, std::move(col)));
         }
         auto res = ColumnHelper::create_column(this->type(), true);
         res->reserve(num_rows);
         NullColumnPtr null = nullptr;
 
         if (columns[0]->is_nullable()) {
-            null = down_cast<NullableColumn*>(columns[0].get())->null_column();
+            null = down_cast<const NullableColumn*>(columns[0].get())->null_column();
         }
 
         for (int row = 0; row < num_rows; ++row) {
-            if (null == nullptr || !null->get_data()[row]) { // not null
+            if (null == nullptr || !null->immutable_data()[row]) { // not null
                 res->append(*columns[0], row, 1);
             } else {
                 res->append(*columns[1], row, 1);
@@ -155,7 +161,7 @@ public:
 
         ASSIGN_OR_RETURN(auto rhs, _children[1]->evaluate_checked(context, ptr));
         if (ColumnHelper::count_nulls(rhs) == rhs->size()) {
-            return lhs->clone();
+            return lhs;
         }
 
         Columns list = {lhs, rhs};
@@ -194,18 +200,19 @@ private:
         auto num_rows = inputs[0]->size();
         Columns columns;
         for (const auto& col : inputs) {
-            columns.push_back(ColumnHelper::unfold_const_column(this->type(), num_rows, col));
+            columns.push_back(ColumnHelper::unfold_const_column(this->type(), num_rows, std::move(col)));
         }
         auto res = ColumnHelper::create_column(this->type(), true);
         res->reserve(num_rows);
-        auto right_data = columns[1];
+        ColumnPtr right_data = columns[1];
         NullColumnPtr right_nulls = nullptr;
         if (columns[1]->is_nullable()) {
-            right_data = down_cast<NullableColumn*>(columns[1].get())->data_column();
-            right_nulls = down_cast<NullableColumn*>(columns[1].get())->null_column();
+            const auto* nullable_col = down_cast<const NullableColumn*>(columns[1].get());
+            right_data = nullable_col->data_column();
+            right_nulls = nullable_col->null_column();
         }
         for (int row = 0; row < num_rows; ++row) {
-            if ((right_nulls == nullptr || !right_nulls->get_data()[row]) &&
+            if ((right_nulls == nullptr || !right_nulls->immutable_data()[row]) &&
                 columns[0]->equals(row, *right_data, row, false) == 1) {
                 res->append_nulls(1);
             } else {
@@ -223,20 +230,20 @@ public:
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         ASSIGN_OR_RETURN(auto bhs, _children[0]->evaluate_checked(context, ptr));
-        int true_count = ColumnHelper::count_true_with_notnull(bhs);
+        const int true_count = ColumnHelper::count_true_with_notnull(bhs);
 
         ASSIGN_OR_RETURN(auto lhs, _children[1]->evaluate_checked(context, ptr));
         if (true_count == bhs->size()) {
-            return lhs->clone();
+            return Column::mutate(std::move(lhs));
         }
 
         ASSIGN_OR_RETURN(auto rhs, _children[2]->evaluate_checked(context, ptr));
         if (true_count == 0) {
-            return rhs->clone();
+            return Column::mutate(std::move(rhs));
         }
 
         if (lhs->only_null() && rhs->only_null()) {
-            return lhs->clone();
+            return Column::mutate(std::move(lhs));
         }
 
         Columns list = {bhs, lhs, rhs};
@@ -285,22 +292,20 @@ public:
 private:
     ColumnPtr get_null_column(int num_rows, ColumnPtr& input_col) {
         if (input_col->only_null()) {
-            auto res = UInt8Column::create(num_rows);
-            res->get_data().assign(num_rows, 1);
-            return res;
+            return ColumnHelper::create_const_column<TYPE_BOOLEAN>(1, num_rows);
         } else if (input_col->is_nullable()) {
-            return down_cast<NullableColumn*>(input_col.get())->null_column();
+            return down_cast<const NullableColumn*>(input_col.get())->null_column();
         } else {
-            return UInt8Column::create(num_rows);
+            return ColumnHelper::create_const_column<TYPE_BOOLEAN>(0, num_rows);
         }
     }
     ColumnPtr get_data_column(int num_rows, ColumnPtr& input_col) {
         if (input_col->only_null()) {
             auto res = ColumnHelper::create_column(type(), false);
-            res->resize(num_rows);
-            return res;
+            res->resize(1);
+            return ConstColumn::create(std::move(res), num_rows);
         } else if (input_col->is_nullable()) {
-            return down_cast<NullableColumn*>(input_col.get())->data_column();
+            return down_cast<const NullableColumn*>(input_col.get())->data_column();
         } else {
             return input_col;
         }
@@ -346,10 +351,10 @@ private:
         auto num_rows = inputs[0]->size();
         Columns columns;
         for (const auto& col : inputs) {
-            columns.push_back(ColumnHelper::unfold_const_column(this->type(), num_rows, col));
+            columns.push_back(ColumnHelper::unfold_const_column(this->type(), num_rows, std::move(col)));
         }
         ColumnViewer<TYPE_BOOLEAN> bhs_viewer(columns[0]);
-        ColumnPtr res = ColumnHelper::create_column(this->type(), true);
+        MutableColumnPtr res = ColumnHelper::create_column(this->type(), true);
         res->reserve(num_rows);
         if constexpr (check_null) {
             for (int row = 0; row < num_rows; ++row) {
@@ -378,7 +383,7 @@ public:
     DEFINE_CLASS_CONSTRUCT_FN(VectorizedCoalesceExpr);
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
-        std::vector<ColumnPtr> columns;
+        Columns columns;
         for (int i = 0; i < _children.size(); ++i) {
             ASSIGN_OR_RETURN(auto value, _children[i]->evaluate_checked(context, ptr));
             auto null_count = ColumnHelper::count_nulls(value);
@@ -388,7 +393,7 @@ public:
             // 3.don't need check if value is all null
             if (null_count == 0) {
                 if (columns.size() == 0) {
-                    return value->clone();
+                    return Column::mutate(std::move(value));
                 }
 
                 // There is a column all not null.
@@ -408,8 +413,8 @@ public:
 
         // direct return if only one
         if (columns.size() == 1) {
-            // TODO: don't copy column if chunk support copy on write
-            return columns[0]->clone();
+            // don't copy column if chunk support copy on write
+            return Column::mutate(std::move(columns[0]));
         }
 
         if constexpr (lt_is_collection<Type>) {
@@ -452,7 +457,7 @@ private:
         int size = inputs[0]->size();
         Columns columns;
         for (const auto& col : inputs) {
-            columns.push_back(ColumnHelper::unfold_const_column(this->type(), size, col));
+            columns.push_back(ColumnHelper::unfold_const_column(this->type(), size, std::move(col)));
         }
         int col_size = columns.size();
         auto res = ColumnHelper::create_column(this->type(), true);
@@ -461,7 +466,7 @@ private:
         nullColumns.resize(col_size);
         for (auto i = 0; i < col_size; ++i) {
             if (columns[i]->is_nullable()) {
-                nullColumns[i] = down_cast<NullableColumn*>(columns[i].get())->null_column();
+                nullColumns[i] = down_cast<const NullableColumn*>(columns[i].get())->null_column();
             } else {
                 nullColumns[i] = nullptr;
             }
@@ -470,7 +475,7 @@ private:
             int col;
             for (col = 0; col < col_size; ++col) {
                 // if not null
-                if (nullColumns[col] == nullptr || !nullColumns[col]->get_data()[row]) {
+                if (nullColumns[col] == nullptr || !nullColumns[col]->immutable_data()[row]) {
                     res->append(*columns[col], row, 1);
                     break;
                 }
@@ -515,7 +520,8 @@ private:
     CASE_TYPE(TYPE_JSON, CLASS);       \
     CASE_TYPE(TYPE_DECIMAL32, CLASS);  \
     CASE_TYPE(TYPE_DECIMAL64, CLASS);  \
-    CASE_TYPE(TYPE_DECIMAL128, CLASS);
+    CASE_TYPE(TYPE_DECIMAL128, CLASS); \
+    CASE_TYPE(TYPE_DECIMAL256, CLASS);
 
 Expr* VectorizedConditionExprFactory::create_if_null_expr(const starrocks::TExprNode& node) {
     LogicalType resultType = TypeDescriptor::from_thrift(node.type).type;

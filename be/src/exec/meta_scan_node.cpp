@@ -29,6 +29,19 @@ MetaScanNode::~MetaScanNode() {
     }
 }
 
+Status MetaScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
+    RETURN_IF_ERROR(ScanNode::init(tnode, state));
+
+    if (_meta_scan_node.__isset.column_access_paths) {
+        for (int i = 0; i < _meta_scan_node.column_access_paths.size(); ++i) {
+            ASSIGN_OR_RETURN(auto path, ColumnAccessPath::create(_meta_scan_node.column_access_paths[i], state, _pool));
+            _column_access_paths.emplace_back(std::move(path));
+        }
+    }
+
+    return Status::OK();
+}
+
 void MetaScanNode::_init_counter(RuntimeState* state) {
     _scan_timer = ADD_TIMER(_runtime_profile, "ScanTime");
     _meta_scan_profile = _runtime_profile->create_child("META_SCAN", true, false);

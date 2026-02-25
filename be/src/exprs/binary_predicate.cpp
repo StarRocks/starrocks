@@ -14,21 +14,25 @@
 
 #include "exprs/binary_predicate.h"
 
-#include <llvm/IR/Constants.h>
-#include <llvm/IR/IRBuilder.h>
-#include <llvm/IR/Value.h>
-
 #include "column/array_column.h"
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
 #include "column/type_traits.h"
 #include "exprs/binary_function.h"
-#include "exprs/jit/ir_helper.h"
 #include "exprs/unary_function.h"
 #include "runtime/runtime_state.h"
 #include "storage/column_predicate.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
+
+#ifdef STARROCKS_JIT_ENABLE
+#include <llvm/IR/Constants.h>
+#include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/Value.h>
+
+#include "exprs/jit/expr_jit_codegen.h"
+#include "exprs/jit/ir_helper.h"
+#endif
 
 namespace starrocks {
 
@@ -40,6 +44,11 @@ struct PredicateCmpType {
 template <>
 struct PredicateCmpType<TYPE_JSON> {
     using CmpType = JsonValue;
+};
+
+template <>
+struct PredicateCmpType<TYPE_VARIANT> {
+    using CmpType = VariantRowValue;
 };
 
 // The evaluator for LogicalType
@@ -119,7 +128,13 @@ std::string get_cmp_op_name() {
 }
 
 template <LogicalType Type, typename OP>
-class VectorizedBinaryPredicate final : public Predicate {
+#ifdef STARROCKS_JIT_ENABLE
+class VectorizedBinaryPredicate final : public Predicate,
+                                        public JITCodegenNode
+#else
+class VectorizedBinaryPredicate final : public Predicate
+#endif
+{
 public:
     explicit VectorizedBinaryPredicate(const TExprNode& node) : Predicate(node) {}
     ~VectorizedBinaryPredicate() override = default;
@@ -131,6 +146,7 @@ public:
         ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, ptr));
         return VectorizedStrictBinaryFunction<OP>::template evaluate<Type, TYPE_BOOLEAN>(l, r);
     }
+#ifdef STARROCKS_JIT_ENABLE
 
     bool is_compilable(RuntimeState* state) const override {
         return state->can_jit_expr(CompilableExprType::CMP) && IRHelper::support_jit(Type);
@@ -157,8 +173,8 @@ public:
             return Status::NotSupported("JIT of decimal cmp not support");
         } else {
             std::vector<LLVMDatum> datums(2);
-            ASSIGN_OR_RETURN(datums[0], _children[0]->generate_ir(context, jit_ctx))
-            ASSIGN_OR_RETURN(datums[1], _children[1]->generate_ir(context, jit_ctx))
+            ASSIGN_OR_RETURN(datums[0], ExprJITCodegen::generate_ir(context, _children[0], jit_ctx))
+            ASSIGN_OR_RETURN(datums[1], ExprJITCodegen::generate_ir(context, _children[1], jit_ctx))
 
             auto* l = datums[0].value;
             auto* r = datums[1].value;
@@ -211,10 +227,11 @@ public:
     }
 
     std::string jit_func_name_impl(RuntimeState* state) const override {
-        return "{" + _children[0]->jit_func_name(state) + get_cmp_op_name<Type, OP>() +
-               _children[1]->jit_func_name(state) + "}" + (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") +
-               type().debug_string();
+        return "{" + ExprJITCodegen::func_name(_children[0], state) + get_cmp_op_name<Type, OP>() +
+               ExprJITCodegen::func_name(_children[1], state) + "}" + (is_constant() ? "c:" : "") +
+               (is_nullable() ? "n:" : "") + type().debug_string();
     }
+#endif
 
     std::string debug_string() const override {
         std::stringstream out;
@@ -249,8 +266,8 @@ public:
 
         DCHECK(data1->is_array());
         DCHECK(data2->is_array());
-        auto lhs_arr = down_cast<ArrayColumn&>(*data1);
-        auto rhs_arr = down_cast<ArrayColumn&>(*data2);
+        const auto& lhs_arr = down_cast<const ArrayColumn&>(*data1);
+        const auto& rhs_arr = down_cast<const ArrayColumn&>(*data2);
 
         ColumnBuilder<TYPE_BOOLEAN> builder(l->size());
         std::vector<int8_t> cmp_result;
@@ -292,11 +309,11 @@ public:
         size_t lstep = l->is_constant() ? 0 : 1;
         size_t rstep = r->is_constant() ? 0 : 1;
 
-        auto& const1 = FunctionHelper::get_data_column_of_const(l);
-        auto& const2 = FunctionHelper::get_data_column_of_const(r);
+        ColumnPtr const1 = FunctionHelper::get_data_column_of_const(l);
+        ColumnPtr const2 = FunctionHelper::get_data_column_of_const(r);
 
-        auto& data1 = FunctionHelper::get_data_column_of_nullable(const1);
-        auto& data2 = FunctionHelper::get_data_column_of_nullable(const2);
+        ColumnPtr data1 = FunctionHelper::get_data_column_of_nullable(const1);
+        ColumnPtr data2 = FunctionHelper::get_data_column_of_nullable(const2);
 
         size_t size = l->size();
         ColumnBuilder<TYPE_BOOLEAN> builder(size);
@@ -342,7 +359,7 @@ public:
             return ColumnHelper::create_const_column<TYPE_BOOLEAN>(true, l->size());
         }
 
-        auto is_null_predicate = [&](const ColumnPtr& column) {
+        auto is_null_predicate = [&](const ColumnPtr& column) -> ColumnPtr {
             if (!column->is_nullable() || !column->has_null()) {
                 return ColumnHelper::create_const_column<TYPE_BOOLEAN>(false, column->size());
             }
@@ -356,14 +373,14 @@ public:
             return is_null_predicate(l);
         }
 
-        auto& const1 = FunctionHelper::get_data_column_of_nullable(l);
-        auto& const2 = FunctionHelper::get_data_column_of_nullable(r);
+        ColumnPtr const1 = FunctionHelper::get_data_column_of_nullable(l);
+        ColumnPtr const2 = FunctionHelper::get_data_column_of_nullable(r);
 
         size_t lstep = const1->is_constant() ? 0 : 1;
         size_t rstep = const2->is_constant() ? 0 : 1;
 
-        auto& data1 = FunctionHelper::get_data_column_of_const(const1);
-        auto& data2 = FunctionHelper::get_data_column_of_const(const2);
+        const auto& data1 = FunctionHelper::get_data_column_of_const(const1);
+        const auto& data2 = FunctionHelper::get_data_column_of_const(const2);
 
         size_t size = l->size();
         ColumnBuilder<TYPE_BOOLEAN> builder(size);
@@ -386,7 +403,13 @@ public:
 };
 
 template <LogicalType Type, typename OP>
-class VectorizedNullSafeEqPredicate final : public Predicate {
+#ifdef STARROCKS_JIT_ENABLE
+class VectorizedNullSafeEqPredicate final : public Predicate,
+                                            public JITCodegenNode
+#else
+class VectorizedNullSafeEqPredicate final : public Predicate
+#endif
+{
 public:
     explicit VectorizedNullSafeEqPredicate(const TExprNode& node) : Predicate(node) {}
     ~VectorizedNullSafeEqPredicate() override = default;
@@ -426,6 +449,7 @@ public:
 
         return builder.build(ColumnHelper::is_all_const(list));
     }
+#ifdef STARROCKS_JIT_ENABLE
 
     bool is_compilable(RuntimeState* state) const override {
         return state->can_jit_expr(CompilableExprType::CMP) && IRHelper::support_jit(Type);
@@ -433,8 +457,8 @@ public:
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
         std::vector<LLVMDatum> datums(2);
-        ASSIGN_OR_RETURN(datums[0], _children[0]->generate_ir(context, jit_ctx))
-        ASSIGN_OR_RETURN(datums[1], _children[1]->generate_ir(context, jit_ctx))
+        ASSIGN_OR_RETURN(datums[0], ExprJITCodegen::generate_ir(context, _children[0], jit_ctx))
+        ASSIGN_OR_RETURN(datums[1], ExprJITCodegen::generate_ir(context, _children[1], jit_ctx))
         auto& b = jit_ctx->builder;
         if constexpr (lt_is_decimal<Type>) {
             // TODO(yueyang): Implement decimal cmp in LLVM IR.
@@ -461,9 +485,11 @@ public:
     }
 
     std::string jit_func_name_impl(RuntimeState* state) const override {
-        return "{" + _children[0]->jit_func_name(state) + "<=>" + _children[1]->jit_func_name(state) + "}" +
-               (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
+        return "{" + ExprJITCodegen::func_name(_children[0], state) + "<=>" +
+               ExprJITCodegen::func_name(_children[1], state) + "}" + (is_constant() ? "c:" : "") +
+               (is_nullable() ? "n:" : "") + type().debug_string();
     }
+#endif
 
     std::string debug_string() const override {
         std::stringstream out;

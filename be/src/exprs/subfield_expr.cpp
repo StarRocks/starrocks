@@ -20,6 +20,7 @@
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
 #include "common/object_pool.h"
+#include "exprs/function_helper.h"
 
 namespace starrocks {
 
@@ -39,62 +40,56 @@ public:
 
         ASSIGN_OR_RETURN(ColumnPtr col, _children.at(0)->evaluate_checked(context, chunk));
 
-        // Enter multiple subfield for struct type, remain last subfield
-        for (size_t i = 0; i < _used_subfield_names.size() - 1; i++) {
-            std::string fieldname = _used_subfield_names[i];
-            Column* tmp_col = ColumnHelper::get_data_column(col.get());
-            DCHECK(tmp_col->is_struct());
-            auto* struct_column = down_cast<StructColumn*>(tmp_col);
-            col = struct_column->field_column(fieldname);
-            if (col == nullptr) {
-                return Status::InternalError("Struct subfield name: " + fieldname + " not found!");
-            }
-        }
-
         // handle nullable column
-        std::vector<uint8_t> null_flags;
-        size_t num_rows = col->size();
-        null_flags.resize(num_rows, false);
-        if (col->is_nullable()) {
-            auto* nullable = down_cast<NullableColumn*>(col.get());
-            const uint8_t* nulls = nullable->null_column()->raw_data();
-            std::memcpy(&null_flags[0], &nulls[0], num_rows * sizeof(uint8_t));
+        const size_t num_rows = col->size();
+        if (col->only_null()) {
+            return ColumnHelper::create_const_null_column(num_rows);
         }
 
-        Column* tmp_col = ColumnHelper::get_data_column(col.get());
-        DCHECK(tmp_col->is_struct());
-        auto* struct_column = down_cast<StructColumn*>(tmp_col);
+        NullColumnPtr union_null_column = NullColumn::create(num_rows, false);
 
-        std::string fieldname = _used_subfield_names.back();
-        ColumnPtr subfield_column = struct_column->field_column(fieldname);
-        if (subfield_column->is_nullable()) {
-            auto* nullable = down_cast<NullableColumn*>(subfield_column.get());
-            const uint8_t* nulls = nullable->null_column()->raw_data();
-            for (size_t i = 0; i < num_rows; i++) {
-                null_flags[i] |= nulls[i];
+        for (size_t i = 0; i < _used_subfield_names.size(); i++) {
+            const std::string& fieldname = _used_subfield_names[i];
+
+            // merge null flags for each level
+            if (col->is_nullable()) {
+                const auto* nullable = down_cast<const NullableColumn*>(col.get());
+                union_null_column =
+                        FunctionHelper::union_null_column(std::move(union_null_column), nullable->null_column());
             }
-            subfield_column = nullable->data_column();
+
+            const Column* tmp_col = ColumnHelper::get_data_column(col.get());
+            DCHECK(tmp_col->is_struct());
+            const auto* struct_column = down_cast<const StructColumn*>(tmp_col);
+            ASSIGN_OR_RETURN(col, struct_column->field_column(fieldname));
         }
 
-        NullColumnPtr result_null = NullColumn::create();
-        result_null->get_data().swap(null_flags);
-        DCHECK_EQ(subfield_column->size(), result_null->size());
+        if (col->is_nullable()) {
+            const auto* nullable = down_cast<const NullableColumn*>(col.get());
+            union_null_column =
+                    FunctionHelper::union_null_column(std::move(union_null_column), nullable->null_column());
+            col = nullable->data_column();
+        }
 
-        // We need clone a new subfield column
+        DCHECK_EQ(col->size(), union_null_column->size());
+
+        // We need to clone a new subfield column
         if (_copy_flag) {
-            return NullableColumn::create(subfield_column->clone_shared(), result_null);
+            return NullableColumn::create(Column::mutate(std::move(col)), std::move(union_null_column));
         } else {
-            return NullableColumn::create(subfield_column, result_null);
+            return NullableColumn::create(std::move(col), std::move(union_null_column));
         }
     }
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new SubfieldExpr(*this)); }
 
     int get_subfields(std::vector<std::vector<std::string>>* subfields) const override {
+        int n = Expr::get_subfields(subfields);
         if (subfields != nullptr) {
             subfields->push_back(_used_subfield_names);
+            n += 1;
         }
-        return 1;
+        return n;
     }
 
 private:

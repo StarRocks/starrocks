@@ -33,7 +33,7 @@
 // under the License.
 package com.starrocks.http;
 
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.MysqlCommand;
@@ -69,7 +69,7 @@ public class HttpConnectProcessor extends ConnectProcessor {
                 .setDb(ctx.getDatabase())
                 .setCatalog(ctx.getCurrentCatalog());
         Tracers.register(ctx);
-        Tracers.init(ctx, Tracers.Mode.TIMER, null);
+        Tracers.init(ctx, "TIMER", null);
 
         StatementBase parsedStmt = ((HttpConnectContext) ctx).getStatement();
         String sql = parsedStmt.getOrigStmt().originStmt;
@@ -77,7 +77,9 @@ public class HttpConnectProcessor extends ConnectProcessor {
         executor = new StmtExecutor(ctx, parsedStmt);
         ctx.setExecutor(executor);
 
+        // http sql doesn't support multi stmt
         ctx.setIsLastStmt(true);
+        ctx.setSingleStmt(true);
 
         //  for http protocal, if current FE can't read, just let client talk with leader
         if (executor.isForwardToLeader()) {
@@ -94,7 +96,7 @@ public class HttpConnectProcessor extends ConnectProcessor {
             LOG.warn("Process one query failed because IOException: ", e);
             ctx.getState().setError("StarRocks process failed");
             ctx.getState().setErrType(QueryState.ErrType.IO_ERR);
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             LOG.warn("Process one query failed. SQL: " + sql + ", because.", e);
             ctx.getState().setError(e.getMessage());
             // set is as ANALYSIS_ERR so that it won't be treated as a query failure.

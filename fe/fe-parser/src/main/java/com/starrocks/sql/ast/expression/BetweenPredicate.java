@@ -1,0 +1,77 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.starrocks.sql.ast.expression;
+
+import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.parser.NodePosition;
+
+/**
+ * Class describing between predicates. After successful analysis, we equal
+ * the between predicate to a conjunctive/disjunctive compound predicate
+ * to be handed to the backend.
+ */
+public class BetweenPredicate extends Predicate {
+    private final boolean isNotBetween;
+
+    // First child is the comparison expr which should be in [lowerBound, upperBound].
+    public BetweenPredicate(Expr compareExpr, Expr lowerBound, Expr upperBound, boolean isNotBetween) {
+        this(compareExpr, lowerBound, upperBound, isNotBetween, NodePosition.ZERO);
+    }
+
+    public BetweenPredicate(Expr compareExpr, Expr lowerBound, Expr upperBound, boolean isNotBetween, NodePosition pos) {
+        super(pos);
+        children.add(compareExpr);
+        children.add(lowerBound);
+        children.add(upperBound);
+        this.isNotBetween = isNotBetween;
+    }
+
+    protected BetweenPredicate(BetweenPredicate other) {
+        super(other);
+        isNotBetween = other.isNotBetween;
+    }
+
+    @Override
+    public Expr clone() {
+        return new BetweenPredicate(this);
+    }
+
+    public boolean isNotBetween() {
+        return isNotBetween;
+    }
+
+
+    @Override
+    public int hashCode() {
+        return 31 * super.hashCode() + Boolean.hashCode(isNotBetween);
+    }
+
+    @Override
+    public boolean equalsWithoutChild(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+        if (!(obj instanceof BetweenPredicate)) {
+            return false;
+        }
+        BetweenPredicate that = (BetweenPredicate) obj;
+        return super.equalsWithoutChild(that) && isNotBetween == that.isNotBetween;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitBetweenPredicate(this, context);
+    }
+}

@@ -282,3 +282,106 @@ ALTER TABLE site_access1 DROP COLUMN site_id;
 E: (1064, 'Distribution column[site_id] cannot be dropped. index[site_access1]')
 -- !result
 
+-- name: test_alter_table_storage_ttl
+CREATE TABLE `test` (
+  `k1` date NULL COMMENT "",
+  `k2` datetime NULL COMMENT "",
+  `k3` varchar(65533) NULL COMMENT "",
+  `k4` varchar(20) NULL COMMENT "",
+  `k5` boolean NULL COMMENT "",
+  `k6` tinyint(4) NULL COMMENT "",
+  `k7` smallint(6) NULL COMMENT "",
+  `k8` int(11) NULL COMMENT "",
+  `k9` bigint(20) NULL COMMENT "",
+  `k10` largeint(40) NULL COMMENT "",
+  `k11` float NULL COMMENT "",
+  `k12` double NULL COMMENT "",
+  `k13` decimal(27, 9) NULL COMMENT ""
+) ENGINE=OLAP
+UNIQUE KEY(`k1`, `k2`, `k3`, `k4`, `k5`)
+PARTITION BY time_slice(k2, 1, 'month', 'floor')
+DISTRIBUTED BY HASH(`k1`, `k2`, `k3`)
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "3",
+"storage_cooldown_ttl" = "3 day",
+"storage_medium" = "SSD"
+);
+-- result:
+-- !result
+insert into test values('2020-01-01', '2024-10-30 11:17:01', 'asfgrgte', 'wergergqer', 0, 11, 111, 1111, 11111, 111111, 11.11, 111.111, 1111.1111),('2020-01-01', '2024-10-30 10:17:01', 'asfgrgte', 'wergergqer', 0, 11, 111, 1111, 11111, 111111, 11.11, 111.111, 1111.1111),('2020-01-01', '2024-10-30 09:17:01', 'asfgrgte', 'wergergqer', 0, 11, 111, 1111, 11111, 111111, 11.11, 111.111, 1111.1111),('2020-01-01', '2024-10-30 12:17:01', 'asfgrgte', 'wergergqer', 0, 11, 111, 1111, 11111, 111111, 11.11, 111.111, 1111.1111);
+-- result:
+-- !result
+alter table test modify PARTITION (*) set ("storage_cooldown_ttl" = "1 year", "storage_medium" = "SSD");
+-- result:
+-- !result
+
+-- name: test_pk_alter_char
+CREATE TABLE test2
+(
+    k1 BIGINT,
+    v1 LARGEINT,
+    v2 CHAR(4)
+)
+ENGINE=olap
+PRIMARY KEY(k1)
+DISTRIBUTED BY HASH (k1) BUCKETS 3
+PROPERTIES(
+    "replication_num"="1"
+);
+-- result:
+-- !result
+insert into test2 values (1, 1, '1');
+-- result:
+-- !result
+select * from test2 where v2 = '1';
+-- result:
+1	1	1
+-- !result
+alter table test2 add index test_bitmap(v1);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from test2 where v2 = '1';
+-- result:
+1	1	1
+-- !result
+
+-- name: test_alter_table_char_padding @cloud
+CREATE TABLE test3
+(
+    k1 BIGINT,
+    v1 LARGEINT,
+    v2 CHAR(4)
+)
+ENGINE=olap
+DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH (k1) BUCKETS 3
+PROPERTIES(
+    "replication_num"="1"
+);
+-- result:
+-- !result
+insert into test3 values (1, 1, 'a');
+-- result:
+-- !result
+select * from test3 where v2 = 'a';
+-- result:
+1	1	a
+-- !result
+alter table test3 modify column v2 CHAR(10);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from test3 where v2 = 'a';
+-- result:
+1	1	a
+-- !result

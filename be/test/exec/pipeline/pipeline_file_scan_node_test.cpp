@@ -20,9 +20,14 @@
 #include <random>
 #include <utility>
 
+#include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
+#include "common/system/disk_info.h"
+#include "common/system/mem_info.h"
+#include "common/util/thrift_util.h"
 #include "exec/connector_scan_node.h"
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/exchange/local_exchange_sink_operator.h"
@@ -40,12 +45,9 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/storage_engine.h"
-#include "testutil/assert.h"
-#include "util/defer_op.h"
-#include "util/disk_info.h"
-#include "util/mem_info.h"
-#include "util/thrift_util.h"
+#include "util/global_metrics_registry.h"
 
 // TODO: test multi thread
 // TODO: test runtime filter
@@ -58,6 +60,7 @@ public:
     void SetUp() override {
         config::enable_system_metrics = false;
         config::enable_metric_calculator = false;
+        GlobalMetricsRegistry::instance()->metrics()->set_collect_hook_enabled(true);
 
         _exec_env = ExecEnv::GetInstance();
 
@@ -65,7 +68,7 @@ public:
         const auto& query_id = params.query_id;
         const auto& fragment_id = params.fragment_instance_id;
 
-        _query_ctx = _exec_env->query_context_mgr()->get_or_register(query_id);
+        ASSIGN_OR_ASSERT_FAIL(_query_ctx, _exec_env->query_context_mgr()->get_or_register(query_id));
         _query_ctx->set_total_fragments(1);
         _query_ctx->set_delivery_expire_seconds(60);
         _query_ctx->set_query_expire_seconds(60);
@@ -90,6 +93,7 @@ public:
         _runtime_state->set_be_number(_request.backend_num);
         _runtime_state->set_query_ctx(_query_ctx);
         _runtime_state->set_fragment_ctx(_fragment_ctx);
+        _runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
         _pool = _runtime_state->obj_pool();
         auto sink_dop = degree_of_parallelism;
         _context = _pool->add(new PipelineBuilderContext(_fragment_ctx, degree_of_parallelism, sink_dop, false));
@@ -117,7 +121,6 @@ private:
                               const std::vector<TScanRangeParams>& scan_ranges);
 
     RuntimeState* _runtime_state = nullptr;
-    OlapTableDescriptor* _table_desc = nullptr;
     ObjectPool* _pool = nullptr;
     std::shared_ptr<MemTracker> _mem_tracker = nullptr;
     ExecEnv* _exec_env = nullptr;
@@ -245,8 +248,10 @@ void PipeLineFileScanNodeTest::prepare_pipeline() {
 }
 
 void PipeLineFileScanNodeTest::execute_pipeline() {
-    _fragment_ctx->iterate_drivers(
-            [state = _fragment_ctx->runtime_state()](const DriverPtr& driver) { return driver->prepare(state); });
+    _fragment_ctx->iterate_drivers([state = _fragment_ctx->runtime_state()](const DriverPtr& driver) {
+        RETURN_IF_ERROR(driver->prepare(state));
+        return driver->prepare_local_state(state);
+    });
 
     _fragment_ctx->iterate_drivers([exec_env = _exec_env](const DriverPtr& driver) {
         LOG(WARNING) << driver->to_readable_string();

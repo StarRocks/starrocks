@@ -15,30 +15,37 @@
 #pragma once
 
 #include <memory>
-#include <string>
 #include <vector>
 
 #include "gutil/macros.h"
+#include "runtime/global_dict/types_fwd_decl.h"
 #include "storage/lake/general_tablet_writer.h"
 
 namespace starrocks {
 class SegmentWriter;
 class RowsMapperBuilder;
+class BundleWritableFileContext;
 } // namespace starrocks
 
 namespace starrocks::lake {
+
+class DefaultSSTWriter;
 
 class HorizontalPkTabletWriter : public HorizontalGeneralTabletWriter {
 public:
     explicit HorizontalPkTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
                                       std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
-                                      ThreadPool* flush_pool, bool is_compaction);
+                                      ThreadPool* flush_pool, bool is_compaction,
+                                      BundleWritableFileContext* bundle_file_context = nullptr,
+                                      GlobalDictByNameMaps* _global_dicts = nullptr);
 
     ~HorizontalPkTabletWriter() override;
 
     DISALLOW_COPY(HorizontalPkTabletWriter);
 
     Status write(const Chunk& data, const std::vector<uint64_t>& rssid_rowids, SegmentPB* segment = nullptr) override;
+
+    Status write(const Chunk& data, SegmentPB* segment = nullptr, bool eos = false) override;
 
     Status flush_del_file(const Column& deletes) override;
 
@@ -48,14 +55,18 @@ public:
 
     Status finish(SegmentPB* segment = nullptr) override;
 
+    StatusOr<std::unique_ptr<TabletWriter>> clone() const override;
+
     RowsetTxnMetaPB* rowset_txn_meta() override { return _rowset_txn_meta.get(); }
 
 protected:
+    Status reset_segment_writer(bool eos) override;
     Status flush_segment_writer(SegmentPB* segment = nullptr) override;
 
 private:
     std::unique_ptr<RowsetTxnMetaPB> _rowset_txn_meta;
     std::unique_ptr<RowsMapperBuilder> _rows_mapper_builder;
+    std::unique_ptr<DefaultSSTWriter> _pk_sst_writer;
 };
 
 class VerticalPkTabletWriter : public VerticalGeneralTabletWriter {
@@ -68,7 +79,7 @@ public:
 
     DISALLOW_COPY(VerticalPkTabletWriter);
 
-    Status write(const starrocks::Chunk& data, SegmentPB* segment = nullptr) override {
+    Status write(const starrocks::Chunk& data, SegmentPB* segment = nullptr, bool eos = false) override {
         return Status::NotSupported("VerticalPkTabletWriter write not support");
     }
 
@@ -84,6 +95,7 @@ public:
 
 private:
     std::unique_ptr<RowsMapperBuilder> _rows_mapper_builder;
+    std::vector<std::unique_ptr<DefaultSSTWriter>> _pk_sst_writers;
 };
 
 } // namespace starrocks::lake

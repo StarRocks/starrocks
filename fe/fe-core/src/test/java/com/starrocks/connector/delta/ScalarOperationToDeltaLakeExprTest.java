@@ -14,15 +14,17 @@
 
 package com.starrocks.connector.delta;
 
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.type.CharType;
+import com.starrocks.type.HLLType;
+import com.starrocks.type.VarcharType;
 import io.delta.kernel.expressions.AlwaysTrue;
 import io.delta.kernel.expressions.And;
 import io.delta.kernel.expressions.Column;
@@ -45,9 +47,9 @@ import io.delta.kernel.types.StructField;
 import io.delta.kernel.types.StructType;
 import io.delta.kernel.types.TimestampNTZType;
 import io.delta.kernel.types.TimestampType;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -60,18 +62,19 @@ import java.util.Set;
 public class ScalarOperationToDeltaLakeExprTest {
     private StructType schema;
     private Set<String> partitionColumns;
-    ColumnRefOperator cBoolCol = new ColumnRefOperator(1, Type.BOOLEAN, "c_bool", true, false);
-    ColumnRefOperator cShortCol = new ColumnRefOperator(1, Type.SMALLINT, "c_short", true, false);
-    ColumnRefOperator cIntCol = new ColumnRefOperator(1, Type.INT, "c_int", true, false);
-    ColumnRefOperator cLongCol = new ColumnRefOperator(1, Type.BIGINT, "c_long", true, false);
-    ColumnRefOperator cFloatCol = new ColumnRefOperator(1, Type.FLOAT, "c_float", true, false);
-    ColumnRefOperator cDoubleCol = new ColumnRefOperator(1, Type.DOUBLE, "c_double", true, false);
-    ColumnRefOperator cDateCol = new ColumnRefOperator(1, Type.DATE, "c_date", true, false);
-    ColumnRefOperator cTimestampCol = new ColumnRefOperator(1, Type.DATETIME, "c_timestamp", true, false);
-    ColumnRefOperator cTimestampNTZCol = new ColumnRefOperator(1, Type.DATETIME, "c_timestamp_ntz", true, false);
-    ColumnRefOperator cCharCol = new ColumnRefOperator(1, Type.CHAR, "c_string", true, false);
-    ColumnRefOperator cVarcharCol = new ColumnRefOperator(1, Type.VARCHAR, "c_string", true, false);
-    ColumnRefOperator cHLLCol = new ColumnRefOperator(1, Type.VARCHAR, "c_string", true, false);
+    ColumnRefOperator cBoolCol = new ColumnRefOperator(1, com.starrocks.type.BooleanType.BOOLEAN, "c_bool", true, false);
+    ColumnRefOperator cShortCol = new ColumnRefOperator(1, com.starrocks.type.IntegerType.SMALLINT, "c_short", true, false);
+    ColumnRefOperator cIntCol = new ColumnRefOperator(1, com.starrocks.type.IntegerType.INT, "c_int", true, false);
+    ColumnRefOperator cLongCol = new ColumnRefOperator(1, com.starrocks.type.IntegerType.BIGINT, "c_long", true, false);
+    ColumnRefOperator cFloatCol = new ColumnRefOperator(1, com.starrocks.type.FloatType.FLOAT, "c_float", true, false);
+    ColumnRefOperator cDoubleCol = new ColumnRefOperator(1, com.starrocks.type.FloatType.DOUBLE, "c_double", true, false);
+    ColumnRefOperator cDateCol = new ColumnRefOperator(1, com.starrocks.type.DateType.DATE, "c_date", true, false);
+    ColumnRefOperator cTimestampCol = new ColumnRefOperator(1, com.starrocks.type.DateType.DATETIME, "c_timestamp", true, false);
+    ColumnRefOperator cTimestampNTZCol = new ColumnRefOperator(1, com.starrocks.type.DateType.DATETIME,
+            "c_timestamp_ntz", true, false);
+    ColumnRefOperator cCharCol = new ColumnRefOperator(1, CharType.CHAR, "c_string", true, false);
+    ColumnRefOperator cVarcharCol = new ColumnRefOperator(1, VarcharType.VARCHAR, "c_string", true, false);
+    ColumnRefOperator cHLLCol = new ColumnRefOperator(1, VarcharType.VARCHAR, "c_string", true, false);
 
     Column cDeltaBoolCol = new Column("c_bool");
     Column cDeltaShortCol = new Column("c_short");
@@ -86,7 +89,7 @@ public class ScalarOperationToDeltaLakeExprTest {
     Column cDeltaVarcharCol = new Column("c_string");
     Column cDeltaHLLCol = new Column("c_string");
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         schema = new StructType()
                 .add("c_int", IntegerType.INTEGER)
@@ -130,7 +133,7 @@ public class ScalarOperationToDeltaLakeExprTest {
         Predicate convertExpr = converter.convert(operators, context);
         Predicate expectedExpr = new And(new Predicate(">", cDeltaIntCol, literal1),
                 new Predicate("<", cDeltaIntCol, literal2));
-        Assert.assertEquals(convertExpr.toString(), expectedExpr.toString());
+        Assertions.assertEquals(convertExpr.toString(), expectedExpr.toString());
 
         // or
         ltOperator = new BinaryPredicateOperator(BinaryType.LT, cIntCol, value1);
@@ -139,7 +142,7 @@ public class ScalarOperationToDeltaLakeExprTest {
         operators = new ArrayList<>(List.of(operator));
         convertExpr = converter.convert(operators, context);
         expectedExpr = new Or(new Predicate("<", cDeltaIntCol, literal1), new Predicate(">", cDeltaIntCol, literal2));
-        Assert.assertEquals(convertExpr.toString(), expectedExpr.toString());
+        Assertions.assertEquals(convertExpr.toString(), expectedExpr.toString());
 
         // NOT
         ltOperator = new BinaryPredicateOperator(BinaryType.LT, cIntCol, value1);
@@ -147,7 +150,7 @@ public class ScalarOperationToDeltaLakeExprTest {
         operators = new ArrayList<>(List.of(operator));
         convertExpr = converter.convert(operators, context);
         expectedExpr = new Predicate("NOT", new Predicate("<", cDeltaIntCol, literal1));
-        Assert.assertEquals(convertExpr.toString(), expectedExpr.toString());
+        Assertions.assertEquals(convertExpr.toString(), expectedExpr.toString());
     }
 
     @Test
@@ -162,14 +165,14 @@ public class ScalarOperationToDeltaLakeExprTest {
         operators = new ArrayList<>(List.of(isNullPredicateOperator));
         Predicate convertExpr = converter.convert(operators, context);
         Predicate expectedExpr = new Predicate("IS_NULL", cDeltaIntCol);
-        Assert.assertEquals(convertExpr.toString(), expectedExpr.toString());
+        Assertions.assertEquals(convertExpr.toString(), expectedExpr.toString());
 
         // is not null
         isNullPredicateOperator = new IsNullPredicateOperator(true, cIntCol);
         operators = new ArrayList<>(List.of(isNullPredicateOperator));
         convertExpr = converter.convert(operators, context);
         expectedExpr = new Predicate("IS_NOT_NULL", cDeltaIntCol);
-        Assert.assertEquals(convertExpr.toString(), expectedExpr.toString());
+        Assertions.assertEquals(convertExpr.toString(), expectedExpr.toString());
     }
 
     @Test
@@ -187,7 +190,7 @@ public class ScalarOperationToDeltaLakeExprTest {
         operators = new ArrayList<>(List.of(operator));
         Predicate convertExpr = converter.convert(operators, context);
         Predicate expectedExpr = new Predicate("=", cDeltaBoolCol, Literal.ofBoolean(false));
-        Assert.assertEquals(expectedExpr.toString(), convertExpr.toString());
+        Assertions.assertEquals(expectedExpr.toString(), convertExpr.toString());
 
         // int -> smallint
         value = ConstantOperator.createInt(5);
@@ -195,7 +198,7 @@ public class ScalarOperationToDeltaLakeExprTest {
         operators = new ArrayList<>(List.of(operator));
         convertExpr = converter.convert(operators, context);
         expectedExpr = new Predicate("=", cDeltaShortCol, Literal.ofShort((short) 5));
-        Assert.assertEquals(expectedExpr.toString(), convertExpr.toString());
+        Assertions.assertEquals(expectedExpr.toString(), convertExpr.toString());
 
         // bigint -> int
         value = ConstantOperator.createBigint(5);
@@ -203,7 +206,7 @@ public class ScalarOperationToDeltaLakeExprTest {
         operators = new ArrayList<>(List.of(operator));
         convertExpr = converter.convert(operators, context);
         expectedExpr = new Predicate("=", cDeltaIntCol, Literal.ofLong(5));
-        Assert.assertEquals(expectedExpr.toString(), convertExpr.toString());
+        Assertions.assertEquals(expectedExpr.toString(), convertExpr.toString());
 
         // int -> bigint
         value = ConstantOperator.createInt(5);
@@ -211,7 +214,7 @@ public class ScalarOperationToDeltaLakeExprTest {
         operators = new ArrayList<>(List.of(operator));
         convertExpr = converter.convert(operators, context);
         expectedExpr = new Predicate("=", cDeltaLongCol, Literal.ofInt(5));
-        Assert.assertEquals(expectedExpr.toString(), convertExpr.toString());
+        Assertions.assertEquals(expectedExpr.toString(), convertExpr.toString());
 
         // string -> date
         value = ConstantOperator.createVarchar("2023-01-05");
@@ -219,7 +222,7 @@ public class ScalarOperationToDeltaLakeExprTest {
         operators = new ArrayList<>(List.of(operator));
         convertExpr = converter.convert(operators, context);
         expectedExpr = new Predicate("=", cDeltaDateCol, Literal.ofDate(19362));
-        Assert.assertEquals(expectedExpr.toString(), convertExpr.toString());
+        Assertions.assertEquals(expectedExpr.toString(), convertExpr.toString());
 
         // string -> datetime
         value = ConstantOperator.createVarchar("2023-01-05 01:01:01");
@@ -227,7 +230,7 @@ public class ScalarOperationToDeltaLakeExprTest {
         operators = new ArrayList<>(List.of(operator));
         convertExpr = converter.convert(operators, context);
         expectedExpr = new Predicate("=", cDeltaTimestampCol, Literal.ofTimestamp(1672851661000000L));
-        Assert.assertEquals(expectedExpr.toString(), convertExpr.toString());
+        Assertions.assertEquals(expectedExpr.toString(), convertExpr.toString());
 
         // date -> string
         value = ConstantOperator.createDate(LocalDateTime.of(2023, 1, 5, 0, 0));
@@ -235,7 +238,7 @@ public class ScalarOperationToDeltaLakeExprTest {
         operators = new ArrayList<>(List.of(operator));
         convertExpr = converter.convert(operators, context);
         expectedExpr = new Predicate("=", cDeltaVarcharCol, Literal.ofString("2023-01-05"));
-        Assert.assertEquals(expectedExpr.toString(), convertExpr.toString());
+        Assertions.assertEquals(expectedExpr.toString(), convertExpr.toString());
 
         // int -> string (not supported)
         value = ConstantOperator.createInt(12345);
@@ -243,14 +246,14 @@ public class ScalarOperationToDeltaLakeExprTest {
         operators = new ArrayList<>(List.of(operator));
         convertExpr = converter.convert(operators, context);
         expectedExpr = AlwaysTrue.ALWAYS_TRUE;
-        Assert.assertEquals(expectedExpr.toString(), convertExpr.toString());
+        Assertions.assertEquals(expectedExpr.toString(), convertExpr.toString());
 
         // not supported
         value = ConstantOperator.createInt(12345);
         operator = new BinaryPredicateOperator(BinaryType.EQ, cDoubleCol, value);
         operators = new ArrayList<>(List.of(operator));
         convertExpr = converter.convert(operators, context);
-        Assert.assertEquals(AlwaysTrue.ALWAYS_TRUE.toString(), convertExpr.toString());
+        Assertions.assertEquals(AlwaysTrue.ALWAYS_TRUE.toString(), convertExpr.toString());
     }
 
     @Test
@@ -267,7 +270,7 @@ public class ScalarOperationToDeltaLakeExprTest {
         long timestamp = localDateTime.atZone(ZoneOffset.UTC).toEpochSecond() * 1000 * 1000
                 + localDateTime.getNano() / 1000;
         Predicate expectedExpr = new Predicate("<", cDeltaTimestampCol, Literal.ofTimestamp(timestamp));
-        Assert.assertEquals(convertExpr.toString(), expectedExpr.toString());
+        Assertions.assertEquals(convertExpr.toString(), expectedExpr.toString());
     }
 
     @Test
@@ -287,7 +290,7 @@ public class ScalarOperationToDeltaLakeExprTest {
         operators = new ArrayList<>(List.of(operator));
         convertExpr = converter.convert(operators, context);
         expectedExpr = new Predicate("<", cDeltaBoolCol, Literal.ofBoolean(true));
-        Assert.assertEquals(convertExpr.toString(), expectedExpr.toString());
+        Assertions.assertEquals(convertExpr.toString(), expectedExpr.toString());
 
         // Tinyint
         value = ConstantOperator.createTinyInt((byte) 5);
@@ -295,7 +298,7 @@ public class ScalarOperationToDeltaLakeExprTest {
         operators = new ArrayList<>(List.of(operator));
         convertExpr = converter.convert(operators, context);
         expectedExpr = new Predicate("<", cDeltaShortCol, Literal.ofShort((short) 5));
-        Assert.assertEquals(convertExpr.toString(), expectedExpr.toString());
+        Assertions.assertEquals(convertExpr.toString(), expectedExpr.toString());
 
         // Smallint
         value = ConstantOperator.createSmallInt((short) 5);
@@ -303,7 +306,7 @@ public class ScalarOperationToDeltaLakeExprTest {
         operators = new ArrayList<>(List.of(operator));
         convertExpr = converter.convert(operators, context);
         expectedExpr = new Predicate("<", cDeltaShortCol, Literal.ofShort((short) 5));
-        Assert.assertEquals(convertExpr.toString(), expectedExpr.toString());
+        Assertions.assertEquals(convertExpr.toString(), expectedExpr.toString());
 
         // int
         value = ConstantOperator.createInt(5);
@@ -311,7 +314,7 @@ public class ScalarOperationToDeltaLakeExprTest {
         operators = new ArrayList<>(List.of(operator));
         convertExpr = converter.convert(operators, context);
         expectedExpr = new Predicate("<", cDeltaIntCol, Literal.ofInt(5));
-        Assert.assertEquals(convertExpr.toString(), expectedExpr.toString());
+        Assertions.assertEquals(convertExpr.toString(), expectedExpr.toString());
 
         // bigint
         value = ConstantOperator.createBigint(5);
@@ -319,7 +322,7 @@ public class ScalarOperationToDeltaLakeExprTest {
         operators = new ArrayList<>(List.of(operator));
         convertExpr = converter.convert(operators, context);
         expectedExpr = new Predicate("<", cDeltaLongCol, Literal.ofLong(5));
-        Assert.assertEquals(convertExpr.toString(), expectedExpr.toString());
+        Assertions.assertEquals(convertExpr.toString(), expectedExpr.toString());
 
         // float
         value = ConstantOperator.createFloat(5.5);
@@ -327,7 +330,7 @@ public class ScalarOperationToDeltaLakeExprTest {
         operators = new ArrayList<>(List.of(operator));
         convertExpr = converter.convert(operators, context);
         expectedExpr = new Predicate("<", cDeltaFloatCol, Literal.ofFloat((float) 5.5));
-        Assert.assertEquals(convertExpr.toString(), expectedExpr.toString());
+        Assertions.assertEquals(convertExpr.toString(), expectedExpr.toString());
 
         // double
         value = ConstantOperator.createDouble(5.5);
@@ -335,7 +338,7 @@ public class ScalarOperationToDeltaLakeExprTest {
         operators = new ArrayList<>(List.of(operator));
         convertExpr = converter.convert(operators, context);
         expectedExpr = new Predicate("<", cDeltaDoubleCol, Literal.ofFloat((float) 5.5));
-        Assert.assertEquals(convertExpr.toString(), expectedExpr.toString());
+        Assertions.assertEquals(convertExpr.toString(), expectedExpr.toString());
 
         // date
         LocalDateTime localDateTime = LocalDateTime.now();
@@ -344,7 +347,7 @@ public class ScalarOperationToDeltaLakeExprTest {
         operators = new ArrayList<>(List.of(operator));
         convertExpr = converter.convert(operators, context);
         expectedExpr = new Predicate("<", cDeltaDateCol, Literal.ofDate((int) localDateTime.toLocalDate().toEpochDay()));
-        Assert.assertEquals(convertExpr.toString(), expectedExpr.toString());
+        Assertions.assertEquals(convertExpr.toString(), expectedExpr.toString());
 
         // datetime (timestamp)
         localDateTime = LocalDateTime.now();
@@ -355,7 +358,7 @@ public class ScalarOperationToDeltaLakeExprTest {
         ZoneId zoneId = TimeUtils.getTimeZone().toZoneId();
         long timestamp = localDateTime.atZone(zoneId).toEpochSecond() * 1000 * 1000 + localDateTime.getNano() / 1000;
         expectedExpr = new Predicate("<", cDeltaTimestampCol, Literal.ofTimestamp(timestamp));
-        Assert.assertEquals(convertExpr.toString(), expectedExpr.toString());
+        Assertions.assertEquals(convertExpr.toString(), expectedExpr.toString());
 
         // datetime (timestamp_ntz)
         localDateTime = LocalDateTime.now();
@@ -365,7 +368,7 @@ public class ScalarOperationToDeltaLakeExprTest {
         convertExpr = converter.convert(operators, context);
         timestamp = localDateTime.atZone(ZoneOffset.UTC).toEpochSecond() * 1000 * 1000 + localDateTime.getNano() / 1000;
         expectedExpr = new Predicate("<", cDeltaTimestampNTZCol, Literal.ofTimestamp(timestamp));
-        Assert.assertEquals(convertExpr.toString(), expectedExpr.toString());
+        Assertions.assertEquals(convertExpr.toString(), expectedExpr.toString());
 
         // varchar
         value = ConstantOperator.createVarchar("12345");
@@ -373,7 +376,7 @@ public class ScalarOperationToDeltaLakeExprTest {
         operators = new ArrayList<>(List.of(operator));
         convertExpr = converter.convert(operators, context);
         expectedExpr = new Predicate("<", cDeltaVarcharCol, Literal.ofString("12345"));
-        Assert.assertEquals(convertExpr.toString(), expectedExpr.toString());
+        Assertions.assertEquals(convertExpr.toString(), expectedExpr.toString());
 
         // char
         value = ConstantOperator.createChar("12345");
@@ -381,15 +384,15 @@ public class ScalarOperationToDeltaLakeExprTest {
         operators = new ArrayList<>(List.of(operator));
         convertExpr = converter.convert(operators, context);
         expectedExpr = new Predicate("<", cDeltaCharCol, Literal.ofString("12345"));
-        Assert.assertEquals(convertExpr.toString(), expectedExpr.toString());
+        Assertions.assertEquals(convertExpr.toString(), expectedExpr.toString());
 
         // hll
-        value = ConstantOperator.createObject("12345", Type.HLL);
+        value = ConstantOperator.createObject("12345", HLLType.HLL);
         operator = new BinaryPredicateOperator(BinaryType.LT, cHLLCol, value);
         operators = new ArrayList<>(List.of(operator));
         convertExpr = converter.convert(operators, context);
         expectedExpr = new Predicate("<", cDeltaHLLCol, Literal.ofString("12345"));
-        Assert.assertEquals(convertExpr.toString(), expectedExpr.toString());
+        Assertions.assertEquals(convertExpr.toString(), expectedExpr.toString());
     }
 
     @Test
@@ -406,41 +409,41 @@ public class ScalarOperationToDeltaLakeExprTest {
         operators = new ArrayList<>(List.of(ltOperator));
         Predicate convertExpr = converter.convert(operators, context);
         Predicate expectedExpr = new Predicate("<", cDeltaIntCol, literal);
-        Assert.assertEquals(convertExpr.toString(), expectedExpr.toString());
+        Assertions.assertEquals(convertExpr.toString(), expectedExpr.toString());
 
         // <=
         ScalarOperator leOperator = new BinaryPredicateOperator(BinaryType.LE, cIntCol, value);
         operators = new ArrayList<>(List.of(leOperator));
         convertExpr = converter.convert(operators, context);
         expectedExpr = new Predicate("<=", cDeltaIntCol, literal);
-        Assert.assertEquals(convertExpr.toString(), expectedExpr.toString());
+        Assertions.assertEquals(convertExpr.toString(), expectedExpr.toString());
 
         // >
         ScalarOperator gtOperator = new BinaryPredicateOperator(BinaryType.GT, cIntCol, value);
         operators = new ArrayList<>(List.of(gtOperator));
         convertExpr = converter.convert(operators, context);
         expectedExpr = new Predicate(">", cDeltaIntCol, literal);
-        Assert.assertEquals(convertExpr.toString(), expectedExpr.toString());
+        Assertions.assertEquals(convertExpr.toString(), expectedExpr.toString());
 
         // >=
         ScalarOperator geOperator = new BinaryPredicateOperator(BinaryType.GE, cIntCol, value);
         operators = new ArrayList<>(List.of(geOperator));
         convertExpr = converter.convert(operators, context);
         expectedExpr = new Predicate(">=", cDeltaIntCol, literal);
-        Assert.assertEquals(convertExpr.toString(), expectedExpr.toString());
+        Assertions.assertEquals(convertExpr.toString(), expectedExpr.toString());
 
         // ==
         ScalarOperator eqOperator = new BinaryPredicateOperator(BinaryType.EQ, cIntCol, value);
         operators = new ArrayList<>(List.of(eqOperator));
         convertExpr = converter.convert(operators, context);
         expectedExpr = new Predicate("=", cDeltaIntCol, literal);
-        Assert.assertEquals(convertExpr.toString(), expectedExpr.toString());
+        Assertions.assertEquals(convertExpr.toString(), expectedExpr.toString());
 
         // !=
         ScalarOperator neOperator = new BinaryPredicateOperator(BinaryType.NE, cIntCol, value);
         operators = new ArrayList<>(List.of(neOperator));
         convertExpr = converter.convert(operators, context);
         expectedExpr = new Predicate("NOT", new Predicate("=", cDeltaIntCol, literal));
-        Assert.assertEquals(convertExpr.toString(), expectedExpr.toString());
+        Assertions.assertEquals(convertExpr.toString(), expectedExpr.toString());
     }
 }

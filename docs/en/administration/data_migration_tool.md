@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Cross-cluster Data Migration Tool
@@ -16,6 +16,18 @@ The StarRocks Cross-cluster Data Migration Tool is provided by StarRocks Communi
 ## Preparations
 
 The following preparations must be performed on the target cluster for data migration.
+
+### Open ports
+
+If you have enabled the firewall, you must open these ports:
+
+| **Component** | **Port**     | **Default** |
+| ----------- | -------------- | ----------- |
+| FE          | query_port     | 9030 |
+| FE          | http_port      | 8030 |
+| FE          | rpc_port       | 9020 |
+| BE          | be_http_port   | 8040 |
+| BE          | be_port        | 9060 |
 
 ### Enable Legacy Compatibility for Replication
 
@@ -47,36 +59,6 @@ After the data migration is completed, you need to remove the configuration `ena
 ADMIN SET FRONTEND CONFIG("enable_legacy_compatibility_for_replication"="false");
 ```
 
-### Disable Compaction
-
-If the target cluster for data migration is a shared-data cluster, you need to manually disable Compaction before starting the data migration and re-enable it after the data migration is completed.
-
-1. You can check whether Compaction is enabled by using the following statement:
-
-   ```SQL
-   ADMIN SHOW FRONTEND CONFIG LIKE 'lake_compaction_max_tasks';
-   ```
-
-   If `0` is returned, it indicates that Compaction is disabled.
-
-2. Dynamically disable Compaction:
-
-   ```SQL
-   ADMIN SET FRONTEND CONFIG("lake_compaction_max_tasks"="0");
-   ```
-
-3. To prevent Compaction from automatically enabling during the data migration process in case of cluster restart, you also need to add the following configuration item in the FE configuration file **fe.conf**:
-
-   ```Properties
-   lake_compaction_max_tasks = 0
-   ```
-
-After the data migration is completed, you need to remove the configuration `lake_compaction_max_tasks = 0` from the configuration file, and dynamically enable Compaction using the following statement:
-
-```SQL
-ADMIN SET FRONTEND CONFIG("lake_compaction_max_tasks"="-1");
-```
-
 ### Configure Data Migration (Optional)
 
 You can configure data migration operations using the following FE and BE parameters. In most cases, the default configuration can meet your needs. If you wish to use the default configuration, you can skip this step.
@@ -96,11 +78,11 @@ The following FE parameters are dynamic configuration items. Refer to [Configure
 | replication_max_parallel_table_count  | 100         | -        | The maximum number of concurrent data synchronization tasks allowed. StarRocks creates one synchronization task for each table. |
 | replication_max_parallel_replica_count| 10240       | -        | The maximum number of tablet replica allowed for concurrent synchronization. |
 | replication_max_parallel_data_size_mb | 1048576     | MB       | The maximum size of data allowed for concurrent synchronization. |
-| replication_transaction_timeout_sec   | 3600        | Seconds  | The timeout duration for synchronization tasks.              |
+| replication_transaction_timeout_sec   | 86400       | Seconds  | The timeout duration for synchronization tasks.              |
 
 #### BE Parameters
 
-The following BE parameter is a dynamic configuration item. Refer to [Configure BE Dynamic Parameters](../administration/management/BE_configuration.md#configure-be-dynamic-parameters) on how to modify it.
+The following BE parameter is a dynamic configuration item. Refer to [Configure BE Dynamic Parameters](../administration/management/BE_configuration.md) on how to modify it.
 
 | **Parameter**       | **Default** | **Unit** | **Description**                                              |
 | ------------------- | ----------- | -------- | ------------------------------------------------------------ |
@@ -143,12 +125,17 @@ source_fe_host=
 source_fe_query_port=9030
 source_cluster_user=root
 source_cluster_password=
+source_cluster_password_secret_key=
 source_cluster_token=
 
 target_fe_host=
 target_fe_query_port=9030
 target_cluster_user=root
 target_cluster_password=
+target_cluster_password_secret_key=
+
+jdbc_connect_timeout_ms=30000
+jdbc_socket_timeout_ms=60000
 
 # Comma-separated list of database names or table names like <db_name> or <db_name.table_name>
 # example: db1,db2.tbl2,db3
@@ -159,16 +146,41 @@ exclude_data_list=
 # If there are no special requirements, please maintain the default values for the following configurations.
 target_cluster_storage_volume=
 target_cluster_replication_num=-1
+target_cluster_max_disk_used_percent=80
+# To maintain consistency with the source cluster, use null.
+target_cluster_enable_persistent_index=
+
+max_replication_data_size_per_job_in_gb=1024
 
 meta_job_interval_seconds=180
 meta_job_threads=4
 ddl_job_interval_seconds=10
 ddl_job_batch_size=10
+
+# table config
 ddl_job_allow_drop_target_only=false
 ddl_job_allow_drop_schema_change_table=true
 ddl_job_allow_drop_inconsistent_partition=true
+ddl_job_allow_drop_inconsistent_time_partition = true
+ddl_job_allow_drop_partition_target_only=true
+# index config
+enable_bitmap_index_sync=false
+ddl_job_allow_drop_inconsistent_bitmap_index=true
+ddl_job_allow_drop_bitmap_index_target_only=true
+# MV config
+enable_materialized_view_sync=false
+ddl_job_allow_drop_inconsistent_materialized_view=true
+ddl_job_allow_drop_materialized_view_target_only=false
+# View config
+enable_view_sync=false
+ddl_job_allow_drop_inconsistent_view=true
+ddl_job_allow_drop_view_target_only=false
+
 replication_job_interval_seconds=10
 replication_job_batch_size=10
+report_interval_seconds=300
+
+enable_table_property_sync=false
 ```
 
 The description of the parameters is as follows:
@@ -180,24 +192,44 @@ The description of the parameters is as follows:
 | source_fe_query_port                      | The query port (`query_port`) of the source cluster's FE.    |
 | source_cluster_user                       | The username used to log in to the source cluster. This user must be granted the OPERATE privilege on the SYSTEM level. |
 | source_cluster_password                   | The user password used to log in to the source cluster.      |
+| source_cluster_password_secret_key        | The secret key used to encrypt the password of the login user for the source cluster. The default value is an empty string, which means that the login password is not encrypted. If you want to encrypt `source_cluster_password`, you can get the encrypted `source_cluster_password` string by using SQL statement `SELECT TO_BASE64(AES_ENCRYPT('<source_cluster_password>','<source_cluster_password_ secret_key>'))`. |
 | source_cluster_token                      | Token of the source cluster. For information on how to obtain the cluster token, refer to [Obtain Cluster Token](#obtain-cluster-token) below. |
 | target_fe_host                            | The IP address or FQDN (Fully Qualified Domain Name) of the target cluster's FE. |
 | target_fe_query_port                      | The query port (`query_port`) of the target cluster's FE.    |
 | target_cluster_user                       | The username used to log in to the target cluster. This user must be granted the OPERATE privilege on the SYSTEM level. |
 | target_cluster_password                   | The user password used to log in to the target cluster.      |
+| target_cluster_password_secret_key        | The secret key used to encrypt the password of the login user for the target cluster. The default value is an empty string, which means that the login password is not encrypted. If you want to encrypt `target_cluster_password`, you can get the encrypted `target_cluster_password` string by using SQL statement `SELECT TO_BASE64(AES_ENCRYPT('<target_cluster_password>','<target_cluster_password_ secret_key>'))`. |
+| jdbc_connect_timeout_ms                   | JDBC connection timeout in milliseconds for FE queries. Default: `30000`. |
+| jdbc_socket_timeout_ms                    | JDBC socket timeout in milliseconds for FE queries. Default: `60000`. |
 | include_data_list                         | The databases and tables that need to be migrated, with multiple objects separated by commas (`,`). For example: `db1, db2.tbl2, db3`. This item takes effect prior to `exclude_data_list`. If you want to migrate all databases and tables in the cluster, you do not need to configure this item. |
 | exclude_data_list                         | The databases and tables that do not need to be migrated, with multiple objects separated by commas (`,`). For example: `db1, db2.tbl2, db3`. `include_data_list` takes effect prior to this item. If you want to migrate all databases and tables in the cluster, you do not need to configure this item. |
 | target_cluster_storage_volume             | The storage volume used to store tables in the target cluster when the target cluster is a shared-data cluster. If you want to use the default storage volume, you do not need to specify this item. |
 | target_cluster_replication_num            | The number of replicas specified when creating tables in the target cluster. If you want to use the same replica number as the source cluster, you do not need to specify this item. |
+| target_cluster_max_disk_used_percent      | Disk usage percentage threshold for BE nodes of the target cluster when the target cluster is shared-nothing. Migration is terminated when the disk usage of any BE in the target cluster exceeds this threshold. The default value is `80`, which means 80%. |
 | meta_job_interval_seconds                 | The interval, in seconds, at which the migration tool retrieves metadata from the source and target clusters. You can use the default value for this item. |
 | meta_job_threads                          | The number of threads used by the migration tool to obtain metadata from the source and target clusters. You can use the default value for this item. |
 | ddl_job_interval_seconds                  | The interval, in seconds, at which the migration tool executes DDL statements on the target cluster. You can use the default value for this item. |
 | ddl_job_batch_size                        | The batch size for executing DDL statements on the target cluster. You can use the default value for this item. |
-| ddl_job_allow_drop_target_only            | Whether to allow the migration tool to delete databases, tables, or partitions that exist only in the target cluster but not in the source cluster. The default is `false`, which means they will not be deleted. You can use the default value for this item. |
+| ddl_job_allow_drop_target_only            | Whether to allow the migration tool to delete databases or tables that exist only in the target cluster but not in the source cluster. The default is `false`, which means they will not be deleted. You can use the default value for this item. |
 | ddl_job_allow_drop_schema_change_table    | Whether to allow the migration tool to delete tables with inconsistent schemas between the source and target clusters. The default is `true`, meaning they will be deleted. You can use the default value for this item. The migration tool will automatically synchronize the deleted tables during the migration. |
 | ddl_job_allow_drop_inconsistent_partition | Whether to allow the migration tool to delete partitions with inconsistent data distribution between the source and target clusters. The default is `true`, meaning they will be deleted. You can use the default value for this item. The migration tool will automatically synchronize the deleted partitions during the migration. |
+| ddl_job_allow_drop_partition_target_only  | Whether to allow the migration tool to delete partitions that are deleted in the source cluster to keep the partitions consistent between the source and target clusters. The default is `true`, meaning they will be deleted. You can use the default value for this item. |
 | replication_job_interval_seconds          | The interval, in seconds, at which the migration tool triggers data synchronization tasks. You can use the default value for this item. |
 | replication_job_batch_size                | The batch size at which the migration tool triggers data synchronization tasks. You can use the default value for this item. |
+| max_replication_data_size_per_job_in_gb   | The data size threshold at which the migration tool triggers data synchronization tasks. Unit: GB. Multiple data synchronization tasks will be triggered if the size of the partition to be migrated exceed this value. The default value is `1024`. You can use the default value for this item. |
+| report_interval_seconds                   | The time interval at which the migration tool prints the progress information. Unit: Seconds. Default value: `300`. You can use the default value for this item. |
+| target_cluster_enable_persistent_index    | Whether to enable persistent index the in the target cluster. If this item is not specified, the target cluster is consistent with the source cluster. |
+| ddl_job_allow_drop_inconsistent_time_partition | Whether to allow the migration tool to delete partitions with inconsistent time between the source and target clusters. The default is `true`, meaning they will be deleted. You can use the default value for this item. The migration tool will automatically synchronize the deleted partitions during the migration. |
+| enable_bitmap_index_sync                  | Whether to enable synchronization for Bitmap indexes.         |
+| ddl_job_allow_drop_inconsistent_bitmap_index | Whether to allow the migration tool to delete inconsistent Bitmap indexes between the source and target clusters. The default is `true`, meaning they will be deleted. You can use the default value for this item. The migration tool will automatically synchronize the deleted indexes during the migration. |
+| ddl_job_allow_drop_bitmap_index_target_only | Whether to allow the migration tool to delete Bitmap indexes that are deleted in the source cluster to keep the indexes consistent between the source and target clusters. The default is `true`, meaning they will be deleted. You can use the default value for this item. |
+| enable_materialized_view_sync             | Whether to enable synchronization for materialized views.     |
+| ddl_job_allow_drop_inconsistent_materialized_view | Whether to allow the migration tool to delete inconsistent materialized views between the source and target clusters. The default is `true`, meaning they will be deleted. You can use the default value for this item. The migration tool will automatically synchronize the deleted materialized views during the migration. |
+| ddl_job_allow_drop_materialized_view_target_only | Whether to allow the migration tool to delete materialized views that are deleted in the source cluster to keep the materialized views consistent between the source and target clusters. The default is `true`, meaning they will be deleted. You can use the default value for this item. |
+| enable_view_sync                          | Whether to enable synchronization for views.                  |
+| ddl_job_allow_drop_inconsistent_view      | Whether to allow the migration tool to delete inconsistent views between the source and target clusters. The default is `true`, meaning they will be deleted. You can use the default value for this item. The migration tool will automatically synchronize the deleted views during the migration. |
+| ddl_job_allow_drop_view_target_only       | Whether to allow the migration tool to delete views that are deleted in the source cluster to keep the views consistent between the source and target clusters. The default is `true`, meaning they will be deleted. You can use the default value for this item. |
+| enable_table_property_sync                | Whether to enable synchronization for table properties.       |
 
 ### Obtain Cluster Token
 
@@ -240,19 +272,24 @@ vi conf/hosts.properties
 The default content of the file is as follows, describing how network address mapping is configured:
 
 ```Properties
-# <SOURCE/TARGET>_<domain>=<IP>
+# <SOURCE/TARGET>_<host>=<mappedHost>[;<srcPort>:<dstPort>[,<srcPort>:<dstPort>...]]
 ```
+
+:::note
+The `<host>` must match the address shown in the `IP` column returned by `SHOW FRONTENDS`, `SHOW BACKENDS`, or `SHOW COMPUTE NODES`.
+:::
 
 The following example performs these operations:
 
 1. Map the source cluster's private network addresses `192.1.1.1` and `192.1.1.2` to `10.1.1.1` and `10.1.1.2`.
-2. Map the target cluster's private network address `fe-0.starrocks.svc.cluster.local` to `10.1.2.1`.
+2. Map the source cluster's FE ports `8030` and `9030` to `38030` and `39030` on `10.1.1.1`.
+3. Map the target cluster's private network address `fe-0.starrocks.svc.cluster.local` to `10.1.2.1` and remap port `9030`.
 
 ```Properties
-# <SOURCE/TARGET>_<domain>=<IP>
-SOURCE_192.1.1.1=10.1.1.1
+# <SOURCE/TARGET>_<host>=<mappedHost>[;<srcPort>:<dstPort>[,<srcPort>:<dstPort>...]]
+SOURCE_192.1.1.1=10.1.1.1;8030:38030,9030:39030
 SOURCE_192.1.1.2=10.1.1.2
-TARGET_fe-0.starrocks.svc.cluster.local=10.1.2.1
+TARGET_fe-0.starrocks.svc.cluster.local=10.1.2.1;9030:19030
 ```
 
 ## Step 3: Start the Migration Tool
@@ -279,13 +316,13 @@ After configuring the tool, start the migration tool to initiate the data migrat
 
 You can check the migration progress through the migration tool log **log/sync.INFO.log**.
 
-Example:
+Example 1: View task progress.
 
 ![img](../_assets/data_migration_tool-1.png)
 
 The important metrics are as follows:
 
-- `Sync progress`: The progress of data migration. The migration tool regularly checks whether the data in the target cluster is lagging behind the source cluster. Therefore, a progress of 100% only means that the data synchronization is completed within the current check interval. If new data continues to be loaded into the source cluster, the progress may decrease in the next check interval.
+- `Sync job progress`: The progress of data migration. The migration tool regularly checks whether the data in the target cluster is lagging behind the source cluster. Therefore, a progress of 100% only means that the data synchronization is completed within the current check interval. If new data continues to be loaded into the source cluster, the progress may decrease in the next check interval.
 - `total`: The total number of all types of jobs in this migration operation.
 - `ddlPending`: The number of DDL jobs pending to be executed.
 - `jobPending`: The number of pending data synchronization jobs to be executed.
@@ -294,6 +331,18 @@ The important metrics are as follows:
 - `finished`: The number of data synchronization jobs that are finished.
 - `failed`: The number of failed data synchronization jobs. Failed data synchronization jobs will be resent. Therefore, in most cases, you can ignore this metric. If this value is significantly large, please contact our engineers.
 - `unknown`: The number of jobs with an unknown status. Theoretically, this value should always be `0`. If this value is not `0`, please contact our engineers.
+
+Example 2: View the table migration progress.
+
+![img](../_assets/data_migration_tool-2.png)
+
+- `Sync table progress`: Table migration progress, that is, the ratio of tables that have been migrated in this migration task to all the tables that need to be migrated.
+- `finishedTableRatio`: Ratio of tables with at least one successful synchronization task execution.
+- `expiredTableRatio`: Ratio of tables with expired data.
+- `total table`: Total number of tables involved in this data migration progress.
+- `finished table`: Number of tables with at least one successful synchronization task execution.
+- `unfinished table`: Number of tables with no synchronization task execution.
+- `expired table`: Number of tables with expired data.
 
 ### View Migration Transaction Status
 
@@ -335,3 +384,12 @@ FROM INFORMATION_SCHEMA.TABLES
 WHERE TABLE_TYPE = 'BASE TABLE' 
 ORDER BY TABLE_NAME;
 ```
+
+## Limits
+
+The list of objects that support synchronization currently is as follows (those not included indicate that synchronization is not supported):
+
+- Databases
+- Internal tables and their data
+- Materialized view schemas and their building statements (The data in the materialized view will not be synchronized. And if the base tables of the materialized view is not synchronized to the target cluster, the background refresh task of the materialized view reports an error.)
+- Logical views

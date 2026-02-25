@@ -16,27 +16,26 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Sets;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class UseCatalogStmtTest {
     private static ConnectContext ctx;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -82,22 +81,20 @@ public class UseCatalogStmtTest {
                 "use 'catalog hive_catalog'", ctx.getSessionVariable().getSqlMode()));
         executor.execute();
 
-        Assert.assertEquals("hive_catalog", ctx.getCurrentCatalog());
+        Assertions.assertEquals("hive_catalog", ctx.getCurrentCatalog());
 
         executor = new StmtExecutor(ctx, SqlParser.parseSingleStatement(
                 "use 'catalog default_catalog'", ctx.getSessionVariable().getSqlMode()));
         executor.execute();
 
-        Assert.assertEquals("default_catalog", ctx.getCurrentCatalog());
+        Assertions.assertEquals("default_catalog", ctx.getCurrentCatalog());
 
-        executor = new StmtExecutor(ctx, SqlParser.parseSingleStatement(
-                "use 'xxx default_catalog'", ctx.getSessionVariable().getSqlMode()));
-        executor.execute();
-        Assert.assertSame(ctx.getState().getStateType(), QueryState.MysqlStateType.ERR);
+        Assertions.assertThrows(com.starrocks.sql.parser.ParsingException.class, () ->
+                SqlParser.parseSingleStatement(
+                        "use 'xxx default_catalog'", ctx.getSessionVariable().getSqlMode()));
 
-        executor = new StmtExecutor(ctx, SqlParser.parseSingleStatement(
-                "use 'catalog default_catalog xxx'", ctx.getSessionVariable().getSqlMode()));
-        executor.execute();
-        Assert.assertSame(ctx.getState().getStateType(), QueryState.MysqlStateType.ERR);
+        Assertions.assertThrows(com.starrocks.sql.parser.ParsingException.class, () ->
+                SqlParser.parseSingleStatement(
+                        "use 'catalog default_catalog xxx'", ctx.getSessionVariable().getSqlMode()));
     }
 }

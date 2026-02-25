@@ -21,6 +21,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorTableInfo;
@@ -34,6 +35,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 public class MVMetaVersionRepairer {
     private static final Logger LOG = LogManager.getLogger(MVMetaVersionRepairer.class);
@@ -41,13 +43,12 @@ public class MVMetaVersionRepairer {
     /**
      * Repair base table version changes for all related materialized views when table has no data changed but only version
      * changes which happens in cloud-native environment for background compaction.
-     * @param db table's database
      * @param table changed table
      * @param partitionRepairInfos table's changed partition infos
      */
-    public static void repairBaseTableVersionChanges(Database db, Table table,
+    public static void repairBaseTableVersionChanges(Table table,
                                                      List<MVRepairHandler.PartitionRepairInfo> partitionRepairInfos) {
-        if (db == null || table == null) {
+        if (table == null) {
             return;
         }
         if (!table.isNativeTableOrMaterializedView()) {
@@ -62,21 +63,23 @@ public class MVMetaVersionRepairer {
                 LOG.warn("mv db {} not found", mvId.getDbId());
                 continue;
             }
-            MaterializedView mv = (MaterializedView) mvDb.getTable(mvId.getId());
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(mvDb.getId(), mvId.getId());
             if (mv == null) {
                 LOG.warn("mv {} not found", mvId.getId());
                 continue;
             }
 
-            // acquire db write lock to modify meta of mv
+            // acquire mvDb + mv write lock to modify meta of mv
             Locker locker = new Locker();
-            if (!locker.lockDatabaseAndCheckExist(db, mv, LockType.WRITE)) {
+            if (!locker.tryLockTableWithIntensiveDbLock(mvDb.getId(), mv.getId(), LockType.WRITE,
+                    Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
                 continue;
             }
             try {
                 repairBaseTableTableVersionChange(mv, table, partitionRepairInfos);
             } finally {
-                locker.unLockTableWithIntensiveDbLock(db, mv, LockType.WRITE);
+                locker.unLockTableWithIntensiveDbLock(mvDb.getId(), mv.getId(), LockType.WRITE);
             }
         }
     }
@@ -100,9 +103,10 @@ public class MVMetaVersionRepairer {
         LOG.info("repair base table {} version changes for mv {}, changed versions:{}",
                 table.getName(), mv.getName(), changedVersions);
         // update edit log
-        long maxChangedTableRefreshTime =
-                MvUtils.getMaxTablePartitionInfoRefreshTime(Lists.newArrayList(changedVersions));
+        long maxChangedTableRefreshTime = MvUtils.getMaxTablePartitionInfoRefreshTime(changedVersions);
         MVVersionManager.updateEditLogAfterVersionMetaChanged(mv, maxChangedTableRefreshTime);
+        LOG.info("Update edit log after version changed for mv {}, maxChangedTableRefreshTime:{}",
+                mv.getName(), maxChangedTableRefreshTime);
     }
 
     /**

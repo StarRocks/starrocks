@@ -14,11 +14,11 @@
 
 package com.starrocks.connector.parser.trino;
 
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class TrinoFunctionTransformTest extends TrinoTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         TrinoTestBase.beforeClass();
     }
@@ -60,18 +60,18 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         assertPlanContains(sql, "array_concat([1,2,3], [4,5,6])");
 
         sql = "select concat(c1, c2) from test_array";
-        assertPlanContains(sql, "array_concat(2: c1, CAST(3: c2 AS ARRAY<VARCHAR(65533)>))");
+        assertPlanContains(sql, "array_concat(2: c1, CAST(3: c2 AS ARRAY<VARCHAR>))");
 
         sql = "select concat(c1, c2, array[1,2], array[3,4]) from test_array";
-        assertPlanContains(sql, "array_concat(2: c1, CAST(3: c2 AS ARRAY<VARCHAR(65533)>), " +
-                "CAST([1,2] AS ARRAY<VARCHAR(65533)>), " +
-                "CAST([3,4] AS ARRAY<VARCHAR(65533)>)");
+        assertPlanContains(sql, "array_concat(2: c1, CAST(3: c2 AS ARRAY<VARCHAR>), " +
+                "['1','2'], " +
+                "['3','4']");
 
         sql = "select concat(c2, 2) from test_array";
-        assertPlanContains(sql, "array_concat(3: c2, CAST([2] AS ARRAY<INT>))");
+        assertPlanContains(sql, "array_concat(3: c2, [2])");
 
         sql = "select contains(array[1,2,3], 1)";
-        assertPlanContains(sql, "array_contains([1,2,3], 1)");
+        assertPlanContains(sql, " <slot 2> : TRUE");
 
         sql = "select slice(array[1,2,3,4], 2, 2)";
         assertPlanContains(sql, "array_slice([1,2,3,4], 2, 2)");
@@ -88,6 +88,15 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
 
         sql = "select concat_ws('.', 5,6,'s',8,9,10)";
         assertPlanContains(sql, "'5.6.s.8.9.10'");
+
+        sql = "select array_agg(v1) from t0";
+        assertPlanContains(sql, "array_agg(1: v1)");
+
+        sql = "select array_agg(distinct v1) from t0";
+        assertPlanContains(sql, "array_agg_distinct(1: v1)");
+
+        sql = "select array_agg(distinct v1 order by v2) from t0";
+        assertPlanContains(sql, "array_agg(1: v1, 2: v2)");
     }
 
     @Test
@@ -109,6 +118,18 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
     public void testDateFnTransform() throws Exception {
         String sql = "select to_unixtime(TIMESTAMP '2023-04-22 00:00:00');";
         assertPlanContains(sql, "1682092800");
+
+        sql = "select from_unixtime(1724049401);";
+        assertPlanContains(sql, "2024-08-19 14:36:41");
+
+        sql = "select from_unixtime(1724049401, 'America/Bogota');";
+        assertPlanContains(sql, "2024-08-19 01:36:41");
+
+        sql = "select from_unixtime(1724049401, 1, 1);";
+        assertPlanContains(sql, "2024-08-19 15:37:41");
+
+        sql = "select at_timezone(TIMESTAMP '2024-08-19 14:36:41', 'America/Bogota');";
+        assertPlanContains(sql, "2024-08-19 01:36:41");
 
         sql = "select date_parse('2022/10/20/05', '%Y/%m/%d/%H');";
         assertPlanContains(sql, "2022-10-20 05:00:00");
@@ -159,13 +180,13 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         assertPlanContains(sql, "week_iso('2023-01-01 00:00:00')");
 
         sql = "select format_datetime(TIMESTAMP '2023-06-25 11:10:20', 'yyyyMMdd HH:mm:ss')";
-        assertPlanContains(sql, "jodatime_format('2023-06-25 11:10:20', 'yyyyMMdd HH:mm:ss')");
+        assertPlanContains(sql, "20230625 11:10:20");
 
         sql = "select format_datetime(date '2023-06-25', 'yyyyMMdd HH:mm:ss');";
-        assertPlanContains(sql, "jodatime_format('2023-06-25', 'yyyyMMdd HH:mm:ss')");
+        assertPlanContains(sql, "20230625 00:00:00");
 
         sql = "select to_char(TIMESTAMP '2023-06-25 11:10:20', 'yyyyMMdd HH:mm:ss');";
-        assertPlanContains(sql, "jodatime_format('2023-06-25 11:10:20', 'yyyyMMdd HH:mm:ss')");
+        assertPlanContains(sql, "20230625 11:10:20");
 
         sql = "select parse_datetime('2023-08-02 14:37:02', 'yyyy-MM-dd HH:mm:ss')";
         assertPlanContains(sql, "str_to_jodatime('2023-08-02 14:37:02', 'yyyy-MM-dd HH:mm:ss')");
@@ -173,11 +194,16 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         sql = "select parse_datetime('2023-05','yyyy-MM')";
         assertPlanContains(sql, "str_to_jodatime('2023-05', 'yyyy-MM')");
 
+        sql = "select parse_datetime('2023-08-02T14:37:02', 'yyyy-MM-dd''T''HH:mm:ss''Z''')";
+        assertPlanContains(sql, "str_to_jodatime('2023-08-02T14:37:02', 'yyyy-MM-ddTHH:mm:ss')");
+
+        connectContext.getSessionVariable().setDisableFunctionFoldConstants(true);
         sql = "select last_day_of_month(timestamp '2023-07-01 00:00:00');";
         assertPlanContains(sql, "last_day('2023-07-01 00:00:00', 'month')");
 
         sql = "select last_day_of_month(date '2023-07-01');";
-        assertPlanContains(sql, "last_day('2023-07-01 00:00:00', 'month')");
+        assertPlanContains(sql, "last_day('2023-07-01', 'month')");
+        connectContext.getSessionVariable().setDisableFunctionFoldConstants(false);
 
         sql = "select date_diff('month', timestamp '2023-07-31', timestamp '2023-08-01');";
         assertPlanContains(sql, "date_diff('month', '2023-08-01 00:00:00', '2023-07-31 00:00:00')");
@@ -190,6 +216,18 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
 
         sql = "select to_timestamp('2022-02-02', 'yyyy-mm-dd')";
         assertPlanContains(sql, " to_tera_timestamp('2022-02-02', 'yyyy-mm-dd')");
+
+        sql = "select year_of_week('2022-02-02')";
+        assertPlanContains(sql, "<slot 2> : 2022");
+
+        sql = "select yow('2022-02-02')";
+        assertPlanContains(sql, "<slot 2> : 2022");
+
+        sql = "select from_iso8601_timestamp('2025-02-02 14:37:02')";
+        assertPlanContains(sql, "'2025-02-02 14:37:02'");
+
+        sql = "select from_iso8601_timestamp('2025-02-02')";
+        assertPlanContains(sql, "'2025-02-02 00:00:00'");
     }
 
     @Test
@@ -303,10 +341,10 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         assertPlanContains(sql, "parse_json('{\"a\": {\"b\": 1}}')");
 
         sql = "select json_extract(json_parse('{\"a\": {\"b\": 1}}'), '$.a.b')";
-        assertPlanContains(sql, "get_json_string(parse_json('{\"a\": {\"b\": 1}}'), '$.a.b')");
+        assertPlanContains(sql, "json_query(parse_json('{\"a\": {\"b\": 1}}'), '$.a.b')");
 
         sql = "select json_extract(JSON '{\"a\": {\"b\": 1}}', '$.a.b');";
-        assertPlanContains(sql, "get_json_string('{\"a\": {\"b\": 1}}', '$.a.b')");
+        assertPlanContains(sql, "json_query(CAST('{\"a\": {\"b\": 1}}' AS JSON), '$.a.b')");
 
         sql = "select json_format(JSON '[1, 2, 3]')";
         assertPlanContains(sql, "'[1, 2, 3]'");
@@ -328,6 +366,15 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
     }
 
     @Test
+    public void testExtractFnTransform() throws Exception {
+        String sql = "SELECT extract(dow FROM TIMESTAMP '2022-10-20 05:10:00')";
+        assertPlanContains(sql, "dayofweek_iso('2022-10-20 05:10:00')");
+        sql = "SELECT extract(week FROM TIMESTAMP '2022-10-20 05:10:00')";
+        assertPlanContains(sql, "week_iso('2022-10-20 05:10:00')");
+    }
+
+
+    @Test
     public void testBitFnTransform() throws Exception {
         String sql = "select bitwise_and(19,25)";
         assertPlanContains(sql, "17");
@@ -346,6 +393,12 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
 
         sql = "select bitwise_right_shift(8, 3)";
         assertPlanContains(sql, "8 BITSHIFTRIGHT 3");
+    }
+
+    @Test
+    public void testMathFnTransform() throws Exception {
+        String sql = "select truncate(19.25)";
+        assertPlanContains(sql, "truncate(19.25, 0)");
     }
 
     @Test
@@ -453,5 +506,11 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
 
         sql = "select merge(approx_set(\"tc\")) from tall";
         assertPlanContains(sql, "hll_raw_agg(hll_hash(CAST(3: tc AS VARCHAR)))");
+    }
+
+    @Test
+    public void testMapFunction() throws Exception {
+        String sql = "select map_agg('key', 'value')";
+        assertPlanContains(sql, "array_agg('key'), array_agg('value')", "map_from_arrays(2: array_agg, 3: array_agg)");
     }
 }

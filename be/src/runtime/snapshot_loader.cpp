@@ -51,7 +51,9 @@
 #include "runtime/broker_mgr.h"
 #include "runtime/exec_env.h"
 #include "storage/index/index_descriptor.h"
+#ifndef __APPLE__
 #include "storage/index/inverted/clucene/clucene_plugin.h"
+#endif
 #include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
@@ -87,17 +89,14 @@ SnapshotLoader::SnapshotLoader(ExecEnv* env, int64_t job_id, int64_t task_id)
 Status SnapshotLoader::upload(const std::map<std::string, std::string>& src_to_dest_path, const TUploadReq& upload,
                               std::map<int64_t, std::vector<std::string>>* tablet_files) {
     if (!upload.__isset.use_broker || upload.use_broker) {
-        LOG(INFO) << "begin to upload snapshot files. num: " << src_to_dest_path.size()
-                  << ", broker addr: " << upload.broker_addr << ", job: " << _job_id << ", task" << _task_id;
+        VLOG(2) << "begin to upload snapshot files. num: " << src_to_dest_path.size()
+                << ", broker addr: " << upload.broker_addr << ", job id: " << _job_id << ", task id: " << _task_id;
     } else {
-        LOG(INFO) << "begin to upload snapshot files. num: " << src_to_dest_path.size() << ", job: " << _job_id
-                  << ", task" << _task_id;
+        VLOG(2) << "begin to upload snapshot files. num: " << src_to_dest_path.size() << ", job id: " << _job_id
+                << ", task id: " << _task_id;
     }
 
-    // check if job has already been cancelled
-    int tmp_counter = 1;
-    RETURN_IF_ERROR(_report_every(0, &tmp_counter, 0, 0, TTaskType::type::UPLOAD));
-
+    int64_t start_ms = MonotonicMillis();
     Status status = Status::OK();
     // 1. validate local tablet snapshot paths
     RETURN_IF_ERROR(_check_local_snapshot_paths(src_to_dest_path, true));
@@ -186,39 +185,47 @@ Status SnapshotLoader::upload(const std::map<std::string, std::string>& src_to_d
             // open broker writer. file name end with ".part"
             // it will be renamed to ".md5sum" after upload finished
             auto full_remote_file = dest_path + "/" + local_file;
-            auto tmp_broker_file_name = full_remote_file + ".part";
+            auto tmp_remote_file_name = full_remote_file + ".part";
+            auto final_remote_file_name = full_remote_file + "." + md5sum;
             auto local_file_path = src_path + "/" + local_file;
             std::unique_ptr<WritableFile> remote_writable_file;
             WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
             if (!upload.__isset.use_broker || upload.use_broker) {
                 BrokerFileSystem fs_broker(upload.broker_addr, upload.broker_prop);
-                ASSIGN_OR_RETURN(remote_writable_file, fs_broker.new_writable_file(opts, tmp_broker_file_name));
+                ASSIGN_OR_RETURN(remote_writable_file, fs_broker.new_writable_file(opts, tmp_remote_file_name));
             } else {
-                ASSIGN_OR_RETURN(remote_writable_file, fs->new_writable_file(opts, tmp_broker_file_name));
+                if (fs->type() != FileSystem::S3) {
+                    ASSIGN_OR_RETURN(remote_writable_file, fs->new_writable_file(opts, tmp_remote_file_name));
+                } else {
+                    // Not need rename for S3
+                    ASSIGN_OR_RETURN(remote_writable_file, fs->new_writable_file(opts, final_remote_file_name));
+                }
             }
             ASSIGN_OR_RETURN(auto input_file, FileSystem::Default()->new_sequential_file(local_file_path));
-            auto res = fs::copy(input_file.get(), remote_writable_file.get(), 1024 * 1024);
-            if (!res.ok()) {
-                return res.status();
-            }
-            LOG(INFO) << "finished to write the file: " << local_file_path << ", length: " << *res;
+            ASSIGN_OR_RETURN(auto file_size,
+                             fs::copy(input_file.get(), remote_writable_file.get(), config::upload_buffer_size));
             RETURN_IF_ERROR(remote_writable_file->close());
+            VLOG(2) << "finished to upload file: " << local_file_path << ", length: " << file_size;
+
             // rename file to end with ".md5sum"
             if (!upload.__isset.use_broker || upload.use_broker) {
-                RETURN_IF_ERROR(_rename_remote_file(*client, full_remote_file + ".part",
-                                                    full_remote_file + "." + md5sum, upload.broker_prop));
+                RETURN_IF_ERROR(
+                        _rename_remote_file(*client, tmp_remote_file_name, final_remote_file_name, upload.broker_prop));
             } else {
-                RETURN_IF_ERROR(_rename_remote_file_without_broker(fs, full_remote_file + ".part",
-                                                                   full_remote_file + "." + md5sum));
+                if (fs->type() != FileSystem::S3) {
+                    RETURN_IF_ERROR(
+                            _rename_remote_file_without_broker(fs, tmp_remote_file_name, final_remote_file_name));
+                }
             }
         } // end for each tablet's local files
 
         tablet_files->emplace(tablet_id, local_files_with_checksum);
         finished_num++;
-        LOG(INFO) << "finished to write tablet to remote. local path: " << src_path << ", remote path: " << dest_path;
+        VLOG(2) << "finished to write tablet to remote. local path: " << src_path << ", remote path: " << dest_path;
     } // end for each tablet path
 
-    LOG(INFO) << "finished to upload snapshots. job: " << _job_id << ", task id: " << _task_id;
+    LOG(INFO) << "finished to upload snapshots. num: " << src_to_dest_path.size() << ", job id: " << _job_id
+              << ", task id: " << _task_id << ", cost: " << (MonotonicMillis() - start_ms) << "ms.";
     return status;
 }
 
@@ -231,15 +238,11 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
                                 const TDownloadReq& download, std::vector<int64_t>* downloaded_tablet_ids) {
     if (!download.__isset.use_broker || download.use_broker) {
         LOG(INFO) << "begin to download snapshot files. num: " << src_to_dest_path.size()
-                  << ", broker addr: " << download.broker_addr << ", job: " << _job_id << ", task id: " << _task_id;
+                  << ", broker addr: " << download.broker_addr << ", job id: " << _job_id << ", task id: " << _task_id;
     } else {
-        LOG(INFO) << "begin to download snapshot files. num: " << src_to_dest_path.size() << ", job: " << _job_id
+        LOG(INFO) << "begin to download snapshot files. num: " << src_to_dest_path.size() << ", job id: " << _job_id
                   << ", task id: " << _task_id;
     }
-
-    // check if job has already been cancelled
-    int tmp_counter = 1;
-    RETURN_IF_ERROR(_report_every(0, &tmp_counter, 0, 0, TTaskType::type::DOWNLOAD));
 
     Status status = Status::OK();
     // 1. validate local tablet snapshot paths
@@ -383,11 +386,8 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
             // 3. open local file for write
             WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
             ASSIGN_OR_RETURN(auto local_file, FileSystem::Default()->new_writable_file(opts, full_local_file));
-
-            auto res = fs::copy(remote_sequential_file.get(), local_file.get(), 1024 * 1024);
-            if (!res.ok()) {
-                return res.status();
-            }
+            ASSIGN_OR_RETURN(auto file_size,
+                             fs::copy(remote_sequential_file.get(), local_file.get(), config::download_buffer_size));
             RETURN_IF_ERROR(local_file->close());
 
             // 5. check md5 of the downloaded file
@@ -403,7 +403,7 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
 
             // local_files always keep the updated local files
             local_files.push_back(local_file_name);
-            LOG(INFO) << "finished to download the file: " << full_local_file << ", length: " << file_len;
+            LOG(INFO) << "finished to download the file: " << full_local_file << ", length: " << file_size;
         } // end for all remote files
 
         // finally, delete local files which are not in remote
@@ -433,7 +433,7 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
         finished_num++;
     } // end for src_to_dest_path
 
-    LOG(INFO) << "finished to download snapshots. job: " << _job_id << ", task id: " << _task_id;
+    LOG(INFO) << "finished to download snapshots. job id: " << _job_id << ", task id: " << _task_id;
     return status;
 }
 
@@ -443,7 +443,7 @@ Status SnapshotLoader::primary_key_move(const std::string& snapshot_path, const 
     std::string tablet_path = tablet->schema_hash_path();
     std::string store_path = tablet->data_dir()->path();
     LOG(INFO) << "begin to move snapshot files. from: " << snapshot_path << ", to: " << tablet_path
-              << ", store: " << store_path << ", job: " << _job_id << ", task id: " << _task_id;
+              << ", store: " << store_path << ", job id: " << _job_id << ", task id: " << _task_id;
 
     Status status = Status::OK();
 
@@ -581,7 +581,7 @@ Status SnapshotLoader::move(const std::string& snapshot_path, const TabletShared
     std::string tablet_path = tablet->schema_hash_path();
     std::string store_path = tablet->data_dir()->path();
     LOG(INFO) << "begin to move snapshot files. from: " << snapshot_path << ", to: " << tablet_path
-              << ", store: " << store_path << ", job: " << _job_id << ", task id: " << _task_id;
+              << ", store: " << store_path << ", job id: " << _job_id << ", task id: " << _task_id;
 
     Status status = Status::OK();
 
@@ -804,7 +804,7 @@ Status SnapshotLoader::_check_local_snapshot_paths(const std::map<std::string, s
             return Status::RuntimeError(ss.str());
         }
     }
-    LOG(INFO) << "all local snapshot paths are existing. num: " << src_to_dest_path.size();
+    VLOG(2) << "all local snapshot paths are existing. num: " << src_to_dest_path.size();
     return Status::OK();
 }
 
@@ -837,7 +837,7 @@ Status SnapshotLoader::_get_existing_files_from_remote(BrokerServiceConnection& 
             LOG(WARNING) << ss.str();
             return Status::InternalError(ss.str());
         }
-        LOG(INFO) << "finished to list files from remote path. file num: " << list_rep.files.size();
+        VLOG(2) << "finished to list files from remote path. file num: " << list_rep.files.size();
 
         // split file name and checksum
         for (const auto& file : list_rep.files) {
@@ -859,9 +859,10 @@ Status SnapshotLoader::_get_existing_files_from_remote(BrokerServiceConnection& 
                     << ", checksum: " << std::string(file_name, pos + 1);
         }
 
-        LOG(INFO) << "finished to split files. valid file num: " << files->size();
+        VLOG(2) << "finished to split files. valid file num: " << files->size();
 
     } catch (apache::thrift::TException& e) {
+        (void)client.reopen(config::thrift_rpc_timeout_ms);
         std::stringstream ss;
         ss << "failed to list files in remote path: " << remote_path << ", msg: " << e.what();
         LOG(WARNING) << ss.str();
@@ -907,7 +908,7 @@ Status SnapshotLoader::_get_existing_files_from_remote_without_broker(const std:
         return st;
     }
 
-    LOG(INFO) << "finished to split files. total file num: " << file_num << " valid file num: " << files->size();
+    VLOG(2) << "finished to split files. total file num: " << file_num << " valid file num: " << files->size();
 
     return Status::OK();
 }
@@ -921,7 +922,7 @@ Status SnapshotLoader::_get_existing_files_from_local(const std::string& local_p
         LOG(WARNING) << ss.str();
         return status;
     }
-    LOG(INFO) << "finished to list files in local path: " << local_path << ", file num: " << local_files->size();
+    VLOG(2) << "finished to list files in local path: " << local_path << ", file num: " << local_files->size();
     return Status::OK();
 }
 
@@ -950,13 +951,14 @@ Status SnapshotLoader::_rename_remote_file(BrokerServiceConnection& client, cons
             return Status::InternalError(ss.str());
         }
     } catch (apache::thrift::TException& e) {
+        (void)client.reopen(config::thrift_rpc_timeout_ms);
         std::stringstream ss;
         ss << "Fail to rename file: " << orig_name << " to: " << new_name << " msg:" << e.what();
         LOG(WARNING) << ss.str();
         return Status::ThriftRpcError(ss.str());
     }
 
-    LOG(INFO) << "finished to rename file. orig: " << orig_name << ", new: " << new_name;
+    VLOG(2) << "finished to rename file. orig: " << orig_name << ", new: " << new_name;
 
     return Status::OK();
 }
@@ -970,7 +972,7 @@ Status SnapshotLoader::_rename_remote_file_without_broker(const std::unique_ptr<
         LOG(WARNING) << ss.str();
         return Status::InternalError(ss.str());
     }
-    LOG(INFO) << "finished to rename file. orig: " << orig_name << ", new: " << new_name;
+    VLOG(2) << "finished to rename file. orig: " << orig_name << ", new: " << new_name;
 
     return Status::OK();
 }
@@ -1012,9 +1014,11 @@ Status SnapshotLoader::_replace_tablet_id(const std::string& file_name, int64_t 
                _end_with(file_name, ".vi")) {
         *new_file_name = file_name;
         return Status::OK();
+#ifndef __APPLE__
     } else if (CLucenePlugin::is_index_files(file_name)) {
         *new_file_name = file_name;
         return Status::OK();
+#endif
     } else {
         return Status::InternalError("invalid tablet file name: " + file_name);
     }

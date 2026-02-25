@@ -14,13 +14,19 @@
 
 package com.starrocks.sql.optimizer;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.ColocateTableIndex;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.system.SystemTable;
+import com.starrocks.connector.BucketProperty;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.optimizer.base.CTEProperty;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionCol;
@@ -30,6 +36,7 @@ import com.starrocks.sql.optimizer.base.EmptyDistributionProperty;
 import com.starrocks.sql.optimizer.base.EmptySortProperty;
 import com.starrocks.sql.optimizer.base.EquivalentDescriptor;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
+import com.starrocks.sql.optimizer.base.HashDistributionDescBP;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.base.SortProperty;
@@ -39,9 +46,12 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperato
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
@@ -51,10 +61,13 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalNestLoopJoinOperato
 import com.starrocks.sql.optimizer.operator.physical.PhysicalNoCTEOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalRawValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalSetOperation;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -65,13 +78,16 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static com.google.common.base.Preconditions.checkState;
+import static com.starrocks.sql.optimizer.base.HashDistributionDesc.SourceType.LOCAL;
 import static com.starrocks.sql.optimizer.base.HashDistributionDesc.SourceType.SHUFFLE_AGG;
 import static com.starrocks.sql.optimizer.base.HashDistributionDesc.SourceType.SHUFFLE_JOIN;
 
@@ -135,7 +151,6 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
         EquivalentDescriptor leftDesc = leftScanDistributionSpec.getEquivDesc();
         EquivalentDescriptor rightDesc = rightScanDistributionSpec.getEquivDesc();
 
-
         ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         long leftTableId = leftDesc.getTableId();
         long rightTableId = rightDesc.getTableId();
@@ -181,13 +196,13 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
         EquivalentDescriptor equivDesc = distributionSpec.getEquivDesc();
 
         JoinOperator joinOperator = node.getJoinType();
-        if (joinOperator.isInnerJoin()) {
+        if (joinOperator.isAnyInnerJoin()) {
             for (int i = 0; i < leftOnPredicateColumns.size(); i++) {
                 DistributionCol leftCol = leftOnPredicateColumns.get(i);
                 DistributionCol rightCol = rightOnPredicateColumns.get(i);
                 equivDesc.unionDistributionCols(leftCol, rightCol);
             }
-        } else if (joinOperator.isLeftOuterJoin() || joinOperator.isRightOuterJoin()) {
+        } else if (joinOperator.isAnyLeftOuterJoin() || joinOperator.isRightOuterJoin()) {
             for (int i = 0; i < leftOnPredicateColumns.size(); i++) {
                 DistributionCol leftCol = leftOnPredicateColumns.get(i);
                 DistributionCol rightCol = rightOnPredicateColumns.get(i);
@@ -206,6 +221,87 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
     }
 
     @Override
+    public PhysicalPropertySet visitPhysicalUnion(PhysicalUnionOperator node, ExpressionContext context) {
+        return processPhysicalSetOperation(node, context);
+    }
+
+    @Override
+    public PhysicalPropertySet visitPhysicalExcept(PhysicalExceptOperator node, ExpressionContext context) {
+        return processPhysicalSetOperation(node, context);
+    }
+
+    @Override
+    public PhysicalPropertySet visitPhysicalIntersect(PhysicalIntersectOperator node, ExpressionContext context) {
+        return processPhysicalSetOperation(node, context);
+    }
+
+    private PhysicalPropertySet processPhysicalSetOperation(PhysicalSetOperation node, ExpressionContext context) {
+        DistributionSpec inputDistSpec = childrenOutputProperties.get(0).getDistributionProperty().getSpec();
+        if (inputDistSpec.getType().equals(DistributionSpec.DistributionType.ROUND_ROBIN)) {
+            return visitOperator(node, context);
+        }
+
+        if (!(inputDistSpec instanceof HashDistributionSpec)) {
+            return visitOperator(node, context);
+        }
+
+        HashDistributionSpec inputHashDistSpec = (HashDistributionSpec) inputDistSpec;
+        HashDistributionDesc inputHashDistDesc = inputHashDistSpec.getHashDistributionDesc();
+
+        if (inputHashDistDesc.isLocal()) {
+            List<DistributionCol> inputColumns = node.getChildOutputColumns().get(0)
+                    .stream()
+                    .map(col -> new DistributionCol(col.getId(), true))
+                    .collect(Collectors.toList());
+
+            List<DistributionCol> outputColumns = node.getOutputColumnRefOp()
+                    .stream()
+                    .map(col -> new DistributionCol(col.getId(), true))
+                    .collect(Collectors.toList());
+
+            List<List<DistributionCol>> outputShuffleColumns = Lists.newArrayList();
+            for (int i = 0; i < inputHashDistDesc.getDistributionCols().size(); ++i) {
+                DistributionCol inputCol = inputHashDistDesc.getDistributionCols().get(i);
+                List<DistributionCol> outputShuffleCols = IntStream.range(0, inputColumns.size())
+                        .filter(k -> inputHashDistSpec.getEquivDesc().isConnected(inputCol, inputColumns.get(k)))
+                        .mapToObj(outputColumns::get)
+                        .collect(Collectors.toList());
+                outputShuffleColumns.add(outputShuffleCols);
+            }
+            Preconditions.checkArgument(outputShuffleColumns.stream().allMatch(cols -> cols.size() > 0));
+            List<Integer> columnIds = outputShuffleColumns.stream()
+                    .map(cols -> cols.get(0).getColId())
+                    .collect(Collectors.toList());
+
+            HashDistributionDesc hashDistDesc = new HashDistributionDesc(columnIds, LOCAL);
+            EquivalentDescriptor equivalentDescriptor = new EquivalentDescriptor(
+                    inputHashDistSpec.getEquivDesc().getTableId(), inputHashDistSpec.getEquivDesc().getPartitionIds());
+
+            List<DistributionCol> shuffleColumns = outputShuffleColumns.stream()
+                    .map(cols -> cols.get(0))
+                    .collect(Collectors.toList());
+
+            equivalentDescriptor.initDistributionUnionFind(shuffleColumns);
+            outputShuffleColumns.forEach(columns -> columns.stream().skip(1)
+                    .forEach(col -> equivalentDescriptor.unionDistributionCols(columns.get(0), col)));
+
+            HashDistributionSpec hashDistSpec = new HashDistributionSpec(hashDistDesc, equivalentDescriptor);
+            PhysicalPropertySet propertySet =
+                    new PhysicalPropertySet(DistributionProperty.createProperty(hashDistSpec));
+            return mergeCTEProperty(propertySet);
+        } else {
+            List<Integer> columnIds = node.getOutputColumnRefOp().stream()
+                    .map(ColumnRefOperator::getId)
+                    .collect(Collectors.toList());
+            HashDistributionDesc hashDistDesc = new HashDistributionDesc(columnIds, SHUFFLE_JOIN);
+            HashDistributionSpec hashDistSpec = DistributionSpec.createHashDistributionSpec(hashDistDesc);
+            PhysicalPropertySet propertySet =
+                    new PhysicalPropertySet(DistributionProperty.createProperty(hashDistSpec));
+            return mergeCTEProperty(propertySet);
+        }
+    }
+
+    @Override
     public PhysicalPropertySet visitPhysicalHashJoin(PhysicalHashJoinOperator node, ExpressionContext context) {
         return mergeCTEProperty(visitPhysicalJoin(node, context));
     }
@@ -220,6 +316,19 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
         return mergeCTEProperty(childrenOutputProperties.get(0));
     }
 
+    private PhysicalPropertySet resetSortProperty(PhysicalPropertySet propertySet) {
+        final SessionVariable sv = ConnectContext.get().getSessionVariable();
+        // Spill partition join and partition join operations break ordering.
+        // When these optimizations are enabled, we need to clear the property.
+        boolean needResetSortProperty = sv.isEnableSpill() || sv.enablePartitionHashJoin();
+        if (needResetSortProperty) {
+            propertySet =
+                    new PhysicalPropertySet(propertySet.getDistributionProperty(), EmptySortProperty.INSTANCE,
+                            propertySet.getCteProperty());
+        }
+        return propertySet;
+    }
+
     private PhysicalPropertySet visitPhysicalJoin(PhysicalJoinOperator node, ExpressionContext context) {
         checkState(childrenOutputProperties.size() == 2);
         PhysicalPropertySet leftChildOutputProperty = childrenOutputProperties.get(0);
@@ -227,7 +336,7 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
 
         // 1. Distribution is broadcast
         if (rightChildOutputProperty.getDistributionProperty().isBroadcast()) {
-            return leftChildOutputProperty;
+            return resetSortProperty(leftChildOutputProperty);
         }
         // 2. Distribution is shuffle
         ColumnRefSet leftChildColumns = context.getChildOutputColumns(0);
@@ -259,6 +368,7 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
                 // bucket join
                 PhysicalPropertySet outputProperty = computeBucketJoinDistributionProperty(node.getJoinType(),
                         leftDistributionSpec, leftChildOutputProperty);
+                outputProperty = resetSortProperty(outputProperty);
                 return updateEquivalentDescriptor(node, outputProperty,
                         leftOnPredicateColumns, rightOnPredicateColumns);
 
@@ -350,27 +460,38 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
     public PhysicalPropertySet visitPhysicalRepeat(PhysicalRepeatOperator node, ExpressionContext context) {
         checkState(childrenOutputProperties.size() == 1);
         PhysicalPropertySet childPropertySet = childrenOutputProperties.get(0);
+
+        // calculate the Intersection of RepeatColumnRef
         List<ColumnRefOperator> subRefs = Lists.newArrayList(node.getRepeatColumnRef().get(0));
         node.getRepeatColumnRef().forEach(subRefs::retainAll);
-        Set<ColumnRefOperator> allGroupingRefs = Sets.newHashSet();
-
-        node.getRepeatColumnRef().forEach(allGroupingRefs::addAll);
-        subRefs.forEach(allGroupingRefs::remove);
 
         DistributionProperty childDistribution = childPropertySet.getDistributionProperty();
-        // update null distribution info to null relax for allGroupingRefs
-        if (!allGroupingRefs.isEmpty() && childDistribution.isShuffle()) {
-            HashDistributionSpec distributionSpec = (HashDistributionSpec) childDistribution.getSpec();
-            EquivalentDescriptor newEquivDesc = distributionSpec.getEquivDesc().copy();
-            newEquivDesc.clearNullStrictUnionFind();
-            HashDistributionSpec newDistributionSpec = distributionSpec.getNullRelaxSpec(newEquivDesc);
-            DistributionProperty newDistributionProperty = DistributionProperty.createProperty(
-                    newDistributionSpec,
-                    childPropertySet.getDistributionProperty().isCTERequired());
-            return new PhysicalPropertySet(newDistributionProperty, childPropertySet.getSortProperty(),
-                    childPropertySet.getCteProperty());
+        // only if the Intersection of RepeatColumnRef is the superset of the childrenOutputProperties
+        // we can use childrenOutputProperties as RepeatNode's output property
+        // such as RepeatColumnRef is (cola,colb),(cola), and childrenOutputProperties is hash(cola)
+        // since cola won't be inserted with null value, it's safe to use childrenOutputProperties
+        // if RepeatColumnRef is (cola,colb),(cola), and childrenOutputProperties is hash(cola,colb)
+        // since cola will be inserted with null value, it's unsafe to use hash(cola,colb)
+        DistributionProperty outputDistribution = EmptyDistributionProperty.INSTANCE;
+        if (childDistribution.isShuffle()) {
+            boolean canFollowChild = true;
+            HashDistributionSpec childDistributionSpec = (HashDistributionSpec) childDistribution.getSpec();
+            Set<Integer> commonRefs = subRefs.stream().map(ColumnRefOperator::getId).collect(Collectors.toSet());
+
+            for (DistributionCol col : childDistributionSpec.getHashDistributionDesc().getDistributionCols()) {
+                if (!commonRefs.contains(col.getColId())) {
+                    canFollowChild = false;
+                    break;
+                }
+            }
+
+            if (canFollowChild) {
+                outputDistribution = childDistribution;
+            }
         }
-        return childPropertySet;
+
+        return new PhysicalPropertySet(outputDistribution, childPropertySet.getSortProperty(),
+                childPropertySet.getCteProperty());
     }
 
     @Override
@@ -387,6 +508,60 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
         } else {
             return createPropertySetByDistribution(olapDistributionSpec);
         }
+    }
+
+    private Optional<HashDistributionDesc> computeLakeHashDistributionDesc(HashDistributionDesc require,
+                                                                           List<BucketProperty> bucketProperties,
+                                                                           Map<ColumnRefOperator, Column> map) {
+        ColumnRefSet requireColumnRefSet = ColumnRefSet.createByIds(
+                require.getDistributionCols().stream().map(DistributionCol::getColId).toList());
+
+        List<Integer> bucketColumnIds = new ArrayList<>();
+        Map<Integer, Integer> id2Index = new HashMap<>();
+        for (int i = 0; i < bucketProperties.size(); i++) {
+            Column column = bucketProperties.get(i).getColumn();
+            for (Map.Entry<ColumnRefOperator, Column> entry : map.entrySet()) {
+                if (entry.getKey().getName().equals(column.getName())) {
+                    bucketColumnIds.add(entry.getKey().getId());
+                    id2Index.put(entry.getKey().getId(), i);
+                    break;
+                }
+            }
+        }
+        ColumnRefSet bucketColumnRefSet = ColumnRefSet.createByIds(bucketColumnIds);
+        requireColumnRefSet.intersect(bucketColumnRefSet);
+        if (requireColumnRefSet.isEmpty()) {
+            return Optional.empty();
+        } else {
+            // respect the order of column shuffle
+            List<BucketProperty> usedBP = require.getDistributionCols().stream()
+                    .map(DistributionCol::getColId).filter(requireColumnRefSet::contains)
+                    .map(id2Index::get).map(bucketProperties::get).toList();
+            return Optional.of(new HashDistributionDescBP(
+                    requireColumnRefSet.getStream().toList(), LOCAL, usedBP));
+        }
+    }
+
+    @Override
+    public PhysicalPropertySet visitPhysicalIcebergScan(PhysicalIcebergScanOperator node, ExpressionContext context) {
+        // according bucket properties to compute distribution that meet requirement
+        DistributionSpec distributionSpec = requirements.getDistributionProperty().getSpec();
+        if (ConnectContext.get().getSessionVariable().isEnableBucketAwareExecutionOnLake() &&
+                distributionSpec instanceof HashDistributionSpec hashDistribution) {
+            IcebergTable table = (IcebergTable) node.getTable();
+            if (table.hasBucketProperties()) {
+                List<BucketProperty> properties = table.getBucketProperties();
+                Optional<HashDistributionDesc> hashDistributionDesc = computeLakeHashDistributionDesc(
+                        hashDistribution.getHashDistributionDesc(), properties, node.getColRefToColumnMetaMap());
+                if (hashDistributionDesc.isPresent()) {
+                    HashDistributionDesc nullStrictDesc = hashDistributionDesc.get().getNullStrictDesc();
+                    return createPropertySetByDistribution(new HashDistributionSpec(nullStrictDesc));
+                }
+            }
+            LOG.debug("table name: " + node.getTable().getName() + ", requirement distribution type: " +
+                    distributionSpec.toString());
+        }
+        return mergeCTEProperty(PhysicalPropertySet.EMPTY);
     }
 
     @Override
@@ -422,15 +597,15 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
         List<Integer> partitionColumnRefSet = new ArrayList<>();
 
         node.getPartitionExpressions().forEach(e -> partitionColumnRefSet.addAll(
-                Arrays.stream(e.getUsedColumns().getColumnIds()).boxed().collect(Collectors.toList())));
+                Arrays.stream(e.getUsedColumns().getColumnIds()).boxed().toList()));
 
-        SortProperty sortProperty = SortProperty.createProperty(node.getEnforceOrderBy());
+        SortProperty sortProperty = SortProperty.createProperty(node.getEnforceOrderBy(), partitionColumnRefSet);
 
         DistributionProperty distributionProperty;
         if (partitionColumnRefSet.isEmpty()) {
             distributionProperty = DistributionProperty.createProperty(DistributionSpec.createGatherDistributionSpec());
         } else {
-            // Use child distribution
+            // Use child's distribution
             distributionProperty = childrenOutputProperties.get(0).getDistributionProperty();
         }
         return new PhysicalPropertySet(distributionProperty, sortProperty,
@@ -516,6 +691,10 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
         return createGatherPropertySet();
     }
 
+    @Override
+    public PhysicalPropertySet visitPhysicalRawValues(PhysicalRawValuesOperator node, ExpressionContext context) {
+        return createGatherPropertySet();
+    }
 
     private void updatePropertyWithProjection(Projection projection, PhysicalPropertySet oldProperty) {
         if (projection == null) {

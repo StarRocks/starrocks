@@ -17,7 +17,6 @@ package com.starrocks.authentication;
 
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.common.Config;
@@ -26,13 +25,13 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.SystemVariable;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -71,51 +70,69 @@ public class UserProperty {
     @SerializedName(value = "s")
     private Map<String, String> sessionVariables = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
 
-    public void update(String userName, List<Pair<String, String>> properties) throws DdlException {
-        AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
-        UserIdentity user = authenticationMgr.getUserIdentityByName(userName);
-        update(user, properties);
-    }
-
-    // update the user properties
-    // we should check the properties and throw exceptions if the properties are invalid
-    public void update(UserIdentity user, List<Pair<String, String>> properties) throws DdlException {
+    public UpdateInfo checkUpdate(List<Pair<String, String>> properties) throws DdlException {
+        UpdateInfo result = new UpdateInfo();
         if (properties == null || properties.isEmpty()) {
-            return;
+            return result;
         }
 
         String newDatabase = getDatabase();
+        String newCatalog = getCatalog();
         for (Pair<String, String> entry : properties) {
             String key = entry.first;
             String value = entry.second;
 
             if (key.equalsIgnoreCase(PROP_MAX_USER_CONNECTIONS)) {
-                long newMaxConn = checkMaxConn(value);
-                setMaxConn(newMaxConn);
+                result.maxConn = checkMaxConn(value);
             } else if (key.equalsIgnoreCase(PROP_DATABASE)) {
                 // we do not check database existence here, because we should
                 // check catalog existence first.
                 newDatabase = value;
             } else if (key.equalsIgnoreCase(PROP_CATALOG)) {
                 checkCatalog(value);
-                setCatalog(value);
+                newCatalog = value;
+                result.catalog = value;
             } else if (key.startsWith(PROP_SESSION_PREFIX)) {
                 String sessionKey = key.substring(PROP_SESSION_PREFIX.length());
                 if (sessionKey.equalsIgnoreCase(PROP_CATALOG)) {
                     checkCatalog(value);
-                    setCatalog(value);
+                    newCatalog = value;
+                    result.catalog = value;
                 } else {
                     checkSessionVariable(sessionKey, value);
-                    setSessionVariable(sessionKey, value);
+                    result.sessionVariables.put(sessionKey, value);
                 }
             } else {
                 throw new DdlException("Unknown user property(" + key + ")");
             }
         }
         if (!newDatabase.equalsIgnoreCase(getDatabase())) {
-            checkDatabase(newDatabase);
-            setDatabase(newDatabase);
+            checkDatabase(newCatalog, newDatabase);
+            result.database = newDatabase;
         }
+        return result;
+    }
+
+    public void update(UpdateInfo result) {
+        if (result.maxConn != null) {
+            setMaxConn(result.maxConn);
+        }
+        if (result.catalog != null) {
+            setCatalog(result.catalog);
+        }
+        if (result.database != null) {
+            setDatabase(result.database);
+        }
+        for (Map.Entry<String, String> entry : result.sessionVariables.entrySet()) {
+            setSessionVariable(entry.getKey(), entry.getValue());
+        }
+    }
+
+    // update the user properties
+    // we should check the properties and throw exceptions if the properties are invalid
+    public void update(List<Pair<String, String>> properties) throws DdlException {
+        UpdateInfo result = checkUpdate(properties);
+        update(result);
     }
 
     // We do not check the variable default_session_database and default_session_catalog here, because we have checked them
@@ -183,16 +200,16 @@ public class UserProperty {
         }
         // check whether the variable exists
         SystemVariable variable = new SystemVariable(sessionKey, new StringLiteral(value));
-        VariableMgr.checkSystemVariableExist(variable);
+        GlobalStateMgr.getCurrentState().getVariableMgr().checkSystemVariableExist(variable);
 
         // check whether the value is valid
-        Field field = VariableMgr.getField(sessionKey);
+        Field field = GlobalStateMgr.getCurrentState().getVariableMgr().getField(sessionKey);
         if (field == null || !canAssignValue(field, value)) {
             ErrorReport.reportDdlException(ErrorCode.ERR_WRONG_TYPE_FOR_VAR, value);
         }
 
         // check flags of the variable, e.g. whether the variable is read-only
-        VariableMgr.checkUpdate(variable);
+        GlobalStateMgr.getCurrentState().getVariableMgr().checkUpdate(variable);
     }
 
     // check whether the catalog exist
@@ -210,16 +227,16 @@ public class UserProperty {
 
     // check whether the database exist
     // we need to reset the database if it checks failed
-    private void checkDatabase(String newDatabase) {
+    private void checkDatabase(String newCatalog, String newDatabase) {
         if (newDatabase.equalsIgnoreCase(DATABASE_DEFAULT_VALUE)) {
             return;
         }
 
         // check whether the database exists
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
-        Database db = metadataMgr.getDb(getCatalog(), newDatabase);
+        Database db = metadataMgr.getDb(new ConnectContext(), newCatalog, newDatabase);
         if (db == null) {
-            String catalogDbName = getCatalogDbName();
+            String catalogDbName = newCatalog + "." + newDatabase;
             throw new StarRocksConnectorException(catalogDbName + " not exists");
         }
     }
@@ -313,5 +330,15 @@ public class UserProperty {
 
     private void setMaxConn(long value) {
         maxConn = value;
+    }
+
+    public static class UpdateInfo {
+        Long maxConn;
+
+        String database;
+
+        String catalog;
+
+        Map<String, String> sessionVariables = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
     }
 }

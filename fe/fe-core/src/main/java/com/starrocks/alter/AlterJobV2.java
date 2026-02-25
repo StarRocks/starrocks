@@ -36,32 +36,38 @@ package com.starrocks.alter;
 
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.TabletInvertedIndex;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.TraceManager;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.warehouse.WarehouseIdleChecker;
+import com.starrocks.warehouse.cngroup.CRAcquireContext;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import io.opentelemetry.api.trace.Span;
 import org.apache.hadoop.util.Lists;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
 import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 
 /*
  * Version 2 of AlterJob, for replacing the old version of AlterJob.
@@ -113,8 +119,12 @@ public abstract class AlterJobV2 implements Writable {
     protected long timeoutMs = -1;
     @SerializedName(value = "warehouseId")
     protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+    @SerializedName(value = "computeResource")
+    protected ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
 
     protected Span span;
+
+    protected Future<Boolean> publishVersionFuture = null;
 
     public AlterJobV2(long jobId, JobType jobType, long dbId, long tableId, String tableName, long timeoutMs) {
         this.jobId = jobId;
@@ -134,6 +144,21 @@ public abstract class AlterJobV2 implements Writable {
     protected AlterJobV2(JobType type) {
         this.type = type;
         this.span = TraceManager.startNoopSpan();
+    }
+
+    protected AlterJobV2(AlterJobV2 job) {
+        this.type = job.type;
+        this.jobId = job.jobId;
+        this.jobState = job.jobState;
+        this.dbId = job.dbId;
+        this.tableId = job.tableId;
+        this.tableName = job.tableName;
+        this.errMsg = job.errMsg;
+        this.createTimeMs = job.createTimeMs;
+        this.finishedTimeMs = job.finishedTimeMs;
+        this.timeoutMs = job.timeoutMs;
+        this.warehouseId = job.warehouseId;
+        this.computeResource = job.computeResource;
     }
 
     public long getJobId() {
@@ -188,19 +213,63 @@ public abstract class AlterJobV2 implements Writable {
         this.finishedTimeMs = finishedTimeMs;
     }
 
-    public void setWarehouseId(long warehouseId) {
-        this.warehouseId = warehouseId;
+    public void setComputeResource(ComputeResource computeResource) {
+        this.computeResource = computeResource;
+        this.warehouseId = computeResource.getWarehouseId();
     }
 
     public void createConnectContextIfNeeded() {
         if (ConnectContext.get() == null) {
-            ConnectContext context = new ConnectContext();
+            ConnectContext context = ConnectContext.buildInner();
             context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
             context.setCurrentUserIdentity(UserIdentity.ROOT);
             context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
             context.setQualifiedUser(UserIdentity.ROOT.getUser());
             context.setThreadLocalInfo();
         }
+    }
+
+    public long getWarehouseId() {
+        return warehouseId;
+    }
+
+    public abstract AlterJobV2 copyForPersist();
+
+    protected void copyBaseFields(AlterJobV2 copy) {
+        copy.type = this.type;
+        copy.jobId = this.jobId;
+        copy.jobState = this.jobState;
+        copy.dbId = this.dbId;
+        copy.tableId = this.tableId;
+        copy.tableName = this.tableName;
+        copy.errMsg = this.errMsg;
+        copy.createTimeMs = this.createTimeMs;
+        copy.finishedTimeMs = this.finishedTimeMs;
+        copy.timeoutMs = this.timeoutMs;
+        copy.warehouseId = this.warehouseId;
+        copy.computeResource = this.computeResource;
+    }
+
+    public static void persistStateChange(AlterJobV2 job, JobState newState) {
+        persistStateChange(job, newState, false, null);
+    }
+
+    public static void persistStateChange(AlterJobV2 job, JobState newState, Runnable applier) {
+        persistStateChange(job, newState, false, applier);
+    }
+
+    public static void persistStateChange(AlterJobV2 job, JobState newState, boolean pruneMeta, Runnable applier) {
+        AlterJobV2 persistJob = job.copyForPersist();
+        persistJob.setJobState(newState);
+        if (pruneMeta) {
+            persistJob.pruneMeta();
+        }
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(persistJob, wal -> {
+            if (applier != null) {
+                applier.run();
+            }
+            job.jobState = newState;
+        });
     }
 
     /**
@@ -215,12 +284,23 @@ public abstract class AlterJobV2 implements Writable {
      */
     public synchronized void run() {
         if (isTimeout()) {
-            cancelImpl("Timeout");
-            return;
+            if (cancelInternal("Timeout")) {
+                // If this job can't be cancelled, we should execute it.
+                return;
+            }
         }
 
         // create connectcontext
         createConnectContextIfNeeded();
+        // check & acquire resource
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        CRAcquireContext acquireContext = CRAcquireContext.of(this.warehouseId, this.computeResource);
+        try {
+            this.computeResource = warehouseManager.acquireComputeResource(acquireContext);
+        } catch (Exception e) {
+            LOG.warn("failed to acquire cn resource for job {}", jobId, e);
+            return;
+        }
 
         try {
             while (true) {
@@ -237,6 +317,7 @@ public abstract class AlterJobV2 implements Writable {
                         break;
                     case FINISHED_REWRITING:
                         runFinishedRewritingJob();
+                        finishHook();
                         break;
                     default:
                         break;
@@ -246,13 +327,19 @@ public abstract class AlterJobV2 implements Writable {
                 } // else: handle the new state
             }
         } catch (AlterCancelException e) {
-            cancelImpl(e.getMessage());
+            cancelInternal(e.getMessage());
         }
+    }
+
+    protected boolean cancelInternal(String errMsg) {
+        boolean cancelled = cancelImpl(errMsg);
+        cancelHook(cancelled);
+        return cancelled;
     }
 
     public boolean cancel(String errMsg) {
         synchronized (this) {
-            return cancelImpl(errMsg);
+            return cancelInternal(errMsg);
         }
     }
 
@@ -262,23 +349,23 @@ public abstract class AlterJobV2 implements Writable {
      */
     protected boolean checkTableStable(Database db) throws AlterCancelException {
         long unHealthyTabletId = TabletInvertedIndex.NOT_EXIST_VALUE;
-        OlapTable tbl = (OlapTable) db.getTable(tableId);
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
         if (tbl == null) {
             throw new AlterCancelException("Table " + tableId + " does not exist");
         }
 
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         try {
             if (tbl.isOlapTable()) {
                 unHealthyTabletId = tbl.checkAndGetUnhealthyTablet(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
                         GlobalStateMgr.getCurrentState().getTabletScheduler());
             }
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
         }
 
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
         try {
             if (unHealthyTabletId != TabletInvertedIndex.NOT_EXIST_VALUE) {
                 errMsg = "table is unstable, unhealthy (or doing balance) tablet id: " + unHealthyTabletId;
@@ -287,12 +374,18 @@ public abstract class AlterJobV2 implements Writable {
                 return false;
             } else {
                 // table is stable, set is to ROLLUP and begin altering.
-                LOG.info("table {} is stable, start job{}, type {}", tableId, jobId, type);
-                tbl.setState(type == JobType.ROLLUP ? OlapTableState.ROLLUP : OlapTableState.SCHEMA_CHANGE);
+                LOG.info("table {} is stable, start job {}, type {}", tableId, jobId, type);
+                if (type == JobType.ROLLUP) {
+                    tbl.setState(OlapTableState.ROLLUP);
+                } else if (type == JobType.OPTIMIZE) {
+                    tbl.setState(OlapTableState.OPTIMIZE);
+                } else {
+                    tbl.setState(OlapTableState.SCHEMA_CHANGE);
+                }
                 return true;
             }
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
         }
     }
 
@@ -310,13 +403,46 @@ public abstract class AlterJobV2 implements Writable {
 
     public abstract void replay(AlterJobV2 replayedJob);
 
-    public static AlterJobV2 read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, AlterJobV2.class);
+    protected boolean lakePublishVersion() {
+        return true;
+    }
+
+    protected boolean publishVersion() {
+        if (publishVersionFuture == null) {
+            Callable<Boolean> task = () -> {
+                return lakePublishVersion();
+            };
+            publishVersionFuture = GlobalStateMgr.getCurrentState().getLakeAlterPublishExecutor().submit(task);
+            LOG.info("submit publish task for job: {}", jobId);
+            return false;
+        } else {
+            if (publishVersionFuture.isDone()) {
+                try {
+                    return publishVersionFuture.get();
+                } catch (InterruptedException | ExecutionException e) {
+                    return false;
+                } finally {
+                    publishVersionFuture = null;
+                }
+            } else {
+                return false;
+            }
+        }
+    }
+
+    private void finishHook() {
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId,
+                "AlterJob: jobId[" + jobId + "], jobType[" + type + "]");
+    }
+
+    protected void cancelHook(boolean cancelled) {
+        if (cancelled) {
+            WarehouseIdleChecker.updateJobLastFinishTime(warehouseId,
+                    "AlterJob: jobId[" + jobId + "], jobType[" + type + "]");
+        }
     }
 
     public abstract Optional<Long> getTransactionId();
-
 
     /**
      * Schema change will build a new MaterializedIndexMeta, we need rebuild it(add extra original meta)
@@ -335,8 +461,21 @@ public abstract class AlterJobV2 implements Writable {
                 indexMeta.gsonPostProcess();
             } catch (IOException e) {
                 LOG.warn("rebuild defined stmt of index meta {}(org)/{}(new) failed :",
-                        orgIndexMeta.getIndexId(), indexMeta.getIndexId(), e);
+                        orgIndexMeta.getIndexMetaId(), indexMeta.getIndexMetaId(), e);
             }
         }
+    }
+
+    public void addTabletIdMap(long partitionId, long rollupTabletId, long baseTabletId) {
+    }
+
+    public void addMVIndex(long partitionId, MaterializedIndex mvIndex) {
+    }
+
+    public Map<Long, MaterializedIndex> getPartitionIdToRollupIndex() {
+        return Collections.emptyMap();
+    }
+
+    public void pruneMeta() {
     }
 }

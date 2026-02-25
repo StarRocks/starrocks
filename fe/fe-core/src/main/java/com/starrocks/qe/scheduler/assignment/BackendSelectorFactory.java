@@ -14,18 +14,12 @@
 
 package com.starrocks.qe.scheduler.assignment;
 
-import com.starrocks.planner.DeltaLakeScanNode;
-import com.starrocks.planner.FileTableScanNode;
-import com.starrocks.planner.HdfsScanNode;
-import com.starrocks.planner.HudiScanNode;
-import com.starrocks.planner.IcebergMetadataScanNode;
-import com.starrocks.planner.IcebergScanNode;
-import com.starrocks.planner.OdpsScanNode;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.planner.OlapScanNode;
-import com.starrocks.planner.PaimonScanNode;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SchemaScanNode;
 import com.starrocks.qe.BackendSelector;
+import com.starrocks.qe.BucketAwareBackendSelector;
 import com.starrocks.qe.ColocatedBackendSelector;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.FragmentScanRangeAssignment;
@@ -50,25 +44,38 @@ public class BackendSelectorFactory {
                                          ExecutionFragment execFragment,
                                          WorkerProvider workerProvider,
                                          ConnectContext connectContext,
-                                         Set<Integer> destReplicatedScanIds) {
+                                         Set<Integer> destReplicatedScanIds,
+                                         boolean useIncrementalScanRanges) throws StarRocksException {
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
+        FragmentScanRangeAssignment assignment = execFragment.getScanRangeAssignment();
+
         // The parameters of getScanRangeLocations may ignore, It doesn't take effect.
-        List<TScanRangeLocations> locations = scanNode.getScanRangeLocations(0);
+        int maxScanRangeLength = 0;
+        if (useIncrementalScanRanges) {
+            maxScanRangeLength = sessionVariable.getConnectorIncrementalScanRangeNumber();
+        }
+
+        List<TScanRangeLocations> locations = scanNode.getScanRangeLocations(maxScanRangeLength);
         if (locations == null) {
             return new NoopBackendSelector();
         }
 
-        SessionVariable sessionVariable = connectContext.getSessionVariable();
-        FragmentScanRangeAssignment assignment = execFragment.getScanRangeAssignment();
-
         if (scanNode instanceof SchemaScanNode) {
             return new NormalBackendSelector(scanNode, locations, assignment, workerProvider, false);
-        } else if (scanNode instanceof HdfsScanNode || scanNode instanceof IcebergScanNode ||
-                scanNode instanceof HudiScanNode || scanNode instanceof DeltaLakeScanNode ||
-                scanNode instanceof FileTableScanNode || scanNode instanceof PaimonScanNode
-                || scanNode instanceof OdpsScanNode || scanNode instanceof IcebergMetadataScanNode) {
+        } else if (scanNode.isConnectorScanNode()) {
+            boolean hasColocate = execFragment.isColocated();
+            boolean hasBucket = execFragment.isLocalBucketShuffleJoin();
+            if (hasColocate || hasBucket) {
+                ColocatedBackendSelector.Assignment colocatedAssignment =
+                        execFragment.getOrCreateColocatedAssignment(scanNode);
+                boolean isRightOrFullBucketShuffleFragment = execFragment.isRightOrFullBucketShuffle();
+                String mode = connectContext.getSessionVariable().getLakeBucketAssignMode();
+                return new BucketAwareBackendSelector(scanNode, locations, colocatedAssignment,
+                        workerProvider, isRightOrFullBucketShuffleFragment, useIncrementalScanRanges, mode);
+            }
             return new HDFSBackendSelector(scanNode, locations, assignment, workerProvider,
                     sessionVariable.getForceScheduleLocal(),
-                    sessionVariable.getHDFSBackendSelectorScanRangeShuffle());
+                    sessionVariable.getHDFSBackendSelectorScanRangeShuffle(), useIncrementalScanRanges, connectContext);
         } else {
             boolean hasColocate = execFragment.isColocated();
             boolean hasBucket = execFragment.isLocalBucketShuffleJoin();

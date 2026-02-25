@@ -1,5 +1,6 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+unlisted: true
 ---
 
 # SQL 命令模板

@@ -15,13 +15,12 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OdpsTable;
-import com.starrocks.catalog.Type;
-import com.starrocks.connector.TableVersionRange;
+import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -32,10 +31,13 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.task.TaskContext;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.StringType;
+import com.starrocks.type.UnknownType;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -45,26 +47,26 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class PruneHDFSScanColumnRuleTest {
-    private PruneHDFSScanColumnRule icebergRule = PruneHDFSScanColumnRule.ICEBERG_SCAN;
-    private PruneHDFSScanColumnRule hudiRule = PruneHDFSScanColumnRule.HUDI_SCAN;
-    private PruneHDFSScanColumnRule odpsRule = PruneHDFSScanColumnRule.ODPS_SCAN;
+    private PruneHDFSScanColumnRule icebergRule = new PruneHDFSScanColumnRule();
+    private PruneHDFSScanColumnRule hudiRule = new PruneHDFSScanColumnRule();
+    private PruneHDFSScanColumnRule odpsRule = new PruneHDFSScanColumnRule();
 
-    ColumnRefOperator intColumnOperator = new ColumnRefOperator(1, Type.INT, "id", true);
-    ColumnRefOperator strColumnOperator = new ColumnRefOperator(2, Type.STRING, "name", true);
-    ColumnRefOperator unknownColumnOperator = new ColumnRefOperator(3, Type.UNKNOWN_TYPE, "unknown", true);
+    ColumnRefOperator intColumnOperator = new ColumnRefOperator(1, IntegerType.INT, "id", true);
+    ColumnRefOperator strColumnOperator = new ColumnRefOperator(2, StringType.STRING, "name", true);
+    ColumnRefOperator unknownColumnOperator = new ColumnRefOperator(3, UnknownType.UNKNOWN_TYPE, "unknown", true);
 
     Map<ColumnRefOperator, Column> scanColumnMap = new HashMap<ColumnRefOperator, Column>() {
         {
-            put(intColumnOperator, new Column("id", Type.INT));
-            put(strColumnOperator, new Column("name", Type.STRING));
+            put(intColumnOperator, new Column("id", IntegerType.INT));
+            put(strColumnOperator, new Column("name", StringType.STRING));
         }
     };
 
     Map<ColumnRefOperator, Column> scanColumnMapWithUnknown = new HashMap<ColumnRefOperator, Column>() {
         {
-            put(intColumnOperator, new Column("id", Type.INT));
-            put(strColumnOperator, new Column("name", Type.STRING));
-            put(unknownColumnOperator, new Column("name", Type.UNKNOWN_TYPE));
+            put(intColumnOperator, new Column("id", IntegerType.INT));
+            put(strColumnOperator, new Column("name", StringType.STRING));
+            put(unknownColumnOperator, new Column("name", UnknownType.UNKNOWN_TYPE));
         }
     };
 
@@ -76,14 +78,14 @@ public class PruneHDFSScanColumnRuleTest {
                 new LogicalIcebergScanOperator(table,
                         scanColumnMap, Maps.newHashMap(), -1,
                         new BinaryPredicateOperator(BinaryType.EQ,
-                                new ColumnRefOperator(1, Type.INT, "id", true),
-                                ConstantOperator.createInt(1)), TableVersionRange.empty()));
+                                new ColumnRefOperator(1, IntegerType.INT, "id", true),
+                                ConstantOperator.createInt(1)), TvrTableSnapshot.empty()));
 
         List<TaskContext> taskContextList = new ArrayList<>();
         taskContextList.add(taskContext);
 
         ColumnRefSet requiredOutputColumns = new ColumnRefSet(new ArrayList<>(
-                Collections.singleton(new ColumnRefOperator(1, Type.INT, "id", true))));
+                Collections.singleton(new ColumnRefOperator(1, IntegerType.INT, "id", true))));
 
         doIcebergTransform(scan, context, requiredOutputColumns, taskContextList, taskContext);
     }
@@ -94,7 +96,7 @@ public class PruneHDFSScanColumnRuleTest {
                                                  @Mocked TaskContext taskContext) {
         OptExpression scan = new OptExpression(
                 new LogicalIcebergScanOperator(table,
-                        scanColumnMap, Maps.newHashMap(), -1, null, TableVersionRange.empty()));
+                        scanColumnMap, Maps.newHashMap(), -1, null, TvrTableSnapshot.empty()));
 
         List<TaskContext> taskContextList = new ArrayList<>();
         taskContextList.add(taskContext);
@@ -126,8 +128,8 @@ public class PruneHDFSScanColumnRuleTest {
         List<OptExpression> list = icebergRule.transform(scan, context);
         Map<ColumnRefOperator, Column> transferMap = ((LogicalIcebergScanOperator) list.get(0)
                 .getOp()).getColRefToColumnMetaMap();
-        Assert.assertEquals(transferMap.size(), 1);
-        Assert.assertEquals(transferMap.get(intColumnOperator).getName(), "id");
+        Assertions.assertEquals(transferMap.size(), 1);
+        Assertions.assertEquals(transferMap.get(intColumnOperator).getName(), "id");
     }
 
     @Test
@@ -138,14 +140,14 @@ public class PruneHDFSScanColumnRuleTest {
                 new LogicalHudiScanOperator(table,
                         scanColumnMap, Maps.newHashMap(), -1,
                         new BinaryPredicateOperator(BinaryType.EQ,
-                                new ColumnRefOperator(1, Type.INT, "id", true),
+                                new ColumnRefOperator(1, IntegerType.INT, "id", true),
                                 ConstantOperator.createInt(1))));
 
         List<TaskContext> taskContextList = new ArrayList<>();
         taskContextList.add(taskContext);
 
         ColumnRefSet requiredOutputColumns = new ColumnRefSet(new ArrayList<>(
-                Collections.singleton(new ColumnRefOperator(1, Type.INT, "id", true))));
+                Collections.singleton(new ColumnRefOperator(1, IntegerType.INT, "id", true))));
 
         doHudiTransform(scan, context, requiredOutputColumns, taskContextList, taskContext);
     }
@@ -203,10 +205,10 @@ public class PruneHDFSScanColumnRuleTest {
         };
         List<OptExpression> list = hudiRule.transform(scan, context);
         LogicalHudiScanOperator scanOperator = (LogicalHudiScanOperator) list.get(0).getOp();
-        Assert.assertEquals(scanOperator.getScanOptimzeOption().getCanUseAnyColumn(), (requiredOutputColumns.size() == 0));
+        Assertions.assertEquals(scanOperator.getScanOptimizeOption().getCanUseAnyColumn(), (requiredOutputColumns.size() == 0));
         Map<ColumnRefOperator, Column> transferMap = scanOperator.getColRefToColumnMetaMap();
-        Assert.assertEquals(transferMap.size(), 1);
-        Assert.assertEquals(transferMap.get(intColumnOperator).getName(), "id");
+        Assertions.assertEquals(transferMap.size(), 1);
+        Assertions.assertEquals(transferMap.get(intColumnOperator).getName(), "id");
     }
 
     @Test
@@ -215,7 +217,7 @@ public class PruneHDFSScanColumnRuleTest {
                                                         @Mocked TaskContext taskContext) {
         OptExpression scan = new OptExpression(
                 new LogicalIcebergScanOperator(table,
-                        scanColumnMap, Maps.newHashMap(), -1, null, TableVersionRange.empty()));
+                        scanColumnMap, Maps.newHashMap(), -1, null, TvrTableSnapshot.empty()));
 
         List<TaskContext> taskContextList = new ArrayList<>();
         taskContextList.add(taskContext);
@@ -238,7 +240,7 @@ public class PruneHDFSScanColumnRuleTest {
         };
         List<OptExpression> list = icebergRule.transform(scan, context);
         LogicalIcebergScanOperator op = ((LogicalIcebergScanOperator) list.get(0).getOp());
-        Assert.assertEquals(op.getScanOptimzeOption().getCanUseAnyColumn(), false);
+        Assertions.assertEquals(op.getScanOptimizeOption().getCanUseAnyColumn(), false);
     }
 
     @Test
@@ -249,14 +251,14 @@ public class PruneHDFSScanColumnRuleTest {
                 new LogicalOdpsScanOperator(table,
                         scanColumnMap, Maps.newHashMap(), -1,
                         new BinaryPredicateOperator(BinaryType.EQ,
-                                new ColumnRefOperator(1, Type.INT, "id", true),
+                                new ColumnRefOperator(1, IntegerType.INT, "id", true),
                                 ConstantOperator.createInt(1))));
 
         List<TaskContext> taskContextList = new ArrayList<>();
         taskContextList.add(taskContext);
 
         ColumnRefSet requiredOutputColumns = new ColumnRefSet(new ArrayList<>(
-                Collections.singleton(new ColumnRefOperator(1, Type.INT, "id", true))));
+                Collections.singleton(new ColumnRefOperator(1, IntegerType.INT, "id", true))));
 
         doOdpsTransform(scan, context, requiredOutputColumns, taskContextList, taskContext);
     }
@@ -314,10 +316,10 @@ public class PruneHDFSScanColumnRuleTest {
         };
         List<OptExpression> list = odpsRule.transform(scan, context);
         LogicalOdpsScanOperator scanOperator = (LogicalOdpsScanOperator) list.get(0).getOp();
-        Assert.assertEquals(scanOperator.getScanOptimzeOption().getCanUseAnyColumn(),
+        Assertions.assertEquals(scanOperator.getScanOptimizeOption().getCanUseAnyColumn(),
                 (requiredOutputColumns.size() == 0));
         Map<ColumnRefOperator, Column> transferMap = scanOperator.getColRefToColumnMetaMap();
-        Assert.assertEquals(transferMap.size(), 1);
-        Assert.assertEquals(transferMap.get(intColumnOperator).getName(), "id");
+        Assertions.assertEquals(transferMap.size(), 1);
+        Assertions.assertEquals(transferMap.get(intColumnOperator).getName(), "id");
     }
 }

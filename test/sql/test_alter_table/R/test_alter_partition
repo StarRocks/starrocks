@@ -1,0 +1,11 @@
+-- name: test_alter_partition_name
+create table t(k datetime) partition by date_trunc('day',k);
+-- result:
+-- !result
+insert into t values('2020-01-01');
+-- result:
+-- !result
+alter table t rename partition p20200101 pp;
+-- result:
+E: (1064, 'Table[t] is automatic partitioned. not support to rename partition name.')
+-- !result

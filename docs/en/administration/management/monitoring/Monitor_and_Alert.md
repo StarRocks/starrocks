@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Monitor and Alert with Prometheus and Grafana
@@ -138,6 +138,10 @@ After the download is complete, upload or copy the installation package to the d
            labels:
              group: be
    ```
+
+   :::note
+   Please note that Prometheus is unable to detect the service changes (`targets`) after the cluster has been scaled in or out. For example, for clusters deployed on AWS, you can grant the EC2 instance that hosts the Prometheus service the `ec2:DescribeInstances` and `ec2:DescribeTags` permissions, and add the `ec2_sd_configs` and `relabel_configs` properties to **prometheus/prometheus.yml**. For detailed instructions, see [Appendix - Enable Service Detection for Prometheus](#enable-service-detection-for-prometheus).
+   :::
 
    After you have modified the configuration file, you can use `promtool` to verify whether the modification is valid.
 
@@ -320,9 +324,9 @@ After the configuration is complete, click **Save & Test** to save and test the 
 
 1. Download the corresponding Dashboard template based on your StarRocks version.
 
-   - [Dashboard template for StarRocks-2.4.0 and later](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Overview-24-new.json)
-   - [Shared-data dashboard template - General](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Shared_data-General.json)
-   - [Shared-data dashboard template - Starlet](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Shared_data-Starlet.json)
+   - [Dashboard template for All Architecture](https://releases.starrocks.io/resources/Dashboard-All-Arch-20260113.json)
+   - [Dashboard template for Shared-data Cluster - General](https://releases.starrocks.io/resources/Dashboard-Shared-data-General-3.5.json)
+   - [Dashboard template for Shared-data Cluster - Starlet](https://releases.starrocks.io/resources/Dashboard-Shared-data-Starlet-3.5.json)
 
    > **NOTE**
    >
@@ -709,7 +713,7 @@ This item corresponds to **BE Compaction Score** under **Cluster Overview**, and
 1. In the **Set an alert rule name** section, configure the name as "[PROD] BE Compaction Score".
 2. In the **Set a query and alert condition** section, configure the rule in section C as `B IS ABOVE 0`. You can use default values for other items.
 3. In the **Alert evaluation behavior** section, choose the **PROD** directory and Evaluation group **01** created earlier, and set the duration to 30 seconds.
-4. In the **Add details for your alert rule** section, click **Add annotation**, select **Description**, and input the alert content, for example, "High compaction pressure. Please check whether there are high-frequency or high-concurrency loading tasks and reduce the loading frequency. If the cluster has sufficient CPU, memory, and I/O resources, consider adjusting the cluster compaction strategy".
+4. In the **Add details for your alert rule** section, click **Add annotation**, select **Description**, and input the alert content, for example, "High compaction pressure. Please check whether there are high-frequency or high concurrency loading tasks and reduce the loading frequency. If the cluster has sufficient CPU, memory, and I/O resources, consider adjusting the cluster compaction strategy".
 5. In the **Notifications** section, configure **Labels** the same as the FE alert rule. If Labels are not configured, Grafana will use the Default policy and send alert emails to the "StarRocksOp" alert channel.
 
 ##### Clone
@@ -774,6 +778,81 @@ This item corresponds to **Cluster FE JVM Heap Stat** under **Overview**, monito
 4. In the **Add details for your alert rule** section, click **Add annotation**, select **Description**, and input the alert content, for example, "Detected that FE heap memory usage is high, please adjust the heap memory limit in the FE configuration file **fe.conf**".
 5. In the **Notifications** section, configure **Labels** the same as the FE alert rule. If Labels are not configured, Grafana will use the Default policy and send alert emails to the "StarRocksOp" alert channel.
 
+## Appendix
+
+### Enable Service Detection for Prometheus
+
+You can enable Service Detection for Prometheus so that it can automatically detect the services (nodes) after the cluster is scaled in or out.
+
+:::note
+The following section uses AWS as an example.
+:::
+
+1. Grant the EC2 instance that hosts your Prometheus service the following permissions using IAM Policy:
+
+   ```JSON
+   {
+         "Version": "2012-10-17",
+         "Statement": [
+                  {
+                           "Effect": "Allow",
+                           "Action": [
+                                 "ec2:DescribeInstances",
+                                 "ec2:DescribeTags"
+                           ],
+                           "Resource": "*"
+                  }
+         ]
+   }
+   ```
+
+   For detailed instructions of authentication to AWS resources, see [Authenticate to AWS resources](../../../integrations/authenticate_to_aws_resources.md).
+
+   With these permissions, Prometheus is able to list the instances and their tags in the region.
+
+2. Add the `ec2_sd_configs` and `relabel_configs` sections to **prometheus/prometheus.yml**.
+
+   Example:
+
+   ```Yaml
+   global:
+   scrape_interval: 15s # Set the global scrape interval to 15s. The default is 1 min.
+   evaluation_interval: 15s # Set the global rule evaluation interval to 15s. The default is 1 min.
+   scrape_configs:
+   - job_name: 'StarRocks_Cluster01'
+      metrics_path: '/metrics'
+      # highlight-start
+      ec2_sd_configs:
+         - region: us-west-2
+         port: 8030
+         filters:
+            - name: tag:ClusterName
+               values: ['test-stage-20251021']
+            - name: tag:ProcessType
+               values: ['FE']
+         - region: us-west-2
+         port: 8040
+         filters:
+            - name: tag:ClusterName
+               values: ['test-stage-20251021']
+            - name: tag:ProcessType
+               values: ['BE']
+      relabel_configs:
+         - source_labels: [__meta_ec2_tag_ClusterName]
+         regex: test-stage-20251021
+         target_label: cluster
+         replacement: test-stage-20251021
+         - source_labels: [__meta_ec2_tag_ProcessType]
+         regex: FE
+         target_label: group
+         replacement: fe
+         - source_labels: [__meta_ec2_tag_ProcessType]
+         regex: BE
+         target_label: group
+         replacement: be
+      # highlight-end
+   ```
+
 ## Q&A
 
 ### Q: Why can't the Dashboard detect anomalies?
@@ -786,3 +865,49 @@ A: Taking the Query Error item as an example, you can create two alert rules for
 
 - **Risk Level**: Set the failure rate greater than 0.05, indicating a risk. Send the alert to the development team.
 - **Severity Level**: Set the failure rate greater than 0.20, indicating a severity. At this point, the alert notification will be sent to both the development and operations teams simultaneously.
+
+### Q: How can I retrieve more detailed metrics, including table-level metrics, materialized view metrics, and connection statistics with user labels?
+
+A: By default, the `/metrics` endpoint collects metrics in a minified mode to minimize performance impact. To retrieve detailed metrics, you need to add specific parameters to the request and provide Basic Authentication credentials for a user with ADMIN privileges.
+
+**Supported Parameters:**
+
+- `with_table_metrics=all`: Collects all table-level metrics.
+- `with_materialized_view_metrics=all`: Collects all materialized view metrics.
+- `with_user_connections=all`: Collects connection statistics categorized by user labels.
+
+**Authentication Requirement:**
+
+These parameters take effect only when the request includes valid Basic Authentication credentials for an ADMIN user. If the request is anonymous or the user lacks ADMIN privileges, these parameters are ignored, and only default metrics are returned.
+
+**Example Curl Command:**
+
+```bash
+curl -u <admin_username>:<admin_password> \
+"http://<fe_host>:<fe_http_port>/metrics?with_table_metrics=all&with_materialized_view_metrics=all&with_user_connections=all"
+```
+
+**Prometheus Configuration Example:**
+
+To enable detailed metric collection in Prometheus, configure `params` and `basic_auth` in your `prometheus.yml`:
+
+```yaml
+scrape_configs:
+  - job_name: 'StarRocks_Detailed_Metrics'
+    metrics_path: '/metrics'
+    params:
+      with_table_metrics: ['all']
+      with_materialized_view_metrics: ['all']
+      with_user_connections: ['all']
+    basic_auth:
+      username: '<admin_username>'
+      password: '<admin_password>'
+    static_configs:
+      - targets: ['<fe_host>:<fe_http_port>']
+```
+
+:::note
+
+Collecting all table and materialized view metrics may increase the load on the FE node. Use these parameters with caution in large-scale environments.
+
+:::

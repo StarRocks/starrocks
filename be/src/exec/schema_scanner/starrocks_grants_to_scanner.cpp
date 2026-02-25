@@ -16,20 +16,19 @@
 
 #include "exec/schema_scanner/schema_helper.h"
 #include "runtime/runtime_state.h"
-#include "runtime/string_value.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc StarrocksGrantsToScanner::_s_grants_to_columns[] = {
         //   name,       type,          size
-        {"GRANTEE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"OBJECT_CATALOG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"OBJECT_DATABASE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"OBJECT_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"OBJECT_TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"PRIVILEGE_TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"IS_GRANTABLE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"GRANTEE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"OBJECT_CATALOG", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"OBJECT_DATABASE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"OBJECT_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"OBJECT_TYPE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"PRIVILEGE_TYPE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"IS_GRANTABLE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
 };
 
 StarrocksGrantsToScanner::StarrocksGrantsToScanner(TGrantsToType::type type)
@@ -60,23 +59,23 @@ Status StarrocksGrantsToScanner::fill_chunk(ChunkPtr* chunk) {
         case 1: {
             // GRANTEE
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(1);
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(1);
                 const std::string* str = &grants_to_item.grantee;
                 Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             }
             break;
         }
         case 2: {
             // OBJECT_CATALOG
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(2);
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(2);
                 if (grants_to_item.__isset.object_catalog) {
                     const std::string* str = &grants_to_item.object_catalog;
                     Slice value(str->c_str(), str->length());
-                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
                 } else {
-                    fill_data_column_with_null(column.get());
+                    fill_data_column_with_null(column);
                 }
             }
             break;
@@ -84,13 +83,13 @@ Status StarrocksGrantsToScanner::fill_chunk(ChunkPtr* chunk) {
         case 3: {
             // OBJECT_DATABASE
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(3);
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(3);
                 if (grants_to_item.__isset.object_database) {
                     const std::string* str = &grants_to_item.object_database;
                     Slice value(str->c_str(), str->length());
-                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
                 } else {
-                    fill_data_column_with_null(column.get());
+                    fill_data_column_with_null(column);
                 }
             }
             break;
@@ -98,13 +97,13 @@ Status StarrocksGrantsToScanner::fill_chunk(ChunkPtr* chunk) {
         case 4: {
             // OBJECT_NAME
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(4);
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(4);
                 if (grants_to_item.__isset.object_name) {
                     const std::string* str = &grants_to_item.object_name;
                     Slice value(str->c_str(), str->length());
-                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
                 } else {
-                    fill_data_column_with_null(column.get());
+                    fill_data_column_with_null(column);
                 }
             }
             break;
@@ -112,13 +111,13 @@ Status StarrocksGrantsToScanner::fill_chunk(ChunkPtr* chunk) {
         case 5: {
             // OBJECT_TYPE
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(5);
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(5);
                 if (grants_to_item.__isset.object_type) {
                     const std::string* str = &grants_to_item.object_type;
                     Slice value(str->c_str(), str->length());
-                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
                 } else {
-                    fill_data_column_with_null(column.get());
+                    fill_data_column_with_null(column);
                 }
             }
             break;
@@ -126,13 +125,13 @@ Status StarrocksGrantsToScanner::fill_chunk(ChunkPtr* chunk) {
         case 6: {
             // PRIVILEGE_TYPE
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(6);
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(6);
                 if (grants_to_item.__isset.privilege_type) {
                     const std::string* str = &grants_to_item.privilege_type;
                     Slice value(str->c_str(), str->length());
-                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
                 } else {
-                    fill_data_column_with_null(column.get());
+                    fill_data_column_with_null(column);
                 }
             }
             break;
@@ -140,10 +139,10 @@ Status StarrocksGrantsToScanner::fill_chunk(ChunkPtr* chunk) {
         case 7: {
             // IS_GRANTABLEA
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(7);
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(7);
                 const std::string str = grants_to_item.is_grantable ? "YES" : "NO";
                 Slice value(str.c_str(), str.length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             }
             break;
         }

@@ -17,6 +17,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "column/column.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "storage/olap_common.h"
@@ -40,7 +41,7 @@ public:
 
     size_t memory_usage() const { return _memory_usage; }
 
-    std::vector<ColumnPtr> pk_cols;
+    Columns pk_cols;
 
 private:
     Status _load_segments(Rowset* rowset, uint32_t segment_id);

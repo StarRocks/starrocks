@@ -15,28 +15,25 @@
 #pragma once
 
 #include "column/column.h"
-#include "column/datum.h"
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
+#include "gutil/strings/substitute.h"
+#include "types/datum.h"
 
 namespace starrocks {
 
-class ConstColumn final : public ColumnFactory<Column, ConstColumn> {
-    friend class ColumnFactory<Column, ConstColumn>;
+class ConstColumn final : public CowFactory<ColumnFactory<Column, ConstColumn>, ConstColumn> {
+    friend class CowFactory<ColumnFactory<Column, ConstColumn>, ConstColumn>;
 
 public:
+    using ValueType = void;
+
     explicit ConstColumn(ColumnPtr data_column);
     ConstColumn(ColumnPtr data_column, size_t size);
 
-    ConstColumn(const ConstColumn& rhs) : _data(rhs._data->clone_shared()), _size(rhs._size) {}
+    DISALLOW_COPY(ConstColumn);
 
     ConstColumn(ConstColumn&& rhs) noexcept : _data(std::move(rhs._data)), _size(rhs._size) {}
-
-    ConstColumn& operator=(const ConstColumn& rhs) {
-        ConstColumn tmp(rhs);
-        this->swap_column(tmp);
-        return *this;
-    }
 
     ConstColumn& operator=(ConstColumn&& rhs) noexcept {
         ConstColumn tmp(std::move(rhs));
@@ -48,6 +45,8 @@ public:
 
     bool is_nullable() const override { return _data->is_nullable(); }
     bool is_json() const override { return _data->is_json(); }
+    bool is_variant() const override { return _data->is_variant(); }
+    bool is_array() const override { return _data->is_array(); }
 
     bool is_null(size_t index) const override { return _data->is_null(0); }
 
@@ -109,7 +108,7 @@ public:
 
     void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) override;
 
-    ColumnPtr replicate(const std::vector<uint32_t>& offsets) override;
+    StatusOr<MutableColumnPtr> replicate(const Buffer<uint32_t>& offsets) override;
 
     bool append_nulls(size_t count) override {
         DCHECK_GT(count, 0);
@@ -124,8 +123,6 @@ public:
             return false;
         }
     }
-
-    bool append_strings(const Buffer<Slice>& strs) override { return false; }
 
     size_t append_numbers(const void* buff, size_t length) override { return -1; }
 
@@ -153,14 +150,23 @@ public:
 
     void update_rows(const Column& src, const uint32_t* indexes) override;
 
-    uint32_t serialize(size_t idx, uint8_t* pos) override { return _data->serialize(0, pos); }
+    uint32_t serialize(size_t idx, uint8_t* pos) const override { return _data->serialize(0, pos); }
 
-    uint32_t serialize_default(uint8_t* pos) override { return _data->serialize_default(pos); }
+    uint32_t serialize_default(uint8_t* pos) const override { return _data->serialize_default(pos); }
 
     void serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
-                         uint32_t max_one_row_size) override {
-        for (size_t i = 0; i < chunk_size; ++i) {
-            slice_sizes[i] += _data->serialize(0, dst + i * max_one_row_size + slice_sizes[i]);
+                         uint32_t max_one_row_size) const override {
+        if (chunk_size <= 0) {
+            return;
+        }
+
+        auto* first_row_buf = dst + slice_sizes[0];
+        const size_t first_row_bytes = _data->serialize(0, first_row_buf);
+        slice_sizes[0] += first_row_bytes;
+
+        for (size_t i = 1; i < chunk_size; ++i) {
+            strings::memcpy_inlined(dst + i * max_one_row_size + slice_sizes[i], first_row_buf, first_row_bytes);
+            slice_sizes[i] += first_row_bytes;
         }
     }
 
@@ -189,17 +195,15 @@ public:
 
     uint32_t serialize_size(size_t idx) const override { return _data->serialize_size(0); }
 
-    MutableColumnPtr clone_empty() const override { return create_mutable(_data->clone_empty(), 0); }
+    MutableColumnPtr clone_empty() const override { return create(_data->clone_empty(), 0); }
+
+    MutableColumnPtr clone() const override { return create(_data->clone(), _size); }
 
     size_t filter_range(const Filter& filter, size_t from, size_t to) override;
 
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
 
     int equals(size_t left, const Column& rhs, size_t right, bool safe_eq = true) const override;
-
-    void fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
-
-    void crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
 
     int64_t xor_checksum(uint32_t from, uint32_t to) const override;
 
@@ -209,8 +213,10 @@ public:
 
     std::string get_name() const override { return "const-" + _data->get_name(); }
 
-    ColumnPtr* mutable_data_column() { return &_data; }
+    Column* data_column_raw_ptr() { return _data.get(); }
+    const Column* data_column_raw_ptr() const { return _data.get(); }
 
+    ColumnPtr& data_column() { return _data; }
     const ColumnPtr& data_column() const { return _data; }
 
     Datum get(size_t n __attribute__((unused))) const override { return _data->get(0); }
@@ -251,27 +257,27 @@ public:
         return ss.str();
     }
 
-    bool capacity_limit_reached(std::string* msg = nullptr) const override {
-        RETURN_IF_UNLIKELY(_data->capacity_limit_reached(msg), true);
+    Status capacity_limit_reached() const override {
+        RETURN_IF_ERROR(_data->capacity_limit_reached());
         if (_size > Column::MAX_CAPACITY_LIMIT) {
-            if (msg != nullptr) {
-                msg->append("Row count of const column reach limit: " + std::to_string(Column::MAX_CAPACITY_LIMIT));
-            }
-            return true;
+            return Status::CapacityLimitExceed(strings::Substitute("Row count of const column reach limit: $0",
+                                                                   std::to_string(Column::MAX_CAPACITY_LIMIT)));
         }
-        return false;
+        return Status::OK();
     }
 
     void check_or_die() const override;
 
-    StatusOr<ColumnPtr> upgrade_if_overflow() override;
+    StatusOr<MutableColumnPtr> upgrade_if_overflow() override;
 
-    StatusOr<ColumnPtr> downgrade() override;
+    StatusOr<MutableColumnPtr> downgrade() override;
 
     bool has_large_column() const override { return _data->has_large_column(); }
 
+    void mutate_each_subcolumn() override { _data = (std::move(*_data)).mutate(); }
+
 private:
-    ColumnPtr _data;
+    Column::WrappedPtr _data;
     uint64_t _size;
 };
 

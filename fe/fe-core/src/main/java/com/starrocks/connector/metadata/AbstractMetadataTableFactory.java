@@ -15,7 +15,8 @@
 package com.starrocks.connector.metadata;
 
 import com.starrocks.catalog.Table;
+import com.starrocks.qe.ConnectContext;
 
 public interface AbstractMetadataTableFactory {
-    Table createTable(String catalogName, String dbName, String tableName, MetadataTableType tableType);
+    Table createTable(ConnectContext context, String catalogName, String dbName, String tableName, MetadataTableType tableType);
 }

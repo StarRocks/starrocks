@@ -21,7 +21,6 @@ ARG LOCAL_REPO_PATH
 
 COPY ${LOCAL_REPO_PATH}/output/fe /release/fe_artifacts/fe
 COPY ${LOCAL_REPO_PATH}/output/be /release/be_artifacts/be
-COPY ${LOCAL_REPO_PATH}/fs_brokers/apache_hdfs_broker/output/apache_hdfs_broker /release/broker_artifacts/apache_hdfs_broker
 
 
 FROM artifacts-from-${ARTIFACT_SOURCE} as artifacts
@@ -34,20 +33,20 @@ ARG DEPLOYDIR=/data/deploy
 ENV SR_HOME=${DEPLOYDIR}/starrocks
 
 RUN apt-get update -y && apt-get install -y --no-install-recommends \
-        binutils-dev default-jdk python2 mysql-client curl vim tree net-tools less tzdata linux-tools-common linux-tools-generic supervisor nginx netcat locales && \
+        openjdk-17-jdk python2 mysql-client curl vim tree net-tools less tzdata linux-tools-common linux-tools-generic supervisor nginx netcat locales tini && \
         ln -fs /usr/share/zoneinfo/UTC /etc/localtime && \
         dpkg-reconfigure -f noninteractive tzdata && \
         locale-gen en_US.UTF-8 && \
         rm -rf /var/lib/apt/lists/*
-RUN echo "export PATH=/usr/lib/linux-tools/5.15.0-60-generic:$PATH" >> /etc/bash.bashrc
-ENV JAVA_HOME=/lib/jvm/default-java
+RUN echo "export PATH=/usr/lib/linux-tools/5.15.0-60-generic:$PATH" >> /etc/bash.bashrc ; ARCH=`uname -m` && cd /lib/jvm && \
+    if [ "$ARCH" = "aarch64" ] ; then ln -s java-17-openjdk-arm64 java-17-openjdk ; else ln -s java-17-openjdk-amd64 java-17-openjdk  ; fi ;
+ENV JAVA_HOME=/lib/jvm/java-17-openjdk
 
 WORKDIR $DEPLOYDIR
 
 # Copy all artifacts to the runtime container image
 COPY --from=artifacts /release/be_artifacts/ $DEPLOYDIR/starrocks
 COPY --from=artifacts /release/fe_artifacts/ $DEPLOYDIR/starrocks
-COPY --from=artifacts /release/broker_artifacts/ $DEPLOYDIR/starrocks
 
 # Copy setup script and config files
 COPY docker/dockerfiles/allin1/*.sh docker/dockerfiles/allin1/*.conf docker/dockerfiles/allin1/*.txt $DEPLOYDIR
@@ -58,4 +57,8 @@ RUN cat be.conf >> $DEPLOYDIR/starrocks/be/conf/be.conf && \
     rm -f be.conf fe.conf && \
     mkdir -p $DEPLOYDIR/starrocks/fe/meta $DEPLOYDIR/starrocks/be/storage && touch /.dockerenv
 
-CMD ./entrypoint.sh
+HEALTHCHECK --interval=30s --timeout=15s --start-period=30s CMD ./health_check.sh
+
+ENTRYPOINT ["/usr/bin/tini-static", "--"]
+
+CMD ["./entrypoint.sh"]

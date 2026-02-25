@@ -38,6 +38,8 @@
 #include <memory>
 #include <string>
 
+#include "base/coding.h"
+#include "base/string/slice.h"
 #include "common/status.h"
 #include "gutil/macros.h"
 #include "runtime/mem_tracker.h"
@@ -45,9 +47,7 @@
 #include "storage/rowset/index_page.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_pointer.h"
-#include "util/coding.h"
 #include "util/once.h"
-#include "util/slice.h"
 
 namespace starrocks {
 
@@ -122,12 +122,7 @@ public:
         }
     }
 
-    void print_debug_info() {
-        for (int i = 0; i < _num_pages; i++) {
-            LOG(INFO) << "ordinals" << i << _ordinals.get()[i];
-            LOG(INFO) << "pages" << i << _pages.get()[i];
-        }
-    }
+    void print_debug_info();
 
 private:
     friend OrdinalPageIndexIterator;

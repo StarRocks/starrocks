@@ -41,7 +41,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.LogBuilder;
@@ -90,12 +90,12 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
 
     @VisibleForTesting
     public RoutineLoadTaskScheduler() {
-        super("Routine load task scheduler", 0);
+        super("routine-load-task-scheduler", 0);
         this.routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
     }
 
     public RoutineLoadTaskScheduler(RoutineLoadMgr routineLoadManager) {
-        super("Routine load task scheduler", 0);
+        super("routine-load-task-scheduler", 0);
         this.routineLoadManager = routineLoadManager;
     }
 
@@ -172,10 +172,10 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
         });
     }
 
-    private void scheduleOneTask(RoutineLoadTaskInfo routineLoadTaskInfo) throws Exception {
+    void scheduleOneTask(RoutineLoadTaskInfo routineLoadTaskInfo) throws Exception {
         routineLoadTaskInfo.setLastScheduledTime(System.currentTimeMillis());
         // check if task has been abandoned
-        if (!routineLoadManager.checkTaskInJob(routineLoadTaskInfo.getId())) {
+        if (!routineLoadManager.checkTaskInJob(routineLoadTaskInfo.getJobId(), routineLoadTaskInfo.getId())) {
             // task has been abandoned while renew task has been added in queue
             // or database has been deleted
             LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_TASK, routineLoadTaskInfo.getId())
@@ -200,7 +200,7 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
         } catch (RoutineLoadPauseException e) {
             String msg = "FE aborts the task with reason: failed to check task ready to execute, err: " + e.getMessage();
             routineLoadManager.getJob(routineLoadTaskInfo.getJobId()).updateState(
-                    JobState.PAUSED, new ErrorReason(InternalErrorCode.TASKS_ABORT_ERR, msg), false);
+                    JobState.PAUSED, new ErrorReason(InternalErrorCode.TASKS_ABORT_ERR, msg));
             LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_TASK, routineLoadTaskInfo.getId())
                     .add("error_msg", msg)
                     .build());
@@ -232,7 +232,7 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
             // exception happens, PAUSE the job
             routineLoadManager.getJob(routineLoadTaskInfo.getJobId()).updateState(JobState.PAUSED,
                     new ErrorReason(InternalErrorCode.CREATE_TASKS_ERR,
-                            "failed to begin txn for task :" + e.getMessage()), false);
+                            "failed to begin txn for task :" + e.getMessage()));
             LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_TASK, routineLoadTaskInfo.getId()).add("error_msg",
                     "begin task txn encounter exception: " + e.getMessage()).build());
             throw e;
@@ -250,15 +250,13 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
             // this means database or table has been dropped, just stop this routine load job.
             routineLoadManager.getJob(routineLoadTaskInfo.getJobId())
                     .updateState(JobState.CANCELLED,
-                            new ErrorReason(InternalErrorCode.META_NOT_FOUND_ERR, "meta not found: " + e.getMessage()),
-                            false);
+                            new ErrorReason(InternalErrorCode.META_NOT_FOUND_ERR, "meta not found: " + e.getMessage()));
             throw e;
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             releaseBeSlot(routineLoadTaskInfo);
             routineLoadManager.getJob(routineLoadTaskInfo.getJobId())
                     .updateState(JobState.PAUSED,
-                            new ErrorReason(e.getErrorCode(), "failed to create task: " + e.getMessage()),
-                            false);
+                            new ErrorReason(e.getInternalErrorCode(), "failed to create task: " + e.getMessage()));
             throw e;
         }
 
@@ -371,7 +369,7 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
         }
 
         // the previous BE is not available, try to find a better one
-        long beId = routineLoadManager.takeBeTaskSlot(routineLoadTaskInfo.warehouseId, routineLoadTaskInfo.getJobId());
+        long beId = routineLoadManager.takeBeTaskSlot(routineLoadTaskInfo.getWarehouseId(), routineLoadTaskInfo.getJobId());
         if (beId < 0) {
             return false;
         }

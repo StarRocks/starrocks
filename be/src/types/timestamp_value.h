@@ -17,12 +17,12 @@
 #include <cctz/civil_time.h>
 #include <cctz/time_zone.h>
 
+#include <chrono>
 #include <string>
 
-#include "runtime/datetime_value.h"
-#include "runtime/time_types.h"
 #include "types/date_value.h"
-#include "util/hash_util.hpp"
+#include "types/datetime_value.h"
+#include "types/time_types.h"
 
 namespace starrocks {
 
@@ -86,6 +86,9 @@ public:
 
     void to_timestamp(int* year, int* month, int* day, int* hour, int* minute, int* second, int* usec) const;
 
+    // Convert to C++20 chrono sys_time<microseconds> for time arithmetic
+    inline std::chrono::sys_time<std::chrono::microseconds> to_sys_time() const;
+
     void trunc_to_millisecond();
     void trunc_to_second();
     void trunc_to_minute();
@@ -120,6 +123,9 @@ public:
     bool from_string(const char* date_str, size_t len);
 
     int64_t to_unix_second() const;
+    int64_t to_unix_microsecond() const;
+    int64_t to_unixtime() const;
+    int64_t to_unixtime(const cctz::time_zone& ctz) const;
 
     bool from_unixtime(int64_t second, const std::string& timezone);
     void from_unixtime(int64_t second, const cctz::time_zone& ctz);
@@ -140,7 +146,7 @@ public:
     // direct return microsecond will over int64
     int64_t diff_microsecond(TimestampValue other) const;
 
-    std::string to_string() const;
+    std::string to_string(bool igonre_microsecond = false) const;
 
     // Returns the formatted string length or -1 on error.
     int to_string(char* s, size_t n) const;
@@ -164,6 +170,24 @@ TimestampValue TimestampValue::create(int year, int month, int day, int hour, in
     TimestampValue ts;
     ts.from_timestamp(year, month, day, hour, minute, second, microsecond);
     return ts;
+}
+
+std::chrono::sys_time<std::chrono::microseconds> TimestampValue::to_sys_time() const {
+    int year, month, day, hour, minute, second, microsecond;
+    to_timestamp(&year, &month, &day, &hour, &minute, &second, &microsecond);
+
+    auto ymd = std::chrono::year_month_day{std::chrono::year{year}, std::chrono::month{static_cast<unsigned>(month)},
+                                           std::chrono::day{static_cast<unsigned>(day)}};
+    return std::chrono::sys_days{ymd} + std::chrono::hours{hour} + std::chrono::minutes{minute} +
+           std::chrono::seconds{second} + std::chrono::microseconds{microsecond};
+}
+
+inline DateValue::operator TimestampValue() const {
+    return TimestampValue{date::to_timestamp(_julian)};
+}
+
+inline TimestampValue::operator DateValue() const {
+    return DateValue{timestamp::to_julian(_timestamp)};
 }
 
 template <bool end>

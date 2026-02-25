@@ -15,7 +15,7 @@
 #pragma once
 
 #include <memory>
-#include <mutex>
+#include <shared_mutex>
 #include <string_view>
 #include <variant>
 
@@ -36,7 +36,7 @@ namespace starrocks::lake {
 
 using CacheValue = std::variant<std::shared_ptr<const TabletMetadataPB>, std::shared_ptr<const TxnLogPB>,
                                 std::shared_ptr<const TabletSchema>, std::shared_ptr<const DelVector>,
-                                std::shared_ptr<Segment>, std::shared_ptr<const CombinedTxnLogPB>>;
+                                std::shared_ptr<Segment>, std::shared_ptr<const CombinedTxnLogPB>, bool>;
 
 class Metacache {
 public:
@@ -58,6 +58,8 @@ public:
 
     std::shared_ptr<const DelVector> lookup_delvec(std::string_view key);
 
+    bool lookup_aggregation_partition(std::string_view key);
+
     void cache_tablet_metadata(std::string_view key, std::shared_ptr<const TabletMetadataPB> metadata);
 
     void cache_tablet_schema(std::string_view key, std::shared_ptr<const TabletSchema> schema, size_t size);
@@ -68,10 +70,15 @@ public:
 
     void cache_segment(std::string_view key, std::shared_ptr<Segment> segment);
 
+    // return the same `segment_addr_hint` if the key exists in cache, 0 otherwise
+    intptr_t cache_segment_if_present(std::string_view key, size_t mem_cost, intptr_t segment_addr_hint);
+
     // cache the segment if the given key not exists in the cache, returns the segment shared_ptr stored in the cache.
-    std::shared_ptr<Segment> cache_segment_if_absent(std::string_view key, std::shared_ptr<Segment> segment);
+    std::shared_ptr<Segment> cache_segment_if_absent(std::string_view key, const std::shared_ptr<Segment>& segment);
 
     void cache_delvec(std::string_view key, std::shared_ptr<const DelVector> delvec);
+
+    void cache_aggregation_partition(std::string_view key, bool is_aggregation);
 
     void erase(std::string_view key);
 
@@ -87,13 +94,13 @@ private:
     static void cache_value_deleter(const CacheKey& /*key*/, void* value) { delete static_cast<CacheValue*>(value); }
 
     std::shared_ptr<Segment> _lookup_segment_no_lock(std::string_view key);
-    void _cache_segment_no_lock(std::string_view key, std::shared_ptr<Segment> segment);
+    void _cache_segment_no_lock(std::string_view key, size_t mem_cost, std::shared_ptr<Segment> segment);
 
     void insert(std::string_view key, CacheValue* ptr, size_t size);
 
     std::unique_ptr<Cache> _cache;
 
-    std::mutex _mutex;
+    std::shared_mutex _mutex;
 };
 
 } // namespace starrocks::lake

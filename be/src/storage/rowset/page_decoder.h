@@ -34,15 +34,16 @@
 
 #pragma once
 
+#include "column/nullable_column.h"
 #include "common/status.h" // for Status
 #include "gen_cpp/segment.pb.h"
 #include "storage/range.h"
-#include "storage/rowset/page_pointer.h"
-#include "types/timestamp_value.h"
+#include "storage/rowset/page_handle_fwd.h"
 
 namespace starrocks {
+class ColumnPredicate;
 class Column;
-}
+} // namespace starrocks
 
 namespace starrocks {
 
@@ -91,6 +92,31 @@ public:
         return Status::NotSupported("PageDecoder Not Support");
     }
 
+    // given a set of ranges in page, apply compound and predicates on it, and only return filtered data
+    // since null data is separate from actually data page, we need pass the null data by caller if this is a nullable column
+    // null_data is a uint8_t array where null_data[i] indicates whether the i-th row is null (1 for null, 0 for not null)
+    // callee is responsible to handle null column and append null data into dst column if selected
+    virtual Status next_batch_with_filter(Column* column, const SparseRange<>& range,
+                                          const std::vector<const ColumnPredicate*>& compound_and_predicates,
+                                          const uint8_t* null_data, uint8_t* selection, uint16_t* selected_idx) {
+        return Status::NotSupported("PageDecoder Not Support next_batch_with_filter");
+    }
+
+    /**
+     * rowids and count represent a rowId vector
+     * read_by_rowids read selected rows in rowId vector
+     *  and return row numbers it read by 'count'
+     */
+    virtual Status read_by_rowids(const ordinal_t first_ordinal_in_page, const rowid_t* rowids, size_t* count,
+                                  Column* column) {
+        return Status::NotSupported("PageDecoder Not Support");
+    }
+
+    virtual Status read_dict_codes_by_rowids(const ordinal_t first_ordinal_in_page, const rowid_t* rowids,
+                                             size_t* count, Column* dst) {
+        return Status::NotSupported("PageDecoder Doesn't Support read_dict_codes_by_rowids");
+    }
+
     // Return the number of elements in this page.
     virtual uint32_t count() const = 0;
 
@@ -114,9 +140,17 @@ public:
 
     virtual const PageDecoder* dict_page_decoder() const { return nullptr; }
 
-private:
     PageDecoder(const PageDecoder&) = delete;
     const PageDecoder& operator=(const PageDecoder&) = delete;
+
+    void set_page_handle(const std::shared_ptr<PageHandle>& page_handle) { _page_handle = page_handle; }
+
+    virtual void reserve_col(size_t n, Column* column) { column->reserve(n); }
+
+    virtual bool supports_read_by_rowids() const { return false; }
+
+protected:
+    std::shared_ptr<PageHandle> _page_handle;
 };
 
 } // namespace starrocks

@@ -15,6 +15,10 @@
 
 package com.starrocks.sql.optimizer.operator;
 
+import java.util.Arrays;
+import java.util.Set;
+import java.util.stream.Collectors;
+
 public enum OperatorType {
     /**
      * Logical operator
@@ -25,6 +29,7 @@ public enum OperatorType {
     LOGICAL_HIVE_SCAN,
     LOGICAL_FILE_SCAN,
     LOGICAL_ICEBERG_SCAN,
+    LOGICAL_ICEBERG_EQUALITY_DELETE_SCAN,
     LOGICAL_HUDI_SCAN,
     LOGICAL_DELTALAKE_SCAN,
     LOGICAL_PAIMON_SCAN,
@@ -51,11 +56,14 @@ public enum OperatorType {
     LOGICAL_EXCEPT,
     LOGICAL_INTERSECT,
     LOGICAL_VALUES,
+    LOGICAL_RAW_VALUES,
     LOGICAL_REPEAT,
     LOGICAL_TABLE_FUNCTION,
     LOGICAL_CTE_ANCHOR,
     LOGICAL_CTE_PRODUCE,
     LOGICAL_CTE_CONSUME,
+    LOGICAL_SPJG_PIECES,
+    LOGICAL_BENCHMARK_SCAN,
 
     /**
      * Physical operator
@@ -66,10 +74,13 @@ public enum OperatorType {
     PHYSICAL_HASH_JOIN,
     PHYSICAL_MERGE_JOIN,
     PHYSICAL_NESTLOOP_JOIN,
+
+    // TODO: collapse these verbose scans
     PHYSICAL_OLAP_SCAN,
     PHYSICAL_HIVE_SCAN,
     PHYSICAL_FILE_SCAN,
     PHYSICAL_ICEBERG_SCAN,
+    PHYSICAL_ICEBERG_EQUALITY_DELETE_SCAN,
     PHYSICAL_HUDI_SCAN,
     PHYSICAL_DELTALAKE_SCAN,
     PHYSICAL_PAIMON_SCAN,
@@ -81,6 +92,8 @@ public enum OperatorType {
     PHYSICAL_META_SCAN,
     PHYSICAL_ES_SCAN,
     PHYSICAL_JDBC_SCAN,
+    PHYSICAL_BENCHMARK_SCAN,
+
     PHYSICAL_PROJECT,
     PHYSICAL_SORT,
     PHYSICAL_TOPN,
@@ -90,6 +103,7 @@ public enum OperatorType {
     PHYSICAL_ASSERT_ONE_ROW,
     PHYSICAL_WINDOW,
     PHYSICAL_VALUES,
+    PHYSICAL_RAW_VALUES,
     PHYSICAL_REPEAT,
     PHYSICAL_FILTER,
     PHYSICAL_TABLE_FUNCTION,
@@ -104,7 +118,12 @@ public enum OperatorType {
     PHYSICAL_STREAM_JOIN,
     PHYSICAL_STREAM_AGG,
     PHYSICAL_TABLE_FUNCTION_TABLE_SCAN,
+    PHYSICAL_SPLIT_PRODUCE,
+    PHYSICAL_SPLIT_CONSUME,
+    PHYSICAL_CONCATENATE,
 
+    PHYSICAL_FETCH,
+    PHYSICAL_LOOKUP,
     /**
      * Scalar operator
      */
@@ -130,6 +149,8 @@ public enum OperatorType {
     SUBQUERY,
     SUBFIELD,
     MULTI_IN,
+    DICTIONARY_GET,
+    MATCH_EXPR,
 
     /**
      * PATTERN
@@ -145,7 +166,15 @@ public enum OperatorType {
     //  join   table
     //  /  \
     // table table
-    PATTERN_MULTIJOIN,
-    DICTIONARY_GET,
-    MATCH_EXPR
+    PATTERN_MULTIJOIN;
+
+    private static final Set<OperatorType> PHYSICAL_SCANS =
+            Arrays.stream(OperatorType.values())
+                    .filter(x -> x.name().startsWith("PHYSICAL") && x.name().endsWith("SCAN"))
+                    .filter(x -> !x.equals(PHYSICAL_STREAM_SCAN))
+                    .collect(Collectors.toUnmodifiableSet());
+
+    public boolean isPhysicalScan() {
+        return PHYSICAL_SCANS.contains(this);
+    }
 }

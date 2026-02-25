@@ -27,6 +27,8 @@ import com.starrocks.planner.MultiCastPlanFragment;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.planner.SplitCastDataSink;
+import com.starrocks.planner.SplitCastPlanFragment;
 import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.qe.QueryStatisticsItem;
 import com.starrocks.qe.SimpleScheduler;
@@ -146,6 +148,10 @@ public class ExecutionDAG {
         return fragments.stream()
                 .flatMap(fragment -> fragment.getScanNodes().stream())
                 .collect(Collectors.toList());
+    }
+
+    public int getWorkerNum() {
+        return workerIdToNumInstances.size();
     }
 
     public List<ExecutionFragment> getFragmentsInCreatedOrder() {
@@ -278,6 +284,7 @@ public class ExecutionDAG {
         if (build != null) {
             captureVersionFragment = build;
             fragments.add(build);
+            idToFragment.put(captureVersionFragment.getFragmentId(), captureVersionFragment);
         }
     }
 
@@ -401,6 +408,8 @@ public class ExecutionDAG {
         if (execFragment.getPlanFragment() instanceof MultiCastPlanFragment) {
             connectMultiCastFragmentToDestFragments(execFragment,
                     (MultiCastPlanFragment) execFragment.getPlanFragment());
+        } else if (execFragment.getPlanFragment() instanceof SplitCastPlanFragment) {
+            connectSplitFragmentToDestFragments(execFragment, (SplitCastPlanFragment) execFragment.getPlanFragment());
         } else {
             connectNormalFragmentToDestFragments(execFragment);
         }
@@ -408,6 +417,14 @@ public class ExecutionDAG {
 
     private boolean needScheduleByLocalBucketShuffleJoin(ExecutionFragment destFragment, DataSink sourceSink) {
         if (destFragment.isLocalBucketShuffleJoin() && sourceSink instanceof DataStreamSink) {
+            DataStreamSink streamSink = (DataStreamSink) sourceSink;
+            return streamSink.getOutputPartition().isBucketShuffle();
+        }
+        return false;
+    }
+
+    private boolean needScheduleByLocalBucketShuffleSet(ExecutionFragment destFragment, DataSink sourceSink) {
+        if (destFragment.isColocateSet() && sourceSink instanceof DataStreamSink) {
             DataStreamSink streamSink = (DataStreamSink) sourceSink;
             return streamSink.getOutputPartition().isBucketShuffle();
         }
@@ -444,6 +461,7 @@ public class ExecutionDAG {
             if (needScheduleByLocalBucketShuffleJoin(destExecFragment, sink)) {
                 throw new NonRecoverableException("CTE consumer fragment cannot be bucket shuffle join");
             } else {
+                Preconditions.checkArgument(!destExecFragment.getInstances().isEmpty());
                 // add destination host to this fragment's destination
                 for (FragmentInstance destInstance : destExecFragment.getInstances()) {
                     TPlanFragmentDestination dest = new TPlanFragmentDestination();
@@ -492,7 +510,8 @@ public class ExecutionDAG {
         });
 
         // We can only handle unpartitioned (= broadcast) and hash-partitioned output at the moment.
-        if (needScheduleByLocalBucketShuffleJoin(destExecFragment, sink)) {
+        if (needScheduleByLocalBucketShuffleJoin(destExecFragment, sink) ||
+                needScheduleByLocalBucketShuffleSet(destExecFragment, sink)) {
             Map<Integer, FragmentInstance> bucketSeqToDestInstance = Maps.newHashMap();
             for (FragmentInstance destInstance : destExecFragment.getInstances()) {
                 for (int bucketSeq : destInstance.getBucketSeqs()) {
@@ -502,6 +521,7 @@ public class ExecutionDAG {
 
             TNetworkAddress dummyServer = new TNetworkAddress("0.0.0.0", 0);
             int bucketNum = destExecFragment.getBucketNum();
+            Preconditions.checkArgument(bucketNum != 0);
             for (int bucketSeq = 0; bucketSeq < bucketNum; bucketSeq++) {
                 TPlanFragmentDestination dest = new TPlanFragmentDestination();
 
@@ -528,6 +548,7 @@ public class ExecutionDAG {
                 execFragment.addDestination(dest);
             }
         } else {
+            Preconditions.checkArgument(!destExecFragment.getInstances().isEmpty());
             // add destination host to this fragment's destination
             for (FragmentInstance destInstance : destExecFragment.getInstances()) {
                 TPlanFragmentDestination dest = new TPlanFragmentDestination();
@@ -543,6 +564,49 @@ public class ExecutionDAG {
         }
     }
 
+    private void connectSplitFragmentToDestFragments(ExecutionFragment execFragment, SplitCastPlanFragment fragment)
+            throws SchedulerException {
+        Preconditions.checkState(fragment.getSink() instanceof SplitCastDataSink);
+        SplitCastDataSink splitSink = (SplitCastDataSink) fragment.getSink();
+
+        // set # of senders
+        int numDestinations = fragment.getDestFragmentList().size();
+        for (int i = 0; i < numDestinations; i++) {
+            PlanFragment destFragment = fragment.getDestFragmentList().get(i);
+
+            Preconditions.checkState(destFragment != null);
+
+            ExecutionFragment destExecFragment = idToFragment.get(destFragment.getFragmentId());
+            DataStreamSink sink = splitSink.getDataStreamSinks().get(i);
+
+            // Set params for pipeline level shuffle.
+            fragment.getDestNode(i).setPartitionType(fragment.getOutputPartitions().get(i).getType());
+            sink.setExchDop(destFragment.getPipelineDop());
+
+            Integer exchangeId = sink.getExchNodeId().asInt();
+
+            destExecFragment.getNumSendersPerExchange().put(exchangeId, execFragment.getInstances().size());
+
+            if (needScheduleByLocalBucketShuffleJoin(destExecFragment, sink)) {
+                throw new NonRecoverableException("Split fragment cannot be bucket shuffle join");
+            } else {
+                Preconditions.checkArgument(!destExecFragment.getInstances().isEmpty());
+                // add destination host to this fragment's destination
+                for (FragmentInstance destInstance : destExecFragment.getInstances()) {
+                    TPlanFragmentDestination dest = new TPlanFragmentDestination();
+
+                    dest.setFragment_instance_id(destInstance.getInstanceId());
+                    ComputeNode worker = destInstance.getWorker();
+                    // NOTE(zc): can be removed in version 4.0
+                    dest.setDeprecated_server(worker.getAddress());
+                    dest.setBrpc_server(worker.getBrpcIpAddress());
+
+                    splitSink.getDestinations().get(i).add(dest);
+                }
+            }
+        }
+    }
+
     private void setInstanceId(FragmentInstance instance) {
         TUniqueId jobId = jobSpec.getQueryId();
         TUniqueId instanceId = new TUniqueId();
@@ -553,10 +617,10 @@ public class ExecutionDAG {
         instanceIdToInstance.put(instanceId, instance);
     }
 
-    public void cancelQueryContext(PPlanFragmentCancelReason cancelReason) {
+    public void cancelQueryContext(PPlanFragmentCancelReason cancelReason, String errorMessage) {
         if (LOG.isDebugEnabled()) {
-            LOG.debug("cancel query context id:{} reason:{}", DebugUtil.printId(jobSpec.getQueryId()),
-                    cancelReason.name());
+            LOG.debug("cancel query context id:{} reason:{} error:{}", DebugUtil.printId(jobSpec.getQueryId()),
+                    cancelReason.name(), errorMessage);
         }
 
         Set<ComputeNode> workers = Sets.newHashSet();
@@ -572,7 +636,7 @@ public class ExecutionDAG {
             try {
                 BackendServiceClient.getInstance().cancelPlanFragmentAsync(brpcAddress,
                         jobSpec.getQueryId(), dummyInstanceId, cancelReason,
-                        jobSpec.isEnablePipeline());
+                        jobSpec.isEnablePipeline(), errorMessage);
             } catch (RpcException e) {
                 LOG.warn("cancel plan fragment get a exception, address={}:{}", brpcAddress.getHostname(),
                         brpcAddress.getPort(), e);

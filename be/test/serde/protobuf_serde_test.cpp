@@ -16,13 +16,13 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/parallel_test.h"
 #include "column/chunk.h"
 #include "column/chunk_extra_data.h"
 #include "column/field.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
-#include "runtime/types.h"
-#include "testutil/parallel_test.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::serde {
 
@@ -101,7 +101,7 @@ PARALLEL_TEST(ProtobufChunkSerde, TestChunkWithExtraData) {
     auto chunk = std::make_unique<Chunk>(make_columns(2), make_schema(2));
     auto extra_data_meta = std::vector<ChunkExtraColumnsMeta>{
             ChunkExtraColumnsMeta{.type = TypeDescriptor(TYPE_INT), .is_null = false, .is_const = false}};
-    auto extra_data_cols = std::vector<ColumnPtr>{make_columns(2)};
+    auto extra_data_cols = make_columns(2);
     auto extra_data = std::make_shared<ChunkExtraColumnsData>(std::move(extra_data_meta), std::move(extra_data_cols));
     chunk->set_extra_data(extra_data);
 

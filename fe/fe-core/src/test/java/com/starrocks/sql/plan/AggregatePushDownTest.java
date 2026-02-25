@@ -16,12 +16,12 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class AggregatePushDownTest extends PlanTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         FeConstants.runningUnitTest = true;
@@ -39,25 +39,60 @@ public class AggregatePushDownTest extends PlanTestBase {
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\"\n" +
                 ")");
+        starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS t_json_a (\n" +
+                "  c0 INT NULL,\n" +
+                "  c1 BIGINT NULL,\n" +
+                "  c2 DATE NULL,\n" +
+                "  c3 JSON NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(c0, c1)\n" +
+                "DISTRIBUTED BY HASH(c0) BUCKETS 3\n" +
+                "PROPERTIES(\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
         connectContext.getSessionVariable().setNewPlanerAggStage(1);
         connectContext.getSessionVariable().setCboPushDownAggregateMode(1);
         connectContext.getSessionVariable().setEnableRewriteSumByAssociativeRule(false);
+        connectContext.getSessionVariable().setEnableEliminateAgg(false);
     }
 
     @Test
-    public void testPushDown() {
-        runFileUnitTest("optimized-plan/agg-pushdown");
+    public void testPushDownDisableOnBroadcastJoin() {
+        connectContext.getSessionVariable().setCboPushDownAggregateOnBroadcastJoin(false);
+        try {
+            runFileUnitTest("optimized-plan/agg-pushdown-disable_on_broadcast_join");
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownAggregateOnBroadcastJoin(true);
+        }
     }
 
     @Test
-    public void testPushDownPreAgg() {
+    public void testPushDownEnableOnBroadcastJoin() {
+        runFileUnitTest("optimized-plan/agg-pushdown-enable_on_broadcast_join");
+    }
+
+    @Test
+    public void testPushDownPreAggDisableOnBroadcastJoin() {
+        connectContext.getSessionVariable().setCboPushDownAggregateOnBroadcastJoin(false);
         connectContext.getSessionVariable().setCboPushDownAggregate("local");
         try {
-            runFileUnitTest("optimized-plan/preagg-pushdown");
+            runFileUnitTest("optimized-plan/preagg-pushdown-disable_on_broadcast_join");
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownAggregate("global");
+            connectContext.getSessionVariable().setCboPushDownAggregateOnBroadcastJoin(true);
+        }
+    }
+
+    @Test
+    public void testPushDownPreAggEnableOnBroadcastJoin() {
+        connectContext.getSessionVariable().setCboPushDownAggregate("local");
+        try {
+            runFileUnitTest("optimized-plan/preagg-pushdown-enable_on_broadcast_join");
         } finally {
             connectContext.getSessionVariable().setCboPushDownAggregate("global");
         }
     }
+
 
     @Test
     public void testPushDownDistinctAggBelowWindow()
@@ -77,17 +112,41 @@ public class AggregatePushDownTest extends PlanTestBase {
                 "where month(order_date)=1\n" +
                 "order by region, order_date";
         String plan = UtFrameUtils.getVerboseFragmentPlan(connectContext, q1);
-        Assert.assertTrue(plan, plan.contains("  1:AGGREGATE (update finalize)\n" +
+        Assertions.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
                 "  |  aggregate: sum[([3: income, DECIMAL128(10,2), false]); args: DECIMAL128; " +
                 "result: DECIMAL128(38,2); args nullable: false; result nullable: true]\n" +
-                "  |  group by: [1: region, VARCHAR, true], [2: order_date, DATE, false]\n"));
+                "  |  group by: [1: region, VARCHAR, true], [2: order_date, DATE, false]\n"), plan);
 
-        Assert.assertTrue(plan.contains("  0:OlapScanNode\n" +
+        Assertions.assertTrue(plan.contains("  0:OlapScanNode\n" +
                 "     table: trans, rollup: trans\n" +
                 "     preAggregation: on\n" +
                 "     Predicates: month[([2: order_date, DATE, false]); args: DATE; result: TINYINT; " +
                 "args nullable: false; result nullable: false] = 1\n" +
                 ""));
+    }
+
+    @Test
+    public void testNotPushdownWithJsonType() throws Exception {
+        String sql = "select /*+ SET_VAR(cbo_push_down_aggregate_mode=1) */ distinct " +
+                "cast(json_query(a.c3, '$.\"14\"') as varchar) as v0 " +
+                "from t_json_a a " +
+                "where a.c0 = 1 and a.c1 in (" +
+                "  select distinct v1 from t0 where v1 in (4)" +
+                ")";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(connectContext, sql);
+        assertContains(plan, "|----4:EXCHANGE\n" +
+                "  |       distribution type: BROADCAST\n" +
+                "  |       cardinality: 1\n" +
+                "  |    \n" +
+                "  1:Project\n" +
+                "  |  output columns:\n" +
+                "  |  2 <-> [2: c1, BIGINT, true]\n" +
+                "  |  10 <-> json_query[([4: c3, JSON, true], '$.\"14\"'); args: JSON,VARCHAR; result: JSON; args nullable: " +
+                "true; result nullable: true]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     table: t_json_a, rollup: t_json_a");
     }
 
     @Test

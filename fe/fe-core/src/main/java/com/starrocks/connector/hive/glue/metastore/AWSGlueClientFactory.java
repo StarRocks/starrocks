@@ -16,7 +16,7 @@ package com.starrocks.connector.hive.glue.metastore;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.credential.CloudConfigurationFactory;
-import com.starrocks.credential.aws.AWSCloudCredential;
+import com.starrocks.credential.aws.AwsCloudCredential;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.api.MetaException;
 import org.apache.logging.log4j.LogManager;
@@ -25,7 +25,7 @@ import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.services.glue.GlueClient;
 import software.amazon.awssdk.services.glue.GlueClientBuilder;
 
-import java.net.URI;
+import static com.starrocks.connector.share.credential.AwsCredentialUtil.ensureSchemeInEndpoint;
 
 public final class AWSGlueClientFactory implements GlueClientFactory {
 
@@ -40,7 +40,7 @@ public final class AWSGlueClientFactory implements GlueClientFactory {
 
     @Override
     public GlueClient newClient() throws MetaException {
-        AWSCloudCredential glueCloudCredential = CloudConfigurationFactory.buildGlueCloudCredential(conf);
+        AwsCloudCredential glueCloudCredential = CloudConfigurationFactory.buildGlueCloudCredential(conf);
         try {
             GlueClientBuilder glueClientBuilder = GlueClient.builder();
             if (glueCloudCredential != null) {
@@ -50,7 +50,7 @@ public final class AWSGlueClientFactory implements GlueClientFactory {
                 glueClientBuilder.region(glueCloudCredential.tryToResolveRegion());
 
                 if (!glueCloudCredential.getEndpoint().isEmpty()) {
-                    glueClientBuilder.endpointOverride(URI.create(glueCloudCredential.getEndpoint()));
+                    glueClientBuilder.endpointOverride(ensureSchemeInEndpoint(glueCloudCredential.getEndpoint()));
                 }
             }
             return glueClientBuilder.build();

@@ -15,8 +15,6 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
@@ -24,28 +22,26 @@ import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.ExpectedException;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
 public class InsertIntoValuesDecimalV3Test {
     private static StarRocksAssert starRocksAssert;
 
-    @Rule
-    public ExpectedException expectedEx = ExpectedException.none();
-
     private static ConnectContext ctx;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         String createTblStmtStr =
@@ -76,7 +72,7 @@ public class InsertIntoValuesDecimalV3Test {
                 ");");
     }
 
-    @Before
+    @BeforeEach
     public void setUp() {
         ctx.setQueryId(UUIDUtil.genUUID());
         ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
@@ -97,9 +93,9 @@ public class InsertIntoValuesDecimalV3Test {
         QueryStatement selectStmt = stmt.getQueryStatement();
         ExecPlan execPlan = new StatementPlanner().plan(stmt, ctx);
         for (List<Expr> exprs : ((ValuesRelation) selectStmt.getQueryRelation()).getRows()) {
-            Assert.assertEquals(
+            Assertions.assertEquals(
                     exprs.get(1).getType(),
-                    ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 20, 9));
+                    TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 20, 9));
         }
     }
 
@@ -110,7 +106,7 @@ public class InsertIntoValuesDecimalV3Test {
         ExecPlan execPlan = new StatementPlanner().plan(stmt, ctx);
         String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
 
-        Assert.assertTrue(plan.contains("constant exprs: \n" +
+        Assertions.assertTrue(plan.contains("constant exprs: \n" +
                 "         1 | 2 | []"));
     }
 }

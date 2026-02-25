@@ -41,10 +41,12 @@
 #include <type_traits>
 #include <utility>
 
+#include "base/types/int128.h"
 #include "column/column.h"
 #include "column/column_viewer.h"
 #include "column/const_column.h"
 #include "common/logging.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "exec/es/es_query_builder.h"
 #include "exprs/column_ref.h"
@@ -52,11 +54,8 @@
 #include "exprs/expr_context.h"
 #include "exprs/in_const_predicate.hpp"
 #include "gutil/casts.h"
-#include "runtime/large_int_value.h"
 #include "runtime/runtime_state.h"
-#include "runtime/string_value.h"
 #include "types/logical_type.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 
@@ -105,7 +104,7 @@ VExtLiteral::VExtLiteral(LogicalType type, ColumnPtr column, const std::string& 
     } else if (type == TYPE_DECIMAL32 || type == TYPE_DECIMAL64 || type == TYPE_DECIMAL128) {
         DCHECK(!column->is_null(0));
         if (column->is_constant()) {
-            _value = down_cast<ConstColumn*>(column.get())->data_column()->debug_item(0);
+            _value = down_cast<const ConstColumn*>(column.get())->data_column()->debug_item(0);
         } else {
             _value = column->debug_item(0);
         }
@@ -122,12 +121,13 @@ std::string VExtLiteral::_value_to_string(ColumnPtr& column) {
                 [&](auto&& arg) {
                     using T = std::decay_t<decltype(arg)>;
                     if constexpr (is_type_in<T, std::monostate, int96_t, decimal12_t, DecimalV2Value, DatumArray,
-                                             DatumMap, HyperLogLog*, BitmapValue*, PercentileValue*, JsonValue*>()) {
+                                             DatumMap, HyperLogLog*, BitmapValue*, PercentileValue*, JsonValue*,
+                                             VariantRowValue*>()) {
                         // ignore these types
                     } else if constexpr (std::is_same_v<T, Slice>) {
                         res = std::string(arg.data, arg.size);
                     } else if constexpr (std::is_same_v<T, __int128_t>) {
-                        res = LargeIntValue::to_string(arg);
+                        res = int128_to_string(arg);
                     } else {
                         res = std::to_string(arg);
                     }

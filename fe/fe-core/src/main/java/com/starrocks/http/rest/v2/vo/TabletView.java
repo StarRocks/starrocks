@@ -18,9 +18,10 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 
 import java.util.Set;
+
+import static com.starrocks.server.WarehouseManager.DEFAULT_RESOURCE;
 
 public class TabletView {
 
@@ -45,9 +46,9 @@ public class TabletView {
         tvo.setBackendIds(tablet.getBackendIds());
 
         if (tablet instanceof LakeTablet) {
-            LakeTablet lakeTablet = (LakeTablet) tablet;
+            // TODO(ComputeResource): support more better compute resource acquiring.
             Long computeNodeId = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                    .getComputeNodeId(WarehouseManager.DEFAULT_WAREHOUSE_ID, lakeTablet);
+                    .getAliveComputeNodeId(DEFAULT_RESOURCE, tablet.getId());
             tvo.setPrimaryComputeNodeId(computeNodeId);
         }
 

@@ -15,26 +15,29 @@
 
 package com.starrocks.connector.elasticsearch;
 
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.InPredicate;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.IsNullPredicate;
-import com.starrocks.analysis.LikePredicate;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.SlotId;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import org.junit.Assert;
-import org.junit.Test;
+import com.starrocks.planner.SlotDescriptor;
+import com.starrocks.planner.SlotId;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.InPredicate;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.IsNullPredicate;
+import com.starrocks.sql.ast.expression.LikePredicate;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.StringType;
+import com.starrocks.type.Type;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -48,18 +51,18 @@ public class QueryConverterTest {
 
     @Test
     public void testTranslateIsNullPredicate() {
-        SlotRef kSlotRef = mockSlotRef("k", Type.BOOLEAN);
+        SlotRef kSlotRef = mockSlotRef("k", BooleanType.BOOLEAN);
         IsNullPredicate isNullPredicate = new IsNullPredicate(kSlotRef, false);
         IsNullPredicate isNotNullPredicate = new IsNullPredicate(kSlotRef, true);
-        Assert.assertEquals("{\"bool\":{\"must_not\":{\"exists\":{\"field\":\"k\"}}}}",
+        Assertions.assertEquals("{\"bool\":{\"must_not\":{\"exists\":{\"field\":\"k\"}}}}",
                 queryConverter.convert(isNullPredicate).toString());
-        Assert.assertEquals("{\"exists\":{\"field\":\"k\"}}",
+        Assertions.assertEquals("{\"exists\":{\"field\":\"k\"}}",
                 queryConverter.convert(isNotNullPredicate).toString());
     }
 
     @Test
     public void testTranslateInPredicate() {
-        SlotRef codeSlotRef = mockSlotRef("code", Type.INT);
+        SlotRef codeSlotRef = mockSlotRef("code", IntegerType.INT);
         List<Expr> codeLiterals = new ArrayList<>();
         IntLiteral codeLiteral1 = new IntLiteral(1);
         IntLiteral codeLiteral2 = new IntLiteral(2);
@@ -69,14 +72,14 @@ public class QueryConverterTest {
         codeLiterals.add(codeLiteral3);
         InPredicate inPredicate = new InPredicate(codeSlotRef, codeLiterals, false);
         InPredicate notInPredicate = new InPredicate(codeSlotRef, codeLiterals, true);
-        Assert.assertEquals("{\"terms\":{\"code\":[1,2,3]}}", queryConverter.convert(inPredicate).toString());
-        Assert.assertEquals("{\"bool\":{\"must_not\":{\"terms\":{\"code\":[1,2,3]}}}}",
+        Assertions.assertEquals("{\"terms\":{\"code\":[1,2,3]}}", queryConverter.convert(inPredicate).toString());
+        Assertions.assertEquals("{\"bool\":{\"must_not\":{\"terms\":{\"code\":[1,2,3]}}}}",
                 queryConverter.convert(notInPredicate).toString());
     }
 
     @Test
     public void testTranslateRawQuery() {
-        SlotRef serviceSlotRef = mockSlotRef("service", Type.STRING);
+        SlotRef serviceSlotRef = mockSlotRef("service", StringType.STRING);
         // normal test
         String normalValue = "{\"term\":{\"service\":{\"value\":\"starrocks\"}}}";
         StringLiteral normalValueLiteral = new StringLiteral(normalValue);
@@ -84,7 +87,7 @@ public class QueryConverterTest {
         params.add(serviceSlotRef);
         params.add(normalValueLiteral);
         FunctionCallExpr normalESQueryExpr = new FunctionCallExpr("esquery", params);
-        Assert.assertEquals(normalValue, queryConverter.convert(normalESQueryExpr).toString());
+        Assertions.assertEquals(normalValue, queryConverter.convert(normalESQueryExpr).toString());
         // illegal test
         String illegalValue = "{\"term\":{\"service\":{\"value\":\"starrocks\"}},\"k\":3}";
         StringLiteral illegalValueLiteral = new StringLiteral(illegalValue);
@@ -97,7 +100,7 @@ public class QueryConverterTest {
 
     @Test
     public void testTranslateLikePredicate() {
-        SlotRef name = mockSlotRef("name", Type.STRING);
+        SlotRef name = mockSlotRef("name", StringType.STRING);
         StringLiteral nameLiteral1 = new StringLiteral("%1%");
         StringLiteral nameLiteral2 = new StringLiteral("*1*");
         StringLiteral nameLiteral3 = new StringLiteral("1_2");
@@ -105,14 +108,14 @@ public class QueryConverterTest {
         LikePredicate regexPredicate = new LikePredicate(LikePredicate.Operator.REGEXP, name, nameLiteral2);
         LikePredicate likePredicate2 = new LikePredicate(LikePredicate.Operator.LIKE, name, nameLiteral3);
 
-        Assert.assertEquals("{\"wildcard\":{\"name\":\"*1*\"}}", queryConverter.convert(likePredicate1).toString());
-        Assert.assertEquals("{\"wildcard\":{\"name\":\"*1*\"}}", queryConverter.convert(regexPredicate).toString());
-        Assert.assertEquals("{\"wildcard\":{\"name\":\"1?2\"}}", queryConverter.convert(likePredicate2).toString());
+        Assertions.assertEquals("{\"wildcard\":{\"name\":\"*1*\"}}", queryConverter.convert(likePredicate1).toString());
+        Assertions.assertEquals("{\"wildcard\":{\"name\":\"*1*\"}}", queryConverter.convert(regexPredicate).toString());
+        Assertions.assertEquals("{\"wildcard\":{\"name\":\"1?2\"}}", queryConverter.convert(likePredicate2).toString());
     }
 
     @Test
     public void testTranslateRangePredicate() {
-        SlotRef valueSlotRef = mockSlotRef("value", Type.INT);
+        SlotRef valueSlotRef = mockSlotRef("value", IntegerType.INT);
         IntLiteral intLiteral = new IntLiteral(1000);
         Expr leExpr = new BinaryPredicate(BinaryType.LE, valueSlotRef, intLiteral);
         Expr ltExpr = new BinaryPredicate(BinaryType.LT, valueSlotRef, intLiteral);
@@ -121,40 +124,40 @@ public class QueryConverterTest {
 
         Expr eqExpr = new BinaryPredicate(BinaryType.EQ, valueSlotRef, intLiteral);
         Expr neExpr = new BinaryPredicate(BinaryType.NE, valueSlotRef, intLiteral);
-        Assert.assertEquals("{\"range\":{\"value\":{\"lt\":1000}}}",
+        Assertions.assertEquals("{\"range\":{\"value\":{\"lt\":1000}}}",
                 queryConverter.convert(ltExpr).toString());
-        Assert.assertEquals("{\"range\":{\"value\":{\"lte\":1000}}}",
+        Assertions.assertEquals("{\"range\":{\"value\":{\"lte\":1000}}}",
                 queryConverter.convert(leExpr).toString());
-        Assert.assertEquals("{\"range\":{\"value\":{\"gt\":1000}}}",
+        Assertions.assertEquals("{\"range\":{\"value\":{\"gt\":1000}}}",
                 queryConverter.convert(gtExpr).toString());
-        Assert.assertEquals("{\"range\":{\"value\":{\"gte\":1000}}}",
+        Assertions.assertEquals("{\"range\":{\"value\":{\"gte\":1000}}}",
                 queryConverter.convert(geExpr).toString());
-        Assert.assertEquals("{\"term\":{\"value\":1000}}", queryConverter.convert(eqExpr).toString());
-        Assert.assertEquals("{\"bool\":{\"must_not\":{\"term\":{\"value\":1000}}}}",
+        Assertions.assertEquals("{\"term\":{\"value\":1000}}", queryConverter.convert(eqExpr).toString());
+        Assertions.assertEquals("{\"bool\":{\"must_not\":{\"term\":{\"value\":1000}}}}",
                 queryConverter.convert(neExpr).toString());
     }
 
     @Test
     public void testTranslateCompoundPredicate() {
-        SlotRef col1SlotRef = mockSlotRef("col1", Type.INT);
+        SlotRef col1SlotRef = mockSlotRef("col1", IntegerType.INT);
         IntLiteral intLiteral1 = new IntLiteral(100);
-        SlotRef col2SlotRef = mockSlotRef("col2", Type.INT);
+        SlotRef col2SlotRef = mockSlotRef("col2", IntegerType.INT);
 
         IntLiteral intLiteral2 = new IntLiteral(200);
         BinaryPredicate bp1 = new BinaryPredicate(BinaryType.EQ, col1SlotRef, intLiteral1);
         BinaryPredicate bp2 = new BinaryPredicate(BinaryType.GT, col2SlotRef, intLiteral2);
         CompoundPredicate andPredicate =
                 new CompoundPredicate(CompoundPredicate.Operator.AND, bp1, bp2);
-        Assert.assertEquals("{\"bool\":{\"must\":[{\"term\":{\"col1\":100}},{\"range\":{\"col2\":{\"gt\":200}}}]}}",
+        Assertions.assertEquals("{\"bool\":{\"must\":[{\"term\":{\"col1\":100}},{\"range\":{\"col2\":{\"gt\":200}}}]}}",
                 queryConverter.convert(andPredicate).toString());
 
         CompoundPredicate orPredicate =
                 new CompoundPredicate(CompoundPredicate.Operator.OR, bp1, bp2);
-        Assert.assertEquals("{\"bool\":{\"should\":[{\"term\":{\"col1\":100}},{\"range\":{\"col2\":{\"gt\":200}}}]}}",
+        Assertions.assertEquals("{\"bool\":{\"should\":[{\"term\":{\"col1\":100}},{\"range\":{\"col2\":{\"gt\":200}}}]}}",
                 queryConverter.convert(orPredicate).toString());
 
         CompoundPredicate notPredicate = new CompoundPredicate(CompoundPredicate.Operator.NOT, bp2, null);
-        Assert.assertEquals("{\"bool\":{\"must_not\":{\"range\":{\"col2\":{\"gt\":200}}}}}",
+        Assertions.assertEquals("{\"bool\":{\"must_not\":{\"range\":{\"col2\":{\"gt\":200}}}}}",
                 queryConverter.convert(notPredicate).toString());
     }
 

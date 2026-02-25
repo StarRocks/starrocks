@@ -12,50 +12,69 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.parser;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.JoinOperator;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AlterClause;
+import com.starrocks.sql.ast.AlterDatabaseSetStmt;
+import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.MergeTabletClause;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SplitTabletClause;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.UtFrameUtils;
 import org.antlr.v4.runtime.BaseErrorListener;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.atn.PredictionMode;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 import static com.starrocks.sql.plan.PlanTestBase.assertContains;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.fail;
 
 class ParserTest {
+
+    @Test
+    void test() {
+        String sql = "alter plan advisor add " +
+                "select count(*) from customer join " +
+                "(select * from skew_tbl where c_custkey_skew = 100) t on abs(c_custkey) = c_custkey_skew;";
+        SqlParser.parse(sql, new SessionVariable());
+        System.out.println();
+    }
 
     @Test
     void tokensExceedLimitTest() {
@@ -68,15 +87,6 @@ class ParserTest {
             assertContains(e.getMessage(), "Getting syntax error. Detail message: " +
                     "Statement exceeds maximum length limit");
         }
-    }
-
-    @Test
-    void test() {
-        String sql = "@`a` = 1";
-        SessionVariable sessionVariable = new SessionVariable();
-        List<Expr> exprs = SqlParser.parseSqlToExprs(sql, sessionVariable);
-        System.out.println();
-
     }
 
     @Test
@@ -93,8 +103,10 @@ class ParserTest {
     }
 
     /**
-     * Test that FE code can parse queries for databases in the MySQL-family that support SQL 2011's system versioning
-     * temporal queries. Although MySQL doesn't yet support this syntax directly, multiple MySQL compatible databases do.
+     * Test that FE code can parse queries for databases in the MySQL-family that
+     * support SQL 2011's system versioning
+     * temporal queries. Although MySQL doesn't yet support this syntax directly,
+     * multiple MySQL compatible databases do.
      */
     @Test
     void sqlParseTemporalQueriesTest() {
@@ -148,13 +160,14 @@ class ParserTest {
     @Test
     void testNonReservedWords_1() {
         String sql = "select anti, authentication, auto_increment, cancel, distributed, enclose, escape, export," +
-                "host, incremental, minus, nodes, optimizer, privileges, qualify, skip_header, semi, trace, trim_space " +
+                "host, incremental, minus, nodes, optimizer, privileges, qualify, skip_header, semi, trace, trim_space "
+                +
                 "from tbl left anti join t1 on ture left semi join t2 on false full join t3 on true minus select * from tbl";
         SessionVariable sessionVariable = new SessionVariable();
         try {
             QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
         } catch (Exception e) {
-            fail("sql should success. errMsg: " +  e.getMessage());
+            fail("sql should success. errMsg: " + e.getMessage());
         }
     }
 
@@ -166,37 +179,37 @@ class ParserTest {
         try {
             QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
             JoinRelation topJoinRelation = (JoinRelation) ((SelectRelation) stmt.getQueryRelation()).getRelation();
-            Assert.assertEquals(JoinOperator.INNER_JOIN, topJoinRelation.getJoinOp());
+            Assertions.assertEquals(JoinOperator.INNER_JOIN, topJoinRelation.getJoinOp());
 
             JoinRelation bottomJoinRelation = (JoinRelation) topJoinRelation.getLeft();
-            Assert.assertEquals("semi", bottomJoinRelation.getLeft().getResolveTableName().getTbl());
-            Assert.assertEquals("anti", bottomJoinRelation.getRight().getResolveTableName().getTbl());
-            Assert.assertEquals(JoinOperator.INNER_JOIN, bottomJoinRelation.getJoinOp());
+            Assertions.assertEquals("semi", bottomJoinRelation.getLeft().getResolveTableName().getTbl());
+            Assertions.assertEquals("anti", bottomJoinRelation.getRight().getResolveTableName().getTbl());
+            Assertions.assertEquals(JoinOperator.INNER_JOIN, bottomJoinRelation.getJoinOp());
         } catch (Exception e) {
-            fail("sql should success. errMsg: " +  e.getMessage());
+            fail("sql should success. errMsg: " + e.getMessage());
         }
     }
 
     @Test
     void testParseLargeDecimal() {
-        String sql = "select cast(1 as decimal(65,0))";
+        String sql = "select cast(1 as decimal(85,0))";
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         ctx.setThreadLocalInfo();
         SessionVariable sessionVariable = ctx.getSessionVariable();
         try {
             sessionVariable.setSqlDialect("sr");
-            QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
-            Assert.fail();
+            SqlParser.parse(sql, sessionVariable);
+            Assertions.fail();
         } catch (Throwable err) {
-            Assert.assertTrue(err.getMessage().contains("DECIMAL's precision should range from 1 to 38"));
+            Assertions.assertTrue(err.getMessage().contains("DECIMAL's precision should range from 1 to 76"));
         }
 
         try {
             sessionVariable.setSqlDialect("trino");
-            QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
-            Assert.fail();
+            SqlParser.parse(sql, sessionVariable);
+            Assertions.fail();
         } catch (Throwable err) {
-            Assert.assertTrue(err.getMessage().contains("DECIMAL's precision should range from 1 to 38"));
+            Assertions.assertTrue(err.getMessage().contains("DECIMAL's precision should range from 1 to 76"));
         }
 
         try {
@@ -205,9 +218,9 @@ class ParserTest {
             QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
             Analyzer.analyze(stmt, ctx);
             Type type = stmt.getQueryRelation().getOutputExpression().get(0).getType();
-            Assert.assertTrue(type.isDouble());
+            Assertions.assertTrue(type.isDouble());
         } catch (Throwable err) {
-            Assert.fail(err.getMessage());
+            Assertions.fail(err.getMessage());
         }
 
         try {
@@ -216,9 +229,9 @@ class ParserTest {
             QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
             Analyzer.analyze(stmt, ctx);
             Type type = stmt.getQueryRelation().getOutputExpression().get(0).getType();
-            Assert.assertTrue(type.isDouble());
+            Assertions.assertTrue(type.isDouble());
         } catch (Throwable err) {
-            Assert.fail(err.getMessage());
+            Assertions.fail(err.getMessage());
         }
 
         try {
@@ -227,9 +240,9 @@ class ParserTest {
             QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
             Analyzer.analyze(stmt, ctx);
             Type type = stmt.getQueryRelation().getOutputExpression().get(0).getType();
-            Assert.assertEquals(type, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0));
+            Assertions.assertEquals(type, TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL256, 76, 0));
         } catch (Throwable err) {
-            Assert.fail(err.getMessage());
+            Assertions.fail(err.getMessage());
         }
 
         try {
@@ -238,13 +251,13 @@ class ParserTest {
             QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
             Analyzer.analyze(stmt, ctx);
             Type type = stmt.getQueryRelation().getOutputExpression().get(0).getType();
-            Assert.assertEquals(type, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0));
+            Assertions.assertEquals(type, TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL256, 76, 0));
         } catch (Throwable err) {
-            Assert.fail(err.getMessage());
+            Assertions.fail(err.getMessage());
         }
         try {
             sessionVariable.setLargeDecimalUnderlyingType("foobar");
-            Assert.fail();
+            Assertions.fail();
         } catch (Throwable error) {
 
         }
@@ -262,8 +275,8 @@ class ParserTest {
         Analyzer.analyze(stmt, ctx);
         Type type1 = stmt.getQueryRelation().getOutputExpression().get(0).getType();
         Type type2 = stmt.getQueryRelation().getOutputExpression().get(1).getType();
-        Assert.assertEquals(type1, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0));
-        Assert.assertEquals(type2, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 0));
+        Assertions.assertEquals(type1, TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL256, 65, 0));
+        Assertions.assertEquals(type2, TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 0));
     }
 
     @Test
@@ -274,10 +287,11 @@ class ParserTest {
         final Expr[] exprs = new Expr[2];
         Thread t1 = new Thread(() -> {
             synchronized (lock) {
-                StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
+                com.starrocks.sql.parser.StarRocksLexer lexer =
+                        new com.starrocks.sql.parser.StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
                 lexer.setSqlMode(SqlModeHelper.MODE_DEFAULT);
                 CommonTokenStream tokenStream = new CommonTokenStream(lexer);
-                StarRocksParser parser = new StarRocksParser(tokenStream);
+                com.starrocks.sql.parser.StarRocksParser parser = new com.starrocks.sql.parser.StarRocksParser(tokenStream);
                 parser.removeErrorListeners();
                 parser.addErrorListener(new BaseErrorListener());
                 parser.removeParseListeners();
@@ -286,9 +300,12 @@ class ParserTest {
                 } catch (InterruptedException e) {
                     fail(e.getMessage());
                 }
-                List<StarRocksParser.SingleStatementContext> sqlStatements = parser.sqlStatements().singleStatement();
-                QueryStatement statement = (QueryStatement) new AstBuilder(SqlModeHelper.MODE_DEFAULT)
-                        .visitSingleStatement(sqlStatements.get(0));
+                List<com.starrocks.sql.parser.StarRocksParser.SingleStatementContext> sqlStatements =
+                        parser.sqlStatements().singleStatement();
+                QueryStatement statement =
+                        (QueryStatement) new AstBuilder(SqlModeHelper.MODE_DEFAULT, GlobalVariable.enableTableNameCaseInsensitive,
+                                new IdentityHashMap<>())
+                                .visitSingleStatement(sqlStatements.get(0));
                 SelectList item = ((SelectRelation) statement.getQueryRelation()).getSelectList();
                 exprs[0] = item.getItems().get(0).getExpr();
                 latch.countDown();
@@ -298,16 +315,19 @@ class ParserTest {
 
         Thread t2 = new Thread(() -> {
             synchronized (lock) {
-                StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
+                com.starrocks.sql.parser.StarRocksLexer lexer =
+                        new com.starrocks.sql.parser.StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
                 long sqlMode = SqlModeHelper.MODE_DEFAULT | SqlModeHelper.MODE_PIPES_AS_CONCAT;
                 lexer.setSqlMode(sqlMode);
                 CommonTokenStream tokenStream = new CommonTokenStream(lexer);
-                StarRocksParser parser = new StarRocksParser(tokenStream);
+                com.starrocks.sql.parser.StarRocksParser parser = new com.starrocks.sql.parser.StarRocksParser(tokenStream);
                 parser.removeErrorListeners();
                 parser.addErrorListener(new BaseErrorListener());
                 parser.removeParseListeners();
-                List<StarRocksParser.SingleStatementContext> sqlStatements = parser.sqlStatements().singleStatement();
-                QueryStatement statement = (QueryStatement) new AstBuilder(sqlMode)
+                List<com.starrocks.sql.parser.StarRocksParser.SingleStatementContext> sqlStatements =
+                        parser.sqlStatements().singleStatement();
+                QueryStatement statement = (QueryStatement) new AstBuilder(sqlMode, GlobalVariable.enableTableNameCaseInsensitive,
+                        new IdentityHashMap<>())
                         .visitSingleStatement(sqlStatements.get(0));
                 SelectList item = ((SelectRelation) statement.getQueryRelation()).getSelectList();
                 exprs[1] = item.getItems().get(0).getExpr();
@@ -320,10 +340,10 @@ class ParserTest {
         Thread.sleep(100);
         t2.start();
         latch.await(10, TimeUnit.SECONDS);
-        Assert.assertTrue(exprs[0].toSql() + "should be a compound or predicate",
-                exprs[0] instanceof CompoundPredicate);
-        Assert.assertTrue(exprs[1].toSql() + "should be a concat function call",
-                exprs[1] instanceof FunctionCallExpr);
+        Assertions.assertTrue(exprs[0] instanceof CompoundPredicate,
+                ExprToSql.toSql(exprs[0]) + "should be a compound or predicate");
+        Assertions.assertTrue(exprs[1] instanceof FunctionCallExpr,
+                ExprToSql.toSql(exprs[1]) + "should be a concat function call");
     }
 
     @ParameterizedTest
@@ -333,7 +353,7 @@ class ParserTest {
         try {
             SqlParser.parse(sql, sessionVariable).get(0);
         } catch (Exception e) {
-            fail("sql should success. errMsg: " +  e.getMessage());
+            fail("sql should success. errMsg: " + e.getMessage());
         }
     }
 
@@ -345,7 +365,7 @@ class ParserTest {
             SqlParser.parse(sql, sessionVariable).get(0);
             fail("Not quoting reserved words. sql should fail.");
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof ParsingException);
+            Assertions.assertTrue(e instanceof ParsingException);
         }
     }
 
@@ -360,7 +380,7 @@ class ParserTest {
             }
         } catch (Exception e) {
             if (isValid) {
-                fail("sql should success. errMsg: " +  e.getMessage());
+                fail("sql should success. errMsg: " + e.getMessage());
             }
         }
     }
@@ -376,7 +396,7 @@ class ParserTest {
             }
         } catch (Exception e) {
             if (isValid) {
-                fail("sql should success. errMsg: " +  e.getMessage());
+                fail("sql should success. errMsg: " + e.getMessage());
             }
         }
     }
@@ -387,7 +407,7 @@ class ParserTest {
         SessionVariable sessionVariable = new SessionVariable();
         try {
             SqlParser.parse(sql, sessionVariable).get(0);
-            fail("sql should fail.");
+            fail("sql should fail: " + sql);
         } catch (Exception e) {
             System.out.println(e.getMessage());
             assertContains(e.getMessage(), expecting);
@@ -396,16 +416,17 @@ class ParserTest {
 
     @Test
     void testWrongVariableName() {
-        String res = VariableMgr.findSimilarVarNames("disable_coloce_join");
-        assertContains(res, "{'disable_colocate_join', 'disable_join_reorder', 'disable_function_fold_constants'}");
+        VariableMgr variableMgr = new VariableMgr();
+        String res = variableMgr.findSimilarVarNames("disable_coloce_join");
+        assertContains(res, "{'disable_colocate_join', 'disable_colocate_set', 'disable_join_reorder'");
 
-        res = VariableMgr.findSimilarVarNames("SQL_AUTO_NULL");
+        res = variableMgr.findSimilarVarNames("SQL_AUTO_NULL");
         assertContains(res, "{'SQL_AUTO_IS_NULL', 'sql_dialect', 'spill_storage_volume'}");
 
-        res = VariableMgr.findSimilarVarNames("pipeline");
+        res = variableMgr.findSimilarVarNames("pipeline");
         assertContains(res, "{'pipeline_dop', 'pipeline_sink_dop', 'pipeline_profile_level'}");
 
-        res = VariableMgr.findSimilarVarNames("disable_joinreorder");
+        res = variableMgr.findSimilarVarNames("disable_joinreorder");
         assertContains(res, "{'disable_join_reorder', 'disable_colocate_join'");
     }
 
@@ -428,14 +449,16 @@ class ParserTest {
             builder.append(exprString);
         }
 
-        AstBuilder astBuilder = new AstBuilder(SqlModeHelper.MODE_DEFAULT);
-        StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(builder.toString())));
+        AstBuilder astBuilder = new AstBuilder(SqlModeHelper.MODE_DEFAULT, GlobalVariable.enableTableNameCaseInsensitive,
+                new IdentityHashMap<>());
+        com.starrocks.sql.parser.StarRocksLexer lexer = new com.starrocks.sql.parser.StarRocksLexer(
+                new CaseInsensitiveStream(CharStreams.fromString(builder.toString())));
         lexer.setSqlMode(SqlModeHelper.MODE_DEFAULT);
         CommonTokenStream tokenStream = new CommonTokenStream(lexer);
-        StarRocksParser parser = new StarRocksParser(tokenStream);
+        com.starrocks.sql.parser.StarRocksParser parser = new com.starrocks.sql.parser.StarRocksParser(tokenStream);
         parser.getInterpreter().setPredictionMode(PredictionMode.LL);
         long start = System.currentTimeMillis();
-        StarRocksParser.ExpressionContext context1 = parser.expression();
+        com.starrocks.sql.parser.StarRocksParser.ExpressionContext context1 = parser.expression();
         Expr expr1 = (Expr) astBuilder.visit(context1);
         long end = System.currentTimeMillis();
         long timeOfLL = end - start;
@@ -444,13 +467,13 @@ class ParserTest {
         parser.reset();
         parser.getInterpreter().setPredictionMode(PredictionMode.SLL);
         start = System.currentTimeMillis();
-        StarRocksParser.ExpressionContext context2 = parser.expression();
+        com.starrocks.sql.parser.StarRocksParser.ExpressionContext context2 = parser.expression();
         Expr expr2 = (Expr) astBuilder.visit(context2);
         end = System.currentTimeMillis();
         long timeOfSLL = end - start;
 
-        Assert.assertEquals(expr1, expr2);
-        Assert.assertTrue(timeOfLL > timeOfSLL);
+        Assertions.assertEquals(expr1, expr2);
+        Assertions.assertTrue(timeOfLL > timeOfSLL);
     }
 
     @Test
@@ -462,19 +485,18 @@ class ParserTest {
                 "pivot (sum(v1) as s1, count(v2) as c1, avg(v3) as c3 " +
                 "for (v2, v3) in ((1, 2) as 'a', (3,4) as b, (5,6) as 'c'))");
 
-
         List<String> expects = Lists.newArrayList();
         expects.add("SELECT *\n" +
-                "FROM `t` PIVOT (sum(v1)\n" +
-                "FOR v2 IN (1, 2, 3)\n" +
+                "FROM `t` PIVOT (sum(v1) " +
+                "FOR v2 IN (1, 2, 3)" +
                 ")");
         expects.add("SELECT *\n" +
-                "FROM `t` PIVOT (sum(v1) AS s1\n" +
-                "FOR (v2, v3) IN ((1, 2) AS a, (3, 4) AS b, (5, 6) AS c)\n" +
+                "FROM `t` PIVOT (sum(v1) AS s1 " +
+                "FOR (v2, v3) IN ((1, 2) AS a, (3, 4) AS b, (5, 6) AS c)" +
                 ")");
         expects.add("SELECT *\n" +
-                "FROM `t` PIVOT (sum(v1) AS s1, count(v2) AS c1, avg(v3) AS c3\n" +
-                "FOR (v2, v3) IN ((1, 2) AS a, (3, 4) AS b, (5, 6) AS c)\n" +
+                "FROM `t` PIVOT (sum(v1) AS s1, count(v2) AS c1, avg(v3) AS c3 " +
+                "FOR (v2, v3) IN ((1, 2) AS a, (3, 4) AS b, (5, 6) AS c)" +
                 ")");
         for (String sql : sqls) {
             try {
@@ -505,7 +527,6 @@ class ParserTest {
         sqls.add("select * from tbl1 MINUS select * from tbl2");
         return sqls.stream().map(e -> Arguments.of(e));
     }
-
 
     private static Stream<Arguments> reservedWordSqls() {
         List<String> sqls = Lists.newArrayList();
@@ -544,7 +565,6 @@ class ParserTest {
         return sqls.stream().map(e -> Arguments.of(e.first, e.second));
     }
 
-
     private static Stream<Arguments> unexpectedTokenSqls() {
         List<Arguments> arguments = Lists.newArrayList();
 
@@ -560,7 +580,6 @@ class ParserTest {
                 "PROPERTIES (\n" +
                 " \"replication_num\" = \"1\"\n" +
                 ");", ")"));
-        arguments.add(Arguments.of("analyze table tt abc", "';'"));
         arguments.add(Arguments.of("select 1,, from tbl", "a legal identifier"));
         arguments.add(Arguments.of("INSTALL PLUGIN FRO xxx", "FROM"));
         arguments.add(Arguments.of("select (1 + 1) + 1) from tbl", "';'"));
@@ -578,6 +597,212 @@ class ParserTest {
         return arguments.stream();
     }
 
+    @Test
+    public void testTranslateFunction() {
+        String sql = "select translate('abcabc', 'ab', '12') as test;";
+        SessionVariable sessionVariable = new SessionVariable();
+        try {
+            SqlParser.parse(sql, sessionVariable);
+        } catch (Exception e) {
+            Assertions.fail("sql should success. errMsg: " + e.getMessage());
+        }
+    }
+
+    @Test
+    public void testSplitTabletClause() {
+        {
+            String sql = "ALTER TABLE test_db.test_table\n" + //
+                    "SPLIT TABLET\n" + //
+                    "PROPERTIES (\n" + //
+                    "    \"tablet_reshard_target_size\"=\"1024\")";
+
+            SessionVariable sessionVariable = new SessionVariable();
+            try {
+                List<StatementBase> stmts = SqlParser.parse(sql, sessionVariable);
+                Assertions.assertEquals(1, stmts.size());
+
+                AlterTableStmt alterTableStmt = (AlterTableStmt) stmts.get(0);
+                Assertions.assertEquals("test_db", alterTableStmt.getDbName());
+                Assertions.assertEquals("test_table", alterTableStmt.getTableName());
+
+                List<AlterClause> alterClauses = alterTableStmt.getAlterClauseList();
+                Assertions.assertEquals(1, alterClauses.size());
+
+                SplitTabletClause splitTabletClause = (SplitTabletClause) alterClauses.get(0);
+                Assertions.assertEquals(null, splitTabletClause.getPartitionNames());
+                Assertions.assertEquals(null, splitTabletClause.getTabletList());
+                Assertions.assertEquals(Map.of("tablet_reshard_target_size", "1024"), splitTabletClause.getProperties());
+                Assertions.assertNotNull(splitTabletClause.toString());
+            } catch (Exception e) {
+                Assertions.fail("sql should success. errMsg: " + e.getMessage());
+            }
+        }
+
+        {
+            String sql = "ALTER TABLE test_db.test_table\n" + //
+                    "SPLIT TABLET\n" + //
+                    "    PARTITION (partiton_name1, partition_name2)\n" + //
+                    "PROPERTIES (\n" + //
+                    "    \"tablet_reshard_target_size\"=\"1024\")";
+
+            SessionVariable sessionVariable = new SessionVariable();
+            try {
+                List<StatementBase> stmts = SqlParser.parse(sql, sessionVariable);
+                Assertions.assertEquals(1, stmts.size());
+
+                AlterTableStmt alterTableStmt = (AlterTableStmt) stmts.get(0);
+                Assertions.assertEquals("test_db", alterTableStmt.getDbName());
+                Assertions.assertEquals("test_table", alterTableStmt.getTableName());
+
+                List<AlterClause> alterClauses = alterTableStmt.getAlterClauseList();
+                Assertions.assertEquals(1, alterClauses.size());
+
+                SplitTabletClause splitTabletClause = (SplitTabletClause) alterClauses.get(0);
+                Assertions.assertEquals(Lists.newArrayList("partiton_name1", "partition_name2"),
+                        splitTabletClause.getPartitionNames().getPartitionNames());
+                Assertions.assertEquals(null, splitTabletClause.getTabletList());
+                Assertions.assertEquals(Map.of("tablet_reshard_target_size", "1024"), splitTabletClause.getProperties());
+                Assertions.assertNotNull(splitTabletClause.toString());
+            } catch (Exception e) {
+                Assertions.fail("sql should success. errMsg: " + e.getMessage());
+            }
+        }
+
+        {
+            String sql = "ALTER TABLE test_db.test_table\n" + //
+                    "SPLIT TABLET (1, 2, 3)\n" + //
+                    "PROPERTIES (\n" + //
+                    "    \"tablet_reshard_target_size\"=\"1024\")";
+
+            SessionVariable sessionVariable = new SessionVariable();
+            try {
+                List<StatementBase> stmts = SqlParser.parse(sql, sessionVariable);
+                Assertions.assertEquals(1, stmts.size());
+
+                AlterTableStmt alterTableStmt = (AlterTableStmt) stmts.get(0);
+                Assertions.assertEquals("test_db", alterTableStmt.getDbName());
+                Assertions.assertEquals("test_table", alterTableStmt.getTableName());
+
+                List<AlterClause> alterClauses = alterTableStmt.getAlterClauseList();
+                Assertions.assertEquals(1, alterClauses.size());
+
+                SplitTabletClause splitTabletClause = (SplitTabletClause) alterClauses.get(0);
+                Assertions.assertEquals(null, splitTabletClause.getPartitionNames());
+                Assertions.assertEquals(Lists.newArrayList(1L, 2L, 3L),
+                        splitTabletClause.getTabletList().getTabletIds());
+                Assertions.assertEquals(Map.of("tablet_reshard_target_size", "1024"), splitTabletClause.getProperties());
+                Assertions.assertNotNull(splitTabletClause.toString());
+            } catch (Exception e) {
+                Assertions.fail("sql should success. errMsg: " + e.getMessage());
+            }
+        }
+
+        SplitTabletClause splitTabletClause = new SplitTabletClause(null, null, null);
+        Assertions.assertEquals(null, splitTabletClause.getPartitionNames());
+        Assertions.assertTrue(splitTabletClause.toString().contains("SPLIT TABLET"));
+    }
+
+    @Test
+    public void testMergeTabletClause() {
+        {
+            String sql = "ALTER TABLE test_db.test_table\n" + //
+                    "MERGE TABLET PARTITION (partiton_name1, partition_name2)\n" + //
+                    "PROPERTIES (\n" + //
+                    "    \"tablet_reshard_target_size\"=\"1024\")";
+
+            SessionVariable sessionVariable = new SessionVariable();
+            try {
+                List<StatementBase> stmts = SqlParser.parse(sql, sessionVariable);
+                Assertions.assertEquals(1, stmts.size());
+
+                AlterTableStmt alterTableStmt = (AlterTableStmt) stmts.get(0);
+                Assertions.assertEquals("test_db", alterTableStmt.getDbName());
+                Assertions.assertEquals("test_table", alterTableStmt.getTableName());
+
+                List<AlterClause> alterClauses = alterTableStmt.getAlterClauseList();
+                Assertions.assertEquals(1, alterClauses.size());
+
+                MergeTabletClause mergeTabletClause = (MergeTabletClause) alterClauses.get(0);
+                Assertions.assertEquals(Lists.newArrayList("partiton_name1", "partition_name2"),
+                        mergeTabletClause.getPartitionNames().getPartitionNames());
+                Assertions.assertEquals(null, mergeTabletClause.getTabletGroupList());
+                Assertions.assertEquals(Map.of("tablet_reshard_target_size", "1024"), mergeTabletClause.getProperties());
+                Assertions.assertNotNull(mergeTabletClause.toString());
+            } catch (Exception e) {
+                Assertions.fail("sql should success. errMsg: " + e.getMessage());
+            }
+        }
+
+        {
+            String sql = "ALTER TABLE test_db.test_table\n" + //
+                    "MERGE TABLETS (1, 2, 3) (4, 5, 6)\n" + //
+                    "PROPERTIES (\n" + //
+                    "    \"tablet_reshard_target_size\"=\"1024\")";
+
+            SessionVariable sessionVariable = new SessionVariable();
+            try {
+                List<StatementBase> stmts = SqlParser.parse(sql, sessionVariable);
+                Assertions.assertEquals(1, stmts.size());
+
+                AlterTableStmt alterTableStmt = (AlterTableStmt) stmts.get(0);
+                Assertions.assertEquals("test_db", alterTableStmt.getDbName());
+                Assertions.assertEquals("test_table", alterTableStmt.getTableName());
+
+                List<AlterClause> alterClauses = alterTableStmt.getAlterClauseList();
+                Assertions.assertEquals(1, alterClauses.size());
+
+                MergeTabletClause mergeTabletClause = (MergeTabletClause) alterClauses.get(0);
+                Assertions.assertEquals(null, mergeTabletClause.getPartitionNames());
+                Assertions.assertEquals(Lists.newArrayList(
+                        Lists.newArrayList(1L, 2L, 3L),
+                        Lists.newArrayList(4L, 5L, 6L)),
+                        mergeTabletClause.getTabletGroupList().getTabletIdGroups());
+                Assertions.assertEquals(Map.of("tablet_reshard_target_size", "1024"), mergeTabletClause.getProperties());
+                Assertions.assertNotNull(mergeTabletClause.toString());
+            } catch (Exception e) {
+                Assertions.fail("sql should success. errMsg: " + e.getMessage());
+            }
+        }
+    }
+
+    @Test
+    void testSkewHintWithNegativeValues() {
+        String[] sqls = {
+                "select * from t1 join [skew|t1.c_int(-100)] t2 on t1.c_int = t2.c_int",
+                "select * from t1 join [skew|t1.c_int(-100, -200)] t2 on t1.c_int = t2.c_int",
+                "select * from t1 join [skew|t1.c_float(-10.5)] t2 on t1.c_float = t2.c_float",
+                "select * from t1 join [skew|t1.c_decimal(-10.5)] t2 on t1.c_decimal = t2.c_decimal"
+        };
+        SessionVariable sessionVariable = new SessionVariable();
+        for (String sql : sqls) {
+            SqlParser.parse(sql, sessionVariable);
+        }
+    }
+
+    @Test
+    void testAlterDatabaseSet() {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ctx.setThreadLocalInfo();
+        {
+            String sql = "ALTER DATABASE db1 SET (\"storage_volume\" = \"sv1\");";
+            StatementBase stmt = SqlParser.parse(sql, new SessionVariable()).get(0);
+            Assertions.assertInstanceOf(AlterDatabaseSetStmt.class, stmt);
+            Analyzer.analyze(stmt, ctx);
+            com.starrocks.sql.ast.AlterDatabaseSetStmt setStmt = (com.starrocks.sql.ast.AlterDatabaseSetStmt) stmt;
+            Assertions.assertEquals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, setStmt.getCatalogName());
+            Assertions.assertEquals("db1", setStmt.getDbName());
+            Assertions.assertEquals("sv1", setStmt.getProperties().get("storage_volume"));
+        }
+        {
+            ctx.setCurrentCatalog("external_catalog");
+            String sql = "ALTER DATABASE db1 SET (\"storage_volume\" = \"sv1\");";
+            StatementBase stmt = SqlParser.parse(sql, new SessionVariable()).get(0);
+            SemanticException exception = Assertions.assertThrows(SemanticException.class, () -> {
+                Analyzer.analyze(stmt, ctx);
+            });
+            Assertions.assertTrue(
+                    exception.getMessage().contains("Unsupported operation alter db properties under external catalog"),
+                    exception.getMessage());
+        }
+    }
 }
-
-

@@ -18,19 +18,20 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.JoinOperator;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.common.TypeManager;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -42,7 +43,9 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalSetOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
@@ -57,7 +60,11 @@ import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.collections4.SetUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -66,10 +73,12 @@ import org.roaringbitmap.RoaringBitmap;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
@@ -173,6 +182,14 @@ public class Utils {
         return count;
     }
 
+    public static int countOptExpressionNodes(OptExpression node) {
+        int count = 1;
+        for (OptExpression child : node.getInputs()) {
+            count += countOptExpressionNodes(child);
+        }
+        return count;
+    }
+
     public static void extractOlapScanOperator(GroupExpression groupExpression, List<LogicalOlapScanOperator> list) {
         extractOperator(groupExpression, list, p -> OperatorType.LOGICAL_OLAP_SCAN.equals(p.getOpType()));
     }
@@ -183,11 +200,13 @@ public class Utils {
         return list;
     }
 
+    /**
+     * Extract all operators satisfied the predicate
+     */
     public static <E extends Operator> void extractOperator(OptExpression root, List<E> list,
                                                             Predicate<Operator> lambda) {
         if (lambda.test(root.getOp())) {
             list.add((E) root.getOp());
-            return;
         }
 
         List<OptExpression> inputs = root.getInputs();
@@ -196,11 +215,13 @@ public class Utils {
         }
     }
 
+    /**
+     * Extract all operators satisfied the predicate
+     */
     private static <E extends Operator> void extractOperator(GroupExpression root, List<E> list,
                                                              Predicate<Operator> lambda) {
         if (lambda.test(root.getOp())) {
             list.add((E) root.getOp());
-            return;
         }
 
         List<Group> groups = root.getInputs();
@@ -254,7 +275,7 @@ public class Utils {
         return createCompound(CompoundPredicateOperator.CompoundType.OR, Arrays.asList(nodes));
     }
 
-    public static ScalarOperator compoundAnd(Collection<ScalarOperator> nodes) {
+    public static ScalarOperator compoundAnd(Collection<? extends ScalarOperator> nodes) {
         return createCompound(CompoundPredicateOperator.CompoundType.AND, nodes);
     }
 
@@ -289,7 +310,7 @@ public class Utils {
     //  /\   /\
     // a  b c  d
     public static ScalarOperator createCompound(CompoundPredicateOperator.CompoundType type,
-                                                Collection<ScalarOperator> nodes) {
+                                                Collection<? extends ScalarOperator> nodes) {
         LinkedList<ScalarOperator> link =
                 nodes.stream().filter(Objects::nonNull).collect(Collectors.toCollection(Lists::newLinkedList));
 
@@ -297,6 +318,15 @@ public class Utils {
             return null;
         }
 
+        // for and predicate, filter redundant true
+        if (type == CompoundPredicateOperator.CompoundType.AND) {
+            link = link.stream()
+                    .filter(so -> !ConstantOperator.TRUE.equals(so))
+                    .collect(Collectors.toCollection(Lists::newLinkedList));
+            if (link.isEmpty()) {
+                return ConstantOperator.TRUE;
+            }
+        }
         if (link.size() == 1) {
             return link.get(0);
         }
@@ -374,6 +404,16 @@ public class Utils {
         return count;
     }
 
+    public static boolean hasPrunableJoin(OptExpression expression) {
+        if (expression.getOp() instanceof LogicalJoinOperator) {
+            LogicalJoinOperator joinOp = expression.getOp().cast();
+            JoinOperator joinType = joinOp.getJoinType();
+            return joinType.isInnerJoin() || joinType.isCrossJoin() ||
+                    joinType.isLeftOuterJoin() || joinType.isRightOuterJoin();
+        }
+        return expression.getInputs().stream().anyMatch(Utils::hasPrunableJoin);
+    }
+
     public static boolean hasUnknownColumnsStats(OptExpression root) {
         Operator operator = root.getOp();
         if (operator instanceof LogicalScanOperator) {
@@ -410,6 +450,8 @@ public class Utils {
                 return ((LogicalIcebergScanOperator) operator).hasUnknownColumn();
             } else if (operator instanceof LogicalDeltaLakeScanOperator)  {
                 return ((LogicalDeltaLakeScanOperator) operator).hasUnknownColumn();
+            } else if (operator instanceof LogicalPaimonScanOperator) {
+                return ((LogicalPaimonScanOperator) operator).hasUnknownColumn();
             } else {
                 // For other scan operators, we do not know the column statistics.
                 return true;
@@ -485,8 +527,8 @@ public class Utils {
      */
     public static Optional<ScalarOperator> tryCastConstant(ScalarOperator op, Type descType) {
         // Forbidden cast float, because behavior isn't same with before
-        if (!op.isConstantRef() || op.getType().matchesType(descType) || Type.FLOAT.equals(op.getType())
-                || descType.equals(Type.FLOAT)) {
+        if (!op.isConstantRef() || op.getType().matchesType(descType) || FloatType.FLOAT.equals(op.getType())
+                || descType.equals(FloatType.FLOAT)) {
             return Optional.empty();
         }
 
@@ -530,7 +572,7 @@ public class Utils {
         }
         // Guarantee that both childType casting to lhsType and rhsType casting to childType are
         // lossless
-        if (!Type.isAssignable2Decimal((ScalarType) lhsType, (ScalarType) childType)) {
+        if (!TypeManager.isAssignable2Decimal((ScalarType) lhsType, (ScalarType) childType)) {
             return Optional.empty();
         }
 
@@ -542,7 +584,7 @@ public class Utils {
         if (result.isEmpty()) {
             return Optional.empty();
         }
-        if (Type.isAssignable2Decimal((ScalarType) childType, (ScalarType) rhsType)) {
+        if (TypeManager.isAssignable2Decimal((ScalarType) childType, (ScalarType) rhsType)) {
             return Optional.of(result.get());
         } else if (result.get().toString().equalsIgnoreCase(rhs.toString())) {
             // check lossless
@@ -601,6 +643,10 @@ public class Utils {
         return 31 - Integer.numberOfLeadingZeros(n);
     }
 
+    public static long log2(long n) {
+        return 63 - Long.numberOfLeadingZeros(n);
+    }
+
     /**
      * Check the input expression is not nullable or not.
      * @param nullOutputColumnOps the nullable column reference operators.
@@ -626,7 +672,8 @@ public class Utils {
                 }
             }
         } catch (Throwable e) {
-            LOG.warn("Failed to eliminate null: {}", DebugUtil.getStackTrace(e));
+            LOG.warn("[query_id={}] Failed to eliminate null: {}",
+                    DebugUtil.getSessionQueryId(), DebugUtil.getStackTrace(e));
             return false;
         }
         return false;
@@ -750,8 +797,11 @@ public class Utils {
         return false;
     }
 
-    // without distinct function, the common distinctCols is an empty list.
-    public static Optional<List<ColumnRefOperator>> extractCommonDistinctCols(Collection<CallOperator> aggCallOperators) {
+    // 1. without distinct function, the common distinctCols is an empty list.
+    // 2. If has some distinct function, but distinct columns are not exactly same, ruturn Optional.empty
+    // 3. If has some distinct function and distinct columns are exactly same or only one distinct function, return Optional.of(distinctCols)
+    public static Optional<List<ColumnRefOperator>> extractCommonDistinctCols(
+            Collection<CallOperator> aggCallOperators) {
         Set<ColumnRefOperator> distinctChildren = Sets.newHashSet();
         for (CallOperator callOperator : aggCallOperators) {
             if (callOperator.isDistinct()) {
@@ -768,21 +818,63 @@ public class Utils {
         return Optional.of(Lists.newArrayList(distinctChildren));
     }
 
-    public static boolean hasNonDeterministicFunc(ScalarOperator operator) {
-        for (ScalarOperator child : operator.getChildren()) {
-            if (child instanceof CallOperator) {
-                CallOperator call = (CallOperator) child;
-                String fnName = call.getFnName();
-                if (FunctionSet.nonDeterministicFunctions.contains(fnName)) {
-                    return true;
+    // like select array_agg(distinct LO_REVENUE), count(distinct LO_REVENUE) will return true
+    public static Boolean hasMultipleDistinctFuncShareSameDistinctColumns(Collection<CallOperator> aggCallOperators) {
+        List<CallOperator> distinctFuncs =
+                aggCallOperators.stream().filter(CallOperator::isDistinct).collect(Collectors.toList());
+        if (distinctFuncs.size() <= 1) {
+            return false;
+        }
+        Set<ColumnRefOperator> distinctChildren = Sets.newHashSet();
+        for (CallOperator callOperator : distinctFuncs) {
+            if (distinctChildren.isEmpty()) {
+                distinctChildren = Sets.newHashSet(callOperator.getColumnRefs());
+            } else {
+                Set<ColumnRefOperator> nextDistinctChildren = Sets.newHashSet(callOperator.getColumnRefs());
+                if (!SetUtils.isEqualSet(distinctChildren, nextDistinctChildren)) {
+                    return false;
                 }
             }
+        }
 
+        return true;
+    }
+
+    public static boolean hasNonDeterministicFunc(ScalarOperator operator) {
+        if (hasNonDeterministicFuncImpl(operator)) {
+            return true;
+        }
+
+        for (ScalarOperator child : operator.getChildren()) {
             if (hasNonDeterministicFunc(child)) {
                 return true;
             }
         }
         return false;
+    }
+
+    private static boolean hasNonDeterministicFuncImpl(ScalarOperator operator) {
+        if (operator instanceof CallOperator) {
+            CallOperator call = (CallOperator) operator;
+            String fnName = call.getFnName();
+            if (FunctionSet.nonDeterministicFunctions.contains(fnName)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Ensure the operator is predicate's min granularity.
+     */
+    public static boolean canPushDownPredicate(ScalarOperator operator) {
+        if (operator == null) {
+            return false;
+        }
+        if (hasNonDeterministicFunc(operator)) {
+            return false;
+        }
+        return true;
     }
 
     public static void calculateStatistics(OptExpression expr, OptimizerContext context) {
@@ -800,7 +892,8 @@ public class Utils {
         try {
             statisticsCalculator.estimatorStats();
         } catch (Exception e) {
-            LOG.warn("Failed to calculate statistics for expression: {}", expr, e);
+            LOG.warn("[query={}] Failed to calculate statistics for expression: {}",
+                    DebugUtil.getSessionQueryId(), expr, e);
             return;
         }
 
@@ -818,59 +911,43 @@ public class Utils {
         if (newProjectionMap == null || newProjectionMap.isEmpty()) {
             return input;
         }
-        Operator newOp = input.getOp();
-        if (newOp.getProjection() == null || newOp.getProjection().getColumnRefMap().isEmpty()) {
-            newOp.setProjection(new Projection(newProjectionMap));
-        } else {
-            // merge two projections
-            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(newOp.getProjection().getColumnRefMap());
-            Map<ColumnRefOperator, ScalarOperator> resultMap = Maps.newHashMap();
-            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : newProjectionMap.entrySet()) {
-                ScalarOperator result = rewriter.rewrite(entry.getValue());
-                resultMap.put(entry.getKey(), result);
-            }
-            newOp.setProjection(new Projection(resultMap));
-        }
+        Operator inputOp = input.getOp();
+        // merge two projections
+        Projection newProjection = new Projection(mergeWithProject(newProjectionMap, inputOp.getProjection()));
+        inputOp.setProjection(newProjection);
         return input;
     }
 
     /**
-     * Check if the operator has applied the rule
-     * @param op input operator to be checked
-     * @param ruleMask specific rule mask
-     * @return true if the operator has applied the rule, false otherwise
+     * Merge projection1 -> projection2, use projection1's output as the final output.
      */
-    public static boolean isOpAppliedRule(Operator op, int ruleMask) {
-        if (op == null) {
-            return false;
+    public static Projection mergeWithProject(Projection projection1,
+                                              Projection projection2) {
+
+        if (projection1 == null || projection1.getColumnRefMap() == null) {
+            return projection1;
         }
-        // TODO: support cte inline
-        int opRuleMask = op.getOpRuleMask();
-        return (opRuleMask & ruleMask) != 0;
+        return new Projection(mergeWithProject(projection1.getColumnRefMap(), projection2));
     }
 
     /**
-     * Set the rule mask to the operator
-     * @param op input operator
-     * @param ruleMask specific rule mask
+     * Merge input mapping with projection's mapping, return a new mapping based on the existed projection.
      */
-    public static void setOpAppliedRule(Operator op, int ruleMask) {
-        if (op == null) {
-            return;
+    public static Map<ColumnRefOperator, ScalarOperator> mergeWithProject(Map<ColumnRefOperator, ScalarOperator> input,
+                                                                          Projection projection) {
+        if (input == null || input.isEmpty()) {
+            return input;
         }
-        op.setOpRuleMask(op.getOpRuleMask() | ruleMask);
-    }
-
-    /**
-     * Reset the rule mask to the operator
-     * @param op input operator
-     * @param ruleMask specific rule mask
-     */
-    public static void resetOpAppliedRule(Operator op, int ruleMask) {
-        if (op == null) {
-            return;
+        if (projection == null || projection.getColumnRefMap() == null) {
+            return input;
         }
-        op.resetOpRuleMask(ruleMask);
+        ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(projection.getColumnRefMap());
+        Map<ColumnRefOperator, ScalarOperator> resultMap = Maps.newHashMap();
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : input.entrySet()) {
+            ScalarOperator result = rewriter.rewrite(entry.getValue());
+            resultMap.put(entry.getKey(), result);
+        }
+        return resultMap;
     }
 
     /**
@@ -880,14 +957,18 @@ public class Utils {
      * @return true if the optExpression or its children have applied the rule, false otherwise
      */
     public static boolean isOptHasAppliedRule(OptExpression optExpression, int ruleMask) {
+        return isOptHasAppliedRule(optExpression, op -> op.isOpRuleBitSet(ruleMask));
+    }
+
+    public static boolean isOptHasAppliedRule(OptExpression optExpression, Predicate<Operator> pred) {
         if (optExpression == null) {
             return false;
         }
-        if (isOpAppliedRule(optExpression.getOp(), ruleMask)) {
+        if (pred.test(optExpression.getOp())) {
             return true;
         }
         for (OptExpression child : optExpression.getInputs()) {
-            if (isOptHasAppliedRule(child, ruleMask)) {
+            if (isOptHasAppliedRule(child, pred)) {
                 return true;
             }
         }
@@ -928,5 +1009,106 @@ public class Utils {
         }
 
         return value;
+    }
+
+    /**
+     * Recursively resolve the column ref for complicated expressions
+     * Throw exception if that ref cannot be found in the operator expression
+     *
+     * @param ref     column ref
+     * @param factory column factory
+     * @param expr    operator expression
+     * @return all resolved columns
+     */
+    public static List<Pair<Table, Column>> resolveColumnRefRecursive(ColumnRefOperator ref, ColumnRefFactory factory,
+                                                                      OptExpression expr) {
+        // consult the factory
+        Pair<Table, Column> tableAndColumn = factory.getTableAndColumn(ref);
+        if (tableAndColumn != null) {
+            return List.of(tableAndColumn);
+        }
+
+        // When deriving stats, the OptExpression is not exist but only a GroupExpression. We cannot resolve the
+        // ColumnRef from it
+        if (expr == null) {
+            return null;
+        }
+
+        // Consult the projection
+        if (expr.getOp().getProjection() != null) {
+            ScalarOperator impl = expr.getOp().getProjection().resolveColumnRef(ref);
+            if (impl != null) {
+                List<ColumnRefOperator> subRefs = Utils.extractColumnRef(impl);
+                if (impl instanceof ColumnRefOperator) {
+                    subRefs.remove(impl);
+                }
+                List<Pair<Table, Column>> subColumns = Lists.newArrayList();
+                for (ColumnRefOperator subRef : subRefs) {
+                    subColumns.addAll(ListUtils.emptyIfNull(resolveColumnRefRecursive(subRef, factory, expr)));
+                }
+                return subColumns;
+            }
+        }
+
+        // Consult the corresponding children
+        if (expr.getOp() instanceof LogicalSetOperator setOp) {
+            List<ColumnRefOperator> childrenRefs = setOp.resolveColumnRef(ref);
+            if (CollectionUtils.isNotEmpty(childrenRefs)) {
+                List<Pair<Table, Column>> result = Lists.newArrayList();
+                for (int i = 0; i < expr.getInputs().size(); i++) {
+                    List<Pair<Table, Column>> pairs =
+                            resolveColumnRefRecursive(childrenRefs.get(i), factory, expr.getInputs().get(i));
+                    if (CollectionUtils.isNotEmpty(pairs)) {
+                        result.addAll(pairs);
+                    }
+                }
+                return result;
+            }
+
+        }
+
+        // consult children operators
+        for (OptExpression child : expr.getInputs()) {
+            List<Pair<Table, Column>> children = resolveColumnRefRecursive(ref, factory, child);
+            if (CollectionUtils.isNotEmpty(children)) {
+                return children;
+            }
+        }
+
+        return null;
+    }
+
+    public static Pair<Map<ColumnRefOperator, ConstantOperator>, List<ScalarOperator>> separateEqualityPredicates(
+            ScalarOperator predicate) {
+        List<ScalarOperator> conjunctivePredicates = extractConjuncts(predicate);
+        Map<ColumnRefOperator, ConstantOperator> columnConstMap = new HashMap<>();
+        List<ScalarOperator> otherPredicates = new ArrayList<>();
+
+        for (ScalarOperator op : conjunctivePredicates) {
+            if (ScalarOperator.isColumnEqualConstant(op)) {
+                BinaryPredicateOperator binaryOp = (BinaryPredicateOperator) op;
+                ColumnRefOperator column = (ColumnRefOperator) binaryOp.getChild(0);
+                ConstantOperator constant = (ConstantOperator) binaryOp.getChild(1);
+                columnConstMap.put(column, constant);
+            } else {
+                otherPredicates.add(op);
+            }
+        }
+
+        return new Pair<>(columnConstMap, otherPredicates);
+    }
+
+    /**
+     * If there's only one BE node, splitting into multi-phase has no benefit but only overhead
+     */
+    public static boolean isSingleNodeExecution(ConnectContext context) {
+        return context.getAliveExecutionNodesNumber() == 1;
+    }
+
+    /**
+     * Check whether the FE is running in unit test mode
+     */
+    public static boolean isRunningInUnitTest() {
+        return FeConstants.runningUnitTest;
     }
 }

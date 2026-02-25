@@ -16,42 +16,67 @@ package com.starrocks.statistic;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.OriginStatement;
+import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TStatisticData;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.Type;
 import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.velocity.VelocityContext;
 
+import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
+
+import static com.starrocks.statistic.StatsConstants.FULL_STATISTICS_TABLE_NAME;
 
 public class FullStatisticsCollectJob extends StatisticsCollectJob {
     private static final Logger LOG = LogManager.getLogger(FullStatisticsCollectJob.class);
 
+    //| table_id       | bigint           | NO   | true  | <null>  |       |
+    //| partition_id   | bigint           | NO   | true  | <null>  |       |
+    //| column_name    | varchar(65530)   | NO   | true  | <null>  |       |
+    //| db_id          | bigint           | NO   | false | <null>  |       |
+    //| table_name     | varchar(65530)   | NO   | false | <null>  |       |
+    //| partition_name | varchar(65530)   | NO   | false | <null>  |       |
+    //| row_count      | bigint           | NO   | false | <null>  |       |
+    //| data_size      | bigint           | NO   | false | <null>  |       |
+    //| ndv            | hll              | NO   | false |         |       |
+    //| null_count     | bigint           | NO   | false | <null>  |       |
+    //| max            | varchar(1048576) | NO   | false | <null>  |       |
+    //| min            | varchar(1048576) | NO   | false | <null>  |       |
+    //| update_time    | datetime         | NO   | false | <null>  |       |
+    //| collection_size| bigint           | NO   | false | <null>  |       |
+    private static final String TABLE_NAME = "column_statistics";
     private static final String BATCH_FULL_STATISTIC_TEMPLATE = "SELECT cast($version as INT)" +
             ", cast($partitionId as BIGINT)" + // BIGINT
             ", '$columnNameStr'" + // VARCHAR
@@ -61,7 +86,16 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             ", cast($countNullFunction as BIGINT)" + // BIGINT
             ", $maxFunction" + // VARCHAR
             ", $minFunction " + // VARCHAR
+            ", cast($collectionSizeFunction as BIGINT)" + // BIGINT
             " FROM (select $quoteColumnName as column_key from `$dbName`.`$tableName` partition `$partitionName`) tt";
+    private static final String OVERWRITE_PARTITION_TEMPLATE =
+            "INSERT INTO " + TABLE_NAME + "(" + StatisticUtils.buildStatsColumnDef(TABLE_NAME).stream().map(ColumnDef::getName)
+                    .collect(Collectors.joining(", ")) + ") " + "\n" +
+                    "SELECT " +
+                    "   table_id, $targetPartitionId, column_name, db_id, table_name, \n" +
+                    "   partition_name, row_count, data_size, ndv, null_count, max, min, update_time, collection_size \n" +
+                    "FROM " + TABLE_NAME + "\n" +
+                    "WHERE `table_id`=$tableId AND `partition_id`=$sourcePartitionId";
 
     private final List<Long> partitionIdList;
 
@@ -84,7 +118,6 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
 
     @Override
     public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
-        long finishedSQLNum = 0;
         int parallelism = Math.max(1, context.getSessionVariable().getStatisticCollectParallelism());
         List<List<String>> collectSQLList = buildCollectSQLList(parallelism);
         long totalCollectSQL = collectSQLList.size();
@@ -100,6 +133,9 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         // dop will be set to 1 to meet the requirements of the degree of parallelism.
         // If the number of unions is less than the degree of parallelism,
         // dop should be adjusted appropriately to use enough cpu cores
+        long finishedSQLNum = 0;
+        long failedNum = 0;
+        Exception lastFailure = null;
         for (List<String> sqlUnion : collectSQLList) {
             if (sqlUnion.size() < parallelism) {
                 context.getSessionVariable().setPipelineDop(parallelism / sqlUnion.size());
@@ -109,20 +145,52 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
 
             String sql = Joiner.on(" UNION ALL ").join(sqlUnion);
 
-            collectStatisticSync(sql, context);
+            try {
+                collectStatisticSync(sql, context, analyzeStatus);
+            } catch (Exception e) {
+                failedNum++;
+                LOG.warn("collect statistics task failed in job: {}, {}", this, sql, e);
+
+                double failureRatio = 1.0 * failedNum / collectSQLList.size();
+                if (collectSQLList.size() < 100) {
+                    // too few tasks, just fail this job
+                    throw e;
+                } else if (failureRatio > Config.statistic_full_statistics_failure_tolerance_ratio) {
+                    // many tasks, tolerate partial failure
+                    String message = String.format("collect statistic job failed due to " +
+                                    "too many failed tasks: %d/%d, the last failure is %s",
+                            failedNum, collectSQLList.size(), e);
+                    LOG.warn(message, e);
+                    throw new RuntimeException(message, e);
+                } else {
+                    lastFailure = e;
+                    continue;
+                }
+            }
             finishedSQLNum++;
             analyzeStatus.setProgress(finishedSQLNum * 100 / totalCollectSQL);
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
         }
 
+        if (lastFailure != null) {
+            String message = String.format("collect statistic job partially failed but tolerated %d/%d, " +
+                    "last error is %s", failedNum, collectSQLList.size(), lastFailure);
+            analyzeStatus.setReason(message);
+            LOG.warn(message);
+        }
+
         flushInsertStatisticsData(context, true);
     }
 
-    // INSERT INTO column_statistics values
+    // INSERT INTO column_statistics(table_id, partition_id, column_name, db_id, table_name,
+    // partition_name, row_count, data_size, ndv, null_count, max, min, update_time, collection_size) values
     // ($tableId, $partitionId, '$columnName', $dbId, '$dbName.$tableName', '$partitionName',
-    //  $count, $dataSize, hll_deserialize('$hll'), $countNull, $maxFunction, $minFunction, NOW());
+    //  $count, $dataSize, hll_deserialize('$hll'), $countNull, $maxFunction, $minFunction, NOW(), $collectionSizeFunction);
     @Override
-    public void collectStatisticSync(String sql, ConnectContext context) throws Exception {
+    public void collectStatisticSync(String sql, ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
+        // Calculate and set remaining timeout for this SQL task
+        calculateAndSetRemainingTimeout(context, analyzeStatus);
+
         LOG.debug("statistics collect sql : " + sql);
         StatisticExecutor executor = new StatisticExecutor();
 
@@ -136,7 +204,11 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             List<String> params = Lists.newArrayList();
             List<Expr> row = Lists.newArrayList();
 
-            String partitionName = StringEscapeUtils.escapeSql(table.getPartition(data.getPartitionId()).getName());
+            Partition partition = table.getPartition(data.getPartitionId());
+            if (partition == null) {
+                continue;
+            }
+            String partitionName = StringEscapeUtils.escapeSql(partition.getName());
 
             params.add(String.valueOf(table.getId()));
             params.add(String.valueOf(data.getPartitionId()));
@@ -151,20 +223,22 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             params.add("'" + data.getMax() + "'");
             params.add("'" + data.getMin() + "'");
             params.add("now()");
+            params.add(String.valueOf(data.getCollectionSize() <= 0 ? -1 : data.getCollectionSize()));
             // int
-            row.add(new IntLiteral(table.getId(), Type.BIGINT)); // table id, 8 byte
-            row.add(new IntLiteral(data.getPartitionId(), Type.BIGINT)); // partition id, 8 byte
+            row.add(new IntLiteral(table.getId(), IntegerType.BIGINT)); // table id, 8 byte
+            row.add(new IntLiteral(data.getPartitionId(), IntegerType.BIGINT)); // partition id, 8 byte
             row.add(new StringLiteral(data.getColumnName())); // column name, 20 byte
-            row.add(new IntLiteral(db.getId(), Type.BIGINT)); // db id, 8 byte
+            row.add(new IntLiteral(db.getId(), IntegerType.BIGINT)); // db id, 8 byte
             row.add(new StringLiteral(tableName)); // table name, 50 byte
             row.add(new StringLiteral(partitionName)); // partition name, 10 byte
-            row.add(new IntLiteral(data.getRowCount(), Type.BIGINT)); // row count, 8 byte
-            row.add(new IntLiteral((long) data.getDataSize(), Type.BIGINT)); // data size, 8 byte
+            row.add(new IntLiteral(data.getRowCount(), IntegerType.BIGINT)); // row count, 8 byte
+            row.add(new IntLiteral((long) data.getDataSize(), IntegerType.BIGINT)); // data size, 8 byte
             row.add(hllDeserialize(data.getHll())); // hll, 32 kB
-            row.add(new IntLiteral(data.getNullCount(), Type.BIGINT)); // null count, 8 byte
+            row.add(new IntLiteral(data.getNullCount(), IntegerType.BIGINT)); // null count, 8 byte
             row.add(new StringLiteral(data.getMax())); // max, 200 byte
             row.add(new StringLiteral(data.getMin())); // min, 200 byte
             row.add(nowFn()); // update time, 8 byte
+            row.add(new IntLiteral(data.getCollectionSize() <= 0 ? -1 : data.getCollectionSize())); // collection size, 8 byte
 
             rowsBuffer.add(row);
             sqlBuffer.add("(" + String.join(", ", params) + ")");
@@ -187,7 +261,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         StatementBase insertStmt = createInsertStmt();
         do {
             LOG.debug("statistics insert sql size:" + rowsBuffer.size());
-            StmtExecutor executor = new StmtExecutor(context, insertStmt);
+            StmtExecutor executor = StmtExecutor.newInternalExecutor(context, insertStmt);
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());
             context.setStartTime();
@@ -213,12 +287,17 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
     }
 
     private StatementBase createInsertStmt() {
-        String sql = "INSERT INTO column_statistics values " + String.join(", ", sqlBuffer) + ";";
-        List<String> names = Lists.newArrayList("column_0", "column_1", "column_2", "column_3",
-                "column_4", "column_5", "column_6", "column_7", "column_8", "column_9",
-                "column_10", "column_11", "column_12");
-        QueryStatement qs = new QueryStatement(new ValuesRelation(rowsBuffer, names));
-        InsertStmt insert = new InsertStmt(new TableName("_statistics_", "column_statistics"), qs);
+        List<String> targetColumnNames = StatisticUtils.buildStatsColumnDef(FULL_STATISTICS_TABLE_NAME).stream()
+                .map(ColumnDef::getName)
+                .collect(Collectors.toList());
+
+        String sql = "INSERT INTO _statistics_.column_statistics(" + String.join(", ", targetColumnNames) +
+                ") values " + String.join(", ", sqlBuffer) + ";";
+        QueryStatement qs = new QueryStatement(new ValuesRelation(rowsBuffer, targetColumnNames));
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("_statistics_", "column_statistics")),
+                null, NodePosition.ZERO);
+        InsertStmt insert = new InsertStmt(tableRef, qs);
+        insert.setTargetColumnNames(targetColumnNames);
         insert.setOrigStmt(new OriginStatement(sql, 0));
         return insert;
     }
@@ -256,7 +335,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         String quoteColumnName = StatisticUtils.quoting(table, columnName);
         String quoteColumnKey = "`column_key`";
 
-        context.put("version", StatsConstants.STATISTIC_BATCH_VERSION);
+        context.put("version", StatsConstants.STATISTIC_BATCH_VERSION_V5);
         context.put("partitionId", partition.getId());
         context.put("columnNameStr", columnNameStr);
         context.put("dataSize", fullAnalyzeGetDataSize(quoteColumnKey, columnType));
@@ -270,14 +349,64 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             context.put("countNullFunction", "0");
             context.put("maxFunction", "''");
             context.put("minFunction", "''");
+            context.put("collectionSizeFunction", "-1");
+        } else if (columnType.isCollectionType()) {
+            String collectionSizeFunction = "IFNULL(AVG(" + (columnType.isArrayType() ? "ARRAY_LENGTH" : "MAP_SIZE") +
+                    "(" + quoteColumnKey + ")), -1) ";
+            long elementTypeSize = columnType.isArrayType() ? ((ArrayType) columnType).getItemType().getTypeSize() :
+                    ((MapType) columnType).getKeyType().getTypeSize() + ((MapType) columnType).getValueType().getTypeSize();
+            String dataSizeFunction =
+                    "COUNT(*) * " + elementTypeSize + " * GREATEST(0, " + collectionSizeFunction.trim() + ")";
+            context.put("hllFunction", "'00'");
+            context.put("countNullFunction", "0");
+            context.put("maxFunction", "''");
+            context.put("minFunction", "''");
+            context.put("collectionSizeFunction", collectionSizeFunction);
+            context.put("dataSize", dataSizeFunction);
         } else {
             context.put("hllFunction", "hex(hll_serialize(IFNULL(hll_raw(" + quoteColumnKey + "), hll_empty())))");
             context.put("countNullFunction", "COUNT(1) - COUNT(" + quoteColumnKey + ")");
             context.put("maxFunction", getMinMaxFunction(columnType, quoteColumnKey, true));
             context.put("minFunction", getMinMaxFunction(columnType, quoteColumnKey, false));
+            context.put("collectionSizeFunction", "-1");
         }
 
         builder.append(build(context, BATCH_FULL_STATISTIC_TEMPLATE));
         return builder.toString();
+    }
+
+    public static List<String> buildOverwritePartitionSQL(long tableId, long sourcePartitionId,
+                                                          long targetPartitionId) {
+        List<String> result = Lists.newArrayList();
+
+        VelocityContext context = new VelocityContext();
+        context.put("tableId", tableId);
+        context.put("targetPartitionId", targetPartitionId);
+        context.put("sourcePartitionId", sourcePartitionId);
+        {
+            StringWriter sw = new StringWriter();
+            DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", OVERWRITE_PARTITION_TEMPLATE);
+            result.add(sw.toString());
+        }
+        return result;
+    }
+
+    @Override
+    public String toString() {
+        final StringBuilder sb = new StringBuilder("FullStatisticsCollectJob{");
+        sb.append("type=").append(analyzeType);
+        sb.append(", scheduleType=").append(scheduleType);
+        sb.append(", db=").append(db);
+        sb.append(", table=").append(table);
+        sb.append(", partitionIdList=").append(partitionIdList);
+        sb.append(", columnNames=").append(columnNames);
+        sb.append(", properties=").append(properties);
+        sb.append('}');
+        return sb.toString();
+    }
+
+    @Override
+    public String getName() {
+        return "Full";
     }
 }

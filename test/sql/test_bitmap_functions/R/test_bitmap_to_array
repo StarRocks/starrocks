@@ -16,7 +16,6 @@ insert into t1 select 1, bitmap_empty();
 -- !result
 select bitmap_to_array(c2) from t1;
 -- result:
-[]
 -- !result
 truncate table t1;
 -- result:

@@ -16,6 +16,12 @@
 
 namespace starrocks::pipeline {
 
+Status ExceptOutputSourceOperator::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(SourceOperator::prepare(state));
+    _except_ctx->observable().attach_source_observer(state, observer());
+    return Status::OK();
+}
+
 StatusOr<ChunkPtr> ExceptOutputSourceOperator::pull_chunk(RuntimeState* state) {
     return _except_ctx->pull_chunk(state);
 }

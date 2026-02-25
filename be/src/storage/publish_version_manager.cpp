@@ -17,10 +17,10 @@
 #include "agent/finish_task.h"
 #include "agent/task_signatures_manager.h"
 #include "common/config.h"
+#include "common/system/cpu_info.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
-#include "util/cpu_info.h"
 
 namespace starrocks {
 const int MIN_FINISH_PUBLISH_WORKER_COUNT = 8;
@@ -71,7 +71,7 @@ bool PublishVersionManager::_all_task_applied(const TFinishTaskRequest& finish_t
                 all_task_applied = false;
                 unapplied_tablet.insert(std::make_pair(tablet_id, request_version));
             }
-            VLOG(1) << "tablet: " << tablet->tablet_id() << " max_readable_version is "
+            VLOG(2) << "tablet: " << tablet->tablet_id() << " max_readable_version is "
                     << tablet->max_readable_version() << ", request_version is " << request_version;
         }
     }
@@ -103,7 +103,7 @@ bool PublishVersionManager::_left_task_applied(const TFinishTaskRequest& finish_
                 applied = false;
                 unapplied_tablet.insert(std::make_pair(tablet_id, request_version));
             }
-            VLOG(1) << "tablet: " << tablet->tablet_id() << " max_readable_version is "
+            VLOG(2) << "tablet: " << tablet->tablet_id() << " max_readable_version is "
                     << tablet->max_readable_version() << ", request_version is " << request_version;
         }
     }

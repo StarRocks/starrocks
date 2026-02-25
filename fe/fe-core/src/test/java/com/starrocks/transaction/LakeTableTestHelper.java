@@ -16,17 +16,17 @@ package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.type.IntegerType;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -37,20 +37,21 @@ public class LakeTableTestHelper {
     long partitionId = 9002;
     long indexId = 9003;
     long[] tabletId = {9004, 90005};
+    long physicalPartitionId = 90006;
     long nextTxnId = 10000;
 
     LakeTable buildLakeTable() {
         MaterializedIndex index = new MaterializedIndex(indexId);
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (long id : tabletId) {
-            TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, 0, 0, TStorageMedium.HDD, true);
+            TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId, 0, TStorageMedium.HDD, true);
             invertedIndex.addTablet(id, tabletMeta);
             index.addTablet(new LakeTablet(id), tabletMeta);
         }
-        Partition partition = new Partition(partitionId, "p0", index, null);
+        Partition partition = new Partition(partitionId, physicalPartitionId, "p0", index, null);
         LakeTable table = new LakeTable(
                 tableId, "t0",
-                Lists.newArrayList(new Column("c0", Type.BIGINT)),
+                Lists.newArrayList(new Column("c0", IntegerType.BIGINT)),
                 KeysType.DUP_KEYS, null, null);
         table.addPartition(partition);
         return table;
@@ -85,6 +86,17 @@ public class LakeTableTestHelper {
         TransactionState transactionState =
                 new TransactionState(dbId, Lists.newArrayList(tableId), txnId, "label", null,
                         TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK, null, 0, 60_000);
+        transactionState.setPrepareTime(currentTimeMs - 10_000);
+        transactionState.setWriteEndTimeMs(currentTimeMs);
+        return transactionState;
+    }
+
+    TransactionState newCompactionTransactionState() {
+        long txnId = nextTxnId++;
+        long currentTimeMs = System.currentTimeMillis();
+        TransactionState transactionState =
+                new TransactionState(dbId, Lists.newArrayList(tableId), txnId, "label", null,
+                        TransactionState.LoadJobSourceType.LAKE_COMPACTION, null, 0, 60_000);
         transactionState.setPrepareTime(currentTimeMs - 10_000);
         transactionState.setWriteEndTimeMs(currentTimeMs);
         return transactionState;

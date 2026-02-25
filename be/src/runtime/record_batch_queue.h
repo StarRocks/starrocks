@@ -17,10 +17,9 @@
 
 #pragma once
 
-#include <util/spinlock.h>
-
+#include "base/concurrency/blocking_queue.hpp"
+#include "base/concurrency/spinlock.h"
 #include "common/status.h"
-#include "util/blocking_queue.hpp"
 
 namespace arrow {
 
@@ -49,6 +48,8 @@ public:
     bool blocking_put(const std::shared_ptr<arrow::RecordBatch>& val) { return _queue.blocking_put(val); }
 
     bool try_put(const std::shared_ptr<arrow::RecordBatch>& val) { return _queue.try_put(val); }
+
+    bool is_shutdown() const { return _queue.is_shutdown(); }
 
     // Shut down the queue. Wakes up all threads waiting on blocking_get or blocking_put.
     void shutdown();

@@ -31,6 +31,8 @@ struct BitmapValuePacked {
 class BitmapIntersectAggregateFunction final
         : public AggregateFunctionBatchHelper<BitmapValuePacked, BitmapIntersectAggregateFunction> {
 public:
+    bool is_exception_safe() const override { return false; }
+
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
         const auto* col = down_cast<const BitmapColumn*>(columns[0]);
         if (!this->data(state).initial) {
@@ -59,8 +61,8 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
-        *dst = src[0];
+                                     MutableColumnPtr& dst) const override {
+        dst = std::move(*(src[0])).mutate();
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {

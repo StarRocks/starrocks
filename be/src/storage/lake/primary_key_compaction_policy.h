@@ -44,9 +44,44 @@ public:
     //
     // Same bytes, if we use more io to fetch it, that means more overhead.
     // And in one rowset, the IO count is equal overlapped segment count plus their delvec files.
+    //
+    // Special case: For non-overlapped rowsets that are already large enough
+    // (>= lake_compaction_max_rowset_size), they are already well-compacted
+    // and should have zero compaction priority. This prevents them from being
+    // selected for compaction when they don't need it.
     double io_count() const {
-        // rowset_meta_ptr->segments_size() could be zero here, so make sure this >= 1 using max.
-        double cnt = rowset_meta_ptr->overlapped() ? std::max(rowset_meta_ptr->segments_size(), 1) : 1;
+        int64_t large_rowset_threshold = config::lake_compaction_max_rowset_size;
+
+        // For non-overlapped rowsets that are already large enough, return 0
+        // to indicate they don't need compaction. The only exception is if they have deletes,
+        // in which case we still want to consider compacting them to reclaim space.
+        if (!rowset_meta_ptr->overlapped() && stat.num_dels == 0) {
+            int64_t rowset_size = static_cast<int64_t>(rowset_meta_ptr->data_size());
+            if (rowset_size >= large_rowset_threshold) {
+                // Already a large, well-compacted rowset with no deletes - zero priority
+                return 0;
+            }
+        }
+
+        double cnt = 1;
+        if (rowset_meta_ptr->overlapped()) {
+            int segments_size = rowset_meta_ptr->segments_size();
+            if (segments_size == 0) {
+                cnt = 1;
+            } else if (rowset_meta_ptr->segment_size_size() == 0) {
+                // No segment_size info, fall back to counting all segments
+                cnt = segments_size;
+            } else {
+                // Count only segments smaller than the large segment threshold
+                int effective_count = 0;
+                for (int i = 0; i < rowset_meta_ptr->segment_size_size(); i++) {
+                    if (static_cast<int64_t>(rowset_meta_ptr->segment_size(i)) < large_rowset_threshold) {
+                        effective_count++;
+                    }
+                }
+                cnt = std::max(1, effective_count);
+            }
+        }
         if (stat.num_dels > 0) {
             // if delvec file exist, that means we need to read segment files and delvec files both
             // And update_compaction_delvec_file_io_ratio control the io amp ratio of delvec files, default is 2.
@@ -75,13 +110,15 @@ public:
 };
 
 struct PKSizeTieredLevel {
-    PKSizeTieredLevel(const std::vector<RowsetCandidate>& rs, bool print_log) : rowsets(rs.begin(), rs.end()) {
-        calc_compaction_score(rs, print_log);
+    PKSizeTieredLevel(const std::vector<RowsetCandidate>& rs, int64_t compact_level)
+            : rowsets(rs.begin(), rs.end()), compact_level(compact_level) {
+        calc_compaction_score(rs);
     }
-    PKSizeTieredLevel(const PKSizeTieredLevel& level) : rowsets(level.rowsets), score(level.score) {}
+    PKSizeTieredLevel(const PKSizeTieredLevel& level)
+            : rowsets(level.rowsets), score(level.score), compact_level(level.compact_level) {}
 
     // caculate the score of this level.
-    void calc_compaction_score(const std::vector<RowsetCandidate>& rs, bool print_log) {
+    void calc_compaction_score(const std::vector<RowsetCandidate>& rs) {
         std::stringstream debug_ss;
         for (const auto& rowset : rs) {
             score += rowset.score;
@@ -89,49 +126,58 @@ struct PKSizeTieredLevel {
                      << " Rows: " << rowset.rowset_meta_ptr->num_rows()
                      << " Dels: " << rowset.rowset_meta_ptr->num_dels() << " Score: " << rowset.score << "] ";
         }
-        if (print_log) {
-            VLOG(2) << "PKSizeTieredLevel " << debug_ss.str();
+        VLOG(2) << "PKSizeTieredLevel " << debug_ss.str();
+    }
+
+    // Merge another level's rowset
+    void merge_level(PKSizeTieredLevel& other) {
+        while (!other.rowsets.empty()) {
+            const auto& top_rowset = other.rowsets.top();
+            rowsets.push(top_rowset);
+            score += top_rowset.score;
+            other.rowsets.pop();
         }
     }
 
-    // Merge another level's top rowset
-    void merge_top(const PKSizeTieredLevel& other) {
-        DCHECK(other.rowsets.size() == 1);
-        if (!other.rowsets.empty()) {
+    // Add other level's rowsets.
+    void add_other_level_rowsets(PKSizeTieredLevel& other) {
+        while (!other.rowsets.empty()) {
             const auto& top_rowset = other.rowsets.top();
-            // Rowset with overlap segments shouldn't be merged here.
-            DCHECK(!top_rowset.multi_segment_with_overlapped());
-            rowsets.push(top_rowset);
-            score += top_rowset.score;
+            other_level_rowsets.push_back(top_rowset);
+            other.rowsets.pop();
         }
     }
+
+    int64_t get_compact_level() { return compact_level; }
 
     bool operator<(const PKSizeTieredLevel& other) const { return score < other.score; }
 
     std::priority_queue<RowsetCandidate> rowsets;
+    std::vector<RowsetCandidate> other_level_rowsets;
     double score = 0.0;
+    int64_t compact_level = 0;
 };
 
 class PrimaryCompactionPolicy : public CompactionPolicy {
 public:
-    explicit PrimaryCompactionPolicy(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> tablet_metadata)
-            : CompactionPolicy(tablet_mgr, std::move(tablet_metadata)) {}
+    explicit PrimaryCompactionPolicy(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> tablet_metadata,
+                                     bool force_base_compaction)
+            : CompactionPolicy(tablet_mgr, std::move(tablet_metadata), force_base_compaction) {}
 
     ~PrimaryCompactionPolicy() override = default;
 
     StatusOr<std::vector<RowsetPtr>> pick_rowsets() override;
     StatusOr<std::vector<RowsetPtr>> pick_rowsets(const std::shared_ptr<const TabletMetadataPB>& tablet_metadata,
-                                                  bool calc_score, std::vector<bool>* has_dels);
+                                                  std::vector<bool>* has_dels);
 
     // Common function to return the picked rowset indexes.
     // For compaction score, only picked rowset indexes are needed.
     // For compaction, picked rowsets can be constructed by picked rowset indexes.
     StatusOr<std::vector<int64_t>> pick_rowset_indexes(const std::shared_ptr<const TabletMetadataPB>& tablet_metadata,
-                                                       bool calc_score, std::vector<bool>* has_dels);
+                                                       std::vector<bool>* has_dels);
 
     // When using Sized-tiered compaction policy, we need this function to pick highest score level.
-    static StatusOr<std::unique_ptr<PKSizeTieredLevel>> pick_max_level(bool calc_score,
-                                                                       std::vector<RowsetCandidate>& rowsets);
+    static StatusOr<std::unique_ptr<PKSizeTieredLevel>> pick_max_level(std::vector<RowsetCandidate>& rowsets);
 
 private:
     int64_t _get_data_size(const std::shared_ptr<const TabletMetadataPB>& tablet_metadata);

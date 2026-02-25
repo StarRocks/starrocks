@@ -36,29 +36,40 @@
 
 #include <memory>
 
+#include "common/system/cpu_info.h"
 #include "gen_cpp/data.pb.h"
 #include "runtime/current_thread.h"
-#include "storage/memtable.h"
 
 namespace starrocks {
 
+// Task for flushing a memtable to storage
 class MemtableFlushTask final : public Runnable {
 public:
+    // @param slot_idx: slot index assigned at submission time, used to track flush order
+    //                  for parallel flush scenarios
     MemtableFlushTask(FlushToken* flush_token, std::unique_ptr<MemTable> memtable, bool eos,
-                      std::function<void(std::unique_ptr<SegmentPB>, bool)> cb)
-            : _flush_token(flush_token), _memtable(std::move(memtable)), _eos(eos), _cb(std::move(cb)) {}
+                      std::function<void(std::unique_ptr<SegmentPB>, bool, int64_t)> cb, int64_t slot_idx)
+            : _flush_token(flush_token),
+              _memtable(std::move(memtable)),
+              _eos(eos),
+              _cb(std::move(cb)),
+              _create_time_ns(MonotonicNanos()),
+              _slot_idx(slot_idx) {}
 
     ~MemtableFlushTask() override = default;
 
     void run() override {
         _flush_token->_stats.queueing_memtable_num--;
+        _flush_token->_stats.pending_time_ns += MonotonicNanos() - _create_time_ns;
         std::unique_ptr<SegmentPB> segment = nullptr;
+        int64_t flush_data_size = 0;
         if (_memtable) {
             SCOPED_THREAD_LOCAL_MEM_SETTER(_memtable->mem_tracker(), false);
             segment = std::make_unique<SegmentPB>();
 
             _flush_token->_stats.cur_flush_count++;
-            _flush_token->_flush_memtable(_memtable.get(), segment.get());
+            // Pass slot_idx to maintain flush ordering information
+            _flush_token->_flush_memtable(_memtable.get(), segment.get(), _eos, &flush_data_size, _slot_idx);
             _flush_token->_stats.cur_flush_count--;
             _memtable.reset();
 
@@ -74,7 +85,7 @@ public:
         }
 
         if (_cb) {
-            _cb(std::move(segment), _eos);
+            _cb(std::move(segment), _eos, flush_data_size);
         }
     }
 
@@ -82,24 +93,31 @@ private:
     FlushToken* _flush_token;
     std::unique_ptr<MemTable> _memtable;
     bool _eos;
-    std::function<void(std::unique_ptr<SegmentPB>, bool)> _cb;
+    std::function<void(std::unique_ptr<SegmentPB>, bool, int64_t)> _cb;
+    int64_t _create_time_ns;
+    int64_t _slot_idx;
 };
 
 std::ostream& operator<<(std::ostream& os, const FlushStatistic& stat) {
-    os << "(flush time(ms)=" << stat.flush_time_ns / 1000 / 1000 << ", flush count=" << stat.flush_count << ")"
-       << ", flush flush_size_bytes = " << stat.flush_size_bytes;
+    os << "(flush time(ms)=" << stat.memtable_stats.flush_time_ns / 1000 / 1000 << ", flush count=" << stat.flush_count
+       << "), flush flush_size_bytes=" << stat.memtable_stats.flush_memory_size;
     return os;
 }
 
 Status FlushToken::submit(std::unique_ptr<MemTable> memtable, bool eos,
-                          std::function<void(std::unique_ptr<SegmentPB>, bool)> cb) {
+                          std::function<void(std::unique_ptr<SegmentPB>, bool, int64_t)> cb) {
     RETURN_IF_ERROR(status());
     if (memtable == nullptr && !eos) {
         return Status::InternalError(fmt::format("memtable=null eos=false"));
     }
     // Does not acount the size of MemtableFlushTask into any memory tracker
     SCOPED_THREAD_LOCAL_MEM_SETTER(nullptr, false);
-    auto task = std::make_shared<MemtableFlushTask>(this, std::move(memtable), eos, std::move(cb));
+    // Assign current slot_idx to this flush task to track submission order
+    auto task = std::make_shared<MemtableFlushTask>(this, std::move(memtable), eos, std::move(cb), _slot_idx);
+    // Increment slot_idx for next submission
+    // NOTE: This auto-increment ensures each flush task gets a unique, monotonically
+    // increasing slot index, which preserves the order for later block group sorting.
+    _slot_idx++;
     _stats.queueing_memtable_num++;
     return _flush_token->submit(std::move(task));
 }
@@ -125,18 +143,44 @@ Status FlushToken::wait() {
     return _status;
 }
 
-void FlushToken::_flush_memtable(MemTable* memtable, SegmentPB* segment) {
+// Wait for all flush tasks to complete with a timeout.
+// This method supports memory-pressure-aware waiting patterns where the caller
+// can periodically check memory status and decide whether to continue waiting.
+// @param timeout_ms: Maximum time to wait in milliseconds
+// @return StatusOr<bool>:
+//   - Returns true if all tasks completed within the timeout
+//   - Returns false if timeout occurred but tasks are still running
+//   - Returns error Status if any flush task failed
+StatusOr<bool> FlushToken::wait_for(int64_t timeout_ms) {
+    bool completed = _flush_token->wait_for(MonoDelta::FromMilliseconds(timeout_ms));
+    std::lock_guard l(_status_lock);
+    RETURN_IF_ERROR(_status);
+    return completed;
+}
+
+// Flush a memtable to persistent storage.
+// When parallel memtable finalize is enabled (config::enable_parallel_memtable_finalize),
+// the finalize() operation is performed here in the flush thread instead of in the write thread.
+// This allows the write thread to continue inserting data into a new memtable while the
+// previous memtable is being finalized and flushed in parallel, significantly improving
+// overall load throughput by overlapping CPU-intensive finalize with I/O-bound flush.
+void FlushToken::_flush_memtable(MemTable* memtable, SegmentPB* segment, bool eos, int64_t* flush_data_size,
+                                 int64_t slot_idx) {
     // If previous flush has failed, return directly
     if (!status().ok()) {
         return;
     }
 
-    MonotonicStopWatch timer;
-    timer.start();
-    set_status(memtable->flush(segment));
-    _stats.flush_time_ns += timer.elapsed_time();
+    // Finalize the memtable (sort/aggregate) - this may have already been done
+    // in the write thread for auto-increment columns or when parallel finalize is disabled.
+    // MemTable::finalize() handles the idempotency check internally.
+    set_status(memtable->finalize());
+    if (!status().ok()) {
+        return;
+    }
+    set_status(memtable->flush(segment, eos, flush_data_size, slot_idx));
     _stats.flush_count++;
-    _stats.flush_size_bytes += memtable->memory_usage();
+    _stats.memtable_stats += memtable->get_stat();
 }
 
 Status MemTableFlushExecutor::init(const std::vector<DataDir*>& data_dirs) {

@@ -18,10 +18,11 @@
 #include <utility>
 
 #include "column/chunk.h"
+#include "common/runtime_profile.h"
+#include "exec/pipeline/schedule/observer.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/spill/dir_manager.h"
 #include "fs/fs.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {
 
@@ -35,7 +36,7 @@ namespace starrocks::pipeline {
 //                                                     |             -> [new pipeline2]
 //                                                     |             -> [new pipeline3]
 // and for each new pipeline, the internal structure is
-// [new pileine]: mcast_local_source -> exchange_sink_operator
+// [new pipeline]: mcast_local_source -> exchange_sink_operator
 
 // The dataflow works like:
 // 1. mcast_local_sink push chunks to exchanger
@@ -44,14 +45,18 @@ namespace starrocks::pipeline {
 // The exchanger should take care of several things:
 // 1. can accept chunk or not. we don't want to block any consumer. we can accept chunk only when a any consumer needs chunk.
 // 2. can throw chunk or not. we can only throw any chunk when all consumers have consumed that chunk.
-// 3. can pull chiunk. we maintain the progress of consumers.
+// 3. can pull chunk. we maintain the progress of consumers.
 
 class MultiCastLocalExchangeSinkOperator;
 // ===== exchanger =====
 class MultiCastLocalExchanger {
 public:
     virtual ~MultiCastLocalExchanger() = default;
-    virtual Status init_metrics(RuntimeProfile* profile) = 0;
+    virtual bool support_event_scheduler() const = 0;
+
+    virtual Status init_metrics(RuntimeProfile* profile, bool is_first_sink_driver) = 0;
+    virtual Status prepare(RuntimeState* state) { return Status::OK(); }
+    virtual void close(RuntimeState* state) {}
 
     virtual bool can_pull_chunk(int32_t mcast_consumer_index) const = 0;
     virtual bool can_push_chunk() const = 0;
@@ -62,16 +67,25 @@ public:
     virtual void open_sink_operator() = 0;
     virtual void close_sink_operator() = 0;
 
+    // indicates if all SourceOperator finished
+    virtual bool is_all_sources_finished() const { return false; }
+
     virtual bool releaseable() const { return false; }
     virtual void enter_release_memory_mode() {}
+
+    PipeObservable& observable() { return _observable; }
+
+private:
+    PipeObservable _observable;
 };
 
 class InMemoryMultiCastLocalExchanger final : public MultiCastLocalExchanger {
 public:
     InMemoryMultiCastLocalExchanger(RuntimeState* runtime_state, size_t consumer_number);
     ~InMemoryMultiCastLocalExchanger() override;
+    bool support_event_scheduler() const override { return true; }
 
-    Status init_metrics(RuntimeProfile* profile) override;
+    Status init_metrics(RuntimeProfile* profile, bool is_first_sink_driver) override;
     bool can_pull_chunk(int32_t mcast_consumer_index) const override;
     bool can_push_chunk() const override;
     Status push_chunk(const ChunkPtr& chunk, int32_t sink_driver_sequence) override;
@@ -80,6 +94,7 @@ public:
     void close_source_operator(int32_t mcast_consumer_index) override;
     void open_sink_operator() override;
     void close_sink_operator() override;
+    bool is_all_sources_finished() const override;
 
 #ifndef BE_TEST
 private:
@@ -119,8 +134,9 @@ class SpillableMultiCastLocalExchanger : public MultiCastLocalExchanger {
 public:
     SpillableMultiCastLocalExchanger(RuntimeState* runtime_state, size_t consumer_number, int32_t plan_node_id);
     ~SpillableMultiCastLocalExchanger() override = default;
+    bool support_event_scheduler() const override { return false; }
 
-    Status init_metrics(RuntimeProfile* profile) override;
+    Status init_metrics(RuntimeProfile* profile, bool is_first_sink_driver) override;
     bool can_pull_chunk(int32_t mcast_consumer_index) const override;
     bool can_push_chunk() const override;
     Status push_chunk(const ChunkPtr& chunk, int32_t sink_driver_sequence) override;
@@ -129,6 +145,7 @@ public:
     void close_source_operator(int32_t mcast_consumer_index) override;
     void open_sink_operator() override;
     void close_sink_operator() override;
+    bool is_all_sources_finished() const override;
     bool releaseable() const override { return true; }
     void enter_release_memory_mode() override;
 

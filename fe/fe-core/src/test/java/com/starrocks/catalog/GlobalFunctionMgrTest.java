@@ -14,95 +14,153 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.analysis.FunctionName;
-import com.starrocks.common.UserException;
-import com.starrocks.persist.EditLog;
+import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.common.Config;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
-
-import static org.mockito.Mockito.mock;
 
 public class GlobalFunctionMgrTest {
     private GlobalFunctionMgr globalFunctionMgr;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         globalFunctionMgr = new GlobalFunctionMgr();
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            public EditLog getEditLog() {
-                return mock();
-            }
-        };
+        UtFrameUtils.setUpForPersistTest();
+    }
+
+    @AfterEach
+    public void tearDown() {
+        UtFrameUtils.tearDownForPersisTest();
     }
 
     @Test
     public void testReplayAddAndDropFunction() {
         FunctionName name = new FunctionName(null, "addIntInt");
         name.setAsGlobalFunction();
-        final Type[] argTypes = {Type.INT, Type.INT};
-        Function f = new Function(name, argTypes, Type.INT, false);
+        final Type[] argTypes = {IntegerType.INT, IntegerType.INT};
+        Function f = new Function(name, argTypes, IntegerType.INT, false);
 
         // add global udf function.
         globalFunctionMgr.replayAddFunction(f);
-        Assert.assertEquals(globalFunctionMgr.getFunctions().size(), 1);
-        Assert.assertTrue(globalFunctionMgr.getFunctions().get(0).compare(f, Function.CompareMode.IS_IDENTICAL));
+        Assertions.assertEquals(globalFunctionMgr.getFunctions().size(), 1);
+        Assertions.assertTrue(globalFunctionMgr.getFunctions().get(0).compare(f, Function.CompareMode.IS_IDENTICAL));
         // drop global udf function ok.
         FunctionSearchDesc desc = new FunctionSearchDesc(name, argTypes, false);
         globalFunctionMgr.replayDropFunction(desc);
-        Assert.assertEquals(globalFunctionMgr.getFunctions().size(), 0);
+        Assertions.assertEquals(globalFunctionMgr.getFunctions().size(), 0);
     }
 
     @Test
-    public void testUserAddFunction() throws UserException {
+    public void testUserAddFunction() throws StarRocksException {
         // User adds addIntInt UDF
         FunctionName name = new FunctionName(null, "addIntInt");
         name.setAsGlobalFunction();
-        final Type[] argTypes = {Type.INT, Type.INT};
-        Function f = new Function(name, argTypes, Type.INT, false);
-        globalFunctionMgr.userAddFunction(f, false);
+        final Type[] argTypes = {IntegerType.INT, IntegerType.INT};
+        Function f = new ScalarFunction(name, argTypes, IntegerType.INT, false);
+        globalFunctionMgr.userAddFunction(f, false, false);
         // User adds addDoubleDouble UDF
         FunctionName name2 = new FunctionName(null, "addDoubleDouble");
         name2.setAsGlobalFunction();
-        final Type[] argTypes2 = {Type.DOUBLE, Type.DOUBLE};
-        Function f2 = new Function(name2, argTypes2, Type.DOUBLE, false);
-        globalFunctionMgr.userAddFunction(f2, false);
+        final Type[] argTypes2 = {FloatType.DOUBLE, FloatType.DOUBLE};
+        Function f2 = new ScalarFunction(name2, argTypes2, FloatType.DOUBLE, false);
+        globalFunctionMgr.userAddFunction(f2, false, false);
     }
 
     @Test
-    public void testUserAddFunctionGivenFunctionAlreadyExists() throws UserException {
+    public void testUserAddFunctionGivenFunctionAlreadyExists() throws StarRocksException {
         FunctionName name = new FunctionName(null, "addIntInt");
         name.setAsGlobalFunction();
-        final Type[] argTypes = {Type.INT, Type.INT};
-        Function f = new Function(name, argTypes, Type.INT, false);
+        final Type[] argTypes = {IntegerType.INT, IntegerType.INT};
+        Function f = new ScalarFunction(name, argTypes, IntegerType.INT, false);
 
         // Add the UDF for the first time
-        globalFunctionMgr.userAddFunction(f, false);
+        globalFunctionMgr.userAddFunction(f, false, false);
 
         // Attempt to add the same UDF again, expecting an exception
-        Assert.assertThrows(UserException.class, () -> globalFunctionMgr.userAddFunction(f, false));
+        Assertions.assertThrows(StarRocksException.class, () -> globalFunctionMgr.userAddFunction(f, false, false));
     }
 
     @Test
-    public void testUserAddFunctionGivenUdfAlreadyExistsAndAllowExisting() throws UserException {
+    public void testUserAddFunctionGivenUdfAlreadyExistsAndAllowExisting() throws StarRocksException {
         FunctionName name = new FunctionName(null, "addIntInt");
         name.setAsGlobalFunction();
-        final Type[] argTypes = {Type.INT, Type.INT};
-        Function f = new Function(name, argTypes, Type.INT, false);
+        final Type[] argTypes = {IntegerType.INT, IntegerType.INT};
+        Function f = new ScalarFunction(name, argTypes, IntegerType.INT, false);
 
         // Add the UDF for the first time
-        globalFunctionMgr.userAddFunction(f, true);
+        globalFunctionMgr.userAddFunction(f, true, false);
         // Attempt to add the same UDF again
-        globalFunctionMgr.userAddFunction(f, true);
+        globalFunctionMgr.userAddFunction(f, true, false);
 
         List<Function> functions = globalFunctionMgr.getFunctions();
-        Assert.assertEquals(functions.size(), 1);
-        Assert.assertTrue(functions.get(0).compare(f, Function.CompareMode.IS_IDENTICAL));
+        Assertions.assertEquals(functions.size(), 1);
+        Assertions.assertTrue(functions.get(0).compare(f, Function.CompareMode.IS_IDENTICAL));
+    }
+
+    @Test
+    public void testFunctionOrderingWithNumericPriority() throws StarRocksException {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        globalFunctionMgr = globalStateMgr.getGlobalFunctionMgr();
+        FunctionName name = new FunctionName(null, "process");
+        name.setAsGlobalFunction();
+
+        final Type[] varcharArgs = {VarcharType.VARCHAR};
+        Function varcharFunc = new ScalarFunction(name, varcharArgs, VarcharType.VARCHAR, false);
+        globalFunctionMgr.userAddFunction(varcharFunc, false, false);
+
+        final Type[] intArgs = {IntegerType.INT};
+        Function intFunc = new ScalarFunction(name, intArgs, IntegerType.INT, false);
+        globalFunctionMgr.userAddFunction(intFunc, false, false);
+
+        final Type[] doubleArgs = {FloatType.DOUBLE};
+        Function doubleFunc = new ScalarFunction(name, doubleArgs, FloatType.DOUBLE, false);
+        globalFunctionMgr.userAddFunction(doubleFunc, false, false);
+
+        List<Function> functions = globalFunctionMgr.getFunctions();
+        Assertions.assertEquals(3, functions.size());
+
+        for (int i = 0; i < functions.size() - 1; i++) {
+            Function current = functions.get(i);
+            Function next = functions.get(i + 1);
+
+            Assertions.assertEquals(current.getFunctionName().getFunction(),
+                    next.getFunctionName().getFunction());
+            Assertions.assertFalse(current.compare(next, Function.CompareMode.IS_IDENTICAL));
+        }
+        Assertions.assertEquals(intFunc, functions.get(0));
+        Assertions.assertEquals(doubleFunc, functions.get(1));
+        Assertions.assertEquals(varcharFunc, functions.get(2));
+
+        new MockUp<Authorizer>() {
+            @Mock
+            public static void checkGlobalFunctionAction(ConnectContext context, Function function,
+                                                         PrivilegeType privilegeType) {
+            }
+        };
+        Config.enable_udf = true;
+        ConnectContext connectContext = new ConnectContext();
+        connectContext.setGlobalStateMgr(globalStateMgr);
+        Function selectedFunc = AnalyzerUtils.getUdfFunction(connectContext, name, varcharArgs);
+        Assertions.assertEquals(varcharFunc, selectedFunc);
+
+        selectedFunc = AnalyzerUtils.getUdfFunction(connectContext, name, intArgs);
+        Assertions.assertEquals(intFunc, selectedFunc);
+        Config.enable_udf = false;
     }
 }

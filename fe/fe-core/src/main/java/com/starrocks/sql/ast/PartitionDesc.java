@@ -15,24 +15,13 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.ParseNode;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
-import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.PartitionType;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.DdlException;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.thrift.TTabletType;
-import org.apache.commons.lang.NotImplementedException;
 
-import java.util.List;
 import java.util.Map;
 
 public class PartitionDesc implements ParseNode {
-
-    protected PartitionType type;
 
     protected final NodePosition pos;
     protected boolean isSystem = false;
@@ -45,16 +34,8 @@ public class PartitionDesc implements ParseNode {
         this.pos = pos;
     }
 
-    public PartitionType getType() {
-        return type;
-    }
-
-    public void analyze(List<ColumnDef> columnDefs, Map<String, String> otherProperties) throws AnalysisException {
-        throw new NotImplementedException();
-    }
-
     public String toSql() {
-        throw new NotImplementedException();
+        throw new UnsupportedOperationException();
     }
 
     @Override
@@ -62,47 +43,32 @@ public class PartitionDesc implements ParseNode {
         return pos;
     }
 
-    // Currently, RANGE is used for materialized view ExpressionRangePartitionInfo, which is isExprPartition=false,
-    // and EXPR_RANGE is used for ordinary table ExpressionRangePartitionInfo, which is isExprPartition=true
-    public PartitionInfo toPartitionInfo(List<Column> columns, Map<String, Long> partitionNameToId, boolean isTemp)
-            throws DdlException {
-        throw new NotImplementedException();
+    public String getPartitionName() throws UnsupportedOperationException {
+        throw new UnsupportedOperationException();
     }
 
-    public String getPartitionName() throws NotImplementedException {
-        throw new NotImplementedException();
+    public boolean isSetIfNotExists() throws UnsupportedOperationException {
+        throw new UnsupportedOperationException();
     }
 
-    public boolean isSetIfNotExists() throws NotImplementedException {
-        throw new NotImplementedException();
+    public Map<String, String> getProperties() throws UnsupportedOperationException {
+        throw new UnsupportedOperationException();
     }
 
-    public Map<String, String> getProperties() throws NotImplementedException {
-        throw new NotImplementedException();
+    public short getReplicationNum() throws UnsupportedOperationException {
+        throw new UnsupportedOperationException();
     }
 
-    public short getReplicationNum() throws NotImplementedException {
-        throw new NotImplementedException();
+    public DataProperty getPartitionDataProperty() throws UnsupportedOperationException {
+        throw new UnsupportedOperationException();
     }
 
-    public DataProperty getPartitionDataProperty() throws NotImplementedException {
-        throw new NotImplementedException();
+    public Long getVersionInfo() throws UnsupportedOperationException {
+        throw new UnsupportedOperationException();
     }
 
-    public Long getVersionInfo() throws NotImplementedException {
-        throw new NotImplementedException();
-    }
-
-    public TTabletType getTabletType() throws NotImplementedException {
-        throw new NotImplementedException();
-    }
-
-    public boolean isInMemory() throws NotImplementedException {
-        throw new NotImplementedException();
-    }
-
-    public DataCacheInfo getDataCacheInfo() throws NotImplementedException {
-        throw new NotImplementedException();
+    public DataCacheInfo getDataCacheInfo() throws UnsupportedOperationException {
+        throw new UnsupportedOperationException();
     }
 
     public boolean isSystem() {

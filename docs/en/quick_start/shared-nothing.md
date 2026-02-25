@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 sidebar_position: 1
 description: "StarRocks in Docker: Query real data with JOINs"
 ---
@@ -16,6 +16,18 @@ This tutorial covers:
 - Loading two public datasets including basic transformation of the data
 - Analyzing the data with SELECT and JOIN
 - Basic data transformation (the **T** in ETL)
+
+## Follow along with the video if you prefer
+
+<iframe
+  width="560"
+  height="315"
+  src="https://www.youtube.com/embed/h7F4U6xEA5M"
+  title="StarRocks in 5 - Getting Started With StarRocks on Docker"
+  frameborder="0"
+  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+  allowfullscreen
+></iframe>
 
 The data used is provided by NYC OpenData and the National Centers for Environmental Information.
 
@@ -38,11 +50,11 @@ There is a lot of information in this document, and it is presented with the ste
 
 ### SQL client
 
-You can use the SQL client provided in the Docker environment, or use one on your system. Many MySQL compatible clients will work, and this guide covers the configuration of DBeaver and MySQL WorkBench.
+You can use the SQL client provided in the Docker environment, or use one on your system. Many MySQL compatible clients will work, and this guide covers the configuration of DBeaver and MySQL Workbench.
 
 ### curl
 
-`curl` is used to issue the data load job to StarRocks, and to download the datasets. Check to see if you have it installed by running `curl` or `curl.exe` at your OS prompt. If curl is not installed, [get curl here](https://curl.se/dlwiz/?type=bin).
+`curl` is used to issue the data load job to StarRocks, and to download the datasets. Check to see if you have it installed by running `curl` or `curl.exe` at your OS prompt. If curl is not installed, [get curl here](https://curl.se/download.html).
 
 ---
 
@@ -61,6 +73,7 @@ Backend nodes are responsible for both data storage and executing query plans.
 ## Launch StarRocks
 
 ```bash
+docker pull starrocks/allin1-ubuntu
 docker run -p 9030:9030 -p 8030:8030 -p 8040:8040 -itd \
 --name quickstart starrocks/allin1-ubuntu
 ```
@@ -167,16 +180,14 @@ Enter host password for user 'root':
 }%
 ```
 
-If there was an error the output provides a URL to see the error messages. Open this in a browser to find out what happened. Expand the detail to see the error message:
+If there was an error the output provides a URL to see the error messages. Open this in a browser to find out what happened. Expand the detail to see a sample error message:
 
 <details>
 
 <summary>Reading error messages in the browser</summary>
 
 ```bash
-Error: Value count does not match column count. Expect 29, but got 32.
-
-Column delimiter: 44,Row delimiter: 10.. Row: 09/06/2015,14:15,,,40.6722269,-74.0110059,"(40.6722269, -74.0110059)",,,"R/O 1 BEARD ST. ( IKEA'S 
+Error: Target column count: 29 doesn't match source value column count: 32. Column separator: ',', Row delimiter: '\n'. Row: 09/06/2015,14:15,,,40.6722269,-74.0110059,"(40.6722269, -74.0110059)",,,"R/O 1 BEARD ST. ( IKEA'S 
 09/14/2015,5:30,BRONX,10473,40.814551,-73.8490955,"(40.814551, -73.8490955)",TORRY AVENUE                    ,NORTON AVENUE                   ,,0,0,0,0,0,0,0,0,Driver Inattention/Distraction,Unspecified,,,,3297457,PASSENGER VEHICLE,PASSENGER VEHICLE,,,
 ```
 
@@ -228,9 +239,7 @@ There is more to learn; we intentionally glossed over the data transformation do
 
 [StarRocks table design](../table_design/StarRocks_table_design.md)
 
-[Materialized views](../cover_pages/mv_use_cases.mdx)
-
-[Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)
+[Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)
 
 The [Motor Vehicle Collisions - Crashes](https://data.cityofnewyork.us/Public-Safety/Motor-Vehicle-Collisions-Crashes/h9gi-nx95) dataset is provided by New York City subject to these [terms of use](https://www.nyc.gov/home/terms-of-use.page) and [privacy policy](https://www.nyc.gov/home/privacy-policy.page).
 

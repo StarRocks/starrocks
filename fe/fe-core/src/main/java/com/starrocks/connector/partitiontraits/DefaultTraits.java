@@ -17,33 +17,37 @@ package com.starrocks.connector.partitiontraits;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.NullLiteral;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.NullablePartitionKey;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.common.PListCell;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
+import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.type.Type;
 import org.apache.commons.lang.NotImplementedException;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-public abstract class DefaultTraits extends ConnectorPartitionTraits  {
+public abstract class DefaultTraits extends ConnectorPartitionTraits {
 
     @Override
     public PartitionKey createPartitionKeyWithType(List<String> values, List<Type> types) throws AnalysisException {
@@ -65,7 +69,7 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits  {
                 partitionKey.setNullPartitionValue(rawValue);
                 exprValue = NullLiteral.create(type);
             } else {
-                exprValue = LiteralExpr.create(rawValue, type);
+                exprValue = LiteralExprFactory.create(rawValue, type);
             }
             partitionKey.pushColumn(exprValue, type.getPrimitiveType());
         }
@@ -85,8 +89,10 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits  {
             return Lists.newArrayList(table.getName());
         }
 
+        ConnectorMetadatRequestContext requestContext = new ConnectorMetadatRequestContext();
+        requestContext.setQueryMVRewrite(this.isQueryMVRewrite());
         return GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                table.getCatalogName(), getDbName(), getTableName());
+                table.getCatalogName(), getCatalogDBName(), getTableName(), requestContext);
     }
 
     @Override
@@ -95,15 +101,15 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits  {
     }
 
     @Override
-    public Map<String, Range<PartitionKey>> getPartitionKeyRange(Column partitionColumn, Expr partitionExpr)
+    public PCellSortedSet getPartitionKeyRange(Column partitionColumn, Expr partitionExpr)
             throws AnalysisException {
         return PartitionUtil.getRangePartitionMapOfExternalTable(
                 table, partitionColumn, getPartitionNames(), partitionExpr);
     }
 
     @Override
-    public Map<String, PListCell> getPartitionList(Column partitionColumn) throws AnalysisException {
-        return PartitionUtil.getMVPartitionNameWithList(table, partitionColumn, getPartitionNames());
+    public PCellSortedSet getPartitionCells(List<Column> partitionColumns) throws AnalysisException {
+        return PartitionUtil.getMVPartitionToCells(table, partitionColumns, getPartitionNames());
     }
 
     @Override
@@ -158,8 +164,8 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits  {
             for (Map.Entry<String, MaterializedView.BasePartitionInfo> versionEntry : versionMap.entrySet()) {
                 String basePartitionName = versionEntry.getKey();
                 if (!latestPartitionInfo.containsKey(basePartitionName)) {
-                    // partitions deleted
-                    return latestPartitionInfo.keySet();
+                    // If this partition is dropped, ignore it.
+                    continue;
                 }
                 long basePartitionVersion = latestPartitionInfo.get(basePartitionName).getModifiedTime();
 
@@ -172,5 +178,46 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits  {
             }
         }
         return result;
+    }
+
+    @Override
+    public Set<String> getUpdatedPartitionNames(LocalDateTime checkTime, int extraSeconds) {
+        List<String> updatedPartitions = Lists.newArrayList();
+        try {
+            getPartitionNameWithPartitionInfo().
+                    forEach((partitionName, partitionInfo) -> {
+                        long partitionModifiedTimeMillis = partitionInfo.getModifiedTimeUnit().toMillis(
+                                partitionInfo.getModifiedTime());
+
+                        LocalDateTime partitionUpdateTime = LocalDateTime.ofInstant(
+                                Instant.ofEpochMilli(partitionModifiedTimeMillis).plusSeconds(extraSeconds),
+                                Clock.systemDefaultZone().getZone());
+                        if (partitionUpdateTime.isAfter(checkTime)) {
+                            updatedPartitions.add(partitionName);
+                        }
+                    });
+            return Sets.newHashSet(updatedPartitions);
+        } catch (Exception e) {
+            // some external table traits do not support getPartitionNameWithPartitionInfo, will throw exception,
+            // just return null
+            return null;
+        }
+    }
+
+    @Override
+    public LocalDateTime getTableLastUpdateTime(int extraSeconds) {
+        try {
+            long lastModifiedTimeMillis = getPartitionNameWithPartitionInfo().values().stream().
+                    map(partitionInfo -> partitionInfo.getModifiedTimeUnit().toMillis(partitionInfo.getModifiedTime())).
+                    max(Long::compareTo).orElse(0L);
+            if (lastModifiedTimeMillis != 0L) {
+                return LocalDateTime.ofInstant(Instant.ofEpochMilli(lastModifiedTimeMillis).plusSeconds(extraSeconds),
+                        Clock.systemDefaultZone().getZone());
+            }
+        } catch (Exception e) {
+            // some external table traits do not support getPartitionNameWithPartitionInfo, will throw exception,
+            // just return null
+        }
+        return null;
     }
 }

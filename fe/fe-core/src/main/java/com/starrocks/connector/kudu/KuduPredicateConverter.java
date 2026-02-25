@@ -15,7 +15,8 @@
 package com.starrocks.connector.kudu;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.BinaryType;
+import com.starrocks.connector.ColumnTypeConverter;
+import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -23,9 +24,11 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.type.Type;
 import org.apache.kudu.ColumnSchema;
 import org.apache.kudu.Schema;
 import org.apache.kudu.client.KuduPredicate;
@@ -103,7 +106,9 @@ public class KuduPredicateConverter extends ScalarOperatorVisitor<List<KuduPredi
         if (columnName == null) {
             return Lists.newArrayList();
         }
-        Object literal = getLiteral(operator.getChild(1));
+        ColumnSchema column = schema.getColumn(columnName);
+        Type targetType = ColumnTypeConverter.fromKuduType(column);
+        Object literal = getLiteral(operator.getChild(1), targetType);
         if (literal == null) {
             return Lists.newArrayList();
         }
@@ -132,15 +137,22 @@ public class KuduPredicateConverter extends ScalarOperatorVisitor<List<KuduPredi
     }
 
     @Override
+    public List<KuduPredicate> visitLargeInPredicate(LargeInPredicateOperator operator, Void context) {
+        throw new UnsupportedOperationException("not support large in predicate in the KuduPredicateConverter");
+    }
+
+    @Override
     public List<KuduPredicate> visitInPredicate(InPredicateOperator operator, Void context) {
         String columnName = getColumnName(operator.getChild(0));
         if (columnName == null) {
             return Lists.newArrayList();
         }
+        ColumnSchema column = schema.getColumn(columnName);
+        Type targetType = ColumnTypeConverter.fromKuduType(column);
         List<ScalarOperator> valuesOperatorList = operator.getListChildren();
         List<Object> literalValues = new ArrayList<>(valuesOperatorList.size());
         for (ScalarOperator valueOperator : valuesOperatorList) {
-            Object literal = getLiteral(valueOperator);
+            Object literal = getLiteral(valueOperator, targetType);
             if (literal == null) {
                 return Lists.newArrayList();
             }
@@ -154,11 +166,18 @@ public class KuduPredicateConverter extends ScalarOperatorVisitor<List<KuduPredi
         return Lists.newArrayList();
     }
 
-    private Object getLiteral(ScalarOperator operator) {
+    private Object getLiteral(ScalarOperator operator, Type targetType) {
         if (!(operator instanceof ConstantOperator)) {
             return null;
         }
+
         ConstantOperator constValue = (ConstantOperator) operator;
+        Optional<ConstantOperator> casted = constValue.castTo(targetType);
+        if (!casted.isPresent()) {
+            // Illegal cast. Do not push down the predicate.
+            return null;
+        }
+        constValue = casted.get();
         switch (constValue.getType().getPrimitiveType()) {
             case BOOLEAN:
                 return constValue.getBoolean();

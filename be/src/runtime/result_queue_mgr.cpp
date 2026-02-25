@@ -37,7 +37,8 @@
 #include "common/config.h"
 #include "common/status.h"
 #include "gen_cpp/StarrocksExternalService_types.h"
-#include "util/starrocks_metrics.h"
+#include "runtime/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
@@ -79,7 +80,12 @@ Status ResultQueueMgr::fetch_result(const TUniqueId& fragment_instance_id, std::
     } else {
         *eos = true;
     }
-    return Status::OK();
+    if (UNLIKELY(*result == nullptr)) {
+        // return the status of the queue, in case the status is updated during the blocking_get()
+        return queue->status();
+    } else {
+        return Status::OK();
+    }
 }
 
 void ResultQueueMgr::create_queue(const TUniqueId& fragment_instance_id, BlockQueueSharedPtr* queue) {

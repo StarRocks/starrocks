@@ -14,33 +14,36 @@
 
 #include "storage/task/engine_storage_migration_task.h"
 
+#include <butil/file_util.h>
+#include <butil/files/file_path.h>
 #include <gtest/gtest.h>
 
-#include "butil/file_util.h"
-#include "column/column_pool.h"
+#include "base/path/file_util.h"
+#include "base/testutil/assert.h"
+#include "base/time/timezone_utils.h"
 #include "common/config.h"
+#include "common/system/cpu_info.h"
+#include "common/system/disk_info.h"
+#include "common/system/mem_info.h"
 #include "exec/pipeline/query_context.h"
 #include "fs/fs_util.h"
+#include "fs/key_cache.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/time_types.h"
 #include "runtime/user_function_cache.h"
 #include "storage/chunk_helper.h"
 #include "storage/delta_writer.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/options.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
-#include "testutil/assert.h"
-#include "util/cpu_info.h"
-#include "util/disk_info.h"
+#include "types/time_types.h"
 #include "util/logging.h"
-#include "util/mem_info.h"
-#include "util/timezone_utils.h"
 
 namespace starrocks {
 
@@ -100,7 +103,7 @@ public:
 
         auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
-        auto& cols = chunk->columns();
+        auto cols = chunk->mutable_columns();
         for (int64_t key : keys) {
             if (schema.num_key_fields() == 1) {
                 cols[0]->append_datum(Datum(key));
@@ -129,6 +132,21 @@ public:
 
     static void init() {
         config::enable_event_based_compaction_framework = false;
+        config::enable_transparent_data_encryption = true;
+        // add encryption keys
+        EncryptionKeyPB pb;
+        pb.set_id(EncryptionKey::DEFAULT_MASTER_KYE_ID);
+        pb.set_type(EncryptionKeyTypePB::NORMAL_KEY);
+        pb.set_algorithm(EncryptionAlgorithmPB::AES_128);
+        pb.set_plain_key("0000000000000000");
+        std::unique_ptr<EncryptionKey> root_encryption_key = EncryptionKey::create_from_pb(pb).value();
+        auto val_st = root_encryption_key->generate_key();
+        EXPECT_TRUE(val_st.ok());
+        std::unique_ptr<EncryptionKey> encryption_key = std::move(val_st.value());
+        encryption_key->set_id(2);
+        KeyCache::instance().add_key(root_encryption_key);
+        KeyCache::instance().add_key(encryption_key);
+
         /*
             create duplicated key tablet
         */
@@ -242,7 +260,7 @@ public:
         auto chunk = ChunkHelper::new_chunk(schema, 1024);
         for (size_t i = 0; i < 1024; ++i) {
             test_data.push_back("well" + std::to_string(i));
-            auto& cols = chunk->columns();
+            auto cols = chunk->mutable_columns();
             cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
             Slice field_1(test_data[i]);
             cols[1]->append_datum(Datum(field_1));
@@ -329,12 +347,16 @@ public:
         } else {
             dest_path = data_dir_1;
         }
-        EngineStorageMigrationTask migration_task(tablet_id, schema_hash, dest_path);
+        EngineStorageMigrationTask migration_task(tablet_id, schema_hash, dest_path, false);
         ASSERT_OK(migration_task.execute());
+        ASSERT_GT(migration_task.get_copy_size(), 0);
+        ASSERT_GE(migration_task.get_copy_time_ms(), 0);
         // sleep 2 second for add latency for load
         sleep(2);
-        EngineStorageMigrationTask migration_task_2(tablet_id, schema_hash, source_path);
+        EngineStorageMigrationTask migration_task_2(tablet_id, schema_hash, source_path, false);
         ASSERT_OK(migration_task_2.execute());
+        ASSERT_GT(migration_task_2.get_copy_size(), 0);
+        ASSERT_GE(migration_task_2.get_copy_time_ms(), 0);
     }
 
     void do_chain_path_migration(int64_t tablet_id, int32_t schema_hash) {
@@ -352,17 +374,17 @@ public:
             }
         }
 
-        EngineStorageMigrationTask migration_task_1(tablet_id, schema_hash, dest_dir[0]);
+        EngineStorageMigrationTask migration_task_1(tablet_id, schema_hash, dest_dir[0], false);
         ASSERT_OK(migration_task_1.execute());
 
         // sleep 2 second for add latency for load
         sleep(2);
-        EngineStorageMigrationTask migration_task_2(tablet_id, schema_hash, dest_dir[1]);
+        EngineStorageMigrationTask migration_task_2(tablet_id, schema_hash, dest_dir[1], false);
         ASSERT_OK(migration_task_2.execute());
 
         // sleep 2 second for add latency for load
         sleep(2);
-        EngineStorageMigrationTask migration_task_3(tablet_id, schema_hash, dest_dir[0]);
+        EngineStorageMigrationTask migration_task_3(tablet_id, schema_hash, dest_dir[0], false);
         ASSERT_OK(migration_task_3.execute());
     }
 
@@ -381,7 +403,7 @@ public:
         } else {
             dest_path = data_dir_1;
         }
-        EngineStorageMigrationTask migration_task(tablet_id, schema_hash, dest_path);
+        EngineStorageMigrationTask migration_task(tablet_id, schema_hash, dest_path, false);
         auto st = migration_task.execute();
         ASSERT_FALSE(st.ok());
     }
@@ -452,7 +474,7 @@ TEST_F(EngineStorageMigrationTaskTest, test_concurrent_ingestion_and_migration) 
         for (size_t i = 0; i < 1024; ++i) {
             indexes.push_back(i);
             test_data.push_back("well" + std::to_string(i));
-            auto& cols = chunk->columns();
+            auto cols = chunk->mutable_columns();
             cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
             Slice field_1(test_data[i]);
             cols[1]->append_datum(Datum(field_1));
@@ -473,14 +495,14 @@ TEST_F(EngineStorageMigrationTaskTest, test_concurrent_ingestion_and_migration) 
     tablet_manager->start_trash_sweep();
     starrocks::StorageEngine::instance()->_clean_unused_txns();
 
-    std::map<TabletInfo, RowsetSharedPtr> tablet_related_rs;
+    std::map<TabletInfo, std::pair<RowsetSharedPtr, bool>> tablet_related_rs;
     StorageEngine::instance()->txn_manager()->get_txn_related_tablets(2222, 10, &tablet_related_rs);
     ASSERT_EQ(1, tablet_related_rs.size());
     TVersion version = 3;
     // publish version for txn
     auto tablet = tablet_manager->get_tablet(12345);
     for (auto& tablet_rs : tablet_related_rs) {
-        const RowsetSharedPtr& rowset = tablet_rs.second;
+        const RowsetSharedPtr& rowset = tablet_rs.second.first;
         auto st = StorageEngine::instance()->txn_manager()->publish_txn(10, tablet, 2222, version, rowset);
         // success because the related transaction is GCed
         ASSERT_TRUE(st.ok());
@@ -530,7 +552,7 @@ TEST_F(EngineStorageMigrationTaskTest, test_concurrent_ingestion_and_migration_p
         indexes.reserve(1024);
         for (size_t i = 0; i < 1024; ++i) {
             indexes.push_back(i);
-            auto& cols = chunk->columns();
+            auto cols = chunk->mutable_columns();
             cols[0]->append_datum(Datum(static_cast<int64_t>(i)));
             cols[1]->append_datum(Datum(static_cast<int16_t>(i + 1)));
             cols[2]->append_datum(Datum(static_cast<int32_t>(i + 2)));
@@ -550,14 +572,14 @@ TEST_F(EngineStorageMigrationTaskTest, test_concurrent_ingestion_and_migration_p
     tablet_manager->start_trash_sweep();
     starrocks::StorageEngine::instance()->_clean_unused_txns();
 
-    std::map<TabletInfo, RowsetSharedPtr> tablet_related_rs;
+    std::map<TabletInfo, std::pair<RowsetSharedPtr, bool>> tablet_related_rs;
     StorageEngine::instance()->txn_manager()->get_txn_related_tablets(4444, 90, &tablet_related_rs);
     ASSERT_EQ(1, tablet_related_rs.size());
     TVersion version = 5;
     // publish version for txn
     auto tablet = tablet_manager->get_tablet(99999);
     for (auto& tablet_rs : tablet_related_rs) {
-        const RowsetSharedPtr& rowset = tablet_rs.second;
+        const RowsetSharedPtr& rowset = tablet_rs.second.first;
         auto st = StorageEngine::instance()->txn_manager()->publish_txn(90, tablet, 4444, version, rowset);
         // success because the related transaction is GCed
         ASSERT_TRUE(st.ok());
@@ -582,11 +604,11 @@ TEST_F(EngineStorageMigrationTaskTest, test_migrate_empty_pk_tablet) {
         dest_path = data_dir_1;
     }
     tablet->set_tablet_state(TabletState::TABLET_NOTREADY);
-    EngineStorageMigrationTask migration_task_not_ready(empty_tablet_id, empty_schema_hash, dest_path);
+    EngineStorageMigrationTask migration_task_not_ready(empty_tablet_id, empty_schema_hash, dest_path, false);
     ASSERT_ERROR(migration_task_not_ready.execute());
     tablet->set_tablet_state(TabletState::TABLET_RUNNING);
     tablet.reset();
-    EngineStorageMigrationTask migration_task(empty_tablet_id, empty_schema_hash, dest_path);
+    EngineStorageMigrationTask migration_task(empty_tablet_id, empty_schema_hash, dest_path, false);
     ASSERT_OK(migration_task.execute());
 }
 
@@ -627,7 +649,8 @@ int main(int argc, char** argv) {
     starrocks::UserFunctionCache::instance()->init(starrocks::config::user_function_dir);
 
     starrocks::date::init_date_cache();
-    starrocks::TimezoneUtils::init_time_zones();
+    // Disable time zone cache, save time for unit test
+    // starrocks::TimezoneUtils::init_time_zones();
 
     // first create the starrocks::config::storage_root_path ahead
     std::vector<starrocks::StorePath> paths;
@@ -637,13 +660,13 @@ int main(int argc, char** argv) {
         exit(-1);
     }
 
-    std::unique_ptr<starrocks::MemTracker> compaction_mem_tracker = std::make_unique<starrocks::MemTracker>();
-    std::unique_ptr<starrocks::MemTracker> update_mem_tracker = std::make_unique<starrocks::MemTracker>();
+    auto* global_env = starrocks::GlobalEnv::GetInstance();
+    (void)global_env->init();
     starrocks::StorageEngine* engine = nullptr;
     starrocks::EngineOptions options;
     options.store_paths = paths;
-    options.compaction_mem_tracker = compaction_mem_tracker.get();
-    options.update_mem_tracker = update_mem_tracker.get();
+    options.compaction_mem_tracker = global_env->process_mem_tracker();
+    options.update_mem_tracker = global_env->update_mem_tracker();
     starrocks::Status s = starrocks::StorageEngine::open(options, &engine);
     if (!s.ok()) {
         starrocks::fs::remove_all(root_path_1);
@@ -652,8 +675,6 @@ int main(int argc, char** argv) {
                 s.to_string().c_str());
         return -1;
     }
-    auto* global_env = starrocks::GlobalEnv::GetInstance();
-    (void)global_env->init();
     auto* exec_env = starrocks::ExecEnv::GetInstance();
     (void)exec_env->init(paths);
     int r = RUN_ALL_TESTS();
@@ -663,13 +684,17 @@ int main(int argc, char** argv) {
     // clear some trash objects kept in tablet_manager so mem_tracker checks will not fail
     starrocks::StorageEngine::instance()->tablet_manager()->start_trash_sweep();
     starrocks::fs::remove_all(storage_root.value());
-    starrocks::TEST_clear_all_columns_this_thread();
     // delete engine
     engine->stop();
     delete engine;
     // destroy exec env
     starrocks::tls_thread_status.set_mem_tracker(nullptr);
     exec_env->stop();
+#ifdef USE_STAROS
+    if (exec_env->lake_tablet_manager() != nullptr) {
+        exec_env->lake_tablet_manager()->stop();
+    }
+#endif
     exec_env->destroy();
     global_env->stop();
 

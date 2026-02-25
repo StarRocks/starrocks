@@ -1,11 +1,22 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 keywords: ['shengji']
 ---
 
 # 升级 StarRocks
 
 本文介绍如何升级您的 StarRocks 集群。
+
+## 重要信息
+
+:::important
+在升级 StarRocks 之前，您应该：
+
+- 阅读您要升级到的 StarRocks 版本的[发行说明](https://docs.starrocks.io/releasenotes/release-3.5/)，以及当前版本和目标版本之间的所有版本，并：
+  - 记录 StarRocks 内的任何行为变化
+  - 记录 StarRocks 与用于导入、导出、可视化等的外部系统之间的任何集成变化
+- 验证目标版本的[部署先决条件](./deployment_prerequisites.md)。例如，StarRocks 3.5.x 需要 JDK 17，而 Ubuntu 上的 StarRocks 3.4.x 需要 JDK 11。
+:::
 
 ## 概述
 
@@ -38,7 +49,7 @@ StarRocks 的版本号由三个数字表示，格式为 **Major.Minor.Patch**，
 >
 > 如果您需要进行连续的大版本升级，比如从 2.4->2.5->3.0->3.1->3.2，或者在升级之后进行了降级，之后再次执行升级，比如 2.5->3.0->2.5->3.0。为了避免部分 FE 节点元数据升级失败，需要在相邻的两次升级之间或降级后升级前执行如下操作：
 >
-> 1. 执行 [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) 创建新的元数据快照文件。
+> 1. 执行 [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md) 创建新的元数据快照文件。
 > 2. 等待元数据快照文件同步至其他 FE 节点。
 >
 > 您可以通过查看 Leader FE 节点的日志文件 **fe.log** 确认元数据快照文件是否推送完成。如果日志打印以下内容，则说明快照文件推送完成："push image.xxx from subdir [] to other nodes. totally xx nodes, push succeeded xx nodes"。
@@ -105,12 +116,14 @@ ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="false");
    mv bin bin.bak
    cp -r /tmp/StarRocks-x.x.x/be/lib  .
    cp -r /tmp/StarRocks-x.x.x/be/bin  .
+   # 如在旧版本中使用了自定义函数(UDF)，需复制旧版本 udf 目录到新 lib 目录下
+   cp -r lib.bak/udf lib/
    ```
 
 3. 启动该 BE 节点。
 
    ```Bash
-   sh bin/start_be.sh --daemon
+   ./bin/start_be.sh --daemon
    ```
 
 4. 查看节点是否启动成功。
@@ -138,12 +151,14 @@ ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="false");
    mv bin bin.bak
    cp -r /tmp/StarRocks-x.x.x/be/lib  .
    cp -r /tmp/StarRocks-x.x.x/be/bin  .
+   # 如在旧版本中使用了自定义函数(UDF)，需复制旧版本 udf 目录到新 lib 目录下
+   cp -r lib.bak/udf lib/
    ```
 
 3. 启动该 CN 节点。
 
    ```Bash
-   sh bin/start_cn.sh --daemon
+   ./bin/start_cn.sh --daemon
    ```
 
 4. 查看节点是否启动成功。
@@ -180,7 +195,7 @@ ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="false");
 3. 启动该 FE 节点。
 
    ```Bash
-   sh bin/start_fe.sh --daemon
+   ./bin/start_fe.sh --daemon
    ```
 
 4. 查看节点是否启动成功。

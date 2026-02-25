@@ -37,9 +37,10 @@ package com.starrocks.connector;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.Type;
-import org.junit.Assert;
-import org.junit.Test;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarcharType;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -55,7 +56,7 @@ public class TableUpdateArbitratorTest {
         TableUpdateArbitrator.UpdateContext updateContext =
                 new TableUpdateArbitrator.UpdateContext(hiveTable, -1, partitionNames);
         TableUpdateArbitrator arbitrator = TableUpdateArbitrator.create(updateContext);
-        Assert.assertTrue(arbitrator instanceof DirectoryBasedUpdateArbitrator);
+        Assertions.assertTrue(arbitrator instanceof DirectoryBasedUpdateArbitrator);
     }
 
     @Test
@@ -66,7 +67,7 @@ public class TableUpdateArbitratorTest {
         TableUpdateArbitrator.UpdateContext updateContext =
                 new TableUpdateArbitrator.UpdateContext(hiveTable, -1, partitionNames);
         TableUpdateArbitrator arbitrator = TableUpdateArbitrator.create(updateContext);
-        Assert.assertTrue(arbitrator instanceof ObjectBasedUpdateArbitrator);
+        Assertions.assertTrue(arbitrator instanceof ObjectBasedUpdateArbitrator);
     }
 
     @Test
@@ -77,16 +78,16 @@ public class TableUpdateArbitratorTest {
         TableUpdateArbitrator.UpdateContext updateContext =
                 new TableUpdateArbitrator.UpdateContext(hiveTable, -1, partitionNames);
         TableUpdateArbitrator arbitrator = TableUpdateArbitrator.create(updateContext);
-        Assert.assertTrue(arbitrator instanceof ObjectBasedUpdateArbitrator);
+        Assertions.assertTrue(arbitrator instanceof ObjectBasedUpdateArbitrator);
     }
 
     HiveTable createHiveTable(String location) {
         List<Column> fullSchema = new ArrayList<>();
-        Column columnId = new Column("id", Type.INT, true);
+        Column columnId = new Column("id", IntegerType.INT, true);
         columnId.setComment("id");
-        Column columnName = new Column("name", Type.VARCHAR);
-        Column columnYear = new Column("year", Type.INT);
-        Column columnDt = new Column("dt", Type.INT);
+        Column columnName = new Column("name", VarcharType.VARCHAR);
+        Column columnYear = new Column("year", IntegerType.INT);
+        Column columnDt = new Column("dt", IntegerType.INT);
         fullSchema.add(columnId);
         fullSchema.add(columnName);
         fullSchema.add(columnYear);

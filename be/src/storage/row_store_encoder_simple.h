@@ -14,11 +14,11 @@
 
 #pragma once
 
+#include "base/string/slice.h"
 #include "column/field.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "storage/row_store_encoder.h"
-#include "util/slice.h"
 
 namespace starrocks {
 
@@ -32,7 +32,7 @@ public:
     Status encode_columns_to_full_row_column(const Schema& schema, const Columns& columns, BinaryColumn& dest) override;
     Status decode_columns_from_full_row_column(const Schema& schema, const BinaryColumn& full_row_column,
                                                const std::vector<uint32_t>& read_column_ids,
-                                               std::vector<std::unique_ptr<Column>>* dest) override;
+                                               MutableColumns* dest) override;
 
 private: // -- for simple and length
     void encode_null_bitmap(BitmapValue& null_bitmap, std::string* dest);

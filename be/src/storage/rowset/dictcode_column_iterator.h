@@ -16,6 +16,7 @@
 
 #include <memory>
 
+#include "base/simd/gather.h"
 #include "column/column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
@@ -23,7 +24,6 @@
 #include "runtime/global_dict/config.h"
 #include "runtime/global_dict/dict_column.h"
 #include "runtime/global_dict/types.h"
-#include "simd/gather.h"
 #include "storage/range.h"
 #include "storage/rowset/column_iterator_decorator.h"
 #include "storage/rowset/scalar_column_iterator.h"
@@ -46,6 +46,11 @@ public:
 
     Status next_batch(const SparseRange<>& range, Column* dst) override { return _parent->next_dict_codes(range, dst); }
 
+    Status fetch_values_by_rowid_for_predicate_evaluate(const Column& rowids, Column* values) override {
+        return _parent->fetch_dict_codes_by_rowid(rowids, values);
+    }
+    std::string name() const override { return "DictCodeColumnIterator"; }
+
 private:
     ColumnId _cid;
 };
@@ -54,8 +59,12 @@ private:
 // used in global dict optimize
 class GlobalDictCodeColumnIterator final : public ColumnIteratorDecorator {
 public:
-    explicit GlobalDictCodeColumnIterator(ColumnId cid, ColumnIterator* iter, int16_t* code_convert_data)
-            : ColumnIteratorDecorator(iter, kDontTakeOwnership), _cid(cid), _local_to_global(code_convert_data) {}
+    explicit GlobalDictCodeColumnIterator(ColumnId cid, ColumnIterator* iter, int16_t* code_convert_data,
+                                          int32_t dict_size)
+            : ColumnIteratorDecorator(iter, kDontTakeOwnership),
+              _cid(cid),
+              _local_to_global(code_convert_data),
+              _dict_size(dict_size) {}
 
     ~GlobalDictCodeColumnIterator() override = default;
 
@@ -77,6 +86,10 @@ public:
         return Status::OK();
     }
 
+    Status fetch_values_by_rowid_for_predicate_evaluate(const Column& rowids, Column* values) override {
+        return _parent->fetch_dict_codes_by_rowid(rowids, values);
+    }
+
     Status next_dict_codes(size_t* n, Column* dst) override {
         return Status::NotSupported("GlobalDictCodeColumnIterator does not support next_dict_codes");
     }
@@ -90,6 +103,8 @@ public:
     static Status build_code_convert_map(ColumnIterator* file_column_iter, GlobalDictMap* global_dict,
                                          std::vector<int16_t>* code_convert_map);
 
+    std::string name() const override { return "GlobalDictCodeColumnIterator"; }
+
 private:
     Status decode_array_dict_codes(const Column& codes, Column* words);
 
@@ -97,7 +112,7 @@ private:
 
 private:
     // create a new empty local dict column
-    ColumnPtr _new_local_dict_col(Column* src);
+    MutableColumnPtr _new_local_dict_col(Column* src);
     // swap null column between src and dst column
     void _swap_null_columns(Column* src, Column* dst);
 
@@ -105,8 +120,9 @@ private:
 
     // _local_to_global[-1] is accessable
     int16_t* _local_to_global;
+    int32_t _dict_size;
 
-    ColumnPtr _local_dict_code_col;
+    MutableColumnPtr _local_dict_code_col;
 };
 
 } // namespace starrocks

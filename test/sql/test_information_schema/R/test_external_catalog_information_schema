@@ -184,6 +184,7 @@ information_schema	table_constraints	CONSTRAINT_NAME	3
 information_schema	table_constraints	TABLE_SCHEMA	4
 information_schema	table_constraints	TABLE_NAME	5
 information_schema	table_constraints	CONSTRAINT_TYPE	6
+information_schema	table_constraints	ENFORCED	7
 information_schema	engines	ENGINE	1
 information_schema	engines	SUPPORT	2
 information_schema	engines	COMMENT	3
@@ -215,6 +216,7 @@ information_schema	statistics	NULLABLE	13
 information_schema	statistics	INDEX_TYPE	14
 information_schema	statistics	COMMENT	15
 information_schema	statistics	INDEX_COMMENT	16
+information_schema	statistics	EXPRESSION	17
 information_schema	triggers	TRIGGER_CATALOG	1
 information_schema	triggers	TRIGGER_SCHEMA	2
 information_schema	triggers	TRIGGER_NAME	3
@@ -295,6 +297,7 @@ information_schema	partitions	CHECKSUM	21
 information_schema	partitions	PARTITION_COMMENT	22
 information_schema	partitions	NODEGROUP	23
 information_schema	partitions	TABLESPACE_NAME	24
+information_schema	partitions	SUBPARTITION_ORDINAL_POSITION	25
 information_schema	column_privileges	GRANTEE	1
 information_schema	column_privileges	TABLE_CATALOG	2
 information_schema	column_privileges	TABLE_SCHEMA	3

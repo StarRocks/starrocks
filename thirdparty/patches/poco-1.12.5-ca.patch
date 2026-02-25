@@ -1,0 +1,162 @@
+diff --color -urN poco-1.12.5-release-origin/NetSSL_OpenSSL/src/Context.cpp poco-1.12.5-release-modified/NetSSL_OpenSSL/src/Context.cpp
+--- poco-1.12.5-release-origin/NetSSL_OpenSSL/src/Context.cpp	2023-10-25 05:34:01
++++ poco-1.12.5-release-modified/NetSSL_OpenSSL/src/Context.cpp	2024-08-20 18:52:49
+@@ -20,6 +20,8 @@
+ #include "Poco/Crypto/OpenSSLInitializer.h"
+ #include "Poco/File.h"
+ #include "Poco/Path.h"
++#include "Poco/DirectoryIterator.h"
++#include "Poco/RegularExpression.h"
+ #include "Poco/Timestamp.h"
+ #include "Poco/Format.h"
+ #include "Poco/Error.h"
+@@ -125,7 +127,112 @@
+ 	}
+ }
+ 
++static bool poco_dir_cert(const std::string & dir)
++{
++	if (dir.empty())
++		return false;
+ 
++	File f(dir);
++	return f.exists() && f.isDirectory();
++}
++
++static bool poco_dir_contains_certs(const std::string & dir)
++{
++	RegularExpression re("^[a-fA-F0-9]{8}\\.\\d$");
++	try
++	{
++		for (DirectoryIterator it(dir), end; it != end; ++it)
++			if (re.match(Path(it->path()).getFileName()))
++				return true;
++	}
++	catch (Poco::Exception& exc) {}
++
++	return false;
++}
++
++static bool poco_file_cert(const std::string & file)
++{
++	if (file.empty())
++		return false;
++
++	File f(file);
++	return f.exists() && f.isFile();
++}
++
++static int poco_ssl_probe_and_set_default_ca_location(SSL_CTX *ctx)
++{
++	/* The probe paths are based on:
++		* https://www.happyassassin.net/posts/2015/01/12/a-note-about-ssltls-trusted-certificate-stores-and-platforms/
++		* Golang's crypto probing paths:
++		*   https://golang.org/search?q=certFiles   and certDirectories
++		*/
++	static const char *paths[] = {
++		"/etc/pki/tls/certs/ca-bundle.crt",
++		"/etc/ssl/certs/ca-bundle.crt",
++		"/etc/pki/tls/certs/ca-bundle.trust.crt",
++		"/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",
++
++		"/etc/ssl/ca-bundle.pem",
++		"/etc/pki/tls/cacert.pem",
++		"/etc/ssl/cert.pem",
++		"/etc/ssl/cacert.pem",
++
++		"/etc/certs/ca-certificates.crt",
++		"/etc/ssl/certs/ca-certificates.crt",
++
++		"/etc/ssl/certs",
++
++		"/usr/local/etc/ssl/cert.pem",
++		"/usr/local/etc/ssl/cacert.pem",
++
++		"/usr/local/etc/ssl/certs/cert.pem",
++		"/usr/local/etc/ssl/certs/cacert.pem",
++
++		/* BSD */
++		"/usr/local/share/certs/ca-root-nss.crt",
++		"/etc/openssl/certs/ca-certificates.crt",
++#ifdef __APPLE__
++		"/private/etc/ssl/cert.pem",
++		"/private/etc/ssl/certs",
++		"/usr/local/etc/openssl@1.1/cert.pem",
++		"/usr/local/etc/openssl@1.0/cert.pem",
++		"/usr/local/etc/openssl/certs",
++		"/System/Library/OpenSSL",
++#endif
++#ifdef _AIX
++		"/var/ssl/certs/ca-bundle.crt",
++#endif
++	};
++
++	const char * dir = nullptr;
++	for (const char * path : paths)
++	{
++		if (poco_dir_cert(path))
++		{
++			if (dir == nullptr)
++				dir = path;
++
++			if (poco_dir_contains_certs(path) && SSL_CTX_load_verify_locations(ctx, NULL, path))
++			{
++				return 1;
++			}
++		}
++
++		if (SSL_CTX_load_verify_locations(ctx, path, NULL))
++		{
++			return 1;
++		}
++	}
++
++	if (dir != nullptr)
++	{
++		return SSL_CTX_load_verify_locations(ctx, NULL, dir);
++	}
++
++	return 0;
++}
++
++
+ void Context::init(const Params& params)
+ {
+ 	Poco::Crypto::OpenSSLInitializer::initialize();
+@@ -154,7 +261,35 @@
+ 
+ 		if (params.loadDefaultCAs)
+ 		{
+-			errCode = SSL_CTX_set_default_verify_paths(_pSSLContext);
++			const char * dir = getenv(X509_get_default_cert_dir_env());
++			if (!dir)
++				dir = X509_get_default_cert_dir();
++
++			const char * file = getenv(X509_get_default_cert_file_env());
++			if (!file)
++				file = X509_get_default_cert_file();
++
++			if (poco_file_cert(file))
++			{
++				errCode = SSL_CTX_set_default_verify_paths(_pSSLContext);
++			}
++			else
++			{
++				if (poco_dir_cert(dir))
++				{
++					errCode = 0;
++					if (!poco_dir_contains_certs(dir))
++						errCode = poco_ssl_probe_and_set_default_ca_location(_pSSLContext);
++
++					if (errCode == 0)
++					{
++						errCode = SSL_CTX_set_default_verify_paths(_pSSLContext);
++					}
++				}
++				else
++					errCode = poco_ssl_probe_and_set_default_ca_location(_pSSLContext);
++			}
++
+ 			if (errCode != 1)
+ 			{
+ 				std::string msg = Utility::getLastError();

@@ -18,6 +18,7 @@ import com.google.common.collect.Multimap;
 import com.starrocks.catalog.CatalogIdGenerator;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.PBackendService;
@@ -26,13 +27,12 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.NodeSelector;
 import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -40,7 +40,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.Random;
-import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
@@ -50,6 +49,7 @@ public class SchedulerTestNoneDBBase extends PlanTestNoneDBBase {
     protected static final long BACKEND1_ID = 10001L;
     protected static Backend backend2 = null;
     protected static Backend backend3 = null;
+    protected static boolean singleNodeTest = false;
 
     private static long prevStatisticCollectIntervalSec;
 
@@ -62,11 +62,13 @@ public class SchedulerTestNoneDBBase extends PlanTestNoneDBBase {
                 .collect(Collectors.toList());
     }
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestNoneDBBase.beforeClass(); // Added mockBackend(10001).
-        backend2 = UtFrameUtils.addMockBackend(10002, "127.0.0.2", 9060);
-        backend3 = UtFrameUtils.addMockBackend(10003, "127.0.0.3", 9060);
+        if (!singleNodeTest) {
+            backend2 = UtFrameUtils.addMockBackend(10002, "127.0.0.2", 9060);
+            backend3 = UtFrameUtils.addMockBackend(10003, "127.0.0.3", 9060);
+        }
 
         // Avoid statistic jobs disturb test cases, because some cases expect the queries are executed in a specific order.
         prevStatisticCollectIntervalSec = Config.statistic_collect_interval_sec;
@@ -78,21 +80,25 @@ public class SchedulerTestNoneDBBase extends PlanTestNoneDBBase {
         connectContext.getSessionVariable().setPipelineDop(16);
     }
 
-    @AfterClass
+    @AfterAll
     public static void afterClass() {
-        try {
-            UtFrameUtils.dropMockBackend(10002);
-            UtFrameUtils.dropMockBackend(10003);
-        } catch (DdlException e) {
-            e.printStackTrace();
+        if (!singleNodeTest) {
+            try {
+                UtFrameUtils.dropMockBackend(10002);
+                UtFrameUtils.dropMockBackend(10003);
+            } catch (DdlException e) {
+                e.printStackTrace();
+            }
         }
 
         Config.statistic_collect_interval_sec = prevStatisticCollectIntervalSec;
         Config.tablet_sched_disable_colocate_overall_balance = false;
-        connectContext.getSessionVariable().setPipelineDop(0);
+        if (connectContext != null && connectContext.getSessionVariable() != null) {
+            connectContext.getSessionVariable().setPipelineDop(0);
+        }
     }
 
-    @Before
+    @BeforeEach
     public void makeQueryRandomStableBeforeTestCase() {
         makeQueryRandomStable();
     }
@@ -107,8 +113,7 @@ public class SchedulerTestNoneDBBase extends PlanTestNoneDBBase {
 
     public DefaultCoordinator getSchedulerWithQueryId(String sql) throws Exception {
         DefaultCoordinator coordinator = getScheduler(sql);
-        UUID uuid = UUID.randomUUID();
-        coordinator.setQueryId(new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()));
+        coordinator.setQueryId(UUIDUtil.genTUniqueId());
         return coordinator;
     }
 

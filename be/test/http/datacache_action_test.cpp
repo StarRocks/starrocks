@@ -19,15 +19,12 @@
 #include <gtest/gtest.h>
 #include <rapidjson/document.h>
 
-#include "block_cache/block_cache.h"
-#include "block_cache/block_cache_hit_rate_counter.hpp"
-#include "gen_cpp/HeartbeatService_types.h"
+#include "cache/data_cache_hit_rate_counter.hpp"
+#include "cache/disk_cache/starcache_engine.h"
+#include "cache/disk_cache/test_cache_utils.h"
 #include "http/http_channel.h"
 #include "http/http_request.h"
-#include "runtime/exec_env.h"
 #include "util/brpc_stub_cache.h"
-
-class mg_connection;
 
 namespace starrocks {
 
@@ -40,19 +37,6 @@ static void inject_send_reply(HttpRequest* request, HttpStatus status, std::stri
 }
 } // namespace
 
-Status init_datacache_instance(const std::string& engine, BlockCache* cache) {
-    if (cache->is_initialized()) {
-        return Status::OK();
-    }
-    CacheOptions options;
-    options.mem_space_size = 20 * 1024 * 1024;
-    options.block_size = 256 * 1024;
-    options.max_concurrent_inserts = 100000;
-    options.enable_checksum = false;
-    options.engine = engine;
-    return cache->init(options);
-}
-
 class DataCacheActionTest : public testing::Test {
 public:
     DataCacheActionTest() = default;
@@ -62,96 +46,103 @@ public:
 
     void SetUp() override {
         k_response_str = "";
-        _env._brpc_stub_cache = new BrpcStubCache();
         _evhttp_req = evhttp_request_new(nullptr, nullptr);
+
+        auto options = TestCacheUtils::create_simple_options(256 * KB, 20 * MB);
+        _cache = std::make_shared<StarCacheEngine>();
+        ASSERT_OK(reinterpret_cast<StarCacheEngine*>(_cache.get())->init(options));
+        _action = std::make_shared<DataCacheAction>(_cache.get(), nullptr);
     }
     void TearDown() override {
-        delete _env._brpc_stub_cache;
-        _env._brpc_stub_cache = nullptr;
-
         if (_evhttp_req != nullptr) {
             evhttp_request_free(_evhttp_req);
         }
     }
 
-private:
-    ExecEnv _env;
+    std::shared_ptr<HttpRequest> create_request(const std::string& action_name);
+
+protected:
     evhttp_request* _evhttp_req = nullptr;
+    std::shared_ptr<LocalDiskCacheEngine> _cache;
+    std::shared_ptr<DataCacheAction> _action;
 };
 
+std::shared_ptr<HttpRequest> DataCacheActionTest::create_request(const std::string& action_name) {
+    auto request = std::make_shared<HttpRequest>(_evhttp_req);
+    request->set_method(HttpMethod::GET);
+    request->add_param("action", action_name);
+    request->set_handler(_action.get());
+    return request;
+}
+
 TEST_F(DataCacheActionTest, stat_success) {
-    auto cache = BlockCache::instance();
-    ASSERT_TRUE(init_datacache_instance("starcache", cache).ok());
-    _env._block_cache = cache;
+    auto request = create_request("stat");
 
-    DataCacheAction action(&_env);
-
-    HttpRequest request(_evhttp_req);
-    request._method = HttpMethod::GET;
-    request._params.emplace("action", "stat");
-    request.set_handler(&action);
-    action.on_header(&request);
-    action.handle(&request);
+    _action->on_header(request.get());
+    _action->handle(request.get());
 
     rapidjson::Document doc;
     doc.Parse(k_response_str.c_str());
-    ASSERT_STREQ("NORMAL", doc["status"].GetString());
-
-    _env._block_cache = nullptr;
+    ASSERT_STREQ("NORMAL", doc["block_cache_status"].GetString());
 }
 
 TEST_F(DataCacheActionTest, app_stat_success) {
-    BlockCacheHitRateCounter* counter = BlockCacheHitRateCounter::instance();
+    DataCacheHitRateCounter* counter = DataCacheHitRateCounter::instance();
     counter->reset();
-    auto cache = BlockCache::instance();
-    ASSERT_TRUE(init_datacache_instance("starcache", cache).ok());
-    _env._block_cache = cache;
-
-    DataCacheAction action(&_env);
 
     {
-        HttpRequest request(_evhttp_req);
-        request._method = HttpMethod::GET;
-        request._params.emplace("action", "app_stat");
-        request.set_handler(&action);
-        action.on_header(&request);
-        action.handle(&request);
+        auto request = create_request("app_stat");
+        _action->on_header(request.get());
+        _action->handle(request.get());
 
         rapidjson::Document doc;
         doc.Parse(k_response_str.c_str());
-        EXPECT_EQ(0, doc["hit_bytes"].GetInt64());
-        EXPECT_EQ(0, doc["miss_bytes"].GetInt64());
-        EXPECT_EQ(0, doc["hit_rate"].GetDouble());
-        EXPECT_EQ(0, doc["hit_bytes_last_minute"].GetInt64());
-        EXPECT_EQ(0, doc["miss_bytes_last_minute"].GetInt64());
-        EXPECT_EQ(0, doc["hit_rate_last_minute"].GetDouble());
+
+        EXPECT_EQ(0, doc["block_cache_hit_bytes"].GetInt64());
+        EXPECT_EQ(0, doc["block_cache_miss_bytes"].GetInt64());
+        EXPECT_EQ(0, doc["block_cache_hit_rate"].GetDouble());
+
+        EXPECT_EQ(0, doc["block_cache_hit_bytes_last_minute"].GetInt64());
+        EXPECT_EQ(0, doc["block_cache_miss_bytes_last_minute"].GetInt64());
+        EXPECT_EQ(0, doc["block_cache_hit_rate_last_minute"].GetDouble());
+
+        EXPECT_EQ(0, doc["page_cache_hit_count"].GetInt64());
+        EXPECT_EQ(0, doc["page_cache_miss_count"].GetInt64());
+        EXPECT_EQ(0, doc["page_cache_hit_rate"].GetDouble());
+
+        EXPECT_EQ(0, doc["page_cache_hit_count_last_minute"].GetInt64());
+        EXPECT_EQ(0, doc["page_cache_miss_count_last_minute"].GetInt64());
+        EXPECT_EQ(0, doc["page_cache_hit_rate_last_minute"].GetDouble());
     }
 
-    counter->update(3, 10);
+    counter->update_block_cache_stat(3, 10);
+    counter->update_page_cache_stat(6, 10);
 
     {
-        HttpRequest request(_evhttp_req);
-        request._method = HttpMethod::GET;
-        request._params.emplace("action", "app_stat");
-        request.set_handler(&action);
-        action.on_header(&request);
-        action.handle(&request);
+        auto request = create_request("app_stat");
+        _action->on_header(request.get());
+        _action->handle(request.get());
 
         rapidjson::Document doc;
         doc.Parse(k_response_str.c_str());
-        EXPECT_EQ(3, doc["hit_bytes"].GetInt64());
-        EXPECT_EQ(10, doc["miss_bytes"].GetInt64());
-        EXPECT_EQ(0.23, doc["hit_rate"].GetDouble());
+
+        EXPECT_EQ(3, doc["block_cache_hit_bytes"].GetInt64());
+        EXPECT_EQ(10, doc["block_cache_miss_bytes"].GetInt64());
+        EXPECT_EQ(0.23, doc["block_cache_hit_rate"].GetDouble());
+
+        EXPECT_EQ(6, doc["page_cache_hit_count"].GetInt64());
+        EXPECT_EQ(4, doc["page_cache_miss_count"].GetInt64());
+        EXPECT_EQ(0.6, doc["page_cache_hit_rate"].GetDouble());
     }
-    _env._block_cache = nullptr;
 }
 
 TEST_F(DataCacheActionTest, stat_with_uninitialized_cache) {
-    DataCacheAction action(&_env);
+    auto cache = std::make_shared<StarCacheEngine>();
+    DataCacheAction action(cache.get(), nullptr);
 
     HttpRequest request(_evhttp_req);
-    request._method = HttpMethod::GET;
-    request._params.emplace("action", "stat");
+    request.set_method(HttpMethod::GET);
+    request.add_param("action", "stat");
     request.set_handler(&action);
     action.on_header(&request);
     action.handle(&request);

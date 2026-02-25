@@ -55,20 +55,30 @@ PARTITION BY RANGE(`k1`) (
 DISTRIBUTED BY HASH(`k1`) BUCKETS 2
 PROPERTIES ( "replication_num" = "1");
 
+-- verify the CREATE & REFRESH clause
+CREATE VIEW verify_result AS
+SELECT 
+  table_schema, table_name,
+  array_filter(split(MATERIALIZED_VIEW_DEFINITION, '\n'), 
+    line -> line like 'CREATE%' or line like 'REFRESH%' or line like 'AS %') 
+    AS mv_query
+FROM information_schema.materialized_views
+WHERE table_schema = 'test_create_mv';
+
 -- simplified syntax case 1
 CREATE MATERIALIZED VIEW `mv1`
 REFRESH ASYNC 
 AS
 select t0.k1, t1.v1
 from t_hash t0 join t_random t1 on t0.k1 = t1.k1;
-SHOW CREATE MATERIALIZED VIEW mv1;
+SELECT * FROM verify_result WHERE table_name = 'mv1';
 
 -- simplified syntax case 2
 CREATE MATERIALIZED VIEW `mv2`
 REFRESH ASYNC 
 AS
 select k1, count(v1)  from t_random group by k1;
-SHOW CREATE MATERIALIZED VIEW mv2;
+SELECT * FROM verify_result WHERE table_name = 'mv2';
 
 -- simplified syntax for partition table
 CREATE MATERIALIZED VIEW `mv3`
@@ -76,7 +86,7 @@ REFRESH ASYNC
 AS
 select t0.k1, t1.v1
 from t_hash t0 join t1 on t0.k1 = t1.k1;
-SHOW CREATE MATERIALIZED VIEW mv3;
+SELECT * FROM verify_result WHERE table_name = 'mv3';
 
 -- simplified syntax for partition table
 CREATE MATERIALIZED VIEW `mv4`
@@ -84,7 +94,7 @@ REFRESH ASYNC
 AS
 select t0.k1, t1.v1
 from t_random t0 join t1 on t0.k1 = t1.k1;
-SHOW CREATE MATERIALIZED VIEW mv4;
+SELECT * FROM verify_result WHERE table_name = 'mv4';
 
 -- simplified syntax for partition table
 CREATE MATERIALIZED VIEW `mv_part1`
@@ -92,7 +102,7 @@ REFRESH ASYNC
 AS
 select t1.k1, t2.v1
 from t1 join t2 on t1.k1 = t2.k1;
-SHOW CREATE MATERIALIZED VIEW mv_part1;
+SELECT * FROM verify_result WHERE table_name = 'mv_part1';
 
 
 -- complex syntax case 1
@@ -107,7 +117,7 @@ PROPERTIES (
 AS select k1, v1, v2 from t1
 union all
 select k1, v1, v2 from t2;
-SHOW CREATE MATERIALIZED VIEW mv5;
+SELECT * FROM verify_result WHERE table_name = 'mv5';
 
 -- complex syntax case 2
 CREATE MATERIALIZED VIEW `mv6`
@@ -121,4 +131,4 @@ PROPERTIES (
 AS select k1, v1, v2 from t1
 union all
 select k1, v1, v2 from t2;
-SHOW CREATE MATERIALIZED VIEW mv6;
+SELECT * FROM verify_result WHERE table_name = 'mv6';

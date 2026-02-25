@@ -14,34 +14,48 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Strings;
+import com.google.common.collect.Maps;
 import com.starrocks.sql.ast.TableRelation;
-import org.apache.parquet.Strings;
 
 import java.util.List;
+import java.util.Map;
 
 public class IcebergView extends ConnectorView {
     private final String defaultCatalogName;
     private final String defaultDbName;
     private final String location;
+    private final Map<String, String> properties;
+    public static final String STARROCKS_DIALECT = "starrocks";
 
     public IcebergView(long id, String catalogName, String dbName, String name, List<Column> schema,
-                       String definition, String defaultCatalogName, String defaultDbName, String location) {
+                       String definition, String defaultCatalogName, String defaultDbName,
+                       String location, Map<String, String> properties) {
         super(id, catalogName, dbName, name, schema, definition, TableType.ICEBERG_VIEW);
         this.defaultCatalogName = defaultCatalogName;
         this.defaultDbName = defaultDbName;
         this.location = location;
+        this.properties = properties != null ? properties : Maps.newHashMap();
     }
 
     @Override
     protected void formatRelations(List<TableRelation> tableRelations, List<String> cteRelationNames) {
         for (TableRelation tableRelation : tableRelations) {
+            TableName name = tableRelation.getName();
+            // do not fill catalog and database name to cte relation
+            if (Strings.isNullOrEmpty(name.getCatalog()) &&
+                    Strings.isNullOrEmpty(name.getDb()) &&
+                    cteRelationNames.contains(name.getTbl())) {
+                return;
+            }
+
             // iceberg view query statement with external catalog which created by starrocks must have catalog name
-            if (Strings.isNullOrEmpty(tableRelation.getName().getCatalog())) {
-                tableRelation.getName().setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+            if (Strings.isNullOrEmpty(name.getCatalog())) {
+                name.setCatalog(defaultCatalogName);
             }
 
             if (Strings.isNullOrEmpty(tableRelation.getName().getDb())) {
-                tableRelation.getName().setDb(defaultDbName);
+                name.setDb(defaultDbName);
             }
         }
     }
@@ -49,5 +63,10 @@ public class IcebergView extends ConnectorView {
     @Override
     public String getTableLocation() {
         return location;
+    }
+
+    @Override
+    public Map<String, String> getProperties() {
+        return properties;
     }
 }

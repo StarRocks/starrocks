@@ -28,7 +28,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -146,15 +145,6 @@ public class MVEpoch implements Writable {
         }
         this.numEpochFinished.incrementAndGet();
         LOG.info("onEpochReport done: {}", this);
-    }
-
-    public static MVEpoch read(DataInput input) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(input), MVEpoch.class);
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
     public TMVEpoch toThrift() {

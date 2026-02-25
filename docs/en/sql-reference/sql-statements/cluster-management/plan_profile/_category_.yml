@@ -1,0 +1,6 @@
+position: 90 # float position is supported
+label: 'Execution plan and profile'
+collapsible: true
+collapsed: true
+link:
+  type: generated-index

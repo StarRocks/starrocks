@@ -17,17 +17,18 @@
 #include <memory>
 #include <mutex>
 
+#include "base/phmap/phmap.h"
 #include "column/chunk.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
-#include "exprs/anyval_util.h"
+#include "common/constexpr.h"
+#include "exprs/expr_context.h"
 #include "exprs/function_context.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/user_function_cache.h"
 #include "udf/python/callstub.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 
@@ -47,7 +48,7 @@ StatusOr<ColumnPtr> ArrowFunctionCallExpr::evaluate_checked(ExprContext* context
     size_t num_rows = chunk != nullptr ? chunk->num_rows() : 1;
     for (int i = 0; i < _children.size(); ++i) {
         ASSIGN_OR_RETURN(columns[i], _children[i]->evaluate_checked(context, chunk));
-        columns[i] = ColumnHelper::unfold_const_column(_children[i]->type(), num_rows, columns[i]);
+        columns[i] = ColumnHelper::unfold_const_column(_children[i]->type(), num_rows, std::move(columns[i]));
     }
 
     // get call stub
@@ -71,11 +72,11 @@ Status ArrowFunctionCallExpr::prepare(RuntimeState* state, ExprContext* context)
     RETURN_IF_ERROR(Expr::prepare(state, context));
     DCHECK(_fn.__isset.fid);
 
-    FunctionContext::TypeDesc return_type = AnyValUtil::column_type_to_type_desc(_type);
+    FunctionContext::TypeDesc return_type = _type;
     std::vector<FunctionContext::TypeDesc> args_types;
 
     for (Expr* child : _children) {
-        args_types.push_back(AnyValUtil::column_type_to_type_desc(child->type()));
+        args_types.push_back(child->type());
     }
 
     _fn_context_index = context->register_func(state, return_type, args_types);
@@ -99,8 +100,9 @@ Status ArrowFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
     }
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
         auto function_cache = UserFunctionCache::instance();
+        UserFunctionCache::FunctionCacheDesc desc(_fn.fid, _fn.hdfs_location, _fn.checksum, _fn.binary_type);
         if (_fn.hdfs_location != "inline") {
-            RETURN_IF_ERROR(function_cache->get_libpath(_fn.fid, _fn.hdfs_location, _fn.checksum, &_lib_path));
+            RETURN_IF_ERROR(function_cache->get_libpath(desc, &_lib_path));
         } else {
             _lib_path = "inline";
         }
@@ -128,9 +130,14 @@ std::unique_ptr<UDFCallStub> ArrowFunctionCallExpr::_build_stub(int32_t driver_i
         py_func_desc.input_types = context->get_arg_types();
         py_func_desc.return_type = context->get_return_type();
         py_func_desc.content = _fn.content;
+        py_func_desc.driver_id = driver_id;
         return build_py_call_stub(context, py_func_desc);
     }
+#ifndef __APPLE__
     return create_error_call_stub(Status::NotFound(fmt::format("unsupported function type:{}", binary_type)));
+#else
+    return nullptr;
+#endif
 }
 
 } // namespace starrocks

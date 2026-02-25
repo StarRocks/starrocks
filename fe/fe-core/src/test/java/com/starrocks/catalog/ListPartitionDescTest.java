@@ -16,22 +16,29 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.TypeDef;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
+import com.starrocks.sql.analyzer.PartitionDescAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
+import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.thrift.TStorageMedium;
-import com.starrocks.thrift.TTabletType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.DecimalType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.text.DateFormat;
 import java.text.ParseException;
@@ -41,10 +48,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
 public class ListPartitionDescTest {
 
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         UtFrameUtils.addMockBackend(10002);
@@ -52,29 +61,29 @@ public class ListPartitionDescTest {
     }
 
     private List<ColumnDef> findColumnDefList() {
-        ColumnDef id = new ColumnDef("id", TypeDef.create(PrimitiveType.BIGINT));
+        ColumnDef id = new ColumnDef("id", new TypeDef(TypeFactory.createType(PrimitiveType.BIGINT)));
         id.setAggregateType(AggregateType.NONE);
-        ColumnDef userId = new ColumnDef("user_id", TypeDef.create(PrimitiveType.BIGINT));
+        ColumnDef userId = new ColumnDef("user_id", new TypeDef(TypeFactory.createType(PrimitiveType.BIGINT)));
         userId.setAggregateType(AggregateType.NONE);
-        ColumnDef rechargeMoney = new ColumnDef("recharge_money", TypeDef.createDecimal(32, 2));
+        ColumnDef rechargeMoney = new ColumnDef("recharge_money", new TypeDef(TypeFactory.createDecimalV2Type(32, 2)));
         rechargeMoney.setAggregateType(AggregateType.NONE);
-        ColumnDef province = new ColumnDef("province", TypeDef.createVarchar(64));
+        ColumnDef province = new ColumnDef("province", new TypeDef(TypeFactory.createVarcharType(64)));
         province.setAggregateType(AggregateType.NONE);
-        ColumnDef dt = new ColumnDef("dt", TypeDef.create(PrimitiveType.DATE));
+        ColumnDef dt = new ColumnDef("dt", new TypeDef(TypeFactory.createType(PrimitiveType.DATE)));
         dt.setAggregateType(AggregateType.NONE);
         return Lists.newArrayList(id, userId, rechargeMoney, province, dt);
     }
 
     private List<Column> findColumnList() {
-        Column id = new Column("id", Type.BIGINT);
+        Column id = new Column("id", IntegerType.BIGINT);
         id.setAggregationType(AggregateType.NONE, false);
-        Column userId = new Column("user_id", Type.BIGINT);
+        Column userId = new Column("user_id", IntegerType.BIGINT);
         userId.setAggregationType(AggregateType.NONE, false);
-        Column rechargeMoney = new Column("recharge_money", Type.DECIMAL32);
+        Column rechargeMoney = new Column("recharge_money", DecimalType.DECIMAL32);
         rechargeMoney.setAggregationType(AggregateType.NONE, false);
-        Column province = new Column("province", Type.VARCHAR);
+        Column province = new Column("province", VarcharType.VARCHAR);
         province.setAggregationType(AggregateType.NONE, false);
-        Column dt = new Column("dt", Type.DATE);
+        Column dt = new Column("dt", DateType.DATE);
         dt.setAggregationType(AggregateType.NONE, false);
         return Lists.newArrayList(id, userId, rechargeMoney, province, dt);
     }
@@ -120,188 +129,210 @@ public class ListPartitionDescTest {
     public ListPartitionInfo findSingleListPartitionInfo() throws AnalysisException, DdlException {
         ListPartitionDesc listPartitionDesc = this.findListSinglePartitionDesc("province",
                 "p1", "p2", this.findSupportedProperties(null));
-        listPartitionDesc.analyze(this.findColumnDefList(), null);
+        PartitionDescAnalyzer.analyze(listPartitionDesc, this.findColumnDefList(), null);
 
         Map<String, Long> partitionNameToId = new HashMap<>();
         partitionNameToId.put("p1", 10001L);
         partitionNameToId.put("p2", 10002L);
-        return (ListPartitionInfo) listPartitionDesc.toPartitionInfo(this.findColumnList(), partitionNameToId, false);
+        return (ListPartitionInfo) PartitionInfoBuilder.build(listPartitionDesc, this.findColumnList(),
+                partitionNameToId, false);
     }
 
     public ListPartitionInfo findMultiListPartitionInfo() throws AnalysisException, DdlException {
         ListPartitionDesc listPartitionDesc = this.findListMultiPartitionDesc("dt,province",
                 "p1", "p2", this.findSupportedProperties(null));
-        listPartitionDesc.analyze(this.findColumnDefList(), null);
+        PartitionDescAnalyzer.analyze(listPartitionDesc, this.findColumnDefList(), null);
 
         Map<String, Long> partitionNameToId = new HashMap<>();
         partitionNameToId.put("p1", 10001L);
         partitionNameToId.put("p2", 10002L);
-        return (ListPartitionInfo) listPartitionDesc.toPartitionInfo(this.findColumnList(), partitionNameToId, false);
+        return (ListPartitionInfo) PartitionInfoBuilder.build(listPartitionDesc, this.findColumnList(),
+                partitionNameToId, false);
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testInvalidValueAndColumnTypeForMultiPartition() throws AnalysisException {
-        List<String> partitionColNames = Lists.newArrayList("dt", "province");
-        MultiItemListPartitionDesc p1 = new MultiItemListPartitionDesc(false, "p1",
-                //aaaa is invalid value for a date type column dt, it will throw a DdlException
-                Lists.newArrayList(Lists.newArrayList("aaaa", "guangdong"),
-                        Lists.newArrayList("2022-04-15", "tianjin")), null);
+    @Test
+    public void testInvalidValueAndColumnTypeForMultiPartition() {
+        assertThrows(AnalysisException.class, () -> {
+            List<String> partitionColNames = Lists.newArrayList("dt", "province");
+            MultiItemListPartitionDesc p1 = new MultiItemListPartitionDesc(false, "p1",
+                    //aaaa is invalid value for a date type column dt, it will throw a DdlException
+                    Lists.newArrayList(Lists.newArrayList("aaaa", "guangdong"),
+                            Lists.newArrayList("2022-04-15", "tianjin")), null);
 
-        List<PartitionDesc> partitionDescs = Lists.newArrayList(p1);
-        ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionColNames, partitionDescs);
-        listPartitionDesc.analyze(this.findColumnDefList(), null);
+            List<PartitionDesc> partitionDescs = Lists.newArrayList(p1);
+            ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionColNames, partitionDescs);
+            PartitionDescAnalyzer.analyze(listPartitionDesc, this.findColumnDefList(), null);
+        });
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testInvalidValueAndColumnTypeForSinglePartition() throws AnalysisException, DdlException {
-        List<String> partitionColNames = Lists.newArrayList("user_id");
-        SingleItemListPartitionDesc p1 = new SingleItemListPartitionDesc(false, "p1",
-                //beijing is invalid value for a bigint type column user_id, it will throw a DdlException
-                Lists.newArrayList("guangdong", "beijing"), null);
+    @Test
+    public void testInvalidValueAndColumnTypeForSinglePartition() {
+        assertThrows(AnalysisException.class, () -> {
+            List<String> partitionColNames = Lists.newArrayList("user_id");
+            SingleItemListPartitionDesc p1 = new SingleItemListPartitionDesc(false, "p1",
+                    //beijing is invalid value for a bigint type column user_id, it will throw a DdlException
+                    Lists.newArrayList("guangdong", "beijing"), null);
 
-        List<PartitionDesc> partitionDescs = Lists.newArrayList(p1);
-        ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionColNames, partitionDescs);
-        listPartitionDesc.analyze(this.findColumnDefList(), null);
+            List<PartitionDesc> partitionDescs = Lists.newArrayList(p1);
+            ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionColNames, partitionDescs);
+            PartitionDescAnalyzer.analyze(listPartitionDesc, this.findColumnDefList(), null);
+        });
     }
 
     @Test
     public void testSingleListPartitionDesc() throws AnalysisException {
         ListPartitionDesc listPartitionDesc = this.findListSinglePartitionDesc("province",
                 "p1", "p2", null);
-        listPartitionDesc.analyze(this.findColumnDefList(), null);
+        PartitionDescAnalyzer.analyze(listPartitionDesc, this.findColumnDefList(), null);
         String sql = listPartitionDesc.toString();
         String target = "PARTITION BY LIST(`province`)(\n" +
                 "  PARTITION p1 VALUES IN (\'guangdong\',\'tianjin\'),\n" +
                 "  PARTITION p2 VALUES IN (\'shanghai\',\'beijing\')\n" +
                 ")";
-        Assert.assertEquals(sql, target);
+        Assertions.assertEquals(sql, target);
     }
 
     @Test
     public void testMultiListPartitionDesc() throws AnalysisException {
         ListPartitionDesc listPartitionDesc = this.findListMultiPartitionDesc("dt,province",
                 "p1", "p2", null);
-        listPartitionDesc.analyze(this.findColumnDefList(), null);
+        PartitionDescAnalyzer.analyze(listPartitionDesc, this.findColumnDefList(), null);
         String sql = listPartitionDesc.toString();
         String target = "PARTITION BY LIST(`dt`,`province`)(\n" +
                 "  PARTITION p1 VALUES IN ((\'2022-04-15\',\'guangdong\'),(\'2022-04-15\',\'tianjin\')),\n" +
                 "  PARTITION p2 VALUES IN ((\'2022-04-16\',\'shanghai\'),(\'2022-04-16\',\'beijing\'))\n" +
                 ")";
-        Assert.assertEquals(sql, target);
+        Assertions.assertEquals(sql, target);
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testDuplicatePartitionColumn() throws AnalysisException {
-        ListPartitionDesc listPartitionDesc = this.findListSinglePartitionDesc("dt,dt", "p1", "p1", null);
-        listPartitionDesc.analyze(this.findColumnDefList(), null);
+    @Test
+    public void testDuplicatePartitionColumn() {
+        assertThrows(AnalysisException.class, () -> {
+            ListPartitionDesc listPartitionDesc = this.findListSinglePartitionDesc("dt,dt", "p1", "p1", null);
+            PartitionDescAnalyzer.analyze(listPartitionDesc, this.findColumnDefList(), null);
+        });
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testNotAggregatedColumn() throws AnalysisException {
-        ColumnDef province = new ColumnDef("province", TypeDef.createVarchar(64));
-        province.setAggregateType(AggregateType.MAX);
-        ColumnDef dt = new ColumnDef("dt", TypeDef.createVarchar(10));
-        dt.setAggregateType(AggregateType.NONE);
-        List<ColumnDef> columnDefList = Lists.newArrayList(province, dt);
-        ListPartitionDesc listSinglePartitionDesc = this.findListSinglePartitionDesc("province", "p1", "p2", null);
-        listSinglePartitionDesc.analyze(columnDefList, null);
+    @Test
+    public void testNotAggregatedColumn() {
+        assertThrows(AnalysisException.class, () -> {
+            ColumnDef province = new ColumnDef("province", new TypeDef(TypeFactory.createVarcharType(64)));
+            province.setAggregateType(AggregateType.MAX);
+            ColumnDef dt = new ColumnDef("dt", new TypeDef(TypeFactory.createVarcharType(10)));
+            dt.setAggregateType(AggregateType.NONE);
+            List<ColumnDef> columnDefList = Lists.newArrayList(province, dt);
+            ListPartitionDesc listSinglePartitionDesc = this.findListSinglePartitionDesc("province", "p1", "p2", null);
+            PartitionDescAnalyzer.analyzeListPartitionDesc(listSinglePartitionDesc, columnDefList, null);
+        });
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testColumnNoExist() throws AnalysisException {
-        ListPartitionDesc listPartitionDesc = this.findListSinglePartitionDesc("name", "p1", "p1", null);
-        listPartitionDesc.analyze(this.findColumnDefList(), null);
+    @Test
+    public void testColumnNoExist() {
+        assertThrows(AnalysisException.class, () -> {
+            ListPartitionDesc listPartitionDesc = this.findListSinglePartitionDesc("name", "p1", "p1", null);
+            PartitionDescAnalyzer.analyze(listPartitionDesc, this.findColumnDefList(), null);
+        });
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testDuplicateSingleListPartitionNames() throws AnalysisException {
-        ListPartitionDesc listSinglePartitionDesc = this.findListSinglePartitionDesc("province", "p1", "p1", null);
-        listSinglePartitionDesc.analyze(this.findColumnDefList(), null);
+    @Test
+    public void testDuplicateSingleListPartitionNames() {
+        assertThrows(AnalysisException.class, () -> {
+            ListPartitionDesc listSinglePartitionDesc = this.findListSinglePartitionDesc("province", "p1", "p1", null);
+            PartitionDescAnalyzer.analyze(listSinglePartitionDesc, this.findColumnDefList(), null);
+        });
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testDuplicateMultiListPartitionNames() throws AnalysisException {
-        ListPartitionDesc listMultiPartitionDesc = this.findListMultiPartitionDesc("dt,province", "p1", "p1", null);
-        listMultiPartitionDesc.analyze(this.findColumnDefList(), null);
+    @Test
+    public void testDuplicateMultiListPartitionNames() {
+        assertThrows(AnalysisException.class, () -> {
+            ListPartitionDesc listMultiPartitionDesc = this.findListMultiPartitionDesc("dt,province", "p1", "p1", null);
+            PartitionDescAnalyzer.analyze(listMultiPartitionDesc, this.findColumnDefList(), null);
+        });
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testStorageMedium() throws AnalysisException {
-        Map<String, String> supportedProperties = new HashMap<>();
-        supportedProperties.put("storage_medium", "xxx");
-        ListPartitionDesc listMultiPartitionDesc = this.findListMultiPartitionDesc(
-                "dt,province", "p1", "p1", this.findSupportedProperties(supportedProperties));
-        listMultiPartitionDesc.analyze(this.findColumnDefList(), this.findSupportedProperties(null));
+    @Test
+    public void testStorageMedium() {
+        assertThrows(AnalysisException.class, () -> {
+            Map<String, String> supportedProperties = new HashMap<>();
+            supportedProperties.put("storage_medium", "xxx");
+            ListPartitionDesc listMultiPartitionDesc = this.findListMultiPartitionDesc(
+                    "dt,province", "p1", "p1", this.findSupportedProperties(supportedProperties));
+            PartitionDescAnalyzer.analyze(listMultiPartitionDesc, this.findColumnDefList(), this.findSupportedProperties(null));
+        });
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testCoolDownTime() throws AnalysisException {
-        Map<String, String> supportedProperties = new HashMap<>();
-        supportedProperties.put("storage_cooldown_time", "2021-04-01 12:12:12");
-        ListPartitionDesc listMultiPartitionDesc = this.findListMultiPartitionDesc(
-                "dt,province", "p1", "p1", this.findSupportedProperties(supportedProperties));
-        listMultiPartitionDesc.analyze(this.findColumnDefList(), this.findSupportedProperties(null));
+    @Test
+    public void testCoolDownTime() {
+        assertThrows(AnalysisException.class, () -> {
+            Map<String, String> supportedProperties = new HashMap<>();
+            supportedProperties.put("storage_cooldown_time", "2021-04-01 12:12:12");
+            ListPartitionDesc listMultiPartitionDesc = this.findListMultiPartitionDesc(
+                    "dt,province", "p1", "p1", this.findSupportedProperties(supportedProperties));
+            PartitionDescAnalyzer.analyze(listMultiPartitionDesc, this.findColumnDefList(), this.findSupportedProperties(null));
+        });
     }
 
-    @Test(expected = SemanticException.class)
-    public void testReplicaNum() throws AnalysisException {
-        Map<String, String> supportedProperties = new HashMap<>();
-        supportedProperties.put("replication_num", "0");
-        ListPartitionDesc listMultiPartitionDesc = this.findListMultiPartitionDesc(
-                "dt,province", "p1", "p1", this.findSupportedProperties(supportedProperties));
-        listMultiPartitionDesc.analyze(this.findColumnDefList(), this.findSupportedProperties(null));
+    @Test
+    public void testReplicaNum() {
+        assertThrows(SemanticException.class, () -> {
+            Map<String, String> supportedProperties = new HashMap<>();
+            supportedProperties.put("replication_num", "0");
+            ListPartitionDesc listMultiPartitionDesc = this.findListMultiPartitionDesc(
+                    "dt,province", "p1", "p1", this.findSupportedProperties(supportedProperties));
+            PartitionDescAnalyzer.analyze(listMultiPartitionDesc, this.findColumnDefList(), this.findSupportedProperties(null));
+        });
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testIsInMemory() throws AnalysisException {
-        Map<String, String> supportedProperties = new HashMap<>();
-        supportedProperties.put("in_memory", "xxx");
-        ListPartitionDesc listMultiPartitionDesc = this.findListMultiPartitionDesc(
-                "dt,province", "p1", "p1", this.findSupportedProperties(supportedProperties));
-        listMultiPartitionDesc.analyze(this.findColumnDefList(), this.findSupportedProperties(null));
+    @Test
+    public void testIsInMemory() {
+        assertThrows(AnalysisException.class, () -> {
+            Map<String, String> supportedProperties = new HashMap<>();
+            supportedProperties.put("in_memory", "xxx");
+            ListPartitionDesc listMultiPartitionDesc = this.findListMultiPartitionDesc(
+                    "dt,province", "p1", "p1", this.findSupportedProperties(supportedProperties));
+            PartitionDescAnalyzer.analyze(listMultiPartitionDesc, this.findColumnDefList(), this.findSupportedProperties(null));
+        });
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testUnSupportProperties() throws AnalysisException {
-        Map<String, String> supportedProperties = new HashMap<>();
-        supportedProperties.put("no_support", "xxx");
-        ListPartitionDesc listMultiPartitionDesc = this.findListMultiPartitionDesc(
-                "dt,province", "p1", "p1", this.findSupportedProperties(supportedProperties));
-        listMultiPartitionDesc.analyze(this.findColumnDefList(), null);
+    @Test
+    public void testUnSupportProperties() {
+        assertThrows(AnalysisException.class, () -> {
+            Map<String, String> supportedProperties = new HashMap<>();
+            supportedProperties.put("no_support", "xxx");
+            ListPartitionDesc listMultiPartitionDesc = this.findListMultiPartitionDesc(
+                    "dt,province", "p1", "p1", this.findSupportedProperties(supportedProperties));
+            PartitionDescAnalyzer.analyze(listMultiPartitionDesc, this.findColumnDefList(), null);
+        });
     }
 
     @Test
     public void testToPartitionInfoForSingle() throws AnalysisException, DdlException, ParseException {
         ListPartitionInfo partitionInfo = this.findSingleListPartitionInfo();
-        Assert.assertEquals(PartitionType.LIST, partitionInfo.getType());
+        Assertions.assertEquals(PartitionType.LIST, partitionInfo.getType());
 
         DataProperty dataProperty = partitionInfo.getDataProperty(10001L);
-        Assert.assertEquals(TStorageMedium.SSD, dataProperty.getStorageMedium());
+        Assertions.assertEquals(TStorageMedium.SSD, dataProperty.getStorageMedium());
         DateFormat sf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
         long time = sf.parse("2122-07-09 12:12:12").getTime();
-        Assert.assertEquals(time, dataProperty.getCooldownTimeMs());
+        Assertions.assertEquals(time, dataProperty.getCooldownTimeMs());
 
-        Assert.assertEquals(1, partitionInfo.getReplicationNum(10001L));
-        Assert.assertEquals(TTabletType.TABLET_TYPE_MEMORY, partitionInfo.getTabletType(10001L));
-        Assert.assertEquals(true, partitionInfo.getIsInMemory(10001L));
-        Assert.assertEquals(false, partitionInfo.isMultiColumnPartition());
+        Assertions.assertEquals(1, partitionInfo.getReplicationNum(10001L));
+        Assertions.assertEquals(false, partitionInfo.isMultiColumnPartition());
     }
 
     @Test
     public void testToPartitionInfoForMulti() throws AnalysisException, DdlException, ParseException {
         ListPartitionInfo partitionInfo = this.findMultiListPartitionInfo();
-        Assert.assertEquals(PartitionType.LIST, partitionInfo.getType());
+        Assertions.assertEquals(PartitionType.LIST, partitionInfo.getType());
 
         DataProperty dataProperty = partitionInfo.getDataProperty(10001L);
-        Assert.assertEquals(TStorageMedium.SSD, dataProperty.getStorageMedium());
+        Assertions.assertEquals(TStorageMedium.SSD, dataProperty.getStorageMedium());
         DateFormat sf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
         long time = sf.parse("2122-07-09 12:12:12").getTime();
-        Assert.assertEquals(time, dataProperty.getCooldownTimeMs());
+        Assertions.assertEquals(time, dataProperty.getCooldownTimeMs());
 
-        Assert.assertEquals(1, partitionInfo.getReplicationNum(10001L));
-        Assert.assertEquals(TTabletType.TABLET_TYPE_MEMORY, partitionInfo.getTabletType(10001L));
-        Assert.assertEquals(true, partitionInfo.getIsInMemory(10001L));
-        Assert.assertEquals(true, partitionInfo.isMultiColumnPartition());
+        Assertions.assertEquals(1, partitionInfo.getReplicationNum(10001L));
+        Assertions.assertEquals(true, partitionInfo.isMultiColumnPartition());
     }
 
     /**
@@ -309,18 +340,20 @@ public class ListPartitionDescTest {
      *
      * @throws AnalysisException
      */
-    @Test(expected = AnalysisException.class)
-    public void testMultiPartitionDuplicatedValue1() throws AnalysisException {
-        List<String> partitionColNames = Lists.newArrayList("dt", "province");
-        MultiItemListPartitionDesc p1 = new MultiItemListPartitionDesc(false, "p1",
-                Lists.newArrayList(Lists.newArrayList("2022-04-15", "guangdong"),
-                        Lists.newArrayList("2022-04-15", "guangdong")), null);
-        MultiItemListPartitionDesc p2 = new MultiItemListPartitionDesc(false, "p2",
-                Lists.newArrayList(Lists.newArrayList("2022-04-16", "shanghai"),
-                        Lists.newArrayList("2022-04-15", "beijing")), null);
-        List<PartitionDesc> partitionDescs = Lists.newArrayList(p1, p2);
-        ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionColNames, partitionDescs);
-        listPartitionDesc.analyze(this.findColumnDefList(), null);
+    @Test
+    public void testMultiPartitionDuplicatedValue1() {
+        assertThrows(AnalysisException.class, () -> {
+            List<String> partitionColNames = Lists.newArrayList("dt", "province");
+            MultiItemListPartitionDesc p1 = new MultiItemListPartitionDesc(false, "p1",
+                    Lists.newArrayList(Lists.newArrayList("2022-04-15", "guangdong"),
+                            Lists.newArrayList("2022-04-15", "guangdong")), null);
+            MultiItemListPartitionDesc p2 = new MultiItemListPartitionDesc(false, "p2",
+                    Lists.newArrayList(Lists.newArrayList("2022-04-16", "shanghai"),
+                            Lists.newArrayList("2022-04-15", "beijing")), null);
+            List<PartitionDesc> partitionDescs = Lists.newArrayList(p1, p2);
+            ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionColNames, partitionDescs);
+            PartitionDescAnalyzer.analyze(listPartitionDesc, this.findColumnDefList(), null);
+        });
     }
 
     /**
@@ -328,18 +361,20 @@ public class ListPartitionDescTest {
      *
      * @throws AnalysisException
      */
-    @Test(expected = AnalysisException.class)
-    public void testMultiPartitionDuplicatedValue2() throws AnalysisException {
-        List<String> partitionColNames = Lists.newArrayList("dt", "province");
-        MultiItemListPartitionDesc p1 = new MultiItemListPartitionDesc(false, "p1",
-                Lists.newArrayList(Lists.newArrayList("2022-04-15", "guangdong"),
-                        Lists.newArrayList("2022-04-15", "tianjin")), null);
-        MultiItemListPartitionDesc p2 = new MultiItemListPartitionDesc(false, "p2",
-                Lists.newArrayList(Lists.newArrayList("2022-04-16", "shanghai"),
-                        Lists.newArrayList("2022-04-15", "guangdong")), null);
-        List<PartitionDesc> partitionDescs = Lists.newArrayList(p1, p2);
-        ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionColNames, partitionDescs);
-        listPartitionDesc.analyze(this.findColumnDefList(), null);
+    @Test
+    public void testMultiPartitionDuplicatedValue2() {
+        assertThrows(AnalysisException.class, () -> {
+            List<String> partitionColNames = Lists.newArrayList("dt", "province");
+            MultiItemListPartitionDesc p1 = new MultiItemListPartitionDesc(false, "p1",
+                    Lists.newArrayList(Lists.newArrayList("2022-04-15", "guangdong"),
+                            Lists.newArrayList("2022-04-15", "tianjin")), null);
+            MultiItemListPartitionDesc p2 = new MultiItemListPartitionDesc(false, "p2",
+                    Lists.newArrayList(Lists.newArrayList("2022-04-16", "shanghai"),
+                            Lists.newArrayList("2022-04-15", "guangdong")), null);
+            List<PartitionDesc> partitionDescs = Lists.newArrayList(p1, p2);
+            ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionColNames, partitionDescs);
+            PartitionDescAnalyzer.analyze(listPartitionDesc, this.findColumnDefList(), null);
+        });
     }
 
     /**
@@ -347,16 +382,18 @@ public class ListPartitionDescTest {
      *
      * @throws AnalysisException
      */
-    @Test(expected = AnalysisException.class)
-    public void testSinglePartitionDuplicatedValue1() throws AnalysisException {
-        List<String> partitionColNames = Lists.newArrayList("province");
-        SingleItemListPartitionDesc p1 = new SingleItemListPartitionDesc(false, "p1",
-                Lists.newArrayList("guangdong", "guangdong"), null);
-        SingleItemListPartitionDesc p2 = new SingleItemListPartitionDesc(false, "p2",
-                Lists.newArrayList("shanghai", "beijing"), null);
-        List<PartitionDesc> partitionDescs = Lists.newArrayList(p1, p2);
-        ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionColNames, partitionDescs);
-        listPartitionDesc.analyze(this.findColumnDefList(), null);
+    @Test
+    public void testSinglePartitionDuplicatedValue1() {
+        assertThrows(AnalysisException.class, () -> {
+            List<String> partitionColNames = Lists.newArrayList("province");
+            SingleItemListPartitionDesc p1 = new SingleItemListPartitionDesc(false, "p1",
+                    Lists.newArrayList("guangdong", "guangdong"), null);
+            SingleItemListPartitionDesc p2 = new SingleItemListPartitionDesc(false, "p2",
+                    Lists.newArrayList("shanghai", "beijing"), null);
+            List<PartitionDesc> partitionDescs = Lists.newArrayList(p1, p2);
+            ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionColNames, partitionDescs);
+            PartitionDescAnalyzer.analyze(listPartitionDesc, this.findColumnDefList(), null);
+        });
     }
 
     /**
@@ -364,22 +401,24 @@ public class ListPartitionDescTest {
      *
      * @throws AnalysisException
      */
-    @Test(expected = AnalysisException.class)
-    public void testSinglePartitionDuplicatedValue2() throws AnalysisException {
-        List<String> partitionColNames = Lists.newArrayList("province");
-        SingleItemListPartitionDesc p1 = new SingleItemListPartitionDesc(false, "p1",
-                Lists.newArrayList("guangdong", "beijing"), null);
-        SingleItemListPartitionDesc p2 = new SingleItemListPartitionDesc(false, "p2",
-                Lists.newArrayList("shanghai", "beijing"), null);
-        List<PartitionDesc> partitionDescs = Lists.newArrayList(p1, p2);
-        ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionColNames, partitionDescs);
-        listPartitionDesc.analyze(this.findColumnDefList(), null);
+    @Test
+    public void testSinglePartitionDuplicatedValue2() {
+        assertThrows(AnalysisException.class, () -> {
+            List<String> partitionColNames = Lists.newArrayList("province");
+            SingleItemListPartitionDesc p1 = new SingleItemListPartitionDesc(false, "p1",
+                    Lists.newArrayList("guangdong", "beijing"), null);
+            SingleItemListPartitionDesc p2 = new SingleItemListPartitionDesc(false, "p2",
+                    Lists.newArrayList("shanghai", "beijing"), null);
+            List<PartitionDesc> partitionDescs = Lists.newArrayList(p1, p2);
+            ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionColNames, partitionDescs);
+            PartitionDescAnalyzer.analyze(listPartitionDesc, this.findColumnDefList(), null);
+        });
     }
 
     @Test
     public void testCheckHivePartitionColumns() {
         List<String> partitionNames = Lists.newArrayList("p1");
-        ColumnDef columnDef = new ColumnDef("p1", TypeDef.create(PrimitiveType.INT));
+        ColumnDef columnDef = new ColumnDef("p1", new TypeDef(TypeFactory.createType(PrimitiveType.INT)));
         ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionNames, new ArrayList<>());
         ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
                 "Table contains only partition columns",
@@ -387,9 +426,9 @@ public class ListPartitionDescTest {
 
         partitionNames = Lists.newArrayList("p1", "p2");
         List<ColumnDef> columnDefs = Lists.newArrayList(
-                new ColumnDef("c1", TypeDef.create(PrimitiveType.INT)),
-                new ColumnDef("p2", TypeDef.create(PrimitiveType.INT)),
-                new ColumnDef("p1", TypeDef.create(PrimitiveType.INT)));
+                new ColumnDef("c1", new TypeDef(TypeFactory.createType(PrimitiveType.INT))),
+                new ColumnDef("p2", new TypeDef(TypeFactory.createType(PrimitiveType.INT))),
+                new ColumnDef("p1", new TypeDef(TypeFactory.createType(PrimitiveType.INT))));
         ListPartitionDesc listPartitionDesc1 = new ListPartitionDesc(partitionNames, new ArrayList<>());
 
         ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
@@ -409,7 +448,7 @@ public class ListPartitionDescTest {
                 "Partition column[p1] does not exist in column list",
                 () -> listPartitionDesc3.analyzeExternalPartitionColumns(new ArrayList<>(), ""));
 
-        ColumnDef columnDef1 = new ColumnDef("p1", TypeDef.create(PrimitiveType.INT));
+        ColumnDef columnDef1 = new ColumnDef("p1", new TypeDef(IntegerType.INT));
         partitionNames = Lists.newArrayList("p1", "p1");
         ListPartitionDesc listPartitionDesc4 = new ListPartitionDesc(partitionNames, new ArrayList<>());
 
@@ -419,8 +458,8 @@ public class ListPartitionDescTest {
 
         partitionNames = Lists.newArrayList("p1");
         List<ColumnDef> columnDefs1 = Lists.newArrayList(
-                new ColumnDef("c1", TypeDef.create(PrimitiveType.INT)),
-                new ColumnDef("p1", TypeDef.create(PrimitiveType.DECIMAL32)));
+                new ColumnDef("c1", new TypeDef(TypeFactory.createType(PrimitiveType.INT))),
+                new ColumnDef("p1", new TypeDef(TypeFactory.createType(PrimitiveType.DECIMAL32))));
         ListPartitionDesc listPartitionDesc5 = new ListPartitionDesc(partitionNames, new ArrayList<>());
 
         ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
@@ -429,8 +468,8 @@ public class ListPartitionDescTest {
 
         partitionNames = Lists.newArrayList("p1");
         List<ColumnDef> columnDefs2 = Lists.newArrayList(
-                new ColumnDef("c1", TypeDef.create(PrimitiveType.INT)),
-                new ColumnDef("p1", TypeDef.create(PrimitiveType.INT)));
+                new ColumnDef("c1", new TypeDef(TypeFactory.createType(PrimitiveType.INT))),
+                new ColumnDef("p1", new TypeDef(TypeFactory.createType(PrimitiveType.INT))));
         ListPartitionDesc listPartitionDesc6 = new ListPartitionDesc(partitionNames, new ArrayList<>());
         listPartitionDesc6.analyzeExternalPartitionColumns(columnDefs2, "hive");
     }

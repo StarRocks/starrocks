@@ -18,16 +18,16 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Expr;
-import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.Type;
 
 import java.util.Map;
 
@@ -108,7 +108,7 @@ public class ArrayRewriteEquivalent extends IAggregateRewriteEquivalent {
             if (!arg0.equals(eq)) {
                 return null;
             }
-            return rewriteImpl(shuttleContext, call, replace, shuttleContext.isRollup());
+            return rewriteImpl(shuttleContext, call, replace);
         } else if (fn.equalsIgnoreCase(ARRAY_AGG)) {
             if (!call.isDistinct()) {
                 return null;
@@ -117,7 +117,7 @@ public class ArrayRewriteEquivalent extends IAggregateRewriteEquivalent {
             if (!arg0.equals(eq)) {
                 return null;
             }
-            return rewriteImpl(shuttleContext, call, replace, shuttleContext.isRollup());
+            return rewriteImpl(shuttleContext, call, replace);
         }
         return null;
     }
@@ -125,7 +125,7 @@ public class ArrayRewriteEquivalent extends IAggregateRewriteEquivalent {
     CallOperator makeArrayUniqAggFunc(ScalarOperator arg0, CallOperator aggFunc, Function.CompareMode compareMode) {
         Type newInputArgType = aggFunc.getChild(0).getType();
         Type[] argTypes = new Type[] {new ArrayType(newInputArgType)};
-        Function rollup = Expr.getBuiltinFunction(FunctionSet.ARRAY_UNIQUE_AGG, argTypes, compareMode);
+        Function rollup = ExprUtils.getBuiltinFunction(FunctionSet.ARRAY_UNIQUE_AGG, argTypes, compareMode);
         if (rollup == null) {
             return null;
         }
@@ -136,11 +136,11 @@ public class ArrayRewriteEquivalent extends IAggregateRewriteEquivalent {
                                    Function.CompareMode compareMode, String mapped) {
         Type newInputArgType = call.getChild(0).getType();
         Type[] argTypes = new Type[] {new ArrayType(newInputArgType)};
-        Function replaced = Expr.getBuiltinFunction(mapped, argTypes, compareMode);
+        Function replaced = ExprUtils.getBuiltinFunction(mapped, argTypes, compareMode);
         if (replaced == null) {
             return null;
         }
-        Function rollup = Expr.getBuiltinFunction(FunctionSet.ARRAY_UNIQUE_AGG, argTypes, compareMode);
+        Function rollup = ExprUtils.getBuiltinFunction(FunctionSet.ARRAY_UNIQUE_AGG, argTypes, compareMode);
         CallOperator res = new CallOperator(
                 FunctionSet.ARRAY_UNIQUE_AGG,
                 new ArrayType(newInputArgType),
@@ -153,7 +153,7 @@ public class ArrayRewriteEquivalent extends IAggregateRewriteEquivalent {
                                    Function.CompareMode compareMode, String mapped) {
         Type newInputArgType = call.getChild(0).getType();
         Type[] argTypes = new Type[] {new ArrayType(newInputArgType)};
-        Function replaced = Expr.getBuiltinFunction(mapped, argTypes, compareMode);
+        Function replaced = ExprUtils.getBuiltinFunction(mapped, argTypes, compareMode);
         if (replaced == null) {
             return null;
         }
@@ -175,9 +175,9 @@ public class ArrayRewriteEquivalent extends IAggregateRewriteEquivalent {
     }
 
     @Override
-    public ScalarOperator rewriteAggregateFunc(EquivalentShuttleContext shuttleContext,
-                                               CallOperator aggFunc,
-                                               ColumnRefOperator replace) {
+    public ScalarOperator rewriteAggregateFuncWithoutRollup(EquivalentShuttleContext shuttleContext,
+                                                            CallOperator aggFunc,
+                                                            ColumnRefOperator replace) {
         String fn = aggFunc.getFnName();
         if (fn.equals(ARRAY_AGG)) {
             return makeArrayUniqAggFunc(replace, aggFunc, Function.CompareMode.IS_IDENTICAL);

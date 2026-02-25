@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/sort/spillable_partition_sort_sink_operator.h"
 
+#include "base/utility/defer_op.h"
 #include "exec/chunks_sorter_heap_sort.h"
 #include "exec/chunks_sorter_topn.h"
 #include "exec/pipeline/query_context.h"
@@ -24,11 +25,11 @@
 #include "exec/spillable_chunks_sorter_sort.h"
 #include "gen_cpp/InternalService_types.h"
 #include "storage/chunk_helper.h"
-#include "util/defer_op.h"
 
 namespace starrocks::pipeline {
 Status SpillablePartitionSortSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(PartitionSortSinkOperator::prepare(state));
+    RETURN_IF_ERROR(PartitionSortSinkOperator::prepare_local_state(state));
     RETURN_IF_ERROR(_chunks_sorter->spiller()->prepare(state));
     if (state->spill_mode() == TSpillMode::FORCE) {
         _chunks_sorter->set_spill_stragety(spill::SpillStrategy::SPILL_ALL);
@@ -101,16 +102,24 @@ Status SpillablePartitionSortSinkOperator::set_finishing(RuntimeState* state) {
 
 Status SpillablePartitionSortSinkOperator::set_finished(RuntimeState* state) {
     _is_finished = true;
-    _chunks_sorter->cancel();
+    if (state->is_cancelled()) {
+        _chunks_sorter->cancel();
+    }
     return Status::OK();
 }
 
 OperatorPtr SpillablePartitionSortSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
     std::shared_ptr<ChunksSorter> chunks_sorter;
 
-    chunks_sorter = std::make_unique<SpillableChunksSorterFullSort>(
-            runtime_state(), &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first, _sort_keys,
-            _max_buffered_rows, _max_buffered_bytes, _early_materialized_slots);
+    if (_limit > 0) {
+        chunks_sorter = std::make_unique<SpillableChunksSorterTopN>(
+                runtime_state(), &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first,
+                _sort_keys, 0, _limit + _offset);
+    } else {
+        chunks_sorter = std::make_unique<SpillableChunksSorterFullSort>(
+                runtime_state(), &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first,
+                _sort_keys, _max_buffered_rows, _max_buffered_bytes, _early_materialized_slots);
+    }
 
     auto spiller = _spill_factory->create(*_spill_options);
     auto spill_channel = _spill_channel_factory->get_or_create(driver_sequence);

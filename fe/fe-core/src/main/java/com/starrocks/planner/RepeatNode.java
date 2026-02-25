@@ -36,13 +36,9 @@ package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SlotId;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TNormalRepeatNode;
@@ -52,7 +48,6 @@ import com.starrocks.thrift.TRepeatNode;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.util.Strings;
 
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -112,11 +107,7 @@ public class RepeatNode extends PlanNode {
     }
 
     @Override
-    public void computeStats(Analyzer analyzer) {
-    }
-
-    @Override
-    public void init(Analyzer analyzer) throws UserException {
+    public void computeStats() {
     }
 
     @Override
@@ -143,7 +134,7 @@ public class RepeatNode extends PlanNode {
         output.append("\n");
         if (!conjuncts.isEmpty()) {
             output.append(detailPrefix).append("PREDICATES: ").append(
-                    getExplainString(conjuncts)).append("\n");
+                    explainExpr(conjuncts)).append("\n");
         }
 
         if (CollectionUtils.isNotEmpty(outputTupleDesc.getSlots()) &&
@@ -199,5 +190,10 @@ public class RepeatNode extends PlanNode {
         planNode.setRepeat_node(repeatNode);
         planNode.setNode_type(TPlanNodeType.REPEAT_NODE);
         normalizeConjuncts(normalizer, planNode, conjuncts);
+    }
+
+    @Override
+    public boolean needCollectExecStats() {
+        return true;
     }
 }

@@ -44,7 +44,11 @@
 #include "agent/finish_task.h"
 #include "agent/master_info.h"
 #include "agent/task_signatures_manager.h"
+#include "base/network/network_util.h"
+#include "base/string/string_parser.hpp"
+#include "base/utility/defer_op.h"
 #include "common/status.h"
+#include "common/system/backend_options.h"
 #include "engine_storage_migration_task.h"
 #include "fs/fs.h"
 #include "gen_cpp/BackendService.h"
@@ -56,14 +60,10 @@
 #include "runtime/client_cache.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "service/backend_options.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/snapshot_manager.h"
 #include "storage/tablet_updates.h"
-#include "util/defer_op.h"
-#include "util/network_util.h"
-#include "util/string_parser.hpp"
 #include "util/thrift_rpc_helper.h"
 
 using std::set;
@@ -167,7 +167,7 @@ Status EngineCloneTask::_do_clone_primary_tablet(Tablet* tablet) {
         if (st.ok()) {
             st = _finish_clone_primary(tablet, download_path);
         } else if (st.is_not_found()) {
-            LOG(INFO) << fmt::format(
+            VLOG(1) << fmt::format(
                     "No missing version found from src replica. tablet: {}, src BE:{}:{}, type: {}, "
                     "missing_version_ranges: {}, committed_version: {}",
                     tablet->tablet_id(), _clone_req.src_backends[0].host, _clone_req.src_backends[0].be_port,
@@ -269,6 +269,8 @@ Status EngineCloneTask::_do_clone(Tablet* tablet) {
                 LOG(WARNING) << "Fail to load tablet from dir: " << status << " tablet:" << _clone_req.tablet_id
                              << ". schema_hash_dir='" << schema_hash_dir;
                 _error_msgs->push_back("load tablet from dir failed.");
+                (void)fs::remove_all(tablet_dir);
+                return status;
             }
 
             std::string dcgs_snapshot_file = strings::Substitute("$0/$1.dcgs_snapshot", schema_hash_dir, tablet_id);
@@ -282,6 +284,11 @@ Status EngineCloneTask::_do_clone(Tablet* tablet) {
                 }
 
                 auto new_tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
+                if (new_tablet == nullptr) {
+                    std::string error_msg = strings::Substitute("tablet: $0 is not exist", tablet_id);
+                    LOG(WARNING) << error_msg;
+                    return Status::InternalError(error_msg);
+                }
 
                 auto data_dir = new_tablet->data_dir();
                 rocksdb::WriteBatch wb;
@@ -313,7 +320,10 @@ Status EngineCloneTask::_do_clone(Tablet* tablet) {
 
         } else if (fs::path_exist(clone_meta_file)) {
             DCHECK(!fs::path_exist(clone_header_file));
-            status = tablet_manager->create_tablet_from_meta_snapshot(store, tablet_id, schema_hash, schema_hash_dir);
+            bool need_rebuild_pk_index = _clone_req.__isset.need_rebuild_pk_index && _clone_req.need_rebuild_pk_index;
+            status = tablet_manager->create_tablet_from_meta_snapshot(store, tablet_id, schema_hash, schema_hash_dir,
+                                                                      false, need_rebuild_pk_index,
+                                                                      config::pindex_rebuild_clone_wait_seconds);
             if (!status.ok()) {
                 LOG(WARNING) << "Fail to load tablet from snapshot: " << status << " tablet:" << _clone_req.tablet_id
                              << ". schema_hash_dir=" << schema_hash_dir;
@@ -413,8 +423,9 @@ Status EngineCloneTask::_clone_copy(DataDir& data_dir, const string& local_data_
         st = _download_files(&data_dir, download_url, local_path);
         (void)_release_snapshot(src.host, src.be_port, snapshot_path);
         if (!st.ok()) {
-            LOG(WARNING) << "Fail to download snapshot from " << download_url << ": " << st.to_string()
-                         << " tablet:" << _clone_req.tablet_id;
+            LOG(WARNING) << "Fail to download snapshot " << snapshot_path << " from "
+                         << get_host_port(src.host, src.http_port) << ", status: " << st
+                         << ", tablet_id:" << _clone_req.tablet_id << ", schema_hash:" << _clone_req.schema_hash;
             error_msgs->push_back("download snapshot failed. backend_ip: " + src.host);
             continue;
         }
@@ -433,7 +444,8 @@ Status EngineCloneTask::_clone_copy(DataDir& data_dir, const string& local_data_
             error_msgs->push_back("convert rowset id failed. backend_ip: " + src.host);
             continue;
         }
-        LOG(INFO) << "Cloned snapshot from " << download_url << " to " << local_data_path;
+        LOG(INFO) << "Cloned snapshot " << snapshot_path << " from " << get_host_port(src.host, src.http_port) << " to "
+                  << local_data_path;
         break;
     }
     return st;
@@ -616,7 +628,7 @@ Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& re
 
         std::string local_file_path = local_path + file_name;
 
-        VLOG(1) << "Downloading " << remote_file_url << " to " << local_path << ". bytes=" << file_size
+        VLOG(2) << "Downloading " << file_name << " to " << local_path << ". bytes=" << file_size
                 << " timeout=" << estimate_timeout;
 
         auto download_cb = [&remote_file_url, estimate_timeout, &local_file_path, file_size](HttpClient* client) {
@@ -627,8 +639,8 @@ Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& re
             // Check file length
             uint64_t local_file_size = std::filesystem::file_size(local_file_path);
             if (local_file_size != file_size) {
-                LOG(WARNING) << "Fail to download " << remote_file_url << ". file_size=" << local_file_size << "/"
-                             << file_size;
+                LOG(WARNING) << "Mismatched file size, downloaded file: " << local_file_path
+                             << ", file_size: " << local_file_size << "/" << file_size;
                 return Status::InternalError("mismatched file size");
             }
             chmod(local_file_path.c_str(), S_IRUSR | S_IWUSR);
@@ -643,6 +655,8 @@ Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& re
     if (total_time_ms > 0) {
         copy_rate = total_file_size / ((double)total_time_ms) / 1000;
     }
+    _copy_size = (int64_t)total_file_size;
+    _copy_time_ms = (int64_t)total_time_ms;
     LOG(INFO) << "Copied tablet " << _signature << " files=" << file_name_list.size() << ". bytes=" << total_file_size
               << " cost=" << total_time_ms << " ms"
               << " rate=" << copy_rate << " MB/s";
@@ -920,7 +934,7 @@ Status EngineCloneTask::_clone_full_data(Tablet* tablet, TabletMeta* cloned_tabl
     for (auto& rs_meta_ptr : rs_metas_found_in_src) {
         RowsetSharedPtr rowset_to_remove;
         if (auto s = RowsetFactory::create_rowset(cloned_tablet_meta->tablet_schema_ptr(), tablet->schema_hash_path(),
-                                                  rs_meta_ptr, &rowset_to_remove);
+                                                  rs_meta_ptr, &rowset_to_remove, tablet->data_dir()->get_meta());
             !s.ok()) {
             LOG(WARNING) << "failed to init rowset to remove: " << rs_meta_ptr->rowset_id().to_string();
             continue;
@@ -981,13 +995,15 @@ Status EngineCloneTask::_finish_clone_primary(Tablet* tablet, const std::string&
         RETURN_IF_ERROR(fs->link_file(from, to));
     }
     LOG(INFO) << "Linked " << clone_files.size() << " files from " << clone_dir << " to " << tablet_dir;
+    bool need_rebuild_pk_index = _clone_req.__isset.need_rebuild_pk_index && _clone_req.need_rebuild_pk_index;
     // Note that |snapshot_meta| may be modified by `load_snapshot`.
-    Status st = tablet->updates()->load_snapshot(snapshot_meta);
+    Status st = tablet->updates()->load_snapshot(snapshot_meta, false, false, need_rebuild_pk_index,
+                                                 config::pindex_rebuild_clone_wait_seconds);
     if (!st.ok()) {
         Status clear_st;
         for (const std::string& filename : tablet_files) {
             clear_st = fs::delete_file(filename);
-            if (!st.ok()) {
+            if (!clear_st.ok()) {
                 LOG(WARNING) << "remove tablet file:" << filename << " failed, status:" << clear_st;
             }
         }

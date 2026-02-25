@@ -14,13 +14,18 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.RunMode;
+import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 public class DictQueryFunctionTest {
 
@@ -29,7 +34,7 @@ public class DictQueryFunctionTest {
     public static ConnectContext connectContext;
     public static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -53,7 +58,7 @@ public class DictQueryFunctionTest {
                 "DISTRIBUTED BY HASH(`key_varchar`) BUCKETS 12\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
-                "    \"enable_persistent_index\" = \"false\",\n" +
+                "    \"enable_persistent_index\" = \"true\",\n" +
                 "    \"replicated_storage\" = \"true\"\n" +
                 ");";
 
@@ -69,7 +74,7 @@ public class DictQueryFunctionTest {
                 "DISTRIBUTED BY HASH(`key_varchar`) BUCKETS 12\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
-                "    \"enable_persistent_index\" = \"false\",\n" +
+                "    \"enable_persistent_index\" = \"true\",\n" +
                 "    \"replicated_storage\" = \"true\"\n" +
                 ");";
 
@@ -85,7 +90,7 @@ public class DictQueryFunctionTest {
                 "DISTRIBUTED BY HASH(`key_varchar`) BUCKETS 12\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
-                "    \"enable_persistent_index\" = \"false\",\n" +
+                "    \"enable_persistent_index\" = \"true\",\n" +
                 "    \"replicated_storage\" = \"true\"\n" +
                 ");";
         starRocksAssert.withTable(dictTable);
@@ -158,6 +163,25 @@ public class DictQueryFunctionTest {
                 "dict_mapping function do not support shared data mode");
         Config.run_mode = "shared_nothing";
         RunMode.detectRunMode();
+    }
+
+    @Test
+    public void testDictTable() throws Exception {
+        starRocksAssert.useDatabase(TEST_DICT_DATABASE);
+        starRocksAssert.withTable("CREATE TABLE `dd0` (\n" +
+                "  `k1` int(11) NOT NULL,\n" +
+                "  `k2` BIGINT(11) NULL AS dict_mapping('dict_table', `k1`, TRUE)\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+
+        OlapTable table = (OlapTable) starRocksAssert.getTable(TEST_DICT_DATABASE, "dd0");
+        List<String> cols = StatisticUtils.getCollectibleColumns(table);
+        Assertions.assertEquals(1, cols.size());
+
+        starRocksAssert.dropTable("dd0");
     }
 
     private void testDictMappingFunction(String sql, String expectException) {

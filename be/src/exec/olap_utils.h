@@ -40,8 +40,8 @@
 #include "common/logging.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Opcodes_types.h"
-#include "runtime/datetime_value.h"
-#include "storage/tuple.h"
+#include "storage/olap_tuple.h"
+#include "types/datetime_value.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
 
@@ -99,7 +99,7 @@ inline SQLFilterOp to_olap_filter_type(TExprOpcode::type type, bool opposite) {
         return FILTER_IN;
 
     default:
-        VLOG(1) << "TExprOpcode: " << type;
+        VLOG(2) << "TExprOpcode: " << type;
         DCHECK(false);
     }
 
@@ -121,7 +121,7 @@ inline SQLFilterOp invert_olap_filter_type(const SQLFilterOp op) {
     case FILTER_NOT_IN:
         return FILTER_IN;
     default:
-        VLOG(1) << "Unkown SQLFilterOp when inverting it: " << op;
+        VLOG(2) << "Unkown SQLFilterOp when inverting it: " << op;
         DCHECK(false);
     }
     return FILTER_IN;

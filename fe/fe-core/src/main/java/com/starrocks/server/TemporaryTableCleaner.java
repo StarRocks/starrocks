@@ -14,6 +14,7 @@
 
 package com.starrocks.server;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.FrontendDaemon;
@@ -29,8 +30,9 @@ import com.starrocks.thrift.TStatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
@@ -53,17 +55,51 @@ public class TemporaryTableCleaner extends FrontendDaemon  {
 
     @Override
     protected void runAfterCatalogReady() {
-        if (FeConstants.runningUnitTest) {
+        if (FeConstants.runningUnitTest && !FeConstants.temporaryTableCleanerTest) {
             return;
         }
+
+        long startTime = System.nanoTime();
+        Set<UUID> aliveSessions;
+        try {
+            aliveSessions = getAliveSessions();
+        } catch (Exception e) {
+            return;
+        }
+
+        if (FeConstants.temporaryTableCleanerTest) {
+            testMock();
+        }
+
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+        Map<UUID, Long> recordSessions = temporaryTableMgr.listSessions();
+
+        recordSessions.forEach((sessionId, createTime) -> {
+            // We need to consider the create time of the session.
+            // If a session is created during the execution of the cleanup task,
+            // it should not be cleaned up at this time even if it is not in the aliveSession
+            if (!aliveSessions.contains(sessionId) && createTime < startTime) {
+                LOG.warn("cannot find alive session {}, should clean all temporary tables on it", sessionId);
+                metadataMgr.cleanTemporaryTables(sessionId);
+            }
+        });
+    }
+
+    // only used for testing
+    protected void testMock() {
+    }
+
+    @VisibleForTesting
+    protected Set<UUID> getAliveSessions() throws Exception {
         List<Frontend> frontends = GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(null);
-        List<UUID> aliveSessions = new ArrayList<>();
+
+        Set<UUID> aliveSessions = new HashSet<>();
 
         TListSessionsOptions options = new TListSessionsOptions();
         options.setTemporary_table_only(true);
         TListSessionsRequest request = new TListSessionsRequest();
         request.setOptions(options);
-
         for (Frontend frontend : frontends) {
             try {
                 TNetworkAddress thriftAddress = new TNetworkAddress(frontend.getHost(), frontend.getRpcPort());
@@ -87,18 +123,9 @@ public class TemporaryTableCleaner extends FrontendDaemon  {
             } catch (Throwable e) {
                 LOG.warn("listSessions return error from {}:{}, skip clean temporary tables",
                         frontend.getHost(), frontend.getRpcPort(), e);
-                return;
+                throw e;
             }
         }
-
-        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
-        TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
-        Set<UUID> recordSessions = temporaryTableMgr.listSessions();
-        for (UUID sessionId : recordSessions) {
-            if (!aliveSessions.contains(sessionId)) {
-                LOG.info("cannot find alive session {}, should clean all temporary tables on it", sessionId);
-                metadataMgr.cleanTemporaryTables(sessionId);
-            }
-        }
+        return aliveSessions;
     }
 }

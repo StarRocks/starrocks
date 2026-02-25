@@ -20,10 +20,10 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -34,7 +34,7 @@ import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -55,10 +55,9 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class CboTablePruneRule extends TransformationRule {
-    public CboTablePruneRule() {
+    private CboTablePruneRule() {
         super(RuleType.TF_CBO_TABLE_PRUNE_RULE,
-                Pattern.create(OperatorType.LOGICAL_JOIN, OperatorType.LOGICAL_OLAP_SCAN,
-                        OperatorType.LOGICAL_OLAP_SCAN));
+                Pattern.create(OperatorType.LOGICAL_JOIN, OperatorType.PATTERN_SCAN, OperatorType.PATTERN_SCAN));
     }
 
     // the count of joins of these types exceeds certain threshold, this Rule would be time-consuming
@@ -78,9 +77,13 @@ public class CboTablePruneRule extends TransformationRule {
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
         LogicalJoinOperator joinOp = input.getOp().cast();
-        return joinOp.getJoinType() == JoinOperator.INNER_JOIN ||
+        boolean supportedJoinType = (joinOp.getJoinType() == JoinOperator.INNER_JOIN ||
                 joinOp.getJoinType() == JoinOperator.LEFT_OUTER_JOIN ||
-                joinOp.getJoinType() == JoinOperator.RIGHT_OUTER_JOIN;
+                joinOp.getJoinType() == JoinOperator.RIGHT_OUTER_JOIN);
+        if (!supportedJoinType) {
+            return false;
+        }
+        return true;
     }
 
     @Override
@@ -89,12 +92,18 @@ public class CboTablePruneRule extends TransformationRule {
         JoinOperator joinType = joinOp.getJoinType();
         OptExpression lhs = input.inputAt(0);
         OptExpression rhs = input.inputAt(1);
-        LogicalOlapScanOperator lhsScanOp = input.inputAt(0).getOp().cast();
-        LogicalOlapScanOperator rhsScanOp = input.inputAt(1).getOp().cast();
+        LogicalScanOperator lhsScanOp = input.inputAt(0).getOp().cast();
+        LogicalScanOperator rhsScanOp = input.inputAt(1).getOp().cast();
         Pair<List<BinaryPredicateOperator>, List<ScalarOperator>> onPredicates =
                 JoinHelper.separateEqualPredicatesFromOthers(input);
         List<BinaryPredicateOperator> eqOnPredicates = onPredicates.first;
         List<ScalarOperator> otherOnPredicates = onPredicates.second;
+
+        // Sometimes, a JoinOperator may have other predicates on both Operator.predicate and
+        // LogicalJoinOperator.onPredicate, so we must tackle all of them as other predicates together.
+        if (joinOp.getPredicate() != null) {
+            otherOnPredicates.add(joinOp.getPredicate());
+        }
 
         if (eqOnPredicates.isEmpty()) {
             return Collections.emptyList();
@@ -137,15 +146,15 @@ public class CboTablePruneRule extends TransformationRule {
         return Collections.emptyList();
     }
 
-    private boolean matchUniqueConstraints(LogicalOlapScanOperator scanOp, List<ColumnRefOperator> colRefs) {
-        OlapTable table = (OlapTable) scanOp.getTable();
+    private boolean matchUniqueConstraints(LogicalScanOperator scanOp, List<ColumnRefOperator> colRefs) {
+        Table table = scanOp.getTable();
         if (!table.hasUniqueConstraints()) {
             return false;
         }
         Map<String, ColumnRefOperator> colNameToColRefMap = scanOp.getColumnNameToColRefMap();
         ColumnRefSet columnRefSet = new ColumnRefSet(colRefs);
         return table.getUniqueConstraints().stream()
-                .map(uc -> new ColumnRefSet(uc.getUniqueColumnNames().stream().map(colNameToColRefMap::get)
+                .map(uc -> new ColumnRefSet(uc.getUniqueColumnNames(table).stream().map(colNameToColRefMap::get)
                         .collect(Collectors.toList()))).anyMatch(columnRefSet::containsAll);
     }
 
@@ -219,8 +228,8 @@ public class CboTablePruneRule extends TransformationRule {
             Optional<ScalarOperator> optOtherJoinOnPredicate) {
         OptExpression lhs = joinOptExpression.inputAt(0);
         OptExpression rhs = joinOptExpression.inputAt(1);
-        LogicalOlapScanOperator lhsScanOp = lhs.getOp().cast();
-        LogicalOlapScanOperator rhsScanOp = rhs.getOp().cast();
+        LogicalScanOperator lhsScanOp = lhs.getOp().cast();
+        LogicalScanOperator rhsScanOp = rhs.getOp().cast();
         LogicalJoinOperator joinOp = joinOptExpression.getOp().cast();
         JoinOperator joinType = joinOp.getJoinType();
         // If there exist other predicates in on-clause except equality predicates, left/right join
@@ -230,7 +239,7 @@ public class CboTablePruneRule extends TransformationRule {
         }
 
         // must be the same table
-        if (lhsScanOp.getTable().getId() != rhsScanOp.getTable().getId()) {
+        if (!lhsScanOp.getTable().equals(rhsScanOp.getTable())) {
             return Collections.emptyList();
         }
 
@@ -238,7 +247,7 @@ public class CboTablePruneRule extends TransformationRule {
         if (eqColRefPairs.stream().anyMatch(p -> p.first.isNullable() || p.second.isNullable())) {
             return Collections.emptyList();
         }
-        // rhs of LEFT JOIN or lhs of RIGHT JOIN must output all rows of the OlapTable
+        // rhs of LEFT JOIN or lhs of RIGHT JOIN must output all rows of the table
         if ((joinType.isLeftOuterJoin() && (rhsScanOp.getPredicate() != null || rhsScanOp.hasLimit())) ||
                 (joinType.isRightOuterJoin() && (lhsScanOp.getPredicate() != null || lhsScanOp.hasLimit()))) {
             return Collections.emptyList();
@@ -256,8 +265,8 @@ public class CboTablePruneRule extends TransformationRule {
                                                  Optional<ScalarOperator> optOtherJoinOnPredicate) {
         OptExpression lhs = joinOptExpression.inputAt(0);
         OptExpression rhs = joinOptExpression.inputAt(1);
-        LogicalOlapScanOperator lhsScanOp = lhs.getOp().cast();
-        LogicalOlapScanOperator rhsScanOp = rhs.getOp().cast();
+        LogicalScanOperator lhsScanOp = lhs.getOp().cast();
+        LogicalScanOperator rhsScanOp = rhs.getOp().cast();
         Map<Column, ColumnRefOperator> lhsColToColRef = lhsScanOp.getColumnMetaToColRefMap();
         Map<Column, ColumnRefOperator> rhsColToColRef = rhsScanOp.getColumnMetaToColRefMap();
         Map<ColumnRefOperator, ScalarOperator> rewriteMapping = Maps.newHashMap();
@@ -334,8 +343,8 @@ public class CboTablePruneRule extends TransformationRule {
 
         // create a new ScanOperator who unifies join operator, retain-side scan operator and
         // prune-side scan operators.
-        LogicalOlapScanOperator.Builder newOpBuilder =
-                (LogicalOlapScanOperator.Builder) OperatorBuilderFactory.build(retainOp.getOp())
+        LogicalScanOperator.Builder newOpBuilder =
+                (LogicalScanOperator.Builder) OperatorBuilderFactory.build(retainOp.getOp())
                         .withOperator(retainOp.getOp())
                         .setPredicate(newPredicate)
                         .setProjection(new Projection(newColRefMap));
@@ -343,7 +352,6 @@ public class CboTablePruneRule extends TransformationRule {
         // set new ColumnRefToColumnMap in case that when the same tables join on UK/PK
         newColRefToColumnMap.ifPresent(newOpBuilder::setColRefToColumnMetaMap);
         Operator newScan = newOpBuilder.build();
-        newScan.addSalt();
         return Collections.singletonList(OptExpression.create(newScan));
     }
 
@@ -370,7 +378,6 @@ public class CboTablePruneRule extends TransformationRule {
 
         Operator newScan = OperatorBuilderFactory.build(retainOpt.getOp()).withOperator(retainOpt.getOp())
                 .setProjection(newProjection).build();
-        newScan.addSalt();
         return Collections.singletonList(OptExpression.create(newScan));
     }
 }

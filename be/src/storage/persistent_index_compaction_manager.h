@@ -19,12 +19,13 @@
 #include <utility>
 #include <vector>
 
+#include "common/thread/threadpool.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/olap_common.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_updates.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -50,6 +51,8 @@ public:
     // Is tablet's disk out of concurrency limit
     bool disk_limit(DataDir* data_dir);
 
+    virtual void stop();
+
 protected:
     std::mutex _mutex;
     // Sorted by prority
@@ -58,6 +61,7 @@ protected:
     std::unique_ptr<ThreadPool> _worker_thread_pool;
     std::unordered_map<DataDir*, uint64_t> _data_dir_to_task_num_map;
     size_t _last_schedule_time = 0;
+    bool _stopped = false;
 };
 
 } // namespace starrocks

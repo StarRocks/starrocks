@@ -36,6 +36,7 @@ package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
@@ -45,6 +46,7 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -53,10 +55,8 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
-import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.UserIdentity;
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -96,17 +96,17 @@ public class MigrationAction extends RestBaseAction {
             throw new DdlException("Missing params. Need database name");
         }
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
             throw new DdlException("Database[" + dbName + "] does not exist");
         }
 
         List<List<Comparable>> rows = Lists.newArrayList();
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             if (!Strings.isNullOrEmpty(tableName)) {
-                Table table = db.getTable(tableName);
+                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
                 if (table == null) {
                     throw new DdlException("Table[" + tableName + "] does not exist");
                 }
@@ -119,13 +119,13 @@ public class MigrationAction extends RestBaseAction {
 
                 for (Partition partition : olapTable.getPartitions()) {
                     String partitionName = partition.getName();
-                    MaterializedIndex baseIndex = partition.getBaseIndex();
+                    MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getLatestBaseIndex();
                     for (Tablet tablet : baseIndex.getTablets()) {
                         List<Comparable> row = Lists.newArrayList();
                         row.add(tableName);
                         row.add(partitionName);
                         row.add(tablet.getId());
-                        row.add(olapTable.getSchemaHashByIndexId(baseIndex.getId()));
+                        row.add(olapTable.getSchemaHashByIndexMetaId(baseIndex.getMetaId()));
                         if (CollectionUtils.isNotEmpty(((LocalTablet) tablet).getImmutableReplicas())) {
                             Replica replica = ((LocalTablet) tablet).getImmutableReplicas().get(0);
                             row.add(replica.getBackendId());
@@ -135,7 +135,7 @@ public class MigrationAction extends RestBaseAction {
                 }
             } else {
                 // get all olap table
-                for (Table table : db.getTables()) {
+                for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
                     if (table.getType() != TableType.OLAP) {
                         continue;
                     }
@@ -145,13 +145,13 @@ public class MigrationAction extends RestBaseAction {
 
                     for (Partition partition : olapTable.getPartitions()) {
                         String partitionName = partition.getName();
-                        MaterializedIndex baseIndex = partition.getBaseIndex();
+                        MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getLatestBaseIndex();
                         for (Tablet tablet : baseIndex.getTablets()) {
                             List<Comparable> row = Lists.newArrayList();
                             row.add(tableName);
                             row.add(partitionName);
                             row.add(tablet.getId());
-                            row.add(olapTable.getSchemaHashByIndexId(baseIndex.getId()));
+                            row.add(olapTable.getSchemaHashByIndexMetaId(baseIndex.getMetaId()));
                             if (CollectionUtils.isNotEmpty(((LocalTablet) tablet).getImmutableReplicas())) {
                                 Replica replica = ((LocalTablet) tablet).getImmutableReplicas().get(0);
                                 row.add(replica.getBackendId());
@@ -163,7 +163,7 @@ public class MigrationAction extends RestBaseAction {
             }
 
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         ListComparator<List<Comparable>> comparator = new ListComparator<List<Comparable>>(0, 1, 2);

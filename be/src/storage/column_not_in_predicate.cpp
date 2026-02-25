@@ -14,18 +14,20 @@
 
 #include <utility>
 
+#include "base/simd/simd.h"
+#include "base/string/string_parser.hpp"
 #include "column/column.h"
 #include "column/nullable_column.h"
 #include "gutil/casts.h"
+#include "olap_type_infra.h"
 #include "storage/column_predicate.h"
 #include "storage/in_predicate_utils.h"
 #include "storage/rowset/bitmap_index_reader.h"
-#include "util/string_parser.hpp"
 
 namespace starrocks {
 
 template <LogicalType field_type>
-class ColumnNotInPredicate : public ColumnPredicate {
+class ColumnNotInPredicate final : public ColumnPredicate {
     using ValueType = typename CppTypeTraits<field_type>::CppType;
 
 public:
@@ -89,7 +91,17 @@ public:
         return new_size;
     }
 
-    bool zone_map_filter(const ZoneMapDetail& detail) const override { return true; }
+    bool zone_map_filter(const ZoneMapDetail& detail) const override {
+        if (detail.min_or_null_value() == detail.max_value()) {
+            const auto type_info = this->type_info();
+            for (const ValueType& v : _values) {
+                if (type_info->cmp(Datum(v), detail.max_value()) == 0) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
 
     bool support_bitmap_filter() const override { return false; }
 
@@ -177,7 +189,7 @@ private:
 
 // Template specialization for binary column
 template <LogicalType field_type>
-class BinaryColumnNotInPredicate : public ColumnPredicate {
+class BinaryColumnNotInPredicate final : public ColumnPredicate {
 public:
     BinaryColumnNotInPredicate(const TypeInfoPtr& type_info, ColumnId id, std::vector<std::string> strings)
             : ColumnPredicate(type_info, id), _zero_padded_strs(std::move(strings)) {
@@ -358,6 +370,12 @@ ColumnPredicate* new_column_not_in_predicate(const TypeInfoPtr& type_info, Colum
         SetType values = predicate_internal::strings_to_decimal_set<TYPE_DECIMAL128>(scale, strs);
         return new ColumnNotInPredicate<TYPE_DECIMAL128>(type_info, id, std::move(values));
     }
+    case TYPE_DECIMAL256: {
+        const auto scale = type_info->scale();
+        using SetType = ItemHashSet<CppTypeTraits<TYPE_DECIMAL256>::CppType>;
+        SetType values = predicate_internal::strings_to_decimal_set<TYPE_DECIMAL256>(scale, strs);
+        return new ColumnNotInPredicate<TYPE_DECIMAL256>(type_info, id, std::move(values));
+    }
     case TYPE_CHAR:
         return new BinaryColumnNotInPredicate<TYPE_CHAR>(type_info, id, strs);
     case TYPE_VARCHAR:
@@ -388,16 +406,107 @@ ColumnPredicate* new_column_not_in_predicate(const TypeInfoPtr& type_info, Colum
     case TYPE_OBJECT:
     case TYPE_PERCENTILE:
     case TYPE_JSON:
+    case TYPE_VARIANT:
     case TYPE_NULL:
     case TYPE_FUNCTION:
     case TYPE_TIME:
     case TYPE_BINARY:
     case TYPE_MAX_VALUE:
     case TYPE_VARBINARY:
+    case TYPE_INT256:
         return nullptr;
         // No default to ensure newly added enumerator will be handled.
     }
     return nullptr;
+}
+
+ColumnPredicate* new_column_not_in_predicate_from_datum(const TypeInfoPtr& type_info, ColumnId id,
+                                                        const std::vector<Datum>& operands) {
+    const auto type = type_info->type();
+    return field_type_dispatch_column_predicate(
+            type, static_cast<ColumnPredicate*>(nullptr), [&]<LogicalType LT>() -> ColumnPredicate* {
+                if constexpr (lt_is_string<LT>) {
+                    std::vector<std::string> strings;
+                    strings.reserve(operands.size());
+                    for (const auto& v : operands) {
+                        strings.emplace_back(v.get_slice().to_string());
+                    }
+                    return new BinaryColumnNotInPredicate<LT>(type_info, id, std::move(strings));
+                } else {
+                    using SetType = ItemHashSet<typename CppTypeTraits<LT>::CppType>;
+                    SetType value_set = predicate_internal::datums_to_set<LT>(operands);
+                    return new ColumnNotInPredicate<LT>(type_info, id, std::move(value_set));
+                }
+            });
+}
+
+Status compound_and_predicates_evaluate(const std::vector<const ColumnPredicate*>& predicates, const Column* col,
+                                        uint8_t* selection, uint16_t* selected_idx, uint16_t from, uint16_t to) {
+    const auto num_rows = to - from;
+    if (predicates.empty()) {
+        memset(selection + from, 1, num_rows);
+        return Status::OK();
+    }
+
+    std::vector<const ColumnPredicate*> vectorized_preds;
+    std::vector<const ColumnPredicate*> non_vectorized_preds;
+    vectorized_preds.reserve(predicates.size());
+    non_vectorized_preds.reserve(predicates.size());
+    for (const auto& pred : predicates) {
+        if (pred->can_vectorized()) {
+            vectorized_preds.emplace_back(pred);
+        } else {
+            non_vectorized_preds.emplace_back(pred);
+        }
+    }
+
+    // Evaluate vectorized predicates first.
+    bool first = true;
+    bool contains_true = true;
+
+    for (const auto& pred : vectorized_preds) {
+        if (first) {
+            first = false;
+            RETURN_IF_ERROR(pred->evaluate(col, selection, from, to));
+        } else {
+            RETURN_IF_ERROR(pred->evaluate_and(col, selection, from, to));
+        }
+
+        contains_true = SIMD::count_nonzero(selection + from, num_rows);
+        if (!contains_true) {
+            break;
+        }
+    }
+
+    if (contains_true && !non_vectorized_preds.empty()) {
+        uint16_t selected_size = 0;
+        if (first) {
+            // When there is no any vectorized predicate, should initialize selected_idx in a vectorized way.
+            selected_size = to - from;
+            for (uint16_t i = from, j = 0; i < to; ++i, ++j) {
+                selected_idx[j] = i;
+            }
+        } else {
+            for (uint16_t i = from; i < to; ++i) {
+                selected_idx[selected_size] = i;
+                selected_size += selection[i];
+            }
+        }
+
+        for (const auto& pred : non_vectorized_preds) {
+            ASSIGN_OR_RETURN(selected_size, pred->evaluate_branchless(col, selected_idx, selected_size));
+            if (selected_size == 0) {
+                break;
+            }
+        }
+
+        memset(&selection[from], 0, to - from);
+        for (uint16_t i = 0; i < selected_size; ++i) {
+            selection[selected_idx[i]] = 1;
+        }
+    }
+
+    return Status::OK();
 }
 
 } //namespace starrocks

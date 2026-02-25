@@ -37,8 +37,8 @@ select
     ref_object_type
 from sys.object_dependencies where object_database = 'db_${uuid0}';
 -- result:
-mv2	default_catalog	MATERIALIZED_VIEW	t1	default_catalog	OLAP
 mv1	default_catalog	MATERIALIZED_VIEW	t1	default_catalog	OLAP
+mv2	default_catalog	MATERIALIZED_VIEW	t1	default_catalog	OLAP
 -- !result
 create materialized view mv3 refresh async as select * from mv2;
 -- result:
@@ -52,9 +52,9 @@ select
     ref_object_type
 from sys.object_dependencies where object_database = 'db_${uuid0}';
 -- result:
-mv2	default_catalog	MATERIALIZED_VIEW	t1	default_catalog	OLAP
-mv3	default_catalog	MATERIALIZED_VIEW	mv2	default_catalog	MATERIALIZED_VIEW
 mv1	default_catalog	MATERIALIZED_VIEW	t1	default_catalog	OLAP
+mv3	default_catalog	MATERIALIZED_VIEW	mv2	default_catalog	MATERIALIZED_VIEW
+mv2	default_catalog	MATERIALIZED_VIEW	t1	default_catalog	OLAP
 -- !result
 alter table t1 rename t2;
 -- result:
@@ -84,6 +84,9 @@ from sys.object_dependencies where object_database = 'db_${uuid0}' and object_na
 mv1	default_catalog	MATERIALIZED_VIEW	t1	default_catalog	UNKNOWN
 -- !result
 alter table t2 rename t1;
+-- result:
+-- !result
+alter materialized view mv1 active;
 -- result:
 -- !result
 refresh materialized view mv1 with sync mode;

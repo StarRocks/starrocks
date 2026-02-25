@@ -20,21 +20,23 @@
 #include <unordered_map>
 #include <vector>
 
+#include "base/testutil/assert.h"
 #include "exec/olap_scan_prepare.h"
 #include "exprs/binary_predicate.h"
 #include "exprs/column_ref.h"
+#include "exprs/expr_executor.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/Opcodes_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
+#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate.h"
 #include "storage/predicate_parser.h"
 #include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/tablet_schema.h"
-#include "testutil/assert.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -124,7 +126,8 @@ TEST(ConjunctivePredicatesTest, test_evaluate) {
     c4->append_datum(Datum(DecimalV2Value("0.000002")));
     c4->append_datum(Datum(DecimalV2Value("0.000003")));
 
-    ChunkPtr chunk = std::make_shared<Chunk>(Columns{c0, c1, c2, c3, c4}, schema);
+    ChunkPtr chunk = std::make_shared<Chunk>(
+            Columns{std::move(c0), std::move(c1), std::move(c2), std::move(c3), std::move(c4)}, schema);
 
     std::vector<uint8_t> selection(chunk->num_rows(), 0);
 
@@ -170,6 +173,42 @@ TEST(ConjunctivePredicatesTest, test_evaluate) {
     }
 }
 
+TEST(ConjunctivePredicatesTest, test_empty_predicates) {
+    SchemaPtr schema(new Schema());
+    auto c0_field = std::make_shared<Field>(0, "c0", TYPE_INT, true);
+    schema->append(c0_field);
+    auto c0 = ChunkHelper::column_from_field(*c0_field);
+
+    // +------+
+    // | c0   |
+    // +------+
+    // | NULL |
+    // |    1 |
+    // |    2 |
+    // |    3 |
+    // +------+
+    c0->append_datum(Datum());
+    c0->append_datum(Datum(1));
+    c0->append_datum(Datum(2));
+    c0->append_datum(Datum(3));
+
+    ChunkPtr chunk = std::make_shared<Chunk>(Columns{std::move(c0)}, schema);
+
+    std::vector<uint8_t> selection = {1, 0, 1, 0};
+    EXPECT_EQ("1,0,1,0", to_string(selection));
+
+    ConjunctivePredicates conjuncts;
+
+    conjuncts.evaluate(chunk.get(), selection.data());
+    EXPECT_EQ("1,0,1,0", to_string(selection));
+
+    conjuncts.evaluate_or(chunk.get(), selection.data());
+    EXPECT_EQ("1,0,1,0", to_string(selection));
+
+    conjuncts.evaluate_and(chunk.get(), selection.data());
+    EXPECT_EQ("1,0,1,0", to_string(selection));
+}
+
 // NOLINTNEXTLINE
 TEST(ConjunctivePredicatesTest, test_evaluate_and) {
     SchemaPtr schema(new Schema());
@@ -190,7 +229,7 @@ TEST(ConjunctivePredicatesTest, test_evaluate_and) {
     c0->append_datum(Datum(2));
     c0->append_datum(Datum(3));
 
-    ChunkPtr chunk = std::make_shared<Chunk>(Columns{c0}, schema);
+    ChunkPtr chunk = std::make_shared<Chunk>(Columns{std::move(c0)}, schema);
 
     {
         std::vector<uint8_t> selection(chunk->num_rows(), 0);
@@ -229,7 +268,7 @@ TEST(ConjunctivePredicatesTest, test_evaluate_or) {
     c0->append_datum(Datum(2));
     c0->append_datum(Datum(3));
 
-    ChunkPtr chunk = std::make_shared<Chunk>(Columns{c0}, schema);
+    ChunkPtr chunk = std::make_shared<Chunk>(Columns{std::move(c0)}, schema);
 
     {
         std::vector<uint8_t> selection(chunk->num_rows(), 0);
@@ -281,6 +320,12 @@ struct MockConstExprBuilder {
 
 class ConjunctiveTestFixture : public testing::TestWithParam<std::tuple<TExprOpcode::type, LogicalType>> {
 public:
+    void SetUp() override {
+        _runtime_state.init_instance_mem_tracker();
+        _fragment_dict_state = std::make_unique<FragmentDictState>();
+        _runtime_state.set_fragment_dict_state(_fragment_dict_state.get());
+    }
+
     TSlotDescriptor _create_slot_desc(LogicalType type, const std::string& col_name, int col_pos) {
         TSlotDescriptorBuilder builder;
 
@@ -343,6 +388,7 @@ public:
 protected:
     RuntimeState _runtime_state;
     ObjectPool _pool;
+    std::unique_ptr<FragmentDictState> _fragment_dict_state;
 };
 
 // normalize a simple predicate: col op const
@@ -355,11 +401,11 @@ TEST_P(ConjunctiveTestFixture, test_parse_conjuncts) {
     std::vector<std::string> key_column_names = {"c1"};
     SlotDescriptor* slot = tuple_desc->slots()[0];
     std::vector<ExprContext*> conjunct_ctxs = {_pool.add(new ExprContext(build_predicate(ltype, op, slot)))};
-    ASSERT_OK(Expr::prepare(conjunct_ctxs, &_runtime_state));
-    ASSERT_OK(Expr::open(conjunct_ctxs, &_runtime_state));
+    ASSERT_OK(ExprExecutor::prepare(conjunct_ctxs, &_runtime_state));
+    ASSERT_OK(ExprExecutor::open(conjunct_ctxs, &_runtime_state));
     auto tablet_schema = TabletSchema::create(create_tablet_schema(ltype));
 
-    OlapScanConjunctsManagerOptions opts;
+    ScanConjunctsManagerOptions opts;
     opts.conjunct_ctxs_ptr = &conjunct_ctxs;
     opts.tuple_desc = tuple_desc;
     opts.obj_pool = &_pool;
@@ -370,10 +416,10 @@ TEST_P(ConjunctiveTestFixture, test_parse_conjuncts) {
     opts.max_scan_key_num = 1;
     opts.enable_column_expr_predicate = false;
 
-    OlapScanConjunctsManager cm(std::move(opts));
+    ScanConjunctsManager cm(std::move(opts));
     ASSERT_OK(cm.parse_conjuncts());
 
-    PredicateParser parser(tablet_schema);
+    OlapPredicateParser parser(tablet_schema);
     ColumnPredicatePtrs col_preds_owner;
     auto status_or_pred_tree = cm.get_predicate_tree(&parser, col_preds_owner);
     ASSERT_OK(status_or_pred_tree);
@@ -381,7 +427,15 @@ TEST_P(ConjunctiveTestFixture, test_parse_conjuncts) {
 
     // col >= false will be elimated
     if (ltype == TYPE_BOOLEAN && op == TExprOpcode::GE) {
-        ASSERT_TRUE(pred_tree.empty());
+        ASSERT_EQ(1, pred_tree.size());
+
+        const auto& root = pred_tree.root();
+        ASSERT_TRUE(root.compound_children().empty());
+        ASSERT_EQ(1, root.col_children_map().size());
+
+        const auto* predicate = root.col_children_map().find(0)->second[0].col_pred();
+        ASSERT_TRUE(predicate != nullptr);
+        ASSERT_EQ(PredicateType::kNotNull, predicate->type());
         return;
     }
 
@@ -399,6 +453,23 @@ TEST_P(ConjunctiveTestFixture, test_parse_conjuncts) {
     } else {
         ASSERT_EQ(op, convert_predicate_type_to_thrift(predicate->type()));
     }
+}
+
+TEST_F(ConjunctiveTestFixture, test_connector_parse_conjuncts) {
+    std::vector<SlotDescriptor*> slot_descriptors;
+    SlotDescriptor slot{1, "name", TYPE_INT_DESC};
+    slot_descriptors.emplace_back(&slot);
+
+    ConnectorPredicateParser parser{&slot_descriptors};
+    ColumnPredicate* predicate = nullptr;
+    ASSERT_TRUE(parser.can_pushdown(predicate));
+    SlotDescriptor* slot_desc = nullptr;
+    ASSERT_TRUE(parser.can_pushdown(slot_desc));
+
+    PredicateAndNode and_node{};
+    ConstPredicateNodePtr node{&and_node};
+    ASSERT_TRUE(parser.can_pushdown(node));
+    ASSERT_EQ(parser.column_id(slot), 1);
 }
 
 INSTANTIATE_TEST_SUITE_P(ConjunctiveTest, ConjunctiveTestFixture,

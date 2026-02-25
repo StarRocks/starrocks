@@ -23,15 +23,18 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
+import com.starrocks.sql.optimizer.operator.OpRuleBit;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.SortPhase;
 import com.starrocks.sql.optimizer.operator.TopNType;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -43,6 +46,11 @@ public class PhysicalTopNOperator extends PhysicalOperator {
     private TopNType topNType;
     private boolean isSplit;
     private boolean isEnforced;
+    private boolean perPipeline;
+
+    // only set when rank <=1 with preAgg optimization is triggered, otherwise it's empty!
+    // please refer to PushDownPredicateRankingWindowRule and PushDownLimitRankingWindowRule  for more details
+    private Map<ColumnRefOperator, CallOperator> preAggCall;
 
     private PhysicalTopNOperator() {
         super(OperatorType.PHYSICAL_TOPN);
@@ -56,8 +64,10 @@ public class PhysicalTopNOperator extends PhysicalOperator {
                                 TopNType topNType,
                                 boolean isSplit,
                                 boolean isEnforced,
+                                boolean perPipeline,
                                 ScalarOperator predicate,
-                                Projection projection) {
+                                Projection projection,
+                                Map<ColumnRefOperator, CallOperator> analyticCall) {
         super(OperatorType.PHYSICAL_TOPN, spec);
         this.limit = limit;
         this.offset = offset;
@@ -67,8 +77,10 @@ public class PhysicalTopNOperator extends PhysicalOperator {
         this.topNType = topNType;
         this.isSplit = isSplit;
         this.isEnforced = isEnforced;
+        this.perPipeline = perPipeline;
         this.predicate = predicate;
         this.projection = projection;
+        this.preAggCall = analyticCall;
     }
 
     public List<ColumnRefOperator> getPartitionByColumns() {
@@ -99,6 +111,22 @@ public class PhysicalTopNOperator extends PhysicalOperator {
         return isEnforced;
     }
 
+    public Map<ColumnRefOperator, CallOperator> getPreAggCall() {
+        return preAggCall;
+    }
+
+    public boolean isPerPipeline() {
+        return perPipeline;
+    }
+
+    public boolean isTopNPushDownAgg() {
+        return isPerPipeline() || isOpRuleBitSet(OpRuleBit.OP_PUSH_DOWN_TOPN_AGG);
+    }
+
+    public void setTopNPushDownAgg() {
+        setOpRuleBit(OpRuleBit.OP_PUSH_DOWN_TOPN_AGG);
+    }
+
     @Override
     public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
         List<ColumnOutputInfo> entryList = Lists.newArrayList();
@@ -108,12 +136,19 @@ public class PhysicalTopNOperator extends PhysicalOperator {
         for (Ordering ordering : orderSpec.getOrderDescs()) {
             entryList.add(new ColumnOutputInfo(ordering.getColumnRef(), ordering.getColumnRef()));
         }
+
+        if (preAggCall != null) {
+            for (Map.Entry<ColumnRefOperator, CallOperator> entry : preAggCall.entrySet()) {
+                entryList.add(new ColumnOutputInfo(entry.getKey(), entry.getValue()));
+            }
+        }
+
         return new RowOutputInfo(entryList);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), orderSpec, offset, sortPhase, topNType, isSplit, isEnforced);
+        return Objects.hash(super.hashCode(), orderSpec, offset, sortPhase, topNType, isSplit, isEnforced, perPipeline);
     }
 
     @Override
@@ -131,7 +166,9 @@ public class PhysicalTopNOperator extends PhysicalOperator {
         return partitionLimit == that.partitionLimit && offset == that.offset && isSplit == that.isSplit &&
                 Objects.equals(partitionByColumns, that.partitionByColumns) &&
                 Objects.equals(orderSpec, that.orderSpec) &&
-                sortPhase == that.sortPhase && topNType == that.topNType && isEnforced == that.isEnforced;
+                Objects.equals(preAggCall, that.preAggCall) &&
+                sortPhase == that.sortPhase && topNType == that.topNType && isEnforced == that.isEnforced &&
+                perPipeline == that.perPipeline;
     }
 
     @Override
@@ -146,6 +183,12 @@ public class PhysicalTopNOperator extends PhysicalOperator {
 
     public void fillDisableDictOptimizeColumns(ColumnRefSet resultSet, Set<Integer> dictColIds) {
         // nothing to do
+        if (preAggCall == null) {
+            return;
+        }
+        preAggCall.forEach((k, v) -> {
+            resultSet.union(v.getUsedColumns());
+        });
     }
 
     public boolean couldApplyStringDict(Set<Integer> childDictColumns) {
@@ -181,12 +224,20 @@ public class PhysicalTopNOperator extends PhysicalOperator {
             builder.topNType = operator.topNType;
             builder.isSplit = operator.isSplit;
             builder.isEnforced = operator.isEnforced;
+            builder.perPipeline = operator.perPipeline;
+            builder.preAggCall = operator.preAggCall;
             return this;
         }
 
         public Builder setPartitionByColumns(
                 List<ColumnRefOperator> partitionByColumns) {
             builder.partitionByColumns = partitionByColumns;
+            return this;
+        }
+
+        public Builder setPreAggregate(
+                Map<ColumnRefOperator, CallOperator> preAggCall) {
+            builder.preAggCall = preAggCall;
             return this;
         }
     }

@@ -17,8 +17,6 @@ package com.starrocks.planner;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
@@ -26,7 +24,7 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.StreamSourceType;
@@ -93,21 +91,16 @@ public class BinlogScanNode extends ScanNode {
     }
 
     @Override
-    public void init(Analyzer analyzer) throws UserException {
-        super.init(analyzer);
+    public void computeStats() {
     }
 
     @Override
-    public void computeStats(Analyzer analyzer) {
-    }
-
-    @Override
-    public void finalizeStats(Analyzer analyzer) throws UserException {
+    public void finalizeStats() throws StarRocksException {
         if (isFinalized) {
             return;
         }
         computeScanRanges();
-        computeStats(analyzer);
+        computeStats();
         isFinalized = true;
     }
 
@@ -126,14 +119,14 @@ public class BinlogScanNode extends ScanNode {
     }
 
     // TODO: support partition prune and bucket prune
-    public void computeScanRanges() throws UserException {
+    public void computeScanRanges() throws StarRocksException {
         scanRanges = new ArrayList<>();
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         long localBeId = -1;
         long dbId = -1;
         String dbName = null;
         for (PhysicalPartition partition : CollectionUtils.emptyIfNull(olapTable.getAllPhysicalPartitions())) {
-            MaterializedIndex table = partition.getBaseIndex();
+            MaterializedIndex table = partition.getLatestBaseIndex();
             long partitionId = partition.getId();
             long tableId = olapTable.getId();
 
@@ -141,7 +134,7 @@ public class BinlogScanNode extends ScanNode {
                 if (dbId == -1) {
                     TabletMeta meta = invertedIndex.getTabletMeta(tablet.getId());
                     dbId = meta.getDbId();
-                    dbName = GlobalStateMgr.getCurrentState().getDb(dbId).getFullName();
+                    dbName = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId).getFullName();
                 }
 
                 long tabletId = tablet.getId();
@@ -160,14 +153,14 @@ public class BinlogScanNode extends ScanNode {
                 locations.setScan_range(scanRange);
 
                 // Choose replicas
-                int schemaHash = olapTable.getSchemaHashByIndexId(olapTable.getBaseIndexId());
+                int schemaHash = olapTable.getSchemaHashByIndexMetaId(olapTable.getBaseIndexMetaId());
                 long visibleVersion = partition.getVisibleVersion();
 
                 List<Replica> allQueryableReplicas = Lists.newArrayList();
                 List<Replica> localReplicas = Lists.newArrayList();
                 tablet.getQueryableReplicas(allQueryableReplicas, localReplicas, visibleVersion, localBeId, schemaHash);
                 if (CollectionUtils.isEmpty(allQueryableReplicas)) {
-                    throw new UserException("No queryable replica for tablet " + tabletId);
+                    throw new StarRocksException("No queryable replica for tablet " + tabletId);
                 }
                 for (Replica replica : allQueryableReplicas) {
                     Backend backend = Preconditions.checkNotNull(

@@ -16,17 +16,18 @@
 #include <functional>
 #include <vector>
 
+#include "base/string/string_parser.hpp"
 #include "column/column.h" // Column
-#include "column/datum.h"
 #include "common/object_pool.h"
+#include "olap_type_infra.h"
 #include "storage/column_predicate.h"
 #include "storage/olap_common.h" // ColumnId
 #include "storage/range.h"
 #include "storage/rowset/bitmap_index_reader.h"
-#include "storage/rowset/bloom_filter.h"
 #include "storage/types.h"
 #include "storage/zone_map_detail.h"
-#include "util/string_parser.hpp"
+#include "types/datum.h"
+#include "util/bloom_filter.h"
 
 namespace starrocks {
 class BloomFilter;
@@ -137,6 +138,13 @@ static ColumnPredicate* new_column_predicate(const TypeInfoPtr& type_info, Colum
         DCHECK(st.ok());
         return new Predicate<TYPE_DECIMAL128>(type_info, id, value);
     }
+    case TYPE_INT256:
+    case TYPE_DECIMAL256: {
+        int256_t value;
+        auto st = type_info->from_string(&value, operand.to_string());
+        DCHECK(st.ok());
+        return new Predicate<TYPE_DECIMAL256>(type_info, id, value);
+    }
     case TYPE_DATE_V1: {
         uint24_t value = 0;
         auto st = type_info->from_string(&value, operand.to_string());
@@ -174,6 +182,7 @@ static ColumnPredicate* new_column_predicate(const TypeInfoPtr& type_info, Colum
     case TYPE_OBJECT:
     case TYPE_PERCENTILE:
     case TYPE_JSON:
+    case TYPE_VARIANT:
     case TYPE_NULL:
     case TYPE_FUNCTION:
     case TYPE_TIME:
@@ -184,6 +193,25 @@ static ColumnPredicate* new_column_predicate(const TypeInfoPtr& type_info, Colum
         // No default to ensure newly added enumerator will be handled.
     }
     return nullptr;
+}
+
+template <template <LogicalType> typename Predicate, template <LogicalType> typename BinaryPredicate>
+static ColumnPredicate* new_column_predicate(const TypeInfoPtr& type_info, ColumnId id, const Datum& operand) {
+    const auto type = type_info->type();
+    return field_type_dispatch_column_predicate(
+            type, static_cast<ColumnPredicate*>(nullptr), [&]<LogicalType LT>() -> ColumnPredicate* {
+                using CppType = typename CppTypeTraits<LT>::CppType;
+                // ColumnRangeBuilder treats TINYINT and BOOLEAN as INT.
+                constexpr auto MappingLogicalType = LT == TYPE_TINYINT || LT == TYPE_BOOLEAN ? TYPE_INT : LT;
+                using MappingCppType = typename CppTypeTraits<MappingLogicalType>::CppType;
+
+                if constexpr (lt_is_string<LT>) {
+                    return new BinaryPredicate<LT>(type_info, id, operand.get_slice());
+                } else {
+                    const auto value = static_cast<CppType>(operand.get<MappingCppType>());
+                    return new Predicate<LT>(type_info, id, value);
+                }
+            });
 }
 
 // Base class for column predicate
@@ -250,7 +278,7 @@ protected:
 };
 
 template <LogicalType field_type>
-class ColumnGePredicate : public ColumnPredicateCmpBase<field_type, GeEval<field_type>> {
+class ColumnGePredicate final : public ColumnPredicateCmpBase<field_type, GeEval<field_type>> {
 public:
     using ValueType = typename CppTypeTraits<field_type>::CppType;
     using Base = ColumnPredicateCmpBase<field_type, GeEval<field_type>>;
@@ -281,11 +309,15 @@ public:
 
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
                                roaring::Roaring* row_bitmap) const override {
+#ifndef __APPLE__
         InvertedIndexQueryType query_type = InvertedIndexQueryType::GREATER_EQUAL_QUERY;
         roaring::Roaring roaring;
         RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &this->_value, query_type, &roaring));
         *row_bitmap &= roaring;
         return Status::OK();
+#else
+        return Status::OK();
+#endif
     }
 
     Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
@@ -296,7 +328,7 @@ public:
 };
 
 template <LogicalType field_type>
-class ColumnGtPredicate : public ColumnPredicateCmpBase<field_type, GtEval<field_type>> {
+class ColumnGtPredicate final : public ColumnPredicateCmpBase<field_type, GtEval<field_type>> {
 public:
     using ValueType = typename CppTypeTraits<field_type>::CppType;
     using Base = ColumnPredicateCmpBase<field_type, GtEval<field_type>>;
@@ -327,11 +359,15 @@ public:
 
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
                                roaring::Roaring* row_bitmap) const override {
+#ifndef __APPLE__
         InvertedIndexQueryType query_type = InvertedIndexQueryType::GREATER_THAN_QUERY;
         roaring::Roaring roaring;
         RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &this->_value, query_type, &roaring));
         *row_bitmap &= roaring;
         return Status::OK();
+#else
+        return Status::OK();
+#endif
     }
 
     Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
@@ -342,7 +378,7 @@ public:
 };
 
 template <LogicalType field_type>
-class ColumnLePredicate : public ColumnPredicateCmpBase<field_type, LeEval<field_type>> {
+class ColumnLePredicate final : public ColumnPredicateCmpBase<field_type, LeEval<field_type>> {
 public:
     using ValueType = typename CppTypeTraits<field_type>::CppType;
     using Base = ColumnPredicateCmpBase<field_type, LeEval<field_type>>;
@@ -374,11 +410,15 @@ public:
 
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
                                roaring::Roaring* row_bitmap) const override {
+#ifndef __APPLE__
         InvertedIndexQueryType query_type = InvertedIndexQueryType::LESS_EQUAL_QUERY;
         roaring::Roaring roaring;
         RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &this->_value, query_type, &roaring));
         *row_bitmap &= roaring;
         return Status::OK();
+#else
+        return Status::OK();
+#endif
     }
 
     Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
@@ -389,7 +429,7 @@ public:
 };
 
 template <LogicalType field_type>
-class ColumnLtPredicate : public ColumnPredicateCmpBase<field_type, LtEval<field_type>> {
+class ColumnLtPredicate final : public ColumnPredicateCmpBase<field_type, LtEval<field_type>> {
 public:
     using ValueType = typename CppTypeTraits<field_type>::CppType;
     using Base = ColumnPredicateCmpBase<field_type, LtEval<field_type>>;
@@ -421,11 +461,15 @@ public:
 
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
                                roaring::Roaring* row_bitmap) const override {
+#ifndef __APPLE__
         InvertedIndexQueryType query_type = InvertedIndexQueryType::LESS_THAN_QUERY;
         roaring::Roaring roaring;
         RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &this->_value, query_type, &roaring));
         *row_bitmap &= roaring;
         return Status::OK();
+#else
+        return Status::OK();
+#endif
     }
 
     Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
@@ -436,7 +480,7 @@ public:
 };
 
 template <LogicalType field_type>
-class ColumnEqPredicate : public ColumnPredicateCmpBase<field_type, EqEval<field_type>> {
+class ColumnEqPredicate final : public ColumnPredicateCmpBase<field_type, EqEval<field_type>> {
 public:
     using ValueType = typename CppTypeTraits<field_type>::CppType;
     using Base = ColumnPredicateCmpBase<field_type, EqEval<field_type>>;
@@ -470,11 +514,15 @@ public:
 
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
                                roaring::Roaring* row_bitmap) const override {
+#ifndef __APPLE__
         InvertedIndexQueryType query_type = InvertedIndexQueryType::EQUAL_QUERY;
         roaring::Roaring roaring;
         RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &this->_value, query_type, &roaring));
         *row_bitmap &= roaring;
         return Status::OK();
+#else
+        return Status::OK();
+#endif
     }
 
     bool support_original_bloom_filter() const override { return true; }
@@ -495,7 +543,7 @@ public:
 };
 
 template <LogicalType field_type>
-class ColumnNePredicate : public ColumnPredicateCmpBase<field_type, NeEval<field_type>> {
+class ColumnNePredicate final : public ColumnPredicateCmpBase<field_type, NeEval<field_type>> {
 public:
     using ValueType = typename CppTypeTraits<field_type>::CppType;
     using Base = ColumnPredicateCmpBase<field_type, NeEval<field_type>>;
@@ -503,7 +551,15 @@ public:
     ColumnNePredicate(const TypeInfoPtr& type_info, ColumnId id, ValueType value)
             : Base(PredicateType::kNE, type_info, id, value) {}
 
-    bool zone_map_filter(const ZoneMapDetail& detail) const override { return true; }
+    bool zone_map_filter(const ZoneMapDetail& detail) const override {
+        const auto& min = detail.min_or_null_value();
+        const auto& max = detail.max_value();
+        const auto type_info = this->type_info();
+        if (min == max) {
+            return type_info->cmp(Datum(this->_value), min) != 0;
+        }
+        return true;
+    }
 
     bool support_bitmap_filter() const override { return false; }
 
@@ -513,11 +569,15 @@ public:
 
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
                                roaring::Roaring* row_bitmap) const override {
+#ifndef __APPLE__
         InvertedIndexQueryType query_type = InvertedIndexQueryType::EQUAL_QUERY;
         roaring::Roaring roaring;
         RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &this->_value, query_type, &roaring));
         *row_bitmap -= roaring;
         return Status::OK();
+#else
+        return Status::OK();
+#endif
     }
 
     Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
@@ -647,7 +707,7 @@ protected:
 };
 
 template <LogicalType field_type>
-class BinaryColumnEqPredicate : public BinaryColumnPredicateCmpBase<field_type, EqEval<field_type>> {
+class BinaryColumnEqPredicate final : public BinaryColumnPredicateCmpBase<field_type, EqEval<field_type>> {
 public:
     using ValueType = Slice;
     using Base = BinaryColumnPredicateCmpBase<field_type, std::equal_to<ValueType>>;
@@ -690,17 +750,21 @@ public:
 
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
                                roaring::Roaring* row_bitmap) const override {
+#ifndef __APPLE__
         Slice padded_value(Base::_zero_padded_str);
         InvertedIndexQueryType query_type = InvertedIndexQueryType::EQUAL_QUERY;
         roaring::Roaring roaring;
         RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
         *row_bitmap &= roaring;
         return Status::OK();
+#else
+        return Status::OK();
+#endif
     }
 };
 
 template <LogicalType field_type>
-class BinaryColumnGePredicate : public BinaryColumnPredicateCmpBase<field_type, GeEval<field_type>> {
+class BinaryColumnGePredicate final : public BinaryColumnPredicateCmpBase<field_type, GeEval<field_type>> {
 public:
     using ValueType = Slice;
     using Base = BinaryColumnPredicateCmpBase<field_type, std::greater_equal<ValueType>>;
@@ -734,17 +798,21 @@ public:
 
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
                                roaring::Roaring* row_bitmap) const override {
+#ifndef __APPLE__
         Slice padded_value(Base::_zero_padded_str);
         InvertedIndexQueryType query_type = InvertedIndexQueryType::GREATER_EQUAL_QUERY;
         roaring::Roaring roaring;
         RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
         *row_bitmap &= roaring;
         return Status::OK();
+#else
+        return Status::OK();
+#endif
     }
 };
 
 template <LogicalType field_type>
-class BinaryColumnGtPredicate : public BinaryColumnPredicateCmpBase<field_type, GtEval<field_type>> {
+class BinaryColumnGtPredicate final : public BinaryColumnPredicateCmpBase<field_type, GtEval<field_type>> {
 public:
     using ValueType = Slice;
     using Base = BinaryColumnPredicateCmpBase<field_type, std::greater<ValueType>>;
@@ -777,17 +845,21 @@ public:
 
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
                                roaring::Roaring* row_bitmap) const override {
+#ifndef __APPLE__
         Slice padded_value(Base::_zero_padded_str);
         InvertedIndexQueryType query_type = InvertedIndexQueryType::GREATER_THAN_QUERY;
         roaring::Roaring roaring;
         RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
         *row_bitmap &= roaring;
         return Status::OK();
+#else
+        return Status::OK();
+#endif
     }
 };
 
 template <LogicalType field_type>
-class BinaryColumnLtPredicate : public BinaryColumnPredicateCmpBase<field_type, LtEval<field_type>> {
+class BinaryColumnLtPredicate final : public BinaryColumnPredicateCmpBase<field_type, LtEval<field_type>> {
 public:
     using ValueType = Slice;
     using Base = BinaryColumnPredicateCmpBase<field_type, std::less<ValueType>>;
@@ -821,17 +893,21 @@ public:
 
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
                                roaring::Roaring* row_bitmap) const override {
+#ifndef __APPLE__
         Slice padded_value(Base::_zero_padded_str);
         InvertedIndexQueryType query_type = InvertedIndexQueryType::LESS_THAN_QUERY;
         roaring::Roaring roaring;
         RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
         *row_bitmap &= roaring;
         return Status::OK();
+#else
+        return Status::OK();
+#endif
     }
 };
 
 template <LogicalType field_type>
-class BinaryColumnLePredicate : public BinaryColumnPredicateCmpBase<field_type, LeEval<field_type>> {
+class BinaryColumnLePredicate final : public BinaryColumnPredicateCmpBase<field_type, LeEval<field_type>> {
 public:
     using ValueType = Slice;
     using Base = BinaryColumnPredicateCmpBase<field_type, std::less_equal<ValueType>>;
@@ -864,23 +940,27 @@ public:
 
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
                                roaring::Roaring* row_bitmap) const override {
+#ifndef __APPLE__
         Slice padded_value(Base::_zero_padded_str);
         InvertedIndexQueryType query_type = InvertedIndexQueryType::LESS_EQUAL_QUERY;
         roaring::Roaring roaring;
         RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
         *row_bitmap &= roaring;
         return Status::OK();
+#else
+        return Status::OK();
+#endif
     }
 };
 
 template <LogicalType field_type>
-class BinaryColumnNePredicate : public BinaryColumnPredicateCmpBase<field_type, NeEval<field_type>> {
+class BinaryColumnNePredicate final : public BinaryColumnPredicateCmpBase<field_type, NeEval<field_type>> {
 public:
     using ValueType = Slice;
     using Base = BinaryColumnPredicateCmpBase<field_type, std::not_equal_to<ValueType>>;
 
     BinaryColumnNePredicate(const TypeInfoPtr& type_info, ColumnId id, ValueType value)
-            : Base(PredicateType::kNE, type_info, id, value) {}
+            : Base(PredicateType::kNE, type_info, id, value), _is_empty_string(value.empty()) {}
 
     bool zone_map_filter(const ZoneMapDetail& detail) const override { return true; }
 
@@ -892,13 +972,62 @@ public:
 
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
                                roaring::Roaring* row_bitmap) const override {
+#ifndef __APPLE__
         Slice padded_value(Base::_zero_padded_str);
         InvertedIndexQueryType query_type = InvertedIndexQueryType::EQUAL_QUERY;
         roaring::Roaring roaring;
         RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
         *row_bitmap -= roaring;
         return Status::OK();
+#else
+        return Status::OK();
+#endif
     }
+
+    // Optimized evaluate_branchless for empty string comparison
+    StatusOr<uint16_t> evaluate_branchless(const Column* column, uint16_t* sel, uint16_t sel_size) const override {
+        if (!_is_empty_string) {
+            // For non-empty string, use base class implementation
+            return Base::evaluate_branchless(column, sel, sel_size);
+        }
+
+        // Fast path for col != ''
+        // Only need to check if length > 0, no need to compare actual data
+        const BinaryColumn* binary_column;
+        if (column->is_nullable()) {
+            binary_column =
+                    down_cast<const BinaryColumn*>(down_cast<const NullableColumn*>(column)->data_column().get());
+        } else {
+            binary_column = down_cast<const BinaryColumn*>(column);
+        }
+
+        const auto& offsets = binary_column->get_offset();
+        const uint32_t* offset_data = offsets.data();
+        uint16_t new_size = 0;
+
+        if (!column->has_null()) {
+            // Non-nullable column: just check length != 0
+            for (uint16_t i = 0; i < sel_size; ++i) {
+                uint16_t data_idx = sel[i];
+                uint32_t len = offset_data[data_idx + 1] - offset_data[data_idx];
+                sel[new_size] = data_idx;
+                new_size += (len != 0); // Branchless: increment only if len > 0
+            }
+        } else {
+            // Nullable column: check not null AND length != 0
+            const uint8_t* is_null = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
+            for (uint16_t i = 0; i < sel_size; ++i) {
+                uint16_t data_idx = sel[i];
+                uint32_t len = offset_data[data_idx + 1] - offset_data[data_idx];
+                sel[new_size] = data_idx;
+                new_size += (!is_null[data_idx]) & (len != 0); // Branchless
+            }
+        }
+        return new_size;
+    }
+
+private:
+    const bool _is_empty_string;
 };
 
 ColumnPredicate* new_column_ne_predicate(const TypeInfoPtr& type_info, ColumnId id, const Slice& operand) {
@@ -943,6 +1072,30 @@ ColumnPredicate* new_column_cmp_predicate(PredicateType predicate, const TypeInf
     default:
         CHECK(false) << "not a cmp predicate";
     }
+}
+
+ColumnPredicate* new_column_ne_predicate_from_datum(const TypeInfoPtr& type_info, ColumnId id, const Datum& operand) {
+    return new_column_predicate<ColumnNePredicate, BinaryColumnNePredicate>(type_info, id, operand);
+}
+
+ColumnPredicate* new_column_eq_predicate_from_datum(const TypeInfoPtr& type_info, ColumnId id, const Datum& operand) {
+    return new_column_predicate<ColumnEqPredicate, BinaryColumnEqPredicate>(type_info, id, operand);
+}
+
+ColumnPredicate* new_column_lt_predicate_from_datum(const TypeInfoPtr& type_info, ColumnId id, const Datum& operand) {
+    return new_column_predicate<ColumnLtPredicate, BinaryColumnLtPredicate>(type_info, id, operand);
+}
+
+ColumnPredicate* new_column_le_predicate_from_datum(const TypeInfoPtr& type_info, ColumnId id, const Datum& operand) {
+    return new_column_predicate<ColumnLePredicate, BinaryColumnLePredicate>(type_info, id, operand);
+}
+
+ColumnPredicate* new_column_gt_predicate_from_datum(const TypeInfoPtr& type_info, ColumnId id, const Datum& operand) {
+    return new_column_predicate<ColumnGtPredicate, BinaryColumnGtPredicate>(type_info, id, operand);
+}
+
+ColumnPredicate* new_column_ge_predicate_from_datum(const TypeInfoPtr& type_info, ColumnId id, const Datum& operand) {
+    return new_column_predicate<ColumnGePredicate, BinaryColumnGePredicate>(type_info, id, operand);
 }
 
 std::ostream& operator<<(std::ostream& os, PredicateType p) {
@@ -995,6 +1148,9 @@ std::ostream& operator<<(std::ostream& os, PredicateType p) {
         break;
     case PredicateType::kMap:
         os << "map";
+        break;
+    case PredicateType::kPlaceHolder:
+        os << "placeholder";
         break;
     default:
         CHECK(false) << "unknown predicate " << p;

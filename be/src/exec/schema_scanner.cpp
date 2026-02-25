@@ -19,6 +19,8 @@
 #include "column/type_traits.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "exec/schema_scanner/schema_analyze_status.h"
+#include "exec/schema_scanner/schema_applicable_roles_scanner.h"
 #include "exec/schema_scanner/schema_be_bvars_scanner.h"
 #include "exec/schema_scanner/schema_be_cloud_native_compactions_scanner.h"
 #include "exec/schema_scanner/schema_be_compactions_scanner.h"
@@ -26,21 +28,28 @@
 #include "exec/schema_scanner/schema_be_datacache_metrics_scanner.h"
 #include "exec/schema_scanner/schema_be_logs_scanner.h"
 #include "exec/schema_scanner/schema_be_metrics_scanner.h"
+#include "exec/schema_scanner/schema_be_tablet_write_log_scanner.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "exec/schema_scanner/schema_be_threads_scanner.h"
 #include "exec/schema_scanner/schema_be_txns_scanner.h"
 #include "exec/schema_scanner/schema_charsets_scanner.h"
+#include "exec/schema_scanner/schema_cluster_snapshot_jobs_scanner.h"
+#include "exec/schema_scanner/schema_cluster_snapshots_scanner.h"
 #include "exec/schema_scanner/schema_collations_scanner.h"
+#include "exec/schema_scanner/schema_column_stats_usage_scanner.h"
 #include "exec/schema_scanner/schema_columns_scanner.h"
 #include "exec/schema_scanner/schema_dummy_scanner.h"
 #include "exec/schema_scanner/schema_fe_metrics_scanner.h"
 #include "exec/schema_scanner/schema_fe_tablet_schedules_scanner.h"
+#include "exec/schema_scanner/schema_fe_threads_scanner.h"
+#include "exec/schema_scanner/schema_keywords_scanner.h"
 #include "exec/schema_scanner/schema_load_tracking_logs_scanner.h"
 #include "exec/schema_scanner/schema_loads_scanner.h"
 #include "exec/schema_scanner/schema_materialized_views_scanner.h"
 #include "exec/schema_scanner/schema_partitions_meta_scanner.h"
 #include "exec/schema_scanner/schema_pipe_files.h"
 #include "exec/schema_scanner/schema_pipes.h"
+#include "exec/schema_scanner/schema_recyclebin_catalogs.h"
 #include "exec/schema_scanner/schema_routine_load_jobs_scanner.h"
 #include "exec/schema_scanner/schema_schema_privileges_scanner.h"
 #include "exec/schema_scanner/schema_schemata_scanner.h"
@@ -48,12 +57,15 @@
 #include "exec/schema_scanner/schema_table_privileges_scanner.h"
 #include "exec/schema_scanner/schema_tables_config_scanner.h"
 #include "exec/schema_scanner/schema_tables_scanner.h"
+#include "exec/schema_scanner/schema_tablet_reshard_jobs_scanner.h"
 #include "exec/schema_scanner/schema_task_runs_scanner.h"
 #include "exec/schema_scanner/schema_tasks_scanner.h"
 #include "exec/schema_scanner/schema_temp_tables_scanner.h"
 #include "exec/schema_scanner/schema_user_privileges_scanner.h"
 #include "exec/schema_scanner/schema_variables_scanner.h"
 #include "exec/schema_scanner/schema_views_scanner.h"
+#include "exec/schema_scanner/schema_warehouse_metrics.h"
+#include "exec/schema_scanner/schema_warehouse_queries.h"
 #include "exec/schema_scanner/starrocks_grants_to_scanner.h"
 #include "exec/schema_scanner/starrocks_role_edges_scanner.h"
 #include "exec/schema_scanner/sys_fe_locks.h"
@@ -104,7 +116,7 @@ Status SchemaScanner::init_schema_scanner_state(RuntimeState* state) {
     _ss_state.ip = *(_param->ip);
     _ss_state.port = _param->port;
     _ss_state.timeout_ms = state->query_options().query_timeout * 1000;
-    VLOG(1) << "ip=" << _ss_state.ip << ", port=" << _ss_state.port << ", timeout=" << _ss_state.timeout_ms;
+    VLOG(2) << "ip=" << _ss_state.ip << ", port=" << _ss_state.port << ", timeout=" << _ss_state.timeout_ms;
     _ss_state.param = _param;
     return Status::OK();
 }
@@ -114,7 +126,7 @@ Status SchemaScanner::init(SchemaScannerParam* param, ObjectPool* pool) {
         return Status::OK();
     }
 
-    if (nullptr == param || nullptr == pool || nullptr == _columns) {
+    if (nullptr == param || nullptr == pool || (nullptr == _columns && 0 != _column_num)) {
         return Status::InternalError("invalid parameter");
     }
 
@@ -171,6 +183,8 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<SchemaBeMetricsScanner>();
     case TSchemaTableType::SCH_FE_METRICS:
         return std::make_unique<SchemaFeMetricsScanner>();
+    case TSchemaTableType::SCH_FE_THREADS:
+        return std::make_unique<SchemaFeThreadsScanner>();
     case TSchemaTableType::SCH_BE_TXNS:
         return std::make_unique<SchemaBeTxnsScanner>();
     case TSchemaTableType::SCH_BE_CONFIGS:
@@ -187,6 +201,8 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<SchemaBeBvarsScanner>();
     case TSchemaTableType::SCH_BE_CLOUD_NATIVE_COMPACTIONS:
         return std::make_unique<SchemaBeCloudNativeCompactionsScanner>();
+    case TSchemaTableType::SCH_BE_TABLET_WRITE_LOG:
+        return std::make_unique<SchemaBeTabletWriteLogScanner>();
     case TSchemaTableType::STARROCKS_ROLE_EDGES:
         return std::make_unique<StarrocksRoleEdgesScanner>();
     case TSchemaTableType::STARROCKS_GRANT_TO_ROLES:
@@ -213,6 +229,26 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<SysFeMemoryUsage>();
     case TSchemaTableType::SCH_TEMP_TABLES:
         return std::make_unique<SchemaTempTablesScanner>();
+    case TSchemaTableType::SCH_RECYCLEBIN_CATALOGS:
+        return std::make_unique<SchemaRecycleBinCatalogs>();
+    case TSchemaTableType::SCH_COLUMN_STATS_USAGE:
+        return std::make_unique<SchemaColumnStatsUsageScanner>();
+    case TSchemaTableType::SCH_ANALYZE_STATUS:
+        return std::make_unique<SchemaAnalyzeStatus>();
+    case TSchemaTableType::SCH_CLUSTER_SNAPSHOTS:
+        return std::make_unique<SchemaClusterSnapshotsScanner>();
+    case TSchemaTableType::SCH_CLUSTER_SNAPSHOT_JOBS:
+        return std::make_unique<SchemaClusterSnapshotJobsScanner>();
+    case TSchemaTableType::SCH_APPLICABLE_ROLES:
+        return std::make_unique<SchemaApplicableRolesScanner>();
+    case TSchemaTableType::SCH_KEYWORDS:
+        return std::make_unique<SchemaKeywordsScanner>();
+    case TSchemaTableType::SCH_WAREHOUSE_METRICS:
+        return std::make_unique<WarehouseMetricsScanner>();
+    case TSchemaTableType::SCH_WAREHOUSE_QUERIES:
+        return std::make_unique<WarehouseQueriesScanner>();
+    case TSchemaTableType::SCH_TABLET_RESHARD_JOBS:
+        return std::make_unique<SchemaTabletReshardJobsScanner>();
     default:
         return std::make_unique<SchemaDummyScanner>();
     }
@@ -228,9 +264,6 @@ Status SchemaScanner::_create_slot_descs(ObjectPool* pool) {
     }
 
     int offset = (null_column + 7) / 8;
-    int null_byte = 0;
-    int null_bit = 0;
-
     for (int i = 0; i < _column_num; ++i) {
         TSlotDescriptor t_slot_desc;
         const TypeDescriptor& type_desc = _columns[i].type;
@@ -240,18 +273,7 @@ Status SchemaScanner::_create_slot_descs(ObjectPool* pool) {
         t_slot_desc.__set_columnPos(i);
         t_slot_desc.__set_byteOffset(offset);
 
-        if (_columns[i].is_null) {
-            t_slot_desc.__set_nullIndicatorByte(null_byte);
-            t_slot_desc.__set_nullIndicatorBit(null_bit);
-            null_bit = (null_bit + 1) % 8;
-
-            if (0 == null_bit) {
-                null_byte++;
-            }
-        } else {
-            t_slot_desc.__set_nullIndicatorByte(0);
-            t_slot_desc.__set_nullIndicatorBit(-1);
-        }
+        t_slot_desc.__set_isNullable(_columns[i].is_null);
 
         t_slot_desc.__set_slotIdx(i);
         t_slot_desc.__set_isMaterialized(true);
@@ -345,7 +367,7 @@ bool SchemaScanner::_parse_expr_predicate(Expr* conjunct, const std::string& col
     auto literal_col = literal_col_status.value();
     Slice padded_value(literal_col->get(0).get_slice());
     result = padded_value.to_string();
-    VLOG(1) << "schema scaner parse expr value:" << result << ", col_name:" << col_name << ", slot_id=" << slot_id
+    VLOG(2) << "schema scaner parse expr value:" << result << ", col_name:" << col_name << ", slot_id=" << slot_id
             << ", result_child_idx=" << result_child_idx;
     return true;
 }

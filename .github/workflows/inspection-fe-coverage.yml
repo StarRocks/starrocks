@@ -1,0 +1,128 @@
+name: FE COVERAGE IN INSPECTION PIPELINE
+
+on:
+  workflow_call:
+    inputs:
+      BRANCH:
+        description: 'BRANCH'
+        required: true
+        type: string
+      COMMIT_ID:
+        description: 'COMMIT ID'
+        required: true
+        type: string
+      DIFF_FILE_PATH:
+        description: 'FILE PATH OF DIFF INFO'
+        required: true
+        type: string
+
+    outputs:
+      FE_COV_RES_FILE:
+        description: "FE COV RESULT FILE"
+        value: ${{ jobs.REPORT.outputs.FE_COV_RES_FILE }}
+
+permissions:
+  checks: write
+  actions: write
+  contents: write
+  deployments: write
+  discussions: write
+  issues: write
+  packages: write
+  pages: write
+  pull-requests: write
+  repository-projects: write
+  security-events: write
+  statuses: write
+
+env:
+  IS_INSPECTION: true
+  BASE_REF: ${{ inputs.BRANCH }}
+  COMMIT_ID: ${{ inputs.COMMIT_ID }}
+  DIFF_FILE_PATH: ${{ inputs.DIFF_FILE_PATH }}
+  bucket_prefix: starrocks
+
+
+jobs:
+  REPORT:
+    runs-on: [ self-hosted, quick ]
+    env:
+      OSS_CMD: "ossutil64 --config-file /root/.ossutilconfig"
+      JAVA_HOME: /var/local/env/jdk1.8.0_202
+    outputs:
+      FE_COV_RES_FILE: ${{ steps.incremental_cov_report.outputs.FE_COV_RES_FILE }}
+
+    steps:
+      - name: CLEAN & ENV
+        run: |
+          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+          if [[ ! -e "${DIFF_FILE_PATH}" ]]; then
+            echo "::error::diff file: ${DIFF_FILE_PATH} not exist!"
+            exit 1
+          fi
+
+      - name: Download FE UT XML
+        id: download-ut-xml
+        run: |
+          oss_path=oss://${bucket_prefix}-ci-release/${BASE_REF}/Release/pr/UT-Report/${COMMIT_ID}
+          size=$(${OSS_CMD} ls ${oss_path}/fe_ut_report.tar.gz | grep "Object Number is" | awk '{print $NF}')
+          if [[ "$size" == "0" ]]; then
+            echo "::error::FE UT result not exit!"
+            exit 1
+          fi
+          mkdir fe && cd fe
+          ${OSS_CMD} cp ${oss_path}/ . --recursive
+          tar zxf fe_ut_report.tar.gz
+
+      - name: Merge FE Coverage
+        id: merge_report
+        env:
+          fe_path: ${{ github.workspace }}/fe
+        run: |
+          export PATH=$JAVA_HOME/bin:$PATH;
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          if [[ ! -e ${fe_path}/test.exec ]]; then
+            echo "::error::System test result not exit!"
+            exit 1
+          fi
+          java -jar package/jacococli.jar merge ${fe_path}/fe-core/target/jacoco.exec ${fe_path}/test.exec --destfile ${fe_path}/merge.exec
+
+      - name: Generate XML Report
+        id: generate-xml-report
+        env:
+          package_path: ${{ github.workspace }}/ci-tool/package
+          fe_path: ${{ github.workspace }}/fe
+          fe_core_path: ${{ github.workspace }}/fe/fe-core
+        run: |
+          rm -rf result
+          export PATH=$JAVA_HOME/bin:$PATH;
+          cd ${fe_core_path}/target/classes; rm -rf org;
+          cd com/starrocks && rm -rf thrift proto sql/parser builtins common/Version.class;
+          cd ${{ github.workspace }};
+          java -jar $package_path/jacococli.jar report ${fe_path}/merge.exec --classfiles ${fe_core_path}/target/classes/ \
+            --html ./result --xml ${{ github.workspace }}/coverage.xml \
+            --sourcefiles ${fe_core_path}/src/main/java/ --encoding utf-8 --name fe-coverage
+          oss_path=oss://${bucket_prefix}-ci-release/${BASE_REF}/Release/pr/UT-Report/${COMMIT_ID}
+          ${OSS_CMD} cp coverage.xml ${oss_path}/ -f
+
+      # Incremental Total Coverage
+      - name: Incremental Coverage Report - Total
+        id: incremental_cov_report
+        env:
+          fe_path: ${{ github.workspace }}/fe
+        run: |
+          rm -rf ./coverchecker && ln -s /var/local/env/coverchecker ./coverchecker && cd coverchecker && git pull
+          export PATH=$JAVA_HOME/bin:$PATH;
+          java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
+            --cover ${{ github.workspace }}/result/ \
+            --threshold 80 -type jacoco \
+            -d ${DIFF_FILE_PATH} -dt file | tee "${DIFF_FILE_PATH}_fe_cov.log"
+          
+          echo "FE_COV_RES_FILE=${DIFF_FILE_PATH}_fe_cov.log" >> $GITHUB_OUTPUT
+          rm -rf coverchecker
+          rm -rf ci-tools
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -rf ${{ github.workspace }}/*

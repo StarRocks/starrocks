@@ -1,8 +1,8 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
-# Features
+# Database Features
 
 StarRocks offers a rich set of features to deliver a blazing-fast, real-time analytics experience on data at scale.
 
@@ -62,11 +62,11 @@ StarRocks' storage engine uses the Delete-and-insert pattern, which allows for e
 
 ## Intelligent materialized view
 
-StarRocks uses intelligent [materialized views](../using_starrocks/Materialized_view.md) to accelerate queries and data warehouse layering. Different from materialized views of other similar products that requires manual data synchronization with the base table, StarRocks' materialized views automatically update data according to the data changes in the base table without requiring additional maintenance operations. In addition, the selection of materialized views is also automatic. If StarRocks identifies a suitable materialized view (MV) to improve query performance, it will automatically rewrite the query to utilize the MV. This intelligent process significantly enhances query efficiency without requiring manual intervention.
+StarRocks uses intelligent [materialized views](../using_starrocks/async_mv/Materialized_view.md) to accelerate queries and data warehouse layering. Different from materialized views of other similar products that requires manual data synchronization with the base table, StarRocks' materialized views automatically update data according to the data changes in the base table without requiring additional maintenance operations. In addition, the selection of materialized views is also automatic. If StarRocks identifies a suitable materialized view (MV) to improve query performance, it will automatically rewrite the query to utilize the MV. This intelligent process significantly enhances query efficiency without requiring manual intervention.
 
  StarRocks' MV can replace the traditional ETL data modeling process: Instead of transforming data in the upstream applications, you now have the option to transform data with MV within StarRocks, simplifying the data processing pipeline.
 
-For example, in the figure, raw data on data lake can be used to create a normalized table based on an external MV. A denormalized table can be created from normalized tables through asynchronous materialized views. Another MV can be created from normalized tables to support high-concurrency queries and better query performance.
+For example, in the figure, raw data on data lake can be used to create a normalized table based on an external MV. A denormalized table can be created from normalized tables through asynchronous materialized views. Another MV can be created from normalized tables to support high concurrency queries and better query performance.
 
 ![MV](../_assets/1.1-7-mv.png)
 

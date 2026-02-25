@@ -15,6 +15,8 @@
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
 
 #include "column/chunk.h"
+#include "column/chunk_extra_data.h"
+#include "exec/pipeline/exchange/local_exchange.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
@@ -22,6 +24,7 @@ namespace starrocks::pipeline {
 // Used for PassthroughExchanger.
 // The input chunk is most likely full, so we don't merge it to avoid copying chunk data.
 void LocalExchangeSourceOperator::add_chunk(ChunkPtr chunk) {
+    auto notify = defer_notify();
     std::lock_guard<std::mutex> l(_chunk_lock);
     if (_is_finished) {
         return;
@@ -37,6 +40,7 @@ void LocalExchangeSourceOperator::add_chunk(ChunkPtr chunk) {
 // Only enqueue the partition chunk information here, and merge chunk in pull_chunk().
 Status LocalExchangeSourceOperator::add_chunk(ChunkPtr chunk, const std::shared_ptr<std::vector<uint32_t>>& indexes,
                                               uint32_t from, uint32_t size, size_t memory_usage) {
+    auto notify = defer_notify();
     std::lock_guard<std::mutex> l(_chunk_lock);
     if (_is_finished) {
         return Status::OK();
@@ -53,8 +57,10 @@ Status LocalExchangeSourceOperator::add_chunk(ChunkPtr chunk, const std::shared_
     return Status::OK();
 }
 
-Status LocalExchangeSourceOperator::add_chunk(const std::vector<std::string>& partition_key,
-                                              std::unique_ptr<Chunk> chunk) {
+Status LocalExchangeSourceOperator::add_chunk(const std::vector<std::optional<std::string>>& partition_key,
+                                              const std::vector<std::pair<TypeDescriptor, ColumnPtr>>& partition_datum,
+                                              ChunkUniquePtr chunk) {
+    auto notify = defer_notify();
     std::lock_guard<std::mutex> l(_chunk_lock);
     if (_is_finished) {
         return Status::OK();
@@ -68,6 +74,7 @@ Status LocalExchangeSourceOperator::add_chunk(const std::vector<std::string>& pa
     _partition_key2partial_chunks[partition_key].queue.push(std::move(chunk));
     _partition_key2partial_chunks[partition_key].num_rows += num_rows;
     _partition_key2partial_chunks[partition_key].memory_usage += memory_usage;
+    _partition_key2partial_chunks[partition_key].partition_key_datum = std::move(partition_datum);
 
     _local_memory_usage += memory_usage;
     _memory_manager->update_memory_usage(memory_usage, num_rows);
@@ -89,18 +96,25 @@ bool LocalExchangeSourceOperator::has_output() const {
     std::lock_guard<std::mutex> l(_chunk_lock);
 
     return !_full_chunk_queue.empty() || _partition_rows_num >= _factory->runtime_state()->chunk_size() ||
-           _key_partition_max_rows() > 0 || (_is_finished && _partition_rows_num > 0) || _local_buffer_almost_full();
+           _key_partition_max_rows() > 0 || ((_is_finished || _local_buffer_almost_full()) && _partition_rows_num > 0);
 }
 
 Status LocalExchangeSourceOperator::set_finished(RuntimeState* state) {
+    auto* exchanger = down_cast<LocalExchangeSourceOperatorFactory*>(_factory)->exchanger();
+    exchanger->finish_source();
+    // notify local-exchange sink
+    // notify-condition 1. mem-buffer full 2. all finished
+    auto notify = exchanger->defer_notify_sink();
     std::lock_guard<std::mutex> l(_chunk_lock);
     _is_finished = true;
-    // clear _full_chunk_queue
-    { [[maybe_unused]] typeof(_full_chunk_queue) tmp = std::move(_full_chunk_queue); }
-    // clear _partition_chunk_queue
-    { [[maybe_unused]] typeof(_partition_chunk_queue) tmp = std::move(_partition_chunk_queue); }
-    // clear _key_partition_pending_chunks
-    { [[maybe_unused]] typeof(_partition_key2partial_chunks) tmp = std::move(_partition_key2partial_chunks); }
+    {
+        // clear _full_chunk_queue
+        _full_chunk_queue = {};
+        // clear _partition_chunk_queue
+        _partition_chunk_queue = {};
+        // clear _key_partition_pending_chunks
+        _partition_key2partial_chunks = std::map<std::vector<std::optional<std::string>>, PartialChunks>{};
+    }
     // Subtract the number of rows of buffered chunks from row_count of _memory_manager and make it unblocked.
     _memory_manager->update_memory_usage(-_local_memory_usage, -_partition_rows_num);
     _partition_rows_num = 0;
@@ -109,6 +123,9 @@ Status LocalExchangeSourceOperator::set_finished(RuntimeState* state) {
 }
 
 StatusOr<ChunkPtr> LocalExchangeSourceOperator::pull_chunk(RuntimeState* state) {
+    // notify sink
+    auto* exchanger = down_cast<LocalExchangeSourceOperatorFactory*>(_factory)->exchanger();
+    auto notify = exchanger->defer_notify_sink();
     ChunkPtr chunk = _pull_passthrough_chunk(state);
     if (chunk == nullptr && _key_partition_pending_chunk_empty()) {
         chunk = _pull_shuffle_chunk(state);
@@ -116,6 +133,11 @@ StatusOr<ChunkPtr> LocalExchangeSourceOperator::pull_chunk(RuntimeState* state) 
         chunk = _pull_key_partition_chunk(state);
     }
     return std::move(chunk);
+}
+
+std::string LocalExchangeSourceOperator::get_name() const {
+    std::string finished = is_finished() ? "X" : "O";
+    return fmt::format("{}_{}_{}({}) {{ has_output:{}}}", _name, _plan_node_id, (void*)this, finished, has_output());
 }
 
 const size_t min_local_memory_limit = 1LL * 1024 * 1024;
@@ -186,11 +208,13 @@ ChunkPtr LocalExchangeSourceOperator::_pull_key_partition_chunk(RuntimeState* st
     std::vector<ChunkPtr> selected_partition_chunks;
     size_t num_rows = 0;
     size_t memory_usage = 0;
-
+    ChunkExtraColumnsDataPtr chunk_extra_data;
+    std::vector<std::pair<TypeDescriptor, ColumnPtr>> partition_key_datum;
     {
         std::lock_guard<std::mutex> l(_chunk_lock);
-
-        PartialChunks& partial_chunks = _max_row_partition_chunks();
+        auto it = _max_row_partition_chunks();
+        PartialChunks& partial_chunks = it->second;
+        partition_key_datum = it->second.partition_key_datum;
         DCHECK(!partial_chunks.queue.empty());
 
         while (!partial_chunks.queue.empty() &&
@@ -207,10 +231,20 @@ ChunkPtr LocalExchangeSourceOperator::_pull_key_partition_chunk(RuntimeState* st
         _local_memory_usage -= memory_usage;
         _memory_manager->update_memory_usage(-memory_usage, -num_rows);
     }
-
+    Columns partition_key_columns;
+    std::vector<ChunkExtraColumnsMeta> extra_metas;
+    for (auto& datum : partition_key_datum) {
+        auto res = ColumnHelper::create_column(datum.first, true);
+        res->append_datum(datum.second->get(0));
+        auto ptr = ConstColumn::create(std::move(res), 1);
+        partition_key_columns.emplace_back(ptr);
+        extra_metas.push_back(ChunkExtraColumnsMeta{datum.first, true /*useless*/, true /*useless*/});
+    }
+    chunk_extra_data = std::make_shared<ChunkExtraColumnsData>(extra_metas, std::move(partition_key_columns));
     // Unlock during merging partition chunks into a full chunk.
     ChunkPtr chunk = selected_partition_chunks[0]->clone_empty_with_slot();
     chunk->reserve(num_rows);
+    chunk->set_extra_data(chunk_extra_data);
     for (const auto& partition_chunk : selected_partition_chunks) {
         // NOTE: unpack column if `partition_chunk.chunk` constains const column
         chunk->append(*partition_chunk);
@@ -228,11 +262,12 @@ int64_t LocalExchangeSourceOperator::_key_partition_max_rows() const {
     return max_rows;
 }
 
-LocalExchangeSourceOperator::PartialChunks& LocalExchangeSourceOperator::_max_row_partition_chunks() {
+std::map<std::vector<std::optional<std::string>>, LocalExchangeSourceOperator::PartialChunks>::iterator
+LocalExchangeSourceOperator::_max_row_partition_chunks() {
     auto max_it = std::max_element(_partition_key2partial_chunks.begin(), _partition_key2partial_chunks.end(),
                                    [](auto& lhs, auto& rhs) { return lhs.second.num_rows < rhs.second.num_rows; });
 
-    return max_it->second;
+    return max_it;
 }
 
 } // namespace starrocks::pipeline

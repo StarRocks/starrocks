@@ -18,17 +18,14 @@ package com.starrocks.scheduler.mv;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TBinlogOffset;
 import com.starrocks.thrift.TBinlogScanRange;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -40,6 +37,8 @@ import java.util.Objects;
  * NOTE: not thread-safe for updating
  */
 public class BinlogConsumeStateVO implements Writable {
+    private static final Logger LOG = LogManager.getLogger(BinlogConsumeStateVO.class);
+
     @SerializedName("binlogMap")
     private Map<BinlogIdVO, BinlogLSNVO> binlogMap = new HashMap<>();
 
@@ -49,9 +48,12 @@ public class BinlogConsumeStateVO implements Writable {
         binlogMap.forEach((key, value) -> {
             TBinlogScanRange scan = new TBinlogScanRange();
             TabletMeta meta = tabletIndex.getTabletMeta(key.getTabletId());
+            if (meta == null) {
+                throw new RuntimeException("Tablet " + key.getTabletId() + " does not exist");
+            }
             scan.setTable_id(meta.getTableId());
             scan.setTablet_id(key.getTabletId());
-            scan.setPartition_id(meta.getPartitionId());
+            scan.setPartition_id(meta.getPhysicalPartitionId());
             scan.setOffset(value.toThrift());
             res.add(scan);
         });
@@ -60,15 +62,6 @@ public class BinlogConsumeStateVO implements Writable {
 
     public Map<BinlogIdVO, BinlogLSNVO> getBinlogMap() {
         return binlogMap;
-    }
-
-    public static BinlogConsumeStateVO read(DataInput input) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(input), BinlogConsumeStateVO.class);
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
     @Override
@@ -113,14 +106,8 @@ public class BinlogConsumeStateVO implements Writable {
             this.tabletId = tabletId;
         }
 
-        public static BinlogIdVO read(DataInput input) throws IOException {
-            return GsonUtils.GSON.fromJson(Text.readString(input), BinlogIdVO.class);
-        }
 
-        @Override
-        public void write(DataOutput out) throws IOException {
-            Text.writeString(out, GsonUtils.GSON.toJson(this));
-        }
+
 
         public long getTabletId() {
             return tabletId;
@@ -171,15 +158,8 @@ public class BinlogConsumeStateVO implements Writable {
             return res;
         }
 
-        public static BinlogLSNVO read(DataInput input) throws IOException {
-            String json = Text.readString(input);
-            return GsonUtils.GSON.fromJson(json, BinlogLSNVO.class);
-        }
 
-        @Override
-        public void write(DataOutput out) throws IOException {
-            Text.writeString(out, GsonUtils.GSON.toJson(this));
-        }
+
 
         @Override
         public int compareTo(@NotNull BinlogLSNVO o) {

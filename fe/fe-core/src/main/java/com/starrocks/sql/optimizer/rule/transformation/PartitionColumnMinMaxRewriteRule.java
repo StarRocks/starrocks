@@ -16,17 +16,16 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -34,7 +33,6 @@ import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
@@ -47,6 +45,8 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.NotImplementedException;
 
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -220,15 +220,22 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
         List<Partition> nonEmpty = table.getNonEmptyPartitions();
         Set<Long> nonEmptyPartitionIds = nonEmpty.stream().map(Partition::getId).collect(Collectors.toSet());
         PartitionInfo partitionInfo = table.getPartitionInfo();
+        Set<Long> nullPartitions = partitionInfo.getNullValuePartitions();
 
-        List<Long> pruned = Lists.newArrayList();
+        Set<Long> prunedSet = new LinkedHashSet<>();
         if (hasMinMax.first) {
             List<Long> sorted = partitionInfo.getSortedPartitions(true);
             sorted.retainAll(nonEmptyPartitionIds);
             if (CollectionUtils.isEmpty(sorted)) {
                 return null;
             }
-            pruned.add(sorted.get(0));
+            for (long partitionId : sorted) {
+                prunedSet.add(partitionId);
+                // at least reserve one non-null partition, null-partition might be useless
+                if (!nullPartitions.contains(partitionId)) {
+                    break;
+                }
+            }
         }
 
         if (hasMinMax.second) {
@@ -237,9 +244,16 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
             if (CollectionUtils.isEmpty(sorted)) {
                 return null;
             }
-            pruned.add(sorted.get(0));
+            for (long partitionId : sorted) {
+                prunedSet.add(partitionId);
+                // at least reserve one non-null partition, null-partition might be useless
+                if (!nullPartitions.contains(partitionId)) {
+                    break;
+                }
+            }
         }
 
+        List<Long> pruned = new ArrayList<>(prunedSet);
         LogicalOlapScanOperator scan = new LogicalOlapScanOperator.Builder()
                 .withOperator(scanOperator)
                 .setSelectedPartitionId(pruned)
@@ -366,10 +380,7 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
         List<Ordering> ordering = Lists.newArrayList(new Ordering(columnRefOperator, asc, false));
         LogicalTopNOperator topn = new LogicalTopNOperator(ordering, limit, offset);
 
-        Map<ColumnRefOperator, ScalarOperator> columnRefMap = Maps.newHashMap();
-        columnRefMap.put(entries.get(0).getKey(), columnRefOperator);
-        LogicalProjectOperator project = new LogicalProjectOperator(columnRefMap);
-
-        return OptExpression.create(project, OptExpression.create(topn, optExpression.getInputs().get(0).getInputs()));
+        return OptExpression.create(aggregation,
+                OptExpression.create(topn, optExpression.getInputs().get(0).getInputs()));
     }
 }

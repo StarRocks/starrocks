@@ -19,12 +19,11 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.UnionFind;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Utils;
@@ -32,14 +31,15 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
+import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
+import com.starrocks.type.IntegerType;
 import org.roaringbitmap.RoaringBitmap;
 
 import java.util.Collection;
@@ -51,6 +51,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -271,11 +272,8 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
         if (scanOp.hasLimit()) {
             return visit(optExpression, context);
         }
-        //TODO(by satanson): non-OlapTable will be supported in future
-        if (!(scanOp.getTable() instanceof OlapTable)) {
-            return visit(optExpression, context);
-        }
-        OlapTable table = ((OlapTable) scanOp.getTable());
+
+        Table table = scanOp.getTable();
         // A Table that has no PK/UK/FK can not associate with other tables via
         // cardinality-preserving relations.
         if (!table.hasUniqueConstraints() && !table.hasForeignKeyConstraints()) {
@@ -337,7 +335,7 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
         // pruned and the retained Scan operator to the pruned Scan operator from missing the
         // referenced ColumnRef originates from the pruned Scan operator.
         for (OptExpression child : root.getInputs()) {
-            if (child.getOp() instanceof LogicalOlapScanOperator) {
+            if (child.getOp() instanceof LogicalScanOperator) {
                 int ordinal = scanNodeOrdinals.size();
                 scanNodeOrdinals.put(child, ordinal);
                 ordinalToScanNodes.add(child);
@@ -652,7 +650,7 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
 
         Map<Long, List<CPNode>> tableIdToChildGroups = Maps.newHashMap();
         for (CPNode child : children) {
-            LogicalOlapScanOperator scanOp = child.getValue().getOp().cast();
+            LogicalScanOperator scanOp = child.getValue().getOp().cast();
             Long tableId = scanOp.getTable().getId();
             tableIdToChildGroups.computeIfAbsent(tableId, k -> Lists.newArrayList()).add(child);
         }
@@ -988,7 +986,7 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
                 }
             });
             if (newColRefMap.isEmpty()) {
-                newColRefMap.put(columnRefFactory.create("auto_fill_col", Type.TINYINT, false),
+                newColRefMap.put(columnRefFactory.create("auto_fill_col", IntegerType.TINYINT, false),
                         ConstantOperator.createTinyInt((byte) 1));
             }
             LogicalProjectOperator newOperator = LogicalProjectOperator.builder()
@@ -1020,10 +1018,8 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
                 }
             });
             if (newColRefToColMetaMap.isEmpty()) {
-                Preconditions.checkArgument(scanOperator.getTable() instanceof OlapTable);
-                OlapTable table = (OlapTable) scanOperator.getTable();
-                Preconditions.checkArgument(!table.getKeyColumns().isEmpty());
-                Column firstKeyColumn = table.getKeyColumns().get(0);
+                Table table = scanOperator.getTable();
+                Column firstKeyColumn = table.getPresentivateColumn();
                 ColumnRefOperator firstKeyColRef = scanOperator.getColumnMetaToColRefMap().get(firstKeyColumn);
                 newColRefToColMetaMap.put(firstKeyColRef, firstKeyColumn);
             }
@@ -1066,7 +1062,18 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
         frontier = grafter.graft(frontier).orElse(frontier);
 
         // step4: (Top-down) remove the unused ColumnRefOperators.
-        colRefMap.replaceAll((k, v) -> pruner.columnRefRewriter.rewrite(v));
+        // if Frontier is LogicalCTEConsumerOperator, getRowOutputInfo().getColumnRefMap() returns
+        // LogicalCTEConsumerOperator.cteOutputColumnRefMap, the input ColumnRefOperators in this map
+        // are output ColumnRefOperators of LogicalCTEProducerOperator, thus these ColumnRefOperators
+        // are dangling, so when we create a LogicalProjectOperator above LogicalCTEConsumerOperator,we
+        // just need map output ColumnRefOperators to themselves.
+        //LogicalCTEConsumeOperator cteConsumeOperator = frontier.getOp().cast();
+        if (frontier.getOp() instanceof LogicalCTEConsumeOperator) {
+            colRefMap = colRefMap.keySet().stream()
+                    .collect(Collectors.toMap(Function.identity(), Function.identity()));
+        } else {
+            colRefMap.replaceAll((k, v) -> pruner.columnRefRewriter.rewrite(v));
+        }
         LogicalProjectOperator projectOperator = new LogicalProjectOperator(colRefMap);
         frontier = OptExpression.create(projectOperator, frontier);
         Cleaner cleaner = new Cleaner(columnRefFactory);

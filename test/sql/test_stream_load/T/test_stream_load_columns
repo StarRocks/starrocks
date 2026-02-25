@@ -1,0 +1,18 @@
+-- name: test_stream_load_columns
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE `t0` (
+  `c0` int(11) NOT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+DISTRIBUTED BY HASH(`c0`) BUCKETS 10
+PROPERTIES (
+ "replication_num" = "1"
+);
+
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue"  -H "columns: c0, create_time=now()" -d '1' ${url}/api/db_${uuid0}/t0/_stream_load
+sync;
+
+select c0 from db_${uuid0}.t0;

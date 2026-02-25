@@ -16,9 +16,11 @@ package com.starrocks.server;
 
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnBuilder;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PartitionInfoBuilder;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
@@ -45,13 +47,16 @@ public class ElasticSearchTableFactory implements AbstractTableFactory {
 
         // create columns
         List<Column> baseSchema = stmt.getColumnDefs().stream()
-                .map(ref -> new Column(ref.getName(),
-                        ref.getType(),
-                        ref.isKey(),
-                        ref.getAggregateType(),
-                        ref.isAllowNull(),
-                        ref.getDefaultValueDef(),
-                        "by es comment"))
+                .map(ref -> {
+                    Column column;
+                    if (ref.getGeneratedColumnExpr() != null) {
+                        column = ColumnBuilder.buildGeneratedColumn(null, ref);
+                    } else {
+                        column = ColumnBuilder.buildColumn(ref);
+                    }
+                    column.setComment("by es comment");
+                    return column;
+                })
                 .collect(Collectors.toList());
         // metastore is null when external table
         if (null != metastore) {
@@ -63,7 +68,7 @@ public class ElasticSearchTableFactory implements AbstractTableFactory {
         PartitionInfo partitionInfo = null;
         Map<String, Long> partitionNameToId = Maps.newHashMap();
         if (partitionDesc != null) {
-            partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false);
+            partitionInfo = PartitionInfoBuilder.build(partitionDesc, baseSchema, partitionNameToId, false);
         } else if (null != metastore) {
             long partitionId = metastore.getNextId();
             // use table name as single partition name

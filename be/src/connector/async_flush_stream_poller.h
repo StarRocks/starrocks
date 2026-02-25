@@ -32,7 +32,9 @@ public:
 
     AsyncFlushStreamPoller() = default;
 
-    void enqueue(std::unique_ptr<Stream> stream);
+    virtual ~AsyncFlushStreamPoller() = default;
+
+    virtual void enqueue(std::shared_ptr<Stream> stream);
 
     // return a pair of
     // 1. io status
@@ -43,7 +45,7 @@ public:
 
 private:
     struct StreamWithStatus {
-        std::unique_ptr<Stream> stream;
+        std::shared_ptr<Stream> stream;
         std::future<Status> async_status;
     };
 

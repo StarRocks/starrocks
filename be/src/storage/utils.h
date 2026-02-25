@@ -51,6 +51,7 @@
 #include <string>
 #include <vector>
 
+#include "base/types/int128.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "storage/olap_common.h"
@@ -176,5 +177,9 @@ bool is_tracker_hit_hard_limit(MemTracker* tracker, double hard_limit_ratio);
             out = it->second;                                 \
         }                                                     \
     } while (0)
+
+int caculate_delta_writer_thread_num(int thread_num_from_config);
+
+int64_t parse_data_size(const std::string& value_str);
 
 } // namespace starrocks

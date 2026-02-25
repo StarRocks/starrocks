@@ -59,6 +59,10 @@ public:
 
     [[nodiscard]] const Status& status() const { return _status; }
 
+    void set_is_required(bool is_required) { _is_required = is_required; }
+
+    bool is_required() { return _is_required; }
+
 private:
     virtual void on_new_params(){};
 
@@ -79,6 +83,7 @@ private:
 
     // used to identify left join for table function
     bool _is_left_join = false;
+    bool _is_required = true;
 };
 
 class TableFunction {

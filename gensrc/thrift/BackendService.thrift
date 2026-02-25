@@ -42,6 +42,7 @@ include "AgentService.thrift"
 include "InternalService.thrift"
 include "StarrocksExternalService.thrift"
 include "MVMaintenance.thrift"
+include "MasterService.thrift"
 
 struct TExportTaskRequest {
     1: required InternalService.TExecPlanFragmentParams params
@@ -114,6 +115,16 @@ struct TProxyResult {
 struct TStreamLoadChannel {
     1: optional string label
     2: optional i32 channel_id
+    3: optional string table_name
+}
+
+struct TGetTabletsInfoRequest {
+}
+
+struct TGetTabletsInfoResult {
+    1: required Status.TStatus status;
+    2: optional i64 report_version;
+    3: optional map<Types.TTabletId, MasterService.TTablet> tablets;
 }
 
 service BackendService {
@@ -171,4 +182,5 @@ service BackendService {
     // release the context resource associated with the context_id
     StarrocksExternalService.TScanCloseResult close_scanner(1: StarrocksExternalService.TScanCloseParams params);
 
+    TGetTabletsInfoResult get_tablets_info(1: TGetTabletsInfoRequest request);
 }

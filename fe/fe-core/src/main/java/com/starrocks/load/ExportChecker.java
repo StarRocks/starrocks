@@ -36,7 +36,7 @@ package com.starrocks.load;
 
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.load.ExportJob.JobState;
 import com.starrocks.server.GlobalStateMgr;
@@ -63,7 +63,7 @@ public final class ExportChecker extends FrontendDaemon {
     private static LeaderTaskExecutor exportingSubTaskExecutor;
 
     private ExportChecker(JobState jobState, long intervalMs) {
-        super("export checker " + jobState.name().toLowerCase(), intervalMs);
+        super("export-checker-" + jobState.name().toLowerCase(), intervalMs);
         this.jobState = jobState;
     }
 
@@ -197,7 +197,7 @@ public final class ExportChecker extends FrontendDaemon {
         if (beHasErr) {
             try {
                 job.cancel(ExportFailMsg.CancelType.BE_STATUS_ERR, errMsg);
-            } catch (UserException e) {
+            } catch (StarRocksException e) {
                 LOG.warn("try to cancel a completed job. job: {}", job);
             }
             return true;

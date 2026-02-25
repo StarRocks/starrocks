@@ -14,14 +14,14 @@
 
 package com.starrocks.lake.compaction;
 
-import org.junit.Assert;
-import org.junit.Test;
+import com.starrocks.common.io.Text;
+import com.starrocks.persist.gson.GsonUtils;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
-import java.io.DataInput;
 import java.io.DataInputStream;
-import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
 
@@ -29,17 +29,16 @@ public class CompactionTxnCommitAttachmentTest {
     @Test
     public void testBasic() throws IOException {
         CompactionTxnCommitAttachment attachment = new CompactionTxnCommitAttachment();
-        Assert.assertFalse(attachment.getForceCommit());
+        Assertions.assertFalse(attachment.getForceCommit());
 
         CompactionTxnCommitAttachment attachment2 = new CompactionTxnCommitAttachment(true /* forceCommit */);
-        Assert.assertTrue(attachment2.getForceCommit());
+        Assertions.assertTrue(attachment2.getForceCommit());
 
         ByteArrayOutputStream bout = new ByteArrayOutputStream();
         DataOutputStream out = new DataOutputStream(bout);
-        attachment2.write((DataOutput) out);
-
+        Text.writeString(out, GsonUtils.GSON.toJson(attachment2));
         DataInputStream in = new DataInputStream(new ByteArrayInputStream(bout.toByteArray()));
-        attachment.readFields((DataInput) in);
-        Assert.assertTrue(attachment.getForceCommit());
+        attachment = GsonUtils.GSON.fromJson(Text.readString(in), CompactionTxnCommitAttachment.class);
+        Assertions.assertTrue(attachment.getForceCommit());
     }
 }

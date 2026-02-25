@@ -17,13 +17,12 @@ package com.starrocks.sql.optimizer.rule.tree.pdagg;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -33,7 +32,6 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
@@ -42,11 +40,13 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.task.TaskContext;
+import com.starrocks.type.Type;
 import org.apache.commons.collections4.MapUtils;
 
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /*
@@ -71,6 +71,7 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
     // record all push down column on scan node
     // for check the group bys which is generated in join node(on/where)
     private ColumnRefSet allPushDownGroupBys;
+    private Set<OptExpression> pushDownTargets;
 
     public PushDownAggregateRewriter(TaskContext taskContext) {
         this.factory = taskContext.getOptimizerContext().getColumnRefFactory();
@@ -97,6 +98,11 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
                 .map(c -> c.groupBys.values())
                 .flatMap(Collection::stream)
                 .map(ScalarOperator::getUsedColumns).forEach(allPushDownGroupBys::union);
+
+        pushDownTargets = allRewriteContext.values().stream()
+                .flatMap(List::stream)
+                .map(AggregatePushDownContext::getTargetPosition)
+                .collect(Collectors.toSet());
 
         return root.getOp().accept(this, root, AggregatePushDownContext.EMPTY);
     }
@@ -141,7 +147,10 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
         LogicalProjectOperator project = (LogicalProjectOperator) optExpression.getOp();
         Map<ColumnRefOperator, ScalarOperator> originProjectMap = Maps.newHashMap(project.getColumnRefMap());
 
-        if (!originProjectMap.values().stream().allMatch(ScalarOperator::isColumnRef)) {
+        // Some rules will change the output columns of an operator, e.g. from c1 to c2, by adding a Project on top of the
+        // operator with the mapping of c2->c1. At this time, c2 and c1 are both columnRef, but they are different.
+        if (!originProjectMap.values().stream().allMatch(ScalarOperator::isColumnRef) ||
+                !originProjectMap.entrySet().stream().allMatch(e -> e.getKey().equals(e.getValue()))) {
             rewriteProject(context, originProjectMap);
         }
 
@@ -293,7 +302,7 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
     }
 
     private CallOperator genAggregation(CallOperator origin, ScalarOperator args) {
-        Function fn = Expr.getBuiltinFunction(origin.getFunction().getFunctionName().getFunction(),
+        Function fn = ExprUtils.getBuiltinFunction(origin.getFunction().getFunctionName().getFunction(),
                 new Type[] {args.getType()}, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 
         Preconditions.checkState(fn instanceof AggregateFunction);
@@ -311,6 +320,11 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
         if (isInvalid(optExpression, context)) {
             return visit(optExpression, context);
         }
+
+        if (pushDownHere(optExpression)) {
+            return rewrite(optExpression, context);
+        }
+
         // push down aggregate
         optExpression.getInputs().set(0, pushDownJoinAggregate(optExpression, context, 0));
         optExpression.getInputs().set(1, pushDownJoinAggregate(optExpression, context, 1));
@@ -359,8 +373,7 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
         return optExpression;
     }
 
-    @Override
-    public OptExpression visitLogicalTableScan(OptExpression optExpression, AggregatePushDownContext context) {
+    private OptExpression rewrite(OptExpression optExpression, AggregatePushDownContext context) {
         if (isInvalid(optExpression, context)) {
             return visit(optExpression, context);
         }
@@ -376,13 +389,13 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
 
         Preconditions.checkState(context.groupBys.values().stream().allMatch(ScalarOperator::isColumnRef));
 
-        LogicalScanOperator scan = (LogicalScanOperator) optExpression.getOp();
-
         OptExpression result = optExpression;
         // if the aggregation is complex expression, need create project
         if (context.aggregations.values().stream().map(c -> c.getChild(0)).anyMatch(s -> !s.isColumnRef())) {
             Map<ColumnRefOperator, ScalarOperator> refs = Maps.newHashMap();
-            scan.getOutputColumns().forEach(c -> refs.put(c, c));
+            optExpression.getOutputColumns().getStream()
+                    .map(factory::getColumnRef)
+                    .forEach(c -> refs.put(c, c));
 
             for (Map.Entry<ColumnRefOperator, CallOperator> entry : context.aggregations.entrySet()) {
                 ScalarOperator input = entry.getValue().getChild(0);
@@ -406,7 +419,16 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
         } else {
             aggregate = new LogicalAggregationOperator(AggType.GLOBAL, groupBys, context.aggregations);
         }
+
         return OptExpression.create(aggregate, result);
+    }
+
+    @Override
+    public OptExpression visitLogicalTableScan(OptExpression optExpression, AggregatePushDownContext context) {
+        if (pushDownHere(optExpression)) {
+            return rewrite(optExpression, context);
+        }
+        return visit(optExpression, context);
     }
 
     @Override
@@ -468,5 +490,9 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
 
     private boolean isInvalid(OptExpression optExpression, AggregatePushDownContext context) {
         return context.isEmpty() || optExpression.getOp().hasLimit();
+    }
+
+    private boolean pushDownHere(OptExpression optExpression) {
+        return pushDownTargets.contains(optExpression);
     }
 }

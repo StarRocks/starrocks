@@ -62,10 +62,15 @@ public:
 
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
+    void update_exec_stats(RuntimeState* state) override {}
+
+    std::string get_name() const override;
+
 private:
     bool _is_finished = false;
     const std::shared_ptr<LocalExchanger>& _exchanger;
     RuntimeProfile::HighWaterMarkCounter* _peak_memory_usage_counter = nullptr;
+    RuntimeProfile::HighWaterMarkCounter* _peak_num_rows_counter = nullptr;
     // STREAM MV
     bool _is_epoch_finished = false;
 };
@@ -76,6 +81,8 @@ public:
             : OperatorFactory(id, "local_exchange_sink", plan_node_id), _exchanger(std::move(exchanger)) {}
 
     ~LocalExchangeSinkOperatorFactory() override = default;
+
+    bool support_event_scheduler() const override { return true; }
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<LocalExchangeSinkOperator>(this, _id, _plan_node_id, driver_sequence, _exchanger);

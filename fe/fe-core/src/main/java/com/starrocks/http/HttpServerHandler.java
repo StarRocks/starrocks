@@ -37,6 +37,7 @@ package com.starrocks.http;
 import com.starrocks.common.Config;
 import com.starrocks.http.action.IndexAction;
 import com.starrocks.http.action.NotFoundAction;
+import com.starrocks.service.ExecuteEnv;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
@@ -53,18 +54,24 @@ import io.netty.util.ReferenceCountUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.net.URI;
+import java.util.concurrent.Executor;
+
 public class HttpServerHandler extends ChannelInboundHandlerAdapter {
     private static final Logger LOG = LogManager.getLogger(HttpServerHandler.class);
-    // keep connectContext when channel is open
-    private static final AttributeKey<HttpConnectContext> HTTP_CONNECT_CONTEXT_ATTRIBUTE_KEY =
+    // All Execute SQL Actions within this channel share the same ConnectContext, while other Actions create a new ConnectContext
+    // each time. The lifecycle of the shared ConnectContext for Execute SQL Actions is the same as that of the channel.
+    public static final AttributeKey<HttpConnectContext> HTTP_SQL_CONNECT_CONTEXT_ATTRIBUTE_KEY =
             AttributeKey.valueOf("httpContextKey");
     protected HttpRequest request = null;
     private final ActionController controller;
+    private final Executor executor;
     private BaseAction action = null;
 
-    public HttpServerHandler(ActionController controller) {
+    public HttpServerHandler(ActionController controller, Executor executor) {
         super();
         this.controller = controller;
+        this.executor = executor;
     }
 
     @Override
@@ -91,29 +98,22 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
                 return;
             }
 
-            // get HttpConnectContext from channel, HttpConnectContext's lifetime is same as channel
-            HttpConnectContext connectContext = ctx.channel().attr(HTTP_CONNECT_CONTEXT_ATTRIBUTE_KEY).get();
-            BaseRequest req = new BaseRequest(ctx, request, connectContext);
+            BaseRequest req = new BaseRequest(ctx, request);
             action = getAction(req);
+            if (action.isSqlAction()) {
+                req.setConnectContext(ctx.channel().attr(HTTP_SQL_CONNECT_CONTEXT_ATTRIBUTE_KEY).get());
+            } else {
+                req.setConnectContext(new HttpConnectContext());
+            }
+
             if (action != null) {
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("action: {} ", action.getClass().getName());
                 }
-
-                HttpServerHandlerMetrics metrics = HttpServerHandlerMetrics.getInstance();
-                long startTime = System.currentTimeMillis();
-                try {
-                    metrics.handlingRequestsNum.increase(1L);
-                    action.handleRequest(req);
-                } finally {
-                    long latency = System.currentTimeMillis() - startTime;
-                    metrics.handlingRequestsNum.increase(-1L);
-                    metrics.requestHandleLatencyMs.update(latency);
-                    if (latency >= Config.http_slow_request_threshold_ms) {
-                        LOG.warn("receive slow http request. uri: {}, thread id: {}, startTime: {}, latency: {} ms",
-                                WebUtils.sanitizeHttpReqUri(req.getRequest().uri()), Thread.currentThread().getId(),
-                                startTime, latency);
-                    }
+                if (action.supportAsyncHandler()) {
+                    handleActionAsync(req);
+                } else {
+                    handleActionSync(req);
                 }
             }
         } finally {
@@ -121,19 +121,61 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
         }
     }
 
+    private void handleActionSync(BaseRequest request) {
+        RequestHandlingWatch watch = new RequestHandlingWatch(request, false);
+        try {
+            action.handleRequest(request);
+        } catch (Exception e) {
+            handleException(request, e);
+        } finally {
+            watch.finish();
+        }
+    }
+
+    private void handleActionAsync(BaseRequest request) {
+        RequestHandlingWatch watch = new RequestHandlingWatch(request, true);
+        try {
+            executor.execute(() -> {
+                try {
+                    action.handleRequest(request);
+                } catch (Exception e) {
+                    handleException(request, e);
+                } finally {
+                    // HttpServerHandler will flush automatically in channelReadComplete. For synchronous handling,
+                    // the response is written in channelRead which is before channelReadComplete, so no need to
+                    // trigger flush manually. But for asynchronous handling, the response can be written after
+                    // channelReadComplete, so we need to trigger the flush manually.
+                    request.getContext().flush();
+                    watch.finish();
+                }
+            });
+        } catch (Exception exception) {
+            handleException(request, exception);
+            watch.finish();
+        }
+    }
+
+    private void handleException(BaseRequest request, Exception exception) {
+        writeResponse(request.getContext(), HttpResponseStatus.INTERNAL_SERVER_ERROR,
+                String.format("failed to handle request, error: %s:%s ", exception.getClass(), exception.getMessage()));
+        LOG.debug("Failed to handle request: {}", request.getRequest().uri(), exception);
+    }
+
     @Override
     public void channelActive(ChannelHandlerContext ctx) throws Exception {
         HttpServerHandlerMetrics.getInstance().httpConnectionsNum.increase(1L);
         // create HttpConnectContext when channel is established, and store it in channel attr
-        ctx.channel().attr(HTTP_CONNECT_CONTEXT_ATTRIBUTE_KEY).setIfAbsent(new HttpConnectContext());
+        ctx.channel().attr(HTTP_SQL_CONNECT_CONTEXT_ATTRIBUTE_KEY).setIfAbsent(new HttpConnectContext());
         super.channelActive(ctx);
     }
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         HttpServerHandlerMetrics.getInstance().httpConnectionsNum.increase(-1L);
-        if (action != null) {
-            action.handleChannelInactive(ctx);
+        HttpConnectContext context = ctx.channel().attr(HTTP_SQL_CONNECT_CONTEXT_ATTRIBUTE_KEY).get();
+        if (context != null && context.isRegistered()) {
+            // Context is registered in ExecuteSqlAction#executeWithoutPassword
+            ExecuteEnv.getInstance().getScheduler().unregisterConnection(context);
         }
         super.channelInactive(ctx);
     }
@@ -164,10 +206,11 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
 
     private BaseAction getAction(BaseRequest request) {
         String uri = request.getRequest().uri();
+        String baseUri = URI.create(uri).getPath();
         // ignore this request, which is a default request from client's browser.
-        if (uri.endsWith("/favicon.ico")) {
+        if (baseUri.endsWith("/favicon.ico")) {
             return NotFoundAction.getNotFoundAction();
-        } else if (uri.equals("/")) {
+        } else if (baseUri.equals("/")) {
             return new IndexAction(controller);
         }
 
@@ -178,5 +221,43 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
         }
 
         return action;
+    }
+
+    private static class RequestHandlingWatch {
+        private final BaseRequest request;
+        private final boolean asyncHandling;
+        private final long startTime;
+
+        public RequestHandlingWatch(BaseRequest request, boolean asyncHandling) {
+            this.request = request;
+            this.asyncHandling = asyncHandling;
+            this.startTime = System.currentTimeMillis();
+            HttpServerHandlerMetrics.getInstance().handlingRequestsNum.increase(1L);
+            if (asyncHandling) {
+                // HttpServerHandler will release the request object after channelRead finishes. To ensure
+                // the request object can be accessed in the async executor safely, retain the request.
+                ReferenceCountUtil.retain(request.getRequest());
+            }
+        }
+
+        public void finish() {
+            long latency = System.currentTimeMillis() - startTime;
+            HttpServerHandlerMetrics.getInstance().handlingRequestsNum.increase(-1L);
+            HttpServerHandlerMetrics.getInstance().requestHandleLatencyMs.update(latency);
+            if (latency >= Config.http_slow_request_threshold_ms) {
+                String uri;
+                try {
+                    uri = WebUtils.sanitizeHttpReqUri(request.getRequest().uri());
+                } catch (Exception e) {
+                    uri = "failed to sanitize uri, error=" + e.getMessage();
+                }
+                LOG.warn("receive slow http request. uri: {}, startTime: {}, latency: {} ms",
+                        uri, startTime, latency);
+            }
+            if (asyncHandling) {
+                ReferenceCountUtil.release(request.getRequest());
+            }
+        }
+
     }
 }

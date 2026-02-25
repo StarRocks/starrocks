@@ -40,6 +40,10 @@ public class SampleTabletSlot {
     }
 
     public List<TabletStats> sampleTabletStats() {
+        if (tabletStats.isEmpty()) {
+            return Lists.newArrayList();
+        }
+
         int number = (int) Math.ceil(tabletStats.size() * tabletsSampleRatio);
         number = Math.min(number, maxSize);
 
@@ -56,7 +60,7 @@ public class SampleTabletSlot {
             }
         });
 
-        return resultList.subList(0, number);
+        return resultList.subList(0, Math.min(number, resultList.size()));
     }
 
     public double getTabletReadRatio() {

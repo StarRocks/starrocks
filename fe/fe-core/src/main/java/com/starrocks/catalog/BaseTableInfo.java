@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.catalog;
 
 import com.google.common.base.Joiner;
@@ -21,6 +20,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.server.CatalogMgr;
+import org.apache.commons.lang3.StringUtils;
 
 /**
  * BaseTableInfo is used for MaterializedView persisted as a base table's meta info which can be an olap
@@ -110,6 +110,25 @@ public class BaseTableInfo {
         return this.tableId;
     }
 
+    /**
+     * Called when a table is renamed.
+     *
+     * @param newTable the new table with the new table name
+     */
+    public void onTableRename(Table newTable, String oldTableName) {
+        if (newTable == null) {
+            return;
+        }
+
+        // only changes the table name if the old table name is the same as the current table name
+        if (this.tableName != null && this.tableName.equals(oldTableName)) {
+            if (newTable instanceof OlapTable) {
+                this.tableId = newTable.getId();
+            }
+            this.tableName = newTable.getName();
+        }
+    }
+
     public String toString() {
         if (isInternalCatalog()) {
             return Joiner.on(".").join(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbId, tableId);
@@ -145,5 +164,16 @@ public class BaseTableInfo {
     @Override
     public int hashCode() {
         return Objects.hashCode(catalogName, dbId, tableId, dbName, tableIdentifier, tableName);
+    }
+
+    public boolean matchTable(Table t) {
+        if (isInternalCatalog()) {
+            return tableId == t.getId();
+        } else {
+            return StringUtils.equals(catalogName, t.getCatalogName()) &&
+                    StringUtils.equals(dbName, t.getCatalogDBName()) &&
+                    StringUtils.equals(tableName, t.getCatalogTableName()) &&
+                    StringUtils.equals(tableIdentifier, t.getTableIdentifier());
+        }
     }
 }

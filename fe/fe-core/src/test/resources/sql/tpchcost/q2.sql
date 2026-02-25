@@ -308,7 +308,7 @@ OutPut Exchange Id: 13
 11:OlapScanNode
 table: part, rollup: part
 preAggregation: on
-Predicates: [6: P_SIZE, INT, false] = 12, 5: P_TYPE LIKE '%COPPER'
+Predicates: [6: P_SIZE, INT, false] = 12, [5: P_TYPE, VARCHAR, false] LIKE '%COPPER'
 partitionsRatio=1/1, tabletsRatio=10/10
 actualRows=0, avgRowSize=62.0
 cardinality: 100000
@@ -387,3 +387,4 @@ column statistics:
 * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 * R_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
 [end]
+

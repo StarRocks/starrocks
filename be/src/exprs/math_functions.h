@@ -16,6 +16,7 @@
 
 #include <cmath>
 
+#include "base/string/string_parser.hpp"
 #include "column/column.h"
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
@@ -24,7 +25,6 @@
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"
 #include "exprs/unary_function.h"
-#include "util/string_parser.hpp"
 
 namespace starrocks {
 
@@ -110,6 +110,8 @@ public:
     DEFINE_VECTORIZED_FN(abs_decimal32);
     DEFINE_VECTORIZED_FN(abs_decimal64);
     DEFINE_VECTORIZED_FN(abs_decimal128);
+    DEFINE_VECTORIZED_FN(abs_decimal256);
+
     /**
      * @param columns: [DoubleColumn]
      * @return DoubleColumn
@@ -167,6 +169,15 @@ public:
     template <LogicalType TYPE, bool isNorm>
     DEFINE_VECTORIZED_FN(cosine_similarity);
 
+    template <LogicalType TYPE, bool isNorm>
+    DEFINE_VECTORIZED_FN(cosine_similarity2);
+
+    template <LogicalType TYPE>
+    DEFINE_VECTORIZED_FN(l2_distance);
+
+    template <LogicalType TYPE>
+    DEFINE_VECTORIZED_FN(l2_distance2);
+
     /**
     * @param columns: [DoubleColumn]
     * @return BigIntColumn
@@ -214,6 +225,18 @@ public:
      * @return: DecimalV3Column<int128_t>
      */
     DEFINE_VECTORIZED_FN(truncate_decimal128);
+
+    DEFINE_VECTORIZED_FN_TEMPLATE(iceberg_truncate_decimal);
+    DEFINE_VECTORIZED_FN_TEMPLATE(iceberg_truncate_int);
+    //iceberg_truncate_string is defined as StringFunction::left
+
+    DEFINE_VECTORIZED_FN_TEMPLATE(iceberg_bucket_int);
+    DEFINE_VECTORIZED_FN(iceberg_bucket_string);
+    DEFINE_VECTORIZED_FN(iceberg_bucket_date);
+    DEFINE_VECTORIZED_FN(iceberg_bucket_datetime);
+    template <typename T>
+    static vector<uint8_t> int_to_byte_array(T value);
+    DEFINE_VECTORIZED_FN_TEMPLATE(iceberg_bucket_decimal);
 
     /**
     * @param: [DoubleColumn]
@@ -398,7 +421,7 @@ public:
      */
     template <LogicalType Type>
     DEFINE_VECTORIZED_FN(positive) {
-        return VECTORIZED_FN_ARGS(0);
+        return std::move(*columns[0]).mutate();
     }
 
     /**
@@ -427,7 +450,7 @@ public:
     template <LogicalType Type>
     static StatusOr<ColumnPtr> least(FunctionContext* context, const Columns& columns) {
         if (columns.size() == 1) {
-            return columns[0];
+            return std::move(*columns[0]).mutate();
         }
 
         RETURN_IF_COLUMNS_ONLY_NULL(columns);
@@ -468,7 +491,7 @@ public:
     template <LogicalType Type>
     static StatusOr<ColumnPtr> greatest(FunctionContext* context, const Columns& columns) {
         if (columns.size() == 1) {
-            return columns[0];
+            return std::move(*columns[0]).mutate();
         }
 
         RETURN_IF_COLUMNS_ONLY_NULL(columns);

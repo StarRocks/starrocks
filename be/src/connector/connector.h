@@ -19,7 +19,7 @@
 #include <string>
 #include <unordered_map>
 
-#include "connector_chunk_sink.h"
+#include "connector/connector_chunk_sink.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/InternalService_types.h"
@@ -75,7 +75,7 @@ public:
     void set_runtime_filters(RuntimeFilterProbeCollector* runtime_filters) { _runtime_filters = runtime_filters; }
     void set_read_limit(const uint64_t limit) { _read_limit = limit; }
     void set_split_context(pipeline::ScanSplitContext* split_context) { _split_context = split_context; }
-    Status parse_runtime_filters(RuntimeState* state);
+    virtual Status parse_runtime_filters(RuntimeState* state);
     void update_has_any_predicate();
     // Called frequently, don't do heavy work
     virtual const std::string get_custom_coredump_msg() const { return ""; }
@@ -88,7 +88,7 @@ public:
     void set_morsel(pipeline::ScanMorsel* morsel) { _morsel = morsel; }
 
     void set_driver_sequence(size_t driver_sequence) {
-        runtime_bloom_filter_eval_context.driver_sequence = driver_sequence;
+        runtime_membership_filter_eval_context.driver_sequence = driver_sequence;
     }
 
 protected:
@@ -96,13 +96,13 @@ protected:
     bool _has_any_predicate = false;
     std::vector<ExprContext*> _conjunct_ctxs;
     RuntimeFilterProbeCollector* _runtime_filters = nullptr;
-    RuntimeBloomFilterEvalContext runtime_bloom_filter_eval_context;
+    RuntimeMembershipFilterEvalContext runtime_membership_filter_eval_context;
     RuntimeProfile* _runtime_profile = nullptr;
     TupleDescriptor* _tuple_desc = nullptr;
     pipeline::ScanSplitContext* _split_context = nullptr;
 
     virtual Status _init_chunk_if_needed(ChunkPtr* chunk, size_t n) {
-        *chunk = ChunkHelper::new_chunk(*_tuple_desc, n);
+        ASSIGN_OR_RETURN(*chunk, ChunkHelper::new_chunk_checked(*_tuple_desc, n));
         return Status::OK();
     }
 
@@ -125,9 +125,10 @@ using DataSourcePtr = std::unique_ptr<DataSource>;
 
 class DataSourceProvider {
 public:
-    static constexpr int64_t MIN_DATA_SOURCE_MEM_BYTES = 16 * 1024 * 1024;  // 16MB
-    static constexpr int64_t MAX_DATA_SOURCE_MEM_BYTES = 256 * 1024 * 1024; // 256MB
-    static constexpr int64_t PER_FIELD_MEM_BYTES = 4 * 1024 * 1024;         // 4MB
+    static constexpr int64_t MIN_DATA_SOURCE_MEM_BYTES = 16 * 1024 * 1024;     // 16MB
+    static constexpr int64_t DEFAULT_DATA_SOURCE_MEM_BYTES = 64 * 1024 * 1024; // 64MB
+    static constexpr int64_t MAX_DATA_SOURCE_MEM_BYTES = 256 * 1024 * 1024;    // 256MB
+    static constexpr int64_t PER_FIELD_MEM_BYTES = 1 * 1024 * 1024;            // 1MB
 
     virtual ~DataSourceProvider() = default;
 
@@ -156,6 +157,7 @@ public:
     virtual Status init(ObjectPool* pool, RuntimeState* state) { return Status::OK(); }
 
     const std::vector<ExprContext*>& partition_exprs() const { return _partition_exprs; }
+    const std::vector<TBucketProperty>& get_bucket_properties() const { return _bucket_properties; }
 
     virtual const TupleDescriptor* tuple_descriptor(RuntimeState* state) const = 0;
 
@@ -183,6 +185,7 @@ public:
 
 protected:
     std::vector<ExprContext*> _partition_exprs;
+    std::vector<TBucketProperty> _bucket_properties;
     int64_t scan_dop = 0;
 };
 using DataSourceProviderPtr = std::unique_ptr<DataSourceProvider>;
@@ -196,6 +199,7 @@ enum ConnectorType {
     LAKE = 5,
     BINLOG = 6,
     ICEBERG = 7,
+    BENCHMARK = 8,
 };
 
 class Connector {
@@ -209,6 +213,7 @@ public:
     static const std::string LAKE;
     static const std::string BINLOG;
     static const std::string ICEBERG;
+    static const std::string BENCHMARK;
 
     virtual ~Connector() = default;
     // First version we use TPlanNode to construct data source provider.
@@ -224,6 +229,11 @@ public:
     //                                                         const std::string& table_handle) const;
 
     virtual std::unique_ptr<ConnectorChunkSinkProvider> create_data_sink_provider() const {
+        CHECK(false) << connector_type() << " connector does not implement chunk sink yet";
+        __builtin_unreachable();
+    }
+
+    virtual std::unique_ptr<ConnectorChunkSinkProvider> create_delete_sink_provider() const {
         CHECK(false) << connector_type() << " connector does not implement chunk sink yet";
         __builtin_unreachable();
     }

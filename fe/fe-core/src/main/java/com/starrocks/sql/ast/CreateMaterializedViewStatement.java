@@ -16,12 +16,13 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.TableName;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
-import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.PartitionType;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.plan.ExecPlan;
@@ -43,18 +44,29 @@ import java.util.Map;
  */
 public class CreateMaterializedViewStatement extends DdlStmt {
 
-    private TableName tableName;
+    private TableRef tableRef;
     private final List<ColWithComment> colWithComments;
     private final List<IndexDef> indexDefs;
     private boolean ifNotExists;
     private String comment;
     private RefreshSchemeClause refreshSchemeDesc;
-    private ExpressionPartitionDesc expressionPartitionDesc;
+
+    // partition by clause which may be list or range partition expr.
+    private List<Expr> partitionByExprs;
+    // partition type of the mv which is deduced by its referred base table.
+    private PartitionType partitionType;
+
     private Map<String, String> properties;
     private QueryStatement queryStatement;
     private DistributionDesc distributionDesc;
     private final int queryStartIndex;
-    private final List<String> sortKeys;
+    private final int queryStopIndex;
+    // It saves the original sort order elements parsing from the order by clause.
+    // Because other sort properties, such as sort-direction and null-orders, are not supported in materialized view now.
+    // We extract its sort columns to `sortKeys` in analyze phase and use the `sortKeys` instead of it in most places.
+    private final List<OrderByElement> orderByElements;
+    // It will be set based on `orderByElements` in analyze
+    private List<String> sortKeys;
     private KeysType keysType = KeysType.DUP_KEYS;
     // view definition of the mv which has been rewritten by AstToSQLBuilder#toSQL
     protected String inlineViewDef;
@@ -62,7 +74,15 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private String simpleViewDef;
     // original view definition of the mv query without any rewrite which can be used in text based rewrite.
     private String originalViewDefineSql;
+    // IVM view definition of the mv which is rewritten by IVMAnalyzer#rewrite
+    private String ivmViewDef;
+    // current db name when creating mv
+    private String originalDBName;
     private List<BaseTableInfo> baseTableInfos;
+    // the refresh mode of the mv determined by analyzer
+    private MaterializedView.RefreshMode currentRefreshMode = MaterializedView.RefreshMode.PCT;
+    // the encode row id version deduced by analyzer
+    private int encodeRowIdVersion = 0;
 
     // Maintenance information
     ExecPlan maintenancePlan;
@@ -71,9 +91,10 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     // Sink table information
     private List<Column> mvColumnItems = Lists.newArrayList();
     private List<Index> mvIndexes = Lists.newArrayList();
-    private Column partitionColumn;
-    // record expression which related with partition by clause
-    private Expr partitionRefTableExpr;
+    // MV's output columns that are referred by mv's partition expressions
+    private List<Column> partitionColumns;
+    // Ref base table partition expression referred by mv's partition by expressions
+    private List<Expr> partitionRefTableExprs;
 
     // Materialized view's output columns may be different from defined query's output columns.
     // Record the indexes based on materialized view's column output.
@@ -82,39 +103,63 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     //  queryOutputIndexes  :  1, 0, 2
     // which means 0th of query output column is in 1th mv's output columns, and 1th -> 0th, 2th -> 2th.
     private List<Integer> queryOutputIndices = Lists.newArrayList();
+    // Generated partition columns for mv's partition by expressions, partition expression index to generated column.
+    private Map<Integer, Column> generatedPartitionCols = Maps.newHashMap();
+    private Map<Expr, Expr> partitionByExprToAdjustExprMap = Maps.newHashMap();
 
-    public CreateMaterializedViewStatement(TableName tableName, boolean ifNotExists,
+    // Whether the mv is created on a partitioned table with transform function. Use list partition mv if ref base table's
+    // partition contains transform function.
+    private boolean isRefBaseTablePartitionWithTransform = false;
+
+    public CreateMaterializedViewStatement(TableRef tableRef, boolean ifNotExists,
                                            List<ColWithComment> colWithComments,
                                            List<IndexDef> indexDefs,
                                            String comment,
                                            RefreshSchemeClause refreshSchemeDesc,
-                                           ExpressionPartitionDesc expressionPartitionDesc,
-                                           DistributionDesc distributionDesc, List<String> sortKeys,
+                                           List<Expr> partitionByExprs,
+                                           DistributionDesc distributionDesc,
+                                           List<OrderByElement> orderByElements,
                                            Map<String, String> properties,
                                            QueryStatement queryStatement,
                                            int queryStartIndex,
+                                           int queryStopIndex,
+                                           String originalDBName,
                                            NodePosition pos) {
         super(pos);
-        this.tableName = tableName;
+        this.tableRef = tableRef;
         this.colWithComments = colWithComments;
         this.indexDefs = indexDefs;
         this.ifNotExists = ifNotExists;
         this.comment = comment;
         this.refreshSchemeDesc = refreshSchemeDesc;
-        this.expressionPartitionDesc = expressionPartitionDesc;
+        this.partitionByExprs = partitionByExprs;
         this.distributionDesc = distributionDesc;
-        this.sortKeys = sortKeys;
+        this.orderByElements = orderByElements;
         this.properties = properties;
         this.queryStartIndex = queryStartIndex;
+        this.queryStopIndex = queryStopIndex;
         this.queryStatement = queryStatement;
+        this.originalDBName = originalDBName;
     }
 
-    public TableName getTableName() {
-        return tableName;
+    public TableRef getTableRef() {
+        return tableRef;
     }
 
-    public void setTableName(TableName tableName) {
-        this.tableName = tableName;
+    public void setTableRef(TableRef tableRef) {
+        this.tableRef = tableRef;
+    }
+
+    public String getCatalogName() {
+        return tableRef == null ? null : tableRef.getCatalogName();
+    }
+
+    public String getDbName() {
+        return tableRef == null ? null : tableRef.getDbName();
+    }
+
+    public String getTblName() {
+        return tableRef == null ? null : tableRef.getTableName();
     }
 
     public List<ColWithComment> getColWithComments() {
@@ -149,12 +194,27 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.refreshSchemeDesc = refreshSchemeDesc;
     }
 
-    public ExpressionPartitionDesc getPartitionExpDesc() {
-        return expressionPartitionDesc;
+    /**
+     * Get partition by expr of the mv
+     */
+    public List<Expr> getPartitionByExprs() {
+        return partitionByExprs;
     }
 
-    public void setPartitionExpDesc(ExpressionPartitionDesc expressionPartitionDesc) {
-        this.expressionPartitionDesc = expressionPartitionDesc;
+    public void setPartitionByExprs(List<Expr> partitionByExprs) {
+        this.partitionByExprs = partitionByExprs;
+    }
+
+    /**
+     * Get partition type of the mv
+     * @return
+     */
+    public PartitionType getPartitionType() {
+        return partitionType;
+    }
+
+    public void setPartitionType(PartitionType partitionType) {
+        this.partitionType = partitionType;
     }
 
     public void setKeysType(KeysType keysType) {
@@ -167,6 +227,14 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     public DistributionDesc getDistributionDesc() {
         return distributionDesc;
+    }
+
+    public List<OrderByElement> getOrderByElements() {
+        return orderByElements;
+    }
+
+    public void setSortKeys(List<String> sortKeys) {
+        this.sortKeys = sortKeys;
     }
 
     public List<String> getSortKeys() {
@@ -209,8 +277,20 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.originalViewDefineSql = originalViewDefineSql;
     }
 
+    public String getIvmViewDef() {
+        return ivmViewDef;
+    }
+
+    public void setIvmViewDef(String ivmViewDef) {
+        this.ivmViewDef = ivmViewDef;
+    }
+
     public int getQueryStartIndex() {
         return queryStartIndex;
+    }
+
+    public int getQueryStopIndex() {
+        return queryStopIndex;
     }
 
     public QueryStatement getQueryStatement() {
@@ -245,20 +325,20 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.baseTableInfos = baseTableInfos;
     }
 
-    public Column getPartitionColumn() {
-        return partitionColumn;
+    public List<Column> getPartitionColumns() {
+        return partitionColumns;
     }
 
-    public void setPartitionColumn(Column partitionColumn) {
-        this.partitionColumn = partitionColumn;
+    public void setPartitionColumns(List<Column> partitionColumns) {
+        this.partitionColumns = partitionColumns;
     }
 
-    public Expr getPartitionRefTableExpr() {
-        return partitionRefTableExpr;
+    public List<Expr> getPartitionRefTableExpr() {
+        return partitionRefTableExprs;
     }
 
-    public void setPartitionRefTableExpr(Expr partitionRefTableExpr) {
-        this.partitionRefTableExpr = partitionRefTableExpr;
+    public void setPartitionRefTableExpr(List<Expr> partitionRefTableExprs) {
+        this.partitionRefTableExprs = partitionRefTableExprs;
     }
 
     public ExecPlan getMaintenancePlan() {
@@ -282,8 +362,43 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.columnRefFactory = columnRefFactory;
     }
 
+    public Map<Integer, Column> getGeneratedPartitionCols() {
+        return generatedPartitionCols;
+    }
+
+    public Map<Expr, Expr> getPartitionByExprToAdjustExprMap() {
+        return partitionByExprToAdjustExprMap;
+    }
+    public String getOriginalDBName() {
+        return originalDBName;
+    }
+
+    public boolean isRefBaseTablePartitionWithTransform() {
+        return isRefBaseTablePartitionWithTransform;
+    }
+
+    public void setRefBaseTablePartitionWithTransform(boolean refBaseTablePartitionWithTransform) {
+        isRefBaseTablePartitionWithTransform = refBaseTablePartitionWithTransform;
+    }
+
+    public void setCurrentRefreshMode(MaterializedView.RefreshMode currentRefreshMode) {
+        this.currentRefreshMode = currentRefreshMode;
+    }
+
+    public MaterializedView.RefreshMode getCurrentRefreshMode() {
+        return currentRefreshMode;
+    }
+
+    public void setEncodeRowIdVersion(int encodeRowIdVersion) {
+        this.encodeRowIdVersion = encodeRowIdVersion;
+    }
+
+    public int getEncodeRowIdVersion() {
+        return encodeRowIdVersion;
+    }
+
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateMaterializedViewStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateMaterializedViewStatement(this, context);
     }
 }

@@ -18,13 +18,15 @@
 #include <condition_variable>
 #include <mutex>
 
+#include "base/phmap/phmap_fwd_decl.h"
 #include "column/column_access_path.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/context_with_dependency.h"
+#include "exec/pipeline/operator.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
+#include "exec/pipeline/schedule/observer.h"
 #include "runtime/global_dict/parser.h"
 #include "storage/rowset/rowset.h"
-#include "util/phmap/phmap_fwd_decl.h"
 
 namespace starrocks {
 
@@ -45,7 +47,7 @@ using OlapScanContextFactoryPtr = std::shared_ptr<OlapScanContextFactory>;
 
 class ConcurrentJitRewriter {
 public:
-    ConcurrentJitRewriter(int32_t dop) : _dop(dop), _barrier(), _errors(0), _id(0) {}
+    ConcurrentJitRewriter() : _barrier(), _errors(0), _id(0) {}
     Status rewrite(std::vector<ExprContext*>& expr_ctxs, ObjectPool* pool, bool enable_jit);
 
 private:
@@ -74,7 +76,6 @@ private:
         std::mutex _mutex;
         std::condition_variable _cv;
     };
-    const int32_t _dop;
     Barrier _barrier;
     std::atomic_int _errors;
     std::atomic_int _id = 0;
@@ -101,7 +102,10 @@ public:
                            RuntimeFilterProbeCollector* runtime_bloom_filters, int32_t driver_sequence);
 
     OlapScanNode* scan_node() const { return _scan_node; }
-    OlapScanConjunctsManager& conjuncts_manager() { return *_conjuncts_manager; }
+    // Returns the next unique ID. only used in flat json column access path.
+    size_t next_unique_id() const;
+
+    ScanConjunctsManager& conjuncts_manager() { return *_conjuncts_manager; }
     const std::vector<ExprContext*>& not_push_down_conjuncts() const { return _not_push_down_conjuncts; }
     const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges() const { return _key_ranges; }
     BalancedChunkBuffer& get_chunk_buffer() { return _chunk_buffer; }
@@ -124,12 +128,23 @@ public:
 
     int64_t get_scan_table_id() const { return _scan_table_id; }
 
+    void attach_observer(RuntimeState* state, PipelineObserver* observer) { _observable.add_observer(state, observer); }
+    void notify_observers() { _observable.notify_source_observers(); }
+    size_t only_one_observer() const { return _observable.num_observers() == 1; }
+    bool active_inputs_empty_event() {
+        if (!_active_inputs_empty.load(std::memory_order_acquire)) {
+            return false;
+        }
+        bool val = true;
+        return _active_inputs_empty.compare_exchange_strong(val, false);
+    }
+
 private:
     OlapScanNode* _scan_node;
     int64_t _scan_table_id;
 
     std::vector<ExprContext*> _conjunct_ctxs;
-    std::unique_ptr<OlapScanConjunctsManager> _conjuncts_manager = nullptr;
+    std::unique_ptr<ScanConjunctsManager> _conjuncts_manager = nullptr;
     // The conjuncts couldn't push down to storage engine
     std::vector<ExprContext*> _not_push_down_conjuncts;
     std::vector<std::unique_ptr<OlapScanRange>> _key_ranges;
@@ -142,7 +157,9 @@ private:
             typename std::allocator<ActiveInputKey>, NUM_LOCK_SHARD_LOG, std::mutex, true>;
     BalancedChunkBuffer& _chunk_buffer; // Shared Chunk buffer for all scan operators, owned by OlapScanContextFactory.
     ActiveInputSet _active_inputs;      // Maintain the active chunksource
-    bool _shared_scan;                  // Enable shared_scan
+    std::atomic_int _num_active_inputs{};
+    std::atomic_bool _active_inputs_empty{};
+    bool _shared_scan; // Enable shared_scan
 
     std::atomic<bool> _is_prepare_finished{false};
 
@@ -153,6 +170,9 @@ private:
     std::vector<TabletSharedPtr> _tablets;
     MultiRowsetReleaseGuard _rowset_release_guard;
     ConcurrentJitRewriter& _jit_rewriter;
+
+    // the scan operator observe when task finished
+    Observable _observable;
 };
 
 // OlapScanContextFactory creates different contexts for each scan operator, if _shared_scan is false.
@@ -168,7 +188,7 @@ public:
               _chunk_buffer(shared_scan ? BalanceStrategy::kRoundRobin : BalanceStrategy::kDirect, dop,
                             std::move(chunk_buffer_limiter)),
               _contexts(shared_morsel_queue ? 1 : dop),
-              _jit_rewriter(dop) {}
+              _jit_rewriter() {}
 
     OlapScanContextPtr get_or_create(int32_t driver_sequence);
 

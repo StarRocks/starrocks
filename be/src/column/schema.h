@@ -24,6 +24,8 @@
 
 namespace starrocks {
 
+struct SortDescs;
+
 // TODO: move constructor and move assignment
 class Schema {
 public:
@@ -38,6 +40,9 @@ public:
 #endif
 
     explicit Schema(Fields fields, KeysType keys_type, std::vector<ColumnId> sort_key_idxes);
+
+    explicit Schema(Fields fields, KeysType keys_type, std::vector<ColumnId> sort_key_idxes,
+                    std::shared_ptr<SortDescs> sort_descs);
 
     // if we use this constructor and share the name_to_index with another schema,
     // we must make sure another shema is read only!!!
@@ -61,6 +66,10 @@ public:
 
     const std::vector<ColumnId> sort_key_idxes() const { return _sort_key_idxes; }
     void append_sort_key_idx(ColumnId idx) { _sort_key_idxes.emplace_back(idx); }
+    void set_sort_key_idxes(const std::vector<ColumnId>& sort_key_idxes) { _sort_key_idxes = sort_key_idxes; }
+
+    std::shared_ptr<SortDescs> sort_descs() const { return _sort_descs; }
+    void set_sort_descs(const std::shared_ptr<SortDescs>& sort_descs) { _sort_descs = sort_descs; }
 
     void reserve(size_t size) { _fields.reserve(size); }
 
@@ -100,6 +109,27 @@ public:
 
     void init_sort_key_idxes() { _init_sort_key_idxes(); }
 
+    std::string to_string() const {
+        std::ostringstream oss;
+        oss << "{";
+        oss << "\"fields\": [";
+        for (size_t i = 0; i < _fields.size(); ++i) {
+            oss << _fields[i]->to_string();
+            if (i + 1 < _fields.size()) oss << ", ";
+        }
+        oss << "], ";
+        oss << "\"num_keys\": " << _num_keys << ", ";
+        oss << "\"sort_key_idxes\": [";
+        for (size_t i = 0; i < _sort_key_idxes.size(); ++i) {
+            oss << _sort_key_idxes[i];
+            if (i + 1 < _sort_key_idxes.size()) oss << ", ";
+        }
+        oss << "], ";
+        oss << "\"keys_type\": " << static_cast<int>(_keys_type);
+        oss << "}";
+        return oss.str();
+    }
+
 private:
     void _build_index_map(const Fields& fields);
     void _init_sort_key_idxes() {
@@ -112,6 +142,7 @@ private:
     Fields _fields;
     size_t _num_keys = 0;
     std::vector<ColumnId> _sort_key_idxes;
+    std::shared_ptr<SortDescs> _sort_descs;
     std::shared_ptr<std::unordered_map<std::string_view, size_t>> _name_to_index;
 
     // If we share the same _name_to_index with another vectorized schema,

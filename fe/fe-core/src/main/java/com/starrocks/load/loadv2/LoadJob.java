@@ -40,7 +40,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.catalog.AuthorizationInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -50,12 +49,12 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.UserException;
-import com.starrocks.common.io.Text;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LoadPriority;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
+import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.EtlJobType;
@@ -71,6 +70,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.LoadStmt;
@@ -88,13 +88,12 @@ import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionException;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.warehouse.LoadJobWithWarehouse;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -102,7 +101,7 @@ import java.util.TreeMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
-public abstract class LoadJob extends AbstractTxnStateChangeCallback implements LoadTaskCallback, Writable {
+public abstract class LoadJob extends AbstractTxnStateChangeCallback implements LoadTaskCallback, Writable, LoadJobWithWarehouse {
 
     private static final Logger LOG = LogManager.getLogger(LoadJob.class);
 
@@ -124,9 +123,6 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     protected JobState state = JobState.PENDING;
     @SerializedName("j")
     protected EtlJobType jobType;
-    // the auth info could be null when load job is created before commit named 'Persist auth info in load job'
-    @SerializedName("a")
-    protected AuthorizationInfo authorizationInfo;
 
     // optional properties
     // timeout second need to be reset in constructor of subclass
@@ -148,9 +144,6 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     protected int priority = LoadPriority.NORMAL_VALUE;
     @SerializedName("ln")
     protected long logRejectedRecordNum = 0;
-    // reuse deleteFlag as partialUpdate
-    // @Deprecated
-    // protected boolean deleteFlag = false;
 
     @SerializedName("c")
     protected long createTimestamp = -1;
@@ -179,6 +172,8 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
 
     @SerializedName("warehouseId")
     protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+    @SerializedName("computeResource")
+    protected ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
 
     @SerializedName("mc")
     protected String mergeCondition;
@@ -202,7 +197,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     // this request id is only used for checking if a load begin request is a duplicate request.
     protected TUniqueId requestId;
 
-    protected int retryTime = 2; // retry time if timeout
+    protected int retryTime = 2;
 
     // only for persistence param. see readFields() for usage
     private boolean isJobTypeRead = false;
@@ -241,8 +236,23 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         lock.writeLock().unlock();
     }
 
+    @Override
+    public long getCurrentWarehouseId() {
+        return warehouseId;
+    }
+
     public void setWarehouseId(long warehouseId) {
         this.warehouseId = warehouseId;
+    }
+
+    @Override
+    public boolean isFinal() {
+        return isCompleted();
+    }
+
+    @Override
+    public long getFinishTimestampMs() {
+        return getFinishTimestamp();
     }
 
     public long getId() {
@@ -254,9 +264,13 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         this.id = id;
     }
 
+    protected void setLabel(String label) {
+        this.label = label;
+    }
+
     public Database getDb() throws MetaNotFoundException {
         // get db
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             throw new MetaNotFoundException("Database " + dbId + " already has been deleted");
         }
@@ -273,6 +287,10 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
 
     public JobState getState() {
         return state;
+    }
+
+    protected void setState(JobState state) {
+        this.state = state;
     }
 
     public JobState getAcutalState() {
@@ -295,14 +313,8 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         return createTimestamp + timeoutSecond * 1000;
     }
 
-    public void reset() {
-        if (ConnectContext.get() != null) {
-            ConnectContext.get().setStartTime();
-            this.createTimestamp = ConnectContext.get().getStartTime();
-        } else {
-            // only for test used
-            this.createTimestamp = System.currentTimeMillis();
-        }
+    protected void reset() {
+        createTimestamp = System.currentTimeMillis();
         idToTasks.clear();
         finishedTaskIds.clear();
         loadingStatus.reset();
@@ -378,7 +390,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         return state == JobState.FINISHED || state == JobState.CANCELLED || state == JobState.UNKNOWN;
     }
 
-    protected void setJobProperties(Map<String, String> properties) throws DdlException {
+    public void setJobProperties(Map<String, String> properties) throws DdlException {
         // resource info
         if (ConnectContext.get() != null) {
             loadMemLimit = ConnectContext.get().getSessionVariable().getLoadMemLimit();
@@ -446,13 +458,15 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
                 logRejectedRecordNum = Long.parseLong(properties.get(LoadStmt.LOG_REJECTED_RECORD_NUM));
             }
 
-            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
-                String warehouseName = properties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
-                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
-                if (warehouse == null) {
-                    throw new DdlException("Warehouse " + warehouseName + " not exists.");
+            if (RunMode.isSharedDataMode()) {
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
+                    String warehouseName = properties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
+                    Warehouse warehouse =
+                            GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
+                    warehouseId = warehouse.getId();
+                } else {
+                    warehouseId = ConnectContext.get().getCurrentWarehouseId();
                 }
-                warehouseId = warehouse.getId();
             }
 
             if (properties.containsKey(LoadStmt.STRIP_OUTER_ARRAY)) {
@@ -465,6 +479,11 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
 
             if (properties.containsKey(LoadStmt.JSONROOT)) {
                 jsonOptions.jsonRoot = properties.get(LoadStmt.JSONROOT);
+            }
+        } else {
+            if (RunMode.isSharedDataMode()) {
+                // if no properties set, we should still set warehouse here
+                warehouseId = ConnectContext.get().getCurrentWarehouseId();
             }
         }
     }
@@ -563,8 +582,8 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
                 return;
             }
 
-            unprotectedExecuteCancel(new FailMsg(FailMsg.CancelType.TIMEOUT, "loading timeout to cancel"), false);
-            logFinalOperation();
+            unprotectedExecuteCancel(new FailMsg(FailMsg.CancelType.TIMEOUT, "loading timeout to cancel"),
+                    false, true);
         } finally {
             writeUnlock();
         }
@@ -624,13 +643,10 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     }
 
     // if needLog is false, no need to write edit log.
-    public void cancelJobWithoutCheck(FailMsg failMsg, boolean abortTxn, boolean needLog) {
+    public void cancelJobWithoutCheck(FailMsg failMsg, boolean abortTxn) {
         writeLock();
         try {
-            unprotectedExecuteCancel(failMsg, abortTxn);
-            if (needLog) {
-                logFinalOperation();
-            }
+            unprotectedExecuteCancel(failMsg, abortTxn, true);
         } finally {
             writeUnlock();
         }
@@ -657,8 +673,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
                 throw new DdlException("Job could not be cancelled when job is finished or cancelled");
             }
 
-            unprotectedExecuteCancel(failMsg, true);
-            logFinalOperation();
+            unprotectedExecuteCancel(failMsg, true, true);
         } finally {
             writeUnlock();
         }
@@ -676,7 +691,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
      * @param failMsg
      * @param abortTxn true: abort txn when cancel job, false: only change the state of job and ignore abort txn
      */
-    protected void unprotectedExecuteCancel(FailMsg failMsg, boolean abortTxn) {
+    protected void unprotectedExecuteCancel(FailMsg failMsg, boolean abortTxn, boolean needLog) {
         LOG.warn(new LogBuilder(LogKey.LOAD_JOB, id).add("transaction_id", transactionId)
                 .add("error_msg", "Failed to execute load with error: " + failMsg.getMsg()).build());
 
@@ -714,7 +729,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                         .abortTransaction(dbId, transactionId, failMsg.getMsg(),
                                 getTabletCommitInfos(), getTabletFailInfos(), null);
-            } catch (UserException e) {
+            } catch (StarRocksException e) {
                 LOG.warn(new LogBuilder(LogKey.LOAD_JOB, id)
                         .add("transaction_id", transactionId)
                         .add("error_msg", "failed to abort txn when job is cancelled. " + e.getMessage())
@@ -731,7 +746,14 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         }
 
         // change state
-        state = JobState.CANCELLED;
+        if (needLog) {
+            LoadJobFinalOperation operation = new LoadJobFinalOperation(id, loadingStatus,
+                    progress, loadStartTimestamp, finishTimestamp, JobState.CANCELLED, failMsg);
+            GlobalStateMgr.getCurrentState().getEditLog().logEndLoadJob(
+                    operation, wal -> this.state = JobState.CANCELLED);
+        } else {
+            state = JobState.CANCELLED;
+        }
     }
 
     private void executeFinish() {
@@ -748,7 +770,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         idToTasks.clear();
     }
 
-    protected boolean checkDataQuality() {
+    public boolean checkDataQuality() {
         Map<String, String> counters = loadingStatus.getCounters();
         if (!counters.containsKey(DPP_NORMAL_ALL) || !counters.containsKey(DPP_ABNORMAL_ALL)) {
             return true;
@@ -761,12 +783,6 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         }
 
         return true;
-    }
-
-    protected void logFinalOperation() {
-        GlobalStateMgr.getCurrentState().getEditLog().logEndLoadJob(
-                new LoadJobFinalOperation(id, loadingStatus, progress, loadStartTimestamp, finishTimestamp,
-                        state, failMsg));
     }
 
     public void unprotectReadEndOperation(LoadJobFinalOperation loadJobFinalOperation, boolean isReplay) {
@@ -877,9 +893,13 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             }
             jobInfo.add(loadingStatus.getLoadStatistic().toShowInfoStr());
             // warehouse
-            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
-            if (warehouse != null) {
-                jobInfo.add(warehouse.getName());
+            if (RunMode.isSharedDataMode()) {
+                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouseId);
+                if (warehouse != null) {
+                    jobInfo.add(warehouse.getName());
+                } else {
+                    jobInfo.add(String.format("Warehouse id: %d not exist.", warehouseId));
+                }
             } else {
                 jobInfo.add("");
             }
@@ -908,6 +928,15 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         }
         runtimeDetails.put(LoadConstants.RUNTIME_DETAILS_LOAD_ID, Joiner.on(", ").join(loadIds));
         runtimeDetails.put(LoadConstants.RUNTIME_DETAILS_TXN_ID, transactionId);
+        TransactionState txnState = GlobalStateMgr.getCurrentState()
+                .getGlobalTransactionMgr().getTransactionState(dbId, transactionId);
+        if (txnState != null) {
+            // NOTE: Do NOT acquire txnState write lock here to avoid lock inversion with
+            // DatabaseTransactionMgr.finishTransaction() where txnState write lock is held
+            // and LoadJob lock is requested in callbacks. Reading errMsg without locking is acceptable
+            // for diagnostics, even if slightly stale.
+            runtimeDetails.put(LoadConstants.RUNTIME_DETAILS_TXN_ERROR_MSG, txnState.getErrMsg());
+        }
         runtimeDetails.putAll(loadingStatus.getLoadStatistic().toRuntimeDetails());
         Gson gson = new Gson();
         return gson.toJson(runtimeDetails);
@@ -935,6 +964,16 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             info.setTxn_id(transactionId);
             if (!loadIds.isEmpty()) {
                 info.setLoad_id(Joiner.on(", ").join(loadIds));
+
+                List<String> profileIds = Lists.newArrayList();
+                for (String loadId : loadIds) {
+                    if (ProfileManager.getInstance().hasProfile(loadId)) {
+                        profileIds.add(loadId);
+                    }
+                }
+                if (!profileIds.isEmpty()) {
+                    info.setProfile_id(Joiner.on(", ").join(loadIds));
+                }
             }
             try {
                 info.setTable(getTableNames(true).stream().collect(Collectors.joining(",")));
@@ -1021,6 +1060,17 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             info.setNum_scan_rows(loadingStatus.getLoadStatistic().totalSourceLoadRows());
             info.setNum_sink_rows(loadingStatus.getLoadStatistic().totalSinkLoadRows());
             info.setNum_scan_bytes(loadingStatus.getLoadStatistic().sourceScanBytes());
+            // warehouse
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouseId);
+                if (warehouse != null) {
+                    info.setWarehouse(warehouse.getName());
+                } else {
+                    info.setWarehouse(String.format("Warehouse id: %d not exist.", warehouseId));
+                }
+            } else {
+                info.setWarehouse("");
+            }
             return info;
         } finally {
             readUnlock();
@@ -1046,24 +1096,6 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         jobInfo.trackingUrl = loadingStatus.getTrackingUrl();
     }
 
-    public static LoadJob read(DataInput in) throws IOException {
-        LoadJob job = null;
-        EtlJobType type = EtlJobType.valueOf(Text.readString(in));
-        if (type == EtlJobType.BROKER) {
-            job = new BrokerLoadJob();
-        } else if (type == EtlJobType.SPARK) {
-            job = new SparkLoadJob();
-        } else if (type == EtlJobType.INSERT) {
-            job = new InsertLoadJob();
-        } else {
-            throw new IOException("Unknown load type: " + type.name());
-        }
-
-        job.isJobTypeRead(true);
-        job.readFields(in);
-        return job;
-    }
-
     @Override
     public long getCallbackId() {
         return id;
@@ -1083,7 +1115,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     }
 
     @Override
-    public void afterCommitted(TransactionState txnState, boolean txnOperated) throws UserException {
+    public void afterCommitted(TransactionState txnState, boolean txnOperated) throws StarRocksException {
         if (!txnOperated) {
             return;
         }
@@ -1133,7 +1165,8 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             // record attachment in load job
             unprotectUpdateLoadingStatus(txnState);
             // cancel load job
-            unprotectedExecuteCancel(new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, txnStatusChangeReason), false);
+            unprotectedExecuteCancel(new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, txnStatusChangeReason),
+                    false, false);
         } finally {
             writeUnlock();
         }
@@ -1198,7 +1231,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     }
 
     @Override
-    public void onTaskFailed(long taskId, FailMsg failMsg) {
+    public void onTaskFailed(long taskId, FailMsg failMsg, TaskAttachment attachment) {
     }
 
     // This analyze will be invoked after the replay is finished.
@@ -1230,77 +1263,6 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
                 && this.label.equals(other.label)
                 && this.state.equals(other.state)
                 && this.jobType.equals(other.jobType);
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        // Add the type of load secondly
-        Text.writeString(out, jobType.name());
-
-        out.writeLong(id);
-        out.writeLong(dbId);
-        Text.writeString(out, label);
-        Text.writeString(out, state.name());
-        out.writeLong(timeoutSecond);
-        out.writeLong(loadMemLimit);
-        out.writeDouble(maxFilterRatio);
-        // reuse deleteFlag as partialUpdate
-        // out.writeBoolean(deleteFlag);
-        out.writeBoolean(partialUpdate);
-        out.writeLong(createTimestamp);
-        out.writeLong(loadStartTimestamp);
-        out.writeLong(finishTimestamp);
-        if (failMsg == null) {
-            out.writeBoolean(false);
-        } else {
-            out.writeBoolean(true);
-            failMsg.write(out);
-        }
-        out.writeInt(progress);
-        loadingStatus.write(out);
-        out.writeBoolean(strictMode);
-        out.writeLong(transactionId);
-        if (authorizationInfo == null) {
-            out.writeBoolean(false);
-        } else {
-            out.writeBoolean(true);
-            authorizationInfo.write(out);
-        }
-        Text.writeString(out, timezone);
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        if (!isJobTypeRead) {
-            jobType = EtlJobType.valueOf(Text.readString(in));
-            isJobTypeRead = true;
-        }
-
-        id = in.readLong();
-        dbId = in.readLong();
-        label = Text.readString(in);
-        state = JobState.valueOf(Text.readString(in));
-        timeoutSecond = in.readLong();
-        loadMemLimit = in.readLong();
-        maxFilterRatio = in.readDouble();
-        // reuse deleteFlag as partialUpdate
-        // deleteFlag = in.readBoolean();
-        partialUpdate = in.readBoolean();
-        createTimestamp = in.readLong();
-        loadStartTimestamp = in.readLong();
-        finishTimestamp = in.readLong();
-        if (in.readBoolean()) {
-            failMsg = new FailMsg();
-            failMsg.readFields(in);
-        }
-        progress = in.readInt();
-        loadingStatus.readFields(in);
-        strictMode = in.readBoolean();
-        transactionId = in.readLong();
-        if (in.readBoolean()) {
-            authorizationInfo = new AuthorizationInfo();
-            authorizationInfo.readFields(in);
-        }
-        timezone = Text.readString(in);
     }
 
     public void replayUpdateStateInfo(LoadJobStateUpdateInfo info) {
@@ -1351,16 +1313,9 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             return GsonUtils.GSON.toJson(this);
         }
 
-        @Override
-        public void write(DataOutput out) throws IOException {
-            String json = GsonUtils.GSON.toJson(this);
-            Text.writeString(out, json);
-        }
 
-        public static LoadJobStateUpdateInfo read(DataInput in) throws IOException {
-            String json = Text.readString(in);
-            return GsonUtils.GSON.fromJson(json, LoadJobStateUpdateInfo.class);
-        }
+
+
     }
 
     public static class JSONOptions {

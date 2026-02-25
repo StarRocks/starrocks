@@ -19,10 +19,16 @@
 
 namespace starrocks {
 
+static constexpr int VARIANT_UNSHREDDING_FIELD_COUNT = 2;
+static constexpr int VARIANT_SHREDDING_COUNT = 3;
+
 static Status get_parquet_type_from_group(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc);
 static Status get_parquet_type_from_primitive(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc);
 static Status get_parquet_type_from_list(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc);
 static Status get_parquet_type_from_map(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc);
+static bool is_variant_type(const ::parquet::schema::NodePtr& node);
+static Status get_parquet_variant_type(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc);
+static Status try_to_infer_struct_type(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc);
 
 Status get_parquet_type(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc) {
     if (node->is_group()) {
@@ -57,8 +63,8 @@ static Status get_parquet_type_from_primitive(const ::parquet::schema::NodePtr& 
             *type_desc = TypeDescriptor(TYPE_TIME);
         } else if (logical_type->is_decimal()) {
             auto decimal_logical_type = std::dynamic_pointer_cast<const parquet::DecimalLogicalType>(logical_type);
-            *type_desc = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, decimal_logical_type->precision(),
-                                                               decimal_logical_type->scale());
+            *type_desc = TypeDescriptor::promote_decimal_type(decimal_logical_type->precision(),
+                                                              decimal_logical_type->scale());
         } else {
             *type_desc = TypeDescriptor(TYPE_INT);
         }
@@ -72,8 +78,8 @@ static Status get_parquet_type_from_primitive(const ::parquet::schema::NodePtr& 
             *type_desc = TypeDescriptor(TYPE_DATETIME);
         } else if (logical_type->is_decimal()) {
             auto decimal_logical_type = std::dynamic_pointer_cast<const parquet::DecimalLogicalType>(logical_type);
-            *type_desc = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, decimal_logical_type->precision(),
-                                                               decimal_logical_type->scale());
+            *type_desc = TypeDescriptor::promote_decimal_type(decimal_logical_type->precision(),
+                                                              decimal_logical_type->scale());
         } else {
             *type_desc = TypeDescriptor(TYPE_BIGINT);
         }
@@ -86,8 +92,8 @@ static Status get_parquet_type_from_primitive(const ::parquet::schema::NodePtr& 
             *type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
         } else if (logical_type->is_decimal()) {
             auto decimal_logical_type = std::dynamic_pointer_cast<const parquet::DecimalLogicalType>(logical_type);
-            *type_desc = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, decimal_logical_type->precision(),
-                                                               decimal_logical_type->scale());
+            *type_desc = TypeDescriptor::promote_decimal_type(decimal_logical_type->precision(),
+                                                              decimal_logical_type->scale());
         } else if (logical_type->is_JSON()) {
             *type_desc = TypeDescriptor::create_json_type();
         } else {
@@ -97,8 +103,8 @@ static Status get_parquet_type_from_primitive(const ::parquet::schema::NodePtr& 
     case parquet::Type::FIXED_LEN_BYTE_ARRAY: {
         if (logical_type->is_decimal()) {
             auto decimal_logical_type = std::dynamic_pointer_cast<const parquet::DecimalLogicalType>(logical_type);
-            *type_desc = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, decimal_logical_type->precision(),
-                                                               decimal_logical_type->scale());
+            *type_desc = TypeDescriptor::promote_decimal_type(decimal_logical_type->precision(),
+                                                              decimal_logical_type->scale());
         } else {
             *type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
         }
@@ -119,10 +125,73 @@ static Status get_parquet_type_from_group(const ::parquet::schema::NodePtr& node
         return get_parquet_type_from_list(node, type_desc);
     } else if (logical_type->is_map()) {
         return get_parquet_type_from_map(node, type_desc);
+    } else if (is_variant_type(node)) { // TODO: replace with parquet variant logical type when it is supported
+        return get_parquet_variant_type(node, type_desc);
+    }
+
+    auto st = try_to_infer_struct_type(node, type_desc);
+    if (st.ok()) {
+        return Status::OK();
     }
 
     // Treat unsupported types as VARCHAR.
     *type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    return Status::OK();
+}
+
+static bool is_variant_type(const parquet::schema::NodePtr& node) {
+    DCHECK(node->is_group());
+
+    const auto group_node = std::static_pointer_cast<::parquet::schema::GroupNode>(node);
+    int field_count = group_node->field_count();
+    if (field_count != VARIANT_UNSHREDDING_FIELD_COUNT && field_count != VARIANT_SHREDDING_COUNT) {
+        return false;
+    }
+
+    int metadata_field_index = -1;
+    int value_field_index = -1;
+    TypeDescriptor metadata_type_desc;
+    TypeDescriptor value_type_desc;
+    for (auto i = 0; i < group_node->field_count(); ++i) {
+        const auto& field = group_node->field(i);
+        TypeDescriptor child_type_desc;
+        auto field_type_status = get_parquet_type(field, &child_type_desc);
+        if (!field_type_status.ok()) {
+            return false;
+        }
+
+        if (field->name() == "metadata") {
+            metadata_field_index = i;
+            metadata_type_desc = child_type_desc;
+        } else if (field->name() == "value") {
+            value_field_index = i;
+            value_type_desc = child_type_desc;
+        } else if (field->name() == "typed_value") {
+        } else {
+            return false;
+        }
+    }
+
+    if (metadata_field_index == -1 || value_field_index == -1) {
+        return false;
+    }
+
+    return metadata_type_desc.type == TYPE_VARBINARY && value_type_desc.type == TYPE_VARBINARY;
+}
+
+static Status get_parquet_variant_type(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc) {
+    DCHECK(node->is_group());
+
+    const auto group_node = std::static_pointer_cast<::parquet::schema::GroupNode>(node);
+    const int field_count = group_node->field_count();
+    if (field_count != VARIANT_UNSHREDDING_FIELD_COUNT && field_count != VARIANT_SHREDDING_COUNT) {
+        return Status::InvalidArgument("Not a variant type");
+    }
+    if (field_count == VARIANT_SHREDDING_COUNT) {
+        return Status::NotSupported("shredded variant type is not supported yet");
+    }
+
+    *type_desc = TypeDescriptor::create_variant_type();
     return Status::OK();
 }
 
@@ -141,32 +210,110 @@ LIST must always annotate a 3-level structure:
 The outer-most level must be a group annotated with LIST that contains a single field named list. The repetition of this level must be either optional or required and determines whether the list is nullable.
 The middle level, named list, must be a repeated group with a single field named element.
 The element field encodes the list's element type and repetition. Element repetition must be required or optional.
-*/
 
+Support legacy encodings:
+1. List<Integer> (nullable list, non-null elements)
+  optional group my_list (LIST) {
+    repeated int32 element;
+  }
+
+2. List<Tuple<String, Integer>> (nullable list, non-null elements)
+  optional group my_list (LIST) {
+    repeated group element {
+      required binary str (STRING);
+      required int32 num;
+    }
+  }
+
+3. List<List<Integer>> (nullable outer list, non-null elements)
+  optional group my_list (LIST) {
+    repeated group array (LIST) {
+      repeated int32 array;
+    }
+  }
+*/
 static Status get_parquet_type_from_list(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc) {
     // 1st level.
-    // <list-repetition> group <name> (LIST)
     DCHECK(node->is_group());
     DCHECK(node->logical_type()->is_list());
 
     auto group_node = std::static_pointer_cast<::parquet::schema::GroupNode>(node);
-    DCHECK(group_node->field_count() == 1);
+    if (group_node->field_count() != 1) {
+        return Status::NotSupported(fmt::format("list 1st level group {} must have exactly one child, but got {}",
+                                                group_node->name(), group_node->field_count()));
+    }
 
     // 2nd level.
-    // repeated group list {
     auto list_node = group_node->field(0);
-    auto list_group_node = std::static_pointer_cast<::parquet::schema::GroupNode>(list_node);
-    DCHECK(list_group_node->field_count() == 1);
-    DCHECK(list_group_node->is_group());
+    if (!list_node->is_repeated()) {
+        return Status::NotSupported(fmt::format("list 2nd level node {} is not repeated", list_node->name()));
+    }
 
-    // 3rd level.
-    // <list-repetition> group <name> (LIST)
-    const auto& child_node = list_group_node->field(0);
-    TypeDescriptor child_type_desc;
-    RETURN_IF_ERROR(get_parquet_type(child_node, &child_type_desc));
-    *type_desc = TypeDescriptor::create_array_type(child_type_desc);
+    if (list_node->is_group()) {
+        auto list_group_node = std::static_pointer_cast<::parquet::schema::GroupNode>(list_node);
+        int field_count = list_group_node->field_count();
 
-    return Status::OK();
+        if (field_count > 1) {
+            // The inner type of the list should be a struct when there are multiple fields in the repeated group
+            //
+            // List<Tuple<String, Integer>> (nullable list, non-null elements)
+            // optional group my_list (LIST) {
+            //   repeated group element {
+            //     required binary str (STRING);
+            //     required int32 num;
+            //   }
+            // }
+            TypeDescriptor child_type_desc;
+            RETURN_IF_ERROR(try_to_infer_struct_type(list_group_node, &child_type_desc));
+            *type_desc = TypeDescriptor::create_array_type(child_type_desc);
+            return Status::OK();
+        } else if (field_count == 1) {
+            const auto& child_node = list_group_node->field(0);
+            if (list_group_node->logical_type()->is_list() && child_node->is_repeated()) {
+                // The inner type might be a list with two-level encoding
+                //
+                // List<List<Integer>> (nullable outer list, non-null elements)
+                // optional group my_list (LIST) {
+                //   repeated group array (LIST) {
+                //     repeated int32 array;
+                //   }
+                // }
+                TypeDescriptor child_type_desc;
+                RETURN_IF_ERROR(get_parquet_type(list_group_node, &child_type_desc));
+                *type_desc = TypeDescriptor::create_array_type(child_type_desc);
+                return Status::OK();
+            } else {
+                // 3-level encoding
+                //
+                // List<String> (list non-null, elements nullable)
+                // required group my_list (LIST) {
+                //   repeated group list {
+                //     optional binary element (STRING);
+                //   }
+                // }
+                //
+                // 3rd level.
+                TypeDescriptor child_type_desc;
+                RETURN_IF_ERROR(get_parquet_type(child_node, &child_type_desc));
+                *type_desc = TypeDescriptor::create_array_type(child_type_desc);
+                return Status::OK();
+            }
+        } else {
+            return Status::NotSupported(
+                    fmt::format("list 2nd level group {} must have at least one child", list_group_node->name()));
+        }
+    } else {
+        // 2-level encoding
+        //
+        // List<Integer> (nullable list, non-null elements)
+        // optional group my_list (LIST) {
+        //   repeated int32 element;
+        // }
+        TypeDescriptor child_type_desc;
+        RETURN_IF_ERROR(get_parquet_type(list_node, &child_type_desc));
+        *type_desc = TypeDescriptor::create_array_type(child_type_desc);
+        return Status::OK();
+    }
 }
 
 /*
@@ -185,7 +332,6 @@ The middle level, named key_value, must be a repeated group with a key field for
 The key field encodes the map's key type. This field must have repetition required and must always be present.
 The value field encodes the map's value type and repetition. This field can be required, optional, or omitted.
 */
-
 static Status get_parquet_type_from_map(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc) {
     // 1st level.
     // <map-repetition> group <name> (MAP) {
@@ -213,6 +359,46 @@ static Status get_parquet_type_from_map(const ::parquet::schema::NodePtr& node, 
     RETURN_IF_ERROR(get_parquet_type(value_node, &value_type_desc));
 
     *type_desc = TypeDescriptor::create_map_type(key_type_desc, value_type_desc);
+
+    return Status::OK();
+}
+
+/*
+try to infer struct type from group node.
+
+parquet does not have struct type, there is no struct definition in parquet.
+try to infer like this.
+group <name> {
+    type field0;
+    type field1;
+    ...
+}
+*/
+static Status try_to_infer_struct_type(const ::parquet::schema::NodePtr& node, TypeDescriptor* type_desc) {
+    // 1st level.
+    // group name
+    DCHECK(node->is_group());
+
+    auto group_node = std::static_pointer_cast<::parquet::schema::GroupNode>(node);
+    int field_count = group_node->field_count();
+    if (field_count == 0) {
+        return Status::Unknown("unknown type");
+    }
+
+    // 2nd level.
+    // field
+    std::vector<std::string> field_names;
+    std::vector<TypeDescriptor> field_types;
+    field_names.reserve(field_count);
+    field_types.reserve(field_count);
+    for (auto i = 0; i < group_node->field_count(); ++i) {
+        const auto& field = group_node->field(i);
+        field_names.emplace_back(field->name());
+        auto& field_type_desc = field_types.emplace_back();
+        RETURN_IF_ERROR(get_parquet_type(field, &field_type_desc));
+    }
+
+    *type_desc = TypeDescriptor::create_struct_type(field_names, field_types);
 
     return Status::OK();
 }

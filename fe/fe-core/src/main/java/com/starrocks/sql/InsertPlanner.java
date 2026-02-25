@@ -19,47 +19,44 @@ import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.SchemaChangeHandler;
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.NullLiteral;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.connector.ConnectorSinkShuffleMode;
+import com.starrocks.connector.ConnectorSinkSortScope;
+import com.starrocks.load.Load;
 import com.starrocks.planner.BlackHoleTableSink;
 import com.starrocks.planner.DataSink;
+import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.HiveTableSink;
 import com.starrocks.planner.IcebergTableSink;
 import com.starrocks.planner.MysqlTableSink;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
+import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.TableFunctionTableSink;
+import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
@@ -67,21 +64,33 @@ import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.ast.expression.CastExpr;
+import com.starrocks.sql.ast.expression.DefaultValueExpr;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.EmptyDistributionProperty;
 import com.starrocks.sql.optimizer.base.GatherDistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.Ordering;
@@ -105,10 +114,14 @@ import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TResultSinkType;
+import com.starrocks.type.NullType;
+import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.iceberg.NullOrder;
+import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.SortDirection;
 import org.apache.iceberg.SortField;
 import org.apache.iceberg.SortOrder;
@@ -126,7 +139,8 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import static com.starrocks.catalog.DefaultExpr.SUPPORTED_DEFAULT_FNS;
+import static com.starrocks.catalog.DefaultExpr.isValidDefaultFunction;
+import static com.starrocks.sql.StatementPlanner.collectSourceTablesCount;
 import static com.starrocks.sql.optimizer.rule.mv.MVUtils.MATERIALIZED_VIEW_NAME_PREFIX;
 
 public class InsertPlanner {
@@ -184,6 +198,24 @@ public class InsertPlanner {
         return GenColumnDependency.PARTIALLY_DEPEND_ON_TARGET_COLUMNS;
     }
 
+    private static boolean checkIfUseColumnUpsertMode(ConnectContext session,
+                                                      InsertStmt insertStmt,
+                                                      OlapTable olapTable) {
+        String sessionPartialUpdateMode = session.getSessionVariable().getPartialUpdateMode();
+        List<String> targetColumnNames = insertStmt.getTargetColumnNames();
+        int insertColumnCount = targetColumnNames != null ? targetColumnNames.size() :
+                olapTable.getBaseSchemaWithoutGeneratedColumn().size();
+        int totalColumnCount = olapTable.getBaseSchemaWithoutGeneratedColumn().size();
+        // use COLUMN_UPSERT_MODE when explicitly set to column mode
+        if (sessionPartialUpdateMode.equalsIgnoreCase("column")) {
+            return true;
+        } else if (sessionPartialUpdateMode.equalsIgnoreCase("auto")) {
+            // @see com.starrocks.sql.analyzer.UpdateAnalyzer#checkIfUsePartialUpdate
+            return insertColumnCount <= 3 && insertColumnCount < totalColumnCount * 0.3;
+        }
+        return false;
+    }
+
     private void inferOutputSchemaForPartialUpdate(InsertStmt insertStmt) {
         outputBaseSchema = new ArrayList<>();
         outputFullSchema = new ArrayList<>();
@@ -206,7 +238,7 @@ public class InsertPlanner {
                 legalGeneratedColumnDependencies.add(columnName);
                 continue;
             }
-            if (column.isAutoIncrement()) {
+            if (column.isAutoIncrement() || column.getDefaultExpr() != null) {
                 if (baseSchemaNames.contains(columnName)) {
                     outputBaseSchema.add(column);
                 }
@@ -247,6 +279,19 @@ public class InsertPlanner {
         }
     }
 
+    public void refreshExternalTable(QueryStatement queryStatement, ConnectContext session) {
+        SessionVariable currentVariable = (SessionVariable) session.getSessionVariable();
+        if (currentVariable.isEnableInsertSelectExternalAutoRefresh()) {
+            Map<TableName, Table> tables = AnalyzerUtils.collectAllTableWithAlias(queryStatement);
+            for (Map.Entry<TableName, Table> t : tables.entrySet()) {
+                if (t.getValue().isExternalTableWithFileSystem()) {
+                    session.getGlobalStateMgr().getMetadataMgr().refreshTable(t.getKey().getCatalog(),
+                            t.getKey().getDb(), t.getValue(), new ArrayList<>(), false);
+                }
+            }
+        }
+    }
+
     public ExecPlan plan(InsertStmt insertStmt, ConnectContext session) {
         QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
         List<ColumnRefOperator> outputColumns = new ArrayList<>();
@@ -258,6 +303,15 @@ public class InsertPlanner {
             outputBaseSchema = targetTable.getBaseSchema();
             outputFullSchema = targetTable.getFullSchema();
         }
+
+        if (targetTable.isIcebergTable()) {
+            outputBaseSchema = outputBaseSchema.stream().filter(col ->
+                    !IcebergTable.ICEBERG_META_COLUMNS.contains(col.getName())).toList();
+            outputFullSchema = outputFullSchema.stream().filter(col ->
+                    !IcebergTable.ICEBERG_META_COLUMNS.contains(col.getName())).toList();
+        }
+
+        refreshExternalTable(insertStmt.getQueryStatement(), session);
 
         //1. Process the literal value of the insert values type and cast it into the type of the target table
         if (queryRelation instanceof ValuesRelation) {
@@ -333,6 +387,7 @@ public class InsertPlanner {
                     dict.ifPresent(
                             columnDict -> globalDicts.add(new Pair<>(slotDescriptor.getId().asInt(), columnDict)));
                 }
+                // TODO: attach the dict for JSON
             }
             tupleDesc.computeMemLayout();
 
@@ -343,6 +398,9 @@ public class InsertPlanner {
                 List<Long> targetPartitionIds = insertStmt.getTargetPartitionIds();
                 if (insertStmt.isSystem() && insertStmt.isPartitionNotSpecifiedInOverwrite()) {
                     Preconditions.checkState(!CollectionUtils.isEmpty(targetPartitionIds));
+                    enableAutomaticPartition = olapTable.supportedAutomaticPartition();
+                } else if (insertStmt.isDynamicOverwrite()) {
+                    Preconditions.checkState(CollectionUtils.isEmpty(targetPartitionIds));
                     enableAutomaticPartition = olapTable.supportedAutomaticPartition();
                 } else if (insertStmt.isSpecifyPartitionNames()) {
                     Preconditions.checkState(!CollectionUtils.isEmpty(targetPartitionIds));
@@ -377,26 +435,44 @@ public class InsertPlanner {
                 dataSink = new OlapTableSink(olapTable, tupleDesc, targetPartitionIds,
                         olapTable.writeQuorum(),
                         forceReplicatedStorage ? true : olapTable.enableReplicatedStorage(),
-                        nullExprInAutoIncrement, enableAutomaticPartition, session.getCurrentWarehouseId());
+                        nullExprInAutoIncrement, enableAutomaticPartition, session.getCurrentComputeResource());
                 if (insertStmt.usePartialUpdate()) {
-                    ((OlapTableSink) dataSink).setPartialUpdateMode(TPartialUpdateMode.AUTO_MODE);
+                    TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.AUTO_MODE;
+                    if (checkIfUseColumnUpsertMode(session, insertStmt, olapTable)) {
+                        partialUpdateMode = TPartialUpdateMode.COLUMN_UPSERT_MODE;
+                    }
+                    ((OlapTableSink) dataSink).setPartialUpdateMode(partialUpdateMode);
+                    if (insertStmt.autoIncrementPartialUpdate()) {
+                        ((OlapTableSink) dataSink).setMissAutoIncrementColumn();
+                    }
                 }
                 if (olapTable.getAutomaticBucketSize() > 0) {
                     ((OlapTableSink) dataSink).setAutomaticBucketSize(olapTable.getAutomaticBucketSize());
+                }
+                if (insertStmt.isDynamicOverwrite()) {
+                    ((OlapTableSink) dataSink).setDynamicOverwrite(true);
+                }
+                if (insertStmt.isFromOverwrite()) {
+                    ((OlapTableSink) dataSink).setIsFromOverwrite(true);
+                }
+                if (session.getTxnId() != 0) {
+                    ((OlapTableSink) dataSink).setIsMultiStatementsTxn(true);
                 }
 
                 // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
                 session.getSessionVariable().setPreferComputeNode(false);
                 session.getSessionVariable().setUseComputeNodes(0);
                 OlapTableSink olapTableSink = (OlapTableSink) dataSink;
-                TableName catalogDbTable = insertStmt.getTableName();
-                Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogDbTable.getCatalog(),
+                TableRef tableRef = insertStmt.getTableRef();
+                TableName catalogDbTable = TableName.fromTableRef(tableRef);
+                Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(session, catalogDbTable.getCatalog(),
                         catalogDbTable.getDb());
                 try {
-                    olapTableSink.init(session.getExecutionId(), insertStmt.getTxnId(), db.getId(),
-                            ConnectContext.get().getSessionVariable().getQueryTimeoutS());
-                    olapTableSink.complete();
-                } catch (UserException e) {
+                    Load.checkMergeCondition(insertStmt.getMergingCondition(), olapTable, outputFullSchema,
+                            ((OlapTableSink) dataSink).missAutoIncrementColumn());
+                    olapTableSink.init(session.getExecutionId(), insertStmt.getTxnId(), db.getId(), session.getExecTimeout());
+                    olapTableSink.complete(insertStmt.getMergingCondition());
+                } catch (StarRocksException e) {
                     throw new SemanticException(e.getMessage());
                 }
             } else if (insertStmt.getTargetTable() instanceof MysqlTable) {
@@ -436,12 +512,12 @@ public class InsertPlanner {
                     // If you want to set tablet sink dop > 1, please enable single tablet loading and disable shuffle service
                     sinkFragment.setPipelineDop(1);
                 } else {
-                    if (ConnectContext.get().getSessionVariable().getEnableAdaptiveSinkDop()) {
-                        sinkFragment.setPipelineDop(
-                                ConnectContext.get().getSessionVariable().getSinkDegreeOfParallelism());
+                    SessionVariable sv = session.getSessionVariable();
+                    if (sv.getEnableAdaptiveSinkDop()) {
+                        long warehouseId = session.getCurrentComputeResource().getWarehouseId();
+                        sinkFragment.setPipelineDop(sv.getSinkDegreeOfParallelism(warehouseId));
                     } else {
-                        sinkFragment
-                                .setPipelineDop(ConnectContext.get().getSessionVariable().getParallelExecInstanceNum());
+                        sinkFragment.setPipelineDop(sv.getParallelExecInstanceNum());
                     }
                 }
 
@@ -506,18 +582,20 @@ public class InsertPlanner {
     private ExecPlan buildExecPlan(InsertStmt insertStmt, ConnectContext session, List<ColumnRefOperator> outputColumns,
                                    LogicalPlan logicalPlan, ColumnRefFactory columnRefFactory,
                                    QueryRelation queryRelation, Table targetTable) {
-        Optimizer optimizer = new Optimizer();
         PhysicalPropertySet requiredPropertySet = createPhysicalPropertySet(insertStmt, outputColumns,
                 session.getSessionVariable());
         OptExpression optimizedPlan;
 
+        int sourceTablesCount = collectSourceTablesCount(session, insertStmt);
+
         try (Timer ignore2 = Tracers.watchScope("Optimizer")) {
+            OptimizerContext optimizerContext = OptimizerFactory.initContext(session, columnRefFactory);
+            optimizerContext.setSourceTablesCount(sourceTablesCount);
+            Optimizer optimizer = OptimizerFactory.create(optimizerContext);
             optimizedPlan = optimizer.optimize(
-                    session,
                     logicalPlan.getRoot(),
                     requiredPropertySet,
-                    new ColumnRefSet(logicalPlan.getOutputColumn()),
-                    columnRefFactory);
+                    new ColumnRefSet(logicalPlan.getOutputColumn()));
         }
 
         //8. Build fragment exec plan
@@ -550,7 +628,7 @@ public class InsertPlanner {
             boolean isAutoIncrement = targetColumn.isAutoIncrement();
             if (insertStatement.getTargetColumnNames() == null) {
                 for (List<Expr> row : values.getRows()) {
-                    if (isAutoIncrement && row.get(columnIdx).getType() == Type.NULL) {
+                    if (isAutoIncrement && row.get(columnIdx).getType() == NullType.NULL) {
                         throw new SemanticException(" `NULL` value is not supported for an AUTO_INCREMENT column: " +
                                 targetColumn.getName() + " You can use `default` for an" +
                                 " AUTO INCREMENT column");
@@ -569,7 +647,7 @@ public class InsertPlanner {
                 int idx = insertStatement.getTargetColumnNames().indexOf(targetColumn.getName().toLowerCase());
                 if (idx != -1) {
                     for (List<Expr> row : values.getRows()) {
-                        if (isAutoIncrement && row.get(idx).getType() == Type.NULL) {
+                        if (isAutoIncrement && row.get(idx).getType() == NullType.NULL) {
                             throw new SemanticException(
                                     " `NULL` value is not supported for an AUTO_INCREMENT column: " +
                                             targetColumn.getName() + " You can use `default` for an" +
@@ -615,9 +693,17 @@ public class InsertPlanner {
                     if (defaultValueType == Column.DefaultValueType.NULL || targetColumn.isAutoIncrement()) {
                         scalarOperator = ConstantOperator.createNull(targetColumn.getType());
                     } else if (defaultValueType == Column.DefaultValueType.CONST) {
-                        scalarOperator = ConstantOperator.createVarchar(targetColumn.calculatedDefaultValue());
+                        if (targetColumn.getDefaultExpr() != null && targetColumn.getDefaultExpr().getExprObject() != null) {
+                            Expr expr = targetColumn.getDefaultExpr().obtainExpr();
+                            if (!expr.getType().equals(targetColumn.getType())) {
+                                expr = new CastExpr(targetColumn.getType(), expr);
+                            }
+                            scalarOperator = SqlToScalarOperatorTranslator.translate(expr);
+                        } else {
+                            scalarOperator = ConstantOperator.createVarchar(targetColumn.calculatedDefaultValue());
+                        }
                     } else if (defaultValueType == Column.DefaultValueType.VARY) {
-                        if (SUPPORTED_DEFAULT_FNS.contains(targetColumn.getDefaultExpr().getExpr())) {
+                        if (isValidDefaultFunction(targetColumn.getDefaultExpr().getExpr())) {
                             scalarOperator = SqlToScalarOperatorTranslator.
                                     translate(targetColumn.getDefaultExpr().obtainExpr());
                         } else {
@@ -657,8 +743,11 @@ public class InsertPlanner {
                 ExpressionAnalyzer.analyzeExpression(expr,
                         new AnalyzeState(), new Scope(RelationId.anonymous(), new RelationFields(
                                 insertStatement.getTargetTable().getBaseSchema().stream()
-                                        .map(col -> new Field(col.getName(),
-                                                col.getType(), insertStatement.getTableName(), null))
+                                        .map(col -> {
+                                            TableRef tableRef = insertStatement.getTableRef();
+                                            TableName tableName = TableName.fromTableRef(tableRef);
+                                            return new Field(col.getName(), col.getType(), tableName, null);
+                                        })
                                         .collect(Collectors.toList()))), session);
 
                 List<SlotRef> slots = new ArrayList<>();
@@ -723,7 +812,8 @@ public class InsertPlanner {
                 continue;
             }
 
-            // Target column which starts with "mv" should not be treated as materialized view column when this column exists in base schema,
+            // Target column which starts with "mv" should not be treated as materialized view column when this column exists
+            // in base schema,
             // this could be created by user.
             if (targetColumn.isNameWithPrefix(MATERIALIZED_VIEW_NAME_PREFIX) &&
                     !baseSchema.contains(targetColumn)) {
@@ -732,8 +822,8 @@ public class InsertPlanner {
                     // Only olap table can have the synchronized materialized view.
                     OlapTable targetOlapTable = (OlapTable) targetTable;
                     MaterializedIndexMeta targetIndexMeta = null;
-                    for (MaterializedIndexMeta indexMeta : targetOlapTable.getIndexIdToMeta().values()) {
-                        if (indexMeta.getIndexId() == targetOlapTable.getBaseIndexId()) {
+                    for (MaterializedIndexMeta indexMeta : targetOlapTable.getIndexMetaIdToMeta().values()) {
+                        if (indexMeta.getIndexMetaId() == targetOlapTable.getBaseIndexMetaId()) {
                             continue;
                         }
                         for (Column column : indexMeta.getSchema()) {
@@ -744,7 +834,7 @@ public class InsertPlanner {
                         }
                     }
                     String targetIndexMetaName = targetIndexMeta == null ? "" :
-                            targetOlapTable.getIndexNameById(targetIndexMeta.getIndexId());
+                            targetOlapTable.getIndexNameByMetaId(targetIndexMeta.getIndexMetaId());
                     throw new SemanticException(
                             "The define expr of shadow column " + targetColumn.getName() + " is null, " +
                                     "please check the associated materialized view " + targetIndexMetaName
@@ -778,20 +868,20 @@ public class InsertPlanner {
 
             // columnIdx >= outputColumns.size() mean this is a new add schema change column
             if (columnIdx >= outputColumns.size()) {
-                ColumnRefOperator columnRefOperator = columnRefFactory.create(
-                        targetColumn.getName(), targetColumn.getType(), targetColumn.isAllowNull());
-                outputColumns.add(columnRefOperator);
-
+                ScalarOperator scalarOperator = null;
                 Column.DefaultValueType defaultValueType = targetColumn.getDefaultValueType();
                 if (defaultValueType == Column.DefaultValueType.NULL) {
-                    columnRefMap.put(columnRefOperator, ConstantOperator.createNull(targetColumn.getType()));
+                    scalarOperator = ConstantOperator.createNull(targetColumn.getType());
                 } else if (defaultValueType == Column.DefaultValueType.CONST) {
-                    columnRefMap.put(columnRefOperator, ConstantOperator.createVarchar(
-                            targetColumn.calculatedDefaultValue()));
+                    scalarOperator = ConstantOperator.createVarchar(targetColumn.calculatedDefaultValue());
                 } else if (defaultValueType == Column.DefaultValueType.VARY) {
                     throw new SemanticException("Column:" + targetColumn.getName() + " has unsupported default value:"
                             + targetColumn.getDefaultExpr().getExpr());
                 }
+                ColumnRefOperator col = columnRefFactory
+                        .create(scalarOperator, scalarOperator.getType(), scalarOperator.isNullable());
+                outputColumns.add(col);
+                columnRefMap.put(col, scalarOperator);
             } else {
                 columnRefMap.put(outputColumns.get(columnIdx), outputColumns.get(columnIdx));
             }
@@ -840,25 +930,56 @@ public class InsertPlanner {
         Table targetTable = insertStmt.getTargetTable();
         if (targetTable instanceof IcebergTable) {
             IcebergTable icebergTable = (IcebergTable) targetTable;
-            SortOrder sortOrder = icebergTable.getNativeTable().sortOrder();
 
-            if (sortOrder.isUnsorted()) {
-                return new PhysicalPropertySet();
-            } else {
-                List<SortField> sortFields = sortOrder.fields();
-                List<Ordering> orderings = new ArrayList<>();
-                List<Integer> sortKeyIndexes = icebergTable.getSortKeyIndexes();
-                for (int index : sortKeyIndexes) {
-                    ColumnRefOperator columnRef = outputColumns.get(index);
-                    SortField sortField = sortFields.get(sortKeyIndexes.indexOf(index));
-                    boolean isAsc = sortField.direction() == SortDirection.ASC;
-                    boolean isNullFirst = sortField.nullOrder() == NullOrder.NULLS_FIRST;
-                    Ordering ordering = new Ordering(columnRef, isAsc, isNullFirst);
-                    orderings.add(ordering);
+            // Create distribution property if global shuffle is enabled
+            DistributionProperty distributionProperty = EmptyDistributionProperty.INSTANCE;
+            ConnectorSinkShuffleMode shuffleMode = session.getConnectorSinkShuffleMode();
+
+            // For shuffle mode except NEVER, only apply shuffle to partitioned tables
+            if (shuffleMode != ConnectorSinkShuffleMode.NEVER && !icebergTable.getPartitionColumns().isEmpty()) {
+
+                // For FORCE mode - always enable global shuffle, we also handle the old session variable
+                // `enable_iceberg_sink_global_shuffle` for compatibility.
+                // For AUTO mode - use adaptive logic based on partition count and backend count
+                if (shuffleMode == ConnectorSinkShuffleMode.FORCE || (shuffleMode == ConnectorSinkShuffleMode.AUTO &&
+                        shouldEnableAdaptiveGlobalShuffle(insertStmt, icebergTable, session))) {
+                    List<Integer> partitionColumnIDs = icebergTable.partitionColumnIndexes().stream()
+                            .map(x -> outputColumns.get(x).getId()).collect(Collectors.toList());
+                    distributionProperty = createDistributionPropertyFromPartitions(partitionColumnIDs);
                 }
-                SortProperty sortProperty = SortProperty.createProperty(orderings);
-                return new PhysicalPropertySet(sortProperty);
             }
+
+            // Check if we should use host-level sorting for connector sink
+            ConnectorSinkSortScope sortScope = ConnectorSinkSortScope.fromName(session.getConnectorSinkSortScope());
+            boolean useHostLevelSort = (sortScope == ConnectorSinkSortScope.HOST);
+
+            // Get sort order info from Iceberg table
+            List<Ordering> sortOrderings = new ArrayList<>();
+            if (useHostLevelSort) {
+                org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
+                SortOrder sortOrder = nativeTable.sortOrder();
+                if (sortOrder != null && sortOrder.isSorted()) {
+                    List<Integer> sortKeyIndexes = icebergTable.getSortKeyIndexes();
+                    for (int idx = 0; idx < sortKeyIndexes.size(); ++idx) {
+                        int sortKeyIndex = sortKeyIndexes.get(idx);
+                        SortField sortField = sortOrder.fields().get(idx);
+                        // Skip non-identity transforms
+                        if (!sortField.transform().isIdentity()) {
+                            continue;
+                        }
+                        boolean isAsc = sortField.direction() == SortDirection.ASC;
+                        boolean isNullFirst = sortField.nullOrder() == NullOrder.NULLS_FIRST;
+                        sortOrderings.add(new Ordering(outputColumns.get(sortKeyIndex), isAsc, isNullFirst));
+                    }
+                }
+            }
+
+            // Create sort property if host-level sorting is enabled and sort order exists
+            SortProperty sortProperty = SortProperty.createProperty(sortOrderings);
+
+            // Return property set with both distribution and sort properties
+            // These properties also can be empty.
+            return new PhysicalPropertySet(distributionProperty, sortProperty);
         }
 
         if (targetTable instanceof TableFunctionTable) {
@@ -876,10 +997,7 @@ public class InsertPlanner {
                 } else { // use hash shuffle for partitioned table
                     List<Integer> partitionColumnIDs = table.getPartitionColumnIDs().stream()
                             .map(x -> outputColumns.get(x).getId()).collect(Collectors.toList());
-                    HashDistributionDesc desc = new HashDistributionDesc(partitionColumnIDs,
-                            HashDistributionDesc.SourceType.SHUFFLE_AGG);
-                    return new PhysicalPropertySet(DistributionProperty
-                            .createProperty(DistributionSpec.createHashDistributionSpec(desc)));
+                    return new PhysicalPropertySet(createDistributionPropertyFromPartitions(partitionColumnIDs));
                 }
             }
 
@@ -906,11 +1024,11 @@ public class InsertPlanner {
             return new PhysicalPropertySet();
         }
 
-        List<Column> columns = table.getFullSchema();
+        List<Column> columns = outputFullSchema;
         Preconditions.checkState(columns.size() == outputColumns.size(),
                 "outputColumn's size must equal with table's column size");
 
-        List<Column> keyColumns = table.getKeyColumnsByIndexId(table.getBaseIndexId());
+        List<Column> keyColumns = table.getKeyColumnsByIndexMetaId(table.getBaseIndexMetaId());
         List<Integer> keyColumnIds = Lists.newArrayList();
         keyColumns.forEach(column -> {
             int index = columns.indexOf(column);
@@ -933,6 +1051,12 @@ public class InsertPlanner {
         return new PhysicalPropertySet(property);
     }
 
+    private DistributionProperty createDistributionPropertyFromPartitions(List<Integer> partitionColumnIDs) {
+        HashDistributionDesc desc = new HashDistributionDesc(partitionColumnIDs, HashDistributionDesc.SourceType.SHUFFLE_AGG);
+        DistributionSpec spec = DistributionSpec.createHashDistributionSpec(desc);
+        return DistributionProperty.createProperty(spec);
+    }
+
     private OptExprBuilder fillKeyPartitionsColumn(ColumnRefFactory columnRefFactory,
                                                    InsertStmt insertStatement, List<ColumnRefOperator> outputColumns,
                                                    OptExprBuilder root) {
@@ -948,7 +1072,7 @@ public class InsertPlanner {
             if (tablePartitionColumnNames.contains(columnName)) {
                 int index = partitionColNames.indexOf(columnName);
                 LiteralExpr expr = (LiteralExpr) partitionColValues.get(index);
-                Type type = expr.isConstantNull() ? Type.NULL : column.getType();
+                Type type = expr.isConstantNull() ? NullType.NULL : column.getType();
                 ScalarOperator scalarOperator =
                         ConstantOperator.createObject(expr.getRealObjectValue(), type);
                 ColumnRefOperator col = columnRefFactory
@@ -974,12 +1098,25 @@ public class InsertPlanner {
         return skip;
     }
 
-    private boolean isKeyPartitionStaticInsert(InsertStmt insertStmt, QueryRelation queryRelation) {
-        if (!(queryRelation instanceof SelectRelation)) {
-            return false;
+    private boolean checkPartitionInsertValid(Table targetTable) {
+        if (targetTable instanceof IcebergTable) {
+            IcebergTable icebergTable = (IcebergTable) targetTable;
+            if (icebergTable.isPartitioned()) {
+                PartitionSpec partitionSpec = icebergTable.getNativeTable().spec();
+                boolean isInvalid = partitionSpec.fields().stream().anyMatch(field -> !field.transform().isIdentity());
+                if (isInvalid) {
+                    throw new SemanticException("Staitc insert into Iceberg table %s is not supported" +
+                            " for not partitioned by identity transform", icebergTable.getName());
+                }
+            }
         }
 
+        return true;
+    }
+
+    private boolean isKeyPartitionStaticInsert(InsertStmt insertStmt, QueryRelation queryRelation) {
         Table targetTable = insertStmt.getTargetTable();
+
         if (!(targetTable.isHiveTable() || targetTable.isIcebergTable())) {
             return false;
         }
@@ -989,7 +1126,12 @@ public class InsertPlanner {
         }
 
         if (insertStmt.isSpecifyKeyPartition()) {
+            checkPartitionInsertValid(targetTable);
             return true;
+        }
+
+        if (!(queryRelation instanceof SelectRelation)) {
+            return false;
         }
 
         SelectRelation selectRelation = (SelectRelation) queryRelation;
@@ -1003,7 +1145,7 @@ public class InsertPlanner {
 
         List<String> targetColumnNames;
         if (insertStmt.getTargetColumnNames() == null) {
-            targetColumnNames = targetTable.getColumns().stream()
+            targetColumnNames = targetTable.getFullSchema().stream()
                     .map(Column::getName).collect(Collectors.toList());
         } else {
             targetColumnNames = Lists.newArrayList(insertStmt.getTargetColumnNames());
@@ -1018,6 +1160,88 @@ public class InsertPlanner {
                 }
             }
         }
+        checkPartitionInsertValid(targetTable);
         return true;
+    }
+
+    /**
+     * Judge whether adaptive global shuffle should be enabled based on partition count and backend count.
+     * <p>
+     * Decision criteria (configurable via session variables):
+     * 1. Enable when estimated partition count >= backend count * ratio
+     * 2. OR when estimated partition count >= absolute threshold
+     *
+     * @param insertStmt   INSERT statement
+     * @param icebergTable target Iceberg table
+     * @param session      Session variable
+     * @return whether to enable global shuffle
+     */
+    private boolean shouldEnableAdaptiveGlobalShuffle(InsertStmt insertStmt,
+                                                      IcebergTable icebergTable,
+                                                      SessionVariable session) {
+        // Get the number of alive BE nodes and CN nodes in the cluster
+        SystemInfoService clusterInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        int aliveBackendNum = clusterInfo.getAliveBackendNumber();
+        int totalComputeNodeNum = clusterInfo.getTotalComputeNodeNumber();
+        int totalWorkerNum = aliveBackendNum + totalComputeNodeNum;
+
+        // Don't enable global shuffle if we have only 1 or 0 worker nodes
+        if (totalWorkerNum <= 1) {
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Disable adaptive global shuffle for connector table {}.{}: " +
+                                "total worker nodes ({}) <= 1",
+                        icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(),
+                        totalWorkerNum);
+            }
+            return false;
+        }
+
+        // Estimate the number of partitions that may be involved in this insert
+        long estimatedPartitionCount = estimatePartitionCountForInsert(insertStmt, icebergTable);
+
+        // Don't enable global shuffle if unable to estimate partition count or only writing to 1 partition
+        // estimatedPartitionCount <= 1 covers:
+        // - -1: unable to estimate (users typically write to only the latest partition)
+        // - 0 or 1: only writing to one partition
+        if (estimatedPartitionCount <= 1) {
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Disable adaptive global shuffle for connector table {}.{}: " +
+                                "estimated partition count ({}) <= 1",
+                        icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(),
+                        estimatedPartitionCount);
+            }
+            return false;
+        }
+
+        // Get configured thresholds from connector variables
+        long partitionCountThreshold = session.getConnectorSinkShufflePartitionThreshold();
+        double partitionCountNodeRatio = session.getConnectorSinkShufflePartitionNodeRatio();
+
+        // Decision logic:
+        // 1. estimated partitions >= total worker count * ratio coefficient
+        // 2. OR estimated partitions >= absolute threshold
+        boolean shouldEnable = estimatedPartitionCount >= (long) (totalWorkerNum * partitionCountNodeRatio)
+                || estimatedPartitionCount >= partitionCountThreshold;
+
+        if (shouldEnable && LOG.isDebugEnabled()) {
+            LOG.debug("Enable adaptive global shuffle for connector table {}.{}: " +
+                            "estimated partitions={}, total workers={}, threshold={}, ratio={}",
+                    icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(),
+                    estimatedPartitionCount, totalWorkerNum,
+                    partitionCountThreshold, partitionCountNodeRatio);
+        }
+
+        return shouldEnable;
+    }
+
+    /**
+     * Estimate the number of partitions that may be involved in this INSERT operation.
+     *
+     * @param insertStmt   INSERT statement
+     * @param icebergTable target Iceberg table
+     * @return estimated partition count
+     */
+    private long estimatePartitionCountForInsert(InsertStmt insertStmt, IcebergTable icebergTable) {
+        return InsertPartitionEstimator.estimatePartitionCountForInsert(insertStmt, icebergTable);
     }
 }

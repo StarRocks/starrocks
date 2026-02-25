@@ -17,22 +17,21 @@
 #include <simdjson.h>
 
 #include "agent/master_info.h"
+#include "base/metrics.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "gutil/strings/numbers.h"
 #include "gutil/strings/substitute.h"
 #include "http/http_client.h"
 #include "runtime/runtime_state.h"
-#include "runtime/string_value.h"
+#include "runtime/starrocks_metrics.h"
 #include "types/logical_type.h"
-#include "util/metrics.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaFeMetricsScanner::_s_columns[] = {
-        {"FE_ID", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"LABELS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"FE_ID", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"LABELS", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"VALUE", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
 };
 
@@ -53,21 +52,25 @@ Status SchemaFeMetricsScanner::_get_fe_metrics(RuntimeState* state) {
             return Status::OK();
         };
         RETURN_IF_ERROR(HttpClient::execute_with_retry(2 /* retry times */, 1 /* sleep interval */, mmetrics_cb));
-        VLOG(1) << "metrics: " << metrics;
+        VLOG(2) << "metrics: " << metrics;
 
         simdjson::ondemand::parser parser;
         simdjson::padded_string json_metrics(metrics);
-        for (auto json_metric : parser.iterate(json_metrics)) {
-            auto& info = _infos.emplace_back();
-            info.id = frontend.id;
-            info.value = static_cast<int64_t>(double(json_metric["value"]));
-            auto n = std::string_view(json_metric["tags"]["metric"]);
-            info.name = std::string(n.begin(), n.end());
-            std::ostringstream oss;
-            oss << simdjson::to_json_string(json_metric["tags"]);
-            info.labels = oss.str();
-            VLOG(1) << "id: " << info.id << "name: " << info.name << ", labels: " << info.labels
-                    << ", value: " << info.value;
+        try {
+            for (auto json_metric : parser.iterate(json_metrics)) {
+                auto& info = _infos.emplace_back();
+                info.id = frontend.id;
+                info.value = static_cast<int64_t>(double(json_metric["value"]));
+                auto n = std::string_view(json_metric["tags"]["metric"]);
+                info.name = std::string(n.begin(), n.end());
+                std::ostringstream oss;
+                oss << simdjson::to_json_string(json_metric["tags"]);
+                info.labels = oss.str();
+                VLOG(2) << "id: " << info.id << "name: " << info.name << ", labels: " << info.labels
+                        << ", value: " << info.value;
+            }
+        } catch (const simdjson::simdjson_error& e) {
+            return Status::InternalError("Parse the result of fe metrics failed: " + std::string(e.what()));
         }
     }
 
@@ -90,29 +93,29 @@ Status SchemaFeMetricsScanner::fill_chunk(ChunkPtr* chunk) {
             if (slot_id < 1 || slot_id > 4) {
                 return Status::InternalError(strings::Substitute("invalid slot id:$0", slot_id));
             }
-            ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
+            auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(slot_id);
             switch (slot_id) {
             case 1: {
                 // fe name
                 Slice v(info.id);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&v);
                 break;
             }
             case 2: {
                 // name
                 Slice v(info.name);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&v);
                 break;
             }
             case 3: {
                 // labels
                 Slice v(info.labels);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&v);
                 break;
             }
             case 4: {
                 // value
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.value);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.value);
                 break;
             }
             default:

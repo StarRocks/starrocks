@@ -50,6 +50,22 @@ public:
         assert(iter_);
         return iter_->max_rss_rowid();
     }
+    uint32_t shared_rssid() const {
+        assert(iter_);
+        return iter_->shared_rssid();
+    }
+    int64_t shared_version() const {
+        assert(iter_);
+        return iter_->shared_version();
+    }
+    int32_t rssid_offset() const {
+        assert(iter_);
+        return iter_->rssid_offset();
+    }
+    DelVectorPtr delvec() const {
+        assert(iter_);
+        return iter_->delvec();
+    }
     void Next() {
         assert(iter_);
         iter_->Next();

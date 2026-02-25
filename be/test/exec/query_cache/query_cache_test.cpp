@@ -107,27 +107,31 @@ TEST_F(QueryCacheTest, testCacheManager) {
         auto col = Int8Column::create();
         auto payload = byte_size - sizeof(query_cache::CacheValue);
         col->resize(payload);
-        chk->append_column(col, 0);
+        chk->append_column(std::move(col), 0);
         query_cache::CacheValue value(0, 0, {chk});
         return value;
     };
 
+    size_t total_key_size = 0;
     for (auto i = 0; i < 10; ++i) {
+        std::string key = strings::Substitute("key_$0", i);
+        size_t key_size = sizeof(LRUHandle) - 1 + key.size();
+        total_key_size += key_size;
         cache_mgr->populate(strings::Substitute("key_$0", i), create_cache_value(96));
     }
 
-    ASSERT_EQ(cache_mgr->memory_usage(), 960);
+    ASSERT_EQ(cache_mgr->memory_usage(), total_key_size + 960);
     for (auto i = 0; i < 10; ++i) {
         auto status = cache_mgr->probe(strings::Substitute("key_$0", i));
         ASSERT_TRUE(status.ok());
     }
 
-    ASSERT_EQ(cache_mgr->memory_usage(), 960);
+    ASSERT_EQ(cache_mgr->memory_usage(), total_key_size + 960);
     for (auto i = 10; i < 20; ++i) {
         auto status = cache_mgr->probe(strings::Substitute("key_$0", i));
         ASSERT_FALSE(status.ok());
     }
-    ASSERT_EQ(cache_mgr->memory_usage(), 960);
+    ASSERT_EQ(cache_mgr->memory_usage(), total_key_size + 960);
 
     for (auto i = 20; i < 30; ++i) {
         cache_mgr->populate(strings::Substitute("key_$0", i), create_cache_value(100));
@@ -173,7 +177,7 @@ ChunkPtr create_test_chunk(query_cache::LaneOwnerType owner, long from, long to,
     for (auto i = from; i < to; ++i) {
         data[i - from] = double(i);
     }
-    chunk->append_column(column, SlotId(1));
+    chunk->append_column(std::move(column), SlotId(1));
     return chunk;
 }
 struct Task {
@@ -524,12 +528,12 @@ void test_framework_with_with_options(const query_cache::CacheManagerPtr& cache_
     ASSERT_TRUE(chunk_or_status.ok());
     auto chunk = chunk_or_status.value();
     auto column = chunk->get_column_by_slot_id(SlotId(1));
-    auto& data = dynamic_cast<DoubleColumn*>(column.get())->get_data();
+    auto& data = dynamic_cast<DoubleColumn*>(column->as_mutable_raw_ptr())->get_data();
     validate_func(data[0]);
 }
 
-void test_framework(query_cache::CacheManagerPtr cache_mgr, int num_lanes, int dop, RuntimeState& state_object,
-                    MapFunc map1, MapFunc map2, double init_value, ReduceFunc reduce,
+void test_framework(const query_cache::CacheManagerPtr& cache_mgr, int num_lanes, int dop, RuntimeState& state_object,
+                    const MapFunc& map1, const MapFunc& map2, double init_value, const ReduceFunc& reduce,
                     const Actions& pre_passthrough_actions, const Actions& post_passthrough_actions,
                     const ValidateFunc& validate_func) {
     test_framework_with_with_options(std::move(cache_mgr), false, false, num_lanes, dop, state_object, std::move(map1),
@@ -537,24 +541,22 @@ void test_framework(query_cache::CacheManagerPtr cache_mgr, int num_lanes, int d
                                      post_passthrough_actions, std::move(validate_func));
 }
 
-void test_framework_force_populate(query_cache::CacheManagerPtr cache_mgr, int num_lanes, int dop,
-                                   RuntimeState& state_object, MapFunc map1, MapFunc map2, double init_value,
-                                   ReduceFunc reduce, const Actions& pre_passthrough_actions,
+void test_framework_force_populate(const query_cache::CacheManagerPtr& cache_mgr, int num_lanes, int dop,
+                                   RuntimeState& state_object, const MapFunc& map1, const MapFunc& map2,
+                                   double init_value, const ReduceFunc& reduce, const Actions& pre_passthrough_actions,
                                    const Actions& post_passthrough_actions, const ValidateFunc& validate_func) {
-    test_framework_with_with_options(std::move(cache_mgr), true, false, num_lanes, dop, state_object, std::move(map1),
-                                     std::move(map2), init_value, std::move(reduce), pre_passthrough_actions,
-                                     post_passthrough_actions, std::move(validate_func));
+    test_framework_with_with_options(cache_mgr, true, false, num_lanes, dop, state_object, map1, map2, init_value,
+                                     reduce, pre_passthrough_actions, post_passthrough_actions, validate_func);
 }
 
-void test_framework_force_populate_and_passthrough(query_cache::CacheManagerPtr cache_mgr, int num_lanes, int dop,
-                                                   RuntimeState& state_object, MapFunc map1, MapFunc map2,
-                                                   double init_value, ReduceFunc reduce,
+void test_framework_force_populate_and_passthrough(const query_cache::CacheManagerPtr& cache_mgr, int num_lanes,
+                                                   int dop, RuntimeState& state_object, const MapFunc& map1,
+                                                   const MapFunc& map2, double init_value, const ReduceFunc& reduce,
                                                    const Actions& pre_passthrough_actions,
                                                    const Actions& post_passthrough_actions,
                                                    const ValidateFunc& validate_func) {
-    test_framework_with_with_options(std::move(cache_mgr), true, true, num_lanes, dop, state_object, std::move(map1),
-                                     std::move(map2), init_value, std::move(reduce), pre_passthrough_actions,
-                                     post_passthrough_actions, std::move(validate_func));
+    test_framework_with_with_options(cache_mgr, true, true, num_lanes, dop, state_object, map1, map2, init_value,
+                                     reduce, pre_passthrough_actions, post_passthrough_actions, validate_func);
 }
 
 TEST_F(QueryCacheTest, testMultilane) {

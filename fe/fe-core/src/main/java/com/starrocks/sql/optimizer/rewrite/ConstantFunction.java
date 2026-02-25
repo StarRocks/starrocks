@@ -15,7 +15,7 @@
 
 package com.starrocks.sql.optimizer.rewrite;
 
-import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.type.PrimitiveType;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;

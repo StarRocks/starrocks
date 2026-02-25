@@ -37,11 +37,12 @@
 #include <cmath>
 #include <functional>
 
+#include "base/string/slice.h"
 #include "common/config.h"
 #include "common/status.h"
 #include "gen_cpp/segment.pb.h"
 #include "storage/types.h"
-#include "util/slice.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -78,7 +79,7 @@ inline bool numeric_types_support_dict_encoding(LogicalType type) {
 }
 
 inline bool supports_dict_encoding(LogicalType type) {
-    if (type == TYPE_VARCHAR || type == TYPE_CHAR) {
+    if (type == TYPE_VARCHAR || type == TYPE_CHAR || type == TYPE_JSON) {
         return true;
     }
     return numeric_types_support_dict_encoding(type);

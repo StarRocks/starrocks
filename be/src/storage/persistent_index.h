@@ -17,15 +17,15 @@
 #include <memory>
 #include <tuple>
 
+#include "base/phmap/phmap.h"
+#include "base/phmap/phmap_dump.h"
 #include "common/statusor.h"
 #include "fs/fs.h"
 #include "gen_cpp/persistent_index.pb.h"
 #include "storage/edit_version.h"
-#include "storage/rowset/bloom_filter.h"
 #include "storage/rowset/rowset.h"
 #include "storage/storage_engine.h"
-#include "util/phmap/phmap.h"
-#include "util/phmap/phmap_dump.h"
+#include "util/bloom_filter.h"
 
 namespace starrocks {
 
@@ -33,6 +33,7 @@ class Tablet;
 class Schema;
 class Column;
 class PrimaryKeyDump;
+class ParallelPublishContext;
 
 class TabletLoader {
 public:
@@ -74,7 +75,8 @@ enum PersistentIndexFileVersion {
     PERSISTENT_INDEX_VERSION_3,
     PERSISTENT_INDEX_VERSION_4,
     PERSISTENT_INDEX_VERSION_5,
-    PERSISTENT_INDEX_VERSION_6
+    PERSISTENT_INDEX_VERSION_6,
+    PERSISTENT_INDEX_VERSION_7
 };
 
 static constexpr uint64_t NullIndexValue = -1;
@@ -99,14 +101,16 @@ struct IOStat {
     uint64_t flush_or_wal_cost = 0;
     uint64_t compaction_cost = 0;
     uint64_t reload_meta_cost = 0;
+    uint64_t total_file_size = 0;
 
     std::string print_str() {
         return fmt::format(
                 "IOStat read_iops: {} filtered_kv_cnt: {} get_in_shard_cost: {} read_io_bytes: {} "
                 "l0_write_cost: {} "
-                "l1_l2_read_cost: {} flush_or_wal_cost: {} compaction_cost: {} reload_meta_cost: {}",
+                "l1_l2_read_cost: {} flush_or_wal_cost: {} compaction_cost: {} reload_meta_cost: {} total_file_size: "
+                "{}",
                 read_iops, filtered_kv_cnt, get_in_shard_cost, read_io_bytes, l0_write_cost, l1_l2_read_cost,
-                flush_or_wal_cost, compaction_cost, reload_meta_cost);
+                flush_or_wal_cost, compaction_cost, reload_meta_cost, total_file_size);
     }
 };
 
@@ -122,6 +126,8 @@ struct IndexValue {
     bool operator==(const IndexValue& rhs) const { return memcmp(v, rhs.v, 8) == 0; }
     void operator=(uint64_t rhs) { return UNALIGNED_STORE64(v, rhs); }
 };
+
+using IndexValueWithVer = std::pair<int64_t, IndexValue>;
 
 static constexpr size_t kIndexValueSize = 8;
 static_assert(sizeof(IndexValue) == kIndexValueSize);
@@ -240,7 +246,7 @@ public:
     virtual Status load_wals(size_t n, const Slice* keys, const IndexValue* values) = 0;
 
     // load snapshot
-    virtual bool load_snapshot(phmap::BinaryInputArchive& ar) = 0;
+    virtual Status load_snapshot(phmap::BinaryInputArchive& ar) = 0;
 
     // load according meta
     virtual Status load(size_t& offset, std::unique_ptr<RandomAccessFile>& file) = 0;
@@ -248,7 +254,7 @@ public:
     // get dump total size of hashmaps of shards
     virtual size_t dump_bound() = 0;
 
-    virtual bool dump(phmap::BinaryOutputArchive& ar) = 0;
+    virtual Status dump(phmap::BinaryOutputArchive& ar) = 0;
 
     // get all key-values pair references by shard, the result will remain valid until next modification
     // |nshard|: number of shard
@@ -278,6 +284,10 @@ public:
     virtual size_t memory_usage() = 0;
 
     virtual Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb) = 0;
+
+    virtual void set_mutable_index_format_version(uint32_t ver) = 0;
+
+    virtual Status completeness_check(phmap::BinaryInputArchive& ar) = 0;
 
     static StatusOr<std::unique_ptr<MutableIndex>> create(size_t key_size);
 
@@ -364,14 +374,14 @@ public:
     Status append_wal(const Slice* keys, const IndexValue* values, const std::vector<size_t>& idxes);
 
     // load snapshot
-    bool load_snapshot(phmap::BinaryInputArchive& ar, const std::set<uint32_t>& dumped_shard_idxes);
+    Status load_snapshot(phmap::BinaryInputArchive& ar, const std::set<uint32_t>& dumped_shard_idxes);
 
     // load according meta
     Status load(const MutableIndexMetaPB& meta);
 
     size_t dump_bound();
 
-    bool dump(phmap::BinaryOutputArchive& ar, std::set<uint32_t>& dumped_shard_idxes);
+    Status dump(phmap::BinaryOutputArchive& ar, std::set<uint32_t>& dumped_shard_idxes);
 
     Status commit(MutableIndexMetaPB* meta, const EditVersion& version, const CommitType& type);
 
@@ -405,6 +415,8 @@ public:
     static StatusOr<std::unique_ptr<ShardByLengthMutableIndex>> create(size_t key_size, const std::string& path);
 
     Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb);
+
+    Status check_snapshot_file(phmap::BinaryInputArchive& ar, const std::set<uint32_t>& idxes);
 
 private:
     friend class PersistentIndex;
@@ -718,7 +730,7 @@ public:
     // |old_values|: return old values for updates, or set to NullValue for inserts
     // |stat|: used for collect statistic
     virtual Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                          IOStat* stat = nullptr);
+                          IOStat* stat = nullptr, ParallelPublishContext* ctx = nullptr);
 
     // batch replace without return old values
     // |n|: size of key/value array
@@ -772,7 +784,8 @@ public:
     // just for unit test
     bool has_bf() { return _l1_vec.empty() ? false : _l1_vec[0]->has_bf(); }
 
-    Status major_compaction(DataDir* data_dir, int64_t tablet_id, std::shared_timed_mutex* mutex);
+    Status major_compaction(DataDir* data_dir, int64_t tablet_id, std::shared_timed_mutex* mutex,
+                            IOStat* stat = nullptr);
 
     Status TEST_major_compaction(PersistentIndexMetaPB& index_meta);
 
@@ -815,6 +828,8 @@ public:
 
     void test_force_dump();
 
+    bool need_rebuild() const { return _need_rebuild; }
+
 protected:
     Status _delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version,
                                       const EditVersionWithMerge& min_l2_version);
@@ -855,7 +870,7 @@ private:
     Status _build_commit(TabletLoader* loader, PersistentIndexMetaPB& index_meta);
 
     // insert rowset data into persistent index
-    Status _insert_rowsets(TabletLoader* loader, const Schema& pkey_schema, std::unique_ptr<Column> pk_column);
+    Status _insert_rowsets(TabletLoader* loader, const Schema& pkey_schema, MutableColumnPtr pk_column);
 
     Status _get_from_immutable_index(size_t n, const Slice* keys, IndexValue* values,
                                      std::map<size_t, KeysInfo>& keys_info_by_key_size, IOStat* stat);
@@ -890,6 +905,10 @@ private:
 
     // Calculate total memory usage after index been modified.
     void _calc_memory_usage();
+
+    size_t _get_encoded_fixed_size(const Schema& schema);
+
+    void _set_need_rebuild(bool need_rebuild) { _need_rebuild = need_rebuild; }
 
 protected:
     // index storage directory
@@ -937,6 +956,8 @@ private:
     int64_t _latest_compaction_time = 0;
     // Re-calculated when commit end
     std::atomic<size_t> _memory_usage{0};
+
+    std::atomic<bool> _need_rebuild{false};
 };
 
 } // namespace starrocks

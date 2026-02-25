@@ -1,0 +1,4 @@
+-- name: test_tablet_reshard_jobs
+SELECT * FROM  INFORMATION_SCHEMA.tablet_reshard_jobs;
+-- result:
+-- !result

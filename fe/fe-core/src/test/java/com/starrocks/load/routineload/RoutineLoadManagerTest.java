@@ -36,32 +36,37 @@ package com.starrocks.load.routineload;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.LabelName;
-import com.starrocks.analysis.ParseNode;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.RandomDistributionInfo;
+import com.starrocks.catalog.SinglePartitionInfo;
+import com.starrocks.catalog.TableName;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.persist.EditLog;
+import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.LabelName;
+import com.starrocks.sql.ast.OriginStatement;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
 import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
 import com.starrocks.sql.ast.StopRoutineLoadStmt;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TKafkaRLTaskProgress;
 import com.starrocks.thrift.TLoadSourceType;
@@ -78,10 +83,10 @@ import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -102,20 +107,19 @@ public class RoutineLoadManagerTest {
     @Mocked
     private SystemInfoService systemInfoService;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         UtFrameUtils.setUpForPersistTest();
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
         UtFrameUtils.tearDownForPersisTest();
     }
 
     @Test
     public void testAddJobByStmt(@Injectable TResourceInfo tResourceInfo,
-                                 @Mocked ConnectContext connectContext,
-                                 @Mocked GlobalStateMgr globalStateMgr) throws UserException {
+                                 @Mocked ConnectContext connectContext) throws StarRocksException {
         String jobName = "job1";
         String dbName = "db1";
         LabelName labelName = new LabelName(dbName, jobName);
@@ -152,22 +156,22 @@ public class RoutineLoadManagerTest {
 
         Map<String, RoutineLoadJob> idToRoutineLoadJob =
                 Deencapsulation.getField(routineLoadManager, "idToRoutineLoadJob");
-        Assert.assertEquals(1, idToRoutineLoadJob.size());
+        Assertions.assertEquals(1, idToRoutineLoadJob.size());
         RoutineLoadJob routineLoadJob = idToRoutineLoadJob.values().iterator().next();
-        Assert.assertEquals(1L, routineLoadJob.getDbId());
-        Assert.assertEquals(jobName, routineLoadJob.getName());
-        Assert.assertEquals(1L, routineLoadJob.getTableId());
-        Assert.assertEquals(RoutineLoadJob.JobState.NEED_SCHEDULE, routineLoadJob.getState());
-        Assert.assertEquals(true, routineLoadJob instanceof KafkaRoutineLoadJob);
+        Assertions.assertEquals(1L, routineLoadJob.getDbId());
+        Assertions.assertEquals(jobName, routineLoadJob.getName());
+        Assertions.assertEquals(1L, routineLoadJob.getTableId());
+        Assertions.assertEquals(RoutineLoadJob.JobState.NEED_SCHEDULE, routineLoadJob.getState());
+        Assertions.assertEquals(true, routineLoadJob instanceof KafkaRoutineLoadJob);
 
         Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob =
                 Deencapsulation.getField(routineLoadManager, "dbToNameToRoutineLoadJob");
-        Assert.assertEquals(1, dbToNameToRoutineLoadJob.size());
-        Assert.assertEquals(Long.valueOf(1L), dbToNameToRoutineLoadJob.keySet().iterator().next());
+        Assertions.assertEquals(1, dbToNameToRoutineLoadJob.size());
+        Assertions.assertEquals(Long.valueOf(1L), dbToNameToRoutineLoadJob.keySet().iterator().next());
         Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob = dbToNameToRoutineLoadJob.get(1L);
-        Assert.assertEquals(jobName, nameToRoutineLoadJob.keySet().iterator().next());
-        Assert.assertEquals(1, nameToRoutineLoadJob.values().size());
-        Assert.assertEquals(routineLoadJob, nameToRoutineLoadJob.values().iterator().next().get(0));
+        Assertions.assertEquals(jobName, nameToRoutineLoadJob.keySet().iterator().next());
+        Assertions.assertEquals(1, nameToRoutineLoadJob.values().size());
+        Assertions.assertEquals(routineLoadJob, nameToRoutineLoadJob.values().iterator().next().get(0));
     }
 
     @Test
@@ -198,12 +202,12 @@ public class RoutineLoadManagerTest {
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         try {
             routineLoadManager.createRoutineLoadJob(createRoutineLoadStmt);
-            Assert.fail();
+            Assertions.fail();
         } catch (LoadException | DdlException e) {
-            Assert.fail();
+            Assertions.fail();
         } catch (AnalysisException e) {
             LOG.info("Access deny");
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             e.printStackTrace();
         }
     }
@@ -230,16 +234,14 @@ public class RoutineLoadManagerTest {
         Deencapsulation.setField(routineLoadManager, "dbToNameToRoutineLoadJob", dbToNameToRoutineLoadJob);
         try {
             routineLoadManager.addRoutineLoadJob(kafkaRoutineLoadJob, "db");
-            Assert.fail();
+            Assertions.fail();
         } catch (DdlException e) {
             LOG.info(e.getMessage());
         }
     }
 
     @Test
-    public void testCreateWithSameNameOfStoppedJob(@Mocked ConnectContext connectContext,
-                                                   @Mocked GlobalStateMgr globalStateMgr,
-                                                   @Mocked EditLog editLog) throws DdlException {
+    public void testCreateWithSameNameOfStoppedJob(@Mocked ConnectContext connectContext) throws DdlException {
         String jobName = "job1";
         String topicName = "topic1";
         String serverAddress = "http://127.0.0.1:8080";
@@ -247,14 +249,6 @@ public class RoutineLoadManagerTest {
                 serverAddress, topicName);
 
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
-
-        new Expectations() {
-            {
-                globalStateMgr.getEditLog();
-                minTimes = 0;
-                result = editLog;
-            }
-        };
 
         Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newConcurrentMap();
         Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob = Maps.newConcurrentMap();
@@ -266,7 +260,7 @@ public class RoutineLoadManagerTest {
         nameToRoutineLoadJob.put(jobName, routineLoadJobList);
         dbToNameToRoutineLoadJob.put(1L, nameToRoutineLoadJob);
         Map<String, RoutineLoadJob> idToRoutineLoadJob = Maps.newConcurrentMap();
-        idToRoutineLoadJob.put(UUID.randomUUID().toString(), kafkaRoutineLoadJobWithSameName);
+        idToRoutineLoadJob.put(UUIDUtil.genUUID().toString(), kafkaRoutineLoadJobWithSameName);
 
         Deencapsulation.setField(routineLoadManager, "dbToNameToRoutineLoadJob", dbToNameToRoutineLoadJob);
         Deencapsulation.setField(routineLoadManager, "idToRoutineLoadJob", idToRoutineLoadJob);
@@ -275,12 +269,12 @@ public class RoutineLoadManagerTest {
         Map<Long, Map<String, List<RoutineLoadJob>>> result =
                 Deencapsulation.getField(routineLoadManager, "dbToNameToRoutineLoadJob");
         Map<String, RoutineLoadJob> result1 = Deencapsulation.getField(routineLoadManager, "idToRoutineLoadJob");
-        Assert.assertEquals(1, result.size());
-        Assert.assertEquals(Long.valueOf(1L), result.keySet().iterator().next());
+        Assertions.assertEquals(1, result.size());
+        Assertions.assertEquals(Long.valueOf(1L), result.keySet().iterator().next());
         Map<String, List<RoutineLoadJob>> resultNameToRoutineLoadJob = result.get(1L);
-        Assert.assertEquals(jobName, resultNameToRoutineLoadJob.keySet().iterator().next());
-        Assert.assertEquals(2, resultNameToRoutineLoadJob.values().iterator().next().size());
-        Assert.assertEquals(2, result1.values().size());
+        Assertions.assertEquals(jobName, resultNameToRoutineLoadJob.keySet().iterator().next());
+        Assertions.assertEquals(2, resultNameToRoutineLoadJob.values().iterator().next().size());
+        Assertions.assertEquals(2, result1.values().size());
     }
 
     @Test
@@ -299,7 +293,7 @@ public class RoutineLoadManagerTest {
         routineLoadManager.updateBeTaskSlot();
         routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, 1L);
 
-        Assert.assertEquals(Config.max_routine_load_task_num_per_be * 2 - 1,
+        Assertions.assertEquals(Config.max_routine_load_task_num_per_be * 2 - 1,
                 routineLoadManager.getClusterIdleSlotNum());
     }
 
@@ -321,21 +315,22 @@ public class RoutineLoadManagerTest {
         // take tow slots
         long beId1 = routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, 1L);
         long beId2 = routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, 2L);
-        Assert.assertTrue(beId1 != beId2);
-        Assert.assertTrue(beId1 != -1L);
-        Assert.assertTrue(beId2 != -1L);
+        Assertions.assertTrue(beId1 != beId2);
+        Assertions.assertTrue(beId1 != -1L);
+        Assertions.assertTrue(beId2 != -1L);
 
         // take all slots
         ExecutorService es = Executors.newCachedThreadPool();
         for (int i = 0; i < (2 * Config.max_routine_load_task_num_per_be) - 2; i++) {
-            es.submit(() -> Assert.assertTrue(routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, 3L) > 0));
+            es.submit(() -> Assertions.assertTrue(
+                    routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, 3L) > 0));
         }
 
         es.shutdown();
         es.awaitTermination(1, TimeUnit.HOURS);
-        Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, 4L));
-        Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(1L, 5L));
-        Assert.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(2L, 6L));
+        Assertions.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, 4L));
+        Assertions.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(1L, 5L));
+        Assertions.assertEquals(-1L, routineLoadManager.takeBeTaskSlot(2L, 6L));
 
         // release all slots
         ExecutorService es2 = Executors.newCachedThreadPool();
@@ -347,7 +342,7 @@ public class RoutineLoadManagerTest {
         }
         es2.shutdown();
         es2.awaitTermination(1, TimeUnit.HOURS);
-        Assert.assertEquals(2 * Config.max_routine_load_task_num_per_be, routineLoadManager.getClusterIdleSlotNum());
+        Assertions.assertEquals(2 * Config.max_routine_load_task_num_per_be, routineLoadManager.getClusterIdleSlotNum());
     }
 
     @Test
@@ -376,9 +371,9 @@ public class RoutineLoadManagerTest {
         }
 
         Map<Long, Set<Long>> nodeToJobs = routineLoadManager.getNodeToJobs(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        Assert.assertEquals(5, nodeToJobs.size());
+        Assertions.assertEquals(5, nodeToJobs.size());
         for (long beId : nodeToJobs.keySet()) {
-            Assert.assertEquals(60, nodeToJobs.get(beId).size());
+            Assertions.assertEquals(60, nodeToJobs.get(beId).size());
             long total = 0;
             for (long jobId : nodeToJobs.get(beId)) {
                 total += jobId;
@@ -387,8 +382,8 @@ public class RoutineLoadManagerTest {
             LOG.warn("beId: {}, total: {}", beId, total);
         }
         for (long beId : nodeToJobs.keySet()) {
-            Assert.assertEquals(60, nodeToJobs.get(beId).size());
-            Assert.assertEquals(120, routineLoadManager.getNodeTasksNum().get(beId).intValue());
+            Assertions.assertEquals(60, nodeToJobs.get(beId).size());
+            Assertions.assertEquals(120, routineLoadManager.getNodeTasksNum().get(beId).intValue());
         }
         Config.max_routine_load_task_num_per_be = 16;
     }
@@ -428,10 +423,10 @@ public class RoutineLoadManagerTest {
         Deencapsulation.setField(routineLoadManager, "dbToNameToRoutineLoadJob", dbToNameRoutineLoadList);
         List<RoutineLoadJob> result = routineLoadManager.getJobByName(jobName);
 
-        Assert.assertEquals(3, result.size());
-        Assert.assertEquals(routineLoadJob2, result.get(0));
-        Assert.assertEquals(routineLoadJob1, result.get(1));
-        Assert.assertEquals(routineLoadJob3, result.get(2));
+        Assertions.assertEquals(3, result.size());
+        Assertions.assertEquals(routineLoadJob2, result.get(0));
+        Assertions.assertEquals(routineLoadJob1, result.get(1));
+        Assertions.assertEquals(routineLoadJob3, result.get(2));
 
     }
 
@@ -473,7 +468,7 @@ public class RoutineLoadManagerTest {
             rlTaskTxnCommitAttachment.setKafkaRLTaskProgress(tKafkaRLTaskProgress);
             TxnCommitAttachment txnCommitAttachment = new RLTaskTxnCommitAttachment(rlTaskTxnCommitAttachment);
             routineLoadManager.setRoutineLoadJobOtherMsg("foo abc", txnCommitAttachment);
-            Assert.assertEquals(true, routineLoadJob.getOtherMsg().contains("foo abc"));
+            Assertions.assertEquals(true, routineLoadJob.getOtherMsg().contains("foo abc"));
         }
     }
 
@@ -503,10 +498,10 @@ public class RoutineLoadManagerTest {
         Deencapsulation.setField(routineLoadManager, "idToRoutineLoadJob", idToRoutineLoadJob);
         List<RoutineLoadJob> result = routineLoadManager.getJob(null, null, true);
 
-        Assert.assertEquals(3, result.size());
-        Assert.assertEquals(routineLoadJob2, result.get(0));
-        Assert.assertEquals(routineLoadJob1, result.get(1));
-        Assert.assertEquals(routineLoadJob3, result.get(2));
+        Assertions.assertEquals(3, result.size());
+        Assertions.assertEquals(routineLoadJob2, result.get(0));
+        Assertions.assertEquals(routineLoadJob1, result.get(1));
+        Assertions.assertEquals(routineLoadJob3, result.get(2));
     }
 
     @Test
@@ -544,16 +539,16 @@ public class RoutineLoadManagerTest {
         Deencapsulation.setField(routineLoadManager, "idToRoutineLoadJob", idToRoutineLoadJob);
         List<RoutineLoadJob> result = routineLoadManager.getJob(null, "aaa", false);
 
-        Assert.assertEquals(1, result.size());
-        Assert.assertEquals(routineLoadJob2, result.get(0));
+        Assertions.assertEquals(1, result.size());
+        Assertions.assertEquals(routineLoadJob2, result.get(0));
     }
 
     @Test
     public void testGetJobByDb(@Injectable RoutineLoadJob routineLoadJob1,
                                @Injectable RoutineLoadJob routineLoadJob2,
-                               @Injectable RoutineLoadJob routineLoadJob3,
-                               @Mocked GlobalStateMgr globalStateMgr,
-                               @Mocked Database database) throws MetaNotFoundException {
+                               @Injectable RoutineLoadJob routineLoadJob3) throws MetaNotFoundException {
+        Database database = new Database(1L, "db1");
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
         new Expectations() {
             {
                 routineLoadJob1.isFinal();
@@ -574,15 +569,8 @@ public class RoutineLoadManagerTest {
                 routineLoadJob3.getName();
                 minTimes = 0;
                 result = "bbb";
-                globalStateMgr.getDb("db1");
-                minTimes = 0;
-                result = database;
-                database.getId();
-                minTimes = 0;
-                result = 1L;
             }
         };
-
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newConcurrentMap();
         Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob = Maps.newConcurrentMap();
@@ -592,18 +580,18 @@ public class RoutineLoadManagerTest {
         Deencapsulation.setField(routineLoadManager, "dbToNameToRoutineLoadJob", dbToNameToRoutineLoadJob);
         List<RoutineLoadJob> result = routineLoadManager.getJob("db1", null, true);
 
-        Assert.assertEquals(3, result.size());
-        Assert.assertEquals(routineLoadJob2, result.get(0));
-        Assert.assertEquals(routineLoadJob1, result.get(1));
-        Assert.assertEquals(routineLoadJob3, result.get(2));
+        Assertions.assertEquals(3, result.size());
+        Assertions.assertEquals(routineLoadJob2, result.get(0));
+        Assertions.assertEquals(routineLoadJob1, result.get(1));
+        Assertions.assertEquals(routineLoadJob3, result.get(2));
     }
 
     @Test
     public void testGetJobByDbAndJobName(@Injectable RoutineLoadJob routineLoadJob1,
                                          @Injectable RoutineLoadJob routineLoadJob2,
-                                         @Injectable RoutineLoadJob routineLoadJob3,
-                                         @Mocked GlobalStateMgr globalStateMgr,
-                                         @Mocked Database database) throws MetaNotFoundException {
+                                         @Injectable RoutineLoadJob routineLoadJob3) throws MetaNotFoundException {
+        Database database = new Database(1L, "db1");
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
         new Expectations() {
             {
                 routineLoadJob1.isFinal();
@@ -624,12 +612,6 @@ public class RoutineLoadManagerTest {
                 routineLoadJob3.getName();
                 minTimes = 0;
                 result = "bbb";
-                globalStateMgr.getDb("db1");
-                minTimes = 0;
-                result = database;
-                database.getId();
-                minTimes = 0;
-                result = 1L;
             }
         };
 
@@ -642,17 +624,17 @@ public class RoutineLoadManagerTest {
         Deencapsulation.setField(routineLoadManager, "dbToNameToRoutineLoadJob", dbToNameToRoutineLoadJob);
         List<RoutineLoadJob> result = routineLoadManager.getJob("db1", "aaa", true);
 
-        Assert.assertEquals(2, result.size());
-        Assert.assertEquals(routineLoadJob2, result.get(0));
-        Assert.assertEquals(routineLoadJob1, result.get(1));
+        Assertions.assertEquals(2, result.size());
+        Assertions.assertEquals(routineLoadJob2, result.get(0));
+        Assertions.assertEquals(routineLoadJob1, result.get(1));
     }
 
     @Test
     public void testGetJobIncludeHistory(@Injectable RoutineLoadJob routineLoadJob1,
                                          @Injectable RoutineLoadJob routineLoadJob2,
-                                         @Injectable RoutineLoadJob routineLoadJob3,
-                                         @Mocked GlobalStateMgr globalStateMgr,
-                                         @Mocked Database database) throws MetaNotFoundException {
+                                         @Injectable RoutineLoadJob routineLoadJob3) throws MetaNotFoundException {
+        Database database = new Database(1L, "db1");
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
         new Expectations() {
             {
                 routineLoadJob1.isFinal();
@@ -664,12 +646,6 @@ public class RoutineLoadManagerTest {
                 routineLoadJob3.isFinal();
                 minTimes = 0;
                 result = true;
-                globalStateMgr.getDb(anyString);
-                minTimes = 0;
-                result = database;
-                database.getId();
-                minTimes = 0;
-                result = 1L;
             }
         };
 
@@ -683,24 +659,27 @@ public class RoutineLoadManagerTest {
         nameToRoutineLoadJob.put("", routineLoadJobList);
         dbToNameToRoutineLoadJob.put(1L, nameToRoutineLoadJob);
         Deencapsulation.setField(routineLoadManager, "dbToNameToRoutineLoadJob", dbToNameToRoutineLoadJob);
-        List<RoutineLoadJob> result = routineLoadManager.getJob("", "", true);
+        List<RoutineLoadJob> result = routineLoadManager.getJob("db1", "", true);
 
-        Assert.assertEquals(3, result.size());
-        Assert.assertEquals(routineLoadJob2, result.get(0));
-        Assert.assertEquals(routineLoadJob1, result.get(1));
-        Assert.assertEquals(routineLoadJob3, result.get(2));
+        Assertions.assertEquals(3, result.size());
+        Assertions.assertEquals(routineLoadJob2, result.get(0));
+        Assertions.assertEquals(routineLoadJob1, result.get(1));
+        Assertions.assertEquals(routineLoadJob3, result.get(2));
     }
 
     @Test
-    public void testPauseRoutineLoadJob(@Injectable PauseRoutineLoadStmt pauseRoutineLoadStmt,
-                                        @Mocked GlobalStateMgr globalStateMgr,
-                                        @Mocked Database database,
-                                        @Mocked ConnectContext connectContext) throws UserException {
+    public void testPauseRoutineLoadJob(@Injectable PauseRoutineLoadStmt pauseRoutineLoadStmt, 
+                                        @Mocked ConnectContext connectContext) throws StarRocksException {
+        Database database = new Database(1L, "db1");
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
+        OlapTable olapTable = new OlapTable(2L, "table1", Lists.newArrayList(),
+                KeysType.DUP_KEYS, new SinglePartitionInfo(), new RandomDistributionInfo(3));
+        database.registerTableUnlocked(olapTable);
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newHashMap();
         Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob = Maps.newHashMap();
         List<RoutineLoadJob> routineLoadJobList = Lists.newArrayList();
-        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(3L, "job1", 1L, 2L, "localhost:9092", "topic1");
         routineLoadJobList.add(routineLoadJob);
         nameToRoutineLoadJob.put("", routineLoadJobList);
         dbToNameToRoutineLoadJob.put(1L, nameToRoutineLoadJob);
@@ -714,43 +693,37 @@ public class RoutineLoadManagerTest {
             {
                 pauseRoutineLoadStmt.getDbFullName();
                 minTimes = 0;
-                result = "";
+                result = "db1";
                 pauseRoutineLoadStmt.getName();
                 minTimes = 0;
                 result = "";
-                globalStateMgr.getDb("");
-                minTimes = 0;
-                result = database;
-                database.getId();
-                minTimes = 0;
-                result = 1L;
             }
         };
 
         routineLoadManager.pauseRoutineLoadJob(pauseRoutineLoadStmt);
 
-        Assert.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
+        Assertions.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
 
         for (int i = 0; i < 3; i++) {
             Deencapsulation.setField(routineLoadJob, "pauseReason",
                     new ErrorReason(InternalErrorCode.REPLICA_FEW_ERR, ""));
             routineLoadManager.updateRoutineLoadJob();
-            Assert.assertEquals(RoutineLoadJob.JobState.NEED_SCHEDULE, routineLoadJob.getState());
+            Assertions.assertEquals(RoutineLoadJob.JobState.NEED_SCHEDULE, routineLoadJob.getState());
             Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.PAUSED);
             boolean autoResumeLock = Deencapsulation.getField(routineLoadJob, "autoResumeLock");
-            Assert.assertEquals(autoResumeLock, false);
+            Assertions.assertEquals(autoResumeLock, false);
         }
         routineLoadManager.updateRoutineLoadJob();
-        Assert.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
+        Assertions.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
         boolean autoResumeLock = Deencapsulation.getField(routineLoadJob, "autoResumeLock");
-        Assert.assertEquals(autoResumeLock, true);
+        Assertions.assertEquals(autoResumeLock, true);
     }
 
     @Test
     public void testResumeRoutineLoadJob(@Injectable ResumeRoutineLoadStmt resumeRoutineLoadStmt,
-                                         @Mocked GlobalStateMgr globalStateMgr,
-                                         @Mocked Database database,
-                                         @Mocked ConnectContext connectContext) throws UserException {
+                                         @Mocked ConnectContext connectContext) throws StarRocksException {
+        Database database = new Database(1L, "db1");
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newHashMap();
         Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob = Maps.newHashMap();
@@ -765,29 +738,23 @@ public class RoutineLoadManagerTest {
             {
                 resumeRoutineLoadStmt.getDbFullName();
                 minTimes = 0;
-                result = "";
+                result = "db1";
                 resumeRoutineLoadStmt.getName();
                 minTimes = 0;
                 result = "";
-                globalStateMgr.getDb("");
-                minTimes = 0;
-                result = database;
-                database.getId();
-                minTimes = 0;
-                result = 1L;
             }
         };
 
         routineLoadManager.resumeRoutineLoadJob(resumeRoutineLoadStmt);
 
-        Assert.assertEquals(RoutineLoadJob.JobState.NEED_SCHEDULE, routineLoadJob.getState());
+        Assertions.assertEquals(RoutineLoadJob.JobState.NEED_SCHEDULE, routineLoadJob.getState());
     }
 
     @Test
     public void testStopRoutineLoadJob(@Injectable StopRoutineLoadStmt stopRoutineLoadStmt,
-                                       @Mocked GlobalStateMgr globalStateMgr,
-                                       @Mocked Database database,
-                                       @Mocked ConnectContext connectContext) throws UserException {
+                                       @Mocked ConnectContext connectContext) throws StarRocksException {
+        Database database = new Database(1L, "db1");
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newHashMap();
         Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob = Maps.newHashMap();
@@ -802,28 +769,20 @@ public class RoutineLoadManagerTest {
             {
                 stopRoutineLoadStmt.getDbFullName();
                 minTimes = 0;
-                result = "";
+                result = "db1";
                 stopRoutineLoadStmt.getName();
                 minTimes = 0;
                 result = "";
-                globalStateMgr.getDb("");
-                minTimes = 0;
-                result = database;
-                database.getId();
-                minTimes = 0;
-                result = 1L;
             }
         };
 
         routineLoadManager.stopRoutineLoadJob(stopRoutineLoadStmt);
 
-        Assert.assertEquals(RoutineLoadJob.JobState.STOPPED, routineLoadJob.getState());
+        Assertions.assertEquals(RoutineLoadJob.JobState.STOPPED, routineLoadJob.getState());
     }
 
     @Test
-    public void testCleanOldRoutineLoadJobs(@Injectable RoutineLoadJob routineLoadJob,
-                                            @Mocked GlobalStateMgr globalStateMgr,
-                                            @Mocked EditLog editLog) {
+    public void testCleanOldRoutineLoadJobs(@Injectable RoutineLoadJob routineLoadJob) {
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newHashMap();
         Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob = Maps.newHashMap();
@@ -847,15 +806,12 @@ public class RoutineLoadManagerTest {
                 routineLoadJob.getName();
                 minTimes = 0;
                 result = "";
-                globalStateMgr.getEditLog();
-                minTimes = 0;
-                result = editLog;
             }
         };
         routineLoadManager.cleanOldRoutineLoadJobs();
 
-        Assert.assertEquals(0, dbToNameToRoutineLoadJob.size());
-        Assert.assertEquals(0, idToRoutineLoadJob.size());
+        Assertions.assertEquals(0, dbToNameToRoutineLoadJob.size());
+        Assertions.assertEquals(0, idToRoutineLoadJob.size());
     }
 
     @Test
@@ -888,7 +844,7 @@ public class RoutineLoadManagerTest {
         };
 
         routineLoadManager.replayRemoveOldRoutineLoad(operation);
-        Assert.assertEquals(0, idToRoutineLoadJob.size());
+        Assertions.assertEquals(0, idToRoutineLoadJob.size());
     }
 
     @Test
@@ -920,14 +876,14 @@ public class RoutineLoadManagerTest {
         };
 
         routineLoadManager.replayChangeRoutineLoadJob(operation);
-        Assert.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
+        Assertions.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
     }
 
     @Test
     public void testAlterRoutineLoadJob(@Injectable StopRoutineLoadStmt stopRoutineLoadStmt,
-                                        @Mocked GlobalStateMgr globalStateMgr,
-                                        @Mocked Database database,
-                                        @Mocked ConnectContext connectContext) throws UserException {
+                                        @Mocked ConnectContext connectContext) throws StarRocksException {
+        Database database = new Database(1L, "test");
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateDb(database);
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newHashMap();
         Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob = Maps.newHashMap();
@@ -942,22 +898,16 @@ public class RoutineLoadManagerTest {
             {
                 stopRoutineLoadStmt.getDbFullName();
                 minTimes = 0;
-                result = "";
+                result = "test";
                 stopRoutineLoadStmt.getName();
                 minTimes = 0;
                 result = "";
-                globalStateMgr.getDb("");
-                minTimes = 0;
-                result = database;
-                database.getId();
-                minTimes = 0;
-                result = 1L;
             }
         };
 
         routineLoadManager.stopRoutineLoadJob(stopRoutineLoadStmt);
 
-        Assert.assertEquals(RoutineLoadJob.JobState.STOPPED, routineLoadJob.getState());
+        Assertions.assertEquals(RoutineLoadJob.JobState.STOPPED, routineLoadJob.getState());
     }
 
     @Test
@@ -980,37 +930,28 @@ public class RoutineLoadManagerTest {
         long discardJobId = 1L;
         RoutineLoadJob discardJob = new KafkaRoutineLoadJob(discardJobId, "discardJob",
                 1, 1, "xxx", "xxtopic");
-        discardJob.setOrigStmt(new OriginStatement(createSQL, 0));
+        discardJob.setOrigStmt(new OriginStatementInfo(createSQL, 0));
         leaderLoadManager.addRoutineLoadJob(discardJob, db);
         discardJob.updateState(RoutineLoadJob.JobState.CANCELLED,
-                new ErrorReason(InternalErrorCode.CREATE_TASKS_ERR, "fake"), false);
+                new ErrorReason(InternalErrorCode.CREATE_TASKS_ERR, "fake"));
         discardJob.endTimestamp = now - Config.label_keep_max_second * 2 * 1000L;
 
         // 2. create a new job that will keep for a while
         long goodJobId = 2L;
         RoutineLoadJob goodJob = new KafkaRoutineLoadJob(goodJobId, "goodJob",
                 1, 1, "xxx", "xxtopic");
-        goodJob.setOrigStmt(new OriginStatement(createSQL, 0));
+        goodJob.setOrigStmt(new OriginStatementInfo(createSQL, 0));
         leaderLoadManager.addRoutineLoadJob(goodJob, db);
         goodJob.updateState(RoutineLoadJob.JobState.CANCELLED,
-                new ErrorReason(InternalErrorCode.CREATE_TASKS_ERR, "fake"), false);
-        Assert.assertNotNull(leaderLoadManager.getJob(discardJobId));
-        Assert.assertNotNull(leaderLoadManager.getJob(goodJobId));
-
-        // 3. save image & reload
-        UtFrameUtils.PseudoImage pseudoImage = new UtFrameUtils.PseudoImage();
-        leaderLoadManager.write(pseudoImage.getDataOutputStream());
-        RoutineLoadMgr restartedRoutineLoadManager = new RoutineLoadMgr();
-        restartedRoutineLoadManager.readFields(pseudoImage.getDataInputStream());
-        // discard expired job
-        Assert.assertNull(restartedRoutineLoadManager.getJob(discardJobId));
-        Assert.assertNotNull(restartedRoutineLoadManager.getJob(goodJobId));
+                new ErrorReason(InternalErrorCode.CREATE_TASKS_ERR, "fake"));
+        Assertions.assertNotNull(leaderLoadManager.getJob(discardJobId));
+        Assertions.assertNotNull(leaderLoadManager.getJob(goodJobId));
 
         // 4. clean expire
         leaderLoadManager.cleanOldRoutineLoadJobs();
         // discard expired job
-        Assert.assertNull(leaderLoadManager.getJob(discardJobId));
-        Assert.assertNotNull(leaderLoadManager.getJob(goodJobId));
+        Assertions.assertNull(leaderLoadManager.getJob(discardJobId));
+        Assertions.assertNotNull(leaderLoadManager.getJob(goodJobId));
 
     }
 
@@ -1029,14 +970,14 @@ public class RoutineLoadManagerTest {
 
         RoutineLoadJob kafkaRoutineLoadJob = new KafkaRoutineLoadJob(1L, "kafkaJob",
                 1, 1, "xxx", "xxtopic");
-        kafkaRoutineLoadJob.setOrigStmt(new OriginStatement(createSQL, 0));
+        kafkaRoutineLoadJob.setOrigStmt(new OriginStatementInfo(createSQL, 0));
         leaderLoadManager.addRoutineLoadJob(kafkaRoutineLoadJob, db);
 
         createSQL = "CREATE ROUTINE LOAD db0.routine_load_2 ON t1 " +
                 "PROPERTIES(\"format\" = \"json\",\"jsonpaths\"=\"[\\\"$.k1\\\",\\\"$.k2.\\\\\\\"k2.1\\\\\\\"\\\"]\") " +
                 "FROM PULSAR(\"pulsar_service_url\" = \"xxx.xxx.xxx.xxx:xxx\",\"pulsar_topic\" = \"topic_0\");";
         RoutineLoadJob pulsarRoutineLoadJob = new PulsarRoutineLoadJob(2L, "pulsarJob", 1, 1, "xxxx", "xxx", "xxx");
-        pulsarRoutineLoadJob.setOrigStmt(new OriginStatement(createSQL, 0));
+        pulsarRoutineLoadJob.setOrigStmt(new OriginStatementInfo(createSQL, 0));
         leaderLoadManager.addRoutineLoadJob(pulsarRoutineLoadJob, db);
 
         UtFrameUtils.PseudoImage pseudoImage = new UtFrameUtils.PseudoImage();
@@ -1046,7 +987,57 @@ public class RoutineLoadManagerTest {
         restartedRoutineLoadManager.loadRoutineLoadJobsV2(reader);
         reader.close();
 
-        Assert.assertNotNull(restartedRoutineLoadManager.getJob(1L));
-        Assert.assertNotNull(restartedRoutineLoadManager.getJob(2L));
+        Assertions.assertNotNull(restartedRoutineLoadManager.getJob(1L));
+        Assertions.assertNotNull(restartedRoutineLoadManager.getJob(2L));
+    }
+
+
+    @Test
+    public void testCheckTaskInJob() throws Exception {
+
+        KafkaRoutineLoadJob kafkaRoutineLoadJob = new KafkaRoutineLoadJob(1L, "job1", 1L, 1L, null, "topic1");
+        Map<Integer, Long> partitionIdToOffset = Maps.newHashMap();
+        partitionIdToOffset.put(1, 100L);
+        partitionIdToOffset.put(2, 200L);
+        KafkaTaskInfo routineLoadTaskInfo = new KafkaTaskInfo(new UUID(1, 1), kafkaRoutineLoadJob, 20000,
+                System.currentTimeMillis(), partitionIdToOffset, Config.routine_load_task_timeout_second * 1000);
+        kafkaRoutineLoadJob.routineLoadTaskInfoList.add(routineLoadTaskInfo);
+        RoutineLoadMgr routineLoadMgr = new RoutineLoadMgr();
+        routineLoadMgr.addRoutineLoadJob(kafkaRoutineLoadJob, "db");
+        boolean taskExist = routineLoadMgr.checkTaskInJob(kafkaRoutineLoadJob.getId(), routineLoadTaskInfo.getId());
+        Assertions.assertTrue(taskExist);
+        boolean taskNotExist = routineLoadMgr.checkTaskInJob(-1L, routineLoadTaskInfo.getId());
+        Assertions.assertFalse(taskNotExist);
+    }
+
+    @Test
+    public void testGetRunningRoutingLoadCount() throws Exception {
+        KafkaRoutineLoadJob job1 = new KafkaRoutineLoadJob(1L, "job1", 1L, 1L, null, "topic1");
+        job1.warehouseId = 1;
+        job1.state = RoutineLoadJob.JobState.NEED_SCHEDULE;
+
+        KafkaRoutineLoadJob job2 = new KafkaRoutineLoadJob(2L, "job2", 1L, 1L, null, "topic1");
+        job2.warehouseId = 1;
+        job2.state = RoutineLoadJob.JobState.CANCELLED;
+
+
+        KafkaRoutineLoadJob job3 = new KafkaRoutineLoadJob(3L, "job3", 1L, 1L, null, "topic1");
+        job3.warehouseId = 2;
+        job3.state = RoutineLoadJob.JobState.NEED_SCHEDULE;
+
+        KafkaRoutineLoadJob job4 = new KafkaRoutineLoadJob(4L, "job4", 1L, 1L, null, "topic1");
+        job4.warehouseId = 2;
+        job4.state = RoutineLoadJob.JobState.CANCELLED;
+
+        RoutineLoadMgr routineLoadMgr = new RoutineLoadMgr();
+        routineLoadMgr.addRoutineLoadJob(job1, "db");
+        routineLoadMgr.addRoutineLoadJob(job2, "db");
+        routineLoadMgr.addRoutineLoadJob(job3, "db");
+        routineLoadMgr.addRoutineLoadJob(job4, "db");
+
+        Map<Long, Long> result = routineLoadMgr.getRunningRoutingLoadCount();
+        Assertions.assertEquals(2, result.size());
+        Assertions.assertEquals(Long.valueOf(1), result.get(1L));
+        Assertions.assertEquals(Long.valueOf(1), result.get(2L));
     }
 }

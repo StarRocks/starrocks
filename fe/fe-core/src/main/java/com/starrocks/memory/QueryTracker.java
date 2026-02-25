@@ -16,18 +16,17 @@ package com.starrocks.memory;
 
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.qe.QueryDetailQueue;
-import org.apache.spark.util.SizeEstimator;
 
 import java.util.Map;
 
 public class QueryTracker implements MemoryTrackable {
     @Override
-    public long estimateSize() {
-        return SizeEstimator.estimate(QueryDetailQueue.TOTAL_QUERIES);
+    public Map<String, Long> estimateCount() {
+        return ImmutableMap.of("QueryDetail", QueryDetailQueue.getTotalQueriesCount());
     }
 
     @Override
-    public Map<String, Long> estimateCount() {
-        return ImmutableMap.of("QueryDetail", QueryDetailQueue.getTotalQueriesCount());
+    public long estimateSize() {
+        return QueryDetailQueue.estimateSize();
     }
 }

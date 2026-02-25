@@ -17,12 +17,13 @@ package com.starrocks.connector.parser.trino;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.CaseExpr;
-import com.starrocks.analysis.CaseWhenClause;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.StringLiteral;
+import com.starrocks.sql.ast.expression.CaseExpr;
+import com.starrocks.sql.ast.expression.CaseWhenClause;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.VariableExpr;
 
 import java.util.List;
 import java.util.Map;
@@ -81,6 +82,7 @@ public class Trino2SRFunctionCallTransformer {
         registerMapFunctionTransformer();
         registerBinaryFunctionTransformer();
         registerHLLFunctionTransformer();
+        registerMathFunctionTransformer();
         // todo: support more function transform
     }
 
@@ -144,6 +146,38 @@ public class Trino2SRFunctionCallTransformer {
         registerFunctionTransformer("to_unixtime", 1, "unix_timestamp",
                 List.of(Expr.class));
 
+        // from_unixtime(unixtime) -> from_unixtime
+        registerFunctionTransformer("from_unixtime", 1, "from_unixtime",
+                List.of(Expr.class));
+
+        //from_unixtime(unixtime, zone) -> convert_tz, from_unixtime
+        registerFunctionTransformer("from_unixtime", 2,
+                new FunctionCallExpr("convert_tz", List.of(
+                        new FunctionCallExpr("from_unixtime", List.of(
+                                new PlaceholderExpr(1, Expr.class))),
+                        new VariableExpr("time_zone"),
+                        new PlaceholderExpr(2, Expr.class)
+                )));
+
+        //from_unixtime(unixtime, hours, minutes) -> hours_add, minutes_add, from_unixtime
+        registerFunctionTransformer("from_unixtime", 3,
+                new FunctionCallExpr("hours_add", List.of(
+                        new FunctionCallExpr("minutes_add", List.of(
+                                new FunctionCallExpr("from_unixtime", List.of(
+                                        new PlaceholderExpr(1, Expr.class))),
+                                new PlaceholderExpr(3, Expr.class))),
+                        new PlaceholderExpr(2, Expr.class)
+
+                )));
+
+        //at_timezone -> convert_tz
+        registerFunctionTransformer("at_timezone", 2,
+                new FunctionCallExpr("convert_tz", List.of(
+                        new PlaceholderExpr(1, Expr.class),
+                        new VariableExpr("time_zone"),
+                        new PlaceholderExpr(2, Expr.class)
+                )));
+
         // date_parse -> str_to_date
         registerFunctionTransformer("date_parse", 2, "str_to_date",
                 List.of(Expr.class, Expr.class));
@@ -184,10 +218,6 @@ public class Trino2SRFunctionCallTransformer {
         registerFunctionTransformer("to_char", 2, "jodatime_format",
                 List.of(Expr.class, Expr.class));
 
-        // parse_datetime -> str_to_jodatime
-        registerFunctionTransformer("parse_datetime", 2, "str_to_jodatime",
-                List.of(Expr.class, Expr.class));
-
         // to_date -> to_tera_date
         registerFunctionTransformer("to_date", 2, "to_tera_date",
                 List.of(Expr.class, Expr.class));
@@ -199,6 +229,34 @@ public class Trino2SRFunctionCallTransformer {
         // last_day_of_month(x)  -> last_day(x,'month')
         registerFunctionTransformer("last_day_of_month", 1, new FunctionCallExpr("last_day",
                 List.of(new PlaceholderExpr(1, Expr.class), new StringLiteral("month"))));
+
+        // year_of_week(x) -> floor(divide(yearweek('x', 1),100))
+        registerFunctionTransformer("year_of_week", 1,
+                new FunctionCallExpr("floor", List.of(
+                        new FunctionCallExpr("divide", List.of(
+                                new FunctionCallExpr("yearweek", List.of(
+                                        new PlaceholderExpr(1, Expr.class),
+                                        new IntLiteral(1))
+                                ),
+                                new IntLiteral(100))
+                        )
+                )));
+
+        // yow(x) -> floor(divide(yearweek('x', 1),100))
+        registerFunctionTransformer("yow", 1,
+                new FunctionCallExpr("floor", List.of(
+                        new FunctionCallExpr("divide", List.of(
+                                new FunctionCallExpr("yearweek", List.of(
+                                        new PlaceholderExpr(1, Expr.class),
+                                        new IntLiteral(1))
+                                ),
+                                new IntLiteral(100))
+                        )
+                )));
+
+        // from_iso8601_timestamp -> timestamp
+        registerFunctionTransformer("from_iso8601_timestamp", 1, "timestamp",
+                List.of(Expr.class));
     }
 
     private static void registerStringFunctionTransformer() {
@@ -245,6 +303,12 @@ public class Trino2SRFunctionCallTransformer {
         // regexp_like -> regexp
         registerFunctionTransformer("regexp_like", 2, "regexp",
                 List.of(Expr.class, Expr.class));
+
+        // support regexp_replace with 2 param
+        registerFunctionTransformer("regexp_replace", 2,
+                new FunctionCallExpr("regexp_replace",
+                        List.of(new PlaceholderExpr(1, Expr.class), new PlaceholderExpr(2, Expr.class),
+                                new StringLiteral(""))));
     }
 
     private static void registerURLFunctionTransformer() {
@@ -262,8 +326,8 @@ public class Trino2SRFunctionCallTransformer {
         registerFunctionTransformer("json_parse", 1, "parse_json",
                 List.of(Expr.class));
 
-        // json_extract -> get_json_string
-        registerFunctionTransformer("json_extract", 2, "get_json_string",
+        // json_extract -> json_query
+        registerFunctionTransformer("json_extract", 2, "json_query",
                 List.of(Expr.class, Expr.class));
 
         // json_size -> json_length
@@ -324,6 +388,13 @@ public class Trino2SRFunctionCallTransformer {
 
         // merge -> HLL_RAW_AGG
         registerFunctionTransformer("merge", 1, "hll_raw_agg", List.of(Expr.class));
+    }
+
+    private static void registerMathFunctionTransformer() {
+        // truncate(x) -> truncate(x, 0)
+        registerFunctionTransformer("truncate", 1, new FunctionCallExpr("truncate",
+                List.of(new PlaceholderExpr(1, Expr.class), new IntLiteral(0))));
+
     }
 
     private static void registerFunctionTransformer(String trinoFnName, int trinoFnArgNums, String starRocksFnName,

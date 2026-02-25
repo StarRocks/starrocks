@@ -22,7 +22,7 @@
 #include "exec/pipeline/source_operator.h"
 
 namespace starrocks::pipeline {
-
+class LocalExchanger;
 class LocalExchangeSourceOperator final : public SourceOperator {
     class PartitionChunk {
     public:
@@ -46,9 +46,10 @@ class LocalExchangeSourceOperator final : public SourceOperator {
     };
 
     struct PartialChunks {
-        std::queue<std::unique_ptr<Chunk>> queue;
+        std::queue<ChunkUniquePtr> queue;
         int64_t num_rows{0};
         size_t memory_usage{0};
+        std::vector<std::pair<TypeDescriptor, ColumnPtr>> partition_key_datum;
     };
 
 public:
@@ -64,7 +65,8 @@ public:
     Status add_chunk(ChunkPtr chunk, const std::shared_ptr<std::vector<uint32_t>>& indexes, uint32_t from,
                      uint32_t size, size_t memory_bytes);
 
-    Status add_chunk(const std::vector<std::string>& partition_key, std::unique_ptr<Chunk> chunk);
+    Status add_chunk(const std::vector<std::optional<std::string>>& partition_key,
+                     const std::vector<std::pair<TypeDescriptor, ColumnPtr>>& partition_datum, ChunkUniquePtr chunk);
 
     bool has_output() const override;
 
@@ -72,6 +74,7 @@ public:
 
     Status set_finished(RuntimeState* state) override;
     Status set_finishing(RuntimeState* state) override {
+        auto notify = defer_notify();
         std::lock_guard<std::mutex> l(_chunk_lock);
         _is_finished = true;
         return Status::OK();
@@ -97,6 +100,9 @@ public:
 
     void enter_release_memory_mode() override;
     void set_execute_mode(int performance_level) override;
+    void update_exec_stats(RuntimeState* state) override {}
+
+    std::string get_name() const override;
 
 private:
     ChunkPtr _pull_passthrough_chunk(RuntimeState* state);
@@ -107,7 +113,8 @@ private:
 
     int64_t _key_partition_max_rows() const;
 
-    PartialChunks& _max_row_partition_chunks();
+    std::map<std::vector<std::optional<std::string>>, LocalExchangeSourceOperator::PartialChunks>::iterator
+    _max_row_partition_chunks();
 
     bool _local_buffer_almost_full() const { return _local_memory_usage >= _local_memory_limit; }
 
@@ -130,7 +137,7 @@ private:
     // TODO(KKS): make it lock free
     mutable std::mutex _chunk_lock;
     const std::shared_ptr<ChunkBufferMemoryManager>& _memory_manager;
-    std::unordered_map<std::vector<std::string>, PartialChunks> _partition_key2partial_chunks;
+    std::map<std::vector<std::optional<std::string>>, PartialChunks> _partition_key2partial_chunks;
 
     // STREAM MV
     bool _is_epoch_finished = false;
@@ -145,6 +152,8 @@ public:
 
     ~LocalExchangeSourceOperatorFactory() override = default;
 
+    bool support_event_scheduler() const override { return true; }
+
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         std::shared_ptr<LocalExchangeSourceOperator> source = std::make_shared<LocalExchangeSourceOperator>(
                 this, _id, _plan_node_id, driver_sequence, _memory_manager);
@@ -152,9 +161,13 @@ public:
         return source;
     }
 
+    void set_exchanger(LocalExchanger* exchanger) { _exchanger = exchanger; }
+    LocalExchanger* exchanger() { return _exchanger; }
+
     std::vector<LocalExchangeSourceOperator*>& get_sources() { return _sources; }
 
 private:
+    LocalExchanger* _exchanger = nullptr;
     std::shared_ptr<ChunkBufferMemoryManager> _memory_manager;
     std::vector<LocalExchangeSourceOperator*> _sources;
 };

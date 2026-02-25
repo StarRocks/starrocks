@@ -39,6 +39,7 @@
 #include <algorithm>
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "column/column.h"
 #include "column/column_access_path.h"
@@ -46,20 +47,27 @@
 #include "column/datum_convert.h"
 #include "common/compiler_util.h"
 #include "common/logging.h"
+#include "common/status.h"
 #include "common/statusor.h"
-#include "runtime/types.h"
+#include "gen_cpp/segment.pb.h"
+#include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "storage/column_predicate.h"
 #include "storage/index/index_descriptor.h"
+#include "types/type_descriptor.h"
+#ifndef __APPLE__
 #include "storage/index/inverted/inverted_plugin_factory.h"
+#endif
+#include "base/bit/rle_encoding.h"
 #include "storage/rowset/array_column_iterator.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/bitmap_index_reader.h"
-#include "storage/rowset/bloom_filter.h"
 #include "storage/rowset/bloom_filter_index_reader.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/encoding_info.h"
 #include "storage/rowset/json_column_iterator.h"
 #include "storage/rowset/map_column_iterator.h"
+#include "storage/rowset/options.h"
 #include "storage/rowset/page_handle.h"
 #include "storage/rowset/page_io.h"
 #include "storage/rowset/page_pointer.h"
@@ -69,8 +77,8 @@
 #include "storage/rowset/zone_map_index.h"
 #include "storage/types.h"
 #include "types/logical_type.h"
+#include "util/bloom_filter.h"
 #include "util/compression/block_compression.h"
-#include "util/rle_encoding.h"
 
 namespace starrocks {
 
@@ -111,11 +119,15 @@ ColumnReader::~ColumnReader() {
                                  _bloom_filter_index_meta->SpaceUsedLong());
         _bloom_filter_index_meta.reset(nullptr);
     }
+    if (_builtin_inverted_index_meta != nullptr) {
+        _builtin_inverted_index_meta.reset(nullptr);
+    }
     MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->column_metadata_mem_tracker(), sizeof(ColumnReader));
 }
 
 Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
     _column_type = static_cast<LogicalType>(meta->type());
+    _column_length = meta->length();
     _dict_page_pointer = PagePointer(meta->dict_page());
     _total_mem_footprint = meta->total_mem_footprint();
     if (column == nullptr) {
@@ -132,9 +144,16 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
     if (_column_type == TYPE_JSON && meta->has_json_meta()) {
         // TODO(mofei) store format_version in ColumnReader
         const JsonMetaPB& json_meta = meta->json_meta();
-        CHECK_EQ(kJsonMetaDefaultFormatVersion, json_meta.format_version()) << "Only format_version=1 is supported";
         _is_flat_json = json_meta.is_flat();
         _has_remain = json_meta.has_remain();
+
+        if (json_meta.has_remain_filter() && config::enable_json_flat_remain_filter) {
+            DCHECK(_has_remain);
+            DCHECK(!json_meta.remain_filter().empty());
+            RETURN_IF_ERROR(BloomFilter::create(BLOCK_BLOOM_FILTER, &_remain_filter));
+            RETURN_IF_ERROR(_remain_filter->init(json_meta.remain_filter().data(), json_meta.remain_filter().size(),
+                                                 HASH_MURMUR3_X64_64));
+        }
     }
     if (is_scalar_field_type(delegate_type(_column_type))) {
         RETURN_IF_ERROR(EncodingInfo::get(delegate_type(_column_type), meta->encoding(), &_encoding_info));
@@ -186,6 +205,9 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
                                          _bloom_filter_index_meta->SpaceUsedLong());
                 _meta_mem_usage.fetch_add(_bloom_filter_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
                 _bloom_filter_index = std::make_unique<BloomFilterIndexReader>();
+                break;
+            case BUILTIN_INVERTED_INDEX:
+                _builtin_inverted_index_meta.reset(index_meta->release_builtin_inverted_index());
                 break;
             case UNKNOWN_INDEX_TYPE:
                 return Status::Corruption(fmt::format("Bad file {}: unknown index type", file_name()));
@@ -342,7 +364,6 @@ Status ColumnReader::read_page(const ColumnIteratorOptions& iter_opts, const Pag
     opts.verify_checksum = true;
     opts.use_page_cache = iter_opts.use_page_cache;
     opts.encoding_type = _encoding_info->encoding();
-    opts.kept_in_memory = false;
 
     return PageIO::read_and_decompress_page(opts, handle, page_body, footer);
 }
@@ -356,13 +377,42 @@ Status ColumnReader::_calculate_row_ranges(const std::vector<uint32_t>& page_ind
     return Status::OK();
 }
 
+LogicalType ColumnReader::_get_zone_map_parse_type(const ColumnPredicate* predicate) const {
+    DCHECK(predicate != nullptr);
+    // The type of the predicate may be different from the data type in the segment
+    // file, often seen after fast schema evolution, e.g., the predicate type may be
+    // 'BIGINT' while the data type is 'INT', so it's necessary to use the type of
+    // the predicate to parse the zone map string.
+    LogicalType type = predicate->type_info()->type();
+
+    // This addresses a zone map filtering issue that occurs when converting a CHAR columna
+    // to VARCHAR. The zone map may still contain CHAR values with padding bytes (e.g., "abc\0\0\0\0\0\0\0").
+    // If these values are parsed as VARCHAR, the padding bytes are preserved, leading to incorrect
+    // comparisons with VARCHAR predicates (e.g., "abc"). By forcing the parsing type to CHAR,
+    // `datum_from_string` in `_parse_zone_map()` strips these padding bytes, ensuring consistent
+    // comparison semantics between zone map entries and predicate values.
+    if (_column_type == TYPE_CHAR && type == TYPE_VARCHAR) {
+        type = TYPE_CHAR;
+    }
+
+    return type;
+}
+
 Status ColumnReader::_parse_zone_map(LogicalType type, const ZoneMapPB& zm, ZoneMapDetail* detail) const {
     // DECIMAL32/DECIMAL64/DECIMAL128 stored as INT32/INT64/INT128
     // The DECIMAL type will be delegated to INT type.
     TypeInfoPtr type_info = get_type_info(delegate_type(type));
+    return _parse_zone_map(type_info, zm, detail);
+}
+
+Status ColumnReader::_parse_zone_map(const TypeInfoPtr& type_info, const ZoneMapPB& zm, ZoneMapDetail* detail) const {
     detail->set_has_null(zm.has_null());
 
     if (zm.has_not_null()) {
+        if (UNLIKELY(!zm.has_min() || !zm.has_max())) {
+            LOG(ERROR) << "Corrupted zone map protobuf detected: " << zm.ShortDebugString();
+            return Status::Corruption("Corrupted zone map data: missing min or max values");
+        }
         RETURN_IF_ERROR(datum_from_string(type_info.get(), &(detail->min_value()), zm.min(), nullptr));
         RETURN_IF_ERROR(datum_from_string(type_info.get(), &(detail->max_value()), zm.max(), nullptr));
     }
@@ -488,19 +538,20 @@ Status ColumnReader::_load_bloom_filter_index(const IndexReadOptions& opts) {
 }
 
 Status ColumnReader::new_inverted_index_iterator(const std::shared_ptr<TabletIndex>& index_meta,
-                                                 InvertedIndexIterator** iterator, const SegmentReadOptions& opts) {
-    RETURN_IF_ERROR(_load_inverted_index(index_meta, opts));
-    RETURN_IF_ERROR(_inverted_index->new_iterator(index_meta, iterator));
+                                                 InvertedIndexIterator** iterator, const SegmentReadOptions& opts,
+                                                 const IndexReadOptions& index_opt) {
+    RETURN_IF_ERROR(_load_inverted_index(index_meta, opts, index_opt));
+    RETURN_IF_ERROR(_inverted_index->new_iterator(index_meta, iterator, index_opt));
     return Status::OK();
 }
 
 Status ColumnReader::_load_inverted_index(const std::shared_ptr<TabletIndex>& index_meta,
-                                          const SegmentReadOptions& opts) {
-    if (_inverted_index && index_meta && _inverted_index->get_index_id() == index_meta->index_id() &&
-        _inverted_index_loaded()) {
+                                          const SegmentReadOptions& opts, const IndexReadOptions& index_opt) {
+    if (index_meta == nullptr || _inverted_index_loaded()) {
         return Status::OK();
     }
 
+#ifndef __APPLE__
     SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
     return success_once(_inverted_index_load_once,
                         [&]() {
@@ -511,17 +562,22 @@ Status ColumnReader::_load_inverted_index(const std::shared_ptr<TabletIndex>& in
                                 type = _column_type;
                             }
 
-                            ASSIGN_OR_RETURN(auto imp_type, get_inverted_imp_type(*index_meta))
+                            ASSIGN_OR_RETURN(auto imp_type, get_inverted_imp_type(*index_meta));
                             std::string index_path = IndexDescriptor::inverted_index_file_path(
                                     opts.rowset_path, opts.rowsetid.to_string(), _segment->id(),
                                     index_meta->index_id());
                             ASSIGN_OR_RETURN(auto inverted_plugin, InvertedPluginFactory::get_plugin(imp_type));
                             RETURN_IF_ERROR(inverted_plugin->create_inverted_index_reader(index_path, index_meta, type,
                                                                                           &_inverted_index));
-
+                            RETURN_IF_ERROR(_inverted_index->load(index_opt, _builtin_inverted_index_meta.get()));
+                            if (_builtin_inverted_index_meta != nullptr) {
+                                _builtin_inverted_index_meta.reset();
+                            }
                             return Status::OK();
                         })
             .status();
+#endif
+    return Status::OK();
 }
 
 Status ColumnReader::seek_to_first(OrdinalPageIndexIterator* iter) {
@@ -548,42 +604,75 @@ Status ColumnReader::seek_by_page_index(int page_index, OrdinalPageIndexIterator
     return Status::OK();
 }
 
+std::pair<ordinal_t, ordinal_t> ColumnReader::get_page_range(size_t page_index) {
+    DCHECK(_ordinal_index);
+    return std::make_pair(_ordinal_index->get_first_ordinal(page_index), _ordinal_index->get_last_ordinal(page_index));
+}
+
+// Iterate the oridinal index to get the total size of all data pages
+int64_t ColumnReader::data_page_footprint() const {
+    RETURN_IF(_ordinal_index == nullptr, 0);
+    int64_t total_size = 0;
+    auto iter = _ordinal_index->begin();
+    while (iter.valid()) {
+        total_size += iter.page().size;
+        iter.next();
+    }
+    return total_size;
+}
+
 Status ColumnReader::zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                      const ColumnPredicate* del_predicate,
                                      std::unordered_set<uint32_t>* del_partial_filtered_pages,
                                      SparseRange<>* row_ranges, const IndexReadOptions& opts,
-                                     CompoundNodeType pred_relation) {
+                                     CompoundNodeType pred_relation, const Range<>* src_range) {
     RETURN_IF_ERROR(_load_zonemap_index(opts));
 
     std::vector<uint32_t> page_indexes;
     if (pred_relation == CompoundNodeType::AND) {
         RETURN_IF_ERROR(_zone_map_filter<CompoundNodeType::AND>(predicates, del_predicate, del_partial_filtered_pages,
-                                                                &page_indexes));
+                                                                &page_indexes, src_range));
     } else {
         RETURN_IF_ERROR(_zone_map_filter<CompoundNodeType::OR>(predicates, del_predicate, del_partial_filtered_pages,
-                                                               &page_indexes));
+                                                               &page_indexes, src_range));
     }
 
     RETURN_IF_ERROR(_calculate_row_ranges(page_indexes, row_ranges));
     return Status::OK();
 }
 
+StatusOr<std::vector<ZoneMapDetail>> ColumnReader::get_raw_zone_map(const IndexReadOptions& opts) {
+    RETURN_IF_ERROR(_load_zonemap_index(opts));
+    DCHECK(_zonemap_index);
+    DCHECK(_zonemap_index->loaded());
+
+    LogicalType type = _encoding_info->type();
+    int32_t num_pages = _zonemap_index->num_pages();
+    std::vector<ZoneMapDetail> result;
+    result.reserve(num_pages);
+
+    for (const auto& zm : _zonemap_index->page_zone_maps()) {
+        ZoneMapDetail detail;
+        RETURN_IF_ERROR(_parse_zone_map(type, zm, &detail));
+        result.emplace_back(std::move(detail));
+    }
+    return result;
+}
+
 template <CompoundNodeType PredRelation>
 Status ColumnReader::_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                       const ColumnPredicate* del_predicate,
                                       std::unordered_set<uint32_t>* del_partial_filtered_pages,
-                                      std::vector<uint32_t>* pages) {
-    // The type of the predicate may be different from the data type in the segment
-    // file, e.g., the predicate type may be 'BIGINT' while the data type is 'INT',
-    // so it's necessary to use the type of the predicate to parse the zone map string.
-    LogicalType lt;
+                                      std::vector<uint32_t>* pages, const Range<>* src_range) {
+    const ColumnPredicate* predicate;
     if (!predicates.empty()) {
-        lt = predicates[0]->type_info()->type();
+        predicate = predicates[0];
     } else if (del_predicate) {
-        lt = del_predicate->type_info()->type();
+        predicate = del_predicate;
     } else {
         return Status::OK();
     }
+    LogicalType lt = _get_zone_map_parse_type(predicate);
 
     auto page_satisfies_zone_map_filter = [&](const ZoneMapDetail& detail) {
         if constexpr (PredRelation == CompoundNodeType::AND) {
@@ -594,12 +683,25 @@ Status ColumnReader::_zone_map_filter(const std::vector<const ColumnPredicate*>&
         }
     };
 
+    const TypeInfoPtr type_info = get_type_info(delegate_type(lt));
+
     const std::vector<ZoneMapPB>& zone_maps = _zonemap_index->page_zone_maps();
-    int32_t page_size = _zonemap_index->num_pages();
-    for (int32_t i = 0; i < page_size; ++i) {
+    const int32_t num_pages = _zonemap_index->num_pages();
+
+    int32_t i = 0;
+    int32_t end_page = num_pages;
+    if (src_range != nullptr && src_range->end() != 0) {
+        i = _ordinal_index->seek_at_or_before(src_range->begin()).page_index();
+        end_page = _ordinal_index->seek_at_or_before(src_range->end() - 1).page_index();
+        if (end_page + 1 <= num_pages) {
+            end_page++;
+        }
+    }
+
+    for (; i < end_page; ++i) {
         const ZoneMapPB& zm = zone_maps[i];
         ZoneMapDetail detail;
-        RETURN_IF_ERROR(_parse_zone_map(lt, zm, &detail));
+        RETURN_IF_ERROR(_parse_zone_map(type_info, zm, &detail));
 
         if (!page_satisfies_zone_map_filter(detail)) {
             continue;
@@ -617,7 +719,7 @@ bool ColumnReader::segment_zone_map_filter(const std::vector<const ColumnPredica
     if (_segment_zone_map == nullptr || predicates.empty()) {
         return true;
     }
-    LogicalType lt = predicates[0]->type_info()->type();
+    LogicalType lt = _get_zone_map_parse_type(predicates[0]);
     ZoneMapDetail detail;
     auto st = _parse_zone_map(lt, *_segment_zone_map, &detail);
     CHECK(st.ok()) << st;
@@ -667,7 +769,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::_create_merge_struct_ite
                 const TypeInfoPtr& type_info = get_type_info(*sub_column);
                 auto default_value_iter = std::make_unique<DefaultValueColumnIterator>(
                         sub_column->has_default_value(), sub_column->default_value(), sub_column->is_nullable(),
-                        type_info, sub_column->length(), num_rows());
+                        type_info, sub_column->length(), num_rows(), child_paths[i]);
                 ColumnIteratorOptions iter_opts;
                 RETURN_IF_ERROR(default_value_iter->init(iter_opts));
                 field_iters.emplace_back(std::move(default_value_iter));
@@ -680,133 +782,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::_create_merge_struct_ite
 StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAccessPath* path,
                                                                      const TabletColumn* column) {
     if (_column_type == LogicalType::TYPE_JSON) {
-        auto json_iter = std::make_unique<ScalarColumnIterator>(this);
-
-        // access sub columns
-        std::vector<ColumnAccessPath*> access_paths;
-        std::vector<std::string> target_paths;
-        std::vector<LogicalType> target_types;
-        if (path != nullptr && !path->children().empty()) {
-            auto field_name = path->absolute_path();
-            path->get_all_leafs(&access_paths);
-            for (auto& p : access_paths) {
-                // use absolute path, not relative path
-                // root path is field name, we remove it
-                target_paths.emplace_back(p->absolute_path().substr(field_name.size() + 1));
-                target_types.emplace_back(p->value_type().type);
-            }
-        }
-
-        if (!_is_flat_json) {
-            if (path == nullptr || path->children().empty()) {
-                return json_iter;
-            }
-            // dynamic flattern
-            // we must dynamic flat json, because we don't know other segment wasn't the paths
-            return create_json_dynamic_flat_iterator(std::move(json_iter), target_paths, target_types,
-                                                     path->is_from_compaction());
-        }
-
-        std::vector<std::string> source_paths;
-        std::vector<LogicalType> source_types;
-        std::unique_ptr<ColumnIterator> null_iter;
-        std::vector<std::unique_ptr<ColumnIterator>> all_iters;
-        size_t start = is_nullable() ? 1 : 0;
-        size_t end = _has_remain ? _sub_readers->size() - 1 : _sub_readers->size();
-        if (is_nullable()) {
-            ASSIGN_OR_RETURN(null_iter, (*_sub_readers)[0]->new_iterator());
-        }
-
-        if (path == nullptr || path->children().empty() || path->is_from_compaction()) {
-            DCHECK(_is_flat_json);
-            for (size_t i = start; i < end; i++) {
-                const auto& rd = (*_sub_readers)[i];
-                std::string name = rd->name();
-                ASSIGN_OR_RETURN(auto iter, rd->new_iterator());
-                source_paths.emplace_back(name);
-                source_types.emplace_back(rd->column_type());
-                all_iters.emplace_back(std::move(iter));
-            }
-
-            if (_has_remain) {
-                const auto& rd = (*_sub_readers)[end];
-                ASSIGN_OR_RETURN(auto iter, rd->new_iterator());
-                all_iters.emplace_back(std::move(iter));
-            }
-
-            if (path == nullptr || path->children().empty()) {
-                // access whole json
-                return create_json_merge_iterator(this, std::move(null_iter), std::move(all_iters), source_paths,
-                                                  source_types);
-            } else {
-                DCHECK(path->is_from_compaction());
-                return create_json_flat_iterator(this, std::move(null_iter), std::move(all_iters), target_paths,
-                                                 target_types, source_paths, source_types, true);
-            }
-        }
-
-        bool need_remain = false;
-        for (size_t k = 0; k < target_paths.size(); k++) {
-            auto& target = target_paths[k];
-            size_t i = start;
-            for (; i < end; i++) {
-                const auto& rd = (*_sub_readers)[i];
-                std::string name = rd->name();
-                // target: b.b2.b3
-                // source: b.b2
-                if (target == name || target.starts_with(name + ".")) {
-                    ASSIGN_OR_RETURN(auto iter, rd->new_iterator());
-                    source_paths.emplace_back(name);
-                    source_types.emplace_back(rd->column_type());
-                    all_iters.emplace_back(std::move(iter));
-                    break;
-                } else if (name.starts_with(target + ".")) {
-                    // target: b.b2
-                    // source: b.b2.b3
-                    if (target_types[k] != TYPE_JSON && !is_string_type(target_types[k])) {
-                        // don't need column and remain
-                        break;
-                    }
-                    need_remain = true;
-                    ASSIGN_OR_RETURN(auto iter, rd->new_iterator());
-                    source_paths.emplace_back(name);
-                    source_types.emplace_back(rd->column_type());
-                    all_iters.emplace_back(std::move(iter));
-                }
-            }
-            need_remain |= (i == end);
-        }
-
-        if (_has_remain && need_remain) {
-            const auto& rd = (*_sub_readers)[end];
-            ASSIGN_OR_RETURN(auto iter, rd->new_iterator());
-            all_iters.emplace_back(std::move(iter));
-        }
-
-        if (all_iters.empty()) {
-            DCHECK(!_sub_readers->empty());
-            DCHECK(source_paths.empty());
-            // has none remain and can't hit any column, we read any one
-            // why not return null directly, segemnt iterater need ordinal index...
-            // it's canbe optimized
-            size_t index = start;
-            LogicalType type = (*_sub_readers)[start]->column_type();
-            for (size_t i = start + 1; i < end; i++) {
-                const auto& rd = (*_sub_readers)[i];
-                if (type < rd->column_type()) {
-                    index = i;
-                    type = rd->column_type();
-                }
-            }
-            const auto& rd = (*_sub_readers)[index];
-            ASSIGN_OR_RETURN(auto iter, rd->new_iterator());
-            all_iters.emplace_back(std::move(iter));
-            source_paths.emplace_back(rd->name());
-            source_types.emplace_back(rd->column_type());
-        }
-
-        return create_json_flat_iterator(this, std::move(null_iter), std::move(all_iters), target_paths, target_types,
-                                         source_paths, source_types);
+        return _new_json_iterator(path, column);
     } else if (is_scalar_field_type(delegate_type(_column_type))) {
         return std::make_unique<ScalarColumnIterator>(this);
     } else if (_column_type == LogicalType::TYPE_ARRAY) {
@@ -890,6 +866,151 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
     } else {
         return Status::NotSupported("unsupported type to create iterator: " + std::to_string(_column_type));
     }
+}
+
+StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::_new_json_iterator(ColumnAccessPath* path,
+                                                                           const TabletColumn* column) {
+    DCHECK(_column_type == LogicalType::TYPE_JSON);
+    auto json_iter = std::make_unique<ScalarColumnIterator>(this);
+    // access sub columns
+    std::vector<ColumnAccessPath*> target_leafs;
+    std::vector<std::string> target_paths;
+    std::vector<LogicalType> target_types;
+    if (path != nullptr && !path->children().empty()) {
+        auto field_name = path->absolute_path();
+        path->get_all_leafs(&target_leafs);
+        for (auto& p : target_leafs) {
+            // use absolute path, not relative path
+            // root path is field name, we remove it
+            target_paths.emplace_back(p->absolute_path().substr(field_name.size() + 1));
+            target_types.emplace_back(p->value_type().type);
+        }
+    }
+
+    if (!_is_flat_json) {
+        if (path == nullptr || path->children().empty()) {
+            return json_iter;
+        }
+        // dynamic flattern
+        // we must dynamic flat json, because we don't know other segment wasn't the paths
+        return create_json_dynamic_flat_iterator(
+                std::move(json_iter), target_paths, target_types,
+                path->is_from_compaction() || (column != nullptr && column->is_extended()));
+    }
+
+    std::vector<std::string> source_paths;
+    std::vector<LogicalType> source_types;
+    std::unique_ptr<ColumnIterator> null_iter;
+    std::vector<std::unique_ptr<ColumnIterator>> all_iters;
+    size_t start = is_nullable() ? 1 : 0;
+    size_t end = _has_remain ? _sub_readers->size() - 1 : _sub_readers->size();
+    if (is_nullable()) {
+        ASSIGN_OR_RETURN(null_iter, (*_sub_readers)[0]->new_iterator());
+    }
+
+    if (path == nullptr || path->children().empty() || path->is_from_compaction()) {
+        DCHECK(_is_flat_json);
+        for (size_t i = start; i < end; i++) {
+            const auto& rd = (*_sub_readers)[i];
+            std::string name = rd->name();
+            ASSIGN_OR_RETURN(auto iter, rd->new_iterator());
+            source_paths.emplace_back(name);
+            source_types.emplace_back(rd->column_type());
+            all_iters.emplace_back(std::move(iter));
+        }
+
+        if (_has_remain) {
+            const auto& rd = (*_sub_readers)[end];
+            ASSIGN_OR_RETURN(auto iter, rd->new_iterator());
+            all_iters.emplace_back(std::move(iter));
+        }
+
+        if (path == nullptr || path->children().empty()) {
+            // access whole json
+            return create_json_merge_iterator(this, std::move(null_iter), std::move(all_iters), source_paths,
+                                              source_types);
+        } else {
+            DCHECK(path->is_from_compaction());
+            return create_json_flat_iterator(this, std::move(null_iter), std::move(all_iters), target_paths,
+                                             target_types, source_paths, source_types, true);
+        }
+    }
+
+    bool need_remain = false;
+    std::set<std::string> check_paths;
+    for (size_t k = 0; k < target_paths.size(); k++) {
+        auto& target = target_paths[k];
+        size_t i = start;
+        for (; i < end; i++) {
+            const auto& rd = (*_sub_readers)[i];
+            std::string name = rd->name();
+            if (check_paths.contains(name)) {
+                continue;
+            }
+            // target: b.b2.b3
+            // source: b.b2
+            if (target == name || target.starts_with(name + ".")) {
+                ASSIGN_OR_RETURN(auto iter, rd->new_iterator());
+                source_paths.emplace_back(name);
+                source_types.emplace_back(rd->column_type());
+                all_iters.emplace_back(std::move(iter));
+                check_paths.emplace(name);
+                break;
+            } else if (name.starts_with(target + ".")) {
+                // target: b.b2
+                // source: b.b2.b3
+                if (target_types[k] != TYPE_JSON && !is_string_type(target_types[k])) {
+                    // don't need column and remain
+                    break;
+                }
+
+                if (_remain_filter != nullptr &&
+                    !_remain_filter->test_bytes(target_leafs[k]->path().data(), target_leafs[k]->path().size())) {
+                    need_remain = false;
+                } else {
+                    need_remain = true;
+                }
+
+                ASSIGN_OR_RETURN(auto iter, rd->new_iterator());
+                source_paths.emplace_back(name);
+                source_types.emplace_back(rd->column_type());
+                all_iters.emplace_back(std::move(iter));
+                check_paths.emplace(name);
+            }
+        }
+        need_remain |= (i == end);
+    }
+
+    if (_has_remain && need_remain) {
+        const auto& rd = (*_sub_readers)[end];
+        ASSIGN_OR_RETURN(auto iter, rd->new_iterator());
+        all_iters.emplace_back(std::move(iter));
+    }
+
+    if (all_iters.empty()) {
+        DCHECK(!_sub_readers->empty());
+        DCHECK(source_paths.empty());
+        // has none remain and can't hit any column, we read any one
+        // why not return null directly, segemnt iterater need ordinal index...
+        // it's canbe optimized
+        size_t index = start;
+        LogicalType type = (*_sub_readers)[start]->column_type();
+        for (size_t i = start + 1; i < end; i++) {
+            const auto& rd = (*_sub_readers)[i];
+            if (type < rd->column_type()) {
+                index = i;
+                type = rd->column_type();
+            }
+        }
+        const auto& rd = (*_sub_readers)[index];
+        ASSIGN_OR_RETURN(auto iter, rd->new_iterator());
+        all_iters.emplace_back(std::move(iter));
+        source_paths.emplace_back(rd->name());
+        source_types.emplace_back(rd->column_type());
+    }
+
+    return create_json_flat_iterator(this, std::move(null_iter), std::move(all_iters), target_paths, target_types,
+                                     source_paths, source_types);
 }
 
 size_t ColumnReader::mem_usage() const {

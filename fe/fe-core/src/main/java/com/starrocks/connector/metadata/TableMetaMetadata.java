@@ -15,11 +15,16 @@
 package com.starrocks.connector.metadata;
 
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
+import com.starrocks.common.tvr.TvrTableDeltaTrait;
+import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorTableVersion;
-import com.starrocks.connector.TableVersionRange;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.type.IntegerType;
+import org.apache.hadoop.util.Lists;
 
+import java.util.List;
 import java.util.Optional;
 
 // TODO(stephen): what's the pretty class name?
@@ -39,24 +44,35 @@ public class TableMetaMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public Table getTable(String dbName, String tblName) {
+    public Table getTable(ConnectContext context, String dbName, String tblName) {
         MetadataTableName metadataTableName = MetadataTableName.from(tblName);
         MetadataTableType tableType = metadataTableName.getTableType();
         String tableName = metadataTableName.getTableName();
         AbstractMetadataTableFactory tableFactory = MetadataTableFactoryProvider.getFactory(catalogType);
-        return tableFactory.createTable(catalogName, dbName, tableName, tableType);
+        return tableFactory.createTable(context, catalogName, dbName, tableName, tableType);
     }
 
     @Override
-    public TableVersionRange getTableVersionRange(String dbName, Table table,
-                                                  Optional<ConnectorTableVersion> startVersion,
-                                                  Optional<ConnectorTableVersion> endVersion) {
-        if (endVersion.isPresent()) {
-            Long snapshotId = endVersion.get().getConstantOperator().castTo(Type.BIGINT).get().getBigint();
-            return TableVersionRange.withEnd(Optional.of(snapshotId));
-        } else {
-            return TableVersionRange.empty();
-        }
+    public TvrTableSnapshot getCurrentTvrSnapshot(String dbName, Table table) {
+        return TvrTableSnapshot.empty();
     }
 
+    @Override
+    public List<TvrTableDeltaTrait> listTableDeltaTraits(String dbName, Table table,
+                                                         TvrTableSnapshot fromSnapshotExclusive,
+                                                         TvrTableSnapshot toSnapshotInclusive) {
+        return Lists.newArrayList();
+    }
+
+    @Override
+    public TvrVersionRange getTableVersionRange(String dbName, Table table,
+                                                Optional<ConnectorTableVersion> startVersion,
+                                                Optional<ConnectorTableVersion> endVersion) {
+        if (endVersion.isPresent()) {
+            Long snapshotId = endVersion.get().getConstantOperator().castTo(IntegerType.BIGINT).get().getBigint();
+            return TvrTableSnapshot.of(Optional.of(snapshotId));
+        } else {
+            return TvrTableSnapshot.empty();
+        }
+    }
 }

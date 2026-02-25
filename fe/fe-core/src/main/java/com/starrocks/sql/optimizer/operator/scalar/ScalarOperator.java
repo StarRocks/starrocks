@@ -16,15 +16,19 @@ package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.Type;
 
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Stream;
 
 import static java.util.Objects.requireNonNull;
 
@@ -35,7 +39,8 @@ public abstract class ScalarOperator implements Cloneable {
     protected boolean notEvalEstimate = false;
     // Used to determine if it is derive from predicate range extractor
     protected boolean fromPredicateRangeDerive = false;
-    // Check weather the scalar operator is redundant which will not affect the final
+    // Check weather the scalar operator is redundant which will not affect the
+    // final
     // if it's not considered. eg, `IsNullPredicateOperator` which is pushed down
     // from JoinNode.
     protected boolean isRedundant = false;
@@ -45,9 +50,20 @@ public abstract class ScalarOperator implements Cloneable {
 
     protected boolean isCorrelated = false;
 
+    protected boolean isJoinDerived = false;
+
     private List<String> hints = Collections.emptyList();
 
     private boolean isIndexOnlyFilter = false;
+
+    // 1. depth is scalar operator's nested depth, it starts from 0(eg:
+    // ColumnRefOperator/ConstantOperator), incr +1 for each
+    // child nested; if it contains multi children, the max depth of children will
+    // be added to this operator's depth.
+    // 2. depth is marked to avoid infinite loop in some cases.
+    protected int depth = 0;
+
+    protected Optional<Integer> numberFlatChildren = Optional.empty();
 
     public ScalarOperator(OperatorType opType, Type type) {
         this.opType = requireNonNull(opType, "opType is null");
@@ -139,10 +155,102 @@ public abstract class ScalarOperator implements Cloneable {
     public abstract String toString();
 
     @Override
-    public abstract int hashCode();
+    public int hashCode() {
+        return hashCodeSelf();
+    }
+
+    /**
+     * Calculate hashCode based on the operator's own properties, excluding
+     * children/arguments.
+     * This method should be implemented by subclasses to provide a hashCode that
+     * only considers
+     * the operator's intrinsic properties, not its children.
+     */
+    public abstract int hashCodeSelf();
+
+    /**
+     * Check equality based on the operator's own properties, excluding
+     * children/arguments.
+     * This method should be implemented by subclasses to provide an equals that
+     * only considers
+     * the operator's intrinsic properties, not its children.
+     */
+    public abstract boolean equalsSelf(Object other);
 
     @Override
-    public abstract boolean equals(Object other);
+    public boolean equals(Object other) {
+        return equalsSelf(other);
+    }
+
+    public int getDepth() {
+        return depth;
+    }
+
+    public int getNumFlatChildren() {
+        return getNumFlatChildren(true);
+    }
+
+    public int getNumFlatChildren(boolean useCache) {
+        if (useCache && numberFlatChildren.isPresent()) {
+            return numberFlatChildren.get();
+        }
+        int numFlatChildren = 1;
+        for (ScalarOperator child : getChildren()) {
+            numFlatChildren += child.getNumFlatChildren(useCache);
+        }
+        numberFlatChildren = Optional.of(numFlatChildren);
+        return numFlatChildren;
+    }
+
+    public void checkMaxFlatChildren() {
+        checkMaxFlatChildren(true);
+    }
+
+    /**
+     * Check if the expression complexity exceeds the limit.
+     * 
+     * @param useCache whether to use cached node count. Set to false when the expression
+     *                 structure has been modified without cloning.
+     * @throws SemanticException if the expression is too complex
+     */
+    public void checkMaxFlatChildren(boolean useCache) {
+        if (Config.max_scalar_operator_flat_children > 0 &&
+                getNumFlatChildren(useCache) > Config.max_scalar_operator_flat_children) {
+            throw new SemanticException(
+                    String.format("Expression too complex. Current nodes: %d, Limit: %d. " +
+                            "Please simplify your expression or increase Config.max_scalar_operator_flat_children.",
+                             getNumFlatChildren(useCache), Config.max_scalar_operator_flat_children));
+        }
+    }
+
+    /**
+     * Incr depth for this operator: this.depth = 1 + max(depth of children)
+     */
+    public void incrDepth(List<ScalarOperator> args) {
+        // always add 1 for self
+        this.depth += 1;
+        if (args == null) {
+            return;
+        }
+        this.depth += args.stream().map(ScalarOperator::getDepth).max(Integer::compareTo).orElse(0);
+    }
+
+    /**
+     * Incr depth for this operator: this.depth = 1 + max(depth of children)
+     */
+    public void incrDepth(ScalarOperator... args) {
+        // always add 1 for self
+        this.depth += 1;
+
+        if (args == null) {
+            return;
+        }
+        int ans = 0;
+        for (ScalarOperator arg : args) {
+            ans = Math.max(ans, arg.getDepth());
+        }
+        this.depth += ans;
+    }
 
     /**
      * equivalent means logical equals, but may physical different, such as with different id
@@ -162,6 +270,8 @@ public abstract class ScalarOperator implements Cloneable {
             operator.hints = Lists.newArrayList(hints);
             operator.isRedundant = this.isRedundant;
             operator.isPushdown = this.isPushdown;
+            // Clear cache after cloning, as the cloned operator may be modified
+            operator.numberFlatChildren = Optional.empty();
         } catch (CloneNotSupportedException ignored) {
         }
         return operator;
@@ -210,12 +320,12 @@ public abstract class ScalarOperator implements Cloneable {
     }
 
     public boolean isConstantFalse() {
-        return this instanceof ConstantOperator && this.getType() == Type.BOOLEAN &&
+        return this instanceof ConstantOperator && this.getType() == BooleanType.BOOLEAN &&
                 !((ConstantOperator) this).getBoolean();
     }
 
     public boolean isConstantTrue() {
-        return this instanceof ConstantOperator && this.getType() == Type.BOOLEAN &&
+        return this instanceof ConstantOperator && this.getType() == BooleanType.BOOLEAN &&
                 ((ConstantOperator) this).getBoolean();
     }
 
@@ -253,6 +363,14 @@ public abstract class ScalarOperator implements Cloneable {
 
     public void setCorrelated(boolean correlated) {
         isCorrelated = correlated;
+    }
+
+    public boolean isJoinDerived() {
+        return isJoinDerived;
+    }
+
+    public void setJoinDerived(boolean isJoinDerived) {
+        this.isJoinDerived = isJoinDerived;
     }
 
     // whether ScalarOperator are equals without id
@@ -313,5 +431,9 @@ public abstract class ScalarOperator implements Cloneable {
         if (constantOperator.isPresent()) {
             predicate.setChild(1, constantOperator.get());
         }
+    }
+
+    public Stream<ScalarOperator> asStream() {
+        return Stream.concat(Stream.of(this), this.getChildren().stream().flatMap(ScalarOperator::asStream));
     }
 }

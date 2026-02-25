@@ -27,7 +27,7 @@
 #include "glog/logging.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
-#include "util/json.h"
+#include "types/json_value.h"
 #include "velocypack/vpack.h"
 
 namespace starrocks {
@@ -229,7 +229,9 @@ vpack::Slice JsonPathPiece::extract(vpack::Slice root, const std::vector<JsonPat
                 builder->clear();
                 vpack::ArrayBuilder ab(builder);
                 array_selector->iterate(next_item, [&](vpack::Slice array_item) {
-                    auto sub = extract(array_item, jsonpath, i + 1, builder);
+                    vpack::Builder tmpBuilder;
+                    tmpBuilder.clear();
+                    auto sub = extract(array_item, jsonpath, i + 1, &tmpBuilder);
                     if (!sub.isNone()) {
                         builder->add(sub);
                     }
@@ -261,6 +263,20 @@ StatusOr<JsonPath> JsonPath::parse(Slice path_string) {
 
 vpack::Slice JsonPath::extract(const JsonValue* json, const JsonPath& jsonpath, vpack::Builder* b) {
     return JsonPathPiece::extract(json, jsonpath.paths, b);
+}
+
+std::string JsonPath::to_string() const {
+    std::string result = "$";
+    for (size_t i = 0; i < paths.size(); i++) {
+        const auto& piece = paths[i];
+        if (!piece.key.empty() && piece.key != "$") {
+            result += "." + piece.key;
+        }
+        if (piece.array_selector) {
+            result += piece.array_selector->to_string();
+        }
+    }
+    return result;
 }
 
 bool JsonPath::starts_with(const JsonPath* other) const {

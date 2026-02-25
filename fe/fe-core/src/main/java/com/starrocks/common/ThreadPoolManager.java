@@ -79,9 +79,36 @@ public class ThreadPoolManager {
 
     private static Map<String, ThreadPoolExecutor> nameToThreadPoolMap = Maps.newConcurrentMap();
 
-    private static String[] poolMerticTypes = {"pool_size", "active_thread_num", "task_in_queue"};
+    private static final String[] POOL_METRIC_TYPES = {"pool_size", "active_thread_num", "task_in_queue",
+            "completed_task_count"};
 
     private static final long KEEP_ALIVE_TIME = 60L;
+
+    private static final ThreadPoolExecutor STATS_CACHE_THREAD_POOL =
+            ThreadPoolManager.newCollectThreadPool(Config.dict_collect_thread_pool_size, "cache-stats"
+            );
+
+    private static final ThreadPoolExecutor STATS_CACHE_THREAD_POOL_FOR_LAKE =
+            ThreadPoolManager.newCollectThreadPool(Config.dict_collect_thread_pool_for_lake_size,
+                    "cache-stats-lake");
+
+    private static ThreadPoolExecutor newCollectThreadPool(int maxNumThread, String poolName) {
+        if (Config.dict_collect_reject_policy.equals("ignore")) {
+            return newDaemonCacheThreadPool(maxNumThread, poolName, false);
+        } else if (Config.dict_collect_reject_policy.equals("queue")) {
+            return newDaemonCacheThreadPool(maxNumThread, Config.dict_collect_queue_size, poolName, false);
+        } else {
+            throw new RuntimeException("unknown config" + Config.dict_collect_reject_policy);
+        }
+    }
+
+    public static ThreadPoolExecutor getStatsCacheThread() {
+        return STATS_CACHE_THREAD_POOL;
+    }
+
+    public static ThreadPoolExecutor getStatsCacheThreadPoolForLake() {
+        return STATS_CACHE_THREAD_POOL_FOR_LAKE;
+    }
 
     public static void registerAllThreadPoolMetric() {
         for (Map.Entry<String, ThreadPoolExecutor> entry : nameToThreadPoolMap.entrySet()) {
@@ -91,7 +118,7 @@ public class ThreadPoolManager {
     }
 
     public static void registerThreadPoolMetric(String poolName, ThreadPoolExecutor threadPool) {
-        for (String poolMetricType : poolMerticTypes) {
+        for (String poolMetricType : POOL_METRIC_TYPES) {
             GaugeMetric<Integer> gauge =
                     new GaugeMetric<Integer>("thread_pool", MetricUnit.NOUNIT, "thread_pool statistics") {
                         @Override
@@ -104,6 +131,8 @@ public class ThreadPoolManager {
                                     return threadPool.getActiveCount();
                                 case "task_in_queue":
                                     return threadPool.getQueue().size();
+                                case "completed_task_count":
+                                    return (int) threadPool.getCompletedTaskCount();
                                 default:
                                     return 0;
                             }
@@ -122,7 +151,7 @@ public class ThreadPoolManager {
     }
 
     public static ThreadPoolExecutor newDaemonCacheThreadPool(int maxNumThread, int queueSize, String poolName,
-            boolean needRegisterMetric) {
+                                                              boolean needRegisterMetric) {
         return newDaemonThreadPool(0, maxNumThread, KEEP_ALIVE_TIME, TimeUnit.SECONDS,
                 new LinkedBlockingQueue<>(queueSize),
                 new BlockedPolicy(poolName, 5), poolName, needRegisterMetric);
@@ -136,7 +165,8 @@ public class ThreadPoolManager {
     }
 
     public static PriorityThreadPoolExecutor newDaemonFixedPriorityThreadPool(int numThread, int queueSize,
-            String poolName, boolean needRegisterMetric) {
+                                                                              String poolName,
+                                                                              boolean needRegisterMetric) {
         ThreadFactory threadFactory = namedThreadFactory(poolName);
         PriorityThreadPoolExecutor threadPool = new PriorityThreadPoolExecutor(numThread, numThread, 0,
                 TimeUnit.SECONDS, new PriorityBlockingQueue<>(queueSize), threadFactory,
@@ -234,6 +264,50 @@ public class ThreadPoolManager {
                 throw new RejectedExecutionException(msg);
             }
         }
+    }
+
+    public static void setCacheThreadPoolSize(ThreadPoolExecutor executor, int newMaxPoolSize) {
+        if (executor.getCorePoolSize() > 0) {
+            // skip for non-cache thread pool
+            return;
+        }
+        int maxPoolSize = executor.getMaximumPoolSize();
+        if (newMaxPoolSize <= 0 || maxPoolSize == newMaxPoolSize) { // no change
+            return;
+        }
+        executor.setMaximumPoolSize(newMaxPoolSize);
+    }
+
+    public static void setFixedThreadPoolSize(ThreadPoolExecutor executor, int poolSize) {
+        int coreSize = executor.getCorePoolSize();
+        if (coreSize == poolSize) { // no change
+            return;
+        }
+        if (coreSize < poolSize) {
+            // increase the pool size, set the `MaximumPoolSize` first and then the `CoreSize`
+            executor.setMaximumPoolSize(poolSize);
+            executor.setCorePoolSize(poolSize);
+        } else {
+            // decrease the pool size, set `CoreSize` first and then the `MaximumPoolSize`
+            executor.setCorePoolSize(poolSize);
+            executor.setMaximumPoolSize(poolSize);
+        }
+    }
+
+    /**
+     * Calculate the number of CPU cores available on the machine.
+     *
+     * @return The number of CPU cores available.
+     */
+    public static int cpuCores() {
+        return Runtime.getRuntime().availableProcessors();
+    }
+
+    /**
+     * Use at most 3/4 to execute cpu-intensive background tasks
+     */
+    public static int cpuIntensiveThreadPoolSize() {
+        return Integer.max(2, cpuCores() * 3 / 4);
     }
 }
 

@@ -46,6 +46,7 @@ vectorized_functions = [
     [100470, "abs", True, False, "DECIMAL32", ["DECIMAL32"], "MathFunctions::abs_decimal32"],
     [100471, "abs", True, False, "DECIMAL64", ["DECIMAL64"], "MathFunctions::abs_decimal64"],
     [100472, "abs", True, False, "DECIMAL128", ["DECIMAL128"], "MathFunctions::abs_decimal128"],
+    [100473, "abs", True, False, "DECIMAL256", ["DECIMAL256"], "MathFunctions::abs_decimal256"],
 
     [10050, "sin", True, False, "DOUBLE", ["DOUBLE"], "MathFunctions::sin"],
     [10060, "asin", True, False, "DOUBLE", ["DOUBLE"], "MathFunctions::asin"],
@@ -56,14 +57,19 @@ vectorized_functions = [
     [10090, "tan", True, False, "DOUBLE", ["DOUBLE"], "MathFunctions::tan"],
     [10100, "atan", True, False, "DOUBLE", ["DOUBLE"], "MathFunctions::atan"],
     [10101, "tanh", True, False, "DOUBLE", ["DOUBLE"], "MathFunctions::tanh"],
-    [10102, "cosine_similarity", True, False, "FLOAT", ["ARRAY_FLOAT", "ARRAY_FLOAT"],
-     "MathFunctions::cosine_similarity<TYPE_FLOAT, false>"],
-    [10103, "cosine_similarity_norm", True, False, "FLOAT", ["ARRAY_FLOAT", "ARRAY_FLOAT"],
-     "MathFunctions::cosine_similarity<TYPE_FLOAT, true>"],
+
+    #   cosine function
+    [10102, "cosine_similarity", True, False, "FLOAT", ["ARRAY_FLOAT", "ARRAY_FLOAT"], "MathFunctions::cosine_similarity<TYPE_FLOAT, false>"],
+    [10103, "cosine_similarity_norm", True, False, "FLOAT", ["ARRAY_FLOAT", "ARRAY_FLOAT"], "MathFunctions::cosine_similarity<TYPE_FLOAT, true>"],
+    [10106, "approx_cosine_similarity", True, False, "FLOAT", ["ARRAY_FLOAT", "ARRAY_FLOAT"], "MathFunctions::cosine_similarity<TYPE_FLOAT, false>"],
 
     [10110, "ceil", True, False, "BIGINT", ["DOUBLE"], "MathFunctions::ceil"],
     [10111, "ceiling", True, False, "BIGINT", ["DOUBLE"], "MathFunctions::ceil"],
     [10112, "dceil", True, False, "BIGINT", ["DOUBLE"], "MathFunctions::ceil"],
+
+    #   l2 function
+    [10114, "l2_distance", True, False, "FLOAT", ["ARRAY_FLOAT", "ARRAY_FLOAT"], "MathFunctions::l2_distance<TYPE_FLOAT>"],
+    [10116, "approx_l2_distance", True, False, "FLOAT", ["ARRAY_FLOAT", "ARRAY_FLOAT"], "MathFunctions::l2_distance<TYPE_FLOAT>"],
 
     [10120, "floor", True, False, "BIGINT", ["DOUBLE"], "MathFunctions::floor"],
     [10121, "dfloor", True, False, "BIGINT", ["DOUBLE"], "MathFunctions::floor"],
@@ -123,6 +129,7 @@ vectorized_functions = [
     [102570, "mod", True, False, "DECIMAL32", ["DECIMAL32", "DECIMAL32"], "MathFunctions::mod<TYPE_DECIMAL32>"],
     [102571, "mod", True, False, "DECIMAL64", ["DECIMAL64", "DECIMAL64"], "MathFunctions::mod<TYPE_DECIMAL64>"],
     [102572, "mod", True, False, "DECIMAL128", ["DECIMAL128", "DECIMAL128"], "MathFunctions::mod<TYPE_DECIMAL128>"],
+    [102573, "mod", True, False, "DECIMAL256", ["DECIMAL256", "DECIMAL256"], "MathFunctions::mod<TYPE_DECIMAL256>"],
 
     [10260, "positive", True, False, "DOUBLE", ["DOUBLE"], "MathFunctions::positive<TYPE_DOUBLE>"],
     [10261, "positive", True, False, "BIGINT", ["BIGINT"], "MathFunctions::positive<TYPE_BIGINT>"],
@@ -138,6 +145,7 @@ vectorized_functions = [
     [102721, "negative", True, False, "DECIMAL64", ["DECIMAL64"], "MathFunctions::negative<TYPE_DECIMAL64>"],
     [102722, "negative", True, False, "DECIMAL128", ["DECIMAL128"], "MathFunctions::negative<TYPE_DECIMAL128>"],
 
+    [10288, "least", True, False, "DATETIME", ["DATETIME", "..."], "MathFunctions::least<TYPE_DATETIME>"],
     [10280, "least", True, False, "TINYINT", ["TINYINT", "..."], "MathFunctions::least<TYPE_TINYINT>"],
     [10281, "least", True, False, "SMALLINT", ["SMALLINT", "..."], "MathFunctions::least<TYPE_SMALLINT>"],
     [10282, "least", True, False, "INT", ["INT", "..."], "MathFunctions::least<TYPE_INT>"],
@@ -149,9 +157,9 @@ vectorized_functions = [
     [102870, "least", True, False, "DECIMAL32", ["DECIMAL32", "..."], "MathFunctions::least<TYPE_DECIMAL32>"],
     [102871, "least", True, False, "DECIMAL64", ["DECIMAL64", "..."], "MathFunctions::least<TYPE_DECIMAL64>"],
     [102872, "least", True, False, "DECIMAL128", ["DECIMAL128", "..."], "MathFunctions::least<TYPE_DECIMAL128>"],
-    [10288, "least", True, False, "DATETIME", ["DATETIME", "..."], "MathFunctions::least<TYPE_DATETIME>"],
     [10289, "least", True, False, "VARCHAR", ["VARCHAR", "..."], "MathFunctions::least<TYPE_VARCHAR>"],
 
+    [10298, "greatest", True, False, "DATETIME", ["DATETIME", "..."], "MathFunctions::greatest<TYPE_DATETIME>"],
     [10290, "greatest", True, False, "TINYINT", ["TINYINT", "..."], "MathFunctions::greatest<TYPE_TINYINT>"],
     [10291, "greatest", True, False, "SMALLINT", ["SMALLINT", "..."], "MathFunctions::greatest<TYPE_SMALLINT>"],
     [10292, "greatest", True, False, "INT", ["INT", "..."], "MathFunctions::greatest<TYPE_INT>"],
@@ -163,7 +171,6 @@ vectorized_functions = [
     [102970, "greatest", True, False, "DECIMAL32", ["DECIMAL32", "..."], "MathFunctions::greatest<TYPE_DECIMAL32>"],
     [102971, "greatest", True, False, "DECIMAL64", ["DECIMAL64", "..."], "MathFunctions::greatest<TYPE_DECIMAL64>"],
     [102972, "greatest", True, False, "DECIMAL128", ["DECIMAL128", "..."], "MathFunctions::greatest<TYPE_DECIMAL128>"],
-    [10298, "greatest", True, False, "DATETIME", ["DATETIME", "..."], "MathFunctions::greatest<TYPE_DATETIME>"],
     [10299, "greatest", True, False, "VARCHAR", ["VARCHAR", "..."], "MathFunctions::greatest<TYPE_VARCHAR>"],
 
     [10300, "rand", True, False, "DOUBLE", [], "MathFunctions::rand", "MathFunctions::rand_prepare",
@@ -191,6 +198,26 @@ vectorized_functions = [
     [10322, "square", True, False, "DOUBLE", ["DOUBLE"], "MathFunctions::square"],
 
     [10330, "cbrt", True, False, "DOUBLE", ["DOUBLE"], "MathFunctions::cbrt"],
+
+    [10340, '__iceberg_transform_truncate', True, False, 'INT', ['INT', 'INT'], 'MathFunctions::iceberg_truncate_int<TYPE_INT>'],
+    [10341, '__iceberg_transform_truncate', True, False, 'BIGINT', ['BIGINT', 'INT'], 'MathFunctions::iceberg_truncate_int<TYPE_BIGINT>'],
+    [10342, '__iceberg_transform_truncate', True, False, 'DECIMAL32', ['DECIMAL32', 'INT'], 'MathFunctions::iceberg_truncate_decimal<TYPE_DECIMAL32>'],
+    [10343, '__iceberg_transform_truncate', True, False, 'DECIMAL64', ['DECIMAL64', 'INT'], 'MathFunctions::iceberg_truncate_decimal<TYPE_DECIMAL64>'],
+    [10344, '__iceberg_transform_truncate', True, False, 'DECIMAL128', ['DECIMAL128', 'INT'], 'MathFunctions::iceberg_truncate_decimal<TYPE_DECIMAL128>'],
+    [10345, '__iceberg_transform_truncate', True, False, 'VARCHAR', ['VARCHAR', 'INT'], 'StringFunctions::left',
+     'StringFunctions::left_or_right_prepare', 'StringFunctions::left_or_right_close'],
+    [10346, '__iceberg_transform_truncate', True, False, 'VARBINARY', ['VARBINARY', 'INT'], 'BinaryFunctions::iceberg_truncate_binary'],
+
+    [10350, '__iceberg_transform_bucket', True, False, 'INT', ['INT', 'INT'], 'MathFunctions::iceberg_bucket_int<TYPE_INT>'],
+    [10351, '__iceberg_transform_bucket', True, False, 'INT', ['BIGINT', 'INT'], 'MathFunctions::iceberg_bucket_int<TYPE_BIGINT>'],
+    [10352, '__iceberg_transform_bucket', True, False, 'INT', ['DATE', 'INT'], 'MathFunctions::iceberg_bucket_date'],
+    [10353, '__iceberg_transform_bucket', True, False, 'INT', ['DATETIME', 'INT'], 'MathFunctions::iceberg_bucket_datetime'],
+    [10354, '__iceberg_transform_bucket', True, False, 'INT', ['VARCHAR', 'INT'], 'MathFunctions::iceberg_bucket_string'],
+    [10355, '__iceberg_transform_bucket', True, False, 'INT', ['VARBINARY', 'INT'], 'MathFunctions::iceberg_bucket_string'],
+    [10356, '__iceberg_transform_bucket', True, False, 'INT', ['DECIMAL32', 'INT'], 'MathFunctions::iceberg_bucket_decimal<TYPE_DECIMAL32>'],
+    [10357, '__iceberg_transform_bucket', True, False, 'INT', ['DECIMAL64', 'INT'], 'MathFunctions::iceberg_bucket_decimal<TYPE_DECIMAL64>'],
+    [10358, '__iceberg_transform_bucket', True, False, 'INT', ['DECIMAL128', 'INT'], 'MathFunctions::iceberg_bucket_decimal<TYPE_DECIMAL128>'],
+
 
     # 20xxx: bit functions
     [20010, 'bitand', True, False, 'TINYINT', ['TINYINT', 'TINYINT'], "BitFunctions::bitAnd<TYPE_TINYINT>"],
@@ -270,6 +297,7 @@ vectorized_functions = [
     [30050, 'starts_with', True, False, 'BOOLEAN', ['VARCHAR', 'VARCHAR'], 'StringFunctions::starts_with'],
 
     [30060, 'null_or_empty', True, False, 'BOOLEAN', ['VARCHAR'], 'StringFunctions::null_or_empty'],
+    [30061, 'null_or_empty', True, False, 'BOOLEAN', ['ANY_ARRAY'], 'ArrayFunctions::null_or_empty'],
 
     [30070, 'space', True, True, 'VARCHAR', ['INT'], 'StringFunctions::space'],
     [30080, 'repeat', True, True, 'VARCHAR', ['VARCHAR', 'INT'], 'StringFunctions::repeat'],
@@ -285,14 +313,17 @@ vectorized_functions = [
     [30120, 'length', True, False, 'INT', ['VARCHAR'], 'StringFunctions::length'],
     [30130, 'char_length', True, False, 'INT', ['VARCHAR'], 'StringFunctions::utf8_length'],
     [30131, 'character_length', True, False, 'INT', ['VARCHAR'], 'StringFunctions::utf8_length'],
+    [30132, 'inet_aton', True, False, 'BIGINT', ['VARCHAR'], 'StringFunctions::inet_aton'],
 
-    [30140, 'lower', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::lower'],
-    [30141, 'lcase', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::lower'],
+    [30140, 'lower', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::lower', 'StringFunctions::lower_prepare', 'StringFunctions::lower_close'],
+    [30141, 'lcase', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::lower', 'StringFunctions::lower_prepare', 'StringFunctions::lower_close'],
 
-    [30150, 'upper', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::upper'],
-    [30151, 'ucase', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::upper'],
+
+    [30150, 'upper', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::upper', 'StringFunctions::upper_prepare', 'StringFunctions::upper_close'],
+    [30151, 'ucase', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::upper', 'StringFunctions::upper_prepare', 'StringFunctions::upper_close'],
 
     [30160, 'reverse', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::reverse'],
+    [30161, 'initcap', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::initcap'],
 
     [30170, 'trim', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::trim',
      'StringFunctions::trim_prepare', 'StringFunctions::trim_close'],
@@ -312,6 +343,8 @@ vectorized_functions = [
     [30210, 'instr', True, False, 'INT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::instr'],
     [30220, 'locate', True, False, 'INT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::locate'],
     [30221, 'locate', True, False, 'INT', ['VARCHAR', 'VARCHAR', 'INT'], 'StringFunctions::locate_pos'],
+    [30225, 'strpos', True, False, 'BIGINT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::strpos'],
+    [30226, 'strpos', True, False, 'BIGINT', ['VARCHAR', 'VARCHAR', 'INT'], 'StringFunctions::strpos_instance'],
 
     [30250, 'concat', True, True, 'VARCHAR', ['VARCHAR', '...'], 'StringFunctions::concat',
      'StringFunctions::concat_prepare', 'StringFunctions::concat_close'],
@@ -347,6 +380,10 @@ vectorized_functions = [
      'StringFunctions::regexp_extract_prepare', 'StringFunctions::regexp_close'],
     [30334, 'regexp_split', True, True, 'ARRAY_VARCHAR', ['VARCHAR', 'VARCHAR', 'INT'], 'StringFunctions::regexp_split',
      'StringFunctions::regexp_extract_prepare', 'StringFunctions::regexp_close'],
+    [30335, 'regexp_count', True, False, 'BIGINT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::regexp_count',
+     'StringFunctions::regexp_count_prepare', 'StringFunctions::regexp_close'],
+    [30336, 'regexp_position', True, False, 'INT', ['VARCHAR', 'VARCHAR', 'INT', 'INT'], 'StringFunctions::regexp_position',
+     'StringFunctions::regexp_position_prepare', 'StringFunctions::regexp_position_close'],
     [30400, "money_format", True, False, "VARCHAR", ["BIGINT"], "StringFunctions::money_format_bigint"],
     [30401, "money_format", True, False, "VARCHAR", ["LARGEINT"], "StringFunctions::money_format_largeint"],
     [30402, "money_format", True, False, "VARCHAR", ["DECIMALV2"], "StringFunctions::money_format_decimalv2val"],
@@ -377,6 +414,33 @@ vectorized_functions = [
     [30441, 'ngram_search_case_insensitive', True, False, 'DOUBLE', ['VARCHAR', 'VARCHAR', 'INT'],
      'StringFunctions::ngram_search_case_insensitive', 'StringFunctions::ngram_search_case_insensitive_prepare',
      'StringFunctions::ngram_search_close'],
+
+    [30450, 'field', True, False, 'INT', ['VARCHAR', '...'], 'StringFunctions::field<TYPE_VARCHAR>',
+     'StringFunctions::field_prepare<TYPE_VARCHAR>', 'StringFunctions::field_close<TYPE_VARCHAR>'],
+    [30451, 'field', True, False, 'INT', ['BOOLEAN', '...'], 'StringFunctions::field<TYPE_BOOLEAN>',
+     'StringFunctions::field_prepare<TYPE_BOOLEAN>', 'StringFunctions::field_close<TYPE_BOOLEAN>'],
+    [30452, 'field', True, False, 'INT', ['TINYINT', '...'], 'StringFunctions::field<TYPE_TINYINT>',
+     'StringFunctions::field_prepare<TYPE_TINYINT>', 'StringFunctions::field_close<TYPE_TINYINT>'],
+    [30453, 'field', True, False, 'INT', ['SMALLINT', '...'], 'StringFunctions::field<TYPE_SMALLINT>',
+     'StringFunctions::field_prepare<TYPE_SMALLINT>', 'StringFunctions::field_close<TYPE_SMALLINT>'],
+    [30454, 'field', True, False, 'INT', ['INT', '...'], 'StringFunctions::field<TYPE_INT>',
+     'StringFunctions::field_prepare<TYPE_INT>', 'StringFunctions::field_close<TYPE_INT>'],
+    [30455, 'field', True, False, 'INT', ['BIGINT', '...'], 'StringFunctions::field<TYPE_BIGINT>',
+     'StringFunctions::field_prepare<TYPE_BIGINT>', 'StringFunctions::field_close<TYPE_BIGINT>'],
+    [30456, 'field', True, False, 'INT', ['LARGEINT', '...'], 'StringFunctions::field<TYPE_LARGEINT>',
+     'StringFunctions::field_prepare<TYPE_LARGEINT>', 'StringFunctions::field_close<TYPE_LARGEINT>'],
+    [30457, 'field', True, False, 'INT', ['DOUBLE', '...'], 'StringFunctions::field<TYPE_DOUBLE>',
+     'StringFunctions::field_prepare<TYPE_DOUBLE>', 'StringFunctions::field_close<TYPE_DOUBLE>'],
+    [30458, 'field', True, False, 'INT', ['DECIMALV2', '...'], 'StringFunctions::field<TYPE_DECIMALV2>',
+     'StringFunctions::field_prepare<TYPE_DECIMALV2>', 'StringFunctions::field_close<TYPE_DECIMALV2>'],
+    [304590, 'field', True, False, 'INT', ['DECIMAL32', '...'], 'StringFunctions::field<TYPE_DECIMAL32>',
+     'StringFunctions::field_prepare<TYPE_DECIMAL32>', 'StringFunctions::field_close<TYPE_DECIMAL32>'],
+    [304591, 'field', True, False, 'INT', ['DECIMAL64', '...'], 'StringFunctions::field<TYPE_DECIMAL64>',
+     'StringFunctions::field_prepare<TYPE_DECIMAL64>', 'StringFunctions::field_close<TYPE_DECIMAL64>'],
+    [304592, 'field', True, False, 'INT', ['DECIMAL128', '...'], 'StringFunctions::field<TYPE_DECIMAL128>',
+     'StringFunctions::field_prepare<TYPE_DECIMAL128>', 'StringFunctions::field_close<TYPE_DECIMAL128>'],
+
+    [30460, 'format_bytes', True, False, 'VARCHAR', ['BIGINT'], 'StringFunctions::format_bytes'],
 
     # Binary Functions
     # to_binary
@@ -427,6 +491,8 @@ vectorized_functions = [
     [50089, 'second', True, False, 'TINYINT', ['DATETIME'], 'TimeFunctions::secondV2'],
     [50090, 'second', True, False, 'INT', ['DATETIME'], 'TimeFunctions::second'],
 
+    [50100, 'weekday', True, False, 'INT', ['DATETIME'], 'TimeFunctions::week_day'],
+
     [50110, 'years_add', True, False, 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::years_add'],
     [50111, 'years_sub', True, False, 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::years_sub'],
     [50115, 'quarters_add', True, False, 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::quarters_add'],
@@ -471,6 +537,7 @@ vectorized_functions = [
     [50202, 'localtime', True, False, 'DATETIME', [], 'TimeFunctions::now'],
     [50203, 'localtimestamp', True, False, 'DATETIME', [], 'TimeFunctions::now'],
     [50204, 'now', True, False, 'DATETIME', ['INT'], 'TimeFunctions::now'],
+    [50205, 'current_timestamp', True, False, 'DATETIME', ['INT'], 'TimeFunctions::now'],
     [50210, 'curtime', True, False, 'TIME', [], 'TimeFunctions::curtime'],
     [50211, 'current_time', True, False, 'TIME', [], 'TimeFunctions::curtime'],
     [50220, 'curdate', True, False, 'DATE', [], 'TimeFunctions::curdate'],
@@ -502,6 +569,7 @@ vectorized_functions = [
     [50262, 'to_iso8601', True, False, 'VARCHAR', ['DATETIME'], 'TimeFunctions::datetime_to_iso8601'],
     [50263, 'to_iso8601', True, False, 'VARCHAR', ['DATE'], 'TimeFunctions::date_to_iso8601'],
     [50250, 'time_to_sec', True, False, 'BIGINT', ['TIME'], 'TimeFunctions::time_to_sec'],
+    [50251, 'sec_to_time', True, False, 'TIME', ['BIGINT'], 'TimeFunctions::sec_to_time'],
 
     # unix timestamp extended version to int64
     # be sure to put before int32 version, so fe will find signature in order.
@@ -515,7 +583,9 @@ vectorized_functions = [
      'TimeFunctions::from_unix_to_datetime_with_format_64',
      'TimeFunctions::from_unix_prepare', 'TimeFunctions::from_unix_close'],
     [50290, 'from_unixtime_ms', True, False, 'VARCHAR', ['BIGINT'], 'TimeFunctions::from_unix_to_datetime_ms_64'],
-
+    [50291, 'from_unixtime', True, False, 'VARCHAR', ['BIGINT', 'VARCHAR', 'VARCHAR'],
+     'TimeFunctions::from_unix_to_datetime_with_format_timezone',
+     'TimeFunctions::from_unix_timezone_prepare', 'TimeFunctions::from_unix_timezone_close'],
     [50300, 'unix_timestamp', True, False, 'INT', [], 'TimeFunctions::to_unix_for_now_32'],
     [50301, 'unix_timestamp', True, False, 'INT', ['DATETIME'], 'TimeFunctions::to_unix_from_datetime_32'],
     [50302, 'unix_timestamp', True, False, 'INT', ['DATE'], 'TimeFunctions::to_unix_from_date_32'],
@@ -525,11 +595,33 @@ vectorized_functions = [
     [50305, 'from_unixtime', True, False, 'VARCHAR', ['INT', 'VARCHAR'],
      'TimeFunctions::from_unix_to_datetime_with_format_32',
      'TimeFunctions::from_unix_prepare', 'TimeFunctions::from_unix_close'],
+    [50306, 'to_datetime', True, False, 'DATETIME', ['BIGINT'],
+     'TimeFunctions::unixtime_to_datetime',
+     'TimeFunctions::unixtime_to_datetime_prepare', 'TimeFunctions::unixtime_to_datetime_close'],
+    [50307, 'to_datetime', True, False, 'DATETIME', ['BIGINT', 'INT'],
+     'TimeFunctions::unixtime_to_datetime',
+     'TimeFunctions::unixtime_to_datetime_prepare', 'TimeFunctions::unixtime_to_datetime_close'],
+    [50308, 'to_datetime_ntz', True, False, 'DATETIME', ['BIGINT'],
+     'TimeFunctions::unixtime_to_datetime_ntz',
+     'TimeFunctions::unixtime_to_datetime_ntz_prepare', 'TimeFunctions::unixtime_to_datetime_ntz_close'],
+    [50309, 'to_datetime_ntz', True, False, 'DATETIME', ['BIGINT', 'INT'],
+     'TimeFunctions::unixtime_to_datetime_ntz',
+     'TimeFunctions::unixtime_to_datetime_ntz_prepare', 'TimeFunctions::unixtime_to_datetime_ntz_close'],
+
+
+    # specialized version of from_unixtime to reduce the cost of datetime conversion
+    # TODO: 50380 year_from_unixtime
+    # TODO: 50381 month_from_unixtime
+    # TODO: 50382 day_from_unixtime
+    [50383, 'hour_from_unixtime', True, False, 'TINYINT', ['BIGINT'], 'TimeFunctions::hour_from_unixtime'],
+    # TODO: 50384 minute_from_unixtime
+    # TODO: 50385 second_from_unixtime
 
     [50310, 'dayname', True, False, 'VARCHAR', ['DATETIME'], 'TimeFunctions::day_name'],
     [50311, 'monthname', True, False, 'VARCHAR', ['DATETIME'], 'TimeFunctions::month_name'],
     [50320, 'convert_tz', True, False, 'DATETIME', ['DATETIME', 'VARCHAR', 'VARCHAR'], 'TimeFunctions::convert_tz',
      'TimeFunctions::convert_tz_prepare', 'TimeFunctions::convert_tz_close'],
+    [50321, 'current_timezone', True, False, 'VARCHAR', [], 'TimeFunctions::current_timezone'],
     [50330, 'utc_timestamp', True, False, 'DATETIME', [], 'TimeFunctions::utc_timestamp'],
     [50331, 'utc_time', True, False, 'TIME', [], 'TimeFunctions::utc_time'],
     [50340, 'date_trunc', True, False, 'DATETIME', ['VARCHAR', 'DATETIME'], 'TimeFunctions::datetime_trunc',
@@ -552,7 +644,21 @@ vectorized_functions = [
     [50402, 'last_day', True, False, 'DATE', ['DATETIME'], 'TimeFunctions::last_day'],
     [50403, 'last_day', True, False, 'DATE', ['DATETIME', 'VARCHAR'], 'TimeFunctions::last_day_with_format',
      'TimeFunctions::last_day_prepare', 'TimeFunctions::last_day_close'],
+    [50404, 'last_day', True, False, 'DATE', ['DATE'], 'TimeFunctions::last_day_date'],
+    [50405, 'last_day', True, False, 'DATE', ['DATE', 'VARCHAR'], 'TimeFunctions::last_day_date_with_format',
+     'TimeFunctions::last_day_prepare', 'TimeFunctions::last_day_close'],
+
     [50501, 'makedate', True, False, 'DATE', ['INT', 'INT'], 'TimeFunctions::make_date'],
+    [50610, 'time_format', True, False, 'VARCHAR', ['TIME', 'VARCHAR'], 'TimeFunctions::time_format'],
+
+
+    [50620, '__iceberg_transform_year', True, False, 'BIGINT', ['DATE'], 'TimeFunctions::iceberg_years_since_epoch_date'],
+    [50621, '__iceberg_transform_year', True, False, 'BIGINT', ['DATETIME'], 'TimeFunctions::iceberg_years_since_epoch_datetime'],
+    [50630, '__iceberg_transform_month', True, False, 'BIGINT', ['DATE'], 'TimeFunctions::iceberg_months_since_epoch_date'],
+    [50631, '__iceberg_transform_month', True, False, 'BIGINT', ['DATETIME'], 'TimeFunctions::iceberg_months_since_epoch_datetime'],
+    [50640, '__iceberg_transform_day', True, False, 'BIGINT', ['DATE'], 'TimeFunctions::iceberg_days_since_epoch_date'],
+    [50641, '__iceberg_transform_day', True, False, 'BIGINT', ['DATETIME'], 'TimeFunctions::iceberg_days_since_epoch_datetime'],
+    [50650, '__iceberg_transform_hour', True, False, 'BIGINT', ['DATETIME'], 'TimeFunctions::iceberg_hours_since_epoch_datetime'],
 
     # 60xxx: like predicate
     # important ref: LikePredicate.java, must keep name equals LikePredicate.Operator
@@ -641,6 +747,8 @@ vectorized_functions = [
     [70319, 'nullif', True, False, 'JSON', ['JSON', 'JSON'], 'nullptr'],
 
     [70400, 'coalesce', True, False, 'BOOLEAN', ['BOOLEAN', '...'], 'nullptr'],
+    [70409, 'coalesce', True, False, 'DATE', ['DATE', '...'], 'nullptr'],
+    [70408, 'coalesce', True, False, 'DATETIME', ['DATETIME', '...'], 'nullptr'],
     [70401, 'coalesce', True, False, 'TINYINT', ['TINYINT', '...'], 'nullptr'],
     [70402, 'coalesce', True, False, 'SMALLINT', ['SMALLINT', '...'], 'nullptr'],
     [70403, 'coalesce', True, False, 'INT', ['INT', '...'], 'nullptr'],
@@ -648,8 +756,6 @@ vectorized_functions = [
     [70405, 'coalesce', True, False, 'LARGEINT', ['LARGEINT', '...'], 'nullptr'],
     [70406, 'coalesce', True, False, 'FLOAT', ['FLOAT', '...'], 'nullptr'],
     [70407, 'coalesce', True, False, 'DOUBLE', ['DOUBLE', '...'], 'nullptr'],
-    [70408, 'coalesce', True, False, 'DATETIME', ['DATETIME', '...'], 'nullptr'],
-    [70409, 'coalesce', True, False, 'DATE', ['DATE', '...'], 'nullptr'],
     [70410, 'coalesce', True, False, 'DECIMALV2', ['DECIMALV2', '...'], 'nullptr'],
     [704100, 'coalesce', True, False, 'DECIMAL32', ['DECIMAL32', '...'], 'nullptr'],
     [704101, 'coalesce', True, False, 'DECIMAL64', ['DECIMAL64', '...'], 'nullptr'],
@@ -684,6 +790,7 @@ vectorized_functions = [
     [90015, 'to_bitmap', False, False, 'BITMAP', ['BIGINT'], 'BitmapFunctions::to_bitmap<TYPE_BIGINT>'],
     [90016, 'to_bitmap', False, False, 'BITMAP', ['LARGEINT'], 'BitmapFunctions::to_bitmap<TYPE_LARGEINT>'],
     [90020, 'bitmap_hash', False, False, 'BITMAP', ['VARCHAR'], 'BitmapFunctions::bitmap_hash'],
+    [90021, 'bitmap_hash64', False, False, 'BITMAP', ['VARCHAR'], 'BitmapFunctions::bitmap_hash64'],
     [90030, 'bitmap_count', True, False, 'BIGINT', ['BITMAP'], 'BitmapFunctions::bitmap_count'],
     [90040, 'bitmap_empty', False, False, 'BITMAP', [], 'BitmapFunctions::bitmap_empty'],
     [90050, 'bitmap_or', False, False, 'BITMAP', ['BITMAP', 'BITMAP'], 'BitmapFunctions::bitmap_or'],
@@ -713,6 +820,7 @@ vectorized_functions = [
     [100010, 'murmur_hash3_32', True, False, 'INT', ['VARCHAR', '...'], 'HashFunctions::murmur_hash3_32'],
     [100021, 'xx_hash3_64', True, False, 'BIGINT', ['VARCHAR', '...'], 'HashFunctions::xx_hash3_64'],
     [100022, 'xx_hash3_128', True, False, 'LARGEINT', ['VARCHAR', '...'], 'HashFunctions::xx_hash3_128'],
+    [100023, 'crc32_hash', True, False, 'BIGINT', ['ANY_ARRAY'], 'HashFunctions::crc32_hash'],
 
 
     # Utility functions
@@ -726,10 +834,13 @@ vectorized_functions = [
     [100019, 'assert_true', True, False, 'BOOLEAN', ['BOOLEAN', "VARCHAR"], 'UtilityFunctions::assert_true'],
     [100018, 'host_name', True, False, 'VARCHAR', [], "UtilityFunctions::host_name"],
     [100020, 'get_query_profile', True, False, 'VARCHAR', ['VARCHAR'], "UtilityFunctions::get_query_profile"],
+    [100024, 'encode_sort_key', True, False, 'VARBINARY', ['ANY_ELEMENT', '...'], 'UtilityFunctions::encode_sort_key'],
+    [100025, 'uuid_v7', True, False, 'VARCHAR', [], "UtilityFunctions::uuid_v7"],
+    [100026, 'uuid_v7_numeric', True, False, 'LARGEINT', [], "UtilityFunctions::uuid_v7_numeric"],
 
     # json string function
     [110022, "get_json_int", False, False, "BIGINT", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_bigint",
-    "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
+     "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
     [110023, "get_json_int", False, False, "BIGINT", ["JSON", "VARCHAR"], "JsonFunctions::get_native_json_bigint",
      "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
 
@@ -773,12 +884,57 @@ vectorized_functions = [
     [110018, "json_keys", False, False, "JSON", ["JSON"], "JsonFunctions::json_keys"],
     [110019, "json_keys", False, False, "JSON", ["JSON", "VARCHAR"], "JsonFunctions::json_keys",
      "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close"],
+    [110024, "json_remove", False, False, "JSON", ["JSON", "VARCHAR", "..."], "JsonFunctions::json_remove",
+     "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close"],
+    [110025, "json_set", False, False, "JSON", ["JSON", "JSON", "..."], "JsonFunctions::json_set"],
+    [110026, "json_pretty", False, True, "VARCHAR", ["JSON"], "JsonFunctions::json_pretty"],
     [110100, "to_json", False, False, "JSON", ["ANY_MAP"], "JsonFunctions::to_json"],
     [110101, "to_json", False, False, "JSON", ["ANY_STRUCT"], "JsonFunctions::to_json"],
+    [110112, "json_contains", False, False, "BOOLEAN", ["JSON", "JSON"], "JsonFunctions::json_contains"],
+    [110113, "is_json_scalar", False, False, "BOOLEAN", ["JSON"], "JsonFunctions::is_json_scalar"],
+
+
+    # variant type function
+    [110200, "variant_query", False, False, "VARIANT", ["VARIANT", "VARCHAR"], "VariantFunctions::variant_query",
+     "VariantFunctions::variant_segments_prepare", "VariantFunctions::variant_segments_close"],
+    [110201, "get_variant_bool", False, False, "BOOLEAN", ["VARIANT", "VARCHAR"], "VariantFunctions::get_variant_bool",
+     "VariantFunctions::variant_segments_prepare", "VariantFunctions::variant_segments_close"],
+    [110202, "get_variant_int", False, False, "BIGINT", ["VARIANT", "VARCHAR"], "VariantFunctions::get_variant_int",
+     "VariantFunctions::variant_segments_prepare", "VariantFunctions::variant_segments_close"],
+    [110203, "get_variant_double", False, False, "DOUBLE", ["VARIANT", "VARCHAR"],
+     "VariantFunctions::get_variant_double",
+     "VariantFunctions::variant_segments_prepare", "VariantFunctions::variant_segments_close"],
+    [110204, "get_variant_string", False, True, "VARCHAR", ["VARIANT", "VARCHAR"],
+     "VariantFunctions::get_variant_string",
+     "VariantFunctions::variant_segments_prepare", "VariantFunctions::variant_segments_close"],
+    [110206, "get_variant_date", False, False, "DATE", ["VARIANT", "VARCHAR"],
+     "VariantFunctions::get_variant_date",
+     "VariantFunctions::variant_segments_prepare", "VariantFunctions::variant_segments_close"],
+    [110207, "get_variant_datetime", False, False, "DATETIME", ["VARIANT", "VARCHAR"],
+     "VariantFunctions::get_variant_datetime",
+     "VariantFunctions::variant_segments_prepare", "VariantFunctions::variant_segments_close"],
+    [110208, "get_variant_time", False, False, "TIME", ["VARIANT", "VARCHAR"],
+     "VariantFunctions::get_variant_time",
+     "VariantFunctions::variant_segments_prepare", "VariantFunctions::variant_segments_close"],
+    [110205, "variant_typeof", False, False, "VARCHAR", ["VARIANT"], "VariantFunctions::variant_typeof"],
 
     # aes and base64 function
-    [120100, "aes_encrypt", False, False, "VARCHAR", ["VARCHAR", "VARCHAR"], "EncryptionFunctions::aes_encrypt"],
-    [120110, "aes_decrypt", False, False, "VARCHAR", ["VARCHAR", "VARCHAR"], "EncryptionFunctions::aes_decrypt"],
+    # aes_encrypt: 2-parameter version (data, key) for backward compatibility with old FE
+    [120100, "aes_encrypt", False, False, "VARCHAR", ["VARCHAR", "VARCHAR"], "EncryptionFunctions::aes_encrypt_with_mode"],
+    # aes_encrypt: 4-parameter version (data, key, iv, mode)
+    # Note: FE's ExpressionAnalyzer converts 2/3 params to 4 params automatically
+    [120101, "aes_encrypt", False, False, "VARCHAR", ["VARCHAR", "VARCHAR", "VARCHAR", "VARCHAR"], "EncryptionFunctions::aes_encrypt_with_mode"],
+
+    # aes_encrypt: 5-parameter version (data, key, iv, mode, aad) for GCM mode
+    [120102, "aes_encrypt", False, False, "VARCHAR", ["VARCHAR", "VARCHAR", "VARCHAR", "VARCHAR", "VARCHAR"], "EncryptionFunctions::aes_encrypt_with_mode"],
+    # aes_decrypt: 2-parameter version (data, key) for backward compatibility with old FE
+    [120110, "aes_decrypt", False, False, "VARCHAR", ["VARCHAR", "VARCHAR"], "EncryptionFunctions::aes_decrypt_with_mode"],
+    # aes_decrypt: 4-parameter version (data, key, iv, mode)
+    # Note: FE's ExpressionAnalyzer converts 2/3 params to 4 params automatically
+    [120111, "aes_decrypt", False, False, "VARCHAR", ["VARCHAR", "VARCHAR", "VARCHAR", "VARCHAR"], "EncryptionFunctions::aes_decrypt_with_mode"],
+
+    # aes_decrypt: 5-parameter version (data, key, iv, mode, aad) for GCM mode
+    [120112, "aes_decrypt", False, False, "VARCHAR", ["VARCHAR", "VARCHAR", "VARCHAR", "VARCHAR", "VARCHAR"], "EncryptionFunctions::aes_decrypt_with_mode"],
     [120120, "from_base64", False, False, "VARCHAR", ["VARCHAR"], "EncryptionFunctions::from_base64"],
     [120121, "base64_decode_binary", False, False, "VARBINARY", ["VARCHAR"], "EncryptionFunctions::from_base64"],
     [120122, "base64_decode_string", False, False, "VARCHAR", ["VARCHAR"], "EncryptionFunctions::from_base64"],
@@ -789,6 +945,8 @@ vectorized_functions = [
     [120160, "sha2", False, False, "VARCHAR", ["VARCHAR", "INT"], "EncryptionFunctions::sha2",
      "EncryptionFunctions::sha2_prepare", "EncryptionFunctions::sha2_close"],
     [120161, "to_base64", False, True, "VARCHAR", ["VARBINARY"], "EncryptionFunctions::to_base64"],
+    [120162, "encode_fingerprint_sha256", False, False, "VARBINARY", ["ANY_ELEMENT", "..."], "EncryptionFunctions::encode_fingerprint_sha256"],
+
 
     # geo function
     [120000, "ST_Point", False, False, "VARCHAR", ["DOUBLE", "DOUBLE"], "GeoFunctions::st_point"],
@@ -828,7 +986,22 @@ vectorized_functions = [
 
     [150000, 'array_length', True, False, 'INT', ['ANY_ARRAY'], 'ArrayFunctions::array_length'],
     [150001, 'array_append', True, False, 'ANY_ARRAY', ['ANY_ARRAY', 'ANY_ELEMENT'], 'ArrayFunctions::array_append'],
-    [150002, 'array_contains', True, False, 'BOOLEAN', ['ANY_ARRAY', 'ANY_ELEMENT'], 'ArrayFunctions::array_contains'],
+    [150002, 'array_contains', True, False, 'BOOLEAN', ['ANY_ARRAY', 'ANY_ELEMENT'], 'ArrayFunctions::array_contains_generic'],
+    [15000201, 'array_contains', True, False, 'BOOLEAN', ['ARRAY_BOOLEAN', 'BOOLEAN'], 'ArrayFunctions::array_contains_specific<TYPE_BOOLEAN>', 'ArrayFunctions::array_contains_specific_prepare<TYPE_BOOLEAN>', 'ArrayFunctions::array_contains_specific_close<TYPE_BOOLEAN>'],
+    [15000202, 'array_contains', True, False, 'BOOLEAN', ['ARRAY_TINYINT', 'TINYINT'], 'ArrayFunctions::array_contains_specific<TYPE_TINYINT>', 'ArrayFunctions::array_contains_specific_prepare<TYPE_TINYINT>', 'ArrayFunctions::array_contains_specific_close<TYPE_TINYINT>'],
+    [15000203, 'array_contains', True, False, 'BOOLEAN', ['ARRAY_SMALLINT', 'SMALLINT'], 'ArrayFunctions::array_contains_specific<TYPE_SMALLINT>', 'ArrayFunctions::array_contains_specific_prepare<TYPE_SMALLINT>', 'ArrayFunctions::array_contains_specific_close<TYPE_SMALLINT>'],
+    [15000204, 'array_contains', True, False, 'BOOLEAN', ['ARRAY_INT', 'INT'], 'ArrayFunctions::array_contains_specific<TYPE_INT>', 'ArrayFunctions::array_contains_specific_prepare<TYPE_INT>', 'ArrayFunctions::array_contains_specific_close<TYPE_INT>'],
+    [15000205, 'array_contains', True, False, 'BOOLEAN', ['ARRAY_BIGINT', 'BIGINT'], 'ArrayFunctions::array_contains_specific<TYPE_BIGINT>', 'ArrayFunctions::array_contains_specific_prepare<TYPE_BIGINT>', 'ArrayFunctions::array_contains_specific_close<TYPE_BIGINT>'],
+    [15000206, 'array_contains', True, False, 'BOOLEAN', ['ARRAY_LARGEINT', 'LARGEINT'], 'ArrayFunctions::array_contains_specific<TYPE_LARGEINT>', 'ArrayFunctions::array_contains_specific_prepare<TYPE_LARGEINT>', 'ArrayFunctions::array_contains_specific_close<TYPE_LARGEINT>'],
+    [15000207, 'array_contains', True, False, 'BOOLEAN', ['ARRAY_DECIMALV2', 'DECIMALV2'], 'ArrayFunctions::array_contains_specific<TYPE_DECIMALV2>', 'ArrayFunctions::array_contains_specific_prepare<TYPE_DECIMALV2>', 'ArrayFunctions::array_contains_specific_close<TYPE_DECIMALV2>'],
+    [15000208, 'array_contains', True, False, 'BOOLEAN', ['ARRAY_DECIMAL32', 'DECIMAL32'], 'ArrayFunctions::array_contains_specific<TYPE_DECIMAL32>', 'ArrayFunctions::array_contains_specific_prepare<TYPE_DECIMAL32>', 'ArrayFunctions::array_contains_specific_close<TYPE_DECIMAL32>'],
+    [15000209, 'array_contains', True, False, 'BOOLEAN', ['ARRAY_DECIMAL64', 'DECIMAL64'], 'ArrayFunctions::array_contains_specific<TYPE_DECIMAL64>', 'ArrayFunctions::array_contains_specific_prepare<TYPE_DECIMAL64>', 'ArrayFunctions::array_contains_specific_close<TYPE_DECIMAL64>'],
+    [15000210, 'array_contains', True, False, 'BOOLEAN', ['ARRAY_DECIMAL128', 'DECIMAL128'], 'ArrayFunctions::array_contains_specific<TYPE_DECIMAL128>', 'ArrayFunctions::array_contains_specific_prepare<TYPE_DECIMAL128>', 'ArrayFunctions::array_contains_specific_close<TYPE_DECIMAL128>'],
+    [15000211, 'array_contains', True, False, 'BOOLEAN', ['ARRAY_FLOAT', 'FLOAT'], 'ArrayFunctions::array_contains_specific<TYPE_FLOAT>', 'ArrayFunctions::array_contains_specific_prepare<TYPE_FLOAT>', 'ArrayFunctions::array_contains_specific_close<TYPE_FLOAT>'],
+    [15000212, 'array_contains', True, False, 'BOOLEAN', ['ARRAY_DOUBLE', 'DOUBLE'], 'ArrayFunctions::array_contains_specific<TYPE_DOUBLE>', 'ArrayFunctions::array_contains_specific_prepare<TYPE_DOUBLE>', 'ArrayFunctions::array_contains_specific_close<TYPE_DOUBLE>'],
+    [15000213, 'array_contains', True, False, 'BOOLEAN', ['ARRAY_VARCHAR', 'VARCHAR'], 'ArrayFunctions::array_contains_specific<TYPE_VARCHAR>', 'ArrayFunctions::array_contains_specific_prepare<TYPE_VARCHAR>', 'ArrayFunctions::array_contains_specific_close<TYPE_VARCHAR>'],
+    [15000214, 'array_contains', True, False, 'BOOLEAN', ['ARRAY_DATE', 'DATE'], 'ArrayFunctions::array_contains_specific<TYPE_DATE>', 'ArrayFunctions::array_contains_specific_prepare<TYPE_DATE>', 'ArrayFunctions::array_contains_specific_close<TYPE_DATE>'],
+    [15000215, 'array_contains', True, False, 'BOOLEAN', ['ARRAY_DATETIME', 'DATETIME'], 'ArrayFunctions::array_contains_specific<TYPE_DATETIME>', 'ArrayFunctions::array_contains_specific_prepare<TYPE_DATETIME>', 'ArrayFunctions::array_contains_specific_close<TYPE_DATETIME>'],
 
     # sum
     [150003, 'array_sum', True, False, 'BIGINT', ['ARRAY_BOOLEAN'], 'ArrayFunctions::array_sum<TYPE_BOOLEAN>'],
@@ -899,7 +1072,24 @@ vectorized_functions = [
     [150074, 'array_max', True, False, 'VARCHAR', ['ARRAY_VARCHAR'], 'ArrayFunctions::array_max<TYPE_VARCHAR>'],
 
     [150083, 'array_remove', True, False, 'ANY_ARRAY', ['ANY_ARRAY', 'ANY_ELEMENT'], 'ArrayFunctions::array_remove'],
-    [150084, 'array_position', True, False, 'INT', ['ANY_ARRAY', 'ANY_ELEMENT'], 'ArrayFunctions::array_position'],
+    [150084, 'array_position', True, False, 'INT', ['ANY_ARRAY', 'ANY_ELEMENT'], 'ArrayFunctions::array_position_generic'],
+
+    [15008401, 'array_position', True, False, 'INT', ['ARRAY_BOOLEAN', 'BOOLEAN'], 'ArrayFunctions::array_position_specific<TYPE_BOOLEAN>', 'ArrayFunctions::array_position_specific_prepare<TYPE_BOOLEAN>', 'ArrayFunctions::array_position_specific_close<TYPE_BOOLEAN>'],
+    [15008402, 'array_position', True, False, 'INT', ['ARRAY_TINYINT', 'TINYINT'], 'ArrayFunctions::array_position_specific<TYPE_TINYINT>', 'ArrayFunctions::array_position_specific_prepare<TYPE_TINYINT>', 'ArrayFunctions::array_position_specific_close<TYPE_TINYINT>'],
+    [15008403, 'array_position', True, False, 'INT', ['ARRAY_SMALLINT', 'SMALLINT'], 'ArrayFunctions::array_position_specific<TYPE_SMALLINT>', 'ArrayFunctions::array_position_specific_prepare<TYPE_SMALLINT>', 'ArrayFunctions::array_position_specific_close<TYPE_SMALLINT>'],
+    [15008404, 'array_position', True, False, 'INT', ['ARRAY_INT', 'INT'], 'ArrayFunctions::array_position_specific<TYPE_INT>', 'ArrayFunctions::array_position_specific_prepare<TYPE_INT>', 'ArrayFunctions::array_position_specific_close<TYPE_INT>'],
+    [15008405, 'array_position', True, False, 'INT', ['ARRAY_BIGINT', 'BIGINT'], 'ArrayFunctions::array_position_specific<TYPE_BIGINT>', 'ArrayFunctions::array_position_specific_prepare<TYPE_BIGINT>', 'ArrayFunctions::array_position_specific_close<TYPE_BIGINT>'],
+    [15008406, 'array_position', True, False, 'INT', ['ARRAY_LARGEINT', 'LARGEINT'], 'ArrayFunctions::array_position_specific<TYPE_LARGEINT>', 'ArrayFunctions::array_position_specific_prepare<TYPE_LARGEINT>', 'ArrayFunctions::array_position_specific_close<TYPE_LARGEINT>'],
+    [15008407, 'array_position', True, False, 'INT', ['ARRAY_DECIMALV2', 'DECIMALV2'], 'ArrayFunctions::array_position_specific<TYPE_DECIMALV2>', 'ArrayFunctions::array_position_specific_prepare<TYPE_DECIMALV2>', 'ArrayFunctions::array_position_specific_close<TYPE_DECIMALV2>'],
+    [15008408, 'array_position', True, False, 'INT', ['ARRAY_DECIMAL32', 'DECIMAL32'], 'ArrayFunctions::array_position_specific<TYPE_DECIMAL32>', 'ArrayFunctions::array_position_specific_prepare<TYPE_DECIMAL32>', 'ArrayFunctions::array_position_specific_close<TYPE_DECIMAL32>'],
+    [15008409, 'array_position', True, False, 'INT', ['ARRAY_DECIMAL64', 'DECIMAL64'], 'ArrayFunctions::array_position_specific<TYPE_DECIMAL64>', 'ArrayFunctions::array_position_specific_prepare<TYPE_DECIMAL64>', 'ArrayFunctions::array_position_specific_close<TYPE_DECIMAL64>'],
+    [15008410, 'array_position', True, False, 'INT', ['ARRAY_DECIMAL128', 'DECIMAL128'], 'ArrayFunctions::array_position_specific<TYPE_DECIMAL128>', 'ArrayFunctions::array_position_specific_prepare<TYPE_DECIMAL128>', 'ArrayFunctions::array_position_specific_close<TYPE_DECIMAL128>'],
+    [15008411, 'array_position', True, False, 'INT', ['ARRAY_FLOAT', 'FLOAT'], 'ArrayFunctions::array_position_specific<TYPE_FLOAT>', 'ArrayFunctions::array_position_specific_prepare<TYPE_FLOAT>', 'ArrayFunctions::array_position_specific_close<TYPE_FLOAT>'],
+    [15008412, 'array_position', True, False, 'INT', ['ARRAY_DOUBLE', 'DOUBLE'], 'ArrayFunctions::array_position_specific<TYPE_DOUBLE>', 'ArrayFunctions::array_position_specific_prepare<TYPE_DOUBLE>', 'ArrayFunctions::array_position_specific_close<TYPE_DOUBLE>'],
+    [15008413, 'array_position', True, False, 'INT', ['ARRAY_VARCHAR', 'VARCHAR'], 'ArrayFunctions::array_position_specific<TYPE_VARCHAR>', 'ArrayFunctions::array_position_specific_prepare<TYPE_VARCHAR>', 'ArrayFunctions::array_position_specific_close<TYPE_VARCHAR>'],
+    [15008414, 'array_position', True, False, 'INT', ['ARRAY_DATE', 'DATE'], 'ArrayFunctions::array_position_specific<TYPE_DATE>', 'ArrayFunctions::array_position_specific_prepare<TYPE_DATE>', 'ArrayFunctions::array_position_specific_close<TYPE_DATE>'],
+    [15008415, 'array_position', True, False, 'INT', ['ARRAY_DATETIME', 'DATETIME'], 'ArrayFunctions::array_position_specific<TYPE_DATETIME>', 'ArrayFunctions::array_position_specific_prepare<TYPE_DATETIME>', 'ArrayFunctions::array_position_specific_close<TYPE_DATETIME>'],
+
 
     [150090, 'array_distinct', True, False, 'ARRAY_BOOLEAN', ['ARRAY_BOOLEAN'],
      'ArrayFunctions::array_distinct<TYPE_BOOLEAN>'],
@@ -955,6 +1145,7 @@ vectorized_functions = [
      'ArrayFunctions::array_sort<TYPE_DATETIME>'],
     [150121, 'array_sort', True, False, 'ARRAY_DATE', ['ARRAY_DATE'], 'ArrayFunctions::array_sort<TYPE_DATE>'],
     [150122, 'array_sort', True, False, 'ARRAY_JSON', ['ARRAY_JSON'], 'ArrayFunctions::array_sort<TYPE_JSON>'],
+    [150126, 'array_sort_lambda', True, False, 'ANY_ARRAY', ['ANY_ARRAY', 'FUNCTION'], 'ArrayFunctions::array_sort_lambda'],
 
     [150130, 'reverse', True, False, 'ARRAY_BOOLEAN', ['ARRAY_BOOLEAN'], 'ArrayFunctions::array_reverse<TYPE_BOOLEAN>'],
     [150131, 'reverse', True, False, 'ARRAY_TINYINT', ['ARRAY_TINYINT'], 'ArrayFunctions::array_reverse<TYPE_TINYINT>'],
@@ -1066,37 +1257,53 @@ vectorized_functions = [
 
     [150203, 'array_concat', True, True, 'ANY_ARRAY', ['ANY_ARRAY', "..."], 'ArrayFunctions::concat'],
 
-    [150210, 'arrays_overlap', True, False, 'BOOLEAN', ['ARRAY_DATE', 'ARRAY_DATE'],
-     'ArrayFunctions::array_overlap<TYPE_DATE>'],
-    [150211, 'arrays_overlap', True, False, 'BOOLEAN', ['ARRAY_DATETIME', 'ARRAY_DATETIME'],
-     'ArrayFunctions::array_overlap<TYPE_DATETIME>'],
-    [150212, 'arrays_overlap', True, False, 'BOOLEAN', ['ARRAY_BOOLEAN', 'ARRAY_BOOLEAN'],
-     'ArrayFunctions::array_overlap<TYPE_BOOLEAN>'],
-    [150213, 'arrays_overlap', True, False, 'BOOLEAN', ['ARRAY_TINYINT', 'ARRAY_TINYINT'],
-     'ArrayFunctions::array_overlap<TYPE_TINYINT>'],
-    [150214, 'arrays_overlap', True, False, 'BOOLEAN', ['ARRAY_SMALLINT', 'ARRAY_SMALLINT'],
-     'ArrayFunctions::array_overlap<TYPE_SMALLINT>'],
-    [150215, 'arrays_overlap', True, False, 'BOOLEAN', ['ARRAY_INT', 'ARRAY_INT'],
-     'ArrayFunctions::array_overlap<TYPE_INT>'],
-    [150216, 'arrays_overlap', True, False, 'BOOLEAN', ['ARRAY_BIGINT', 'ARRAY_BIGINT'],
-     'ArrayFunctions::array_overlap<TYPE_BIGINT>'],
-    [150217, 'arrays_overlap', True, False, 'BOOLEAN', ['ARRAY_LARGEINT', 'ARRAY_LARGEINT'],
-     'ArrayFunctions::array_overlap<TYPE_LARGEINT>'],
-    [150218, 'arrays_overlap', True, False, 'BOOLEAN', ['ARRAY_FLOAT', 'ARRAY_FLOAT'],
-     'ArrayFunctions::array_overlap<TYPE_FLOAT>'],
-    [150222, 'arrays_overlap', True, False, 'BOOLEAN', ['ARRAY_DECIMAL32', 'ARRAY_DECIMAL32'],
-     'ArrayFunctions::array_overlap<TYPE_DECIMAL32>'],
-    [150223, 'arrays_overlap', True, False, 'BOOLEAN', ['ARRAY_DECIMAL64', 'ARRAY_DECIMAL64'],
-     'ArrayFunctions::array_overlap<TYPE_DECIMAL64>'],
-    [150224, 'arrays_overlap', True, False, 'BOOLEAN', ['ARRAY_DECIMAL128', 'ARRAY_DECIMAL128'],
-     'ArrayFunctions::array_overlap<TYPE_DECIMAL128>'],
-    [150219, 'arrays_overlap', True, False, 'BOOLEAN', ['ARRAY_DOUBLE', 'ARRAY_DOUBLE'],
-     'ArrayFunctions::array_overlap<TYPE_DOUBLE>'],
-    [150220, 'arrays_overlap', True, False, 'BOOLEAN', ['ARRAY_DECIMALV2', 'ARRAY_DECIMALV2'],
-     'ArrayFunctions::array_overlap<TYPE_DECIMALV2>'],
-    [150221, 'arrays_overlap', True, False, 'BOOLEAN', ['ARRAY_VARCHAR', 'ARRAY_VARCHAR'],
-     'ArrayFunctions::array_overlap<TYPE_VARCHAR>'],
+    [150207, 'arrays_zip', True, False, 'ANY_ARRAY', ['ANY_ARRAY', "..."], 'ArrayFunctions::arrays_zip'],
 
+    [150210, 'arrays_overlap', True, False, 'BOOLEAN', ['ARRAY_DATE', 'ARRAY_DATE'],
+     'ArrayFunctions::array_overlap<TYPE_DATE>',
+     'ArrayFunctions::array_overlap_prepare<TYPE_DATE>', 'ArrayFunctions::array_overlap_close<TYPE_DATE>'],
+    [150211, 'arrays_overlap', True, False, 'BOOLEAN', ['ARRAY_DATETIME', 'ARRAY_DATETIME'],
+     'ArrayFunctions::array_overlap<TYPE_DATETIME>',
+     'ArrayFunctions::array_overlap_prepare<TYPE_DATETIME>', 'ArrayFunctions::array_overlap_close<TYPE_DATETIME>'],
+    [150212, 'arrays_overlap', True, False, 'BOOLEAN', ['ARRAY_BOOLEAN', 'ARRAY_BOOLEAN'],
+     'ArrayFunctions::array_overlap<TYPE_BOOLEAN>',
+     'ArrayFunctions::array_overlap_prepare<TYPE_BOOLEAN>', 'ArrayFunctions::array_overlap_close<TYPE_BOOLEAN>'],
+    [150213, 'arrays_overlap', True, False, 'BOOLEAN', ['ARRAY_TINYINT', 'ARRAY_TINYINT'],
+     'ArrayFunctions::array_overlap<TYPE_TINYINT>',
+     'ArrayFunctions::array_overlap_prepare<TYPE_TINYINT>', 'ArrayFunctions::array_overlap_close<TYPE_TINYINT>'],
+    [150214, 'arrays_overlap', True, False, 'BOOLEAN', ['ARRAY_SMALLINT', 'ARRAY_SMALLINT'],
+     'ArrayFunctions::array_overlap<TYPE_SMALLINT>',
+     'ArrayFunctions::array_overlap_prepare<TYPE_SMALLINT>', 'ArrayFunctions::array_overlap_close<TYPE_SMALLINT>'],
+    [150215, 'arrays_overlap', True, False, 'BOOLEAN', ['ARRAY_INT', 'ARRAY_INT'],
+     'ArrayFunctions::array_overlap<TYPE_INT>',
+     'ArrayFunctions::array_overlap_prepare<TYPE_INT>', 'ArrayFunctions::array_overlap_close<TYPE_INT>'],
+    [150216, 'arrays_overlap', True, False, 'BOOLEAN', ['ARRAY_BIGINT', 'ARRAY_BIGINT'],
+     'ArrayFunctions::array_overlap<TYPE_BIGINT>',
+     'ArrayFunctions::array_overlap_prepare<TYPE_BIGINT>', 'ArrayFunctions::array_overlap_close<TYPE_BIGINT>'],
+    [150217, 'arrays_overlap', True, False, 'BOOLEAN', ['ARRAY_LARGEINT', 'ARRAY_LARGEINT'],
+     'ArrayFunctions::array_overlap<TYPE_LARGEINT>',
+     'ArrayFunctions::array_overlap_prepare<TYPE_LARGEINT>', 'ArrayFunctions::array_overlap_close<TYPE_LARGEINT>'],
+    [150218, 'arrays_overlap', True, False, 'BOOLEAN', ['ARRAY_FLOAT', 'ARRAY_FLOAT'],
+     'ArrayFunctions::array_overlap<TYPE_FLOAT>',
+     'ArrayFunctions::array_overlap_prepare<TYPE_FLOAT>', 'ArrayFunctions::array_overlap_close<TYPE_FLOAT>'],
+    [150222, 'arrays_overlap', True, False, 'BOOLEAN', ['ARRAY_DECIMAL32', 'ARRAY_DECIMAL32'],
+     'ArrayFunctions::array_overlap<TYPE_DECIMAL32>',
+     'ArrayFunctions::array_overlap_prepare<TYPE_DECIMAL32>', 'ArrayFunctions::array_overlap_close<TYPE_DECIMAL32>'],
+    [150223, 'arrays_overlap', True, False, 'BOOLEAN', ['ARRAY_DECIMAL64', 'ARRAY_DECIMAL64'],
+     'ArrayFunctions::array_overlap<TYPE_DECIMAL64>',
+     'ArrayFunctions::array_overlap_prepare<TYPE_DECIMAL64>', 'ArrayFunctions::array_overlap_close<TYPE_DECIMAL64>'],
+    [150224, 'arrays_overlap', True, False, 'BOOLEAN', ['ARRAY_DECIMAL128', 'ARRAY_DECIMAL128'],
+     'ArrayFunctions::array_overlap<TYPE_DECIMAL128>',
+     'ArrayFunctions::array_overlap_prepare<TYPE_DECIMAL128>', 'ArrayFunctions::array_overlap_close<TYPE_DECIMAL128>'],
+    [150219, 'arrays_overlap', True, False, 'BOOLEAN', ['ARRAY_DOUBLE', 'ARRAY_DOUBLE'],
+     'ArrayFunctions::array_overlap<TYPE_DOUBLE>',
+     'ArrayFunctions::array_overlap_prepare<TYPE_DOUBLE>', 'ArrayFunctions::array_overlap_close<TYPE_DOUBLE>'],
+    [150220, 'arrays_overlap', True, False, 'BOOLEAN', ['ARRAY_DECIMALV2', 'ARRAY_DECIMALV2'],
+     'ArrayFunctions::array_overlap<TYPE_DECIMALV2>',
+     'ArrayFunctions::array_overlap_prepare<TYPE_DECIMALV2>', 'ArrayFunctions::array_overlap_close<TYPE_DECIMALV2>'],
+    [150221, 'arrays_overlap', True, False, 'BOOLEAN', ['ARRAY_VARCHAR', 'ARRAY_VARCHAR'],
+     'ArrayFunctions::array_overlap<TYPE_VARCHAR>',
+     'ArrayFunctions::array_overlap_prepare<TYPE_VARCHAR>', 'ArrayFunctions::array_overlap_close<TYPE_VARCHAR>'],
     [150226, 'arrays_overlap', True, False, 'BOOLEAN', ['ANY_ARRAY', 'ANY_ARRAY'],
      'ArrayFunctions::array_contains_any'],
 
@@ -1164,8 +1371,44 @@ vectorized_functions = [
     # reserve 150281
     [150282, 'array_contains_all', True, False, 'BOOLEAN', ['ANY_ARRAY', 'ANY_ARRAY'],
      'ArrayFunctions::array_contains_all'],
+    [15028201, 'array_contains_all', True, False, 'BOOLEAN', ['ARRAY_BOOLEAN', 'ARRAY_BOOLEAN'], 'ArrayFunctions::array_contains_all_specific<TYPE_BOOLEAN>', 'ArrayFunctions::array_contains_all_specific_prepare<TYPE_BOOLEAN>', 'ArrayFunctions::array_contains_all_specific_close<TYPE_BOOLEAN>'],
+    [15028202, 'array_contains_all', True, False, 'BOOLEAN', ['ARRAY_TINYINT', 'ARRAY_TINYINT'], 'ArrayFunctions::array_contains_all_specific<TYPE_TINYINT>', 'ArrayFunctions::array_contains_all_specific_prepare<TYPE_TINYINT>', 'ArrayFunctions::array_contains_all_specific_close<TYPE_TINYINT>'],
+    [15028203, 'array_contains_all', True, False, 'BOOLEAN', ['ARRAY_SMALLINT', 'ARRAY_SMALLINT'], 'ArrayFunctions::array_contains_all_specific<TYPE_SMALLINT>', 'ArrayFunctions::array_contains_all_specific_prepare<TYPE_SMALLINT>', 'ArrayFunctions::array_contains_all_specific_close<TYPE_SMALLINT>'],
+    [15028204, 'array_contains_all', True, False, 'BOOLEAN', ['ARRAY_INT', 'ARRAY_INT'], 'ArrayFunctions::array_contains_all_specific<TYPE_INT>', 'ArrayFunctions::array_contains_all_specific_prepare<TYPE_INT>', 'ArrayFunctions::array_contains_all_specific_close<TYPE_INT>'],
+    [15028205, 'array_contains_all', True, False, 'BOOLEAN', ['ARRAY_BIGINT', 'ARRAY_BIGINT'], 'ArrayFunctions::array_contains_all_specific<TYPE_BIGINT>', 'ArrayFunctions::array_contains_all_specific_prepare<TYPE_BIGINT>', 'ArrayFunctions::array_contains_all_specific_close<TYPE_BIGINT>'],
+    [15028206, 'array_contains_all', True, False, 'BOOLEAN', ['ARRAY_LARGEINT', 'ARRAY_LARGEINT'], 'ArrayFunctions::array_contains_all_specific<TYPE_LARGEINT>', 'ArrayFunctions::array_contains_all_specific_prepare<TYPE_LARGEINT>', 'ArrayFunctions::array_contains_all_specific_close<TYPE_LARGEINT>'],
+    [15028207, 'array_contains_all', True, False, 'BOOLEAN', ['ARRAY_DECIMALV2', 'ARRAY_DECIMALV2'], 'ArrayFunctions::array_contains_all_specific<TYPE_DECIMALV2>', 'ArrayFunctions::array_contains_all_specific_prepare<TYPE_DECIMALV2>', 'ArrayFunctions::array_contains_all_specific_close<TYPE_DECIMALV2>'],
+    [15028208, 'array_contains_all', True, False, 'BOOLEAN', ['ARRAY_DECIMAL32', 'ARRAY_DECIMAL32'], 'ArrayFunctions::array_contains_all_specific<TYPE_DECIMAL32>', 'ArrayFunctions::array_contains_all_specific_prepare<TYPE_DECIMAL32>', 'ArrayFunctions::array_contains_all_specific_close<TYPE_DECIMAL32>'],
+    [15028209, 'array_contains_all', True, False, 'BOOLEAN', ['ARRAY_DECIMAL64', 'ARRAY_DECIMAL64'], 'ArrayFunctions::array_contains_all_specific<TYPE_DECIMAL64>', 'ArrayFunctions::array_contains_all_specific_prepare<TYPE_DECIMAL64>', 'ArrayFunctions::array_contains_all_specific_close<TYPE_DECIMAL64>'],
+    [15028210, 'array_contains_all', True, False, 'BOOLEAN', ['ARRAY_DECIMAL128', 'ARRAY_DECIMAL128'], 'ArrayFunctions::array_contains_all_specific<TYPE_DECIMAL128>', 'ArrayFunctions::array_contains_all_specific_prepare<TYPE_DECIMAL128>', 'ArrayFunctions::array_contains_all_specific_close<TYPE_DECIMAL128>'],
+    [15028211, 'array_contains_all', True, False, 'BOOLEAN', ['ARRAY_FLOAT', 'ARRAY_FLOAT'], 'ArrayFunctions::array_contains_all_specific<TYPE_FLOAT>', 'ArrayFunctions::array_contains_all_specific_prepare<TYPE_FLOAT>', 'ArrayFunctions::array_contains_all_specific_close<TYPE_FLOAT>'],
+    [15028212, 'array_contains_all', True, False, 'BOOLEAN', ['ARRAY_DOUBLE', 'ARRAY_DOUBLE'], 'ArrayFunctions::array_contains_all_specific<TYPE_DOUBLE>', 'ArrayFunctions::array_contains_all_specific_prepare<TYPE_DOUBLE>', 'ArrayFunctions::array_contains_all_specific_close<TYPE_DOUBLE>'],
+    [15028213, 'array_contains_all', True, False, 'BOOLEAN', ['ARRAY_VARCHAR', 'ARRAY_VARCHAR'], 'ArrayFunctions::array_contains_all_specific<TYPE_VARCHAR>', 'ArrayFunctions::array_contains_all_specific_prepare<TYPE_VARCHAR>', 'ArrayFunctions::array_contains_all_specific_close<TYPE_VARCHAR>'],
+    [15028214, 'array_contains_all', True, False, 'BOOLEAN', ['ARRAY_DATE', 'ARRAY_DATE'], 'ArrayFunctions::array_contains_all_specific<TYPE_DATE>', 'ArrayFunctions::array_contains_all_specific_prepare<TYPE_DATE>', 'ArrayFunctions::array_contains_all_specific_close<TYPE_DATE>'],
+    [15028215, 'array_contains_all', True, False, 'BOOLEAN', ['ARRAY_DATETIME', 'ARRAY_DATETIME'], 'ArrayFunctions::array_contains_all_specific<TYPE_DATETIME>', 'ArrayFunctions::array_contains_all_specific_prepare<TYPE_DATETIME>', 'ArrayFunctions::array_contains_all_specific_close<TYPE_DATETIME>'],
+
+
+
+    # TODO: sepecific type
     [150283, 'array_contains_seq', True, False, 'BOOLEAN', ['ANY_ARRAY', 'ANY_ARRAY'],
      'ArrayFunctions::array_contains_seq'],
+    [15028301, 'array_contains_seq', True, False, 'BOOLEAN', ['ARRAY_BOOLEAN', 'ARRAY_BOOLEAN'], 'ArrayFunctions::array_contains_seq_specific<TYPE_BOOLEAN>', 'ArrayFunctions::array_contains_seq_specific_prepare<TYPE_BOOLEAN>', 'ArrayFunctions::array_contains_seq_specific_close<TYPE_BOOLEAN>'],
+    [15028302, 'array_contains_seq', True, False, 'BOOLEAN', ['ARRAY_TINYINT', 'ARRAY_TINYINT'], 'ArrayFunctions::array_contains_seq_specific<TYPE_TINYINT>', 'ArrayFunctions::array_contains_seq_specific_prepare<TYPE_TINYINT>', 'ArrayFunctions::array_contains_seq_specific_close<TYPE_TINYINT>'],
+    [15028303, 'array_contains_seq', True, False, 'BOOLEAN', ['ARRAY_SMALLINT', 'ARRAY_SMALLINT'], 'ArrayFunctions::array_contains_seq_specific<TYPE_SMALLINT>', 'ArrayFunctions::array_contains_seq_specific_prepare<TYPE_SMALLINT>', 'ArrayFunctions::array_contains_seq_specific_close<TYPE_SMALLINT>'],
+    [15028304, 'array_contains_seq', True, False, 'BOOLEAN', ['ARRAY_INT', 'ARRAY_INT'], 'ArrayFunctions::array_contains_seq_specific<TYPE_INT>', 'ArrayFunctions::array_contains_seq_specific_prepare<TYPE_INT>', 'ArrayFunctions::array_contains_seq_specific_close<TYPE_INT>'],
+    [15028305, 'array_contains_seq', True, False, 'BOOLEAN', ['ARRAY_BIGINT', 'ARRAY_BIGINT'], 'ArrayFunctions::array_contains_seq_specific<TYPE_BIGINT>', 'ArrayFunctions::array_contains_seq_specific_prepare<TYPE_BIGINT>', 'ArrayFunctions::array_contains_seq_specific_close<TYPE_BIGINT>'],
+    [15028306, 'array_contains_seq', True, False, 'BOOLEAN', ['ARRAY_LARGEINT', 'ARRAY_LARGEINT'], 'ArrayFunctions::array_contains_seq_specific<TYPE_LARGEINT>', 'ArrayFunctions::array_contains_seq_specific_prepare<TYPE_LARGEINT>', 'ArrayFunctions::array_contains_seq_specific_close<TYPE_LARGEINT>'],
+    [15028307, 'array_contains_seq', True, False, 'BOOLEAN', ['ARRAY_DECIMALV2', 'ARRAY_DECIMALV2'], 'ArrayFunctions::array_contains_seq_specific<TYPE_DECIMALV2>', 'ArrayFunctions::array_contains_seq_specific_prepare<TYPE_DECIMALV2>', 'ArrayFunctions::array_contains_seq_specific_close<TYPE_DECIMALV2>'],
+    [15028308, 'array_contains_seq', True, False, 'BOOLEAN', ['ARRAY_DECIMAL32', 'ARRAY_DECIMAL32'], 'ArrayFunctions::array_contains_seq_specific<TYPE_DECIMAL32>', 'ArrayFunctions::array_contains_seq_specific_prepare<TYPE_DECIMAL32>', 'ArrayFunctions::array_contains_seq_specific_close<TYPE_DECIMAL32>'],
+    [15028309, 'array_contains_seq', True, False, 'BOOLEAN', ['ARRAY_DECIMAL64', 'ARRAY_DECIMAL64'], 'ArrayFunctions::array_contains_seq_specific<TYPE_DECIMAL64>', 'ArrayFunctions::array_contains_seq_specific_prepare<TYPE_DECIMAL64>', 'ArrayFunctions::array_contains_seq_specific_close<TYPE_DECIMAL64>'],
+    [15028310, 'array_contains_seq', True, False, 'BOOLEAN', ['ARRAY_DECIMAL128', 'ARRAY_DECIMAL128'], 'ArrayFunctions::array_contains_seq_specific<TYPE_DECIMAL128>', 'ArrayFunctions::array_contains_seq_specific_prepare<TYPE_DECIMAL128>', 'ArrayFunctions::array_contains_seq_specific_close<TYPE_DECIMAL128>'],
+    [15028311, 'array_contains_seq', True, False, 'BOOLEAN', ['ARRAY_FLOAT', 'ARRAY_FLOAT'], 'ArrayFunctions::array_contains_seq_specific<TYPE_FLOAT>', 'ArrayFunctions::array_contains_seq_specific_prepare<TYPE_FLOAT>', 'ArrayFunctions::array_contains_seq_specific_close<TYPE_FLOAT>'],
+    [15028312, 'array_contains_seq', True, False, 'BOOLEAN', ['ARRAY_DOUBLE', 'ARRAY_DOUBLE'], 'ArrayFunctions::array_contains_seq_specific<TYPE_DOUBLE>', 'ArrayFunctions::array_contains_seq_specific_prepare<TYPE_DOUBLE>', 'ArrayFunctions::array_contains_seq_specific_close<TYPE_DOUBLE>'],
+    [15028313, 'array_contains_seq', True, False, 'BOOLEAN', ['ARRAY_VARCHAR', 'ARRAY_VARCHAR'], 'ArrayFunctions::array_contains_seq_specific<TYPE_VARCHAR>', 'ArrayFunctions::array_contains_seq_specific_prepare<TYPE_VARCHAR>', 'ArrayFunctions::array_contains_seq_specific_close<TYPE_VARCHAR>'],
+    [15028314, 'array_contains_seq', True, False, 'BOOLEAN', ['ARRAY_DATE', 'ARRAY_DATE'], 'ArrayFunctions::array_contains_seq_specific<TYPE_DATE>', 'ArrayFunctions::array_contains_seq_specific_prepare<TYPE_DATE>', 'ArrayFunctions::array_contains_seq_specific_close<TYPE_DATE>'],
+    [15028315, 'array_contains_seq', True, False, 'BOOLEAN', ['ARRAY_DATETIME', 'ARRAY_DATETIME'], 'ArrayFunctions::array_contains_seq_specific<TYPE_DATETIME>', 'ArrayFunctions::array_contains_seq_specific_prepare<TYPE_DATETIME>', 'ArrayFunctions::array_contains_seq_specific_close<TYPE_DATETIME>'],
+
+
     [150300, 'array_filter', True, False, 'ANY_ARRAY', ['ANY_ARRAY', 'ARRAY_BOOLEAN'], 'ArrayFunctions::array_filter'],
     [150301, 'all_match', True, False, 'BOOLEAN', ['ARRAY_BOOLEAN'], 'ArrayFunctions::all_match'],
     [150302, 'any_match', True, False, 'BOOLEAN', ['ARRAY_BOOLEAN'], 'ArrayFunctions::any_match'],
@@ -1218,6 +1461,16 @@ vectorized_functions = [
 
     [150340, 'array_repeat', True, False, 'ANY_ARRAY', ['ANY_ELEMENT', 'INT'], 'ArrayFunctions::repeat'],
 
+    # array_top_n
+    [150341, 'array_top_n', True, False, 'ANY_ARRAY', ['ANY_ARRAY', 'INT'], 'ArrayFunctions::array_top_n'],
+
+    [150345, 'array_flatten', True, False, 'ANY_ELEMENT', ['ANY_ARRAY'], 'ArrayFunctions::array_flatten'],
+
+    [150350, 'array_generate', True, False, 'ARRAY_DATETIME', ['DATETIME', 'DATETIME', 'INT', 'VARCHAR'],
+     "ArrayFunctions::array_generate<TYPE_DATETIME>", "ArrayFunctions::array_generate_prepare<TYPE_DATETIME>", "ArrayFunctions::array_generate_close<TYPE_DATETIME>"],
+    [150351, 'array_generate', True, False, 'ARRAY_DATE', ['DATE', 'DATE', 'INT', 'VARCHAR'],
+     "ArrayFunctions::array_generate<TYPE_DATE>", "ArrayFunctions::array_generate_prepare<TYPE_DATE>", "ArrayFunctions::array_generate_close<TYPE_DATE>"],
+
     # high-order functions related to lambda functions.
     [160100, 'array_map', True, False, 'ANY_ARRAY', ['FUNCTION', 'ANY_ARRAY', "..."], 'ArrayFunctions::array_map'],
 
@@ -1230,6 +1483,7 @@ vectorized_functions = [
     [170005, 'map_filter', True, False, 'ANY_MAP', ['ANY_MAP', 'ARRAY_BOOLEAN'], 'MapFunctions::map_filter'],
     [170006, 'distinct_map_keys', True, False, 'ANY_MAP', ['ANY_MAP'], 'MapFunctions::distinct_map_keys'],
     [170007, 'map_concat', True, False, 'ANY_MAP', ['ANY_MAP', "..."], 'MapFunctions::map_concat'],
+    [170008, 'map_entries', True, False, 'ANY_ARRAY', ['ANY_MAP'], 'MapFunctions::map_entries'],
 
     # map, array common functions
     [170100, 'cardinality', True, False, 'INT', ['ANY_MAP'], 'MapFunctions::map_size'],
@@ -1240,5 +1494,15 @@ vectorized_functions = [
     [170501, 'named_struct', True, False, 'ANY_STRUCT', ['ANY_ELEMENT', "..."], 'StructFunctions::named_struct'],
 
     # user function
-    [180000, 'is_role_in_session', True, False, 'BOOLEAN', ['VARCHAR'], 'nullptr']
+    [180000, 'is_role_in_session', True, False, 'BOOLEAN', ['VARCHAR'], 'nullptr'],
+
+    # data synopse functions
+    [181000, 'bar', True, False, 'VARCHAR', ['BIGINT', "BIGINT", 'BIGINT', 'BIGINT'], 'UtilityFunctions::bar'],
+    [181001, 'equiwidth_bucket', True, False, 'BIGINT', ['BIGINT', 'BIGINT', 'BIGINT', 'BIGINT'], 'UtilityFunctions::equiwidth_bucket'],
+
+    # gin functions
+    [190000, 'tokenize', True, False, 'ARRAY_VARCHAR', ['VARCHAR', 'VARCHAR'], 'GinFunctions::tokenize', 'GinFunctions::tokenize_prepare', 'GinFunctions::tokenize_close'],
+
+    # ai functions
+    [200000, 'ai_query', True, False, 'VARCHAR', ['VARCHAR', 'JSON'], "AiFunctions::ai_query"]
 ]

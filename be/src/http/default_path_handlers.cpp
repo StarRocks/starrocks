@@ -37,17 +37,22 @@
 #include <gutil/strings/numbers.h>
 #include <gutil/strings/substitute.h>
 
+#include <algorithm>
 #include <boost/algorithm/string.hpp>
+#include <cctype>
+#include <filesystem>
 #include <sstream>
+#include <vector>
 
+#include "base/utility/pretty_printer.h"
 #include "common/configbase.h"
+#include "http/action/profile_utils.h"
 #include "http/web_page_handler.h"
 #include "jemalloc/jemalloc.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
-#include "util/pretty_printer.h"
 
 namespace starrocks {
 
@@ -91,9 +96,28 @@ void config_handler(const WebPageHandler::ArgumentMap& args, std::stringstream* 
     (*output) << "</pre>";
 }
 
-void mem_tracker_handler(MemTracker* mem_tracker, const WebPageHandler::ArgumentMap& args, std::stringstream* output) {
+void print_mem_str(std::stringstream* output, const MemTracker::SimpleItem& item) {
+    std::string level_str = ItoaKMGT(item.level);
+    std::string limit_str = item.limit == -1 ? "none" : ItoaKMGT(item.limit);
+    string current_consumption_str = ItoaKMGT(item.cur_consumption);
+    string peak_consumption_str = ItoaKMGT(item.peak_consumption);
+    std::string parent_label;
+    if (item.parent != nullptr) {
+        parent_label = item.parent->label;
+    }
+    (*output) << strings::Substitute("<tr><td>$0</td><td>$1</td><td>$2</td><td>$3</td><td>$4</td><td>$5</td></tr>\n",
+                                     item.level, item.label, parent_label, limit_str, current_consumption_str,
+                                     peak_consumption_str);
+    for (const auto* child : item.childs) {
+        print_mem_str(output, *child);
+    }
+}
+
+void MemTrackerWebPageHandler::handle(MemTracker* mem_tracker, const WebPageHandler::ArgumentMap& args,
+                                      std::stringstream* output) {
     (*output) << "<h1>Memory Usage Detail</h1>\n";
     (*output) << "<table data-toggle='table' "
+                 "       data-page-size='25' "
                  "       data-pagination='true' "
                  "       data-search='true' "
                  "       class='table table-striped'>\n";
@@ -111,7 +135,6 @@ void mem_tracker_handler(MemTracker* mem_tracker, const WebPageHandler::Argument
     (*output) << "<tbody>\n";
 
     size_t upper_level;
-    size_t cur_level;
     auto iter = args.find("upper_level");
     if (iter != args.end()) {
         upper_level = std::stol(iter->second);
@@ -122,89 +145,52 @@ void mem_tracker_handler(MemTracker* mem_tracker, const WebPageHandler::Argument
     MemTracker* start_mem_tracker;
     iter = args.find("type");
     if (iter != args.end()) {
-        if (iter->second == "compaction") {
-            start_mem_tracker = GlobalEnv::GetInstance()->compaction_mem_tracker();
-            cur_level = 2;
-        } else if (iter->second == "load") {
-            start_mem_tracker = GlobalEnv::GetInstance()->load_mem_tracker();
-            cur_level = 2;
-        } else if (iter->second == "metadata") {
-            start_mem_tracker = GlobalEnv::GetInstance()->metadata_mem_tracker();
-            cur_level = 2;
-        } else if (iter->second == "query_pool") {
-            start_mem_tracker = GlobalEnv::GetInstance()->query_pool_mem_tracker();
-            cur_level = 2;
-        } else if (iter->second == "schema_change") {
-            start_mem_tracker = GlobalEnv::GetInstance()->schema_change_mem_tracker();
-            cur_level = 2;
-        } else if (iter->second == "clone") {
-            start_mem_tracker = GlobalEnv::GetInstance()->clone_mem_tracker();
-            cur_level = 2;
-        } else if (iter->second == "column_pool") {
-            start_mem_tracker = GlobalEnv::GetInstance()->column_pool_mem_tracker();
-            cur_level = 2;
-        } else if (iter->second == "page_cache") {
-            start_mem_tracker = GlobalEnv::GetInstance()->page_cache_mem_tracker();
-            cur_level = 2;
-        } else if (iter->second == "update") {
-            start_mem_tracker = GlobalEnv::GetInstance()->update_mem_tracker();
-            cur_level = 2;
-        } else if (iter->second == "chunk_allocator") {
-            start_mem_tracker = GlobalEnv::GetInstance()->chunk_allocator_mem_tracker();
-            cur_level = 2;
-        } else if (iter->second == "consistency") {
-            start_mem_tracker = GlobalEnv::GetInstance()->consistency_mem_tracker();
-            cur_level = 2;
-        } else if (iter->second == "datacache") {
-            start_mem_tracker = GlobalEnv::GetInstance()->datacache_mem_tracker();
-            cur_level = 2;
+        auto item = GlobalEnv::GetInstance()->get_mem_tracker_by_type(MemTracker::label_to_type(iter->second));
+        if (item != nullptr) {
+            start_mem_tracker = item.get();
         } else {
             start_mem_tracker = mem_tracker;
-            cur_level = 1;
         }
     } else {
         start_mem_tracker = mem_tracker;
-        cur_level = 1;
     }
+
+    ObjectPool obj_pool;
 
     std::vector<MemTracker::SimpleItem> items;
 
-    // Metadata memory statistics use the old memory framework,
-    // not in RootMemTrackerTree, so it needs to be added here
-    MemTracker* meta_mem_tracker = GlobalEnv::GetInstance()->metadata_mem_tracker();
-    MemTracker::SimpleItem meta_item{"metadata",
-                                     "process",
-                                     2,
-                                     meta_mem_tracker->limit(),
-                                     meta_mem_tracker->consumption(),
-                                     meta_mem_tracker->peak_consumption()};
-
-    // Update memory statistics use the old memory framework,
-    // not in RootMemTrackerTree, so it needs to be added here
-    MemTracker* update_mem_tracker = GlobalEnv::GetInstance()->update_mem_tracker();
-    MemTracker::SimpleItem update_item{"update",
-                                       "process",
-                                       2,
-                                       update_mem_tracker->limit(),
-                                       update_mem_tracker->consumption(),
-                                       update_mem_tracker->peak_consumption()};
-
     if (start_mem_tracker != nullptr) {
-        start_mem_tracker->list_mem_usage(&items, cur_level, upper_level);
+        MemTracker::SimpleItem* root = start_mem_tracker->get_snapshot(&obj_pool, upper_level);
         if (start_mem_tracker == GlobalEnv::GetInstance()->process_mem_tracker()) {
-            items.emplace_back(meta_item);
-            items.emplace_back(update_item);
+            // Metadata memory statistics use the old memory framework,
+            // not in RootMemTrackerTree, so it needs to be added here
+            MemTracker* meta_mem_tracker = GlobalEnv::GetInstance()->metadata_mem_tracker();
+            auto* meta_item = meta_mem_tracker->get_snapshot(&obj_pool, upper_level);
+            meta_item->parent = root;
+
+            // Update memory statistics use the old memory framework,
+            // not in RootMemTrackerTree, so it needs to be added here
+            MemTracker* update_mem_tracker = GlobalEnv::GetInstance()->update_mem_tracker();
+            auto* update_item = update_mem_tracker->get_snapshot(&obj_pool, upper_level);
+            update_item->parent = root;
+
+            // passthrough memory tracker not in RootMemTrackerTree
+            MemTracker* passthrough_mem_tracker = GlobalEnv::GetInstance()->passthrough_mem_tracker();
+            auto* passthrough_item = passthrough_mem_tracker->get_snapshot(&obj_pool, upper_level);
+            passthrough_item->parent = root;
+
+            // Brpc iobuf memory statistics use the old memory framework,
+            MemTracker* brpc_iobuf_mem_tracker = GlobalEnv::GetInstance()->brpc_iobuf_mem_tracker();
+            auto* brpc_iobuf_item = brpc_iobuf_mem_tracker->get_snapshot(&obj_pool, upper_level);
+            brpc_iobuf_item->parent = root;
+
+            root->childs.emplace_back(meta_item);
+            root->childs.emplace_back(update_item);
+            root->childs.emplace_back(passthrough_item);
+            root->childs.emplace_back(brpc_iobuf_item);
         }
 
-        for (const auto& item : items) {
-            std::string level_str = ItoaKMGT(item.level);
-            std::string limit_str = item.limit == -1 ? "none" : ItoaKMGT(item.limit);
-            string current_consumption_str = ItoaKMGT(item.cur_consumption);
-            string peak_consumption_str = ItoaKMGT(item.peak_consumption);
-            (*output) << strings::Substitute(
-                    "<tr><td>$0</td><td>$1</td><td>$2</td><td>$3</td><td>$4</td><td>$5</td></tr>\n", item.level,
-                    item.label, item.parent_label, limit_str, current_consumption_str, peak_consumption_str);
-        }
+        print_mem_str(output, *root);
     }
 
     (*output) << "</tbody></table>\n";
@@ -242,6 +228,99 @@ void mem_usage_handler(MemTracker* mem_tracker, const WebPageHandler::ArgumentMa
     (*output) << stats << "</pre>";
 }
 
+void proc_profile_handler(const WebPageHandler::ArgumentMap& args, std::stringstream* output) {
+    (*output) << "<h2>Process Profiles</h2>";
+    (*output) << "<p>This page displays collected CPU profiles from BE.</p>";
+    (*output) << "<p>To collect profiles, use the <code>collect_be_profile.sh</code> script.</p>";
+    (*output) << "<p>Profiles are stored in: <code>" << config::sys_log_dir << "/proc_profile</code></p>";
+    (*output) << "<p>Profiles are in pprof format, it would take a few seconds to convert to flame graph.</p>";
+
+    // List profile files directly in this page
+    std::string profile_log_dir = std::string(config::sys_log_dir) + "/proc_profile";
+    std::filesystem::path dir_path(profile_log_dir);
+
+    if (!std::filesystem::exists(dir_path) || !std::filesystem::is_directory(dir_path)) {
+        (*output) << "<p><strong>No profile directory found:</strong> " << profile_log_dir << "</p>";
+        return;
+    }
+
+    std::vector<std::pair<std::string, std::string>> profile_files; // filename, timestamp
+
+    try {
+        for (const auto& entry : std::filesystem::directory_iterator(dir_path)) {
+            if (entry.is_regular_file()) {
+                std::string filename = entry.path().filename().string();
+                // Only serve files in the pprof format
+                if (ProfileUtils::get_profile_format(filename) == "Pprof") {
+                    // Extract timestamp from filename using utility function
+                    std::string timestamp = ProfileUtils::extract_timestamp_from_filename(filename);
+                    if (!timestamp.empty()) {
+                        profile_files.emplace_back(filename, timestamp);
+                    }
+                }
+            }
+        }
+    } catch (const std::filesystem::filesystem_error& e) {
+        (*output) << "<p><strong>Error reading profile directory:</strong> " << e.what() << "</p>";
+        return;
+    }
+
+    // Sort by timestamp descending (newest first)
+    std::sort(profile_files.begin(), profile_files.end(),
+              [](const std::pair<std::string, std::string>& a, const std::pair<std::string, std::string>& b) {
+                  return a.second > b.second;
+              });
+
+    if (profile_files.empty()) {
+        (*output) << "<p><strong>No profile files found.</strong></p>";
+        return;
+    }
+
+    (*output) << "<h3>Available Profile Files</h3>";
+    (*output) << "<table class=\"table table-hover table-bordered table-striped table-condensed\">";
+    (*output) << "<thead><tr>";
+    (*output) << "<th>Type</th>";
+    (*output) << "<th>Format</th>";
+    (*output) << "<th>Timestamp</th>";
+    (*output) << "<th>File Size</th>";
+    (*output) << "<th>Actions</th>";
+    (*output) << "</tr></thead>";
+    (*output) << "<tbody>";
+
+    for (const auto& file_info : profile_files) {
+        const std::string& filename = file_info.first;
+        const std::string& timestamp = file_info.second;
+
+        // Determine profile type and format using utility functions
+        std::string profile_type = ProfileUtils::get_profile_type(filename);
+        std::string format = ProfileUtils::get_profile_format(filename);
+
+        // Get file size
+        std::string file_path = profile_log_dir + "/" + filename;
+        std::string file_size_str = "Unknown";
+        try {
+            auto file_size = std::filesystem::file_size(file_path);
+            file_size_str = std::to_string(file_size) + " bytes";
+        } catch (const std::filesystem::filesystem_error&) {
+            // Keep "Unknown" if we can't get file size
+        }
+
+        (*output) << "<tr>";
+        (*output) << "<td>" << profile_type << "</td>";
+        (*output) << "<td>" << format << "</td>";
+        (*output) << "<td>" << timestamp << "</td>";
+        (*output) << "<td>" << file_size_str << "</td>";
+        (*output) << "<td>";
+        (*output) << "<a href=\"/proc_profile/file?filename=" << filename << R"(" target="_blank">View</a>)";
+
+        (*output) << "</td>";
+        (*output) << "</tr>";
+    }
+
+    (*output) << "</tbody>";
+    (*output) << "</table>";
+}
+
 void add_default_path_handlers(WebPageHandler* web_page_handler, MemTracker* process_mem_tracker) {
     // TODO(yingchun): logs_handler is not implemented yet, so not show it on navigate bar
     web_page_handler->register_page("/logs", "Logs", logs_handler, false /* is_on_nav_bar */);
@@ -256,10 +335,11 @@ void add_default_path_handlers(WebPageHandler* web_page_handler, MemTracker* pro
     web_page_handler->register_page(
             "/mem_tracker", "MemTracker",
             [process_mem_tracker](auto&& PH1, auto&& PH2) {
-                return mem_tracker_handler(process_mem_tracker, std::forward<decltype(PH1)>(PH1),
-                                           std::forward<decltype(PH2)>(PH2));
+                return MemTrackerWebPageHandler::handle(process_mem_tracker, std::forward<decltype(PH1)>(PH1),
+                                                        std::forward<decltype(PH2)>(PH2));
             },
             true);
+    web_page_handler->register_page("/proc_profile", "Proc Profiles", proc_profile_handler, true);
 }
 
 } // namespace starrocks

@@ -16,11 +16,14 @@ package com.starrocks.connector.hive;
 
 import com.starrocks.connector.CachingRemoteFileConf;
 import com.starrocks.connector.CachingRemoteFileIO;
+import com.starrocks.connector.ConnectorProperties;
+import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.RemoteFileIO;
 import com.starrocks.connector.RemoteFileOperations;
 
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
@@ -32,7 +35,7 @@ public class HiveMetadataFactory {
     private final IHiveMetastore metastore;
     private final RemoteFileIO remoteFileIO;
     private final long perQueryMetastoreMaxNum;
-    private final long perQueryCacheRemotePathMaxNum;
+    private final double perQueryCacheRemotePathMaxMemoryRatio;
     private final ExecutorService pullRemoteFileExecutor;
     private final Executor updateRemoteFilesExecutor;
     private final Executor updateStatisticsExecutor;
@@ -41,6 +44,7 @@ public class HiveMetadataFactory {
     private final boolean enableHmsEventsIncrementalSync;
     private final HdfsEnvironment hdfsEnvironment;
     private final MetastoreType metastoreType;
+    private final ConnectorProperties connectorProperties;
 
     public HiveMetadataFactory(String catalogName,
                                IHiveMetastore metastore,
@@ -54,12 +58,13 @@ public class HiveMetadataFactory {
                                boolean isRecursive,
                                boolean enableHmsEventsIncrementalSync,
                                HdfsEnvironment hdfsEnvironment,
-                               MetastoreType metastoreType) {
+                               MetastoreType metastoreType,
+                               Map<String, String> properties) {
         this.catalogName = catalogName;
         this.metastore = metastore;
         this.remoteFileIO = remoteFileIO;
         this.perQueryMetastoreMaxNum = hmsConf.getPerQueryCacheMaxNum();
-        this.perQueryCacheRemotePathMaxNum = fileConf.getPerQueryCacheMaxSize();
+        this.perQueryCacheRemotePathMaxMemoryRatio = 0.0; //It is duplicated with Catalog level CachingRemoteFileIO, set as 0.
         this.pullRemoteFileExecutor = pullRemoteFileExecutor;
         this.updateRemoteFilesExecutor = updateRemoteFilesExecutor;
         this.updateStatisticsExecutor = updateStatisticsExecutor;
@@ -68,6 +73,7 @@ public class HiveMetadataFactory {
         this.enableHmsEventsIncrementalSync = enableHmsEventsIncrementalSync;
         this.hdfsEnvironment = hdfsEnvironment;
         this.metastoreType = metastoreType;
+        this.connectorProperties = new ConnectorProperties(ConnectorType.HIVE, properties);
     }
 
     public HiveMetadata create() {
@@ -76,7 +82,7 @@ public class HiveMetadataFactory {
                 metastore instanceof CachingHiveMetastore,
                 hdfsEnvironment.getConfiguration(), metastoreType, catalogName);
         RemoteFileOperations remoteFileOperations = new RemoteFileOperations(
-                CachingRemoteFileIO.createQueryLevelInstance(remoteFileIO, perQueryCacheRemotePathMaxNum),
+                CachingRemoteFileIO.createQueryLevelInstance(remoteFileIO, perQueryCacheRemotePathMaxMemoryRatio),
                 pullRemoteFileExecutor,
                 updateRemoteFilesExecutor,
                 isRecursive,
@@ -86,7 +92,8 @@ public class HiveMetadataFactory {
 
         Optional<HiveCacheUpdateProcessor> cacheUpdateProcessor = getCacheUpdateProcessor();
         return new HiveMetadata(catalogName, hdfsEnvironment, hiveMetastoreOperations, remoteFileOperations,
-                statisticsProvider, cacheUpdateProcessor, updateStatisticsExecutor, refreshOthersFeExecutor);
+                statisticsProvider, cacheUpdateProcessor, updateStatisticsExecutor, refreshOthersFeExecutor,
+                connectorProperties);
     }
 
     public synchronized Optional<HiveCacheUpdateProcessor> getCacheUpdateProcessor() {

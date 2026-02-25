@@ -1,0 +1,42 @@
+-- name: test_hive_table_format_openx_json
+create external catalog hive_catalog_${uuid0} PROPERTIES (
+    "type"="hive",
+    "hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"="${oss_ak}",
+    "aws.s3.secret_key"="${oss_sk}",
+    "aws.s3.endpoint"="${oss_endpoint}"
+);
+-- result:
+-- !result
+select * from hive_catalog_${uuid0}.hive_oss_db.t_openx_json order by c1 asc;
+-- result:
+1	str_11
+2	str_22
+3	str_33
+-- !result
+select * from hive_catalog_${uuid0}.hive_oss_db.t_openx_json where c1>1 order by c1 asc;
+-- result:
+2	str_22
+3	str_33
+-- !result
+select count(*) from hive_catalog_${uuid0}.hive_oss_db.t_openx_json;
+-- result:
+3
+-- !result
+select * from hive_catalog_${uuid0}.hive_oss_db.t_openx_json_partition order by dt asc;
+-- result:
+11	str_11	2024-01-01
+12	str_12	2024-01-01
+13	str_13	2024-01-01
+21	str_21	2024-01-02
+22	str_22	2024-01-02
+-- !result
+select * from hive_catalog_${uuid0}.hive_oss_db.t_openx_json_snappy order by c1 asc;
+-- result:
+1	str_11
+2	str_22
+3	str_33
+-- !result
+drop catalog hive_catalog_${uuid0};
+-- result:
+-- !result

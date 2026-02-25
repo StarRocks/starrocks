@@ -29,15 +29,15 @@
 
 namespace starrocks {
 
-static void append_bigint(ColumnPtr& col, int64_t value) {
+static void append_bigint(MutableColumnPtr& col, int64_t value) {
     [[maybe_unused]] auto n = col->append_numbers(&value, sizeof(value));
     DCHECK_EQ(1, n);
 };
 
-static void fill_rowset_row(Columns& columns, const RowsetMetadataPB& rowset) {
+static void fill_rowset_row(MutableColumns& columns, const RowsetMetadataPB& rowset) {
     DCHECK_EQ(6, columns.size());
     if (UNLIKELY(!rowset.has_id())) {
-        columns[0] = NullableColumn::wrap_if_necessary(columns[0]);
+        columns[0] = NullableColumn::wrap_if_necessary(std::move(columns[0]));
         columns[0]->append_nulls(1);
     } else {
         append_bigint(columns[0], rowset.id());
@@ -46,14 +46,14 @@ static void fill_rowset_row(Columns& columns, const RowsetMetadataPB& rowset) {
     append_bigint(columns[1], rowset.segments_size());
 
     if (UNLIKELY(!rowset.has_num_rows())) {
-        columns[2] = NullableColumn::wrap_if_necessary(columns[2]);
+        columns[2] = NullableColumn::wrap_if_necessary(std::move(columns[2]));
         columns[2]->append_nulls(1);
     } else {
         append_bigint(columns[2], rowset.num_rows());
     }
 
     if (UNLIKELY(!rowset.has_data_size())) {
-        columns[3] = NullableColumn::wrap_if_necessary(columns[3]);
+        columns[3] = NullableColumn::wrap_if_necessary(std::move(columns[3]));
         columns[3]->append_nulls(1);
     } else {
         append_bigint(columns[3], rowset.data_size());
@@ -74,12 +74,13 @@ static void fill_rowset_row(Columns& columns, const RowsetMetadataPB& rowset) {
         opts.pretty_json = false;
         std::string json;
         (void)json2pb::ProtoMessageToJson(rowset.delete_predicate(), &json, opts);
-        (void)columns[5]->append_strings({json});
+        (void)columns[5]->append_strings(std::vector<Slice>{Slice{json}});
     }
 }
 
 std::pair<Columns, UInt32Column::Ptr> ListRowsets::process(RuntimeState* runtime_state,
                                                            TableFunctionState* base_state) const {
+#ifndef __APPLE__
     auto state = down_cast<MyState*>(base_state);
 
     if (UNLIKELY(state->get_columns().size() != 2)) {
@@ -88,7 +89,11 @@ std::pair<Columns, UInt32Column::Ptr> ListRowsets::process(RuntimeState* runtime
         return {};
     }
 
-    auto tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
+    auto tablet_mgr = runtime_state->exec_env()->lake_tablet_manager();
+    if (UNLIKELY(tablet_mgr == nullptr)) {
+        state->set_status(Status::InternalError("Only works for tablets in the cloud-native table"));
+        return {};
+    }
     auto max_column_size = runtime_state->chunk_size();
     auto arg_tablet_id = ColumnViewer<TYPE_BIGINT>(state->get_columns()[0]);
     auto arg_tablet_version = ColumnViewer<TYPE_BIGINT>(state->get_columns()[1]);
@@ -96,14 +101,13 @@ std::pair<Columns, UInt32Column::Ptr> ListRowsets::process(RuntimeState* runtime
     auto num_rows = state->input_rows();
     auto row_offset = state->get_offset();
     auto offsets = UInt32Column::create();
-    auto result = Columns{
-            Int64Column::create(),                                    // id
-            Int64Column::create(),                                    // segments
-            Int64Column::create(),                                    // rows
-            Int64Column::create(),                                    // size
-            BooleanColumn::create(),                                  // overlapped
-            NullableColumn::wrap_if_necessary(BinaryColumn::create()) // delete_predicate
-    };
+    MutableColumns result;
+    result.push_back(Int64Column::create());                                     // id
+    result.push_back(Int64Column::create());                                     // segments
+    result.push_back(Int64Column::create());                                     // rows
+    result.push_back(Int64Column::create());                                     // size
+    result.push_back(BooleanColumn::create());                                   // overlapped
+    result.push_back(NullableColumn::wrap_if_necessary(BinaryColumn::create())); // delete_predicate
 
     while (result[0]->size() < max_column_size && curr_row < num_rows) {
         offsets->append_datum(Datum((uint32_t)result[0]->size()));
@@ -154,8 +158,14 @@ std::pair<Columns, UInt32Column::Ptr> ListRowsets::process(RuntimeState* runtime
         state->set_offset(row_offset);
     }
     offsets->append_datum(Datum((uint32_t)result[0]->size()));
-
-    return std::make_pair(std::move(result), std::move(offsets));
+    // convert mutable columns to immutable columns
+    Columns columns = ColumnHelper::to_columns(std::move(result));
+    return std::make_pair(std::move(columns), std::move(offsets));
+#else
+    // Lake storage is disabled on macOS
+    base_state->set_status(Status::RuntimeError("Lake storage is disabled on macOS"));
+    return {};
+#endif
 }
 
 } // namespace starrocks

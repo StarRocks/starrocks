@@ -16,6 +16,9 @@
 
 #include <utility>
 
+#include "base/debug/trace.h"
+#include "base/time/time.h"
+#include "base/utility/defer_op.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
@@ -24,9 +27,6 @@
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/tablet_reader.h"
-#include "util/defer_op.h"
-#include "util/time.h"
-#include "util/trace.h"
 
 namespace starrocks {
 
@@ -178,7 +178,7 @@ Status Compaction::_merge_rowsets_horizontally(size_t segment_iterator_num, Stat
     int32_t chunk_size =
             CompactionUtils::get_read_chunk_size(config::compaction_memory_limit_per_worker, config::vector_chunk_size,
                                                  total_num_rows, total_mem_footprint, segment_iterator_num);
-    VLOG(1) << "tablet=" << _tablet->tablet_id() << ", reader chunk size=" << chunk_size;
+    VLOG(2) << "tablet=" << _tablet->tablet_id() << ", reader chunk size=" << chunk_size;
     reader_params.chunk_size = chunk_size;
     RETURN_IF_ERROR(reader.prepare());
     RETURN_IF_ERROR(reader.open(reader_params));
@@ -274,7 +274,7 @@ Status Compaction::_merge_rowsets_vertically(size_t segment_iterator_num, Statis
         int32_t chunk_size = CompactionUtils::get_read_chunk_size(config::compaction_memory_limit_per_worker,
                                                                   config::vector_chunk_size, total_num_rows,
                                                                   total_mem_footprint, segment_iterator_num);
-        VLOG(1) << "tablet=" << _tablet->tablet_id() << ", column group=" << i << ", reader chunk size=" << chunk_size;
+        VLOG(2) << "tablet=" << _tablet->tablet_id() << ", column group=" << i << ", reader chunk size=" << chunk_size;
         reader_params.chunk_size = chunk_size;
         RETURN_IF_ERROR(reader.open(reader_params));
 
@@ -359,7 +359,7 @@ Status Compaction::modify_rowsets() {
 
     std::vector<RowsetSharedPtr> to_replace;
     std::unique_lock wrlock(_tablet->get_header_lock());
-    _tablet->modify_rowsets({_output_rowset}, _input_rowsets, &to_replace);
+    _tablet->modify_rowsets_without_lock({_output_rowset}, _input_rowsets, &to_replace);
     _tablet->save_meta();
     Rowset::close_rowsets(_input_rowsets);
     for (auto& rs : to_replace) {

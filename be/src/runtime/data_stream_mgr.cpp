@@ -37,11 +37,14 @@
 #include <iostream>
 #include <utility>
 
+#include "gen_cpp/internal_service.pb.h"
 #include "glog/logging.h"
 #include "runtime/current_thread.h"
 #include "runtime/data_stream_recvr.h"
 #include "runtime/runtime_state.h"
-#include "util/starrocks_metrics.h"
+#include "runtime/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
+#include "util/time_guard.h"
 
 namespace starrocks {
 
@@ -136,6 +139,8 @@ Status DataStreamMgr::transmit_chunk(const PTransmitChunkParams& request, ::goog
     t_finst_id.hi = finst_id.hi();
     t_finst_id.lo = finst_id.lo();
     SCOPED_SET_TRACE_INFO({}, {}, t_finst_id)
+    DUMP_TRACE_IF_TIMEOUT(config::pipeline_datastream_timeout_guard_ms);
+
     std::shared_ptr<DataStreamRecvr> recvr = find_recvr(t_finst_id, request.node_id());
     if (recvr == nullptr) {
         // The receiver may remove itself from the receiver map via deregister_recvr()

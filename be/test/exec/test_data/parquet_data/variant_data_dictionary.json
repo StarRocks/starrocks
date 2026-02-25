@@ -1,0 +1,73 @@
+{
+    "array_empty": [],
+    "array_nested": [
+        {
+            "id": 1,
+            "thing": {
+                "names": [
+                    "Contrarian",
+                    "Spider"
+                ]
+            }
+        },
+        null,
+        {
+            "id": 2,
+            "names": [
+                "Apple",
+                "Ray",
+                null
+            ],
+            "type": "if"
+        }
+    ],
+    "array_primitive": [
+        2,
+        1,
+        5,
+        9
+    ],
+    "object_empty": {},
+    "object_nested": {
+        "id": 1,
+        "observation": {
+            "location": "In the Volcano",
+            "time": "12:34:56",
+            "value": {
+                "humidity": 456,
+                "temperature": 123
+            }
+        },
+        "species": {
+            "name": "lava monster",
+            "population": 6789
+        }
+    },
+    "object_primitive": {
+        "boolean_false_field": false,
+        "boolean_true_field": true,
+        "double_field": 1.23456789,
+        "int_field": 1,
+        "null_field": null,
+        "string_field": "Apache Parquet",
+        "timestamp_field": "2025-04-16T12:34:56.78"
+    },
+    "primitive_binary": "AxM33q2+78r+",
+    "primitive_boolean_false": false,
+    "primitive_boolean_true": true,
+    "primitive_date": "2025-04-16",
+    "primitive_decimal16": 1.2345678912345678e+16,
+    "primitive_decimal4": 12.34,
+    "primitive_decimal8": 12345678.9,
+    "primitive_double": 1234567890.1234,
+    "primitive_float": 1234567940.0,
+    "primitive_int16": 1234,
+    "primitive_int32": 123456,
+    "primitive_int64": 1234567890123456789,
+    "primitive_int8": 42,
+    "primitive_null": null,
+    "primitive_string": "This string is longer than 64 bytes and therefore does not fit in a short_string and it also includes several non ascii characters such as \ud83d\udc22, \ud83d\udc96, \u2665\ufe0f, \ud83c\udfa3 and \ud83e\udd26!!",
+    "primitive_timestamp": "2025-04-16 12:34:56.78+08:00",
+    "primitive_timestampntz": "2025-04-16 12:34:56.78",
+    "short_string": "Less than 64 bytes (\u2764\ufe0f with utf8)"
+}

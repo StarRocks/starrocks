@@ -36,18 +36,21 @@
 
 #include <fmt/format.h>
 
+#include "base/utility/defer_op.h"
 #include "runtime/exec_env.h"
 #include "storage/replication_txn_manager.h"
 #include "storage/snapshot_manager.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/update_manager.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 
 EngineStorageMigrationTask::EngineStorageMigrationTask(TTabletId tablet_id, TSchemaHash schema_hash,
-                                                       DataDir* dest_store)
-        : _tablet_id(tablet_id), _schema_hash(schema_hash), _dest_store(dest_store) {}
+                                                       DataDir* dest_store, bool need_rebuild_pk_index)
+        : _tablet_id(tablet_id),
+          _schema_hash(schema_hash),
+          _dest_store(dest_store),
+          _need_rebuild_pk_index(need_rebuild_pk_index) {}
 
 Status EngineStorageMigrationTask::execute() {
     StarRocksMetrics::instance()->storage_migrate_requests_total.increment(1);
@@ -489,7 +492,7 @@ Status EngineStorageMigrationTask::_finish_migration(const TabletSharedPtr& tabl
     2. snapshot the meta data
     3. create a NEW tablet using meta data in step 2 with the same tablet id. And FORCE REPLACE
        the old one. This is the same as non Primary Key tablet.
-    4. clear primary index cache
+    4. clear primary index cache and clear delvector and dcg cache
 */
 Status EngineStorageMigrationTask::_finish_primary_key_migration(const TabletSharedPtr& tablet, int64_t end_version,
                                                                  uint64_t shard,
@@ -537,8 +540,15 @@ Status EngineStorageMigrationTask::_finish_primary_key_migration(const TabletSha
         }
 
         auto tablet_manager = StorageEngine::instance()->tablet_manager();
+        // don't wait rebuild pk index to finish because migration task does not support increment migration
+        // and needs to be completed as soon as possible
+
+        // create_tablet_from_meta_snapshot does not reset rowset_seg_id in snapshot_meta. The GC progress for
+        // the old tablet maybe conflict in rowset_seg_id with the new one. But it is safe because the rowset_seg_id
+        // conflict in GC progress will only affect the delvector/dcg cache (delete the cache) for the new tablet but
+        // not the metadata because the store path is different between the old one and the new one.
         res = tablet_manager->create_tablet_from_meta_snapshot(_dest_store, _tablet_id, tablet->schema_hash(),
-                                                               schema_hash_path, false);
+                                                               schema_hash_path, false, _need_rebuild_pk_index, 0);
         if (!res.ok()) {
             LOG(WARNING) << "Fail to create tablet from meta snapshot. tablet_id: " << _tablet_id;
             WriteBatch wb;
@@ -553,13 +563,20 @@ Status EngineStorageMigrationTask::_finish_primary_key_migration(const TabletSha
             break;
         }
 
-        // clear index cache
         auto manager = StorageEngine::instance()->update_manager();
-        auto& index_cache = manager->index_cache();
-        auto index_entry = index_cache.get_or_create(_tablet_id);
-        index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
-        index_entry->value().unload();
-        index_cache.release(index_entry);
+        // clear index cache
+        {
+            std::lock_guard lg(*tablet->updates()->get_index_lock());
+            auto& index_cache = manager->index_cache();
+            auto index_entry = index_cache.get_or_create(_tablet_id);
+            index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
+            index_entry->value().unload();
+            index_cache.release(index_entry);
+        }
+
+        // clear delvector and dcg cache
+        manager->clear_cached_del_vec_by_tablet_id(tablet->tablet_id());
+        manager->clear_cached_delta_column_group_by_tablet_id(tablet->tablet_id());
 
         // if old tablet finished schema change, then the schema change status of the new tablet is DONE
         // else the schema change status of the new tablet is FAILED
@@ -597,22 +614,23 @@ void EngineStorageMigrationTask::_generate_new_header(DataDir* store, const uint
     // remove old meta after the new tablet is loaded successfully
 }
 
-Status EngineStorageMigrationTask::_copy_index_and_data_files(
-        const string& schema_hash_path, const TabletSharedPtr& ref_tablet,
-        const std::vector<RowsetSharedPtr>& consistent_rowsets) const {
-    Status status = Status::OK();
+Status EngineStorageMigrationTask::_copy_index_and_data_files(const string& schema_hash_path,
+                                                              const TabletSharedPtr& ref_tablet,
+                                                              const std::vector<RowsetSharedPtr>& consistent_rowsets) {
+    MonotonicStopWatch watch;
+    watch.start();
     for (const auto& rs : consistent_rowsets) {
         bool bg_worker_stopped = StorageEngine::instance()->bg_worker_stopped();
         if (bg_worker_stopped) {
-            status = Status::InternalError("Process is going to quit.");
-            break;
+            return Status::InternalError("Process is going to quit.");
         }
-        status = rs->copy_files_to(ref_tablet->data_dir()->get_meta(), schema_hash_path);
-        if (!status.ok()) {
-            break;
-        }
+
+        ASSIGN_OR_RETURN(auto copy_size, rs->copy_files_to(schema_hash_path));
+        _copy_size += copy_size;
     }
-    return status;
+    uint64_t total_time_ms = watch.elapsed_time() / 1000 / 1000;
+    _copy_time_ms = (int64_t)total_time_ms;
+    return Status::OK();
 }
 
 } // namespace starrocks

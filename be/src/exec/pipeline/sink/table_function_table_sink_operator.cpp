@@ -17,9 +17,10 @@
 #include <boost/algorithm/string.hpp>
 #include <utility>
 
+#include "base/url_coding.h"
+#include "exprs/expr_executor.h"
 #include "formats/parquet/file_writer.h"
 #include "glog/logging.h"
-#include "util/url_coding.h"
 
 namespace starrocks::pipeline {
 
@@ -65,7 +66,8 @@ StatusOr<std::string> column_to_string(const TypeDescriptor& type_desc, const Co
         return url_encode(datum.get_slice().to_string());
     }
     default: {
-        return Status::InvalidArgument("unsupported partition column type" + type_desc.debug_string());
+        return Status::InvalidArgument("unsupported partition column type in table function sink" +
+                                       type_desc.debug_string());
     }
     }
 }
@@ -215,11 +217,11 @@ TableFunctionTableSinkOperatorFactory::TableFunctionTableSinkOperatorFactory(
 Status TableFunctionTableSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
 
-    RETURN_IF_ERROR(Expr::prepare(_output_exprs, state));
-    RETURN_IF_ERROR(Expr::open(_output_exprs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_output_exprs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_output_exprs, state));
 
-    RETURN_IF_ERROR(Expr::prepare(_partition_exprs, state));
-    RETURN_IF_ERROR(Expr::open(_partition_exprs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_partition_exprs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_partition_exprs, state));
 
     if (boost::algorithm::iequals(_file_format, PARQUET_FORMAT)) {
         auto result = parquet::ParquetBuildHelper::make_schema(
@@ -243,8 +245,8 @@ OperatorPtr TableFunctionTableSinkOperatorFactory::create(int32_t degree_of_para
 }
 
 void TableFunctionTableSinkOperatorFactory::close(RuntimeState* state) {
-    Expr::close(_partition_exprs, state);
-    Expr::close(_output_exprs, state);
+    ExprExecutor::close(_partition_exprs, state);
+    ExprExecutor::close(_output_exprs, state);
     OperatorFactory::close(state);
 }
 

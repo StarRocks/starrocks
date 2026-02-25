@@ -36,10 +36,10 @@ public class GCPCloudConfiguration extends CloudConfiguration {
     @Override
     public void toThrift(TCloudConfiguration tCloudConfiguration) {
         super.toThrift(tCloudConfiguration);
-        tCloudConfiguration.setCloud_type(TCloudType.AZURE);
-        Map<String, String> properties = tCloudConfiguration.getCloud_properties_v2();
+        tCloudConfiguration.setCloud_type(TCloudType.GCP);
+        Map<String, String> properties = tCloudConfiguration.getCloud_properties();
         gcpCloudCredential.toThrift(properties);
-        tCloudConfiguration.setCloud_properties_v2(properties);
+        tCloudConfiguration.setCloud_properties(properties);
     }
 
     @Override

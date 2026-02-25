@@ -16,15 +16,14 @@
 
 #include <vector>
 
+#include "base/string/slice.h"
 #include "column/binary_column.h"
 #include "column/nullable_column.h"
-#include "util/slice.h"
 
 namespace starrocks {
 
-std::pair<std::shared_ptr<NullableColumn>, std::vector<int32_t>> extract_column_with_codes(
-        const GlobalDictMap& dict_map) {
-    auto res = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+std::pair<NullableColumn::Ptr, std::vector<int32_t>> extract_column_with_codes(const GlobalDictMap& dict_map) {
+    NullableColumn::MutablePtr res = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
     res->reserve(dict_map.size() + 1);
 
     std::vector<Slice> slices;
@@ -40,8 +39,8 @@ std::pair<std::shared_ptr<NullableColumn>, std::vector<int32_t>> extract_column_
         slices.emplace_back(slice);
         codes.emplace_back(code);
     }
-    res->append_strings(slices);
-    res->set_null(0);
+    (void)res->append_strings(slices.data(), slices.size());
+    (void)res->set_null(0);
     return std::make_pair(std::move(res), std::move(codes));
 }
 

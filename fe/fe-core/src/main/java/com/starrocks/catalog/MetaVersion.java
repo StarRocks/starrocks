@@ -17,13 +17,11 @@ package com.starrocks.catalog;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 
 public class MetaVersion implements Writable {
@@ -44,18 +42,8 @@ public class MetaVersion implements Writable {
         return starrocksVersion;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        JsonObject jsonObject = new JsonObject();
-        // For rollback compatibility
-        jsonObject.addProperty(KEY_COMMUNITY_VERSION, FeConstants.META_VERSION);
 
-        // For rollback compatibility, save the starrocksVersion both to
-        // KEY_STARROCKS_VERSION and KEY_DORISDB_VERSION
-        jsonObject.addProperty(KEY_STARROCKS_VERSION, starrocksVersion);
-        jsonObject.addProperty(KEY_DORISDB_VERSION, starrocksVersion);
-        Text.writeString(out, jsonObject.toString());
-    }
+
 
     public static MetaVersion read(DataInput in) throws IOException {
         String json = Text.readString(in);

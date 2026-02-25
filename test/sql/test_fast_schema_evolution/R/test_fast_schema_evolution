@@ -1,4 +1,4 @@
--- name: test_fast_schema_evolution
+-- name: test_fast_schema_evolution @native
 create database test_fast_schema_evolution;
 -- result:
 -- !result
@@ -281,7 +281,7 @@ drop table tab1;
 drop database test_fast_schema_evolution;
 -- result:
 -- !result
--- name: test_meta_scan
+-- name: test_meta_scan @native
 create database meta_scan;
 -- result:
 -- !result
@@ -298,7 +298,7 @@ DISTRIBUTED BY HASH(`id_int`) BUCKETS 1
 PROPERTIES (
     "replication_num" = "1",
     "storage_format" = "DEFAULT",
-    "enable_persistent_index" = "false",
+    "enable_persistent_index" = "true",
     "fast_schema_evolution" = "true"
 );
 -- result:
@@ -337,7 +337,7 @@ function: manual_compact("meta_scan", "reproducex4")
 -- result:
 None
 -- !result
-select dict_merge(v2) from reproducex4 [_META_];
+select dict_merge(v2, 255) from reproducex4 [_META_];
 -- result:
 {"2":{"lst":["str",2,"LTEwMDA","OQ"]},"3":{"lst":["i32",2,1,2]}}
 -- !result
@@ -362,7 +362,7 @@ DISTRIBUTED BY HASH(`id_int`) BUCKETS 1
 PROPERTIES (
     "replication_num" = "1",
     "storage_format" = "DEFAULT",
-    "enable_persistent_index" = "false",
+    "enable_persistent_index" = "true",
     "fast_schema_evolution" = "false"
 );
 -- result:
@@ -389,6 +389,7 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`id_int`) BUCKETS 1 
 PROPERTIES (
 "compression" = "LZ4",
+"fast_schema_evolution" = "false",
 "replicated_storage" = "true",
 "replication_num" = "1"
 );
@@ -400,7 +401,7 @@ function: manual_compact("meta_scan", "reproducex4")
 -- result:
 None
 -- !result
-select dict_merge(v2) from reproducex4 [_META_];
+select dict_merge(v2, 255) from reproducex4 [_META_];
 -- result:
 {"2":{"lst":["str",2,"LTEwMDA","OQ"]},"3":{"lst":["i32",2,1,2]}}
 -- !result
@@ -415,7 +416,7 @@ None
 drop database meta_scan;
 -- result:
 -- !result
--- name: test_fast_schema_evolution_and_alter
+-- name: test_fast_schema_evolution_and_alter @native
 create database test_fast_schema_evolution_and_alter;
 -- result:
 -- !result
@@ -460,7 +461,6 @@ insert into tab1 values (600, "k2_600", 600, 600, 600, "v4_600", "v5_600");
 -- !result
 alter table tab1 add column c1 bigint;
 -- result:
-[]
 -- !result
 function: wait_alter_table_finish()
 -- result:
@@ -601,6 +601,10 @@ function: wait_alter_table_finish("ROLLUP", 8)
 -- result:
 None
 -- !result
+function: wait_table_state_normal("test_fast_schema_evolution_and_mv", "tab1")
+-- result:
+None
+-- !result
 ALTER TABLE tab1 DROP COLUMN v5;
 -- result:
 E: (1064, 'No key column left. index[mv1]')
@@ -628,6 +632,10 @@ CREATE MATERIALIZED VIEW mv2
 -- result:
 -- !result
 function: wait_alter_table_finish("ROLLUP", 8)
+-- result:
+None
+-- !result
+function: wait_table_state_normal("test_fast_schema_evolution_and_mv", "tab1")
 -- result:
 None
 -- !result
@@ -796,10 +804,18 @@ function: wait_alter_table_finish("ROLLUP", 8)
 -- result:
 None
 -- !result
+function: wait_table_state_normal("test_alter_with_rollup", "tab1")
+-- result:
+None
+-- !result
 alter table tab1 add column v6 bigint default "1";
 -- result:
 -- !result
 function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+function: wait_table_state_normal("test_alter_with_rollup", "tab1")
 -- result:
 None
 -- !result
@@ -816,6 +832,10 @@ alter table tab1 drop column v2;
 -- result:
 -- !result
 function: wait_alter_table_finish("ROLLUP", 8)
+-- result:
+None
+-- !result
+function: wait_table_state_normal("test_alter_with_rollup", "tab1")
 -- result:
 None
 -- !result

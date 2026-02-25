@@ -16,12 +16,12 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/series_column_iterator.h"
-#include "testutil/assert.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -68,6 +68,23 @@ TEST_F(CastColumnIteratorWithDefaultValueColumnIteratorTest, test02) {
     ASSERT_EQ(10, column.get(1).get_int64());
 }
 
+TEST_F(CastColumnIteratorWithDefaultValueColumnIteratorTest, test_get_io_range_vec) {
+    auto source_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+    auto target_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
+    auto source_iter =
+            std::make_unique<DefaultValueColumnIterator>(true, "10", false, get_type_info(source_type.type), 0, 2);
+    auto cast_iter = new CastColumnIterator(std::move(source_iter), source_type, target_type, true);
+    DeferOp defer([&]() { delete cast_iter; });
+    auto opts = ColumnIteratorOptions{};
+    ASSERT_OK(cast_iter->init(opts));
+    auto column = NullableColumn(Int64Column::create(), NullColumn ::create());
+    auto range = SparseRange<>{0, 2};
+    auto status_or = cast_iter->get_io_range_vec(range, &column);
+    // will return default value's get_io_range_vec, which is expected to be empty
+    ASSERT_TRUE(status_or.ok());
+    ASSERT_EQ((*status_or).size(), 0);
+}
+
 namespace {
 struct TestParameter {
     bool nullable_source;
@@ -87,9 +104,9 @@ TEST_P(CastColumnIteratorWithNumericTypeTest, test) {
     DeferOp defer([&]() { delete cast_iter; });
     auto opts = ColumnIteratorOptions{};
     ASSERT_OK(cast_iter->init(opts));
-    auto column = (GetParam().nullable_target)
-                          ? (ColumnPtr)NullableColumn::create(Int64Column::create(), NullColumn::create())
-                          : (ColumnPtr)Int64Column::create();
+    MutableColumnPtr column = (GetParam().nullable_target) ? (MutableColumnPtr)NullableColumn::create(
+                                                                     Int64Column::create(), NullColumn::create())
+                                                           : (MutableColumnPtr)Int64Column::create();
     auto n = size_t{10};
     ASSERT_OK(cast_iter->next_batch(&n, column.get()));
     ASSERT_EQ(10, n);

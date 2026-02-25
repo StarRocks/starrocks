@@ -19,20 +19,13 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnBuilder;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Index;
-import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.PartitionType;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
@@ -44,22 +37,43 @@ import com.starrocks.connector.elasticsearch.EsUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
 import com.starrocks.server.TemporaryTableMgr;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateTemporaryTableStmt;
-import com.starrocks.sql.ast.DictionaryGetExpr;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
+import com.starrocks.sql.ast.Identifier;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.KeysDesc;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ListPartitionDesc;
+import com.starrocks.sql.ast.MultiItemListPartitionDesc;
+import com.starrocks.sql.ast.OrderByElement;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.RandomDistributionDesc;
+import com.starrocks.sql.ast.RangeDistributionDesc;
+import com.starrocks.sql.ast.RangePartitionDesc;
+import com.starrocks.sql.ast.SingleItemListPartitionDesc;
+import com.starrocks.sql.ast.SingleRangePartitionDesc;
+import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.ast.expression.DictionaryGetExpr;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.apache.commons.collections.CollectionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -77,20 +91,29 @@ public class CreateTableAnalyzer {
     private static final Logger LOG = LoggerFactory.getLogger(CreateTableAnalyzer.class);
 
     public static void analyze(CreateTableStmt statement, ConnectContext context) {
-        final TableName tableNameObject = statement.getDbTbl();
-        MetaUtils.normalizationTableName(context, tableNameObject);
+        TableRef tableRef = statement.getTableRef();
+        if (tableRef == null) {
+            throw new SemanticException("Table reference cannot be null");
+        }
+        tableRef = AnalyzerUtils.normalizedTableRef(tableRef, context);
+        statement.setTableRef(tableRef);
 
-        final String catalogName = tableNameObject.getCatalog();
+        final String catalogName = tableRef.getCatalogName();
         MetaUtils.checkCatalogExistAndReport(catalogName);
 
-        final String tableName = tableNameObject.getTbl();
+        final String db = tableRef.getDbName();
+        final String tableName = tableRef.getTableName();
         FeNameFormat.checkTableName(tableName);
 
-        Database db = MetaUtils.getDatabase(catalogName, tableNameObject.getDb());
+        Database dbObj = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, db);
+        if (dbObj == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, db);
+        }
         if (statement instanceof CreateTemporaryTableStmt) {
-            analyzeTemporaryTable(statement, context, catalogName, db, tableName);
+            analyzeTemporaryTable(statement, context, catalogName, dbObj, tableName);
         } else {
-            if (db.getTable(tableName) != null && !statement.isSetIfNotExists()) {
+            if (GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .tableExists(context, catalogName, db, tableName) && !statement.isSetIfNotExists()) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
             }
         }
@@ -98,11 +121,13 @@ public class CreateTableAnalyzer {
         analyzeEngineName(statement, catalogName);
         analyzeCharsetName(statement);
 
+        com.starrocks.catalog.TableName tableNameObj = com.starrocks.catalog.TableName.fromTableRef(tableRef);
+        analyzeMultiExprsPartition(statement, tableNameObj);
         preCheckColumnRef(statement);
         analyzeKeysDesc(statement);
-        analyzeSortKeys(statement);
         analyzePartitionDesc(statement);
         analyzeDistributionDesc(statement);
+        analyzeSortKeys(statement); // analyzeSortKeys must be called after analyzeDistributionDesc
         analyzeColumnRef(statement, catalogName);
 
         if (statement.isHasGeneratedColumn()) {
@@ -110,6 +135,9 @@ public class CreateTableAnalyzer {
         }
 
         analyzeIndexDefs(statement);
+        if (statement.isOlapEngine()) {
+            validateComplexTypeDefaultValues(statement);
+        }
     }
 
     private static void analyzeTemporaryTable(CreateTableStmt stmt, ConnectContext context,
@@ -221,14 +249,25 @@ public class CreateTableAnalyzer {
         List<Column> columns = new ArrayList<>();
         for (ColumnDef columnDef : columnDefs) {
             try {
-                columnDef.analyze(statement.isOlapEngine(), CatalogMgr.isInternalCatalog(catalogName), engineName);
+                String name = columnDef.getName();
+                boolean isAllowNull = columnDef.isAllowNull();
+
+                if (CatalogMgr.isInternalCatalog(catalogName)) {
+                    if (!isAllowNull && !EngineType.supportNotNullColumn(engineName)) {
+                        // prevent not null for external table
+                        throw new AnalysisException(String.format("All columns must be nullable for external table. " +
+                                "Column %s is not nullable, You can rebuild the external table and " +
+                                "We strongly recommend that you use catalog to access external data", name));
+                    }
+                }
+                ColumnDefAnalyzer.analyze(columnDef, statement.isOlapEngine());
             } catch (AnalysisException e) {
                 LOG.error("Column definition analyze failed.", e);
                 throw new SemanticException(e.getMessage());
             }
 
             if (columnDef.isAutoIncrement()) {
-                if (columnDef.getType() != Type.BIGINT) {
+                if (columnDef.getType() != IntegerType.BIGINT) {
                     throw new SemanticException("The AUTO_INCREMENT column must be BIGINT", columnDef.getPos());
                 }
             }
@@ -251,7 +290,12 @@ public class CreateTableAnalyzer {
                 throw new SemanticException("BITMAP_UNION must be used in AGG_KEYS", keysDesc.getPos());
             }
 
-            Column col = columnDef.toColumn(null);
+            Column col;
+            if (columnDef.getGeneratedColumnExpr() != null) {
+                col = ColumnBuilder.buildGeneratedColumn(null, columnDef);
+            } else {
+                col = ColumnBuilder.buildColumn(columnDef);
+            }
             if (keysDesc != null && (keysDesc.getKeysType() == KeysType.UNIQUE_KEYS
                     || keysDesc.getKeysType() == KeysType.PRIMARY_KEYS ||
                     keysDesc.getKeysType() == KeysType.DUP_KEYS)) {
@@ -286,10 +330,14 @@ public class CreateTableAnalyzer {
                         keysColumnNames.add(columnDef.getName());
                     }
                 }
-                keysDesc = new KeysDesc(KeysType.AGG_KEYS, keysColumnNames);
+                keysDesc = new KeysDesc(KeysType.AGG_KEYS, keysColumnNames, true);
             } else {
                 int keyLength = 0;
                 for (ColumnDef columnDef : columnDefs) {
+                    // generated column should not be key
+                    if (columnDef.isGeneratedColumn()) {
+                        break;
+                    }
                     keyLength += columnDef.getType().getIndexSize();
                     if (keysColumnNames.size() >= FeConstants.SHORTKEY_MAX_COLUMN_COUNT
                             || keyLength > FeConstants.SHORTKEY_MAXSIZE_BYTES) {
@@ -316,7 +364,7 @@ public class CreateTableAnalyzer {
                 if (keysColumnNames.isEmpty()) {
                     throw new SemanticException("Data type of first column cannot be %s", columnDefs.get(0).getType());
                 }
-                keysDesc = new KeysDesc(KeysType.DUP_KEYS, keysColumnNames);
+                keysDesc = new KeysDesc(KeysType.DUP_KEYS, keysColumnNames, true);
             }
         }
 
@@ -396,8 +444,9 @@ public class CreateTableAnalyzer {
         stmt.setKeysDesc(keysDesc);
     }
 
+    // analyzeSortKeys must be called after analyzeDistributionDesc
     private static void analyzeSortKeys(CreateTableStmt stmt) {
-        if (!stmt.isOlapEngine()) {
+        if (!stmt.isOlapEngine() || stmt.getOrderByElements() == null) {
             return;
         }
 
@@ -405,20 +454,71 @@ public class CreateTableAnalyzer {
         KeysType keysType = keysDesc.getKeysType();
 
         List<ColumnDef> columnDefs = stmt.getColumnDefs();
-        List<String> sortKeys = stmt.getSortKeys();
+        List<OrderByElement> orderByElements = stmt.getOrderByElements();
         List<String> columnNames = columnDefs.stream().map(ColumnDef::getName).collect(Collectors.toList());
-        if (sortKeys != null) {
+        if (stmt.getDistributionDesc() instanceof RangeDistributionDesc) {
+            // For range distribution, the sort columns must be the same as the key
+            // columns or only in a different order for none duplicate key table
+            if (keysType != KeysType.DUP_KEYS) {
+                List<Integer> sortKeyIdxes = Lists.newArrayList();
+                for (OrderByElement orderByElement : orderByElements) {
+                    Expr expr = orderByElement.getExpr();
+                    String column = expr instanceof SlotRef ? ((SlotRef) expr).getColumnName() : null;
+                    if (column == null) {
+                        throw new SemanticException("Unknown column '%s' in order by clause",
+                                ExprToSql.toSql(orderByElement.getExpr()));
+                    }
+                    int idx = columnNames.indexOf(column);
+                    if (idx == -1) {
+                        throw new SemanticException("Column '%s' does not exist", column);
+                    }
+                    if (keysType == KeysType.PRIMARY_KEYS) {
+                        ColumnDef cd = columnDefs.get(idx);
+                        Type t = cd.getType();
+                        if (!(t.isBoolean() || t.isIntegerType() || t.isLargeint() || t.isVarchar() || t.isBinaryType()
+                                || t.isDate() || t.isDatetime())) {
+                            throw new SemanticException(
+                                    "Sort key column[" + cd.getName() + "] type not supported: " + t.toSql());
+                        }
+                    }
+                    sortKeyIdxes.add(idx);
+                }
+
+                List<Integer> keyColIdxes = Lists.newArrayList();
+                for (String column : keysDesc.getKeysColumnNames()) {
+                    int idx = columnNames.indexOf(column);
+                    if (idx == -1) {
+                        throw new SemanticException("Column '%s' does not exist in key columns", column);
+                    }
+                    keyColIdxes.add(idx);
+                }
+
+                if (keysType == KeysType.PRIMARY_KEYS && !keyColIdxes.equals(sortKeyIdxes)) {
+                    throw new SemanticException("The sort columns must be same with primary key columns " +
+                                                "and the order must be consistent");
+                } else if (keysType != KeysType.PRIMARY_KEYS &&
+                                !new HashSet<>(keyColIdxes).equals(new HashSet<>(sortKeyIdxes))) {
+                    throw new SemanticException("The sort columns must be same with key columns");
+                }
+            }
+        } else {
             // we should check sort key column type if table is primary key table
             if (keysType == KeysType.PRIMARY_KEYS) {
-                for (String column : sortKeys) {
+                for (OrderByElement orderByElement : orderByElements) {
+                    Expr expr = orderByElement.getExpr();
+                    String column = expr instanceof SlotRef ? ((SlotRef) expr).getColumnName() : null;
+                    if (column == null) {
+                        throw new SemanticException("Unknown column '%s' in order by clause",
+                                ExprToSql.toSql(orderByElement.getExpr()));
+                    }
                     int idx = columnNames.indexOf(column);
                     if (idx == -1) {
                         throw new SemanticException("Unknown column '%s' does not exist", column);
                     }
                     ColumnDef cd = columnDefs.get(idx);
                     Type t = cd.getType();
-                    if (!(t.isBoolean() || t.isIntegerType() || t.isLargeint() || t.isVarchar() || t.isDate() ||
-                            t.isDatetime())) {
+                    if (!(t.isBoolean() || t.isIntegerType() || t.isLargeint() || t.isVarchar() || t.isBinaryType() ||
+                            t.isDate() || t.isDatetime())) {
                         throw new SemanticException("sort key column[" + cd.getName() + "] type not supported: " + t.toSql());
                     }
                 }
@@ -426,7 +526,13 @@ public class CreateTableAnalyzer {
                 // sort key column of duplicate table has no limitation
             } else if (keysType == KeysType.AGG_KEYS || keysType == KeysType.UNIQUE_KEYS) {
                 List<Integer> sortKeyIdxes = Lists.newArrayList();
-                for (String column : sortKeys) {
+                for (OrderByElement orderByElement : orderByElements) {
+                    Expr expr = orderByElement.getExpr();
+                    String column = expr instanceof SlotRef ? ((SlotRef) expr).getColumnName() : null;
+                    if (column == null) {
+                        throw new SemanticException("Unknown column '%s' in order by clause",
+                                ExprToSql.toSql(orderByElement.getExpr()));
+                    }
                     int idx = columnNames.indexOf(column);
                     if (idx == -1) {
                         throw new SemanticException("Unknown column '%s' does not exist", column);
@@ -456,23 +562,105 @@ public class CreateTableAnalyzer {
         }
     }
 
+    public static void analyzeMultiExprsPartition(CreateTableStmt stmt, TableName tableName) {
+        PartitionDesc partitionDesc = stmt.getPartitionDesc();
+        if (partitionDesc == null || !(partitionDesc instanceof ListPartitionDesc)) {
+            return;
+        }
+        ListPartitionDesc listPartitionDesc = (ListPartitionDesc) partitionDesc;
+        if (!listPartitionDesc.isAutoPartitionTable()) {
+            return;
+        }
+        List<ParseNode> multiDescList = listPartitionDesc.getMultiDescList();
+        if (multiDescList == null || multiDescList.isEmpty()) {
+            return;
+        }
+        List<ColumnDef> columnDefs = stmt.getColumnDefs();
+        List<String> partitionColumnList = Lists.newArrayList();
+        List<PartitionDesc> partitionDescList = Lists.newArrayList();
+        List<Expr> partitionExprs = Lists.newArrayList();
+        int placeHolderSlotId = 0;
+        for (ParseNode partitionExpr : multiDescList) {
+            if (partitionExpr instanceof Identifier) {
+                Identifier identifier = (Identifier) partitionExpr;
+                partitionColumnList.add(identifier.getValue());
+            }
+            if (partitionExpr instanceof FunctionCallExpr) {
+                FunctionCallExpr expr = (FunctionCallExpr) (((Expr) partitionExpr).clone());
+                if (stmt.isIcebergEngine()) {
+                    String fnName = ((FunctionCallExpr) expr).getFunctionName();
+                    fnName = FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX + fnName;
+                    expr.resetFnName(null, fnName);
+                }
+                ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), new Scope(RelationId.anonymous(),
+                                new RelationFields(columnDefs.stream().map(col -> new Field(col.getName(),
+                                        col.getType(), null, null)).collect(Collectors.toList()))),
+                        ConnectContext.buildInner());
+                String columnName = FeConstants.GENERATED_PARTITION_COLUMN_PREFIX + placeHolderSlotId++;
+                partitionColumnList.add(columnName);
+                Type type = expr.getType();
+                if (type.isScalarType()) {
+                    ScalarType scalarType = (ScalarType) type;
+                    if (scalarType.isWildcardChar()) {
+                        type = TypeFactory.createCharType(TypeFactory.getOlapMaxVarcharLength());
+                    } else if (scalarType.isWildcardVarchar()) {
+                        type = TypeFactory.createVarcharType(TypeFactory.getOlapMaxVarcharLength());
+                    }
+                }
+                TypeDef typeDef = new TypeDef(type);
+                try {
+                    TypeDefAnalyzer.analyze(typeDef);
+                } catch (Exception e) {
+                    throw new SemanticException("Generate partition column " + columnName
+                            + " for multi expression partition error: " + e.getMessage(), partitionDesc.getPos());
+                }
+                // generated column expression should be saved in unanalyzed way in meta
+                ColumnDef generatedPartitionColumn = new ColumnDef(
+                        columnName, typeDef, null, false, null, null, true,
+                        ColumnDef.DefaultValueDef.NOT_SET, null, (FunctionCallExpr) partitionExpr, "");
+                columnDefs.add(generatedPartitionColumn);
+                partitionExprs.add((FunctionCallExpr) partitionExpr);
+            }
+        }
+        for (ColumnDef columnDef : columnDefs) {
+            if (partitionColumnList.contains(columnDef.getName())) {
+                columnDef.setIsPartitionColumn(true);
+            }
+        }
+        listPartitionDesc = new ListPartitionDesc(partitionColumnList, partitionDescList);
+        listPartitionDesc.setAutoPartitionTable(true);
+        listPartitionDesc.setPartitionExprs(partitionExprs);
+        stmt.setPartitionDesc(listPartitionDesc);
+    }
+
     public static void analyzePartitionDesc(CreateTableStmt stmt) {
         String engineName = stmt.getEngineName();
         PartitionDesc partitionDesc = stmt.getPartitionDesc();
         if (stmt.isOlapEngine()) {
             if (partitionDesc != null) {
-                if (partitionDesc.getType() == PartitionType.RANGE || partitionDesc.getType() == PartitionType.LIST) {
+                if (partitionDesc instanceof ListPartitionDesc ||
+                        partitionDesc instanceof MultiItemListPartitionDesc ||
+                        partitionDesc instanceof RangePartitionDesc ||
+                        partitionDesc instanceof SingleItemListPartitionDesc ||
+                        partitionDesc instanceof SingleRangePartitionDesc) {
                     try {
-                        PartitionDescAnalyzer.analyze(partitionDesc);
-                        partitionDesc.analyze(stmt.getColumnDefs(), stmt.getProperties());
+                        PartitionDescAnalyzer.analyze(partitionDesc, stmt.getColumnDefs(), stmt.getProperties());
                     } catch (AnalysisException e) {
                         throw new SemanticException(e.getMessage());
+                    }
+                    if (partitionDesc instanceof ListPartitionDesc) {
+                        ListPartitionDesc listPartitionDesc = (ListPartitionDesc) partitionDesc;
+                        if (listPartitionDesc.getPartitionExprs() != null && !listPartitionDesc.getPartitionExprs().isEmpty()
+                                && (stmt.getKeysDesc().getKeysType() == KeysType.AGG_KEYS
+                                || stmt.getKeysDesc().getKeysType() == KeysType.UNIQUE_KEYS)) {
+                            throw new SemanticException("expression partition base on generated column"
+                                    + " doest not support AGG_KEYS or UNIQUE_KEYS", partitionDesc.getPos());
+                        }
                     }
                 } else if (partitionDesc instanceof ExpressionPartitionDesc) {
                     ExpressionPartitionDesc expressionPartitionDesc = (ExpressionPartitionDesc) partitionDesc;
                     try {
-                        PartitionDescAnalyzer.analyze(partitionDesc);
-                        expressionPartitionDesc.analyze(stmt.getColumnDefs(), stmt.getProperties());
+                        PartitionDescAnalyzer.analyze(expressionPartitionDesc, stmt.getColumnDefs(), stmt.getProperties());
                     } catch (AnalysisException e) {
                         throw new SemanticException(e.getMessage());
                     }
@@ -505,6 +693,23 @@ public class CreateTableAnalyzer {
             Map<String, String> properties = stmt.getProperties();
             KeysDesc keysDesc = Preconditions.checkNotNull(stmt.getKeysDesc());
 
+            boolean enableRangeDistribution = Config.enable_range_distribution;
+            if (ConnectContext.get() != null && ConnectContext.get().getSessionVariable().isEnableRangeDistribution()) {
+                enableRangeDistribution = true;
+            }
+
+            if (enableRangeDistribution) {
+                if (distributionDesc == null) {
+                    // For duplicate key table, if both duplicate key and order by are not
+                    // specified, use random distribution, otherwise, use range distribution
+                    if (!(keysDesc.getKeysType() == KeysType.DUP_KEYS
+                            && keysDesc.isKeysColumnsDerived()
+                            && stmt.getOrderByElements() == null)) {
+                        distributionDesc = new RangeDistributionDesc();
+                    }
+                }
+            }
+
             // analyze distribution
             if (distributionDesc == null) {
                 if (properties != null && properties.containsKey("colocate_with")) {
@@ -528,18 +733,17 @@ public class CreateTableAnalyzer {
                     throw new SemanticException("Currently not support default distribution in " + keysDesc.getKeysType());
                 }
             }
-            if (distributionDesc instanceof RandomDistributionDesc && keysDesc.getKeysType() != KeysType.DUP_KEYS
-                    && !(keysDesc.getKeysType() == KeysType.AGG_KEYS && !stmt.isHasReplace())) {
-                throw new SemanticException(keysDesc.getKeysType().toSql() + (stmt.isHasReplace() ? " with replace " : "")
-                        + " must use hash distribution", distributionDesc.getPos());
+            if (distributionDesc instanceof RandomDistributionDesc && keysDesc.getKeysType() != KeysType.DUP_KEYS) {
+                throw new SemanticException(keysDesc.getKeysType().toSql()
+                        + " cannot use random distribution", distributionDesc.getPos());
             }
             if (distributionDesc.getBuckets() > Config.max_bucket_number_per_partition && stmt.isOlapEngine()
-                    && stmt.getPartitionDesc() != null && stmt.getPartitionDesc().getType() != PartitionType.UNPARTITIONED) {
+                    && stmt.getPartitionDesc() != null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_TOO_MANY_BUCKETS, Config.max_bucket_number_per_partition);
             }
             Set<String> columnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
             columnSet.addAll(columnDefs.stream().map(ColumnDef::getName).collect(Collectors.toSet()));
-            distributionDesc.analyze(columnSet);
+            DistributionDescAnalyzer.analyze(distributionDesc, columnSet);
             stmt.setDistributionDesc(distributionDesc);
             stmt.setProperties(properties);
         } else {
@@ -557,21 +761,64 @@ public class CreateTableAnalyzer {
         }
     }
 
-    public static void analyzeGeneratedColumn(CreateTableStmt stmt, ConnectContext context) {
-        if (!stmt.isOlapEngine()) {
-            throw new SemanticException("Generated Column only support olap table");
-        }
+    private static void analyzeGeneratedColumnForIceberg(CreateTableStmt stmt, ConnectContext context) {
+        List<Column> columns = stmt.getColumns();
+        ListPartitionDesc desc = (ListPartitionDesc) stmt.getPartitionDesc();
 
+        for (Column column : columns) {
+            if (column.isGeneratedColumn()) {
+                if (!column.getName().startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
+                    throw new SemanticException("Define iceberg generated column are not supported");
+                }
+                boolean isMatched = desc.getPartitionColNames().stream()
+                        .anyMatch(partitionColName -> partitionColName.equalsIgnoreCase(column.getName()));
+                if (!isMatched) {
+                    throw new SemanticException("Iceberg generated column are illegal");
+                }
+                Expr expr = column.getGeneratedColumnExpr(columns);
+                if (expr instanceof FunctionCallExpr) {
+                    if (null != ((FunctionCallExpr) expr).getDbName()) {
+                        throw new SemanticException("Iceberg transform expression should not have db name");
+                    }
+                    String fnName = ((FunctionCallExpr) expr).getFunctionName();
+                    if (fnName.equalsIgnoreCase("year") ||
+                            fnName.equalsIgnoreCase("month") ||
+                            fnName.equalsIgnoreCase("day") ||
+                            fnName.equalsIgnoreCase("hour") ||
+                            fnName.equalsIgnoreCase("identity") ||
+                            fnName.equalsIgnoreCase("void")) {
+                        if (expr.getChildren().size() != 1) {
+                            throw new SemanticException("Iceberg transform expression parameter's count not valid");
+                        } else if (!(expr.getChild(0) instanceof SlotRef)) {
+                            throw new SemanticException("Iceberg transform expression's parameter should be a column reference");
+                        }
+                    } else if (fnName.equalsIgnoreCase("truncate") ||
+                            fnName.equalsIgnoreCase("bucket")) {
+                        if (expr.getChildren().size() != 2) {
+                            throw new SemanticException("Iceberg transform expression parameter's count not valid");
+                        } else if (!(expr.getChild(0) instanceof SlotRef)) {
+                            throw new SemanticException("Iceberg transform expression's first parameter is not valid");
+                        } else if (!(expr.getChild(1) instanceof LiteralExpr)) {
+                            throw new SemanticException("Iceberg transform expression's second parameter is not valid");
+                        }
+                    } else {
+                        throw new SemanticException("Iceberg partition column does not support " + fnName +
+                                " transform expression");
+                    }
+                } else {
+                    throw new SemanticException("Should be a function call expr for iceberg generated column");
+                }
+            }
+        }
+    }
+
+    private static void analyzeGeneratedColumnForOlap(CreateTableStmt stmt, ConnectContext context) {
         KeysDesc keysDesc = Preconditions.checkNotNull(stmt.getKeysDesc());
         if (keysDesc.getKeysType() == KeysType.AGG_KEYS) {
             throw new SemanticException("Generated Column does not support AGG table");
         }
 
-        if (RunMode.isSharedDataMode()) {
-            throw new SemanticException("Does not support generated column in shared data cluster yet");
-        }
-
-        final TableName tableNameObject = stmt.getDbTbl();
+        final com.starrocks.catalog.TableName tableNameObject = com.starrocks.catalog.TableName.fromTableRef(stmt.getTableRef());
 
         List<Column> columns = stmt.getColumns();
         Map<String, Column> columnsMap = Maps.newHashMap();
@@ -587,7 +834,7 @@ public class CreateTableAnalyzer {
 
             if (column.isGeneratedColumn()) {
                 if (keysDesc.containsCol(column.getName())) {
-                    throw new SemanticException("Generated Column can not be KEY");
+                    throw new SemanticException("Generated Column " + column.getName() + " can not be KEY");
                 }
 
                 Expr expr = column.getGeneratedColumnExpr(columns);
@@ -643,6 +890,17 @@ public class CreateTableAnalyzer {
         }
     }
 
+    public static void analyzeGeneratedColumn(CreateTableStmt stmt, ConnectContext context) {
+        if (stmt.isOlapEngine()) {
+            analyzeGeneratedColumnForOlap(stmt, context);
+        } else if (stmt.isIcebergEngine()) {
+            analyzeGeneratedColumnForIceberg(stmt, context);
+        } else {
+            throw new SemanticException("Generated Column only support olap/iceberg table");
+        }
+        return;
+    }
+
     public static void analyzeIndexDefs(CreateTableStmt statement) {
         List<IndexDef> indexDefs = statement.getIndexDefs();
 
@@ -651,11 +909,21 @@ public class CreateTableAnalyzer {
 
         List<Index> indexes = new ArrayList<>();
         if (CollectionUtils.isNotEmpty(indexDefs)) {
+            List<String> vectorIndexNames = indexDefs.stream()
+                    .filter(indexDef -> indexDef.getIndexType() == IndexDef.IndexType.VECTOR)
+                    .map(IndexDef::getIndexName)
+                    .collect(Collectors.toList());
+            if (vectorIndexNames.size() > 1) {
+                throw new SemanticException(
+                        String.format("At most one vector index is allowed for a table, but %d were found: %s",
+                                vectorIndexNames.size(), vectorIndexNames));
+            }
+
             Set<String> distinct = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
             Set<List<String>> distinctCol = new HashSet<>();
 
             for (IndexDef indexDef : indexDefs) {
-                indexDef.analyze();
+                IndexAnalyzer.analyze(indexDef);
                 if (!statement.isOlapEngine()) {
                     throw new SemanticException("index only support in olap engine at current version", indexDef.getPos());
                 }
@@ -664,7 +932,8 @@ public class CreateTableAnalyzer {
                     boolean found = false;
                     for (Column column : columns) {
                         if (column.getName().equalsIgnoreCase(indexColName)) {
-                            indexDef.checkColumn(column, keysDesc.getKeysType());
+                            IndexAnalyzer.checkColumn(column, indexDef.getIndexType(), indexDef.getProperties(),
+                                    keysDesc.getKeysType());
                             found = true;
                             columnIds.add(column.getColumnId());
                             break;
@@ -693,5 +962,30 @@ public class CreateTableAnalyzer {
         }
 
         statement.setIndexes(indexes);
+    }
+
+    private static void validateComplexTypeDefaultValues(CreateTableStmt statement) {
+        Map<String, String> properties = statement.getProperties();
+        boolean fastSchemaEvolution = true;
+
+        if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION)) {
+            String value = properties.get(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION);
+            fastSchemaEvolution = Boolean.parseBoolean(value);
+        }
+
+        if (!fastSchemaEvolution) {
+            List<Column> columns = statement.getColumns();
+            if (columns != null) {
+                for (Column column : columns) {
+                    if (column.getDefaultExpr() != null && column.getDefaultExpr().hasExprObject()) {
+                        throw new SemanticException(
+                                "Complex type (ARRAY/MAP/STRUCT) default values require fast schema evolution. " +
+                                        "Table '" + statement.getTableName() + "' has fast_schema_evolution=false. " +
+                                        "Please remove the 'fast_schema_evolution'='false' property or remove the default " +
+                                        "value for column '" + column.getName() + "'");
+                    }
+                }
+            }
+        }
     }
 }

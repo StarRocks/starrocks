@@ -19,14 +19,15 @@
 #include <atomic>
 #include <utility>
 
+#include "column/chunk_slice.h"
 #include "column/vectorized_fwd.h"
+#include "exec/join/join_hash_table.h"
 #include "exec/pipeline/hashjoin/hash_join_build_operator.h"
 #include "exec/pipeline/hashjoin/hash_joiner_fwd.h"
 #include "exec/spill/spiller.h"
 #include "exprs/expr_context.h"
 
 namespace starrocks::pipeline {
-
 class SpillableHashJoinBuildOperator final : public HashJoinBuildOperator {
 public:
     template <class... Args>
@@ -56,14 +57,16 @@ private:
     void set_spill_strategy(spill::SpillStrategy strategy);
     spill::SpillStrategy spill_strategy() const;
 
-    std::function<StatusOr<ChunkPtr>()> _convert_hash_map_to_chunk();
+    StatusOr<std::function<StatusOr<ChunkPtr>()>> _convert_hash_map_to_chunk();
 
     Status publish_runtime_filters(RuntimeState* state);
 
     Status append_hash_columns(const ChunkPtr& chunk);
 
-    Status init_spiller_partitions(RuntimeState* state, JoinHashTable& ht);
+    Status init_spiller_partitions(RuntimeState* state, HashJoinBuilder* builder);
 
+    size_t _hash_table_iterate_idx = 0;
+    std::vector<JoinHashTable*> _hash_tables;
     ChunkSharedSlice _hash_table_build_chunk_slice;
     std::function<StatusOr<ChunkPtr>()> _hash_table_slice_iterator;
     bool _is_first_time_spill = true;
@@ -84,6 +87,8 @@ public:
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
     const std::vector<ExprContext*>& build_side_partition() { return _build_side_partition; }
+
+    bool support_event_scheduler() const override { return false; }
 
 private:
     ObjectPool _pool;

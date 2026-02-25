@@ -1,0 +1,7 @@
+label: 'クエリチューニング'
+position: 200
+collapsed: true
+link:
+  type: generated-index
+  title: 'クエリチューニングのベストプラクティス'
+  description: 'StarRocks でクエリを分析、チューニング、最適化する方法を学びます。'

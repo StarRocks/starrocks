@@ -37,18 +37,18 @@ package com.starrocks.connector.elasticsearch;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
 import com.starrocks.server.GlobalStateMgr;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 public class EsShardPartitionsTest extends EsTestCase {
 
     @Test
     public void testPartition() throws Exception {
         EsTable esTable = (EsTable) GlobalStateMgr.getCurrentState()
-                .getDb(GlobalStateMgrTestUtil.testDb1)
-                .getTable(GlobalStateMgrTestUtil.testEsTableId1);
+                .getLocalMetastore()
+                .getTable(GlobalStateMgrTestUtil.testDb1, GlobalStateMgrTestUtil.testEsTable1);
         EsShardPartitions esShardPartitions = EsShardPartitions.findShardPartitions("doe",
                 loadJsonFromFile("data/es/test_search_shards.json"));
         EsTablePartitions esTablePartitions = EsTablePartitions.fromShardPartitions(esTable, esShardPartitions);

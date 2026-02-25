@@ -14,13 +14,17 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.StringLiteral;
+import com.starrocks.catalog.FunctionSet;
+import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.List;
@@ -31,7 +35,7 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getConnectContext;
 
 public class AnalyzeFunctionTest {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -144,6 +148,15 @@ public class AnalyzeFunctionTest {
     }
 
     @Test
+    public void testApproxCountDistinctWithVarbinary() {
+        analyzeSuccess("select approx_count_distinct(v_varbinary) from tbinary");
+        analyzeSuccess("select ndv(v_varbinary) from tbinary");
+        analyzeSuccess("select ds_hll_count_distinct(v_varbinary) from tbinary");
+        analyzeSuccess("select ds_theta_count_distinct(v_varbinary) from tbinary");
+        analyzeSuccess("select count(distinct v_varbinary) from tbinary");
+    }
+
+    @Test
     public void testMatrixTypeCast() {
         analyzeFail("select trim(b1) from test_object");
         analyzeFail("select trim(h1) from test_object");
@@ -165,61 +178,61 @@ public class AnalyzeFunctionTest {
     public void testTimestampArithmeticExpr() {
         QueryStatement queryStatement =
                 (QueryStatement) analyzeSuccess("select date_add('2022-01-01', interval 2 day)");
-        Assert.assertEquals("SELECT date_add('2022-01-01 00:00:00', INTERVAL 2 DAY)",
+        Assertions.assertEquals("SELECT date_add('2022-01-01 00:00:00', INTERVAL 2 DAY)",
                 AstToStringBuilder.toString(queryStatement.getQueryRelation()));
 
         queryStatement = (QueryStatement) analyzeSuccess("select date_add('2022-01-01 00:00:00', interval 2 day)");
-        Assert.assertEquals("SELECT date_add('2022-01-01 00:00:00', INTERVAL 2 DAY)",
+        Assertions.assertEquals("SELECT date_add('2022-01-01 00:00:00', INTERVAL 2 DAY)",
                 AstToStringBuilder.toString(queryStatement.getQueryRelation()));
 
         queryStatement = (QueryStatement) analyzeSuccess("select date_add('2022-01-01', interval 2 minute)");
-        Assert.assertEquals("SELECT date_add('2022-01-01 00:00:00', INTERVAL 2 MINUTE)",
+        Assertions.assertEquals("SELECT date_add('2022-01-01 00:00:00', INTERVAL 2 MINUTE)",
                 AstToStringBuilder.toString(queryStatement.getQueryRelation()));
 
         queryStatement = (QueryStatement) analyzeSuccess("select date_add('2022-01-01 00:00:00', interval 2 minute)");
-        Assert.assertEquals("SELECT date_add('2022-01-01 00:00:00', INTERVAL 2 MINUTE)",
+        Assertions.assertEquals("SELECT date_add('2022-01-01 00:00:00', INTERVAL 2 MINUTE)",
                 AstToStringBuilder.toString(queryStatement.getQueryRelation()));
 
         queryStatement = (QueryStatement) analyzeSuccess("select timestampadd(day, 2, '2022-01-01')");
-        Assert.assertEquals("SELECT timestampadd(DAY, 2, '2022-01-01 00:00:00')",
+        Assertions.assertEquals("SELECT timestampadd(DAY, 2, '2022-01-01 00:00:00')",
                 AstToStringBuilder.toString(queryStatement.getQueryRelation()));
 
         queryStatement = (QueryStatement) analyzeSuccess("select date_add('2022-01-01', 2)");
-        Assert.assertEquals("SELECT date_add('2022-01-01 00:00:00', INTERVAL 2 DAY)",
+        Assertions.assertEquals("SELECT date_add('2022-01-01 00:00:00', INTERVAL 2 DAY)",
                 AstToStringBuilder.toString(queryStatement.getQueryRelation()));
 
         queryStatement = (QueryStatement) analyzeSuccess("select date_add('2022-01-01', interval 2 year)");
-        Assert.assertEquals("SELECT date_add('2022-01-01 00:00:00', INTERVAL 2 YEAR)",
+        Assertions.assertEquals("SELECT date_add('2022-01-01 00:00:00', INTERVAL 2 YEAR)",
                 AstToStringBuilder.toString(queryStatement.getQueryRelation()));
 
         queryStatement = (QueryStatement) analyzeSuccess("select date_sub('2022-01-01', interval 2 year)");
-        Assert.assertEquals("SELECT date_sub('2022-01-01 00:00:00', INTERVAL 2 YEAR)",
+        Assertions.assertEquals("SELECT date_sub('2022-01-01 00:00:00', INTERVAL 2 YEAR)",
                 AstToStringBuilder.toString(queryStatement.getQueryRelation()));
 
         queryStatement = (QueryStatement) analyzeSuccess("select subdate('2022-01-01', interval 2 year)");
-        Assert.assertEquals("SELECT subdate('2022-01-01 00:00:00', INTERVAL 2 YEAR)",
+        Assertions.assertEquals("SELECT subdate('2022-01-01 00:00:00', INTERVAL 2 YEAR)",
                 AstToStringBuilder.toString(queryStatement.getQueryRelation()));
 
         queryStatement = (QueryStatement) analyzeSuccess("select date_add('2022-01-01', interval 2 year)");
-        Assert.assertEquals("SELECT date_add('2022-01-01 00:00:00', INTERVAL 2 YEAR)",
+        Assertions.assertEquals("SELECT date_add('2022-01-01 00:00:00', INTERVAL 2 YEAR)",
                 AstToStringBuilder.toString(queryStatement.getQueryRelation()));
 
         queryStatement = (QueryStatement) analyzeSuccess("select timestampdiff(day, '2020-01-01', '2020-01-03')");
-        Assert.assertEquals("SELECT timestampdiff(DAY, '2020-01-01 00:00:00', '2020-01-03 00:00:00')",
+        Assertions.assertEquals("SELECT timestampdiff(DAY, '2020-01-01 00:00:00', '2020-01-03 00:00:00')",
                 AstToStringBuilder.toString(queryStatement.getQueryRelation()));
 
         queryStatement = (QueryStatement) analyzeSuccess(
                 "select timestampdiff(day, '2020-01-01 00:00:00', '2020-01-03 00:00:00')");
-        Assert.assertEquals("SELECT timestampdiff(DAY, '2020-01-01 00:00:00', '2020-01-03 00:00:00')",
+        Assertions.assertEquals("SELECT timestampdiff(DAY, '2020-01-01 00:00:00', '2020-01-03 00:00:00')",
                 AstToStringBuilder.toString(queryStatement.getQueryRelation()));
 
         queryStatement = (QueryStatement) analyzeSuccess("select timestampdiff(minute, '2020-01-01', '2020-01-03')");
-        Assert.assertEquals("SELECT timestampdiff(MINUTE, '2020-01-01 00:00:00', '2020-01-03 00:00:00')",
+        Assertions.assertEquals("SELECT timestampdiff(MINUTE, '2020-01-01 00:00:00', '2020-01-03 00:00:00')",
                 AstToStringBuilder.toString(queryStatement.getQueryRelation()));
 
         queryStatement = (QueryStatement) analyzeSuccess(
                 "select timestampdiff(minute, '2020-01-01 00:00:00', '2020-01-03 00:00:00')");
-        Assert.assertEquals("SELECT timestampdiff(MINUTE, '2020-01-01 00:00:00', '2020-01-03 00:00:00')",
+        Assertions.assertEquals("SELECT timestampdiff(MINUTE, '2020-01-01 00:00:00', '2020-01-03 00:00:00')",
                 AstToStringBuilder.toString(queryStatement.getQueryRelation()));
     }
 
@@ -244,9 +257,9 @@ public class AnalyzeFunctionTest {
         analyzeSuccess("select rlike(ta, ta) from tall");
 
         QueryStatement queryStatement = (QueryStatement) analyzeSuccess("select password('3wS_r7UHc')");
-        Assert.assertTrue(queryStatement.getQueryRelation().getOutputExpression().get(0) instanceof StringLiteral);
+        Assertions.assertTrue(queryStatement.getQueryRelation().getOutputExpression().get(0) instanceof StringLiteral);
         StringLiteral stringLiteral = (StringLiteral) queryStatement.getQueryRelation().getOutputExpression().get(0);
-        Assert.assertEquals("*0B5CED987A45262765BB7DEE0EB00483E4AD82D0", stringLiteral.getValue());
+        Assertions.assertEquals("*0B5CED987A45262765BB7DEE0EB00483E4AD82D0", stringLiteral.getValue());
     }
 
     @Test
@@ -300,5 +313,140 @@ public class AnalyzeFunctionTest {
     public void testTypeofFunction() throws Exception {
         analyzeFail("select typeof(cast(1 as tinyint),  cast(1 as int))");
         analyzeFail("select typeof()");
+    }
+
+    @Test
+    public void testFieldFunction() throws Exception {
+        analyzeSuccess("select field(1, 2, 2)");
+        analyzeSuccess("select field(1, 2.0, 2.1)");
+        analyzeSuccess("select field(1, 'a', 2.1)");
+        analyzeSuccess("select field(1, 'a', 2.1, NULL)");
+        analyzeSuccess("select field(NULL, 'a', 2.1, NULL)");
+        analyzeFail("select field((1,2), (1,2))");
+        analyzeFail("select field((1,2), 'a')");
+        analyzeFail("select field(1)");
+        analyzeFail("select field((1,2))");
+    }
+
+    @Test
+    public void testArrayGenerate() throws Exception {
+        analyzeSuccess("select array_generate(1, 5)");
+        analyzeSuccess("select array_generate(1, array_length(split('a,b,c', ',')))");
+        analyzeFail("select array_generate('a')");
+        analyzeFail("select array_generate(1, 5, 'a')");
+        analyzeFail("select array_generate(1, 2, 3, 4)");
+    }
+
+    @Test
+    public void testSecToTime() throws Exception {
+        analyzeFail("select sec_to_time()");
+        analyzeSuccess("select sec_to_time(0)");
+        analyzeSuccess("select sec_to_time(1)");
+        analyzeSuccess("select sec_to_time(-1)");
+        analyzeSuccess("select sec_to_time(3024000)");
+        analyzeSuccess("select sec_to_time(-3024000)");
+    }
+
+    @Test
+    public void testStringAgg() throws Exception {
+        // Test basic STRING_AGG to GROUP_CONCAT conversion
+        QueryStatement stmt = (QueryStatement) analyzeSuccess("select string_agg(ta, ',') from tall");
+        QueryRelation relation = stmt.getQueryRelation();
+        Assertions.assertTrue(relation instanceof SelectRelation);
+        SelectRelation selectRelation = (SelectRelation) relation;
+        Assertions.assertTrue(selectRelation.getOutputExpression().get(0) instanceof FunctionCallExpr);
+        FunctionCallExpr functionCallExpr = (FunctionCallExpr) selectRelation.getOutputExpression().get(0);
+        Assertions.assertEquals(FunctionSet.GROUP_CONCAT, functionCallExpr.getFunctionName());
+        Assertions.assertEquals(2, functionCallExpr.getChildren().size());
+
+        // Test STRING_AGG with ORDER BY
+        stmt = (QueryStatement) analyzeSuccess("select string_agg(ta, ',' order by ta) from tall");
+        relation = stmt.getQueryRelation();
+        selectRelation = (SelectRelation) relation;
+        functionCallExpr = (FunctionCallExpr) selectRelation.getOutputExpression().get(0);
+        Assertions.assertEquals(FunctionSet.GROUP_CONCAT, functionCallExpr.getFunctionName());
+        Assertions.assertNotNull(functionCallExpr.getParams().getOrderByElements());
+        Assertions.assertEquals(1, functionCallExpr.getParams().getOrderByElements().size());
+
+        // Test STRING_AGG with ORDER BY multiple columns
+        stmt = (QueryStatement) analyzeSuccess("select string_agg(ta, ',' order by ta, tb desc) from tall");
+        relation = stmt.getQueryRelation();
+        selectRelation = (SelectRelation) relation;
+        functionCallExpr = (FunctionCallExpr) selectRelation.getOutputExpression().get(0);
+        Assertions.assertEquals(FunctionSet.GROUP_CONCAT, functionCallExpr.getFunctionName());
+        Assertions.assertEquals(2, functionCallExpr.getParams().getOrderByElements().size());
+
+        // Test STRING_AGG with DISTINCT
+        stmt = (QueryStatement) analyzeSuccess("select string_agg(distinct ta, ',') from tall");
+        relation = stmt.getQueryRelation();
+        selectRelation = (SelectRelation) relation;
+        functionCallExpr = (FunctionCallExpr) selectRelation.getOutputExpression().get(0);
+        Assertions.assertEquals(FunctionSet.GROUP_CONCAT, functionCallExpr.getFunctionName());
+        Assertions.assertTrue(functionCallExpr.getParams().isDistinct());
+
+        // Test STRING_AGG with DISTINCT and ORDER BY
+        stmt = (QueryStatement) analyzeSuccess("select string_agg(distinct ta, ',' order by ta) from tall");
+        relation = stmt.getQueryRelation();
+        selectRelation = (SelectRelation) relation;
+        functionCallExpr = (FunctionCallExpr) selectRelation.getOutputExpression().get(0);
+        Assertions.assertEquals(FunctionSet.GROUP_CONCAT, functionCallExpr.getFunctionName());
+        Assertions.assertTrue(functionCallExpr.getParams().isDistinct());
+        Assertions.assertEquals(1, functionCallExpr.getParams().getOrderByElements().size());
+
+        // Test STRING_AGG in various contexts
+        analyzeSuccess("select string_agg(ta, '-') from tall group by tb");
+        analyzeSuccess("select tb, string_agg(ta, '|') from tall group by tb");
+        analyzeSuccess("select string_agg(cast(ti as varchar), ',') from tall");
+        analyzeSuccess("select string_agg(concat(ta, tb), ',') from tall");
+        analyzeSuccess("select string_agg(ta, ' ') from tall where tb = 'test'");
+
+        // Test STRING_AGG error cases - invalid syntax
+        analyzeFail("select string_agg(ta) from tall",
+                "No matching function with signature: string_agg(varchar(20))");
+        analyzeFail("select string_agg(distinct ta) from tall",
+                "Getting syntax error");
+        analyzeFail("select string_agg(ta, ',', 'extra') from tall",
+                "No matching function with signature: string_agg(varchar(20), varchar, varchar)");
+        analyzeFail("select string_agg() from tall",
+                "No matching function with signature: string_agg()");
+
+        // Test STRING_AGG vs GROUP_CONCAT equivalence
+        stmt = (QueryStatement) analyzeSuccess("select string_agg(ta, '|' order by ta desc) from tall");
+        QueryStatement stmt2 =
+                (QueryStatement) analyzeSuccess("select group_concat(ta order by ta desc separator '|') from tall");
+        relation = stmt.getQueryRelation();
+        QueryRelation relation2 = stmt2.getQueryRelation();
+        selectRelation = (SelectRelation) relation;
+        SelectRelation selectRelation2 = (SelectRelation) relation2;
+        functionCallExpr = (FunctionCallExpr) selectRelation.getOutputExpression().get(0);
+        FunctionCallExpr functionCallExpr2 = (FunctionCallExpr) selectRelation2.getOutputExpression().get(0);
+        Assertions.assertEquals(functionCallExpr.getFunctionName(), functionCallExpr2.getFunctionName());
+        Assertions.assertEquals(functionCallExpr.getChildren().size(), functionCallExpr2.getChildren().size());
+    }
+
+    @Test
+    public void testLagLeadFunction() throws Exception {
+        analyzeSuccess("select lag(ta, 2, tc) over() from test_laglead");
+        analyzeSuccess("select lead(ta, 2, tc) over() from test_laglead");
+        analyzeSuccess("select lag(ta ignore nulls, 2, tc) over() from test_laglead");
+        analyzeSuccess("select lead(ta ignore nulls, 2, tc) over() from test_laglead");
+        analyzeSuccess("select lag(ta, 1, NULL) over() from test_laglead");
+        analyzeSuccess("select lead(ta, 1, NULL) over() from test_laglead");
+
+        // Prefer third parameter's type when non-null (VARCHAR/ARRAY/JSON),
+        // and cast first/third arguments to the target type
+        analyzeSuccess("select lag(ta, 1, tc) over(order by tb) from test_laglead");
+        analyzeSuccess("select lead(ta, 1, tc) over(order by tb) from test_laglead");
+
+        // IGNORE NULLS with third parameter column
+        analyzeSuccess("select lag(ta ignore nulls, 2, tc) over(order by tb) from test_laglead");
+        analyzeSuccess("select lead(ta ignore nulls, 2, tc) over(order by tb) from test_laglead");
+
+        // Error cases: non-constant offset, invalid arg count
+        analyzeFail("select lag(ta, tb, tc) over() from test_laglead",
+                "The offset parameter of LEAD/LAG must be a constant positive integer");
+        // Single-argument LEAD/LAG is valid: offset/default will be filled by transformer
+        analyzeSuccess("select lead(ta) over() from test_laglead");
+        analyzeSuccess("select lag(ta) over() from test_laglead");
     }
 }

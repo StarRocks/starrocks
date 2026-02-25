@@ -16,9 +16,8 @@
 
 #include <utility>
 
-#include "exec/aggregator.h"
+#include "exec/aggregator_fwd.h"
 #include "exec/pipeline/aggregate/aggregate_blocking_source_operator.h"
-#include "exec/sorted_streaming_aggregator.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 
@@ -67,6 +66,8 @@ public:
     Status prepare(RuntimeState* state) override;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
+
+    bool support_event_scheduler() const override { return false; }
 
 private:
     AggregatorFactoryPtr _hash_aggregator_factory;

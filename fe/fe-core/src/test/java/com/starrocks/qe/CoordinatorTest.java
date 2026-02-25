@@ -15,14 +15,13 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.analysis.AggregateInfo;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.SlotId;
-import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.analysis.TupleId;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Type;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.Status;
+import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.planner.AggregateInfo;
 import com.starrocks.planner.BinlogScanNode;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.EmptySetNode;
@@ -33,10 +32,18 @@ import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.RuntimeFilterDescription;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.planner.SlotDescriptor;
+import com.starrocks.planner.SlotId;
+import com.starrocks.planner.TupleDescriptor;
+import com.starrocks.planner.TupleId;
 import com.starrocks.planner.stream.StreamAggNode;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
+import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.system.Backend;
@@ -44,14 +51,18 @@ import com.starrocks.thrift.TBinlogOffset;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TScanRangeParams;
+import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.compress.utils.Lists;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -66,7 +77,7 @@ public class CoordinatorTest extends PlanTestBase {
     DefaultCoordinator coordinator;
     CoordinatorPreprocessor coordinatorPreprocessor;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         super.setUp();
         ctx = UtFrameUtils.createDefaultCtx();
@@ -74,7 +85,7 @@ public class CoordinatorTest extends PlanTestBase {
         ConnectContext.threadLocalInfo.set(ctx);
 
         coordinator = new DefaultCoordinator.Factory().createQueryScheduler(ctx, Lists.newArrayList(), Lists.newArrayList(),
-                new TDescriptorTable());
+                new TDescriptorTable(), null);
         coordinatorPreprocessor = coordinator.getPrepareInfo();
     }
 
@@ -87,7 +98,8 @@ public class CoordinatorTest extends PlanTestBase {
         return fragment;
     }
 
-    private void testComputeBucketSeq2InstanceOrdinal(JoinNode.DistributionMode mode) throws IOException {
+    private void testComputeBucketSeq2InstanceOrdinal(JoinNode.DistributionMode mode)
+            throws IOException, StarRocksException {
         PlanFragment fragment = genFragment();
         ExecutionFragment execFragment = new ExecutionFragment(null, fragment, 0);
         FragmentInstance instance0 = new FragmentInstance(null, execFragment);
@@ -105,29 +117,83 @@ public class CoordinatorTest extends PlanTestBase {
         execFragment.addInstance(instance2);
 
         OlapTable table = new OlapTable();
+        table.maySetDatabaseId(1L);
+        table.setBaseIndexMetaId(1L);
+        table.setIndexMeta(1L, "base", Collections.singletonList(new Column("c0", IntegerType.INT)),
+                0, 0, (short) 1, TStorageType.COLUMN, KeysType.DUP_KEYS);
         table.setDefaultDistributionInfo(new HashDistributionInfo(6, Collections.emptyList()));
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         desc.setTable(table);
-        OlapScanNode scanNode = new OlapScanNode(new PlanNodeId(0), desc, "test-scan-node");
+        OlapScanNode scanNode = new OlapScanNode(new PlanNodeId(0), desc, "test-scan-node", table.getBaseIndexMetaId());
         scanNode.setSelectedPartitionIds(ImmutableList.of(0L, 1L));
         execFragment.getOrCreateColocatedAssignment(scanNode);
 
         RuntimeFilterDescription rf = new RuntimeFilterDescription(ctx.sessionVariable);
         rf.setJoinMode(mode);
         fragment.getBuildRuntimeFilters().put(1, rf);
-        Assert.assertTrue(rf.getBucketSeqToInstance() == null || rf.getBucketSeqToInstance().isEmpty());
+        Assertions.assertTrue(rf.getBucketSeqToInstance() == null || rf.getBucketSeqToInstance().isEmpty());
         execFragment.setLayoutInfosForRuntimeFilters();
-        Assert.assertEquals(Arrays.asList(0, 1, 0, 2, 1, 2), rf.getBucketSeqToInstance());
+        Assertions.assertEquals(Arrays.asList(0, 1, 0, 2, 1, 2), rf.getBucketSeqToInstance());
     }
 
     @Test
-    public void testColocateRuntimeFilter() throws IOException {
+    public void testColocateRuntimeFilter() throws IOException, StarRocksException {
         testComputeBucketSeq2InstanceOrdinal(JoinNode.DistributionMode.COLOCATE);
     }
 
     @Test
-    public void testBucketShuffleRuntimeFilter() throws IOException {
+    public void testBucketShuffleRuntimeFilter() throws IOException, StarRocksException {
         testComputeBucketSeq2InstanceOrdinal(JoinNode.DistributionMode.LOCAL_HASH_BUCKET);
+    }
+
+    @Test
+    public void testTimeoutHintUsesTableQueryTimeout() {
+        // Cover DefaultCoordinator timeout hint branch:
+        // DefaultCoordinator.java:960-963, 967-975
+
+        // Prepare an executor with table timeout info
+        StmtExecutor executor = new StmtExecutor(ctx, new QueryStatement(ValuesRelation.newDualRelation()));
+        Deencapsulation.setField(executor, "tableQueryTimeoutTableName", "test.t0");
+        Deencapsulation.setField(executor, "tableQueryTimeoutValue", 120);
+        ctx.setExecutor(executor);
+
+        // Make jobSpec.query_timeout match the table timeout, so DefaultCoordinator uses table_query_timeout hint.
+        JobSpec jobSpec = Deencapsulation.getField(coordinator, "jobSpec");
+        jobSpec.getQueryOptions().setQuery_timeout(120);
+
+        Status timeoutStatus = new Status(TStatusCode.TIMEOUT, "timeout");
+
+        com.starrocks.common.TimeoutException ex = Assertions.assertThrows(
+                com.starrocks.common.TimeoutException.class,
+                () -> Deencapsulation.invoke(coordinator, "dealStatusToTryRetry", timeoutStatus));
+        Assertions.assertTrue(ex.getMessage().contains("table_query_timeout"));
+        Assertions.assertTrue(ex.getMessage().contains("please increase"));
+    }
+
+    @Test
+    public void testTimeoutHintFallbackWhenBuildHintThrows() {
+        // Force DefaultCoordinator.java:967-969 (catch) and 975 (reportTimeoutException) to execute.
+        // Ensure executor is present so the code enters the try-block.
+        StmtExecutor executor = new StmtExecutor(ctx, new QueryStatement(ValuesRelation.newDualRelation()));
+        ctx.setExecutor(executor);
+        new Expectations(executor) {
+            {
+                executor.getTableQueryTimeoutInfo();
+                result = new RuntimeException("mock exception for hint building");
+                minTimes = 0;
+            }
+        };
+
+        JobSpec jobSpec = Deencapsulation.getField(coordinator, "jobSpec");
+        jobSpec.getQueryOptions().setQuery_timeout(120);
+
+        Status timeoutStatus = new Status(TStatusCode.TIMEOUT, "timeout");
+        com.starrocks.common.TimeoutException ex = Assertions.assertThrows(
+                com.starrocks.common.TimeoutException.class,
+                () -> Deencapsulation.invoke(coordinator, "dealStatusToTryRetry", timeoutStatus));
+        // After catch, hint falls back to session variable query_timeout.
+        Assertions.assertTrue(ex.getMessage().contains("query_timeout"));
+        Assertions.assertTrue(ex.getMessage().contains("please increase"));
     }
 
     @Test
@@ -138,9 +204,10 @@ public class CoordinatorTest extends PlanTestBase {
 
         OlapTable olapTable = getOlapTable("t0");
         List<Long> olapTableTabletIds =
-                olapTable.getAllPartitions().stream().flatMap(x -> x.getBaseIndex().getTabletIdsInOrder().stream())
+                olapTable.getAllPartitions().stream().flatMap(x -> x.getDefaultPhysicalPartition().getLatestBaseIndex()
+                                .getTabletIdsInOrder().stream())
                         .collect(Collectors.toList());
-        Assert.assertFalse(olapTableTabletIds.isEmpty());
+        Assertions.assertFalse(olapTableTabletIds.isEmpty());
         tupleDesc.setTable(olapTable);
 
         new MockUp<BinlogScanNode>() {
@@ -157,7 +224,7 @@ public class CoordinatorTest extends PlanTestBase {
 
         BinlogScanNode binlogScan = new BinlogScanNode(planNodeId, tupleDesc);
         binlogScan.setFragmentId(fragmentId);
-        binlogScan.finalizeStats(null);
+        binlogScan.finalizeStats();
 
         List<ScanNode> scanNodes = Arrays.asList(binlogScan);
         CoordinatorPreprocessor prepare = new CoordinatorPreprocessor(Lists.newArrayList(), scanNodes,
@@ -167,16 +234,16 @@ public class CoordinatorTest extends PlanTestBase {
         FragmentScanRangeAssignment scanRangeMap =
                 prepare.getFragmentScanRangeAssignment(fragmentId);
         Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends().get(0);
-        Assert.assertFalse(scanRangeMap.isEmpty());
+        Assertions.assertFalse(scanRangeMap.isEmpty());
         Long expectedWorkerId = backend.getId();
-        Assert.assertTrue(scanRangeMap.containsKey(expectedWorkerId));
+        Assertions.assertTrue(scanRangeMap.containsKey(expectedWorkerId));
         Map<Integer, List<TScanRangeParams>> rangesPerNode = scanRangeMap.get(expectedWorkerId);
-        Assert.assertTrue(rangesPerNode.containsKey(planNodeId.asInt()));
+        Assertions.assertTrue(rangesPerNode.containsKey(planNodeId.asInt()));
         List<TScanRangeParams> ranges = rangesPerNode.get(planNodeId.asInt());
         List<Long> tabletIds =
                 ranges.stream().map(x -> x.getScan_range().getBinlog_scan_range().getTablet_id())
                         .collect(Collectors.toList());
-        Assert.assertEquals(olapTableTabletIds, tabletIds);
+        Assertions.assertEquals(olapTableTabletIds, tabletIds);
     }
 
     @Test
@@ -197,8 +264,8 @@ public class CoordinatorTest extends PlanTestBase {
         TupleDescriptor scanTuple = new TupleDescriptor(new TupleId(2));
         scanTuple.setTable(getOlapTable("t0"));
         TupleDescriptor aggTuple = new TupleDescriptor(new TupleId(3));
-        SlotDescriptor groupBySlot = new SlotDescriptor(new SlotId(4), "groupBy", Type.INT, false);
-        SlotDescriptor aggFuncSlot = new SlotDescriptor(new SlotId(5), "aggFunc", Type.INT, false);
+        SlotDescriptor groupBySlot = new SlotDescriptor(new SlotId(4), "groupBy", IntegerType.INT, false);
+        SlotDescriptor aggFuncSlot = new SlotDescriptor(new SlotId(5), "aggFunc", IntegerType.INT, false);
         aggTuple.addSlot(groupBySlot);
         aggTuple.addSlot(aggFuncSlot);
 
@@ -206,7 +273,7 @@ public class CoordinatorTest extends PlanTestBase {
         List<PlanFragment> fragments = new ArrayList<>();
         BinlogScanNode binlogScan = new BinlogScanNode(new PlanNodeId(1), scanTuple);
         binlogScan.setFragmentId(fragmentId);
-        binlogScan.finalizeStats(null);
+        binlogScan.finalizeStats();
         List<ScanNode> scanNodes = Arrays.asList(binlogScan);
 
         // Build agg node
@@ -225,16 +292,14 @@ public class CoordinatorTest extends PlanTestBase {
 
         // Assert
         Map<PlanFragmentId, ExecutionFragment> fragmentParams = prepare.getExecutionDAG().getIdToFragment();
-        fragmentParams.forEach((k, v) -> {
-            System.err.println("Fragment " + k + " : " + v);
-        });
-        Assert.assertTrue(fragmentParams.containsKey(fragmentId));
+        fragmentParams.forEach((k, v) -> System.err.println("Fragment " + k + " : " + v));
+        Assertions.assertTrue(fragmentParams.containsKey(fragmentId));
         ExecutionFragment fragmentParam = fragmentParams.get(fragmentId);
         FragmentScanRangeAssignment scanRangeAssignment = fragmentParam.getScanRangeAssignment();
         List<FragmentInstance> instances = fragmentParam.getInstances();
-        Assert.assertFalse(fragmentParams.isEmpty());
-        Assert.assertEquals(1, scanRangeAssignment.size());
-        Assert.assertEquals(1, instances.size());
+        Assertions.assertFalse(fragmentParams.isEmpty());
+        Assertions.assertEquals(1, scanRangeAssignment.size());
+        Assertions.assertEquals(1, instances.size());
 
     }
 }

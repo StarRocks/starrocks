@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # Routine Load 导入常见问题
@@ -25,8 +25,8 @@ min(alive_be_number, partition_number, desired_concurrent_number, max_routine_lo
 - `partition_number`：消费分区数量。
 
 - `desired_concurrent_number`：Routine Load 导入作业时为单个导入作业设置较高的期望任务并行度，默认值为 3。
-  - 如果还未创建导入作业，则需要在执行 [CREATE ROUTINE LOAD](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md) 创建导入作业时，设置该参数。
-  - 如果已经创建导入作业，则需要执行 [ALTER ROUTINE LOAD](../../sql-reference/sql-statements/data-manipulation/ALTER_ROUTINE_LOAD.md)，修改该参数。
+  - 如果还未创建导入作业，则需要在执行 [CREATE ROUTINE LOAD](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md) 创建导入作业时，设置该参数。
+  - 如果已经创建导入作业，则需要执行 [ALTER ROUTINE LOAD](../../sql-reference/sql-statements/loading_unloading/routine_load/ALTER_ROUTINE_LOAD.md)，修改该参数。
 
 - `max_routine_load_task_concurrent_num`：Routine Load 导入作业的默认最大任务并行度的 ，默认值为 `5`。该参数为 FE 动态参数，更多说明和设置方式，请参见 [配置参数](../../administration/management/FE_configuration.md#导入导出)。
 
@@ -34,7 +34,7 @@ min(alive_be_number, partition_number, desired_concurrent_number, max_routine_lo
 
 假设消费分区数量为 `7`，存活 BE 数量为 `5`，`max_routine_load_task_concurrent_num` 为默认值 `5`。此时如果需要增加实际任务并发度至上限，则需要将 `desired_concurrent_number` 设置为 `5`（默认值为 `3`），则计算实际任务并行度 `min(5,7,5,5)` 为 `5`。
 
-更多参数说明，请参见 [CREATE ROUTINE LOAD](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md#示例)。
+更多参数说明，请参见 [CREATE ROUTINE LOAD](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md#示例)。
 
 **方式二**：**增大单个导入任务消费分区的数据量**。
 
@@ -71,10 +71,10 @@ I0325 20:27:50.410579 15259 data_consumer_group.cpp:131] consumer group done: 41
 
   **解决方式**：您可以根据 `ReasonOfStateChanged`, `ErrorLogUrls`报错进行排查。
 
-  - 如果是数据源的数据格式问题，则需要检查数据源数据格式，并进行修复。修复后您可以使用 [RESUME ROUTINE LOAD](../../sql-reference/sql-statements/data-manipulation/RESUME_ROUTINE_LOAD.md)，恢复 **PAUSED** 状态的导入作业。
+  - 如果是数据源的数据格式问题，则需要检查数据源数据格式，并进行修复。修复后您可以使用 [RESUME ROUTINE LOAD](../../sql-reference/sql-statements/loading_unloading/routine_load/RESUME_ROUTINE_LOAD.md)，恢复 **PAUSED** 状态的导入作业。
 
   - 如果是数据源的数据格式无法被 StarRocks 解析，则需要调整错误行数阈值`max_error_number`。
-  您可以先执行 [SHOW ROUTINE LOAD](../../sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD.md)，查看错误行数阈值 `max_error_number`，然后执行 [ALTER ROUTINE LOAD](../../sql-reference/sql-statements/data-manipulation/ALTER_ROUTINE_LOAD.md)，适当提高错误行数阈值 `max_error_number`。修改阈值后您可以使用 [RESUME ROUTINE LOAD](../../sql-reference/sql-statements/data-manipulation/RESUME_ROUTINE_LOAD.md)，恢复 **PAUSED** 状态的导入作业。
+  您可以先执行 [SHOW ROUTINE LOAD](../../sql-reference/sql-statements/loading_unloading/routine_load/SHOW_ROUTINE_LOAD.md)，查看错误行数阈值 `max_error_number`，然后执行 [ALTER ROUTINE LOAD](../../sql-reference/sql-statements/loading_unloading/routine_load/ALTER_ROUTINE_LOAD.md)，适当提高错误行数阈值 `max_error_number`。修改阈值后您可以使用 [RESUME ROUTINE LOAD](../../sql-reference/sql-statements/loading_unloading/routine_load/RESUME_ROUTINE_LOAD.md)，恢复 **PAUSED** 状态的导入作业。
 
 - **报错提示**：如果导入作业变成为 **CANCELLED** 状态。
 
@@ -87,3 +87,59 @@ I0325 20:27:50.410579 15259 data_consumer_group.cpp:131] consumer group done: 41
 Routine Load 能够保证 Exactly-once 语义。
 
 一个导入任务是一个单独的事务，如果该事务在执行过程中出现错误，则事务会中止，FE 不会更新该导入任务相关分区的消费进度。并且 FE 在下一次调度任务执行队列中的导入任务时，从上次保存的分区消费位点发起消费请求，如此可以保证 Exactly once 语义。
+
+## 如果 Routine Load 返回SSL身份验证错误该怎么办？
+
+  **错误信息：**`routines:tls_process_server_certificate:certificate verify failed: broker certificate could not be verified, verify that ssl.ca.location is correctly configured or root CA certificates are installed (install ca-certificates package) (after 273ms in state SSL_HANDSHAKE)`
+
+  **原因分析：**证书中的域名与 Kafka Broker 域名不一致。详见[更多细节](https://github.com/confluentinc/librdkafka/issues/4349)。
+
+  **解决方案：**在 Routine Load Job 中添加属性 `"property.ssl.endpoint.identification.algorithm" = "none"`。
+
+## 为什么 Routine Load 报告 “JSON data is an array.strip_outer_array must be set true”？
+
+您的输入数据是一个JSON数组 `([{},{}])`。将属性 `strip_outer_array` 设置为 `true` 以展开它。
+
+## 为什么创建 Routine Load 作业时收到 “There are more than 100 routine load jobs running”？
+
+增加FE配置 `max_routine_load_job_num` 的值。
+
+## 为什么即使配置了 SASL，Routine Load 作业创建仍然失败并显示 “failed to get partition meta”？
+
+实际原因可能是 SASL 配置不正确。
+
+## 如何处理Routine Load错误 “Create replicas failed …”？
+
+调整以下FE配置：
+
+```SQL
+admin set frontend config ("tablet_create_timeout_second"="5");
+admin set frontend config ("max_create_table_timeout_second"="600");
+```
+
+您也可以在配置文件中设置它们以持久化修改。
+
+## 为什么 Routine Load 在消费 Kafka 时报告 “Bad message format”？
+
+Kafka使用主机名进行通信。在所有托管StarRocks节点的服务器上的 `/etc/hosts` 中为Kafka节点添加主机名解析。
+
+## 什么原因导致 Routine Load 失败并显示 "failed to send task: failed to submit task. error code: TOO MANY TASKS"？
+
+这是因为总的 Routine Load 并发超过了集群能力（等于 `routine_load_thread_pool_size × 活跃 BE 数量`）。
+
+解决方案：
+
+- 减少导入QPS（推荐集群QPS < 10）。根据 `cluster routine_load_task_num / routine_load_task_consume_second` 计算集群QPS。
+
+- 通过调整 `max_routine_load_batch_size` 和 `routine_load_task_timeout_second` 增加每个任务的批次大小（> 1 GB）。
+
+- 确保 `routine_load_thread_pool_size` 小于BE CPU核心数的一半。
+
+一个作业的并发由以下值的最小值决定：
+
+- `kafka_partition_num`
+- `desired_concurrent_number`
+- `alive_be_num`
+- `max_routine_load_task_concurrent_num`
+
+您可以通过减少 `max_routine_load_task_concurrent_num` 来开始调整并发。

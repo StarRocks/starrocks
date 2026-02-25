@@ -14,17 +14,32 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.TableName;
+import com.google.common.collect.Maps;
 import com.starrocks.sql.parser.NodePosition;
+
+import java.util.Map;
 
 // Alter view statement
 public class AlterViewStmt extends DdlStmt {
-    private final TableName tableName;
-    private final AlterClause alterClause;
+    private TableRef tableRef;
+    private final boolean security;
+    private final AlterDialectType alterDialect;
+    private final Map<String, String> properties;
+    private final AlterViewClause alterClause;
 
-    public AlterViewStmt(TableName tableName, AlterClause alterClause, NodePosition pos) {
+    public enum AlterDialectType {
+        NONE,
+        ADD,
+        MODIFY
+    }
+
+    public AlterViewStmt(TableRef tableRef, boolean security, AlterDialectType alterDialect, Map<String, String> properties,
+                         AlterViewClause alterClause, NodePosition pos) {
         super(pos);
-        this.tableName = tableName;
+        this.tableRef = tableRef;
+        this.security = security;
+        this.alterDialect = alterDialect;
+        this.properties = properties;
         this.alterClause = alterClause;
     }
 
@@ -32,21 +47,65 @@ public class AlterViewStmt extends DdlStmt {
         AlterViewClause alterViewClause = new AlterViewClause(
                 stmt.getColWithComments(), stmt.getQueryStatement(), NodePosition.ZERO);
         alterViewClause.setInlineViewDef(stmt.getInlineViewDef());
+        alterViewClause.setOriginalViewDefineSql(stmt.getOriginalViewDefineSql());
         alterViewClause.setColumns(stmt.getColumns());
         alterViewClause.setComment(stmt.getComment());
-        return new AlterViewStmt(stmt.getTableName(), alterViewClause, NodePosition.ZERO);
+        return new AlterViewStmt(stmt.getTableRef(), stmt.isSecurity(), AlterDialectType.NONE, Maps.newHashMap(),
+                alterViewClause, NodePosition.ZERO);
     }
 
-    public TableName getTableName() {
-        return tableName;
+    public TableRef getTableRef() {
+        return tableRef;
     }
 
-    public AlterClause getAlterClause() {
+    public void setTableRef(TableRef tableRef) {
+        this.tableRef = tableRef;
+    }
+
+    public String getCatalog() {
+        return tableRef == null ? null : tableRef.getCatalogName();
+    }
+
+    public String getDbName() {
+        return tableRef == null ? null : tableRef.getDbName();
+    }
+
+    public String getTable() {
+        return tableRef == null ? null : tableRef.getTableName();
+    }
+
+    public boolean isSecurity() {
+        return security;
+    }
+
+    public boolean isAlterDialect() {
+        return alterDialect == AlterDialectType.ADD || alterDialect == AlterDialectType.MODIFY;
+    }
+
+    public AlterDialectType getAlterDialectType() {
+        return alterDialect;
+    }
+
+    public Map<String, String> getProperties() {
+        return properties;
+    }
+
+    public AlterViewClause getAlterClause() {
         return alterClause;
+    }
+
+    public String getOriginalViewDefineSql() {
+        return alterClause == null ? null : alterClause.getOriginalViewDefineSql();
+    }
+
+    public void setOriginalViewDefineSql(String originalViewDefineSql) {
+        if (alterClause != null) {
+            alterClause.setOriginalViewDefineSql(originalViewDefineSql);
+        }
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAlterViewStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitAlterViewStatement(this, context);
     }
 }

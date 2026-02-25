@@ -63,6 +63,7 @@ struct RowsetSegmentId {
 
 // from source rowid -> upt rowid
 using RowidPairs = std::pair<uint32_t, uint32_t>;
+inline auto RowidPairsCompFn = [](const RowidPairs& a, const RowidPairs& b) { return a.first < b.first; };
 
 struct ColumnPartialUpdateState {
     bool inited = false;
@@ -91,6 +92,12 @@ struct ColumnPartialUpdateState {
                 insert_rowids.push_back(upt_row_id);
             }
         }
+        // sort RowidPairs via source rowid
+        for (auto& each : rss_rowid_to_update_rowid) {
+            if (!std::is_sorted(each.second.begin(), each.second.end(), RowidPairsCompFn)) {
+                std::sort(each.second.begin(), each.second.end(), RowidPairsCompFn);
+            }
+        }
 #ifndef BE_TEST
         src_rss_rowids.clear();
         src_rss_rowids.shrink_to_fit();
@@ -98,11 +105,9 @@ struct ColumnPartialUpdateState {
     }
 };
 
-using ColumnUniquePtr = std::unique_ptr<Column>;
-
 // It contains multi segment's pk list, segment's id is between [start_idx, end_idx)
 struct BatchPKs {
-    ColumnUniquePtr upserts;
+    MutableColumnPtr upserts;
     uint32_t start_idx;
     uint32_t end_idx;
     std::vector<uint64_t> src_rss_rowids;
@@ -169,6 +174,8 @@ public:
     // For UT test now
     const std::vector<BatchPKsPtr>& upserts() const { return _upserts; }
 
+    static int64_t calc_upt_memory_usage_per_row(Rowset* rowset);
+
 private:
     Status _load_upserts(Rowset* rowset, MemTracker* update_mem_tracker, uint32_t start_idx, uint32_t* end_idx);
 
@@ -211,7 +218,7 @@ private:
                                                                      int segment_id);
 
     Status _fill_default_columns(const TabletSchemaCSPtr& tablet_schema, const std::vector<uint32_t>& column_ids,
-                                 const int64_t row_cnt, vector<std::shared_ptr<Column>>* columns);
+                                 const int64_t row_cnt, vector<ColumnPtr>* columns);
     Status _update_primary_index(const TabletSchemaCSPtr& tablet_schema, Tablet* tablet,
                                  const EditVersion& edit_version, uint32_t rowset_id,
                                  std::map<int, ChunkUniquePtr>& segid_to_chunk, int64_t insert_row_cnt,
@@ -246,7 +253,11 @@ private:
     // when generate delta column group finish, these fields will be filled
     bool _finalize_finished = false;
     std::map<uint32_t, DeltaColumnGroupPtr> _rssid_to_delta_column_group;
+    std::map<string, string> _column_to_expr_value;
 };
+
+void split_rowid_pairs(const std::vector<RowidPairs>& rowid_pairs, std::vector<uint32_t>* sorted_source_rowids,
+                       std::vector<uint32_t>* unsorted_upt_rowids, StreamChunkContainer* container);
 
 inline std::ostream& operator<<(std::ostream& os, const RowsetColumnUpdateState& o) {
     os << o.to_string();

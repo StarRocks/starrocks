@@ -15,12 +15,12 @@
 package com.starrocks.common.util;
 
 import com.starrocks.common.NoAliveBackendException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.server.RunMode;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class AutoInferUtilTest {
 
@@ -28,8 +28,8 @@ public class AutoInferUtilTest {
     public void testCalDefaultReplicationNum() throws Exception {
         try {
             AutoInferUtil.calDefaultReplicationNum();
-        } catch (UserException e) {
-            Assert.assertTrue(e instanceof NoAliveBackendException
+        } catch (StarRocksException e) {
+            Assertions.assertTrue(e instanceof NoAliveBackendException
                     && e.getMessage().contains("No alive backend"));
         }
 
@@ -40,6 +40,6 @@ public class AutoInferUtilTest {
             }
         };
 
-        Assert.assertEquals(1, AutoInferUtil.calDefaultReplicationNum());
+        Assertions.assertEquals(1, AutoInferUtil.calDefaultReplicationNum());
     }
 }

@@ -32,8 +32,8 @@ import io.delta.kernel.utils.CloseableIterator;
 import io.delta.kernel.utils.FileStatus;
 import org.apache.hadoop.conf.Configuration;
 import org.jetbrains.annotations.NotNull;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.util.List;
@@ -54,14 +54,14 @@ public class DeltaLakeJsonHandlerTest {
     private final String deltaLakePath = Objects.requireNonNull(ClassLoader.getSystemClassLoader()
             .getResource("connector/deltalake")).getPath();
 
-    private final LoadingCache<String, List<JsonNode>>  jsonCache = CacheBuilder.newBuilder()
+    private final LoadingCache<DeltaLakeFileStatus, List<JsonNode>> jsonCache = CacheBuilder.newBuilder()
             .expireAfterWrite(3600, TimeUnit.SECONDS)
             .maximumSize(100)
             .build(new CacheLoader<>() {
                 @NotNull
                 @Override
-                public List<JsonNode> load(@NotNull String filePath) throws IOException {
-                    return DeltaLakeJsonHandler.readJsonFile(filePath, hdfsConfiguration);
+                public List<JsonNode> load(@NotNull DeltaLakeFileStatus fileStatus) throws IOException {
+                    return DeltaLakeJsonHandler.readJsonFile(fileStatus.getPath(), hdfsConfiguration);
                 }
             });
 
@@ -75,14 +75,14 @@ public class DeltaLakeJsonHandlerTest {
         try (CloseableIterator<ColumnarBatch> jsonIter = deltaLakeJsonHandler.readJsonFiles(
                 Utils.singletonCloseableIterator(fileStatus), readSchema, Optional.empty())) {
             Optional<Row> checkpointRow = InternalUtils.getSingularRow(jsonIter);
-            Assert.assertTrue(checkpointRow.isPresent());
+            Assertions.assertTrue(checkpointRow.isPresent());
             Row row = checkpointRow.get();
-            Assert.assertEquals(row.getLong(0), 30);
+            Assertions.assertEquals(row.getLong(0), 30);
         } catch (IOException e) {
-            Assert.fail();
+            Assertions.fail();
         }
 
-        Assert.assertTrue(jsonCache.asMap().isEmpty());
+        Assertions.assertTrue(jsonCache.asMap().isEmpty());
     }
 
     @Test
@@ -91,7 +91,8 @@ public class DeltaLakeJsonHandlerTest {
         DeltaLakeJsonHandler deltaLakeJsonHandler = new DeltaLakeJsonHandler(hdfsConfiguration, jsonCache);
 
         StructType readSchema = LogReplay.getAddRemoveReadSchema(true);
-        FileStatus fileStatus = FileStatus.of(path, 0, 0);
+        FileStatus fileStatus = FileStatus.of(path, 123, 123);
+        DeltaLakeFileStatus deltaLakeFileStatus = DeltaLakeFileStatus.of(fileStatus);
 
         List<Row> addRows = Lists.newArrayList();
         try (CloseableIterator<ColumnarBatch> jsonIter = deltaLakeJsonHandler.readJsonFiles(
@@ -114,22 +115,22 @@ public class DeltaLakeJsonHandlerTest {
                 }
             }
         } catch (IOException e) {
-            Assert.fail();
+            Assertions.fail();
         }
 
-        Assert.assertEquals(2, addRows.size());
+        Assertions.assertEquals(2, addRows.size());
         Row scanRow = addRows.get(1);
         Row addFile = getAddFileEntry(scanRow);
-        Assert.assertEquals("col_date=2024-01-06/part-00000-3c9a556a-d185-4963-869d-b059d4c9b482.c000.snappy.parquet",
+        Assertions.assertEquals("col_date=2024-01-06/part-00000-3c9a556a-d185-4963-869d-b059d4c9b482.c000.snappy.parquet",
                 addFile.getString(ADD_FILE_PATH_ORDINAL));
-        Assert.assertEquals(724, addFile.getLong(ADD_FILE_SIZE_ORDINAL));
-        Assert.assertEquals(1721830614469L, addFile.getLong(ADD_FILE_MOD_TIME_ORDINAL));
+        Assertions.assertEquals(724, addFile.getLong(ADD_FILE_SIZE_ORDINAL));
+        Assertions.assertEquals(1721830614469L, addFile.getLong(ADD_FILE_MOD_TIME_ORDINAL));
 
         Map<String, String> partitionValues = InternalScanFileUtils.getPartitionValues(scanRow);
-        Assert.assertTrue(partitionValues.containsKey("col_date"));
-        Assert.assertEquals("2024-01-06", partitionValues.get("col_date"));
+        Assertions.assertTrue(partitionValues.containsKey("col_date"));
+        Assertions.assertEquals("2024-01-06", partitionValues.get("col_date"));
 
-        Assert.assertFalse(jsonCache.asMap().isEmpty());
-        Assert.assertTrue(jsonCache.asMap().containsKey(path));
+        Assertions.assertFalse(jsonCache.asMap().isEmpty());
+        Assertions.assertTrue(jsonCache.asMap().containsKey(deltaLakeFileStatus));
     }
 }

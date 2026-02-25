@@ -1,0 +1,28 @@
+diff --git a/src/signalhandler.cc b/src/signalhandler.cc
+index c5bae59..b46b41c 100644
+--- a/src/signalhandler.cc
++++ b/src/signalhandler.cc
+@@ -53,6 +53,8 @@
+ #  include <sys/ucontext.h>
+ #endif
+ #ifdef HAVE_UNISTD_H
++#include <sys/syscall.h>
++#include <sys/types.h>
+ #  include <unistd.h>
+ #endif
+ 
+@@ -218,6 +220,14 @@ void DumpSignalInfo(int signal_number, siginfo_t* siginfo) {
+   formatter.AppendString(oss.str().c_str());
+ 
+   formatter.AppendString(") ");
++
++#ifdef HAVE_UNISTD_H
++  pid_t tid = syscall(SYS_gettid);
++  formatter.AppendString("LWP(");
++  formatter.AppendUint64(tid, 10);
++  formatter.AppendString(") ");
++#endif
++
+   // Only linux has the PID of the signal sender in si_pid.
+ #  ifdef GLOG_OS_LINUX
+   formatter.AppendString("from PID ");

@@ -37,13 +37,13 @@
 #include <algorithm>
 #include <filesystem>
 
+#include "base/path/path_util.h"
 #include "common/config.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "fs/fs.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
-#include "util/path_util.h"
 
 namespace starrocks {
 
@@ -142,7 +142,8 @@ Status parse_root_path(const string& root_path, StorePath* path) {
     return Status::OK();
 }
 
-Status parse_conf_store_paths(const string& config_path, std::vector<StorePath>* paths) {
+Status parse_conf_store_paths(const string& config_path, std::vector<StorePath>* paths,
+                              std::string_view configvar_name) {
     std::vector<string> path_vec = strings::Split(config_path, ";", strings::SkipWhitespace());
     for (auto& item : path_vec) {
         StorePath path;
@@ -154,8 +155,8 @@ Status parse_conf_store_paths(const string& config_path, std::vector<StorePath>*
         }
     }
     if (paths->empty() || (path_vec.size() != paths->size() && !config::ignore_broken_disk)) {
-        LOG(WARNING) << "fail to parse storage_root_path config. value=[" << config_path << "]";
-        return Status::InvalidArgument("Fail to parse storage_root_path");
+        LOG(WARNING) << "fail to parse " << configvar_name << " config. value=[" << config_path << "]";
+        return Status::InvalidArgument(fmt::format("Fail to parse {}", configvar_name));
     }
     return Status::OK();
 }

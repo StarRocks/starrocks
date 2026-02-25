@@ -19,7 +19,7 @@ namespace starrocks {
 
 class Column;
 
-// This class is a bridge to connect ColumnPredicatew which is used in scan/storage layer, and ExprContext which is
+// This class is a bridge to connect ColumnPredicate which is used in scan/storage layer, and ExprContext which is
 // used in computation layer. By bridging that, we can push more predicates from computation layer onto storage layer,
 // hopefully to scan less data and boost performance.
 
@@ -30,7 +30,7 @@ class Column;
 // And this class has a big limitation that it does not support range evaluatation. In another word, `from` supposed to be 0 always.
 // The fundamental reason is `ExprContext` requires `Column*` as a total piece, unless we can create a class to represent `ColumnSlice`.
 // And that task is almost impossible.
-class ColumnExprPredicate : public ColumnPredicate {
+class ColumnExprPredicate final : public ColumnPredicate {
 public:
     static StatusOr<ColumnExprPredicate*> make_column_expr_predicate(TypeInfoPtr type_info, ColumnId column_id,
                                                                      RuntimeState* state, ExprContext* expr_ctx,
@@ -86,7 +86,7 @@ private:
     mutable std::vector<uint8_t> _tmp_select;
 };
 
-class ColumnTruePredicate : public ColumnPredicate {
+class ColumnTruePredicate final : public ColumnPredicate {
 public:
     ColumnTruePredicate(TypeInfoPtr type_info, ColumnId column_id) : ColumnPredicate(std::move(type_info), column_id) {}
     ~ColumnTruePredicate() override = default;

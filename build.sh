@@ -33,6 +33,15 @@
 # compiled and installed correctly.
 ##############################################################
 startTime=$(date +%s)
+
+format_time() {
+    local epoch="$1"
+    if [[ "$OSTYPE" == darwin* ]]; then
+        date -r "${epoch}" '+%Y-%m-%d %H:%M:%S'
+    else
+        date -d "@${epoch}" '+%Y-%m-%d %H:%M:%S'
+    fi
+}
 ROOT=`dirname "$0"`
 ROOT=`cd "$ROOT"; pwd`
 MACHINE_TYPE=$(uname -m)
@@ -41,6 +50,10 @@ export STARROCKS_HOME=${ROOT}
 
 if [ -z $BUILD_TYPE ]; then
     export BUILD_TYPE=Release
+fi
+
+if [ -z $CMAKE_BUILD_PREFIX ]; then
+    CMAKE_BUILD_PREFIX=${STARROCKS_HOME}/be
 fi
 
 cd $STARROCKS_HOME
@@ -80,6 +93,7 @@ usage() {
 Usage: $0 <options>
   Optional options:
      --be               build Backend
+     --format-lib       build StarRocks format library, only with shared-data mode cluster
      --fe               build Frontend and Spark Dpp application
      --spark-dpp        build Spark DPP application
      --hive-udf         build Hive UDF
@@ -90,6 +104,7 @@ Usage: $0 <options>
      --with-gcov        build Backend with gcov, has an impact on performance
      --without-gcov     build Backend without gcov(default)
      --with-bench       build Backend with bench(default without bench)
+     --with-dynamic     build Backend with dynamic linking of individual StarRocks modules (developer option)
      --with-clang-tidy  build Backend with clang-tidy(default without clang-tidy)
      --without-java-ext build Backend without java-extensions(default with java-extensions)
      --without-starcache
@@ -98,32 +113,64 @@ Usage: $0 <options>
      --output-compile-time 
                         save a list of the compile time for every C++ file in ${ROOT}/compile_times.txt.
                         Turning this option on automatically disables ccache.
-     --with-tenann
-                        build with vector index tenann library
-
+     --without-tenann
+                        build without vector index tenann library
+     --with-compress-debug-symbol {ON|OFF}
+                        build with compressing debug symbol. (default: $WITH_COMPRESS)
+     --with-source-file-relative-path {ON|OFF}
+                        build source file with relative path. (default: $WITH_RELATIVE_SRC_PATH)
+     --without-avx2     build Backend without avx2(instruction)    
+     --with-maven-batch-mode {ON|OFF}
+                        build maven project in batch mode (default: $WITH_MAVEN_BATCH_MODE)
+     --output           specify the output directory (default: $STARROCKS_HOME/output)
+     --disable-java-check-style
+                        disable Java checkstyle checks during build (default: $DISABLE_JAVA_CHECK_STYLE)
+     -h,--help          Show this help message
   Eg.
     $0                                           build all
     $0 --be                                      build Backend without clean
+    $0 --format-lib                              build StarRocks format library without clean
     $0 --fe --clean                              clean and build Frontend and Spark Dpp application
     $0 --fe --be --clean                         clean and build Frontend, Spark Dpp application and Backend
     $0 --spark-dpp                               build Spark DPP application alone
     $0 --hive-udf                                build Hive UDF
+    $0 --be --output PATH                        build Backend that outputs results to a specified path (relative paths are supported).
     BUILD_TYPE=build_type ./build.sh --be        build Backend is different mode (build_type could be Release, Debug, or Asan. Default value is Release. To build Backend in Debug mode, you can execute: BUILD_TYPE=Debug ./build.sh --be)
+    DISABLE_JAVA_CHECK_STYLE=ON ./build.sh       build with Java checkstyle disabled
   "
   exit 1
 }
 
-OPTS=$(getopt \
+GETOPT_BIN="getopt"
+if [[ "$OSTYPE" == darwin* ]]; then
+    # Try to detect gnu-getopt path dynamically
+    if command -v brew &> /dev/null; then
+        GNU_GETOPT_PREFIX=$(brew --prefix gnu-getopt 2>/dev/null)
+        if [[ -n "${GNU_GETOPT_PREFIX}" ]] && [[ -x "${GNU_GETOPT_PREFIX}/bin/getopt" ]]; then
+            GETOPT_BIN="${GNU_GETOPT_PREFIX}/bin/getopt"
+        else
+            echo "gnu-getopt is required on macOS. Please install it with 'brew install gnu-getopt'."
+            exit 1
+        fi
+    else
+        echo "Homebrew is required on macOS to install gnu-getopt. Please install Homebrew first."
+        exit 1
+    fi
+fi
+
+OPTS=$(${GETOPT_BIN} \
   -n $0 \
-  -o '' \
-  -o 'h' \
+  -o 'hj:' \
   -l 'be' \
+  -l 'format-lib' \
   -l 'fe' \
   -l 'spark-dpp' \
   -l 'hive-udf' \
   -l 'clean' \
   -l 'with-gcov' \
   -l 'with-bench' \
+  -l 'with-dynamic' \
+  -l 'module' \
   -l 'with-clang-tidy' \
   -l 'without-gcov' \
   -l 'without-java-ext' \
@@ -132,9 +179,14 @@ OPTS=$(getopt \
   -l 'use-staros' \
   -l 'enable-shared-data' \
   -l 'output-compile-time' \
-  -l 'with-tenann' \
-  -o 'j:' \
+  -l 'without-tenann' \
+  -l 'with-compress-debug-symbol:' \
+  -l 'with-source-file-relative-path:' \
+  -l 'without-avx2' \
+  -l 'with-maven-batch-mode:' \
+  -l 'output:' \
   -l 'help' \
+  -l 'disable-java-check-style' \
   -- "$@")
 
 if [ $? != 0 ] ; then
@@ -144,11 +196,11 @@ fi
 eval set -- "$OPTS"
 
 BUILD_BE=
+BUILD_FORMAT_LIB=
 BUILD_FE=
 BUILD_SPARK_DPP=
 BUILD_HIVE_UDF=
 CLEAN=
-RUN_UT=
 WITH_GCOV=OFF
 WITH_BENCH=OFF
 WITH_CLANG_TIDY=OFF
@@ -157,11 +209,25 @@ WITH_STARCACHE=ON
 USE_STAROS=OFF
 BUILD_JAVA_EXT=ON
 OUTPUT_COMPILE_TIME=OFF
-WITH_TENANN=OFF
+WITH_TENANN=ON
+WITH_RELATIVE_SRC_PATH=ON
+ENABLE_MULTI_DYNAMIC_LIBS=OFF
+BUILD_BE_MODULE=all
+
+# Default to OFF, turn it ON if current shell is non-interactive
+WITH_MAVEN_BATCH_MODE=OFF
+if [ -x "$(command -v tty)" ] ; then
+    # has `tty` and `tty` cmd indicates a non-interactive shell.
+    if ! tty -s >/dev/null 2>&1; then
+        WITH_MAVEN_BATCH_MODE=ON
+    fi
+fi
+
 MSG=""
 MSG_FE="Frontend"
 MSG_DPP="Spark Dpp application"
 MSG_BE="Backend"
+MSG_FORMAT_LIB="Format Lib"
 if [[ -z ${USE_AVX2} ]]; then
     USE_AVX2=ON
 fi
@@ -172,15 +238,19 @@ fi
 if [[ -z ${USE_SSE4_2} ]]; then
     USE_SSE4_2=ON
 fi
-if [[ -z ${JEMALLOC_DEBUG} ]]; then
-    JEMALLOC_DEBUG=OFF
+if [[ -z ${USE_BMI_2} ]]; then
+    USE_BMI_2=ON
 fi
-if [[ -z ${CCACHE} ]] && [[ -x "$(command -v ccache)" ]]; then
-    CCACHE=ccache
+if [[ -z ${ENABLE_JIT} ]]; then
+    ENABLE_JIT=ON
+fi
+if [[ -z ${DISABLE_JAVA_CHECK_STYLE} ]]; then
+    DISABLE_JAVA_CHECK_STYLE=OFF
 fi
 
-if [[ -z ${WITH_TENANN} ]]; then
-  WITH_TENANN=ON
+if [[ -z ${CCACHE} ]] && [[ -x "$(command -v ccache)" ]]; then
+    CCACHE=ccache
+    export CCACHE_SLOPPINESS="pch_defines,include_file_mtime,time_macros"
 fi
 
 if [ -e /proc/cpuinfo ] ; then
@@ -194,10 +264,13 @@ if [ -e /proc/cpuinfo ] ; then
     if [[ -z $(grep -o 'sse4[^ ]*' /proc/cpuinfo) ]]; then
         USE_SSE4_2=OFF
     fi
+    if [[ -z $(grep -o 'bmi2' /proc/cpuinfo) ]]; then
+        USE_BMI_2=OFF
+    fi
 fi
 
 if [[ -z ${ENABLE_QUERY_DEBUG_TRACE} ]]; then
-	ENABLE_QUERY_DEBUG_TRACE=OFF
+    ENABLE_QUERY_DEBUG_TRACE=OFF
 fi
 
 if [[ -z ${ENABLE_FAULT_INJECTION} ]]; then
@@ -211,48 +284,61 @@ if [ $# == 1 ] ; then
     BUILD_FE=1
     BUILD_SPARK_DPP=1
     BUILD_HIVE_UDF=1
+    BUILD_FORMAT_LIB=0
     CLEAN=0
-    RUN_UT=0
 elif [[ $OPTS =~ "-j " ]] && [ $# == 3 ]; then
     # default. `sh build.sh -j 32`
     BUILD_BE=1
     BUILD_FE=1
     BUILD_SPARK_DPP=1
     BUILD_HIVE_UDF=1
+    BUILD_FORMAT_LIB=0
     CLEAN=0
-    RUN_UT=0
     PARALLEL=$2
 else
     BUILD_BE=0
+    BUILD_FORMAT_LIB=0
     BUILD_FE=0
     BUILD_SPARK_DPP=0
     BUILD_HIVE_UDF=0
     CLEAN=0
-    RUN_UT=0
     while true; do
         case "$1" in
             --be) BUILD_BE=1 ; shift ;;
+            --format-lib) BUILD_FORMAT_LIB=1 ; shift ;;
             --fe) BUILD_FE=1 ; shift ;;
             --spark-dpp) BUILD_SPARK_DPP=1 ; shift ;;
             --hive-udf) BUILD_HIVE_UDF=1 ; shift ;;
             --clean) CLEAN=1 ; shift ;;
-            --ut) RUN_UT=1   ; shift ;;
             --with-gcov) WITH_GCOV=ON; shift ;;
             --without-gcov) WITH_GCOV=OFF; shift ;;
             --enable-shared-data|--use-staros) USE_STAROS=ON; shift ;;
             --with-bench) WITH_BENCH=ON; shift ;;
+            --with-dynamic) ENABLE_MULTI_DYNAMIC_LIBS=ON; shift ;;
+            --module) BUILD_BE_MODULE=$2; shift 2 ;;
             --with-clang-tidy) WITH_CLANG_TIDY=ON; shift ;;
             --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
             --without-starcache) WITH_STARCACHE=OFF; shift ;;
             --output-compile-time) OUTPUT_COMPILE_TIME=ON; shift ;;
-            --with-tenann) WITH_TENANN=ON; shift ;;
+            --without-tenann) WITH_TENANN=OFF; shift ;;
+            --without-avx2) USE_AVX2=OFF; shift ;;
+            --with-compress-debug-symbol) WITH_COMPRESS=$2 ; shift 2 ;;
+            --with-source-file-relative-path) WITH_RELATIVE_SRC_PATH=$2 ; shift 2 ;;
+            --with-maven-batch-mode) WITH_MAVEN_BATCH_MODE=$2 ; shift 2 ;;
+            --output) STARROCKS_OUTPUT=$2 ; shift 2 ;;
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
             -j) PARALLEL=$2; shift 2 ;;
+            --disable-java-check-style) DISABLE_JAVA_CHECK_STYLE=ON; shift ;;
             --) shift ;  break ;;
             *) echo "Internal error" ; exit 1 ;;
         esac
     done
+fi
+
+if [[ "${BUILD_TYPE}" == "ASAN" && "${WITH_GCOV}" == "ON" ]]; then
+    echo "Error: ASAN and gcov cannot be enabled at the same time. Please disable one of them."
+    exit 1
 fi
 
 if [[ ${HELP} -eq 1 ]]; then
@@ -260,36 +346,49 @@ if [[ ${HELP} -eq 1 ]]; then
     exit
 fi
 
-if [ ${CLEAN} -eq 1 ] && [ ${BUILD_BE} -eq 0 ] && [ ${BUILD_FE} -eq 0 ] && [ ${BUILD_SPARK_DPP} -eq 0 ] && [ ${BUILD_HIVE_UDF} -eq 0 ]; then
-    echo "--clean can not be specified without --fe or --be or --spark-dpp or --hive-udf"
+if [ ${CLEAN} -eq 1 ] && [ ${BUILD_BE} -eq 0 ] && [ ${BUILD_FORMAT_LIB} -eq 0 ] && [ ${BUILD_FE} -eq 0 ] && [ ${BUILD_SPARK_DPP} -eq 0 ] && [ ${BUILD_HIVE_UDF} -eq 0 ]; then
+    echo "--clean can not be specified without --fe or --be or --format-lib or --spark-dpp or --hive-udf"
     exit 1
+fi
+if [ ${BUILD_BE} -eq 1 ] && [ ${BUILD_FORMAT_LIB} -eq 1 ]; then
+    echo "--format-lib can not be specified with --be"
+    exit 1
+fi
+if [ ${BUILD_FORMAT_LIB} -eq 1 ]; then
+    echo "do not build java extensions when build format-lib."
+    BUILD_JAVA_EXT=OFF
 fi
 
 echo "Get params:
-    BUILD_BE            -- $BUILD_BE
-    BE_CMAKE_TYPE       -- $BUILD_TYPE
-    BUILD_FE            -- $BUILD_FE
-    BUILD_SPARK_DPP     -- $BUILD_SPARK_DPP
-    BUILD_HIVE_UDF      -- $BUILD_HIVE_UDF
-    CCACHE              -- ${CCACHE}
-    CLEAN               -- $CLEAN
-    RUN_UT              -- $RUN_UT
-    WITH_GCOV           -- $WITH_GCOV
-    WITH_BENCH          -- $WITH_BENCH
-    WITH_CLANG_TIDY     -- $WITH_CLANG_TIDY
-    WITH_COMPRESS       -- $WITH_COMPRESS
-    WITH_STARCACHE      -- $WITH_STARCACHE
-    ENABLE_SHARED_DATA  -- $USE_STAROS
-    USE_AVX2            -- $USE_AVX2
-    USE_AVX512          -- $USE_AVX512
-    USE_SSE4_2          -- $USE_SSE4_2
-    JEMALLOC_DEBUG      -- $JEMALLOC_DEBUG
-    PARALLEL            -- $PARALLEL
-    ENABLE_QUERY_DEBUG_TRACE -- $ENABLE_QUERY_DEBUG_TRACE
-    ENABLE_FAULT_INJECTION -- $ENABLE_FAULT_INJECTION
-    BUILD_JAVA_EXT      -- $BUILD_JAVA_EXT
-    OUTPUT_COMPILE_TIME   -- $OUTPUT_COMPILE_TIME
-    WITH_TENANN   -- $WITH_TENANN
+    BUILD_BE                    -- $BUILD_BE
+    BUILD_FORMAT_LIB            -- $BUILD_FORMAT_LIB
+    BE_CMAKE_TYPE               -- $BUILD_TYPE
+    BUILD_FE                    -- $BUILD_FE
+    BUILD_SPARK_DPP             -- $BUILD_SPARK_DPP
+    BUILD_HIVE_UDF              -- $BUILD_HIVE_UDF
+    CCACHE                      -- ${CCACHE}
+    CLEAN                       -- $CLEAN
+    WITH_GCOV                   -- $WITH_GCOV
+    WITH_BENCH                  -- $WITH_BENCH
+    WITH_CLANG_TIDY             -- $WITH_CLANG_TIDY
+    WITH_COMPRESS_DEBUG_SYMBOL  -- $WITH_COMPRESS
+    WITH_STARCACHE              -- $WITH_STARCACHE
+    ENABLE_SHARED_DATA          -- $USE_STAROS
+    USE_AVX2                    -- $USE_AVX2
+    USE_AVX512                  -- $USE_AVX512
+    USE_SSE4_2                  -- $USE_SSE4_2
+    USE_BMI_2                   -- $USE_BMI_2
+    PARALLEL                    -- $PARALLEL
+    ENABLE_QUERY_DEBUG_TRACE    -- $ENABLE_QUERY_DEBUG_TRACE
+    ENABLE_FAULT_INJECTION      -- $ENABLE_FAULT_INJECTION
+    BUILD_JAVA_EXT              -- $BUILD_JAVA_EXT
+    OUTPUT_COMPILE_TIME         -- $OUTPUT_COMPILE_TIME
+    WITH_TENANN                 -- $WITH_TENANN
+    WITH_RELATIVE_SRC_PATH      -- $WITH_RELATIVE_SRC_PATH
+    WITH_MAVEN_BATCH_MODE       -- $WITH_MAVEN_BATCH_MODE
+    DISABLE_JAVA_CHECK_STYLE    -- $DISABLE_JAVA_CHECK_STYLE
+    ENABLE_MULTI_DYNAMIC_LIBS   -- $ENABLE_MULTI_DYNAMIC_LIBS
+    BUILD_BE_MODULE             -- $BUILD_BE_MODULE
 "
 
 check_tool()
@@ -314,35 +413,55 @@ do
 done
 
 # Clean and build generated code
-echo "Build generated code"
-cd ${STARROCKS_HOME}/gensrc
-if [ ${CLEAN} -eq 1 ]; then
-   make clean
-   rm -rf ${STARROCKS_HOME}/fe/fe-core/target
+if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
+    echo "Build generated code"
+    cd ${STARROCKS_HOME}/gensrc
+    if [ ${CLEAN} -eq 1 ]; then
+       make clean
+    fi
+    # DO NOT using parallel make(-j) for gensrc
+    make
 fi
-# DO NOT using parallel make(-j) for gensrc
-make
 cd ${STARROCKS_HOME}
 
 if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
     export LIBRARY_PATH=${JAVA_HOME}/jre/lib/aarch64/server/
-    WITH_TENANN=OFF
 else
     export LIBRARY_PATH=${JAVA_HOME}/jre/lib/amd64/server/
 fi
 
+addon_mvn_opts=""
+if [ "x$WITH_MAVEN_BATCH_MODE" = "xON" ] ; then
+    # this option is only available with mvn >= 3.6
+    addon_mvn_opts="--batch-mode"
+fi
+
+if [ "x$DISABLE_JAVA_CHECK_STYLE" = "xON" ] ; then
+    # Add checkstyle.skip parameter to disable Java checkstyle
+    addon_mvn_opts="${addon_mvn_opts} -Dcheckstyle.skip=true"
+fi
+
 # Clean and build Backend
-if [ ${BUILD_BE} -eq 1 ] ; then
+if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
     if ! ${CMAKE_CMD} --version; then
         echo "Error: cmake is not found"
         exit 1
     fi
 
+    # When build starrocks format lib, USE_STAROS must be ON
+    if [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
+        USE_STAROS=ON
+        WITH_TENANN=OFF
+    fi
+
     CMAKE_BUILD_TYPE=$BUILD_TYPE
     echo "Build Backend: ${CMAKE_BUILD_TYPE}"
-    CMAKE_BUILD_DIR=${STARROCKS_HOME}/be/build_${CMAKE_BUILD_TYPE}
+    CMAKE_BUILD_DIR=${CMAKE_BUILD_PREFIX}/build_${CMAKE_BUILD_TYPE}
     if [ "${WITH_GCOV}" = "ON" ]; then
-        CMAKE_BUILD_DIR=${STARROCKS_HOME}/be/build_${CMAKE_BUILD_TYPE}_gcov
+        CMAKE_BUILD_DIR=${CMAKE_BUILD_PREFIX}/build_${CMAKE_BUILD_TYPE}_gcov
+    fi
+    if [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
+        CMAKE_BUILD_DIR=${CMAKE_BUILD_PREFIX}/build_${CMAKE_BUILD_TYPE}_format-lib
     fi
 
     if [ ${CLEAN} -eq 1 ]; then
@@ -381,24 +500,44 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                   -DCMAKE_CXX_COMPILER_LAUNCHER=${CXX_COMPILER_LAUNCHER} \
                   -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}                \
                   -DMAKE_TEST=OFF -DWITH_GCOV=${WITH_GCOV}              \
-                  -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 \
-                  -DJEMALLOC_DEBUG=$JEMALLOC_DEBUG                      \
+                  -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512         \
+                  -DUSE_SSE4_2=$USE_SSE4_2 -DUSE_BMI_2=$USE_BMI_2       \
                   -DENABLE_QUERY_DEBUG_TRACE=$ENABLE_QUERY_DEBUG_TRACE  \
                   -DWITH_BENCH=${WITH_BENCH}                            \
+                  -DENABLE_MULTI_DYNAMIC_LIBS=${ENABLE_MULTI_DYNAMIC_LIBS}\
                   -DWITH_CLANG_TIDY=${WITH_CLANG_TIDY}                  \
                   -DWITH_COMPRESS=${WITH_COMPRESS}                      \
                   -DWITH_STARCACHE=${WITH_STARCACHE}                    \
                   -DUSE_STAROS=${USE_STAROS}                            \
                   -DENABLE_FAULT_INJECTION=${ENABLE_FAULT_INJECTION}    \
+                  -DBUILD_BE=${BUILD_BE}                                \
                   -DWITH_TENANN=${WITH_TENANN}                          \
-                  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  ..
+                  -DSTARROCKS_JIT_ENABLE=${ENABLE_JIT}                  \
+                  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON                    \
+                  -DBUILD_FORMAT_LIB=${BUILD_FORMAT_LIB}                \
+                  -DWITH_RELATIVE_SRC_PATH=${WITH_RELATIVE_SRC_PATH}    \
+                  ${STARROCKS_HOME}/be
 
-    time ${BUILD_SYSTEM} -j${PARALLEL}
+    if [ "${BUILD_BE_MODULE}" != "all" ] ; then
+        echo "build Backend module: ${BUILD_BE_MODULE}"
+        time ${BUILD_SYSTEM} -j${PARALLEL} $BUILD_BE_MODULE
+    else
+        echo "Build all Backend modules"
+        time ${BUILD_SYSTEM} -j${PARALLEL}
+    fi
+
     if [ "${WITH_CLANG_TIDY}" == "ON" ];then
         exit 0
     fi
 
-    ${BUILD_SYSTEM} install
+    # install target
+    if [ "${BUILD_BE_MODULE}" != "all" ] ; then
+        echo "install Backend module: ${BUILD_BE_MODULE}"
+        ${CMAKE_CMD} -DCOMPONENT=$BUILD_BE_MODULE -P cmake_install.cmake
+    else 
+        ${BUILD_SYSTEM} install
+    fi
+
 
     # Build Java Extensions
     if [ ${BUILD_JAVA_EXT} = "ON" ]; then
@@ -407,7 +546,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
         if [ ${CLEAN} -eq 1 ]; then
             ${MVN_CMD} clean
         fi
-        ${MVN_CMD} package -DskipTests
+        ${MVN_CMD} $addon_mvn_opts package -DskipTests -T ${PARALLEL}
         cd ${STARROCKS_HOME}
     else
         echo "Skip Building Java Extensions"
@@ -420,13 +559,13 @@ cd ${STARROCKS_HOME}
 FE_MODULES=
 if [ ${BUILD_FE} -eq 1 ] || [ ${BUILD_SPARK_DPP} -eq 1 ] || [ ${BUILD_HIVE_UDF} -eq 1 ]; then
     if [ ${BUILD_SPARK_DPP} -eq 1 ]; then
-        FE_MODULES="fe-common,spark-dpp"
+        FE_MODULES="fe-testing,plugin/spark-dpp"
     fi
     if [ ${BUILD_HIVE_UDF} -eq 1 ]; then
-        FE_MODULES="fe-common,hive-udf"
+        FE_MODULES="fe-testing,plugin/hive-udf"
     fi
     if [ ${BUILD_FE} -eq 1 ]; then
-        FE_MODULES="hive-udf,fe-common,spark-dpp,fe-core"
+        FE_MODULES="plugin/hive-udf,fe-testing,plugin/spark-dpp,fe-server"
     fi
 fi
 
@@ -437,15 +576,17 @@ if [ ${FE_MODULES}x != ""x ]; then
     if [ ${CLEAN} -eq 1 ]; then
         ${MVN_CMD} clean
     fi
-    ${MVN_CMD} package -am -pl ${FE_MODULES} -DskipTests
+    # clean phase is explicited by `--clean` option, don't bother doing clean again.
+    ${MVN_CMD} $addon_mvn_opts package -am -pl ${FE_MODULES} -DskipTests -Dmaven.clean.skip=true -T ${PARALLEL}
     cd ${STARROCKS_HOME}/java-extensions
-    ${MVN_CMD} package -am -pl hadoop-ext -DskipTests
+    ${MVN_CMD} $addon_mvn_opts package -am -pl hadoop-ext -DskipTests -T ${PARALLEL}
     cd ${STARROCKS_HOME}
 fi
 
 
 # Clean and prepare output dir
-STARROCKS_OUTPUT=${STARROCKS_HOME}/output/
+STARROCKS_OUTPUT=${STARROCKS_OUTPUT:="${STARROCKS_HOME}/output/"}
+echo "OUTPUT DIR=${STARROCKS_OUTPUT}"
 mkdir -p ${STARROCKS_OUTPUT}
 
 # Copy Frontend and Backend
@@ -462,23 +603,44 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/conf/udf_security.policy ${STARROCKS_OUTPUT}/fe/conf/
         cp -r -p ${STARROCKS_HOME}/conf/hadoop_env.sh ${STARROCKS_OUTPUT}/fe/conf/
         cp -r -p ${STARROCKS_HOME}/conf/core-site.xml ${STARROCKS_OUTPUT}/fe/conf/
+        cp -r -p ${STARROCKS_HOME}/conf/cluster_snapshot.yaml ${STARROCKS_OUTPUT}/fe/conf/
 
         rm -rf ${STARROCKS_OUTPUT}/fe/lib/*
-        cp -r -p ${STARROCKS_HOME}/fe/fe-core/target/lib/* ${STARROCKS_OUTPUT}/fe/lib/
-        cp -r -p ${STARROCKS_HOME}/fe/fe-core/target/starrocks-fe.jar ${STARROCKS_OUTPUT}/fe/lib/
+        cp -r -p ${STARROCKS_HOME}/fe/fe-server/target/lib/* ${STARROCKS_OUTPUT}/fe/lib/
+        cp -r -p ${STARROCKS_HOME}/fe/fe-server/target/starrocks-fe.jar ${STARROCKS_OUTPUT}/fe/lib/
         cp -r -p ${STARROCKS_HOME}/java-extensions/hadoop-ext/target/starrocks-hadoop-ext.jar ${STARROCKS_OUTPUT}/fe/lib/
         cp -r -p ${STARROCKS_HOME}/webroot/* ${STARROCKS_OUTPUT}/fe/webroot/
-        cp -r -p ${STARROCKS_HOME}/fe/spark-dpp/target/spark-dpp-*-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/fe/spark-dpp/
-        cp -r -p ${STARROCKS_HOME}/fe/hive-udf/target/hive-udf-1.0.0.jar ${STARROCKS_OUTPUT}/fe/hive-udf/
-        cp -r -p ${STARROCKS_THIRDPARTY}/installed/async-profiler/* ${STARROCKS_OUTPUT}/fe/bin/
+        cp -r -p ${STARROCKS_HOME}/fe/plugin/spark-dpp/target/spark-dpp-*-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/fe/spark-dpp/
+        cp -r -p ${STARROCKS_HOME}/fe/plugin/hive-udf/target/hive-udf-*.jar ${STARROCKS_OUTPUT}/fe/hive-udf/
         MSG="${MSG} √ ${MSG_FE}"
     elif [ ${BUILD_SPARK_DPP} -eq 1 ]; then
         install -d ${STARROCKS_OUTPUT}/fe/spark-dpp/
         rm -rf ${STARROCKS_OUTPUT}/fe/spark-dpp/*
-        cp -r -p ${STARROCKS_HOME}/fe/spark-dpp/target/spark-dpp-*-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/fe/spark-dpp/
-        cp -r -p ${STARROCKS_HOME}/fe/hive-udf/target/hive-udf-1.0.0.jar ${STARROCKS_HOME}/fe/hive-udf/
+        cp -r -p ${STARROCKS_HOME}/fe/plugin/spark-dpp/target/spark-dpp-*-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/fe/spark-dpp/
+        cp -r -p ${STARROCKS_HOME}/fe/plugin/hive-udf/target/hive-udf-*.jar ${STARROCKS_OUTPUT}/fe/hive-udf/
         MSG="${MSG} √ ${MSG_DPP}"
     fi
+fi
+
+if [ ${BUILD_FORMAT_LIB} -eq 1 ]; then
+    rm -rf ${STARROCKS_OUTPUT}/format-lib/*
+    mkdir -p ${STARROCKS_OUTPUT}/format-lib
+    cp -r ${STARROCKS_HOME}/be/output/format-lib/* ${STARROCKS_OUTPUT}/format-lib/
+    # format $BUILD_TYPE to lower case
+    ibuildtype=`echo ${BUILD_TYPE} | tr 'A-Z' 'a-z'`
+    if [ "${ibuildtype}" == "release" ] ; then
+        pushd ${STARROCKS_OUTPUT}/format-lib/ &>/dev/null
+        FORMAT_LIB=libstarrocks_format.so
+        FORMAT_LIB_DEBUGINFO=libstarrocks_format.debuginfo
+        echo "Split $FORMAT_LIB debug symbol to $FORMAT_LIB_DEBUGINFO ..."
+        # strip be binary
+        # if eu-strip is available, can replace following three lines into `eu-strip -g -f starrocks_be.debuginfo starrocks_be`
+        objcopy --only-keep-debug $FORMAT_LIB $FORMAT_LIB_DEBUGINFO
+        strip --strip-debug $FORMAT_LIB
+        objcopy --add-gnu-debuglink=$FORMAT_LIB_DEBUGINFO $FORMAT_LIB
+        popd &>/dev/null
+    fi
+    MSG="${MSG} √ ${MSG_FORMAT_LIB}"
 fi
 
 if [ ${BUILD_BE} -eq 1 ]; then
@@ -489,7 +651,7 @@ if [ ${BUILD_BE} -eq 1 ]; then
     install -d ${STARROCKS_OUTPUT}/be/bin  \
                ${STARROCKS_OUTPUT}/be/conf \
                ${STARROCKS_OUTPUT}/be/lib/hadoop \
-               ${STARROCKS_OUTPUT}/be/www  \
+               ${STARROCKS_OUTPUT}/be/www
 
     cp -r -p ${STARROCKS_HOME}/be/output/bin/* ${STARROCKS_OUTPUT}/be/bin/
     cp -r -p ${STARROCKS_HOME}/be/output/conf/be.conf ${STARROCKS_OUTPUT}/be/conf/
@@ -499,13 +661,26 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_HOME}/be/output/conf/hadoop_env.sh ${STARROCKS_OUTPUT}/be/conf/
     cp -r -p ${STARROCKS_HOME}/be/output/conf/log4j2.properties ${STARROCKS_OUTPUT}/be/conf/
     cp -r -p ${STARROCKS_HOME}/be/output/conf/core-site.xml ${STARROCKS_OUTPUT}/be/conf/
+    cp -r -p ${STARROCKS_HOME}/be/output/conf/type_checker_config.xml ${STARROCKS_OUTPUT}/be/conf/
 
     if [ "${BUILD_TYPE}" == "ASAN" ]; then
         cp -r -p ${STARROCKS_HOME}/be/output/conf/asan_suppressions.conf ${STARROCKS_OUTPUT}/be/conf/
     fi
     cp -r -p ${STARROCKS_HOME}/be/output/lib/starrocks_be ${STARROCKS_OUTPUT}/be/lib/
-    cp -r -p ${STARROCKS_HOME}/be/output/lib/libmockjvm.so ${STARROCKS_OUTPUT}/be/lib/libjvm.so
+    cp -r -p ${STARROCKS_HOME}/be/output/lib/*.so ${STARROCKS_HOME}/be/output/lib/*.so.* ${STARROCKS_OUTPUT}/be/lib/ 2>/dev/null || true
+    mv ${STARROCKS_OUTPUT}/be/lib/libmockjvm.so ${STARROCKS_OUTPUT}/be/lib/libjvm.so
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc/bin/jeprof ${STARROCKS_OUTPUT}/be/bin
+    mkdir -p ${STARROCKS_OUTPUT}/be/lib/jemalloc
+    cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc/lib-shared/libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/jemalloc/libjemalloc.so.2
+    mkdir -p ${STARROCKS_OUTPUT}/be/lib/jemalloc-dbg
+    cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc-debug/lib/libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/jemalloc-dbg/libjemalloc.so.2
+
+    # Copy pprof and FlameGraph tools
+    if [ -d "${STARROCKS_THIRDPARTY}/installed/flamegraph" ]; then
+        mkdir -p ${STARROCKS_OUTPUT}/be/bin/flamegraph/
+        cp -r -p ${STARROCKS_THIRDPARTY}/installed/flamegraph/* ${STARROCKS_OUTPUT}/be/bin/flamegraph/
+    fi
+
     # format $BUILD_TYPE to lower case
     ibuildtype=`echo ${BUILD_TYPE} | tr 'A-Z' 'a-z'`
     if [ "${ibuildtype}" == "release" ] ; then
@@ -523,6 +698,9 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_HOME}/be/output/www/* ${STARROCKS_OUTPUT}/be/www/
 
     if [ "${BUILD_JAVA_EXT}" == "ON" ]; then
+        # note that conf files will not be overwritten when doing upgrade.
+        # so we have to preserve directory structure to avoid upgrade incompatibility.
+        cp -r -p ${STARROCKS_HOME}/java-extensions/hadoop-lib/target/hadoop-lib ${STARROCKS_OUTPUT}/be/lib/hadoop/common
         cp -r -p ${STARROCKS_HOME}/java-extensions/jdbc-bridge/target/starrocks-jdbc-bridge-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
         cp -r -p ${STARROCKS_HOME}/java-extensions/udf-extensions/target/udf-extensions-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
         cp -r -p ${STARROCKS_HOME}/java-extensions/java-utils/target/starrocks-java-utils.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
@@ -549,19 +727,6 @@ if [ ${BUILD_BE} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/java-extensions/hive-reader/target/starrocks-hive-reader.jar ${STARROCKS_OUTPUT}/be/lib/hive-reader-lib
     fi
 
-    cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/common ${STARROCKS_OUTPUT}/be/lib/hadoop/
-    cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/hdfs ${STARROCKS_OUTPUT}/be/lib/hadoop/
-    cp -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/tools/lib/hadoop-azure-* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs
-    cp -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/tools/lib/azure-* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs
-    cp -p ${STARROCKS_THIRDPARTY}/installed/gcs_connector/*.jar ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs
-    cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/lib/native ${STARROCKS_OUTPUT}/be/lib/hadoop/
-
-    # remove zookeeper
-    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/zookeeper-3.8.3.jar
-    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/zookeeper-3.8.3.jar
-    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/avro-1.9.2.jar
-    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/avro-1.9.2.jar
-
     cp -r -p ${STARROCKS_HOME}/be/extension/python-udf/src/flight_server.py ${STARROCKS_OUTPUT}/be/lib/py-packages
 
     MSG="${MSG} √ ${MSG_BE}"
@@ -576,7 +741,7 @@ endTime=$(date +%s)
 totalTime=$((endTime - startTime))
 
 echo "***************************************"
-echo "Successfully build StarRocks ${MSG} ; StartTime:$(date -d @$startTime '+%Y-%m-%d %H:%M:%S'), EndTime:$(date -d @$endTime '+%Y-%m-%d %H:%M:%S'), TotalTime:${totalTime}s"
+echo "Successfully build StarRocks ${MSG} ; StartTime:$(format_time "${startTime}"), EndTime:$(format_time "${endTime}"), TotalTime:${totalTime}s"
 echo "***************************************"
 
 if [[ ! -z ${STARROCKS_POST_BUILD_HOOK} ]]; then

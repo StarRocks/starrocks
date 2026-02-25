@@ -16,15 +16,33 @@ package com.starrocks.connector.iceberg;
 
 import com.starrocks.connector.PartitionInfo;
 
+import java.util.concurrent.TimeUnit;
+
 public class Partition implements PartitionInfo {
     private final long modifiedTime;
+    private int specId;
 
     @Override
     public long getModifiedTime() {
         return modifiedTime;
     }
 
+    @Override
+    public TimeUnit getModifiedTimeUnit() {
+        return TimeUnit.MICROSECONDS;
+    }
+
+    public int getSpecId() {
+        return specId;
+    }
+
     public Partition(long modifiedTime) {
         this.modifiedTime = modifiedTime;
+        this.specId = -1;
+    }
+
+    public Partition(long modifiedTime, int specId) {
+        this.modifiedTime = modifiedTime;
+        this.specId = specId;
     }
 }

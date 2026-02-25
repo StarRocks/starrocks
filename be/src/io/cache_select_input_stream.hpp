@@ -14,8 +14,8 @@
 
 #pragma once
 
+#include "common/runtime_profile.h"
 #include "io/cache_input_stream.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks::io {
 
@@ -28,6 +28,8 @@ public:
         set_enable_async_populate_mode(false);
         set_enable_cache_io_adaptor(false);
         set_enable_block_buffer(false);
+        // Set a high frequecy for cache item that will be populated by cache select.
+        set_frequency(1);
     }
 
     ~CacheSelectInputStream() override = default;
@@ -56,10 +58,10 @@ protected:
             existed = _cache->exist(_cache_key, block_offset, load_size);
         }
 
-        _stats.read_cache_ns += read_cache_ns;
+        _stats.read_block_cache_ns += read_cache_ns;
         if (existed) {
-            _stats.read_cache_bytes += load_size;
-            _stats.read_cache_count += 1;
+            _stats.read_block_cache_bytes += load_size;
+            _stats.read_block_cache_count += 1;
             return Status::OK();
         } else {
             return Status::NotFound("Not Found");
@@ -80,7 +82,7 @@ protected:
             RETURN_IF_ERROR(_sb_stream->read_at_fully(read_offset_cursor, _buffer.data(), read_size));
             char* src = _buffer.data();
 
-            RETURN_IF_ERROR(_populate_to_cache(read_offset_cursor, read_size, src, nullptr));
+            _populate_to_cache(src, read_offset_cursor, read_size, nullptr);
             read_offset_cursor += read_size;
         }
         return Status::OK();

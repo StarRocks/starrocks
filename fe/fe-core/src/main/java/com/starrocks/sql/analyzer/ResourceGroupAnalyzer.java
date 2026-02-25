@@ -15,23 +15,29 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Splitter;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.InPredicate;
-import com.starrocks.analysis.Predicate;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterResourceGroupStmt;
+import com.starrocks.sql.ast.CreateResourceGroupStmt;
+import com.starrocks.sql.ast.DropResourceGroupStmt;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.InPredicate;
+import com.starrocks.sql.ast.expression.Predicate;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.system.BackendResourceStat;
 import com.starrocks.thrift.TWorkGroupType;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.net.util.SubnetUtils;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -54,7 +60,7 @@ public class ResourceGroupAnalyzer {
                 Expr lhs = eqPred.getChild(0);
                 Expr rhs = eqPred.getChild(1);
                 if (!(lhs instanceof SlotRef) || !(rhs instanceof StringLiteral)) {
-                    throw new SemanticException("Illegal classifier '" + eqPred.toSql() + "'");
+                    throw new SemanticException("Illegal classifier '" + ExprToSql.toSql(eqPred) + "'");
                 }
                 String key = ((SlotRef) lhs).getColumnName();
                 String value = ((StringLiteral) rhs).getValue();
@@ -62,14 +68,14 @@ public class ResourceGroupAnalyzer {
                     if (!ResourceGroupClassifier.USER_PATTERN.matcher(value).matches()) {
                         throw new SemanticException(
                                 String.format("Illegal classifier specifier '%s': '%s'", ResourceGroup.USER,
-                                        eqPred.toSql()));
+                                        ExprToSql.toSql(eqPred)));
                     }
                     classifier.setUser(value);
                 } else if (key.equalsIgnoreCase(ResourceGroup.ROLE)) {
                     if (!ResourceGroupClassifier.USE_ROLE_PATTERN.matcher(value).matches()) {
                         throw new SemanticException(
                                 String.format("Illegal classifier specifier '%s': '%s'", ResourceGroup.ROLE,
-                                        eqPred.toSql()));
+                                        ExprToSql.toSql(eqPred)));
                     }
                     classifier.setRole(value);
                 } else if (key.equalsIgnoreCase(ResourceGroup.SOURCE_IP)) {
@@ -84,7 +90,7 @@ public class ResourceGroupAnalyzer {
 
                     List<Long> databaseIds = new ArrayList<>();
                     for (String name : databases) {
-                        Database db = GlobalStateMgr.getCurrentState().getDb(name);
+                        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(name);
                         if (db == null) {
                             throw new SemanticException(String.format("Specified database not exists: %s", name));
                         }
@@ -96,7 +102,7 @@ public class ResourceGroupAnalyzer {
                     if (planCpuCostRange == null) {
                         throw new SemanticException(String.format("Illegal classifier specifier '%s': '%s', and "
                                         + ResourceGroupClassifier.CostRange.FORMAT_STR_RANGE_MESSAGE,
-                                ResourceGroup.PLAN_CPU_COST_RANGE, eqPred.toSql()));
+                                ResourceGroup.PLAN_CPU_COST_RANGE, ExprToSql.toSql(eqPred)));
                     }
                     classifier.setPlanCpuCostRange(planCpuCostRange);
                 } else if (key.equalsIgnoreCase(ResourceGroup.PLAN_MEM_COST_RANGE)) {
@@ -104,7 +110,7 @@ public class ResourceGroupAnalyzer {
                     if (planMemCostRange == null) {
                         throw new SemanticException(String.format("Illegal classifier specifier '%s': '%s', and "
                                         + ResourceGroupClassifier.CostRange.FORMAT_STR_RANGE_MESSAGE,
-                                ResourceGroup.PLAN_MEM_COST_RANGE, eqPred.toSql()));
+                                ResourceGroup.PLAN_MEM_COST_RANGE, ExprToSql.toSql(eqPred)));
                     }
                     classifier.setPlanMemCostRange(planMemCostRange);
                 } else {
@@ -116,7 +122,7 @@ public class ResourceGroupAnalyzer {
                 List<Expr> rhs = inPred.getListChildren();
                 if (!(lhs instanceof SlotRef) || rhs.stream().anyMatch(e -> !(e instanceof StringLiteral))) {
                     throw new SemanticException(
-                            String.format("Illegal classifier specifier: '%s'", inPred.toSql()));
+                            String.format("Illegal classifier specifier: '%s'", ExprToSql.toSql(inPred)));
                 }
                 String key = ((SlotRef) lhs).getColumnName();
                 if (!key.equalsIgnoreCase(ResourceGroup.QUERY_TYPE)) {
@@ -134,7 +140,7 @@ public class ResourceGroupAnalyzer {
                         .map(String::toUpperCase).map(ResourceGroupClassifier.QueryType::valueOf)
                         .collect(Collectors.toSet()));
             } else {
-                throw new SemanticException(String.format("Illegal classifier specifier: '%s'", pred.toSql()));
+                throw new SemanticException(String.format("Illegal classifier specifier: '%s'", ExprToSql.toSql(pred)));
             }
         }
 
@@ -152,110 +158,285 @@ public class ResourceGroupAnalyzer {
     }
 
     // Property format:
-    // ('cpu_core_limit'='n', 'mem_limit'='m%', 'concurrency_limit'='n', 'type'='normal|default|realtime')
-    public static void analyzeProperties(ResourceGroup resourceGroup, Map<String, String> properties) throws SemanticException {
+    // ('cpu_weight'='n', 'mem_limit'='m%', 'concurrency_limit'='n', 'type'='normal|default|realtime')
+    public static void analyzeProperties(ResourceGroup resourceGroup, Map<String, String> properties)
+            throws SemanticException {
+        final int avgCoreNum = BackendResourceStat.getInstance().getAvgNumCoresOfBe();
+        final boolean hasWarehouseProperty =
+                properties.keySet().stream().anyMatch(key -> key.equalsIgnoreCase(ResourceGroup.WAREHOUSES));
         for (Map.Entry<String, String> e : properties.entrySet()) {
             String key = e.getKey();
             String value = e.getValue();
-            if (key.equalsIgnoreCase(ResourceGroup.CPU_CORE_LIMIT)) {
-                int cpuCoreLimit = Integer.parseInt(value);
-                int avgCoreNum = BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe();
-                if (cpuCoreLimit <= 0 || cpuCoreLimit > avgCoreNum) {
-                    throw new SemanticException(String.format("cpu_core_limit should range from 1 to %d", avgCoreNum));
+            try {
+                if (key.equalsIgnoreCase(ResourceGroup.WAREHOUSES)) {
+                    List<String> warehouses = parseWarehouses(value);
+                    resourceGroup.setWarehouses(warehouses);
+                    continue;
                 }
-                resourceGroup.setCpuCoreLimit(Integer.parseInt(value));
-                continue;
-            }
-            if (key.equalsIgnoreCase(ResourceGroup.MAX_CPU_CORES)) {
-                int maxCpuCores = Integer.parseInt(value);
-                int avgCoreNum = BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe();
-                if (maxCpuCores > avgCoreNum) {
-                    throw new SemanticException(String.format("max_cpu_cores should range from 0 to %d", avgCoreNum));
+                if (key.equalsIgnoreCase(ResourceGroup.CPU_CORE_LIMIT) || key.equalsIgnoreCase(ResourceGroup.CPU_WEIGHT)) {
+                    int cpuWeight = Integer.parseInt(value);
+                    if (cpuWeight > 0 && hasWarehouseProperty) {
+                        throw new SemanticException("'cpu_weight' cannot be set when 'warehouses' is specified, " +
+                                "please use 'cpu_weight_percent' instead");
+                    }
+                    if (cpuWeight > avgCoreNum) {
+                        throw new SemanticException(
+                                String.format("%s should range from 0 to %d", ResourceGroup.CPU_WEIGHT, avgCoreNum));
+                    }
+                    resourceGroup.setCpuWeight(cpuWeight);
+                    continue;
                 }
-                resourceGroup.setMaxCpuCores(Integer.parseInt(value));
-                continue;
-            }
-            if (key.equalsIgnoreCase(ResourceGroup.MEM_LIMIT)) {
-                double memLimit;
-                if (value.endsWith("%")) {
-                    value = value.substring(0, value.length() - 1);
-                    memLimit = Double.parseDouble(value) / 100;
-                } else {
-                    memLimit = Double.parseDouble(value);
+                if (key.equalsIgnoreCase(ResourceGroup.CPU_WEIGHT_PERCENT)) {
+                    int cpuWeightPercent = Integer.parseInt(value);
+                    if (cpuWeightPercent < 0 || cpuWeightPercent > 100) {
+                        throw new SemanticException(
+                                String.format("%s should range from [0, 100]", ResourceGroup.CPU_WEIGHT_PERCENT));
+                    }
+                    resourceGroup.setCpuWeightPercent(cpuWeightPercent);
+                    continue;
                 }
-                if (memLimit <= 0.0 || memLimit >= 1.0) {
-                    throw new SemanticException("mem_limit should range from 0.00(exclude) to 1.00(exclude)");
+                if (key.equalsIgnoreCase(ResourceGroup.EXCLUSIVE_CPU_CORES)) {
+                    final int exclusiveCpuCores = Integer.parseInt(value);
+                    if (exclusiveCpuCores > 0 && hasWarehouseProperty) {
+                        throw new SemanticException("'exclusive_cpu_cores' cannot be set when 'warehouses' is specified, " +
+                                "please use 'exclusive_cpu_percent' instead");
+                    }
+                    final int minCoreNum = BackendResourceStat.getInstance().getMinNumCoresOfBe();
+                    if (exclusiveCpuCores >= minCoreNum) {
+                        throw new SemanticException(String.format(
+                                "%s cannot exceed the minimum number of CPU cores available on the backends minus one [%d]",
+                                ResourceGroup.EXCLUSIVE_CPU_CORES, minCoreNum - 1));
+                    }
+                    resourceGroup.setExclusiveCpuCores(exclusiveCpuCores);
+                    continue;
                 }
-                resourceGroup.setMemLimit(memLimit);
-                continue;
-            }
+                if (key.equalsIgnoreCase(ResourceGroup.EXCLUSIVE_CPU_PERCENT)) {
+                    int exclusiveCpuPercent = Integer.parseInt(value);
+                    if (exclusiveCpuPercent < 0 || exclusiveCpuPercent >= 100) {
+                        throw new SemanticException(
+                                String.format("%s should range from [0, 100)", ResourceGroup.EXCLUSIVE_CPU_PERCENT));
+                    }
+                    resourceGroup.setExclusiveCpuPercent(exclusiveCpuPercent);
+                    continue;
+                }
+                if (key.equalsIgnoreCase(ResourceGroup.MAX_CPU_CORES)) {
+                    int maxCpuCores = Integer.parseInt(value);
+                    if (maxCpuCores > 0 && hasWarehouseProperty) {
+                        throw new SemanticException("'max_cpu_cores' cannot be set when 'warehouses' is specified");
+                    }
+                    if (maxCpuCores > avgCoreNum) {
+                        throw new SemanticException(String.format("max_cpu_cores should range from 0 to %d", avgCoreNum));
+                    }
+                    resourceGroup.setMaxCpuCores(maxCpuCores);
+                    continue;
+                }
+                if (key.equalsIgnoreCase(ResourceGroup.MEM_LIMIT)) {
+                    double memLimit;
+                    if (value.endsWith("%")) {
+                        value = value.substring(0, value.length() - 1);
+                        memLimit = Double.parseDouble(value) / 100;
+                    } else {
+                        memLimit = Double.parseDouble(value);
+                    }
+                    if (memLimit <= 0.0 || memLimit > 1.0) {
+                        throw new SemanticException("mem_limit should range from 0.00(exclude) to 1.00(include)");
+                    }
+                    resourceGroup.setMemLimit(memLimit);
+                    continue;
+                }
 
-            if (key.equalsIgnoreCase(ResourceGroup.BIG_QUERY_MEM_LIMIT)) {
-                long bigQueryMemLimit = Long.parseLong(value);
-                if (bigQueryMemLimit < 0) {
-                    throw new SemanticException("big_query_mem_limit should greater than 0 or equal to 0");
+                if (key.equalsIgnoreCase(ResourceGroup.MEM_POOL)) {
+                    resourceGroup.setMemPool(value);
+                    continue;
                 }
-                resourceGroup.setBigQueryMemLimit(bigQueryMemLimit);
-                continue;
-            }
 
-            if (key.equalsIgnoreCase(ResourceGroup.BIG_QUERY_SCAN_ROWS_LIMIT)) {
-                long bigQueryScanRowsLimit = Long.parseLong(value);
-                if (bigQueryScanRowsLimit < 0) {
-                    throw new SemanticException("big_query_scan_rows_limit should greater than 0 or equal to 0");
+                if (key.equalsIgnoreCase(ResourceGroup.BIG_QUERY_MEM_LIMIT)) {
+                    long bigQueryMemLimit = Long.parseLong(value);
+                    if (bigQueryMemLimit < 0) {
+                        throw new SemanticException("big_query_mem_limit should greater than 0 or equal to 0");
+                    }
+                    resourceGroup.setBigQueryMemLimit(bigQueryMemLimit);
+                    continue;
                 }
-                resourceGroup.setBigQueryScanRowsLimit(bigQueryScanRowsLimit);
-                continue;
-            }
 
-            if (key.equalsIgnoreCase(ResourceGroup.BIG_QUERY_CPU_SECOND_LIMIT)) {
-                long bigQueryCpuCoreSecondLimit = Long.parseLong(value);
-                if (bigQueryCpuCoreSecondLimit < 0) {
-                    throw new SemanticException("big_query_cpu_second_limit should greater than 0 or equal to 0");
+                if (key.equalsIgnoreCase(ResourceGroup.BIG_QUERY_SCAN_ROWS_LIMIT)) {
+                    long bigQueryScanRowsLimit = Long.parseLong(value);
+                    if (bigQueryScanRowsLimit < 0) {
+                        throw new SemanticException("big_query_scan_rows_limit should greater than 0 or equal to 0");
+                    }
+                    resourceGroup.setBigQueryScanRowsLimit(bigQueryScanRowsLimit);
+                    continue;
                 }
-                resourceGroup.setBigQueryCpuSecondLimit(bigQueryCpuCoreSecondLimit);
-                continue;
-            }
 
-            if (key.equalsIgnoreCase(ResourceGroup.CONCURRENCY_LIMIT)) {
-                int concurrencyLimit = Integer.parseInt(value);
-                if (concurrencyLimit < 0) {
-                    throw new SemanticException("concurrency_limit should be greater than 0");
+                if (key.equalsIgnoreCase(ResourceGroup.BIG_QUERY_CPU_SECOND_LIMIT)) {
+                    long bigQueryCpuSecondLimit = Long.parseLong(value);
+                    if (bigQueryCpuSecondLimit < 0 || bigQueryCpuSecondLimit > ResourceGroup.MAX_BIG_QUERY_CPU_SECOND_LIMIT) {
+                        throw new SemanticException(
+                                String.format("The range of `%s` should be (0, %d]", ResourceGroup.BIG_QUERY_CPU_SECOND_LIMIT,
+                                        ResourceGroup.MAX_BIG_QUERY_CPU_SECOND_LIMIT));
+                    }
+                    resourceGroup.setBigQueryCpuSecondLimit(bigQueryCpuSecondLimit);
+                    continue;
                 }
-                resourceGroup.setConcurrencyLimit(concurrencyLimit);
-                continue;
-            }
 
-            if (key.equalsIgnoreCase(ResourceGroup.SPILL_MEM_LIMIT_THRESHOLD)) {
-                double spillMemLimitThreshold;
-                if (value.endsWith("%")) {
-                    value = value.substring(0, value.length() - 1);
-                    spillMemLimitThreshold = Double.parseDouble(value) / 100;
-                } else {
-                    spillMemLimitThreshold = Double.parseDouble(value);
+                if (key.equalsIgnoreCase(ResourceGroup.CONCURRENCY_LIMIT)) {
+                    int concurrencyLimit = Integer.parseInt(value);
+                    if (concurrencyLimit < 0) {
+                        throw new SemanticException("concurrency_limit should be greater than 0");
+                    }
+                    resourceGroup.setConcurrencyLimit(concurrencyLimit);
+                    continue;
                 }
-                if (spillMemLimitThreshold <= 0.0 || spillMemLimitThreshold >= 1.0) {
-                    throw new SemanticException("spill_mem_limit_threshold should range from 0.00(exclude) to 1.00(exclude)");
-                }
-                resourceGroup.setSpillMemLimitThreshold(spillMemLimitThreshold);
-                continue;
-            }
 
-            if (key.equalsIgnoreCase(ResourceGroup.GROUP_TYPE)) {
-                try {
-                    resourceGroup.setResourceGroupType(TWorkGroupType.valueOf("WG_" + value.toUpperCase()));
-                    if (resourceGroup.getResourceGroupType() != TWorkGroupType.WG_NORMAL &&
-                            resourceGroup.getResourceGroupType() != TWorkGroupType.WG_SHORT_QUERY &&
-                            resourceGroup.getResourceGroupType() != TWorkGroupType.WG_MV) {
+                if (key.equalsIgnoreCase(ResourceGroup.SPILL_MEM_LIMIT_THRESHOLD)) {
+                    double spillMemLimitThreshold;
+                    if (value.endsWith("%")) {
+                        value = value.substring(0, value.length() - 1);
+                        spillMemLimitThreshold = Double.parseDouble(value) / 100;
+                    } else {
+                        spillMemLimitThreshold = Double.parseDouble(value);
+                    }
+                    if (spillMemLimitThreshold <= 0.0 || spillMemLimitThreshold >= 1.0) {
+                        throw new SemanticException("spill_mem_limit_threshold should range from 0.00(exclude) to 1.00(exclude)");
+                    }
+                    resourceGroup.setSpillMemLimitThreshold(spillMemLimitThreshold);
+                    continue;
+                }
+
+                if (key.equalsIgnoreCase(ResourceGroup.GROUP_TYPE)) {
+                    try {
+                        resourceGroup.setResourceGroupType(TWorkGroupType.valueOf("WG_" + value.toUpperCase()));
+                        if (resourceGroup.getResourceGroupType() != TWorkGroupType.WG_NORMAL &&
+                                resourceGroup.getResourceGroupType() != TWorkGroupType.WG_SHORT_QUERY &&
+                                resourceGroup.getResourceGroupType() != TWorkGroupType.WG_MV) {
+                            throw new SemanticException("Only support 'normal', 'mv' and 'short_query' type");
+                        }
+                    } catch (Exception ignored) {
                         throw new SemanticException("Only support 'normal', 'mv' and 'short_query' type");
                     }
-                } catch (Exception ignored) {
-                    throw new SemanticException("Only support 'normal', 'mv' and 'short_query' type");
+                    continue;
                 }
-                continue;
+            } catch (NumberFormatException exception) {
+                throw new SemanticException(String.format("The value type of the property `%s` must be a valid numeric type, " +
+                        "but it is set to `%s`", e.getKey(), e.getValue()));
             }
 
             throw new SemanticException("Unknown property: " + key);
         }
+    }
+
+    /**
+     * Analyze CreateResourceGroupStmt for validation only
+     * The actual ResourceGroup construction is now handled by ResourceGroupBuilder
+     */
+    public static void analyzeCreateResourceGroupStmt(CreateResourceGroupStmt stmt) throws SemanticException {
+        // Validate classifiers by converting them (this validates the syntax and format)
+        for (List<Predicate> predicates : stmt.getClassifiers()) {
+            convertPredicateToClassifier(predicates);
+        }
+
+        // Create a temporary ResourceGroup to validate properties
+        ResourceGroup tempResourceGroup = new ResourceGroup();
+        analyzeProperties(tempResourceGroup, stmt.getProperties());
+
+        // Validate required properties exist
+        if (tempResourceGroup.getMemLimit() == null) {
+            throw new SemanticException("property 'mem_limit' is absent");
+        }
+
+        // Set default type if not specified for validation
+        if (tempResourceGroup.getResourceGroupType() == null) {
+            tempResourceGroup.setResourceGroupType(TWorkGroupType.WG_NORMAL);
+        }
+
+        // Validate short query resource group constraints
+        if (tempResourceGroup.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY &&
+                (tempResourceGroup.getExclusiveCpuCores() != null && tempResourceGroup.getExclusiveCpuCores() > 0)) {
+            throw new SemanticException("short query resource group should not set exclusive_cpu_cores");
+        }
+
+        // Validate CPU parameters
+        ResourceGroup.validateCpuParameters(tempResourceGroup.getRawCpuWeight(), tempResourceGroup.getCpuWeightPercent(),
+                tempResourceGroup.getExclusiveCpuCores(), tempResourceGroup.getExclusiveCpuPercent(),
+                tempResourceGroup.getMaxCpuCores(),
+                tempResourceGroup.getResourceGroupType(), tempResourceGroup.getWarehouses());
+    }
+
+    /**
+     * Analyze AlterResourceGroupStmt for validation only
+     * The actual ResourceGroup modification is now handled by ResourceGroupBuilder
+     */
+    public static void analyzeAlterResourceGroupStmt(AlterResourceGroupStmt stmt) throws SemanticException {
+        String name = stmt.getName();
+        AlterResourceGroupStmt.SubCommand cmd = stmt.getCmd();
+
+        // Validate classifiers by converting them (this validates the syntax and format)
+        if (cmd instanceof AlterResourceGroupStmt.AddClassifiers addClassifiers) {
+            for (List<Predicate> predicates : addClassifiers.getClassifiers()) {
+                convertPredicateToClassifier(predicates);
+            }
+        } else if (cmd instanceof AlterResourceGroupStmt.AlterProperties alterProperties) {
+            // Create a temporary ResourceGroup to validate properties
+            ResourceGroup tempResourceGroup = new ResourceGroup();
+            analyzeProperties(tempResourceGroup, alterProperties.getProperties());
+
+            // Validate that type cannot be changed
+            if (tempResourceGroup.getResourceGroupType() != null) {
+                throw new SemanticException("type of ResourceGroup is immutable");
+            }
+
+            // Validate that at least one property is specified
+            if (tempResourceGroup.getRawCpuWeight() == null &&
+                    tempResourceGroup.getCpuWeightPercent() == null &&
+                    tempResourceGroup.getExclusiveCpuCores() == null &&
+                    tempResourceGroup.getExclusiveCpuPercent() == null &&
+                    tempResourceGroup.getMemLimit() == null &&
+                    tempResourceGroup.getConcurrencyLimit() == null &&
+                    tempResourceGroup.getMaxCpuCores() == null &&
+                    tempResourceGroup.getBigQueryCpuSecondLimit() == null &&
+                    tempResourceGroup.getBigQueryMemLimit() == null &&
+                    tempResourceGroup.getBigQueryScanRowsLimit() == null &&
+                    tempResourceGroup.getSpillMemLimitThreshold() == null &&
+                    tempResourceGroup.getWarehouses() == null) {
+                throw new SemanticException("At least one of ('cpu_weight','cpu_weight_percent'," +
+                        "'exclusive_cpu_cores','exclusive_cpu_percent','mem_limit','max_cpu_cores','concurrency_limit'," +
+                        "'big_query_mem_limit', 'big_query_scan_rows_limit','big_query_cpu_second_limit'," +
+                        "'spill_mem_limit_threshold','warehouses') should be specified");
+            }
+        }
+
+        // Validate builtin resource group constraints
+        if (ResourceGroup.BUILTIN_WG_NAMES.contains(name) && !(cmd instanceof AlterResourceGroupStmt.AlterProperties)) {
+            throw new SemanticException(String.format("cannot alter classifiers of builtin resource group [%s]", name));
+        }
+    }
+
+    public static void analyzeDropResourceGroupStmt(DropResourceGroupStmt stmt) throws SemanticException {
+        String name = stmt.getName();
+        if (ResourceGroup.BUILTIN_WG_NAMES.contains(name)) {
+            throw new SemanticException(String.format("cannot drop builtin resource group [%s]", name));
+        }
+    }
+
+    private static List<String> parseWarehouses(String warehousesValue) {
+        List<String> warehouses = new ArrayList<>();
+        for (String token : warehousesValue.split(",")) {
+            String name = token.trim();
+            if (!name.isEmpty()) {
+                warehouses.add(name);
+            }
+        }
+
+        Set<String> dedup = new HashSet<>();
+        for (String warehouseName : warehouses) {
+            if (!dedup.add(warehouseName)) {
+                throw new SemanticException(String.format("Duplicate warehouse in warehouses: %s", warehouseName));
+            }
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouseName);
+            if (warehouse == null) {
+                throw new SemanticException(String.format("Unknown warehouse: %s", warehouseName));
+            }
+        }
+        return warehouses;
     }
 }

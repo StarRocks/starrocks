@@ -24,7 +24,6 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
 import com.starrocks.sql.optimizer.operator.Operator;
-import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
@@ -73,19 +72,12 @@ public class ShortCircuitPlanner {
         }
     }
 
-    public static OptExpression checkSupportShortCircuitRead(OptExpression root, ConnectContext connectContext) {
+    public static boolean checkSupportShortCircuitRead(OptExpression root, ConnectContext connectContext) {
         if (!connectContext.getSessionVariable().isEnableShortCircuit()) {
-            root.setShortCircuit(false);
-            return root;
+            return false;
         }
-        boolean supportShortCircuit = root.getOp().accept(new LogicalPlanChecker(), root, null);
-        if (supportShortCircuit && OperatorType.LOGICAL_LIMIT.equals(root.getOp().getOpType())) {
-            root = root.getInputs().get(0);
-        }
-        root.setShortCircuit(supportShortCircuit);
-        return root;
+        return root.getOp().accept(new LogicalPlanChecker(), root, null);
     }
-
     protected static boolean isRedundant(Map<ColumnRefOperator, ScalarOperator> projections) {
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projections.entrySet()) {
             if (!entry.getKey().equals(entry.getValue())) {

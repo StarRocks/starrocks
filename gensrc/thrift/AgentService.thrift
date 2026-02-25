@@ -55,6 +55,9 @@ struct TTabletSchema {
     10: optional list<i32> sort_key_idxes
     11: optional list<i32> sort_key_unique_ids
     12: optional i32 schema_version;
+    13: optional Types.TCompressionType compression_type = Types.TCompressionType.LZ4_FRAME
+    14: optional i32 compression_level = -1;
+    15: optional Types.TPrimaryKeyEncodingType primary_key_encoding_type;
 }
 
 // this enum stands for different storage format in src_backends
@@ -82,11 +85,23 @@ struct TBinlogConfig {
     4: optional i64 binlog_max_size;
 }
 
+struct TFlatJsonConfig {
+    1: optional bool flat_json_enable;
+    2: optional double flat_json_null_factor;
+    3: optional double flat_json_sparsity_factor;
+    4: optional i64 flat_json_column_max;
+}
+
 // If you want to add types,
 // don't forget to also add type to PersistentIndexTypePB
 enum TPersistentIndexType {
     LOCAL = 0
     CLOUD_NATIVE = 1
+}
+
+enum TCompactionStrategy {
+    DEFAULT = 0
+    REAL_TIME = 1
 }
 
 struct TCreateTabletReq {
@@ -118,6 +133,13 @@ struct TCreateTabletReq {
     21: optional i32 compression_level = -1;
     // Whether or not use shared tablet initial metadata.
     22: optional bool enable_tablet_creation_optimization = false;
+    // The timeout FE will wait for the tablet to be created.
+    23: optional i64 timeout_ms = -1;
+    // Global transaction id
+    24: optional i64 gtid = 0;
+    25: optional TFlatJsonConfig flat_json_config;
+    26: optional TCompactionStrategy compaction_strategy;
+    27: optional Types.TTabletRange range;
 }
 
 struct TDropTabletReq {
@@ -166,12 +188,24 @@ struct TAlterTabletReqV2 {
     11: optional i64 job_id
     12: optional InternalService.TQueryGlobals query_globals
     13: optional InternalService.TQueryOptions query_options
+    // This field is used for shared-nothing fast schema evolution, and shared-data use base_tablet_read_schema instead.
     14: optional list<Descriptors.TColumn> columns
     // synchronized materialized view parameters
     15: optional TAlterJobType alter_job_type = TAlterJobType.SCHEMA_CHANGE
     16: optional Descriptors.TDescriptorTable desc_tbl
     17: optional Exprs.TExpr where_expr
     18: optional list<string> base_table_column_names 
+    // Schema from FE catalog for reading data from base tablet in shared-data. This may be newer than the schema stored
+    // in tablet metadata in Fast Schema Evolution v2 scenario. Must use this schema to read data, otherwise correctness
+    // issues may occur. Why shared-data doesn't reuse the 'columns' field from shared-nothing:
+    // 1. shared-nothing only sends columns, requiring BE to construct complete schema (complex, not extensible).
+    //    For example, shared-nothing assumes adding key columns won't trigger fast schema evolution,
+    //    so BE won't rebuild sort key when constructing schema. This would cause issues in shared-data,
+    //    where fast schema evolution supports adding key columns, requiring complete schema info.
+    // 2. In shared-data's original fast schema evolution (non-v2), columns were meaningless since FE catalog
+    //    schema matches tablet metadata schema. base_tablet_read_schema can directly replace columns;
+    //    old BE will fall back to tablet metadata schema if columns are missing, with no compatibility impact.
+    19: optional TTabletSchema base_tablet_read_schema
 }
 
 struct TClusterInfo {
@@ -222,12 +256,14 @@ struct TCloneReq {
     10: optional i32 timeout_s
 
     30: optional bool is_local
+    31: optional bool need_rebuild_pk_index
 }
 
 struct TStorageMediumMigrateReq {
     1: required Types.TTabletId tablet_id
     2: required Types.TSchemaHash schema_hash
     3: required Types.TStorageMedium storage_medium
+    4: optional bool need_rebuild_pk_index
 }
 
 struct TCancelDeleteDataReq {
@@ -248,6 +284,10 @@ struct TCheckConsistencyReq {
 struct TCompactionReq {
     1: optional list<Types.TTableId> tablet_ids
     2: optional bool is_base_compaction
+}
+
+struct TCompactionControlReq {
+    1: optional map<Types.TTableId, i64> table_to_disable_deadline
 }
 
 struct TUpdateSchemaReq {
@@ -384,6 +424,7 @@ struct TRemoteSnapshotRequest {
      12: optional Types.TVersion src_visible_version
      13: optional list<Types.TBackend> src_backends
      14: optional i32 timeout_sec
+     15: optional Types.TVersion data_version
  }
 
  struct TReplicateSnapshotRequest {
@@ -400,6 +441,25 @@ struct TRemoteSnapshotRequest {
      11: optional Types.TSchemaHash src_schema_hash
      12: optional Types.TVersion src_visible_version
      13: optional list<Types.TSnapshotInfo> src_snapshot_infos
+     14: optional binary encryption_meta
+     15: optional Types.TVersion data_version
+     16: optional Types.TTabletId virtual_tablet_id
+     17: optional Types.TDatabaseId src_db_id
+     18: optional Types.TTableId src_table_id
+     19: optional Types.TPartitionId src_partition_id
+ }
+
+struct TExternalClusterSnapshotRequest {
+    1: optional i64 job_id // ExternalClusterSnapshot job id
+    2: optional i64 db_id
+    3: optional Types.TTableId table_id
+    4: optional Types.TPartitionId partition_id
+    5: optional Types.TPartitionId physical_partition_id
+    6: optional Types.TVersion pre_version
+    7: optional Types.TVersion new_version
+    8: optional Types.TTabletId dest_tablet_id // tablet id of the target storage volume
+    9: optional list<Types.TTabletId> src_tablets // tablets need to file synchronization
+    10: optional list<Types.TBackend> compute_nodes  // candidate cn to do file sync
  }
 
 enum TTabletMetaType {
@@ -413,7 +473,12 @@ enum TTabletMetaType {
     BUCKET_SIZE,
     PRIMARY_INDEX_CACHE_EXPIRE_SEC,
     STORAGE_TYPE,
-    MUTABLE_BUCKET_NUM
+    MUTABLE_BUCKET_NUM,
+    ENABLE_LOAD_PROFILE,
+    BASE_COMPACTION_FORBIDDEN_TIME_RANGES,
+    FLAT_JSON_CONFIG,
+    ENABLE_FILE_BUNDLING,
+    COMPACTION_STRATEGY
 }
 
 struct TTabletMetaInfo {
@@ -428,6 +493,10 @@ struct TTabletMetaInfo {
     9: optional TTabletSchema tablet_schema;
     // |create_schema_file| only used when |tablet_schema| exists
     10: optional bool create_schema_file;
+    11: optional TPersistentIndexType persistent_index_type;
+    12: optional TFlatJsonConfig flat_json_config;
+    13: optional bool bundle_tablet_metadata;
+    14: optional TCompactionStrategy compaction_strategy;
 }
 
 struct TUpdateTabletMetaInfoReq {
@@ -477,6 +546,8 @@ struct TAgentTaskRequest {
     29: optional TRemoteSnapshotRequest remote_snapshot_req
     30: optional TReplicateSnapshotRequest replicate_snapshot_req
     31: optional TUpdateSchemaReq update_schema_req
+    32: optional TCompactionControlReq compaction_control_req
+    33: optional TExternalClusterSnapshotRequest external_cluster_snapshot_req
 }
 
 struct TAgentResult {

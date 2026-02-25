@@ -18,11 +18,13 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Expr;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -37,6 +39,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.type.Type;
 import org.apache.commons.lang.StringUtils;
 
 import java.util.Collection;
@@ -49,11 +52,17 @@ import java.util.stream.Collectors;
  *
  * Rewrite count(distinct xx) group by x when distinct columns satisfy scan distribution
  *
+ * 1. If xx is not primary key:
  * e.g.
  * select count(distinct xx) from t group by x
  * ->
  * select count(xx) from (select x, xx from t group by x, xx) tt group by x;
  *
+ * 2. If xx is primary key:
+ * e.g.
+ * select count(distinct xx) from t group by x
+ * ->
+ * select count(xx) from t group by x;
  */
 public class GroupByCountDistinctRewriteRule extends TransformationRule {
     // multi-stage distinct function mapping
@@ -171,6 +180,21 @@ public class GroupByCountDistinctRewriteRule extends TransformationRule {
 
         List<ColumnRefOperator> firstGroupBy = Lists.newArrayList(aggregate.getGroupingKeys());
         Preconditions.checkState(distinctColumn.isPresent());
+
+        LogicalOlapScanOperator scan = (LogicalOlapScanOperator) input.getInputs().get(0).getOp();
+        if (isPrimaryKey(distinctColumn.get(), scan)) {
+            Map<ColumnRefOperator, CallOperator> newAggregations = Maps.newHashMap();
+            distinctMap.forEach((k, v) -> {
+                CallOperator newAgg = transformDistinctAgg(v);
+                newAggregations.put(k, newAgg);
+            });
+            LogicalAggregationOperator newAggregateOp = new LogicalAggregationOperator.Builder()
+                    .withOperator(aggregate)
+                    .setAggregations(newAggregations)
+                    .build();
+            return Lists.newArrayList(OptExpression.create(newAggregateOp, input.getInputs()));
+        }
+
         firstGroupBy.add(distinctColumn.get());
 
         Map<ColumnRefOperator, CallOperator> firstAggregations = Maps.newHashMap();
@@ -206,14 +230,14 @@ public class GroupByCountDistinctRewriteRule extends TransformationRule {
             if (StringUtils.equals(originFuncName, firstFuncName)) {
                 return origin;
             } else {
-                Function newFunc = Expr.getBuiltinFunction(firstFuncName, origin.getFunction().getArgs(),
+                Function newFunc = ExprUtils.getBuiltinFunction(firstFuncName, origin.getFunction().getArgs(),
                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
                 return new CallOperator(firstFuncName, newFunc.getReturnType(), args, newFunc);
             }
         } else {
             String secondFuncName = OTHER_FUNCTION_TRANS.get(originFuncName).second;
             Type[] argTypes = args.stream().map(ScalarOperator::getType).toArray(Type[]::new);
-            Function newFunc = Expr.getBuiltinFunction(secondFuncName, argTypes,
+            Function newFunc = ExprUtils.getBuiltinFunction(secondFuncName, argTypes,
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             Preconditions.checkNotNull(newFunc);
             newFunc = newFunc.copy();
@@ -231,7 +255,7 @@ public class GroupByCountDistinctRewriteRule extends TransformationRule {
         if (StringUtils.equals(originFuncName, newFuncName)) {
             return new CallOperator(originFuncName, origin.getType(), origin.getChildren(), origin.getFunction());
         } else {
-            Function newFunc = Expr.getBuiltinFunction(newFuncName, origin.getFunction().getArgs(),
+            Function newFunc = ExprUtils.getBuiltinFunction(newFuncName, origin.getFunction().getArgs(),
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             return new CallOperator(newFuncName, newFunc.getReturnType(), origin.getChildren(), newFunc);
         }
@@ -242,5 +266,18 @@ public class GroupByCountDistinctRewriteRule extends TransformationRule {
                 FunctionSet.MULTI_DISTINCT_SUM.equals(call.getFunction().functionName()) ||
                 FunctionSet.MULTI_DISTINCT_COUNT.equals(call.getFunction().functionName()) ||
                 FunctionSet.ARRAY_AGG_DISTINCT.equals(call.getFunction().functionName());
+    }
+
+    private boolean isPrimaryKey(ColumnRefOperator column, LogicalOlapScanOperator scan) {
+        OlapTable olapTable = (OlapTable) scan.getTable();
+        if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
+            List<Column> keyColumnNames = olapTable.getKeyColumns();
+            // The check() ensures there is only one DISTINCT column, so composite pk is not supported here
+            if (keyColumnNames.size() != 1) {
+                return false;
+            }
+            return keyColumnNames.get(0).getName().equals(column.getName());
+        }
+        return false;
     }
 }

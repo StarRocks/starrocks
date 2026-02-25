@@ -1,5 +1,6 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+sidebar_position: 40
 ---
 
 # Colocate Join
@@ -44,7 +45,6 @@ PROPERTIES(
 为了使得表能够有相同的数据分布，同一 CG 内的表必须满足下列约束：
 
 * 同一 CG 内的表的分桶键的类型、数量和顺序完全一致，并且桶数一致，从而保证多张表的数据分片能够一一对应地进行分布控制。分桶键，即在建表语句中 `DISTRIBUTED BY HASH(col1, col2, ...)` 中指定一组列。分桶键决定了一张表的数据通过哪些列的值进行 Hash 划分到不同的 Bucket Seq 下。同 CG 的表的分桶键的名字可以不相同，分桶列的定义在建表语句中的出现次序可以不一致，但是在 `DISTRIBUTED BY HASH(col1, col2, ...)` 的对应数据类型的顺序要完全一致。
-* 同一个 CG 内所有表的所有分区的副本数必须一致。如果不一致，可能出现某一个子表的某一个副本，在同一个 BE 上没有其他的表分片的副本对应。
 * 同一个 CG 内所有表的分区键，分区数量可以不同。
 
 同一个 CG 中的所有表的副本放置必须满足下列约束：
@@ -345,7 +345,7 @@ SET disable_colocate_join = TRUE;
 
 StarRocks 提供了多个与 Colocate Join 有关的 HTTP Restful API，用于查看和修改 Colocation Group。
 
-该 API 在 FE 端实现，您可以使用 `fe_host:fe_http_port` 进行访问。访问需要 `cluster_admin` 角色对应的权限。
+该 API 在 FE 端实现，您可以使用 `fe_host:fe_http_port` 进行访问。访问需要 `db_admin` 和 `user_admin` 角色对应的权限。
 
 1. 查看集群的全部 Colocation 信息。
 

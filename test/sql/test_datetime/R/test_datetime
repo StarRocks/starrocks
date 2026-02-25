@@ -40,3 +40,43 @@ select * from test_datetime order by c1;
 12	2020-01-01 00:00:00.123450
 13	2020-01-01 00:00:00.123450
 -- !result
+delete from test_datetime where c2 = '2020-01-01 00:00:00';
+-- result:
+-- !result
+delete from test_datetime where c2 = '2020-01-01 00:00:00.0';
+-- result:
+-- !result
+delete from test_datetime where c2 = '2020-01-01 00:00:00.012';
+-- result:
+-- !result
+select * from test_datetime order by c1;
+-- result:
+3	2020-01-01 00:00:00.010000
+5	2020-01-01 00:00:00.012300
+6	2020-01-01 00:00:00.012340
+7	2020-01-01 00:00:00.012345
+8	2020-01-01 00:00:00.100000
+9	2020-01-01 00:00:00.120000
+10	2020-01-01 00:00:00.123000
+11	2020-01-01 00:00:00.123400
+12	2020-01-01 00:00:00.123450
+13	2020-01-01 00:00:00.123450
+-- !result
+delete from test_datetime where c2 = '2020-01-01 00:00:00.1';
+-- result:
+-- !result
+delete from test_datetime where c2 = '2020-01-01 00:00:00.123';
+-- result:
+-- !result
+delete from test_datetime where c2 = '2020-01-01 00:00:00.123450';
+-- result:
+-- !result
+select * from test_datetime order by c1;
+-- result:
+3	2020-01-01 00:00:00.010000
+5	2020-01-01 00:00:00.012300
+6	2020-01-01 00:00:00.012340
+7	2020-01-01 00:00:00.012345
+9	2020-01-01 00:00:00.120000
+11	2020-01-01 00:00:00.123400
+-- !result

@@ -8,7 +8,7 @@ PRIMARY KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -41,7 +41,7 @@ PRIMARY KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -84,7 +84,7 @@ SELECT dictionary_get("test_dictionary_basic_operation", 1);
 -- !result
 SELECT dictionary_get("test_dictionary_basic_operation", 2);
 -- result:
-E: (1064, 'key not found in dictionary cache')
+[REGEX].*key not found in dictionary cache.*
 -- !result
 DROP DICTIONARY test_dictionary_basic_operation CACHE;
 -- result:
@@ -120,7 +120,7 @@ PRIMARY KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -470,7 +470,7 @@ PRIMARY KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -627,7 +627,7 @@ PRIMARY KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -915,7 +915,7 @@ PRIMARY KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -930,7 +930,7 @@ PRIMARY KEY(`id4`)
 DISTRIBUTED BY HASH(`id4`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -1028,7 +1028,7 @@ PRIMARY KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -1042,7 +1042,7 @@ PRIMARY KEY(`id3`)
 DISTRIBUTED BY HASH(`id3`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -1087,7 +1087,7 @@ PRIMARY KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -1109,7 +1109,7 @@ PRIMARY KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -1135,7 +1135,7 @@ PRIMARY KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -1154,7 +1154,7 @@ function: wait_refresh_dictionary_finish("test_dictionary_common_expression", "F
 -- result:
 None
 -- !result
-explain SELECT dictionary_get("test_dictionary_common_expression", id1)[1],dictionary_get("test_dictionary_common_expression", id1)[2],dictionary_get("test_dictionary_common_expression", id1)[3] FROM t_dictionary_common_expression;
+[UC]explain select dictionary_get("test_dictionary_common_expression", id1)[1],dictionary_get("test_dictionary_common_expression", id1)[2],dictionary_get("test_dictionary_common_expression", id1)[3] FROM t_dictionary_common_expression;
 -- result:
 [REGEX]*common*
 -- !result
@@ -1168,83 +1168,7 @@ DROP DICTIONARY test_dictionary_common_expression;
 DROP TABLE t_dictionary_common_expression;
 -- result:
 -- !result
--- name: test_dictionary_multiple_row
-CREATE TABLE `t_dictionary_multiple_row` (
-  `id1` BIGINT NOT NULL COMMENT "",
-  `id2` BIGINT NOT NULL COMMENT "",
-  `id3` BIGINT NOT NULL COMMENT "",
-  `id4` BIGINT NOT NULL COMMENT ""
-) ENGINE=OLAP
-PRIMARY KEY(`id1`)
-DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
-PROPERTIES (
-"replication_num" = "1",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
-"compression" = "LZ4"
-);
--- result:
--- !result
-CREATE TABLE `t_dictionary_multiple_row_fact` (
-  `id1` BIGINT NOT NULL COMMENT "",
-  `id2` BIGINT NOT NULL COMMENT "",
-  `id3` BIGINT NOT NULL COMMENT "",
-  `id4` BIGINT NOT NULL COMMENT ""
-) ENGINE=OLAP
-PRIMARY KEY(`id1`)
-DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
-PROPERTIES (
-"replication_num" = "1",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
-"compression" = "LZ4"
-);
--- result:
--- !result
-insert into t_dictionary_multiple_row select generate_series, generate_series, generate_series, generate_series from Table(generate_series(1, 20001));
--- result:
--- !result
-[UC]DROP DICTIONARY test_dictionary_multiple_row_multi_value;
--- result:
-E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_multiple_row_multi_value does not exist.')
--- !result
-CREATE DICTIONARY test_dictionary_multiple_row_multi_value USING t_dictionary_multiple_row (id1 KEY, id2 VALUE, id3 VALUE, id4 VALUE);
--- result:
--- !result
-function: wait_refresh_dictionary_finish("test_dictionary_multiple_row_multi_value", "FINISHED")
--- result:
-None
--- !result
-[UC]DROP DICTIONARY test_dictionary_multiple_row_single_value;
--- result:
-E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_multiple_row_single_value does not exist.')
--- !result
-CREATE DICTIONARY test_dictionary_multiple_row_single_value USING t_dictionary_multiple_row (id1 KEY, id2 VALUE);
--- result:
--- !result
-function: wait_refresh_dictionary_finish("test_dictionary_multiple_row_single_value", "FINISHED")
--- result:
-None
--- !result
-insert into t_dictionary_multiple_row_fact SELECT id1, dictionary_get("test_dictionary_multiple_row_multi_value", id1)[1], dictionary_get("test_dictionary_multiple_row_multi_value", id1)[2], dictionary_get("test_dictionary_multiple_row_multi_value", id1)[3] FROM t_dictionary_multiple_row;
--- result:
--- !result
-insert into t_dictionary_multiple_row_fact SELECT id1, dictionary_get("test_dictionary_multiple_row_single_value", id1)[1], 1, 1 FROM t_dictionary_multiple_row;
--- result:
--- !result
-DROP TABLE t_dictionary_multiple_row;
--- result:
--- !result
-DROP TABLE t_dictionary_multiple_row_fact;
--- result:
--- !result
-DROP DICTIONARY test_dictionary_multiple_row_multi_value;
--- result:
--- !result
-DROP DICTIONARY test_dictionary_multiple_row_single_value;
--- result:
--- !result
--- name: test_dictionary_show_create_table_gen_col
+-- name: test_dictionary_show_create_table_gen_col @native
 CREATE TABLE `t_dictionary_show_create_table_gen_col_1` (
   `k` BIGINT NOT NULL COMMENT "",
   `v` BIGINT NOT NULL COMMENT ""
@@ -1253,7 +1177,7 @@ PRIMARY KEY(`k`)
 DISTRIBUTED BY HASH(`k`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -1281,7 +1205,7 @@ PRIMARY KEY(`k`)
 DISTRIBUTED BY HASH(`k`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -1304,7 +1228,7 @@ PRIMARY KEY(`k`)
 DISTRIBUTED BY HASH(`k`) BUCKETS 1 
 PROPERTIES (
 "compression" = "LZ4",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "fast_schema_evolution" = "true",
 "replicated_storage" = "true",
 "replication_num" = "1"
@@ -1319,7 +1243,7 @@ DROP TABLE t_dictionary_show_create_table_gen_col_2;
 DROP DICTIONARY test_dictionary_show_create_table_gen_col;
 -- result:
 -- !result
--- name: test_dictionary_null_if_not_exist
+-- name: test_dictionary_null_if_not_exist @native
 CREATE TABLE `t_dictionary_null_if_not_exist` (
   `k` BIGINT NOT NULL COMMENT "",
   `v` BIGINT NOT NULL COMMENT ""
@@ -1328,7 +1252,7 @@ PRIMARY KEY(`k`)
 DISTRIBUTED BY HASH(`k`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -1353,11 +1277,11 @@ INSERT INTO t_dictionary_null_if_not_exist VALUES (2,2),(4,4);
 -- !result
 SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k) FROM t_dictionary_null_if_not_exist ORDER BY k;
 -- result:
-E: (1064, 'key not found in dictionary cache')
+[REGEX].*key not found in dictionary cache.*
 -- !result
 SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, false) FROM t_dictionary_null_if_not_exist ORDER BY k;
 -- result:
-E: (1064, 'key not found in dictionary cache')
+[REGEX].*key not found in dictionary cache.*
 -- !result
 SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, true) FROM t_dictionary_null_if_not_exist ORDER BY k;
 -- result:
@@ -1377,7 +1301,7 @@ SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, tRuE) FROM t_di
 -- !result
 SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, FaLsE) FROM t_dictionary_null_if_not_exist ORDER BY k;
 -- result:
-E: (1064, 'key not found in dictionary cache')
+[REGEX].*key not found in dictionary cache.*
 -- !result
 SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, xxxx) FROM t_dictionary_null_if_not_exist ORDER BY k;
 -- result:
@@ -1415,7 +1339,7 @@ PRIMARY KEY(`k`)
 DISTRIBUTED BY HASH(`k`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -1423,7 +1347,7 @@ PROPERTIES (
 -- !result
 INSERT INTO t_dictionary_null_if_not_exist_gen_column VALUES (1),(2),(3),(4),(5);
 -- result:
-E: (5025, 'key not found in dictionary cache')
+[REGEX].*key not found in dictionary cache.*
 -- !result
 SELECT * FROM t_dictionary_null_if_not_exist_gen_column;
 -- result:
@@ -1438,13 +1362,13 @@ PRIMARY KEY(`k`)
 DISTRIBUTED BY HASH(`k`) BUCKETS 1 
 PROPERTIES (
 "compression" = "LZ4",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "fast_schema_evolution" = "true",
 "replicated_storage" = "true",
 "replication_num" = "1"
 );
 -- !result
--- name: test_dictionary_null_if_not_exist
+-- name: test_dictionary_null_if_not_exist @native
 CREATE TABLE `t_dictionary_null_if_not_exist` (
   `k` BIGINT NOT NULL COMMENT "",
   `v` BIGINT NOT NULL COMMENT ""
@@ -1453,7 +1377,7 @@ PRIMARY KEY(`k`)
 DISTRIBUTED BY HASH(`k`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -1478,11 +1402,11 @@ INSERT INTO t_dictionary_null_if_not_exist VALUES (2,2),(4,4);
 -- !result
 SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k) FROM t_dictionary_null_if_not_exist ORDER BY k;
 -- result:
-E: (1064, 'key not found in dictionary cache')
+[REGEX].*key not found in dictionary cache.*
 -- !result
 SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, false) FROM t_dictionary_null_if_not_exist ORDER BY k;
 -- result:
-E: (1064, 'key not found in dictionary cache')
+[REGEX].*key not found in dictionary cache.*
 -- !result
 SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, true) FROM t_dictionary_null_if_not_exist ORDER BY k;
 -- result:
@@ -1502,7 +1426,7 @@ SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, tRuE) FROM t_di
 -- !result
 SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, FaLsE) FROM t_dictionary_null_if_not_exist ORDER BY k;
 -- result:
-E: (1064, 'key not found in dictionary cache')
+[REGEX].*key not found in dictionary cache.*
 -- !result
 SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, xxxx) FROM t_dictionary_null_if_not_exist ORDER BY k;
 -- result:
@@ -1510,27 +1434,27 @@ E: (1064, "Getting analyzing error. Detail message: Column 'xxxx' cannot be reso
 -- !result
 SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, "true") FROM t_dictionary_null_if_not_exist ORDER BY k;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_null_if_not_exist has invalid parameter for `null_if_not_exist` invalid parameter: StringLiteral{id=null, type=VARCHAR, sel=-1.0, #distinct=-1, scale=-1}.')
+E: (1064, "Getting analyzing error. Detail message: dictionary: test_dictionary_null_if_not_exist has invalid parameter for `null_if_not_exist` invalid parameter: 'true'.")
 -- !result
 SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, "false") FROM t_dictionary_null_if_not_exist ORDER BY k;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_null_if_not_exist has invalid parameter for `null_if_not_exist` invalid parameter: StringLiteral{id=null, type=VARCHAR, sel=-1.0, #distinct=-1, scale=-1}.')
+E: (1064, "Getting analyzing error. Detail message: dictionary: test_dictionary_null_if_not_exist has invalid parameter for `null_if_not_exist` invalid parameter: 'false'.")
 -- !result
 SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, 1) FROM t_dictionary_null_if_not_exist ORDER BY k;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_null_if_not_exist has invalid parameter for `null_if_not_exist` invalid parameter: IntLiteral{id=null, type=TINYINT, sel=-1.0, #distinct=-1, scale=-1}.')
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_null_if_not_exist has invalid parameter for `null_if_not_exist` invalid parameter: 1.')
 -- !result
 SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, 0) FROM t_dictionary_null_if_not_exist ORDER BY k;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_null_if_not_exist has invalid parameter for `null_if_not_exist` invalid parameter: IntLiteral{id=null, type=TINYINT, sel=-1.0, #distinct=-1, scale=-1}.')
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_null_if_not_exist has invalid parameter for `null_if_not_exist` invalid parameter: 0.')
 -- !result
 SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, -1) FROM t_dictionary_null_if_not_exist ORDER BY k;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_null_if_not_exist has invalid parameter for `null_if_not_exist` invalid parameter: IntLiteral{id=null, type=TINYINT, sel=-1.0, #distinct=-1, scale=-1}.')
+E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_null_if_not_exist has invalid parameter for `null_if_not_exist` invalid parameter: -1.')
 -- !result
 SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, k) FROM t_dictionary_null_if_not_exist ORDER BY k;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: dictionary: test_dictionary_null_if_not_exist has invalid parameter for `null_if_not_exist` invalid parameter: SlotRef{id=null, type=BIGINT, sel=-1.0, #distinct=-1, scale=-1}.')
+[REGEX].*invalid parameter.*
 -- !result
 SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, k, k) FROM t_dictionary_null_if_not_exist ORDER BY k;
 -- result:
@@ -1544,7 +1468,7 @@ PRIMARY KEY(`k`)
 DISTRIBUTED BY HASH(`k`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -1552,7 +1476,7 @@ PROPERTIES (
 -- !result
 INSERT INTO t_dictionary_null_if_not_exist_gen_column VALUES (1),(2),(3),(4),(5);
 -- result:
-E: (5025, 'key not found in dictionary cache')
+[REGEX].*key not found in dictionary cache.*
 -- !result
 SELECT * FROM t_dictionary_null_if_not_exist_gen_column;
 -- result:
@@ -1567,7 +1491,7 @@ PRIMARY KEY(`k`)
 DISTRIBUTED BY HASH(`k`) BUCKETS 1 
 PROPERTIES (
 "compression" = "LZ4",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "fast_schema_evolution" = "true",
 "replicated_storage" = "true",
 "replication_num" = "1"
@@ -1608,7 +1532,7 @@ PRIMARY KEY(`k`)
 DISTRIBUTED BY HASH(`k`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );

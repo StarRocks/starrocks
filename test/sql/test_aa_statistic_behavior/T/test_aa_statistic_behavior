@@ -1,0 +1,144 @@
+-- name: test_aa_statistic_behavior @sequential @slow
+
+-- This case is used to test statistics collection behavior.
+-- Include auto collection/partition first load
+-- The order of this case is carefully adjusted. If the case is failed, do not delete it easily, there must be a bug.
+-- Since async tablet stats report and auto collect statistics in the background will affect the behavior of statistics collection.
+-- The inconsistency of the triggering timing order of the two will lead to inconsistent case results.
+-- So we need to use SLEEP command in the case.
+-- tablet stats report interval: 3s
+-- auto collect statistics interval: 6s
+-- sleep 5 means wait for tablet stats report
+-- sleep 7 means wait for statistics auto collect
+-- Since the default analyze job of collecting statistic will collect all databases and tables.
+-- This time is uncontrollable in the testing environment. So we use an analyze job with `statistic_exclude_pattern` to replace it.
+
+DROP DATABASE IF EXISTS test_statistic_behavior;
+CREATE DATABASE test_statistic_behavior;
+USE test_statistic_behavior;
+
+CREATE TABLE `source` (
+  `k1` int(11) NULL COMMENT "",
+  `event_day` datetime NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`, `event_day`)
+PARTITION BY date_trunc('day', event_day)
+PROPERTIES (
+"replication_num" = "1"
+);
+
+insert into source select generate_series, '2020-01-01' from table(generate_series(1, 250000));
+insert into source select generate_series, '2021-01-01' from table(generate_series(1, 250000));
+insert into source select generate_series, '2022-01-01' from table(generate_series(1, 250000));
+insert into source select generate_series, '2023-01-01' from table(generate_series(1, 250000));
+insert into source select generate_series, '2024-01-01' from table(generate_series(1, 150000));
+
+ADMIN SET FRONTEND CONFIG ("enable_sync_tablet_stats" = "false");
+ADMIN SET FRONTEND CONFIG ("loads_history_sync_interval_second" = "1000000");
+ADMIN SET FRONTEND CONFIG ("enable_trigger_analyze_job_immediate" = "false");
+ADMIN SET FRONTEND CONFIG ("enable_auto_collect_statistics" = "false");
+ADMIN SET FRONTEND CONFIG ("enable_statistic_collect" = "false");
+ADMIN SET FRONTEND CONFIG ("statistic_collect_interval_sec" = "6");
+ADMIN SET FRONTEND CONFIG ("tablet_stat_update_interval_second" = "3");
+update default_catalog.information_schema.be_configs set `value` = "3" where name= "tablet_stat_cache_update_interval_second";
+drop all analyze job;
+shell: sleep 110
+shell: sleep 110
+shell: sleep 110
+
+CREATE TABLE `target_table` (
+  `k1` int(11) NULL COMMENT "",
+  `event_day` datetime NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`, `event_day`)
+PARTITION BY date_trunc('day', event_day)
+PROPERTIES (
+"replication_num" = "1"
+);
+
+-- insert one new partition. sample collect
+insert into target_table select * from source where event_day = '2020-01-01';
+function: assert_show_stats_meta("show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table'", "[REGEX]\[\['test_statistic_behavior', 'target_table', 'ALL', 'SAMPLE', '{sample_once_times=1, init_stats_sample_job=true}', '100%', '\(k1,SAMPLE\),\(event_day,SAMPLE\)', '\[tableRowCount=1, tableRowCountInStatistics=250000, totalPartitionCount=1, unhealthyPartitionCount=1, unhealthyPartitionRowCount=0, unhealthyPartitionDataSize=\d+KB, updatePartitionRowCountForCalc=0, deltaRowCount=0\]'\]\]")
+
+-- insert three new partitions. sample collect
+insert into target_table select * from source where event_day >= '2022-01-01';
+function: assert_show_stats_meta("show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table'", "[REGEX]\[\['test_statistic_behavior', 'target_table', 'ALL', 'SAMPLE', '{sample_once_times=2, init_stats_sample_job=true}', '100%', '\(k1,SAMPLE\),\(event_day,SAMPLE\)', '\[tableRowCount=1, tableRowCountInStatistics=900000, totalPartitionCount=4, unhealthyPartitionCount=4, unhealthyPartitionRowCount=0, unhealthyPartitionDataSize=\d+KB, updatePartitionRowCountForCalc=0, deltaRowCount=650000\]'\]\]")
+
+-- insert all partitions. only one is a new partition.
+insert into target_table select * from source;
+function: assert_show_stats_meta("show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table'", "[REGEX]\[\['test_statistic_behavior', 'target_table', 'ALL', 'SAMPLE', '{sample_once_times=3, init_stats_sample_job=true}', '0%', '\(k1,SAMPLE\),\(event_day,SAMPLE\)', '\[tableRowCount=1, tableRowCountInStatistics=1150000, totalPartitionCount=5, unhealthyPartitionCount=5, unhealthyPartitionRowCount=0, unhealthyPartitionDataSize=\d+KB, updatePartitionRowCountForCalc=900000, deltaRowCount=1800000\]'\]\]")
+ADMIN SET FRONTEND CONFIG ("enable_sync_tablet_stats" = "true");
+-- report tablet stats and check table stats healthy
+shell: sleep 5
+function: assert_show_stats_meta("show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table'", "[REGEX]\[\['test_statistic_behavior', 'target_table', 'ALL', 'SAMPLE', '{sample_once_times=3, init_stats_sample_job=true}', '56%', '\(k1,SAMPLE\),\(event_day,SAMPLE\)', '\[tableRowCount=2050001, tableRowCountInStatistics=1150000, totalPartitionCount=5, unhealthyPartitionCount=4, unhealthyPartitionRowCount=1800000, unhealthyPartitionDataSize=\d+KB, updatePartitionRowCountForCalc=900001, deltaRowCount=0\]'\]\]")
+
+-- wait for auto collect statistics. this should be full collected.
+ADMIN SET FRONTEND CONFIG ("enable_statistic_collect" = "true");
+-- simulate default auto job. only collect case db
+create analyze full all properties  ("statistic_exclude_pattern"="^(?!.*test_statistic_behavior).*$");
+shell: sleep 7
+function: assert_show_stats_meta("show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table'", "[REGEX]\[\['test_statistic_behavior', 'target_table', 'ALL', 'FULL', '{sample_once_times=3, full_schedule_times=1}', '100%', '\(k1,FULL\),\(event_day,FULL\)', '\[tableRowCount=2050001, tableRowCountInStatistics=2050001, totalPartitionCount=5, unhealthyPartitionCount=0, unhealthyPartitionRowCount=0, unhealthyPartitionDataSize=\d+KB, updatePartitionRowCountForCalc=1, deltaRowCount=0\]'\]\]")
+
+-- no new partitions, wait for auto collect statistics. full_schedule_times increase once.
+drop all analyze job;
+shell: sleep 7
+insert into target_table select * from target_table;
+shell: sleep 5
+create analyze full all properties  ("statistic_exclude_pattern"="^(?!.*test_statistic_behavior).*$");
+shell: sleep 7
+function: assert_show_stats_meta("show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table'", "[REGEX]\[\['test_statistic_behavior', 'target_table', 'ALL', 'FULL', '{sample_once_times=3, full_schedule_times=2}', '100%', '\(k1,FULL\),\(event_day,FULL\)', '\[tableRowCount=4100001, tableRowCountInStatistics=4100001, totalPartitionCount=5, unhealthyPartitionCount=0, unhealthyPartitionRowCount=0, unhealthyPartitionDataSize=\d+KB, updatePartitionRowCountForCalc=1, deltaRowCount=0\]'\]\]")
+
+-- no new partitions, wait for auto collect statistics. table stats is healthy and no new stats collect job.
+drop all analyze job;
+shell: sleep 7
+insert into target_table select * from source where event_day = '2020-01-01' limit 100000;
+shell: sleep 5
+create analyze full all properties  ("statistic_exclude_pattern"="^(?!.*test_statistic_behavior).*$");
+shell: sleep 7
+function: assert_show_stats_meta("show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table'", "[REGEX]\[\['test_statistic_behavior', 'target_table', 'ALL', 'FULL', '{sample_once_times=3, full_schedule_times=2}', '97%', '\(k1,FULL\),\(event_day,FULL\)', '\[tableRowCount=4200001, tableRowCountInStatistics=4100001, totalPartitionCount=5, unhealthyPartitionCount=1, unhealthyPartitionRowCount=1100000, unhealthyPartitionDataSize=\d+KB, updatePartitionRowCountForCalc=100000, deltaRowCount=0\]'\]\]")
+
+-- add a new partition, sample_once_times increase once.
+drop all analyze job;
+shell: sleep 13
+insert into target_table select k1, '2026-01-01' from source where event_day = '2021-01-01';
+shell: sleep 5
+function: assert_show_stats_meta("show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table'", "[REGEX]\[\['test_statistic_behavior', 'target_table', 'ALL', 'SAMPLE', '{sample_once_times=4, full_schedule_times=2, init_stats_sample_job=true}', '97%', '\(k1,SAMPLE\),\(event_day,SAMPLE\)', '\[tableRowCount=4450001, tableRowCountInStatistics=4350000, totalPartitionCount=6, unhealthyPartitionCount=1, unhealthyPartitionRowCount=1100000, unhealthyPartitionDataSize=\d+KB, updatePartitionRowCountForCalc=100001, deltaRowCount=0\]'\]\]")
+
+-- create sample analyze job. eliminate init_job flag.
+insert into target_table select * from source;
+shell: sleep 5
+create analyze all properties  ("statistic_exclude_pattern"="^(?!.*test_statistic_behavior).*$");
+shell: sleep 7
+function: assert_show_stats_meta("show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table'", "[REGEX]\[\['test_statistic_behavior', 'target_table', 'ALL', 'SAMPLE', '{sample_once_times=4, full_schedule_times=2, statistic_exclude_pattern=.*?, sample_schedule_times=1}', '100%', '\(k1,SAMPLE\),\(event_day,SAMPLE\)', '\[tableRowCount=5600001, tableRowCountInStatistics=5600001, totalPartitionCount=6, unhealthyPartitionCount=0, unhealthyPartitionRowCount=0, unhealthyPartitionDataSize=\d+KB, updatePartitionRowCountForCalc=1, deltaRowCount=0\]'\]\]")
+
+-- test auto sample strategy to full analyze predicate column
+drop all analyze job;
+shell: sleep 7
+ADMIN SET FRONTEND CONFIG ("statistic_auto_collect_small_table_size" = "1");
+ADMIN SET FRONTEND CONFIG ("statistic_auto_collect_large_table_interval" = "0");
+ADMIN SET FRONTEND CONFIG ("statistic_auto_collect_sample_threshold" = "0.6");
+select count(*) from target_table where k1 = -1 and event_day = '2021-01-01';
+admin execute on frontend 'import com.starrocks.statistic.columns.PredicateColumnsMgr; PredicateColumnsMgr.getInstance().persist();';
+insert into target_table select * from target_table;
+shell: sleep 5
+create analyze all properties  ("statistic_exclude_pattern"="^(?!.*test_statistic_behavior).*$");
+shell: sleep 7
+function: assert_show_stats_meta("show stats meta where `Database` = 'test_statistic_behavior' and `table` = 'target_table'", "[REGEX]\[\['test_statistic_behavior', 'target_table', 'ALL', 'FULL', '{sample_once_times=4, full_schedule_times=3, sample_schedule_times=1}', '100%', '\(k1,FULL\),\(event_day,FULL\)', '\[tableRowCount=11200001, tableRowCountInStatistics=11200001, totalPartitionCount=6, unhealthyPartitionCount=0, unhealthyPartitionRowCount=0, unhealthyPartitionDataSize=\d+KB, updatePartitionRowCountForCalc=1, deltaRowCount=0\]'\]\]")
+
+drop stats target_table;
+drop table target_table;
+drop all analyze job;
+
+-- reset fe config
+ADMIN SET FRONTEND CONFIG ("enable_sync_tablet_stats" = "true");
+ADMIN SET FRONTEND CONFIG ("enable_statistic_collect" = "true");
+ADMIN SET FRONTEND CONFIG ("enable_auto_collect_statistics" = "true");
+ADMIN SET FRONTEND CONFIG ("enable_trigger_analyze_job_immediate" = "true");
+ADMIN SET FRONTEND CONFIG ("statistic_auto_collect_small_table_size" = "5368709120");
+ADMIN SET FRONTEND CONFIG ("statistic_auto_collect_large_table_interval" = "43200");
+ADMIN SET FRONTEND CONFIG ("statistic_auto_collect_sample_threshold" = "0.3");
+ADMIN SET FRONTEND CONFIG ("statistic_collect_interval_sec" = "300");
+ADMIN SET FRONTEND CONFIG ("tablet_stat_update_interval_second" = "180");
+
+shell: sleep 10
+

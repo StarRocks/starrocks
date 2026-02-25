@@ -42,7 +42,16 @@
 #include <sstream>
 
 #include "agent/master_info.h"
+#include "base/concurrency/stopwatch.hpp"
+#include "base/network/network_util.h"
+#include "base/uid_util.h"
+#include "base/url_coding.h"
 #include "common/object_pool.h"
+#include "common/system/backend_options.h"
+#include "common/thread/thread.h"
+#include "common/thread/threadpool.h"
+#include "common/util/misc.h"
+#include "common/util/thrift_util.h"
 #include "exec/pipeline/fragment_executor.h"
 #include "gen_cpp/DataSinks_types.h"
 #include "gen_cpp/FrontendService.h"
@@ -51,23 +60,18 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/client_cache.h"
 #include "runtime/current_thread.h"
-#include "runtime/datetime_value.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
+#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/plan_fragment_executor.h"
 #include "runtime/profile_report_worker.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_filter_worker.h"
-#include "service/backend_options.h"
-#include "util/misc.h"
-#include "util/network_util.h"
-#include "util/starrocks_metrics.h"
-#include "util/stopwatch.hpp"
-#include "util/thread.h"
-#include "util/threadpool.h"
-#include "util/thrift_util.h"
-#include "util/uid_util.h"
-#include "util/url_coding.h"
+#include "runtime/runtime_state_helper.h"
+#include "runtime/starrocks_metrics.h"
+#include "types/datetime_value.h"
+#include "util/global_metrics_registry.h"
+#include "util/thrift_rpc_helper.h"
 
 namespace starrocks {
 
@@ -75,15 +79,13 @@ std::string to_load_error_http_path(const std::string& file_name) {
     if (file_name.empty()) {
         return "";
     }
+    std::string resolved_ip = BackendOptions::get_resolved_ip();
+
     std::stringstream url;
-    url << "http://" << get_host_port(BackendOptions::get_localhost(), config::be_http_port) << "/api/_load_error_log?"
+    url << "http://" << get_host_port(resolved_ip, config::be_http_port) << "/api/_load_error_log?"
         << "file=" << file_name;
     return url.str();
 }
-
-using apache::thrift::TException;
-using apache::thrift::TProcessor;
-using apache::thrift::transport::TTransportException;
 
 class RuntimeProfile;
 
@@ -143,7 +145,9 @@ public:
     std::shared_ptr<RuntimeState> runtime_state() { return _runtime_state; }
 
 private:
-    void coordinator_callback(const Status& status, RuntimeProfile* profile, bool done);
+    std::unique_ptr<FragmentDictState> _fragment_dict_state;
+    void coordinator_callback(const Status& status, RuntimeProfile* profile, RuntimeProfile* load_channel_profile,
+                              bool done);
 
     std::shared_ptr<RuntimeState> _runtime_state = nullptr;
 
@@ -167,26 +171,34 @@ private:
 
 FragmentExecState::FragmentExecState(const TUniqueId& query_id, const TUniqueId& fragment_instance_id, int backend_num,
                                      ExecEnv* exec_env, const TNetworkAddress& coord_addr)
-        : _query_id(query_id),
+        : _fragment_dict_state(std::make_unique<FragmentDictState>()),
+          _query_id(query_id),
           _fragment_instance_id(fragment_instance_id),
           _backend_num(backend_num),
           _exec_env(exec_env),
           _coord_addr(coord_addr),
-          _executor(exec_env, std::bind<void>(std::mem_fn(&FragmentExecState::coordinator_callback), this,
-                                              std::placeholders::_1, std::placeholders::_2, std::placeholders::_3)) {
+          _executor(exec_env,
+                    std::bind<void>(std::mem_fn(&FragmentExecState::coordinator_callback), this, std::placeholders::_1,
+                                    std::placeholders::_2, std::placeholders::_3, std::placeholders::_3)) {
     _start_time = DateTimeValue::local_time();
 }
 
-FragmentExecState::~FragmentExecState() = default;
+FragmentExecState::~FragmentExecState() {
+    if (_fragment_dict_state != nullptr && _runtime_state != nullptr) {
+        _fragment_dict_state->close(_runtime_state.get());
+    }
+}
 
 Status FragmentExecState::prepare(const TExecPlanFragmentParams& params) {
     _runtime_state = std::make_shared<RuntimeState>(params.params.query_id, params.params.fragment_instance_id,
                                                     params.query_options, params.query_globals, _exec_env);
+    _runtime_state->set_fragment_dict_state(_fragment_dict_state.get());
     int func_version = params.__isset.func_version ? params.func_version
                                                    : TFunctionVersion::type::RUNTIME_FILTER_SERIALIZE_VERSION_2;
     _runtime_state->set_func_version(func_version);
-    _runtime_state->init_mem_trackers(_query_id);
+    _runtime_state->init_mem_trackers(_query_id, _exec_env->query_pool_mem_tracker());
     _executor.set_runtime_state(_runtime_state.get());
+    RuntimeStateHelper::init_runtime_filter_port(_runtime_state.get());
 
     if (params.__isset.query_options) {
         _timeout_second = params.query_options.query_timeout;
@@ -233,20 +245,10 @@ std::string FragmentExecState::to_http_path(const std::string& file_name) {
 // it is only invoked from the executor's reporting thread.
 // Also, the reported status will always reflect the most recent execution status,
 // including the final status when execution finishes.
-void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfile* profile, bool done) {
+void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfile* profile,
+                                             RuntimeProfile* load_channel_profile, bool done) {
     DCHECK(status.ok() || done); // if !status.ok() => done
     Status exec_status = update_status(status);
-
-    Status coord_status;
-    FrontendServiceConnection coord(_exec_env->frontend_client_cache(), _coord_addr, config::thrift_rpc_timeout_ms,
-                                    &coord_status);
-    if (!coord_status.ok()) {
-        std::stringstream ss;
-        ss << "couldn't get a client for " << _coord_addr;
-        LOG(WARNING) << ss.str();
-        (void)update_status(Status::InternalError(ss.str()));
-        return;
-    }
 
     TReportExecStatusParams params;
     params.protocol_version = FrontendServiceVersion::V1;
@@ -260,15 +262,18 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
     DCHECK(runtime_state != nullptr);
     if (runtime_state->query_options().query_type == TQueryType::LOAD && !done && status.ok()) {
         // this is a load plan, and load is not finished, just make a brief report
-        runtime_state->update_report_load_status(&params);
+        RuntimeStateHelper::update_report_load_status(runtime_state, &params);
         params.__set_load_type(runtime_state->query_options().load_job_type);
     } else {
         if (runtime_state->query_options().query_type == TQueryType::LOAD) {
-            runtime_state->update_report_load_status(&params);
+            RuntimeStateHelper::update_report_load_status(runtime_state, &params);
             params.__set_load_type(runtime_state->query_options().load_job_type);
         }
         profile->to_thrift(&params.profile);
         params.__isset.profile = true;
+
+        load_channel_profile->to_thrift(&params.load_channel_profile);
+        params.__isset.load_channel_profile = true;
 
         if (!runtime_state->output_files().empty()) {
             params.__isset.delta_urls = true;
@@ -309,10 +314,6 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
         if (!runtime_state->tablet_fail_infos().empty()) {
             params.__set_failInfos(runtime_state->tablet_fail_infos());
         }
-
-        // Send new errors to coordinator
-        runtime_state->get_unreported_errors(&(params.error_log));
-        params.__isset.error_log = (params.error_log.size() > 0);
     }
 
     auto backend_id = get_backend_id();
@@ -324,29 +325,20 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
     Status rpc_status;
 
     VLOG_ROW << "debug: reportExecStatus params is " << apache::thrift::ThriftDebugString(params).c_str();
-    try {
-        try {
-            coord->reportExecStatus(res, params);
-        } catch (TTransportException& e) {
-            LOG(WARNING) << "Retrying ReportExecStatus: " << e.what();
-            rpc_status = coord.reopen(config::thrift_rpc_timeout_ms);
 
-            if (!rpc_status.ok()) {
-                // we need to cancel the execution of this fragment
-                (void)update_status(rpc_status);
-                _executor.cancel();
-                return;
-            }
-            coord->reportExecStatus(res, params);
-        }
+    rpc_status = ThriftRpcHelper::rpc<FrontendServiceClient>(
+            _coord_addr.hostname, _coord_addr.port,
+            [&res, &params](FrontendServiceConnection& client) { client->reportExecStatus(res, params); },
+            config::thrift_rpc_timeout_ms);
 
+    VLOG(1) << "report exec status, fragment_instance_id: " << print_id(_runtime_state->fragment_instance_id())
+            << ", has_profile: " << params.__isset.profile
+            << ", has_load_channel_profile: " << params.__isset.load_channel_profile
+            << ", rpc_status: " << rpc_status.to_string()
+            << ", result: " << apache::thrift::ThriftDebugString(res).c_str();
+
+    if (rpc_status.ok()) {
         rpc_status = Status(res.status);
-    } catch (TException& e) {
-        (void)coord.reopen(config::thrift_rpc_timeout_ms);
-        std::stringstream msg;
-        msg << "ReportExecStatus() to " << _coord_addr << " failed:\n" << e.what();
-        LOG(WARNING) << msg.str();
-        rpc_status = Status::InternalError(msg.str());
     }
 
     if (!rpc_status.ok()) {
@@ -374,9 +366,11 @@ FragmentMgr::FragmentMgr(ExecEnv* exec_env)
 }
 
 FragmentMgr::~FragmentMgr() {
-    // stop thread
+    // stop thread if not already stopped in close()
     _stop = true;
-    _cancel_thread.join();
+    if (_cancel_thread.joinable()) {
+        _cancel_thread.join();
+    }
     // Stop all the worker, should wait for a while?
     // _thread_pool->wait_for();
     _thread_pool->shutdown();
@@ -505,7 +499,7 @@ Status FragmentMgr::cancel(const TUniqueId& id, const PPlanFragmentCancelReason&
 }
 
 void FragmentMgr::receive_runtime_filter(const PTransmitRuntimeFilterParams& params,
-                                         const std::shared_ptr<const JoinRuntimeFilter>& shared_rf) {
+                                         const std::shared_ptr<const RuntimeFilter>& shared_rf) {
     std::shared_ptr<FragmentExecState> exec_state;
     const PUniqueId& query_id = params.query_id();
     _exec_env->add_rf_event({query_id, params.filter_id(), BackendOptions::get_localhost(), "RECV_TOTAL_RF_RPC"});
@@ -559,6 +553,11 @@ void FragmentMgr::close() {
     for (auto& id : frag_instance_ids) {
         WARN_IF_ERROR(cancel(id, PPlanFragmentCancelReason::USER_CANCEL),
                       strings::Substitute("Fail to cancel fragment $0", print_id(id)));
+    }
+    // Stop cancel_worker thread to avoid waiting in destructor
+    _stop = true;
+    if (_cancel_thread.joinable()) {
+        _cancel_thread.join();
     }
 }
 
@@ -651,7 +650,7 @@ void FragmentMgr::report_fragments_with_same_host(
                 RuntimeState* runtime_state = executor->runtime_state();
                 DCHECK(runtime_state != nullptr);
                 if (runtime_state->query_options().query_type == TQueryType::LOAD) {
-                    runtime_state->update_report_load_status(&params);
+                    RuntimeStateHelper::update_report_load_status(runtime_state, &params);
                     params.__set_load_type(runtime_state->query_options().load_job_type);
                 }
 
@@ -703,22 +702,6 @@ void FragmentMgr::report_fragments(const std::vector<TUniqueId>& non_pipeline_ne
                 continue;
             }
 
-            Status fe_connection_status;
-
-            FrontendServiceConnection fe_connection(fragment_exec_state->exec_env()->frontend_client_cache(),
-                                                    fragment_exec_state->coord_addr(), config::thrift_rpc_timeout_ms,
-                                                    &fe_connection_status);
-            if (!fe_connection_status.ok()) {
-                std::stringstream ss;
-                ss << "couldn't get a client for " << fragment_exec_state->coord_addr();
-                LOG(WARNING) << ss.str();
-                ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(
-                        fragment_exec_state->fragment_instance_id());
-                fragment_exec_state->exec_env()->frontend_client_cache()->close_connections(
-                        fragment_exec_state->coord_addr());
-                continue;
-            }
-
             std::vector<TReportExecStatusParams> report_exec_status_params_vector;
 
             TReportExecStatusParams params;
@@ -732,7 +715,7 @@ void FragmentMgr::report_fragments(const std::vector<TUniqueId>& non_pipeline_ne
             RuntimeState* runtime_state = executor->runtime_state();
             DCHECK(runtime_state != nullptr);
             if (runtime_state->query_options().query_type == TQueryType::LOAD) {
-                runtime_state->update_report_load_status(&params);
+                RuntimeStateHelper::update_report_load_status(runtime_state, &params);
                 params.__set_load_type(runtime_state->query_options().load_job_type);
             }
 
@@ -756,23 +739,16 @@ void FragmentMgr::report_fragments(const std::vector<TUniqueId>& non_pipeline_ne
             Status rpc_status;
 
             VLOG_ROW << "debug: reportExecStatus params is " << apache::thrift::ThriftDebugString(params).c_str();
-            try {
-                try {
-                    fe_connection->batchReportExecStatus(res, report_batch);
-                } catch (TTransportException& e) {
-                    LOG(WARNING) << "Retrying ReportExecStatus: " << e.what();
-                    rpc_status = fe_connection.reopen(config::thrift_rpc_timeout_ms);
-                    if (!rpc_status.ok()) {
-                        continue;
-                    }
-                    fe_connection->batchReportExecStatus(res, report_batch);
-                }
+            rpc_status = ThriftRpcHelper::rpc<FrontendServiceClient>(
+                    fragment_exec_state->coord_addr(),
+                    [&res, &report_batch](FrontendServiceConnection& client) {
+                        client->batchReportExecStatus(res, report_batch);
+                    },
+                    config::thrift_rpc_timeout_ms);
 
-            } catch (TException& e) {
-                (void)fe_connection.reopen(config::thrift_rpc_timeout_ms);
-                std::stringstream msg;
-                msg << "ReportExecStatus() to " << fragment_exec_state->coord_addr() << " failed:\n" << e.what();
-                LOG(WARNING) << msg.str();
+            if (!rpc_status.ok()) {
+                LOG(WARNING) << "batch report exec status rpc error:" << rpc_status;
+                continue;
             }
 
             const std::vector<TStatus>& status_list = res.status_list;
@@ -875,7 +851,7 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
             LOG(WARNING) << "tuple descriptor is null. id: " << slot_ref.tuple_id;
             return Status::InvalidArgument("tuple descriptor is null");
         }
-        auto* slot_desc = desc_tbl->get_slot_descriptor(slot_ref.slot_id);
+        auto* slot_desc = desc_tbl->get_slot_descriptor_with_column(slot_ref.slot_id);
         if (slot_desc == nullptr) {
             LOG(WARNING) << "slot descriptor is null. id: " << slot_ref.slot_id;
             return Status::InvalidArgument("slot descriptor is null");
@@ -950,7 +926,6 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
     query_options.query_type = TQueryType::EXTERNAL;
     // For spark sql / flink sql, we dont use page cache.
     query_options.use_page_cache = false;
-    query_options.use_column_pool = false;
     query_options.enable_profile = config::enable_profile_for_external_plan;
     exec_fragment_params.__set_query_options(query_options);
     VLOG_ROW << "external exec_plan_fragment params is "

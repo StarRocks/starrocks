@@ -14,6 +14,9 @@
 
 #pragma once
 
+#include <optional>
+#include <unordered_set>
+
 #include "common/statusor.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/tablet.h"
@@ -21,11 +24,13 @@
 #include "storage/olap_common.h"
 #include "storage/options.h"
 #include "storage/rowset/base_rowset.h"
+#include "storage/seek_range.h"
 
 namespace starrocks::lake {
 
 class MetaFileBuilder;
 class TabletManager;
+class TabletWriter;
 
 class Rowset : public BaseRowset {
 public:
@@ -44,7 +49,19 @@ public:
     // Requires:
     //  - |tablet_mgr| and |tablet_metadata| is not nullptr
     //  - 0 <= |rowset_index| && |rowset_index| < tablet_metadata->rowsets_size()
-    explicit Rowset(TabletManager* tablet_mgr, TabletMetadataPtr tablet_metadata, int rowset_index);
+    explicit Rowset(TabletManager* tablet_mgr, TabletMetadataPtr tablet_metadata, int rowset_index,
+                    size_t compaction_segment_limit);
+
+    // Create a Rowset with a specific segment range [segment_start, segment_end).
+    // Used for large rowset split compaction where a single rowset is split into multiple subtasks.
+    // Each subtask processes a subset of segments.
+    //
+    // Requires:
+    //  - segment_start >= 0
+    //  - segment_end > segment_start
+    //  - segment_end <= metadata.segments_size()
+    explicit Rowset(TabletManager* tablet_mgr, TabletMetadataPtr tablet_metadata, int rowset_index,
+                    int32_t segment_start, int32_t segment_end);
 
     virtual ~Rowset();
 
@@ -60,6 +77,8 @@ public:
     // |stats| used for iterator read stats
     // return iterator list, an iterator for each segment,
     // if the segment is empty, it wouln't add this iterator to iterator list
+    // this function does not expect segment schema will be changed, so return error if record predicate exists
+    // but does not match its chunk schema
     StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator(const Schema& schema, bool file_data_cache,
                                                                       OlapReaderStatistics* stats);
 
@@ -70,19 +89,44 @@ public:
     // |stats| used for iterator read stats
     // return iterator list, an iterator for each segment,
     // if the segment is empty, it wouln't add this iterator to iterator list
+    // this function does not expect segment schema will be changed, so return error if record predicate exists
+    // but does not match its chunk schema
     StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator_with_delvec(const Schema& schema, int64_t version,
                                                                                   const MetaFileBuilder* builder,
                                                                                   OlapReaderStatistics* stats);
 
     [[nodiscard]] bool is_overlapped() const override { return metadata().overlapped(); }
 
-    [[nodiscard]] int64_t num_segments() const { return metadata().segments_size(); }
+    // if _compaction_segment_limit is set > 0, it means only partial segments will be used
+    // if _segment_range_end > 0, it means segment range mode is used
+    [[nodiscard]] int64_t num_segments() const {
+        if (_segment_range_end > 0) {
+            return _segment_range_end - _segment_range_start;
+        }
+        return _compaction_segment_limit > 0 ? _compaction_segment_limit : metadata().segments_size();
+    }
+
+    // only used in compaction
+    [[nodiscard]] bool partial_segments_compaction() const { return _compaction_segment_limit > 0; }
+
+    // Check if this rowset uses segment range mode (for large rowset split compaction)
+    [[nodiscard]] bool is_segment_range_mode() const { return _segment_range_end > 0; }
+
+    // Get segment range [start, end), only valid when is_segment_range_mode() returns true
+    [[nodiscard]] int32_t segment_range_start() const { return _segment_range_start; }
+    [[nodiscard]] int32_t segment_range_end() const { return _segment_range_end; }
+    // only used in compaction
+    [[nodiscard]] Status add_partial_compaction_segments_info(TxnLogPB_OpCompaction* op_compaction,
+                                                              TabletWriter* writer, uint64_t& uncompacted_num_rows,
+                                                              uint64_t& uncompacted_data_size);
 
     [[nodiscard]] int64_t num_rows() const override { return metadata().num_rows(); }
 
     [[nodiscard]] int64_t num_dels() const { return metadata().num_dels(); }
 
     [[nodiscard]] int64_t data_size() const { return metadata().data_size(); }
+
+    [[nodiscard]] int64_t data_size_after_deletion() const;
 
     [[nodiscard]] uint32_t id() const { return metadata().id(); }
 
@@ -96,19 +140,30 @@ public:
 
     StatusOr<std::vector<SegmentPtr>> segments(bool fill_cache);
 
-    StatusOr<std::vector<SegmentPtr>> segments(const LakeIOOptions& lake_io_opts, bool fill_metadata_cache);
+    [[nodiscard]] StatusOr<std::vector<SegmentPtr>> segments(const LakeIOOptions& lake_io_opts);
 
     // `fill_cache` controls `fill_data_cache` and `fill_meta_cache`
     Status load_segments(std::vector<SegmentPtr>* segments, bool fill_cache, int64_t buffer_size = -1);
 
-    Status load_segments(std::vector<SegmentPtr>* segments, const LakeIOOptions& lake_io_opts,
-                         bool fill_metadata_cache);
+    [[nodiscard]] Status load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptions& seg_options,
+                                       std::pair<std::vector<SegmentPtr>, std::vector<SegmentPtr>>* not_used_segments,
+                                       const std::unordered_set<int>* skip_segment_idxs = nullptr);
 
     int64_t tablet_id() const { return _tablet_id; }
 
     [[nodiscard]] int64_t version() const { return metadata().version(); }
 
+    TabletSchemaPtr tablet_schema() const { return _tablet_schema; }
+
+    bool has_data_files() const override { return num_segments() > 0 || num_dels() > 0; }
+
+    // no practical significance, just compatible interface
+    int64_t start_version() const override { return 0; }
+    int64_t end_version() const override { return 0; }
+
 private:
+    StatusOr<std::optional<SeekRange>> get_seek_range() const;
+
     TabletManager* _tablet_mgr;
     int64_t _tablet_id;
     const RowsetMetadataPB* _metadata;
@@ -116,13 +171,23 @@ private:
     TabletSchemaPtr _tablet_schema;
     TabletMetadataPtr _tablet_metadata;
     std::vector<SegmentSharedPtr> _segments;
+    bool _parallel_load;
+    // only takes effect when rowset is overlapped, tells how many segments will be used in compaction,
+    // default is 0 means every segment will be used.
+    // only used for compaction
+    size_t _compaction_segment_limit;
+    // Segment range for large rowset split compaction.
+    // When _segment_range_end > 0, only segments in [_segment_range_start, _segment_range_end) are used.
+    // Default is 0, meaning all segments are used.
+    int32_t _segment_range_start = 0;
+    int32_t _segment_range_end = 0;
 };
 
 inline std::vector<RowsetPtr> Rowset::get_rowsets(TabletManager* tablet_mgr, const TabletMetadataPtr& tablet_metadata) {
     std::vector<RowsetPtr> rowsets;
     rowsets.reserve(tablet_metadata->rowsets_size());
     for (int i = 0, size = tablet_metadata->rowsets_size(); i < size; ++i) {
-        auto rowset = std::make_shared<Rowset>(tablet_mgr, tablet_metadata, i);
+        auto rowset = std::make_shared<Rowset>(tablet_mgr, tablet_metadata, i, 0 /* compaction_segment_limit */);
         rowsets.emplace_back(std::move(rowset));
     }
     return rowsets;

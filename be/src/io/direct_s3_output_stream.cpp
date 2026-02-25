@@ -22,8 +22,10 @@
 #include <aws/s3/model/UploadPartRequest.h>
 #include <fmt/format.h>
 
+#include "base/concurrency/stopwatch.hpp"
+#include "base/failpoint/fail_point.h"
 #include "common/logging.h"
-#include "util/failpoint/fail_point.h"
+#include "io/io_profiler.h"
 
 namespace starrocks::io {
 
@@ -36,8 +38,11 @@ public:
 };
 
 DirectS3OutputStream::DirectS3OutputStream(std::shared_ptr<Aws::S3::S3Client> client, std::string bucket,
-                                           std::string object)
-        : _client(std::move(client)), _bucket(std::move(bucket)), _object(std::move(object)) {
+                                           std::string object, std::string content_type)
+        : _client(std::move(client)),
+          _bucket(std::move(bucket)),
+          _object(std::move(object)),
+          _content_type(std::move(content_type)) {
     DCHECK(_client != nullptr);
 }
 
@@ -50,6 +55,9 @@ Status DirectS3OutputStream::write(const void* data, int64_t size) {
     if (size == 0) {
         return Status::OK();
     }
+
+    MonotonicStopWatch watch;
+    watch.start();
 
     Aws::S3::Model::UploadPartRequest req;
     req.SetBucket(_bucket);
@@ -66,6 +74,7 @@ Status DirectS3OutputStream::write(const void* data, int64_t size) {
     }
 
     _etags.push_back(outcome.GetResult().GetETag());
+    IOProfiler::add_write(size, watch.elapsed_time());
     return Status::OK();
 }
 
@@ -75,7 +84,10 @@ Status DirectS3OutputStream::close() {
     }
 
     if (!_upload_id.empty() && !_etags.empty()) {
+        MonotonicStopWatch watch;
+        watch.start();
         RETURN_IF_ERROR(complete_multipart_upload());
+        IOProfiler::add_sync(watch.elapsed_time());
     }
 
     _client = nullptr;
@@ -86,6 +98,7 @@ Status DirectS3OutputStream::create_multipart_upload() {
     Aws::S3::Model::CreateMultipartUploadRequest req;
     req.SetBucket(_bucket);
     req.SetKey(_object);
+    req.SetContentType(_content_type);
     FAIL_POINT_TRIGGER_RETURN(output_stream_io_error, Status::IOError("injected output_stream_io_error"));
     Aws::S3::Model::CreateMultipartUploadOutcome outcome = _client->CreateMultipartUpload(req);
     if (outcome.IsSuccess()) {

@@ -21,6 +21,9 @@
 #include <string>
 #include <thread>
 
+#include "base/path/path_util.h"
+#include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "column/datum_tuple.h"
 #include "column/vectorized_fwd.h"
 #include "fs/fs.h"
@@ -45,9 +48,6 @@
 #include "storage/tablet_updates.h"
 #include "storage/union_iterator.h"
 #include "storage/update_manager.h"
-#include "testutil/assert.h"
-#include "util/defer_op.h"
-#include "util/path_util.h"
 
 namespace starrocks {
 
@@ -59,7 +59,7 @@ enum PartialUpdateCloneCase {
 };
 
 template <class T>
-static void append_datum_func(std::shared_ptr<Column> col, T val) {
+static void append_datum_func(MutableColumnPtr& col, T val) {
     if (val == -1) {
         col->append_nulls(1);
     } else {
@@ -93,7 +93,7 @@ public:
         }
         auto schema = ChunkHelper::convert_schema(tablet->thread_safe_get_tablet_schema());
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
-        auto& cols = chunk->columns();
+        auto cols = chunk->mutable_columns();
         for (int64_t key : keys) {
             if (schema.num_key_fields() == 1) {
                 cols[0]->append_datum(Datum(key));
@@ -149,7 +149,7 @@ public:
         auto schema = ChunkHelper::convert_schema(tablet->thread_safe_get_tablet_schema());
         for (int i = 0; i < keys_by_segment.size(); i++) {
             auto chunk = ChunkHelper::new_chunk(schema, keys_by_segment[i].size());
-            auto& cols = chunk->columns();
+            auto cols = chunk->mutable_columns();
             for (int64_t key : keys_by_segment[i]) {
                 if (schema.num_key_fields() == 1) {
                     cols[0]->append_datum(Datum(key));
@@ -205,7 +205,7 @@ public:
         if (keys.size() > 0) {
             auto chunk = ChunkHelper::new_chunk(schema, keys.size());
             EXPECT_TRUE(2 == chunk->num_columns());
-            auto& cols = chunk->columns();
+            auto cols = chunk->mutable_columns();
             for (long key : keys) {
                 cols[0]->append_datum(Datum(key));
                 cols[1]->append_datum(Datum((int16_t)(key % 100 + 3)));
@@ -236,7 +236,7 @@ public:
         auto schema = ChunkHelper::convert_schema(tablet->thread_safe_get_tablet_schema());
         for (std::size_t written_rows = 0; written_rows < keys.size(); written_rows += max_rows_per_segment) {
             auto chunk = ChunkHelper::new_chunk(schema, max_rows_per_segment);
-            auto& cols = chunk->columns();
+            auto cols = chunk->mutable_columns();
             for (size_t i = 0; i < max_rows_per_segment; i++) {
                 cols[0]->append_datum(Datum(keys[written_rows + i]));
                 cols[1]->append_datum(Datum((int16_t)(keys[written_rows + i] % 100 + 1)));
@@ -265,7 +265,7 @@ public:
         auto schema = ChunkHelper::convert_schema(tablet->thread_safe_get_tablet_schema());
         const auto nkeys = keys.size();
         auto chunk = ChunkHelper::new_chunk(schema, nkeys);
-        auto& cols = chunk->columns();
+        auto cols = chunk->mutable_columns();
         for (int64_t key : keys) {
             cols[0]->append_datum(Datum(key));
             cols[1]->append_datum(Datum((int16_t)(nkeys - 1 - key)));
@@ -308,7 +308,7 @@ public:
         } else {
             varchar_value = std::string(1024, 'a');
         }
-        auto& cols = chunk->columns();
+        auto cols = chunk->mutable_columns();
         for (int64_t key : keys) {
             cols[0]->append_datum(Datum(key));
             cols[1]->append_datum(Datum((int16_t)(nkeys - 1 - key)));
@@ -337,7 +337,7 @@ public:
         auto schema = ChunkHelper::convert_schema(tablet->thread_safe_get_tablet_schema());
         const auto nkeys = keys.size();
         auto chunk = ChunkHelper::new_chunk(schema, nkeys);
-        auto& cols = chunk->columns();
+        auto cols = chunk->mutable_columns();
         for (auto i = 0; i < nkeys; ++i) {
             cols[0]->append_datum(Datum(keys[i]));
             cols[1]->append_datum(Datum((int16_t)1));
@@ -366,7 +366,7 @@ public:
         auto schema = ChunkHelper::convert_schema(tablet->thread_safe_get_tablet_schema());
         const auto keys_size = all_cols[0].size();
         auto chunk = ChunkHelper::new_chunk(schema, keys_size);
-        auto& cols = chunk->columns();
+        auto cols = chunk->mutable_columns();
         for (auto i = 0; i < keys_size; ++i) {
             append_datum_func(cols[0], static_cast<int64_t>(all_cols[0][i]));
             append_datum_func(cols[1], static_cast<int16_t>(all_cols[1][i]));
@@ -377,7 +377,9 @@ public:
         return *writer->build();
     }
 
-    TabletSharedPtr create_tablet(int64_t tablet_id, int32_t schema_hash, bool multi_column_pk = false) {
+    TabletSharedPtr create_tablet(int64_t tablet_id, int32_t schema_hash, bool multi_column_pk = false,
+                                  int64_t schema_id = 0, int32_t schema_version = 0, bool add_v3 = false) {
+        srand(GetCurrentTimeMicros());
         TCreateTabletReq request;
         request.tablet_id = tablet_id;
         request.__set_version(1);
@@ -386,43 +388,54 @@ public:
         request.tablet_schema.short_key_column_count = 1;
         request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
         request.tablet_schema.storage_type = TStorageType::COLUMN;
+        request.tablet_schema.__set_id(schema_id);
+        request.tablet_schema.__set_schema_version(schema_version);
 
         if (multi_column_pk) {
             TColumn pk1;
             pk1.column_name = "pk1_bigint";
             pk1.__set_is_key(true);
             pk1.column_type.type = TPrimitiveType::BIGINT;
-            request.tablet_schema.columns.push_back(pk1);
+            request.tablet_schema.columns.emplace_back(pk1);
             TColumn pk2;
             pk2.column_name = "pk2_varchar";
             pk2.__set_is_key(true);
             pk2.column_type.type = TPrimitiveType::VARCHAR;
             pk2.column_type.len = 128;
-            request.tablet_schema.columns.push_back(pk2);
+            request.tablet_schema.columns.emplace_back(pk2);
             TColumn pk3;
             pk3.column_name = "pk3_int";
             pk3.__set_is_key(true);
             pk3.column_type.type = TPrimitiveType::INT;
-            request.tablet_schema.columns.push_back(pk3);
+            request.tablet_schema.columns.emplace_back(pk3);
         } else {
             TColumn k1;
             k1.column_name = "pk";
             k1.__set_is_key(true);
             k1.column_type.type = TPrimitiveType::BIGINT;
-            request.tablet_schema.columns.push_back(k1);
+            request.tablet_schema.columns.emplace_back(k1);
         }
 
         TColumn k2;
         k2.column_name = "v1";
         k2.__set_is_key(false);
         k2.column_type.type = TPrimitiveType::SMALLINT;
-        request.tablet_schema.columns.push_back(k2);
+        request.tablet_schema.columns.emplace_back(k2);
 
         TColumn k3;
         k3.column_name = "v2";
         k3.__set_is_key(false);
         k3.column_type.type = TPrimitiveType::INT;
-        request.tablet_schema.columns.push_back(k3);
+        request.tablet_schema.columns.emplace_back(k3);
+
+        if (add_v3) {
+            TColumn k4;
+            k4.column_name = "v3";
+            k4.__set_default_value("1");
+            k4.__set_is_key(false);
+            k4.column_type.type = TPrimitiveType::INT;
+            request.tablet_schema.columns.emplace_back(k4);
+        }
         auto st = StorageEngine::instance()->create_tablet(request);
         CHECK(st.ok()) << st.to_string();
         return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
@@ -443,19 +456,19 @@ public:
         k1.column_name = "pk";
         k1.__set_is_key(true);
         k1.column_type.type = TPrimitiveType::BIGINT;
-        request.tablet_schema.columns.push_back(k1);
+        request.tablet_schema.columns.emplace_back(k1);
 
         TColumn k2;
         k2.column_name = "v1";
         k2.__set_is_key(false);
         k2.column_type.type = TPrimitiveType::SMALLINT;
-        request.tablet_schema.columns.push_back(k2);
+        request.tablet_schema.columns.emplace_back(k2);
 
         TColumn k3;
         k3.column_name = "v2";
         k3.__set_is_key(false);
         k3.column_type.type = TPrimitiveType::INT;
-        request.tablet_schema.columns.push_back(k3);
+        request.tablet_schema.columns.emplace_back(k3);
         auto st = StorageEngine::instance()->create_tablet(request);
         CHECK(st.ok()) << st.to_string();
         return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
@@ -476,21 +489,21 @@ public:
         k1.column_name = "pk";
         k1.__set_is_key(true);
         k1.column_type.type = TPrimitiveType::BIGINT;
-        request.tablet_schema.columns.push_back(k1);
+        request.tablet_schema.columns.emplace_back(k1);
 
         TColumn k2;
         k2.column_name = "v1";
         k2.__set_is_key(false);
         k2.__set_is_allow_null(true);
         k2.column_type.type = TPrimitiveType::SMALLINT;
-        request.tablet_schema.columns.push_back(k2);
+        request.tablet_schema.columns.emplace_back(k2);
 
         TColumn k3;
         k3.column_name = "v2";
         k3.__set_is_key(false);
         k3.__set_is_allow_null(true);
         k3.column_type.type = TPrimitiveType::INT;
-        request.tablet_schema.columns.push_back(k3);
+        request.tablet_schema.columns.emplace_back(k3);
         auto st = StorageEngine::instance()->create_tablet(request);
         CHECK(st.ok()) << st.to_string();
         return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
@@ -512,38 +525,38 @@ public:
             pk1.column_name = "pk1_bigint";
             pk1.__set_is_key(true);
             pk1.column_type.type = TPrimitiveType::BIGINT;
-            request.tablet_schema.columns.push_back(pk1);
+            request.tablet_schema.columns.emplace_back(pk1);
             TColumn pk2;
             pk2.column_name = "pk2_varchar";
             pk2.__set_is_key(true);
             pk2.column_type.type = TPrimitiveType::VARCHAR;
             pk2.column_type.len = 128;
-            request.tablet_schema.columns.push_back(pk2);
+            request.tablet_schema.columns.emplace_back(pk2);
             TColumn pk3;
             pk3.column_name = "pk3_int";
             pk3.__set_is_key(true);
             pk3.column_type.type = TPrimitiveType::INT;
-            request.tablet_schema.columns.push_back(pk3);
+            request.tablet_schema.columns.emplace_back(pk3);
         } else {
             TColumn k1;
             k1.column_name = "pk";
             k1.__set_is_key(true);
             k1.column_type.type = TPrimitiveType::BIGINT;
-            request.tablet_schema.columns.push_back(k1);
+            request.tablet_schema.columns.emplace_back(k1);
         }
 
         TColumn k2;
         k2.column_name = "v1";
         k2.__set_is_key(false);
         k2.column_type.type = TPrimitiveType::SMALLINT;
-        request.tablet_schema.columns.push_back(k2);
+        request.tablet_schema.columns.emplace_back(k2);
 
         TColumn k3;
         k3.column_name = "v2";
         k3.__set_is_key(false);
         k3.column_type.type = TPrimitiveType::VARCHAR;
         k3.column_type.len = TypeDescriptor::MAX_VARCHAR_LENGTH;
-        request.tablet_schema.columns.push_back(k3);
+        request.tablet_schema.columns.emplace_back(k3);
 
         TColumn row;
         row.column_name = Schema::FULL_ROW_COLUMN;
@@ -554,7 +567,7 @@ public:
         row.__set_aggregation_type(TAggregationType::REPLACE);
         row.__set_is_allow_null(false);
         row.__set_default_value("");
-        request.tablet_schema.columns.push_back(row);
+        request.tablet_schema.columns.emplace_back(row);
 
         auto st = StorageEngine::instance()->create_tablet(request);
         CHECK(st.ok()) << st.to_string();
@@ -575,26 +588,26 @@ public:
         k1.column_name = "pk";
         k1.__set_is_key(true);
         k1.column_type.type = TPrimitiveType::BIGINT;
-        request.tablet_schema.columns.push_back(k1);
+        request.tablet_schema.columns.emplace_back(k1);
 
         TColumn k2;
         k2.column_name = "v1";
         k2.__set_is_key(false);
         k2.column_type.type = TPrimitiveType::SMALLINT;
-        request.tablet_schema.columns.push_back(k2);
+        request.tablet_schema.columns.emplace_back(k2);
 
         TColumn k3;
         k3.column_name = "v2";
         k3.__set_is_key(false);
         k3.column_type.type = TPrimitiveType::INT;
-        request.tablet_schema.columns.push_back(k3);
+        request.tablet_schema.columns.emplace_back(k3);
 
         TColumn k4;
         k4.column_name = "v3";
         k4.__set_is_key(false);
         k4.column_type.type = TPrimitiveType::INT;
         k4.__set_default_value("1");
-        request.tablet_schema.columns.push_back(k4);
+        request.tablet_schema.columns.emplace_back(k4);
         auto st = StorageEngine::instance()->create_tablet(request);
         CHECK(st.ok()) << st.to_string();
         return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
@@ -614,20 +627,20 @@ public:
         k1.column_name = "pk";
         k1.__set_is_key(true);
         k1.column_type.type = TPrimitiveType::BIGINT;
-        request.tablet_schema.columns.push_back(k1);
+        request.tablet_schema.columns.emplace_back(k1);
 
         TColumn k2;
         k2.column_name = "v1";
         k2.__set_is_key(false);
         k2.column_type.type = TPrimitiveType::SMALLINT;
-        request.tablet_schema.columns.push_back(k2);
+        request.tablet_schema.columns.emplace_back(k2);
 
         TColumn k3;
         k3.column_name = "v2";
         k3.__set_is_key(false);
         k3.column_type.type = TPrimitiveType::VARCHAR;
         k3.column_type.len = 128;
-        request.tablet_schema.columns.push_back(k3);
+        request.tablet_schema.columns.emplace_back(k3);
 
         auto st = StorageEngine::instance()->create_tablet(request);
         CHECK(st.ok()) << st.to_string();
@@ -648,26 +661,26 @@ public:
         k1.column_name = "pk";
         k1.__set_is_key(true);
         k1.column_type.type = TPrimitiveType::BIGINT;
-        request.tablet_schema.columns.push_back(k1);
+        request.tablet_schema.columns.emplace_back(k1);
 
         TColumn k2;
         k2.column_name = "v1";
         k2.__set_is_key(false);
         k2.column_type.type = TPrimitiveType::SMALLINT;
-        request.tablet_schema.columns.push_back(k2);
+        request.tablet_schema.columns.emplace_back(k2);
 
         TColumn k3;
         k3.column_name = "v2";
         k3.__set_is_key(false);
         k3.column_type.type = TPrimitiveType::INT;
-        request.tablet_schema.columns.push_back(k3);
+        request.tablet_schema.columns.emplace_back(k3);
 
         TColumn k4;
         k4.column_name = "newcol";
         k4.__set_is_key(false);
         k4.__set_is_allow_null(true);
         k4.column_type.type = TPrimitiveType::BIGINT;
-        request.tablet_schema.columns.push_back(k4);
+        request.tablet_schema.columns.emplace_back(k4);
         auto st = StorageEngine::instance()->create_tablet(request);
         CHECK(st.ok()) << st.to_string();
         return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
@@ -788,12 +801,14 @@ public:
     void test_load_from_pb(bool enable_persistent_index);
     void test_remove_expired_versions(bool enable_persistent_index);
     void test_apply(bool enable_persistent_index, bool has_merge_condition);
+    void test_apply_breakpoint_check(bool enable_persistent_index);
     void test_condition_update_apply(bool enable_persistent_index);
     void test_concurrent_write_read_and_gc(bool enable_persistent_index);
     void test_compaction_score_not_enough(bool enable_persistent_index);
     void test_compaction_score_enough_duplicate(bool enable_persistent_index);
     void test_compaction_score_enough_normal(bool enable_persistent_index);
-    void test_horizontal_compaction(bool enable_persistent_index, bool show_status = false);
+    void test_horizontal_compaction(bool enable_persistent_index, bool show_status = false,
+                                    bool random_compaction = false);
     void test_vertical_compaction(bool enable_persistent_index);
     void test_horizontal_compaction_with_rows_mapper(bool enable_persistent_index);
     void test_vertical_compaction_with_rows_mapper(bool enable_persistent_index);

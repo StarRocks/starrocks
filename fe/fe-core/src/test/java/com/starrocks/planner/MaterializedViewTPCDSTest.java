@@ -14,12 +14,30 @@
 
 package com.starrocks.planner;
 
+import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.Optimizer;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerFactory;
+import com.starrocks.sql.optimizer.OptimizerOptions;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVColumnPruner;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVPartitionPruner;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
+import com.starrocks.sql.optimizer.transformer.LogicalPlan;
+import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.TPCDSPlanTestBase;
 import com.starrocks.sql.plan.TPCDSTestUtil;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
+
+import java.util.Map;
 
 @TestMethodOrder(MethodOrderer.MethodName.class)
 public class MaterializedViewTPCDSTest extends MaterializedViewTestBase {
@@ -28,6 +46,32 @@ public class MaterializedViewTPCDSTest extends MaterializedViewTestBase {
         MaterializedViewTestBase.beforeClass();
         TPCDSTestUtil.prepareTables(starRocksAssert);
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
+    }
+
+    @Test
+    public void testMVPartitionPrunerAndColumnPruner() {
+        Map<String, String> sqlMap = TPCDSPlanTestBase.getSqlMap();
+        for (String sql : sqlMap.values()) {
+            StatementBase mvStmt = MVTestBase.getAnalyzedPlan(sql, connectContext);
+            QueryRelation query = ((QueryStatement) mvStmt).getQueryRelation();
+            ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+            LogicalPlan logicalPlan =
+                    new RelationTransformer(columnRefFactory, connectContext).transformWithSelectLimit(query);
+            OptimizerContext optimizerContext =
+                    OptimizerFactory.initContext(connectContext, columnRefFactory, OptimizerOptions.newRuleBaseOpt());
+            Optimizer optimizer = OptimizerFactory.create(optimizerContext);
+            OptExpression optExpression = optimizer.optimize(
+                    logicalPlan.getRoot(),
+                    new PhysicalPropertySet(),
+                    new ColumnRefSet(logicalPlan.getOutputColumn()));
+            MVPartitionPruner mvPartitionPruner = new MVPartitionPruner(
+                    optimizerContext, null);
+            // partition pruner
+            mvPartitionPruner.prunePartition(optExpression);
+
+            // column pruner
+            new MVColumnPruner().pruneColumns(optExpression, optExpression.getOutputColumns());
+        }
     }
 
     @Test

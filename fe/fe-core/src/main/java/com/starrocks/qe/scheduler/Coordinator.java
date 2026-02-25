@@ -14,10 +14,11 @@
 
 package com.starrocks.qe.scheduler;
 
-import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.datacache.DataCacheSelectMetrics;
+import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.StreamLoadPlanner;
@@ -26,7 +27,9 @@ import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryStatisticsItem;
 import com.starrocks.qe.RowBatch;
+import com.starrocks.qe.scheduler.slot.DeployState;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
+import com.starrocks.rpc.RpcException;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TDescriptorTable;
@@ -40,6 +43,7 @@ import com.starrocks.thrift.TTabletFailInfo;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 
 import java.util.Collections;
 import java.util.List;
@@ -52,12 +56,14 @@ public abstract class Coordinator {
         Coordinator createQueryScheduler(ConnectContext context,
                                          List<PlanFragment> fragments,
                                          List<ScanNode> scanNodes,
-                                         TDescriptorTable descTable);
+                                         TDescriptorTable descTable,
+                                         ExecPlan execPlan);
 
         Coordinator createInsertScheduler(ConnectContext context,
                                           List<PlanFragment> fragments,
                                           List<ScanNode> scanNodes,
-                                          TDescriptorTable descTable);
+                                          TDescriptorTable descTable,
+                                          ExecPlan execPlan);
 
         Coordinator createBrokerLoadScheduler(LoadPlanner loadPlanner);
 
@@ -65,31 +71,41 @@ public abstract class Coordinator {
 
         Coordinator createSyncStreamLoadScheduler(StreamLoadPlanner planner, TNetworkAddress address);
 
-        Coordinator createNonPipelineBrokerLoadScheduler(Long jobId, TUniqueId queryId, DescriptorTable descTable,
-                                                         List<PlanFragment> fragments,
-                                                         List<ScanNode> scanNodes, String timezone, long startTime,
-                                                         Map<String, String> sessionVariables,
-                                                         ConnectContext context, long execMemLimit,
-                                                         long warehouseId);
-
         Coordinator createBrokerExportScheduler(Long jobId, TUniqueId queryId, DescriptorTable descTable,
                                                 List<PlanFragment> fragments,
                                                 List<ScanNode> scanNodes, String timezone, long startTime,
                                                 Map<String, String> sessionVariables,
                                                 long execMemLimit,
-                                                long warehouseId);
+                                                ComputeResource computeResource);
 
         Coordinator createRefreshDictionaryCacheScheduler(ConnectContext context, TUniqueId queryId,
-                                                DescriptorTable descTable, List<PlanFragment> fragments,
-                                                List<ScanNode> scanNodes);
+                                                          DescriptorTable descTable, List<PlanFragment> fragments,
+                                                          List<ScanNode> scanNodes, ExecPlan execPlan);
     }
 
     // ------------------------------------------------------------------------------------
     // Common methods for scheduling.
     // ------------------------------------------------------------------------------------
+    public static class ScheduleOption {
+        public boolean doDeploy = true;
+        public boolean useQueryDeployExecutor = false;
+    }
 
-    public void exec() throws Exception {
-        startScheduling();
+    public void exec() throws StarRocksException, RpcException, InterruptedException {
+        ScheduleOption option = new ScheduleOption();
+        startScheduling(option);
+    }
+
+    public void execWithoutDeploy() throws Exception {
+        ScheduleOption option = new ScheduleOption();
+        option.doDeploy = false;
+        startScheduling(option);
+    }
+
+    public void execWithQueryDeployExecutor(ConnectContext context) throws Exception {
+        ScheduleOption option = new ScheduleOption();
+        option.useQueryDeployExecutor = context.getSessionVariable().isEnableConnectorDeployScanRangesBackground();
+        startScheduling(option);
     }
 
     /**
@@ -100,21 +116,11 @@ public abstract class Coordinator {
      *     <li> Deploys them to the related workers, if the parameter {@code needDeploy} is true.
      * </ul>
      * <p>
-     *
-     * @param needDeploy Whether deploying fragment instances to workers.
      */
-    public abstract void startScheduling(boolean needDeploy) throws Exception;
+    public abstract void startScheduling(ScheduleOption option) throws StarRocksException, InterruptedException, RpcException;
 
     public Status scheduleNextTurn(TUniqueId fragmentInstanceId) {
         return Status.OK;
-    }
-
-    public void startScheduling() throws Exception {
-        startScheduling(true);
-    }
-
-    public void startSchedulingWithoutDeploy() throws Exception {
-        startScheduling(false);
     }
 
     public abstract String getSchedulerExplain();
@@ -128,6 +134,15 @@ public abstract class Coordinator {
     }
 
     public abstract void cancel(PPlanFragmentCancelReason reason, String message);
+
+    public List<DeployState> assignIncrementalScanRangesToDeployStates(Deployer deployer, List<DeployState> deployStates)
+            throws StarRocksException {
+        return List.of();
+    }
+
+    // Release query queue resources
+    public void onReleaseSlots() {
+    }
 
     public abstract void onFinished();
 
@@ -150,6 +165,8 @@ public abstract class Coordinator {
     public abstract boolean isThriftServerHighLoad();
 
     public abstract void setLoadJobType(TLoadJobType type);
+
+    public abstract TLoadJobType getLoadJobType();
 
     public abstract long getLoadJobId();
 
@@ -232,9 +249,22 @@ public abstract class Coordinator {
 
     public abstract void setTimeoutSecond(int timeoutSecond);
 
+    public void setPredictedCost(long memBytes) {
+    }
+
     public abstract boolean isProfileAlreadyReported();
 
     public abstract String getWarehouseName();
 
+    public abstract long getCurrentWarehouseId();
+
+    public abstract String getResourceGroupName();
+
     public abstract boolean isShortCircuit();
+
+    /**
+     * Release external resources held by scan nodes or connectors. Default no-op.
+     */
+    public void clearExternalResources() {
+    }
 }

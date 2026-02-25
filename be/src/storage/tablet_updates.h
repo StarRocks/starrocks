@@ -20,6 +20,8 @@
 #include <shared_mutex>
 #include <unordered_map>
 
+#include "base/concurrency/blocking_queue.hpp"
+#include "base/time/time.h"
 #include "common/statusor.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "storage/delta_column_group.h"
@@ -27,7 +29,6 @@
 #include "storage/olap_common.h"
 #include "storage/row_store_encoder_factory.h"
 #include "storage/rowset/rowset_writer.h"
-#include "util/blocking_queue.hpp"
 
 namespace starrocks {
 
@@ -73,8 +74,8 @@ struct CompactionInfo {
 };
 
 struct ExtraFileSize {
-    int64_t pindex_size = 0;
-    int64_t col_size = 0;
+    std::atomic<int64_t> pindex_size = 0;
+    std::atomic<int64_t> col_size = 0;
 };
 
 struct EditVersionInfo {
@@ -107,7 +108,6 @@ struct EditVersionInfo {
 class TabletUpdates {
 public:
     friend class LocalPrimaryKeyRecover;
-    using ColumnUniquePtr = std::unique_ptr<Column>;
     using segment_rowid_t = uint32_t;
     using DeletesMap = std::unordered_map<uint32_t, vector<segment_rowid_t>>;
 
@@ -139,6 +139,7 @@ public:
 
     // get latest version's version
     int64_t max_version() const;
+    int64_t min_readable_version() const;
 
     int64_t max_readable_version() const;
 
@@ -153,7 +154,7 @@ public:
 
     Status get_rowsets_total_stats(const std::vector<uint32_t>& rowsets, size_t* total_rows, size_t* total_dels);
 
-    Status rowset_commit(int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time,
+    Status rowset_commit(int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time_ms,
                          bool is_version_overwrite = false, bool is_double_write = false);
 
     // should only called by UpdateManager's apply thread
@@ -247,7 +248,8 @@ public:
                         const std::string& err_msg_header = "");
 
     Status load_snapshot(const SnapshotMeta& snapshot_meta, bool restore_from_backup = false,
-                         bool save_source_schema = false);
+                         bool save_source_schema = false, bool need_rebuild_pk_index = false,
+                         int32_t rebuild_pk_index_wait_seconds = 0);
 
     Status get_latest_applied_version(EditVersion* latest_applied_version);
 
@@ -260,6 +262,7 @@ public:
     //  - logs
     Status clear_meta();
 
+    // Note: values in column_ids must be valid, unique and increasing, do not support out-of-order column_ids
     // get column values by rssids and rowids, at currently applied version
     // for example:
     // get_column_values with
@@ -303,9 +306,9 @@ public:
     //   ]
     // ]
     Status get_column_values(const std::vector<uint32_t>& column_ids, int64_t read_version, bool with_default,
-                             std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
-                             vector<std::unique_ptr<Column>>* columns, void* state,
-                             const TabletSchemaCSPtr& tablet_schema);
+                             std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid, MutableColumns* columns,
+                             void* state, const TabletSchemaCSPtr& tablet_schema,
+                             const std::map<string, string>* column_to_expr_value = nullptr);
 
     Status get_rss_rowids_by_pk(Tablet* tablet, const Column& keys, EditVersion* read_version,
                                 std::vector<uint64_t>* rss_rowids, int64_t timeout_ms = 0);
@@ -382,6 +385,17 @@ public:
         }
     }
 
+    void rewrite_rs_meta(bool is_fatal);
+
+    void stop_and_wait_apply_done();
+
+    Status breakpoint_check();
+    Status compaction_random(MemTracker* mem_tracker);
+
+    bool rowset_check_file_existence() const;
+
+    std::shared_timed_mutex* get_index_lock() { return &_index_lock; }
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;
@@ -429,21 +443,22 @@ private:
 
     // wait a version to be applied, so reader can read this version
     // assuming _lock already hold
-    Status _wait_for_version(const EditVersion& version, int64_t timeout_ms, std::unique_lock<std::mutex>& lock);
+    Status _wait_for_version(const EditVersion& version, int64_t timeout_ms, std::unique_lock<std::mutex>& lock,
+                             bool is_compaction = false);
 
     Status _commit_compaction(std::unique_ptr<CompactionInfo>* info, const RowsetSharedPtr& rowset,
                               EditVersion* commit_version);
 
-    void _stop_and_wait_apply_done();
+    void _wait_apply_done();
 
-    Status _do_compaction(std::unique_ptr<CompactionInfo>* pinfo);
+    Status _do_compaction(std::unique_ptr<CompactionInfo>* pinfo, const vector<uint32_t>& all_rowset_ids);
 
     int32_t _calc_compaction_level(RowsetStats* stats);
     void _calc_compaction_score(RowsetStats* stats);
 
     Status _do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t condition_column, int64_t read_version,
-                      const std::vector<ColumnUniquePtr>& upserts, PrimaryIndex& index, int64_t tablet_id,
-                      DeletesMap* new_deletes, const TabletSchemaCSPtr& tablet_schema);
+                      const MutableColumns& upserts, PrimaryIndex& index, int64_t tablet_id, DeletesMap* new_deletes,
+                      const TabletSchemaCSPtr& tablet_schema);
 
     // This method will acquire |_lock|.
     size_t _get_rowset_num_deletes(uint32_t rowsetid);
@@ -502,12 +517,10 @@ private:
             _last_compaction_time_ms = UnixMillis();
         }
     }
+    void wait_apply_done() { _wait_apply_done(); }
+    bool is_apply_stop() { return _apply_stopped.load(); }
 
     bool compaction_running() { return _compaction_running; }
-
-    std::shared_timed_mutex* get_index_lock() { return &_index_lock; }
-
-    StatusOr<ExtraFileSize> _get_extra_file_size() const;
 
     bool _use_light_apply_compaction(Rowset* rowset);
 
@@ -515,7 +528,10 @@ private:
                                           size_t* total_deletes, size_t* total_rows,
                                           vector<std::pair<uint32_t, DelVectorPtr>>* delvecs);
 
-    bool _is_tolerable(Status& status);
+    bool _check_status_msg(std::string_view msg);
+    bool _retry_times_limit();
+    bool _is_retryable(Status& status);
+    bool _is_breakpoint(Status& status);
 
     void _reset_apply_status(const EditVersionInfo& version_info_apply);
 
@@ -581,6 +597,10 @@ private:
     std::atomic<double> _pk_index_write_amp_score{0.0};
 
     std::atomic<bool> _apply_schedule{false};
+    size_t _apply_failed_time = 0;
+
+    // cache of latest ExtraFileSize
+    ExtraFileSize _extra_file_size_cache;
 };
 
 } // namespace starrocks

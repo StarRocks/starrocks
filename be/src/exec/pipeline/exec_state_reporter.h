@@ -16,6 +16,8 @@
 
 #include <memory>
 
+#include "common/system/backend_options.h"
+#include "common/thread/threadpool.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "gen_cpp/FrontendService.h"
@@ -23,13 +25,13 @@
 #include "gen_cpp/Types_types.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "service/backend_options.h"
-#include "util/threadpool.h"
 
 namespace starrocks::pipeline {
+class ExecStateReporterMetrics;
 class ExecStateReporter {
 public:
-    ExecStateReporter();
+    explicit ExecStateReporter(const CpuUtil::CpuIds& cpuids, ExecStateReporterMetrics* metrics);
+    ~ExecStateReporter();
 
     static std::unique_ptr<TReportExecStatusParams> create_report_exec_status_params(
             QueryContext* query_ctx, FragmentContext* fragment_ctx, RuntimeProfile* profile,
@@ -40,6 +42,8 @@ public:
 
     void submit(std::function<void()>&& report_task, bool priority = false);
 
+    void bind_cpus(const CpuUtil::CpuIds& cpuids) const;
+
     // STREAM MV
     static TMVMaintenanceTasks create_report_epoch_params(const QueryContext* query_ctx,
                                                           const std::vector<FragmentContext*>& fragment_ctxs);
@@ -47,6 +51,7 @@ public:
     static Status report_epoch(const TMVMaintenanceTasks& params, ExecEnv* exec_env, const TNetworkAddress& fe_addr);
 
 private:
+    ExecStateReporterMetrics* _metrics;
     std::unique_ptr<ThreadPool> _thread_pool;
     std::unique_ptr<ThreadPool> _priority_thread_pool;
 };

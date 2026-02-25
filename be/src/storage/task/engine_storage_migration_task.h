@@ -50,8 +50,12 @@ public:
     Status execute() override;
 
 public:
-    EngineStorageMigrationTask(TTabletId tablet_id, TSchemaHash schema_hash, DataDir* dest_store);
+    EngineStorageMigrationTask(TTabletId tablet_id, TSchemaHash schema_hash, DataDir* dest_store,
+                               bool need_rebuild_pk_index);
     ~EngineStorageMigrationTask() override = default;
+
+    int64_t get_copy_size() const { return _copy_size; }
+    int64_t get_copy_time_ms() const { return _copy_time_ms; }
 
 private:
     Status _storage_migrate(TabletSharedPtr tablet);
@@ -61,7 +65,7 @@ private:
                               const TabletMetaSharedPtr& new_tablet_meta);
 
     Status _copy_index_and_data_files(const std::string& header_path, const TabletSharedPtr& ref_tablet,
-                                      const std::vector<RowsetSharedPtr>& consistent_rowsets) const;
+                                      const std::vector<RowsetSharedPtr>& consistent_rowsets);
 
     Status _finish_migration(const TabletSharedPtr& tablet, int64_t end_version, uint64_t shard,
                              const std::vector<RowsetSharedPtr>& consistent_rowsets,
@@ -77,5 +81,8 @@ private:
     TTabletId _tablet_id;
     TSchemaHash _schema_hash;
     DataDir* _dest_store;
+    bool _need_rebuild_pk_index{false};
+    int64_t _copy_size{0};
+    int64_t _copy_time_ms{0};
 }; // EngineTask
 } // namespace starrocks

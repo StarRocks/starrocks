@@ -14,6 +14,7 @@
 
 package com.starrocks.qe.scheduler.assignment;
 
+import com.starrocks.planner.LookUpNode;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.ConnectContext;
@@ -42,13 +43,13 @@ public class FragmentAssignmentStrategyFactory {
 
     public FragmentAssignmentStrategy create(ExecutionFragment execFragment, WorkerProvider workerProvider) {
         PlanNode leftMostNode = execFragment.getLeftMostNode();
-        boolean isRemoteFragment = !(leftMostNode instanceof ScanNode);
+        boolean isRemoteFragment = !(leftMostNode instanceof ScanNode || leftMostNode instanceof LookUpNode);
         if (isRemoteFragment) {
             return new RemoteFragmentAssignmentStrategy(connectContext, workerProvider, jobSpec.isEnablePipeline(),
                     executionDAG.isGatherOutput(), random);
         } else {
             return new LocalFragmentAssignmentStrategy(connectContext, workerProvider, jobSpec.isEnablePipeline(),
-                    jobSpec.isLoadType());
+                    jobSpec.isLoadType(), jobSpec.isIncrementalScanRanges());
         }
     }
 }

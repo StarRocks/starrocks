@@ -12,14 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.hive;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
@@ -29,6 +27,7 @@ import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.hive.glue.projection.PartitionProjectionService;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;
@@ -48,12 +47,12 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkState;
-import static com.starrocks.connector.PartitionUtil.executeInNewThread;
-import static com.starrocks.connector.hive.HiveWriteUtils.checkLocationProperties;
-import static com.starrocks.connector.hive.HiveWriteUtils.createDirectory;
-import static com.starrocks.connector.hive.HiveWriteUtils.isDirectory;
-import static com.starrocks.connector.hive.HiveWriteUtils.isEmpty;
-import static com.starrocks.connector.hive.HiveWriteUtils.pathExists;
+import static com.starrocks.connector.hive.HiveStorageFormat.PARQUET;
+import static com.starrocks.connector.hive.HiveUtils.checkLocationProperties;
+import static com.starrocks.connector.hive.HiveUtils.createDirectory;
+import static com.starrocks.connector.hive.HiveUtils.isDirectory;
+import static com.starrocks.connector.hive.HiveUtils.isEmpty;
+import static com.starrocks.connector.hive.HiveUtils.pathExists;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.toResourceName;
 
 public class HiveMetastoreOperations {
@@ -67,6 +66,7 @@ public class HiveMetastoreOperations {
     private final Configuration hadoopConf;
     private final MetastoreType metastoreType;
     private final String catalogName;
+    private final PartitionProjectionService partitionProjectionService;
 
     public HiveMetastoreOperations(CachingHiveMetastore cachingHiveMetastore,
                                    boolean enableCatalogLevelCache,
@@ -78,6 +78,7 @@ public class HiveMetastoreOperations {
         this.hadoopConf = hadoopConf;
         this.metastoreType = metastoreType;
         this.catalogName = catalogName;
+        this.partitionProjectionService = new PartitionProjectionService();
     }
 
     public List<String> getAllDatabaseNames() {
@@ -202,7 +203,7 @@ public class HiveMetastoreOperations {
                 .setFullSchema(stmt.getColumns())
                 .setTableLocation(tablePath == null ? null : tablePath.toString())
                 .setProperties(stmt.getProperties())
-                .setStorageFormat(HiveStorageFormat.get(properties.getOrDefault(FILE_FORMAT, "parquet")))
+                .setStorageFormat(HiveStorageFormat.get(properties.getOrDefault(FILE_FORMAT, PARQUET.name())))
                 .setCreateTime(System.currentTimeMillis())
                 .setHiveTableType(tableType);
         Table table = builder.build();
@@ -258,10 +259,24 @@ public class HiveMetastoreOperations {
     }
 
     public List<String> getPartitionKeys(String dbName, String tableName) {
+        Table table = getTable(dbName, tableName);
+        if (table instanceof HiveTable) {
+            HiveTable hiveTable = (HiveTable) table;
+            if (partitionProjectionService.isEnabled(table)) {
+                return partitionProjectionService.getProjectedPartitionNames(hiveTable);
+            }
+        }
         return metastore.getPartitionKeysByValue(dbName, tableName, HivePartitionValue.ALL_PARTITION_VALUES);
     }
 
     public List<String> getPartitionKeysByValue(String dbName, String tableName, List<Optional<String>> partitionValues) {
+        Table table = getTable(dbName, tableName);
+        if (table instanceof HiveTable) {
+            HiveTable hiveTable = (HiveTable) table;
+            if (partitionProjectionService.isEnabled(table)) {
+                return partitionProjectionService.getProjectedPartitionNamesByValue(hiveTable, partitionValues);
+            }
+        }
         return metastore.getPartitionKeysByValue(dbName, tableName, partitionValues);
     }
 
@@ -282,9 +297,16 @@ public class HiveMetastoreOperations {
     }
 
     public Map<String, Partition> getPartitionByPartitionKeys(Table table, List<PartitionKey> partitionKeys) {
-        String dbName = ((HiveMetaStoreTable) table).getDbName();
-        String tblName = ((HiveMetaStoreTable) table).getTableName();
-        List<String> partitionColumnNames = ((HiveMetaStoreTable) table).getPartitionColumnNames();
+        if (table instanceof HiveTable) {
+            HiveTable hiveTable = (HiveTable) table;
+            if (partitionProjectionService.isEnabled(table)) {
+                return partitionProjectionService.getProjectedPartitions(hiveTable, partitionKeys);
+            }
+        }
+
+        String dbName = table.getCatalogDBName();
+        String tblName = table.getCatalogTableName();
+        List<String> partitionColumnNames = table.getPartitionColumnNames();
         List<String> partitionNames = partitionKeys.stream()
                 .map(partitionKey -> PartitionUtil.toHivePartitionName(partitionColumnNames, partitionKey))
                 .collect(Collectors.toList());
@@ -293,8 +315,15 @@ public class HiveMetastoreOperations {
     }
 
     public Map<String, Partition> getPartitionByNames(Table table, List<String> partitionNames) {
-        String dbName = ((HiveMetaStoreTable) table).getDbName();
-        String tblName = ((HiveMetaStoreTable) table).getTableName();
+        if (table instanceof HiveTable) {
+            HiveTable hiveTable = (HiveTable) table;
+            if (partitionProjectionService.isEnabled(table)) {
+                return partitionProjectionService.getProjectedPartitionsFromNames(hiveTable, partitionNames);
+            }
+        }
+
+        String dbName = table.getCatalogDBName();
+        String tblName = table.getCatalogTableName();
         return metastore.getPartitionsByNames(dbName, tblName, partitionNames);
     }
 
@@ -303,9 +332,9 @@ public class HiveMetastoreOperations {
     }
 
     public Map<String, HivePartitionStats> getPartitionStatistics(Table table, List<String> partitionNames) {
-        String catalogName = ((HiveMetaStoreTable) table).getCatalogName();
-        String dbName = ((HiveMetaStoreTable) table).getDbName();
-        String tblName = ((HiveMetaStoreTable) table).getTableName();
+        String catalogName = (table).getCatalogName();
+        String dbName = (table).getCatalogDBName();
+        String tblName = (table).getCatalogTableName();
         List<HivePartitionName> hivePartitionNames = partitionNames.stream()
                 .map(partitionName -> HivePartitionName.of(dbName, tblName, partitionName))
                 .peek(hivePartitionName -> checkState(hivePartitionName.getPartitionNames().isPresent(),
@@ -315,13 +344,6 @@ public class HiveMetastoreOperations {
         Map<String, HivePartitionStats> partitionStats;
         if (enableCatalogLevelCache) {
             partitionStats = metastore.getPresentPartitionsStatistics(hivePartitionNames);
-            if (partitionStats.size() == partitionNames.size()) {
-                return partitionStats;
-            }
-
-            String backgroundThreadName = String.format(BACKGROUND_THREAD_NAME_PREFIX + "%s-%s-%s",
-                    catalogName, dbName, tblName);
-            executeInNewThread(backgroundThreadName, () -> metastore.getPartitionStatistics(table, partitionNames));
         } else {
             partitionStats = metastore.getPartitionStatistics(table, partitionNames);
         }

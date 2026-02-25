@@ -34,70 +34,90 @@
 
 package com.starrocks.qe;
 
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.VariableExpr;
+import com.starrocks.authentication.AccessControlContext;
+import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authentication.UserProperty;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PrivilegeException;
+import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.Pair;
+import com.starrocks.common.util.SqlUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.connector.iceberg.IcebergRewriteDataJob.FinishSinkHandler;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.mysql.ssl.SSLChannel;
-import com.starrocks.mysql.ssl.SSLChannelImpClassLoader;
+import com.starrocks.mysql.ssl.SSLChannelImp;
+import com.starrocks.mysql.ssl.SSLContextLoader;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.ObjectType;
-import com.starrocks.privilege.PrivilegeException;
-import com.starrocks.privilege.PrivilegeType;
+import com.starrocks.qe.QueryDetail.QuerySource;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CleanTemporaryTableStmt;
+import com.starrocks.sql.ast.ExecuteStmt;
+import com.starrocks.sql.ast.OriginStatement;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.sql.spm.SQLPlanStorage;
 import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.LazyComputeResource;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.xnio.StreamConnection;
 
 import java.io.IOException;
-import java.nio.channels.SocketChannel;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import javax.net.ssl.SSLContext;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+
+import static com.starrocks.common.util.Util.normalizeName;
 
 // When one client connect in, we create a connection context for it.
 // We store session information here. Meanwhile, ConnectScheduler all
@@ -149,42 +169,32 @@ public class ConnectContext {
     protected volatile boolean isKilled;
     // Db
     protected String currentDb = "";
-    // `qualifiedUser` is the user used when the user establishes connection and authentication.
-    // It is the real user used for this connection.
-    // Different from the `currentUserIdentity` authentication user of execute as,
-    // `qualifiedUser` should not be changed during the entire session.
-    protected String qualifiedUser;
-    // `currentUserIdentity` is the user used for authorization. Under normal circumstances,
-    // `currentUserIdentity` and `qualifiedUser` are the same user,
-    // but currentUserIdentity may be modified by execute as statement.
-    protected UserIdentity currentUserIdentity;
-    // currentRoleIds is the role that has taken effect in the current session.
-    // Note that this set is not all roles belonging to the current user.
-    // `execute as` will modify currentRoleIds and assign the active role of the impersonate user to currentRoleIds.
-    // For specific logic, please refer to setCurrentRoleIds.
-    protected Set<Long> currentRoleIds = new HashSet<>();
+
+    // Unified access control context holding authentication and authorization information
+    protected AccessControlContext accessControlContext = new AccessControlContext();
+
     // Serializer used to pack MySQL packet.
     protected MysqlSerializer serializer;
     // Variables belong to this session.
     protected SessionVariable sessionVariable;
     // all the modified session variables, will forward to leader
-    protected Map<String, SystemVariable> modifiedSessionVariables = new HashMap<>();
+    protected Map<String, SystemVariable> modifiedSessionVariables = Maps.newConcurrentMap();
     // user define variable in this session
     protected Map<String, UserVariable> userVariables;
     protected Map<String, UserVariable> userVariablesCopyInWrite;
-    // Scheduler this connection belongs to
-    protected ConnectScheduler connectScheduler;
     // Executor
     protected StmtExecutor executor;
     // Command this connection is processing.
     protected MysqlCommand command;
     // last command start time
-    protected Instant startTime = Instant.now();
+    protected volatile Instant startTime = Instant.now();
+    // last command end time
+    protected volatile Instant endTime = Instant.ofEpochMilli(0);
+    // last command pending time(s), query's timeout should not contain pending time.
+    protected volatile int pendingTimeSecond = 0;
     // Cache thread info for this connection.
     protected ThreadInfo threadInfo;
 
-    // GlobalStateMgr: put globalStateMgr here is convenient for unit test,
-    // because globalStateMgr is singleton, hard to mock
     protected GlobalStateMgr globalStateMgr;
     protected boolean isSend;
 
@@ -194,16 +204,13 @@ public class ConnectContext {
 
     protected volatile boolean closed;
 
-    // set with the randomstring extracted from the handshake data at connecting stage
-    // used for authdata(password) salting
-    protected byte[] authDataSalt;
-
     protected QueryDetail queryDetail;
 
     // isLastStmt is true when original stmt is single stmt
     //    or current processing stmt is the last stmt for multi stmts
     // used to set mysql result package
     protected boolean isLastStmt = true;
+    protected boolean isSingleStmt = false;
     // set true when user dump query through HTTP
     protected boolean isHTTPQueryDump = false;
 
@@ -226,8 +233,6 @@ public class ConnectContext {
     protected volatile boolean isPending = false;
     protected volatile boolean isForward = false;
 
-    protected SSLContext sslContext;
-
     private ConnectContext parent;
 
     private boolean relationAliasCaseInsensitive = false;
@@ -236,9 +241,52 @@ public class ConnectContext {
 
     private UUID sessionId;
 
+    private String proxyHostName;
+    private AtomicInteger pendingForwardRequests = new AtomicInteger(0);
+
     // QueryMaterializationContext is different from MaterializationContext that it keeps the context during the query
     // lifecycle instead of per materialized view.
     private QueryMaterializationContext queryMVContext;
+
+    // Query source to distinguish different types of queries
+    private QuerySource querySource = QuerySource.EXTERNAL;
+
+    // In order to ensure the correctness of imported data, in some cases, we don't use connector metadata cache for
+    // `insert into table select external table`. Currently, this feature only supports hive table.
+    private Optional<Boolean> useConnectorMetadataCache = Optional.empty();
+
+    // running explicit transaction in a session.
+    // The temporary state generated by multiple statements in a transaction is recorded in
+    // GlobalTransactionMgr#ExplicitTxnState, and the transaction state is recorded in TransactionState.
+    private long txnId;
+
+    // session level SPM storage
+    private SQLPlanStorage sqlPlanStorage = SQLPlanStorage.create(false);
+
+    // Whether leader is transferred during executing stmt
+    private boolean isLeaderTransferred = false;
+
+    private AtomicLong currentThreadAllocatedMemory = new AtomicLong(0);
+
+    // thread id is the thread who created this ConnectContext's id
+    private AtomicLong currentThreadId = null;
+
+    // The cnResource of the current session.
+    private ComputeResource computeResource = null;
+
+    // listeners for this connection
+    private List<Listener> listeners = Lists.newArrayList();
+
+    private boolean skipFinishSink = false;
+    private FinishSinkHandler handler = null;
+
+    public void setTxnId(long txnId) {
+        this.txnId = txnId;
+    }
+
+    public long getTxnId() {
+        return txnId;
+    }
 
     public StmtExecutor getExecutor() {
         return executor;
@@ -248,8 +296,32 @@ public class ConnectContext {
         return threadLocalInfo.get();
     }
 
+    public static void set(ConnectContext ctx) {
+        threadLocalInfo.set(ctx);
+    }
+
+    public static SessionVariable getSessionVariableOrDefault() {
+        ConnectContext ctx = get();
+        return (ctx != null) ? ctx.sessionVariable : SessionVariable.DEFAULT_SESSION_VARIABLE;
+    }
+
     public static void remove() {
         threadLocalInfo.remove();
+    }
+
+    public boolean isQueryStmt(StatementBase statement) {
+        if (statement instanceof QueryStatement) {
+            return true;
+        }
+
+        if (statement instanceof ExecuteStmt) {
+            ExecuteStmt executeStmt = (ExecuteStmt) statement;
+            PrepareStmtContext prepareStmtContext = getPreparedStmt(executeStmt.getStmtName());
+            if (prepareStmtContext != null) {
+                return prepareStmtContext.getStmt().getInnerStmt() instanceof QueryStatement;
+            }
+        }
+        return false;
     }
 
     public boolean isSend() {
@@ -257,36 +329,53 @@ public class ConnectContext {
     }
 
     public ConnectContext() {
-        this(null, null);
+        this(null);
     }
 
-    public ConnectContext(SocketChannel channel) {
-        this(channel, null);
-    }
-
-    public ConnectContext(SocketChannel channel, SSLContext sslContext) {
+    public ConnectContext(StreamConnection connection) {
+        // `globalStateMgr` is used in many cases, so we should explicitly make sure it is not null
+        globalStateMgr = GlobalStateMgr.getCurrentState();
         closed = false;
         state = new QueryState();
         returnRows = 0;
         serverCapability = MysqlCapability.DEFAULT_CAPABILITY;
         isKilled = false;
         serializer = MysqlSerializer.newInstance();
-        sessionVariable = VariableMgr.newSessionVariable();
+        sessionVariable = globalStateMgr.getVariableMgr().newSessionVariable();
         userVariables = new ConcurrentHashMap<>();
         command = MysqlCommand.COM_SLEEP;
         queryDetail = null;
-
-        mysqlChannel = new MysqlChannel(channel);
-        if (channel != null) {
-            remoteIP = mysqlChannel.getRemoteIp();
-        }
-
-        this.sslContext = sslContext;
 
         if (shouldDumpQuery()) {
             this.dumpInfo = new QueryDumpInfo(this);
         }
         this.sessionId = UUIDUtil.genUUID();
+
+        mysqlChannel = new MysqlChannel(connection);
+        if (connection != null) {
+            remoteIP = mysqlChannel.getRemoteIp();
+        }
+    }
+
+    /**
+     * Build a ConnectContext for normal query.
+     */
+    public static ConnectContext build() {
+        return new ConnectContext();
+    }
+
+    /**
+     * Build a ConnectContext for inner query which is used for StarRocks internal query.
+     */
+    public static ConnectContext buildInner() {
+        ConnectContext connectContext = new ConnectContext();
+        // disable materialized view rewrite for inner query
+        connectContext.getSessionVariable().setEnableMaterializedViewRewrite(false);
+        return connectContext;
+    }
+
+    public SQLPlanStorage getSqlPlanStorage() {
+        return sqlPlanStorage;
     }
 
     public void putPreparedStmt(String stmtName, PrepareStmtContext ctx) {
@@ -333,6 +422,10 @@ public class ConnectContext {
         return queryDetail;
     }
 
+    public void setAuditEventBuilder(AuditEventBuilder auditEventBuilder) {
+        this.auditEventBuilder = auditEventBuilder;
+    }
+
     public AuditEventBuilder getAuditEventBuilder() {
         return auditEventBuilder;
     }
@@ -341,20 +434,22 @@ public class ConnectContext {
         threadLocalInfo.set(this);
     }
 
-    /**
-     * Set this connect to thread-local if not exists
-     *
-     * @return set or not
-     */
-    public boolean setThreadLocalInfoIfNotExists() {
-        if (threadLocalInfo.get() == null) {
-            threadLocalInfo.set(this);
-            return true;
-        }
-        return false;
+    public Optional<Boolean> getUseConnectorMetadataCache() {
+        return useConnectorMetadataCache;
+    }
+
+    public void setUseConnectorMetadataCache(Optional<Boolean> useConnectorMetadataCache) {
+        this.useConnectorMetadataCache = useConnectorMetadataCache;
+    }
+
+    public static ConnectContext exchangeThreadLocalInfo(ConnectContext ctx) {
+        ConnectContext prev = threadLocalInfo.get();
+        threadLocalInfo.set(ctx);
+        return prev;
     }
 
     public void setGlobalStateMgr(GlobalStateMgr globalStateMgr) {
+        Preconditions.checkState(globalStateMgr != null);
         this.globalStateMgr = globalStateMgr;
     }
 
@@ -363,47 +458,145 @@ public class ConnectContext {
     }
 
     public String getQualifiedUser() {
-        return qualifiedUser;
+        return accessControlContext.getQualifiedUser();
     }
 
     public void setQualifiedUser(String qualifiedUser) {
-        this.qualifiedUser = qualifiedUser;
+        accessControlContext.setQualifiedUser(qualifiedUser);
     }
 
     public UserIdentity getCurrentUserIdentity() {
-        return currentUserIdentity;
+        return accessControlContext.getCurrentUserIdentity();
     }
 
     public void setCurrentUserIdentity(UserIdentity currentUserIdentity) {
-        this.currentUserIdentity = currentUserIdentity;
+        accessControlContext.setCurrentUserIdentity(currentUserIdentity);
+    }
+
+    public void setDistinguishedName(String distinguishedName) {
+        accessControlContext.setDistinguishedName(distinguishedName);
+    }
+
+    public String getDistinguishedName() {
+        return accessControlContext.getDistinguishedName();
     }
 
     public Set<Long> getCurrentRoleIds() {
-        return currentRoleIds;
-    }
-
-    public void setCurrentRoleIds(UserIdentity user) {
-        try {
-            Set<Long> defaultRoleIds;
-            if (GlobalVariable.isActivateAllRolesOnLogin()) {
-                defaultRoleIds = GlobalStateMgr.getCurrentState().getAuthorizationMgr().getRoleIdsByUser(user);
-            } else {
-                defaultRoleIds = GlobalStateMgr.getCurrentState().getAuthorizationMgr().getDefaultRoleIdsByUser(user);
-            }
-            this.currentRoleIds = defaultRoleIds;
-        } catch (PrivilegeException e) {
-            LOG.warn("Set current role fail : {}", e.getMessage());
-        }
+        return accessControlContext.getCurrentRoleIds();
     }
 
     public void setCurrentRoleIds(Set<Long> roleIds) {
-        this.currentRoleIds = roleIds;
+        accessControlContext.setCurrentRoleIds(roleIds);
     }
 
-    public void modifySystemVariable(SystemVariable setVar, boolean onlySetSessionVar) throws DdlException {
-        VariableMgr.setSystemVariable(sessionVariable, setVar, onlySetSessionVar);
-        if (!SetType.GLOBAL.equals(setVar.getType()) && VariableMgr.shouldForwardToLeader(setVar.getVariable())) {
+    public void setCurrentRoleIds(UserIdentity user) {
+        Set<Long> roleIds = getRoleIdsByUser(user);
+        accessControlContext.setCurrentRoleIds(roleIds);
+    }
+
+    public void setCurrentRoleIds(UserIdentity userIdentity, Set<String> groups) {
+        Set<Long> roleIds = getRoleIdsByUser(userIdentity);
+        for (String group : groups) {
+            roleIds.addAll(globalStateMgr.getAuthorizationMgr().getRoleIdListByGroup(group));
+        }
+        setCurrentRoleIds(roleIds);
+    }
+
+    private Set<Long> getRoleIdsByUser(UserIdentity user) {
+        if (user.isEphemeral()) {
+            return new HashSet<>();
+        } else {
+            try {
+                Set<Long> defaultRoleIds;
+                if (GlobalVariable.isActivateAllRolesOnLogin()) {
+                    defaultRoleIds = globalStateMgr.getAuthorizationMgr().getRoleIdsByUser(user);
+                } else {
+                    defaultRoleIds = globalStateMgr.getAuthorizationMgr().getDefaultRoleIdsByUser(user);
+                }
+                return defaultRoleIds;
+            } catch (PrivilegeException e) {
+                LOG.warn("Set current role fail : {}", e.getMessage());
+                return new HashSet<>();
+            }
+        }
+    }
+
+    public Set<String> getGroups() {
+        return accessControlContext.getGroups();
+    }
+
+    public void setGroups(Set<String> groups) {
+        accessControlContext.setGroups(groups);
+    }
+
+    public String getAuthToken() {
+        return accessControlContext.getAuthToken();
+    }
+
+    public void setAuthToken(String authToken) {
+        accessControlContext.setAuthToken(authToken);
+    }
+
+    public AuthenticationProvider getAuthenticationProvider() {
+        return accessControlContext.getAuthenticationProvider();
+    }
+
+    public void setAuthPlugin(String authPlugin) {
+        accessControlContext.setAuthPlugin(authPlugin);
+    }
+
+    public String getAuthPlugin() {
+        return accessControlContext.getAuthPlugin();
+    }
+
+    public void setAuthDataSalt(byte[] authDataSalt) {
+        accessControlContext.setAuthDataSalt(authDataSalt);
+    }
+
+    public String getSecurityIntegration() {
+        return accessControlContext.getSecurityIntegration();
+    }
+
+    public void setSecurityIntegration(String securityIntegration) {
+        accessControlContext.setSecurityIntegration(securityIntegration);
+    }
+
+    /**
+     * Get the authentication context for this connection
+     */
+    public AccessControlContext getAccessControlContext() {
+        return accessControlContext;
+    }
+
+    public boolean modifySystemVariable(SystemVariable setVar, boolean onlySetSessionVar) throws DdlException {
+        if (!globalStateMgr.getVariableMgr().containsVariable(setVar.getVariable())) {
+            return false;
+        }
+        globalStateMgr.getVariableMgr().setSystemVariable(sessionVariable, setVar, onlySetSessionVar);
+        if (!SetType.GLOBAL.equals(setVar.getType())
+                && globalStateMgr.getVariableMgr().shouldForwardToLeader(setVar.getVariable())) {
             modifiedSessionVariables.put(setVar.getVariable(), setVar);
+        }
+        return true;
+    }
+
+    /**
+     * Whether {@link SessionVariable#QUERY_TIMEOUT} is explicitly overridden in the current session.
+     * <p>
+     * This is used to decide whether table-level timeout should take effect when the user didn't set
+     * the session query_timeout
+     */
+    public boolean isSessionQueryTimeoutOverridden() {
+        if (modifiedSessionVariables.containsKey(SessionVariable.QUERY_TIMEOUT)) {
+            return true;
+        }
+
+        try {
+            int defaultTimeout = globalStateMgr.getVariableMgr().getDefaultSessionVariable().getQueryTimeoutS();
+            return sessionVariable.getQueryTimeoutS() != defaultTimeout;
+        } catch (Exception e) {
+            LOG.warn("Failed to judge session query timeout override.", e);
+            return false;
         }
     }
 
@@ -419,7 +612,7 @@ public class ConnectContext {
      * until you are sure that the set sql was executed successfully.
      * 2. Changes to user variables during set sql execution should
      * be effected in the {@link ConnectContext#userVariablesCopyInWrite}.
-     * */
+     */
     public void modifyUserVariableCopyInWrite(UserVariable userVariable) {
         if (userVariablesCopyInWrite != null) {
             if (userVariablesCopyInWrite.size() > 1024) {
@@ -432,10 +625,10 @@ public class ConnectContext {
     /**
      * The SQL execution that sets the variable must reset userVariablesCopyInWrite when it finishes,
      * either normally or abnormally.
-     *
+     * <p>
      * This method needs to be called at the time of setting the user variable.
      * call by {@link SetExecutor#execute()}, {@link StmtExecutor#processQueryScopeHint()}
-     * */
+     */
     public void resetUserVariableCopyInWrite() {
         userVariablesCopyInWrite = null;
     }
@@ -443,9 +636,9 @@ public class ConnectContext {
     /**
      * After the successful execution of the SQL that set the variable,
      * the result of the change to the copy of userVariables is set back to the current session.
-     *
+     * <p>
      * call by {@link SetExecutor#execute()}, {@link StmtExecutor#processQueryScopeHint()}
-     * */
+     */
     public void modifyUserVariables(Map<String, UserVariable> userVarCopyInWrite) {
         if (userVarCopyInWrite.size() > 1024) {
             throw new SemanticException("User variable exceeds the maximum limit of 1024");
@@ -456,10 +649,10 @@ public class ConnectContext {
     /**
      * Instead of using {@link ConnectContext#userVariables} when set userVariables,
      * use a copy of it, the purpose of which is to ensure atomicity/isolation of modifications to userVariables
-     *
+     * <p>
      * This method needs to be called at the time of setting the user variable.
      * call by {@link SetExecutor#execute()}, {@link StmtExecutor#processQueryScopeHint()}
-     * */
+     */
     public void modifyUserVariablesCopyInWrite(Map<String, UserVariable> userVariables) {
         this.userVariablesCopyInWrite = userVariables;
     }
@@ -484,6 +677,10 @@ public class ConnectContext {
         }
     }
 
+    public Map<String, SystemVariable> getModifiedSessionVariablesMap() {
+        return modifiedSessionVariables;
+    }
+
     public SessionVariable getSessionVariable() {
         return sessionVariable;
     }
@@ -497,7 +694,7 @@ public class ConnectContext {
     }
 
     public void resetSessionVariable() {
-        this.sessionVariable = VariableMgr.newSessionVariable();
+        this.sessionVariable = globalStateMgr.getVariableMgr().newSessionVariable();
         modifiedSessionVariables.clear();
     }
 
@@ -521,16 +718,16 @@ public class ConnectContext {
         this.sessionVariable = sessionVariable;
     }
 
-    public ConnectScheduler getConnectScheduler() {
-        return connectScheduler;
-    }
-
-    public void setConnectScheduler(ConnectScheduler connectScheduler) {
-        this.connectScheduler = connectScheduler;
-    }
-
     public MysqlCommand getCommand() {
         return command;
+    }
+
+    public String getCommandStr() {
+        if (command == null) {
+            return "MySQL.UNKNOWN";
+        } else {
+            return "MySQL." + command;
+        }
     }
 
     public void setCommand(MysqlCommand command) {
@@ -548,9 +745,25 @@ public class ConnectContext {
     public void setStartTime() {
         startTime = Instant.now();
         returnRows = 0;
+        pendingTimeSecond = 0;
     }
 
-    public void updateReturnRows(int returnRows) {
+    @VisibleForTesting
+    public void setStartTime(Instant start) {
+        startTime = start;
+        returnRows = 0;
+        pendingTimeSecond = 0;
+    }
+
+    public void setEndTime() {
+        endTime = Instant.now();
+    }
+
+    public Instant getEndTime() {
+        return endTime;
+    }
+
+    public void updateReturnRows(long returnRows) {
         this.returnRows += returnRows;
     }
 
@@ -574,6 +787,26 @@ public class ConnectContext {
         this.connectionId = connectionId;
     }
 
+    public String getProxyHostName() {
+        return proxyHostName;
+    }
+
+    public void setProxyHostName(String address) {
+        this.proxyHostName = address;
+    }
+
+    public boolean hasPendingForwardRequest() {
+        return pendingForwardRequests.intValue() > 0;
+    }
+
+    public void incPendingForwardRequest() {
+        pendingForwardRequests.incrementAndGet();
+    }
+
+    public void decPendingForwardRequest() {
+        pendingForwardRequests.decrementAndGet();
+    }
+
     public void resetConnectionStartTime() {
         this.connectionStartTime = System.currentTimeMillis();
     }
@@ -592,6 +825,10 @@ public class ConnectContext {
 
     public void setState(QueryState state) {
         this.state = state;
+    }
+
+    public boolean isArrowFlightSql() {
+        return this instanceof ArrowFlightSqlConnectContext;
     }
 
     public String getNormalizedErrorCode() {
@@ -632,7 +869,11 @@ public class ConnectContext {
     }
 
     public String getDatabase() {
-        return currentDb;
+        if (GlobalVariable.enableTableNameCaseInsensitive && currentDb != null) {
+            return currentDb.toLowerCase();
+        } else {
+            return currentDb;
+        }
     }
 
     public void setDatabase(String db) {
@@ -651,6 +892,7 @@ public class ConnectContext {
         mysqlChannel.close();
         threadLocalInfo.remove();
         returnRows = 0;
+        computeResource = null;
     }
 
     public boolean isKilled() {
@@ -690,6 +932,10 @@ public class ConnectContext {
         return sessionVariable != null ? sessionVariable.getCustomQueryId() : "";
     }
 
+    public String getCustomSessionName() {
+        return sessionVariable != null ? sessionVariable.getCustomSessionName() : "";
+    }
+
     public boolean isProfileEnabled() {
         if (sessionVariable == null) {
             return false;
@@ -704,16 +950,7 @@ public class ConnectContext {
     }
 
     public boolean needMergeProfile() {
-        return isProfileEnabled() &&
-                sessionVariable.getPipelineProfileLevel() < TPipelineProfileLevel.DETAIL.getValue();
-    }
-
-    public byte[] getAuthDataSalt() {
-        return authDataSalt;
-    }
-
-    public void setAuthDataSalt(byte[] authDataSalt) {
-        this.authDataSalt = authDataSalt;
+        return sessionVariable.getPipelineProfileLevel() < TPipelineProfileLevel.DETAIL.getValue();
     }
 
     public boolean getIsLastStmt() {
@@ -773,20 +1010,34 @@ public class ConnectContext {
     }
 
     public void setCurrentCatalog(String currentCatalog) {
-        this.sessionVariable.setCatalog(currentCatalog);
+        SystemVariable variable = new SystemVariable(SessionVariable.CATALOG, new StringLiteral(currentCatalog));
+        try {
+            globalStateMgr.getVariableMgr().setSystemVariable(sessionVariable, variable, true);
+            modifiedSessionVariables.put(variable.getVariable(), variable);
+        } catch (DdlException e) {
+            LOG.warn("failed to set catalog {}", currentCatalog, e);
+        }
     }
 
-    public long getCurrentWarehouseId() {
+    public Long getCurrentWarehouseIdAllowNull() {
         String warehouseName = this.sessionVariable.getWarehouseName();
         if (warehouseName.equalsIgnoreCase(WarehouseManager.DEFAULT_WAREHOUSE_NAME)) {
             return WarehouseManager.DEFAULT_WAREHOUSE_ID;
         }
 
-        Warehouse warehouse = globalStateMgr.getWarehouseMgr().getWarehouse(warehouseName);
+        Warehouse warehouse = globalStateMgr.getWarehouseMgr().getWarehouseAllowNull(warehouseName);
         if (warehouse == null) {
-            throw new SemanticException("Warehouse " + warehouseName + " not exist");
+            return null;
         }
         return warehouse.getId();
+    }
+
+    public long getCurrentWarehouseId() {
+        Long warehouseId = getCurrentWarehouseIdAllowNull();
+        if (warehouseId == null) {
+            throw new SemanticException("Warehouse " + this.sessionVariable.getWarehouseName() + " not exist");
+        }
+        return warehouseId;
     }
 
     public String getCurrentWarehouseName() {
@@ -794,12 +1045,154 @@ public class ConnectContext {
     }
 
     public void setCurrentWarehouse(String currentWarehouse) {
-        this.sessionVariable.setWarehouseName(currentWarehouse);
+        final SessionVariable old = this.sessionVariable;
+        try {
+            final VariableMgr variableMgr = GlobalStateMgr.getCurrentState().getVariableMgr();
+            this.sessionVariable = variableMgr.newSessionVariable();
+            applyWarehouseSessionVariable(currentWarehouse, this.sessionVariable);
+        } catch (Exception e) {
+            this.sessionVariable = old;
+            throw e;
+        }
+    }
+
+    public void applyWarehouseSessionVariable(String warehouse, SessionVariable sv) {
+        final VariableMgr variableMgr = GlobalStateMgr.getCurrentState().getVariableMgr();
+        sv.setWarehouseName(warehouse);
+        variableMgr.applyWarehouseVariable(sv);
+        // apply user property variable
+        try {
+            String user = getQualifiedUser();
+            final AuthenticationMgr authMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+            if (user != null) {
+                final UserProperty userProperty = authMgr.getUserProperty(getQualifiedUser());
+                if (!userProperty.getSessionVariables().isEmpty()) {
+                    variableMgr.applySessionVariable(userProperty.getSessionVariables(), sv);
+                }
+            }
+        } catch (Exception e) {
+            LOG.warn("failed to apply user property session variable", e);
+        }
+
+        // apply modified session variable
+        try {
+            variableMgr.applyModifiedVariable(modifiedSessionVariables, sv);
+        } catch (Exception e) {
+            LOG.warn("failed to apply user session variable", e);
+        }
+        this.resetComputeResource();
     }
 
     public void setCurrentWarehouseId(long warehouseId) {
         Warehouse warehouse = globalStateMgr.getWarehouseMgr().getWarehouse(warehouseId);
-        this.sessionVariable.setWarehouseName(warehouse.getName());
+        this.setCurrentWarehouse(warehouse.getName());
+    }
+
+    public void setCurrentComputeResource(ComputeResource computeResource) {
+        this.computeResource = computeResource;
+    }
+
+    /**
+     * Reset the current compute resource, so that we can acquire a new one next time.
+     */
+    public void resetComputeResource() {
+        this.computeResource = null;
+    }
+
+    /**
+     * Acquire a compute resource from warehouse manager.
+     */
+    private synchronized void acquireComputeResource() {
+        // once warehouse is set, needs to choose the available cngroup
+        // try to acquire cn group id once the warehouse is set
+        final long warehouseId = this.getCurrentWarehouseId();
+        final WarehouseManager warehouseManager = globalStateMgr.getWarehouseMgr();
+        this.computeResource = LazyComputeResource.of(warehouseId, () ->
+                warehouseManager.acquireComputeResource(warehouseId, this.computeResource));
+    }
+
+    /**
+     * Get the current compute resource, acquire it if not set.
+     * NOTE: This method will acquire compute resource if it is not set.
+     *
+     * @return: the current compute resource, or the default resource if not in shared data mode.
+     */
+    public ComputeResource getCurrentComputeResource() {
+        if (!RunMode.isSharedDataMode()) {
+            return WarehouseManager.DEFAULT_RESOURCE;
+        }
+        if (this.computeResource == null) {
+            acquireComputeResource();
+        } else {
+            final WarehouseManager warehouseManager = globalStateMgr.getWarehouseMgr();
+            // throw exception if the current warehouse is not exist.
+            if (!warehouseManager.warehouseExists(this.getCurrentWarehouseName())) {
+                String errMsg = String.format("Current connection's warehouse(%s) does not exist, please " +
+                        "set to another warehouse.", this.getCurrentWarehouseName());
+                this.resetComputeResource();
+                throw new RuntimeException(errMsg);
+            }
+            if (!warehouseManager.isResourceAvailable(computeResource)) {
+                if (state != null && !state.isRunning()) {
+                    // if the query is not running, we can acquire a new compute resource.
+                    acquireComputeResource();
+                } else {
+                    // throw exception if the current compute resource is not available.
+                    // and reset compute resource, so that we can acquire a new one next time.
+                    String errMsg =
+                            String.format("Current connection's compute resource(%s) is not available:%s, please " +
+                                    "try again.", this.getCurrentWarehouseName(), computeResource);
+                    this.resetComputeResource();
+                    throw new RuntimeException(errMsg);
+                }
+            }
+        }
+        return this.computeResource;
+    }
+
+    /**
+     * Get the name of the current compute resource.
+     * During the execution of a statement, the compute resource should be fixed.
+     * NOTE: this method will not acquire compute resource if it is not set.
+     *
+     * @return: the name of the current compute resource, or empty string if not set.
+     */
+    public String getCurrentComputeResourceName() {
+        if (!RunMode.isSharedDataMode() || this.computeResource == null) {
+            return "";
+        }
+        try {
+            final WarehouseManager warehouseManager = globalStateMgr.getWarehouseMgr();
+            return warehouseManager.getComputeResourceName(this.computeResource);
+        } catch (Exception e) {
+            LOG.warn("get compute resource name failed, resource: {}", this.computeResource, e);
+            return "";
+        }
+    }
+
+    /**
+     * Get the current compute resource without acquiring it.
+     *
+     * @return: the current compute resource(null if not set), or the default resource if not in shared data mode.
+     */
+    public ComputeResource getCurrentComputeResourceNoAcquire() {
+        if (!RunMode.isSharedDataMode()) {
+            return WarehouseManager.DEFAULT_RESOURCE;
+        }
+        return this.computeResource;
+    }
+
+    /**
+     * This method will acquire a new compute resource if the current one is not available.
+     * To ensure the compute resource is unique during the execution of a statement, check this method
+     * before executing a statement.
+     */
+    public void ensureCurrentComputeResourceAvailable() {
+        if (!RunMode.isSharedDataMode() || this.computeResource == null) {
+            return;
+        }
+        // acquire compute resource again for better schedule balance
+        acquireComputeResource();
     }
 
     public void setParentConnectContext(ConnectContext parent) {
@@ -842,6 +1235,14 @@ public class ConnectContext {
         this.needQueued = needQueued;
     }
 
+    public boolean isBypassAuthorizerCheck() {
+        return accessControlContext.isBypassAuthorizerCheck();
+    }
+
+    public void setBypassAuthorizerCheck(boolean value) {
+        accessControlContext.setBypassAuthorizerCheck(value);
+    }
+
     public ConnectContext getParent() {
         return parent;
     }
@@ -862,7 +1263,6 @@ public class ConnectContext {
         return this.forwardTimes;
     }
 
-
     public void setSessionId(UUID sessionId) {
         this.sessionId = sessionId;
     }
@@ -877,6 +1277,30 @@ public class ConnectContext {
 
     public void setQueryMVContext(QueryMaterializationContext queryMVContext) {
         this.queryMVContext = queryMVContext;
+    }
+
+    public QuerySource getQuerySource() {
+        return querySource;
+    }
+
+    public void setQuerySource(QuerySource querySource) {
+        this.querySource = querySource;
+    }
+
+    public void startAcceptQuery(ConnectProcessor connectProcessor) {
+        mysqlChannel.startAcceptQuery(this, connectProcessor);
+    }
+
+    public void suspendAcceptQuery() {
+        mysqlChannel.suspendAcceptQuery();
+    }
+
+    public void resumeAcceptQuery() {
+        mysqlChannel.resumeAcceptQuery();
+    }
+
+    public void stopAcceptQuery() throws IOException {
+        mysqlChannel.stopAcceptQuery();
     }
 
     // kill operation with no protect.
@@ -898,7 +1322,7 @@ public class ConnectContext {
                     Thread.sleep(10);
                     times++;
                     if (times > 100) {
-                        LOG.warn("wait for close fail, break.");
+                        LOG.warn("kill queryId={} connectId={} wait for close fail, break.", queryId, connectionId);
                         break;
                     }
                 } catch (InterruptedException e) {
@@ -911,37 +1335,105 @@ public class ConnectContext {
         }
     }
 
-    public void checkTimeout(long now) {
+    /**
+     * NOTE: The ExecTimeout should not contain the pending time which may be caused by QueryQueue's scheduler.
+     * </p>
+     *
+     * @return Get the timeout for this session, unit: second
+     */
+    public int getExecTimeout() {
+        return pendingTimeSecond + getExecTimeoutWithoutPendingTime();
+    }
+
+    public int getExecTimeoutWithoutPendingTime() {
+        return executor != null ? executor.getExecTimeout() : sessionVariable.getQueryTimeoutS();
+    }
+
+    /**
+     * update the pending time for this session, unit: second
+     *
+     * @param pendingTimeSecond: the pending time for this session
+     */
+    public void setPendingTimeSecond(int pendingTimeSecond) {
+        this.pendingTimeSecond = pendingTimeSecond;
+    }
+
+    public long getPendingTimeSecond() {
+        return this.pendingTimeSecond;
+    }
+
+    private String getExecType() {
+        return executor != null ? executor.getExecType() : "Query";
+    }
+
+    private boolean isExecLoadType() {
+        return executor != null && executor.isExecLoadType();
+    }
+
+    /**
+     * Check the connect context is timeout or not. If true, kill the connection, otherwise, return false.
+     *
+     * @param now : current time in milliseconds
+     * @return true if timeout, false otherwise
+     */
+    public boolean checkTimeout(long now) {
         long startTimeMillis = getStartTime();
         if (startTimeMillis <= 0) {
-            return;
+            return false;
         }
 
         long delta = now - startTimeMillis;
         boolean killFlag = false;
         boolean killConnection = false;
+        String sql = "";
+        if (executor != null) {
+            sql = executor.getOriginStmtInString();
+        }
+        String errMsg = "";
         if (command == MysqlCommand.COM_SLEEP) {
-            if (delta > sessionVariable.getWaitTimeoutS() * 1000L) {
+            int waitTimeout = sessionVariable.getWaitTimeoutS();
+            if (delta > waitTimeout * 1000L) {
                 // Need kill this connection.
-                LOG.warn("kill wait timeout connection, remote: {}, wait timeout: {}",
-                        getMysqlChannel().getRemoteHostPortString(), sessionVariable.getWaitTimeoutS());
+                LOG.warn("kill wait timeout connection, remote: {}, wait timeout: {}, query id: {}, sql: {}",
+                        getMysqlChannel().getRemoteHostPortString(), waitTimeout, queryId, SqlUtils.sqlPrefix(sql));
 
                 killFlag = true;
                 killConnection = true;
+
+                errMsg = String.format("Connection reached its wait timeout of %d seconds", waitTimeout);
             }
         } else {
-            long timeoutSecond = sessionVariable.getQueryTimeoutS();
+            long timeoutSecond = getExecTimeout();
             if (delta > timeoutSecond * 1000L) {
-                LOG.warn("kill query timeout, remote: {}, query timeout: {}",
-                        getMysqlChannel().getRemoteHostPortString(), sessionVariable.getQueryTimeoutS());
+                final long pendingTime = getPendingTimeSecond();
+                final long execTimeout = getExecTimeoutWithoutPendingTime();
+                LOG.warn("kill timeout {}, remote: {}, execute timeout: {}, exec timeout: {}, pending time:{}, " +
+                                "query id: {}, sql: {}",
+                        getExecType().toLowerCase(), getMysqlChannel().getRemoteHostPortString(), timeoutSecond,
+                        execTimeout, pendingTime, queryId, SqlUtils.sqlPrefix(sql));
 
                 // Only kill
                 killFlag = true;
+
+                String msg;
+
+                if (!isSessionQueryTimeoutOverridden() && executor != null && executor.getTableQueryTimeoutInfo() != null) {
+                    Pair<String, Integer> tableTimeoutInfo = executor.getTableQueryTimeoutInfo();
+                    String tableName = tableTimeoutInfo.first;
+                    int tableTimeout = tableTimeoutInfo.second;
+                    msg = String.format("the table %s table_query_timeout is %ds, pending time:%s",
+                            tableName, tableTimeout, pendingTime);
+                } else {
+                    msg = String.format("please increase the '%s' session variable, pending time:%s",
+                            isExecLoadType() ? SessionVariable.INSERT_TIMEOUT : SessionVariable.QUERY_TIMEOUT, pendingTime);
+                }
+                errMsg = ErrorCode.ERR_TIMEOUT.formatErrorMsg(getExecType(), execTimeout, msg);
             }
         }
         if (killFlag) {
-            kill(killConnection, "query timeout");
+            kill(killConnection, errMsg);
         }
+        return killFlag;
     }
 
     // Helper to dump connection information.
@@ -968,6 +1460,15 @@ public class ConnectContext {
         return globalStateMgr.getNodeMgr().getClusterInfo().getAliveComputeNodeNumber();
     }
 
+    /**
+     * BackendNode + ComputeNode
+     */
+    public int getAliveExecutionNodesNumber() {
+        return getAliveBackendNumber() +
+                (RunMode.isSharedDataMode() ?
+                        getGlobalStateMgr().getNodeMgr().getClusterInfo().getAliveComputeNodeNumber() : 0);
+    }
+
     public void setPending(boolean pending) {
         isPending = pending;
     }
@@ -984,59 +1485,51 @@ public class ConnectContext {
         return isForward;
     }
 
-    public boolean supportSSL() {
-        return sslContext != null;
-    }
-
     public boolean enableSSL() throws IOException {
-        Class<? extends SSLChannel> clazz = SSLChannelImpClassLoader.loadSSLChannelImpClazz();
-        if (clazz == null) {
-            LOG.warn("load SSLChannelImp class failed");
-            throw new IOException("load SSLChannelImp class failed");
-        }
-
-        try {
-            SSLChannel sslChannel = (SSLChannel) clazz.getConstructors()[0]
-                    .newInstance(sslContext.createSSLEngine(), mysqlChannel);
-            if (!sslChannel.init()) {
-                return false;
-            } else {
-                mysqlChannel.setSSLChannel(sslChannel);
-                return true;
-            }
-        } catch (Exception e) {
-            LOG.warn("construct SSLChannelImp class failed");
-            throw new IOException("construct SSLChannelImp class failed");
+        SSLChannel sslChannel = new SSLChannelImp(SSLContextLoader.newServerEngine(), mysqlChannel);
+        if (!sslChannel.init()) {
+            return false;
+        } else {
+            mysqlChannel.setSSLChannel(sslChannel);
+            return true;
         }
     }
 
     public StmtExecutor executeSql(String sql) throws Exception {
         StatementBase sqlStmt = SqlParser.parse(sql, getSessionVariable()).get(0);
         sqlStmt.setOrigStmt(new OriginStatement(sql, 0));
-        StmtExecutor executor = new StmtExecutor(this, sqlStmt);
+        StmtExecutor executor = StmtExecutor.newInternalExecutor(this, sqlStmt);
         setExecutor(executor);
         setThreadLocalInfo();
         executor.execute();
         return executor;
     }
 
+    /**
+     * Bind the context to current scope, exchange the context if it's already existed
+     * Sample usage:
+     * try (var guard = context.bindScope()) {
+     * ......
+     * }
+     */
     public ScopeGuard bindScope() {
-        return ScopeGuard.setIfNotExists(this);
+        return ScopeGuard.bind(this);
     }
 
     // Change current catalog of this session, and reset current database.
     // We can support "use 'catalog <catalog_name>'" from mysql client or "use catalog <catalog_name>" from jdbc.
     public void changeCatalog(String newCatalogName) throws DdlException {
-        CatalogMgr catalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
+        CatalogMgr catalogMgr = globalStateMgr.getCatalogMgr();
+        newCatalogName = normalizeName(newCatalogName);
         if (!catalogMgr.catalogExists(newCatalogName)) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, newCatalogName);
         }
         if (!CatalogMgr.isInternalCatalog(newCatalogName)) {
             try {
-                Authorizer.checkAnyActionOnCatalog(this.getCurrentUserIdentity(),
-                        this.getCurrentRoleIds(), newCatalogName);
+                Authorizer.checkAnyActionOnCatalog(this, newCatalogName);
             } catch (AccessDeniedException e) {
-                AccessDeniedException.reportAccessDenied(newCatalogName, this.getCurrentUserIdentity(), this.getCurrentRoleIds(),
+                AccessDeniedException.reportAccessDenied(newCatalogName, this.getCurrentUserIdentity(),
+                        this.getCurrentRoleIds(),
                         PrivilegeType.ANY.name(), ObjectType.CATALOG.name(), newCatalogName);
             }
         }
@@ -1049,8 +1542,8 @@ public class ConnectContext {
     // For "CATALOG.DB", we change the current catalog database.
     // For "DB", we keep the current catalog and change the current database.
     public void changeCatalogDb(String identifier) throws DdlException {
-        CatalogMgr catalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
-        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        CatalogMgr catalogMgr = globalStateMgr.getCatalogMgr();
+        MetadataMgr metadataMgr = globalStateMgr.getMetadataMgr();
 
         String dbName;
 
@@ -1062,14 +1555,13 @@ public class ConnectContext {
         if (parts.length == 1) { // use database
             dbName = identifier;
         } else { // use catalog.database
-            String newCatalogName = parts[0];
+            String newCatalogName = normalizeName(parts[0]);
             if (!catalogMgr.catalogExists(newCatalogName)) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, newCatalogName);
             }
             if (!CatalogMgr.isInternalCatalog(newCatalogName)) {
                 try {
-                    Authorizer.checkAnyActionOnCatalog(this.getCurrentUserIdentity(),
-                            this.getCurrentRoleIds(), newCatalogName);
+                    Authorizer.checkAnyActionOnCatalog(this, newCatalogName);
                 } catch (AccessDeniedException e) {
                     AccessDeniedException.reportAccessDenied(newCatalogName,
                             this.getCurrentUserIdentity(), this.getCurrentRoleIds(),
@@ -1080,7 +1572,9 @@ public class ConnectContext {
             dbName = parts[1];
         }
 
-        if (!Strings.isNullOrEmpty(dbName) && metadataMgr.getDb(this.getCurrentCatalog(), dbName) == null) {
+        dbName = normalizeName(dbName);
+
+        if (!Strings.isNullOrEmpty(dbName) && metadataMgr.getDb(this, this.getCurrentCatalog(), dbName) == null) {
             LOG.debug("Unknown catalog {} and db {}", this.getCurrentCatalog(), dbName);
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
@@ -1088,8 +1582,7 @@ public class ConnectContext {
         // Here we check the request permission that sent by the mysql client or jdbc.
         // So we didn't check UseDbStmt permission in PrivilegeCheckerV2.
         try {
-            Authorizer.checkAnyActionOnOrInDb(this.getCurrentUserIdentity(),
-                    this.getCurrentRoleIds(), this.getCurrentCatalog(), dbName);
+            Authorizer.checkAnyActionOnOrInDb(this, this.getCurrentCatalog(), dbName);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(this.getCurrentCatalog(),
                     this.getCurrentUserIdentity(), this.getCurrentRoleIds(),
@@ -1103,7 +1596,7 @@ public class ConnectContext {
         if (sessionId == null) {
             return;
         }
-        if (!GlobalStateMgr.getCurrentState().getTemporaryTableMgr().sessionExists(sessionId)) {
+        if (!globalStateMgr.getTemporaryTableMgr().sessionExists(sessionId)) {
             return;
         }
         LOG.debug("clean temporary table on session {}", sessionId);
@@ -1112,7 +1605,7 @@ public class ConnectContext {
             CleanTemporaryTableStmt cleanTemporaryTableStmt = new CleanTemporaryTableStmt(sessionId);
             cleanTemporaryTableStmt.setOrigStmt(
                     new OriginStatement("clean temporary table on session '" + sessionId.toString() + "'"));
-            executor = new StmtExecutor(this, cleanTemporaryTableStmt);
+            executor = StmtExecutor.newInternalExecutor(this, cleanTemporaryTableStmt);
             executor.execute();
         } catch (Throwable e) {
             LOG.warn("Failed to clean temporary table on session {}, {}", sessionId, e);
@@ -1123,37 +1616,28 @@ public class ConnectContext {
     // to execute SQL.
     public void updateByUserProperty(UserProperty userProperty) {
         try {
-            // set session variables
-            Map<String, String> sessionVariables = userProperty.getSessionVariables();
-            for (Map.Entry<String, String> entry : sessionVariables.entrySet()) {
-                String currentValue = VariableMgr.getValue(sessionVariable, new VariableExpr(entry.getKey()));
-                if (!currentValue.equalsIgnoreCase(VariableMgr.getDefaultValue(entry.getKey()))) {
-                    // If the current session variable is not default value, we should respect it.
-                    continue;
-                }
-                SystemVariable variable = new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue()));
-                modifySystemVariable(variable, true);
+            final VariableMgr variableMgr = globalStateMgr.getVariableMgr();
+            final Map<String, String> userPropertySvs = userProperty.getSessionVariables();
+            if (userPropertySvs.containsKey(SessionVariable.WAREHOUSE_NAME)) {
+                setCurrentWarehouse(userPropertySvs.get(SessionVariable.WAREHOUSE_NAME));
+            } else {
+                variableMgr.applySessionVariable(userPropertySvs, sessionVariable);
             }
-
             // set catalog and database
-            boolean dbHasBeenSetByUser = !getCurrentCatalog().equals(VariableMgr.getDefaultValue(SessionVariable.CATALOG)) ||
-                    !getDatabase().isEmpty();
-            if (!dbHasBeenSetByUser) {
-                String catalog = userProperty.getCatalog();
-                String database = userProperty.getDatabase();
-                if (catalog.equals(UserProperty.CATALOG_DEFAULT_VALUE)) {
-                    if (!database.equals(UserProperty.DATABASE_DEFAULT_VALUE)) {
-                        changeCatalogDb(userProperty.getCatalogDbName());
-                    }
-                } else {
-                    if (database.equals(UserProperty.DATABASE_DEFAULT_VALUE)) {
-                        changeCatalog(catalog);
-                    } else {
-                        changeCatalogDb(userProperty.getCatalogDbName());
-                    }
-                    SystemVariable variable = new SystemVariable(SessionVariable.CATALOG, new StringLiteral(catalog));
-                    modifySystemVariable(variable, true);
+            String catalog = userProperty.getCatalog();
+            String database = userProperty.getDatabase();
+            if (catalog.equals(UserProperty.CATALOG_DEFAULT_VALUE)) {
+                if (!database.equals(UserProperty.DATABASE_DEFAULT_VALUE)) {
+                    changeCatalogDb(userProperty.getCatalogDbName());
                 }
+            } else {
+                if (database.equals(UserProperty.DATABASE_DEFAULT_VALUE)) {
+                    changeCatalog(catalog);
+                } else {
+                    changeCatalogDb(userProperty.getCatalogDbName());
+                }
+                SystemVariable variable = new SystemVariable(SessionVariable.CATALOG, new StringLiteral(catalog));
+                globalStateMgr.getVariableMgr().setSystemVariable(sessionVariable, variable, true);
             }
         } catch (Exception e) {
             LOG.warn("set session env failed: ", e);
@@ -1163,26 +1647,43 @@ public class ConnectContext {
         }
     }
 
+    public boolean isLeaderTransferred() {
+        return isLeaderTransferred;
+    }
+
+    public void setIsLeaderTransferred(boolean isLeaderTransferred) {
+        this.isLeaderTransferred = isLeaderTransferred;
+    }
+
     /**
      * Set thread-local context for the scope, and remove it after leaving the scope
      */
     public static class ScopeGuard implements AutoCloseable {
 
         private boolean set = false;
+        private ConnectContext prev;
 
         private ScopeGuard() {
         }
 
-        public static ScopeGuard setIfNotExists(ConnectContext session) {
+        private static ScopeGuard bind(ConnectContext session) {
             ScopeGuard res = new ScopeGuard();
-            res.set = session.setThreadLocalInfoIfNotExists();
+            res.prev = exchangeThreadLocalInfo(session);
+            res.set = true;
             return res;
+        }
+
+        public ConnectContext prev() {
+            return prev;
         }
 
         @Override
         public void close() {
             if (set) {
                 ConnectContext.remove();
+            }
+            if (prev != null) {
+                prev.setThreadLocalInfo();
             }
         }
     }
@@ -1195,7 +1696,7 @@ public class ConnectContext {
         public List<String> toRow(long nowMs, boolean full) {
             List<String> row = Lists.newArrayList();
             row.add("" + connectionId);
-            row.add(ClusterNamespace.getNameFromFullName(qualifiedUser));
+            row.add(ClusterNamespace.getNameFromFullName(getQualifiedUser()));
             // Ip + port
             if (ConnectContext.this instanceof HttpConnectContext) {
                 String remoteAddress = ((HttpConnectContext) (ConnectContext.this)).getRemoteAddress();
@@ -1231,7 +1732,99 @@ public class ConnectContext {
             } else {
                 row.add(Boolean.toString(isPending));
             }
+            // warehouse
+            row.add(sessionVariable.getWarehouseName());
+            // cngroup
+            row.add(getCurrentComputeResourceName());
+            // catalog
+            row.add(sessionVariable.getCatalog());
+            // query id
+            row.add(queryId == null ? null : queryId.toString());
             return row;
         }
+    }
+
+    public boolean isIdleLastFor(long milliSeconds) {
+        if (command != MysqlCommand.COM_SLEEP) {
+            return false;
+        }
+
+        return endTime.isAfter(startTime)
+                && endTime.plusMillis(milliSeconds).isBefore(Instant.now());
+    }
+
+    public long getCurrentThreadAllocatedMemory() {
+        return currentThreadAllocatedMemory.get();
+    }
+
+    public void setCurrentThreadAllocatedMemory(long currentThreadAllocatedMemory) {
+        this.currentThreadAllocatedMemory.set(currentThreadAllocatedMemory);
+    }
+
+    public long getCurrentThreadId() {
+        if (currentThreadId == null) {
+            return 0;
+        }
+        return currentThreadId.get();
+    }
+
+    public void setCurrentThreadId(long currentThreadId) {
+        this.currentThreadId = new AtomicLong(currentThreadId);
+    }
+
+    public void setFinishSinkHandler(FinishSinkHandler handler) {
+        this.skipFinishSink = true;
+        this.handler = handler;
+    }
+
+    public boolean getSkipFinishSink() {
+        return skipFinishSink;
+    }
+
+    public FinishSinkHandler getFinishSinkHandler() {
+        return handler;
+    }
+
+    public interface Listener {
+        /**
+         * Trigger when query is finished
+         */
+        void onQueryFinished(ConnectContext state);
+    }
+
+    public void registerListener(Listener listener) {
+        this.listeners.add(listener);
+    }
+
+    public List<Listener> getListeners() {
+        return listeners;
+    }
+
+    public void onQueryFinished() {
+        for (Listener listener : listeners) {
+            try {
+                listener.onQueryFinished(this);
+            } catch (Exception e) {
+                // ignore
+                LOG.warn("onQueryFinished error", e);
+            }
+        }
+
+        try {
+            auditEventBuilder.setCNGroup(getCurrentComputeResourceName());
+        } catch (Exception e) {
+            LOG.warn("set cn group name failed", e);
+        }
+
+        // after current query finished, remove all current listeners
+        listeners.clear();
+    }
+
+    public boolean isSingleStmt() {
+        return isSingleStmt;
+    }
+
+    public void setSingleStmt(boolean singleStmt) {
+        isSingleStmt = singleStmt;
     }
 }

@@ -80,6 +80,12 @@ public:
         }
     }
 
+    void acquire_runtime_filter(RuntimeState* state) {
+        for (auto& op : _op_factories) {
+            op->acquire_runtime_filter(state);
+        }
+    }
+
     std::string to_readable_string() const {
         std::stringstream ss;
         ss << "operator-chain: [";

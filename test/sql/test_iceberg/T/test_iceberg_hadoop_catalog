@@ -1,0 +1,61 @@
+-- name: testIcebergHadoopCatalog
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_catalog/test_iceberg_hadoop_catalog/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+create external catalog `ice_hadoop${uuid0}`
+properties (
+"type"  =  "iceberg",
+"iceberg.catalog.type"  =  "hadoop",
+"iceberg.catalog.warehouse"="oss://${oss_bucket}/test_catalog/test_iceberg_hadoop_catalog/${uuid0}",
+"aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}"
+);
+
+create database ice_hadoop${uuid0}.ice_hadoop_db${uuid0};
+
+create table ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test (
+    c0 int, 
+    c1 string
+);
+
+insert into ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test values (1, "A");
+
+select * from ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test;
+
+drop table ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test;
+
+create table ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test_double (
+    c0 double
+);
+
+create table ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test_double_as as select * from ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test_double;
+
+describe ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test_double_as;
+
+drop table ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test_double_as;
+
+drop table ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test_double;
+
+--test create table with same name
+create table ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.member (
+    name string
+);
+
+insert into ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.member VALUES ('Kim');
+select * from ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.member;
+drop table ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.member;
+
+create table ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.member (
+    address string
+);
+
+desc ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.member;
+insert into ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.member VALUES ('Earth');
+select * from ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.member;
+
+drop table ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.member;
+
+drop database ice_hadoop${uuid0}.ice_hadoop_db${uuid0};
+
+drop catalog ice_hadoop${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_catalog/test_iceberg_hadoop_catalog/${uuid0} >/dev/null || echo "exit 0" >/dev/null

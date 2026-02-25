@@ -15,13 +15,13 @@
 package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.type.Type;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -36,7 +36,7 @@ import static java.util.Objects.requireNonNull;
  * Please be careful when adding new attributes. Rewriting expr operation exists everywhere in the optimizer.
  * If you add new attributes, please make sure that the new attributes will not be erased by the rewriting operation.
  */
-public class CallOperator extends ScalarOperator {
+public class CallOperator extends ArgsScalarOperator {
     private String fnName;
     /**
      * TODO:
@@ -44,8 +44,6 @@ public class CallOperator extends ScalarOperator {
      * to determine a unique function signature
      */
     //private final FunctionSignature signature;
-
-    protected List<ScalarOperator> arguments;
 
     private Function fn;
     // The flag for distinct function
@@ -78,6 +76,7 @@ public class CallOperator extends ScalarOperator {
         this.fn = fn;
         this.isDistinct = isDistinct;
         this.removedDistinct = removedDistinct;
+        incrDepth(arguments);
     }
 
     public void setIgnoreNulls(boolean ignoreNulls) {
@@ -143,28 +142,13 @@ public class CallOperator extends ScalarOperator {
     }
 
     @Override
-    public List<ScalarOperator> getChildren() {
-        return arguments;
-    }
-
-    @Override
-    public ScalarOperator getChild(int index) {
-        return arguments.get(index);
-    }
-
-    @Override
-    public void setChild(int index, ScalarOperator child) {
-        arguments.set(index, child);
-    }
-
-    @Override
     public boolean isNullable() {
         // check if fn always return non null
         if (fn != null && !fn.isNullable()) {
             return false;
         }
         // check children nullable
-        if (FunctionCallExpr.nullableSameWithChildrenFunctions.contains(fnName)) {
+        if (FunctionCallExpr.NULLABLE_SAME_WITH_CHILDREN_FUNCTIONS.contains(fnName)) {
             // decimal operation may overflow
             return arguments.stream()
                     .anyMatch(argument -> argument.isNullable() || argument.getType().isDecimalOfAnyVersion());
@@ -195,12 +179,12 @@ public class CallOperator extends ScalarOperator {
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(fnName, arguments, isDistinct);
+    public int hashCodeSelf() {
+        return Objects.hash(fnName, isDistinct, ignoreNulls);
     }
 
     @Override
-    public boolean equals(Object obj) {
+    public boolean equalsSelf(Object obj) {
         if (this == obj) {
             return true;
         }
@@ -208,13 +192,13 @@ public class CallOperator extends ScalarOperator {
             return false;
         }
         CallOperator other = (CallOperator) obj;
-        return isDistinct == other.isDistinct && removedDistinct == other.removedDistinct &&
+        return isDistinct == other.isDistinct &&
+                removedDistinct == other.removedDistinct &&
                 Objects.equals(fnName, other.fnName) &&
                 Objects.equals(type, other.type) &&
-                Objects.equals(arguments, other.arguments) &&
-                Objects.equals(fn, other.fn);
+                Objects.equals(fn, other.fn) &&
+                ignoreNulls == other.ignoreNulls;
     }
-
 
     // Only used for meaning equivalence comparison in iceberg table scan predicate
     @Override
@@ -259,6 +243,6 @@ public class CallOperator extends ScalarOperator {
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitCall(this, context);
+        return  visitor.visitCall(this, context);
     }
 }

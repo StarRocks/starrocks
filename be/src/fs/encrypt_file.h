@@ -16,7 +16,7 @@
 
 #include "fs/fs.h"
 #include "fs/writable_file_wrapper.h"
-#include "io/input_stream.h"
+#include "io/core/input_stream.h"
 
 namespace starrocks {
 
@@ -34,6 +34,8 @@ public:
     Status append(const Slice& data) override;
 
     Status appendv(const Slice* data, size_t cnt) override;
+
+    void set_encryption_info(const FileEncryptionInfo& info) override { _encryption_info = info; }
 
 private:
     FileEncryptionInfo _encryption_info;
@@ -56,6 +58,8 @@ public:
     Status read_at_fully(int64_t offset, void* out, int64_t count);
 
     StatusOr<std::string> read_all() override;
+
+    bool is_encrypted() const override { return true; };
 
 private:
     std::unique_ptr<io::SeekableInputStream> _stream;

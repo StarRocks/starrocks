@@ -37,6 +37,7 @@ public:
     NLJoinProbeOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                         TJoinOp::type join_op, const std::string& sql_join_conjuncts,
                         const std::vector<ExprContext*>& join_conjuncts, const std::vector<ExprContext*>& conjunct_ctxs,
+                        const std::map<SlotId, ExprContext*>& common_expr_ctxs,
                         const std::vector<SlotDescriptor*>& col_types, size_t probe_column_count,
                         const std::shared_ptr<NLJoinContext>& cross_join_context);
 
@@ -59,6 +60,7 @@ public:
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
     Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
+    void update_exec_stats(RuntimeState* state) override;
 
 private:
     enum JoinStage {
@@ -86,8 +88,8 @@ private:
     bool _skip_probe() const;
     void _check_post_probe() const;
     void _init_build_match() const;
-    void _permute_probe_row(const ChunkPtr& chunk);
-    ChunkPtr _permute_chunk_for_other_join(size_t chunk_size);
+    Status _permute_probe_row(const ChunkPtr& chunk);
+    StatusOr<ChunkPtr> _permute_chunk_for_other_join(size_t chunk_size);
     ChunkPtr _permute_chunk_for_inner_join(size_t chunk_size);
     void _permute_chunk_base_left(ChunkPtr* chunk);
     void _permute_chunk_base_right(ChunkPtr* chunk);
@@ -96,11 +98,17 @@ private:
     bool _is_curr_probe_chunk_finished() const;
     void iterate_enumerate_chunk(const ChunkPtr& chunk, const std::function<void(bool, size_t, size_t)>& call);
 
+    Status _eval_nullaware_anti_conjuncts(const ChunkPtr& chunk, FilterPtr* filter);
+
+    // eval conjuncts for nest loop join
+    Status _eval_conjuncts(const ChunkPtr& chunk);
+
     // Join type check
     bool _is_left_join() const;
     bool _is_right_join() const;
     bool _is_left_semi_join() const;
     bool _is_left_anti_join() const;
+    bool _is_null_aware_left_anti_join() const;
 
 private:
     const TJoinOp::type _join_op;
@@ -111,6 +119,7 @@ private:
     const std::vector<ExprContext*>& _join_conjuncts;
 
     const std::vector<ExprContext*>& _conjunct_ctxs;
+    const std::map<SlotId, ExprContext*>& _common_expr_ctxs;
     const std::shared_ptr<NLJoinContext>& _cross_join_context;
 
     bool _input_finished = false;
@@ -123,7 +132,7 @@ private:
     size_t _prev_chunk_start = 0;
     size_t _prev_chunk_size = 0;
     size_t _build_row_current = 0;
-    mutable std::vector<uint8_t> _self_build_match_flag;
+    mutable Filter _self_build_match_flag;
 
     // Probe states
     ChunkPtr _probe_chunk = nullptr;
@@ -143,6 +152,7 @@ public:
                                const RowDescriptor& left_row_desc, const RowDescriptor& right_row_desc,
                                std::string sql_join_conjuncts, std::vector<ExprContext*>&& join_conjuncts,
                                std::vector<ExprContext*>&& conjunct_ctxs,
+                               std::map<SlotId, ExprContext*>&& common_expr_ctxs,
                                std::shared_ptr<NLJoinContext>&& cross_join_context, TJoinOp::type join_op)
             : OperatorWithDependencyFactory(id, "cross_join_left", plan_node_id),
               _join_op(join_op),
@@ -151,6 +161,7 @@ public:
               _sql_join_conjuncts(std::move(sql_join_conjuncts)),
               _join_conjuncts(std::move(join_conjuncts)),
               _conjunct_ctxs(std::move(conjunct_ctxs)),
+              _common_expr_ctxs(std::move(common_expr_ctxs)),
               _cross_join_context(std::move(cross_join_context)) {}
 
     ~NLJoinProbeOperatorFactory() override = default;
@@ -167,13 +178,14 @@ private:
     const RowDescriptor& _left_row_desc;
     const RowDescriptor& _right_row_desc;
 
-    Buffer<SlotDescriptor*> _col_types;
+    std::vector<SlotDescriptor*> _col_types;
     size_t _probe_column_count = 0;
     size_t _build_column_count = 0;
 
     std::string _sql_join_conjuncts;
     std::vector<ExprContext*> _join_conjuncts;
     std::vector<ExprContext*> _conjunct_ctxs;
+    std::map<SlotId, ExprContext*> _common_expr_ctxs;
 
     std::shared_ptr<NLJoinContext> _cross_join_context;
 };

@@ -15,14 +15,15 @@
 package com.starrocks.connector.parser.trino;
 
 import org.apache.commons.lang3.StringUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class TrinoQueryTest extends TrinoTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         TrinoTestBase.beforeClass();
+        starRocksAssert.getCtx().getSessionVariable().setCboPushDownAggregateMode(-1);
     }
 
     @Test
@@ -104,6 +105,12 @@ public class TrinoQueryTest extends TrinoTestBase {
 
         sql = "select timestamp '2023-07-01'";
         assertPlanContains(sql, "'2023-07-01 00:00:00'");
+    }
+
+    @Test
+    public void testAtTimezone() {
+        String sql = "select now() AT TIME ZONE 'Asia/Hong_Kong';";
+        analyzeSuccess(sql);
     }
 
     @Test
@@ -336,9 +343,9 @@ public class TrinoQueryTest extends TrinoTestBase {
         sql = "select element_at(array[1,2,3], 1, 0)";
         try {
             getFragmentPlan(sql);
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("element_at function must have 2 arguments"));
+            Assertions.assertTrue(e.getMessage().contains("element_at function must have 2 arguments"));
         }
     }
 
@@ -360,10 +367,10 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertPlanContains(sql, "array_min(2: c1)");
 
         sql = "select array_position(array[1,2,3], 2) from test_array";
-        assertPlanContains(sql, "array_position([1,2,3], 2)");
+        assertPlanContains(sql, "<slot 4> : 2");
 
         sql = "select array_remove(array[1,2,3], 2) from test_array";
-        assertPlanContains(sql, "array_remove([1,2,3], 2)");
+        assertPlanContains(sql, "<slot 4> : [1,3]");
 
         sql = "select array_sort(c1) from test_array";
         assertPlanContains(sql, "array_sort(2: c1)");
@@ -446,7 +453,7 @@ public class TrinoQueryTest extends TrinoTestBase {
 
         sql = "select avg(c1[1]) from test_map where c1[1] is not null";
         assertPlanContains(sql, "2:AGGREGATE (update finalize)\n" +
-                "  |  output: avg(2: c1[1])");
+                "  |  output: avg(5: expr)");
 
         sql = "select c2[2][1] from test_map";
         assertPlanContains(sql, "<slot 5> : 3: c2[2][1]");
@@ -748,6 +755,7 @@ public class TrinoQueryTest extends TrinoTestBase {
 
     @Test
     public void testAggFunction() throws Exception {
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
         String sql = "select count(v1) from t0";
         assertPlanContains(sql, "output: count(1: v1)");
 
@@ -896,14 +904,15 @@ public class TrinoQueryTest extends TrinoTestBase {
     @Test
     public void testExplain() throws Exception {
         String sql = "explain (TYPE logical) select v1, v2 from t0,t1";
-        Assert.assertTrue(getExplain(sql), StringUtils.containsIgnoreCase(getExplain(sql),
+        Assertions.assertTrue(StringUtils.containsIgnoreCase(getExplain(sql),
                 "SCAN [t1] => [8:auto_fill_col]\n" +
-                        "                    Estimates: {row: 1, cpu: 9.00, memory: 0.00, network: 0.00, cost: 4.50}\n" +
+                        "                    Estimates: {row: 1, cpu: 9.00, memory: 0.00, network: 0.00, cost: 4" +
+                        ".50}\n" +
                         "                    partitionRatio: 0/1, tabletRatio: 0/0\n" +
-                        "                    8:auto_fill_col := 1"));
+                        "                    8:auto_fill_col := 1"), getExplain(sql));
 
         sql = "explain select v1, v2 from t0,t1";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getExplain(sql),
+        Assertions.assertTrue(StringUtils.containsIgnoreCase(getExplain(sql),
                 "2:Project\n" +
                         "  |  <slot 8> : 1\n" +
                         "  |  \n" +
@@ -913,7 +922,7 @@ public class TrinoQueryTest extends TrinoTestBase {
                         "     partitions=0/1"));
 
         sql = "explain (Type DISTRIBUTED)select v1, v2 from t0,t1";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getExplain(sql),
+        Assertions.assertTrue(StringUtils.containsIgnoreCase(getExplain(sql),
                 "5:Project\n" +
                         "  |  output columns:\n" +
                         "  |  1 <-> [1: v1, BIGINT, true]\n" +
@@ -923,7 +932,7 @@ public class TrinoQueryTest extends TrinoTestBase {
                         "  4:NESTLOOP JOIN"));
 
         sql = "explain (Type io)select v1, v2 from t0,t1";
-        Assert.assertTrue(StringUtils.containsIgnoreCase(getExplain(sql),
+        Assertions.assertTrue(StringUtils.containsIgnoreCase(getExplain(sql),
                 "5:Project\n" +
                         "  |  output columns:\n" +
                         "  |  1 <-> [1: v1, BIGINT, true]\n" +
@@ -1031,7 +1040,7 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertPlanContains(sql, "<slot 2> : trim('  abcd')");
 
         sql = "select trim(trailing 'ER' from upper('worker'));";
-        assertPlanContains(sql, "<slot 2> : rtrim(upper('worker'), 'ER')");
+        assertPlanContains(sql, "<slot 2> : rtrim('WORKER', 'ER')");
 
         sql = "select trim(trailing from '  abcd');";
         assertPlanContains(sql, "<slot 2> : rtrim('  abcd')");
@@ -1226,6 +1235,33 @@ public class TrinoQueryTest extends TrinoTestBase {
     @Test
     public void testCastArrayDataType() throws Exception {
         String sql = "select cast(ARRAY[1] as array(int))";
-        assertPlanContains(sql, "CAST([1] AS ARRAY<INT>)");
+        assertPlanContains(sql, " <slot 2> : [1]");
+    }
+
+    @Test
+    public void testDistinctFrom() throws Exception {
+        String sql = "select 1 is distinct from 1";
+        analyzeSuccess(sql);
+
+        sql = "select 1 is distinct from null";
+        analyzeSuccess(sql);
+
+        sql = "select null is distinct from null";
+        analyzeSuccess(sql);
+
+        sql = "select 1 is not distinct from 1";
+        analyzeSuccess(sql);
+
+        sql = "select 1 is not distinct from null";
+        analyzeSuccess(sql);
+
+        sql = "select null is not distinct from null";
+        analyzeSuccess(sql);
+    }
+
+    @Test
+    public void testRegexpReplace() throws Exception {
+        String sql = "select regexp_replace('123', '321')";
+        assertPlanContains(sql, "regexp_replace('123', '321', '')");
     }
 }

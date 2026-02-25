@@ -23,7 +23,7 @@ import com.starrocks.utframe.UtFrameUtils;
 import joptsimple.internal.Strings;
 import kotlin.text.Charsets;
 import org.apache.commons.io.IOUtils;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 
 import java.io.File;
 import java.io.IOException;
@@ -92,7 +92,7 @@ public class TablePruningTestBase {
                 return null;
             }
         }).collect(Collectors.toList());
-        Assert.assertFalse(sqlList.contains(null));
+        Assertions.assertFalse(sqlList.contains(null));
         return sqlList;
     }
 
@@ -101,7 +101,7 @@ public class TablePruningTestBase {
     String checkHashJoinCountEq(String infoMsg, String sql, int numHashJoins, Consumer<SessionVariable> svSetter) {
         return checkHashJoinCount(infoMsg, sql, (info, n) -> {
             //System.out.println(String.format("{\"%s\", %d},", info, n));
-            Assert.assertEquals(info, numHashJoins, (int) n);
+            Assertions.assertEquals(numHashJoins, (int) n, info);
             return null;
         }, svSetter);
     }
@@ -117,7 +117,7 @@ public class TablePruningTestBase {
             return Pair.create(realNumOfHashJoin, infoMsg);
         } catch (Throwable err) {
             err.printStackTrace();
-            Assert.fail("SQL=" + sql + "\nError:" + err.getMessage());
+            Assertions.fail("SQL=" + sql + "\nError:" + err.getMessage());
         } finally {
             ctx.getSessionVariable().setEnableRboTablePrune(false);
             ctx.getSessionVariable().setEnableCboTablePrune(false);
@@ -127,7 +127,7 @@ public class TablePruningTestBase {
 
     String checkHashJoinCountLessThan(String sql, int numHashJoins, Consumer<SessionVariable> svSetter) {
         return checkHashJoinCount(null, sql, (info, n) -> {
-            Assert.assertTrue(info, n < numHashJoins);
+            Assertions.assertTrue(n < numHashJoins, info);
             return null;
         }, svSetter);
     }
@@ -148,7 +148,7 @@ public class TablePruningTestBase {
             return plan;
         } catch (Throwable err) {
             err.printStackTrace();
-            Assert.fail("SQL=" + sql + "\nError:" + err.getMessage());
+            Assertions.fail("SQL=" + sql + "\nError:" + err.getMessage());
         } finally {
             ctx.getSessionVariable().setEnableRboTablePrune(false);
             ctx.getSessionVariable().setEnableCboTablePrune(false);

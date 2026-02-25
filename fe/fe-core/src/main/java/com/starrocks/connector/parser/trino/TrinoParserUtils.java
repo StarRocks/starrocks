@@ -14,18 +14,20 @@
 
 package com.starrocks.connector.parser.trino;
 
-import com.starrocks.analysis.CastExpr;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.expression.CastExpr;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
+import com.starrocks.type.DateType;
 import io.trino.sql.tree.CreateTableAsSelect;
+import io.trino.sql.tree.DropTable;
 import io.trino.sql.tree.Explain;
 import io.trino.sql.tree.ExplainAnalyze;
+import io.trino.sql.tree.Insert;
 import io.trino.sql.tree.Query;
 import io.trino.sql.tree.Statement;
 
@@ -40,7 +42,8 @@ public class TrinoParserUtils {
         String trimmedQuery = query.trim();
         Statement statement = TrinoParser.parse(trimmedQuery);
         if (statement instanceof Query || statement instanceof Explain || statement instanceof ExplainAnalyze
-                || statement instanceof CreateTableAsSelect) {
+                || statement instanceof CreateTableAsSelect || statement instanceof Insert
+                || statement instanceof DropTable) {
             return (StatementBase) statement.accept(new AstBuilder(sqlMode), new ParseTreeContext());
         } else {
             throw trinoParserUnsupportedException("Unsupported statement type: " + statement.getClass().getName());
@@ -58,7 +61,7 @@ public class TrinoParserUtils {
      */
     public static Expr alignWithInputDatetimeType(TimestampArithmeticExpr expr) {
         if (isDateType(expr.getChild(0))) {
-            return new CastExpr(Type.DATE, expr);
+            return new CastExpr(DateType.DATE, expr);
         }
         return expr;
     }
@@ -86,7 +89,7 @@ public class TrinoParserUtils {
         if (expr.getType().isDate()) {
             return true;
         } else if (expr instanceof FunctionCallExpr) {
-            return DATE_RETURNING_FUNCTIONS.contains(((FunctionCallExpr) expr).getFnName().getFunction().toLowerCase());
+            return DATE_RETURNING_FUNCTIONS.contains(((FunctionCallExpr) expr).getFunctionName().toLowerCase());
         } else if (expr instanceof CastExpr) {
             return ((CastExpr) expr).getTargetTypeDef().getType().isDate();
         } else if (expr instanceof StringLiteral) {

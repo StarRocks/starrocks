@@ -18,9 +18,9 @@ package com.starrocks.sql.optimizer.operator.scalar;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.type.Type;
 
 import java.util.Comparator;
 import java.util.List;
@@ -44,6 +44,7 @@ public class LambdaFunctionOperator extends ScalarOperator {
         super(OperatorType.LAMBDA_FUNCTION, retType);
         this.refColumns = refColumns;
         this.lambdaExpr = lambdaExpr;
+        incrDepth(lambdaExpr);
     }
 
     public List<ColumnRefOperator> getRefColumns() {
@@ -95,29 +96,36 @@ public class LambdaFunctionOperator extends ScalarOperator {
     }
 
     @Override
-    public int hashCode() {
+    public int hashCodeSelf() {
         return Objects.hash(getType(), refColumns, lambdaExpr);
     }
 
     @Override
-    public boolean equals(Object other) {
+    public boolean equalsSelf(Object other) {
         if (other == null) {
             return false;
         }
         if (this == other) {
             return true;
         }
-        if (other instanceof LambdaFunctionOperator) {
-            final LambdaFunctionOperator lambda = (LambdaFunctionOperator) other;
-            return lambda.getType().equals(getType()) && lambda.lambdaExpr.equals(lambdaExpr) &&
-                    lambda.refColumns.equals(refColumns);
+        if (other instanceof LambdaFunctionOperator lambda) {
+            return lambda.getType().equals(getType()) &&
+                   lambda.refColumns.equals(refColumns);
+        }
+        return false;
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        if (other instanceof LambdaFunctionOperator lambda) {
+            return equalsSelf(other) && lambda.lambdaExpr.equals(lambdaExpr);
         }
         return false;
     }
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitLambdaFunctionOperator(this, context);
+        return  visitor.visitLambdaFunctionOperator(this, context);
     }
 
     @Override

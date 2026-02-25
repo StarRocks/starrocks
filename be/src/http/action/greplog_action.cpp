@@ -14,11 +14,11 @@
 
 #include "http/action/greplog_action.h"
 
-#include "common/greplog.h"
 #include "http/http_channel.h"
 #include "http/http_headers.h"
 #include "http/http_request.h"
 #include "http/http_status.h"
+#include "service/greplog.h"
 
 namespace starrocks {
 
@@ -66,7 +66,7 @@ void GrepLogAction::handle(HttpRequest* req) {
         return;
     }
 
-    auto ret = grep_log_as_string(start_ts, end_ts, std::toupper(level[0]), pattern, limit);
+    auto ret = grep_log_as_string(start_ts, end_ts, level, pattern, limit);
 
     HttpChannel::send_reply(req, HttpStatus::OK, ret);
 }

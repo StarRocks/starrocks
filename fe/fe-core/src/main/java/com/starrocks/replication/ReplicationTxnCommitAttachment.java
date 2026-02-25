@@ -15,14 +15,9 @@
 package com.starrocks.replication;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.Map;
 
 /*
@@ -31,7 +26,7 @@ import java.util.Map;
  */
 public class ReplicationTxnCommitAttachment extends TxnCommitAttachment {
     @SerializedName("partitionVersions")
-    private Map<Long, Long> partitionVersions; // The version of partitions
+    private Map<Long, Long> partitionVersions; // The data version of partitions, not the visible version
 
     @SerializedName("partitionVersionEpochs")
     private Map<Long, Long> partitionVersionEpochs; // The version epoch of partitions
@@ -54,18 +49,6 @@ public class ReplicationTxnCommitAttachment extends TxnCommitAttachment {
         return partitionVersionEpochs;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-        String s = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, s);
-    }
 
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        String s = Text.readString(in);
-        ReplicationTxnCommitAttachment insertTxnCommitAttachment = GsonUtils.GSON.fromJson(s,
-                ReplicationTxnCommitAttachment.class);
-        this.partitionVersions = insertTxnCommitAttachment.getPartitionVersions();
-    }
+
 }

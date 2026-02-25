@@ -17,7 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.JoinOperator;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -31,7 +31,7 @@ import java.util.List;
 import java.util.Map;
 
 public class JoinCommutativityRule extends TransformationRule {
-    private static final Map<JoinOperator, JoinOperator> JOIN_COMMUTATIVITY_MAP =
+    public static final Map<JoinOperator, JoinOperator> JOIN_COMMUTATIVITY_MAP =
             ImmutableMap.<JoinOperator, JoinOperator>builder()
                     .put(JoinOperator.LEFT_ANTI_JOIN, JoinOperator.RIGHT_ANTI_JOIN)
                     .put(JoinOperator.RIGHT_ANTI_JOIN, JoinOperator.LEFT_ANTI_JOIN)

@@ -14,18 +14,16 @@
 
 package com.starrocks.connector;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.connector.hive.HiveWriteUtils;
+import com.starrocks.connector.hive.HiveUtils;
 import com.starrocks.connector.hive.Partition;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
-import jline.internal.Log;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -36,7 +34,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -49,13 +46,14 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import static com.starrocks.connector.hive.HiveWriteUtils.checkedDelete;
-import static com.starrocks.connector.hive.HiveWriteUtils.createDirectory;
-import static com.starrocks.connector.hive.HiveWriteUtils.fileCreatedByQuery;
+import static com.starrocks.connector.hive.HiveUtils.checkedDelete;
+import static com.starrocks.connector.hive.HiveUtils.createDirectory;
+import static com.starrocks.connector.hive.HiveUtils.fileCreatedByQuery;
 
 public class RemoteFileOperations {
     private static final Logger LOG = LogManager.getLogger(RemoteFileOperations.class);
     public static final String HMS_PARTITIONS_REMOTE_FILES = "HMS.PARTITIONS.LIST_FS_PARTITIONS";
+
     protected CachingRemoteFileIO remoteFileIO;
     private final ExecutorService pullRemoteFileExecutor;
     private final Executor updateRemoteFilesExecutor;
@@ -96,6 +94,11 @@ public class RemoteFileOperations {
     }
 
     public List<RemoteFileInfo> getRemoteFiles(Table table, List<Partition> partitions, GetRemoteFilesParams params) {
+        boolean isRecursive = this.isRecursive;
+        if (params.getIsRecursive().isPresent()) {
+            // override the default recursive option
+            isRecursive = params.getIsRecursive().get();
+        }
         RemoteFileScanContext scanContext = new RemoteFileScanContext(table);
         Map<RemotePathKey, Partition> pathKeyToPartition = Maps.newHashMap();
         for (Partition partition : partitions) {
@@ -103,7 +106,7 @@ public class RemoteFileOperations {
             pathKeyToPartition.put(key, partition);
         }
 
-        int cacheMissSize = partitions.size();
+        int cacheMissSize = pathKeyToPartition.size();
         if (enableCatalogLevelCache && params.isUseCache()) {
             cacheMissSize = cacheMissSize - remoteFileIO.getPresentRemoteFiles(
                     Lists.newArrayList(pathKeyToPartition.keySet())).size();
@@ -139,78 +142,24 @@ public class RemoteFileOperations {
         return resultRemoteFiles;
     }
 
-    public RemoteFileInfoSource getRemoteFilesAsync(Table table, List<Partition> partitions, GetRemoteFilesParams params) {
+    public RemoteFileInfoSource getRemoteFilesAsync(Table table, GetRemoteFilesParams params,
+                                                    Function<GetRemoteFilesParams, List<Partition>> fnGetPartitionValues) {
+
         RemoteFileScanContext scanContext = new RemoteFileScanContext(table);
-
-        // compute cache miss size.
-        {
-            List<RemotePathKey> remotePathKeys = new ArrayList<>();
-            for (Partition partition : partitions) {
-                RemotePathKey key = RemotePathKey.of(partition.getFullPath(), isRecursive);
-                remotePathKeys.add(key);
-            }
-
-            int cacheMissSize = partitions.size();
-            if (enableCatalogLevelCache && params.isUseCache()) {
-                cacheMissSize = cacheMissSize - remoteFileIO.getPresentRemoteFiles(remotePathKeys).size();
-            }
-            Tracers.count(Tracers.Module.EXTERNAL, HMS_PARTITIONS_REMOTE_FILES, cacheMissSize);
-        }
-
-        class MyAsyncTaskQueue extends AsyncTaskQueue<RemoteFileInfo> implements RemoteFileInfoSource {
-            public MyAsyncTaskQueue(Executor executor) {
-                super(executor);
-            }
-
-            @Override
-            public List<RemoteFileInfo> getOutputs(int maxSize) {
-                try (Timer ignored = Tracers.watchScope(Tracers.Module.EXTERNAL, HMS_PARTITIONS_REMOTE_FILES)) {
-                    return super.getOutputs(maxSize);
-                }
-            }
-
-            @Override
-            public int computeOutputSize(RemoteFileInfo output) {
-                List<RemoteFileDesc> files = (output.getFiles());
-                int size = 1;
-                if (files != null) {
-                    size = Math.max(size, files.size());
-                }
-                return size;
-            }
-
-            @Override
-            public RemoteFileInfo getOutput() {
-                List<RemoteFileInfo> res = getOutputs(1);
-                Preconditions.checkArgument(res.size() == 1);
-                return res.get(0);
-            }
-        }
-
-        SessionVariable sv = SessionVariable.DEFAULT_SESSION_VARIABLE;
-        if (ConnectContext.get() != null) {
-            sv = ConnectContext.get().getSessionVariable();
-        }
-        MyAsyncTaskQueue asyncTaskQueue = new MyAsyncTaskQueue(pullRemoteFileExecutor);
-        asyncTaskQueue.setMaxOutputQueueSize(sv.getConnectorRemoteFileAsyncQueueSize());
-        asyncTaskQueue.setMaxRunningTaskCount(sv.getConnectorRemoteFileAsyncTaskSize());
-        List<AsyncTaskQueue.Task<RemoteFileInfo>> tasks = new ArrayList<>();
-        List attachments = params.getPartitionAttachments();
-        for (int i = 0; i < partitions.size(); i++) {
-            final Partition partition = partitions.get(i);
-            final RemotePathKey pathKey = RemotePathKey.of(partition.getFullPath(), isRecursive);
-            final Object attachment = (attachments != null) ? attachments.get(i) : null;
-            pathKey.setScanContext(scanContext);
-            tasks.add(() -> {
-                Map<RemotePathKey, List<RemoteFileDesc>> res = remoteFileIO.getRemoteFiles(pathKey);
-                List<RemoteFileDesc> files = res.get(pathKey);
-                RemoteFileInfo remoteFileInfo = buildRemoteFileInfo(partition, files);
-                remoteFileInfo.setAttachment(attachment);
-                return List.of(remoteFileInfo);
-            });
-        }
-        asyncTaskQueue.start(tasks);
-        return asyncTaskQueue;
+        HMSPartitionBasedRemoteInfoSource remoteInfoSource = new HMSPartitionBasedRemoteInfoSource(pullRemoteFileExecutor, params,
+                partition -> {
+                    final RemotePathKey pathKey = RemotePathKey.of(partition.getFullPath(), isRecursive);
+                    pathKey.setScanContext(scanContext);
+                    Map<RemotePathKey, List<RemoteFileDesc>> res = remoteFileIO.getRemoteFiles(pathKey, params.isUseCache());
+                    List<RemoteFileDesc> files = res.get(pathKey);
+                    RemoteFileInfo remoteFileInfo = buildRemoteFileInfo(partition, files);
+                    return remoteFileInfo;
+                }, fnGetPartitionValues);
+        SessionVariable sv = ConnectContext.getSessionVariableOrDefault();
+        remoteInfoSource.setMaxOutputQueueSize(sv.getConnectorRemoteFileAsyncQueueSize());
+        remoteInfoSource.setMaxRunningTaskCount(sv.getConnectorRemoteFileAsyncTaskSize());
+        remoteInfoSource.run();
+        return remoteInfoSource;
     }
 
     public List<RemoteFileInfo> getPresentFilesInCache(Collection<Partition> partitions) {
@@ -284,7 +233,7 @@ public class RemoteFileOperations {
         try {
             fileSystem = FileSystem.get(writePath.toUri(), conf);
         } catch (Exception e) {
-            Log.error("Failed to get fileSystem", e);
+            LOG.error("Failed to get fileSystem", e);
             throw new StarRocksConnectorException("Failed to move data files to target location. " +
                     "Failed to get file system on path %s. msg: %s", writePath, e.getMessage());
         }
@@ -354,11 +303,28 @@ public class RemoteFileOperations {
     }
 
     public boolean pathExists(Path path) {
-        return HiveWriteUtils.pathExists(path, conf);
+        return HiveUtils.pathExists(path, conf);
     }
 
     public boolean deleteIfExists(Path path, boolean recursive) {
-        return HiveWriteUtils.deleteIfExists(path, recursive, conf);
+        return HiveUtils.deleteIfExists(path, recursive, conf);
+    }
+
+    public void truncateLocations(List<String> paths) {
+        for (String location : paths) {
+            try {
+                Path path = new Path(location);
+                if (!deleteIfExists(path, true)) {
+                    throw new StarRocksConnectorException("Failed to delete path : %s", location);
+                }
+                HiveUtils.createDirectoryIfNotExists(path, conf);
+                LOG.info("Truncate data in partition location: {}", location);
+            } catch (Exception e) {
+                LOG.error("Failed to truncate data in location: {}", location, e);
+                throw new StarRocksConnectorException("Failed to truncate data in location: %s. msg: %s",
+                        location, e.getMessage());
+            }
+        }
     }
 
     public FileStatus[] listStatus(Path path) {

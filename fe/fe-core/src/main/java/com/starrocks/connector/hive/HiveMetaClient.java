@@ -47,6 +47,7 @@ import java.util.List;
 import java.util.Map;
 
 import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
+import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_CONNECTION_POOL_SIZE;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TIMEOUT;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TYPE;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
@@ -59,7 +60,8 @@ public class HiveMetaClient {
     public static final String DLF_HIVE_METASTORE = "dlf";
     public static final String GLUE_HIVE_METASTORE = "glue";
     // Maximum number of idle metastore connections in the connection pool at any point.
-    private static final int MAX_HMS_CONNECTION_POOL_SIZE = 32;
+    private final int maxPoolSize;
+    private static final int MAX_HMS_CONNECTION_POOL_SIZE_DEFAULT = 32;
 
     private final LinkedList<RecyclableClient> clientPool = new LinkedList<>();
     private final Object clientPoolLock = new Object();
@@ -71,6 +73,7 @@ public class HiveMetaClient {
 
     public HiveMetaClient(HiveConf conf) {
         this.conf = conf;
+        this.maxPoolSize = conf.getInt(HIVE_METASTORE_CONNECTION_POOL_SIZE, MAX_HMS_CONNECTION_POOL_SIZE_DEFAULT);
     }
 
     public static HiveMetaClient createHiveMetaClient(HdfsEnvironment env, Map<String, String> properties) {
@@ -81,7 +84,10 @@ public class HiveMetaClient {
             conf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), properties.get(HIVE_METASTORE_URIS));
         }
         String hmsTimeout = properties.getOrDefault(HIVE_METASTORE_TIMEOUT, String.valueOf(Config.hive_meta_store_timeout_s));
+        String poolSize = properties.getOrDefault(HIVE_METASTORE_CONNECTION_POOL_SIZE,
+                String.valueOf(MAX_HMS_CONNECTION_POOL_SIZE_DEFAULT));
         conf.set(MetastoreConf.ConfVars.CLIENT_SOCKET_TIMEOUT.getHiveName(), hmsTimeout);
+        conf.set(HIVE_METASTORE_CONNECTION_POOL_SIZE, poolSize);
         return new HiveMetaClient(conf);
     }
 
@@ -101,23 +107,31 @@ public class HiveMetaClient {
             }
         }
 
-        // When the number of currently used clients is less than MAX_HMS_CONNECTION_POOL_SIZE,
+        // When the number of currently used clients is less than maxPoolSize,
         // the client will be recycled and reused. If it does, we close the client.
         public void finish() {
+            boolean shouldClose = false;
             synchronized (clientPoolLock) {
-                if (clientPool.size() >= MAX_HMS_CONNECTION_POOL_SIZE) {
-                    LOG.warn("There are more than {} connections currently accessing the metastore",
-                            MAX_HMS_CONNECTION_POOL_SIZE);
-                    close();
+                if (clientPool.size() >= maxPoolSize) {
+                    shouldClose = true;
                 } else {
                     clientPool.offer(this);
                 }
+            }
+            if (shouldClose) {
+                LOG.warn("There are more than {} connections currently accessing the metastore",
+                        maxPoolSize);
+                close();
             }
         }
 
         public void close() {
             hiveClient.close();
         }
+    }
+
+    public int getMaxClientPoolSize() {
+        return maxPoolSize;
     }
 
     public int getClientSize() {
@@ -134,17 +148,12 @@ public class HiveMetaClient {
             Thread.currentThread().setContextClassLoader(ClassLoader.getSystemClassLoader());
         }
 
+        RecyclableClient client = null;
         synchronized (clientPoolLock) {
-            RecyclableClient client = clientPool.poll();
-            // The pool was empty so create a new client and return that.
-            // Serialize client creation to defend against possible race conditions accessing
-            // local Kerberos state
-            if (client == null) {
-                return new RecyclableClient(conf);
-            } else {
-                return client;
-            }
+            client = clientPool.poll();
         }
+
+        return client != null ? client : new RecyclableClient(conf);
     }
 
     public <T> T callRPC(String methodName, String messageIfError, Object... args) {

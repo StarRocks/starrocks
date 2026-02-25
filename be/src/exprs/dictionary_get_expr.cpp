@@ -16,6 +16,7 @@
 
 #include <fmt/format.h>
 
+#include "base/simd/simd.h"
 #include "column/column_helper.h"
 #include "column/struct_column.h"
 #include "storage/chunk_helper.h"
@@ -42,7 +43,7 @@ StatusOr<ColumnPtr> DictionaryGetExpr::evaluate_checked(ExprContext* context, Ch
             column = ColumnHelper::unpack_and_duplicate_const_column(size, column);
         }
         if (column->is_nullable()) {
-            column = ColumnHelper::update_column_nullable(false, column, size);
+            column = ColumnHelper::update_column_nullable(false, std::move(column), size);
         }
     }
 
@@ -54,27 +55,27 @@ StatusOr<ColumnPtr> DictionaryGetExpr::evaluate_checked(ExprContext* context, Ch
     // assign the key chunk
     for (int i = 0; i < _dictionary_get_expr.key_size; ++i) {
         ColumnPtr key_column = columns[1 + i];
-        key_chunk->update_column_by_index(key_column, i);
+        key_chunk->update_column_by_index(std::move(key_column), i);
     }
     value_chunk->reserve(size);
 
-    ColumnPtr null_column = UInt8Column::create(size, 0);
+    auto null_column = UInt8Column::create(size, 0);
     // assign the value chunk
     RETURN_IF_ERROR(DictionaryCacheManager::probe_given_dictionary_cache(
             *_key_chunk->schema().get(), *_value_chunk->schema().get(), _dictionary, key_chunk, value_chunk,
             _dictionary_get_expr.null_if_not_exist ? null_column.get() : nullptr));
 
     // merge the value chunk into a single struct column and return
-    auto fields =
-            down_cast<StructColumn*>(down_cast<NullableColumn*>(nullable_struct_column.get())->data_column().get())
-                    ->fields_column();
+    auto* nullable_mut = nullable_struct_column->as_mutable_raw_ptr();
+    auto* nullable_col = down_cast<NullableColumn*>(nullable_mut);
+    auto* struct_col = down_cast<StructColumn*>(nullable_col->data_column_raw_ptr());
     for (size_t i = 0; i < value_chunk->columns().size(); ++i) {
+        auto* field = struct_col->field_column_raw_ptr(i);
         auto column = value_chunk->columns()[i];
-        fields[i]->append(*column, 0, column->size());
+        field->append(*column, 0, column->size());
     }
-    down_cast<NullableColumn*>(nullable_struct_column.get())
-            ->set_has_null(SIMD::contain_nonzero(down_cast<UInt8Column*>(null_column.get())->get_data(), 0));
-    down_cast<NullableColumn*>(nullable_struct_column.get())->mutable_null_column()->swap_column(*null_column);
+    nullable_col->set_has_null(SIMD::contain_nonzero(down_cast<UInt8Column*>(null_column.get())->immutable_data(), 0));
+    nullable_col->null_column_raw_ptr()->swap_column(*null_column);
 
     return nullable_struct_column;
 }
@@ -121,11 +122,11 @@ Status DictionaryGetExpr::prepare(RuntimeState* state, ExprContext* context) {
     Columns sub_columns;
     for (const ColumnPtr& column : _value_chunk->columns()) {
         auto sub_null_column = UInt8Column::create(0, 0);
-        sub_columns.emplace_back(NullableColumn::create(column, sub_null_column));
+        sub_columns.emplace_back(NullableColumn::create(column, std::move(sub_null_column)));
     }
     auto null_column = UInt8Column::create(0, 0);
-    _nullable_struct_column =
-            NullableColumn::create(StructColumn::create(sub_columns, value_columns_name), null_column);
+    _nullable_struct_column = NullableColumn::create(
+            StructColumn::create(std::move(sub_columns), std::move(value_columns_name)), std::move(null_column));
     DCHECK(_nullable_struct_column != nullptr);
 
     return Status::OK();

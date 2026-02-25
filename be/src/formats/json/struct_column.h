@@ -18,8 +18,8 @@
 
 #include "column/column.h"
 #include "common/status.h"
-#include "runtime/types.h"
 #include "simdjson.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 Status add_struct_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,

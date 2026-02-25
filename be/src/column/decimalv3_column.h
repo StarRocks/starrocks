@@ -14,25 +14,28 @@
 
 #pragma once
 
-#include <runtime/decimalv3.h>
+#include <types/decimalv3.h>
 
+#include "base/decimal_types.h"
 #include "column/column.h"
 #include "column/fixed_length_column_base.h"
-#include "util/decimal_types.h"
-#include "util/mysql_row_buffer.h"
 
 namespace starrocks {
 
 template <typename T>
-class DecimalV3Column final : public ColumnFactory<FixedLengthColumnBase<T>, DecimalV3Column<DecimalType<T>>, Column> {
+class DecimalV3Column final
+        : public CowFactory<ColumnFactory<FixedLengthColumnBase<T>, DecimalV3Column<DecimalType<T>>>,
+                            DecimalV3Column<DecimalType<T>>, Column> {
+    friend class CowFactory<ColumnFactory<FixedLengthColumnBase<T>, DecimalV3Column<DecimalType<T>>>,
+                            DecimalV3Column<DecimalType<T>>, Column>;
+
 public:
     DecimalV3Column() = default;
     explicit DecimalV3Column(size_t num_rows);
     DecimalV3Column(int precision, int scale);
     DecimalV3Column(int precision, int scale, size_t num_rows);
 
-    DecimalV3Column(DecimalV3Column const&) = default;
-    DecimalV3Column& operator=(DecimalV3Column const&) = default;
+    DISALLOW_COPY_TEMPLATE(DecimalV3Column, DecimalV3Column<DecimalType<T>>);
 
     bool is_decimal() const override;
     bool is_numeric() const override;
@@ -41,11 +44,16 @@ public:
     int precision() const;
     int scale() const;
 
-    MutableColumnPtr clone_empty() const override;
+    MutableColumnPtr clone_empty() const override { return this->create(_precision, _scale); }
+
+    MutableColumnPtr clone() const override {
+        auto p = clone_empty();
+        p->append(*this, 0, this->size());
+        return p;
+    }
 
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol = false) const override;
     std::string debug_item(size_t idx) const override;
-    void crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
     int64_t xor_checksum(uint32_t from, uint32_t to) const override;
 
 private:

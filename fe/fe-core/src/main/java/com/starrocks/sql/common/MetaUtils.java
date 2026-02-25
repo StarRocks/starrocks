@@ -17,30 +17,32 @@ package com.starrocks.sql.common;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
-import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
+import com.starrocks.catalog.TableOperation;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.external.starrocks.TableMetaSyncer;
+import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.optimizer.base.ColumnIdentifier;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TUniqueId;
@@ -50,6 +52,8 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 public class MetaUtils {
 
@@ -70,89 +74,46 @@ public class MetaUtils {
         }
     }
 
-    public static void checkNotSupportCatalog(String catalogName, String operation) {
-        if (catalogName == null) {
-            throw new SemanticException("Catalog is null");
-        }
-        if (CatalogMgr.isInternalCatalog(catalogName)) {
-            return;
+    public static void checkNotSupportCatalog(Table table, TableOperation operation) {
+        checkNotSupportCatalog(table, operation, null);
+    }
+
+    /**
+     * Check if the specified operation is supported on the given table.
+     * Throws SemanticException if the operation is not supported by the table type.
+     * For internal catalog tables, all operations are supported.
+     *
+     * @param table The table to check
+     * @param operation The operation to check
+     * @param catalogName The catalog name to check, defaults to table.getCatalogName() when null
+     * @throws SemanticException if the operation is not supported
+     */
+    public static void checkNotSupportCatalog(Table table, TableOperation operation, String catalogName) {
+        if (table == null) {
+            throw new SemanticException("Table is null");
         }
         if (operation == null) {
-            throw new SemanticException("operation is null");
+            throw new SemanticException("Operation is null");
         }
 
-        Catalog catalog = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogByName(catalogName);
+        String targetCatalogName = table.getCatalogName() != null ? table.getCatalogName() : catalogName;
+        if (targetCatalogName == null) {
+            throw new SemanticException("Catalog is null");
+        }
+        // Internal catalog tables support all operations
+        if (CatalogMgr.isInternalCatalog(targetCatalogName)) {
+            return;
+        }
+
+        Catalog catalog = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogByName(targetCatalogName);
         if (catalog == null) {
-            throw new SemanticException("Catalog %s is not found", catalogName);
+            throw new SemanticException("Catalog %s is not found", targetCatalogName);
         }
 
-        if (!operation.equals("ALTER") && catalog.getType().equalsIgnoreCase("iceberg")) {
-            throw new SemanticException("Table of iceberg catalog doesn't support [%s]", operation);
+        if (!table.supportsOperation(operation)) {
+            throw new SemanticException("Table of %s catalog doesn't support [%s]",
+                    table.getType().name(), operation.name());
         }
-    }
-
-    public static Database getDatabase(long dbId) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        if (db == null) {
-            throw new SemanticException("Database %s is not found", dbId);
-        }
-        return db;
-    }
-
-    public static Table getTable(long dbId, long tableId) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        if (db == null) {
-            throw new SemanticException("Database %s is not found", dbId);
-        }
-        Table table = db.getTable(tableId);
-        if (table == null) {
-            throw new SemanticException("Table %s is not found", tableId);
-        }
-        return table;
-    }
-
-    public static Database getDatabase(ConnectContext session, TableName tableName) {
-        if (Strings.isNullOrEmpty(tableName.getCatalog())) {
-            tableName.setCatalog(session.getCurrentCatalog());
-        }
-        Database db = session.getGlobalStateMgr().getMetadataMgr().getDb(tableName.getCatalog(), tableName.getDb());
-        if (db == null) {
-            throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
-        }
-        return db;
-    }
-
-    public static Database getDatabase(String catalogName, String dbName) {
-        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
-        if (db == null) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
-        }
-        return db;
-    }
-
-    public static Table getTable(TableName tableName) {
-        if (Strings.isNullOrEmpty(tableName.getCatalog())) {
-            tableName.setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
-        }
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName.getCatalog(),
-                tableName.getDb(), tableName.getTbl());
-        if (table == null) {
-            throw new SemanticException("Table %s is not found", tableName);
-        }
-        return table;
-    }
-
-    public static Table getTable(ConnectContext session, TableName tableName) {
-        if (Strings.isNullOrEmpty(tableName.getCatalog())) {
-            tableName.setCatalog(session.getCurrentCatalog());
-        }
-        Table table = session.getGlobalStateMgr().getMetadataMgr().getTable(tableName.getCatalog(),
-                tableName.getDb(), tableName.getTbl());
-
-        if (table == null) {
-            throw new SemanticException("Table %s is not found", tableName.toString());
-        }
-        return table;
     }
 
     // get table by tableName, unlike getTable, this interface is session aware,
@@ -163,7 +124,14 @@ public class MetaUtils {
             tableName.setCatalog(session.getCurrentCatalog());
         }
         if (database == null) {
-            database = getDatabase(session, tableName);
+            if (Strings.isNullOrEmpty(tableName.getCatalog())) {
+                tableName.setCatalog(session.getCurrentCatalog());
+            }
+            database = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getDb(session, tableName.getCatalog(), tableName.getDb());
+            if (database == null) {
+                throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
+            }
         }
 
         Table table = session.getGlobalStateMgr().getMetadataMgr().getTemporaryTable(
@@ -172,62 +140,14 @@ public class MetaUtils {
             return table;
         }
         table = session.getGlobalStateMgr().getMetadataMgr().getTable(
-                tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
+                session, tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableName.getTbl());
         }
         return table;
     }
 
-    public static Table getTable(String catalogName, String dbName, String tableName) {
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
-        if (table == null) {
-            throw new SemanticException("Table %s is not found", tableName);
-        }
-        return table;
-    }
-
-    public static void normalizationTableName(ConnectContext connectContext, TableName tableName) {
-        if (Strings.isNullOrEmpty(tableName.getCatalog())) {
-            if (Strings.isNullOrEmpty(connectContext.getCurrentCatalog())) {
-                throw new SemanticException("No catalog selected");
-            }
-            tableName.setCatalog(connectContext.getCurrentCatalog());
-        }
-        if (Strings.isNullOrEmpty(tableName.getDb())) {
-            if (Strings.isNullOrEmpty(connectContext.getDatabase())) {
-                throw new SemanticException("No database selected");
-            }
-            tableName.setDb(connectContext.getDatabase());
-        }
-
-        if (Strings.isNullOrEmpty(tableName.getTbl())) {
-            throw new SemanticException("Table name is null");
-        }
-    }
-
-    /**
-     * Materialized view name is a little bit different from a normal table
-     * 1. Use default catalog if not specified, actually it only support default catalog until now
-     */
-    public static void normalizeMVName(ConnectContext connectContext, TableName tableName) {
-        if (Strings.isNullOrEmpty(tableName.getCatalog())) {
-            tableName.setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
-        }
-        if (Strings.isNullOrEmpty(tableName.getDb())) {
-            if (Strings.isNullOrEmpty(connectContext.getDatabase())) {
-                throw new SemanticException("No database selected. " +
-                        "You could set the database name through `<database>.<table>` or `use <database>` statement");
-            }
-            tableName.setDb(connectContext.getDatabase());
-        }
-
-        if (Strings.isNullOrEmpty(tableName.getTbl())) {
-            throw new SemanticException("Table name cannot be empty");
-        }
-    }
-
-    public static Map<String, Expr> parseColumnNameToDefineExpr(OriginStatement originStmt) {
+    public static Map<String, Expr> parseColumnNameToDefineExpr(OriginStatementInfo originStmt) {
         CreateMaterializedViewStmt stmt;
 
         try {
@@ -267,22 +187,60 @@ public class MetaUtils {
     }
 
     public static boolean isPartitionExist(GlobalStateMgr stateMgr, long dbId, long tableId, long partitionId) {
-        Database db = stateMgr.getDb(dbId);
+        Database db = stateMgr.getLocalMetastore().getDb(dbId);
         if (db == null) {
             return false;
         }
         // lake table or lake materialized view
-        OlapTable table = (OlapTable) db.getTable(tableId);
+        OlapTable table = (OlapTable) stateMgr.getLocalMetastore().getTable(db.getId(), tableId);
         if (table == null) {
             return false;
         }
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+        try {
+            return table.getPartition(partitionId) != null;
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+        }
+    }
+
+    public static boolean isPhysicalPartitionExist(GlobalStateMgr stateMgr, long dbId, long tableId, long partitionId) {
+        Database db = stateMgr.getLocalMetastore().getDb(dbId);
+        if (db == null) {
+            return false;
+        }
+        // lake table or lake materialized view
+        OlapTable table = (OlapTable) stateMgr.getLocalMetastore().getTable(db.getId(), tableId);
+        if (table == null) {
+            return false;
+        }
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
             return table.getPhysicalPartition(partitionId) != null;
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
+    }
+
+    public static long lookupDbIdByTable(OlapTable table) {
+        Optional<Long> dbId = table.mayGetDatabaseId();
+        if (dbId.isPresent()) {
+            return dbId.get();
+        }
+        long tableId = table.getId();
+        long res = -1;
+        for (Long id : GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds()) {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(id);
+            if (db != null &&
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId) != null) {
+                res = db.getId();
+                table.maySetDatabaseId(res);
+                break;
+            }
+        }
+        return res;
     }
 
     public static List<Column> getColumnsByColumnIds(Table table, List<ColumnId> ids) {
@@ -309,6 +267,32 @@ public class MetaUtils {
         return result;
     }
 
+    public static List<Column> getRangeDistributionColumns(OlapTable olapTable) {
+        List<Column> columns = new ArrayList<>();
+        MaterializedIndexMeta baseIndexMeta = olapTable.getIndexMetaByMetaId(olapTable.getBaseIndexMetaId());
+        List<Column> baseSchema = olapTable.getBaseSchema();
+        if (baseIndexMeta.getSortKeyIdxes() != null) {
+            for (Integer i : baseIndexMeta.getSortKeyIdxes()) {
+                columns.add(baseSchema.get(i));
+            }
+        } else {
+            for (Column column : baseSchema) {
+                if (column.isKey()) {
+                    columns.add(column);
+                }
+            }
+        }
+        return columns;
+    }
+
+    public static List<String> getRangeDistributionColumnNames(OlapTable olapTable) {
+        return getRangeDistributionColumns(olapTable).stream().map(Column::getName).collect(Collectors.toList());
+    }
+
+    public static List<String> getRangeDistributionColumnIds(OlapTable olapTable) {
+        return getRangeDistributionColumns(olapTable).stream().map(col -> col.getColumnId().getId()).collect(Collectors.toList());
+    }
+
     public static List<String> getColumnNamesByColumnIds(Table table, List<ColumnId> columnIds) {
         return getColumnNamesByColumnIds(table.getIdToColumn(), columnIds);
     }
@@ -326,7 +310,11 @@ public class MetaUtils {
     }
 
     public static Column getColumnByColumnName(long dbId, long tableId, String columnName) {
-        Table table = getTable(dbId, tableId);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+        if (table == null) {
+            throw new SemanticException("Table %s is not found", tableId);
+        }
+
         Column column = table.getColumn(columnName);
         if (column == null) {
             throw new SemanticException(String.format("can not find column by name: %s", columnName));
@@ -343,12 +331,31 @@ public class MetaUtils {
     }
 
     public static String getColumnNameByColumnId(long dbId, long tableId, ColumnId columnId) {
-        Table table = getTable(dbId, tableId);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+        if (table == null) {
+            throw new SemanticException("Table %s is not found", tableId);
+        }
         Column column = table.getColumn(columnId);
         if (column == null) {
             throw new SemanticException(String.format("can not find column by column id: %s", columnId));
         }
         return column.getName();
+    }
+
+    public static Column getColumnByColumnId(ColumnIdentifier identifier) {
+        return getColumnByColumnId(identifier.getDbId(), identifier.getTableId(), identifier.getColumnName());
+    }
+
+    public static Column getColumnByColumnId(long dbId, long tableId, ColumnId columnId) {
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+        if (table == null) {
+            throw new SemanticException("Table %s is not found", tableId);
+        }
+        Column column = table.getColumn(columnId);
+        if (column == null) {
+            throw new SemanticException(String.format("can not find column by column id: %s", columnId));
+        }
+        return column;
     }
 
     public static List<ColumnId> getColumnIdsByColumnNames(Table table, List<String> names) {
@@ -362,5 +369,13 @@ public class MetaUtils {
             columnIds.add(column.getColumnId());
         }
         return columnIds;
+    }
+
+    public static String getPartitionColumnToSql(Column column) {
+        if (column.isGeneratedColumn()) {
+            return column.generatedColumnExprToString();
+        } else {
+            return "`" + column.getName() + "`";
+        }
     }
 }

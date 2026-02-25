@@ -33,6 +33,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalRawValuesOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
@@ -176,7 +177,8 @@ public class LogicalProperty implements Property {
         @Override
         public OneTabletProperty visitLogicalTableScan(LogicalScanOperator node, ExpressionContext context) {
             if (node instanceof LogicalOlapScanOperator) {
-                if (((LogicalOlapScanOperator) node).getSelectedTabletId().size() <= 1) {
+                LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) node;
+                if (olapScanOperator.getSelectedTabletId() != null && olapScanOperator.getSelectedTabletId().size() <= 1) {
                     Set<String> distributionColumnNames = node.getTable().getDistributionColumnNames();
                     List<ColumnRefOperator> bucketColumns = Lists.newArrayList();
                     for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
@@ -195,6 +197,11 @@ public class LogicalProperty implements Property {
 
         @Override
         public OneTabletProperty visitLogicalValues(LogicalValuesOperator node, ExpressionContext context) {
+            return OneTabletProperty.supportWithoutChangeDistribution(new ColumnRefSet());
+        }
+
+        @Override
+        public OneTabletProperty visitLogicalRawValues(LogicalRawValuesOperator node, ExpressionContext context) {
             return OneTabletProperty.supportWithoutChangeDistribution(new ColumnRefSet());
         }
 

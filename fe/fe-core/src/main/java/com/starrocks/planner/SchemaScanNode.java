@@ -36,14 +36,14 @@ package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.TupleDescriptor;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TFrontend;
@@ -55,10 +55,10 @@ import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TSchemaScanNode;
 import com.starrocks.thrift.TUserIdentity;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -155,9 +155,10 @@ public class SchemaScanNode extends ScanNode {
     /**
      * Constructs node to scan given data files of table 'tbl'.
      */
-    public SchemaScanNode(PlanNodeId id, TupleDescriptor desc) {
+    public SchemaScanNode(PlanNodeId id, TupleDescriptor desc, ComputeResource computeResource) {
         super(id, desc, "SCAN SCHEMA");
         this.tableName = desc.getTable().getName();
+        this.computeResource = computeResource;
     }
 
     @Override
@@ -167,7 +168,7 @@ public class SchemaScanNode extends ScanNode {
     }
 
     @Override
-    public void finalizeStats(Analyzer analyzer) throws UserException {
+    public void finalizeStats() throws StarRocksException {
     }
 
     @Override
@@ -205,7 +206,7 @@ public class SchemaScanNode extends ScanNode {
         msg.schema_scan_node.setIp(frontendIP);
         msg.schema_scan_node.setPort(frontendPort);
 
-        TUserIdentity tCurrentUser = ConnectContext.get().getCurrentUserIdentity().toThrift();
+        TUserIdentity tCurrentUser = UserIdentityUtils.toThrift(ConnectContext.get().getCurrentUserIdentity());
         msg.schema_scan_node.setCurrent_user_ident(tCurrentUser);
 
         if (tableId != null) {
@@ -332,8 +333,8 @@ public class SchemaScanNode extends ScanNode {
     public void computeBeScanRanges() {
         List<ComputeNode> nodeList;
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-            long warehouseId = ConnectContext.get().getCurrentWarehouseId();
-            List<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+            final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            final List<Long> computeNodeIds = warehouseManager.getAllComputeNodeIds(computeResource);
 
             nodeList = computeNodeIds.stream()
                     .map(id -> GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(id))
@@ -372,7 +373,6 @@ public class SchemaScanNode extends ScanNode {
         return beScanRanges;
     }
 
-
     @Override
     public boolean canUseRuntimeAdaptiveDop() {
         return true;
@@ -384,5 +384,10 @@ public class SchemaScanNode extends ScanNode {
 
     public void setCatalogName(String catalogName) {
         this.catalogName = catalogName;
+    }
+
+    @Override
+    public boolean isRunningAsConnectorOperator() {
+        return false;
     }
 }

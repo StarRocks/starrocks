@@ -106,6 +106,8 @@ enum WriteQuorumTypePB {
 enum TxnTypePB {
      TXN_NORMAL = 0;
      TXN_REPLICATION = 1;
+     TXN_EMPTY = 2;
+     TXN_TABLET_RESHARD = 3;
 }
 
 enum ReplicationTxnStatePB {
@@ -133,6 +135,7 @@ enum IndexType {
      optional string src_snapshot_path = 7;
      optional int64 snapshot_version = 8;
      optional bool incremental_snapshot = 9;
+     optional int64 data_version = 10;
  }
 
 // Used to store additional information about a txn when it is finished/visible
@@ -191,16 +194,47 @@ message IndexValuesWithVerPB {
     repeated IndexValueWithVerPB values = 1;
 }
 
-message PersistentIndexSstablePB {
-    optional int64 version = 1; // Deprecated
-    optional string filename = 2;
-    optional int64 filesize = 3;
-    // used for rebuild point of persistent index
-    optional uint64 max_rss_rowid = 4;
-    optional bytes encryption_meta = 5;
+enum TransactionStatusPB {
+    TRANS_UNKNOWN = 0;
+    TRANS_PREPARE = 1;
+    TRANS_COMMITTED = 2;
+    TRANS_VISIBLE = 3;
+    TRANS_ABORTED = 4;
+    TRANS_PREPARED = 5;
 }
 
-message PersistentIndexSstableMetaPB {
-    // sstables are ordered with the smaller version on the left.
-    repeated PersistentIndexSstablePB sstables = 1;
+message TransactionStatePB {
+    optional int64 txn_id = 1;
+    optional TransactionStatusPB status = 2;
+    optional string reason = 3;
+}
+
+enum VariantTypePB {
+    NORMAL_VALUE = 0;
+    NULL_VALUE = 1;
+    MINIMUM = 2;
+    MAXIMUM = 3;
+}
+
+message VariantPB {
+    optional PTypeDesc type = 1;
+    optional string value = 2;
+    optional VariantTypePB variant_type = 3;
+}
+
+message TuplePB {
+    repeated VariantPB values = 1;
+}
+
+message TabletRangePB {
+    optional TuplePB lower_bound = 1;
+    optional TuplePB upper_bound = 2;
+    optional bool lower_bound_included = 3;
+    optional bool upper_bound_included = 4;
+}
+
+enum PrimaryKeyEncodingTypePB {
+    PK_ENCODING_TYPE_NONE = 0;
+    PK_ENCODING_TYPE_V1 = 1;
+    PK_ENCODING_TYPE_V2 = 2;
 }

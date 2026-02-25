@@ -15,16 +15,17 @@
 #include "fs/key_cache.h"
 
 #include "agent/master_info.h"
+#include "base/metrics.h"
+#include "base/url_coding.h"
+#include "base/utility/defer_op.h"
 #include "fs/encrypt_file.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/Types_types.h"
 #include "gutil/casts.h"
 #include "runtime/client_cache.h"
-#include "util/defer_op.h"
-#include "util/metrics.h"
-#include "util/starrocks_metrics.h"
+#include "runtime/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 #include "util/thrift_rpc_helper.h"
-#include "util/url_coding.h"
 
 namespace starrocks {
 
@@ -35,8 +36,6 @@ METRIC_DEFINE_INT_GAUGE(encryption_keys_in_cache, MetricUnit::NOUNIT);
 EncryptionKey::EncryptionKey() = default;
 EncryptionKey::EncryptionKey(EncryptionKeyPB pb) : _pb(std::move(pb)) {}
 EncryptionKey::~EncryptionKey() = default;
-
-static const std::string VAULT_KEY_IDENTIFIER = "GLOBAL_VAULT_KEY";
 
 static const std::string& get_identifier_from_pb(const EncryptionKeyPB& pb) {
     switch (pb.type()) {
@@ -133,9 +132,11 @@ KeyCache& KeyCache::instance() {
 }
 
 KeyCache::KeyCache() {
-    StarRocksMetrics::instance()->metrics()->register_metric("encryption_keys_created", &encryption_keys_created);
-    StarRocksMetrics::instance()->metrics()->register_metric("encryption_keys_unwrapped", &encryption_keys_unwrapped);
-    StarRocksMetrics::instance()->metrics()->register_metric("encryption_keys_in_cache", &encryption_keys_in_cache);
+    GlobalMetricsRegistry::instance()->metrics()->register_metric("encryption_keys_created", &encryption_keys_created);
+    GlobalMetricsRegistry::instance()->metrics()->register_metric("encryption_keys_unwrapped",
+                                                                  &encryption_keys_unwrapped);
+    GlobalMetricsRegistry::instance()->metrics()->register_metric("encryption_keys_in_cache",
+                                                                  &encryption_keys_in_cache);
 }
 
 Status KeyCache::_resolve_encryption_meta(const EncryptionMetaPB& metaPb, std::vector<const EncryptionKey*>& keys,
@@ -215,6 +216,24 @@ StatusOr<FileEncryptionPair> KeyCache::create_encryption_meta_pair_using_current
     return ret;
 }
 
+StatusOr<FileEncryptionPair> KeyCache::create_plain_random_encryption_meta_pair() {
+    EncryptionKeyPB pb;
+    pb.set_type(EncryptionKeyTypePB::NORMAL_KEY);
+    pb.set_algorithm(EncryptionAlgorithmPB::AES_128);
+    std::string pkey(16, '\0');
+    ssl_random_bytes(pkey.data(), 16);
+    pb.set_plain_key(pkey);
+    EncryptionMetaPB meta_pb;
+    *meta_pb.add_key_hierarchy() = pb;
+    FileEncryptionPair ret;
+    RETURN_IF_UNLIKELY(!meta_pb.SerializeToString(&ret.encryption_meta),
+                       Status::InternalError("serialize EncryptionMetaPB failed"));
+    ret.info.algorithm = pb.algorithm();
+    ret.info.key = pkey;
+    encryption_keys_created.increment(1);
+    return ret;
+}
+
 StatusOr<FileEncryptionInfo> KeyCache::unwrap_encryption_meta(const std::string& encryption_meta) {
     EncryptionMetaPB meta_pb;
     RETURN_IF_UNLIKELY(!meta_pb.ParseFromArray(encryption_meta.data(), encryption_meta.size()),
@@ -269,7 +288,7 @@ Status KeyCache::refresh_keys(const std::string& key_meta) {
     RETURN_IF_UNLIKELY(nkey == 0, Status::Corruption("no key in encryption_meta"););
     std::vector<const EncryptionKey*> keys(nkey);
     std::vector<std::unique_ptr<EncryptionKey>> owned_keys(nkey);
-    RETURN_IF_ERROR(_resolve_encryption_meta(meta_pb, keys, owned_keys, nkey - 1));
+    RETURN_IF_ERROR(_resolve_encryption_meta(meta_pb, keys, owned_keys, true));
     if (size_before != size()) {
         LOG(INFO) << "refresh keys, num keys before: " << size_before << " after:" << size();
     }

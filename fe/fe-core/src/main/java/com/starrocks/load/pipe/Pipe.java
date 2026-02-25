@@ -16,11 +16,10 @@ package com.starrocks.load.pipe;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableMap;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.CloseableLock;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -28,15 +27,15 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.pipe.filelist.FileListRepo;
+import com.starrocks.persist.AlterPipeLog;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.qe.VariableMgr;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.SubmitResult;
@@ -82,10 +81,7 @@ public class Pipe implements GsonPostProcessable {
     public static final long DEFAULT_BATCH_FILES = 256;
     public static final int FAILED_TASK_THRESHOLD = 5;
 
-    private static final ImmutableMap<String, String> DEFAULT_TASK_EXECUTION_VARIABLES =
-            ImmutableMap.<String, String>builder()
-                    .put("query_timeout", "3600")
-                    .build();
+    private static final String TASK_PROPERTY_PREFIX = "task.";
 
     @SerializedName(value = "name")
     private final String name;
@@ -129,14 +125,18 @@ public class Pipe implements GsonPostProcessable {
         this.createdTime = TimeUtils.getEpochSeconds();
         this.properties = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         this.taskExecutionVariables = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
-        this.taskExecutionVariables.putAll(DEFAULT_TASK_EXECUTION_VARIABLES);
     }
 
     public static Pipe fromStatement(long id, CreatePipeStmt stmt) {
         PipeName pipeName = stmt.getPipeName();
-        long dbId = GlobalStateMgr.getCurrentState().getDb(pipeName.getDbName()).getId();
+        long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(pipeName.getDbName()).getId();
         PipeId pipeId = new PipeId(dbId, id);
-        Pipe res = new Pipe(pipeId, pipeName.getPipeName(), stmt.getTargetTable(), stmt.getDataSource(),
+        com.starrocks.catalog.TableName targetTableName = 
+                com.starrocks.catalog.TableName.fromTableRef(stmt.getTargetTableRef());
+        if (targetTableName == null) {
+            throw new IllegalArgumentException("Target table reference cannot be null when creating a pipe");
+        }
+        Pipe res = new Pipe(pipeId, pipeName.getPipeName(), targetTableName, stmt.getDataSource(),
                 stmt.getInsertSql());
         stmt.getDataSource().initPipeId(pipeId);
         res.recovered = true;
@@ -144,17 +144,63 @@ public class Pipe implements GsonPostProcessable {
         return res;
     }
 
+    public void alterProperties(Map<String, String> properties) {
+        try (CloseableLock l = takeWriteLock()) {
+            validateProperties(properties);
+            AlterPipeLog alterPipeLog = new AlterPipeLog(id);
+            alterPipeLog.setChangeProps(properties);
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterPipe(alterPipeLog, wal -> {
+                processProperties(properties);
+            });
+        }
+    }
+
+    private void validateProperties(Map<String, String> properties) {
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            String key = entry.getKey().toLowerCase();
+            String value = entry.getValue();
+            switch (key) {
+                case PipeAnalyzer.PROPERTY_POLL_INTERVAL, PipeAnalyzer.PROPERTY_BATCH_FILES: {
+                    Integer.parseInt(value);
+                    break;
+                }
+                case PipeAnalyzer.PROPERTY_AUTO_INGEST: {
+                    ParseUtil.parseBooleanValue(value, PipeAnalyzer.PROPERTY_AUTO_INGEST);
+                    break;
+                }
+                case PipeAnalyzer.PROPERTY_BATCH_SIZE: {
+                    ParseUtil.parseDataVolumeStr(value);
+                    break;
+                }
+                case PropertyAnalyzer.PROPERTIES_WAREHOUSE: {
+                    // warehouse property is validated in PipeAnalyzer.analyzeWarehouseProperty
+                    // Just check that value is not empty
+                    if (StringUtils.isEmpty(value)) {
+                        throw new IllegalArgumentException("warehouse property cannot be empty");
+                    }
+                    break;
+                }
+                default: {
+                    // task execution variables
+                    if (!key.startsWith(TASK_PROPERTY_PREFIX)) {
+                        throw new IllegalArgumentException("unsupported property: " + entry.getKey());
+                    }
+                }
+            }
+        }
+    }
+
     public void processProperties(Map<String, String> properties) {
         for (Map.Entry<String, String> entry : properties.entrySet()) {
-            String key = entry.getKey();
+            String key = entry.getKey().toLowerCase();
             String value = entry.getValue();
-            switch (key.toLowerCase()) {
+            switch (key) {
                 case PipeAnalyzer.PROPERTY_POLL_INTERVAL: {
                     this.pollIntervalSecond = Integer.parseInt(value);
                     break;
                 }
                 case PipeAnalyzer.PROPERTY_AUTO_INGEST: {
-                    pipeSource.setAutoIngest(VariableMgr.parseBooleanVariable(value));
+                    pipeSource.setAutoIngest(ParseUtil.parseBooleanValue(value, PipeAnalyzer.PROPERTY_AUTO_INGEST));
                     break;
                 }
                 case PipeAnalyzer.PROPERTY_BATCH_SIZE: {
@@ -172,22 +218,24 @@ public class Pipe implements GsonPostProcessable {
                 }
                 default: {
                     // task execution variables
-                    if (key.toUpperCase().startsWith("TASK.")) {
-                        String taskVariable = StringUtils.removeStart(key.toUpperCase(), "TASK.");
+                    if (key.startsWith(TASK_PROPERTY_PREFIX)) {
+                        String taskVariable = StringUtils.removeStart(key, TASK_PROPERTY_PREFIX);
                         this.taskExecutionVariables.put(taskVariable, value);
                     } else {
-                        throw new IllegalArgumentException("unsupported property: " + key);
+                        throw new IllegalArgumentException("unsupported property: " + entry.getKey());
                     }
                 }
             }
-            this.properties.put(key, value);
+            if (this.properties != properties) {
+                this.properties.put(key, value);
+            }
         }
     }
 
     /**
      * Poll event from data source
      */
-    public void poll() throws UserException {
+    public void poll() throws StarRocksException {
         long nextPollTime = lastPolledTime + pollIntervalSecond;
         if (System.currentTimeMillis() / 1000 < nextPollTime) {
             return;
@@ -201,7 +249,6 @@ public class Pipe implements GsonPostProcessable {
             pipeSource.poll();
         } catch (Throwable e) {
             recordPipeError("poll from source failed: " + e.getMessage());
-            changeState(State.ERROR, true);
         }
     }
 
@@ -254,7 +301,7 @@ public class Pipe implements GsonPostProcessable {
             if (StringUtils.isEmpty(file.insertLabel)) {
                 file.loadState = FileListRepo.PipeFileState.ERROR;
             } else {
-                TransactionStatus txnStatus = txnMgr.getLabelStatus(dbId, file.insertLabel);
+                TransactionStatus txnStatus = txnMgr.getLabelStatus(dbId, file.insertLabel).getStatus();
                 if (txnStatus == null || txnStatus.isFailed()) {
                     file.loadState = FileListRepo.PipeFileState.ERROR;
                 } else {
@@ -280,7 +327,6 @@ public class Pipe implements GsonPostProcessable {
         LOG.info("{} pipe recovered to state {}, failed-files: {}, loaded-files: {}",
                 name, state, failedFiles, loadedFiles);
         recovered = true;
-        persistPipe();
     }
 
     /**
@@ -315,7 +361,7 @@ public class Pipe implements GsonPostProcessable {
             long taskId = GlobalStateMgr.getCurrentState().getNextId();
             PipeId pipeId = getPipeId();
             String uniqueName = PipeTaskDesc.genUniqueTaskName(getName(), taskId, 0);
-            String dbName = GlobalStateMgr.getCurrentState().mayGetDb(pipeId.getDbId())
+            String dbName = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(pipeId.getDbId())
                     .map(Database::getOriginName)
                     .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR));
             String sqlTask = FilePipeSource.buildInsertSql(this, piece, uniqueName);
@@ -353,25 +399,27 @@ public class Pipe implements GsonPostProcessable {
      */
     private void finalizeTasks() {
         List<Long> removeTaskId = new ArrayList<>();
+        Runnable changeStateAction = null;
+        LoadStatus changedLoadStatus = loadStatus.cloneForUpdate();
         try (CloseableLock l = takeWriteLock()) {
             for (PipeTaskDesc task : runningTasks.values()) {
                 if (task.isFinished() || task.tooManyErrors()) {
                     removeTaskId.add(task.getId());
                     pipeSource.finishPiece(task);
-                    loadStatus.loadingFiles -= task.getPiece().getNumFiles();
+                    changedLoadStatus.loadingFiles -= task.getPiece().getNumFiles();
                 }
                 if (task.isError()) {
                     failedTaskExecutionCount++;
                     if (failedTaskExecutionCount > FAILED_TASK_THRESHOLD) {
-                        changeState(State.ERROR, false);
+                        changeStateAction = () -> changeState(State.ERROR, false);
                     }
                 }
                 if (task.isFinished()) {
                     FilePipePiece piece = task.getPiece();
-                    loadStatus.loadedFiles += piece.getNumFiles();
-                    loadStatus.loadedBytes += piece.getTotalBytes();
-                    loadStatus.loadRows += piece.getTotalRows();
-                    loadStatus.lastLoadedTime = LocalDateTime.now(ZoneId.systemDefault());
+                    changedLoadStatus.loadedFiles += piece.getNumFiles();
+                    changedLoadStatus.loadedBytes += piece.getTotalBytes();
+                    changedLoadStatus.loadRows += piece.getTotalRows();
+                    changedLoadStatus.lastLoadedTime = LocalDateTime.now(ZoneId.systemDefault());
                 }
             }
             for (long taskId : removeTaskId) {
@@ -379,10 +427,21 @@ public class Pipe implements GsonPostProcessable {
             }
         }
 
+        if (changeStateAction != null) {
+            changeStateAction.run();
+        }
+
         // Persist LoadStatus
         // TODO: currently we cannot guarantee the consistency of LoadStatus and FileList
         if (CollectionUtils.isNotEmpty(removeTaskId)) {
-            persistPipe();
+            PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
+            AlterPipeLog alterPipeLog = new AlterPipeLog(id);
+            alterPipeLog.setLoadStatus(changedLoadStatus);
+            try (CloseableLock l = pm.takeWriteLock();
+                    CloseableLock r = takeWriteLock()) {
+                GlobalStateMgr.getCurrentState().getEditLog().logAlterPipe(
+                        alterPipeLog, wal -> this.loadStatus = changedLoadStatus);
+            }
             LOG.info("pipe {} remove finalized tasks {}", this, removeTaskId);
         }
     }
@@ -410,25 +469,22 @@ public class Pipe implements GsonPostProcessable {
         PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
         try (CloseableLock l = pm.takeWriteLock();
                 CloseableLock r = this.takeWriteLock()) {
-            if (this.state.equals(state)) {
-                return;
-            }
-            this.state = state;
-            if (persist) {
-                pm.updatePipe(this);
-            }
+            unprotectedChangeState(state, persist);
         } catch (Throwable e) {
             LOG.error("update pipe state {} failed: {}", toString(), e.getMessage(), e);
         }
     }
 
-    private void persistPipe() {
-        PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
-        try (CloseableLock l = pm.takeWriteLock();
-                CloseableLock r = this.takeWriteLock()) {
-            pm.updatePipe(this);
-        } catch (Throwable e) {
-            LOG.error("persist pipe {} state failed: {}", this, e.getMessage(), e);
+    private void unprotectedChangeState(State state, boolean persist) {
+        if (this.state.equals(state)) {
+            return;
+        }
+        if (persist) {
+            AlterPipeLog alterPipeLog = new AlterPipeLog(this.id);
+            alterPipeLog.setState(state);
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterPipe(alterPipeLog, wal -> this.state = state);
+        } else {
+            this.state = state;
         }
     }
 
@@ -446,12 +502,12 @@ public class Pipe implements GsonPostProcessable {
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
             Task task = TaskBuilder.buildPipeTask(taskDesc);
             try {
-                taskManager.createTask(task, false);
+                taskManager.createTask(task);
             } catch (DdlException e) {
                 recordTaskError(taskDesc, "create task failed");
                 return;
             }
-            SubmitResult result = taskManager.executeTaskAsync(task, new ExecuteOption(task.getSource().isMergeable()));
+            SubmitResult result = taskManager.executeTaskAsync(task, new ExecuteOption(task));
             taskDesc.onRunning();
             taskDesc.setFuture(result.getFuture());
             if (result.getStatus() != SubmitResult.SubmitStatus.SUBMITTED) {
@@ -496,10 +552,10 @@ public class Pipe implements GsonPostProcessable {
         }
     }
 
-    public void suspend() {
+    public void suspend(boolean persist) {
         try (CloseableLock l = takeWriteLock()) {
             if (this.state == State.RUNNING) {
-                this.state = State.SUSPEND;
+                unprotectedChangeState(State.SUSPEND, persist);
 
                 for (PipeTaskDesc task : runningTasks.values()) {
                     if (task.isTaskRunning()) {
@@ -516,7 +572,7 @@ public class Pipe implements GsonPostProcessable {
     public void resume() {
         try (CloseableLock l = takeWriteLock()) {
             if (this.state == State.SUSPEND || this.state == State.ERROR) {
-                this.state = State.RUNNING;
+                unprotectedChangeState(State.RUNNING, true);
                 this.failedTaskExecutionCount = 0;
                 LOG.info("Resume pipe " + this);
             }
@@ -627,6 +683,10 @@ public class Pipe implements GsonPostProcessable {
         return lastPolledTime;
     }
 
+    public int getPollIntervalSecond() {
+        return pollIntervalSecond;
+    }
+
     public Map<String, String> getProperties() {
         return properties;
     }
@@ -654,6 +714,10 @@ public class Pipe implements GsonPostProcessable {
 
     public void setState(State state) {
         this.state = state;
+    }
+
+    public void setLoadStatus(LoadStatus loadStatus) {
+        this.loadStatus = loadStatus;
     }
 
     @Override
@@ -719,6 +783,16 @@ public class Pipe implements GsonPostProcessable {
         public void gsonPostProcess() throws IOException {
             loadingFiles = 0;
             lastLoadedTime = null;
+        }
+
+        public LoadStatus cloneForUpdate() {
+            LoadStatus status = new LoadStatus();
+            status.loadedFiles = this.loadedFiles;
+            status.loadedBytes = this.loadedBytes;
+            status.loadingFiles = this.loadingFiles;
+            status.loadRows = this.loadRows;
+            status.lastLoadedTime = this.lastLoadedTime;
+            return status;
         }
     }
 

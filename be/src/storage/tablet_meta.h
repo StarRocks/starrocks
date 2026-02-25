@@ -40,17 +40,18 @@
 #include <string_view>
 #include <vector>
 
+#include "base/uid_util.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "storage/binlog_manager.h"
 #include "storage/delete_handler.h"
+#include "storage/flat_json_config.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_meta.h"
 #include "storage/tablet_schema.h"
-#include "util/uid_util.h"
 
 namespace starrocks {
 
@@ -123,13 +124,13 @@ public:
     static Status save(const std::string& file_path, const TabletMetaPB& tablet_meta_pb);
     static Status reset_tablet_uid(const std::string& file_path);
     static std::string construct_header_file_path(const std::string& schema_hash_path, int64_t tablet_id);
-    Status save_meta(DataDir* data_dir);
+    Status save_meta(DataDir* data_dir, bool skip_tablet_schema = false);
 
     Status serialize(std::string* meta_binary);
     Status deserialize(std::string_view data);
     void init_from_pb(TabletMetaPB* ptablet_meta_pb, bool use_tablet_schema_map = true);
 
-    void to_meta_pb(TabletMetaPB* tablet_meta_pb);
+    void to_meta_pb(TabletMetaPB* tablet_meta_pb, bool skip_tablet_schema = false);
     void to_json(std::string* json_string, json2pb::Pb2JsonOptions& options);
 
     TabletTypePB tablet_type() const { return _tablet_type; }
@@ -164,7 +165,8 @@ public:
     const TabletSchema& tablet_schema() const;
 
     void set_tablet_schema(const TabletSchemaCSPtr& tablet_schema) { _schema = tablet_schema; }
-    void save_tablet_schema(const TabletSchemaCSPtr& tablet_schema, DataDir* data_dir);
+    void save_tablet_schema(const TabletSchemaCSPtr& tablet_schema, std::vector<RowsetSharedPtr>& committed_rs,
+                            DataDir* data_dir, bool is_primary_key);
 
     TabletSchemaCSPtr& tablet_schema_ptr() { return _schema; }
     const TabletSchemaCSPtr& tablet_schema_ptr() const { return _schema; }
@@ -217,9 +219,15 @@ public:
 
     std::shared_ptr<BinlogConfig> get_binlog_config() { return _binlog_config; }
 
+    std::shared_ptr<FlatJsonConfig> get_flat_json_config() { return _flat_json_config; }
+
     void set_binlog_config(const BinlogConfig& new_config) {
         _binlog_config = std::make_shared<BinlogConfig>();
         _binlog_config->update(new_config);
+    }
+
+    void set_flat_json_config(const FlatJsonConfig& new_config) {
+        _flat_json_config = std::make_shared<FlatJsonConfig>(new_config);
     }
 
     BinlogLsn get_binlog_min_lsn() { return _binlog_min_lsn; }
@@ -236,10 +244,13 @@ public:
 
     const TabletSchemaCSPtr& source_schema() const { return _source_schema; }
 
+    // for test
+    void TEST_set_table_id(int64_t table_id);
+
 private:
     int64_t _mem_usage() const { return sizeof(TabletMeta); }
 
-    Status _save_meta(DataDir* data_dir);
+    Status _save_meta(DataDir* data_dir, bool skip_tablet_schema = false);
 
     // _del_pred_array is ignored to compare.
     friend bool operator==(const TabletMeta& a, const TabletMeta& b);
@@ -281,6 +292,7 @@ private:
     TabletUpdates* _updates = nullptr;
 
     std::shared_ptr<BinlogConfig> _binlog_config;
+    std::shared_ptr<FlatJsonConfig> _flat_json_config;
 
     // The minimum lsn of binlog that is valid. It will be updated when deleting expired
     // or overcapacity binlog in Tablet#delete_expired_inc_rowsets, and used to skip those
@@ -309,6 +321,10 @@ inline TabletUid TabletMeta::tablet_uid() const {
 
 inline int64_t TabletMeta::table_id() const {
     return _table_id;
+}
+
+inline void TabletMeta::TEST_set_table_id(int64_t table_id) {
+    _table_id = table_id;
 }
 
 inline int64_t TabletMeta::partition_id() const {

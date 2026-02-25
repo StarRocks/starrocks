@@ -38,12 +38,13 @@ public class TPCHPlanTest extends PlanTestBase {
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         connectContext.getSessionVariable().setEnableViewBasedMvRewrite(false);
         connectContext.getSessionVariable().setCboEqBaseType(SessionVariableConstants.DOUBLE);
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
     }
 
     @Test
     public void testJoin() {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable table1 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
+        OlapTable table1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
         setTableStatistics(table1, 10000);
         runFileUnitTest("optimized-plan/join");
         setTableStatistics(table1, 0);

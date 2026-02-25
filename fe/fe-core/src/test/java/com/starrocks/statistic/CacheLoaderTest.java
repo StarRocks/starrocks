@@ -18,6 +18,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.Bucket;
 import com.starrocks.sql.optimizer.statistics.ColumnBasicStatsCacheLoader;
 import com.starrocks.sql.optimizer.statistics.ColumnHistogramStatsCacheLoader;
@@ -26,15 +27,15 @@ import com.starrocks.sql.optimizer.statistics.Histogram;
 import com.starrocks.thrift.TStatisticData;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class CacheLoaderTest {
     public static ConnectContext connectContext;
     public static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
 
@@ -62,7 +63,7 @@ public class CacheLoaderTest {
 
     @Test
     public void testCovertBasicStatistics() {
-        Database db = connectContext.getGlobalStateMgr().getDb("test");
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
         OlapTable table = (OlapTable) db.getTable("t0");
         ColumnBasicStatsCacheLoader basicStatsCacheLoader
                 = Deencapsulation.newInstance(ColumnBasicStatsCacheLoader.class);
@@ -80,8 +81,8 @@ public class CacheLoaderTest {
 
         ColumnStatistic columnStatistic =
                 Deencapsulation.invoke(basicStatsCacheLoader, "convert2ColumnStatistics", statisticData);
-        Assert.assertEquals(-6.2167248343E10, columnStatistic.getMinValue(), 0.1);
-        Assert.assertEquals(2.534021856E11, columnStatistic.getMaxValue(), 0.1);
+        Assertions.assertEquals(-6.2167248343E10, columnStatistic.getMinValue(), 0.1);
+        Assertions.assertEquals(2.534021856E11, columnStatistic.getMaxValue(), 0.1);
 
 
         statisticData = new TStatisticData();
@@ -97,14 +98,14 @@ public class CacheLoaderTest {
 
         columnStatistic =
                 Deencapsulation.invoke(basicStatsCacheLoader, "convert2ColumnStatistics", statisticData);
-        Assert.assertEquals(-6.2167248343E10, columnStatistic.getMinValue(), 0.1);
-        Assert.assertEquals(2.534021856E11, columnStatistic.getMaxValue(), 0.1);
+        Assertions.assertEquals(-6.2167248343E10, columnStatistic.getMinValue(), 0.1);
+        Assertions.assertEquals(2.534021856E11, columnStatistic.getMaxValue(), 0.1);
     }
 
     @Test
     public void testCovertHistogramStatistics() {
-        Database db = connectContext.getGlobalStateMgr().getDb("test");
-        OlapTable table = (OlapTable) db.getTable("t0");
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0");
         ColumnHistogramStatsCacheLoader columnHistogramStatsCacheLoader
                 = Deencapsulation.newInstance(ColumnHistogramStatsCacheLoader.class);
 
@@ -117,15 +118,15 @@ public class CacheLoaderTest {
                 "\"mcv\" : [[\"27\",\"8\"],[\"19\",\"5\"],[\"20\",\"4\"]] }");
 
         Histogram histogram = Deencapsulation.invoke(columnHistogramStatsCacheLoader, "convert2Histogram", statisticData);
-        Assert.assertEquals(5, histogram.getBuckets().size());
+        Assertions.assertEquals(5, histogram.getBuckets().size());
         Bucket bucket = histogram.getBuckets().get(0);
-        Assert.assertEquals(2, bucket.getLower(), 0.1);
-        Assert.assertEquals(7, bucket.getUpper(), 0.1);
-        Assert.assertEquals(6, bucket.getCount(), 0.1);
-        Assert.assertEquals(1, bucket.getUpperRepeats(), 0.1);
+        Assertions.assertEquals(2, bucket.getLower(), 0.1);
+        Assertions.assertEquals(7, bucket.getUpper(), 0.1);
+        Assertions.assertEquals(6, bucket.getCount(), 0.1);
+        Assertions.assertEquals(1, bucket.getUpperRepeats(), 0.1);
 
-        Assert.assertEquals(3, histogram.getMCV().size());
-        Assert.assertEquals("{27=8, 19=5, 20=4}", histogram.getMCV().toString());
+        Assertions.assertEquals(3, histogram.getMCV().size());
+        Assertions.assertEquals("{27=8, 19=5, 20=4}", histogram.getMCV().toString());
 
         statisticData.setColumnName("v4");
         statisticData.setHistogram("{ \"buckets\" : [[\"2022-01-02\",\"2022-01-07\",\"6\",\"1\"]," +
@@ -137,17 +138,17 @@ public class CacheLoaderTest {
 
         histogram = Deencapsulation.invoke(columnHistogramStatsCacheLoader, "convert2Histogram", statisticData);
         bucket = histogram.getBuckets().get(0);
-        Assert.assertEquals(1.6410528E9, bucket.getLower(), 0.1);
-        Assert.assertEquals(1.6414848E9, bucket.getUpper(), 0.1);
-        Assert.assertEquals(6, bucket.getCount(), 0.1);
-        Assert.assertEquals(1, bucket.getUpperRepeats(), 0.1);
-        Assert.assertEquals("{2022-01-19=5, 2022-01-27=8, 2022-01-20=4}", histogram.getMCV().toString());
+        Assertions.assertEquals(1.6410528E9, bucket.getLower(), 0.1);
+        Assertions.assertEquals(1.6414848E9, bucket.getUpper(), 0.1);
+        Assertions.assertEquals(6, bucket.getCount(), 0.1);
+        Assertions.assertEquals(1, bucket.getUpperRepeats(), 0.1);
+        Assertions.assertEquals("{2022-01-19=5, 2022-01-27=8, 2022-01-20=4}", histogram.getMCV().toString());
     }
 
     @Test
     public void testCovertHistogramStatisticsDate() {
-        Database db = connectContext.getGlobalStateMgr().getDb("test");
-        OlapTable table = (OlapTable) db.getTable("t0");
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0");
         ColumnHistogramStatsCacheLoader columnHistogramStatsCacheLoader
                 = Deencapsulation.newInstance(ColumnHistogramStatsCacheLoader.class);
 
@@ -162,13 +163,13 @@ public class CacheLoaderTest {
         Histogram histogram = Deencapsulation.invoke(columnHistogramStatsCacheLoader, "convert2Histogram", statisticData);
 
         Bucket bucket = histogram.getBuckets().get(0);
-        Assert.assertEquals(-6.2167248343E10, bucket.getLower(), 0.1);
-        Assert.assertEquals(1.6409664E9, bucket.getUpper(), 0.1);
+        Assertions.assertEquals(-6.2167248343E10, bucket.getLower(), 0.1);
+        Assertions.assertEquals(1.6409664E9, bucket.getUpper(), 0.1);
 
         bucket = histogram.getBuckets().get(1);
-        Assert.assertEquals(1.6410528E9, bucket.getLower(), 0.1);
-        Assert.assertEquals(2.534021856E11, bucket.getUpper(), 0.1);
+        Assertions.assertEquals(1.6410528E9, bucket.getLower(), 0.1);
+        Assertions.assertEquals(2.534021856E11, bucket.getUpper(), 0.1);
 
-        Assert.assertEquals("{0000-01-01=8, 9999-12-31=5}", histogram.getMCV().toString());
+        Assertions.assertEquals("{0000-01-01=8, 9999-12-31=5}", histogram.getMCV().toString());
     }
 }

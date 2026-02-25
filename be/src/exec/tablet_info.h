@@ -16,9 +16,11 @@
 
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
+#include "base/random/random.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "common/object_pool.h"
@@ -27,7 +29,6 @@
 #include "gen_cpp/descriptors.pb.h"
 #include "runtime/descriptors.h"
 #include "storage/tablet_schema.h"
-#include "util/random.h"
 
 namespace starrocks {
 
@@ -49,6 +50,8 @@ struct OlapTableIndexSchema {
     int32_t schema_hash;
     OlapTableColumnParam* column_param;
     ExprContext* where_clause = nullptr;
+    std::map<std::string, std::string> column_to_expr_value;
+    bool is_shadow = false;
 
     void to_protobuf(POlapTableIndexSchema* pindex) const;
 };
@@ -79,6 +82,7 @@ public:
         return _proto_schema;
     }
 
+    int64_t shadow_index_size() const { return _shadow_indexes; }
     std::string debug_string() const;
 
 private:
@@ -90,6 +94,8 @@ private:
     mutable POlapTableSchemaParam* _proto_schema = nullptr;
     std::vector<OlapTableIndexSchema*> _indexes;
     mutable ObjectPool _obj_pool;
+
+    int64_t _shadow_indexes = 0;
 };
 
 using OlapTableIndexTablets = TOlapTableIndexTablets;
@@ -104,7 +110,7 @@ public:
         }
     }
 
-    TabletLocation* find_tablet(int64_t tablet_id) {
+    const TabletLocation* find_tablet(int64_t tablet_id) {
         auto it = _tablets.find(tablet_id);
         if (it != std::end(_tablets)) {
             return &it->second;
@@ -114,8 +120,7 @@ public:
 
     void add_locations(std::vector<TTabletLocation>& locations) {
         for (auto& location : locations) {
-            if (_tablets.count(location.tablet_id) == 0) {
-                _tablets.emplace(location.tablet_id, std::move(location));
+            if (_tablets.try_emplace(location.tablet_id, std::move(location)).second) {
                 VLOG(2) << "add location " << location;
             }
         }
@@ -158,6 +163,17 @@ public:
             }
         }
     }
+    const std::unordered_map<int64_t, NodeInfo>& get_nodes() const { return _nodes; }
+
+    std::string debug_string() const {
+        std::stringstream ss;
+        ss << "nodes[";
+        for (const auto& [id, info] : _nodes) {
+            ss << id << "=>" << info.host << ":" << info.brpc_port << ",";
+        }
+        ss << "]";
+        return ss.str();
+    }
 
 private:
     std::unordered_map<int64_t, NodeInfo> _nodes;
@@ -165,11 +181,11 @@ private:
 
 struct ChunkRow {
     ChunkRow() = default;
-    ChunkRow(Columns* columns_, uint32_t index_) : columns(columns_), index(index_) {}
+    ChunkRow(const MutableColumns* columns_, uint32_t index_) : columns(columns_), index(index_) {}
 
     std::string debug_string();
 
-    Columns* columns = nullptr;
+    const MutableColumns* columns = nullptr;
     uint32_t index = 0;
 };
 
@@ -178,7 +194,6 @@ struct OlapTablePartition {
     ChunkRow start_key;
     ChunkRow end_key;
     std::vector<ChunkRow> in_keys;
-    int64_t num_buckets = 0;
     std::vector<OlapTableIndexTablets> indexes;
 };
 
@@ -194,7 +209,9 @@ struct PartionKeyComparator {
         DCHECK_EQ(lhs->columns->size(), rhs->columns->size());
 
         for (size_t i = 0; i < lhs->columns->size(); ++i) {
-            int cmp = _compare_at((*lhs->columns)[i], (*rhs->columns)[i], lhs->index, rhs->index);
+            const Column* lc = (*lhs->columns)[i].get();
+            const Column* rc = (*rhs->columns)[i].get();
+            int cmp = _compare_at(lc, rc, lhs->index, rhs->index);
             if (cmp != 0) {
                 return cmp < 0;
             }
@@ -202,6 +219,8 @@ struct PartionKeyComparator {
         // equal, return false
         return false;
     }
+
+    bool operator()(const ChunkRow& lhs, const ChunkRow& rhs) const { return operator()(&lhs, &rhs); }
 
 private:
     /**
@@ -212,12 +231,12 @@ private:
      * @param r_idx  right column index
      * @return 0 if equal or left & right both null, -1 if left < right or left is null, 1 if left > right or right is null
      */
-    int _compare_at(const ColumnPtr& lc, const ColumnPtr& rc, uint32_t l_idx, uint32_t r_idx) const {
+    int _compare_at(const Column* lc, const Column* rc, uint32_t l_idx, uint32_t r_idx) const {
         bool is_l_null = lc->is_null(l_idx);
         bool is_r_null = rc->is_null(r_idx);
         if (!is_l_null && !is_r_null) {
-            Column* ldc = ColumnHelper::get_data_column(lc.get());
-            Column* rdc = ColumnHelper::get_data_column(rc.get());
+            const Column* ldc = ColumnHelper::get_data_column(lc);
+            const Column* rdc = ColumnHelper::get_data_column(rc);
             return ldc->compare_at(l_idx, r_idx, *rdc, -1);
         } else {
             if (is_l_null && is_r_null) {
@@ -252,7 +271,7 @@ public:
     // `invalid_row_index` stores index that chunk[index]
     // has been filtered out for not being able to find tablet.
     // it could be any row, becauset it's just for outputing error message for user to diagnose.
-    Status find_tablets(Chunk* chunk, std::vector<OlapTablePartition*>* partitions, std::vector<uint32_t>* indexes,
+    Status find_tablets(Chunk* chunk, std::vector<OlapTablePartition*>* partitions, std::vector<uint32_t>* hashes,
                         std::vector<uint8_t>* selection, std::vector<int>* invalid_row_indexs, int64_t txn_id,
                         std::vector<std::vector<std::string>>* partition_not_exist_row_values);
 
@@ -266,44 +285,62 @@ public:
 
     const TOlapTablePartitionParam& param() const { return _t_param; }
 
+    Status test_add_partitions(OlapTablePartition* partition);
+
+    const std::vector<SlotDescriptor*>& distribution_slot_descs() const { return _distributed_slot_descs; }
+
+    bool is_range_distribution() const {
+        return _distribution_type.has_value() && _distribution_type.value() == TOlapTableDistributionType::RANGE;
+    }
+
+    bool is_hash_distribution() const {
+        return ((!_distribution_type.has_value() && !_distributed_slot_descs.empty()) ||
+                (_distribution_type.has_value() && _distribution_type.value() == TOlapTableDistributionType::HASH));
+    }
+
+    bool is_random_distribution() const {
+        return ((!_distribution_type.has_value() && _distributed_slot_descs.empty()) ||
+                (_distribution_type.has_value() && _distribution_type.value() == TOlapTableDistributionType::RANDOM));
+    }
+
 private:
     /**
      * @brief  find tablets with range partition table
      * @param chunk  input chunk
-     * @param partition_columns input partition columns 
+     * @param partition_columns input partition columns
+     * @param hashes  input row hashes
      * @param partitions  output partitions
-     * @param indexes  output partition indexes
      * @param selection  chunk's selection
      * @param invalid_row_indexs output invalid row indexs
      * @param partition_not_exist_row_values  output partition not exist row values
      * @return Status 
      */
-    Status _find_tablets_with_range_partition(Chunk* chunk, Columns partition_columns,
+    Status _find_tablets_with_range_partition(Chunk* chunk, const MutableColumns& partition_columns,
+                                              const std::vector<uint32_t>& hashes,
                                               std::vector<OlapTablePartition*>* partitions,
-                                              std::vector<uint32_t>* indexes, std::vector<uint8_t>* selection,
-                                              std::vector<int>* invalid_row_indexs,
+                                              std::vector<uint8_t>* selection, std::vector<int>* invalid_row_indexs,
                                               std::vector<std::vector<std::string>>* partition_not_exist_row_values);
 
     /**
      * @brief  find tablets with list partition table
      * @param chunk  input chunk
-     * @param partition_columns input partition columns 
+     * @param partition_columns input partition columns
+     * @param hashes  input row hashes
      * @param partitions  output partitions
-     * @param indexes  output partition indexes
      * @param selection  chunk's selection
      * @param invalid_row_indexs output invalid row indexs
      * @param partition_not_exist_row_values  output partition not exist row values
      * @return Status 
      */
-    Status _find_tablets_with_list_partition(Chunk* chunk, Columns partition_columns,
+    Status _find_tablets_with_list_partition(Chunk* chunk, const MutableColumns& partition_columns,
+                                             const std::vector<uint32_t>& hashes,
                                              std::vector<OlapTablePartition*>* partitions,
-                                             std::vector<uint32_t>* indexes, std::vector<uint8_t>* selection,
-                                             std::vector<int>* invalid_row_indexs,
+                                             std::vector<uint8_t>* selection, std::vector<int>* invalid_row_indexs,
                                              std::vector<std::vector<std::string>>* partition_not_exist_row_values);
 
     Status _create_partition_keys(const std::vector<TExprNode>& t_exprs, ChunkRow* part_key);
 
-    void _compute_hashes(Chunk* chunk, std::vector<uint32_t>* indexes);
+    void _compute_hashes(const Chunk* chunk, std::vector<uint32_t>* hashes);
 
     // check if this partition contain this key
     bool _part_contains(OlapTablePartition* part, ChunkRow* key) const {
@@ -320,8 +357,8 @@ private:
 
     std::vector<SlotDescriptor*> _partition_slot_descs;
     std::vector<SlotDescriptor*> _distributed_slot_descs;
-    Columns _partition_columns;
-    std::vector<Column*> _distributed_columns;
+    MutableColumns _partition_columns;
+    std::vector<const Column*> _distributed_columns;
     std::vector<ExprContext*> _partitions_expr_ctxs;
 
     ObjectPool _obj_pool;
@@ -330,6 +367,10 @@ private:
     std::map<ChunkRow*, std::vector<int64_t>, PartionKeyComparator> _partitions_map;
 
     Random _rand{(uint32_t)time(nullptr)};
+
+    // NOTE: Thrift generates enum as `struct TOlapTableDistributionType { enum type { ... }; };`
+    // so we should store the actual enum type `TOlapTableDistributionType::type` here.
+    std::optional<TOlapTableDistributionType::type> _distribution_type;
 };
 
 } // namespace starrocks

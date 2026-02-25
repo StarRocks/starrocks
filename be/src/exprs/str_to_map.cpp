@@ -15,13 +15,13 @@
 #include <algorithm>
 #include <stack>
 
+#include "base/string/utf8.h"
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/map_column.h"
 #include "exprs/function_context.h"
 #include "exprs/string_functions.h"
-#include "util/utf8.h"
 
 namespace starrocks {
 
@@ -68,11 +68,11 @@ StatusOr<ColumnPtr> StringFunctions::str_to_map_v1(FunctionContext* context, con
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
     // decompose array<string>
     auto array_str_column = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]);
-    NullColumnPtr nulls = nullptr;
+    NullColumn::Ptr nulls = nullptr;
     if (array_str_column->is_nullable()) {
-        nulls = down_cast<NullableColumn*>(array_str_column.get())->null_column();
+        nulls = down_cast<const NullableColumn*>(array_str_column.get())->null_column();
     }
-    auto* array_str = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(array_str_column.get()));
+    const auto* array_str = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(array_str_column.get()));
     auto offsets = array_str->offsets_column();
     auto nullable_str = array_str->elements_column(); // no null here
 
@@ -180,8 +180,8 @@ StatusOr<ColumnPtr> StringFunctions::str_to_map_v1(FunctionContext* context, con
     }
 
     auto map = MapColumn::create(keys_builder.build_nullable_column(), values_builder.build_nullable_column(),
-                                 res_offsets);
-    return NullableColumn::create(std::move(map), res_null);
+                                 std::move(res_offsets));
+    return NullableColumn::create(std::move(map), std::move(res_null));
 }
 
 } // namespace starrocks

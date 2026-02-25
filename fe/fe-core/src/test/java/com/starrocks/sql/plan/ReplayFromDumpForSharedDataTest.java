@@ -15,7 +15,6 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.EditLog;
@@ -24,30 +23,36 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResourceProvider;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class ReplayFromDumpForSharedDataTest extends ReplayFromDumpTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
+        new MockUp<WarehouseComputeResourceProvider>() {
+            @Mock
+            public boolean isResourceAvailable(ComputeResource computeResource) {
+                return true;
+            }
+        };
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
+
+        // create connect context
+        connectContext = UtFrameUtils.createDefaultCtx();
+        starRocksAssert = new StarRocksAssert(connectContext);
         Config.show_execution_groups = false;
+        Config.enable_virtual_columns = false;
         // Should disable Dynamic Partition in replay dump test
         Config.dynamic_partition_enable = false;
         Config.tablet_sched_disable_colocate_overall_balance = true;
-        // create connect context
-        connectContext = UtFrameUtils.createDefaultCtx();
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
-        connectContext.getSessionVariable().setJoinImplementationMode("auto");
-        connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
-        starRocksAssert = new StarRocksAssert(connectContext);
-        FeConstants.runningUnitTest = true;
-        FeConstants.showScanNodeLocalShuffleColumnsInExplain = false;
-        FeConstants.enablePruneEmptyOutputScan = false;
-        FeConstants.showJoinLocalShuffleInExplain = false;
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
+        // set default config for timeliness mvs
+        UtFrameUtils.mockTimelinessForAsyncMVTest(connectContext);
 
         new MockUp<EditLog>() {
             @Mock
@@ -63,6 +68,6 @@ public class ReplayFromDumpForSharedDataTest extends ReplayFromDumpTestBase {
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpInfo);
         SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(dumpInfo, sessionVariable);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("mv_name_1"));
+        Assertions.assertTrue(replayPair.second.contains("mv_name_1"), replayPair.second);
     }
 }

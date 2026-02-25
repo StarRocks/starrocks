@@ -16,11 +16,11 @@
 
 #include <queue>
 
-#include "column/column_helper.h"
+#include "column/chunk_slice.h"
+#include "common/runtime_profile.h"
 #include "exec/sorting/merge.h"
 #include "exec/sorting/sorting.h"
 #include "runtime/chunk_cursor.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 
@@ -127,7 +127,6 @@ public:
 private:
     const std::vector<ExprContext*>* _sort_exprs;
     SortDescs _sort_desc;
-    std::vector<std::unique_ptr<SimpleChunkSortCursor>> _cursors;
 
     std::unique_ptr<MergeCursorsCascade> _merger;
     ChunkSlice _current_chunk;

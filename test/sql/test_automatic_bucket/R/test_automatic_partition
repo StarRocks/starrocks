@@ -1,4 +1,4 @@
--- name: test_bucket_size
+-- name: test_bucket_size @native
 create table t(k int);
 -- result:
 -- !result
@@ -10,7 +10,7 @@ t	CREATE TABLE `t` (
 DUPLICATE KEY(`k`)
 DISTRIBUTED BY RANDOM
 PROPERTIES (
-"bucket_size" = "4294967296",
+"bucket_size" = "1073741824",
 "compression" = "LZ4",
 "fast_schema_evolution" = "true",
 "replicated_storage" = "true",
@@ -37,6 +37,12 @@ PROPERTIES (
 -- !result
 
 
+
+
+
+
+
+
 -- name: test_invalid_bucket_size
 create table t0(k int) properties('bucket_size'='0');
 -- result:
@@ -60,7 +66,13 @@ alter table t set('bucket_size'='2048');
 -- !result
 
 
--- name: test_automatic_bucket
+
+
+
+
+
+
+-- name: test_automatic_bucket @native
 create database kkk;
 -- result:
 -- !result
@@ -91,6 +103,12 @@ select count(*) from information_schema.be_tablets t1, information_schema.tables
 alter table t set('bucket_size'='1');
 -- result:
 -- !result
+
+
+
+
+
+
 
 
 -- name: test_range_partition @sequential
@@ -153,6 +171,12 @@ select * from t;
 -- !result
 
 
+
+
+
+
+
+
 -- name: test_list_partition @sequential
 create database ddd;
 -- result:
@@ -213,6 +237,12 @@ select * from t;
 -- !result
 
 
+
+
+
+
+
+
 -- name: test_expr_partition @sequential
 create database eee;
 -- result:
@@ -227,37 +257,17 @@ PROPERTIES (
 );
 -- result:
 -- !result
-select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='eee';
--- result:
-3
--- !result
 insert into t values('2021-01-01', 1);
 -- result:
--- !result
-select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='eee';
--- result:
-6
 -- !result
 insert into t values('2021-01-03', 1);
 -- result:
 -- !result
-select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='eee';
--- result:
-12
--- !result
 insert into t values('2021-01-05', 1);
 -- result:
 -- !result
-select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='eee';
--- result:
-18
--- !result
 insert into t values('2021-01-01', 1);
 -- result:
--- !result
-select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='eee';
--- result:
-21
 -- !result
 select * from t;
 -- result:
@@ -266,6 +276,12 @@ select * from t;
 2021-01-01	1
 2021-01-01	1
 -- !result
+
+
+
+
+
+
 
 
 -- name: test_schema_change @sequential
@@ -373,6 +389,12 @@ select * from t;
 -- !result
 
 
+
+
+
+
+
+
 -- name: test_mv @sequential
 create table t(k date, v int, v1 int) DUPLICATE KEY(k) PARTITION BY DATE_TRUNC('DAY', `k`)
 PROPERTIES (
@@ -456,6 +478,12 @@ select k, v1 from t;
 -- !result
 
 
+
+
+
+
+
+
 -- name: test_delete
 create table t(k int, v int)
 PROPERTIES (
@@ -463,27 +491,21 @@ PROPERTIES (
 "bucket_size" = "1"
 );
 -- result:
-[]
 -- !result
 insert into t values(1,1);
 -- result:
-[]
 -- !result
 insert into t values(1,2);
 -- result:
-[]
 -- !result
 insert into t values(1,3);
 -- result:
-[]
 -- !result
 insert into t values(1,4);
 -- result:
-[]
 -- !result
 insert into t values(1,5);
 -- result:
-[]
 -- !result
 select * from t;
 -- result:
@@ -495,21 +517,24 @@ select * from t;
 -- !result
 delete from t where k = 1;
 -- result:
-[]
 -- !result
 select * from t;
 -- result:
 -- !result
 
 
--- name: test_mutable_bucket @sequential
+
+
+
+
+
+
+-- name: test_mutable_bucket @sequential @native
 create database ggg;
 -- result:
-[]
 -- !result
 use ggg;
 -- result:
-[]
 -- !result
 create table t(k date, v int) PARTITION BY DATE_TRUNC('DAY', `k`)
 PROPERTIES (
@@ -518,7 +543,6 @@ PROPERTIES (
 "mutable_bucket_num" = "2"
 );
 -- result:
-[]
 -- !result
 show create table t;
 -- result:
@@ -527,7 +551,7 @@ t	CREATE TABLE `t` (
   `v` int(11) NULL COMMENT ""
 ) ENGINE=OLAP 
 DUPLICATE KEY(`k`, `v`)
-PARTITION BY date_trunc('DAY', k)
+PARTITION BY DATE_TRUNC('DAY', `k`)
 DISTRIBUTED BY RANDOM
 PROPERTIES (
 "bucket_size" = "1",
@@ -544,7 +568,6 @@ select count(*) from information_schema.be_tablets t1, information_schema.tables
 -- !result
 insert into t values('2021-01-01', 1);
 -- result:
-[]
 -- !result
 select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ggg';
 -- result:
@@ -552,7 +575,6 @@ select count(*) from information_schema.be_tablets t1, information_schema.tables
 -- !result
 alter table t set('mutable_bucket_num'='3');
 -- result:
-[]
 -- !result
 show create table t;
 -- result:
@@ -561,7 +583,7 @@ t	CREATE TABLE `t` (
   `v` int(11) NULL COMMENT ""
 ) ENGINE=OLAP 
 DUPLICATE KEY(`k`, `v`)
-PARTITION BY date_trunc('DAY', k)
+PARTITION BY DATE_TRUNC('DAY', `k`)
 DISTRIBUTED BY RANDOM
 PROPERTIES (
 "bucket_size" = "1",
@@ -574,7 +596,6 @@ PROPERTIES (
 -- !result
 insert into t values('2021-01-01', 1);
 -- result:
-[]
 -- !result
 select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ggg';
 -- result:
@@ -592,4 +613,55 @@ E: (1064, 'Getting analyzing error. Detail message: Illegal mutable bucket num: 
 alter table t set('mutable_bucket_num'='a');
 -- result:
 E: (1064, 'Getting analyzing error. Detail message: Mutable bucket num: For input string: "a".')
+-- !result
+
+
+
+
+
+-- name: test_tablet_check
+create table t(k int)properties('bucket_size'='1');
+-- result:
+-- !result
+insert into t values(1);
+-- result:
+-- !result
+insert into t values(1);
+-- result:
+-- !result
+insert into t values(1);
+-- result:
+-- !result
+admin set frontend config('consistency_tablet_meta_check_interval_ms'='100');
+-- result:
+-- !result
+select sleep(5);
+-- result:
+1
+-- !result
+select * from t;
+-- result:
+1
+1
+1
+-- !result
+admin set frontend config('consistency_tablet_meta_check_interval_ms'='7200000');
+-- result:
+-- !result
+
+
+
+
+-- name: test_stale_flush @sequential
+create table t(k int)properties('bucket_size'='1');
+-- result:
+-- !result
+update information_schema.be_configs set value=102400 where name='write_buffer_size';
+-- result:
+-- !result
+insert into t select generate_series from TABLE(generate_series(1, 10000000));
+-- result:
+-- !result
+update information_schema.be_configs set value=104857600 where name='write_buffer_size';
+-- result:
 -- !result

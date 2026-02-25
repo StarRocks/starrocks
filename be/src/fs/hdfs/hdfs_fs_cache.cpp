@@ -27,7 +27,6 @@ namespace starrocks {
 // TODO(SmithCruise): Should remove when using cpp sdk
 static const std::map<std::string, std::string> get_cloud_properties(const FSOptions& options) {
     const TCloudConfiguration* cloud_configuration = nullptr;
-    std::map<std::string, std::string> properties;
     if (options.cloud_configuration != nullptr) {
         // This branch is used by data lake
         cloud_configuration = options.cloud_configuration;
@@ -35,17 +34,10 @@ static const std::map<std::string, std::string> get_cloud_properties(const FSOpt
         // This branch is used by broker load
         cloud_configuration = &options.hdfs_properties()->cloud_configuration;
     }
-    if (cloud_configuration != nullptr) {
-        if (cloud_configuration->__isset.cloud_properties) {
-            for (const auto& cloud_property : cloud_configuration->cloud_properties) {
-                properties.insert({cloud_property.key, cloud_property.value});
-            }
-            return properties;
-        } else {
-            return cloud_configuration->cloud_properties_v2;
-        }
+    if (cloud_configuration != nullptr && cloud_configuration->__isset.cloud_properties) {
+        return cloud_configuration->cloud_properties;
     }
-    return properties;
+    return {};
 }
 
 static Status create_hdfs_fs_handle(const std::string& namenode, const std::shared_ptr<HdfsFsClient>& hdfs_client,

@@ -19,9 +19,11 @@
 #include <string>
 #include <vector>
 
+#include "common/runtime_profile.h"
 #include "common/statusor.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/macros.h"
+#include "runtime/global_dict/types_fwd_decl.h"
 #include "storage/lake/delta_writer_finish_mode.h"
 
 namespace starrocks {
@@ -32,6 +34,7 @@ class SlotDescriptor;
 namespace starrocks {
 class Chunk;
 class TxnLogPB;
+class BundleWritableFileContext;
 } // namespace starrocks
 
 namespace starrocks::lake {
@@ -87,6 +90,13 @@ public:
 
     void finish(DeltaWriterFinishMode mode, FinishCallback cb);
 
+    // Cancel the writer with the given status.
+    // After cancellation, subsequent write/flush operations will fail quickly.
+    // This method delegates to the underlying DeltaWriter::cancel() which is thread-safe.
+    //
+    // [thread-safe]
+    void cancel(const Status& st);
+
     // This method will wait for all running tasks completed.
     //
     // This method can be called concurrently and multiple times and only the
@@ -111,6 +121,10 @@ public:
     Status check_immutable();
 
     [[nodiscard]] int64_t last_write_ts() const;
+
+    DeltaWriter* delta_writer();
+
+    const DictColumnsValidMap* global_dict_columns_valid_info() const;
 
 private:
     AsyncDeltaWriterImpl* _impl;
@@ -138,6 +152,11 @@ public:
 
     AsyncDeltaWriterBuilder& set_txn_id(int64_t txn_id) {
         _txn_id = txn_id;
+        return *this;
+    }
+
+    AsyncDeltaWriterBuilder& set_db_id(int64_t db_id) {
+        _db_id = db_id;
         return *this;
     }
 
@@ -186,11 +205,42 @@ public:
         return *this;
     }
 
+    AsyncDeltaWriterBuilder& set_column_to_expr_value(const std::map<std::string, std::string>* column_to_expr_value) {
+        _column_to_expr_value = column_to_expr_value;
+        return *this;
+    }
+
+    AsyncDeltaWriterBuilder& set_load_id(const PUniqueId& load_id) {
+        _load_id = load_id;
+        return *this;
+    }
+
+    AsyncDeltaWriterBuilder& set_profile(RuntimeProfile* profile) {
+        _profile = profile;
+        return *this;
+    }
+
+    AsyncDeltaWriterBuilder& set_bundle_writable_file_context(BundleWritableFileContext* bundle_writable_file_context) {
+        _bundle_writable_file_context = bundle_writable_file_context;
+        return *this;
+    }
+
+    AsyncDeltaWriterBuilder& set_global_dicts(GlobalDictByNameMaps* global_dicts) {
+        _global_dicts = global_dicts;
+        return *this;
+    }
+
+    AsyncDeltaWriterBuilder& set_is_multi_statements_txn(bool is_multi_statements_txn) {
+        _is_multi_statements_txn = is_multi_statements_txn;
+        return *this;
+    }
+
     StatusOr<AsyncDeltaWriterPtr> build();
 
 private:
     TabletManager* _tablet_mgr{nullptr};
     int64_t _txn_id{0};
+    int64_t _db_id{0};
     int64_t _table_id{0};
     int64_t _partition_id{0};
     int64_t _schema_id{0};
@@ -201,6 +251,12 @@ private:
     std::string _merge_condition{};
     bool _miss_auto_increment_column{false};
     PartialUpdateMode _partial_update_mode{PartialUpdateMode::ROW_MODE};
+    const std::map<std::string, std::string>* _column_to_expr_value{nullptr};
+    PUniqueId _load_id;
+    RuntimeProfile* _profile{nullptr};
+    BundleWritableFileContext* _bundle_writable_file_context{nullptr};
+    GlobalDictByNameMaps* _global_dicts = nullptr;
+    bool _is_multi_statements_txn = false;
 };
 
 } // namespace starrocks::lake

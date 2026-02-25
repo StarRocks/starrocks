@@ -18,6 +18,8 @@
 
 #include <future>
 
+#include "base/testutil/assert.h"
+#include "base/testutil/id_generator.h"
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
@@ -30,8 +32,6 @@
 #include "storage/lake/tablet_writer.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
-#include "testutil/assert.h"
-#include "testutil/id_generator.h"
 
 namespace starrocks::lake {
 
@@ -146,8 +146,8 @@ TEST_F(LakeMetacacheTest, test_segment_cache) {
     c2->append_numbers(k1.data(), k1.size() * sizeof(int));
     c3->append_numbers(v1.data(), v1.size() * sizeof(int));
 
-    Chunk chunk0({c0, c1}, _schema);
-    Chunk chunk1({c2, c3}, _schema);
+    Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
+    Chunk chunk1({std::move(c2), std::move(c3)}, _schema);
 
     const int segment_rows = chunk0.num_rows() + chunk1.num_rows();
 
@@ -170,7 +170,7 @@ TEST_F(LakeMetacacheTest, test_segment_cache) {
         ASSERT_OK(writer->write(chunk1));
         ASSERT_OK(writer->finish());
 
-        auto files = writer->files();
+        const auto& files = writer->segments();
         ASSERT_EQ(2, files.size());
 
         // add rowset metadata
@@ -178,8 +178,8 @@ TEST_F(LakeMetacacheTest, test_segment_cache) {
         rowset->set_overlapped(true);
         rowset->set_id(1);
         auto* segs = rowset->mutable_segments();
-        for (auto& file : writer->files()) {
-            segs->Add(std::move(file.path));
+        for (const auto& file : writer->segments()) {
+            segs->Add()->assign(file.path);
         }
 
         writer->close();

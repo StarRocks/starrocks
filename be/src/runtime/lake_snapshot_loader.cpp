@@ -14,15 +14,16 @@
 
 #include <runtime/lake_snapshot_loader.h>
 
+#include "base/container/raw_container.h"
+#include "base/network/network_util.h"
 #include "fs/fs_broker.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/TFileBrokerService.h"
 #include "gen_cpp/lake_service.pb.h"
+#include "runtime/exec_env.h"
 #include "runtime/snapshot_loader.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/tablet.h"
-#include "util/network_util.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 LakeSnapshotLoader::LakeSnapshotLoader(ExecEnv* env) : _env(env) {}
@@ -57,7 +58,7 @@ Status LakeSnapshotLoader::_get_existing_files_from_remote(BrokerServiceConnecti
             LOG(WARNING) << ss.str();
             return Status::InternalError(ss.str());
         }
-        LOG(INFO) << "finished to list files from remote path. file num: " << list_rep.files.size();
+        VLOG(2) << "finished to list files from remote path. file num: " << list_rep.files.size();
 
         // split file name and checksum
         for (const auto& file : list_rep.files) {
@@ -79,9 +80,10 @@ Status LakeSnapshotLoader::_get_existing_files_from_remote(BrokerServiceConnecti
                     << ", checksum: " << std::string(file_name, pos + 1);
         }
 
-        LOG(INFO) << "finished to split files. valid file num: " << files->size();
+        VLOG(2) << "finished to split files. valid file num: " << files->size();
 
     } catch (apache::thrift::TException& e) {
+        (void)client.reopen(config::thrift_rpc_timeout_ms);
         std::stringstream ss;
         ss << "failed to list files in remote path: " << remote_path << ", msg: " << e.what();
         LOG(WARNING) << ss.str();
@@ -116,13 +118,14 @@ Status LakeSnapshotLoader::_rename_remote_file(BrokerServiceConnection& client, 
             return Status::InternalError(ss.str());
         }
     } catch (apache::thrift::TException& e) {
+        (void)client.reopen(config::thrift_rpc_timeout_ms);
         std::stringstream ss;
         ss << "Fail to rename file: " << orig_name << " to: " << new_name << " msg:" << e.what();
         LOG(WARNING) << ss.str();
         return Status::ThriftRpcError(ss.str());
     }
 
-    LOG(INFO) << "finished to rename file. orig: " << orig_name << ", new: " << new_name;
+    VLOG(2) << "finished to rename file. orig: " << orig_name << ", new: " << new_name;
 
     return Status::OK();
 }
@@ -165,9 +168,10 @@ Status LakeSnapshotLoader::upload(const ::starrocks::UploadSnapshotsRequest* req
         LOG(WARNING) << ss.str();
         return Status::InternalError(ss.str());
     }
-    LOG(INFO) << "begin to upload snapshot files. num: " << request->snapshots().size()
-              << ", broker addr: " << request->broker();
+    VLOG(2) << "begin to upload snapshot files. num: " << request->snapshots().size()
+            << ", broker addr: " << request->broker();
 
+    int64_t start_ms = MonotonicMillis();
     for (auto& [tablet_id, snapshot] : request->snapshots()) {
         // TODO: support report logic
 
@@ -232,13 +236,15 @@ Status LakeSnapshotLoader::upload(const ::starrocks::UploadSnapshotsRequest* req
             if (!res.ok()) {
                 return res.status();
             }
-            LOG(INFO) << "finished to write file via broker. file: " << file << ", length: " << *res;
+            VLOG(2) << "finished to write file via broker. file: " << file << ", length: " << *res;
             RETURN_IF_ERROR(remote_writable_file->close());
             // rename file to end with ".md5sum"
             RETURN_IF_ERROR(_rename_remote_file(*client, full_remote_file + ".part", full_remote_file + "." + md5sum,
                                                 broker_prop));
         }
     }
+    LOG(INFO) << "finished to upload snapshots. num: " << request->snapshots().size()
+              << ", broker addr: " << request->broker() << ", cost: " << (MonotonicMillis() - start_ms) << "ms.";
     return status;
 }
 

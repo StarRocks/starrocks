@@ -17,16 +17,16 @@ package com.starrocks.sql.plan;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.planner.MaterializedViewTestBase;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
 public class TracerMVTest extends MaterializedViewTestBase {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         MaterializedViewTestBase.beforeClass();
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
@@ -34,36 +34,21 @@ public class TracerMVTest extends MaterializedViewTestBase {
         starRocksAssert.useTable("depts");
         starRocksAssert.useTable("locations");
         starRocksAssert.useTable("emps");
-
-        String mv = "CREATE MATERIALIZED VIEW `test_distinct_mv1`\n" +
-                "DISTRIBUTED BY HASH(`deptno`, `locationid`) BUCKETS 10\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\"" +
-                ")\n" +
-                "AS \n" +
-                "SELECT \n" +
-                "  `locationid`,\n" +
-                "  `deptno`,\n" +
-                "  count(DISTINCT `empid`) AS `order_num`\n" +
-                "FROM `emps`\n" +
-                "GROUP BY `locationid`, `deptno`;";
-        starRocksAssert.withMaterializedView(mv);
     }
 
-    @AfterClass
+    @AfterAll
     public static void tearDown() throws Exception {
-        starRocksAssert.dropMaterializedView("test_distinct_mv1");
         MaterializedViewTestBase.afterClass();
     }
 
     @Test
     public void testTracerTimerMV() {
         Tracers.register(connectContext);
-        Tracers.init(connectContext, Tracers.Mode.TIMER, "MV");
+        Tracers.init(connectContext, "TIMER", "MV");
         String mv = "select locations.locationid, empid, sum(emps.deptno) as col3 from emps " +
                 "join locations on emps.locationid = locations.locationid group by empid,locations.locationid";
         testRewriteOK(mv, "select emps.locationid, empid, sum(emps.deptno) as col3 from emps " +
-                "join locations on emps.locationid = locations.locationid where empid = 10 group by empid,emps.locationid");
+                "join locations on emps.locationid = locations.locationid group by empid,emps.locationid");
         String pr = Tracers.printScopeTimer();
         Tracers.close();
         assertContains(pr, "-- Planner");
@@ -72,7 +57,7 @@ public class TracerMVTest extends MaterializedViewTestBase {
     @Test
     public void testTracerVarMV() {
         Tracers.register(connectContext);
-        Tracers.init(connectContext, Tracers.Mode.VARS, "MV");
+        Tracers.init(connectContext, "VARS", "MV");
         String mv = "select locations.locationid, empid, sum(emps.deptno) as col3 from emps " +
                 "join locations on emps.locationid = locations.locationid group by empid,locations.locationid";
         testRewriteOK(mv, "select emps.locationid, empid, sum(emps.deptno) as col3 from emps " +
@@ -86,7 +71,7 @@ public class TracerMVTest extends MaterializedViewTestBase {
     public void testTracerLogMV1() {
         connectContext.getSessionVariable().setTraceLogMode("command");
         Tracers.register(connectContext);
-        Tracers.init(connectContext, Tracers.Mode.LOGS, "MV");
+        Tracers.init(connectContext, "LOGS", "MV");
         String mv = "select locations.locationid, empid, sum(emps.deptno) as col3 from emps " +
                 "join locations on emps.locationid = locations.locationid group by empid,locations.locationid";
         testRewriteOK(mv, "select emps.locationid, empid, sum(emps.deptno) as col3 from emps " +
@@ -100,7 +85,7 @@ public class TracerMVTest extends MaterializedViewTestBase {
     public void testTracerLogMV2() {
         connectContext.getSessionVariable().setTraceLogMode("File");
         Tracers.register(connectContext);
-        Tracers.init(connectContext, Tracers.Mode.LOGS, "MV");
+        Tracers.init(connectContext, "LOGS", "MV");
         String mv = "select locations.locationid, empid, sum(emps.deptno) as col3 from emps " +
                 "join locations on emps.locationid = locations.locationid group by empid,locations.locationid";
         testRewriteOK(mv, "select emps.locationid, empid, sum(emps.deptno) as col3 from emps " +
@@ -115,7 +100,7 @@ public class TracerMVTest extends MaterializedViewTestBase {
     public void testTracerLogMV_Success1() {
         connectContext.getSessionVariable().setTraceLogMode("command");
         Tracers.register(connectContext);
-        Tracers.init(connectContext, Tracers.Mode.LOGS, "MV");
+        Tracers.init(connectContext, "LOGS", "MV");
         String mv = "select locations.locationid, empid, sum(emps.deptno) as col3 from emps " +
                 "join locations on emps.locationid = locations.locationid group by empid,locations.locationid";
         testRewriteOK(mv, "select emps.locationid, empid, sum(emps.deptno) as col3 from emps " +
@@ -130,7 +115,7 @@ public class TracerMVTest extends MaterializedViewTestBase {
     public void testTracerLogMV_Success2() {
         connectContext.getSessionVariable().setTraceLogMode("command");
         Tracers.register(connectContext);
-        Tracers.init(connectContext, Tracers.Mode.LOGS, "MV");
+        Tracers.init(connectContext, "LOGS", "MV");
         String mv = "select locations.locationid, empid, sum(emps.deptno) as col3 from emps " +
                 "join locations on emps.locationid = locations.locationid group by empid,locations.locationid";
         testRewriteOK(mv, "select emps.locationid, empid, sum(emps.deptno) as col3 from emps " +
@@ -145,7 +130,7 @@ public class TracerMVTest extends MaterializedViewTestBase {
     public void testTracerLogMV_Fail1() {
         connectContext.getSessionVariable().setTraceLogMode("command");
         Tracers.register(connectContext);
-        Tracers.init(connectContext, Tracers.Mode.LOGS, "MV");
+        Tracers.init(connectContext, "LOGS", "MV");
         String mv = "select locations.locationid, empid, sum(emps.deptno) as col3 from emps " +
                 "join locations on emps.locationid = locations.locationid group by empid,locations.locationid";
         testRewriteFail(mv, "select emps.locationid, empid, sum(emps.deptno + 1) as col3 from emps " +
@@ -160,7 +145,7 @@ public class TracerMVTest extends MaterializedViewTestBase {
     public void testTracerLogMV_Fail2() {
         connectContext.getSessionVariable().setTraceLogMode("command");
         Tracers.register(connectContext);
-        Tracers.init(connectContext, Tracers.Mode.LOGS, "MV");
+        Tracers.init(connectContext, "LOGS", "MV");
         String mv = "select locations.locationid, empid, sum(emps.deptno) as col3 from emps " +
                 "join locations on emps.locationid = locations.locationid group by empid,locations.locationid";
         testRewriteFail(mv, "select emps.locationid, empid, sum(emps.deptno + 1) as col3 from emps " +
@@ -182,18 +167,18 @@ public class TracerMVTest extends MaterializedViewTestBase {
         Tracers.toRuntimeProfile(runtimeProfile);
 
         Map<String, String> result = runtimeProfile.getInfoStrings();
-        Assert.assertTrue(result.isEmpty());
+        Assertions.assertFalse(result.isEmpty());
     }
 
     @Test
     public void testTracerWithNonDeterministicFunctions() {
         connectContext.getSessionVariable().setTraceLogMode("command");
         Tracers.register(connectContext);
-        Tracers.init(connectContext, Tracers.Mode.LOGS, "MV");
+        Tracers.init(connectContext, "LOGS", "MV");
         String mv = "select empid, current_date(), current_timestamp() from emps ";
         testRewriteFail(mv, "select empid, current_date(), current_timestamp(), random() from emps");
         String pr = Tracers.printLogs();
-        Assert.assertTrue(pr.contains("MV contains non-deterministic functions(current_date)"));
+        Assertions.assertTrue(pr.contains("MV contains non-deterministic functions(current_date)"));
         Tracers.close();
     }
 }

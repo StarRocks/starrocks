@@ -19,8 +19,8 @@
 #include <future>
 #include <thread>
 
+#include "base/testutil/assert.h"
 #include "column/fixed_length_column.h"
-#include "testutil/assert.h"
 
 namespace starrocks::pipeline {
 
@@ -87,7 +87,7 @@ ChunkPtr SinkIOBufferTest::gen_test_chunk(int value) {
     auto col = Int32Column::create();
     col->resize(value);
     auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(col, 1);
+    chunk->append_column(std::move(col), 1);
     return chunk;
 }
 

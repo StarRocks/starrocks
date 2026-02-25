@@ -16,27 +16,18 @@
 package com.starrocks.lake.delete;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.IsNullPredicate;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
@@ -47,13 +38,24 @@ import com.starrocks.proto.DeleteDataRequest;
 import com.starrocks.proto.DeleteDataResponse;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryStateException;
+import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.DeleteStmt;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.PartitionRef;
+import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.IsNullPredicate;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
@@ -61,28 +63,34 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.IntegerType;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.jetbrains.annotations.NotNull;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class DeleteTest {
     private final long dbId = 1L;
     private final long tableId = 2L;
     private final long partitionId = 3L;
     private final long indexId = 4L;
+    private final long physicalPartitionId = 6L;
     private final long tablet1Id = 10L;
     private final long tablet2Id = 11L;
     private final long backendId = 20L;
@@ -104,15 +112,16 @@ public class DeleteTest {
     private Database db;
     private ConnectContext connectContext = new ConnectContext();
     private DeleteMgr deleteHandler;
+    private VariableMgr variableMgr = new VariableMgr();
 
     private Database createDb() {
         // Schema
         List<Column> columns = Lists.newArrayList();
-        Column k1 = new Column("k1", Type.INT, true, null, "", "");
+        Column k1 = new Column("k1", IntegerType.INT, true, null, "", "");
         columns.add(k1);
-        columns.add(new Column("k2", Type.BIGINT, true, null, "", ""));
-        columns.add(new Column("v", Type.BIGINT, false, null, "0", ""));
-        columns.add(new Column("v1", Type.ARRAY_BIGINT, false, null, "0", ""));
+        columns.add(new Column("k2", IntegerType.BIGINT, true, null, "", ""));
+        columns.add(new Column("v", IntegerType.BIGINT, false, null, "0", ""));
+        columns.add(new Column("v1", ArrayType.ARRAY_BIGINT, false, null, "0", ""));
 
         // Tablet
         Tablet tablet1 = new LakeTablet(tablet1Id);
@@ -120,7 +129,7 @@ public class DeleteTest {
 
         // Index
         MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
-        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.HDD, true);
+        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, TStorageMedium.HDD, true);
         index.addTablet(tablet1, tabletMeta);
         index.addTablet(tablet2, tabletMeta);
 
@@ -128,11 +137,11 @@ public class DeleteTest {
         DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setReplicationNum(partitionId, (short) 3);
-        Partition partition = new Partition(partitionId, partitionName, index, distributionInfo);
+        Partition partition = new Partition(partitionId, physicalPartitionId, partitionName, index, distributionInfo);
 
         // Lake table
         LakeTable table = new LakeTable(tableId, tableName, columns, KeysType.DUP_KEYS, partitionInfo, distributionInfo);
-        Deencapsulation.setField(table, "baseIndexId", indexId);
+        Deencapsulation.setField(table, "baseIndexMetaId", indexId);
         table.addPartition(partition);
         table.setIndexMeta(indexId, "t1", columns, 0, 0, (short) 3, TStorageType.COLUMN, KeysType.AGG_KEYS);
 
@@ -149,8 +158,11 @@ public class DeleteTest {
                 GlobalStateMgr.getCurrentState();
                 result = globalStateMgr;
 
-                globalStateMgr.getDb(anyString);
+                globalStateMgr.getLocalMetastore().getDb(anyString);
                 result = db;
+
+                globalStateMgr.getLocalMetastore().getTable(anyString, anyString);
+                result = db.getTable(tableId);
 
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
                 result = globalTransactionMgr;
@@ -164,15 +176,16 @@ public class DeleteTest {
         };
     }
 
-    @Before
+    @BeforeEach
     public void setUp() {
         connectContext.setGlobalStateMgr(globalStateMgr);
+        connectContext.setSessionVariable(variableMgr.newSessionVariable());
         deleteHandler = new DeleteMgr();
         db = createDb();
     }
 
     @Test
-    public void testNormal() throws UserException, RpcException {
+    public void testNormal() throws StarRocksException, RpcException {
         setUpExpectation();
         TransactionState transactionState = new TransactionState();
         transactionState.setTransactionStatus(TransactionStatus.VISIBLE);
@@ -225,20 +238,29 @@ public class DeleteTest {
         BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryType.GT, new SlotRef(null, "k1"),
                 new IntLiteral(3));
 
-        DeleteStmt deleteStmt = new DeleteStmt(new TableName(dbName, tableName),
-                new PartitionNames(false, Lists.newArrayList(partitionName)), binaryPredicate);
+        DeleteStmt deleteStmt = new DeleteStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList(dbName, tableName)),
+                        null, NodePosition.ZERO),
+                new PartitionRef(Lists.newArrayList(partitionName), false, NodePosition.ZERO), binaryPredicate);
 
         try {
             Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+
             new Expectations() {
                 {
                     globalStateMgr.getAnalyzer();
                     result = analyzer;
+
+                    globalStateMgr.getMetadataMgr().getTemporaryTable((UUID) any, anyString, anyLong, anyString);
+                    result = null;
+
+                    globalStateMgr.getMetadataMgr().getTable((ConnectContext) any, anyString, anyString, anyString);
+                    result = db.getTable(tableId);
                 }
             };
             com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
 
         try {
@@ -248,73 +270,83 @@ public class DeleteTest {
 
         Map<Long, DeleteJob> idToDeleteJob = Deencapsulation.getField(deleteHandler, "idToDeleteJob");
         Collection<DeleteJob> jobs = idToDeleteJob.values();
-        Assert.assertEquals(0, jobs.size());
+        Assertions.assertEquals(0, jobs.size());
     }
 
-    @Test(expected = DdlException.class)
-    public void testBeDeleteFail() throws UserException {
-        setUpExpectation();
-        new MockUp<BrpcProxy>() {
-            @Mock
-            public LakeService getLakeService(String host, int port) {
-                return lakeService;
-            }
-        };
-        new Expectations() {
-            {
-                lakeService.deleteData((DeleteDataRequest) any);
-                result = new Future<DeleteDataResponse>() {
-                    @Override
-                    public boolean cancel(boolean mayInterruptIfRunning) {
-                        return false;
-                    }
-
-                    @Override
-                    public boolean isCancelled() {
-                        return false;
-                    }
-
-                    @Override
-                    public boolean isDone() {
-                        return false;
-                    }
-
-                    @Override
-                    public DeleteDataResponse get() throws InterruptedException, ExecutionException {
-                        DeleteDataResponse response = new DeleteDataResponse();
-                        response.failedTablets = Lists.newArrayList(tablet1Id);
-                        return response;
-                    }
-
-                    @Override
-                    public DeleteDataResponse get(long timeout, @NotNull TimeUnit unit)
-                            throws InterruptedException, ExecutionException, TimeoutException {
-                        return null;
-                    }
-                };
-            }
-        };
-
-        BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryType.GT, new SlotRef(null, "k1"),
-                new IntLiteral(3));
-
-        DeleteStmt deleteStmt = new DeleteStmt(new TableName(dbName, tableName),
-                new PartitionNames(false, Lists.newArrayList(partitionName)), binaryPredicate);
-
-        try {
-            Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
-            new Expectations() {
-                {
-                    globalStateMgr.getAnalyzer();
-                    result = analyzer;
+    @Test
+    public void testBeDeleteFail() {
+        assertThrows(DdlException.class, () -> {
+            setUpExpectation();
+            new MockUp<BrpcProxy>() {
+                @Mock
+                public LakeService getLakeService(String host, int port) {
+                    return lakeService;
                 }
             };
-            com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
-        } catch (Exception e) {
-            Assert.fail();
-        }
+            new Expectations() {
+                {
+                    lakeService.deleteData((DeleteDataRequest) any);
+                    result = new Future<DeleteDataResponse>() {
+                        @Override
+                        public boolean cancel(boolean mayInterruptIfRunning) {
+                            return false;
+                        }
 
-        deleteHandler.process(deleteStmt);
+                        @Override
+                        public boolean isCancelled() {
+                            return false;
+                        }
+
+                        @Override
+                        public boolean isDone() {
+                            return false;
+                        }
+
+                        @Override
+                        public DeleteDataResponse get() throws InterruptedException, ExecutionException {
+                            DeleteDataResponse response = new DeleteDataResponse();
+                            response.failedTablets = Lists.newArrayList(tablet1Id);
+                            return response;
+                        }
+
+                        @Override
+                        public DeleteDataResponse get(long timeout, @NotNull TimeUnit unit)
+                                throws InterruptedException, ExecutionException, TimeoutException {
+                            return null;
+                        }
+                    };
+                }
+            };
+
+            BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryType.GT, new SlotRef(null, "k1"),
+                    new IntLiteral(3));
+
+            DeleteStmt deleteStmt = new DeleteStmt(
+                    new TableRef(QualifiedName.of(Lists.newArrayList(dbName, tableName)),
+                            null, NodePosition.ZERO),
+                    new PartitionRef(Lists.newArrayList(partitionName), false, NodePosition.ZERO), binaryPredicate);
+
+            try {
+                Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+                new Expectations() {
+                    {
+                        globalStateMgr.getAnalyzer();
+                        result = analyzer;
+
+                        globalStateMgr.getMetadataMgr().getTemporaryTable((UUID) any, anyString, anyLong, anyString);
+                        result = null;
+
+                        globalStateMgr.getMetadataMgr().getTable((ConnectContext) any, anyString, anyString, anyString);
+                        result = db.getTable(tableId);
+                    }
+                };
+                com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
+            } catch (Exception e) {
+                Assertions.fail();
+            }
+
+            deleteHandler.process(deleteStmt);
+        });
     }
 
     public void setUpExpectationWithoutExec() {
@@ -324,18 +356,20 @@ public class DeleteTest {
                 GlobalStateMgr.getCurrentState();
                 result = globalStateMgr;
 
-                globalStateMgr.getDb(anyString);
+                globalStateMgr.getLocalMetastore().getDb(anyString);
                 result = db;
+
+                globalStateMgr.getLocalMetastore().getTable(anyString, anyString);
+                result = db.getTable(tableId);
 
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
                 result = globalTransactionMgr;
-
             }
         };
     }
 
     @Test
-    public void testBeDeleteArrayType() throws UserException {
+    public void testBeDeleteArrayType() throws StarRocksException {
         setUpExpectationWithoutExec();
         new MockUp<BrpcProxy>() {
             @Mock
@@ -347,33 +381,43 @@ public class DeleteTest {
         // Not supported type
         BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryType.GT, new SlotRef(null, "v1"),
                 new StringLiteral("[]"));
-        DeleteStmt deleteStmt = new DeleteStmt(new TableName(dbName, tableName),
-                new PartitionNames(false, Lists.newArrayList(partitionName)), binaryPredicate);
+        DeleteStmt deleteStmt = new DeleteStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList(dbName, tableName)),
+                        null, NodePosition.ZERO),
+                new PartitionRef(Lists.newArrayList(partitionName), false, NodePosition.ZERO), binaryPredicate);
 
         Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
         new Expectations() {
             {
                 globalStateMgr.getAnalyzer();
                 result = analyzer;
+
+                globalStateMgr.getMetadataMgr().getTemporaryTable((UUID) any, anyString, anyLong, anyString);
+                result = null;
+
+                globalStateMgr.getMetadataMgr().getTable((ConnectContext) any, anyString, anyString, anyString);
+                result = db.getTable(tableId);
             }
         };
         com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
         try {
             deleteHandler.process(deleteStmt);
         } catch (DdlException e) {
-            Assert.assertTrue(e.getMessage().contains("unsupported delete condition on Array/Map/Struct type column"));
+            Assertions.assertTrue(e.getMessage().contains("unsupported delete condition on Array/Map/Struct type column"));
         }
 
         // Not supported type
         IsNullPredicate isNull = new IsNullPredicate(new SlotRef(null, "v1"), true);
-        deleteStmt = new DeleteStmt(new TableName(dbName, tableName),
-                new PartitionNames(false, Lists.newArrayList(partitionName)), isNull);
+        deleteStmt = new DeleteStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList(dbName, tableName)),
+                        null, NodePosition.ZERO),
+                new PartitionRef(Lists.newArrayList(partitionName), false, NodePosition.ZERO), isNull);
 
         com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
         try {
             deleteHandler.process(deleteStmt);
         } catch (DdlException e) {
-            Assert.assertTrue(e.getMessage().contains("unsupported delete condition on Array/Map/Struct type"));
+            Assertions.assertTrue(e.getMessage().contains("unsupported delete condition on Array/Map/Struct type"));
         }
     }
 }

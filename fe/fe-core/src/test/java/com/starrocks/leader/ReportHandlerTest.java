@@ -23,7 +23,7 @@ import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -60,19 +60,21 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.thrift.TException;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.awaitility.Awaitility;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 public class ReportHandlerTest {
     private static ConnectContext connectContext;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         Config.alter_scheduler_interval_millisecond = 1000;
         FeConstants.runningUnitTest = true;
@@ -85,26 +87,26 @@ public class ReportHandlerTest {
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
 
         starRocksAssert.withDatabase("test").useDatabase("test")
-                .withTable("CREATE TABLE test.properties_change_test(k1 int, v1 int) " +
-                        "primary key(k1) distributed by hash(k1) properties('replication_num' = '1');")
-                .withTable("CREATE TABLE test.binlog_report_handler_test(k1 int, v1 int) " +
-                        "duplicate key(k1) distributed by hash(k1) buckets 50 properties('replication_num' = '1', " +
-                        "'binlog_enable' = 'true', 'binlog_max_size' = '100');")
-                .withTable("CREATE TABLE test.primary_index_cache_expire_sec_test(k1 int, v1 int) " +
-                        "primary key(k1) distributed by hash(k1) buckets 5 properties('replication_num' = '1', " +
-                        "'primary_index_cache_expire_sec' = '3600');")
-                .withTable("CREATE TABLE test.update_schema(k1 int, v1 int) " +
-                        "primary key(k1) distributed by hash(k1) buckets 5 properties('replication_num' = '1', " +
-                        "'primary_index_cache_expire_sec' = '3600');");
+                    .withTable("CREATE TABLE test.properties_change_test(k1 int, v1 int) " +
+                                "primary key(k1) distributed by hash(k1) properties('replication_num' = '1');")
+                    .withTable("CREATE TABLE test.binlog_report_handler_test(k1 int, v1 int) " +
+                                "duplicate key(k1) distributed by hash(k1) buckets 50 properties('replication_num' = '1', " +
+                                "'binlog_enable' = 'true', 'binlog_max_size' = '100');")
+                    .withTable("CREATE TABLE test.primary_index_cache_expire_sec_test(k1 int, v1 int) " +
+                                "primary key(k1) distributed by hash(k1) buckets 5 properties('replication_num' = '1', " +
+                                "'primary_index_cache_expire_sec' = '3600');")
+                    .withTable("CREATE TABLE test.update_schema(k1 int, v1 int) " +
+                                "primary key(k1) distributed by hash(k1) buckets 5 properties('replication_num' = '1', " +
+                                "'primary_index_cache_expire_sec' = '3600');");
     }
 
     @Test
     public void testHandleSetTabletEnablePersistentIndex() {
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         long dbId = db.getId();
         long backendId = 10001L;
         List<Long> tabletIds = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(10001);
-        Assert.assertFalse(tabletIds.isEmpty());
+        Assertions.assertFalse(tabletIds.isEmpty());
 
         Map<Long, TTablet> backendTablets = new HashMap<Long, TTablet>();
         List<TTabletInfo> tabletInfos = Lists.newArrayList();
@@ -124,12 +126,13 @@ public class ReportHandlerTest {
 
     @Test
     public void testHandleSetPrimaryIndexCacheExpireSec() {
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         long dbId = db.getId();
-        OlapTable olapTable = (OlapTable) db.getTable("primary_index_cache_expire_sec_test");
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), "primary_index_cache_expire_sec_test");
         long backendId = 10001L;
         List<Long> tabletIds = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(10001);
-        Assert.assertFalse(tabletIds.isEmpty());
+        Assertions.assertFalse(tabletIds.isEmpty());
 
         Map<Long, TTablet> backendTablets = new HashMap<Long, TTablet>();
         List<TTabletInfo> tabletInfos = Lists.newArrayList();
@@ -149,22 +152,23 @@ public class ReportHandlerTest {
 
     @Test
     public void testHandleUpdateTableSchema() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         long dbId = db.getId();
-        OlapTable olapTable = (OlapTable) db.getTable("update_schema");
+        OlapTable olapTable =
+                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "update_schema");
 
         String stmt = "alter table update_schema add column add_v int default '1'";
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         AlterTableStmt alterTableStmt =
-                (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
+                    (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
-        Assert.assertEquals(OlapTableState.NORMAL, olapTable.getState());
+        Assertions.assertEquals(OlapTableState.NORMAL, olapTable.getState());
 
         long backendId = 10001L;
         List<Long> tabletIds =
-                GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(10001);
-        Assert.assertFalse(tabletIds.isEmpty());
+                    GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(10001);
+        Assertions.assertFalse(tabletIds.isEmpty());
 
         Map<Long, TTablet> backendTablets = new HashMap<Long, TTablet>();
         List<TTabletInfo> tabletInfos = Lists.newArrayList();
@@ -184,12 +188,13 @@ public class ReportHandlerTest {
 
     @Test
     public void testHandleSetTabletBinlogConfig() {
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         long dbId = db.getId();
-        OlapTable olapTable = (OlapTable) db.getTable("binlog_report_handler_test");
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), "binlog_report_handler_test");
         long backendId = 10001L;
         List<Long> tabletIds = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(10001);
-        Assert.assertFalse(tabletIds.isEmpty());
+        Assertions.assertFalse(tabletIds.isEmpty());
 
         Map<Long, TTablet> backendTablets = new HashMap<Long, TTablet>();
         List<TTabletInfo> tabletInfos = Lists.newArrayList();
@@ -216,7 +221,7 @@ public class ReportHandlerTest {
         backendTablets.put(backendId, tablet);
 
         handler.testHandleSetTabletBinlogConfig(backendId, backendTablets);
-        Assert.assertTrue(GlobalStateMgr.getCurrentState().getBinlogManager().isBinlogAvailable(dbId, olapTable.getId()));
+        Assertions.assertTrue(GlobalStateMgr.getCurrentState().getBinlogManager().isBinlogAvailable(dbId, olapTable.getId()));
 
     }
 
@@ -231,11 +236,13 @@ public class ReportHandlerTest {
     }
 
     @Test
-    public void testHandleResourceUsageReport() {
+    public void testHandleResourceUsageReport() throws TException {
         ResourceUsageMonitor resourceUsageMonitor = GlobalStateMgr.getCurrentState().getResourceUsageMonitor();
 
         Backend backend = new Backend(0, "127.0.0.1", 80);
+        backend.setBePort(90);
         ComputeNode computeNode = new ComputeNode(2, "127.0.0.1", 88);
+        computeNode.setBePort(99);
 
         new MockUp<SystemInfoService>() {
             @Mock
@@ -250,6 +257,24 @@ public class ReportHandlerTest {
             }
         };
 
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public Backend getBackendWithBePort(String host, int bePort) {
+                if (host.equals(backend.getHost()) && bePort == backend.getBePort()) {
+                    return backend;
+                }
+                return null;
+            }
+
+            @Mock
+            public ComputeNode getComputeNodeWithBePort(String host, int bePort) {
+                if (host.equals(computeNode.getHost()) && bePort == computeNode.getBePort()) {
+                    return computeNode;
+                }
+                return null;
+            }
+        };
+
         new Expectations(resourceUsageMonitor) {
             {
                 resourceUsageMonitor.notifyResourceUsageUpdate();
@@ -257,33 +282,55 @@ public class ReportHandlerTest {
             }
         };
 
-        int numRunningQueries = 1;
-        long memLimitBytes = 3;
-        long memUsedBytes = 2;
-        int cpuUsedPermille = 300;
-        TResourceUsage resourceUsage = genResourceUsage(numRunningQueries, memLimitBytes, memUsedBytes, cpuUsedPermille);
+        ReportHandler handler = new ReportHandler();
+        handler.start();
 
-        // For backend, sync to FE followers and notify pending queries.
-        ReportHandler.testHandleResourceUsageReport(backend.getId(), resourceUsage);
-        Assert.assertEquals(numRunningQueries, backend.getNumRunningQueries());
-        //        Assert.assertEquals(memLimitBytes, backend.getMemLimitBytes());
-        Assert.assertEquals(memUsedBytes, backend.getMemUsedBytes());
-        Assert.assertEquals(cpuUsedPermille, backend.getCpuUsedPermille());
+        {
+            int numRunningQueries = 1;
+            long memLimitBytes = 3;
+            long memUsedBytes = 2;
+            int cpuUsedPermille = 300;
+            TResourceUsage resourceUsage = genResourceUsage(numRunningQueries, memLimitBytes, memUsedBytes, cpuUsedPermille);
+            handler.handleReport(genRequest(resourceUsage, backend));
 
-        // For compute node, sync to FE followers and notify pending queries.
-        numRunningQueries = 10;
-        memLimitBytes = 30;
-        memUsedBytes = 20;
-        cpuUsedPermille = 310;
-        resourceUsage = genResourceUsage(numRunningQueries, memLimitBytes, memUsedBytes, cpuUsedPermille);
-        ReportHandler.testHandleResourceUsageReport(computeNode.getId(), resourceUsage);
-        Assert.assertEquals(numRunningQueries, computeNode.getNumRunningQueries());
-        //        Assert.assertEquals(memLimitBytes, computeNode.getMemLimitBytes());
-        Assert.assertEquals(memUsedBytes, computeNode.getMemUsedBytes());
-        Assert.assertEquals(cpuUsedPermille, computeNode.getCpuUsedPermille());
+            Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() -> numRunningQueries == backend.getNumRunningQueries());
+            // For backend, sync to FE followers and notify pending queries.
+            Assertions.assertEquals(memUsedBytes, backend.getMemUsedBytes());
+            Assertions.assertEquals(cpuUsedPermille, backend.getCpuUsedPermille());
+        }
 
-        // Don't sync and notify, because this BE doesn't exist.
-        ReportHandler.testHandleResourceUsageReport(/* Not Exist */ 1, resourceUsage);
+        {
+            // For compute node, sync to FE followers and notify pending queries.
+            int numRunningQueries = 10;
+            int memLimitBytes = 30;
+            int memUsedBytes = 20;
+            int cpuUsedPermille = 310;
+            TResourceUsage resourceUsage = genResourceUsage(numRunningQueries, memLimitBytes, memUsedBytes, cpuUsedPermille);
+            handler.handleReport(genRequest(resourceUsage, computeNode));
+
+            Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() -> numRunningQueries == computeNode.getNumRunningQueries());
+            Assertions.assertEquals(memUsedBytes, computeNode.getMemUsedBytes());
+            Assertions.assertEquals(cpuUsedPermille, computeNode.getCpuUsedPermille());
+
+            // Don't sync and notify, because this BE doesn't exist.
+            ComputeNode nonExistCN = new ComputeNode(2, "127.10.0.1", 100);
+            nonExistCN.setBePort(199);
+            handler.handleReport(genRequest(resourceUsage, nonExistCN));
+        }
+
+        handler.setStop();
+    }
+
+    private TReportRequest genRequest(TResourceUsage resourceUsage, ComputeNode worker) {
+        TReportRequest req = new TReportRequest();
+        req.setResource_usage(resourceUsage);
+
+        TBackend tcn = new TBackend();
+        tcn.setHost(worker.getHost());
+        tcn.setBe_port(worker.getBePort());
+        req.setBackend(tcn);
+
+        return req;
     }
 
     @Test
@@ -323,7 +370,7 @@ public class ReportHandlerTest {
             req.setBackend(tcn);
 
             TMasterResult res = handler.handleReport(req);
-            Assert.assertEquals(TStatusCode.OK, res.getStatus().getStatus_code());
+            Assertions.assertEquals(TStatusCode.OK, res.getStatus().getStatus_code());
         }
 
         {
@@ -337,7 +384,7 @@ public class ReportHandlerTest {
             req.setBackend(tbe);
 
             TMasterResult res = handler.handleReport(req);
-            Assert.assertEquals(TStatusCode.OK, res.getStatus().getStatus_code());
+            Assertions.assertEquals(TStatusCode.OK, res.getStatus().getStatus_code());
         }
 
         {
@@ -350,7 +397,7 @@ public class ReportHandlerTest {
             req.setBackend(tcn);
 
             TMasterResult res = handler.handleReport(req);
-            Assert.assertEquals(TStatusCode.INTERNAL_ERROR, res.getStatus().getStatus_code());
+            Assertions.assertEquals(TStatusCode.INTERNAL_ERROR, res.getStatus().getStatus_code());
         }
     }
 
@@ -375,20 +422,21 @@ public class ReportHandlerTest {
         for (int i = 0; i < tabletMetaList.size(); i++) {
             long tabletId = tabletIds.get(i);
             TabletMeta tabletMeta = tabletMetaList.get(i);
-            Database db = GlobalStateMgr.getCurrentState().getDb("test");
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
             if (db == null) {
                 continue;
             }
             OlapTable table = null;
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             try {
-                table = (OlapTable) db.getTable(tabletMeta.getTableId());
+                table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(db.getId(), tabletMeta.getTableId());
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
 
-            Partition partition = table.getPartition(tabletMeta.getPartitionId());
+            PhysicalPartition partition = table.getPhysicalPartition(tabletMeta.getPhysicalPartitionId());
             MaterializedIndex idx = partition.getIndex(tabletMeta.getIndexId());
             LocalTablet tablet = (LocalTablet) idx.getTablet(tabletId);
 
@@ -413,22 +461,22 @@ public class ReportHandlerTest {
         };
 
         OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState()
-                .getDb("test").getTable("binlog_report_handler_test");
+                    .getLocalMetastore().getDb("test").getTable("binlog_report_handler_test");
         ListMultimap<TStorageMedium, Long> tabletMetaMigrationMap = ArrayListMultimap.create();
         List<Long> allTablets = new ArrayList<>();
         for (MaterializedIndex index : olapTable.getPartition("binlog_report_handler_test")
-                .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                .getDefaultPhysicalPartition().getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
             for (Tablet tablet : index.getTablets()) {
                 tabletMetaMigrationMap.put(TStorageMedium.HDD, tablet.getId());
                 allTablets.add(tablet.getId());
             }
         }
 
-        Assert.assertEquals(50, tabletMetaMigrationMap.size());
+        Assertions.assertEquals(50, tabletMetaMigrationMap.size());
 
         ReportHandler.handleMigration(tabletMetaMigrationMap, backendId);
 
-        Assert.assertEquals(50, AgentTaskQueue.getTaskNum(backendId, TTaskType.STORAGE_MEDIUM_MIGRATE, false));
+        Assertions.assertEquals(50, AgentTaskQueue.getTaskNum(backendId, TTaskType.STORAGE_MEDIUM_MIGRATE, false));
 
         // finish 30 tablets migration
         for (int i = 0; i < 30; i++) {
@@ -437,7 +485,7 @@ public class ReportHandlerTest {
         // limit the batch size to 30
         Config.tablet_sched_max_migration_task_sent_once = 30;
         ReportHandler.handleMigration(tabletMetaMigrationMap, backendId);
-        Assert.assertEquals(30, AgentTaskQueue.getTaskNum(backendId, TTaskType.STORAGE_MEDIUM_MIGRATE, false));
+        Assertions.assertEquals(30, AgentTaskQueue.getTaskNum(backendId, TTaskType.STORAGE_MEDIUM_MIGRATE, false));
     }
 
     @Test
@@ -447,22 +495,34 @@ public class ReportHandlerTest {
         Config.tablet_report_drop_tablet_delay_sec = 3;
 
         boolean ready = ReportHandler.checkReadyToBeDropped(tabletId, backendId);
-        Assert.assertFalse(ready);
+        Assertions.assertFalse(ready);
 
         Thread.sleep(1000);
         ready = ReportHandler.checkReadyToBeDropped(tabletId, backendId);
-        Assert.assertFalse(ready);
+        Assertions.assertFalse(ready);
 
         Thread.sleep(3000);
         ready = ReportHandler.checkReadyToBeDropped(tabletId, backendId);
-        Assert.assertTrue(ready);
+        Assertions.assertTrue(ready);
 
         // check map is cleaned
         ready = ReportHandler.checkReadyToBeDropped(tabletId, backendId);
-        Assert.assertFalse(ready);
+        Assertions.assertFalse(ready);
 
         Thread.sleep(4000);
         ready = ReportHandler.checkReadyToBeDropped(tabletId, backendId);
-        Assert.assertTrue(ready);
+        Assertions.assertTrue(ready);
+    }
+
+    @Test
+    public void testGetPendingTabletReportTaskCnt() throws Exception {
+        ReportHandler reportHandler = new ReportHandler();
+        Assertions.assertEquals(0, reportHandler.getPendingTabletReportTaskCnt());
+        reportHandler.putTabletReportTask(1L, 1L, new HashMap<>());
+        Assertions.assertEquals(1, reportHandler.getPendingTabletReportTaskCnt());
+        reportHandler.putTabletReportTask(1L, 1L, new HashMap<>());
+        Assertions.assertEquals(1, reportHandler.getPendingTabletReportTaskCnt());
+        reportHandler.putTabletReportTask(2L, 1L, new HashMap<>());
+        Assertions.assertEquals(2, reportHandler.getPendingTabletReportTaskCnt());
     }
 }

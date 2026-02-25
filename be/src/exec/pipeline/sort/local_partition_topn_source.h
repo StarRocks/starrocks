@@ -35,6 +35,8 @@ public:
 
     ~LocalPartitionTopnSourceOperator() override = default;
 
+    Status prepare(RuntimeState* state) override;
+
     bool has_output() const override;
 
     bool is_finished() const override;
@@ -51,6 +53,7 @@ public:
                                             LocalPartitionTopnContextFactoryPtr partition_topn_ctx_factory);
 
     ~LocalPartitionTopnSourceOperatorFactory() override = default;
+    bool support_event_scheduler() const override { return true; }
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 

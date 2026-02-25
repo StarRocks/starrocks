@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # null_or_empty
@@ -12,6 +12,7 @@ This function returns true when the string is empty or NULL. Otherwise, it retur
 
 ```Haskell
 BOOLEAN NULL_OR_EMPTY (VARCHAR str)
+BOOLEAN NULL_OR_EMPTY (any_array)
 ```
 
 ## Examples
@@ -32,6 +33,20 @@ MySQL > select null_or_empty("");
 +-------------------+
 
 MySQL > select null_or_empty("a");
++--------------------+
+| null_or_empty('a') |
++--------------------+
+|                  0 |
++--------------------+
+
+MySQL > select null_or_empty([]);
++-------------------+
+| null_or_empty('') |
++-------------------+
+|                 1 |
++-------------------+
+
+MySQL > select null_or_empty([1]);
 +--------------------+
 | null_or_empty('a') |
 +--------------------+

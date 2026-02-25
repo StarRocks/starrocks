@@ -15,6 +15,10 @@
 #include "exec/pipeline/sink/memory_scratch_sink_operator.h"
 
 #include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/workgroup/work_group.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
+#include "runtime/current_thread.h"
 #include "util/arrow/row_batch.h"
 #include "util/arrow/starrocks_column_to_arrow.h"
 
@@ -47,7 +51,8 @@ bool MemoryScratchSinkOperator::is_finished() const {
 Status MemoryScratchSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
     if (_num_sinkers.fetch_sub(1, std::memory_order_acq_rel) == 1) {
-        state->exec_env()->wg_driver_executor()->report_audit_statistics(state->query_ctx(), state->fragment_ctx());
+        state->fragment_ctx()->workgroup()->executors()->driver_executor()->report_audit_statistics(
+                state->query_ctx(), state->fragment_ctx());
     }
     return Status::OK();
 }
@@ -56,15 +61,19 @@ bool MemoryScratchSinkOperator::pending_finish() const {
     // After set_finishing, there may be data that has not been sent.
     // We need to ensure that all remaining data are put into the queue.
     const_cast<MemoryScratchSinkOperator*>(this)->try_to_put_sentinel();
-    return !(_is_finished && _pending_result == nullptr && _has_put_sentinel);
+    return !(_is_finished && ((_pending_result == nullptr && _has_put_sentinel) || _queue->is_shutdown()));
 }
 
 Status MemoryScratchSinkOperator::set_cancelled(RuntimeState* state) {
     // because we introduced pending_finish, once cancel occurs, some states need to be changed so that the pending_finish can end immediately
     _pending_result.reset();
     _is_finished = true;
-    _has_put_sentinel = true;
     _queue->update_status(Status::Cancelled("Set cancelled by MemoryScratchSinkOperator"));
+    // Make sure all waiters in the result queue can get the notification.
+    // NOTE:
+    //   There is no guarantee that pending_finish() will be invoked before set_cancelled().  In case set_cancelled() is
+    //   called before pending_finish(), there is no chance to invoke try_to_put_sentinel() any more.
+    try_to_put_sentinel();
     return Status::OK();
 }
 
@@ -95,6 +104,7 @@ Status MemoryScratchSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr
 }
 
 void MemoryScratchSinkOperator::try_to_put_sentinel() {
+    // NOTE: Must be implemented idempotent!
     if (_pending_result != nullptr) {
         if (!_queue->try_put(_pending_result)) {
             return;
@@ -116,9 +126,9 @@ MemoryScratchSinkOperatorFactory::MemoryScratchSinkOperatorFactory(int32_t id, c
 
 Status MemoryScratchSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
-    RETURN_IF_ERROR(Expr::create_expr_trees(state->obj_pool(), _t_output_expr, &_output_expr_ctxs, state));
-    RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprFactory::create_expr_trees(state->obj_pool(), _t_output_expr, &_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_output_expr_ctxs, state));
     _prepare_id_to_col_name_map();
     RETURN_IF_ERROR(convert_to_arrow_schema(_row_desc, _id_to_col_name, &_arrow_schema, _output_expr_ctxs));
 
@@ -128,7 +138,7 @@ Status MemoryScratchSinkOperatorFactory::prepare(RuntimeState* state) {
 }
 
 void MemoryScratchSinkOperatorFactory::close(RuntimeState* state) {
-    Expr::close(_output_expr_ctxs, state);
+    ExprExecutor::close(_output_expr_ctxs, state);
     OperatorFactory::close(state);
 }
 

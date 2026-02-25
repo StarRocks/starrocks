@@ -25,20 +25,15 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
-import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.MockUp;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
@@ -47,7 +42,7 @@ public class CatalogMgrTest {
     private static StarRocksAssert starRocksAssert;
     private String fileName = "./testCatalogMgr";
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -56,7 +51,7 @@ public class CatalogMgrTest {
         starRocksAssert.withCatalog(createCatalog);
     }
 
-    @After
+    @AfterEach
     public void tearDownCreate() throws Exception {
         File file = new File(fileName);
         file.delete();
@@ -71,21 +66,21 @@ public class CatalogMgrTest {
 
         Catalog catalog = new ExternalCatalog(10000, "catalog_1", "", config);
         catalogMgr.replayCreateCatalog(catalog);
-        Assert.assertTrue(GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists("catalog_1"));
-        Assert.assertTrue(GlobalStateMgr.getCurrentState().getConnectorMgr().connectorExists("catalog_1"));
+        Assertions.assertTrue(GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists("catalog_1"));
+        Assertions.assertTrue(GlobalStateMgr.getCurrentState().getConnectorMgr().connectorExists("catalog_1"));
 
         DropCatalogLog log = new DropCatalogLog("catalog_1");
         catalogMgr.replayDropCatalog(log);
-        Assert.assertFalse(GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists("catalog_1"));
-        Assert.assertFalse(GlobalStateMgr.getCurrentState().getConnectorMgr().connectorExists("catalog_1"));
+        Assertions.assertFalse(GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists("catalog_1"));
+        Assertions.assertFalse(GlobalStateMgr.getCurrentState().getConnectorMgr().connectorExists("catalog_1"));
 
         config.put("type", "hhhhhhive");
         config.put("hive.metastore.uris", "thrift://127.0.0.1:9083");
 
         catalog = new ExternalCatalog(10000, "catalog_2", "", config);
         catalogMgr.replayCreateCatalog(catalog);
-        Assert.assertFalse(GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists("catalog_1"));
-        Assert.assertFalse(GlobalStateMgr.getCurrentState().getConnectorMgr().connectorExists("catalog_1"));
+        Assertions.assertFalse(GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists("catalog_1"));
+        Assertions.assertFalse(GlobalStateMgr.getCurrentState().getConnectorMgr().connectorExists("catalog_1"));
 
         config.put("type", "paimon");
         final ExternalCatalog catalog1 = new ExternalCatalog(10000, "catalog_3", "", config);
@@ -111,51 +106,28 @@ public class CatalogMgrTest {
 
         try {
             catalogMgr.createCatalog("jdbc", "a", "", config);
-            Assert.fail();
+            Assertions.fail();
         } catch (DdlException e) {
-            Assert.assertTrue(e.getMessage().contains("Missing"));
+            Assertions.assertTrue(e.getMessage().contains("Missing"));
         }
 
         config.put("type", "test_unsupported");
 
-        Assert.assertThrows(DdlException.class, () -> {
-            catalogMgr.createCatalog("test_unsupported", "b", "", config);
-        });
-    }
-
-    @Test
-    public void testLoadCatalog() throws IOException, DdlException {
-        CatalogMgr catalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
-        Assert.assertTrue(catalogMgr.catalogExists("hive_catalog"));
-
-        File file = new File(fileName);
-        file.createNewFile();
-        DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
-        catalogMgr.saveCatalogs(out, 0);
-        out.flush();
-        out.close();
-
-        catalogMgr.dropCatalog(new DropCatalogStmt("hive_catalog"));
-        Assert.assertFalse(catalogMgr.catalogExists("hive_catalog"));
-
-        DataInputStream in = new DataInputStream(new FileInputStream(file));
-        catalogMgr.loadCatalogs(in, 0);
-        Assert.assertTrue(catalogMgr.catalogExists("hive_catalog"));
+        Assertions.assertThrows(DdlException.class, () -> catalogMgr.createCatalog("test_unsupported", "b", "", config));
     }
 
     @Test
     public void testLoadCatalogWithException() throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         CatalogMgr catalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
-        Assert.assertTrue(catalogMgr.catalogExists("hive_catalog"));
+        Assertions.assertTrue(catalogMgr.catalogExists("hive_catalog"));
 
-        UtFrameUtils.PseudoImage.setUpImageVersion();
         UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
         catalogMgr.save(image.getImageWriter());
         SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
 
         CatalogMgr loadCatalogMgr = new CatalogMgr(new ConnectorMgr());
         loadCatalogMgr.load(reader);
-        Assert.assertTrue(loadCatalogMgr.catalogExists("hive_catalog"));
+        Assertions.assertTrue(loadCatalogMgr.catalogExists("hive_catalog"));
 
         // test load with ddl exception
         loadCatalogMgr = new CatalogMgr(new ConnectorMgr());
@@ -171,8 +143,8 @@ public class CatalogMgrTest {
             loadCatalogMgr.load(reader);
         } catch (Exception e) {
             // should not throw exception
-            Assert.fail();
+            Assertions.fail();
         }
-        Assert.assertFalse(loadCatalogMgr.catalogExists("hive_catalog"));
+        Assertions.assertFalse(loadCatalogMgr.catalogExists("hive_catalog"));
     }
 }

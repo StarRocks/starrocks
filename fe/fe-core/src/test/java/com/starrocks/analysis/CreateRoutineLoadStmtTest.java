@@ -36,11 +36,12 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.load.routineload.KafkaProgress;
 import com.starrocks.load.routineload.LoadDataSourceType;
 import com.starrocks.qe.ConnectContext;
@@ -50,19 +51,25 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ImportWhereStmt;
+import com.starrocks.sql.ast.LabelName;
 import com.starrocks.sql.ast.LoadStmt;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.PartitionRef;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.Subquery;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -75,7 +82,7 @@ public class CreateRoutineLoadStmtTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         FeConstants.runningUnitTest = true;
         Config.routine_load_scheduler_interval_millisecond = 100;
@@ -118,17 +125,18 @@ public class CreateRoutineLoadStmtTest {
             List<String> partitionNames = new ArrayList<>();
             partitionNames.add("p1");
             partitionNames.add("p2");
-            Assert.assertNotNull(createRoutineLoadStmt.getRoutineLoadDesc());
-            Assert.assertEquals("\t", createRoutineLoadStmt.getRoutineLoadDesc().getColumnSeparator().getColumnSeparator());
-            Assert.assertEquals(partitionNames,
+            Assertions.assertNotNull(createRoutineLoadStmt.getRoutineLoadDesc());
+            Assertions.assertEquals("\t", createRoutineLoadStmt.getRoutineLoadDesc().getColumnSeparator().getColumnSeparator());
+            Assertions.assertEquals(partitionNames,
                     createRoutineLoadStmt.getRoutineLoadDesc().getPartitionNames().getPartitionNames());
-            Assert.assertEquals(3, createRoutineLoadStmt.getDesiredConcurrentNum());
-            Assert.assertEquals(20, createRoutineLoadStmt.getMaxBatchIntervalS());
-            Assert.assertEquals("kafkahost1:9092,kafkahost2:9092", createRoutineLoadStmt.getKafkaBrokerList());
-            Assert.assertEquals("topictest", createRoutineLoadStmt.getKafkaTopic());
-            Assert.assertEquals("Asia/Shanghai", createRoutineLoadStmt.getTimezone());
-            Assert.assertEquals("https://user:password@confluent.west.us", createRoutineLoadStmt.getConfluentSchemaRegistryUrl());
-            Assert.assertEquals(0.12, createRoutineLoadStmt.getMaxFilterRatio(), 0.01);
+            Assertions.assertEquals(3, createRoutineLoadStmt.getDesiredConcurrentNum());
+            Assertions.assertEquals(20, createRoutineLoadStmt.getMaxBatchIntervalS());
+            Assertions.assertEquals("kafkahost1:9092,kafkahost2:9092", createRoutineLoadStmt.getKafkaBrokerList());
+            Assertions.assertEquals("topictest", createRoutineLoadStmt.getKafkaTopic());
+            Assertions.assertEquals("Asia/Shanghai", createRoutineLoadStmt.getTimezone());
+            Assertions.assertEquals("https://user:password@confluent.west.us", createRoutineLoadStmt.getConfluentSchemaRegistryUrl());
+            Assertions.assertEquals(0.12, createRoutineLoadStmt.getMaxFilterRatio(), 0.01);
+            Assertions.assertFalse(createRoutineLoadStmt.isPauseOnFatalParseError());
         }
 
         {
@@ -143,6 +151,7 @@ public class CreateRoutineLoadStmtTest {
                     + "\"max_batch_interval\" = \"20\",\n"
                     + "\"max_filter_ratio\" = \"0.12\",\n"
                     + "\"strict_mode\" = \"false\",\n"
+                    + "\"pause_on_fatal_parse_error\" = \"true\",\n"
                     + "\"timezone\" = \"Asia/Shanghai\"\n"
                     + ")\n"
                     + "FROM KAFKA\n"
@@ -157,17 +166,18 @@ public class CreateRoutineLoadStmtTest {
             List<String> partitionNames = new ArrayList<>();
             partitionNames.add("p1");
             partitionNames.add("p2");
-            Assert.assertNotNull(createRoutineLoadStmt.getRoutineLoadDesc());
-            Assert.assertEquals("\t", createRoutineLoadStmt.getRoutineLoadDesc().getColumnSeparator().getColumnSeparator());
-            Assert.assertEquals(partitionNames,
+            Assertions.assertNotNull(createRoutineLoadStmt.getRoutineLoadDesc());
+            Assertions.assertEquals("\t", createRoutineLoadStmt.getRoutineLoadDesc().getColumnSeparator().getColumnSeparator());
+            Assertions.assertEquals(partitionNames,
                     createRoutineLoadStmt.getRoutineLoadDesc().getPartitionNames().getPartitionNames());
-            Assert.assertEquals(3, createRoutineLoadStmt.getDesiredConcurrentNum());
-            Assert.assertEquals(20, createRoutineLoadStmt.getMaxBatchIntervalS());
-            Assert.assertEquals("[2001:db8:85a3::8a2e:370:7334]:9092,[2001:0db8:85a3:0000:0000:8a2e:0370:7335]:9092,192.168.164.136:9092", createRoutineLoadStmt.getKafkaBrokerList());
-            Assert.assertEquals("topictest", createRoutineLoadStmt.getKafkaTopic());
-            Assert.assertEquals("Asia/Shanghai", createRoutineLoadStmt.getTimezone());
-            Assert.assertEquals("https://user:password@confluent.west.us", createRoutineLoadStmt.getConfluentSchemaRegistryUrl());
-            Assert.assertEquals(0.12, createRoutineLoadStmt.getMaxFilterRatio(), 0.01);
+            Assertions.assertEquals(3, createRoutineLoadStmt.getDesiredConcurrentNum());
+            Assertions.assertEquals(20, createRoutineLoadStmt.getMaxBatchIntervalS());
+            Assertions.assertEquals("[2001:db8:85a3::8a2e:370:7334]:9092,[2001:0db8:85a3:0000:0000:8a2e:0370:7335]:9092,192.168.164.136:9092", createRoutineLoadStmt.getKafkaBrokerList());
+            Assertions.assertEquals("topictest", createRoutineLoadStmt.getKafkaTopic());
+            Assertions.assertEquals("Asia/Shanghai", createRoutineLoadStmt.getTimezone());
+            Assertions.assertEquals("https://user:password@confluent.west.us", createRoutineLoadStmt.getConfluentSchemaRegistryUrl());
+            Assertions.assertEquals(0.12, createRoutineLoadStmt.getMaxFilterRatio(), 0.01);
+            Assertions.assertTrue(createRoutineLoadStmt.isPauseOnFatalParseError());
         }
     }
 
@@ -190,7 +200,10 @@ public class CreateRoutineLoadStmtTest {
             CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt)stmts.get(0);
             CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
             ImportWhereStmt whereStmt = createRoutineLoadStmt.getRoutineLoadDesc().getWherePredicate();
-            Assert.assertEquals(false, whereStmt.isContainSubquery());
+
+            ArrayList<Expr> matched = new ArrayList<>();
+            whereStmt.getExpr().collect(Subquery.class, matched);
+            Assertions.assertEquals(0, matched.size());
         }
         
 
@@ -208,10 +221,10 @@ public class CreateRoutineLoadStmtTest {
             try {
                 CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
             } catch (Exception e) {
-                Assert.assertEquals(true, e.getMessage().contains("the predicate cannot contain subqueries"));
+                Assertions.assertEquals(true, e.getMessage().contains("the predicate cannot contain subqueries"));
                 return;
             }
-            Assert.assertEquals(true, false);
+            Assertions.assertEquals(true, false);
         }
     }
 
@@ -231,8 +244,8 @@ public class CreateRoutineLoadStmtTest {
         List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
         CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt)stmts.get(0);
         CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
-        Assert.assertNotNull(createRoutineLoadStmt.getRoutineLoadDesc());
-        Assert.assertEquals(0, createRoutineLoadStmt.getLoadPropertyList().size());
+        Assertions.assertNotNull(createRoutineLoadStmt.getRoutineLoadDesc());
+        Assertions.assertEquals(0, createRoutineLoadStmt.getLoadPropertyList().size());
     }
 
     @Test
@@ -251,8 +264,8 @@ public class CreateRoutineLoadStmtTest {
             List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
             CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt) stmts.get(0);
             CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
-            Assert.assertEquals(15, createRoutineLoadStmt.getTaskTimeoutSecond());
-            Assert.assertEquals(5, createRoutineLoadStmt.getTaskConsumeSecond());
+            Assertions.assertEquals(15, createRoutineLoadStmt.getTaskTimeoutSecond());
+            Assertions.assertEquals(5, createRoutineLoadStmt.getTaskConsumeSecond());
         }
 
         {
@@ -268,8 +281,8 @@ public class CreateRoutineLoadStmtTest {
             List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
             CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt) stmts.get(0);
             CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
-            Assert.assertEquals(Config.routine_load_task_timeout_second, createRoutineLoadStmt.getTaskTimeoutSecond());
-            Assert.assertEquals(Config.routine_load_task_consume_second, createRoutineLoadStmt.getTaskConsumeSecond());
+            Assertions.assertEquals(Config.routine_load_task_timeout_second, createRoutineLoadStmt.getTaskTimeoutSecond());
+            Assertions.assertEquals(Config.routine_load_task_consume_second, createRoutineLoadStmt.getTaskConsumeSecond());
         }
 
         {
@@ -285,8 +298,8 @@ public class CreateRoutineLoadStmtTest {
             List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
             CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt) stmts.get(0);
             CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
-            Assert.assertEquals(20, createRoutineLoadStmt.getTaskTimeoutSecond());
-            Assert.assertEquals(5, createRoutineLoadStmt.getTaskConsumeSecond());
+            Assertions.assertEquals(20, createRoutineLoadStmt.getTaskTimeoutSecond());
+            Assertions.assertEquals(5, createRoutineLoadStmt.getTaskConsumeSecond());
         }
     }
 
@@ -302,7 +315,7 @@ public class CreateRoutineLoadStmtTest {
         List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
         CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt)stmts.get(0);
         CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
-        Assert.assertEquals(6, createRoutineLoadStmt.getRoutineLoadDesc().getColumnsInfo().getColumns().size());
+        Assertions.assertEquals(6, createRoutineLoadStmt.getRoutineLoadDesc().getColumnsInfo().getColumns().size());
 
         sql = "CREATE ROUTINE LOAD testdb.routine_name ON table1" +
                 " COLUMNS(`k1`, `k2`, `k3`, `k4`, `k5`)" +
@@ -313,7 +326,7 @@ public class CreateRoutineLoadStmtTest {
         stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
         createRoutineLoadStmt = (CreateRoutineLoadStmt)stmts.get(0);
         CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
-        Assert.assertEquals(5, createRoutineLoadStmt.getRoutineLoadDesc().getColumnsInfo().getColumns().size());
+        Assertions.assertEquals(5, createRoutineLoadStmt.getRoutineLoadDesc().getColumnsInfo().getColumns().size());
 
         sql = "CREATE ROUTINE LOAD testdb.routine_name ON table1" +
                 " COLUMNS( `v1` = to_bitmap(`k1`)," +
@@ -328,7 +341,7 @@ public class CreateRoutineLoadStmtTest {
         stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
         createRoutineLoadStmt = (CreateRoutineLoadStmt)stmts.get(0);
         CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
-        Assert.assertEquals(5, createRoutineLoadStmt.getRoutineLoadDesc().getColumnsInfo().getColumns().size());
+        Assertions.assertEquals(5, createRoutineLoadStmt.getRoutineLoadDesc().getColumnsInfo().getColumns().size());
 
         sql = "CREATE ROUTINE LOAD testdb.routine_name ON table1" +
                 " COLUMNS( `v1` = to_bitmap(`k1`)," +
@@ -344,7 +357,7 @@ public class CreateRoutineLoadStmtTest {
         stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
         createRoutineLoadStmt = (CreateRoutineLoadStmt)stmts.get(0);
         CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
-        Assert.assertEquals(10, createRoutineLoadStmt.getRoutineLoadDesc().getColumnsInfo().getColumns().size());
+        Assertions.assertEquals(10, createRoutineLoadStmt.getRoutineLoadDesc().getColumnsInfo().getColumns().size());
 
         sql = "CREATE ROUTINE LOAD testdb.routine_name ON table1" +
                 " COLUMNS( `v1` = to_bitmap(`k1`), `k1`," +
@@ -359,7 +372,7 @@ public class CreateRoutineLoadStmtTest {
         stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
         createRoutineLoadStmt = (CreateRoutineLoadStmt)stmts.get(0);
         CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
-        Assert.assertEquals(10, createRoutineLoadStmt.getRoutineLoadDesc().getColumnsInfo().getColumns().size());
+        Assertions.assertEquals(10, createRoutineLoadStmt.getRoutineLoadDesc().getColumnsInfo().getColumns().size());
 
         sql = "CREATE ROUTINE LOAD testdb.routine_name ON table1" +
                 " COLUMNS(`k1`, `k2`, `k3`, `k4`, `k5`," +
@@ -375,11 +388,11 @@ public class CreateRoutineLoadStmtTest {
         stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
         createRoutineLoadStmt = (CreateRoutineLoadStmt)stmts.get(0);
         CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
-        Assert.assertEquals(10, createRoutineLoadStmt.getRoutineLoadDesc().getColumnsInfo().getColumns().size());
+        Assertions.assertEquals(10, createRoutineLoadStmt.getRoutineLoadDesc().getColumnsInfo().getColumns().size());
     }
 
     @Test
-    public void testAnalyzeWithDuplicateProperty() throws UserException {
+    public void testAnalyzeWithDuplicateProperty() throws StarRocksException {
         String jobName = "job1";
         String dbName = "db1";
         LabelName labelName = new LabelName(dbName, jobName);
@@ -387,9 +400,6 @@ public class CreateRoutineLoadStmtTest {
         String topicName = "topic1";
         String serverAddress = "http://127.0.0.1:8080";
         String kafkaPartitionString = "1,2,3";
-        List<String> partitionNameString = Lists.newArrayList();
-        partitionNameString.add("p1");
-        PartitionNames partitionNames = new PartitionNames(false, partitionNameString);
         ColumnSeparator columnSeparator = new ColumnSeparator(",");
 
         // duplicate load property
@@ -410,7 +420,7 @@ public class CreateRoutineLoadStmtTest {
                 typeName, customProperties);
         try {
             CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
-            Assert.fail();
+            Assertions.fail();
         } catch (RuntimeException e) {
             LOG.info(e.getMessage());
         }
@@ -428,7 +438,7 @@ public class CreateRoutineLoadStmtTest {
         String timeZone = "8:00";
         List<String> partitionNameString = Lists.newArrayList();
         partitionNameString.add("p1");
-        PartitionNames partitionNames = new PartitionNames(false, partitionNameString);
+        PartitionRef partitionNames = new PartitionRef(partitionNameString, false, NodePosition.ZERO);
         ColumnSeparator columnSeparator = new ColumnSeparator(",");
 
         // duplicate load property
@@ -452,15 +462,15 @@ public class CreateRoutineLoadStmtTest {
 
         CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
 
-        Assert.assertNotNull(createRoutineLoadStmt.getRoutineLoadDesc());
-        Assert.assertEquals(columnSeparator, createRoutineLoadStmt.getRoutineLoadDesc().getColumnSeparator());
-        Assert.assertEquals(partitionNames.getPartitionNames(),
+        Assertions.assertNotNull(createRoutineLoadStmt.getRoutineLoadDesc());
+        Assertions.assertEquals(columnSeparator, createRoutineLoadStmt.getRoutineLoadDesc().getColumnSeparator());
+        Assertions.assertEquals(partitionNames.getPartitionNames(),
                 createRoutineLoadStmt.getRoutineLoadDesc().getPartitionNames().getPartitionNames());
-        Assert.assertEquals(2, createRoutineLoadStmt.getDesiredConcurrentNum());
-        Assert.assertEquals(0, createRoutineLoadStmt.getMaxErrorNum());
-        Assert.assertEquals(serverAddress, createRoutineLoadStmt.getKafkaBrokerList());
-        Assert.assertEquals(topicName, createRoutineLoadStmt.getKafkaTopic());
-        Assert.assertEquals("+08:00", createRoutineLoadStmt.getTimezone());
+        Assertions.assertEquals(2, createRoutineLoadStmt.getDesiredConcurrentNum());
+        Assertions.assertEquals(0, createRoutineLoadStmt.getMaxErrorNum());
+        Assertions.assertEquals(serverAddress, createRoutineLoadStmt.getKafkaBrokerList());
+        Assertions.assertEquals(topicName, createRoutineLoadStmt.getKafkaTopic());
+        Assertions.assertEquals("+08:00", createRoutineLoadStmt.getTimezone());
     }
 
     @Test
@@ -471,15 +481,15 @@ public class CreateRoutineLoadStmtTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt) SqlParser.parse(createSQL, 32).get(0);
         CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
-        Assert.assertEquals(createRoutineLoadStmt.getJsonPaths(), "[\"$.k1\",\"$.k2.\\\"k2.1\\\"\"]");
+        Assertions.assertEquals(createRoutineLoadStmt.getJsonPaths(), "[\"$.k1\",\"$.k2.\\\"k2.1\\\"\"]");
 
         String selectSQL = "SELECT \"Pat O\"\"Hanrahan & <Matthew Eldridge]\"\"\";";
         QueryStatement selectStmt = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(selectSQL, ctx);
 
         Expr expr = ((SelectRelation) (selectStmt.getQueryRelation())).getOutputExpression().get(0);
-        Assert.assertTrue(expr instanceof StringLiteral);
+        Assertions.assertTrue(expr instanceof StringLiteral);
         StringLiteral stringLiteral = (StringLiteral) expr;
-        Assert.assertEquals(stringLiteral.getValue(), "Pat O\"Hanrahan & <Matthew Eldridge]\"");
+        Assertions.assertEquals(stringLiteral.getValue(), "Pat O\"Hanrahan & <Matthew Eldridge]\"");
 
     }
 
@@ -492,8 +502,8 @@ public class CreateRoutineLoadStmtTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt) SqlParser.parse(createSQL, 32).get(0);
         CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
-        Assert.assertEquals(createRoutineLoadStmt.getJsonPaths(), "[\"$.k1\",\"$.k2.\\\"k2.1\\\"\"]");
-        Assert.assertEquals("https://user:password@confluent.west.us", createRoutineLoadStmt.getConfluentSchemaRegistryUrl());
+        Assertions.assertEquals(createRoutineLoadStmt.getJsonPaths(), "[\"$.k1\",\"$.k2.\\\"k2.1\\\"\"]");
+        Assertions.assertEquals("https://user:password@confluent.west.us", createRoutineLoadStmt.getConfluentSchemaRegistryUrl());
     }
 
     @Test
@@ -504,9 +514,9 @@ public class CreateRoutineLoadStmtTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt) SqlParser.parse(createSQL, 32).get(0);
         CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
-        Assert.assertEquals(createRoutineLoadStmt.isTrimspace(), true);
-        Assert.assertEquals(createRoutineLoadStmt.getEnclose(), '\'');
-        Assert.assertEquals(createRoutineLoadStmt.getEscape(), '|');
+        Assertions.assertEquals(createRoutineLoadStmt.isTrimspace(), true);
+        Assertions.assertEquals(createRoutineLoadStmt.getEnclose(), '\'');
+        Assertions.assertEquals(createRoutineLoadStmt.getEscape(), '|');
     }
 
     @Test
@@ -517,10 +527,10 @@ public class CreateRoutineLoadStmtTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt) SqlParser.parse(createSQL, 32).get(0);
         CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
-        Assert.assertEquals(createRoutineLoadStmt.getMaxErrorNum(), 10);
-        Assert.assertEquals(createRoutineLoadStmt.getEnclose(), 0);
-        Assert.assertEquals(createRoutineLoadStmt.getEscape(), 0);
-        Assert.assertEquals(createRoutineLoadStmt.isTrimspace(), false);
+        Assertions.assertEquals(createRoutineLoadStmt.getMaxErrorNum(), 10);
+        Assertions.assertEquals(createRoutineLoadStmt.getEnclose(), 0);
+        Assertions.assertEquals(createRoutineLoadStmt.getEscape(), 0);
+        Assertions.assertEquals(createRoutineLoadStmt.isTrimspace(), false);
     }
 
     @Test
@@ -533,7 +543,7 @@ public class CreateRoutineLoadStmtTest {
         // load property
         List<String> partitionNameString = Lists.newArrayList();
         partitionNameString.add("p1");
-        PartitionNames partitionNames = new PartitionNames(false, partitionNameString);
+        PartitionRef partitionNames = new PartitionRef(partitionNameString, false, NodePosition.ZERO);
         ColumnSeparator columnSeparator = new ColumnSeparator(",");
         List<ParseNode> loadPropertyList = new ArrayList<>();
         loadPropertyList.add(columnSeparator);
@@ -550,9 +560,9 @@ public class CreateRoutineLoadStmtTest {
                 LoadDataSourceType.KAFKA.name(), customProperties);
         CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
         List<Pair<Integer, Long>> partitionOffsets = createRoutineLoadStmt.getKafkaPartitionOffsets();
-        Assert.assertEquals(2, partitionOffsets.size());
-        Assert.assertEquals(KafkaProgress.OFFSET_BEGINNING_VAL, (long) partitionOffsets.get(0).second);
-        Assert.assertEquals(KafkaProgress.OFFSET_END_VAL, (long) partitionOffsets.get(1).second);
+        Assertions.assertEquals(2, partitionOffsets.size());
+        Assertions.assertEquals(KafkaProgress.OFFSET_BEGINNING_VAL, (long) partitionOffsets.get(0).second);
+        Assertions.assertEquals(KafkaProgress.OFFSET_END_VAL, (long) partitionOffsets.get(1).second);
 
         // 2. no kafka_offsets and property.kafka_default_offsets
         // 1,2 -> OFFSET_END
@@ -564,9 +574,9 @@ public class CreateRoutineLoadStmtTest {
                         LoadDataSourceType.KAFKA.name(), customProperties);
         CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
         partitionOffsets = createRoutineLoadStmt.getKafkaPartitionOffsets();
-        Assert.assertEquals(2, partitionOffsets.size());
-        Assert.assertEquals(KafkaProgress.OFFSET_END_VAL, (long) partitionOffsets.get(0).second);
-        Assert.assertEquals(KafkaProgress.OFFSET_END_VAL, (long) partitionOffsets.get(1).second);
+        Assertions.assertEquals(2, partitionOffsets.size());
+        Assertions.assertEquals(KafkaProgress.OFFSET_END_VAL, (long) partitionOffsets.get(0).second);
+        Assertions.assertEquals(KafkaProgress.OFFSET_END_VAL, (long) partitionOffsets.get(1).second);
 
         // 3. property.kafka_default_offsets
         // 1,2 -> 10
@@ -579,9 +589,9 @@ public class CreateRoutineLoadStmtTest {
                         LoadDataSourceType.KAFKA.name(), customProperties);
         CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
         partitionOffsets = createRoutineLoadStmt.getKafkaPartitionOffsets();
-        Assert.assertEquals(2, partitionOffsets.size());
-        Assert.assertEquals(10, (long) partitionOffsets.get(0).second);
-        Assert.assertEquals(10, (long) partitionOffsets.get(1).second);
+        Assertions.assertEquals(2, partitionOffsets.size());
+        Assertions.assertEquals(10, (long) partitionOffsets.get(0).second);
+        Assertions.assertEquals(10, (long) partitionOffsets.get(1).second);
 
         // 4. both kafka_offsets and property.kafka_default_offsets
         // 1 -> OFFSET_BEGINNING, 2 -> OFFSET_END, 3 -> 11
@@ -595,10 +605,10 @@ public class CreateRoutineLoadStmtTest {
                         LoadDataSourceType.KAFKA.name(), customProperties);
         CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
         partitionOffsets = createRoutineLoadStmt.getKafkaPartitionOffsets();
-        Assert.assertEquals(3, partitionOffsets.size());
-        Assert.assertEquals(KafkaProgress.OFFSET_BEGINNING_VAL, (long) partitionOffsets.get(0).second);
-        Assert.assertEquals(KafkaProgress.OFFSET_END_VAL, (long) partitionOffsets.get(1).second);
-        Assert.assertEquals(11, (long) partitionOffsets.get(2).second);
+        Assertions.assertEquals(3, partitionOffsets.size());
+        Assertions.assertEquals(KafkaProgress.OFFSET_BEGINNING_VAL, (long) partitionOffsets.get(0).second);
+        Assertions.assertEquals(KafkaProgress.OFFSET_END_VAL, (long) partitionOffsets.get(1).second);
+        Assertions.assertEquals(11, (long) partitionOffsets.get(2).second);
 
         // 5. invalid partitions " 1 2 3 "
         customProperties = getCustomProperties();
@@ -611,7 +621,7 @@ public class CreateRoutineLoadStmtTest {
                         LoadDataSourceType.KAFKA.name(), customProperties);
         CreateRoutineLoadStmt finalCreateRoutineLoadStmt = createRoutineLoadStmt;
         ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
-                "kafka partition '1 2 3' is invalid. It must be an integer",
+                "Invalid kafka partition: '1 2 3'. Expected values should be an integer",
                 () -> CreateRoutineLoadAnalyzer.analyze(finalCreateRoutineLoadStmt, connectContext));
 
         // 6. invalid offset a
@@ -625,7 +635,7 @@ public class CreateRoutineLoadStmtTest {
                         LoadDataSourceType.KAFKA.name(), customProperties);
         CreateRoutineLoadStmt finalCreateRoutineLoadStmt2 = createRoutineLoadStmt;
         ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
-                "kafka offset 'a' is invalid. It must be an integer, OFFSET_BEGINNING, or OFFSET_END",
+                "Invalid kafka offset: 'a'. Expected values should be an integer, OFFSET_BEGINNING, or OFFSET_END",
                 () -> CreateRoutineLoadAnalyzer.analyze(finalCreateRoutineLoadStmt2, connectContext));
     }
 
@@ -651,7 +661,7 @@ public class CreateRoutineLoadStmtTest {
                 + ");";
         ConnectContext ctx = starRocksAssert.getCtx();
         CreateRoutineLoadStmt stmt = (CreateRoutineLoadStmt) com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
-        Assert.assertEquals("CREATE ROUTINE LOAD testdb.routine_name ON table1PROPERTIES ( \"desired_concurrent_number\" = \"3\", \"timezone\" = \"Asia/Shanghai\", \"strict_mode\" = \"false\", \"max_batch_interval\" = \"20\" ) " +
+        Assertions.assertEquals("CREATE ROUTINE LOAD testdb.routine_name ON table1PROPERTIES ( \"desired_concurrent_number\" = \"3\", \"timezone\" = \"Asia/Shanghai\", \"strict_mode\" = \"false\", \"max_batch_interval\" = \"20\" ) " +
         "FROM KAFKA ( \"kafka_broker_list\" = \"kafkahost1:9092,kafkahost2:9092\", \"kafka_topic\" = \"topictest\", \"confluent.schema.registry.url\" = \"***\" )", AstToStringBuilder.toString(stmt));
     }
 
@@ -677,7 +687,7 @@ public class CreateRoutineLoadStmtTest {
                 + ");";
         ConnectContext ctx = starRocksAssert.getCtx();
         CreateRoutineLoadStmt stmt = (CreateRoutineLoadStmt) com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
-        Assert.assertEquals("CREATE ROUTINE LOAD routine_name ON table1PROPERTIES ( \"desired_concurrent_number\" = \"3\", \"timezone\" = \"Asia/Shanghai\", \"strict_mode\" = \"false\", \"max_batch_interval\" = \"20\" ) " +
+        Assertions.assertEquals("CREATE ROUTINE LOAD routine_name ON table1PROPERTIES ( \"desired_concurrent_number\" = \"3\", \"timezone\" = \"Asia/Shanghai\", \"strict_mode\" = \"false\", \"max_batch_interval\" = \"20\" ) " +
                 "FROM KAFKA ( \"kafka_broker_list\" = \"kafkahost1:9092,kafkahost2:9092\", \"kafka_topic\" = \"topictest\", \"confluent.schema.registry.url\" = \"***\" )", AstToStringBuilder.toString(stmt));
     }
 

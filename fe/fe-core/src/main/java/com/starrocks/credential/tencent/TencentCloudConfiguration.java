@@ -38,7 +38,7 @@ public class TencentCloudConfiguration extends CloudConfiguration {
     public void toThrift(TCloudConfiguration tCloudConfiguration) {
         super.toThrift(tCloudConfiguration);
         tCloudConfiguration.setCloud_type(TCloudType.AWS);
-        Map<String, String> properties = tCloudConfiguration.getCloud_properties_v2();
+        Map<String, String> properties = tCloudConfiguration.getCloud_properties();
         properties.put(CloudConfigurationConstants.AWS_S3_ENABLE_SSL, String.valueOf(true));
         tencentCloudCredential.toThrift(properties);
     }

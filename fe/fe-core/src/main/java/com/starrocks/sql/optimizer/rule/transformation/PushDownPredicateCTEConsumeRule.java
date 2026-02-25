@@ -32,30 +32,31 @@ import java.util.List;
  *          Filter          CTEConsume(Predicate)
  *            |                 |
  *        CTEConsume   =>     Filter
- *            |                 |
- *           Node              Node
  *
  * */
 public class PushDownPredicateCTEConsumeRule extends TransformationRule {
     public PushDownPredicateCTEConsumeRule() {
         super(RuleType.TF_PUSH_DOWN_PREDICATE_CTE_CONSUME, Pattern.create(OperatorType.LOGICAL_FILTER)
-                .addChildren(Pattern.create(OperatorType.LOGICAL_CTE_CONSUME, OperatorType.PATTERN_LEAF)));
+                .addChildren(Pattern.create(OperatorType.LOGICAL_CTE_CONSUME)));
     }
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
 
         LogicalFilterOperator filter = (LogicalFilterOperator) input.getOp();
-        LogicalCTEConsumeOperator consume = (LogicalCTEConsumeOperator) input.getInputs().get(0).getOp();
+        OptExpression child = input.getInputs().get(0);
+        LogicalCTEConsumeOperator consume = child.getOp().cast();
 
         ScalarOperator mergedPredicate = Utils.compoundAnd(filter.getPredicate(), consume.getPredicate());
 
         LogicalCTEConsumeOperator newConsume = new LogicalCTEConsumeOperator.Builder()
                 .withOperator(consume).setPredicate(mergedPredicate).build();
 
-        OptExpression output = OptExpression.create(newConsume,
-                OptExpression.create(filter, input.getInputs().get(0).getInputs()));
-
-        return Lists.newArrayList(output);
+        if (child.getInputs().isEmpty()) {
+            return Lists.newArrayList(OptExpression.create(newConsume));
+        } else {
+            OptExpression output = OptExpression.create(newConsume, OptExpression.create(filter, child.getInputs()));
+            return Lists.newArrayList(output);
+        }
     }
 }

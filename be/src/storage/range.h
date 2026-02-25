@@ -20,9 +20,10 @@
 #include <string>
 #include <vector>
 
-#include "column/datum.h"
 #include "column/vectorized_fwd.h"
+#include "common/memory/column_allocator.h"
 #include "storage/rowset/common.h"
+#include "types/datum.h"
 #include "util/logging.h"
 
 namespace starrocks {
@@ -46,6 +47,9 @@ public:
 
     // the id of end row, exclusive.
     T end() const { return _end; }
+
+    // expand the end with delta
+    void expand(T delta) { _end += delta; }
 
     bool empty() const { return span_size() == 0; }
 
@@ -87,11 +91,21 @@ inline Range<T> Range<T>::intersection(const Range& r) const {
 template <typename T>
 inline Range<T> Range<T>::filter(const Filter* const filter) const {
     DCHECK(span_size() == filter->size());
-    int32_t start = filter->size();
+    const int32_t len = filter->size();
+    int32_t start = len;
     int32_t end = -1;
-    for (int32_t i = 0; i < filter->size(); i++) {
-        start = start > i && filter->data()[i] == 1 ? i : start;
-        end = end < i && filter->data()[i] == 1 ? i : end;
+    for (int32_t i = 0; i < len; i++) {
+        if (filter->data()[i] == 1) {
+            start = i;
+            break;
+        }
+    }
+
+    for (int32_t i = len - 1; i >= 0; i--) {
+        if (filter->data()[i] == 1) {
+            end = i;
+            break;
+        }
     }
     return start <= end ? Range<T>(_begin + start, _begin + end + 1) : Range<T>(_begin, _begin);
 }
@@ -150,6 +164,8 @@ public:
     size_t covered_ranges(size_t size) const;
 
     void skip(T size);
+
+    size_t remaining_rows() const;
 
 private:
     const SparseRange<T>* _range{nullptr};
@@ -447,6 +463,20 @@ inline SparseRangeIterator<T> SparseRangeIterator<T>::intersection(const SparseR
 }
 
 template <typename T>
+inline size_t SparseRangeIterator<T>::remaining_rows() const {
+    if (!has_more()) {
+        return 0;
+    }
+    size_t res = 0;
+    auto range = Range<T>(_next_rowid, _range->_ranges[0].end());
+    res += range.span_size();
+    for (size_t i = _index + 1; i < _range->_ranges.size(); i++) {
+        res += _range->_ranges[i].span_size();
+    }
+    return res;
+}
+
+template <typename T>
 inline size_t SparseRangeIterator<T>::covered_ranges(size_t size) const {
     if (size == 0) {
         return 0;
@@ -489,11 +519,17 @@ inline std::ostream& operator<<(std::ostream& os, const SparseRange<T>& range) {
 
 template class Range<>;
 template class Range<ordinal_t>;
+using RowIdRange = Range<rowid_t>;
+using OridinalRange = Range<ordinal_t>;
 
 template class SparseRange<>;
 template class SparseRange<ordinal_t>;
+using RowIdSparseRange = SparseRange<rowid_t>;
+using OridinalSparseRange = SparseRange<ordinal_t>;
 
 template class SparseRangeIterator<>;
 template class SparseRangeIterator<ordinal_t>;
+using RowIdSparseRangeIterator = SparseRangeIterator<rowid_t>;
+using OrdinalSparseRangeIterator = SparseRangeIterator<ordinal_t>;
 
 } // namespace starrocks

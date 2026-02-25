@@ -16,23 +16,21 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.EsTable;
-import com.starrocks.catalog.Type;
 import com.starrocks.connector.elasticsearch.EsShardPartitions;
 import com.starrocks.connector.elasticsearch.EsShardRouting;
 import com.starrocks.connector.elasticsearch.EsTestCase;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.type.IntegerType;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -46,7 +44,7 @@ public class EsScanNodeTest extends EsTestCase {
     @Mocked
     SystemInfoService systemInfoService;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         ComputeNode node1 = new ComputeNode(1, "127.0.0.1", 1000);
         node1.setAlive(true);
@@ -65,11 +63,10 @@ public class EsScanNodeTest extends EsTestCase {
     }
 
     @Test
-    public void test(@Mocked Analyzer analyzer,
-                     @Mocked EsTable esTable)  throws Exception {
+    public void test(@Mocked EsTable esTable)  throws Exception {
 
         List<Column> columns = new ArrayList<>();
-        Column k1 = new Column("k1", Type.BIGINT);
+        Column k1 = new Column("k1", IntegerType.BIGINT);
         columns.add(k1);
 
         esTable = fakeEsTable("doe", "doe", "doc", columns);
@@ -77,9 +74,9 @@ public class EsScanNodeTest extends EsTestCase {
         TupleDescriptor td = new TupleDescriptor(new TupleId(0));
         td.setTable(esTable);
         PlanNodeId planNodeId = new PlanNodeId(11);
-        EsScanNode scanNode = new EsScanNode(planNodeId, td, "EsScanNode");
+        EsScanNode scanNode = new EsScanNode(planNodeId, td, "EsScanNode", WarehouseManager.DEFAULT_RESOURCE);
 
-        scanNode.init(analyzer);
+        scanNode.assignNodes();
 
         EsShardPartitions esShardPartitions = EsShardPartitions.findShardPartitions("doe",
                 loadJsonFromFile("data/es/test_search_shards.json"));
@@ -87,7 +84,6 @@ public class EsScanNodeTest extends EsTestCase {
         List<EsShardPartitions> selectedIndex = new ArrayList<>();
         selectedIndex.add(esShardPartitions);
         scanNode.computeShardLocations(selectedIndex);
-
 
         List<EsShardRouting> singleShardRouting = Lists.newArrayList();
         TNetworkAddress addr = new TNetworkAddress("127.0.0.1", 1234);

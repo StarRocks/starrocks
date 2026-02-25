@@ -13,780 +13,789 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
+import json
+import logging
 import re
+from typing import Any, Collection, Dict, List, Optional, Set, Union
 
-from sqlalchemy.dialects.mysql.enumerated import ENUM
-from sqlalchemy.dialects.mysql.enumerated import SET
-from sqlalchemy.dialects.mysql.types import DATETIME
-from sqlalchemy.dialects.mysql.types import TIME
-from sqlalchemy.dialects.mysql.types import TIMESTAMP
-from sqlalchemy import log
-from sqlalchemy import types as sqltypes
-from sqlalchemy import util
+from sqlalchemy import log, types as sqltypes, util
+from sqlalchemy.dialects.mysql.base import _DecodingRow
+from sqlalchemy.dialects.mysql.reflection import _re_compile
+from sqlalchemy.engine.reflection import Inspector
+from sqlalchemy.schema import Table
+
+from starrocks.common.consts import TableConfigKey
+from starrocks.common.params import (
+    ColumnAggInfoKeyWithPrefix,
+    SRKwargsPrefix,
+    TableInfoKey,
+    TableInfoKeyWithPrefix,
+    TableKind,
+    TableObjectInfoKey,
+)
+from starrocks.common.types import PartitionType, TableEngine
+from starrocks.common.utils import SQLParseError, TableAttributeNormalizer
+
+from .common import utils
+from .drivers.parsers import parse_data_type, parse_mv_refresh_clause
+from .engine.interfaces import (
+    MySQLKeyType,
+    ReflectedDistributionInfo,
+    ReflectedMVState,
+    ReflectedPartitionInfo,
+    ReflectedRefreshInfo,
+    ReflectedState,
+    ReflectedTableKeyInfo,
+    ReflectedViewState,
+)
 
 
-class ReflectedState(object):
-    """Stores raw information about a SHOW CREATE TABLE statement."""
+logger = logging.getLogger(__name__)
 
-    def __init__(self):
-        self.columns = []
-        self.table_options = {}
-        self.table_name = None
-        self.keys = []
-        self.fk_constraints = []
-        self.ck_constraints = []
+
+class hashdict(dict):
+    def __hash__(self):
+        return hash(tuple(sorted(self.items())))
+
+
+class StarRocksInspector(Inspector):
+    """
+    The StarRocksInspector provides a custom inspector for the StarRocks dialect,
+    allowing for reflection of StarRocks-specific database objects like views.
+    """
+    def __init__(self, bind):
+        super().__init__(bind)
+
+    def get_view(self, view_name: str, schema: Optional[str] = None, **kwargs: Any) -> ReflectedViewState:
+        """
+        Retrieves information about a specific view.
+
+        :param view_name: The name of the view to inspect.
+        :param schema: The schema of the view; defaults to the default schema name if None.
+        :param kwargs: Additional arguments passed to the dialect's get_view method.
+        :return: A ReflectedViewState object.
+        :raises: NoSuchTableError if the view does not exist.
+        """
+        return self.dialect.get_view(self.bind, view_name, schema=schema, **kwargs)
+
+    def get_materialized_view(self, view_name: str, schema: Optional[str] = None, **kwargs: Any) -> Optional[ReflectedMVState]:
+        """
+        Retrieves information about a specific materialized view.
+
+        :param view_name: The name of the materialized view to inspect.
+        :param schema: The schema of the materialized view; defaults to the default schema name if None.
+        :param kwargs: Additional arguments passed to the dialect's get_materialized_view method.
+        :return: A ReflectedMVState object, or None if the materialized view does not exist.
+        """
+        return self.dialect.get_materialized_view(self.bind, view_name, schema=schema, **kwargs)
+
+    def get_materialized_view_definition(self, view_name: str, schema: Optional[str] = None, **kwargs: Any) -> Optional[str]:
+        """
+        Retrieves the definition of a specific materialized view.
+
+        :param view_name: The name of the materialized view to inspect.
+        :param schema: The schema of the materialized view; defaults to the default schema name if None.
+        :param kwargs: Additional arguments passed to the dialect's get_materialized_view_definition method.
+        :return: The materialized view definition as a string, or None if the view does not exist.
+        """
+        mv_state = self.get_materialized_view(view_name, schema=schema, **kwargs)
+        return mv_state.definition if mv_state else None
+
+    def reflect_table(
+        self,
+        table: Table,
+        include_columns: Optional[Collection[str]] = None,
+        exclude_columns: Collection[str] = (),
+        resolve_fks: bool = True,
+        _extend_on: Optional[Set[Table]] = None,
+        _reflect_info: Optional[Any] = None
+    ) -> None:
+        """
+        Override to set VIEW/MV specific attributes.
+        """
+
+        # 1. Call parent class (will call get_pk_constraints, etc., which will trigger _setup_parser)
+        #    And, it will set all dialect options from parsed_state, including for a View or a Mv or a Table.
+        if _reflect_info: # SQLAlchemy 2.0
+            super().reflect_table(table, include_columns, exclude_columns, resolve_fks, _extend_on, _reflect_info)
+        else: # SQLAlchemy 1.4
+            super().reflect_table(table, include_columns, exclude_columns, resolve_fks, _extend_on)
+        # comment is already set to Table.comment, the starrocks_comment is not used again.
+        self._delete_comment_from_dialect_options(table)
+
+        # 1. Get table_kind and parsed_state, which will use the cached parsed_state)
+        parsed_state = self.dialect._parsed_state_or_create(self.bind, table.name, table.schema, info_cache=self.info_cache)
+        table_kind = parsed_state.table_kind
+        logger.debug("reflect %s: %s, parsed_state: %s.", table_kind, table.name, parsed_state)
+
+        # 3. Set info['table_kind']
+        table.info[TableObjectInfoKey.TABLE_KIND] = table_kind
+
+        # 4. Set specific attributes based on type
+        if table_kind == TableKind.VIEW:
+            self._reflect_view_attributes(table, parsed_state)
+        elif table_kind == TableKind.MATERIALIZED_VIEW:
+            self._reflect_mv_attributes(table, parsed_state)
+
+    @staticmethod
+    def _delete_comment_from_dialect_options(table: Table):
+        try:
+            del table.dialect_kwargs[TableInfoKeyWithPrefix.COMMENT]
+        except KeyError:
+            # starrocks_comment does not exist in dialect_kwargs
+            pass
+
+    def _reflect_view_attributes(self, table: Table, view_state: ReflectedViewState) -> None:
+        """Set View specific attributes from ReflectedViewState.
+
+        Note: Column information (including comments) is already handled by
+        SQLAlchemy's standard reflection flow via get_columns(), which returns
+        ReflectedColumn dictionaries from view_state.columns.
+        """
+        table.info[TableObjectInfoKey.DEFINITION] = view_state.definition
+        # if view_state.security:
+        #     table.dialect_options.setdefault(DialectName, {})[TableInfoKey.SECURITY] = view_state.security
+
+    def _reflect_mv_attributes(self, table, mv_state: ReflectedMVState):
+        """Set MV specific attributes from ReflectedMVState"""
+        table.info[TableObjectInfoKey.DEFINITION] = mv_state.definition
+        # table.dialect_options.setdefault(DialectName, {}).update(mv_state.table_options)
 
 
 @log.class_logger
 class StarRocksTableDefinitionParser(object):
-    """Parses the results of a SHOW CREATE TABLE statement."""
+    """
+    This parser is responsible for interpreting the raw data returned from
+    StarRocks' `information_schema` and `SHOW` commands.
+
+    For columns, the base attributes (name, type, nullable, default) are
+    parsed here, leveraging the underlying MySQL dialect where possible.
+    This dialect-specific implementation adds logic to parse StarRocks-specific
+    attributes that are not present in standard MySQL, such as the aggregation
+    type on a column (e.g., 'SUM', 'REPLACE', 'KEY'). This is achieved by
+    querying `SHOW FULL COLUMNS` and processing the 'Extra' field.
+
+    Other standard column attributes are assumed to be handled correctly by
+    the base MySQL dialect's reflection mechanisms.
+
+    MySQLTableDefinitionParser uses regex to parse information, so it's not
+    used here.
+    """
+
+    _COLUMN_TYPE_PATTERN = re.compile(r"^(?P<type>\w+)(?:\s*\((?P<args>.*?)\))?\s*(?:(?P<attr>unsigned))?$")
+    _TABLE_KEY_PATTERN = re.compile(r'\s*(\w+\s+KEY)\s*\((.*)\)\s*', re.IGNORECASE)
+    _BUCKETS_PATTERN = re.compile(r'\sBUCKETS\s+(\d+)', re.IGNORECASE)
+    _BUCKETS_REPLACE_PATTERN = re.compile(r'\s+BUCKETS\s+\d+', re.IGNORECASE)
+    _PARTITION_BY_PATTERN = re.compile(r"PARTITION BY\s*(.+?)(?=\s*(?:DISTRIBUTED BY|ORDER BY|REFRESH|PROPERTIES|AS|\Z))", re.IGNORECASE | re.DOTALL)
+
+    _VIEW_SECURITY_PATTERN = re.compile(r'\s+SECURITY\s+(INVOKER|DEFINER|NONE)\b', re.IGNORECASE)
+
+    # Patterns to parse CREATE MATERIALIZED VIEW statement
+    _MV_REFRESH_PATTERN = re.compile(r"\s*REFRESH\s+(.+?)(?=\s*(?:PARTITION BY|DISTRIBUTED BY|ORDER BY|PROPERTIES|AS|\Z))", re.IGNORECASE | re.DOTALL)
+    _MV_PROPERTIES_PATTERN = re.compile(r"\s*PROPERTIES\s*\((.+?)\)(?=\s*(?:PARTITION BY|DISTRIBUTED BY|ORDER BY|REFRESH|AS|\Z))", re.IGNORECASE | re.DOTALL)
+    _MV_AS_DEFINITION_PATTERN = re.compile(r"\s*AS\s*((?:WITH|SELECT)\s*.+)", re.IGNORECASE | re.DOTALL)
 
     def __init__(self, dialect, preparer):
         self.dialect = dialect
         self.preparer = preparer
-        self._prep_regexes()
+        self._re_csv_int = _re_compile(r"\d+")
+        self._re_csv_str = _re_compile(r"\x27(?:\x27\x27|[^\x27])*\x27")
 
-    def parse(self, show_create, charset):
-        state = ReflectedState()
-        state.charset = charset
-        for line in re.split(r"\r?\n", show_create):
-            if line.startswith("  " + self.preparer.initial_quote):
-                self._parse_column(line, state)
-            # the end of table definition, start of the options
-            elif line.startswith(") "):
-                # 'ENGINE=OLAP \nDUPLICATE KEY(`a`, `b`)\nCOMMENT "OLAP"\nDISTRIBUTED BY RANDOM\nPROPERTIES (\n"replication_num" = "1",\n"datacache.enable" = "true",\n"storage_volume" = "plaid_volume",\n"enable_async_write_back" = "false",\n"enable_persistent_index" = "false",\n"compression" = "LZ4"\n);'
-                self._parse_table_options(re.split(r"\r?\n", show_create.rsplit(') ')[-1]), state)
-                break
+    def parse_table(
+        self,
+        table: _DecodingRow,
+        table_config: Dict[str, Any],
+        columns: List[_DecodingRow],
+        column_2_agg_type: Dict[str, str] = None,
+        column_autoinc: dict[str, bool] = None,
+        charset: str = None,
+    ) -> ReflectedState:
+        """
+        Parses the raw reflection data into a structured ReflectedState object.
 
-                # self._parse_table_options(line, state)
-            # an ANSI-mode table options line
-            elif line == ")":
-                pass
-            elif line.startswith("CREATE "):
-                self._parse_table_name(line, state)
-            # Not present in real reflection, but may be if
-            # loading from a file.
-            elif not line:
-                pass
+        :param table: A row from `information_schema.tables`.
+        :param table_config: A dictionary representing a row from `information_schema.tables_config`,
+                             augmented with the 'PARTITION_CLAUSE'.
+        :param columns: A list of rows from `information_schema.columns`.
+        :param column_2_agg_type: A dictionary mapping column names to their aggregation types.
+        :param charset: The character set of the table.
+        :return: A ReflectedState object containing the parsed table information.
+        """
+        # logger.debug("parsing table: %s", table.TABLE_NAME)
+        sorted_columns = self._sort_columns(columns)
+        reflected_table_info = ReflectedState(
+            table_name=table.TABLE_NAME,
+            columns=[
+                self._parse_column(
+                    column=column,
+                    col_2_autoinc=column_autoinc,
+                    **{ColumnAggInfoKeyWithPrefix.AGG_TYPE: column_2_agg_type.get(column.COLUMN_NAME)} if column_2_agg_type else {},
+                )
+                for column in sorted_columns
+            ],
+            table_options=self._parse_table_options(
+                table.TABLE_NAME, schema=table.TABLE_SCHEMA,
+                table=table, table_config=table_config, sorted_columns=sorted_columns
+            ),
+            keys=[{
+                "type": self._get_mysql_key_type(table_config=table_config),
+                "columns": [(c, None, None) for c in self._get_key_columns(sorted_columns=sorted_columns)],
+                "parser": None,
+                "name": None,
+            }],
+        )
+        logger.debug("reflected table info for table: %r, info: '%s'", table.TABLE_NAME, reflected_table_info)
+        return reflected_table_info
+
+    def _parse_column(self, column: _DecodingRow, col_2_autoinc: dict | None = None, **kwargs: Any) -> dict:
+        """
+        Parse column from information_schema.columns table.
+        It returns dictionary with column informations expected by sqlalchemy.
+
+        Args:
+            column: A row from `information_schema.columns`.
+            col_2_autoinc: A dictionary of column names and their auto increment info.
+                The key is the column name, the value is True/False whether the column has auto increment.
+                Example: `{"col1": True, "col2": False, ...}`
+            kwargs: Additional keyword arguments, with prefix `starrocks_`, passed to the dialect.
+                currently only support:
+                    - starrocks_is_agg_key: Whether the column is a key column.
+                    - starrocks_agg_type: The aggregate type of the column.
+
+        Returns:
+            A dictionary with column information expected by sqlalchemy.
+            It's the same as the `ReflectedColumn` object.
+        """
+        col_data = {
+            "name": column.COLUMN_NAME,
+            "type": self._parse_column_type(column=column),
+            "nullable": column.IS_NULLABLE != "NO",
+            "default": self._ColumnDefaultValueRenderer().build(column),
+            "autoincrement": col_2_autoinc.get(column.COLUMN_NAME, False) if col_2_autoinc else False,
+            "comment": column.COLUMN_COMMENT or None,
+            "dialect_options": {
+                k: v for k, v in kwargs.items() if v is not None
+            }
+        }
+        if column.GENERATION_EXPRESSION:
+            col_data["computed"] = {
+                "sqltext": column.GENERATION_EXPRESSION
+            }
+
+        # logger.debug("parsed column data for column: %s is %s", column.COLUMN_NAME, col_data)
+
+        return col_data
+
+    class _ColumnDefaultValueRenderer:
+        """
+        Apply StarRocks-friendly default value rendering:
+        1. DATETIME CURRENT_TIMESTAMP defaults are emitted verbatim.
+        2. Function-looking defaults become `(func_expr)`.
+        3. Remaining literals are double quoted.
+        """
+        def build(self, column: _DecodingRow) -> Optional[str]:
+            raw_default = getattr(column, "COLUMN_DEFAULT", None)
+            if raw_default is None:
+                return None
+
+            default = str(raw_default).strip()
+            if default is None or default.upper() == "NULL":
+                return None
+
+            if self._is_datetime_column(column) and default.upper().startswith("CURRENT_TIMESTAMP"):
+                return default
+
+            if self._looks_like_function(default):
+                return self._wrap_function_default(default)
+
+            return f"{default!r}"
+
+        @staticmethod
+        def _is_datetime_column(column: _DecodingRow) -> bool:
+            column_type = getattr(column, "COLUMN_TYPE", "") or ""
+            return column_type.upper().startswith("DATETIME")
+
+        @staticmethod
+        def _looks_like_function(default: str) -> bool:
+            return bool(re.match(r"^[A-Za-z_][A-Za-z0-9_]*\s*\(.*\)$", default))
+
+        @staticmethod
+        def _wrap_function_default(default: str) -> str:
+            trimmed = default.strip()
+            if trimmed.startswith("(") and trimmed.endswith(")"):
+                return trimmed
+            return f"({trimmed})"
+
+    def _parse_column_type(self, column: _DecodingRow) -> Any:
+        """
+        Parse column type from information_schema.columns table.
+        It splits column type into type and arguments.
+        After that it creates instance of column type.
+
+        Some special cases:
+            - LARGEINT: treat 'bigint(20) unsigned' as 'LARGEINT'
+        """
+        try:
+            return parse_data_type(column.COLUMN_TYPE)
+        except Exception as e:
+            logger.warning(f"Could not parse type string '{column.COLUMN_TYPE}' for column '{column.COLUMN_NAME}'. Error: {e}")
+            match = self._COLUMN_TYPE_PATTERN.match(column.COLUMN_TYPE)
+            if match:
+                type_ = match.group("type")
             else:
-                type_, spec = self._parse_constraints(line)
-                if type_ is None:
-                    util.warn("Unknown schema content: %r" % line)
-                elif type_ == "key":
-                    state.keys.append(spec)
-                elif type_ == "fk_constraint":
-                    state.fk_constraints.append(spec)
-                elif type_ == "ck_constraint":
-                    state.ck_constraints.append(spec)
-                else:
-                    pass
+                type_ = column.COLUMN_TYPE
+
+            util.warn(
+                "Did not recognize type '%s' of column %r" % (type_, column.COLUMN_NAME)
+            )
+            return sqltypes.NullType
+
+    def _get_mysql_key_type(self, table_config: Dict[str, Any]) -> str:
+        """
+        Get key type from information_schema.tables_config table.
+        And return the MySQL's key type, as MySQLKeyType
+        But, directly return the MySQLKeyType.PRIMARY, for check only
+        """
+        # table_model_to_key_type_map: Dict[str, MySQLKeyType] = {
+        #     TableModel.DUP_KEYS: MySQLKeyType.UNIQUE,
+        #     TableModel.DUP_KEYS2: MySQLKeyType.UNIQUE,
+        #     TableModel.AGG_KEYS: MySQLKeyType.UNIQUE,
+        #     TableModel.AGG_KEYS2: MySQLKeyType.UNIQUE,
+        #     TableModel.PRI_KEYS: MySQLKeyType.PRIMARY,
+        #     TableModel.PRI_KEYS2: MySQLKeyType.PRIMARY,
+        #     TableModel.UNQ_KEYS: MySQLKeyType.UNIQUE,
+        #     TableModel.UNQ_KEYS2: MySQLKeyType.UNIQUE,
+        # }
+        # return str(table_model_to_key_type_map.get(table_config.get(TableConfigKey.TABLE_MODEL), "").value)
+        return str(MySQLKeyType.PRIMARY.value)
+
+    def _sort_columns(self, columns: List[_DecodingRow]) -> List[_DecodingRow]:
+        """
+        Sort columns by ORDINAL_POSITION.
+        """
+        return sorted(columns, key=lambda col: col.ORDINAL_POSITION)
+
+    def _get_key_columns(self, sorted_columns: List[_DecodingRow]) -> List[str]:
+        """
+        Get list of key columns (COLUMN_KEY) from information_schema.columns table.
+        It returns list of column names that are part of key.
+
+        Currently, we can't extract the key columns from information_schema.tables_config.
+        """
+        return [c.COLUMN_NAME for c in sorted_columns if c.COLUMN_KEY]
+
+    @staticmethod
+    def parse_key_clause(table_key: str) -> Optional[ReflectedTableKeyInfo]:
+        """
+        Parses a raw TABLE KEY clause string into a structured ReflectedTableKeyInfo object.
+        It's not used now.
+        """
+        if not table_key or table_key.strip() == "":
+            return None
+        key_match = StarRocksTableDefinitionParser._TABLE_KEY_PATTERN.search(table_key)
+        if key_match:
+            type = key_match.group(1)
+            columns = key_match.group(2)
+            return ReflectedTableKeyInfo(type=type, columns=columns)
+        else:
+            logger.error(f"Invalid table key clause: '{table_key}'")
+            return None
+
+    @staticmethod
+    def parse_partition_clause(partition_clause: str) -> Optional[ReflectedPartitionInfo]:
+        """
+        Parses a raw PARTITION BY clause string into a structured ReflectedPartitionInfo object.
+
+        This method handles RANGE, LIST, and expression partitioning schemes. It
+        extracts the partition type, or expression used for partitioning,
+        and any pre-defined partition clauses
+        (e.g., `(PARTITION p1 VALUES LESS THAN ('100'), PARTITION p2 VALUES LESS THAN ('200'))`).
+
+        Args:
+            partition_clause: The raw string of the PARTITION BY clause from a
+                `SHOW CREATE TABLE` statement.
+
+        Returns:
+            A `ReflectedPartitionInfo` object containing the parsed details.
+        """
+        if not partition_clause:
+            return None
+
+        clause_upper = partition_clause.strip().upper()
+        partition_method: str
+        pre_created_partitions: Optional[str] = None
+
+        # Check for RANGE or LIST partitioning
+        if clause_upper.startswith(PartitionType.RANGE) or clause_upper.startswith(PartitionType.LIST):
+            partition_type = PartitionType.RANGE if clause_upper.startswith(PartitionType.RANGE) else PartitionType.LIST
+
+            # Find the end of the RANGE/LIST(...) part using robust parenthesis matching
+            open_paren_index = partition_clause.find('(')
+            if open_paren_index != -1:
+                close_paren_index = utils.find_matching_parenthesis(partition_clause, open_paren_index)
+                if close_paren_index != -1:
+                    partition_method = partition_clause[:close_paren_index + 1].strip()
+                    rest = partition_clause[close_paren_index + 1:].strip()
+                    if rest:
+                        pre_created_partitions = rest
+                else:  # Fallback for mismatched parentheses
+                    raise SQLParseError(f"Invalid partition clause, mismatched parentheses: {partition_clause}")
+            else:  # Fallback for no parentheses
+                raise SQLParseError(f"Invalid partition clause, no columns specified: {partition_clause}")
+        else:
+            # If not RANGE or LIST, it's an expression-based partition
+            # normalize partition method to be without outer parentheses
+            partition_type = PartitionType.EXPRESSION
+            partition_method = TableAttributeNormalizer.remove_outer_parentheses(partition_clause)
+
+        return ReflectedPartitionInfo(
+            type=partition_type,
+            partition_method=partition_method,
+            pre_created_partitions=pre_created_partitions
+        )
+
+    @staticmethod
+    def parse_distribution_clause(distribution: str) -> Union[ReflectedDistributionInfo, None]:
+        """Parse DISTRIBUTED BY string to extract distribution method and buckets.
+        Args:
+            distribution: String like "HASH(id) BUCKETS 8" or "HASH(id)"
+        Returns:
+            ReflectedDistributionInfo object
+        """
+        if not distribution:
+            return None
+        buckets_match = StarRocksTableDefinitionParser._BUCKETS_PATTERN.search(distribution)
+
+        if buckets_match:
+            buckets = int(buckets_match.group(1))
+            # Remove BUCKETS part to get pure distribution
+            distribution_method = StarRocksTableDefinitionParser._BUCKETS_REPLACE_PATTERN.sub('', distribution).strip()
+        else:
+            buckets = None
+            distribution_method = distribution
+
+        return ReflectedDistributionInfo(
+            type=None,
+            columns=None,
+            distribution_method=distribution_method,
+            buckets=buckets,
+        )
+
+    @staticmethod
+    def parse_distribution(distribution: Optional[Union[ReflectedDistributionInfo, str]]
+                           ) -> Union[ReflectedDistributionInfo, None]:
+        if not distribution or isinstance(distribution, ReflectedDistributionInfo):
+            return distribution
+        return StarRocksTableDefinitionParser.parse_distribution_clause(distribution)
+
+    def _get_distribution_info(self, table_config: dict[str, Any]) -> ReflectedDistributionInfo:
+        """
+        Get distribution from information_schema.tables_config table.
+        It returns ReflectedDistributionInfo representation of distribution option.
+        """
+        return ReflectedDistributionInfo(
+            type=table_config.get(TableConfigKey.DISTRIBUTE_TYPE),
+            columns=table_config.get(TableConfigKey.DISTRIBUTE_KEY),
+            distribution_method=None,
+            buckets=table_config.get(TableConfigKey.DISTRIBUTE_BUCKET),
+        )
+
+    def _parse_common_table_options(self, table_kind: str, table_row: Optional[_DecodingRow]) -> Dict[str, Any]:
+        """
+        Parses common options from an information_schema.tables row.
+        Args:
+            table_kind: Table kind, such as 'TABLE' or 'MATERIALIZED VIEW'.
+            table_row: A row from `information_schema.tables`.
+        """
+        opts = {}
+        if not table_row:
+            return opts
+        if table_row.TABLE_COMMENT and table_row.TABLE_COMMENT != 'OLAP':
+            # logger.debug("table.TABLE_COMMENT: %s", table_row.TABLE_COMMENT)
+            if table_kind == TableKind.MATERIALIZED_VIEW and table_row.TABLE_COMMENT == 'MATERIALIZED_VIEW':
+                pass  # SR will automatically set the COMMENT `MATERIALIZED_VIEW` for MV if not provided
+            elif table_kind == TableKind.VIEW and table_row.TABLE_COMMENT == 'VIEW':
+                pass  # SR will automatically set the COMMENT `VIEW` for VIEW if not provided
+            else:
+                opts[TableInfoKeyWithPrefix.COMMENT] = table_row.TABLE_COMMENT
+        return opts
+
+    def _parse_general_table_options(self, table_name: str, schema: Optional[str] = None, table_config: Dict[str, Any] = None) -> Dict[str, Any]:
+        """
+        Parses general table options from a `tables_config` dict (not the original _DecodingRow object).
+        This logic is shared between table and materialized view reflection.
+        """
+        table_fqn = utils.gen_simple_qualified_name(table_name, schema)
+        logger.debug("parse general table options for table: %r.", table_fqn)
+
+        opts = {}
+        if partition_clause := table_config.get(TableConfigKey.PARTITION_CLAUSE):
+            # logger.debug("table_config.%s: %s", TableConfigKey.PARTITION_CLAUSE, partition_clause)
+            opts[TableInfoKeyWithPrefix.PARTITION_BY] = self.parse_partition_clause(partition_clause)
+
+        distribute_key = table_config.get(TableConfigKey.DISTRIBUTE_KEY)
+        distribute_type = table_config.get(TableConfigKey.DISTRIBUTE_TYPE)
+        if distribute_key or distribute_type:
+            # logger.debug("table_config.%s: %s", TableConfigKey.DISTRIBUTE_KEY, distribute_key)
+            # logger.debug("table_config.%s: %s", TableConfigKey.DISTRIBUTE_TYPE, distribute_type)
+            opts[TableInfoKeyWithPrefix.DISTRIBUTED_BY] = str(self._get_distribution_info(table_config))
+
+        if sort_key := table_config.get(TableConfigKey.SORT_KEY):
+            # logger.debug("table_config.%s: %s", TableConfigKey.SORT_KEY, sort_key)
+            opts[TableInfoKeyWithPrefix.ORDER_BY] = sort_key
+
+        if properties := table_config.get(TableConfigKey.PROPERTIES):
+            # logger.debug("table_config.%s: %s", TableConfigKey.PROPERTIES, properties)
+            try:
+                opts[TableInfoKeyWithPrefix.PROPERTIES] = hashdict(json.loads(properties or "{}").items())
+            except json.JSONDecodeError:
+                logger.info(f"properties are not valid JSON: {properties}")
+        return opts
+
+    def _parse_table_options(self, table_name: str, schema: Optional[str],
+            table: _DecodingRow, table_config: Dict[str, Any], sorted_columns: List[_DecodingRow]
+        ) -> Dict:
+        """
+        Parse table options from `information_schema` views,
+        and generate the table options with `starrocks_` prefix, which will be used to reflect a Table().
+        Then, these options will be exactly the same as the options of a sqlalchemy.Table()
+        which is created by users manually, for both sqlalchemy.Table() or ORM styles.
+
+        NOTE: partition info is extracted from SHOW CREATE TABLE rather than directly from information_schema.tables_config.
+            But, here we can directly use table_config, bucause they are already filled into the table_config dict.
+
+        Args:
+            table: A row from `information_schema.tables`.
+            table_config: A dictionary representing a row from `information_schema.tables_config`,
+                             augmented with the 'PARTITION_CLAUSE'.
+            sorted_columns: A list of rows from `information_schema.columns`, sorted by ORDINAL_POSITION.
+
+        Returns:
+            A dictionary of StarRocks-specific table options with the 'starrocks_' prefix.
+        """
+        opts = self._parse_common_table_options(TableKind.TABLE, table)
+        table_fqn = utils.gen_simple_qualified_name(table_name, schema)
+        logger.debug("parse table options for table: %r.", table_fqn)
+
+        # Set partition, distribution, sort key, properties
+        opts.update(self._parse_general_table_options(table_name, schema, table_config))
+
+        if table_engine := table_config.get(TableConfigKey.TABLE_ENGINE):
+            # logger.debug("table_config.%s: %s", TableConfigKey.TABLE_ENGINE, table_engine)
+            # change CLOUD_NATIVE to OLAP for shared-data mode.
+            if table_engine.upper() == TableEngine.CLOUD_NATIVE:
+                table_engine = TableEngine.OLAP
+            # if table_engine.upper() != TableEngine.OLAP:
+            #     raise NotImplementedError(f"Table engine {table_engine} is not supported now.")
+            opts[TableInfoKeyWithPrefix.ENGINE] = table_engine.upper()
+
+        # Get key type from information_schema.tables_config.TABLE_MODEL,
+        # and key columns from information_schema.columns.COLUMN_KEY
+        if table_model := table_config.get(TableConfigKey.TABLE_MODEL):
+            # logger.debug("table_config.%s: %s", TableConfigKey.TABLE_MODEL, table_model)
+            # convert to key string, such as "PRIMARY_KEY", not PRIMARY KEY"
+            key_str = TableInfoKey.MODEL_TO_KEY_MAP.get(table_model)
+            if key_str:
+                key_columns_str = ", ".join(self._get_key_columns(sorted_columns))
+                prefixed_key = f"{SRKwargsPrefix}{key_str}"
+                opts[prefixed_key] = key_columns_str
+
+        return opts
+
+    def parse_view(
+        self,
+        view_row: _DecodingRow,
+        table_row: Optional[_DecodingRow],
+        column_rows: List[_DecodingRow],
+        create_view_sql: Optional[str] = None
+    ) -> ReflectedViewState:
+        """
+        Parses raw reflection data into a structured ReflectedViewState object.
+
+        Args:
+            view_row: Row from information_schema.views
+            table_row: Optional row from information_schema.tables (for comment)
+            column_rows: Rows from information_schema.columns (for column names, types, and comments)
+            create_view_sql: Optional CREATE VIEW statement from SHOW CREATE VIEW (to parse SECURITY)
+
+        Returns:
+            A ReflectedViewState object with parsed view information
+        """
+        state = ReflectedViewState(
+            table_name=view_row.TABLE_NAME,
+            definition=view_row.VIEW_DEFINITION,
+        )
+
+        # Parse columns using standard _parse_column method
+        # For views, we care about name, type, and comment
+        # Type and nullable are inferred from the SELECT statement
+        if column_rows:
+            sorted_columns = self._sort_columns(column_rows)
+            state.columns = [self._parse_column(col) for col in sorted_columns]
+
+        table_options = self._parse_common_table_options(TableKind.VIEW, table_row)
+
+        # table_options[TableInfoKeyWithPrefix.SECURITY] = view_row.SECURITY_TYPE.upper()
+        # Parse SECURITY from SHOW CREATE VIEW output
+        # Note: information_schema.views.SECURITY_TYPE is always empty in StarRocks (v3.5)
+        if security := self._parse_sql_security_from_create_view(create_view_sql):
+            table_options[TableInfoKeyWithPrefix.SECURITY] = security
+
+        state.table_options = table_options
+        return state
+
+    def _parse_sql_security_from_create_view(self, create_view_sql: Optional[str]) -> Optional[str]:
+        """
+        Parse SECURITY clause from CREATE VIEW statement.
+
+        Args:
+            create_view_sql: CREATE VIEW statement from SHOW CREATE VIEW
+
+        Returns:
+            'INVOKER' or 'DEFINER' if found, None otherwise
+
+        Example:
+            CREATE VIEW v1 SECURITY INVOKER AS SELECT ...
+            -> Returns 'INVOKER'
+        """
+        if not create_view_sql:
+            return None
+
+        # Match: SECURITY {INVOKER|DEFINER|NONE}
+        match = self._VIEW_SECURITY_PATTERN.search(create_view_sql)
+
+        if match:
+            security_type = match.group(1).upper()
+            # logger.debug("Parsed SECURITY: %s from CREATE VIEW: %s", security_type, create_view_sql[:200])
+            return security_type
+        else:
+            logger.debug("No SECURITY match in CREATE VIEW: %s", create_view_sql[:200] if create_view_sql else 'None')
+
+        return None
+
+    def parse_mv(
+        self,
+        mv_row: _DecodingRow,
+        table_row: Optional[_DecodingRow],
+        config_row: Optional[_DecodingRow],
+    ) -> ReflectedMVState:
+        """
+        Parses all raw reflection data for a Materialized View into a ReflectedMVState.
+        This is the main entry point for MV reflection parsing.
+
+        Args:
+            mv_row: A row from `information_schema.materialized_views`.
+            table_row: An optional row from `information_schema.tables` for the same mv
+            config_row: An optional row from `information_schema.tables_config` for the same mv
+        Returns:
+            A ReflectedMVState object.
+        """
+        ddl = mv_row.MATERIALIZED_VIEW_DEFINITION.strip()
+        mv_fqn = utils.gen_simple_qualified_name(mv_row.TABLE_NAME, mv_row.TABLE_SCHEMA)
+        # logger.debug("mv create ddl for %r: %s", mv_fqn, ddl)
+
+        mv_name, schema = mv_row.TABLE_NAME, mv_row.TABLE_SCHEMA
+        # 1. Parse the DDL to get properties that are only available there.
+        #   Includes partition, refresh, and properties.
+        try:
+            parsed_state = self._parse_mv_ddl(mv_name, ddl, schema)
+        except Exception as e:
+            logger.warning(f"Failed to parse DDL for MV '{mv_row.TABLE_SCHEMA}.{mv_row.TABLE_NAME}', reflection may be incomplete: {e}")
+            parsed_state = ReflectedMVState(table_name=mv_row.TABLE_NAME, definition=ddl)
+        # logger.debug("partial parsed mv state. mv: %s, state: %s", mv_fqn, parsed_state)
+
+        # 2. Augment/overwrite with more reliable info from other sources.
+        parsed_state.table_options.update(self._parse_common_table_options(TableKind.MATERIALIZED_VIEW, table_row))
+
+        if config_row:
+            general_options = self._parse_general_table_options(mv_name, schema, table_config=config_row)
+            logger.debug("parsed general table options for mv: %s, options: %s", mv_fqn, general_options)
+            parsed_state.table_options.update(general_options)
+
+        logger.debug("parsed mv state. mv: %s, state: %s", mv_fqn, parsed_state)
+        return parsed_state
+
+    def _parse_mv_ddl(
+        self,
+        mv_name: str,
+        create_mv_ddl: str,
+        schema: Optional[str] = None
+    ) -> ReflectedMVState:
+        """
+        Parses the DDL from SHOW CREATE MATERIALIZED VIEW.
+        This is the main entry point for MV reflection.
+        """
+        # Extract AS SELECT definition first
+        mv_definition = None
+        definition_match = self._MV_AS_DEFINITION_PATTERN.search(create_mv_ddl)
+        if definition_match:
+            mv_definition = definition_match.group(1).strip()
+            clauses_str = create_mv_ddl[:definition_match.start()]
+        else:
+            raise SQLParseError(f"Could not find 'AS SELECT' in CREATE MATERIALIZED VIEW statement for {mv_name}", create_mv_ddl)
+
+        state = ReflectedMVState(
+            table_name=mv_name,
+            definition=mv_definition,
+        )
+
+        partition_match = self._PARTITION_BY_PATTERN.search(clauses_str)
+        if partition_match:
+            state.table_options[TableInfoKeyWithPrefix.PARTITION_BY] = self.parse_partition_clause(partition_match.group(1).strip())
+
+        # Use Lark parser for the refresh clause
+        try:
+            refresh_text_match = self._MV_REFRESH_PATTERN.search(clauses_str)
+            if refresh_text_match:
+                refresh_clause_str = refresh_text_match.group(0).strip()
+                logger.debug("mv: %r, refresh_clause: %r", mv_name, refresh_clause_str)
+                parsed_refresh = parse_mv_refresh_clause(refresh_clause_str)
+                state.table_options[TableInfoKeyWithPrefix.REFRESH] = ReflectedRefreshInfo(
+                    moment=parsed_refresh.get("refresh_moment"),
+                    type=parsed_refresh.get("refresh_type")
+                )
+        except Exception as e:
+            logger.warning(f"Failed to parse refresh clause for MV {mv_name}, falling back to regex: {e}")
+            # Fallback to simple regex if lark parsing fails
+            self._parse_mv_refresh_with_regex(clauses_str, state)
+
+        # NOTE: currently, it uses properties from information_schema.tables_config, not from the DDL.
+        # properties_match = self._MV_PROPERTIES_PATTERN.search(clauses_str)
+        # if properties_match:
+        #     # Use string instead of dictionary now.
+        #     # state.mv_options.properties = self._parse_properties(properties_match.group(1))
+        #     state.table_options[TableInfoKeyWithPrefix.PROPERTIES] = properties_match.group(1).strip()
 
         return state
 
-    def _check_view(self, sql):
-        return bool(self._re_is_view.match(sql))
+    def _parse_mv_refresh_with_regex(self, ddl_part: str, state: ReflectedMVState):
+        """Fallback refresh clause parser using regex."""
+        refresh_match = re.search(r"REFRESH\s+(.+?)(?=\s*(?:PROPERTIES|AS))", ddl_part, re.IGNORECASE | re.DOTALL)
+        if refresh_match:
+            refresh_text = refresh_match.group(1).strip().upper()
+            moment, type = None, None
+            parts = refresh_text.split()
+            if len(parts) > 0:
+                if parts[0] in ("IMMEDIATE", "DEFERRED"):
+                    moment = parts.pop(0)
+                if parts:
+                    type = " ".join(parts)
+            state.table_options[TableInfoKeyWithPrefix.REFRESH] = ReflectedRefreshInfo(moment=moment, type=type)
 
-    # def _parse_indexes(self, indexes, state):
-    # """Parses results from SHOW INDEX FROM table, if required -N.B. not any longer, just Starrocks takes a while to create indexes on table"""
-    #     i = 0
-    #     while (i < len(indexes)):
-    #         ir = indexes[i]
-    #         table = ir[0]
-    #         unique = not ir[1]
-    #         index_name = ir[2]
-    #         index_type = ir[10]
-    #         index_cols = []
-    #         while (i < len(indexes) and table == ir[0] and index_name == ir[2]):
-    #             index_cols.append((ir[4], None, '')) # name, length, modifiers
-    #             i += 1
-    #         state.keys.append({
-    #             "name": index_name,
-    #             "columns": index_cols,
-    #             "unique": unique,
-    #             "type": "INDEX",
-    #             "parser": None,
-    #         })
-
-    def _parse_constraints(self, line):
-        """Parse a KEY or CONSTRAINT line.
-
-        :param line: A line of SHOW CREATE TABLE output
+    def _parse_properties(self, props_str: str) -> Dict[str, str]:
         """
-
-        # KEY
-        # Try to match index with extra space before columns first, otherwise space gets added to index name
-        m = self._re_index.match(line)
-        if not m:
-            m = self._re_key.match(line)
-        if m:
-            spec = m.groupdict()
-            spec['parser'] = None
-            # convert columns into name, length pairs
-            # NOTE: we may want to consider SHOW INDEX as the
-            # format of indexes in MySQL becomes more complex
-            spec["columns"] = self._parse_keyexprs(spec["columns"])
-            # if spec["version_sql"]:
-            #     m2 = self._re_key_version_sql.match(spec["version_sql"])
-            #     if m2 and m2.groupdict()["parser"]:
-            #         spec["parser"] = m2.groupdict()["parser"]
-            # if spec["parser"]:
-            #     spec["parser"] = self.preparer.unformat_identifiers(
-            #         spec["parser"]
-            #     )[0]
-            return "key", spec
-        #
-        # # FOREIGN KEY CONSTRAINT
-        # m = self._re_fk_constraint.match(line)
-        # if m:
-        #     spec = m.groupdict()
-        #     spec["table"] = self.preparer.unformat_identifiers(spec["table"])
-        #     spec["local"] = [c[0] for c in self._parse_keyexprs(spec["local"])]
-        #     spec["foreign"] = [
-        #         c[0] for c in self._parse_keyexprs(spec["foreign"])
-        #     ]
-        #     return "fk_constraint", spec
-        #
-        # # CHECK constraint
-        # m = self._re_ck_constraint.match(line)
-        # if m:
-        #     spec = m.groupdict()
-        #     return "ck_constraint", spec
-
-        # # PARTITION and SUBPARTITION
-        # m = self._re_partition.match(line)
-        # if m:
-        #     # Punt!
-        #     return "partition", line
-
-        # No match.
-        return (None, line)
-
-    def _parse_table_name(self, line, state):
-        """Extract the table name.
-
-        :param line: The first line of SHOW CREATE TABLE
+        Parses the content of a PROPERTIES clause into a dictionary.
+        This implementation uses regex to correctly handle commas and escaped quotes within property values.
         """
-
-        regex, cleanup = self._pr_name
-        m = regex.match(line)
-        if m:
-            state.table_name = cleanup(m.group("name"))
-
-    # def _parse_table_options(self, line, state):
-    #     """Build a dictionary of all reflected table-level options.
-    #
-    #     :param line: The final line of SHOW CREATE TABLE output.
-    #     """
-    #
-    #     options = {}
-    #
-    #     if not line or line == ")":
-    #         pass
-    #
-    #     else:
-    #         rest_of_line = line[:]
-    #         for regex, cleanup in self._pr_options:
-    #             m = regex.search(rest_of_line)
-    #             if not m:
-    #                 continue
-    #             directive, value = m.group("directive"), m.group("val")
-    #             if cleanup:
-    #                 value = cleanup(value)
-    #             options[directive.lower()] = value
-    #             rest_of_line = regex.sub("", rest_of_line)
-    #
-    #     for nope in ("auto_increment", "data directory", "index directory"):
-    #         options.pop(nope, None)
-    #
-    #     for opt, val in options.items():
-    #         state.table_options["%s_%s" % (self.dialect.name, opt)] = val
-
-    def _parse_table_options(self, lines, state):
-        def has_state(option):
-            return "%s_%s" % (self.dialect.name, option) in state.table_options
-
-        skip_lines = 0
-        for index, line in enumerate(lines):
-            if skip_lines:
-                skip_lines -= 1
-                continue
-            if not has_state('engine'):
-                if self._parse_engine(line, state):
-                    continue
-            # if not has_state('key_desc'):
-            #     if self._parse_key_desc(line, state):
-            #         continue
-            if not has_state('comment'):
-                if self._parse_table_comment(line, state):
-                    continue
-            if not has_state('partition'):
-                skip_lines = self._parse_partition_desc(lines, index, state)
-                if skip_lines:
-                    continue
-            if not has_state('distribution'):
-                if self._parse_distribution_desc(line, state):
-                    continue
-            # if not has_state('roll_up'):
-            #     if self._parse_roll_up(line, state):
-            #         continue
-            if not has_state('order_by'):
-                if self._parse_order_by(line, state):
-                    continue
-            if not has_state('properties'):
-                skip_lines = self._parse_properties(lines, index, state)
-                if skip_lines:
-                    continue
-            if not has_state('broker_properties'):
-                skip_lines = self._parse_broker_properties(lines, index, state)
-                if skip_lines:
-                    continue
-
-            type_, spec = self._parse_constraints(line)
-            if type_ is None:
-                util.warn("Unknown schema content: %r" % line)
-            elif type_ == "key":
-                state.keys.append(spec)
-            # elif type_ == "fk_constraint":
-            #     state.fk_constraints.append(spec)
-            # elif type_ == "ck_constraint":
-            #     state.ck_constraints.append(spec)
-            else:
-                pass
-
-    # 'ENGINE=OLAP '
-    # 'DUPLICATE KEY(`a`, `b`)'
-    # 'DISTRIBUTED BY RANDOM'
-    # 'PROPERTIES ('
-    # '"replication_num" = "1",'
-    # '"datacache.enable" = "true",'
-    # '"storage_volume" = "plaid_volume",'
-    # '"enable_async_write_back" = "false",'
-    # '"enable_persistent_index" = "false",'
-    # '"compression" = "LZ4"'
-    # ');'
-
-    def _parse_engine(self, line, state):
-        m = self._re_engine.search(line)
-        if m:
-            state.table_options["%s_%s" % (self.dialect.name, 'engine')] = m.group("val")
-        return bool(m)
-
-    def _parse_key_desc(self, line, state):
-        m = self._re_key_desc.search(line)
-        if m:
-            state.table_options["%s_%s" % (self.dialect.name, "key_desc")] = '%s KEY %s' %(m.group("key_type"), m.group("columns"))
-        return bool(m)
-
-    def _parse_table_comment(self, line, state):
-        # clean_line = line.replace("\\\\", "\\")
-        m = self._re_comment.search(line)
-        if m:
-            value = str(m.group("val")).replace('\\"', '\"').replace("\\\\", "\\")
-            if value == "OLAP":
-                value = None # This is a default comment when the comment is blank
-            state.table_options["%s_%s" % (self.dialect.name, "comment")] = value
-        return bool(m)
-
-    def _parse_partition_desc(self, lines, index, state):
-        count = 0
-        if lines[index].startswith("PARTITION BY"):
-            partition_str = lines[index]
-            while True and (index + count < len(lines)):
-                count += 1
-                partition_str += lines[index + count]
-                if self._re_properties_end.match(lines[index + count]):
-                    break
-            m = self._re_partition.match(partition_str)
-            if m:
-                state.table_options["%s_%s" % (self.dialect.name, "partition_by")] = m.group("partition")
-        return count
-
-    def _parse_distribution_desc(self, line, state):
-        m = self._re_distribution.match(line)
-        if m:
-            state.table_options["%s_%s" % (self.dialect.name, "distribution")] = m.group("val")
-        return bool(m)
-
-    def _parse_order_by(self, line, state):
-        m = self._re_order_by.match(line)
-        if m:
-            state.table_options["%s_%s" % (self.dialect.name, "order_by")] = line
-
-    def _parse_properties(self, lines, index, state):
-        count = 0
-        if self._re_properties.match(lines[index]):
-            count += 1
-            properties = []
-            while (index + count < len(lines)) and not self._re_properties_end.match(lines[index + count]):
-                m = self._re_property.match(lines[index + count])
-                if m:
-                    properties.append((m.group("key"), m.group("value")))
-                count += 1
-            state.table_options["%s_%s" % (self.dialect.name, "properties")] = tuple(properties)
-        return count
-
-    def _parse_broker_properties(self, lines, index, state):
-        count = 0
-        if self._re_broker_properties.match(lines[index]):
-            count += 1
-            properties = []
-            while (index + count < len(lines)) and not self._re_properties_end.match(lines[index + count]):
-                m = self._re_property.match(lines[index + count])
-                if m:
-                    properties.append((m.group("key"), m.group("value")))
-                count += 1
-            state.table_options["%s_%s" % (self.dialect.name, "broker_properties")] = properties
-        return count
-
-
-    def _parse_column(self, line, state):
-        """Extract column details.
-
-        Falls back to a 'minimal support' variant if full parse fails.
-
-        :param line: Any column-bearing line from SHOW CREATE TABLE
-        """
-
-        spec = None
-        m = self._re_column.match(line)
-        if m:
-            spec = m.groupdict()
-            spec["full"] = True
+        # Regex to find all key-value pairs, respecting quotes.
+        # It captures the key in group 1 and the value in group 2.
+        # The value part `((?:\\"|[^"])*)` handles escaped quotes `\"` inside the value string.
+        pattern = re.compile(r'"([^"]+)"\s*=\s*"((?:\\"|[^"])*)"')
+        matches = pattern.findall(props_str)
+        if matches:
+            properties = {key: value.replace('\\"', '"') for key, value in matches}
         else:
-            m = self._re_column_loose.match(line)
-            if m:
-                spec = m.groupdict()
-                spec["full"] = False
-        if not spec:
-            util.warn("Unknown column definition %r" % line)
-            return
-        if not spec["full"]:
-            util.warn("Incomplete reflection of column definition %r" % line)
-
-        name, type_, args = spec["name"], spec["coltype"], spec["arg"]
-
-        try:
-            col_type = self.dialect.ischema_names[type_]
-        except KeyError:
-            util.warn(
-                "Did not recognize type '%s' of column '%s'" % (type_, name)
-            )
-            col_type = sqltypes.NullType
-
-        # Column type positional arguments eg. varchar(32)
-        if args is None or args == "":
-            type_args = []
-        elif args[0] == "'" and args[-1] == "'":
-            type_args = self._re_csv_str.findall(args)
-        else:
-            type_args = [int(v) for v in self._re_csv_int.findall(args)]
-
-        # Column type keyword options
-        type_kw = {}
-
-        if issubclass(col_type, (DATETIME, TIME, TIMESTAMP)):
-            if type_args:
-                type_kw["fsp"] = type_args.pop(0)
-
-        for kw in ("unsigned", "zerofill"):
-            if spec.get(kw, False):
-                type_kw[kw] = True
-        for kw in ("charset", "collate"):
-            if spec.get(kw, False):
-                type_kw[kw] = spec[kw]
-        if issubclass(col_type, (ENUM, SET)):
-            type_args = _strip_values(type_args)
-
-            if issubclass(col_type, SET) and "" in type_args:
-                type_kw["retrieve_as_bitwise"] = True
-
-        type_instance = col_type(*type_args, **type_kw)
-
-        col_kw = {}
-
-        # NOT NULL
-        col_kw["nullable"] = True
-        # this can be "NULL" in the case of TIMESTAMP
-        if spec.get("notnull", False) == "NOT NULL":
-            col_kw["nullable"] = False
-
-        # AUTO_INCREMENT
-        if spec.get("autoincr", False):
-            col_kw["autoincrement"] = True
-        elif issubclass(col_type, sqltypes.Integer):
-            col_kw["autoincrement"] = False
-
-        # DEFAULT
-        default = spec.get("default", None)
-
-        if default == "NULL":
-            # eliminates the need to deal with this later.
-            default = None
-
-        comment = spec.get("comment", None)
-
-        if comment is not None:
-            comment = comment.replace("\\\\", "\\").replace("''", "'")
-
-        sqltext = spec.get("generated")
-        if sqltext is not None:
-            computed = dict(sqltext=sqltext)
-            persisted = spec.get("persistence")
-            if persisted is not None:
-                computed["persisted"] = persisted == "STORED"
-            col_kw["computed"] = computed
-
-        col_d = dict(
-            name=name, type=type_instance, default=default, comment=comment
-        )
-        col_d.update(col_kw)
-        state.columns.append(col_d)
-
-    def _describe_to_create(self, table_name, columns):
-        """Re-format DESCRIBE output as a SHOW CREATE TABLE string.
-
-        DESCRIBE is a much simpler reflection and is sufficient for
-        reflecting views for runtime use.  This method formats DDL
-        for columns only- keys are omitted.
-
-        :param columns: A sequence of DESCRIBE or SHOW COLUMNS 6-tuples.
-          SHOW FULL COLUMNS FROM rows must be rearranged for use with
-          this function.
-        """
-
-        buffer = []
-        for row in columns:
-            (name, col_type, nullable, default, extra) = [
-                row[i] for i in (0, 1, 2, 4, 5)
-            ]
-
-            line = [" "]
-            line.append(self.preparer.quote_identifier(name))
-            line.append(col_type)
-            if not nullable:
-                line.append("NOT NULL")
-            if default:
-                if "auto_increment" in default:
-                    pass
-                elif col_type.startswith("timestamp") and default.startswith(
-                    "C"
-                ):
-                    line.append("DEFAULT")
-                    line.append(default)
-                elif default == "NULL":
-                    line.append("DEFAULT")
-                    line.append(default)
-                else:
-                    line.append("DEFAULT")
-                    line.append("'%s'" % default.replace("'", "''"))
-            if extra:
-                line.append(extra)
-
-            buffer.append(" ".join(line))
-
-        return "".join(
-            [
-                (
-                    "CREATE TABLE %s (\n"
-                    % self.preparer.quote_identifier(table_name)
-                ),
-                ",\n".join(buffer),
-                "\n) ",
-            ]
-        )
-
-    def _parse_keyexprs(self, identifiers):
-        """Unpack '"col"(2),"col" ASC'-ish strings into components."""
-
-        return [
-            (colname, int(length) if length else None, modifiers)
-            for colname, length, modifiers in self._re_keyexprs.findall(
-                identifiers
-            )
-        ]
-
-    def _prep_regexes(self):
-        """Pre-compile regular expressions."""
-
-        self._re_columns = []
-        self._pr_options = []
-
-        _final = self.preparer.final_quote
-
-        quotes = dict(
-            zip(
-                ("iq", "fq", "esc_fq"),
-                [
-                    re.escape(s)
-                    for s in (
-                        self.preparer.initial_quote,
-                        _final,
-                        self.preparer._escape_identifier(_final),
-                    )
-                ],
-            )
-        )
-
-        self._pr_name = _pr_compile(
-            r"^CREATE (?:\w+ +)?TABLE +"
-            r"%(iq)s(?P<name>(?:%(esc_fq)s|[^%(fq)s])+)%(fq)s +\($" % quotes,
-            self.preparer._unescape_identifier,
-        )
-
-        self._re_is_view = _re_compile(r"^CREATE(?! TABLE)(\s.*)?\sVIEW")
-
-        # `col`,`col2`(32),`col3`(15) DESC
-        #
-        self._re_keyexprs = _re_compile(
-            r"(?:"
-            r"(?:%(iq)s((?:%(esc_fq)s|[^%(fq)s])+)%(fq)s)"
-            r"(?:\((\d+)\))?(?: +(ASC|DESC))?(?=\,|$))+" % quotes
-        )
-
-        # 'foo' or 'foo','bar' or 'fo,o','ba''a''r'
-        self._re_csv_str = _re_compile(r"\x27(?:\x27\x27|[^\x27])*\x27")
-
-        # 123 or 123,456
-        self._re_csv_int = _re_compile(r"\d+")
-
-        # `colname` <type> [type opts]
-        #  (NOT NULL | NULL)
-        #   DEFAULT ('value' | CURRENT_TIMESTAMP...)
-        #   COMMENT 'comment'
-        #  COLUMN_FORMAT (FIXED|DYNAMIC|DEFAULT)
-        #  STORAGE (DISK|MEMORY)
-        self._re_column = _re_compile(
-            r"  "
-            r"%(iq)s(?P<name>(?:%(esc_fq)s|[^%(fq)s])+)%(fq)s +"
-            r"(?P<coltype>\w+)"
-            r"(?:\((?P<arg>(?:\d+|\d+,\s*\d+|"
-            r"(?:'(?:''|[^'])*',?)+))\))?"
-            r"(?: +(?P<unsigned>UNSIGNED))?"
-            r"(?: +(?P<zerofill>ZEROFILL))?"
-            r"(?: +CHARACTER SET +(?P<charset>[\w_]+))?"
-            r"(?: +COLLATE +(?P<collate>[\w_]+))?"
-            r"(?: +(?P<notnull>(?:NOT )?NULL))?"
-            r"(?: +DEFAULT +(?P<default>"
-            r"(?:NULL|'(?:''|[^'])*'|[\-\w\.\(\)]+"
-            r"(?: +ON UPDATE [\-\w\.\(\)]+)?)"
-            r"))?"
-            r"(?: +(?:GENERATED ALWAYS)? ?AS +(?P<generated>\("
-            r".*\))? ?(?P<persistence>VIRTUAL|STORED)?)?"
-            r"(?: +(?P<autoincr>AUTO_INCREMENT))?"
-            r"(?: +COMMENT +\"(?P<comment>(?:\"\"|[^\"])*)\")?"
-            r"(?: +COLUMN_FORMAT +(?P<colfmt>\w+))?"
-            r"(?: +STORAGE +(?P<storage>\w+))?"
-            r"(?: +(?P<extra>.*))?"
-            r",?$" % quotes
-        )
-
-        # Fallback, try to parse as little as possible
-        self._re_column_loose = _re_compile(
-            r"  "
-            r"%(iq)s(?P<name>(?:%(esc_fq)s|[^%(fq)s])+)%(fq)s +"
-            r"(?P<coltype>\w+)"
-            r"(?:\((?P<arg>(?:\d+|\d+,\d+|\x27(?:\x27\x27|[^\x27])+\x27))\))?"
-            r".*?(?P<notnull>(?:NOT )NULL)?" % quotes
-        )
-
-        # (PRIMARY|UNIQUE|FULLTEXT|SPATIAL) INDEX `name` (USING (BTREE|HASH))?
-        # (`col` (ASC|DESC)?, `col` (ASC|DESC)?)
-        # KEY_BLOCK_SIZE size | WITH PARSER name  /*!50100 WITH PARSER name */
-        # self._re_key = _re_compile(
-        #     r"  "
-        #     r"(?:(?P<type>\S+) )?KEY"
-        #     r"(?: +%(iq)s(?P<name>(?:%(esc_fq)s|[^%(fq)s])+)%(fq)s)?"
-        #     r"(?: +USING +(?P<using_pre>\S+))?"
-        #     r" +\((?P<columns>.+?)\)"
-        #     r"(?: +USING +(?P<using_post>\S+))?"
-        #     r"(?: +KEY_BLOCK_SIZE *[ =]? *(?P<keyblock>\S+))?"
-        #     r"(?: +WITH PARSER +(?P<parser>\S+))?"
-        #     r"(?: +COMMENT +(?P<comment>(\x27\x27|\x27([^\x27])*?\x27)+))?"
-        #     r"(?: +/\*(?P<version_sql>.+)\*/ *)?"
-        #     r",?$" % quotes
-        # )
-#"\s*(?:(?P<type>\S+) )?(?:KEY)?(?: *`?(?P<name>(?:``|[^`])+)`?)(?: +USING +(?P<using_pre>\S+))?\((?P<columns>.+?)\)?(?: +USING +(?P<using_post>\S+))?,?$"
-        self._re_key = _re_compile(
-            r"\s*(?:(?P<type>\S+) )?(?:KEY)?"
-            r"(?: *%(iq)s?(?P<name>(?:%(esc_fq)s|[^%(fq)s])+)%(fq)s?)"
-            r"(?: +USING +(?P<using_pre>\S+))?"
-            r"\((?P<columns>.+?)\)?"
-            r"(?: +USING +(?P<using_post>\S+))?"
-            r",?$" % quotes
-        )
-        self._re_index = _re_compile(
-            r"\s*(?:(?P<type>\S+) )?(?:KEY)?"
-            r"(?: *%(iq)s?(?P<name>(?:%(esc_fq)s|[^%(fq)s])+)%(fq)s?)"
-            r"(?: +USING +(?P<using_pre>\S+))?"
-            r" +\((?P<columns>.+?)\)?"
-            r"(?: +USING +(?P<using_post>\S+))?"
-            r",?$" % quotes
-        )
-
-        # https://forums.mysql.com/read.php?20,567102,567111#msg-567111
-        # It means if the MySQL version >= \d+, execute what's in the comment
-        self._re_key_version_sql = _re_compile(
-            r"\!\d+ " r"(?: *WITH PARSER +(?P<parser>\S+) *)?"
-        )
-
-        # CONSTRAINT `name` FOREIGN KEY (`local_col`)
-        # REFERENCES `remote` (`remote_col`)
-        # MATCH FULL | MATCH PARTIAL | MATCH SIMPLE
-        # ON DELETE CASCADE ON UPDATE RESTRICT
-        #
-        # unique constraints come back as KEYs
-        kw = quotes.copy()
-        kw["on"] = "RESTRICT|CASCADE|SET NULL|NO ACTION"
-        self._re_fk_constraint = _re_compile(
-            r"  "
-            r"CONSTRAINT +"
-            r"%(iq)s(?P<name>(?:%(esc_fq)s|[^%(fq)s])+)%(fq)s +"
-            r"FOREIGN KEY +"
-            r"\((?P<local>[^\)]+?)\) REFERENCES +"
-            r"(?P<table>%(iq)s[^%(fq)s]+%(fq)s"
-            r"(?:\.%(iq)s[^%(fq)s]+%(fq)s)?) +"
-            r"\((?P<foreign>[^\)]+?)\)"
-            r"(?: +(?P<match>MATCH \w+))?"
-            r"(?: +ON DELETE (?P<ondelete>%(on)s))?"
-            r"(?: +ON UPDATE (?P<onupdate>%(on)s))?" % kw
-        )
-
-        # CONSTRAINT `CONSTRAINT_1` CHECK (`x` > 5)'
-        # testing on MariaDB 10.2 shows that the CHECK constraint
-        # is returned on a line by itself, so to match without worrying
-        # about parenthesis in the expression we go to the end of the line
-        self._re_ck_constraint = _re_compile(
-            r"  "
-            r"CONSTRAINT +"
-            r"%(iq)s(?P<name>(?:%(esc_fq)s|[^%(fq)s])+)%(fq)s +"
-            r"CHECK +"
-            r"\((?P<sqltext>.+)\),?" % kw
-        )
-
-        self._re_engine = _re_compile(r"ENGINE%s" r"(?P<val>\w+)\s*" % (self._optional_equals))
-        self._re_key_desc = _re_compile(r"(?P<key_type>[A-Z]+)\s*KEY\s*\((?P<columns>.+?)\)\s*")
-        self._re_comment = _re_compile(r'COMMENT(?:\s*(?:=\s*)|\s+)"(?P<val>(?:[^"\\]|\\.)*?)"(?!")\s*')
-        self._re_partition = _re_compile(r"(?:.*)?PARTITION(?:.*)")
-
-        self._re_distribution = _re_compile(r"DISTRIBUTED BY (?P<val>.*)")
-        # self._re_roll_up_index = _re_compile(r"undefined")
-
-        self._re_order_by = _re_compile(r"ORDER BYs*\((?P<columns>.+?)\)")
-        # self._re_properties = _re_compile(r"PROPERTIES%s" r"\s*\"(?P<key>.*?)\"\s*=\s*\"(?P<value>.*?)\",*" % (self._optional_equals))
-        self._re_properties = _re_compile(r"PROPERTIES\s*\(")
-        self._re_property = _re_compile(r"\s*\"(?P<key>.*?)\"\s*=\s*\"(?P<value>.*?)\",*")
-        self._re_properties_end = _re_compile(r"\);*")
-        self._re_broker_properties = _re_compile(r"BROKER PROPERTIES\s*\(")
-
-        # Table-level options (COLLATE, ENGINE, etc.)
-        # Do the string options first, since they have quoted
-        # strings we need to get rid of.
-        for option in _options_of_type_string:
-            self._add_option_string(option)
-
-        # now word only options
-        for option in (
-            "ENGINE",
-            # partition
-            # distribution
-            # rollup ??
-        ):
-            self._add_option_word(option)
-
-        # self._add_option_regex("UNION", r"\([^\)]+\)")
-        # self._add_option_regex("TABLESPACE", r".*? STORAGE DISK")
-        # self._add_option_regex(
-        #     "RAID_TYPE",
-        #     r"\w+\s+RAID_CHUNKS\s*\=\s*\w+RAID_CHUNKSIZE\s*=\s*\w+",
-        # )
-
-        # key regex options (and "order by")
-        # regex = r"(?P<directive>%s)%s" r"(?P<val>%s)" % (
-        #     re.escape(directive),
-        #     self._optional_equals,
-        #     regex,
-        # )
-        # self._pr_options.append(_pr_compile(regex))
-
-        # key_regex = r"(?P<directive>%s) KEY%s"  r"\s*\((?P<columns>.+?)\)"
-        # for option in (
-        #     "UNIQUE KEY",
-        #     "PRIMARY KEY",
-        #     "AGGREGATE KEY",
-        #     "DUPLICATE KEY",
-        #     "ORDER BY"
-        # ):
-        #     self._add_option_regex(
-        #         option,
-        #         key_regex
-        #     )
-
-        # self._add_option_regex(
-        #     "PROPERTIES",
-        #     r"\s*\"(?P<key>.*?)\"\s*=\s*\"(?P<value>.*?)\",*",
-        # )
-        # self._add_option_regex(
-        #     "BROKER PROPERTIES",
-        #     r"\s*\"(?P<key>.*?)\"\s*=\s*\"(?P<value>.*?)\",*",
-        # )
-
-
-    _optional_equals = r"(?:\s*(?:=\s*)|\s+)"
-
-    def _add_option_string(self, directive):
-        regex = r"(?P<directive>%s)%s" r"'(?P<val>(?:[^']|'')*?)'(?!')" % (
-            re.escape(directive),
-            self._optional_equals,
-        )
-        self._pr_options.append(
-            _pr_compile(
-                regex, lambda v: v.replace("\\\\", "\\").replace("''", "'")
-            )
-        )
-
-    def _add_option_word(self, directive):
-        regex = r"(?P<directive>%s)%s" r"(?P<val>\w+)" % (
-            re.escape(directive),
-            self._optional_equals,
-        )
-        self._pr_options.append(_pr_compile(regex))
-
-    def _add_option_regex(self, directive, regex):
-        regex = r"(?P<directive>%s)%s" r"(?P<val>%s)" % (
-            re.escape(directive),
-            self._optional_equals,
-            regex,
-        )
-        self._pr_options.append(_pr_compile(regex))
-
-
-_options_of_type_string = (
-    "COMMENT",
-    # "DATA DIRECTORY",
-    # "INDEX DIRECTORY",
-    # "PASSWORD",
-    # "CONNECTION",
-)
-
-
-def _pr_compile(regex, cleanup=None):
-    """Prepare a 2-tuple of compiled regex and callable."""
-
-    return (_re_compile(regex), cleanup)
-
-
-def _re_compile(regex):
-    """Compile a string to regex, I and UNICODE."""
-
-    return re.compile(regex, re.I | re.UNICODE)
-
-
-def _strip_values(values):
-    "Strip reflected values quotes"
-    strip_values = []
-    for a in values:
-        if a[0:1] == '"' or a[0:1] == "'":
-            # strip enclosing quotes and unquote interior
-            a = a[1:-1].replace(a[0] * 2, a[0])
-        strip_values.append(a)
-    return strip_values
+            properties = {}
+        return properties

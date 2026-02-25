@@ -31,6 +31,8 @@ public:
 
     Status prepare(RuntimeState* state) override;
 
+    Status prepare_local_state(RuntimeState* state) override;
+
     bool has_output() const override;
 
     bool is_finished() const override;
@@ -38,6 +40,8 @@ public:
     Status set_finishing(RuntimeState* state) override;
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
+
+    std::string get_name() const override;
 
 private:
     std::shared_ptr<DataStreamRecvr> _stream_recvr = nullptr;
@@ -54,7 +58,9 @@ public:
               _row_desc(row_desc),
               _enable_pipeline_level_shuffle(enable_pipeline_level_shuffle) {}
 
-    virtual ~ExchangeSourceOperatorFactory();
+    ~ExchangeSourceOperatorFactory() override;
+
+    bool support_event_scheduler() const override { return true; }
 
     const TExchangeNode& texchange_node() { return _texchange_node; }
 

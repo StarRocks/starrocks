@@ -17,21 +17,21 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.proto.EncryptionAlgorithmPB;
 import com.starrocks.proto.EncryptionKeyPB;
 import com.starrocks.proto.EncryptionKeyTypePB;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.Base64;
 
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class NormalKeyTest {
     private NormalKey normalKey;
 
-    @Before
+    @BeforeEach
     public void setup() {
         normalKey = NormalKey.createRandom();
         normalKey.setId(111);
@@ -46,6 +46,7 @@ public class NormalKeyTest {
         pb.encryptedKey = new byte[16];
         pb.type = EncryptionKeyTypePB.NORMAL_KEY;
         pb.createTime = 3L;
+        pb.keyDesc = "desc";
         String js = GsonUtils.GSON.toJson(pb);
         EncryptionKeyPB pb2 = GsonUtils.GSON.fromJson(js, EncryptionKeyPB.class);
         assertEquals(pb.id, pb2.id);
@@ -53,6 +54,7 @@ public class NormalKeyTest {
         assertEquals(pb.algorithm, pb2.algorithm);
         assertEquals(pb.createTime, pb2.createTime);
         assertEquals(pb.type, pb2.type);
+        assertEquals(pb.keyDesc, pb2.keyDesc);
         assertArrayEquals(pb.encryptedKey, pb2.encryptedKey);
     }
 
@@ -164,39 +166,30 @@ public class NormalKeyTest {
 
     @Test
     public void testCreateFromSpec_InvalidSpecFormat() {
-        assertThrows(IllegalArgumentException.class, () -> {
-            NormalKey.createFromSpec("invalid_spec_format");
-        });
+        assertThrows(IllegalArgumentException.class, () -> NormalKey.createFromSpec("invalid_spec_format"));
     }
 
     @Test
     public void testCreateFromSpec_InvalidBase64Key() {
-        assertThrows(IllegalArgumentException.class, () -> {
-            NormalKey.createFromSpec("AES_128:invalid_base64");
-        });
+        assertThrows(IllegalArgumentException.class, () -> NormalKey.createFromSpec("AES_128:invalid_base64"));
     }
 
     @Test
     public void testCreateFromSpec_InvalidKeyLength() {
-        assertThrows(IllegalArgumentException.class, () -> {
-            NormalKey.createFromSpec("AES_128:" + Base64.getEncoder().encodeToString(new byte[10]));
-        });
+        assertThrows(IllegalArgumentException.class,
+                () -> NormalKey.createFromSpec("AES_128:" + Base64.getEncoder().encodeToString(new byte[10])));
     }
 
     @Test
     public void testWrapKey_UnsupportedAlgorithm() {
         NormalKey key = NormalKey.createRandom(EncryptionAlgorithmPB.AES_128);
-        assertThrows(IllegalArgumentException.class, () -> {
-            key.wrapKey(EncryptionAlgorithmPB.NO_ENCRYPTION, new byte[16]);
-        });
+        assertThrows(IllegalArgumentException.class, () -> key.wrapKey(EncryptionAlgorithmPB.NO_ENCRYPTION, new byte[16]));
     }
 
     @Test
     public void testUnwrapKey_UnsupportedAlgorithm() {
         NormalKey key = NormalKey.createRandom(EncryptionAlgorithmPB.AES_128);
-        assertThrows(IllegalArgumentException.class, () -> {
-            key.unwrapKey(EncryptionAlgorithmPB.NO_ENCRYPTION, new byte[16]);
-        });
+        assertThrows(IllegalArgumentException.class, () -> key.unwrapKey(EncryptionAlgorithmPB.NO_ENCRYPTION, new byte[16]));
     }
 
     @Test
@@ -217,9 +210,7 @@ public class NormalKeyTest {
                 return null;
             }
         };
-        assertThrows(IllegalArgumentException.class, () -> {
-            key.decryptKey(invalidKey);
-        });
+        assertThrows(IllegalArgumentException.class, () -> key.decryptKey(invalidKey));
     }
 
     @Test
@@ -228,9 +219,7 @@ public class NormalKeyTest {
         EncryptionKeyPB pb = new EncryptionKeyPB();
         pb.encryptedKey = new byte[16];
         KeyMgr mgr = new KeyMgr();
-        assertThrows(IllegalArgumentException.class, () -> {
-            key.fromPB(pb, mgr);
-        });
+        assertThrows(IllegalArgumentException.class, () -> key.fromPB(pb, mgr));
     }
 
     @Test
@@ -239,9 +228,7 @@ public class NormalKeyTest {
         EncryptionKeyPB pb = new EncryptionKeyPB();
         pb.algorithm = EncryptionAlgorithmPB.AES_128;
         KeyMgr mgr = new KeyMgr();
-        assertThrows(IllegalArgumentException.class, () -> {
-            key.fromPB(pb, mgr);
-        });
+        assertThrows(IllegalArgumentException.class, () -> key.fromPB(pb, mgr));
     }
 
     @Test
@@ -252,9 +239,7 @@ public class NormalKeyTest {
         pb.algorithm = EncryptionAlgorithmPB.AES_128;
         pb.encryptedKey = new byte[16];
         KeyMgr mgr = new KeyMgr();
-        assertThrows(IllegalArgumentException.class, () -> {
-            key.fromPB(pb, mgr);
-        });
+        assertThrows(IllegalArgumentException.class, () -> key.fromPB(pb, mgr));
     }
 
 }

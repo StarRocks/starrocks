@@ -16,10 +16,9 @@ using std::numeric_limits;
 using std::unordered_map;
 using std::unordered_set;
 
-#include <common/logging.h>
-
 #include "gutil/hash/hash.h"
 #include "gutil/integral_types.h"
+#include "gutil/logging.h"
 #include "gutil/strings/ascii_ctype.h"
 #include "gutil/strings/util.h"
 #include "gutil/strtoint.h"
@@ -886,7 +885,7 @@ bool SplitStringIntoKeyValues(const string& line, const string& key_value_delimi
     // find the key string
     size_t end_key_pos = line.find_first_of(key_value_delimiters);
     if (end_key_pos == string::npos) {
-        VLOG(1) << "cannot parse key from line: " << line;
+        VLOG(2) << "cannot parse key from line: " << line;
         return false; // no key
     }
     key->assign(line, 0, end_key_pos);
@@ -895,7 +894,7 @@ bool SplitStringIntoKeyValues(const string& line, const string& key_value_delimi
     string remains(line, end_key_pos, line.size() - end_key_pos);
     size_t begin_values_pos = remains.find_first_not_of(key_value_delimiters);
     if (begin_values_pos == string::npos) {
-        VLOG(1) << "cannot parse value from line: " << line;
+        VLOG(2) << "cannot parse value from line: " << line;
         return false; // no value
     }
     string values_string(remains, begin_values_pos, remains.size() - begin_values_pos);
@@ -906,7 +905,7 @@ bool SplitStringIntoKeyValues(const string& line, const string& key_value_delimi
     } else { // multiple values
         SplitStringUsing(values_string, value_value_delimiters.c_str(), values);
         if (values->size() < 1) {
-            VLOG(1) << "cannot parse value from line: " << line;
+            VLOG(2) << "cannot parse value from line: " << line;
             return false; // no value
         }
     }

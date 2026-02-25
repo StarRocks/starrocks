@@ -29,7 +29,10 @@
 #include "exec/pipeline/nljoin/spillable_nljoin_probe_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr_context.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 #include "exprs/literal.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "glog/logging.h"
@@ -51,6 +54,7 @@ static bool _support_join_type(TJoinOp::type join_type) {
     case TJoinOp::FULL_OUTER_JOIN:
     case TJoinOp::LEFT_SEMI_JOIN:
     case TJoinOp::LEFT_ANTI_JOIN:
+    case TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN:
         return true;
     default:
         return false;
@@ -70,8 +74,12 @@ Status CrossJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
         }
 
         if (tnode.nestloop_join_node.__isset.join_conjuncts) {
-            RETURN_IF_ERROR(
-                    Expr::create_expr_trees(_pool, tnode.nestloop_join_node.join_conjuncts, &_join_conjuncts, state));
+            RETURN_IF_ERROR(ExprFactory::create_expr_trees(_pool, tnode.nestloop_join_node.join_conjuncts,
+                                                           &_join_conjuncts, state));
+        }
+
+        if (tnode.nestloop_join_node.__isset.interpolate_passthrough) {
+            _interpolate_passthrough = tnode.nestloop_join_node.interpolate_passthrough;
         }
         if (tnode.nestloop_join_node.__isset.sql_join_conjuncts) {
             _sql_join_conjuncts = tnode.nestloop_join_node.sql_join_conjuncts;
@@ -81,6 +89,13 @@ Status CrossJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
                 auto* rf_desc = _pool->add(new RuntimeFilterBuildDescriptor());
                 RETURN_IF_ERROR(rf_desc->init(_pool, desc, state));
                 _build_runtime_filters.emplace_back(rf_desc);
+            }
+        }
+        if (tnode.nestloop_join_node.__isset.common_slot_map) {
+            for (const auto& [key, val] : tnode.nestloop_join_node.common_slot_map) {
+                ExprContext* context;
+                RETURN_IF_ERROR(ExprFactory::create_expr_tree(_pool, val, &context, state, true));
+                _common_expr_ctxs.insert({key, context});
             }
         }
         return Status::OK();
@@ -97,7 +112,7 @@ Status CrossJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
 Status CrossJoinNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::prepare(state));
-    RETURN_IF_ERROR(Expr::prepare(_join_conjuncts, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_join_conjuncts, state));
 
     _build_timer = ADD_TIMER(runtime_profile(), "BuildTime");
     _probe_timer = ADD_TIMER(runtime_profile(), "ProbeTime");
@@ -111,7 +126,7 @@ Status CrossJoinNode::prepare(RuntimeState* state) {
 Status CrossJoinNode::open(RuntimeState* state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(ExecNode::open(state));
-    RETURN_IF_ERROR(Expr::open(_join_conjuncts, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_join_conjuncts, state));
 
     RETURN_IF_ERROR(_build(state));
 
@@ -148,14 +163,14 @@ void CrossJoinNode::_copy_joined_rows_with_index_base_probe(ChunkPtr& chunk, siz
                                                             size_t build_index) {
     for (size_t i = 0; i < _probe_column_count; i++) {
         SlotDescriptor* slot = _col_types[i];
-        ColumnPtr& dest_col = chunk->get_column_by_slot_id(slot->id());
+        auto* dest_col = chunk->get_column_raw_ptr_by_slot_id(slot->id());
         ColumnPtr& src_col = _probe_chunk->get_column_by_slot_id(slot->id());
         _copy_probe_rows_with_index_base_probe(dest_col, src_col, probe_index, row_count);
     }
 
     for (size_t i = 0; i < _build_column_count; i++) {
         SlotDescriptor* slot = _col_types[i + _probe_column_count];
-        ColumnPtr& dest_col = chunk->get_column_by_slot_id(slot->id());
+        auto* dest_col = chunk->get_column_raw_ptr_by_slot_id(slot->id());
         ColumnPtr& src_col = _build_chunk->get_column_by_slot_id(slot->id());
         _copy_build_rows_with_index_base_probe(dest_col, src_col, build_index, row_count);
     }
@@ -165,20 +180,20 @@ void CrossJoinNode::_copy_joined_rows_with_index_base_build(ChunkPtr& chunk, siz
                                                             size_t build_index) {
     for (size_t i = 0; i < _probe_column_count; i++) {
         SlotDescriptor* slot = _col_types[i];
-        ColumnPtr& dest_col = chunk->get_column_by_slot_id(slot->id());
+        auto* dest_col = chunk->get_column_raw_ptr_by_slot_id(slot->id());
         ColumnPtr& src_col = _probe_chunk->get_column_by_slot_id(slot->id());
         _copy_probe_rows_with_index_base_build(dest_col, src_col, probe_index, row_count);
     }
 
     for (size_t i = 0; i < _build_column_count; i++) {
         SlotDescriptor* slot = _col_types[i + _probe_column_count];
-        ColumnPtr& dest_col = chunk->get_column_by_slot_id(slot->id());
+        auto* dest_col = chunk->get_column_raw_ptr_by_slot_id(slot->id());
         ColumnPtr& src_col = _build_chunk->get_column_by_slot_id(slot->id());
         _copy_build_rows_with_index_base_build(dest_col, src_col, build_index, row_count);
     }
 }
 
-void CrossJoinNode::_copy_probe_rows_with_index_base_probe(ColumnPtr& dest_col, ColumnPtr& src_col, size_t start_row,
+void CrossJoinNode::_copy_probe_rows_with_index_base_probe(Column* dest_col, ColumnPtr& src_col, size_t start_row,
                                                            size_t copy_number) {
     if (src_col->is_nullable()) {
         if (src_col->is_constant()) {
@@ -202,7 +217,7 @@ void CrossJoinNode::_copy_probe_rows_with_index_base_probe(ColumnPtr& dest_col, 
     }
 }
 
-void CrossJoinNode::_copy_probe_rows_with_index_base_build(ColumnPtr& dest_col, ColumnPtr& src_col, size_t start_row,
+void CrossJoinNode::_copy_probe_rows_with_index_base_build(Column* dest_col, ColumnPtr& src_col, size_t start_row,
                                                            size_t copy_number) {
     if (src_col->is_nullable()) {
         if (src_col->is_constant()) {
@@ -226,7 +241,7 @@ void CrossJoinNode::_copy_probe_rows_with_index_base_build(ColumnPtr& dest_col, 
     }
 }
 
-void CrossJoinNode::_copy_build_rows_with_index_base_probe(ColumnPtr& dest_col, ColumnPtr& src_col, size_t start_row,
+void CrossJoinNode::_copy_build_rows_with_index_base_probe(Column* dest_col, ColumnPtr& src_col, size_t start_row,
                                                            size_t row_count) {
     if (!src_col->is_nullable()) {
         if (src_col->is_constant()) {
@@ -248,7 +263,7 @@ void CrossJoinNode::_copy_build_rows_with_index_base_probe(ColumnPtr& dest_col, 
     }
 }
 
-void CrossJoinNode::_copy_build_rows_with_index_base_build(ColumnPtr& dest_col, ColumnPtr& src_col, size_t start_row,
+void CrossJoinNode::_copy_build_rows_with_index_base_build(Column* dest_col, ColumnPtr& src_col, size_t start_row,
                                                            size_t row_count) {
     if (!src_col->is_nullable()) {
         if (src_col->is_constant()) {
@@ -317,8 +332,8 @@ Status CrossJoinNode::get_next_internal(RuntimeState* state, ChunkPtr* chunk, bo
                     return Status::OK();
                 } else {
                     // should output (*chunk) first before EOS
-                    RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
-                    RETURN_IF_ERROR(ExecNode::eval_conjuncts(_join_conjuncts, (*chunk).get()));
+                    RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
+                    RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_join_conjuncts, (*chunk).get()));
                     break;
                 }
             }
@@ -422,8 +437,8 @@ Status CrossJoinNode::get_next_internal(RuntimeState* state, ChunkPtr* chunk, bo
 
         TRY_CATCH_ALLOC_SCOPE_END()
 
-        RETURN_IF_ERROR(ExecNode::eval_conjuncts(_join_conjuncts, (*chunk).get()));
-        RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
+        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_join_conjuncts, (*chunk).get()));
+        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
 
         // we get result chunk.
         break;
@@ -466,7 +481,7 @@ void CrossJoinNode::close(RuntimeState* state) {
         _probe_chunk->reset();
     }
 
-    Expr::close(_join_conjuncts, state);
+    ExprExecutor::close(_join_conjuncts, state);
     ExecNode::close(state);
 }
 
@@ -553,7 +568,7 @@ void CrossJoinNode::_init_chunk(ChunkPtr* chunk) {
     for (size_t i = 0; i < _build_column_count; ++i) {
         SlotDescriptor* slot = _col_types[_probe_column_count + i];
         ColumnPtr& src_col = _build_chunk->get_column_by_slot_id(slot->id());
-        ColumnPtr new_col = ColumnHelper::create_column(slot->type(), src_col->is_nullable());
+        MutableColumnPtr new_col = ColumnHelper::create_column(slot->type(), src_col->is_nullable());
         new_chunk->append_column(std::move(new_col), slot->id());
     }
 
@@ -603,10 +618,10 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> CrossJoinNode::_decompos
 
     OpFactories left_ops = _children[0]->decompose_to_pipeline(context);
     // communication with CrossJoinRight through shared_data.
-    auto left_factory =
-            std::make_shared<ProbeFactory>(context->next_operator_id(), id(), _row_descriptor, child(0)->row_desc(),
-                                           child(1)->row_desc(), _sql_join_conjuncts, std::move(_join_conjuncts),
-                                           std::move(_conjunct_ctxs), std::move(cross_join_context), _join_op);
+    auto left_factory = std::make_shared<ProbeFactory>(
+            context->next_operator_id(), id(), _row_descriptor, child(0)->row_desc(), child(1)->row_desc(),
+            _sql_join_conjuncts, std::move(_join_conjuncts), std::move(_conjunct_ctxs), std::move(_common_expr_ctxs),
+            std::move(cross_join_context), _join_op);
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(left_factory.get(), context, rc_rf_probe_collector);
     if (!context->is_colocate_group()) {
@@ -617,6 +632,11 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> CrossJoinNode::_decompos
 
     if (limit() != -1) {
         left_ops.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+    }
+
+    if (_interpolate_passthrough && !context->is_colocate_group()) {
+        left_ops = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), left_ops,
+                                                                         context->degree_of_parallelism(), true);
     }
 
     if constexpr (std::is_same_v<BuildFactory, SpillableNLJoinBuildOperatorFactory>) {

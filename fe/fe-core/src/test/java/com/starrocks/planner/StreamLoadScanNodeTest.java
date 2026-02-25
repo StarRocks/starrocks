@@ -35,30 +35,24 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ScalarFunction;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.load.Load;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.ImportColumnDesc;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.SqlParser;
@@ -71,16 +65,22 @@ import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TSlotDescriptor;
 import com.starrocks.thrift.TStreamLoadPutRequest;
 import com.starrocks.thrift.TTypeNode;
+import com.starrocks.type.DecimalType;
+import com.starrocks.type.HLLType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.TypeFactory;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class StreamLoadScanNodeTest {
     @Mocked
@@ -92,7 +92,7 @@ public class StreamLoadScanNodeTest {
     @Injectable
     OlapTable dstTable;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         SqlParser sqlParser = new SqlParser(AstBuilder.getInstance());
         new MockUp<GlobalStateMgr>() {
@@ -115,24 +115,24 @@ public class StreamLoadScanNodeTest {
     List<Column> getBaseSchema() {
         List<Column> columns = Lists.newArrayList();
 
-        Column k1 = new Column("k1", Type.BIGINT);
+        Column k1 = new Column("k1", IntegerType.BIGINT);
         k1.setIsKey(true);
         k1.setIsAllowNull(false);
         columns.add(k1);
 
-        Column k2 = new Column("k2", ScalarType.createVarchar(25));
+        Column k2 = new Column("k2", TypeFactory.createVarcharType(25));
         k2.setIsKey(true);
         k2.setIsAllowNull(true);
         columns.add(k2);
 
-        Column v1 = new Column("v1", Type.BIGINT);
+        Column v1 = new Column("v1", IntegerType.BIGINT);
         v1.setIsKey(false);
         v1.setIsAllowNull(true);
         v1.setAggregationType(AggregateType.SUM, false);
 
         columns.add(v1);
 
-        Column v2 = new Column("v2", ScalarType.createVarchar(25));
+        Column v2 = new Column("v2", TypeFactory.createVarcharType(25));
         v2.setIsKey(false);
         v2.setAggregationType(AggregateType.REPLACE, false);
         v2.setIsAllowNull(false);
@@ -144,12 +144,12 @@ public class StreamLoadScanNodeTest {
     List<Column> getHllSchema() {
         List<Column> columns = Lists.newArrayList();
 
-        Column k1 = new Column("k1", Type.BIGINT);
+        Column k1 = new Column("k1", IntegerType.BIGINT);
         k1.setIsKey(true);
         k1.setIsAllowNull(false);
         columns.add(k1);
 
-        Column v1 = new Column("v1", Type.HLL);
+        Column v1 = new Column("v1", HLLType.HLL);
         v1.setIsKey(false);
         v1.setIsAllowNull(true);
         v1.setAggregationType(AggregateType.HLL_UNION, false);
@@ -162,15 +162,15 @@ public class StreamLoadScanNodeTest {
     List<Column> getDecimalSchema() {
         List<Column> columns = Lists.newArrayList();
 
-        Column c0 = new Column("c0", Type.DEFAULT_DECIMAL32);
+        Column c0 = new Column("c0", DecimalType.DEFAULT_DECIMAL32);
         c0.setIsKey(false);
         columns.add(c0);
 
-        Column c1 = new Column("c1", Type.DEFAULT_DECIMAL64);
+        Column c1 = new Column("c1", DecimalType.DEFAULT_DECIMAL64);
         c0.setIsKey(false);
         columns.add(c1);
 
-        Column c2 = new Column("c2", Type.DEFAULT_DECIMAL128);
+        Column c2 = new Column("c2", DecimalType.DEFAULT_DECIMAL128);
         c0.setIsKey(false);
         columns.add(c2);
 
@@ -178,7 +178,7 @@ public class StreamLoadScanNodeTest {
     }
 
     private StreamLoadScanNode getStreamLoadScanNode(TupleDescriptor dstDesc, TStreamLoadPutRequest request)
-            throws UserException {
+            throws StarRocksException {
         StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, null);
         StreamLoadScanNode scanNode =
                 new StreamLoadScanNode(streamLoadInfo.getId(), new PlanNodeId(1), dstDesc, dstTable, streamLoadInfo);
@@ -186,9 +186,9 @@ public class StreamLoadScanNodeTest {
     }
 
     @Test
-    public void testNormal() throws UserException {
-        Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
-        DescriptorTable descTbl = analyzer.getDescTbl();
+    public void testNormal() throws StarRocksException {
+        
+        DescriptorTable descTbl = new DescriptorTable();
 
         List<Column> columns = getBaseSchema();
         TupleDescriptor dstDesc = descTbl.createTupleDescriptor("DstTableDesc");
@@ -219,78 +219,82 @@ public class StreamLoadScanNodeTest {
             dstTable.getColumn("v2");
             result = columns.get(3);
         }};
-        scanNode.init(analyzer);
-        scanNode.finalizeStats(analyzer);
+        scanNode.init(descTbl);
+        scanNode.finalizeStats();
         scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
         TPlanNode planNode = new TPlanNode();
         scanNode.toThrift(planNode);
-        Assert.assertEquals(1, scanNode.getScanRangeLocations(0).size());
-    }
-
-    @Test(expected = AnalysisException.class)
-    public void testLostV2() throws UserException {
-        Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
-        DescriptorTable descTbl = analyzer.getDescTbl();
-
-        List<Column> columns = getBaseSchema();
-        TupleDescriptor dstDesc = descTbl.createTupleDescriptor("DstTableDesc");
-        for (Column column : columns) {
-            SlotDescriptor slot = descTbl.addSlotDescriptor(dstDesc);
-            slot.setColumn(column);
-            slot.setIsMaterialized(true);
-            if (column.isAllowNull()) {
-                slot.setIsNullable(true);
-            } else {
-                slot.setIsNullable(false);
-            }
-        }
-
-        TStreamLoadPutRequest request = getBaseRequest();
-        request.setColumns("k1, k2, v1");
-        StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, null);
-        StreamLoadScanNode scanNode = getStreamLoadScanNode(dstDesc, request);
-
-        scanNode.init(analyzer);
-        scanNode.finalizeStats(analyzer);
-        scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
-        TPlanNode planNode = new TPlanNode();
-        scanNode.toThrift(planNode);
-    }
-
-    @Test(expected = ParsingException.class)
-    public void testBadColumns(@Mocked GlobalStateMgr globalStateMgr) throws UserException, UserException {
-        Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
-        DescriptorTable descTbl = analyzer.getDescTbl();
-
-        List<Column> columns = getBaseSchema();
-        TupleDescriptor dstDesc = descTbl.createTupleDescriptor("DstTableDesc");
-        for (Column column : columns) {
-            SlotDescriptor slot = descTbl.addSlotDescriptor(dstDesc);
-            slot.setColumn(column);
-            slot.setIsMaterialized(true);
-            if (column.isAllowNull()) {
-                slot.setIsNullable(true);
-            } else {
-                slot.setIsNullable(false);
-            }
-        }
-
-        TStreamLoadPutRequest request = getBaseRequest();
-        request.setColumns("k1 k2 v1");
-        StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, null);
-        StreamLoadScanNode scanNode = getStreamLoadScanNode(dstDesc, request);
-
-        scanNode.init(analyzer);
-        scanNode.finalizeStats(analyzer);
-        scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
-        TPlanNode planNode = new TPlanNode();
-        scanNode.toThrift(planNode);
+        Assertions.assertEquals(1, scanNode.getScanRangeLocations(0).size());
     }
 
     @Test
-    public void testColumnsNormal() throws UserException, UserException {
-        Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
-        DescriptorTable descTbl = analyzer.getDescTbl();
+    public void testLostV2() {
+        assertThrows(AnalysisException.class, () -> {
+            
+            DescriptorTable descTbl = new DescriptorTable();
+
+            List<Column> columns = getBaseSchema();
+            TupleDescriptor dstDesc = descTbl.createTupleDescriptor("DstTableDesc");
+            for (Column column : columns) {
+                SlotDescriptor slot = descTbl.addSlotDescriptor(dstDesc);
+                slot.setColumn(column);
+                slot.setIsMaterialized(true);
+                if (column.isAllowNull()) {
+                    slot.setIsNullable(true);
+                } else {
+                    slot.setIsNullable(false);
+                }
+            }
+
+            TStreamLoadPutRequest request = getBaseRequest();
+            request.setColumns("k1, k2, v1");
+            StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, null);
+            StreamLoadScanNode scanNode = getStreamLoadScanNode(dstDesc, request);
+
+            scanNode.init(descTbl);
+            scanNode.finalizeStats();
+            scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
+            TPlanNode planNode = new TPlanNode();
+            scanNode.toThrift(planNode);
+        });
+    }
+
+    @Test
+    public void testBadColumns(@Mocked GlobalStateMgr globalStateMgr) {
+        assertThrows(ParsingException.class, () -> {
+            
+            DescriptorTable descTbl = new DescriptorTable();
+
+            List<Column> columns = getBaseSchema();
+            TupleDescriptor dstDesc = descTbl.createTupleDescriptor("DstTableDesc");
+            for (Column column : columns) {
+                SlotDescriptor slot = descTbl.addSlotDescriptor(dstDesc);
+                slot.setColumn(column);
+                slot.setIsMaterialized(true);
+                if (column.isAllowNull()) {
+                    slot.setIsNullable(true);
+                } else {
+                    slot.setIsNullable(false);
+                }
+            }
+
+            TStreamLoadPutRequest request = getBaseRequest();
+            request.setColumns("k1 k2 v1");
+            StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, null);
+            StreamLoadScanNode scanNode = getStreamLoadScanNode(dstDesc, request);
+
+            scanNode.init(descTbl);
+            scanNode.finalizeStats();
+            scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
+            TPlanNode planNode = new TPlanNode();
+            scanNode.toThrift(planNode);
+        });
+    }
+
+    @Test
+    public void testColumnsNormal() throws StarRocksException, StarRocksException {
+        
+        DescriptorTable descTbl = new DescriptorTable();
 
         List<Column> columns = getBaseSchema();
         TupleDescriptor dstDesc = descTbl.createTupleDescriptor("DstTableDesc");
@@ -325,8 +329,8 @@ public class StreamLoadScanNodeTest {
         request.setColumns("k1,k2,v1, v2=k2");
         StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, null);
         StreamLoadScanNode scanNode = getStreamLoadScanNode(dstDesc, request);
-        scanNode.init(analyzer);
-        scanNode.finalizeStats(analyzer);
+        scanNode.init(descTbl);
+        scanNode.finalizeStats();
         scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
         TPlanNode planNode = new TPlanNode();
         scanNode.toThrift(planNode);
@@ -334,8 +338,8 @@ public class StreamLoadScanNodeTest {
 
     @Test
     public void testSetColumnOfDecimal() {
-        Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
-        DescriptorTable descTbl = analyzer.getDescTbl();
+        
+        DescriptorTable descTbl = new DescriptorTable();
         List<Column> columns = getDecimalSchema();
 
         TupleDescriptor dstDesc = descTbl.createTupleDescriptor("DstTableDesc");
@@ -352,16 +356,16 @@ public class StreamLoadScanNodeTest {
         TDescriptorTable tableDesc = descTbl.toThrift();
         TSlotDescriptor slotDesc = tableDesc.getSlotDescriptors().get(2);
         TTypeNode typeNode = slotDesc.slotType.getTypes().get(0);
-        Assert.assertTrue(typeNode.isSetScalar_type());
-        Assert.assertEquals(typeNode.scalar_type.type, TPrimitiveType.DECIMAL128);
-        Assert.assertEquals(typeNode.scalar_type.precision, 38);
-        Assert.assertEquals(typeNode.scalar_type.scale, 9);
+        Assertions.assertTrue(typeNode.isSetScalar_type());
+        Assertions.assertEquals(typeNode.scalar_type.type, TPrimitiveType.DECIMAL128);
+        Assertions.assertEquals(typeNode.scalar_type.precision, 38);
+        Assertions.assertEquals(typeNode.scalar_type.scale, 9);
     }
 
     @Test
-    public void testHllColumnsNormal() throws UserException {
-        Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
-        DescriptorTable descTbl = analyzer.getDescTbl();
+    public void testHllColumnsNormal() throws StarRocksException {
+        
+        DescriptorTable descTbl = new DescriptorTable();
 
         List<Column> columns = getHllSchema();
         TupleDescriptor dstDesc = descTbl.createTupleDescriptor("DstTableDesc");
@@ -378,7 +382,7 @@ public class StreamLoadScanNodeTest {
 
         new Expectations() {{
             globalStateMgr.getFunction((Function) any, (Function.CompareMode) any);
-            result = new ScalarFunction(new FunctionName(FunctionSet.HLL_HASH), Lists.newArrayList(), Type.BIGINT,
+            result = new ScalarFunction(new FunctionName(FunctionSet.HLL_HASH), Lists.newArrayList(), IntegerType.BIGINT,
                     false);
         }};
 
@@ -401,181 +405,189 @@ public class StreamLoadScanNodeTest {
         StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, null);
         StreamLoadScanNode scanNode = getStreamLoadScanNode(dstDesc, request);
 
-        scanNode.init(analyzer);
-        scanNode.finalizeStats(analyzer);
-        scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
-        TPlanNode planNode = new TPlanNode();
-        scanNode.toThrift(planNode);
-    }
-
-    @Test(expected = UserException.class)
-    public void testHllColumnsNoHllHash() throws UserException {
-        Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
-        DescriptorTable descTbl = analyzer.getDescTbl();
-
-        List<Column> columns = getHllSchema();
-        TupleDescriptor dstDesc = descTbl.createTupleDescriptor("DstTableDesc");
-        for (Column column : columns) {
-            SlotDescriptor slot = descTbl.addSlotDescriptor(dstDesc);
-            slot.setColumn(column);
-            slot.setIsMaterialized(true);
-            if (column.isAllowNull()) {
-                slot.setIsNullable(true);
-            } else {
-                slot.setIsNullable(false);
-            }
-        }
-
-        new Expectations() {
-            {
-                globalStateMgr.getFunction((Function) any, (Function.CompareMode) any);
-                result = new ScalarFunction(new FunctionName("hll_hash1"), Lists.newArrayList(), Type.BIGINT, false);
-                minTimes = 0;
-            }
-        };
-
-        new Expectations() {
-            {
-                dstTable.getColumn("k1");
-                result = columns.stream().filter(c -> c.getName().equals("k1")).findFirst().get();
-                minTimes = 0;
-
-                dstTable.getColumn("k2");
-                result = null;
-                minTimes = 0;
-
-                dstTable.getColumn("v1");
-                result = columns.stream().filter(c -> c.getName().equals("v1")).findFirst().get();
-                minTimes = 0;
-            }
-        };
-
-        TStreamLoadPutRequest request = getBaseRequest();
-        request.setFileType(TFileType.FILE_LOCAL);
-        request.setColumns("k1,k2, v1=hll_hash1(k2)");
-        StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, null);
-        StreamLoadScanNode scanNode = getStreamLoadScanNode(dstDesc, request);
-
-        scanNode.init(analyzer);
-        scanNode.finalizeStats(analyzer);
-        scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
-        TPlanNode planNode = new TPlanNode();
-        scanNode.toThrift(planNode);
-    }
-
-    @Test(expected = UserException.class)
-    public void testHllColumnsFail() throws UserException {
-        Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
-        DescriptorTable descTbl = analyzer.getDescTbl();
-
-        List<Column> columns = getHllSchema();
-        TupleDescriptor dstDesc = descTbl.createTupleDescriptor("DstTableDesc");
-        for (Column column : columns) {
-            SlotDescriptor slot = descTbl.addSlotDescriptor(dstDesc);
-            slot.setColumn(column);
-            slot.setIsMaterialized(true);
-            if (column.isAllowNull()) {
-                slot.setIsNullable(true);
-            } else {
-                slot.setIsNullable(false);
-            }
-        }
-
-        TStreamLoadPutRequest request = getBaseRequest();
-        request.setFileType(TFileType.FILE_LOCAL);
-        request.setColumns("k1,k2, v1=k2");
-        StreamLoadScanNode scanNode = getStreamLoadScanNode(dstDesc, request);
-
-        scanNode.init(analyzer);
-        scanNode.finalizeStats(analyzer);
-        scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
-        TPlanNode planNode = new TPlanNode();
-        scanNode.toThrift(planNode);
-    }
-
-    @Test(expected = UserException.class)
-    public void testUnsupportedFType() throws UserException, UserException {
-        Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
-        DescriptorTable descTbl = analyzer.getDescTbl();
-
-        List<Column> columns = getBaseSchema();
-        TupleDescriptor dstDesc = descTbl.createTupleDescriptor("DstTableDesc");
-        for (Column column : columns) {
-            SlotDescriptor slot = descTbl.addSlotDescriptor(dstDesc);
-            slot.setColumn(column);
-            slot.setIsMaterialized(true);
-            if (column.isAllowNull()) {
-                slot.setIsNullable(true);
-            } else {
-                slot.setIsNullable(false);
-            }
-        }
-
-        TStreamLoadPutRequest request = getBaseRequest();
-        request.setFileType(TFileType.FILE_BROKER);
-        request.setColumns("k1,k2,v1, v2=k2");
-        StreamLoadScanNode scanNode = getStreamLoadScanNode(dstDesc, request);
-
-        scanNode.init(analyzer);
-        scanNode.finalizeStats(analyzer);
-        scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
-        TPlanNode planNode = new TPlanNode();
-        scanNode.toThrift(planNode);
-    }
-
-    @Test(expected = UserException.class)
-    public void testColumnsUnknownRef() throws UserException, UserException {
-        Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
-        DescriptorTable descTbl = analyzer.getDescTbl();
-
-        List<Column> columns = getBaseSchema();
-        TupleDescriptor dstDesc = descTbl.createTupleDescriptor("DstTableDesc");
-        for (Column column : columns) {
-            SlotDescriptor slot = descTbl.addSlotDescriptor(dstDesc);
-            slot.setColumn(column);
-            slot.setIsMaterialized(true);
-            if (column.isAllowNull()) {
-                slot.setIsNullable(true);
-            } else {
-                slot.setIsNullable(false);
-            }
-        }
-
-        new Expectations() {
-            {
-                dstTable.getColumn("k1");
-                result = columns.stream().filter(c -> c.getName().equals("k1")).findFirst().get();
-                minTimes = 0;
-
-                dstTable.getColumn("k2");
-                result = columns.stream().filter(c -> c.getName().equals("k2")).findFirst().get();
-                minTimes = 0;
-
-                dstTable.getColumn("v1");
-                result = columns.stream().filter(c -> c.getName().equals("v1")).findFirst().get();
-                minTimes = 0;
-
-                dstTable.getColumn("v2");
-                result = columns.stream().filter(c -> c.getName().equals("v2")).findFirst().get();
-                minTimes = 0;
-            }
-        };
-
-        TStreamLoadPutRequest request = getBaseRequest();
-        request.setColumns("k1,k2,v1, v2=k3");
-        StreamLoadScanNode scanNode = getStreamLoadScanNode(dstDesc, request);
-
-        scanNode.init(analyzer);
-        scanNode.finalizeStats(analyzer);
+        scanNode.init(descTbl);
+        scanNode.finalizeStats();
         scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
         TPlanNode planNode = new TPlanNode();
         scanNode.toThrift(planNode);
     }
 
     @Test
-    public void testWhereNormal() throws UserException, UserException {
-        Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
-        DescriptorTable descTbl = analyzer.getDescTbl();
+    public void testHllColumnsNoHllHash() {
+        assertThrows(StarRocksException.class, () -> {
+            
+            DescriptorTable descTbl = new DescriptorTable();
+
+            List<Column> columns = getHllSchema();
+            TupleDescriptor dstDesc = descTbl.createTupleDescriptor("DstTableDesc");
+            for (Column column : columns) {
+                SlotDescriptor slot = descTbl.addSlotDescriptor(dstDesc);
+                slot.setColumn(column);
+                slot.setIsMaterialized(true);
+                if (column.isAllowNull()) {
+                    slot.setIsNullable(true);
+                } else {
+                    slot.setIsNullable(false);
+                }
+            }
+
+            new Expectations() {
+                {
+                    globalStateMgr.getFunction((Function) any, (Function.CompareMode) any);
+                    result = new ScalarFunction(new FunctionName("hll_hash1"), Lists.newArrayList(), IntegerType.BIGINT, false);
+                    minTimes = 0;
+                }
+            };
+
+            new Expectations() {
+                {
+                    dstTable.getColumn("k1");
+                    result = columns.stream().filter(c -> c.getName().equals("k1")).findFirst().get();
+                    minTimes = 0;
+
+                    dstTable.getColumn("k2");
+                    result = null;
+                    minTimes = 0;
+
+                    dstTable.getColumn("v1");
+                    result = columns.stream().filter(c -> c.getName().equals("v1")).findFirst().get();
+                    minTimes = 0;
+                }
+            };
+
+            TStreamLoadPutRequest request = getBaseRequest();
+            request.setFileType(TFileType.FILE_LOCAL);
+            request.setColumns("k1,k2, v1=hll_hash1(k2)");
+            StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, null);
+            StreamLoadScanNode scanNode = getStreamLoadScanNode(dstDesc, request);
+
+            scanNode.init(descTbl);
+            scanNode.finalizeStats();
+            scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
+            TPlanNode planNode = new TPlanNode();
+            scanNode.toThrift(planNode);
+        });
+    }
+
+    @Test
+    public void testHllColumnsFail() {
+        assertThrows(StarRocksException.class, () -> {
+            
+            DescriptorTable descTbl = new DescriptorTable();
+
+            List<Column> columns = getHllSchema();
+            TupleDescriptor dstDesc = descTbl.createTupleDescriptor("DstTableDesc");
+            for (Column column : columns) {
+                SlotDescriptor slot = descTbl.addSlotDescriptor(dstDesc);
+                slot.setColumn(column);
+                slot.setIsMaterialized(true);
+                if (column.isAllowNull()) {
+                    slot.setIsNullable(true);
+                } else {
+                    slot.setIsNullable(false);
+                }
+            }
+
+            TStreamLoadPutRequest request = getBaseRequest();
+            request.setFileType(TFileType.FILE_LOCAL);
+            request.setColumns("k1,k2, v1=k2");
+            StreamLoadScanNode scanNode = getStreamLoadScanNode(dstDesc, request);
+
+            scanNode.init(descTbl);
+            scanNode.finalizeStats();
+            scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
+            TPlanNode planNode = new TPlanNode();
+            scanNode.toThrift(planNode);
+        });
+    }
+
+    @Test
+    public void testUnsupportedFType() {
+        assertThrows(StarRocksException.class, () -> {
+            
+            DescriptorTable descTbl = new DescriptorTable();
+
+            List<Column> columns = getBaseSchema();
+            TupleDescriptor dstDesc = descTbl.createTupleDescriptor("DstTableDesc");
+            for (Column column : columns) {
+                SlotDescriptor slot = descTbl.addSlotDescriptor(dstDesc);
+                slot.setColumn(column);
+                slot.setIsMaterialized(true);
+                if (column.isAllowNull()) {
+                    slot.setIsNullable(true);
+                } else {
+                    slot.setIsNullable(false);
+                }
+            }
+
+            TStreamLoadPutRequest request = getBaseRequest();
+            request.setFileType(TFileType.FILE_BROKER);
+            request.setColumns("k1,k2,v1, v2=k2");
+            StreamLoadScanNode scanNode = getStreamLoadScanNode(dstDesc, request);
+
+            scanNode.init(descTbl);
+            scanNode.finalizeStats();
+            scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
+            TPlanNode planNode = new TPlanNode();
+            scanNode.toThrift(planNode);
+        });
+    }
+
+    @Test
+    public void testColumnsUnknownRef() {
+        assertThrows(StarRocksException.class, () -> {
+            
+            DescriptorTable descTbl = new DescriptorTable();
+
+            List<Column> columns = getBaseSchema();
+            TupleDescriptor dstDesc = descTbl.createTupleDescriptor("DstTableDesc");
+            for (Column column : columns) {
+                SlotDescriptor slot = descTbl.addSlotDescriptor(dstDesc);
+                slot.setColumn(column);
+                slot.setIsMaterialized(true);
+                if (column.isAllowNull()) {
+                    slot.setIsNullable(true);
+                } else {
+                    slot.setIsNullable(false);
+                }
+            }
+
+            new Expectations() {
+                {
+                    dstTable.getColumn("k1");
+                    result = columns.stream().filter(c -> c.getName().equals("k1")).findFirst().get();
+                    minTimes = 0;
+
+                    dstTable.getColumn("k2");
+                    result = columns.stream().filter(c -> c.getName().equals("k2")).findFirst().get();
+                    minTimes = 0;
+
+                    dstTable.getColumn("v1");
+                    result = columns.stream().filter(c -> c.getName().equals("v1")).findFirst().get();
+                    minTimes = 0;
+
+                    dstTable.getColumn("v2");
+                    result = columns.stream().filter(c -> c.getName().equals("v2")).findFirst().get();
+                    minTimes = 0;
+                }
+            };
+
+            TStreamLoadPutRequest request = getBaseRequest();
+            request.setColumns("k1,k2,v1, v2=k3");
+            StreamLoadScanNode scanNode = getStreamLoadScanNode(dstDesc, request);
+
+            scanNode.init(descTbl);
+            scanNode.finalizeStats();
+            scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
+            TPlanNode planNode = new TPlanNode();
+            scanNode.toThrift(planNode);
+        });
+    }
+
+    @Test
+    public void testWhereNormal() throws StarRocksException, StarRocksException {
+        
+        DescriptorTable descTbl = new DescriptorTable();
 
         List<Column> columns = getBaseSchema();
         TupleDescriptor dstDesc = descTbl.createTupleDescriptor("DstTableDesc");
@@ -615,177 +627,187 @@ public class StreamLoadScanNodeTest {
         request.setWhere("k1 = 1");
         StreamLoadScanNode scanNode = getStreamLoadScanNode(dstDesc, request);
 
-        scanNode.init(analyzer);
-        scanNode.finalizeStats(analyzer);
+        scanNode.init(descTbl);
+        scanNode.finalizeStats();
         scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
         TPlanNode planNode = new TPlanNode();
         scanNode.toThrift(planNode);
     }
 
-    @Test(expected = ParsingException.class)
-    public void testWhereBad() throws UserException, UserException {
-        Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
-        DescriptorTable descTbl = analyzer.getDescTbl();
+    @Test
+    public void testWhereBad() {
+        assertThrows(ParsingException.class, () -> {
+            
+            DescriptorTable descTbl = new DescriptorTable();
 
-        List<Column> columns = getBaseSchema();
-        TupleDescriptor dstDesc = descTbl.createTupleDescriptor("DstTableDesc");
-        for (Column column : columns) {
-            SlotDescriptor slot = descTbl.addSlotDescriptor(dstDesc);
-            slot.setColumn(column);
-            slot.setIsMaterialized(true);
-            if (column.isAllowNull()) {
-                slot.setIsNullable(true);
-            } else {
-                slot.setIsNullable(false);
+            List<Column> columns = getBaseSchema();
+            TupleDescriptor dstDesc = descTbl.createTupleDescriptor("DstTableDesc");
+            for (Column column : columns) {
+                SlotDescriptor slot = descTbl.addSlotDescriptor(dstDesc);
+                slot.setColumn(column);
+                slot.setIsMaterialized(true);
+                if (column.isAllowNull()) {
+                    slot.setIsNullable(true);
+                } else {
+                    slot.setIsNullable(false);
+                }
             }
-        }
 
-        new Expectations() {
-            {
-                dstTable.getColumn("k1");
-                result = columns.stream().filter(c -> c.getName().equals("k1")).findFirst().get();
-                minTimes = 0;
+            new Expectations() {
+                {
+                    dstTable.getColumn("k1");
+                    result = columns.stream().filter(c -> c.getName().equals("k1")).findFirst().get();
+                    minTimes = 0;
 
-                dstTable.getColumn("k2");
-                result = columns.stream().filter(c -> c.getName().equals("k2")).findFirst().get();
-                minTimes = 0;
+                    dstTable.getColumn("k2");
+                    result = columns.stream().filter(c -> c.getName().equals("k2")).findFirst().get();
+                    minTimes = 0;
 
-                dstTable.getColumn("v1");
-                result = columns.stream().filter(c -> c.getName().equals("v1")).findFirst().get();
-                minTimes = 0;
+                    dstTable.getColumn("v1");
+                    result = columns.stream().filter(c -> c.getName().equals("v1")).findFirst().get();
+                    minTimes = 0;
 
-                dstTable.getColumn("v2");
-                result = columns.stream().filter(c -> c.getName().equals("v2")).findFirst().get();
-                minTimes = 0;
-            }
-        };
+                    dstTable.getColumn("v2");
+                    result = columns.stream().filter(c -> c.getName().equals("v2")).findFirst().get();
+                    minTimes = 0;
+                }
+            };
 
-        TStreamLoadPutRequest request = getBaseRequest();
-        request.setColumns("k1,k2,v1, v2=k2");
-        request.setWhere("k1   1");
-        StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, null);
-        StreamLoadScanNode scanNode =
-                new StreamLoadScanNode(streamLoadInfo.getId(), new PlanNodeId(1), dstDesc, dstTable,
-                        streamLoadInfo);
+            TStreamLoadPutRequest request = getBaseRequest();
+            request.setColumns("k1,k2,v1, v2=k2");
+            request.setWhere("k1   1");
+            StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, null);
+            StreamLoadScanNode scanNode =
+                    new StreamLoadScanNode(streamLoadInfo.getId(), new PlanNodeId(1), dstDesc, dstTable,
+                            streamLoadInfo);
 
-        scanNode.init(analyzer);
-        scanNode.finalizeStats(analyzer);
-        scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
-        TPlanNode planNode = new TPlanNode();
-        scanNode.toThrift(planNode);
+            scanNode.init(descTbl);
+            scanNode.finalizeStats();
+            scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
+            TPlanNode planNode = new TPlanNode();
+            scanNode.toThrift(planNode);
+        });
     }
 
-    @Test(expected = UserException.class)
-    public void testWhereUnknownRef() throws UserException, UserException {
-        Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
-        DescriptorTable descTbl = analyzer.getDescTbl();
+    @Test
+    public void testWhereUnknownRef() {
+        assertThrows(StarRocksException.class, () -> {
+            
+            DescriptorTable descTbl = new DescriptorTable();
 
-        List<Column> columns = getBaseSchema();
-        TupleDescriptor dstDesc = descTbl.createTupleDescriptor("DstTableDesc");
-        for (Column column : columns) {
-            SlotDescriptor slot = descTbl.addSlotDescriptor(dstDesc);
-            slot.setColumn(column);
-            slot.setIsMaterialized(true);
-            if (column.isAllowNull()) {
-                slot.setIsNullable(true);
-            } else {
-                slot.setIsNullable(false);
+            List<Column> columns = getBaseSchema();
+            TupleDescriptor dstDesc = descTbl.createTupleDescriptor("DstTableDesc");
+            for (Column column : columns) {
+                SlotDescriptor slot = descTbl.addSlotDescriptor(dstDesc);
+                slot.setColumn(column);
+                slot.setIsMaterialized(true);
+                if (column.isAllowNull()) {
+                    slot.setIsNullable(true);
+                } else {
+                    slot.setIsNullable(false);
+                }
             }
-        }
 
-        new Expectations() {
-            {
-                dstTable.getColumn("k1");
-                result = columns.stream().filter(c -> c.getName().equals("k1")).findFirst().get();
-                minTimes = 0;
+            new Expectations() {
+                {
+                    dstTable.getColumn("k1");
+                    result = columns.stream().filter(c -> c.getName().equals("k1")).findFirst().get();
+                    minTimes = 0;
 
-                dstTable.getColumn("k2");
-                result = columns.stream().filter(c -> c.getName().equals("k2")).findFirst().get();
-                minTimes = 0;
+                    dstTable.getColumn("k2");
+                    result = columns.stream().filter(c -> c.getName().equals("k2")).findFirst().get();
+                    minTimes = 0;
 
-                dstTable.getColumn("v1");
-                result = columns.stream().filter(c -> c.getName().equals("v1")).findFirst().get();
-                minTimes = 0;
+                    dstTable.getColumn("v1");
+                    result = columns.stream().filter(c -> c.getName().equals("v1")).findFirst().get();
+                    minTimes = 0;
 
-                dstTable.getColumn("v2");
-                result = columns.stream().filter(c -> c.getName().equals("v2")).findFirst().get();
-                minTimes = 0;
-            }
-        };
+                    dstTable.getColumn("v2");
+                    result = columns.stream().filter(c -> c.getName().equals("v2")).findFirst().get();
+                    minTimes = 0;
+                }
+            };
 
-        TStreamLoadPutRequest request = getBaseRequest();
-        request.setColumns("k1,k2,v1, v2=k1");
-        request.setWhere("k5 = 1");
-        StreamLoadScanNode scanNode = getStreamLoadScanNode(dstDesc, request);
+            TStreamLoadPutRequest request = getBaseRequest();
+            request.setColumns("k1,k2,v1, v2=k1");
+            request.setWhere("k5 = 1");
+            StreamLoadScanNode scanNode = getStreamLoadScanNode(dstDesc, request);
 
-        scanNode.init(analyzer);
-        scanNode.finalizeStats(analyzer);
-        scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
-        TPlanNode planNode = new TPlanNode();
-        scanNode.toThrift(planNode);
+            scanNode.init(descTbl);
+            scanNode.finalizeStats();
+            scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
+            TPlanNode planNode = new TPlanNode();
+            scanNode.toThrift(planNode);
+        });
     }
 
-    @Test(expected = UserException.class)
-    public void testWhereNotBool() throws UserException {
-        Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
-        DescriptorTable descTbl = analyzer.getDescTbl();
+    @Test
+    public void testWhereNotBool() {
+        assertThrows(StarRocksException.class, () -> {
+            
+            DescriptorTable descTbl = new DescriptorTable();
 
-        List<Column> columns = getBaseSchema();
-        TupleDescriptor dstDesc = descTbl.createTupleDescriptor("DstTableDesc");
-        for (Column column : columns) {
-            SlotDescriptor slot = descTbl.addSlotDescriptor(dstDesc);
-            slot.setColumn(column);
-            slot.setIsMaterialized(true);
-            if (column.isAllowNull()) {
-                slot.setIsNullable(true);
-            } else {
-                slot.setIsNullable(false);
+            List<Column> columns = getBaseSchema();
+            TupleDescriptor dstDesc = descTbl.createTupleDescriptor("DstTableDesc");
+            for (Column column : columns) {
+                SlotDescriptor slot = descTbl.addSlotDescriptor(dstDesc);
+                slot.setColumn(column);
+                slot.setIsMaterialized(true);
+                if (column.isAllowNull()) {
+                    slot.setIsNullable(true);
+                } else {
+                    slot.setIsNullable(false);
+                }
             }
-        }
 
-        TStreamLoadPutRequest request = getBaseRequest();
-        request.setColumns("k1,k2,v1,v2");
-        request.setWhere("k1 + v1");
-        StreamLoadScanNode scanNode = getStreamLoadScanNode(dstDesc, request);
+            TStreamLoadPutRequest request = getBaseRequest();
+            request.setColumns("k1,k2,v1,v2");
+            request.setWhere("k1 + v1");
+            StreamLoadScanNode scanNode = getStreamLoadScanNode(dstDesc, request);
 
-        new Expectations() {
-            {
-                dstTable.getBaseSchema();
-                result = columns;
-                dstTable.getFullSchema();
-                result = columns;
-                dstTable.getColumn("k1");
-                result = columns.get(0);
-                dstTable.getColumn("k2");
-                result = columns.get(1);
-                dstTable.getColumn("v1");
-                result = columns.get(2);
-                dstTable.getColumn("v2");
-                result = columns.get(3);
-            }
-        };
+            new Expectations() {
+                {
+                    dstTable.getBaseSchema();
+                    result = columns;
+                    dstTable.getFullSchema();
+                    result = columns;
+                    dstTable.getColumn("k1");
+                    result = columns.get(0);
+                    dstTable.getColumn("k2");
+                    result = columns.get(1);
+                    dstTable.getColumn("v1");
+                    result = columns.get(2);
+                    dstTable.getColumn("v2");
+                    result = columns.get(3);
+                }
+            };
 
-        new Expectations() {{
-            globalStateMgr.getFunction((Function) any, (Function.CompareMode) any);
-            result = new ScalarFunction(new FunctionName(FunctionSet.ADD), Lists.newArrayList(), Type.BIGINT,
-                    false);
-        }};
+            new Expectations() {
+                {
+                    globalStateMgr.getFunction((Function) any, (Function.CompareMode) any);
+                    result = new ScalarFunction(new FunctionName(FunctionSet.ADD), Lists.newArrayList(), IntegerType.BIGINT,
+                            false);
+                }
+            };
 
-        scanNode.init(analyzer);
-        scanNode.finalizeStats(analyzer);
-        scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
-        TPlanNode planNode = new TPlanNode();
-        scanNode.toThrift(planNode);
+            scanNode.init(descTbl);
+            scanNode.finalizeStats();
+            scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
+            TPlanNode planNode = new TPlanNode();
+            scanNode.toThrift(planNode);
+        });
     }
 
-    @Test(expected = DdlException.class)
-    public void testLoadInitColumnsMappingColumnNotExist() throws UserException {
-        List<Column> columns = Lists.newArrayList();
-        columns.add(new Column("c1", Type.INT, true, null, false, null, ""));
-        columns.add(new Column("c2", ScalarType.createVarchar(10), true, null, false, null, ""));
-        Table table = new Table(1L, "table0", TableType.OLAP, columns);
-        List<ImportColumnDesc> columnExprs = Lists.newArrayList();
-        columnExprs.add(new ImportColumnDesc("c3", new FunctionCallExpr("func", Lists.newArrayList())));
-        Load.initColumns(table, columnExprs, null, null, null, null, null, null);
+    @Test
+    public void testLoadInitColumnsMappingColumnNotExist() {
+        assertThrows(DdlException.class, () -> {
+            List<Column> columns = Lists.newArrayList();
+            columns.add(new Column("c1", IntegerType.INT, true, null, false, null, ""));
+            columns.add(new Column("c2", TypeFactory.createVarcharType(10), true, null, false, null, ""));
+            Table table = new Table(1L, "table0", TableType.OLAP, columns);
+            List<ImportColumnDesc> columnExprs = Lists.newArrayList();
+            columnExprs.add(new ImportColumnDesc("c3", new FunctionCallExpr("func", Lists.newArrayList())));
+            Load.initColumns(table, columnExprs, null, null, null, null, null, null, true, false, Lists.newArrayList());
+        });
     }
 }

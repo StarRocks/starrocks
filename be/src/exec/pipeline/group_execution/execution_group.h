@@ -28,6 +28,27 @@
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
+
+// Synchronization context for parallel driver preparation
+// Use shared_ptr to manage lifecycle and avoid use-after-free
+// Use raw pointer with atomic to avoid std::atomic<std::shared_ptr<T>> compilation issue in Clang 14
+struct DriverPrepareSyncContext {
+    std::mutex mutex;
+    std::condition_variable cv;
+    std::atomic<Status*> first_error{nullptr};
+    std::atomic<int> pending_tasks{0};
+
+    ~DriverPrepareSyncContext() {
+        // Clean up the dynamically allocated Status object
+        Status* expected = first_error.load();
+        Status* new_value = nullptr;
+        first_error.compare_exchange_strong(expected, new_value);
+        if (expected != nullptr) {
+            delete expected;
+        }
+    }
+};
+
 // execution group is a collection of pipelines
 // clang-format off
 template <typename T>
@@ -65,18 +86,29 @@ public:
     void attach_driver_executor(DriverExecutor* executor) { _executor = executor; }
 
     void count_down_pipeline(RuntimeState* state) {
-        if (++_num_finished_pipelines == _num_pipelines) {
+        // Cache the member before performing the atomic increment.
+        // This ensures we won't dereference `this` after another thread may
+        // have deleted the object.
+        size_t num_pipelines = _num_pipelines;
+        if (++_num_finished_pipelines == num_pipelines) {
             state->fragment_ctx()->count_down_execution_group();
         }
     }
 
     void count_down_epoch_pipeline(RuntimeState* state) {
-        if (++_num_epoch_finished_pipelines == _num_pipelines) {
+        size_t num_pipelines = _num_pipelines;
+        if (++_num_epoch_finished_pipelines == num_pipelines) {
             state->fragment_ctx()->count_down_epoch_pipeline(state);
         }
     }
 
     size_t total_logical_dop() const { return _total_logical_dop; }
+
+    size_t total_active_driver_size();
+
+    void prepare_active_drivers_parallel(RuntimeState* state, std::shared_ptr<DriverPrepareSyncContext> sync_ctx);
+
+    Status prepare_active_drivers_sequentially(RuntimeState* state);
 
     ExecutionGroupType type() const { return _type; }
     bool is_colocate_exec_group() const { return type() == ExecutionGroupType::COLOCATE; }

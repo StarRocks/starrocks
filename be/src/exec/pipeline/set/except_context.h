@@ -14,6 +14,9 @@
 
 #pragma once
 
+#include "base/hash/hash_std.hpp"
+#include "base/phmap/phmap.h"
+#include "base/string/slice.h"
 #include "column/chunk.h"
 #include "column/column_hash.h"
 #include "column/column_helper.h"
@@ -25,9 +28,6 @@
 #include "exprs/expr_context.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
-#include "util/hash_util.hpp"
-#include "util/phmap/phmap.h"
-#include "util/slice.h"
 
 namespace starrocks::pipeline {
 
@@ -73,6 +73,8 @@ public:
                                ExceptBufferState* buffer_state);
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state);
 
+    PipeObservable& observable() { return _observable; }
+
 private:
     std::unique_ptr<ExceptHashSerializeSet> _hash_set = std::make_unique<ExceptHashSerializeSet>();
 
@@ -103,6 +105,8 @@ private:
     std::vector<int64_t> _num_probers_per_factory;
     std::vector<std::atomic<int64_t>> _num_finished_probers_per_factory;
     std::atomic<bool> _is_build_finished{false};
+
+    PipeObservable _observable;
 };
 
 // The input chunks of BUILD and PROBE are shuffled by the local shuffle operator.

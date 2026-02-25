@@ -17,31 +17,43 @@
 #include <memory>
 
 #include "column/column.h"
-#include "column/datum.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
+#include "gutil/strings/substitute.h"
 #include "types/bitmap_value.h"
+#include "types/datum.h"
 #include "types/hll.h"
-#include "util/json.h"
-#include "util/percentile_value.h"
+#include "types/json_value.h"
+#include "types/percentile_value.h"
+#include "types/variant_value.h"
 
 namespace starrocks {
 
 template <typename T>
-class ObjectColumn : public ColumnFactory<Column, ObjectColumn<T>> {
-    friend class ColumnFactory<Column, ObjectColumn>;
+class ObjectColumn : public CowFactory<ColumnFactory<Column, ObjectColumn<T>>, ObjectColumn<T>> {
+    friend class CowFactory<ColumnFactory<Column, ObjectColumn>, ObjectColumn>;
 
 public:
     using ValueType = T;
     using Container = Buffer<ValueType*>;
+
+    struct ObjectDataProxyContainer {
+        ObjectDataProxyContainer(const ObjectColumn& column) : _column(column) {}
+
+        T* operator[](size_t index) const { return _column.get_object(index); }
+
+        size_t size() const { return _column.size(); }
+
+    private:
+        const ObjectColumn& _column;
+    };
+    using ImmContainer = ObjectDataProxyContainer;
 
     ObjectColumn() = default;
 
     explicit ObjectColumn(size_t size) : _pool(size) {}
 
     ObjectColumn(const ObjectColumn& column) { DCHECK(false) << "Can't copy construct object column"; }
-
-    ObjectColumn(ObjectColumn&& object_column) noexcept : _pool(std::move(object_column._pool)) {}
 
     void operator=(const ObjectColumn&) = delete;
 
@@ -76,9 +88,9 @@ public:
 
     size_t byte_size(size_t idx) const override;
 
-    void reserve(size_t n) override { _pool.reserve(n); }
+    void reserve(size_t n) override;
 
-    void resize(size_t n) override { _pool.resize(n); }
+    void resize(size_t n) override;
 
     void assign(size_t n, size_t idx) override;
 
@@ -100,7 +112,7 @@ public:
 
     bool append_nulls(size_t count) override { return false; }
 
-    bool append_strings(const Buffer<Slice>& strs) override;
+    bool append_strings(const Slice* data, size_t size) override;
 
     size_t append_numbers(const void* buff, size_t length) override { return -1; }
 
@@ -115,11 +127,11 @@ public:
 
     void update_rows(const Column& src, const uint32_t* indexes) override;
 
-    uint32_t serialize(size_t idx, uint8_t* pos) override;
-    uint32_t serialize_default(uint8_t* pos) override;
+    uint32_t serialize(size_t idx, uint8_t* pos) const override;
+    uint32_t serialize_default(uint8_t* pos) const override;
 
     void serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
-                         uint32_t max_one_row_size) override;
+                         uint32_t max_one_row_size) const override;
 
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
 
@@ -128,20 +140,15 @@ public:
     void deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) override;
 
     uint32_t serialize_size(size_t idx) const override;
+    uint32_t max_one_element_serialize_size() const override;
 
-    MutableColumnPtr clone_empty() const override { return this->create_mutable(); }
+    MutableColumnPtr clone_empty() const override { return this->create(); }
 
     MutableColumnPtr clone() const override;
-
-    ColumnPtr clone_shared() const override;
 
     size_t filter_range(const Filter& filter, size_t from, size_t to) override;
 
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
-
-    void fnv_hash(uint32_t* seed, uint32_t from, uint32_t to) const override;
-
-    void crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
 
     int64_t xor_checksum(uint32_t from, uint32_t to) const override;
 
@@ -160,6 +167,8 @@ public:
         _build_cache();
         return _cache;
     }
+
+    const ObjectDataProxyContainer immutable_data() const { return ObjectDataProxyContainer(*this); }
 
     Datum get(size_t n) const override { return Datum(get_object(n)); }
 
@@ -213,24 +222,21 @@ public:
         return ss.str();
     }
 
-    bool capacity_limit_reached(std::string* msg = nullptr) const override {
+    Status capacity_limit_reached() const override {
         if (_pool.size() > Column::MAX_CAPACITY_LIMIT) {
-            if (msg != nullptr) {
-                msg->append("row count of object column exceed the limit: " +
-                            std::to_string(Column::MAX_CAPACITY_LIMIT));
-            }
-            return true;
+            return Status::CapacityLimitExceed(strings::Substitute("row count of object column exceed the limit: $0",
+                                                                   std::to_string(Column::MAX_CAPACITY_LIMIT)));
         }
-        return false;
+        return Status::OK();
     }
 
-    StatusOr<ColumnPtr> upgrade_if_overflow() override;
+    StatusOr<MutableColumnPtr> upgrade_if_overflow() override;
 
-    StatusOr<ColumnPtr> downgrade() override { return nullptr; }
+    StatusOr<MutableColumnPtr> downgrade() override { return nullptr; }
 
     bool has_large_column() const override { return false; }
 
-    void check_or_die() const {}
+    void check_or_die() const override {}
 
 private:
     // add this to avoid warning clang-diagnostic-overloaded-virtual

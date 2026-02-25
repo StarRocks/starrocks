@@ -91,7 +91,7 @@ typedef Iterator* (*BlockFunction)(void*, const ReadOptions&, const Slice&);
 
 class TwoLevelIterator : public Iterator {
 public:
-    TwoLevelIterator(Iterator* index_iter, BlockFunction block_function, void* arg, const ReadOptions& options);
+    TwoLevelIterator(Iterator* index_iter, BlockFunction block_function, void* arg, ReadOptions options);
 
     ~TwoLevelIterator() override;
 
@@ -123,6 +123,11 @@ public:
 
     uint64_t max_rss_rowid() const override { return options_.max_rss_rowid; }
 
+    uint32_t shared_rssid() const override { return options_.shared_rssid; };
+    int64_t shared_version() const override { return options_.shared_version; };
+    int32_t rssid_offset() const override { return options_.rssid_offset; };
+    DelVectorPtr delvec() const override { return options_.delvec; };
+
 private:
     void SaveError(const Status& s) {
         if (status_.ok() && !s.ok()) status_ = s;
@@ -143,9 +148,12 @@ private:
     std::string data_block_handle_;
 };
 
-TwoLevelIterator::TwoLevelIterator(Iterator* index_iter, BlockFunction block_function, void* arg,
-                                   const ReadOptions& options)
-        : block_function_(block_function), arg_(arg), options_(options), index_iter_(index_iter), data_iter_(nullptr) {}
+TwoLevelIterator::TwoLevelIterator(Iterator* index_iter, BlockFunction block_function, void* arg, ReadOptions options)
+        : block_function_(block_function),
+          arg_(arg),
+          options_(std::move(options)), /* Fix modernize-pass-by-value by clang-tidy */
+          index_iter_(index_iter),
+          data_iter_(nullptr) {}
 
 TwoLevelIterator::~TwoLevelIterator() = default;
 

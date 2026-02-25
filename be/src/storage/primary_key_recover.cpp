@@ -26,9 +26,10 @@ Status PrimaryKeyRecover::recover() {
     LOG(INFO) << "PrimaryKeyRecover pre clean up finish. tablet_id: " << tablet_id();
 
     // 2. generate primary key schema
-    std::unique_ptr<Column> pk_column;
+    MutableColumnPtr pk_column;
     auto pkey_schema = generate_pkey_schema();
-    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
+    ASSIGN_OR_RETURN(auto encoding_type, primary_key_encoding_type());
+    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, encoding_type).ok()) {
         CHECK(false) << "create column for primary key encoder failed";
     }
 
@@ -65,9 +66,7 @@ Status PrimaryKeyRecover::recover() {
                         std::vector<uint8_t> read_buffer(file_size);
                         RETURN_IF_ERROR(read_file->read_at_fully(0, read_buffer.data(), read_buffer.size()));
                         auto col = pk_column->clone();
-                        if (serde::ColumnArraySerde::deserialize(read_buffer.data(), col.get()) == nullptr) {
-                            return Status::InternalError("column deserialization failed");
-                        }
+                        RETURN_IF_ERROR(serde::ColumnArraySerde::deserialize(read_buffer.data(), col.get()));
                         RETURN_IF_ERROR(index.erase(*col, &new_deletes));
                         del_index++;
                     } else {
@@ -90,7 +89,8 @@ Status PrimaryKeyRecover::recover() {
                                 return st;
                             } else {
                                 pk_column->reset_column();
-                                PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get());
+                                PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get(),
+                                                          encoding_type);
                                 // upsert and generate new deletes
                                 RETURN_IF_ERROR(index.upsert(rssid, row_id_start, *pk_column, &new_deletes));
                                 row_id_start += pk_column->size();

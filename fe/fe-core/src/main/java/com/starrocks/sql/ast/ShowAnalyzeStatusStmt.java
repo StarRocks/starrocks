@@ -16,51 +16,34 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Predicate;
-import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 public class ShowAnalyzeStatusStmt extends ShowStmt {
+    private static final Logger LOG = LogManager.getLogger(ShowAnalyzeStatusStmt.class);
 
-    public ShowAnalyzeStatusStmt(Predicate predicate) {
-        this(predicate, NodePosition.ZERO);
-    }
-
-    public ShowAnalyzeStatusStmt(Predicate predicate, NodePosition pos) {
+    public ShowAnalyzeStatusStmt(Expr predicate, List<OrderByElement> orderByElements,
+                                 LimitElement limitElement, NodePosition pos) {
         super(pos);
         this.predicate = predicate;
+        this.limitElement = limitElement;
+        this.orderByElements = orderByElements;
     }
-
-    private static final ShowResultSetMetaData META_DATA =
-            ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Id", ScalarType.createVarchar(60)))
-                    .addColumn(new Column("Database", ScalarType.createVarchar(60)))
-                    .addColumn(new Column("Table", ScalarType.createVarchar(60)))
-                    .addColumn(new Column("Columns", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("Type", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Schedule", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Status", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("StartTime", ScalarType.createVarchar(60)))
-                    .addColumn(new Column("EndTime", ScalarType.createVarchar(60)))
-                    .addColumn(new Column("Properties", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("Reason", ScalarType.createVarchar(100)))
-                    .build();
 
     public static List<String> showAnalyzeStatus(ConnectContext context,
                                                  AnalyzeStatus analyzeStatus) throws MetaNotFoundException {
@@ -74,11 +57,14 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
         Table table;
         // In new privilege framework(RBAC), user needs any action on the table to show analysis status for it.
         try {
-            table = MetaUtils.getTable(analyzeStatus.getCatalogName(), analyzeStatus.getDbName(),
-                    analyzeStatus.getTableName());
-            Authorizer.checkAnyActionOnTableLikeObject(context.getCurrentUserIdentity(),
-                    context.getCurrentRoleIds(), analyzeStatus.getDbName(), table);
-        } catch (AccessDeniedException | SemanticException e) {
+            table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
+                    context, analyzeStatus.getCatalogName(), analyzeStatus.getDbName(), analyzeStatus.getTableName());
+            if (table == null) {
+                throw new SemanticException("Table %s is not found", analyzeStatus.getTableName());
+            }
+            Authorizer.checkAnyActionOnTableLikeObject(context, analyzeStatus.getDbName(), table);
+        } catch (Exception e) {
+            LOG.warn("Failed to check privilege for show analyze status for table {}.", analyzeStatus.getTableName(), e);
             return null;
         }
 
@@ -115,17 +101,7 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
     }
 
     @Override
-    public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_NO_SYNC;
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowAnalyzeStatusStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowAnalyzeStatusStatement(this, context);
     }
 }

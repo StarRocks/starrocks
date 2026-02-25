@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization.rule;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.metric.MaterializedViewMetricsRegistry;
@@ -25,6 +26,7 @@ import com.starrocks.sql.optimizer.MvRewriteContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
@@ -46,9 +48,9 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
+import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_MV_UNION_REWRITE;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.deriveLogicalProperty;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.getQuerySplitPredicate;
-import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.isAppliedMVUnionRewrite;
 
 public abstract class BaseMaterializedViewRewriteRule extends TransformationRule implements IMaterializedViewRewriteRule {
 
@@ -78,7 +80,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
         // To avoid dead-loop rewrite, no rewrite when query extra predicate is not changed
-        if (isAppliedMVUnionRewrite(input)) {
+        if (Utils.isOptHasAppliedRule(input, OP_MV_UNION_REWRITE)) {
             return false;
         }
         return !context.getCandidateMvs().isEmpty() && checkOlapScanWithoutTabletOrPartitionHints(input);
@@ -93,6 +95,26 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         return false;
     }
 
+
+    /**
+     * Whether to choose the best mv based on data layout.
+     */
+    public boolean isChooseBestMVBasedDataLayout(OptExpression input) {
+        BestMvSelector.ChooseMode chooseMode =
+                BestMvSelector.ChooseMode.of(Config.mv_rewrite_consider_data_layout_mode);
+        switch (chooseMode) {
+            case DISABLE -> {
+                return false;
+            }
+            case ENABLE -> {
+                return MvUtils.isLogicalSP(input);
+            } case FORCE -> {
+                return true;
+            }
+        }
+        return false;
+    }
+
     @Override
     public List<OptExpression> transform(OptExpression queryExpression, OptimizerContext context) {
         try {
@@ -100,13 +122,10 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             if (expressions == null || expressions.isEmpty()) {
                 return Lists.newArrayList();
             }
-            if (context.isInMemoPhase()) {
-                return expressions;
-            } else {
-                // in rule phase, only return the best one result
-                BestMvSelector bestMvSelector = new BestMvSelector(expressions, context, queryExpression, this);
-                return Lists.newArrayList(bestMvSelector.selectBest());
-            }
+            // in rbo/cbo phase, only return the best one result
+            BestMvSelector bestMvSelector = new BestMvSelector(expressions, context, queryExpression, this);
+            boolean isConsiderQueryDataLayout = isChooseBestMVBasedDataLayout(queryExpression);
+            return bestMvSelector.selectBest(isConsiderQueryDataLayout);
         } catch (Exception e) {
             String errMsg = ExceptionUtils.getStackTrace(e);
             // for mv rewrite rules, do not disturb query when exception.
@@ -151,6 +170,11 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             logMVRewrite(context, this, "too many MV candidates, truncate them to " + numCandidates);
             mvCandidateContexts = mvCandidateContexts.subList(0, numCandidates);
         }
+        if (mvCandidateContexts.isEmpty()) {
+            return Lists.newArrayList();
+        }
+        logMVRewrite(context, this, "MV Candidates: {}",
+                mvCandidateContexts.stream().map(x -> x.getMv().getName()).collect(Collectors.toList()));
 
         // 3. do rewrite with associated mvs
         return doTransform(mvCandidateContexts, queryExpression, context);
@@ -197,20 +221,20 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
 
             IMaterializedViewRewriter mvRewriter = createRewriter(context, mvRewriteContext);
             if (mvRewriter == null) {
-                logMVRewrite(context, this, "create materialized view rewriter failed");
+                logMVRewrite(mvRewriteContext, "create materialized view rewriter failed");
                 continue;
             }
 
             // rewrite query
             OptExpression candidate = mvRewriter.doRewrite(mvRewriteContext);
             if (candidate == null) {
-                logMVRewrite(context, this, "doRewrite phase failed");
+                logMVRewrite(mvRewriteContext, "doRewrite phase failed");
                 continue;
             }
 
             candidate = mvRewriter.postRewrite(context, mvRewriteContext, candidate);
             if (candidate == null) {
-                logMVRewrite(context, this, "doPostAfterRewrite phase failed");
+                logMVRewrite(mvRewriteContext, "doPostAfterRewrite phase failed");
                 continue;
             }
 
@@ -228,14 +252,19 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
                     MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mvContext.getMv().getMvId());
             mvEntity.increaseQueryMatchedCount(1L);
             // mark: query has been rewritten by mv success.
-            context.getQueryMaterializationContext().markRewriteSuccess(true);
+            context.getQueryMaterializationContext().addRewrittenSuccessMVContext(mvContext);
 
             // Do not try to enumerate all plans, it would take a lot of time
             int limit = context.getSessionVariable().getCboMaterializedViewRewriteRuleOutputLimit();
             if (limit > 0 && results.size() >= limit) {
-                logMVRewrite(context, this, "too many MV rewrite results generated, but limit to {}", limit);
+                logMVRewrite(mvRewriteContext, "too many MV rewrite results generated, but limit to {}", limit);
                 break;
             }
+
+            // mark this mv has applied this query
+            MvUtils.getScanOperator(candidate)
+                    .stream()
+                    .forEach(op -> op.setOpAppliedMV(mvContext.getMv().getId()));
 
             // Give up rewrite if it exceeds the optimizer timeout
             context.checkTimeout();

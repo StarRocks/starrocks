@@ -35,15 +35,20 @@ namespace starrocks::connector {
 
 class IcebergChunkSink : public ConnectorChunkSink {
 public:
-    IcebergChunkSink(std::vector<std::string> partition_columns,
+    IcebergChunkSink(std::vector<std::string> partition_columns, std::vector<std::string> transform_exprs,
                      std::vector<std::unique_ptr<ColumnEvaluator>>&& partition_column_evaluators,
-                     std::unique_ptr<LocationProvider> location_provider,
-                     std::unique_ptr<formats::FileWriterFactory> file_writer_factory, int64_t max_file_size,
-                     RuntimeState* state);
+                     std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory, RuntimeState* state);
 
     ~IcebergChunkSink() override = default;
 
     void callback_on_commit(const CommitResult& result) override;
+
+    const std::vector<std::string>& transform_expr() const { return _transform_exprs; }
+
+    Status add(const ChunkPtr& chunk) override;
+
+private:
+    std::vector<std::string> _transform_exprs;
 };
 
 struct IcebergChunkSinkContext : public ConnectorChunkSinkContext {
@@ -51,8 +56,10 @@ struct IcebergChunkSinkContext : public ConnectorChunkSinkContext {
 
     std::string path;
     std::vector<std::string> column_names;
+    std::vector<std::string> partition_column_names;
+    std::vector<std::string> transform_exprs;
     std::vector<std::unique_ptr<ColumnEvaluator>> column_evaluators;
-    std::vector<int32_t> partition_column_indices;
+    std::vector<std::unique_ptr<ColumnEvaluator>> partition_evaluators;
     int64_t max_file_size = 128L * 1024 * 1024;
     std::string format;
     TCompressionType::type compression_type = TCompressionType::UNKNOWN_COMPRESSION;
@@ -61,6 +68,8 @@ struct IcebergChunkSinkContext : public ConnectorChunkSinkContext {
     PriorityThreadPool* executor = nullptr;
     TCloudConfiguration cloud_conf;
     pipeline::FragmentContext* fragment_context = nullptr;
+    int tuple_desc_id = -1;
+    std::shared_ptr<SortOrdering> sort_ordering;
 };
 
 class IcebergChunkSinkProvider : public ConnectorChunkSinkProvider {

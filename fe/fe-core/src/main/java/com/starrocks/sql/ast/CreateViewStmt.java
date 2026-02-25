@@ -15,52 +15,79 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Strings;
-import com.starrocks.analysis.TableName;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
+import java.util.Map;
 
 public class CreateViewStmt extends DdlStmt {
-    private final TableName tableName;
+    private TableRef tableRef;
     private final List<ColWithComment> colWithComments;
     private final boolean ifNotExists;
     private final boolean replace;
     private final String comment;
+    private final boolean security;
     protected QueryStatement queryStatement;
 
     //Resolved by Analyzer
     protected List<Column> columns;
     private String inlineViewDef;
+    private String originalViewDefineSql;
+    private int queryStartIndex = -1;
+    private int queryStopIndex = -1;
+    private Map<String, String> properties;
 
-    public CreateViewStmt(boolean ifNotExists, boolean replace,
-                          TableName tableName, List<ColWithComment> colWithComments,
+    public CreateViewStmt(boolean ifNotExists,
+                          boolean replace,
+                          TableRef tableRef,
+                          List<ColWithComment> colWithComments,
                           String comment,
+                          boolean security,
                           QueryStatement queryStmt,
                           NodePosition pos) {
+        this(ifNotExists, replace, tableRef, colWithComments, comment, security, queryStmt, pos, Maps.newHashMap());
+    }
+
+    public CreateViewStmt(boolean ifNotExists,
+                          boolean replace,
+                          TableRef tableRef,
+                          List<ColWithComment> colWithComments,
+                          String comment,
+                          boolean security,
+                          QueryStatement queryStmt,
+                          NodePosition pos,
+                          Map<String, String> properties) {
         super(pos);
         this.ifNotExists = ifNotExists;
         this.replace = replace;
-        this.tableName = tableName;
+        this.tableRef = tableRef;
         this.colWithComments = colWithComments;
         this.comment = Strings.nullToEmpty(comment);
+        this.security = security;
         this.queryStatement = queryStmt;
+        this.properties = properties != null ? properties : Maps.newHashMap();
+    }
+
+    public TableRef getTableRef() {
+        return tableRef;
+    }
+
+    public void setTableRef(TableRef tableRef) {
+        this.tableRef = tableRef;
     }
 
     public String getCatalog() {
-        return tableName.getCatalog();
+        return tableRef == null ? null : tableRef.getCatalogName();
     }
 
     public String getDbName() {
-        return tableName.getDb();
+        return tableRef == null ? null : tableRef.getDbName();
     }
 
     public String getTable() {
-        return tableName.getTbl();
-    }
-
-    public TableName getTableName() {
-        return tableName;
+        return tableRef == null ? null : tableRef.getTableName();
     }
 
     public List<ColWithComment> getColWithComments() {
@@ -79,8 +106,20 @@ public class CreateViewStmt extends DdlStmt {
         return comment;
     }
 
+    public boolean isSecurity() {
+        return security;
+    }
+
     public QueryStatement getQueryStatement() {
         return queryStatement;
+    }
+
+    public Map<String, String> getProperties() {
+        return properties;
+    }
+
+    public void setProperties(Map<String, String> properties) {
+        this.properties = properties;
     }
 
     public void setColumns(List<Column> columns) {
@@ -99,7 +138,31 @@ public class CreateViewStmt extends DdlStmt {
         this.inlineViewDef = inlineViewDef;
     }
 
+    public String getOriginalViewDefineSql() {
+        return originalViewDefineSql;
+    }
+
+    public void setOriginalViewDefineSql(String originalViewDefineSql) {
+        this.originalViewDefineSql = originalViewDefineSql;
+    }
+
+    public int getQueryStartIndex() {
+        return queryStartIndex;
+    }
+
+    public void setQueryStartIndex(int queryStartIndex) {
+        this.queryStartIndex = queryStartIndex;
+    }
+
+    public int getQueryStopIndex() {
+        return queryStopIndex;
+    }
+
+    public void setQueryStopIndex(int queryStopIndex) {
+        this.queryStopIndex = queryStopIndex;
+    }
+
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateViewStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateViewStatement(this, context);
     }
 }

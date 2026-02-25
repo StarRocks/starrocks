@@ -58,7 +58,6 @@ set(SRC_FILES
     ${GEN_CPP_DIR}/descriptors.pb.cc
     ${GEN_CPP_DIR}/encryption.pb.cc
     ${GEN_CPP_DIR}/internal_service.pb.cc
-    ${GEN_CPP_DIR}/doris_internal_service.pb.cc
     ${GEN_CPP_DIR}/types.pb.cc
     ${GEN_CPP_DIR}/snapshot.pb.cc
     ${GEN_CPP_DIR}/status.pb.cc
@@ -71,9 +70,7 @@ set(SRC_FILES
     #$${GEN_CPP_DIR}/opcode/functions.cc
     #$${GEN_CPP_DIR}/opcode/vector-functions.cc
     #$${GEN_CPP_DIR}/opcode/opcode-registry-init.cc
-    ${GEN_CPP_DIR}/opcode/builtin_functions.cpp
     ${GEN_CPP_DIR}/RuntimeFilter_types.cpp
-    ${GEN_CPP_DIR}/version.cpp
     ${GEN_CPP_DIR}/CloudConfiguration_types.cpp
     ${GEN_CPP_DIR}/ShortCircuit_types.cpp
     ${GEN_CPP_DIR}/DataCache_types.cpp
@@ -82,7 +79,7 @@ set(SRC_FILES
 
 # keep everything in one library, the object files reference
 # each other
-add_library(StarRocksGen STATIC ${SRC_FILES})
+ADD_BE_LIB(StarRocksGen ${SRC_FILES})
 
 # Setting these files as code-generated lets make clean and incremental builds work
 # correctly
@@ -90,4 +87,3 @@ set_source_files_properties(${SRC_FILES} PROPERTIES GENERATED TRUE)
 
 #add_dependencies(StarRocksGen thrift-cpp)
 #add_dependencies(Opcode function)
-

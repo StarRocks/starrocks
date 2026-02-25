@@ -136,8 +136,4 @@ select dt from test_mv2 group by dt order by 1;
 select dt from test_mv3 group by dt order by 1;
 select dt from test_mv4 group by dt order by 1;
 
-drop materialized view test_mv1;
-drop materialized view test_mv2;
-drop materialized view test_mv3;
-drop materialized view test_mv4;
 drop database db_${uuid0} force;

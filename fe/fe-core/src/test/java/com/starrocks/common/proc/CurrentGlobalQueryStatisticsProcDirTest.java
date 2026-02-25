@@ -20,7 +20,7 @@ import com.starrocks.qe.QueryStatisticsInfo;
 import com.starrocks.server.NodeMgr;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 
@@ -47,8 +47,11 @@ public class CurrentGlobalQueryStatisticsProcDirTest {
             .withSpillBytes(0)
             .withCpuCostNs(97323000)
             .withExecTime(3533000)
+            .withExecProgress("100%")
+            .withExecState("FINISHED")
             .withWareHouseName("default_warehouse")
-            .withCustomQueryId("");
+            .withCustomQueryId("")
+            .withResourceGroupName("wg1");
 
 
     public static final QueryStatisticsInfo QUERY_TWO_LOCAL = new QueryStatisticsInfo()
@@ -64,8 +67,11 @@ public class CurrentGlobalQueryStatisticsProcDirTest {
             .withSpillBytes(0)
             .withCpuCostNs(96576000)
             .withExecTime(2086000)
+            .withExecProgress("100%")
+            .withExecState("FINISHED")
             .withWareHouseName("default_warehouse")
-            .withCustomQueryId("");
+            .withCustomQueryId("")
+            .withResourceGroupName("wg2");
 
     public static final QueryStatisticsInfo QUERY_ONE_REMOTE = new QueryStatisticsInfo()
             .withQueryStartTime(1721866428)
@@ -80,8 +86,11 @@ public class CurrentGlobalQueryStatisticsProcDirTest {
             .withSpillBytes(0)
             .withCpuCostNs(97456000)
             .withExecTime(3687000)
+            .withExecProgress("100%")
+            .withExecState("FINISHED")
             .withWareHouseName("default_warehouse")
-            .withCustomQueryId("");
+            .withCustomQueryId("")
+            .withResourceGroupName("wg3");
 
 
     public static final QueryStatisticsInfo QUERY_TWO_REMOTE = new QueryStatisticsInfo()
@@ -97,8 +106,11 @@ public class CurrentGlobalQueryStatisticsProcDirTest {
             .withSpillBytes(0)
             .withCpuCostNs(96686000)
             .withExecTime(2196000)
+            .withExecProgress("100%")
+            .withExecState("FINISHED")
             .withWareHouseName("default_warehouse")
-            .withCustomQueryId("");
+            .withCustomQueryId("")
+            .withResourceGroupName("wg");
 
     public static List<QueryStatisticsInfo> LOCAL_TEST_QUERIES =
             new ArrayList<>(List.of(QUERY_ONE_LOCAL, QUERY_TWO_LOCAL));
@@ -120,7 +132,7 @@ public class CurrentGlobalQueryStatisticsProcDirTest {
             };
 
             BaseProcResult result = (BaseProcResult) new CurrentGlobalQueryStatisticsProcDir().fetchResult();
-            Assert.assertEquals(LOCAL_TEST_QUERIES.size() + REMOTE_TEST_QUERIES.size(),
+            Assertions.assertEquals(LOCAL_TEST_QUERIES.size() + REMOTE_TEST_QUERIES.size(),
                     result.getRows().size());
 
             List<List<String>> expectedQueryStatisticsInfo =

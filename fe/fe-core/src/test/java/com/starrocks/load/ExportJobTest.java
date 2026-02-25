@@ -15,9 +15,6 @@
 package com.starrocks.load;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
@@ -29,23 +26,35 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.ProfileManager;
+import com.starrocks.common.util.RuntimeProfile;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.persist.BrokerPropertiesPersistInfo;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.planner.TupleDescriptor;
+import com.starrocks.planner.TupleId;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.task.ExportExportingTask;
 import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.TimeZone;
 
 public class ExportJobTest {
 
@@ -59,8 +68,8 @@ public class ExportJobTest {
                 Pair.create(new ExportJob.NetworkAddress("host1", 1000), "path1")
         );
 
-        Assert.assertEquals(sList, updateInfo.serialize(tList));
-        Assert.assertEquals(tList, updateInfo.deserialize(sList));
+        Assertions.assertEquals(sList, updateInfo.serialize(tList));
+        Assertions.assertEquals(tList, updateInfo.deserialize(sList));
     }
 
     @Test
@@ -72,14 +81,14 @@ public class ExportJobTest {
                                          @Mocked Tablet tablet,
                                          @Mocked OlapScanNode scanNode,
                                          @Mocked PlanFragment fragment,
-                                         @Mocked BrokerDesc brokerDesc) {
+                                         @Mocked BrokerPropertiesPersistInfo brokerDescPersistInfo) {
         // tabletId  backendId  dataSize
         //     1        0           1
         //     2        0           2
         //     3        0           3
         //     4        0           4
         //     5        0           5
-        TabletMeta tabletMeta = new TabletMeta(0L, 1L, 2L, 3L, 4, TStorageMedium.HDD, true);
+        TabletMeta tabletMeta = new TabletMeta(0L, 1L, 2L, 3L, TStorageMedium.HDD, true);
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
@@ -88,7 +97,7 @@ public class ExportJobTest {
                 result = tabletMeta;
                 tablet.getDataSize(true);
                 returns(1L, 2L, 3L, 4L, 5L);
-                brokerDesc.hasBroker();
+                brokerDescPersistInfo.hasBroker();
                 result = true;
             }
         };
@@ -110,36 +119,35 @@ public class ExportJobTest {
         }
 
 
-
         ExportJob job = new ExportJob(0, UUIDUtil.genUUID());
         Deencapsulation.setField(job, "tabletLocations", locationsList);
         Deencapsulation.setField(job, "exportTable", table);
         Deencapsulation.setField(job, "exportTupleDesc", new TupleDescriptor(new TupleId(0)));
-        Deencapsulation.setField(job, "brokerDesc", brokerDesc);
+        Deencapsulation.setField(job, "brokerPersistInfo", brokerDescPersistInfo);
 
         // 1 task: (1,2,3,4,5)
         List<PlanFragment> fragments = Lists.newArrayList();
         List<ScanNode> scanNodes = Lists.newArrayList();
         Config.export_max_bytes_per_be_per_task = 100L;
         Deencapsulation.invoke(job, "genTaskFragments", fragments, scanNodes);
-        Assert.assertEquals(1, fragments.size());
-        Assert.assertEquals(1, scanNodes.size());
+        Assertions.assertEquals(1, fragments.size());
+        Assertions.assertEquals(1, scanNodes.size());
 
         // 2 tasks: (1,2,3), (4,5)
         fragments.clear();
         scanNodes.clear();
         Config.export_max_bytes_per_be_per_task = 5L;
         Deencapsulation.invoke(job, "genTaskFragments", fragments, scanNodes);
-        Assert.assertEquals(5, fragments.size());
-        Assert.assertEquals(5, scanNodes.size());
+        Assertions.assertEquals(5, fragments.size());
+        Assertions.assertEquals(5, scanNodes.size());
 
         // 5 tasks: (1), (2), (3), (4), (5)
         fragments.clear();
         scanNodes.clear();
         Config.export_max_bytes_per_be_per_task = 1L;
         Deencapsulation.invoke(job, "genTaskFragments", fragments, scanNodes);
-        Assert.assertEquals(5, fragments.size());
-        Assert.assertEquals(5, scanNodes.size());
+        Assertions.assertEquals(5, fragments.size());
+        Assertions.assertEquals(5, scanNodes.size());
     }
 
     @Test
@@ -151,14 +159,14 @@ public class ExportJobTest {
                                          @Mocked Tablet tablet,
                                          @Mocked OlapScanNode scanNode,
                                          @Mocked PlanFragment fragment,
-                                         @Mocked BrokerDesc brokerDesc) {
+                                         @Mocked BrokerPropertiesPersistInfo brokerDesc) {
         // tabletId  backendId  dataSize
         //     1        0           1
         //     2        0           2
         //     3        0           3
         //     4        0           4
         //     5        0           5
-        TabletMeta tabletMeta = new TabletMeta(0L, 1L, 2L, 3L, 4, TStorageMedium.HDD, false);
+        TabletMeta tabletMeta = new TabletMeta(0L, 1L, 2L, 3L, TStorageMedium.HDD, false);
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
@@ -199,30 +207,81 @@ public class ExportJobTest {
         Deencapsulation.setField(job, "tabletLocations", locationsList);
         Deencapsulation.setField(job, "exportTable", table);
         Deencapsulation.setField(job, "exportTupleDesc", new TupleDescriptor(new TupleId(0)));
-        Deencapsulation.setField(job, "brokerDesc", brokerDesc);
+        Deencapsulation.setField(job, "brokerPersistInfo", brokerDesc);
+        Assertions.assertEquals(WarehouseManager.DEFAULT_RESOURCE, job.getComputeResource());
 
         // 1 task: (1,2,3,4,5)
         List<PlanFragment> fragments = Lists.newArrayList();
         List<ScanNode> scanNodes = Lists.newArrayList();
         Config.export_max_bytes_per_be_per_task = 100L;
         Deencapsulation.invoke(job, "genTaskFragments", fragments, scanNodes);
-        Assert.assertEquals(1, fragments.size());
-        Assert.assertEquals(1, scanNodes.size());
+        Assertions.assertEquals(1, fragments.size());
+        Assertions.assertEquals(1, scanNodes.size());
 
         // 2 tasks: (1,2,3), (4,5)
         fragments.clear();
         scanNodes.clear();
         Config.export_max_bytes_per_be_per_task = 5L;
         Deencapsulation.invoke(job, "genTaskFragments", fragments, scanNodes);
-        Assert.assertEquals(5, fragments.size());
-        Assert.assertEquals(5, scanNodes.size());
+        Assertions.assertEquals(5, fragments.size());
+        Assertions.assertEquals(5, scanNodes.size());
 
         // 5 tasks: (1), (2), (3), (4), (5)
         fragments.clear();
         scanNodes.clear();
         Config.export_max_bytes_per_be_per_task = 1L;
         Deencapsulation.invoke(job, "genTaskFragments", fragments, scanNodes);
-        Assert.assertEquals(5, fragments.size());
-        Assert.assertEquals(5, scanNodes.size());
+        Assertions.assertEquals(5, fragments.size());
+        Assertions.assertEquals(5, scanNodes.size());
+    }
+
+    @Test
+    public void initProfile_createsProfileWithCorrectSummaryInfo(@Mocked GlobalStateMgr state,
+                                                                 @Mocked ExportJob job) {
+        new Expectations() {
+            {
+                job.getId();
+                result = 12345L;
+
+                job.getStartTimeMs();
+                result = 1633024800000L;
+
+                job.getState();
+                result = ExportJob.JobState.EXPORTING;
+
+                job.getDbId();
+                result = 1001L;
+
+                job.getSql();
+                result = "SELECT * FROM table";
+
+                job.getComputeResource();
+                result = WarehouseManager.DEFAULT_RESOURCE;
+
+                GlobalStateMgr.getCurrentState();
+                result = state;
+
+                state.getWarehouseMgr().getWarehouseComputeResourceName((ComputeResource) any);
+                result = "default_warehouse";
+            }
+        };
+
+        new MockUp<TimeUtils>() {
+            @Mock
+            public static TimeZone getTimeZone() {
+                return TimeZone.getTimeZone("UTC");
+            }
+        };
+        ExportExportingTask task = new ExportExportingTask(job);
+        Deencapsulation.invoke(task, "initProfile");
+
+        RuntimeProfile profile = Deencapsulation.getField(task, "profile");
+        Assertions.assertNotNull(profile);
+        RuntimeProfile summaryProfile = profile.getChild("Summary");
+        Assertions.assertNotNull(summaryProfile);
+        Assertions.assertEquals("12345", summaryProfile.getInfoString(ProfileManager.QUERY_ID));
+        Assertions.assertEquals("Query", summaryProfile.getInfoString(ProfileManager.QUERY_TYPE));
+        Assertions.assertEquals("EXPORTING", summaryProfile.getInfoString(ProfileManager.QUERY_STATE));
+        Assertions.assertEquals("default_warehouse", summaryProfile.getInfoString(ProfileManager.WAREHOUSE_CNGROUP));
     }
 }

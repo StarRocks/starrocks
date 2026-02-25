@@ -14,12 +14,26 @@
 
 #include "column/column_viewer.h"
 
+#include "base/phmap/phmap.h"
 #include "column/column_helper.h"
 #include "types/logical_type_infra.h"
-#include "util/percentile_value.h"
-#include "util/phmap/phmap.h"
+#include "types/percentile_value.h"
 
 namespace starrocks {
+
+namespace {
+
+const NullColumnPtr& one_size_not_null_column() {
+    static NullColumnPtr one_size_not_null_column = NullColumn::create(1, 0);
+    return one_size_not_null_column;
+}
+
+const NullColumnPtr& one_size_null_column() {
+    static NullColumnPtr one_size_null_column = NullColumn::create(1, 1);
+    return one_size_null_column;
+}
+
+} // namespace
 
 static inline size_t not_const_mask(const ColumnPtr& column) {
     return !column->only_null() && !column->is_constant() ? -1 : 0;
@@ -33,20 +47,21 @@ template <LogicalType Type>
 ColumnViewer<Type>::ColumnViewer(const ColumnPtr& column)
         : _not_const_mask(not_const_mask(column)), _null_mask(null_mask(column)) {
     if (column->only_null()) {
-        _null_column = ColumnHelper::one_size_null_column;
-        _column = RunTimeColumnType<Type>::create();
-        _column->append_default();
+        _null_column = one_size_null_column();
+        auto column = RunTimeColumnType<Type>::create();
+        column->append_default();
+        _column = std::move(column);
     } else if (column->is_constant()) {
         auto v = ColumnHelper::as_raw_column<ConstColumn>(column);
         _column = ColumnHelper::cast_to<Type>(v->data_column());
-        _null_column = ColumnHelper::one_size_not_null_column;
+        _null_column = one_size_not_null_column();
     } else if (column->is_nullable()) {
         auto v = ColumnHelper::as_raw_column<NullableColumn>(column);
         _column = ColumnHelper::cast_to<Type>(v->data_column());
         _null_column = ColumnHelper::as_column<NullColumn>(v->null_column());
     } else {
         _column = ColumnHelper::cast_to<Type>(column);
-        _null_column = ColumnHelper::one_size_not_null_column;
+        _null_column = one_size_not_null_column();
     }
 
     _data = _column->get_data().data();

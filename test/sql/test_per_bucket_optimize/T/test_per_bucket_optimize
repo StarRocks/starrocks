@@ -12,6 +12,7 @@ PROPERTIES( "replication_num"="1", "colocate_with"="5a5fd327dsdb_2806" );
 insert into t0 (c1, c2) values (1, 1), (2, 1), (3, 1), (4, 1), (11, 1), (11, 2), (1, 2), (2, 2), (3, 2), (11, 2), (12, 2), (1, 3), (2, 3), (3, 3), (11, 3);
 select /*+ SET_VAR(enable_per_bucket_optimize=true,enable_query_cache=false) */c2, count() from t0 group by c2 order by c2;
 select /*+ SET_VAR(enable_per_bucket_optimize=false,enable_query_cache=false) */c2, count() from t0 group by c2 order by c2;
+select /*+ SET_VAR(enable_per_bucket_optimize=true,enable_query_cache=false,tablet_internal_parallel_mode='force_split',pipeline_dop=2) */c2, count() from t0 group by c2 order by c2;
 
 CREATE TABLE t1 (
     c1 int,
@@ -25,6 +26,7 @@ PROPERTIES( "replication_num"="1", "colocate_with"="5a5fd327dsdb_2806" );
 insert into t1 (c1, c2) values (1, 1), (2, 1), (3, 1), (4, 1), (11, 1), (11, 2), (1, 2), (2, 2), (3, 2), (11, 2), (12, 2), (1, 3), (2, 3), (3, 3), (11, 3);
 select /*+ SET_VAR(enable_per_bucket_optimize=true,enable_query_cache=false) */c2, count() from t1 group by c2 order by c2;
 select /*+ SET_VAR(enable_per_bucket_optimize=false,enable_query_cache=false) */c2, count() from t1 group by c2 order by c2;
+select /*+ SET_VAR(enable_per_bucket_optimize=true,enable_query_cache=false,tablet_internal_parallel_mode='force_split',pipeline_dop=2) */c2, count() from t1 group by c2 order by c2;
 
 
 CREATE TABLE t2 (
@@ -40,6 +42,7 @@ PROPERTIES( "replication_num"="1", "colocate_with"="5a5fd327dsdb_2806" );
 insert into t2 (c1, c2)values (1, 1), (2, 1), (3, 1), (4, 1), (11, 1), (11, 2), (1, 2), (2, 2), (3, 2), (11, 2), (12, 2), (1, 3), (2, 3), (3, 3), (11, 3);
 select /*+ SET_VAR(enable_per_bucket_optimize=true,enable_query_cache=false) */c2, count() from t2 group by c2 order by c2;
 select /*+ SET_VAR(enable_per_bucket_optimize=false,enable_query_cache=false) */c2, count() from t2 group by c2 order by c2;
+select /*+ SET_VAR(enable_per_bucket_optimize=true,enable_query_cache=false,tablet_internal_parallel_mode='force_split',pipeline_dop=2) */c2, count() from t2 group by c2 order by c2;
 
 
 CREATE TABLE t3 (
@@ -54,6 +57,7 @@ PROPERTIES( "replication_num"="1", "colocate_with"="5a5fd327dsdb_2806" );
 insert into t3 (c1, c2)values (1, 1), (2, 1), (3, 1), (4, 1), (11, 1), (11, 2), (1, 2), (2, 2), (3, 2), (11, 2), (12, 2), (1, 3), (2, 3), (3, 3), (11, 3),(1,11);
 select /*+ SET_VAR(enable_per_bucket_optimize=true,enable_query_cache=false) */c2, count() from t3 group by c2 order by c2;
 select /*+ SET_VAR(enable_per_bucket_optimize=false,enable_query_cache=false) */c2, count() from t3 group by c2 order by c2;
+select /*+ SET_VAR(enable_per_bucket_optimize=true,enable_query_cache=false,tablet_internal_parallel_mode='force_split',pipeline_dop=2) */c2, count() from t3 group by c2 order by c2;
 
 
 CREATE TABLE t4 (
@@ -64,3 +68,4 @@ PROPERTIES( "replication_num"="1", "colocate_with"="5a5fd327dsdb_2806" );
 insert into t4 (c1, c2)values (1, 1), (2, 1), (3, 1), (4, 1), (11, 1), (11, 2), (1, 2), (2, 2), (3, 2), (11, 2), (12, 2), (1, 3), (2, 3), (3, 3), (11, 3);
 select /*+ SET_VAR(enable_per_bucket_optimize=true,enable_query_cache=false) */c2, count() from t4 group by c2 order by c2;
 select /*+ SET_VAR(enable_per_bucket_optimize=false,enable_query_cache=false) */c2, count() from t4 group by c2 order by c2;
+select /*+ SET_VAR(enable_per_bucket_optimize=true,enable_query_cache=false,tablet_internal_parallel_mode='force_split',pipeline_dop=2) */c2, count() from t4 group by c2 order by c2;

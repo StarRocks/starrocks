@@ -34,20 +34,18 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
-import com.starrocks.common.UserException;
-import com.starrocks.common.util.concurrent.lock.LockManager;
-import com.starrocks.persist.CreateTableInfo;
-import com.starrocks.persist.EditLog;
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.NodeMgr;
-import com.starrocks.transaction.GtidGenerator;
-import mockit.Expectations;
-import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.thrift.TFunctionBinaryType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.Type;
+import com.starrocks.utframe.UtFrameUtils;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.LinkedList;
 import java.util.List;
@@ -57,151 +55,135 @@ public class DatabaseTest {
     private Database db;
     private long dbId = 10000;
 
-    @Mocked
-    private GlobalStateMgr globalStateMgr;
-    @Mocked
-    private EditLog editLog;
-
-    @Mocked
-    NodeMgr nodeMgr;
-
-    @Before
+    @BeforeEach
     public void setup() {
         db = new Database(dbId, "dbTest");
-        new Expectations() {
-            {
-                editLog.logCreateTable((CreateTableInfo) any);
-                minTimes = 0;
+        UtFrameUtils.setUpForPersistTest();
+    }
 
-                globalStateMgr.getEditLog();
-                minTimes = 0;
-                result = editLog;
-            }
-        };
-
-        new Expectations(globalStateMgr) {
-            {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-
-                globalStateMgr.getNodeMgr();
-                minTimes = 0;
-                result = nodeMgr;
-
-                globalStateMgr.getLockManager();
-                minTimes = 0;
-                result = new LockManager();
-
-                globalStateMgr.getNextId();
-                minTimes = 0;
-                result = 1L;
-
-                globalStateMgr.getGtidGenerator();
-                minTimes = 0;
-                result = new GtidGenerator();
-            }
-        };
+    @AfterEach
+    public void tearDown() {
+        UtFrameUtils.tearDownForPersisTest();
     }
 
     @Test
     public void createAndDropPartitionTest() {
-        Assert.assertEquals("dbTest", db.getOriginName());
-        Assert.assertEquals(dbId, db.getId());
+        Assertions.assertEquals("dbTest", db.getOriginName());
+        Assertions.assertEquals(dbId, db.getId());
 
         MaterializedIndex baseIndex = new MaterializedIndex(10001, IndexState.NORMAL);
-        Partition partition = new Partition(20000L, "baseTable", baseIndex, new RandomDistributionInfo(10));
+        Partition partition = new Partition(20000L, 20001L,
+                "baseTable", baseIndex, new RandomDistributionInfo(10));
         List<Column> baseSchema = new LinkedList<Column>();
         OlapTable table = new OlapTable(2000, "baseTable", baseSchema, KeysType.AGG_KEYS,
                 new SinglePartitionInfo(), new RandomDistributionInfo(10));
         table.addPartition(partition);
 
         // create
-        Assert.assertTrue(db.registerTableUnlocked(table));
+        Assertions.assertTrue(db.registerTableUnlocked(table));
         // duplicate
-        Assert.assertFalse(db.registerTableUnlocked(table));
+        Assertions.assertFalse(db.registerTableUnlocked(table));
 
-        Assert.assertEquals(table, db.getTable(table.getId()));
-        Assert.assertEquals(table, db.getTable(table.getName()));
+        Assertions.assertEquals(table, db.getTable(table.getId()));
+        Assertions.assertEquals(table, db.getTable(table.getName()));
 
-        Assert.assertEquals(1, db.getTables().size());
-        Assert.assertEquals(table, db.getTables().get(0));
+        Assertions.assertEquals(1, db.getTables().size());
+        Assertions.assertEquals(table, db.getTables().get(0));
 
-        Assert.assertEquals(1, db.getTableNamesViewWithLock().size());
+        Assertions.assertEquals(1, db.getTableNamesViewWithLock().size());
         for (String tableFamilyGroupName : db.getTableNamesViewWithLock()) {
-            Assert.assertEquals(table.getName(), tableFamilyGroupName);
+            Assertions.assertEquals(table.getName(), tableFamilyGroupName);
         }
 
         // drop
         // drop not exist tableFamily
         db.dropTable("invalid");
-        Assert.assertEquals(1, db.getTables().size());
+        Assertions.assertEquals(1, db.getTables().size());
 
         db.registerTableUnlocked(table);
         db.dropTable(table.getName());
-        Assert.assertEquals(0, db.getTables().size());
+        Assertions.assertEquals(0, db.getTables().size());
     }
 
     @Test
     public void testGetUUID() {
         // Internal database
         Database db1 = new Database();
-        Assert.assertEquals("0", db1.getUUID());
+        Assertions.assertEquals("0", db1.getUUID());
 
         Database db2 = new Database(101, "db2");
-        Assert.assertEquals("101", db2.getUUID());
+        Assertions.assertEquals("101", db2.getUUID());
 
         // External database
         Database db3 = new Database(101, "db3");
         db3.setCatalogName("hive");
-        Assert.assertEquals("hive.db3", db3.getUUID());
+        Assertions.assertEquals("hive.db3", db3.getUUID());
     }
 
     @Test
-    public void testAddFunction() throws UserException {
+    public void testAddFunction() throws StarRocksException {
         // Add addIntInt function to database
         FunctionName name = new FunctionName(null, "addIntInt");
         name.setDb(db.getCatalogName());
-        final Type[] argTypes = {Type.INT, Type.INT};
-        Function f = new Function(name, argTypes, Type.INT, false);
+        final Type[] argTypes = {IntegerType.INT, IntegerType.INT};
+        Function f = new ScalarFunction(name, argTypes, IntegerType.INT, false);
+        f.setBinaryType(TFunctionBinaryType.SRJAR);
+        f.setUserVisible(true);
         db.addFunction(f);
 
         // Add addDoubleDouble function to database
         FunctionName name2 = new FunctionName(null, "addDoubleDouble");
         name2.setDb(db.getCatalogName());
-        final Type[] argTypes2 = {Type.DOUBLE, Type.DOUBLE};
-        Function f2 = new Function(name2, argTypes2, Type.DOUBLE, false);
+        final Type[] argTypes2 = {FloatType.DOUBLE, FloatType.DOUBLE};
+        Function f2 = new ScalarFunction(name2, argTypes2, FloatType.DOUBLE, false);
+        f2.setBinaryType(TFunctionBinaryType.SRJAR);
+        f2.setUserVisible(true);
         db.addFunction(f2);
     }
 
     @Test
-    public void testAddFunctionGivenFunctionAlreadyExists() throws UserException {
+    public void testAddFunctionGivenFunctionAlreadyExists() throws StarRocksException {
         FunctionName name = new FunctionName(null, "addIntInt");
         name.setDb(db.getCatalogName());
-        final Type[] argTypes = {Type.INT, Type.INT};
-        Function f = new Function(name, argTypes, Type.INT, false);
+        final Type[] argTypes = {IntegerType.INT, IntegerType.INT};
+        Function f = new ScalarFunction(name, argTypes, IntegerType.INT, false);
+        f.setBinaryType(TFunctionBinaryType.SRJAR);
+        f.setUserVisible(true);
 
         // Add the UDF for the first time
         db.addFunction(f);
 
         // Attempt to add the same UDF again, expecting an exception
-        Assert.assertThrows(UserException.class, () -> db.addFunction(f));
+        Assertions.assertThrows(StarRocksException.class, () -> db.addFunction(f));
     }
 
     @Test
-    public void testAddFunctionGivenFunctionAlreadyExistsAndAllowExisting() throws UserException {
+    public void testAddFunctionGivenFunctionAlreadyExistsAndAllowExisting() throws StarRocksException {
         FunctionName name = new FunctionName(null, "addIntInt");
         name.setDb(db.getCatalogName());
-        final Type[] argTypes = {Type.INT, Type.INT};
-        Function f = new Function(name, argTypes, Type.INT, false);
+        final Type[] argTypes = {IntegerType.INT, IntegerType.INT};
+        Function f = new ScalarFunction(name, argTypes, IntegerType.INT, false);
+        f.setBinaryType(TFunctionBinaryType.SRJAR);
+        f.setUserVisible(true);
 
         // Add the UDF for the first time
-        db.addFunction(f, true);
+        db.addFunction(f, true, false);
         // Attempt to add the same UDF again
-        db.addFunction(f, true);
+        db.addFunction(f, true, false);
 
         List<Function> functions = db.getFunctions();
-        Assert.assertEquals(functions.size(), 1);
-        Assert.assertTrue(functions.get(0).compare(f, Function.CompareMode.IS_IDENTICAL));
+        Assertions.assertEquals(functions.size(), 1);
+        Assertions.assertTrue(functions.get(0).compare(f, Function.CompareMode.IS_IDENTICAL));
+    }
+
+    @Test
+    public void testAddAndDropFunctionForRestore() {
+        Function f1 = new Function(new FunctionName(db.getFullName(), "test_function"),
+                                   new Type[] {IntegerType.INT}, new String[] {"argName"}, IntegerType.INT, false);
+        try {
+            db.addFunction(f1);
+        } catch (Exception e) {
+        }
+        db.dropFunctionForRestore(f1);
     }
 }

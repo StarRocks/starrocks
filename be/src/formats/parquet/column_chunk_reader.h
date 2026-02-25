@@ -21,9 +21,13 @@
 #include <unordered_map>
 #include <vector>
 
+#include "base/concurrency/stopwatch.hpp"
+#include "base/string/slice.h"
 #include "column/column.h"
+#include "column/vectorized_fwd.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
-#include "exec/hdfs_scanner.h"
+#include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/encoding.h"
 #include "formats/parquet/level_codec.h"
@@ -33,12 +37,8 @@
 #include "fs/fs.h"
 #include "gen_cpp/parquet_types.h"
 #include "util/compression/block_compression.h"
-#include "util/runtime_profile.h"
-#include "util/slice.h"
-#include "util/stopwatch.hpp"
 
 namespace starrocks {
-class BlockCompressionCodec;
 class NullableColumn;
 
 namespace io {
@@ -62,8 +62,6 @@ public:
 
     Status load_page();
 
-    Status skip_page();
-
     Status skip_values(size_t num) {
         if (num == 0) {
             return Status::OK();
@@ -82,31 +80,18 @@ public:
     LevelDecoder& def_level_decoder() { return _def_level_decoder; }
     LevelDecoder& rep_level_decoder() { return _rep_level_decoder; }
 
-    Status decode_values(size_t n, const uint16_t* is_nulls, ColumnContentType content_type, Column* dst) {
+    Status decode_values(size_t n, const NullInfos& null_infos, ColumnContentType content_type, Column* dst,
+                         const FilterData* filter = nullptr) {
         SCOPED_RAW_TIMER(&_opts.stats->value_decode_ns);
         if (_current_row_group_no_null || _current_page_no_null) {
-            return _cur_decoder->next_batch(n, content_type, dst);
+            return _cur_decoder->next_batch(n, content_type, dst, filter);
         }
-        size_t idx = 0;
-        while (idx < n) {
-            bool is_null = is_nulls[idx++];
-            size_t run = 1;
-            while (idx < n && is_nulls[idx] == is_null) {
-                idx++;
-                run++;
-            }
-            if (is_null) {
-                dst->append_nulls(run);
-            } else {
-                RETURN_IF_ERROR(_cur_decoder->next_batch(run, content_type, dst));
-            }
-        }
-        return Status::OK();
+        return _cur_decoder->next_batch_with_nulls(n, null_infos, content_type, dst, filter);
     }
 
-    Status decode_values(size_t n, ColumnContentType content_type, Column* dst) {
+    Status decode_values(size_t n, ColumnContentType content_type, Column* dst, const FilterData* filter = nullptr) {
         SCOPED_RAW_TIMER(&_opts.stats->value_decode_ns);
-        return _cur_decoder->next_batch(n, content_type, dst);
+        return _cur_decoder->next_batch(n, content_type, dst, filter);
     }
 
     const tparquet::ColumnMetaData& metadata() const { return _chunk_metadata->meta_data; }
@@ -116,7 +101,7 @@ public:
         return _cur_decoder->get_dict_values(column);
     }
 
-    Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls, Column* column) {
+    Status get_dict_values(const Buffer<int32_t>& dict_codes, const NullableColumn& nulls, Column* column) {
         RETURN_IF_ERROR(_try_load_dictionary());
         return _cur_decoder->get_dict_values(dict_codes, nulls, column);
     }
@@ -137,13 +122,9 @@ private:
     Status _parse_page_header();
     Status _parse_page_data();
 
-    Status _read_and_decompress_page_data();
-    Status _parse_data_page();
+    Status _parse_data_page(tparquet::PageType::type page_type);
     Status _parse_dict_page();
-
     Status _try_load_dictionary();
-
-    Status _read_and_decompress_page_data(uint32_t compressed_size, uint32_t uncompressed_size, bool is_compressed);
 
 private:
     enum PageParseState {
@@ -161,7 +142,6 @@ private:
     const tparquet::ColumnChunk* _chunk_metadata = nullptr;
     const ColumnReaderOptions& _opts;
     std::unique_ptr<PageReader> _page_reader;
-    const BlockCompressionCodec* _compress_codec = nullptr;
     io::SeekableInputStream* _stream;
 
     LevelDecoder _def_level_decoder;
@@ -170,11 +150,7 @@ private:
     int _chunk_size = 0;
     size_t _num_values = 0;
 
-    std::vector<uint8_t> _compressed_buf;
-    std::vector<uint8_t> _uncompressed_buf;
-
     PageParseState _page_parse_state = INITIALIZED;
-    Slice _data;
 
     bool _dict_page_parsed = false;
     Decoder* _cur_decoder = nullptr;

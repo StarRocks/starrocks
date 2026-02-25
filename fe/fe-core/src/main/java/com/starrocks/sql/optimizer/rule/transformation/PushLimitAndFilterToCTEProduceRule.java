@@ -82,7 +82,8 @@ public class PushLimitAndFilterToCTEProduceRule extends TransformationRule {
             child = OptExpression.create(new LogicalFilterOperator(extractor.rewriteAll(orPredicate)), child);
         }
 
-        if (consumeNums == limits.size()) {
+        if (consumeNums == limits.size() && predicates.isEmpty()) {
+            // only push down limit when no predicate
             Long maxLimit = limits.stream().reduce(Long::max).orElse(Operator.DEFAULT_LIMIT);
             child = OptExpression.create(LogicalLimitOperator.local(maxLimit), child);
         }

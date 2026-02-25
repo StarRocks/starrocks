@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include "base/hash/hash_std.hpp"
+#include "base/uid_util.h"
 #include "column/stream_chunk.h"
 #include "runtime/runtime_state.h"
 
@@ -23,8 +25,7 @@ class TMVStartEpochTask;
 } // namespace starrocks
 
 namespace starrocks::pipeline {
-
-using FragmentContext = pipeline::FragmentContext;
+class FragmentContext;
 using TabletId2BinlogOffset = std::unordered_map<int64_t, BinlogOffset>;
 using NodeId2ScanRanges = std::unordered_map<int64_t, TabletId2BinlogOffset>;
 

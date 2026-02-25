@@ -20,13 +20,13 @@
 #include <limits>
 #include <type_traits>
 
+#include "base/container/raw_container.h"
 #include "column/fixed_length_column.h"
 #include "column/type_traits.h"
 #include "exprs/agg/maxmin.h"
 #include "exprs/agg/stream/stream_detail_state.h"
 #include "gutil/casts.h"
 #include "storage/chunk_helper.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 
@@ -50,21 +50,29 @@ struct MaxAggregateDataRetractable<LT, FixedLengthLTGuard<LT>> : public StreamDe
 
 template <LogicalType LT>
 struct MaxAggregateDataRetractable<LT, StringLTGuard<LT>> : public StreamDetailState<LT> {
-    int32_t size = -1;
-    raw::RawVector<uint8_t> buffer;
+    void assign(const Slice& slice) {
+        _buffer.resize(slice.size);
+        size_t length = std::min<size_t>(PADDED_SIZE, slice.size);
+        memcpy(_buffer.data(), slice.data, length);
+        _size = slice.size;
+    }
 
-    bool has_value() const { return buffer.size() > 0; }
+    bool has_value() const { return _size > -1; }
 
-    Slice slice() const { return {buffer.data(), buffer.size()}; }
+    Slice slice() const { return {_buffer.data(), (size_t)_size}; }
 
     void reset_result() {
-        buffer.clear();
-        size = -1;
+        _buffer.clear();
+        _size = -1;
     }
     void reset() {
         StreamDetailState<LT>::reset();
         reset_result();
     }
+
+private:
+    int32_t _size = -1;
+    raw::RawVector<uint8_t> _buffer;
 };
 
 template <LogicalType LT, typename = guard::Guard>
@@ -83,21 +91,29 @@ struct MinAggregateDataRetractable<LT, FixedLengthLTGuard<LT>> : public StreamDe
 
 template <LogicalType LT>
 struct MinAggregateDataRetractable<LT, StringLTGuard<LT>> : public StreamDetailState<LT> {
-    int32_t size = -1;
-    Buffer<uint8_t> buffer;
+    void assign(const Slice& slice) {
+        _buffer.resize(slice.size);
+        size_t length = std::min<size_t>(PADDED_SIZE, slice.size);
+        memcpy(_buffer.data(), slice.data, length);
+        _size = slice.size;
+    }
 
-    bool has_value() const { return size > -1; }
+    bool has_value() const { return _size > -1; }
 
-    Slice slice() const { return {buffer.data(), buffer.size()}; }
+    Slice slice() const { return {_buffer.data(), (size_t)_size}; }
 
     void reset_result() {
-        buffer.clear();
-        size = -1;
+        _buffer.clear();
+        _size = -1;
     }
     void reset() {
         StreamDetailState<LT>::reset();
         reset_result();
     }
+
+private:
+    int32_t _size = -1;
+    raw::RawVector<uint8_t> _buffer;
 };
 
 template <LogicalType LT, typename State, class OP, typename T = RunTimeCppType<LT>>
@@ -135,8 +151,8 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
-        *dst = src[0];
+                                     MutableColumnPtr& dst) const override {
+        dst = std::move(*(src[0])).mutate();
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
@@ -179,11 +195,11 @@ public:
     T get_row_value(const Column* column, size_t row_num) const {
         if constexpr (lt_is_string<LT>) {
             DCHECK(column->is_binary());
-            return column->get(row_num).get_slice();
+            return down_cast<const InputColumnType&>(*column).get_slice(row_num);
         } else {
             DCHECK(!column->is_nullable() && !column->is_binary());
             const auto& col = down_cast<const InputColumnType&>(*column);
-            return col.get_data()[row_num];
+            return col.immutable_data()[row_num];
         }
     }
 
@@ -254,7 +270,7 @@ public:
         sync_col->append(is_sync);
     }
 
-    void output_detail(FunctionContext* ctx, ConstAggDataPtr __restrict state, const Columns& to,
+    void output_detail(FunctionContext* ctx, ConstAggDataPtr __restrict state, Columns& to,
                        Column* count) const override {
         if constexpr (lt_is_string<LT>) {
             DCHECK((*to[0]).is_binary());
@@ -262,8 +278,8 @@ public:
             DCHECK((*to[0]).is_numeric());
         }
         DCHECK((*to[1]).is_numeric());
-        auto* column0 = down_cast<InputColumnType*>(to[0].get());
-        auto* column1 = down_cast<Int64Column*>(to[1].get());
+        auto* column0 = down_cast<InputColumnType*>(to[0]->as_mutable_raw_ptr());
+        auto* column1 = down_cast<Int64Column*>(to[1]->as_mutable_raw_ptr());
         auto& detail_state = this->data(state).detail_state();
         for (auto iter = detail_state.cbegin(); iter != detail_state.cend(); iter++) {
             // is it possible that count is negative?

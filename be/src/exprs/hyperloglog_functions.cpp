@@ -14,13 +14,13 @@
 
 #include "exprs/hyperloglog_functions.h"
 
+#include "base/phmap/phmap.h"
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
 #include "column/object_column.h"
 #include "exprs/function_context.h"
 #include "exprs/unary_function.h"
 #include "types/hll.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 
@@ -63,7 +63,7 @@ StatusOr<ColumnPtr> HyperloglogFunctions::hll_hash(FunctionContext* context, con
     }
 
     if (ColumnHelper::is_all_const(columns)) {
-        return ConstColumn::create(hll_column, columns[0]->size());
+        return ConstColumn::create(std::move(hll_column), columns[0]->size());
     } else {
         return hll_column;
     }
@@ -74,7 +74,7 @@ StatusOr<ColumnPtr> HyperloglogFunctions::hll_empty(FunctionContext* context, co
     auto p = HyperLogLogColumn::create();
 
     p->append_default();
-    return ConstColumn::create(p, 1);
+    return ConstColumn::create(std::move(p), 1);
 }
 
 // hll_serialize
@@ -105,10 +105,12 @@ StatusOr<ColumnPtr> HyperloglogFunctions::hll_deserialize(FunctionContext* conte
     }
 
     if (ColumnHelper::is_all_const(columns)) {
-        return ConstColumn::create(hll_column, columns[0]->size());
+        return ConstColumn::create(std::move(hll_column), columns[0]->size());
     } else {
         return hll_column;
     }
 }
 
 } // namespace starrocks
+
+#include "gen_cpp/opcode/HyperloglogFunctions.inc"

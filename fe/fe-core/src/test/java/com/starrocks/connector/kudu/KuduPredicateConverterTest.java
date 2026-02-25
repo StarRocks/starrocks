@@ -14,9 +14,9 @@
 
 package com.starrocks.connector.kudu;
 
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.catalog.Type;
+import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -24,10 +24,13 @@ import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarcharType;
 import org.apache.kudu.Schema;
 import org.apache.kudu.client.KuduPredicate;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 import java.util.Arrays;
@@ -45,24 +48,26 @@ public class KuduPredicateConverterTest {
             genColumnSchema("f4", org.apache.kudu.Type.UNIXTIME_MICROS)
     ));
 
-    private static final ColumnRefOperator F0 = new ColumnRefOperator(0, Type.INT, "f0", true, false);
-    private static final ColumnRefOperator F1 = new ColumnRefOperator(0, Type.VARCHAR, "f1", true, false);
-    private static final ColumnRefOperator F3 = new ColumnRefOperator(0, Type.DATE, "f3", true, false);
-    private static final ColumnRefOperator F4 = new ColumnRefOperator(0, Type.DATETIME, "f4", true, false);
+    private static final ColumnRefOperator F0 = new ColumnRefOperator(0, IntegerType.INT, "f0", true, false);
+    private static final ColumnRefOperator F1 = new ColumnRefOperator(0, VarcharType.VARCHAR, "f1", true, false);
+    private static final ColumnRefOperator F3 = new ColumnRefOperator(0, DateType.DATE, "f3", true, false);
+    private static final ColumnRefOperator F4 = new ColumnRefOperator(0, DateType.DATETIME, "f4", true, false);
+    private static final CastOperator F0_CAST = new CastOperator(
+            VarcharType.VARCHAR, new ColumnRefOperator(0, IntegerType.INT, "f0", true, false));
 
     private static final KuduPredicateConverter CONVERTER = new KuduPredicateConverter(SCHEMA);
 
     @Test
     public void testNull() {
         List<KuduPredicate> result = CONVERTER.convert(null);
-        Assert.assertNull(result);
+        Assertions.assertNull(result);
     }
 
     @Test
     public void testIsNull() {
         ScalarOperator op = new IsNullPredicateOperator(false, F0);
         List<KuduPredicate> result = CONVERTER.convert(op);
-        Assert.assertEquals(result.get(0).toString(), "`f0` NONE");
+        Assertions.assertEquals(result.get(0).toString(), "`f0` NONE");
     }
 
     @Test
@@ -70,7 +75,15 @@ public class KuduPredicateConverterTest {
         ConstantOperator value = ConstantOperator.createInt(5);
         ScalarOperator op = new BinaryPredicateOperator(BinaryType.EQ, F0, value);
         List<KuduPredicate> result = CONVERTER.convert(op);
-        Assert.assertEquals(result.get(0).toString(), "`f0` = 5");
+        Assertions.assertEquals(result.get(0).toString(), "`f0` = 5");
+    }
+
+    @Test
+    public void testEqCast() {
+        ConstantOperator value = ConstantOperator.createVarchar("5");
+        ScalarOperator op = new BinaryPredicateOperator(BinaryType.EQ, F0_CAST, value);
+        List<KuduPredicate> result = CONVERTER.convert(op);
+        Assertions.assertEquals(result.get(0).toString(), "`f0` = 5");
     }
 
     @Test
@@ -78,7 +91,7 @@ public class KuduPredicateConverterTest {
         ConstantOperator value = ConstantOperator.createDate(LocalDateTime.of(2024, 1, 1, 0, 0));
         ScalarOperator op = new BinaryPredicateOperator(BinaryType.EQ, F3, value);
         List<KuduPredicate> result = CONVERTER.convert(op);
-        Assert.assertEquals(result.get(0).toString(), "`f3` = 2024-01-01");
+        Assertions.assertEquals(result.get(0).toString(), "`f3` = 2024-01-01");
     }
 
     @Test
@@ -86,7 +99,7 @@ public class KuduPredicateConverterTest {
         ConstantOperator value = ConstantOperator.createDatetime(LocalDateTime.of(2024, 1, 1, 0, 0));
         ScalarOperator op = new BinaryPredicateOperator(BinaryType.EQ, F4, value);
         List<KuduPredicate> result = CONVERTER.convert(op);
-        Assert.assertEquals(result.get(0).toString(), "`f4` = 2024-01-01T00:00:00.000000Z");
+        Assertions.assertEquals(result.get(0).toString(), "`f4` = 2024-01-01T00:00:00.000000Z");
     }
 
     @Test
@@ -94,7 +107,7 @@ public class KuduPredicateConverterTest {
         ConstantOperator value = ConstantOperator.createInt(5);
         ScalarOperator op = new BinaryPredicateOperator(BinaryType.LT, F0, value);
         List<KuduPredicate> result = CONVERTER.convert(op);
-        Assert.assertEquals(result.get(0).toString(), "`f0` < 5");
+        Assertions.assertEquals(result.get(0).toString(), "`f0` < 5");
     }
 
     @Test
@@ -102,7 +115,7 @@ public class KuduPredicateConverterTest {
         ConstantOperator value = ConstantOperator.createInt(5);
         ScalarOperator op = new BinaryPredicateOperator(BinaryType.LE, F0, value);
         List<KuduPredicate> result = CONVERTER.convert(op);
-        Assert.assertEquals(result.get(0).toString(), "`f0` < 6");
+        Assertions.assertEquals(result.get(0).toString(), "`f0` < 6");
     }
 
     @Test
@@ -110,7 +123,7 @@ public class KuduPredicateConverterTest {
         ConstantOperator value = ConstantOperator.createInt(5);
         ScalarOperator op = new BinaryPredicateOperator(BinaryType.GT, F0, value);
         List<KuduPredicate> result = CONVERTER.convert(op);
-        Assert.assertEquals(result.get(0).toString(), "`f0` >= 6");
+        Assertions.assertEquals(result.get(0).toString(), "`f0` >= 6");
     }
 
     @Test
@@ -118,7 +131,7 @@ public class KuduPredicateConverterTest {
         ConstantOperator value = ConstantOperator.createInt(5);
         ScalarOperator op = new BinaryPredicateOperator(BinaryType.GE, F0, value);
         List<KuduPredicate> result = CONVERTER.convert(op);
-        Assert.assertEquals(result.get(0).toString(), "`f0` >= 5");
+        Assertions.assertEquals(result.get(0).toString(), "`f0` >= 5");
     }
 
     @Test
@@ -128,7 +141,7 @@ public class KuduPredicateConverterTest {
         ConstantOperator value2 = ConstantOperator.createInt(7);
         ScalarOperator op = new InPredicateOperator(false, F0, value, value1, value2);
         List<KuduPredicate> result = CONVERTER.convert(op);
-        Assert.assertEquals(result.get(0).toString(), "`f0` IN (5, 6, 7)");
+        Assertions.assertEquals(result.get(0).toString(), "`f0` IN (5, 6, 7)");
     }
 
     @Test
@@ -136,7 +149,7 @@ public class KuduPredicateConverterTest {
         ConstantOperator value = ConstantOperator.createInt(5);
         ScalarOperator op = new LikePredicateOperator(LikePredicateOperator.LikeType.LIKE, F0, value);
         List<KuduPredicate> result = CONVERTER.convert(op);
-        Assert.assertEquals(result.size(), 0);
+        Assertions.assertEquals(result.size(), 0);
     }
 
     @Test
@@ -147,7 +160,7 @@ public class KuduPredicateConverterTest {
         ScalarOperator ge2 = new BinaryPredicateOperator(BinaryType.GT, F1, varcharOp);
         ScalarOperator op = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.NOT, ge1, ge2);
         List<KuduPredicate> result = CONVERTER.convert(op);
-        Assert.assertEquals(result.size(), 0);
+        Assertions.assertEquals(result.size(), 0);
     }
 
     @Test
@@ -158,8 +171,8 @@ public class KuduPredicateConverterTest {
         ScalarOperator eq = new BinaryPredicateOperator(BinaryType.EQ, F1, varcharOp);
         ScalarOperator op = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, gt, eq);
         List<KuduPredicate> result = CONVERTER.convert(op);
-        Assert.assertEquals(result.get(0).toString(), "`f0` >= 6");
-        Assert.assertEquals(result.get(1).toString(), "`f1` = \"abc\"");
+        Assertions.assertEquals(result.get(0).toString(), "`f0` >= 6");
+        Assertions.assertEquals(result.get(1).toString(), "`f1` = \"abc\"");
     }
 
     @Test
@@ -170,6 +183,6 @@ public class KuduPredicateConverterTest {
         ScalarOperator eq = new BinaryPredicateOperator(BinaryType.EQ, F1, varcharOp);
         ScalarOperator op = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, gt, eq);
         List<KuduPredicate> result = CONVERTER.convert(op);
-        Assert.assertEquals(result.size(), 0);
+        Assertions.assertEquals(result.size(), 0);
     }
 }

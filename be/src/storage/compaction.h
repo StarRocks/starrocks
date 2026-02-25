@@ -16,6 +16,8 @@
 
 #include <vector>
 
+#include "base/concurrency/semaphore.hpp"
+#include "common/runtime_profile.h"
 #include "storage/compaction_utils.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
@@ -25,8 +27,6 @@
 #include "storage/tablet.h"
 #include "storage/tablet_meta.h"
 #include "storage/utils.h"
-#include "util/runtime_profile.h"
-#include "util/semaphore.hpp"
 
 namespace starrocks {
 

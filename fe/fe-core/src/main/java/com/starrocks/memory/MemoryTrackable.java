@@ -14,18 +14,12 @@
 
 package com.starrocks.memory;
 
-import org.apache.spark.util.SizeEstimator;
-
-import java.util.HashMap;
 import java.util.Map;
 
 public interface MemoryTrackable {
-
     default long estimateSize() {
-        return SizeEstimator.estimate(this);
+        return 0;
     }
 
-    default Map<String, Long> estimateCount() {
-        return new HashMap<>();
-    }
+    Map<String, Long> estimateCount();
 }

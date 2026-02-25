@@ -14,12 +14,14 @@
 
 package com.starrocks.connector.metadata;
 
+import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metadata.iceberg.IcebergMetadataTableFactory;
 
 public class MetadataTableFactoryProvider {
     public static AbstractMetadataTableFactory getFactory(String catalogType) {
-        if (catalogType.equalsIgnoreCase("iceberg")) {
+        if (catalogType.equalsIgnoreCase(ConnectorType.ICEBERG.getName()) ||
+                catalogType.equalsIgnoreCase(ConnectorType.UNIFIED.getName())) {
             return IcebergMetadataTableFactory.INSTANCE;
         }
         throw new StarRocksConnectorException("not support getting %s metadata table factory", catalogType);

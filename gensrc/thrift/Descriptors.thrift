@@ -38,20 +38,38 @@ namespace java com.starrocks.thrift
 include "Types.thrift"
 include "Exprs.thrift"
 
+enum TRowPositionType {
+    ICEBERG_V3_ROW_POSITION,
+}
+
+// used to describe row position for different tables
+struct TRowPositionDescriptor {
+    1: optional TRowPositionType row_position_type;
+    // which node used to do fetch operation
+    2: optional Types.TSlotId row_source_slot;
+    3: optional list<Types.TSlotId> fetch_ref_slots;
+    4: optional list<Types.TSlotId> lookup_ref_slots;
+}
+
 struct TSlotDescriptor {
   1: optional Types.TSlotId id
   2: optional Types.TTupleId parent
   3: optional Types.TTypeDesc slotType
   4: optional i32 columnPos   // Deprecated
   5: optional i32 byteOffset  // Deprecated
-  6: optional i32 nullIndicatorByte // Deprecated
-  7: optional i32 nullIndicatorBit // Deprecated
+  6: optional i32 nullIndicatorByte = 0 // Deprecated
+  7: optional i32 nullIndicatorBit = -1 // Deprecated
   8: optional string colName;
   9: optional i32 slotIdx // Deprecated
   10: optional bool isMaterialized // Deprecated
   11: optional bool isOutputColumn // Deprecated
   12: optional bool isNullable // replace nullIndicatorBit & nullIndicatorByte
   13: optional i32 col_unique_id = -1
+  // col_physical_name is used to store the physical name of the column in the storage layer.
+  // for example, the physical name of a column in a parquet file.
+  // used in delta lake column mapping name mode
+  14: optional string col_physical_name
+  15: optional bool is_virtual_column = false
 }
 
 struct TTupleDescriptor {
@@ -64,9 +82,11 @@ struct TTupleDescriptor {
 
 enum THdfsFileFormat {
   TEXT = 0,
-  LZO_TEXT = 1,
-  RC_BINARY = 2,
-  RC_TEXT = 3,
+  LZO_TEXT = 1, // Deprecated
+  RC_FILE = 2,
+  // THdfsFileFormat is only used to represent FileFormat, not SerializeFormat,
+  // so there is no need to split it into RC_BINARY and RC_TEXT.
+  RC_TEXT = 3, // Deprecated
   AVRO = 4,
   PARQUET = 5,
   ORC = 6,
@@ -156,7 +176,7 @@ enum TSchemaTableType {
     SCH_BE_LOGS,
     SCH_BE_BVARS,
     SCH_BE_CLOUD_NATIVE_COMPACTIONS,
-    
+
     STARROCKS_ROLE_EDGES,
     STARROCKS_GRANT_TO_ROLES,
     STARROCKS_GRANT_TO_USERS,
@@ -167,10 +187,29 @@ enum TSchemaTableType {
     SCH_FE_METRICS,
     STARROCKS_OBJECT_DEPENDENCIES,
     SYS_FE_LOCKS,
-    SCH_BE_DATACACHE_METRICS,
-    SCH_PARTITIONS_META,
     SYS_FE_MEMORY_USAGE,
+    SCH_PARTITIONS_META,
+    SCH_BE_DATACACHE_METRICS,
     SCH_TEMP_TABLES,
+    
+    SCH_COLUMN_STATS_USAGE,
+    SCH_ANALYZE_STATUS,
+
+    SCH_CLUSTER_SNAPSHOTS,
+    SCH_CLUSTER_SNAPSHOT_JOBS,
+
+    SCH_KEYWORDS,
+    SCH_APPLICABLE_ROLES,
+
+    SCH_WAREHOUSE_METRICS,
+    SCH_WAREHOUSE_QUERIES,
+
+    SCH_TABLET_RESHARD_JOBS,
+    SCH_RECYCLEBIN_CATALOGS,
+
+    SCH_FE_THREADS,
+
+    SCH_BE_TABLET_WRITE_LOG
 }
 
 enum THdfsCompression {
@@ -188,6 +227,14 @@ enum TIndexType {
   GIN,
   NGRAMBF,
   VECTOR,
+}
+
+// Not define UNKNOWN type for better compatibility with
+// DistributionInfo.DistributionInfoType definition
+enum TOlapTableDistributionType {
+    HASH,
+    RANDOM,
+    RANGE,
 }
 
 // Mapping from names defined by Avro to the enum.
@@ -215,17 +262,37 @@ struct TColumn {
     9: optional bool is_auto_increment
     10: optional i32 col_unique_id  = -1
     11: optional bool has_bitmap_index = false
+    12: optional Types.TAggStateDesc agg_state_desc
                                                                                                       
     // How many bytes used for short key index encoding.
     // For fixed-length column, this value may be ignored by BE when creating a tablet.
     20: optional i32 index_len                 
     // column type. If this field is set, the |column_type| will be ignored.
-    21: optional Types.TTypeDesc type_desc         
+    21: optional Types.TTypeDesc type_desc
+    // Default value expression for complex types (array/map/struct).
+    // If set, BE will evaluate this expression and convert to JSON string for storage.
+    // For simple types, use |default_value| (field 6) instead.
+    22: optional Exprs.TExpr default_expr
+}
+
+// Key information for locating a specific table schema version.
+struct TTableSchemaKey {
+  1: optional i64 db_id
+  2: optional i64 table_id
+  3: optional i64 schema_id
+}
+
+struct TOlapTableTablet {
+    1: optional i64 id // tablet id
+    2: optional Types.TTabletRange range
 }
 
 struct TOlapTableIndexTablets {
+    // Because multiple versions of a materialized index cannot be loaded simultaneously,
+    // the `index id` is set to the `index meta id`.
     1: required i64 index_id
-    2: required list<i64> tablets
+    2: required list<i64> tablet_ids
+    3: optional list<TOlapTableTablet> tablets
 }
 
 // its a closed-open range
@@ -235,8 +302,8 @@ struct TOlapTablePartition {
     2: optional Exprs.TExprNode start_key
     3: optional Exprs.TExprNode end_key
 
-    // how many tablets in one partition
-    4: required i32 num_buckets
+    // Deprecated, different indexes could have different buckets
+    4: optional i32 deprecated_num_buckets = 0
 
     5: required list<TOlapTableIndexTablets> indexes
 
@@ -267,6 +334,8 @@ struct TOlapTablePartitionParam {
     8: optional list<Exprs.TExpr> partition_exprs
 
     9: optional bool enable_automatic_partition
+
+    10: optional TOlapTableDistributionType distribution_type
 }
 
 struct TOlapTableColumnParam {
@@ -276,12 +345,16 @@ struct TOlapTableColumnParam {
 }
 
 struct TOlapTableIndexSchema {
-    1: required i64 id // index id
+    // Because multiple versions of a materialized index cannot be loaded simultaneously,
+    // the `id` is set to the `index meta id`.
+    1: required i64 id
     2: required list<string> columns
     3: required i32 schema_hash
     4: optional TOlapTableColumnParam column_param
     5: optional Exprs.TExpr where_clause
     6: optional i64 schema_id // schema id
+    7: optional map<string, string> column_to_expr_value
+    8: optional bool is_shadow
 }
 
 struct TOlapTableSchemaParam {
@@ -465,6 +538,9 @@ struct TTableFunctionTable {
     9: optional string csv_column_seperator
 
     10: optional bool parquet_use_legacy_encoding
+    11: optional Types.TParquetOptions parquet_options
+
+    12: optional bool csv_include_header
 }
 
 struct TIcebergSchemaField {
@@ -495,6 +571,19 @@ struct TCompressedPartitionMap {
     3: optional string compressed_serialized_partitions
 }
 
+struct TIcebergPartitionInfo {
+    1: optional string source_column_name
+    2: optional string partition_column_name
+    3: optional string transform_expr
+    4: optional Exprs.TExpr partition_expr
+}
+
+struct TSortOrder {
+    1: optional list<i32> sort_key_idxes
+    2: optional list<bool> is_ascs;
+    3: optional list<bool> is_null_firsts;
+}
+
 struct TIcebergTable {
     // table location
     1: optional string location
@@ -506,7 +595,7 @@ struct TIcebergTable {
     3: optional TIcebergSchema iceberg_schema
 
     // partition column names
-    4: optional list<string> partition_column_names
+    4: optional list<string> partition_column_names //Deprecated, move to TIcebergPartitionInfo
 
     // partition map may be very big, serialize costs too much, just use serialized byte[]
     5: optional TCompressedPartitionMap compressed_partitions
@@ -516,6 +605,11 @@ struct TIcebergTable {
 
     // Iceberg equality delete schema, used to support schema evolution
     7: optional TIcebergSchema iceberg_equal_delete_schema
+
+    8: optional list<TIcebergPartitionInfo> partition_info
+
+    // Iceberg sort order, used to sort data before writing to Iceberg
+    9: optional TSortOrder sort_order
 }
 
 struct THudiTable {
@@ -561,6 +655,9 @@ struct TPaimonTable {
 
     // timezone
     3: optional string time_zone
+
+    // reuse iceberg schema here, used to support schema evolution
+    4: optional TIcebergSchema paimon_schema
 }
 
 struct TDeltaLakeTable {

@@ -15,27 +15,20 @@
 #pragma once
 
 #include <cstdint>
-#include <cstring>
-#include <map>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
 
-#include "common/status.h"
-#include "runtime/types.h"
-#include "types/logical_type.h"
+#include "column/column.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 
 class MemPool;
 class RuntimeState;
 
-class Column;
-class Slice;
-struct JavaUDAFContext;
 struct NgramBloomFilterState;
-using ColumnPtr = std::shared_ptr<Column>;
 
 class FunctionContext {
 public:
@@ -51,7 +44,6 @@ public:
         /// concurrently on a single host if the UDF will be evaluated in multiple plan
         /// fragments on that host. In general, read-only state that doesn't need to be
         /// recomputed for every UDF call should be fragment-local.
-        /// TODO: not yet implemented
         FRAGMENT_LOCAL,
 
         /// Indicates that the function state is local to the execution thread. This state
@@ -128,12 +120,10 @@ public:
     // Return true if it's constant and not null
     bool is_notnull_constant_column(int i) const;
 
-    std::shared_ptr<starrocks::Column> get_constant_column(int arg_idx) const;
+    ColumnPtr get_constant_column(int arg_idx) const;
 
     bool is_udf() { return _is_udf; }
     void set_is_udf(bool is_udf) { this->_is_udf = is_udf; }
-
-    ColumnPtr create_column(const TypeDesc& type_desc, bool nullable);
 
     // Create a test FunctionContext object. The caller is responsible for calling delete
     // on it. This context has additional debugging validation enabled.
@@ -145,28 +135,24 @@ public:
     /// it.
     FunctionContext* clone(MemPool* pool);
 
-    void set_constant_columns(std::vector<ColumnPtr> columns) { _constant_columns = std::move(columns); }
+    void set_constant_columns(Columns columns) { _constant_columns = std::move(columns); }
 
     MemPool* mem_pool() { return _mem_pool; }
 
-    void set_mem_usage_counter(int64_t* mem_usage_counter) { _mem_usage = mem_usage_counter; }
+    void set_mem_usage_counter(int64_t* mem_usage_counter) { _mem_usage_counter = mem_usage_counter; }
 
     int64_t mem_usage() const {
-        DCHECK(_mem_usage);
-        return *_mem_usage;
+        DCHECK(_mem_usage_counter);
+        return *_mem_usage_counter;
     }
     void add_mem_usage(int64_t delta) {
-        DCHECK(_mem_usage);
-        *_mem_usage += delta;
+        DCHECK(_mem_usage_counter);
+        *_mem_usage_counter += delta;
     }
 
     RuntimeState* state() { return _state; }
     bool has_error() const;
     const char* error_msg() const;
-
-    JavaUDAFContext* udaf_ctxs() { return _jvm_udaf_ctxs.get(); }
-
-    void release_mems();
 
     ssize_t get_group_concat_max_len() { return group_concat_max_len; }
     // min value is 4, default is 1024
@@ -205,16 +191,17 @@ private:
     // TODO: support complex type
     std::vector<FunctionContext::TypeDesc> _arg_types;
 
-    std::vector<ColumnPtr> _constant_columns;
+    Columns _constant_columns;
 
     // Indicates whether this context has been closed. Used for verification/debugging.
     bool _is_udf = false;
 
-    // this is used for count memory usage of aggregate state
-    int64_t* _mem_usage = nullptr;
-
-    // UDAF Context
-    std::unique_ptr<JavaUDAFContext> _jvm_udaf_ctxs;
+    int64_t _mem_usage = 0;
+    // This is used to count the memory usage of the agg state.
+    // In Aggregator, multiple FunctionContexts can share the same counter.
+    // If it is not explicitly set externally (e.g. AggFuncBasedValueAggregator),
+    // it will point to the internal _mem_usage
+    int64_t* _mem_usage_counter = &_mem_usage;
 
     std::vector<bool> _is_asc_order;
     std::vector<bool> _nulls_first;

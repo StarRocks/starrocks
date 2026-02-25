@@ -17,10 +17,11 @@
 
 #pragma once
 
+#include <memory>
 #include <mutex>
 #include <vector>
 
-#include "util/spinlock.h"
+#include "base/concurrency/spinlock.h"
 
 namespace starrocks {
 
@@ -40,9 +41,11 @@ public:
 
     template <class T>
     T* add(T* t) {
+        std::unique_ptr<T> uniq(t);
         // TODO: Consider using a lock-free structure.
         std::lock_guard<SpinLock> l(_lock);
         _objects.emplace_back(Element{t, [](void* obj) { delete reinterpret_cast<T*>(obj); }});
+        uniq.release();
         return t;
     }
 

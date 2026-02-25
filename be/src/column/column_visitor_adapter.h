@@ -73,6 +73,8 @@ public:
 
     Status visit(const Decimal128Column& column) override { return _impl->do_visit(column); }
 
+    Status visit(const Decimal256Column& column) override { return _impl->do_visit(column); }
+
     Status visit(const FixedLengthColumn<int96_t>& column) override { return _impl->do_visit(column); }
 
     Status visit(const FixedLengthColumn<uint24_t>& column) override { return _impl->do_visit(column); }
@@ -92,6 +94,8 @@ public:
     Status visit(const BinaryColumn& column) override { return _impl->do_visit(column); }
 
     Status visit(const LargeBinaryColumn& column) override { return _impl->do_visit(column); }
+
+    Status visit(const VariantColumn& column) override { return _impl->do_visit(column); }
 
 private:
     Impl* _impl;
@@ -146,6 +150,8 @@ public:
 
     Status visit(Decimal128Column* column) override { return _impl->do_visit(column); }
 
+    Status visit(Decimal256Column* column) override { return _impl->do_visit(column); }
+
     Status visit(FixedLengthColumn<int96_t>* column) override { return _impl->do_visit(column); }
 
     Status visit(FixedLengthColumn<uint24_t>* column) override { return _impl->do_visit(column); }
@@ -165,6 +171,8 @@ public:
     Status visit(BinaryColumn* column) override { return _impl->do_visit(column); }
 
     Status visit(LargeBinaryColumn* column) override { return _impl->do_visit(column); }
+
+    Status visit(VariantColumn* column) override { return _impl->do_visit(column); }
 
 private:
     Impl* _impl;

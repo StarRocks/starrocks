@@ -19,7 +19,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.Pair;
-import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.qe.CoordinatorPreprocessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.ExecPlan;
@@ -30,18 +29,14 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
-import java.io.ByteArrayInputStream;
-import java.io.DataInput;
-import java.io.DataInputStream;
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class MVMaintenanceJobTest extends PlanTestBase {
 
@@ -92,24 +87,6 @@ public class MVMaintenanceJobTest extends PlanTestBase {
     }
 
     @Test
-    public void serialize() throws IOException {
-        MaterializedView view = new MaterializedView();
-        view.setId(1024);
-        view.setName("view1");
-        view.setMaintenancePlan(new ExecPlan());
-
-        MVMaintenanceJob job = new MVMaintenanceJob(view);
-        DataOutputBuffer buffer = new DataOutputBuffer(1024);
-        job.write(buffer);
-        byte[] bytes = buffer.getData();
-
-        DataInput input = new DataInputStream(new ByteArrayInputStream(buffer.getData()));
-        MVMaintenanceJob deserialized = MVMaintenanceJob.read(input);
-        assertEquals(job, deserialized);
-
-    }
-
-    @Test
     public void buildPhysicalTopology() throws Exception {
         String sql = "select count(distinct v5) from t1 join t2";
         Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
@@ -126,7 +103,7 @@ public class MVMaintenanceJobTest extends PlanTestBase {
                 pair.first);
 
         String currentDb = connectContext.getDatabase();
-        long dbId = GlobalStateMgr.getCurrentState().getDb(currentDb).getId();
+        long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(currentDb).getId();
         MaterializedView view = new MaterializedView();
         view.setDbId(dbId);
         view.setId(1024);

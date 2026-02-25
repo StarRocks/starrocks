@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -21,23 +22,28 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
-import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.pattern.MultiOpPattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
+import java.util.Set;
 
 // transform empty scan to empty values
 public class PruneEmptyScanRule extends TransformationRule {
-    public static final PruneEmptyScanRule OLAP_SCAN = new PruneEmptyScanRule(OperatorType.LOGICAL_OLAP_SCAN);
-    public static final PruneEmptyScanRule HIVE_SCAN = new PruneEmptyScanRule(OperatorType.LOGICAL_HIVE_SCAN);
-    public static final PruneEmptyScanRule HUDI_SCAN = new PruneEmptyScanRule(OperatorType.LOGICAL_HUDI_SCAN);
-    public static final PruneEmptyScanRule ICEBERG_SCAN = new PruneEmptyScanRule(OperatorType.LOGICAL_ICEBERG_SCAN);
-    public static final PruneEmptyScanRule PAIMON_SCAN = new PruneEmptyScanRule(OperatorType.LOGICAL_PAIMON_SCAN);
-    public static final PruneEmptyScanRule ODPS_SCAN = new PruneEmptyScanRule(OperatorType.LOGICAL_ODPS_SCAN);
-    public static final PruneEmptyScanRule KUDU_SCAN = new PruneEmptyScanRule(OperatorType.LOGICAL_KUDU_SCAN);
-    private PruneEmptyScanRule(OperatorType logicalOperatorType) {
-        super(RuleType.TF_PRUNE_EMPTY_SCAN, Pattern.create(logicalOperatorType));
+    private static final Set<OperatorType> SUPPORTED = Set.of(
+            OperatorType.LOGICAL_OLAP_SCAN,
+            OperatorType.LOGICAL_HIVE_SCAN,
+            OperatorType.LOGICAL_HUDI_SCAN,
+            OperatorType.LOGICAL_ICEBERG_SCAN,
+            OperatorType.LOGICAL_PAIMON_SCAN,
+            OperatorType.LOGICAL_ODPS_SCAN,
+            OperatorType.LOGICAL_KUDU_SCAN,
+            OperatorType.LOGICAL_BENCHMARK_SCAN
+    );
+
+    public PruneEmptyScanRule() {
+        super(RuleType.TF_PRUNE_EMPTY_SCAN, MultiOpPattern.of(SUPPORTED));
     }
 
     @Override
@@ -52,6 +58,7 @@ public class PruneEmptyScanRule extends TransformationRule {
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
+        Preconditions.checkState(input.getOp().getProjection() == null);
         List<ColumnRefOperator> refs =
                 input.getOutputColumns().getColumnRefOperators(context.getColumnRefFactory());
         return Lists.newArrayList(OptExpression.create(new LogicalValuesOperator(refs, Lists.newArrayList())));

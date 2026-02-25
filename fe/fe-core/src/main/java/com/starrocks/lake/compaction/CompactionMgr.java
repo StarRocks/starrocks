@@ -19,6 +19,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -54,6 +55,29 @@ public class CompactionMgr implements MemoryTrackable {
     private Sorter sorter;
     private CompactionScheduler compactionScheduler;
 
+    /**
+     *
+     * In order to ensure that the input rowsets of compaction still exists when doing publishing version, it is
+     * necessary to ensure that the compaction task of the same partition is executed serially, that is, the next
+     * compaction task can be executed only after the status of the previous compaction task changes to visible or
+     * canceled.
+     * So when FE restarted, we should make sure all the active compaction transactions before restarting were tracked,
+     * and exclude them from choosing as candidates for compaction.
+     *
+     * We use `activeCompactionTransactionMap` to track all lake compaction txns that are not published on FE restart.
+     * The key of the map is the transaction id related to the compaction task, and the value is table id of the
+     * compaction task. It's possible that multiple keys have the same value, because there might be multiple compaction
+     * jobs on different partitions with the same table id.
+     *
+     * Note that, this will prevent all partitions whose tableId is maintained in the map from being compacted
+     */
+    private final ConcurrentHashMap<Long, Long> remainedActiveCompactionTxnWhenStart = new ConcurrentHashMap<>();
+
+    @VisibleForTesting
+    protected ConcurrentHashMap<Long, Long> getRemainedActiveCompactionTxnWhenStart() {
+        return remainedActiveCompactionTxnWhenStart;
+    }
+
     public CompactionMgr() {
         try {
             init();
@@ -80,11 +104,36 @@ public class CompactionMgr implements MemoryTrackable {
         if (compactionScheduler == null) {
             compactionScheduler = new CompactionScheduler(this, GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
                     GlobalStateMgr.getCurrentState().getGlobalTransactionMgr(), GlobalStateMgr.getCurrentState(),
-                    Config.lake_compaction_disable_tables);
+                    Config.lake_compaction_disable_ids);
             GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(() -> {
-                compactionScheduler.disableTables(Config.lake_compaction_disable_tables);
+                compactionScheduler.disableTableOrPartitionId(Config.lake_compaction_disable_ids);
             });
             compactionScheduler.start();
+        }
+    }
+
+    /**
+     * iterate all transactions and find those with LAKE_COMPACTION labels and are not finished before FE restart
+     * or Leader FE changed.
+     **/
+    public void buildActiveCompactionTransactionMap() {
+        Map<Long, Long> activeTxnStates =
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getLakeCompactionActiveTxnStats();
+        for (Map.Entry<Long, Long> txnState : activeTxnStates.entrySet()) {
+            // for lake compaction txn, there can only be one table id for each txn state
+            remainedActiveCompactionTxnWhenStart.put(txnState.getKey(), txnState.getValue());
+            LOG.info("Found lake compaction transaction not finished on table {}, txn_id: {}", txnState.getValue(),
+                    txnState.getKey());
+        }
+    }
+
+    public void removeFromStartupActiveCompactionTransactionMap(long txnId) {
+        if (remainedActiveCompactionTxnWhenStart.isEmpty()) {
+            return;
+        }
+        boolean ret = remainedActiveCompactionTxnWhenStart.keySet().removeIf(key -> key == txnId);
+        if (ret) {
+            LOG.info("Removed transaction {} from startup active compaction transaction map", txnId);
         }
     }
 
@@ -97,9 +146,6 @@ public class CompactionMgr implements MemoryTrackable {
             }
             v.setCurrentVersion(currentVersion);
             v.setCompactionScore(compactionScore);
-            if (v.getCompactionVersion() == null) {
-                v.setCompactionVersion(new PartitionVersion(0, versionTime));
-            }
             return v;
         });
         if (LOG.isDebugEnabled()) {
@@ -108,7 +154,7 @@ public class CompactionMgr implements MemoryTrackable {
     }
 
     public void handleCompactionFinished(PartitionIdentifier partition, long version, long versionTime,
-                                         Quantiles compactionScore) {
+                                         Quantiles compactionScore, long txnId, boolean isPartialSuccess) {
         PartitionVersion compactionVersion = new PartitionVersion(version, versionTime);
         PartitionStatistics statistics = partitionStatisticsHashMap.compute(partition, (k, v) -> {
             if (v == null) {
@@ -116,7 +162,7 @@ public class CompactionMgr implements MemoryTrackable {
             }
             v.setCurrentVersion(compactionVersion);
             v.setCompactionVersion(compactionVersion);
-            v.setCompactionScoreAndAdjustPunishFactor(compactionScore);
+            v.setCompactionScoreAndAdjustPunishFactor(compactionScore, isPartialSuccess);
             return v;
         });
         if (LOG.isDebugEnabled()) {
@@ -125,15 +171,21 @@ public class CompactionMgr implements MemoryTrackable {
     }
 
     @NotNull
-    List<PartitionIdentifier> choosePartitionsToCompact(@NotNull Set<PartitionIdentifier> excludes,
-            @NotNull Set<Long> excludeTables) {
-        return choosePartitionsToCompact(excludeTables).stream().filter(p -> !excludes.contains(p)).collect(Collectors.toList());
+    List<PartitionStatisticsSnapshot> choosePartitionsToCompact(@NotNull Set<PartitionIdentifier> excludes,
+                                                                @NotNull Set<Long> excludeIds) {
+        Set<Long> excludeTableOrPartition = new HashSet<>(excludeIds);
+        excludeTableOrPartition.addAll(remainedActiveCompactionTxnWhenStart.values());
+        return choosePartitionsToCompact(excludeTableOrPartition)
+                .stream()
+                .filter(p -> !excludes.contains(p.getPartition()))
+                .collect(Collectors.toList());
     }
 
     @NotNull
-    List<PartitionIdentifier> choosePartitionsToCompact(Set<Long> excludeTables) {
-        List<PartitionStatistics> selection = sorter.sort(selector.select(partitionStatisticsHashMap.values(), excludeTables));
-        return selection.stream().map(PartitionStatistics::getPartition).collect(Collectors.toList());
+    List<PartitionStatisticsSnapshot> choosePartitionsToCompact(Set<Long> excludeTableOrPartition) {
+        List<PartitionStatisticsSnapshot> selection = sorter.sort(
+                selector.select(partitionStatisticsHashMap.values(), excludeTableOrPartition));
+        return selection;
     }
 
     @NotNull
@@ -152,8 +204,8 @@ public class CompactionMgr implements MemoryTrackable {
     }
 
     public double getMaxCompactionScore() {
-        return partitionStatisticsHashMap.values().stream().mapToDouble(stat -> stat.getCompactionScore().getMax())
-                .max().orElse(0);
+        return partitionStatisticsHashMap.values().stream().filter(stat -> stat.getCompactionScore() != null)
+                .mapToDouble(stat -> stat.getCompactionScore().getMax()).max().orElse(0);
     }
 
     void enableCompactionAfter(PartitionIdentifier partition, long delayMs) {
@@ -200,7 +252,7 @@ public class CompactionMgr implements MemoryTrackable {
         // remove partition for every case, so remove non-existed partitions only when writing image
         getAllPartitions()
                 .stream()
-                .filter(p -> !MetaUtils.isPartitionExist(
+                .filter(p -> !MetaUtils.isPhysicalPartitionExist(
                         GlobalStateMgr.getCurrentState(), p.getDbId(), p.getTableId(), p.getPartitionId()))
                 .forEach(this::removePartition);
 
@@ -233,5 +285,10 @@ public class CompactionMgr implements MemoryTrackable {
     @Override
     public Map<String, Long> estimateCount() {
         return ImmutableMap.of("PartitionStats", (long) partitionStatisticsHashMap.size());
+    }
+
+    @Override
+    public long estimateSize() {
+        return Estimator.estimate(partitionStatisticsHashMap);
     }
 }

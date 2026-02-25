@@ -17,16 +17,15 @@
 #include "exec/schema_scanner/schema_helper.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "runtime/runtime_state.h"
-#include "runtime/string_value.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SysFeMemoryUsage::_s_columns[] = {
-        {"module_name", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"class_name", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"module_name", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"class_name", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"current_consumption", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(long), true},
         {"peak_consumption", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(long), true},
-        {"counter_info", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true}};
+        {"counter_info", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true}};
 
 SysFeMemoryUsage::SysFeMemoryUsage()
         : SchemaScanner(_s_columns, sizeof(_s_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
@@ -54,7 +53,7 @@ Status SysFeMemoryUsage::_fill_chunk(ChunkPtr* chunk) {
     DatumArray datum_array{Slice(info.module_name), Slice(info.class_name), info.current_consumption,
                            info.peak_consumption, Slice(info.counter_info)};
     for (const auto& [slot_id, index] : slot_id_map) {
-        Column* column = (*chunk)->get_column_by_slot_id(slot_id).get();
+        auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(slot_id);
         column->append_datum(datum_array[slot_id - 1]);
     }
     _index++;

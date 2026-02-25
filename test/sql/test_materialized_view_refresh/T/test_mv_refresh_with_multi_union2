@@ -1,4 +1,4 @@
--- name: test_mv_refresh_with_multi_union2
+-- name: test_mv_refresh_with_multi_union2 @slow
 
 CREATE TABLE `u1` (
   `id` int(11) NOT NULL,

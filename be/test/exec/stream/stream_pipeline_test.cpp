@@ -18,6 +18,8 @@
 
 #include <vector>
 
+#include "base/testutil/assert.h"
+#include "base/uid_util.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
@@ -25,7 +27,6 @@
 #include "exec/stream/stream_operators_test.h"
 #include "gtest/gtest.h"
 #include "runtime/exec_env.h"
-#include "testutil/assert.h"
 #include "testutil/desc_tbl_helper.h"
 
 namespace starrocks::stream {
@@ -40,7 +41,7 @@ Status StreamPipelineTest::prepare() {
     const auto& query_id = params.query_id;
     const auto& fragment_id = params.fragment_instance_id;
 
-    _query_ctx = _exec_env->query_context_mgr()->get_or_register(query_id);
+    ASSIGN_OR_RETURN(_query_ctx, _exec_env->query_context_mgr()->get_or_register(query_id));
     _query_ctx->set_query_id(query_id);
     _query_ctx->set_total_fragments(1);
     _query_ctx->set_delivery_expire_seconds(600);
@@ -67,6 +68,7 @@ Status StreamPipelineTest::prepare() {
     _runtime_state->set_be_number(_request.backend_num);
     _runtime_state->set_query_ctx(_query_ctx);
     _runtime_state->set_fragment_ctx(_fragment_ctx);
+    _runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
 
     _obj_pool = _runtime_state->obj_pool();
     auto sink_dop = _degree_of_parallelism;
@@ -108,8 +110,10 @@ Status StreamPipelineTest::prepare() {
 
 Status StreamPipelineTest::execute() {
     VLOG_ROW << "ExecutePipeline";
-    _fragment_ctx->iterate_drivers(
-            [state = _fragment_ctx->runtime_state()](const DriverPtr& driver) { CHECK_OK(driver->prepare(state)); });
+    _fragment_ctx->iterate_drivers([state = _fragment_ctx->runtime_state()](const DriverPtr& driver) {
+        CHECK_OK(driver->prepare(state));
+        CHECK_OK(driver->prepare_local_state(state));
+    });
 
     // CHECK_OK(_fragment_ctx->submit_active_drivers(_exec_env->wg_driver_executor()));
     _fragment_ctx->iterate_drivers([exec_env = _exec_env](const DriverPtr& driver) {
@@ -207,7 +211,7 @@ Status StreamPipelineTest::wait_until_epoch_finished(const EpochInfo& epoch_info
     };
 
     while (!are_all_drivers_parked_func()) {
-        sleep(0.1);
+        usleep(100000);
     }
     VLOG_ROW << "WaitUntilEpochEnd Done " << epoch_info.debug_string();
     return Status::OK();

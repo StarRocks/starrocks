@@ -35,6 +35,7 @@
 package com.starrocks.http.action;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -62,6 +63,9 @@ public class SessionAction extends WebBaseAction {
         SESSION_TABLE_HEADER.add("Info");
         SESSION_TABLE_HEADER.add("IsPending");
         SESSION_TABLE_HEADER.add("Warehouse");
+        SESSION_TABLE_HEADER.add("CNGroup");
+        SESSION_TABLE_HEADER.add("Catalog");
+        SESSION_TABLE_HEADER.add("QueryId");
     }
 
     public SessionAction(ActionController controller) {
@@ -83,8 +87,12 @@ public class SessionAction extends WebBaseAction {
     private void appendSessionInfo(StringBuilder buffer) {
         buffer.append("<h2>Session Info</h2>");
 
+        ConnectContext context = ConnectContext.get();
+        context.setCurrentUserIdentity(UserIdentity.ROOT);
+        context.setCurrentRoleIds(UserIdentity.ROOT);
+
         List<ConnectContext.ThreadInfo> threadInfos =
-                ExecuteEnv.getInstance().getScheduler().listConnection("root", null);
+                ExecuteEnv.getInstance().getScheduler().listConnection(context, null);
         List<List<String>> rowSet = Lists.newArrayList();
         long nowMs = System.currentTimeMillis();
         for (ConnectContext.ThreadInfo info : threadInfos) {

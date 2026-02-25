@@ -15,7 +15,8 @@
 
 package com.starrocks.connector.paimon;
 
-import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.sql.ast.expression.BoolLiteral;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -23,38 +24,58 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.StringType;
+import com.starrocks.type.VarbinaryType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.paimon.data.BinaryString;
 import org.apache.paimon.data.Decimal;
 import org.apache.paimon.predicate.Predicate;
 import org.apache.paimon.predicate.PredicateBuilder;
+import org.apache.paimon.types.BigIntType;
+import org.apache.paimon.types.BinaryType;
+import org.apache.paimon.types.BooleanType;
+import org.apache.paimon.types.CharType;
 import org.apache.paimon.types.DataField;
+import org.apache.paimon.types.DataType;
+import org.apache.paimon.types.DateType;
+import org.apache.paimon.types.DecimalType;
+import org.apache.paimon.types.DoubleType;
+import org.apache.paimon.types.FloatType;
+import org.apache.paimon.types.IntType;
 import org.apache.paimon.types.RowType;
+import org.apache.paimon.types.SmallIntType;
+import org.apache.paimon.types.TimestampType;
+import org.apache.paimon.types.TinyIntType;
+import org.apache.paimon.types.VarCharType;
 
 import java.math.BigDecimal;
-import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
-import static org.apache.paimon.data.Timestamp.fromSQLTimestamp;
+import static org.apache.paimon.data.Timestamp.fromLocalDateTime;
 
-public class PaimonPredicateConverter extends ScalarOperatorVisitor<Predicate, Void> {
+public class PaimonPredicateConverter extends ScalarOperatorVisitor<Predicate, PaimonPredicateContext> {
     private static final Logger LOG = LogManager.getLogger(PaimonPredicateConverter.class);
     private final PredicateBuilder builder;
     private final List<String> fieldNames;
+    private final List<DataType> fieldTypes;
 
     public PaimonPredicateConverter(RowType rowType) {
         this.builder = new PredicateBuilder(rowType);
+        this.fieldTypes = rowType.getFieldTypes();
         this.fieldNames = rowType.getFields().stream().map(DataField::name).collect(Collectors.toList());
     }
 
@@ -66,35 +87,48 @@ public class PaimonPredicateConverter extends ScalarOperatorVisitor<Predicate, V
     }
 
     @Override
-    public Predicate visit(ScalarOperator scalarOperator, Void context) {
+    public Predicate visit(ScalarOperator scalarOperator, PaimonPredicateContext context) {
         return null;
     }
 
     @Override
-    public Predicate visitCompoundPredicate(CompoundPredicateOperator operator, Void context) {
+    public Predicate visitCompoundPredicate(CompoundPredicateOperator operator, PaimonPredicateContext context) {
         CompoundPredicateOperator.CompoundType op = operator.getCompoundType();
         if (op == CompoundPredicateOperator.CompoundType.NOT) {
             if (operator.getChild(0) instanceof LikePredicateOperator) {
                 return null;
             }
-            Predicate expression = operator.getChild(0).accept(this, null);
-
+            PaimonPredicateContext paimonPredicateContext = new PaimonPredicateContext();
+            paimonPredicateContext.setParentPredicateOperator(operator);
+            Predicate expression = operator.getChild(0).accept(this, paimonPredicateContext);
             if (expression != null) {
                 return expression.negate().orElse(null);
             }
         } else {
-            Predicate left = operator.getChild(0).accept(this, null);
-            Predicate right = operator.getChild(1).accept(this, null);
+            Predicate left = operator.getChild(0).accept(this, context);
+            Predicate right = operator.getChild(1).accept(this, context);
+            CompoundPredicateOperator parentPredicateOperator = null;
+            if (context != null && context.getParentPredicateOperator() != null) {
+                parentPredicateOperator = context.getParentPredicateOperator();
+            }
             if (left != null && right != null) {
                 return (op == CompoundPredicateOperator.CompoundType.OR) ? PredicateBuilder.or(left, right) :
                         PredicateBuilder.and(left, right);
+            } else if (parentPredicateOperator != null &&
+                    parentPredicateOperator.getCompoundType() == CompoundPredicateOperator.CompoundType.NOT) {
+                return null;
+            } else if (left != null && op == CompoundPredicateOperator.CompoundType.AND) {
+                //if op=and, return the predicates that are not null.
+                return left;
+            } else if (right != null && op == CompoundPredicateOperator.CompoundType.AND) {
+                return right;
             }
         }
         return null;
     }
 
     @Override
-    public Predicate visitIsNullPredicate(IsNullPredicateOperator operator, Void context) {
+    public Predicate visitIsNullPredicate(IsNullPredicateOperator operator, PaimonPredicateContext context) {
         String columnName = getColumnName(operator.getChild(0));
         if (columnName == null) {
             return null;
@@ -108,15 +142,18 @@ public class PaimonPredicateConverter extends ScalarOperatorVisitor<Predicate, V
     }
 
     @Override
-    public Predicate visitBinaryPredicate(BinaryPredicateOperator operator, Void context) {
+    public Predicate visitBinaryPredicate(BinaryPredicateOperator operator, PaimonPredicateContext context) {
         String columnName = getColumnName(operator.getChild(0));
         if (columnName == null) {
             return null;
         }
         int idx = fieldNames.indexOf(columnName);
-        Object literal = getLiteral(operator.getChild(1));
+        Object literal = getLiteral(operator.getChild(1), fieldTypes.get(idx));
         if (literal == null) {
             return null;
+        }
+        if (fieldTypes.get(idx) instanceof BooleanType) {
+            literal = convertBoolLiteralValue(literal);
         }
         switch (operator.getBinaryType()) {
             case LT:
@@ -137,7 +174,12 @@ public class PaimonPredicateConverter extends ScalarOperatorVisitor<Predicate, V
     }
 
     @Override
-    public Predicate visitInPredicate(InPredicateOperator operator, Void context) {
+    public Predicate visitLargeInPredicate(LargeInPredicateOperator operator, PaimonPredicateContext context) {
+        throw new UnsupportedOperationException("not support large in predicate in the PaimonPredicateConverter");
+    }
+
+    @Override
+    public Predicate visitInPredicate(InPredicateOperator operator, PaimonPredicateContext context) {
         String columnName = getColumnName(operator.getChild(0));
         if (columnName == null) {
             return null;
@@ -146,9 +188,12 @@ public class PaimonPredicateConverter extends ScalarOperatorVisitor<Predicate, V
         List<ScalarOperator> valuesOperatorList = operator.getListChildren();
         List<Object> literalValues = new ArrayList<>(valuesOperatorList.size());
         for (ScalarOperator valueOperator : valuesOperatorList) {
-            Object value = getLiteral(valueOperator);
+            Object value = getLiteral(valueOperator, fieldTypes.get(idx));
             if (value == null) {
                 return null;
+            }
+            if (fieldTypes.get(idx) instanceof BooleanType) {
+                value = convertBoolLiteralValue(value);
             }
             literalValues.add(value);
         }
@@ -161,7 +206,7 @@ public class PaimonPredicateConverter extends ScalarOperatorVisitor<Predicate, V
     }
 
     @Override
-    public Predicate visitLikePredicateOperator(LikePredicateOperator operator, Void context) {
+    public Predicate visitLikePredicateOperator(LikePredicateOperator operator, PaimonPredicateContext context) {
         String columnName = getColumnName(operator.getChild(0));
         if (columnName == null) {
             return null;
@@ -170,7 +215,11 @@ public class PaimonPredicateConverter extends ScalarOperatorVisitor<Predicate, V
         int idx = fieldNames.indexOf(columnName);
         if (operator.getLikeType() == LikePredicateOperator.LikeType.LIKE) {
             if (operator.getChild(1).getType().isStringType()) {
-                String literal = ((BinaryString) getLiteral(operator.getChild(1))).toString();
+                Object objectLiteral = getLiteral(operator.getChild(1), fieldTypes.get(idx));
+                if (objectLiteral == null) {
+                    return null;
+                }
+                String literal = ((BinaryString) objectLiteral).toString();
                 if (literal.length() > 1 && literal.indexOf("%") == literal.length() - 1 && literal.charAt(0) != '%') {
                     return builder.startsWith(idx, BinaryString.fromString(literal.substring(0, literal.length() - 1)));
                 }
@@ -179,48 +228,128 @@ public class PaimonPredicateConverter extends ScalarOperatorVisitor<Predicate, V
         return null;
     }
 
-    private Object getLiteral(ScalarOperator operator) {
-        if (!(operator instanceof ConstantOperator)) {
+    private Object getLiteral(ScalarOperator operator, DataType dataType) {
+        if (operator == null) {
             return null;
         }
 
-        ConstantOperator constValue = (ConstantOperator) operator;
-        switch (constValue.getType().getPrimitiveType()) {
-            case BOOLEAN:
-                return constValue.getBoolean();
-            case TINYINT:
-                return constValue.getTinyInt();
-            case SMALLINT:
-                return constValue.getSmallint();
-            case INT:
-                return constValue.getInt();
-            case BIGINT:
-                return constValue.getBigint();
-            case FLOAT:
-                return constValue.getFloat();
-            case DOUBLE:
-                return constValue.getDouble();
-            case DECIMALV2:
-            case DECIMAL32:
-            case DECIMAL64:
-            case DECIMAL128:
-                BigDecimal bigDecimal = constValue.getDecimal();
-                PrimitiveType type = constValue.getType().getPrimitiveType();
-                return Decimal.fromBigDecimal(bigDecimal, PrimitiveType.getMaxPrecisionOfDecimal(type),
-                        PrimitiveType.getDefaultScaleOfDecimal(type));
-            case HLL:
-            case VARCHAR:
-            case CHAR:
-                return BinaryString.fromString(constValue.getVarchar());
-            case DATE:
-                LocalDate localDate = constValue.getDate().toLocalDate();
-                LocalDate epochDay = Instant.ofEpochSecond(0).atOffset(ZoneOffset.UTC).toLocalDate();
-                return (int) ChronoUnit.DAYS.between(epochDay, localDate);
-            case DATETIME:
-                LocalDateTime localDateTime = constValue.getDatetime();
-                return fromSQLTimestamp(Timestamp.valueOf((localDateTime)));
-            default:
+        return operator.accept(new PaimonPredicateConverter.ExtractLiteralValue(), dataType);
+    }
+
+    private static class ExtractLiteralValue extends ScalarOperatorVisitor<Object, DataType> {
+        @Override
+        public Object visit(ScalarOperator scalarOperator, DataType dataType) {
+            return null;
+        }
+
+        @Override
+        public Object visitConstant(ConstantOperator operator, DataType dataType) {
+            if (needCast(operator.getType().getPrimitiveType(), dataType)) {
+                operator = tryCastToResultType(operator, dataType);
+            }
+            if (operator == null) {
                 return null;
+            }
+            switch (operator.getType().getPrimitiveType()) {
+                case BOOLEAN:
+                    return operator.getBoolean();
+                case TINYINT:
+                    return operator.getTinyInt();
+                case SMALLINT:
+                    return operator.getSmallint();
+                case INT:
+                    return operator.getInt();
+                case BIGINT:
+                    return operator.getBigint();
+                case FLOAT:
+                    return operator.getFloat();
+                case DOUBLE:
+                    return operator.getDouble();
+                case DECIMALV2:
+                case DECIMAL32:
+                case DECIMAL64:
+                case DECIMAL128:
+                    BigDecimal bigDecimal = operator.getDecimal();
+                    PrimitiveType type = operator.getType().getPrimitiveType();
+                    return Decimal.fromBigDecimal(bigDecimal, PrimitiveType.getMaxPrecisionOfDecimal(type),
+                            PrimitiveType.getDefaultScaleOfDecimal(type));
+                case HLL:
+                case VARCHAR:
+                case CHAR:
+                    return BinaryString.fromString(operator.getVarchar());
+                case DATE:
+                    LocalDate localDate = operator.getDate().toLocalDate();
+                    LocalDate epochDay = Instant.ofEpochSecond(0).atOffset(ZoneOffset.UTC).toLocalDate();
+                    return (int) ChronoUnit.DAYS.between(epochDay, localDate);
+                case DATETIME:
+                    return fromLocalDateTime(operator.getDatetime());
+                default:
+                    return null;
+            }
+        }
+
+        @Override
+        public Object visitCastOperator(CastOperator operator, DataType dataType) {
+            return operator.getChild(0).accept(this, dataType);
+        }
+
+        private boolean needCast(PrimitiveType sourceType, DataType dataType) {
+            return switch (sourceType) {
+                case BOOLEAN -> !(dataType instanceof BooleanType);
+                case TINYINT -> !(dataType instanceof TinyIntType);
+                case SMALLINT -> !(dataType instanceof SmallIntType);
+                case INT -> !(dataType instanceof IntType);
+                case BIGINT -> !(dataType instanceof BigIntType);
+                case FLOAT -> !(dataType instanceof FloatType);
+                case DOUBLE -> !(dataType instanceof DoubleType);
+                case DECIMALV2, DECIMAL32, DECIMAL64, DECIMAL128 -> !(dataType instanceof DecimalType);
+                case HLL, VARCHAR -> !(dataType instanceof VarCharType);
+                case CHAR -> !(dataType instanceof CharType);
+                case DATE -> !(dataType instanceof DateType);
+                case DATETIME -> !(dataType instanceof TimestampType);
+                default -> true;
+            };
+        }
+
+        private ConstantOperator tryCastToResultType(ConstantOperator operator, DataType dataType) {
+            Optional<ConstantOperator> res = Optional.empty();
+            if (dataType instanceof BooleanType) {
+                res = operator.castTo(com.starrocks.type.BooleanType.BOOLEAN);
+            } else if (dataType instanceof DateType) {
+                res = operator.castTo(com.starrocks.type.DateType.DATE);
+            } else if (dataType instanceof TimestampType) {
+                res = operator.castTo(com.starrocks.type.DateType.DATETIME);
+            } else if (dataType instanceof VarCharType) {
+                res = operator.castTo(StringType.STRING);
+            } else if (dataType instanceof CharType) {
+                res = operator.castTo(com.starrocks.type.CharType.CHAR);
+            } else if (dataType instanceof BinaryType) {
+                res = operator.castTo(VarbinaryType.VARBINARY);
+            } else if (dataType instanceof IntType) {
+                res = operator.castTo(IntegerType.INT);
+            } else if (dataType instanceof BigIntType) {
+                res = operator.castTo(IntegerType.BIGINT);
+            } else if (dataType instanceof TinyIntType) {
+                res = operator.castTo(IntegerType.TINYINT);
+            } else if (dataType instanceof SmallIntType) {
+                res = operator.castTo(IntegerType.SMALLINT);
+            } else if (dataType instanceof FloatType) {
+                res = operator.castTo(com.starrocks.type.FloatType.FLOAT);
+            } else if (dataType instanceof DoubleType) {
+                res = operator.castTo(com.starrocks.type.FloatType.DOUBLE);
+            } else if (dataType instanceof DecimalType) {
+                res = operator.castTo(com.starrocks.type.DecimalType.DEFAULT_DECIMAL128);
+            }
+            return res.orElse(operator);
+        }
+    }
+
+    // Support both 0/1 and true/false for boolean type
+    private static Object convertBoolLiteralValue(Object literalValue) {
+        try {
+            return new BoolLiteral(String.valueOf(literalValue)).getValue();
+        } catch (Exception e) {
+            throw new StarRocksConnectorException("Failed to convert %s to boolean type", literalValue);
         }
     }
 

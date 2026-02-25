@@ -19,11 +19,11 @@
 #include "gutil/casts.h"
 #include "storage/column_predicate.h"
 #include "storage/rowset/bitmap_index_reader.h"
-#include "storage/rowset/bloom_filter.h"
+#include "util/bloom_filter.h"
 
 namespace starrocks {
 
-class ColumnIsNullPredicate : public ColumnPredicate {
+class ColumnIsNullPredicate final : public ColumnPredicate {
 public:
     explicit ColumnIsNullPredicate(const TypeInfoPtr& type_info, ColumnId id) : ColumnPredicate(type_info, id) {}
 
@@ -80,10 +80,14 @@ public:
 
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
                                roaring::Roaring* row_bitmap) const override {
+#ifndef __APPLE__
         roaring::Roaring null_roaring;
         RETURN_IF_ERROR(iterator->read_null(column_name, &null_roaring));
         *row_bitmap &= null_roaring;
         return Status::OK();
+#else
+        return Status::OK();
+#endif
     }
 
     bool support_original_bloom_filter() const override { return true; }
@@ -103,7 +107,7 @@ public:
     std::string debug_string() const override { return strings::Substitute("(ColumnId($0) IS NULL)", _column_id); }
 };
 
-class ColumnNotNullPredicate : public ColumnPredicate {
+class ColumnNotNullPredicate final : public ColumnPredicate {
 public:
     explicit ColumnNotNullPredicate(const TypeInfoPtr& type_info, ColumnId id) : ColumnPredicate(type_info, id) {}
 
@@ -159,10 +163,14 @@ public:
 
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
                                roaring::Roaring* row_bitmap) const override {
+#ifndef __APPLE__
         roaring::Roaring null_roaring;
         RETURN_IF_ERROR(iterator->read_null(column_name, &null_roaring));
         *row_bitmap -= null_roaring;
         return Status::OK();
+#else
+        return Status::OK();
+#endif
     }
 
     PredicateType type() const override { return PredicateType::kNotNull; }

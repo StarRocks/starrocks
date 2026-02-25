@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # ARRAY
@@ -60,7 +60,6 @@ The following limits apply when you create ARRAY columns in StarRocks tables:
 - In versions earlier than v2.1, you can create ARRAY columns only in Duplicate Key tables. From v2.1 onwards, you can also create ARRAY columns in other types of tables (Primary Key, Unique Key, Aggregate). Note that in an Aggregate table, you can create an ARRAY column only when the function used to aggregate data in that column is replace() or replace_if_not_null(). For more information, see [Aggregate table](../../../table_design/table_types/aggregate_table.md).
 - ARRAY columns cannot be used as key columns.
 - ARRAY columns cannot be used as partition keys (included in PARTITION BY) or bucketing keys (included in DISTRIBUTED BY).
-- DECIMAL V3 is not supported in ARRAY.
 - An array can have a maximum of 14-level nesting.
 
 ## Construct arrays in SQL
@@ -197,11 +196,11 @@ INSERT INTO t0 VALUES(1, [1,2,3]);
 
 ### Use Broker Load to load arrays from ORC or Parquet files
 
-  The array type in StarRocks corresponds to the list structure in ORC and Parquet files, which eliminates the need for you to specify different data types in StarRocks. For more information about data loading, see [Broker load](../../sql-statements/data-manipulation/BROKER_LOAD.md).
+  The array type in StarRocks corresponds to the list structure in ORC and Parquet files, which eliminates the need for you to specify different data types in StarRocks. For more information about data loading, see [Broker load](../../sql-statements/loading_unloading/BROKER_LOAD.md).
 
 ### Use Stream Load or Routine Load to load CSV-formatted arrays
 
-  Arrays in CSV files are separated with comma by default. You can use [Stream Load](../../../loading/StreamLoad.md#load-csv-data) or [Routine Load](../../../loading/RoutineLoad.md#load-csv-format-data) to load CSV text files or CSV data in Kafka.
+  Arrays in CSV files are separated with comma by default. You can use [Stream Load or Routine Load](../../../loading/Loading_intro.md) to load CSV text files or CSV data in Kafka.
 
 ## Query ARRAY data
 

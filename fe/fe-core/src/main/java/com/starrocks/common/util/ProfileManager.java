@@ -40,9 +40,9 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.memory.estimate.Estimator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.spark.util.SizeEstimator;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -74,25 +74,20 @@ public class ProfileManager implements MemoryTrackable {
     public static final String QUERY_TYPE = "Query Type";
     public static final String QUERY_STATE = "Query State";
     public static final String SQL_STATEMENT = "Sql Statement";
+    public static final String SQL_DIALECT = "Sql Dialect";
     public static final String USER = "User";
     public static final String DEFAULT_DB = "Default Db";
     public static final String VARIABLES = "Variables";
     public static final String PROFILE_COLLECT_TIME = "Collect Profile Time";
+    public static final String LOAD_TYPE = "Load Type";
+    public static final String WAREHOUSE_CNGROUP = "Warehouse";
+
+    public static final String LOAD_TYPE_STREAM_LOAD = "STREAM_LOAD";
+    public static final String LOAD_TYPE_ROUTINE_LOAD = "ROUTINE_LOAD";
 
     public static final ArrayList<String> PROFILE_HEADERS = new ArrayList<>(
             Arrays.asList(QUERY_ID, USER, DEFAULT_DB, SQL_STATEMENT, QUERY_TYPE,
-                    START_TIME, END_TIME, TOTAL_TIME, QUERY_STATE));
-
-    @Override
-    public long estimateSize() {
-        return SizeEstimator.estimate(profileMap) + SizeEstimator.estimate(loadProfileMap);
-    }
-
-    @Override
-    public Map<String, Long> estimateCount() {
-        return ImmutableMap.of("QueryProfile", (long) profileMap.size(),
-                               "LoadProfile", (long) loadProfileMap.size());
-    }
+                    START_TIME, END_TIME, TOTAL_TIME, QUERY_STATE, WAREHOUSE_CNGROUP, SQL_DIALECT));
 
     public static class ProfileElement {
         public Map<String, String> infoStrings = Maps.newHashMap();
@@ -117,8 +112,8 @@ public class ProfileManager implements MemoryTrackable {
     private final ReadLock readLock;
     private final WriteLock writeLock;
 
-    private final LinkedHashMap<String, ProfileElement> profileMap; // from QueryId to RuntimeProfile
-    private final LinkedHashMap<String, ProfileElement> loadProfileMap; // from LoadId to RuntimeProfile
+    // from QueryId to RuntimeProfile
+    private final LinkedHashMap<String, ProfileElement> profileMap;
 
     public static ProfileManager getInstance() {
         if (INSTANCE == null) {
@@ -132,7 +127,6 @@ public class ProfileManager implements MemoryTrackable {
         readLock = lock.readLock();
         writeLock = lock.writeLock();
         profileMap = new LinkedHashMap<>();
-        loadProfileMap = new LinkedHashMap<>();
     }
 
     public ProfileElement createElement(RuntimeProfile summaryProfile, String profileString) {
@@ -175,7 +169,6 @@ public class ProfileManager implements MemoryTrackable {
         ProfileElement element = createElement(profile.getChildList().get(0).first, profileString);
         element.plan = plan;
         String queryId = element.infoStrings.get(ProfileManager.QUERY_ID);
-        String queryType = element.infoStrings.get(ProfileManager.QUERY_TYPE);
         // check when push in, which can ensure every element in the list has QUERY_ID column,
         // so there is no need to check when remove element from list.
         if (Strings.isNullOrEmpty(queryId)) {
@@ -183,22 +176,19 @@ public class ProfileManager implements MemoryTrackable {
                     + "may be forget to insert 'QUERY_ID' column into infoStrings");
         }
 
+        String removedQueryId = null;
         writeLock.lock();
         try {
-            if (queryType != null && queryType.equals("Load")) {
-                loadProfileMap.put(queryId, element);
-                if (loadProfileMap.size() > Config.load_profile_info_reserved_num) {
-                    loadProfileMap.remove(loadProfileMap.keySet().iterator().next());
-                }
-            } else {
-                profileMap.put(queryId, element);
-                if (profileMap.size() > Config.profile_info_reserved_num) {
-                    profileMap.remove(profileMap.keySet().iterator().next());
-                }
+            profileMap.put(queryId, element);
+            if (profileMap.size() > Config.profile_info_reserved_num) {
+                removedQueryId = profileMap.keySet().iterator().next();
+                profileMap.remove(removedQueryId);
             }
         } finally {
             writeLock.unlock();
         }
+
+        LOG.debug("push profile for query: {}, remove profile for query: {}", queryId, removedQueryId);
 
         return profileString;
     }
@@ -206,7 +196,7 @@ public class ProfileManager implements MemoryTrackable {
     public boolean hasProfile(String queryId) {
         readLock.lock();
         try {
-            return profileMap.containsKey(queryId) || loadProfileMap.containsKey(queryId);
+            return profileMap.containsKey(queryId);
         } finally {
             readLock.unlock();
         }
@@ -224,14 +214,6 @@ public class ProfileManager implements MemoryTrackable {
                 }
                 result.add(0, row);
             }
-            for (ProfileElement element : loadProfileMap.values()) {
-                Map<String, String> infoStrings = element.infoStrings;
-                List<String> row = Lists.newArrayList();
-                for (String str : PROFILE_HEADERS) {
-                    row.add(infoStrings.get(str));
-                }
-                result.add(0, row);
-            }
         } finally {
             readLock.unlock();
         }
@@ -241,7 +223,6 @@ public class ProfileManager implements MemoryTrackable {
     public void removeProfile(String queryId) {
         writeLock.lock();
         try {
-            loadProfileMap.remove(queryId);
             profileMap.remove(queryId);
         } finally {
             writeLock.unlock();
@@ -251,7 +232,6 @@ public class ProfileManager implements MemoryTrackable {
     public void clearProfiles() {
         writeLock.lock();
         try {
-            loadProfileMap.clear();
             profileMap.clear();
         } finally {
             writeLock.unlock();
@@ -262,7 +242,7 @@ public class ProfileManager implements MemoryTrackable {
         ProfileElement element = new ProfileElement();
         readLock.lock();
         try {
-            element = profileMap.get(queryId) == null ? loadProfileMap.get(queryId) : profileMap.get(queryId);
+            element = profileMap.get(queryId);
             if (element == null) {
                 return null;
             }
@@ -280,7 +260,7 @@ public class ProfileManager implements MemoryTrackable {
     public ProfileElement getProfileElement(String queryId) {
         readLock.lock();
         try {
-            return profileMap.get(queryId) == null ? loadProfileMap.get(queryId) : profileMap.get(queryId);
+            return profileMap.get(queryId);
         } finally {
             readLock.unlock();
         }
@@ -291,26 +271,27 @@ public class ProfileManager implements MemoryTrackable {
         readLock.lock();
         try {
             result.addAll(profileMap.values());
-            result.addAll(loadProfileMap.values());
         } finally {
             readLock.unlock();
         }
         return result;
     }
 
-    public long getQueryProfileCount() {
+    @Override
+    public Map<String, Long> estimateCount() {
         readLock.lock();
         try {
-            return profileMap.size();
+            return ImmutableMap.of("QueryProfile", (long) profileMap.size());
         } finally {
             readLock.unlock();
         }
     }
 
-    public long getLoadProfileCount() {
+    @Override
+    public long estimateSize() {
         readLock.lock();
         try {
-            return loadProfileMap.size();
+            return Estimator.estimate(profileMap, 10);
         } finally {
             readLock.unlock();
         }

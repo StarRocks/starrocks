@@ -1,0 +1,42 @@
+-- name: test_insert_partial_update_sortkey
+create table test_bug
+(
+    group_id    INT    NOT NULL,
+    customer_id BIGINT NOT NULL,
+    product_id LARGEINT NOT NULL,
+    num_items   INT,
+    code        VARCHAR(255)
+) PRIMARY KEY (group_id, customer_id, product_id)
+PARTITION BY (group_id)
+DISTRIBUTED BY HASH (customer_id)
+ORDER BY (group_id, product_id, customer_id)
+PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO test_bug VALUES (1,1,1,10, "AAA");
+-- result:
+-- !result
+INSERT INTO test_bug VALUES (1,2,1,20, "AAA");
+-- result:
+-- !result
+SELECT * FROM test_bug WHERE group_id=1 and product_id=1;
+-- result:
+1	2	1	20	AAA
+1	1	1	10	AAA
+-- !result
+INSERT INTO test_bug (group_id, customer_id, product_id, num_items, code) VALUES (1,1,1,30,"BBB");
+-- result:
+-- !result
+SELECT * FROM test_bug WHERE group_id=1 and product_id=1;
+-- result:
+1	2	1	20	AAA
+1	1	1	30	BBB
+-- !result
+INSERT INTO test_bug (group_id, customer_id, product_id, num_items) VALUES (1,1,1,40);
+-- result:
+-- !result
+SELECT * FROM test_bug WHERE group_id=1 and product_id=1;
+-- result:
+1	2	1	20	AAA
+1	1	1	40	BBB
+-- !result

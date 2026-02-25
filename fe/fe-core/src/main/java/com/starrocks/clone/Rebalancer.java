@@ -41,6 +41,7 @@ import com.starrocks.thrift.TStorageMedium;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 /*
  * Rebalancer is responsible for
@@ -57,11 +58,11 @@ import java.util.Map;
 public abstract class Rebalancer {
     // When Rebalancer init, the loadStatistic is usually empty. So it's no need to be an arg.
     // Only use updateLoadStatistic() to load stats.
-    protected ClusterLoadStatistic loadStatistic;
+    protected AtomicReference<ClusterLoadStatistic> loadStatistic = new AtomicReference<>(null);
 
     public List<TabletSchedCtx> selectAlternativeTablets() {
         List<TabletSchedCtx> alternativeTablets = Lists.newArrayList();
-        ClusterLoadStatistic localLoadStat = loadStatistic;
+        ClusterLoadStatistic localLoadStat = getClusterLoadStatistic();
         if (localLoadStat != null) {
             for (TStorageMedium medium : TStorageMedium.values()) {
                 alternativeTablets.addAll(selectAlternativeTabletsForCluster(localLoadStat, medium));
@@ -94,7 +95,11 @@ public abstract class Rebalancer {
         return -1L;
     }
 
+    public ClusterLoadStatistic getClusterLoadStatistic() {
+        return loadStatistic.get();
+    }
+
     public void updateLoadStatistic(ClusterLoadStatistic loadStatistic) {
-        this.loadStatistic = loadStatistic;
+        this.loadStatistic.set(loadStatistic);
     }
 }

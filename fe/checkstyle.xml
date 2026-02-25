@@ -41,7 +41,7 @@ https://github.com/checkstyle/checkstyle/blob/master/src/main/resources/google_c
     <property name="fileExtensions" value="java"/>
 
     <module name="RegexpHeader">
-        <property name="headerFile" value="checkstyle-header.txt"/>
+        <property name="header" value="(^// Licensed to the Apache Software Foundation \(ASF\) under one$)|(^// Copyright 2021-present StarRocks, Inc\. All rights reserved\.$)"/>
         <property name="fileExtensions" value="java"/>
     </module>
 
@@ -69,6 +69,12 @@ https://github.com/checkstyle/checkstyle/blob/master/src/main/resources/google_c
             <property name="allowNonPrintableEscapes" value="true"/>
         </module>
         <module name="UnusedImports"/>
+        <module name="IllegalImport">
+            <property name="regexp" value="true"/>
+            <!-- reject all references from shaded modules -->
+            <property name="illegalClasses" value="^.*\.shaded\..*$"/>
+            <property name="illegalPkgs" value=""/>
+        </module>
         <module name="AvoidStarImport"/>
         <!--        <module name="OneTopLevelClass"/>-->
         <module name="NoLineWrap">

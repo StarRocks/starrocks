@@ -19,8 +19,8 @@
 #include <cstdint>
 #include <vector>
 
+#include "base/utility/guard.h"
 #include "gen_cpp/RuntimeFilter_types.h"
-#include "util/guard.h"
 
 namespace starrocks {
 class RuntimeFilterLayout {
@@ -37,6 +37,7 @@ public:
 
     const std::vector<int32_t>& bucketseq_to_driverseq() const { return _bucketseq_to_driverseq; }
     const std::vector<int32_t>& bucketseq_to_partition() const { return _bucketseq_to_partition; }
+    const std::vector<TBucketProperty>& bucket_properties() const { return _bucket_properties; }
 
 protected:
     int _filter_id;
@@ -48,6 +49,7 @@ protected:
     std::vector<int32_t> _bucketseq_to_instance;
     std::vector<int32_t> _bucketseq_to_driverseq;
     std::vector<int32_t> _bucketseq_to_partition;
+    std::vector<TBucketProperty> _bucket_properties;
 };
 
 class WithLayoutMixin {
@@ -127,4 +129,31 @@ auto dispatch_layout(bool global, const RuntimeFilterLayout& layout, Args&&... a
     }
 }
 
+template <template <TRuntimeFilterLayoutMode::type> typename F, typename... Args>
+auto dispatch_layout_v2(bool global, const RuntimeFilterLayout& layout, Args&&... args) {
+    TRuntimeFilterLayoutMode::type layout_mode = global ? layout.global_layout() : layout.local_layout();
+    switch (layout_mode) {
+    case TRuntimeFilterLayoutMode::SINGLETON:
+        return F<TRuntimeFilterLayoutMode::SINGLETON>()(layout, std::forward<Args>(args)...);
+    case TRuntimeFilterLayoutMode::PIPELINE_SHUFFLE:
+        return F<TRuntimeFilterLayoutMode::PIPELINE_SHUFFLE>()(layout, std::forward<Args>(args)...);
+    case TRuntimeFilterLayoutMode::GLOBAL_SHUFFLE_2L:
+        return F<TRuntimeFilterLayoutMode::GLOBAL_SHUFFLE_2L>()(layout, std::forward<Args>(args)...);
+    case TRuntimeFilterLayoutMode::GLOBAL_SHUFFLE_1L:
+        return F<TRuntimeFilterLayoutMode::GLOBAL_SHUFFLE_1L>()(layout, std::forward<Args>(args)...);
+    case TRuntimeFilterLayoutMode::PIPELINE_BUCKET_LX:
+        return F<TRuntimeFilterLayoutMode::PIPELINE_BUCKET_LX>()(layout, std::forward<Args>(args)...);
+    case TRuntimeFilterLayoutMode::PIPELINE_BUCKET:
+        return F<TRuntimeFilterLayoutMode::PIPELINE_BUCKET>()(layout, std::forward<Args>(args)...);
+    case TRuntimeFilterLayoutMode::GLOBAL_BUCKET_2L_LX:
+        return F<TRuntimeFilterLayoutMode::GLOBAL_BUCKET_2L_LX>()(layout, std::forward<Args>(args)...);
+    case TRuntimeFilterLayoutMode::GLOBAL_BUCKET_2L:
+        return F<TRuntimeFilterLayoutMode::GLOBAL_BUCKET_2L>()(layout, std::forward<Args>(args)...);
+    case TRuntimeFilterLayoutMode::GLOBAL_BUCKET_1L:
+        return F<TRuntimeFilterLayoutMode::GLOBAL_BUCKET_1L>()(layout, std::forward<Args>(args)...);
+    default:
+        CHECK(false) << "Unknown type: " << layout_mode;
+        __builtin_unreachable();
+    }
+}
 } // namespace starrocks

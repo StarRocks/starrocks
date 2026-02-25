@@ -17,31 +17,36 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.NullLiteral;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.TableName;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SelectAnalyzer.RewriteAliasVisitor;
 import com.starrocks.sql.ast.ColumnAssignment;
-import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UpdateStmt;
+import com.starrocks.sql.ast.expression.DefaultValueExpr;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.TypeManager;
+import com.starrocks.type.NullType;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -57,10 +62,25 @@ public class UpdateAnalyzer {
         }
     }
 
+    private static void analyzeProperties(UpdateStmt updateStmt, ConnectContext session) {
+        Map<String, String> properties = updateStmt.getProperties();
+        properties.put(LoadStmt.MAX_FILTER_RATIO_PROPERTY,
+                String.valueOf(session.getSessionVariable().getInsertMaxFilterRatio()));
+        properties.put(LoadStmt.STRICT_MODE, String.valueOf(session.getSessionVariable().getEnableInsertStrict()));
+        properties.put(LoadStmt.TIMEOUT_PROPERTY, String.valueOf(session.getSessionVariable().getInsertTimeoutS()));
+    }
+
     public static void analyze(UpdateStmt updateStmt, ConnectContext session) {
-        TableName tableName = updateStmt.getTableName();
-        MetaUtils.normalizationTableName(session, tableName);
-        MetaUtils.getDatabase(session, tableName);
+        analyzeProperties(updateStmt, session);
+
+        TableRef tableRef = AnalyzerUtils.normalizedTableRef(updateStmt.getTableRef(), session);
+        updateStmt.setTableRef(tableRef);
+        TableName tableName = TableName.fromTableRef(tableRef);
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getDb(session, tableName.getCatalog(), tableName.getDb());
+        if (db == null) {
+            throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
+        }
         Table table = MetaUtils.getSessionAwareTable(session, null, tableName);
 
         if (table instanceof MaterializedView) {
@@ -74,8 +94,10 @@ public class UpdateAnalyzer {
         }
 
         List<ColumnAssignment> assignmentList = updateStmt.getAssignments();
-        Map<String, ColumnAssignment> assignmentByColName =
-                assignmentList.stream().collect(Collectors.toMap(assign -> assign.getColumn().toLowerCase(), a -> a));
+        Map<String, ColumnAssignment> assignmentByColName = new HashMap<>();
+        for (ColumnAssignment col : assignmentList) {
+            assignmentByColName.put(col.getColumn().toLowerCase(), col);
+        }
         for (String colName : assignmentByColName.keySet()) {
             if (table.getColumn(colName) == null) {
                 throw new SemanticException("table '%s' do not existing column '%s'", tableName.getTbl(), colName);
@@ -83,13 +105,13 @@ public class UpdateAnalyzer {
         }
 
         if (table.isOlapTable() || table.isCloudNativeTable()) {
-            if (session.getSessionVariable().getPartialUpdateMode().equals("column")) {
+            if (session.getSessionVariable().getPartialUpdateMode().equalsIgnoreCase("column")) {
                 // use partial update by column
                 updateStmt.setUsePartialUpdate();
                 if (((OlapTable) table).hasRowStorageType()) {
                     throw new SemanticException("column_with_row table do not support column mode update");
                 }
-            } else if (session.getSessionVariable().getPartialUpdateMode().equals("auto")) {
+            } else if (session.getSessionVariable().getPartialUpdateMode().equalsIgnoreCase("auto")) {
                 // decide by default rules
                 if (updateStmt.getWherePredicate() == null) {
                     if (checkIfUsePartialUpdate(assignmentList.size(), table.getBaseSchema().size())) {
@@ -125,7 +147,7 @@ public class UpdateAnalyzer {
                     autoIncrementColumn = col;
                 }
 
-                if (col.isAutoIncrement() && assign.getExpr().getType() == Type.NULL) {
+                if (col.isAutoIncrement() && assign.getExpr().getType() == NullType.NULL) {
                     nullExprInAutoIncrement = true;
                     break;
                 }

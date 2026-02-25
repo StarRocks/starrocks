@@ -1,0 +1,50 @@
+-- name: test_create_two_resource_groups_with_mem_pool_then_try_alter
+
+[UC] drop resource group shared_resource_group_for_skywalker;
+[UC] drop resource group shared_resource_group_for_vader;
+
+[UC] create resource group shared_resource_group_for_skywalker 
+to (user='skywalker') 
+with (
+  'cpu_weight' = '2',
+  'mem_limit' = '70%',
+  'mem_pool' = 'shared_pool_skywalker_and_vader'
+);
+
+
+[UC] create resource group shared_resource_group_for_vader 
+to (user='vader') 
+with (
+  'cpu_weight' = '2',
+  'mem_limit' = '70%',
+  'mem_pool' = 'shared_pool_skywalker_and_vader'
+);
+
+show verbose resource groups all;
+-- result:
+[REGEX]shared_resource_group_for_skywalker.+2.+70(\.\d+)?%.+NORMAL.+\(id=\d+,.+user=skywalker\)\s*shared_pool_skywalker_and_vader
+-- !result
+
+show verbose resource groups all;
+-- result:
+[REGEX]shared_resource_group_for_vader.+2.+70(\.\d+)?%.+NORMAL.+\(id=\d+,.+user=vader\)\s*shared_pool_skywalker_and_vader
+-- !result
+
+alter resource group shared_resource_group_for_vader with (
+    'mem_limit' = '99%',
+    'mem_pool' = 'other_pool'
+);
+-- result:
+E: (1064, 'Property `mem_pool` cannot be altered [shared_pool_skywalker_and_vader].')
+-- !result
+
+alter resource group shared_resource_group_for_skywalker with (
+    'mem_limit' = '99%',
+    'mem_pool' = 'other_pool'
+);
+-- result:
+E: (1064, 'Property `mem_pool` cannot be altered [shared_pool_skywalker_and_vader].')
+-- !result
+
+[UC] drop resource group shared_resource_group_for_skywalker;
+[UC] drop resource group shared_resource_group_for_vader;

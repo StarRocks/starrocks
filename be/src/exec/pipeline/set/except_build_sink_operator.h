@@ -14,9 +14,9 @@
 
 #pragma once
 
+#include "base/concurrency/race_detect.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/set/except_context.h"
-#include "util/race_detect.h"
 
 namespace starrocks::pipeline {
 
@@ -54,6 +54,7 @@ public:
     bool is_finished() const override { return _is_finished || _except_ctx->is_finished(); }
 
     Status set_finishing(RuntimeState* state) override {
+        auto notify = _except_ctx->observable().defer_notify_sink();
         ONCE_DETECT(_set_finishing_once);
         _is_finished = true;
         _except_ctx->finish_build_ht();
@@ -85,6 +86,7 @@ public:
             : OperatorFactory(id, "except_build_sink", plan_node_id),
               _except_partition_ctx_factory(std::move(except_partition_ctx_factory)),
               _dst_exprs(dst_exprs) {}
+    bool support_event_scheduler() const override { return true; }
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<ExceptBuildSinkOperator>(this, _id, _plan_node_id, driver_sequence,

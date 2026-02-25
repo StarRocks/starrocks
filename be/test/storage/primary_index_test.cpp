@@ -18,6 +18,7 @@
 
 #include <random>
 
+#include "base/testutil/parallel_test.h"
 #include "column/binary_column.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
@@ -26,7 +27,6 @@
 #include "storage/chunk_helper.h"
 #include "storage/primary_key_dump.h"
 #include "storage/primary_key_encoder.h"
-#include "testutil/parallel_test.h"
 
 using namespace starrocks;
 
@@ -51,7 +51,7 @@ void test_pk_dump(PrimaryIndex* pk_index, const std::map<std::string, uint64_t>&
     {
         // read primary index dump
         ASSERT_TRUE(PrimaryKeyDump::deserialize_pkcol_pkindex_from_meta(
-                            kPrimaryIndexDumpFile, dump_pb, [&](const starrocks::Chunk& chunk) {},
+                            kPrimaryIndexDumpFile, dump_pb, [&](uint32_t segment_id, const starrocks::Chunk& chunk) {},
                             [&](const std::string& filename, const starrocks::PartialKVsPB& kvs) {
                                 for (int i = 0; i < kvs.keys_size(); i++) {
                                     auto search =
@@ -76,7 +76,7 @@ void test_integral_pk() {
 
     auto chunk = ChunkHelper::new_chunk(*schema, kSegmentSize);
 
-    auto pk_col = down_cast<FixedLengthColumn<DatumType>*>(chunk->get_column_by_index(0).get());
+    auto* pk_col = down_cast<FixedLengthColumn<DatumType>*>(chunk->get_column_raw_ptr_by_index(0));
     pk_col->resize(kSegmentSize);
     auto pk_data = pk_col->get_data().data();
     DatumType pk_value = 0;
@@ -218,7 +218,7 @@ void test_binary_pk(int key_size) {
     auto chunk = ChunkHelper::new_chunk(*schema, kSegmentSize);
     size_t pk_value = 0;
 
-    auto pk_col = down_cast<BinaryColumn*>(chunk->get_column_by_index(0).get());
+    auto* pk_col = down_cast<BinaryColumn*>(chunk->get_column_raw_ptr_by_index(0));
     pk_col->reserve(kSegmentSize);
 
     // [0, kSegmentSize)
@@ -365,8 +365,8 @@ PARALLEL_TEST(PrimaryIndexTest, test_composite_key) {
 
     auto chunk = ChunkHelper::new_chunk(*schema, kSegmentSize);
 
-    auto pk_col0 = down_cast<FixedLengthColumn<int8_t>*>(chunk->get_column_by_index(0).get());
-    auto pk_col1 = down_cast<FixedLengthColumn<int16_t>*>(chunk->get_column_by_index(1).get());
+    auto pk_col0 = down_cast<FixedLengthColumn<int8_t>*>(chunk->get_column_raw_ptr_by_index(0));
+    auto pk_col1 = down_cast<FixedLengthColumn<int16_t>*>(chunk->get_column_raw_ptr_by_index(1));
 
     pk_col0->resize(0);
     pk_col1->resize(0);
@@ -375,9 +375,10 @@ PARALLEL_TEST(PrimaryIndexTest, test_composite_key) {
         pk_col1->append(i * 2);
     }
 
-    std::unique_ptr<Column> pk_column;
-    PrimaryKeyEncoder::create_column(*schema, &pk_column);
-    PrimaryKeyEncoder::encode(*schema, *chunk, 0, chunk->num_rows(), pk_column.get());
+    MutableColumnPtr pk_column;
+    PrimaryKeyEncoder::create_column(*schema, &pk_column, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
+    PrimaryKeyEncoder::encode(*schema, *chunk, 0, chunk->num_rows(), pk_column.get(),
+                              PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
 
     ASSERT_TRUE(pk_index->insert(0, 0, *pk_column).ok());
     LOG(INFO) << "pk_index memory:" << pk_index->memory_usage();

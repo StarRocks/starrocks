@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.qe.ConnectContext;
 
 import static java.lang.Double.NEGATIVE_INFINITY;
 import static java.lang.Double.NaN;
@@ -31,6 +32,8 @@ public class ColumnStatistic {
     private static final ColumnStatistic UNKNOWN =
             new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 1, 1, null, StatisticType.UNKNOWN);
 
+    public static final double DEFAULT_COLLECTION_SIZE = -1.0;
+
     // For time types, including Date, DateTime, Timestamp. They all represented as timestamp in ColumnStatistic,
     // regardless of their different storage format
     private final double minValue;
@@ -45,6 +48,28 @@ public class ColumnStatistic {
     // @todo refactor this!
     private String minString = null;
     private String maxString = null;
+
+
+    private double collectionSize = DEFAULT_COLLECTION_SIZE;
+
+    public ColumnStatistic(
+            double minValue,
+            double maxValue,
+            double nullsFraction,
+            double averageRowSize,
+            double distinctValuesCount,
+            double collectionSize,
+            Histogram histogram,
+            StatisticType type) {
+        this.minValue = minValue;
+        this.maxValue = maxValue;
+        this.nullsFraction = nullsFraction;
+        this.averageRowSize = averageRowSize;
+        this.distinctValuesCount = distinctValuesCount;
+        this.histogram = histogram;
+        this.collectionSize = collectionSize;
+        this.type = type;
+    }
 
     // TODO deal with string max, min
     public ColumnStatistic(
@@ -108,6 +133,10 @@ public class ColumnStatistic {
         return distinctValuesCount;
     }
 
+    public double getCollectionSize() {
+        return collectionSize;
+    }
+
     public Histogram getHistogram() {
         return histogram;
     }
@@ -145,18 +174,34 @@ public class ColumnStatistic {
     @Override
     public String toString() {
         String separator = ", ";
-        return "[" + minValue + separator
-                + maxValue + separator
-                + nullsFraction + separator
-                + averageRowSize + separator
-                + distinctValuesCount + "] "
-                + (histogram == null ? "" : histogram.getMcvString() + " ")
-                + type;
+        boolean enableLabeledColumnStatisticOutput =
+                ConnectContext.get() != null && ConnectContext.get().getSessionVariable() != null &&
+                        ConnectContext.get().getSessionVariable().isEnableLabeledColumnStatisticOutput();
+        if (enableLabeledColumnStatisticOutput) {
+            return "[MIN: " + minValue + separator
+                    + "MAX: " + maxValue + separator
+                    + "NULLS: " + nullsFraction + separator
+                    + "ROS: " + averageRowSize + separator
+                    + "NDV: " + distinctValuesCount + "] "
+                    + (collectionSize == DEFAULT_COLLECTION_SIZE ? "" : "COS: " + collectionSize + " ")
+                    + (histogram == null ? "" : histogram.getMcvString() + " ")
+                    + type;
+        } else {
+            return "[" + minValue + separator
+                    + maxValue + separator
+                    + nullsFraction + separator
+                    + averageRowSize + separator
+                    + distinctValuesCount + "] "
+                    + (collectionSize == DEFAULT_COLLECTION_SIZE ? "" : "COS: " + collectionSize + " ")
+                    + (histogram == null ? "" : histogram.getMcvString() + " ")
+                    + type;
+        }
     }
 
     public static Builder buildFrom(ColumnStatistic other) {
         return new Builder(other.minString, other.maxString, other.minValue, other.maxValue,
-                other.nullsFraction, other.averageRowSize, other.distinctValuesCount, other.histogram, other.type);
+                other.nullsFraction, other.averageRowSize, other.distinctValuesCount, other.histogram,
+                other.collectionSize, other.type);
     }
 
     public static Builder buildFrom(String columnStatistic) {
@@ -164,13 +209,38 @@ public class ColumnStatistic {
         String valueString = columnStatistic.substring(1, endIndex);
         String typeString = endIndex == columnStatistic.length() - 1 ? "" : columnStatistic.substring(endIndex + 2);
 
-        String[] valueArray = valueString.split(",");
-        Preconditions.checkState(valueArray.length == 5,
-                "statistic value: %s is illegal", valueString);
+        // Check if this is the new labeled format (contains "MIN:")
+        boolean isLabeledFormat = valueString.contains("MIN:");
+        
+        double minValue;
+        double maxValue;
+        double nullsFraction;
+        double averageRowSize;
+        double distinctValues;
+        
+        if (isLabeledFormat) {
+            // Parse labeled format: MIN: 1.0, MAX: 100.0, NULLS: 0.0, ROS: 8.0, NDV: 50.0
+            String[] parts = valueString.split(",");
+            Preconditions.checkState(parts.length == 5,
+                    "statistic value: %s is illegal", valueString);
+            
+            minValue = parseLabeledValue(parts[0].trim(), "MIN:");
+            maxValue = parseLabeledValue(parts[1].trim(), "MAX:");
+            nullsFraction = parseLabeledValue(parts[2].trim(), "NULLS:");
+            averageRowSize = parseLabeledValue(parts[3].trim(), "ROS:");
+            distinctValues = parseLabeledValue(parts[4].trim(), "NDV:");
+        } else {
+            // Parse old format: 1.0, 100.0, 0.0, 8.0, 50.0
+            String[] valueArray = valueString.split(",");
+            Preconditions.checkState(valueArray.length == 5,
+                    "statistic value: %s is illegal", valueString);
 
-        double minValue = Double.parseDouble(valueArray[0]);
-        double maxValue = Double.parseDouble(valueArray[1]);
-        double distinctValues = Double.parseDouble(valueArray[4]);
+            minValue = Double.parseDouble(valueArray[0]);
+            maxValue = Double.parseDouble(valueArray[1]);
+            nullsFraction = Double.parseDouble(valueArray[2]);
+            averageRowSize = Double.parseDouble(valueArray[3]);
+            distinctValues = Double.parseDouble(valueArray[4]);
+        }
 
         if (minValue > maxValue) {
             minValue = Double.NEGATIVE_INFINITY;
@@ -181,15 +251,19 @@ public class ColumnStatistic {
             distinctValues = 1;
         }
 
-        Builder builder = new Builder(minValue, maxValue,
-                Double.parseDouble(valueArray[2]), Double.parseDouble(valueArray[3]),
-                distinctValues);
+        Builder builder = new Builder(minValue, maxValue, nullsFraction, averageRowSize, distinctValues);
         if (!typeString.isEmpty()) {
             builder.setType(StatisticType.valueOf(typeString));
         } else if (builder.build().isUnknownValue()) {
             builder.setType(StatisticType.UNKNOWN);
         }
         return builder;
+    }
+
+    private static double parseLabeledValue(String part, String label) {
+        Preconditions.checkState(part.startsWith(label),
+                "Expected label %s but got: %s", label, part);
+        return Double.parseDouble(part.substring(label.length()).trim());
     }
 
     public static Builder builder() {
@@ -206,20 +280,20 @@ public class ColumnStatistic {
         private StatisticType type = StatisticType.ESTIMATE;
         private String minString = null;
         private String maxString = null;
+        private double collectionSize = DEFAULT_COLLECTION_SIZE;
 
         private Builder() {
         }
 
         private Builder(double minValue, double maxValue, double nullsFraction, double averageRowSize,
-                        double distinctValuesCount, Histogram histogram,
-                        StatisticType type) {
+                        double distinctValuesCount, double collectionSize, Histogram histogram, StatisticType type) {
             this(null, null, minValue, maxValue, nullsFraction,
-                    averageRowSize, distinctValuesCount, histogram, type);
+                    averageRowSize, distinctValuesCount, histogram, collectionSize, type);
         }
 
         private Builder(String minString, String maxString, double minValue, double maxValue,
                         double nullsFraction, double averageRowSize,
-                        double distinctValuesCount, Histogram histogram,
+                        double distinctValuesCount, Histogram histogram, double collectionSize,
                         StatisticType type) {
             this.minString = minString;
             this.maxString = maxString;
@@ -230,11 +304,13 @@ public class ColumnStatistic {
             this.distinctValuesCount = distinctValuesCount;
             this.histogram = histogram;
             this.type = type;
+            this.collectionSize = collectionSize;
         }
 
         private Builder(double minValue, double maxValue, double nullsFraction, double averageRowSize,
                         double distinctValuesCount) {
-            this(minValue, maxValue, nullsFraction, averageRowSize, distinctValuesCount, null, StatisticType.ESTIMATE);
+            this(minValue, maxValue, nullsFraction, averageRowSize, distinctValuesCount,
+                    DEFAULT_COLLECTION_SIZE, null, StatisticType.ESTIMATE);
         }
 
         public Builder setMinValue(double minValue) {
@@ -262,6 +338,11 @@ public class ColumnStatistic {
             return this;
         }
 
+        public Builder setCollectionSize(double collectionSize) {
+            this.collectionSize = collectionSize;
+            return this;
+        }
+
         public Builder setHistogram(Histogram histogram) {
             this.histogram = histogram;
             return this;
@@ -284,7 +365,7 @@ public class ColumnStatistic {
 
         public ColumnStatistic build() {
             ColumnStatistic columnStatistic = new ColumnStatistic(
-                    minValue, maxValue, nullsFraction, averageRowSize, distinctValuesCount, histogram, type);
+                    minValue, maxValue, nullsFraction, averageRowSize, distinctValuesCount, collectionSize, histogram, type);
             columnStatistic.setMaxString(maxString);
             columnStatistic.setMinString(minString);
             return columnStatistic;

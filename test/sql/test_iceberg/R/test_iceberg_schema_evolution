@@ -1,0 +1,18 @@
+-- name: testIcebergSchemaEvolution
+create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_oss_db.schema_evo_table order by new_trip_id;
+-- result:
+1	1000371	1.8	15.32	N
+2	1000372	2.5	22.15	N
+2	1000373	0.9	9.01	N
+1	1000374	8.4	42.13	Y
+1	1000471	1.8	15.32	N
+2	1000472	2.5	22.15	N
+2	1000473	0.9	9.01	N
+1	1000474	8.4	42.13	Y
+-- !result
+drop catalog iceberg_sql_test_${uuid0};
+-- result:
+-- !result

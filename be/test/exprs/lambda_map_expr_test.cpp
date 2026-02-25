@@ -15,12 +15,15 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "butil/time.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/map_column.h"
 #include "exprs/arithmetic_expr.h"
 #include "exprs/cast_expr.h"
+#include "exprs/expr_context.h"
+#include "exprs/expr_executor.h"
 #include "exprs/function_call_expr.h"
 #include "exprs/is_null_predicate.h"
 #include "exprs/lambda_function.h"
@@ -29,7 +32,6 @@
 #include "exprs/map_expr.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "runtime/runtime_state.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -46,7 +48,7 @@ ColumnPtr const_varchar_column(const std::string& value, size_t size = 1) {
 }
 
 std::unique_ptr<MapApplyExpr> create_map_apply_expr(const TypeDescriptor& type) {
-    return std::unique_ptr<MapApplyExpr>(new MapApplyExpr(type));
+    return std::make_unique<MapApplyExpr>(type);
 }
 
 class MapApplyExprTest : public ::testing::Test {
@@ -58,7 +60,7 @@ protected:
         TScalarType scalar_type;
         scalar_type.__set_type(TPrimitiveType::INT);
         node.__set_scalar_type(scalar_type);
-        int_type.types.push_back(node);
+        int_type.types.emplace_back(node);
         // init expr_node
         expr_node.opcode = TExprOpcode::ADD;
         expr_node.child_type = TPrimitiveType::INT;
@@ -120,7 +122,7 @@ protected:
         lambda_func->add_child(map_expr);
         lambda_func->add_child(col1);
         lambda_func->add_child(col2);
-        _lambda_func.push_back(lambda_func);
+        _lambda_func.emplace_back(lambda_func);
 
         /// (k,v) -> map_expr(k is null, v + a)
         lambda_func = _objpool.add(new LambdaFunction(tlambda_func));
@@ -150,7 +152,7 @@ protected:
         lambda_func->add_child(map_expr);
         lambda_func->add_child(key3);
         lambda_func->add_child(val3);
-        _lambda_func.push_back(lambda_func);
+        _lambda_func.emplace_back(lambda_func);
     }
     std::vector<Expr*> _lambda_func;
     TExprNode expr_node;
@@ -166,11 +168,11 @@ private:
 TEST_F(MapApplyExprTest, test_map_int_int) {
     TypeDescriptor type_map_int_int;
     type_map_int_int.type = LogicalType::TYPE_MAP;
-    type_map_int_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
-    type_map_int_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
+    type_map_int_int.children.emplace_back(LogicalType::TYPE_INT);
+    type_map_int_int.children.emplace_back(LogicalType::TYPE_INT);
 
     create_lambda_expr(type_map_int_int);
-    auto column = ColumnHelper::create_column(type_map_int_int, true);
+    MutableColumnPtr column = ColumnHelper::create_column(type_map_int_int, true);
 
     DatumMap map1;
     map1[(int32_t)1] = (int32_t)44;
@@ -214,14 +216,14 @@ TEST_F(MapApplyExprTest, test_map_int_int) {
 
         ExprContext exprContext(map_apply_expr.get());
         std::vector<ExprContext*> expr_ctxs = {&exprContext};
-        ASSERT_OK(Expr::prepare(expr_ctxs, &_runtime_state));
-        ASSERT_OK(Expr::open(expr_ctxs, &_runtime_state));
+        ASSERT_OK(ExprExecutor::prepare(expr_ctxs, &_runtime_state));
+        ASSERT_OK(ExprExecutor::open(expr_ctxs, &_runtime_state));
         ColumnPtr result = map_apply_expr->evaluate(&exprContext, &cur_chunk);
 
         EXPECT_TRUE(result->is_nullable());
         EXPECT_TRUE(result->debug_string() == column->debug_string());
 
-        Expr::close(expr_ctxs, &_runtime_state);
+        ExprExecutor::close(expr_ctxs, &_runtime_state);
     }
 
     // Inputs:
@@ -246,14 +248,14 @@ TEST_F(MapApplyExprTest, test_map_int_int) {
 
         ExprContext exprContext(map_apply_expr.get());
         std::vector<ExprContext*> expr_ctxs = {&exprContext};
-        ASSERT_OK(Expr::prepare(expr_ctxs, &_runtime_state));
-        ASSERT_OK(Expr::open(expr_ctxs, &_runtime_state));
+        ASSERT_OK(ExprExecutor::prepare(expr_ctxs, &_runtime_state));
+        ASSERT_OK(ExprExecutor::open(expr_ctxs, &_runtime_state));
         ColumnPtr result = map_apply_expr->evaluate(&exprContext, &cur_chunk);
 
         EXPECT_TRUE(result->is_nullable());
         EXPECT_STREQ(result->debug_string().c_str(), "[{0:67}, {0:89}, {0:NULL}, {}, NULL]");
 
-        Expr::close(expr_ctxs, &_runtime_state);
+        ExprExecutor::close(expr_ctxs, &_runtime_state);
     }
 }
 
@@ -270,7 +272,7 @@ TEST_F(MapApplyExprTest, test_map_varchar_int) {
     type_varchar.len = 10;
     create_lambda_expr(type_map_varchar_int);
 
-    auto column = ColumnHelper::create_column(type_map_varchar_int, false);
+    MutableColumnPtr column = ColumnHelper::create_column(type_map_varchar_int, false);
 
     DatumMap map;
     map[(Slice) "a"] = (int32_t)11;
@@ -317,14 +319,14 @@ TEST_F(MapApplyExprTest, test_map_varchar_int) {
 
         ExprContext exprContext(map_apply_expr.get());
         std::vector<ExprContext*> expr_ctxs = {&exprContext};
-        ASSERT_OK(Expr::prepare(expr_ctxs, &_runtime_state));
-        ASSERT_OK(Expr::open(expr_ctxs, &_runtime_state));
+        ASSERT_OK(ExprExecutor::prepare(expr_ctxs, &_runtime_state));
+        ASSERT_OK(ExprExecutor::open(expr_ctxs, &_runtime_state));
         ColumnPtr result = map_apply_expr->evaluate(&exprContext, &cur_chunk);
 
         EXPECT_FALSE(result->is_nullable());
         EXPECT_TRUE(result->debug_string() == column->debug_string());
 
-        Expr::close(expr_ctxs, &_runtime_state);
+        ExprExecutor::close(expr_ctxs, &_runtime_state);
     }
 
     // Inputs:
@@ -348,14 +350,14 @@ TEST_F(MapApplyExprTest, test_map_varchar_int) {
 
         ExprContext exprContext(map_apply_expr.get());
         std::vector<ExprContext*> expr_ctxs = {&exprContext};
-        ASSERT_OK(Expr::prepare(expr_ctxs, &_runtime_state));
-        ASSERT_OK(Expr::open(expr_ctxs, &_runtime_state));
+        ASSERT_OK(ExprExecutor::prepare(expr_ctxs, &_runtime_state));
+        ASSERT_OK(ExprExecutor::open(expr_ctxs, &_runtime_state));
         ColumnPtr result = map_apply_expr->evaluate(&exprContext, &cur_chunk);
 
         EXPECT_FALSE(result->is_nullable());
         EXPECT_STREQ(result->debug_string().c_str(), "{0:34}, {0:67}, {0:89}, {0:100}, {}");
 
-        Expr::close(expr_ctxs, &_runtime_state);
+        ExprExecutor::close(expr_ctxs, &_runtime_state);
     }
 }
 

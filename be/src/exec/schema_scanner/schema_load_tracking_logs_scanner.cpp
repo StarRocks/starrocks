@@ -16,11 +16,11 @@
 
 #include <climits>
 
+#include "base/time/time.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "gutil/strings/substitute.h"
 #include "http/http_client.h"
 #include "runtime/runtime_state.h"
-#include "runtime/string_value.h"
 
 namespace starrocks {
 
@@ -28,10 +28,10 @@ SchemaScanner::ColumnDesc SchemaLoadTrackingLogsScanner::_s_tbls_columns[] = {
         //   name,       type,          size,     is_null
         {"ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"JOB_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
-        {"LABEL", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"DATABASE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"TRACKING_LOG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true}};
+        {"LABEL", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"DATABASE_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"TRACKING_LOG", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"TYPE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true}};
 
 SchemaLoadTrackingLogsScanner::SchemaLoadTrackingLogsScanner()
         : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)),
@@ -75,28 +75,28 @@ Status SchemaLoadTrackingLogsScanner::fill_chunk(ChunkPtr* chunk) {
             if (slot_id < 1 || slot_id > 6) {
                 return Status::InternalError(strings::Substitute("invalid slot id: $0", slot_id));
             }
-            ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
+            auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(slot_id);
             switch (slot_id) {
             case 1: {
                 // id
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.job_id);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.job_id);
                 break;
             }
             case 2: {
                 // job id
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.job_id);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.job_id);
                 break;
             }
             case 3: {
                 // label
                 Slice label = Slice(info.label);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&label);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&label);
                 break;
             }
             case 4: {
                 // database
                 Slice db = Slice(info.db);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&db);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&db);
                 break;
             }
             case 5: {
@@ -112,16 +112,16 @@ Status SchemaLoadTrackingLogsScanner::fill_chunk(ChunkPtr* chunk) {
                                   });
                     std::string tmp_str = ss.str();
                     Slice msg = Slice(tmp_str);
-                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&msg);
+                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&msg);
                 } else {
-                    down_cast<NullableColumn*>(column.get())->append_nulls(1);
+                    down_cast<NullableColumn*>(column)->append_nulls(1);
                 }
                 break;
             }
             case 6: {
                 // type
                 Slice load_type = Slice(info.load_type);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&load_type);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&load_type);
                 break;
             }
             default:

@@ -14,15 +14,24 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.system.BackendResourceStat;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.thrift.TWorkGroupType;
+import com.starrocks.type.TypeFactory;
+import com.starrocks.warehouse.Warehouse;
 
-import java.util.ArrayList;
+import java.text.DecimalFormat;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
+import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 
 public class ResourceGroup {
@@ -35,61 +44,148 @@ public class ResourceGroup {
     public static final String PLAN_CPU_COST_RANGE = "plan_cpu_cost_range";
     public static final String PLAN_MEM_COST_RANGE = "plan_mem_cost_range";
     public static final String CPU_CORE_LIMIT = "cpu_core_limit";
+    public static final String CPU_WEIGHT = "cpu_weight";
+    public static final String CPU_WEIGHT_PERCENT = "cpu_weight_percent";
+    public static final String EXCLUSIVE_CPU_CORES = "exclusive_cpu_cores";
+    public static final String EXCLUSIVE_CPU_PERCENT = "exclusive_cpu_percent";
     public static final String MAX_CPU_CORES = "max_cpu_cores";
     public static final String MEM_LIMIT = "mem_limit";
+    public static final String MEM_POOL = "mem_pool";
     public static final String BIG_QUERY_MEM_LIMIT = "big_query_mem_limit";
     public static final String BIG_QUERY_SCAN_ROWS_LIMIT = "big_query_scan_rows_limit";
     public static final String BIG_QUERY_CPU_SECOND_LIMIT = "big_query_cpu_second_limit";
     public static final String CONCURRENCY_LIMIT = "concurrency_limit";
+    public static final String WAREHOUSES = "warehouses";
     public static final String DEFAULT_RESOURCE_GROUP_NAME = "default_wg";
     public static final String DISABLE_RESOURCE_GROUP_NAME = "disable_resource_group";
+    public static final String DEFAULT_MEM_POOL = "default_mem_pool";
     public static final String DEFAULT_MV_RESOURCE_GROUP_NAME = "default_mv_wg";
     public static final String SPILL_MEM_LIMIT_THRESHOLD = "spill_mem_limit_threshold";
 
-    public static final long DEFAULT_WG_ID = 0;
-    public static final long DEFAULT_MV_WG_ID = 1;
-    public static final long DEFAULT_MV_VERSION = 1;
+    /**
+     * In the old version, DEFAULT_WG and DEFAULT_MV_WG are not saved and persisted in the FE, but are only created in each
+     * BE. Its ID is 0 and 1. To distinguish it from the old version, a new ID 2 and 3 is used here.
+     */
+    public static final long DEFAULT_WG_ID = 2;
+    public static final long DEFAULT_MV_WG_ID = 3;
 
-    public static final ResourceGroup DEFAULT_WG = new ResourceGroup();
-    public static final ResourceGroup DEFAULT_MV_WG = new ResourceGroup();
+    public static final Set<String> BUILTIN_WG_NAMES =
+            ImmutableSet.of(DEFAULT_RESOURCE_GROUP_NAME, DEFAULT_MV_RESOURCE_GROUP_NAME);
 
-    static {
-        DEFAULT_WG.setId(DEFAULT_WG_ID);
-        DEFAULT_WG.setName(DEFAULT_RESOURCE_GROUP_NAME);
+    // BE actually stores nanoseconds, so the maximum value needs to be limited to prevent overflow.
+    public static final long MAX_BIG_QUERY_CPU_SECOND_LIMIT = Long.MAX_VALUE / 1_000_000_000L;
 
-        DEFAULT_MV_WG.setId(DEFAULT_MV_WG_ID);
-        DEFAULT_MV_WG.setName(DEFAULT_MV_RESOURCE_GROUP_NAME);
+    private static class ColumnMeta {
+        public ColumnMeta(Column column, BiFunction<ResourceGroup, ResourceGroupClassifier, String> valueSupplier) {
+            this(column, valueSupplier, true);
+        }
+
+        public ColumnMeta(Column column, BiFunction<ResourceGroup, ResourceGroupClassifier, String> valueSupplier,
+                          boolean visible) {
+            this.column = column;
+            this.valueSupplier = valueSupplier;
+            this.visible = visible;
+        }
+
+        private final Column column;
+        private final BiFunction<ResourceGroup, ResourceGroupClassifier, String> valueSupplier;
+        private final boolean visible;
     }
 
-    public static final ShowResultSetMetaData META_DATA =
-            ShowResultSetMetaData.builder()
-                    .addColumn(new Column("name", ScalarType.createVarchar(100)))
-                    .addColumn(new Column("id", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("cpu_core_limit", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("mem_limit", ScalarType.createVarchar(200)))
-                    .addColumn(new Column(MAX_CPU_CORES, ScalarType.createVarchar(200)))
-                    .addColumn(new Column("big_query_cpu_second_limit", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("big_query_scan_rows_limit", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("big_query_mem_limit", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("concurrency_limit", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("spill_mem_limit_threshold", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("type", ScalarType.createVarchar(200)))
-                    .addColumn(new Column("classifiers", ScalarType.createVarchar(1024)))
-                    .build();
+    private static final List<ColumnMeta> COLUMN_METAS = ImmutableList.of(
+            new ColumnMeta(
+                    new Column("name", TypeFactory.createVarcharType(100)),
+                    (rg, classifier) -> rg.getName()),
+            new ColumnMeta(
+                    new Column("id", TypeFactory.createVarcharType(200)),
+                    (rg, classifier) -> "" + rg.getId()),
+            new ColumnMeta(
+                    new Column(CPU_WEIGHT, TypeFactory.createVarcharType(200)),
+                    (rg, classifier) -> "" + rg.getNormalizedCpuWeight(), false),
+            new ColumnMeta(
+                    new Column(CPU_WEIGHT_PERCENT, TypeFactory.createVarcharType(200)),
+                    (rg, classifier) -> "" + rg.getCpuWeightPercent()),
+            new ColumnMeta(
+                    new Column(EXCLUSIVE_CPU_CORES, TypeFactory.createVarcharType(200)),
+                    (rg, classifier) -> "" + rg.getNormalizedExclusiveCpuCores(), false),
+            new ColumnMeta(
+                    new Column(EXCLUSIVE_CPU_PERCENT, TypeFactory.createVarcharType(200)),
+                    (rg, classifier) -> "" + rg.getExclusiveCpuPercent()),
+            new ColumnMeta(
+                    new Column(MEM_LIMIT, TypeFactory.createVarcharType(200)),
+                    (rg, classifier) -> (rg.getMemLimit() * 100) + "%"),
+            new ColumnMeta(
+                    new Column(MAX_CPU_CORES, TypeFactory.createVarcharType(200)),
+                    (rg, classifier) -> "" + rg.getMaxCpuCores(), false),
+            new ColumnMeta(
+                    new Column(BIG_QUERY_CPU_SECOND_LIMIT, TypeFactory.createVarcharType(200)),
+                    (rg, classifier) -> "" + Objects.requireNonNullElse(rg.getBigQueryCpuSecondLimit(), 0)),
+            new ColumnMeta(
+                    new Column(BIG_QUERY_SCAN_ROWS_LIMIT, TypeFactory.createVarcharType(200)),
+                    (rg, classifier) -> "" + Objects.requireNonNullElse(rg.getBigQueryScanRowsLimit(), 0)),
+            new ColumnMeta(
+                    new Column(BIG_QUERY_MEM_LIMIT, TypeFactory.createVarcharType(200)),
+                    (rg, classifier) -> "" + Objects.requireNonNullElse(rg.getBigQueryMemLimit(), 0)),
+            new ColumnMeta(
+                    new Column(CONCURRENCY_LIMIT, TypeFactory.createVarcharType(200)),
+                    (rg, classifier) -> "" + rg.getConcurrencyLimit()),
+            new ColumnMeta(
+                    new Column(SPILL_MEM_LIMIT_THRESHOLD, TypeFactory.createVarcharType(200)),
+                    (rg, classifier) -> new DecimalFormat("#.##").format(
+                            Objects.requireNonNullElse(rg.getSpillMemLimitThreshold(), 1.0) * 100) + "%"),
+            new ColumnMeta(
+                    new Column(GROUP_TYPE, TypeFactory.createVarcharType(200)),
+                    (rg, classifier) -> rg.getResourceGroupType().name().substring("WG_".length()), false),
+            new ColumnMeta(
+                    new Column("classifiers", TypeFactory.createVarcharType(1024)),
+                    (rg, classifier) -> classifier.toString()),
+            new ColumnMeta(
+                    new Column(MEM_POOL, TypeFactory.createVarcharType(200)),
+                    (rg, classifier) -> Objects.requireNonNullElse(rg.getMemPool(), DEFAULT_MEM_POOL), false),
+            new ColumnMeta(
+                    new Column(WAREHOUSES, TypeFactory.createVarcharType(1024)),
+                    (rg, classifier) -> rg.getWarehouses() == null ? "" : String.join(",", rg.getWarehouses()))
+    );
+
+    public static final ShowResultSetMetaData META_DATA;
+    public static final ShowResultSetMetaData VERBOSE_META_DATA;
+
+    static {
+        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
+        COLUMN_METAS.stream()
+                .filter(meta -> meta.visible)
+                .forEach(item -> builder.addColumn(item.column));
+        META_DATA = builder.build();
+
+        ShowResultSetMetaData.Builder verboseBuilder = ShowResultSetMetaData.builder();
+        COLUMN_METAS.forEach(item -> verboseBuilder.addColumn(item.column));
+        VERBOSE_META_DATA = verboseBuilder.build();
+    }
+
     @SerializedName(value = "classifiers")
     List<ResourceGroupClassifier> classifiers;
     @SerializedName(value = "name")
     private String name;
     @SerializedName(value = "id")
     private long id;
+
     @SerializedName(value = "cpuCoreLimit")
-    private Integer cpuCoreLimit;
+    private Integer cpuWeight;
+    @SerializedName(value = "cpuWeightPercent")
+    private Integer cpuWeightPercent;
+    @SerializedName(value = "exclusiveCpuCores")
+    private Integer exclusiveCpuCores;
+    @SerializedName(value = "exclusiveCpuPercent")
+    private Integer exclusiveCpuPercent;
 
     @SerializedName(value = "maxCpuCores")
     private Integer maxCpuCores;
 
     @SerializedName(value = "memLimit")
     private Double memLimit;
+
+    @SerializedName(value = "memPool")
+    private String memPool;
     @SerializedName(value = "bigQueryMemLimit")
     private Long bigQueryMemLimit;
     @SerializedName(value = "bigQueryScanRowsLimit")
@@ -104,46 +200,24 @@ public class ResourceGroup {
     private TWorkGroupType resourceGroupType;
     @SerializedName(value = "version")
     private long version;
+    @SerializedName(value = "warehouses")
+    private List<String> warehouses;
 
     public ResourceGroup() {
     }
 
-    private List<String> showClassifier(ResourceGroupClassifier classifier) {
-        List<String> row = new ArrayList<>();
-        row.add(this.name);
-        row.add("" + this.id);
-        row.add("" + cpuCoreLimit);
-        row.add("" + (memLimit * 100) + "%");
-        row.add("" + maxCpuCores);
-        if (bigQueryCpuSecondLimit != null) {
-            row.add("" + bigQueryCpuSecondLimit);
-        } else {
-            row.add("" + 0);
-        }
-        if (bigQueryScanRowsLimit != null) {
-            row.add("" + bigQueryScanRowsLimit);
-        } else {
-            row.add("" + 0);
-        }
-        if (bigQueryMemLimit != null) {
-            row.add("" + bigQueryMemLimit);
-        } else {
-            row.add("" + 0);
-        }
-        row.add("" + concurrencyLimit);
-        if (spillMemLimitThreshold != null) {
-            row.add("" + (spillMemLimitThreshold * 100) + "%");
-        } else {
-            row.add("" + "100%");
-        }
-        row.add("" + resourceGroupType.name().substring("WG_".length()));
-        row.add(classifier.toString());
-        return row;
+    private List<String> showClassifier(ResourceGroupClassifier classifier, boolean verbose) {
+        return COLUMN_METAS.stream()
+                .filter(meta -> verbose || meta.visible)
+                .map(meta -> meta.valueSupplier.apply(this, classifier))
+                .collect(Collectors.toList());
     }
 
-    public List<List<String>> showVisible(String user, List<String> activeRoles, String ip) {
-        return classifiers.stream().filter(c -> c.isVisible(user, activeRoles, ip))
-                .map(this::showClassifier).collect(Collectors.toList());
+    public List<List<String>> showVisible(String user, List<String> activeRoles, String ip, boolean verbose) {
+        return classifiers.stream()
+                .filter(c -> c.isVisible(user, activeRoles, ip))
+                .map(c -> showClassifier(c, verbose))
+                .collect(Collectors.toList());
     }
 
     public long getVersion() {
@@ -154,11 +228,13 @@ public class ResourceGroup {
         this.version = version;
     }
 
-    public List<List<String>> show() {
+    public List<List<String>> show(boolean verbose) {
         if (classifiers.isEmpty()) {
-            return Collections.singletonList(showClassifier(new ResourceGroupClassifier()));
+            return Collections.singletonList(showClassifier(new ResourceGroupClassifier(), verbose));
         }
-        return classifiers.stream().map(this::showClassifier).collect(Collectors.toList());
+        return classifiers.stream()
+                .map(c -> showClassifier(c, verbose))
+                .collect(Collectors.toList());
     }
 
     public String getName() {
@@ -181,8 +257,11 @@ public class ResourceGroup {
         TWorkGroup twg = new TWorkGroup();
         twg.setName(name);
         twg.setId(id);
-        if (cpuCoreLimit != null) {
-            twg.setCpu_core_limit(cpuCoreLimit);
+        if (cpuWeightPercent != null) {
+            twg.setCpu_weight_percent(cpuWeightPercent);
+        }
+        if (cpuWeight != null) {
+            twg.setCpu_core_limit(cpuWeight);
         }
         if (memLimit != null) {
             twg.setMem_limit(memLimit);
@@ -214,16 +293,90 @@ public class ResourceGroup {
         if (resourceGroupType != null) {
             twg.setWorkgroup_type(resourceGroupType);
         }
+        if (memPool != null) {
+            twg.setMem_pool(memPool);
+        }
+        if (exclusiveCpuPercent != null) {
+            twg.setExclusive_cpu_percent(exclusiveCpuPercent);
+        }
+        twg.setExclusive_cpu_cores(getNormalizedExclusiveCpuCores());
+        if (warehouses != null) {
+            twg.setWarehouses(warehouses);
+        }
+
         twg.setVersion(version);
         return twg;
     }
 
-    public Integer getCpuCoreLimit() {
-        return cpuCoreLimit;
+    public Integer getRawCpuWeight() {
+        return cpuWeight;
     }
 
-    public void setCpuCoreLimit(int cpuCoreLimit) {
-        this.cpuCoreLimit = cpuCoreLimit;
+    public void setCpuWeight(int cpuWeight) {
+        this.cpuWeight = cpuWeight;
+    }
+
+    public Integer getCpuWeightPercent() {
+        return cpuWeightPercent;
+    }
+
+    public void setCpuWeightPercent(Integer cpuWeightPercent) {
+        this.cpuWeightPercent = cpuWeightPercent;
+    }
+
+    public int getNormalizedCpuWeight() {
+        if (exclusiveCpuPercent != null && exclusiveCpuPercent > 0) {
+            return 0;
+        }
+        if (exclusiveCpuCores != null && exclusiveCpuCores > 0) {
+            return 0;
+        }
+        if (cpuWeightPercent != null && cpuWeightPercent > 0) {
+            return 0;
+        }
+        if (cpuWeight == null) {
+            return 0;
+        }
+        return cpuWeight;
+    }
+
+    /**
+     * The old version considers cpu_weight as a positive integer, but now it can be non-positive.
+     * To be compatible with the old version, if cpu_weight is non-positive, it is stored as 1.
+     * And use getNormalizedCpuWeight() to get the normalized value when using cpu_weight.
+     */
+    public void normalizeCpuWeight() {
+        if (cpuWeight == null || cpuWeight <= 0) {
+            cpuWeight = 1;
+        }
+    }
+
+    public Integer getExclusiveCpuCores() {
+        return exclusiveCpuCores;
+    }
+
+    public int getNormalizedExclusiveCpuCores() {
+        if (exclusiveCpuCores != null && exclusiveCpuCores > 0) {
+            return exclusiveCpuCores;
+        }
+        // For compatibility, resource group of deprecated type `short_query` uses `cpu_weight` (the original `cpu_core_limit`)
+        // as the reserved cores.
+        if (resourceGroupType == TWorkGroupType.WG_SHORT_QUERY && cpuWeight != null && cpuWeight > 0) {
+            return cpuWeight;
+        }
+        return 0;
+    }
+
+    public void setExclusiveCpuCores(Integer exclusiveCpuCores) {
+        this.exclusiveCpuCores = exclusiveCpuCores;
+    }
+
+    public Integer getExclusiveCpuPercent() {
+        return exclusiveCpuPercent;
+    }
+
+    public void setExclusiveCpuPercent(Integer exclusiveCpuPercent) {
+        this.exclusiveCpuPercent = exclusiveCpuPercent;
     }
 
     public boolean isMaxCpuCoresEffective() {
@@ -306,6 +459,26 @@ public class ResourceGroup {
         this.classifiers = classifiers;
     }
 
+    public String getMemPool() {
+        return memPool;
+    }
+
+    public boolean hasDefaultMemPool() {
+        return memPool == null || memPool.equals(DEFAULT_MEM_POOL);
+    }
+
+    public void setMemPool(String memPool) {
+        this.memPool = memPool;
+    }
+
+    public List<String> getWarehouses() {
+        return warehouses;
+    }
+
+    public void setWarehouses(List<String> warehouses) {
+        this.warehouses = warehouses;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -321,6 +494,91 @@ public class ResourceGroup {
     @Override
     public int hashCode() {
         return Objects.hash(id, version);
+    }
+
+    public static void validateCpuParameters(Integer cpuWeight, Integer cpuWeightPercent,
+                                             Integer exclusiveCpuCores, Integer exclusiveCpuPercent,
+                                             Integer maxCpuCores,
+                                             TWorkGroupType type, List<String> warehouses) {
+        final int minCoreNum = getMinNumHardwareCoresOfBe(warehouses);
+
+        final boolean hasCpuWeight = cpuWeight != null && cpuWeight > 0;
+        final boolean hasCpuWeightPercent = cpuWeightPercent != null && cpuWeightPercent > 0;
+        final boolean hasExclusiveCpuCores = exclusiveCpuCores != null && exclusiveCpuCores > 0;
+        final boolean hasExclusiveCpuPercent = exclusiveCpuPercent != null && exclusiveCpuPercent > 0;
+
+        int trueCount = 0;
+        trueCount += hasCpuWeight ? 1 : 0;
+        trueCount += hasCpuWeightPercent ? 1 : 0;
+        trueCount += hasExclusiveCpuCores ? 1 : 0;
+        trueCount += hasExclusiveCpuPercent ? 1 : 0;
+
+        if (trueCount > 1) {
+            throw new SemanticException(
+                    String.format("Exactly only one of '%s', '%s', '%s' or '%s' can be present and positive at the same time",
+                            ResourceGroup.CPU_WEIGHT, ResourceGroup.CPU_WEIGHT_PERCENT,
+                            ResourceGroup.EXCLUSIVE_CPU_CORES, ResourceGroup.EXCLUSIVE_CPU_PERCENT));
+        }
+        if (trueCount <= 0) {
+            throw new SemanticException(String.format("Exactly one of '%s', '%s', '%s' or '%s' must be a positive value",
+                    ResourceGroup.CPU_WEIGHT, ResourceGroup.CPU_WEIGHT_PERCENT,
+                    ResourceGroup.EXCLUSIVE_CPU_CORES, ResourceGroup.EXCLUSIVE_CPU_PERCENT));
+        }
+
+        if (hasCpuWeightPercent && type == TWorkGroupType.WG_SHORT_QUERY) {
+            throw new SemanticException(
+                    String.format("short query resource group should not set '%s'", ResourceGroup.CPU_WEIGHT_PERCENT));
+        }
+
+        if (hasExclusiveCpuPercent && type == TWorkGroupType.WG_SHORT_QUERY) {
+            throw new SemanticException(
+                    String.format("short query resource group should not set '%s'", ResourceGroup.EXCLUSIVE_CPU_PERCENT));
+        }
+
+        if (hasCpuWeight && warehouses != null && !warehouses.isEmpty()) {
+            if (cpuWeight > minCoreNum) {
+                throw new SemanticException("'cpu_weight' cannot be set when 'warehouses' is specified, " +
+                        "please use 'cpu_weight_percent' instead");
+            }
+        }
+
+        if (hasExclusiveCpuCores && warehouses != null && !warehouses.isEmpty()) {
+            throw new SemanticException("'exclusive_cpu_cores' cannot be set when 'warehouses' is specified, " +
+                    "please use 'exclusive_cpu_percent' instead");
+        }
+
+        if (maxCpuCores != null && maxCpuCores > 0 && warehouses != null && !warehouses.isEmpty()) {
+            throw new SemanticException("'max_cpu_cores' cannot be set when 'warehouses' is specified");
+        }
+
+        if (hasExclusiveCpuPercent) {
+            if (minCoreNum * exclusiveCpuPercent / 100 < 1) {
+                throw new SemanticException(String.format(
+                        "%s is too small, it must be at least %d%% to reserve one core on the smallest BE (with %d cores)",
+                        ResourceGroup.EXCLUSIVE_CPU_CORES, (100 + minCoreNum) / minCoreNum, minCoreNum));
+            }
+        }
+    }
+
+    private static int getMinNumHardwareCoresOfBe(List<String> warehouses) {
+        if (warehouses == null || warehouses.isEmpty()) {
+            return BackendResourceStat.getInstance().getMinNumCoresOfBe();
+        }
+
+        int minCoreNum = Integer.MAX_VALUE;
+        for (String warehouseName : warehouses) {
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouseName);
+            if (warehouse == null) {
+                continue;
+            }
+            minCoreNum = Math.min(minCoreNum,
+                    BackendResourceStat.getInstance().getMinNumCoresOfBe(warehouse.getId()));
+        }
+
+        if (minCoreNum == Integer.MAX_VALUE) { // All warehouses are invalid.
+            return BackendResourceStat.getInstance().getMinNumCoresOfBe();
+        }
+        return minCoreNum;
     }
 
 }

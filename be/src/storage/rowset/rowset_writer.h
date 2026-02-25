@@ -170,6 +170,8 @@ public:
 
     const GlobalDictByNameMaps* rowset_global_dicts() const { return _writer_options.global_dicts; }
 
+    const RowsetWriterContext& context() const { return _context; }
+
 private:
     Status _flush_segment(const SegmentPB& segment_pb, butil::IOBuf& data);
 
@@ -180,6 +182,8 @@ private:
     Status _flush_index_files(const SegmentPB& segment_pb, butil::IOBuf& data);
 
 protected:
+    void _check_global_dict(SegmentWriter* segment_writer);
+
     RowsetWriterContext _context;
     std::shared_ptr<FileSystem> _fs;
     std::unique_ptr<RowsetMetaPB> _rowset_meta_pb;
@@ -192,6 +196,9 @@ protected:
     int _num_indexfile = 0;
     vector<uint32> _delfile_idxes;
     vector<std::string> _tmp_segment_files;
+    std::vector<string> _segment_encryption_metas;
+    std::vector<string> _delfile_encryption_metas;
+    std::vector<string> _updatefile_encryption_metas;
     // mutex lock for vectorized add chunk and flush
     std::mutex _lock;
 

@@ -20,8 +20,10 @@
 #include <iostream>
 #include <memory>
 
+#include "base/testutil/assert.h"
 #include "column/datum_tuple.h"
 #include "fs/fs_memory.h"
+#include "fs/key_cache.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
@@ -36,18 +38,32 @@
 #include "storage/tablet_schema.h"
 #include "storage/union_iterator.h"
 #include "storage/update_manager.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 
 class RowsetUpdateStateTest : public ::testing::Test {
 public:
     void SetUp() override {
+        config::enable_transparent_data_encryption = true;
+        // add encryption keys
+        EncryptionKeyPB pb;
+        pb.set_id(EncryptionKey::DEFAULT_MASTER_KYE_ID);
+        pb.set_type(EncryptionKeyTypePB::NORMAL_KEY);
+        pb.set_algorithm(EncryptionAlgorithmPB::AES_128);
+        pb.set_plain_key("0000000000000000");
+        std::unique_ptr<EncryptionKey> root_encryption_key = EncryptionKey::create_from_pb(pb).value();
+        auto val_st = root_encryption_key->generate_key();
+        EXPECT_TRUE(val_st.ok());
+        std::unique_ptr<EncryptionKey> encryption_key = std::move(val_st.value());
+        encryption_key->set_id(2);
+        KeyCache::instance().add_key(root_encryption_key);
+        KeyCache::instance().add_key(encryption_key);
         _compaction_mem_tracker = std::make_unique<MemTracker>(-1);
         _metadata_mem_tracker = std::make_unique<MemTracker>();
     }
 
     void TearDown() override {
+        config::enable_transparent_data_encryption = false;
         if (_tablet) {
             StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet->tablet_id());
             _tablet.reset();
@@ -72,11 +88,13 @@ public:
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
         auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
-        auto& cols = chunk->columns();
+        auto col0 = chunk->get_column_raw_ptr_by_index(0);
+        auto col1 = chunk->get_column_raw_ptr_by_index(1);
+        auto col2 = chunk->get_column_raw_ptr_by_index(2);
         for (long key : keys) {
-            cols[0]->append_datum(Datum(key));
-            cols[1]->append_datum(Datum((int16_t)(key % 100 + 1)));
-            cols[2]->append_datum(Datum((int32_t)(key % 1000 + 2)));
+            col0->append_datum(Datum(key));
+            col1->append_datum(Datum((int16_t)(key % 100 + 1)));
+            col2->append_datum(Datum((int32_t)(key % 1000 + 2)));
         }
         if (one_delete == nullptr && !keys.empty()) {
             CHECK_OK(writer->flush_chunk(*chunk));
@@ -102,19 +120,19 @@ public:
         k1.column_name = "pk";
         k1.__set_is_key(true);
         k1.column_type.type = TPrimitiveType::BIGINT;
-        request.tablet_schema.columns.push_back(k1);
+        request.tablet_schema.columns.emplace_back(k1);
 
         TColumn k2;
         k2.column_name = "v1";
         k2.__set_is_key(false);
         k2.column_type.type = TPrimitiveType::SMALLINT;
-        request.tablet_schema.columns.push_back(k2);
+        request.tablet_schema.columns.emplace_back(k2);
 
         TColumn k3;
         k3.column_name = "v2";
         k3.__set_is_key(false);
         k3.column_type.type = TPrimitiveType::INT;
-        request.tablet_schema.columns.push_back(k3);
+        request.tablet_schema.columns.emplace_back(k3);
         auto st = StorageEngine::instance()->create_tablet(request);
         CHECK(st.ok()) << st.to_string();
         return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
@@ -146,7 +164,7 @@ public:
 
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
         EXPECT_TRUE(2 == chunk->num_columns());
-        auto& cols = chunk->columns();
+        auto cols = chunk->mutable_columns();
         for (long key : keys) {
             cols[0]->append_datum(Datum(key));
             cols[1]->append_datum(Datum((int16_t)(key % 100 + 3)));
@@ -206,6 +224,26 @@ static ssize_t read_tablet(const TabletSharedPtr& tablet, int64_t version) {
         return -1;
     }
     return read_until_eof(iter);
+}
+
+TEST_F(RowsetUpdateStateTest, with_deletes) {
+    const int N = 100;
+    _tablet = create_tablet(rand(), rand());
+    // create full rowsets first
+    std::vector<int64_t> keys(N);
+    for (int i = 0; i < N; i++) {
+        keys[i] = i;
+    }
+    std::vector<int64_t> delete_keys;
+    for (int i = 0; i < N / 2; i++) {
+        delete_keys.emplace_back(N + i);
+    }
+    Int64Column deletes;
+    deletes.append_numbers(delete_keys.data(), sizeof(int64_t) * delete_keys.size());
+    RowsetSharedPtr rowset = create_rowset(_tablet, keys, &deletes);
+    auto st = _tablet->rowset_commit(2, rowset, 2000);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+    ASSERT_EQ(2, _tablet->updates()->max_version());
 }
 
 TEST_F(RowsetUpdateStateTest, prepare_partial_update_states) {
@@ -300,7 +338,7 @@ TEST_F(RowsetUpdateStateTest, check_conflict) {
     EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
     auto schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
     auto chunk = ChunkHelper::new_chunk(schema, N);
-    auto& cols = chunk->columns();
+    auto cols = chunk->mutable_columns();
     for (size_t i = 0; i < N; i++) {
         cols[0]->append_datum(Datum(i));
         cols[1]->append_datum(Datum((int16_t)(i % 100 + 1)));

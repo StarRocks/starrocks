@@ -17,26 +17,26 @@
 #include <memory>
 #include <queue>
 #include <set>
+#include <shared_mutex>
 #include <string>
 #include <thread>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
+#include "base/brpc/ref_count_closure.h"
+#include "base/brpc/reusable_closure.h"
+#include "base/container/raw_container.h"
 #include "common/status.h"
-#include "common/tracer.h"
+#include "common/thread/threadpool.h"
+#include "common/tracer_fwd.h"
 #include "exec/async_data_sink.h"
 #include "exec/tablet_info.h"
 #include "gen_cpp/Types_types.h"
-#include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/mem_tracker.h"
 #include "util/compression/block_compression.h"
 #include "util/internal_service_recoverable_stub.h"
-#include "util/raw_container.h"
-#include "util/ref_count_closure.h"
-#include "util/reusable_closure.h"
-#include "util/threadpool.h"
 
 namespace starrocks {
 
@@ -48,7 +48,7 @@ class OlapTableSink;    // forward declaration
 class TabletSinkSender; // forward declaration
 
 template <typename T>
-void serialize_to_iobuf(const T& proto_obj, butil::IOBuf* iobuf);
+void serialize_to_iobuf(T& proto_obj, butil::IOBuf* iobuf);
 
 // The counter of add_batch rpc of a single node
 struct AddBatchCounter {
@@ -97,6 +97,7 @@ struct TabletSinkProfile {
     RuntimeProfile::Counter* server_rpc_timer = nullptr;
     RuntimeProfile::Counter* alloc_auto_increment_timer = nullptr;
     RuntimeProfile::Counter* server_wait_flush_timer = nullptr;
+    RuntimeProfile::Counter* update_load_channel_profile_timer = nullptr;
 };
 
 // map index_id to TabletBEMap(map tablet_id to backend id)
@@ -175,6 +176,7 @@ private:
     Status _wait_request(ReusableClosure<PTabletWriterAddBatchResult>* closure);
     Status _wait_all_prev_request();
     Status _wait_one_prev_request();
+    Status _try_send_eos_and_process_all_response();
     bool _check_prev_request_done();
     bool _check_all_prev_request_done();
     Status _serialize_chunk(const Chunk* src, ChunkPB* dst);
@@ -185,6 +187,15 @@ private:
     void _cancel(int64_t index_id, const Status& err_st);
     Status _filter_indexes_with_where_expr(Chunk* input, const std::vector<uint32_t>& indexes,
                                            std::vector<uint32_t>& filtered_indexes);
+
+    void _reset_cur_chunk(Chunk* input);
+    void _append_data_to_cur_chunk(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size);
+
+    void _try_diagnose(const std::string& error_text);
+    bool _is_diagnose_done();
+    void _wait_diagnose(RuntimeState* state);
+    bool _process_diagnose_profile(RuntimeState* state, PLoadDiagnoseResult& result);
+    void _release_diagnose_closure();
 
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
 
@@ -210,6 +221,7 @@ private:
 
     // channel is closed
     bool _closed{false};
+    bool _all_response_processed{false};
 
     // data sending is finished
     bool _finished{false};
@@ -235,10 +247,11 @@ private:
 
     size_t _max_parallel_request_size = 1;
     std::vector<ReusableClosure<PTabletWriterAddBatchResult>*> _add_batch_closures;
-    std::unique_ptr<Chunk> _cur_chunk;
+    ChunkUniquePtr _cur_chunk;
+    int64_t _cur_chunk_mem_usage = 0;
 
     PTabletWriterAddChunksRequest _rpc_request;
-    using AddMultiChunkReq = std::pair<std::unique_ptr<Chunk>, PTabletWriterAddChunksRequest>;
+    using AddMultiChunkReq = std::pair<ChunkUniquePtr, PTabletWriterAddChunksRequest>;
     std::deque<AddMultiChunkReq> _request_queue;
 
     size_t _current_request_index = 0;
@@ -261,6 +274,7 @@ private:
     ExprContext* _where_clause = nullptr;
 
     bool _has_primary_replica = false;
+    RefCountClosure<PLoadDiagnoseResult>* _diagnose_closure = nullptr;
 };
 
 class IndexChannel {
@@ -272,12 +286,14 @@ public:
     Status init(RuntimeState* state, const std::vector<PTabletWithPartition>& tablets, bool is_incremental);
 
     void for_each_node_channel(const std::function<void(NodeChannel*)>& func) {
+        std::shared_lock<std::shared_mutex> lock(_node_channels_mutex);
         for (auto& it : _node_channels) {
             func(it.second.get());
         }
     }
 
     void for_each_initial_node_channel(const std::function<void(NodeChannel*)>& func) {
+        std::shared_lock<std::shared_mutex> lock(_node_channels_mutex);
         for (auto& it : _node_channels) {
             if (!it.second->is_incremental()) {
                 func(it.second.get());
@@ -286,6 +302,7 @@ public:
     }
 
     void for_each_incremental_node_channel(const std::function<void(NodeChannel*)>& func) {
+        std::shared_lock<std::shared_mutex> lock(_node_channels_mutex);
         for (auto& it : _node_channels) {
             if (it.second->is_incremental()) {
                 func(it.second.get());
@@ -295,11 +312,17 @@ public:
 
     void mark_as_failed(const NodeChannel* ch);
 
-    bool is_failed_channel(const NodeChannel* ch) { return _failed_channels.count(ch->node_id()) != 0; }
+    bool is_failed_channel(const NodeChannel* ch) {
+        std::shared_lock<std::shared_mutex> lock(_failure_state_mutex);
+        return _failed_channels.count(ch->node_id()) != 0;
+    }
 
     bool has_intolerable_failure();
 
-    bool has_incremental_node_channel() const { return _has_incremental_node_channel; }
+    bool has_incremental_node_channel() const {
+        std::shared_lock<std::shared_mutex> lock(_node_channels_mutex);
+        return _has_incremental_node_channel;
+    }
 
     int64_t index_id() const { return _index_id; }
 
@@ -309,10 +332,21 @@ private:
     OlapTableSink* _parent;
     int64_t _index_id;
 
+    // Mutex to protect _node_channels and _has_incremental_node_channel from concurrent access.
+    // Read operations (for_each_*_node_channel, has_incremental_node_channel) acquire shared lock.
+    // Write operation (init) acquires exclusive lock.
+    mutable std::shared_mutex _node_channels_mutex;
     // BeId -> channel
     std::unordered_map<int64_t, std::unique_ptr<NodeChannel>> _node_channels;
     // map be_id to tablet num
     std::unordered_map<int64_t, int64_t> _be_to_tablet_num;
+
+    // Mutex to protect failure state variables (_failed_channels, _has_intolerable_failure,
+    // _write_quorum_type) from concurrent access. These variables are used together in
+    // has_intolerable_failure() to determine if the failure is intolerable.
+    // Read operations (is_failed_channel, has_intolerable_failure) acquire shared lock.
+    // Write operations (mark_as_failed, init for _write_quorum_type) acquire exclusive lock.
+    mutable std::shared_mutex _failure_state_mutex;
     // BeId
     std::set<int64_t> _failed_channels;
 

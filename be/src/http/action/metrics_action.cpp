@@ -26,12 +26,14 @@
 
 #include <string>
 
+#include "base/metrics.h"
 #include "common/config.h"
 #include "common/tracer.h"
 #include "http/http_channel.h"
 #include "http/http_headers.h"
 #include "http/http_request.h"
-#include "util/metrics.h"
+#include "runtime/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 
 #ifdef USE_STAROS
 #include "metrics/metrics.h"
@@ -127,6 +129,7 @@ void PrometheusMetricsVisitor::visit(const std::string& prefix, const std::strin
     } else {
         metric_name = prefix + "_" + name;
     }
+
     // Output metric type
     _ss << "# TYPE " << metric_name << " " << collector->type() << "\n";
     switch (collector->type()) {
@@ -290,7 +293,6 @@ void JsonMetricsVisitor::visit(const std::string& prefix, const std::string& nam
     if (collector->empty() || name.empty()) {
         return;
     }
-
     rapidjson::Document::AllocatorType& allocator = doc.GetAllocator();
     switch (collector->type()) {
     case MetricType::COUNTER:
@@ -331,13 +333,16 @@ void MetricsAction::handle(HttpRequest* req) {
     } else if (type == "json") {
         JsonMetricsVisitor visitor;
         _metrics->collect(&visitor);
+        _collect_table_metrics(&visitor);
         str.assign(visitor.to_string());
     } else {
         PrometheusMetricsVisitor visitor;
         _metrics->collect(&visitor);
+        _collect_table_metrics(&visitor);
         if (config::dump_metrics_with_bvar) {
             bvar::Variable::dump_exposed(&visitor, &_options);
         }
+
 #ifdef USE_STAROS
 #ifdef BE_TEST
         if (!sDisableStarOSMetrics) {
@@ -355,6 +360,12 @@ void MetricsAction::handle(HttpRequest* req) {
         HttpChannel::send_reply(req, str);
     } else {
         (*_mock_func)(str);
+    }
+}
+
+void MetricsAction::_collect_table_metrics(starrocks::MetricsVisitor* visitor) {
+    if (config::enable_collect_table_metrics) {
+        GlobalMetricsRegistry::instance()->table_metrics_mgr()->metric_registry()->collect(visitor);
     }
 }
 

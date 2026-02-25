@@ -20,6 +20,7 @@
 #include "butil/time.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "exprs/string_functions.h"
+#include "storage/olap_define.h"
 
 namespace starrocks {
 
@@ -53,10 +54,10 @@ TEST_F(StringFunctionConcatTest, concatNormalTest) {
         str4->append(std::to_string(j));
     }
 
-    columns.emplace_back(str1);
-    columns.emplace_back(str2);
-    columns.emplace_back(str3);
-    columns.emplace_back(str4);
+    columns.emplace_back(std::move(str1));
+    columns.emplace_back(std::move(str2));
+    columns.emplace_back(std::move(str3));
+    columns.emplace_back(std::move(str4));
 
     ColumnPtr result = StringFunctions::concat(ctx.get(), columns).value();
 
@@ -83,10 +84,10 @@ TEST_F(StringFunctionConcatTest, concatConstTest) {
     str3->append("_1234");
     str4->append("_道可道,非常道");
 
-    columns.emplace_back(str1);
-    columns.emplace_back(ConstColumn::create(str2, 1));
-    columns.emplace_back(ConstColumn::create(str3, 1));
-    columns.emplace_back(ConstColumn::create(str4, 1));
+    columns.emplace_back(std::move(str1));
+    columns.emplace_back(ConstColumn::create(std::move(str2), 1));
+    columns.emplace_back(ConstColumn::create(std::move(str3), 1));
+    columns.emplace_back(ConstColumn::create(std::move(str4), 1));
 
     auto state = std::make_unique<ConcatState>();
     for (int i = 1; i < columns.size(); ++i) {
@@ -122,10 +123,10 @@ TEST_F(StringFunctionConcatTest, concatNullTest) {
         null->append(j % 2 == 0);
     }
 
-    columns.emplace_back(str1);
-    columns.emplace_back(str2);
-    columns.emplace_back(str3);
-    columns.emplace_back(NullableColumn::create(str4, null));
+    columns.emplace_back(std::move(str1));
+    columns.emplace_back(std::move(str2));
+    columns.emplace_back(std::move(str3));
+    columns.emplace_back(NullableColumn::create(std::move(str4), std::move(null)));
 
     ColumnPtr result = StringFunctions::concat(ctx.get(), columns).value();
 
@@ -163,10 +164,10 @@ TEST_F(StringFunctionConcatTest, concatWsTest) {
         null->append(j % 2);
     }
 
-    columns.emplace_back(step);
-    columns.emplace_back(str1);
-    columns.emplace_back(str2);
-    columns.emplace_back(NullableColumn::create(str3, null));
+    columns.emplace_back(std::move(step));
+    columns.emplace_back(std::move(str1));
+    columns.emplace_back(std::move(str2));
+    columns.emplace_back(NullableColumn::create(std::move(str3), std::move(null)));
 
     ColumnPtr result = StringFunctions::concat_ws(ctx.get(), columns).value();
     ASSERT_EQ(20, result->size());
@@ -202,10 +203,10 @@ TEST_F(StringFunctionConcatTest, concatWs1Test) {
         null->append(j % 2);
     }
 
-    columns.emplace_back(step);
-    columns.emplace_back(str1);
-    columns.emplace_back(str2);
-    columns.emplace_back(NullableColumn::create(str3, null));
+    columns.emplace_back(std::move(step));
+    columns.emplace_back(std::move(str1));
+    columns.emplace_back(std::move(str2));
+    columns.emplace_back(NullableColumn::create(std::move(str3), std::move(null)));
 
     ColumnPtr result = StringFunctions::concat_ws(ctx.get(), columns).value();
     ASSERT_EQ(20, result->size());
@@ -260,15 +261,15 @@ TEST_F(StringFunctionConcatTest, concatConstOversizeTest) {
     auto result = StringFunctions::concat(context.get(), columns).value();
 
     ASSERT_TRUE(result->is_nullable());
-    auto result_nullable = down_cast<NullableColumn*>(result.get());
+    auto result_nullable = down_cast<const NullableColumn*>(result.get());
     ASSERT_TRUE(result_nullable != nullptr);
-    auto result_binary = down_cast<BinaryColumn*>(result_nullable->data_column().get());
+    auto result_binary = down_cast<const BinaryColumn*>(result_nullable->data_column().get());
     ASSERT_TRUE(result_binary != nullptr);
     ASSERT_EQ(result_binary->size(), col0->size());
     ASSERT_EQ(result_binary->size(), row_num);
     for (auto i = 0; i < row_num; ++i) {
         if (i % 3 == 0) {
-            ASSERT_EQ(null_col->get_data()[i], 1);
+            ASSERT_EQ(null_col->immutable_data()[i], 1);
             ASSERT_TRUE(columns[0]->is_null(i));
             ASSERT_TRUE(result->is_null(i));
             continue;
@@ -294,9 +295,9 @@ static inline void concat_not_const_test(const NullColumnPtr& null_col, Columns 
     auto result = StringFunctions::concat(context.get(), columns).value();
 
     ASSERT_TRUE(result->is_nullable());
-    auto result_nullable = down_cast<NullableColumn*>(result.get());
+    auto result_nullable = down_cast<const NullableColumn*>(result.get());
     ASSERT_TRUE(result_nullable != nullptr);
-    auto result_binary = down_cast<BinaryColumn*>(result_nullable->data_column().get());
+    auto result_binary = down_cast<const BinaryColumn*>(result_nullable->data_column().get());
     ASSERT_TRUE(result_binary != nullptr);
     const auto row_num = columns[0]->size();
     ASSERT_EQ(result_binary->size(), columns[0]->size());
@@ -305,7 +306,7 @@ static inline void concat_not_const_test(const NullColumnPtr& null_col, Columns 
     auto init_row = row_num > limit ? row_num - limit : size_t(0);
     for (auto i = init_row; i < row_num; ++i) {
         if (i % 3 == 0) {
-            ASSERT_EQ(null_col->get_data()[i], 1);
+            ASSERT_EQ(null_col->immutable_data()[i], 1);
             ASSERT_TRUE(result->is_null(i));
             continue;
         }
@@ -333,27 +334,33 @@ static inline void concat_not_const_test(const NullColumnPtr& null_col, Columns 
 
 static inline void concat_not_const_test(const NullColumnPtr& null_col, const ColumnPtr& col0, const ColumnPtr& col1,
                                          const ColumnPtr& col2, const ColumnPtr& col3, const size_t limit) {
-    concat_not_const_test(null_col, {NullableColumn::create(col0, null_col), col1, col2, col3}, 0, limit);
+    concat_not_const_test(
+            null_col, {NullableColumn::create(col0->as_mutable_ptr(), null_col->as_mutable_ptr()), col1, col2, col3}, 0,
+            limit);
     /*
-    concat_not_const_test(null_col, {col1, NullableColumn::create(col0, null_col), col2, col3}, 1,
+    concat_not_const_test(null_col, {col1, NullableColumn::create(col0->as_mutable_ptr(), null_col->as_mutable_ptr()), col2, col3}, 1,
                           limit);
-    concat_not_const_test(null_col, {col1, col2, NullableColumn::create(col0, null_col), col3}, 2,
+    concat_not_const_test(null_col, {col1, col2, NullableColumn::create(col0->as_mutable_ptr(), null_col->as_mutable_ptr()), col3}, 2,
                           limit);
-    concat_not_const_test(null_col, {col1, col2, col3, NullableColumn::create(col0, null_col)}, 3,
+    concat_not_const_test(null_col, {col1, col2, col3, NullableColumn::create(col0->as_mutable_ptr(), null_col->as_mutable_ptr())}, 3,
                           limit);
     */
-    concat_not_const_test(null_col, {col0, NullableColumn::create(col1, null_col), col2, col3}, 0, limit);
+    concat_not_const_test(
+            null_col, {col0, NullableColumn::create(col1->as_mutable_ptr(), null_col->as_mutable_ptr()), col2, col3}, 0,
+            limit);
     /*
-    concat_not_const_test(null_col, {col0, col1, NullableColumn::create(col2, null_col), col3}, 0,
+    concat_not_const_test(null_col, {col0, col1, NullableColumn::create(std::move(col2), null_col->as_mutable_ptr()), col3}, 0,
                           limit);
-    concat_not_const_test(null_col, {col0, col1, col2, NullableColumn::create(col3, null_col)}, 0,
+    concat_not_const_test(null_col, {col0, col1, col2, NullableColumn::create(std::move(col3), null_col->as_mutable_ptr())}, 0,
                           limit);
     */
-    concat_not_const_test(null_col, {NullableColumn::create(col1, null_col), col0, col2, col3}, 1, limit);
+    concat_not_const_test(
+            null_col, {NullableColumn::create(col1->as_mutable_ptr(), null_col->as_mutable_ptr()), col0, col2, col3}, 1,
+            limit);
     /*
-    concat_not_const_test(null_col, {col1, NullableColumn::create(col2, null_col), col0, col3}, 2,
+    concat_not_const_test(null_col, {col1, NullableColumn::create(std::move(col2), null_col->as_mutable_ptr()), col0, col3}, 2,
                           limit);
-    concat_not_const_test(null_col, {col1, col2, NullableColumn::create(col3, null_col), col0}, 3,
+    concat_not_const_test(null_col, {col1, col2, NullableColumn::create(std::move(col3), null_col->as_mutable_ptr()), col0}, 3,
                           limit);
     */
 }
@@ -381,7 +388,7 @@ TEST_F(StringFunctionConcatTest, concatNotConstSmallOversizeTest) {
             null_col->append(0);
         }
     }
-    concat_not_const_test(null_col, col0, col1, col2, col3, 10);
+    concat_not_const_test(std::move(null_col), std::move(col0), std::move(col1), std::move(col2), std::move(col3), 10);
 }
 
 TEST_F(StringFunctionConcatTest, concatNotConstBigOversizeTest) {
@@ -410,7 +417,7 @@ TEST_F(StringFunctionConcatTest, concatNotConstBigOversizeTest) {
             null_col->append(0);
         }
     }
-    concat_not_const_test(null_col, col0, col1, col2, col3, 0);
+    concat_not_const_test(std::move(null_col), std::move(col0), std::move(col1), std::move(col2), std::move(col3), 0);
 }
 
 static inline void concat_ws_test(const NullColumnPtr& sep_null_col, const NullColumnPtr& null_col,
@@ -420,9 +427,9 @@ static inline void concat_ws_test(const NullColumnPtr& sep_null_col, const NullC
     auto union_null_col = FunctionHelper::union_null_column(sep_null_col, null_col);
 
     ASSERT_TRUE(result->is_nullable());
-    auto result_nullable = down_cast<NullableColumn*>(result.get());
+    auto result_nullable = down_cast<const NullableColumn*>(result.get());
     ASSERT_TRUE(result_nullable != nullptr);
-    auto result_binary = down_cast<BinaryColumn*>(result_nullable->data_column().get());
+    auto result_binary = down_cast<const BinaryColumn*>(result_nullable->data_column().get());
     ASSERT_TRUE(result_binary != nullptr);
     const auto row_num = columns[0]->size();
     ASSERT_EQ(result_binary->size(), columns[0]->size());
@@ -461,44 +468,53 @@ static inline void concat_ws_test(const NullColumnPtr& sep_null_col, const NullC
 static inline void concat_ws_test(const NullColumnPtr& sep_null_col, const NullColumnPtr& null_col,
                                   const ColumnPtr& sep_col, const ColumnPtr& col0, const ColumnPtr& col1,
                                   const ColumnPtr& col2, const ColumnPtr& col3, const size_t limit) {
-    auto nullable_sep_col = NullableColumn::create(sep_col, sep_null_col);
+    ColumnPtr nullable_sep_col = NullableColumn::create(sep_col->as_mutable_ptr(), sep_null_col->as_mutable_ptr());
     concat_ws_test(sep_null_col, null_col, sep_col,
-                   {nullable_sep_col, NullableColumn::create(col0, null_col), col1, col2, col3}, 1, limit);
+                   {nullable_sep_col, NullableColumn::create(col0->as_mutable_ptr(), null_col->as_mutable_ptr()), col1,
+                    col2, col3},
+                   1, limit);
     /*
     concat_ws_test(sep_null_col, null_col, sep_col,
-                   {nullable_sep_col, col1, NullableColumn::create(col0, null_col), col2, col3}, 2,
+                   {nullable_sep_col, col1, NullableColumn::create(col0->as_mutable_ptr(), null_col->as_mutable_ptr()), col2, col3}, 2,
                    limit);
     concat_ws_test(sep_null_col, null_col, sep_col,
-                   {nullable_sep_col, col1, col2, NullableColumn::create(col0, null_col), col3}, 3,
+                   {nullable_sep_col, col1, col2, NullableColumn::create(col0->as_mutable_ptr(), null_col->as_mutable_ptr()), col3}, 3,
                    limit);
     */
     concat_ws_test(sep_null_col, null_col, sep_col,
-                   {nullable_sep_col, col1, col2, col3, NullableColumn::create(col0, null_col)}, 4, limit);
+                   {nullable_sep_col, col1, col2, col3,
+                    NullableColumn::create(col0->as_mutable_ptr(), null_col->as_mutable_ptr())},
+                   4, limit);
 
-    concat_ws_test(sep_null_col, null_col, sep_col,
-                   {nullable_sep_col, col0, NullableColumn::create(col1, null_col), col2, col3}, 1, limit);
+    concat_ws_test(
+            sep_null_col, null_col, sep_col,
+            {nullable_sep_col, col0, NullableColumn::create(std::move(col1), null_col->as_mutable_ptr()), col2, col3},
+            1, limit);
     /*
     concat_ws_test(sep_null_col, null_col, sep_col,
-                   {nullable_sep_col, col0, col1, NullableColumn::create(col2, null_col), col3}, 1,
+                   {nullable_sep_col, col0, col1, NullableColumn::create(std::move(col2), null_col->as_mutable_ptr()), col3}, 1,
                    limit);
     concat_ws_test(sep_null_col, null_col, sep_col,
-                   {nullable_sep_col, col0, col1, col2, NullableColumn::create(col3, null_col)}, 1,
+                   {nullable_sep_col, col0, col1, col2, NullableColumn::create(std::move(col3), null_col->as_mutable_ptr())}, 1,
                    limit);
     */
-    concat_ws_test(sep_null_col, null_col, sep_col,
-                   {nullable_sep_col, NullableColumn::create(col1, null_col), col0, col2, col3}, 2, limit);
+    concat_ws_test(
+            sep_null_col, null_col, sep_col,
+            {nullable_sep_col, NullableColumn::create(std::move(col1), null_col->as_mutable_ptr()), col0, col2, col3},
+            2, limit);
     /*
     concat_ws_test(sep_null_col, null_col, sep_col,
-                   {nullable_sep_col, col1, NullableColumn::create(col2, null_col), col0, col3}, 3,
+                   {nullable_sep_col, col1, NullableColumn::create(std::move(col2), null_col->as_mutable_ptr()), col0, col3}, 3,
                    limit);
     concat_ws_test(sep_null_col, null_col, sep_col,
-                   {nullable_sep_col, col1, col2, NullableColumn::create(col3, null_col), col0}, 4,
+                   {nullable_sep_col, col1, col2, NullableColumn::create(std::move(col3), null_col->as_mutable_ptr()), col0}, 4,
                    limit);
     */
 }
-void prepare_concat_ws_data(const NullColumnPtr& sep_null_col, const NullColumnPtr& null_col, const ColumnPtr& sep,
-                            const ColumnPtr& col0, const ColumnPtr& col1, const ColumnPtr& col2,
-                            const ColumnPtr& col3) {
+void prepare_concat_ws_data(const NullColumn::MutablePtr& sep_null_col, const NullColumn::MutablePtr& null_col,
+                            const BinaryColumn::MutablePtr& sep, const BinaryColumn::MutablePtr& col0,
+                            const BinaryColumn::MutablePtr& col1, const BinaryColumn::MutablePtr& col2,
+                            const BinaryColumn::MutablePtr& col3) {
     for (auto i = 0; i < 5; ++i) {
         sep->append_datum(Slice(""));
         sep->append_datum(Slice("x"));
@@ -555,7 +571,8 @@ TEST_F(StringFunctionConcatTest, concatWsSmallOversizeTest) {
     auto sep_null_col = NullColumn::create();
     auto null_col = NullColumn::create();
     prepare_concat_ws_data(sep_null_col, null_col, sep, col0, col1, col2, col3);
-    concat_ws_test(sep_null_col, null_col, sep, col0, col1, col2, col3, 300);
+    concat_ws_test(std::move(sep_null_col), std::move(null_col), std::move(sep), std::move(col0), std::move(col1),
+                   std::move(col2), std::move(col3), 300);
 }
 
 TEST_F(StringFunctionConcatTest, concatWsBigOversizeTest) {
@@ -574,6 +591,7 @@ TEST_F(StringFunctionConcatTest, concatWsBigOversizeTest) {
         col3->append(Slice(std::string(3796 - i, 'v')));
     }
     prepare_concat_ws_data(sep_null_col, null_col, sep, col0, col1, col2, col3);
-    concat_ws_test(sep_null_col, null_col, sep, col0, col1, col2, col3, 2);
+    concat_ws_test(std::move(sep_null_col), std::move(null_col), std::move(sep), std::move(col0), std::move(col1),
+                   std::move(col2), std::move(col3), 2);
 }
 } // namespace starrocks

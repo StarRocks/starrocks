@@ -19,11 +19,9 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 
 add_subdirectory(rowset)
 
-add_library(Storage STATIC
+set(STORAGE_FILES
     aggregate_type.cpp
     base_tablet.cpp
-    decimal12.cpp
-    decimal_type_info.cpp
     delete_handler.cpp
     del_vector.cpp
     delta_column_group.cpp
@@ -39,7 +37,6 @@ add_library(Storage STATIC
     olap_define.cpp
     olap_server.cpp
     options.cpp
-    page_cache.cpp
     persistent_index.cpp
     primary_index.cpp
     primary_key_encoder.cpp
@@ -65,7 +62,7 @@ add_library(Storage STATIC
     tablet_schema_map.cpp
     tablet_updates.cpp
     txn_manager.cpp
-    types.cpp
+    type_info_factory.cpp
     update_manager.cpp
     utils.cpp
     compaction_utils.cpp
@@ -99,17 +96,16 @@ add_library(Storage STATIC
     rowset/ordinal_page_index.cpp
     rowset/page_io.cpp
     rowset/binary_dict_page.cpp
-    rowset/dict_page.cpp
     rowset/binary_prefix_page.cpp
+    rowset/data_sample.cpp
+    rowset/dict_page.cpp
     rowset/segment.cpp
     rowset/segment_writer.cpp
     rowset/segment_rewriter.cpp
     rowset/segment_group.cpp
     rowset/storage_page_decoder.cpp
-    rowset/block_split_bloom_filter.cpp
     rowset/bloom_filter_index_reader.cpp
     rowset/bloom_filter_index_writer.cpp
-    rowset/bloom_filter.cpp
     rowset/parsed_page.cpp
     rowset/zone_map_index.cpp
     rowset/segment_iterator.cpp
@@ -123,19 +119,23 @@ add_library(Storage STATIC
     task/engine_checksum_task.cpp
     task/engine_clone_task.cpp
     task/engine_manual_compaction_task.cpp
+    task/engine_compaction_control_task.cpp
     task/engine_storage_migration_task.cpp
     task/engine_alter_tablet_task.cpp
     aggregate_iterator.cpp
     async_delta_writer.cpp
     chunk_helper.cpp
+    chunk_variant_helper.cpp
     chunk_iterator.cpp
     column_predicate_cmp.cpp
     column_in_predicate.cpp
     column_not_in_predicate.cpp
     column_null_predicate.cpp
     column_or_predicate.cpp
+    column_and_predicate.cpp
     column_expr_predicate.cpp
     conjunctive_predicates.cpp
+    runtime_filter_predicate.cpp
     predicate_tree/predicate_tree.cpp
     convert_helper.cpp
     delete_predicates.cpp
@@ -175,6 +175,7 @@ add_library(Storage STATIC
     compaction_manager.cpp
     horizontal_compaction_task.cpp
     vertical_compaction_task.cpp
+    virtual_column_utils.cpp
     compaction_task_factory.cpp
     default_compaction_policy.cpp
     size_tiered_compaction_policy.cpp
@@ -187,19 +188,27 @@ add_library(Storage STATIC
     lake/compaction_scheduler.cpp
     lake/compaction_task.cpp
     lake/compaction_task_context.cpp
+    lake/tablet_parallel_compaction_manager.cpp
     lake/horizontal_compaction_task.cpp
     lake/delta_writer.cpp
     lake/vacuum.cpp
+    lake/vacuum_full.cpp
     lake/general_tablet_writer.cpp
     lake/pk_tablet_writer.cpp
+    lake/pk_tablet_sst_writer.cpp
     lake/primary_key_compaction_policy.cpp
+    lake/tablet_reshard.cpp
     lake/replication_txn_manager.cpp
+    lake/lake_replication_txn_manager.cpp
     lake/rowset.cpp
+    lake/segment_metadata_filter.cpp
     lake/schema_change.cpp
     lake/starlet_location_provider.cpp
     lake/tablet.cpp
     lake/tablet_manager.cpp
     lake/tablet_reader.cpp
+    lake/tablet_range_helper.cpp
+    lake/sst_seek_range.cpp
     lake/transactions.cpp
     lake/metadata_iterator.cpp
     lake/spark_load.cpp
@@ -209,8 +218,19 @@ add_library(Storage STATIC
     lake/lake_primary_index.cpp
     lake/versioned_tablet.cpp
     lake/vertical_compaction_task.cpp
+    lake/cloud_native_index_compaction_task.cpp
     lake/metacache.cpp
     lake/lake_primary_key_recover.cpp
+    lake/spill_mem_table_sink.cpp
+    lake/tablet_retain_info.cpp
+    lake/tablet_writer.cpp
+    lake/lake_persistent_index_parallel_compact_mgr.cpp
+    lake/lake_persistent_index_size_tiered_compaction_strategy.cpp
+    lake/persistent_index_sstable_fileset.cpp
+    lake/lake_persistent_index_key_value_merger.cpp
+    lake/tablet_internal_parallel_merge_task.cpp
+    load_spill_block_manager.cpp
+    load_chunk_spiller.cpp
     sstable/block_builder.cpp
     sstable/block.cpp
     sstable/coding.cpp
@@ -224,6 +244,8 @@ add_library(Storage STATIC
     sstable/iterator.cpp
     sstable/options.cpp
     sstable/merger.cpp
+    sstable/concatenating_iterator.cpp
+    lake/lake_delvec_loader.cpp
     binlog_util.cpp
     binlog_file_writer.cpp
     binlog_file_reader.cpp
@@ -234,6 +256,8 @@ add_library(Storage STATIC
     lake/txn_log_applier.cpp
     lake/lake_local_persistent_index.cpp
     persistent_index_compaction_manager.cpp
+    persistent_index_load_executor.cpp
+    lake/local_pk_index_manager.cpp
     persistent_index_tablet_loader.cpp
     lake/lake_local_persistent_index_tablet_loader.cpp
     lake/lake_persistent_index.cpp
@@ -242,11 +266,14 @@ add_library(Storage STATIC
     lake/persistent_index_sstable.cpp
     lake/lake_primary_key_compaction_conflict_resolver.cpp
     lake/column_mode_partial_update_handler.cpp
+    lake/tablet_write_log_manager.cpp
     primary_key_dump.cpp
     dictionary_cache_manager.cpp
     rows_mapper.cpp
     primary_key_compaction_conflict_resolver.cpp
     local_primary_key_compaction_conflict_resolver.cpp
+    load_spill_pipeline_merge_iterator.cpp
+    load_spill_pipeline_merge_context.cpp
     index/inverted/inverted_index_iterator.cpp
     index/inverted/inverted_index_option.cpp
     index/inverted/inverted_plugin_factory.cpp
@@ -254,8 +281,26 @@ add_library(Storage STATIC
     index/inverted/clucene/clucene_inverted_writer.cpp
     index/inverted/clucene/clucene_inverted_reader.cpp
     index/inverted/clucene/match_operator.cpp
+    index/vector/empty_index_reader.cpp
     index/vector/vector_index_builder_factory.cpp
     index/vector/vector_index_writer.cpp
     index/vector/vector_index_builder.cpp
+    index/vector/vector_index_reader_factory.cpp
+    index/vector/tenann_index_reader.cpp
+    index/vector/tenann/del_id_filter.cpp
     index/vector/tenann/tenann_index_builder.cpp
-    index/vector/tenann/tenann_index_utils.cpp)
+    index/vector/tenann/tenann_index_utils.cpp
+    lake/table_schema_service.cpp
+    index/inverted/builtin/builtin_plugin.cpp
+    index/inverted/builtin/builtin_inverted_writer.cpp
+    index/inverted/builtin/builtin_inverted_reader.cpp
+    index/inverted/builtin/builtin_inverted_index_iterator.cpp
+    index/inverted/builtin/builtin_simple_analyzer.cpp)
+
+if (NOT BUILD_FORMAT_LIB)
+    list(APPEND STORAGE_FILES  lake/starlet_location_provider.cpp)
+endif()
+
+ADD_BE_LIB(Storage
+    ${STORAGE_FILES}
+)

@@ -28,7 +28,6 @@ import java.nio.IntBuffer;
 import java.nio.charset.StandardCharsets;
 import java.sql.Blob;
 import java.sql.Date;
-import java.sql.SQLException;
 import java.sql.Time;
 import java.sql.Timestamp;
 import java.text.DateFormat;
@@ -36,10 +35,17 @@ import java.text.SimpleDateFormat;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.TimeZone;
+import java.util.UUID;
 
 import static com.starrocks.utils.NativeMethodHelper.getAddrs;
+import static com.starrocks.utils.NativeMethodHelper.getColumnLogicalType;
+import static com.starrocks.utils.NativeMethodHelper.resize;
 import static com.starrocks.utils.NativeMethodHelper.resizeStringData;
 
 public class UDFHelper {
@@ -51,11 +57,27 @@ public class UDFHelper {
     public static final int TYPE_DOUBLE = 11;
     public static final int TYPE_VARCHAR = 17;
     public static final int TYPE_ARRAY = 19;
+    public static final int TYPE_MAP = 20;
     public static final int TYPE_BOOLEAN = 24;
     public static final int TYPE_TIME = 44;
     public static final int TYPE_VARBINARY = 46;
     public static final int TYPE_DATE = 50;
     public static final int TYPE_DATETIME = 51;
+
+    public static final HashMap<Integer, Class<?>> clazzs = new HashMap<Integer, Class<?>>() {
+        {
+            put(TYPE_BOOLEAN, Boolean.class);
+            put(TYPE_TINYINT, Byte.class);
+            put(TYPE_SMALLINT, Short.class);
+            put(TYPE_INT, Integer.class);
+            put(TYPE_FLOAT, Float.class);
+            put(TYPE_DOUBLE, Double.class);
+            put(TYPE_BIGINT, Long.class);
+            put(TYPE_VARCHAR, String.class);
+            put(TYPE_ARRAY, List.class);
+            put(TYPE_MAP, Map.class);
+        }
+    };
 
     private static final byte[] emptyBytes = new byte[0];
 
@@ -64,6 +86,7 @@ public class UDFHelper {
     private static final DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
+    // TODO: Use the time zone set by session variables?
     private static final TimeZone timeZone = TimeZone.getDefault();
 
     private static void getBooleanBoxedResult(int numRows, Boolean[] boxedArr, long columnAddr) {
@@ -204,6 +227,7 @@ public class UDFHelper {
         Platform.copyMemory(dataArr, Platform.DOUBLE_ARRAY_OFFSET, null, addrs[1], numRows * 8L);
     }
 
+    // TODO: Why not use BigInt instead of double?
     private static void getDoubleTimeResult(int numRows, Time[] boxedArr, long columnAddr) {
         byte[] nulls = new byte[numRows];
         double[] dataArr = new double[numRows];
@@ -212,7 +236,8 @@ public class UDFHelper {
                 nulls[i] = 1;
             } else {
                 // Note: add the timezone offset back because Time#getTime() returns the GMT timestamp
-                dataArr[i] = (boxedArr[i].getTime() + timeZone.getRawOffset()) / 1000;
+                long v = boxedArr[i].getTime();
+                dataArr[i] = (v + timeZone.getOffset(v)) / 1000;
             }
         }
 
@@ -277,7 +302,8 @@ public class UDFHelper {
         getStringBoxedResult(numRows, results, columnAddr);
     }
 
-    private static void copyDataToBinaryColumn(int numRows, byte[][] byteRes, int[] offsets, byte[] nulls, long columnAddr) {
+    private static void copyDataToBinaryColumn(int numRows, byte[][] byteRes, int[] offsets, byte[] nulls,
+                                               long columnAddr) {
         byte[] bytes = new byte[offsets[numRows - 1]];
         int dst = 0;
         for (int i = 0; i < numRows; i++) {
@@ -330,6 +356,24 @@ public class UDFHelper {
         copyDataToBinaryColumn(numRows, byteRes, offsets, nulls, columnAddr);
     }
 
+    private static void getUUIDBoxedResult(int numRows, UUID[] column, long columnAddr) {
+        byte[] nulls = new byte[numRows];
+        int[] offsets = new int[numRows];
+        byte[][] byteRes = new byte[numRows][];
+        int offset = 0;
+        for (int i = 0; i < numRows; i++) {
+            if (column[i] == null) {
+                byteRes[i] = emptyBytes;
+                nulls[i] = 1;
+            } else {
+                byteRes[i] = column[i].toString().getBytes(StandardCharsets.UTF_8);
+            }
+            offset += byteRes[i].length;
+            offsets[i] = offset;
+        }
+        copyDataToBinaryColumn(numRows, byteRes, offsets, nulls, columnAddr);
+    }
+
     private static void getBinaryBoxedBlobResult(int numRows, Blob[] column, long columnAddr) {
         byte[] nulls = new byte[numRows];
         int[] offsets = new int[numRows];
@@ -357,7 +401,95 @@ public class UDFHelper {
         copyDataToBinaryColumn(numRows, byteRes, offsets, nulls, columnAddr);
     }
 
+    public static void getResultFromListArray(int numRows, List<?>[] lists, long columnAddr) {
+        byte[] nulls = new byte[numRows];
+        int[] offsets = new int[numRows];
+        int offset = 0;
+
+        for (int i = 0; i < numRows; i++) {
+            if (lists[i] == null) {
+                nulls[i] = 1;
+            } else {
+                offset += lists[i].size();
+            }
+            offsets[i] = offset;
+        }
+
+        final long[] addrs = getAddrs(columnAddr);
+        long elementAddr = addrs[2];
+        // get_type
+        int elementType = getColumnLogicalType(elementAddr);
+        // get clazz array
+        Object[] elements = (Object[]) Array.newInstance(clazzs.get(elementType), offsets[numRows - 1]);
+        offset = 0;
+        for (int i = 0; i < numRows; i++) {
+            if (lists[i] != null) {
+                for (Object o : lists[i]) {
+                    elements[offset++] = o;
+                }
+            }
+            lists[i] = null;
+        }
+
+        // memcpy to uint8_t array
+        Platform.copyMemory(nulls, Platform.BYTE_ARRAY_OFFSET, null, addrs[0], numRows);
+        // memcpy to offset array
+        Platform.copyMemory(offsets, Platform.INT_ARRAY_OFFSET, null, addrs[1] + 4, numRows * 4L);
+
+        resize(elementAddr, offsets[numRows - 1]);
+        getResultFromBoxedArray(elementType, offsets[numRows - 1], elements, elementAddr);
+    }
+
+    public static void getResultFromMapArray(int numRows, Map<?, ?>[] maps, long columnAddr) {
+        byte[] nulls = new byte[numRows];
+        int[] offsets = new int[numRows];
+        int offset = 0;
+
+        for (int i = 0; i < numRows; i++) {
+            if (maps[i] == null) {
+                nulls[i] = 1;
+            } else {
+                offset += maps[i].size();
+            }
+            offsets[i] = offset;
+        }
+        final long[] addrs = getAddrs(columnAddr);
+        long keyAddr = addrs[2];
+        long valueAddr = addrs[3];
+
+        int keyType = getColumnLogicalType(keyAddr);
+        int valueType = getColumnLogicalType(valueAddr);
+        // get clazz array
+        Object[] keys = (Object[]) Array.newInstance(clazzs.get(keyType), offsets[numRows - 1]);
+        Object[] values = (Object[]) Array.newInstance(clazzs.get(valueType), offsets[numRows - 1]);
+
+        offset = 0;
+        for (int i = 0; i < numRows; i++) {
+            if (maps[i] != null) {
+                for (Map.Entry<?, ?> entry : maps[i].entrySet()) {
+                    keys[offset] = entry.getKey();
+                    values[offset++] = entry.getValue();
+                }
+            }
+            maps[i] = null;
+        }
+
+        resize(keyAddr, offsets[numRows - 1]);
+        resize(valueAddr, offsets[numRows - 1]);
+
+        // memcpy to uint8_t array
+        Platform.copyMemory(nulls, Platform.BYTE_ARRAY_OFFSET, null, addrs[0], numRows);
+        // memcpy to offset array
+        Platform.copyMemory(offsets, Platform.INT_ARRAY_OFFSET, null, addrs[1] + 4, numRows * 4L);
+
+        getResultFromBoxedArray(keyType, offsets[numRows - 1], keys, keyAddr);
+        getResultFromBoxedArray(valueType, offsets[numRows - 1], values, valueAddr);
+    }
+
     public static void getResultFromBoxedArray(int type, int numRows, Object boxedResult, long columnAddr) {
+        if (numRows == 0) {
+            return;
+        }
         switch (type) {
             case TYPE_BOOLEAN: {
                 getBooleanBoxedResult(numRows, (Boolean[]) boxedResult, columnAddr);
@@ -416,9 +548,19 @@ public class UDFHelper {
                     getBinaryBoxedResult(numRows, (byte[][]) boxedResult, columnAddr);
                 } else if (boxedResult instanceof Blob[]) {
                     getBinaryBoxedBlobResult(numRows, (Blob[]) boxedResult, columnAddr);
+                } else if (boxedResult instanceof UUID[]) {
+                    getUUIDBoxedResult(numRows, (UUID[]) boxedResult, columnAddr);
                 } else {
                     throw new UnsupportedOperationException("unsupported type:" + boxedResult);
                 }
+                break;
+            }
+            case TYPE_ARRAY: {
+                getResultFromListArray(numRows, (List<?>[]) boxedResult, columnAddr);
+                break;
+            }
+            case TYPE_MAP: {
+                getResultFromMapArray(numRows, (Map<?, ?>[]) boxedResult, columnAddr);
                 break;
             }
             default:
@@ -669,6 +811,56 @@ public class UDFHelper {
         return strings;
     }
 
+    public static Object[] createBoxedListArray(int numRows, ByteBuffer nullBuffer, ByteBuffer offsetBuffer, Object[] elements) {
+        final IntBuffer intBuffer = offsetBuffer.order(ByteOrder.LITTLE_ENDIAN).asIntBuffer();
+        int[] offsets = new int[numRows + 1];
+        intBuffer.get(offsets);
+        final int byteSize = offsets[offsets.length - 1];
+
+        List<?>[] lists = new List[numRows];
+        if (nullBuffer != null) {
+            byte[] nullArr = new byte[numRows];
+            nullBuffer.get(nullArr);
+            for (int i = 0; i < numRows; i++) {
+                if (nullArr[i] == 0) {
+                    lists[i] = new ImmutableList<>(elements, offsets[i], offsets[i + 1] - offsets[i]);
+                }
+            }
+        } else {
+            for (int i = 0; i < numRows; i++) {
+                lists[i] = new ImmutableList<>(elements, offsets[i], offsets[i + 1] - offsets[i]);
+            }
+        }
+        return lists;
+    }
+
+    public static Object[] createBoxedMapArray(int numRows, ByteBuffer nullBuffer, ByteBuffer offsetBuffer, Object[] keys,
+                                               Object[] values) {
+        final IntBuffer intBuffer = offsetBuffer.order(ByteOrder.LITTLE_ENDIAN).asIntBuffer();
+        int[] offsets = new int[numRows + 1];
+        intBuffer.get(offsets);
+
+        Map<?, ?>[] maps = new Map[numRows];
+        if (nullBuffer != null) {
+            byte[] nullArr = new byte[numRows];
+            nullBuffer.get(nullArr);
+            for (int i = 0; i < numRows; i++) {
+                if (nullArr[i] == 0) {
+                    ImmutableList<?> k = new ImmutableList<>(keys, offsets[i], offsets[i + 1] - offsets[i]);
+                    ImmutableList<?> v = new ImmutableList<>(values, offsets[i], offsets[i + 1] - offsets[i]);
+                    maps[i] = new ImmutableMap<>(k, v);
+                }
+            }
+        } else {
+            for (int i = 0; i < numRows; i++) {
+                ImmutableList<?> k = new ImmutableList<>(keys, offsets[i], offsets[i + 1] - offsets[i]);
+                ImmutableList<?> v = new ImmutableList<>(values, offsets[i], offsets[i + 1] - offsets[i]);
+                maps[i] = new ImmutableMap<>(k, v);
+            }
+        }
+        return maps;
+    }
+
     // batch call void(Object...)
     public static void batchUpdate(Object o, Method method, FunctionStates ctx, int[] states, Object[] column)
             throws Throwable {
@@ -732,7 +924,7 @@ public class UDFHelper {
 
         Object[] res = new Object[size];
         int nums = 0;
-        for (int i = 0;i < size; i++) {
+        for (int i = 0; i < size; i++) {
             long address = data + offsets[i];
             int length = offsets[i + 1] - offsets[i];
             res[nums++] = constructor.newInstance(address, length);
@@ -786,5 +978,21 @@ public class UDFHelper {
         } catch (InvocationTargetException e) {
             throw e.getTargetException();
         }
+    }
+
+    public static List<?> extractKeyList(Map<?, ?> map) {
+        final ArrayList<Object> res = new ArrayList<>(map.size());
+        for (Map.Entry<?, ?> entry : map.entrySet()) {
+            res.add(entry.getKey());
+        }
+        return res;
+    }
+
+    public static List<?> extractValueList(Map<?, ?> map) {
+        final ArrayList<Object> res = new ArrayList<>(map.size());
+        for (Map.Entry<?, ?> entry : map.entrySet()) {
+            res.add(entry.getValue());
+        }
+        return res;
     }
 }

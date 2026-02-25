@@ -12,7 +12,7 @@ PARTITION BY date_trunc('day', event_day)
 DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -34,11 +34,11 @@ select * from site_access;
 -- !result
 INSERT overwrite site_access PARTITION(event_day='2023-07-01') select '2023-07-02' as event_day, 10 as site_id, 'SomeCity' as city_code, 'UserName' as user_name, 0 as pv from dual;
 -- result:
-[REGEX]Insert has filtered data in strict mode
+[REGEX]Insert has filtered data
 -- !result
 INSERT overwrite site_access PARTITION(event_day='2023-07-02') select '2023-07-01' as event_day, 10 as site_id, 'SomeCity' as city_code, 'UserName' as user_name, 0 as pv from dual;
 -- result:
-[REGEX]Insert has filtered data in strict mode
+[REGEX]Insert has filtered data
 -- !result
 INSERT overwrite site_access select '2023-07-02' as event_day, 10 as site_id, 'SomeCity' as city_code, 'UserName' as user_name, 0 as pv from dual;
 -- result:
@@ -171,7 +171,7 @@ PARTITION BY (`dt`,`city`)
 DISTRIBUTED BY HASH(`id`)
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "fast_schema_evolution" = "true",
 "partition_live_number" = "1",

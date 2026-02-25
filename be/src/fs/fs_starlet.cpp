@@ -27,18 +27,23 @@
 #include <sys/stat.h>
 #include <worker.h>
 
+#include "base/concurrency/stopwatch.hpp"
+#include "base/container/lru_cache.h"
+#include "base/string/string_parser.hpp"
+#include "base/utility/defer_op.h"
 #include "common/config.h"
 #include "fs/encrypt_file.h"
 #include "fs/output_stream_adapter.h"
 #include "gutil/strings/util.h"
-#include "io/input_stream.h"
-#include "io/output_stream.h"
-#include "io/seekable_input_stream.h"
-#include "io/throttled_output_stream.h"
-#include "io/throttled_seekable_input_stream.h"
+#include "io/core/input_stream.h"
+#include "io/core/output_stream.h"
+#include "io/core/seekable_input_stream.h"
+#include "io/core/throttled_output_stream.h"
+#include "io/core/throttled_seekable_input_stream.h"
+#include "io/io_profiler.h"
 #include "service/staros_worker.h"
+#include "storage/lake/filenames.h"
 #include "storage/olap_common.h"
-#include "util/string_parser.hpp"
 
 namespace starrocks {
 
@@ -61,6 +66,11 @@ using ReadOnlyFilePtr = std::unique_ptr<staros::starlet::fslib::ReadOnlyFile>;
 using WritableFilePtr = std::unique_ptr<staros::starlet::fslib::WritableFile>;
 using Anchor = staros::starlet::fslib::Stream::Anchor;
 using EntryStat = staros::starlet::fslib::EntryStat;
+
+static const std::string kFileTagType = "type";
+static const std::string kFileTagTypeData = "data";
+static const std::string kFileTagTypeMeta = "meta";
+static const std::string kFileTagTypeTxnLog = "txnlog";
 
 bool is_starlet_uri(std::string_view uri) {
     return HasPrefixString(uri, "staros://");
@@ -139,6 +149,8 @@ public:
     }
 
     StatusOr<int64_t> read(void* data, int64_t count) override {
+        MonotonicStopWatch watch;
+        watch.start();
         auto stream_st = _file_ptr->stream();
         if (!stream_st.ok()) {
             return to_status(stream_st.status());
@@ -147,6 +159,7 @@ public:
         if (res.ok()) {
             g_starlet_io_num_reads << 1;
             g_starlet_io_read << *res;
+            IOProfiler::add_read(*res, watch.elapsed_time());
             return *res;
         } else {
             return to_status(res.status());
@@ -154,6 +167,8 @@ public:
     }
 
     StatusOr<std::string> read_all() override {
+        MonotonicStopWatch watch;
+        watch.start();
         auto stream_st = _file_ptr->stream();
         if (!stream_st.ok()) {
             return to_status(stream_st.status());
@@ -162,10 +177,20 @@ public:
         if (res.ok()) {
             g_starlet_io_num_reads << 1;
             g_starlet_io_read << res.value().size();
+            IOProfiler::add_read(res.value().size(), watch.elapsed_time());
             return std::move(res).value();
         } else {
             return to_status(res.status());
         }
+    }
+
+    Status touch_cache(int64_t offset, size_t length) override {
+        auto stream_st = _file_ptr->stream();
+        if (!stream_st.ok()) {
+            return to_status(stream_st.status());
+        }
+        auto res = (*stream_st)->touch_cache(offset, length);
+        return to_status(res);
     }
 
     StatusOr<std::unique_ptr<io::NumericStatistics>> get_numeric_statistics() override {
@@ -184,7 +209,7 @@ public:
         stats->append(kIOCountRemote, read_stats.io_count_remote);
         stats->append(kIONsReadLocalDisk, read_stats.io_ns_read_local_disk);
         stats->append(kIONsWriteLocalDisk, read_stats.io_ns_write_local_disk);
-        stats->append(kIONsRemote, read_stats.io_ns_remote);
+        stats->append(kIONsReadRemote, read_stats.io_ns_read_remote);
         stats->append(kPrefetchHitCount, read_stats.prefetch_hit_count);
         stats->append(kPrefetchWaitFinishNs, read_stats.prefetch_wait_finish_ns);
         stats->append(kPrefetchPendingNs, read_stats.prefetch_pending_ns);
@@ -217,6 +242,8 @@ public:
         if (!stream_st.ok()) {
             return to_status(stream_st.status());
         }
+        MonotonicStopWatch watch;
+        watch.start();
         auto left = size;
         while (left > 0) {
             auto* p = static_cast<const char*>(data) + size - left;
@@ -228,6 +255,7 @@ public:
         }
         g_starlet_io_num_writes << 1;
         g_starlet_io_write << size;
+        IOProfiler::add_write(size, watch.elapsed_time());
         return Status::OK();
     }
 
@@ -238,11 +266,27 @@ public:
     }
 
     Status close() override {
+        MonotonicStopWatch watch;
+        watch.start();
+        DeferOp defer([&]() { IOProfiler::add_sync(watch.elapsed_time()); });
         auto stream_st = _file_ptr->stream();
         if (!stream_st.ok()) {
             return to_status(stream_st.status());
         }
         return to_status((*stream_st)->close());
+    }
+
+    StatusOr<std::unique_ptr<io::NumericStatistics>> get_numeric_statistics() override {
+        auto stream_st = _file_ptr->stream();
+        if (!stream_st.ok()) {
+            return to_status(stream_st.status());
+        }
+        const auto& io_stats = (*stream_st)->get_io_stats();
+        auto stats = std::make_unique<io::NumericStatistics>();
+        stats->reserve(2);
+        stats->append(kIONsWriteRemote, io_stats.io_ns_write_remote);
+        stats->append(kBytesWriteRemote, io_stats.bytes_write_remote);
+        return std::move(stats);
     }
 
 private:
@@ -251,7 +295,10 @@ private:
 
 class StarletFileSystem : public FileSystem {
 public:
-    StarletFileSystem() { staros::starlet::fslib::register_builtin_filesystems(); }
+    StarletFileSystem(std::shared_ptr<staros::starlet::fslib::FileSystem> shard_fs = nullptr)
+            : _shard_fs(std::move(shard_fs)) {
+        staros::starlet::fslib::register_builtin_filesystems();
+    }
     ~StarletFileSystem() override = default;
 
     StarletFileSystem(const StarletFileSystem&) = delete;
@@ -280,6 +327,7 @@ public:
         auto opt = ReadOptions();
         opt.skip_fill_local_cache = opts.skip_fill_local_cache;
         opt.buffer_size = opts.buffer_size;
+        opt.skip_read_local_cache = opts.skip_disk_cache;
         if (info.size.has_value()) {
             opt.file_size = info.size.value();
         }
@@ -332,6 +380,15 @@ public:
         staros::starlet::fslib::WriteOptions fslib_opts;
         fslib_opts.create_missing_parent = true;
         fslib_opts.skip_fill_local_cache = opts.skip_fill_local_cache;
+        if (config::starlet_write_file_with_tag) {
+            if (lake::is_segment(pair.first)) {
+                fslib_opts.tags[kFileTagType] = kFileTagTypeData;
+            } else if (lake::is_tablet_metadata(pair.first)) {
+                fslib_opts.tags[kFileTagType] = kFileTagTypeMeta;
+            } else if (lake::is_txn_log(pair.first) || lake::is_combined_txn_log(pair.first)) {
+                fslib_opts.tags[kFileTagType] = kFileTagTypeTxnLog;
+            }
+        }
         auto file_st = (*fs_st)->create(pair.first, fslib_opts);
         if (!file_st.ok()) {
             return to_status(file_st.status());
@@ -534,7 +591,7 @@ public:
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
-        return to_status((*fs_st)->drop_cache(pair.first));
+        return to_status((*fs_st)->drop_cache(pair.first, 0 /* offset */, -1 /* size */));
     }
 
     Status delete_files(std::span<const std::string> paths) override {
@@ -560,15 +617,72 @@ public:
 
 private:
     absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>> get_shard_filesystem(int64_t shard_id) {
+        if (_shard_fs != nullptr) {
+            return _shard_fs;
+        }
         return g_worker->get_shard_filesystem(shard_id, _conf);
     }
 
 private:
     staros::starlet::fslib::Configuration _conf;
+    std::shared_ptr<staros::starlet::fslib::FileSystem> _shard_fs;
 };
 
 std::unique_ptr<FileSystem> new_fs_starlet() {
     return std::make_unique<StarletFileSystem>();
+}
+
+// Deleter for LRU cache entries
+static void shard_fs_cache_deleter(const CacheKey& /*key*/, void* value) {
+    delete static_cast<std::shared_ptr<staros::starlet::fslib::FileSystem>*>(value);
+}
+
+std::shared_ptr<FileSystem> new_fs_starlet(int64_t shard_id) {
+    // The cache here is used to store fslib's shard fs which is used for cross cluster migration,
+    // where each shard fs correspond to one storage volume on source cluster.
+    // We chose a small cache capacity size here, with expect that normally very few storage volumes are used.
+    constexpr size_t kDefaultCacheCapacity = 1024 * 10;
+    static std::unique_ptr<Cache> g_shard_fs_cache(new_lru_cache(kDefaultCacheCapacity));
+
+    // Build cache key from shard_id
+    std::string key_str = std::to_string(shard_id);
+    CacheKey cache_key(key_str);
+
+    // Try cache lookup
+    Cache::Handle* handle = g_shard_fs_cache->lookup(cache_key);
+    if (handle != nullptr) {
+        auto* cached_ptr =
+                static_cast<std::shared_ptr<staros::starlet::fslib::FileSystem>*>(g_shard_fs_cache->value(handle));
+        std::shared_ptr<staros::starlet::fslib::FileSystem> shard_fs = *cached_ptr;
+        g_shard_fs_cache->release(handle);
+        return std::make_shared<StarletFileSystem>(shard_fs);
+    }
+
+    // Cache miss - create new shard filesystem
+    staros::starlet::fslib::Configuration conf;
+    absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>> fs_st =
+            g_worker->get_shard_filesystem(shard_id, conf);
+    if (!fs_st.ok()) {
+        LOG(WARNING) << "Failed to get shard filesystem, shard_id: " << shard_id << ", error: " << fs_st.status();
+        return nullptr;
+    }
+
+    std::shared_ptr<staros::starlet::fslib::FileSystem> shard_fs = fs_st.value();
+
+    // Insert into cache
+    auto* cache_value = new std::shared_ptr<staros::starlet::fslib::FileSystem>(shard_fs);
+    handle = g_shard_fs_cache->insert(cache_key, cache_value, 1, shard_fs_cache_deleter);
+    if (handle != nullptr) {
+        g_shard_fs_cache->release(handle);
+    } else {
+        delete cache_value;
+    }
+
+    LOG(INFO) << "Created new shard filesystem, shard_id: " << shard_id
+              << ", cache_inserts: " << g_shard_fs_cache->get_insert_count()
+              << ", cache_memory: " << g_shard_fs_cache->get_memory_usage() << " bytes";
+
+    return std::make_shared<StarletFileSystem>(shard_fs);
 }
 } // namespace starrocks
 

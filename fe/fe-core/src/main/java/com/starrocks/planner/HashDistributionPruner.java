@@ -36,12 +36,12 @@ package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.InPredicate;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;
 import com.starrocks.common.Config;
 import com.starrocks.connector.PartitionUtil;
+import com.starrocks.sql.ast.expression.InPredicate;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.SlotRef;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -66,20 +66,18 @@ import java.util.Set;
 public class HashDistributionPruner implements DistributionPruner {
     private static final Logger LOG = LogManager.getLogger(HashDistributionPruner.class);
 
-    // partition list, sort by the hash code
-    private List<Long> bucketsList;
-    // partition columns
-    private List<Column> distributionColumns;
-    // partition column filters
-    private Map<String, PartitionColumnFilter> distributionColumnFilters;
-    private int hashMod;
+    // tablet ids in order
+    private final List<Long> tabletIdsInOrder;
+    // distribution columns
+    private final List<Column> distributionColumns;
+    // distribution column filters
+    private final Map<String, PartitionColumnFilter> distributionColumnFilters;
 
-    public HashDistributionPruner(List<Long> bucketsList, List<Column> columns,
-                                  Map<String, PartitionColumnFilter> filters, int hashMod) {
-        this.bucketsList = bucketsList;
-        this.distributionColumns = columns;
-        this.distributionColumnFilters = filters;
-        this.hashMod = hashMod;
+    public HashDistributionPruner(List<Long> tabletIdsInOrder, List<Column> distributionColumns,
+                                  Map<String, PartitionColumnFilter> distributionColumnFilters) {
+        this.tabletIdsInOrder = tabletIdsInOrder;
+        this.distributionColumns = distributionColumns;
+        this.distributionColumnFilters = distributionColumnFilters;
     }
 
     // columnId: which column to compute
@@ -88,14 +86,14 @@ public class HashDistributionPruner implements DistributionPruner {
         if (columnId == distributionColumns.size()) {
             // compute Hash Key
             long hashValue = hashKey.getHashValue();
-            return Lists.newArrayList(bucketsList.get((int) ((hashValue & 0xffffffff) % hashMod)));
+            return Lists.newArrayList(tabletIdsInOrder.get((int) ((hashValue & 0xffffffff) % tabletIdsInOrder.size())));
         }
         Column keyColumn = distributionColumns.get(columnId);
         PartitionColumnFilter filter = distributionColumnFilters.get(keyColumn.getName());
         if (null == filter) {
             // no filter in this column, no partition Key
-            // return all subPartition
-            return bucketsList;
+            // return all subPartition, should return physical buckets
+            return tabletIdsInOrder;
         }
 
         List<LiteralExpr> inPredicateLiterals = filter.getInPredicateLiterals();
@@ -106,7 +104,8 @@ public class HashDistributionPruner implements DistributionPruner {
             // equal one value
             if (filter.lowerBoundInclusive && filter.upperBoundInclusive
                     && lowerBound != null && upperBound != null
-                    && 0 == lowerBound.compareLiteral(upperBound)) {
+                    && 0 == lowerBound.compareLiteral(upperBound)
+                    && !filter.isFromFunctionCall()) {
                 try {
                     boolean isConvertToDate = PartitionUtil.isConvertToDate(keyColumn.getType(), lowerBound.getType());
                     hashKey.pushColumn(filter.getLowerBound(isConvertToDate), keyColumn.getType());
@@ -115,17 +114,17 @@ public class HashDistributionPruner implements DistributionPruner {
                     return result;
                 } catch (Exception e) {
                     LOG.warn("Prune distribution key {} with predicate {} failed:", keyColumn, filter, e);
-                    return bucketsList;
+                    return tabletIdsInOrder;
                 }
             }
             // return all SubPartition
-            return bucketsList;
+            return tabletIdsInOrder;
         }
 
         InPredicate inPredicate = filter.getInPredicate();
         if (null != inPredicate && !(inPredicate.getChild(0) instanceof SlotRef)) {
             // return all SubPartition
-            return bucketsList;
+            return tabletIdsInOrder;
         }
 
         Set<Long> resultSet = Sets.newHashSet();
@@ -136,7 +135,7 @@ public class HashDistributionPruner implements DistributionPruner {
             Collection<Long> subList = prune(columnId + 1, hashKey, newComplex);
             resultSet.addAll(subList);
             hashKey.popColumn();
-            if (resultSet.size() >= bucketsList.size()) {
+            if (resultSet.size() >= tabletIdsInOrder.size()) {
                 break;
             }
         }

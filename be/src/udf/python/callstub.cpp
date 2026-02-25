@@ -21,6 +21,8 @@
 #include "arrow/buffer.h"
 #include "arrow/flight/client.h"
 #include "arrow/type.h"
+#include "base/utility/arrow_utils.h"
+#include "base/utility/defer_op.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/base64.h"
@@ -28,10 +30,9 @@
 #include "rapidjson/rapidjson.h"
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 #include "udf/python/env.h"
 #include "util/arrow/row_batch.h"
-#include "util/arrow/utils.h"
 
 #define RETURN_IF_ARROW_ERROR(expr)    \
     do {                               \
@@ -73,6 +74,7 @@ private:
 
 Status ArrowFlightWithRW::init(const std::string& uri_string, const PyFunctionDescriptor& func_desc,
                                std::shared_ptr<PyWorker> process) {
+    CancelableDefer defer = [worker = process.get()]() { worker->mark_dead(); };
     using namespace arrow::flight;
     ARROW_ASSIGN_OR_RETURN(auto location, Location::Parse(uri_string));
     ARROW_ASSIGN_OR_RETURN(_arrow_client, ArrowFlightClient::Connect(location));
@@ -82,6 +84,7 @@ Status ArrowFlightWithRW::init(const std::string& uri_string, const PyFunctionDe
     _reader = std::move(result.reader);
     _writer = std::move(result.writer);
     _process = std::move(process);
+    defer.cancel();
     return Status::OK();
 }
 

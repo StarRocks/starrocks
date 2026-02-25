@@ -18,21 +18,21 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class RoutineLoadJobMetaTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         FeConstants.runningUnitTest = true;
         Config.alter_scheduler_interval_millisecond = 100;
@@ -61,23 +61,23 @@ public class RoutineLoadJobMetaTest {
     }
 
     @Test
-    public void testMetaNotFound() throws UserException {
+    public void testMetaNotFound() {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        Database db = globalStateMgr.getDb("test");
+        Database db = globalStateMgr.getLocalMetastore().getDb("test");
         RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(1L, "rj", db.getId(), 2L, "", "");
 
-        Exception e = Assert.assertThrows(MetaNotFoundException.class,
+        Exception e = Assertions.assertThrows(MetaNotFoundException.class,
                 () -> routineLoadJob.plan(new TUniqueId(1, 2), 1, ""));
     }
 
     @Test
-    public void testTxnNotFound() throws UserException {
+    public void testTxnNotFound() {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        Database db = globalStateMgr.getDb("test");
-        Table table = db.getTable("site_access_auto");
+        Database db = globalStateMgr.getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_auto");
         RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(1L, "rj", db.getId(), table.getId(), "", "");
 
-        Exception e = Assert.assertThrows(MetaNotFoundException.class,
+        Exception e = Assertions.assertThrows(StarRocksException.class,
                 () -> routineLoadJob.plan(new TUniqueId(1, 2), 1, ""));
     }
 }

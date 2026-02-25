@@ -20,6 +20,11 @@
 #include <optional>
 #include <unordered_map>
 
+#include "base/concurrency/spinlock.h"
+#include "base/hash/hash.h"
+#include "base/hash/hash_std.hpp"
+#include "base/time/time.h"
+#include "base/uid_util.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/stream_epoch_manager.h"
@@ -31,9 +36,6 @@
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_state.h"
 #include "util/debug/query_trace.h"
-#include "util/hash_util.hpp"
-#include "util/spinlock.h"
-#include "util/time.h"
 
 namespace starrocks {
 
@@ -46,7 +48,8 @@ using std::chrono::milliseconds;
 using std::chrono::steady_clock;
 using std::chrono::duration_cast;
 
-class ConnectorScanOperatorMemShareArbitrator;
+struct ConnectorScanOperatorMemShareArbitrator;
+class GlobalLateMaterilizationContextMgr;
 
 // The context for all fragment of one query in one BE
 class QueryContext : public std::enable_shared_from_this<QueryContext> {
@@ -70,6 +73,7 @@ public:
     }
 
     void count_down_fragments();
+    void count_down_fragments(QueryContextManager* query_context_mgr);
     int num_active_fragments() const { return _num_active_fragments.load(); }
     bool has_no_active_instances() { return _num_active_fragments.load() == 0; }
 
@@ -79,7 +83,7 @@ public:
     // now time point pass by deadline point.
     bool is_delivery_expired() const {
         auto now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
-        return now > _delivery_deadline || _is_cancelled;
+        return now > _delivery_deadline || _cancelled_by_fe;
     }
     bool is_query_expired() const {
         auto now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
@@ -88,7 +92,14 @@ public:
 
     bool is_cancelled() const { return _is_cancelled; }
 
-    bool is_dead() const { return _num_active_fragments == 0 && (_num_fragments == _total_fragments || _is_cancelled); }
+    Status get_cancelled_status() const {
+        auto* status = _cancelled_status.load();
+        return status == nullptr ? Status::Cancelled("Query has been cancelled") : *status;
+    }
+
+    bool is_dead() const {
+        return _num_active_fragments == 0 && (_num_fragments == _total_fragments || _cancelled_by_fe);
+    }
     // add expired seconds to deadline
     void extend_delivery_lifetime() {
         _delivery_deadline =
@@ -145,7 +156,8 @@ public:
 
     FragmentContextManager* fragment_mgr();
 
-    void cancel(const Status& status);
+    void cancel(const Status& status, bool cancelled_by_fe);
+    void set_cancelled_by_fe() { _cancelled_by_fe = true; }
 
     void set_is_runtime_filter_coordinator(bool flag) { _is_runtime_filter_coordinator = flag; }
 
@@ -163,11 +175,10 @@ public:
     /// that there is a big query memory limit of this resource group.
     void init_mem_tracker(int64_t query_mem_limit, MemTracker* parent, int64_t big_query_mem_limit = -1,
                           std::optional<double> spill_mem_limit = std::nullopt, workgroup::WorkGroup* wg = nullptr,
-                          RuntimeState* state = nullptr);
+                          RuntimeState* state = nullptr, int connector_scan_node_number = 1);
     std::shared_ptr<MemTracker> mem_tracker() { return _mem_tracker; }
+    const std::shared_ptr<MemTracker>& mem_tracker() const { return _mem_tracker; }
     MemTracker* connector_scan_mem_tracker() { return _connector_scan_mem_tracker.get(); }
-
-    MemTracker* operator_mem_tracker(int32_t plan_node_id);
 
     Status init_spill_manager(const TQueryOptions& query_options);
     Status init_query_once(workgroup::WorkGroup* wg, bool enable_group_level_query_queue);
@@ -192,13 +203,69 @@ public:
         _delta_scan_bytes += scan_bytes;
     }
 
+    void incr_transmitted_bytes(int64_t transmitted_bytes) { _total_transmitted_bytes += transmitted_bytes; }
+
+    void init_node_exec_stats(const std::vector<int32_t>& exec_stats_node_ids);
+    bool need_record_exec_stats(int32_t plan_node_id) {
+        auto it = _node_exec_stats.find(plan_node_id);
+        return it != _node_exec_stats.end();
+    }
+
     void update_scan_stats(int64_t table_id, int64_t scan_rows_num, int64_t scan_bytes);
+    void incr_read_stats(int64_t read_local_cnt, int64_t read_remote_cnt) {
+        _total_read_local_cnt += read_local_cnt;
+        _total_read_remote_cnt += read_remote_cnt;
+    }
+    void update_push_rows_stats(int32_t plan_node_id, int64_t push_rows) {
+        auto it = _node_exec_stats.find(plan_node_id);
+        if (it != _node_exec_stats.end()) {
+            it->second->push_rows += push_rows;
+        }
+    }
+
+    void update_pull_rows_stats(int32_t plan_node_id, int64_t pull_rows) {
+        auto it = _node_exec_stats.find(plan_node_id);
+        if (it != _node_exec_stats.end()) {
+            it->second->pull_rows += pull_rows;
+        }
+    }
+
+    void update_pred_filter_stats(int32_t plan_node_id, int64_t pred_filter_rows) {
+        auto it = _node_exec_stats.find(plan_node_id);
+        if (it != _node_exec_stats.end()) {
+            it->second->pred_filter_rows += pred_filter_rows;
+        }
+    }
+
+    void update_index_filter_stats(int32_t plan_node_id, int64_t index_filter_rows) {
+        auto it = _node_exec_stats.find(plan_node_id);
+        if (it != _node_exec_stats.end()) {
+            it->second->index_filter_rows += index_filter_rows;
+        }
+    }
+
+    void update_rf_filter_stats(int32_t plan_node_id, int64_t rf_filter_rows) {
+        auto it = _node_exec_stats.find(plan_node_id);
+        if (it != _node_exec_stats.end()) {
+            it->second->rf_filter_rows += rf_filter_rows;
+        }
+    }
+
+    void force_set_pull_rows_stats(int32_t plan_node_id, int64_t pull_rows) {
+        auto it = _node_exec_stats.find(plan_node_id);
+        if (it != _node_exec_stats.end()) {
+            it->second->pull_rows.exchange(pull_rows);
+        }
+    }
 
     int64_t cpu_cost() const { return _total_cpu_cost_ns; }
     int64_t cur_scan_rows_num() const { return _total_scan_rows_num; }
     int64_t get_scan_bytes() const { return _total_scan_bytes; }
     std::atomic_int64_t* mutable_total_spill_bytes() { return &_total_spill_bytes; }
     int64_t get_spill_bytes() { return _total_spill_bytes; }
+    int64_t get_read_local_cnt() { return _total_read_local_cnt; }
+    int64_t get_read_remote_cnt() { return _total_read_remote_cnt; }
+    int64_t get_transmitted_bytes() { return _total_transmitted_bytes; }
 
     // Query start time, used to check how long the query has been running
     // To ensure that the minimum run time of the query will not be killed by the big query checking mechanism
@@ -214,7 +281,7 @@ public:
     std::shared_ptr<starrocks::debug::QueryTrace> shared_query_trace() { return _query_trace; }
 
     // Delta statistic since last retrieve
-    std::shared_ptr<QueryStatistics> intermediate_query_statistic();
+    std::shared_ptr<QueryStatistics> intermediate_query_statistic(int64_t delta_transmitted_bytes);
     // Merged statistic from all executor nodes
     std::shared_ptr<QueryStatistics> final_query_statistic();
     std::shared_ptr<QueryStatisticsRecvr> maintained_query_recv();
@@ -236,6 +303,10 @@ public:
         return _connector_scan_operator_mem_share_arbitrator;
     }
 
+    GlobalLateMaterilizationContextMgr* global_late_materialization_ctx_mgr() const {
+        return _global_late_materialization_ctx_mgr;
+    }
+
 public:
     static constexpr int DEFAULT_EXPIRE_SECONDS = 300;
 
@@ -243,6 +314,7 @@ private:
     ExecEnv* _exec_env = nullptr;
     TUniqueId _query_id;
     MonotonicStopWatch _lifetime_sw;
+    std::unique_ptr<spill::QuerySpillManager> _spill_manager;
     std::unique_ptr<FragmentContextManager> _fragment_mgr;
     size_t _total_fragments;
     std::atomic<size_t> _num_fragments;
@@ -259,16 +331,15 @@ private:
     int64_t _big_query_profile_threshold_ns = 0;
     int64_t _runtime_profile_report_interval_ns = std::numeric_limits<int64_t>::max();
     TPipelineProfileLevel::type _profile_level;
-    std::shared_ptr<MemTracker> _mem_tracker;
-    std::shared_ptr<MemTracker> _connector_scan_mem_tracker;
-    std::mutex _operator_mem_trackers_lock;
-    std::unordered_map<int32_t, std::shared_ptr<MemTracker>> _operator_mem_trackers;
     ObjectPool _object_pool;
     DescriptorTbl* _desc_tbl = nullptr;
     std::once_flag _query_trace_init_flag;
     std::shared_ptr<starrocks::debug::QueryTrace> _query_trace;
     std::atomic_bool _is_prepared = false;
     std::atomic_bool _is_cancelled = false;
+    std::atomic_bool _cancelled_by_fe = false;
+    std::atomic<Status*> _cancelled_status = nullptr;
+    Status _s_status;
 
     std::once_flag _init_query_once;
     int64_t _query_begin_time = 0;
@@ -277,6 +348,9 @@ private:
     std::atomic<int64_t> _total_scan_rows_num = 0;
     std::atomic<int64_t> _total_scan_bytes = 0;
     std::atomic<int64_t> _total_spill_bytes = 0;
+    std::atomic<int64_t> _total_read_local_cnt = 0;
+    std::atomic<int64_t> _total_read_remote_cnt = 0;
+    std::atomic<int64_t> _total_transmitted_bytes = 0;
     std::atomic<int64_t> _delta_cpu_cost_ns = 0;
     std::atomic<int64_t> _delta_scan_rows_num = 0;
     std::atomic<int64_t> _delta_scan_bytes = 0;
@@ -287,27 +361,45 @@ private:
         std::atomic<int64_t> delta_scan_rows_num = 0;
         std::atomic<int64_t> delta_scan_bytes = 0;
     };
+
+    std::once_flag _node_exec_stats_init_flag;
+    struct NodeExecStats {
+        std::atomic_int64_t push_rows;
+        std::atomic_int64_t pull_rows;
+        std::atomic_int64_t pred_filter_rows;
+        std::atomic_int64_t index_filter_rows;
+        std::atomic_int64_t rf_filter_rows;
+    };
+
     // @TODO(silverbullet233):
     // our phmap's version is too old and it doesn't provide a thread-safe iteration interface,
     // we use spinlock + flat_hash_map here, after upgrading, we can change it to parallel_flat_hash_map
     SpinLock _scan_stats_lock;
     // table level scan stats
-    phmap::flat_hash_map<int64_t, std::shared_ptr<ScanStats>> _scan_stats;
+    phmap::flat_hash_map<int64_t, std::shared_ptr<ScanStats>, StdHash<int64_t>> _scan_stats;
+
+    std::unordered_map<int32_t, std::shared_ptr<NodeExecStats>> _node_exec_stats;
 
     bool _is_final_sink = false;
     std::shared_ptr<QueryStatisticsRecvr> _sub_plan_query_statistics_recvr; // For receive
 
     int64_t _scan_limit = 0;
+    // _wg_mem_tracker is used to grab mem_tracker in workgroup to prevent it from
+    // being released prematurely in FragmentContext::cancel, otherwise accessing
+    // workgroup's mem_tracker in QueryContext's dtor shall cause segmentation fault.
+    std::shared_ptr<MemTracker> _wg_mem_tracker = nullptr;
     workgroup::RunningQueryTokenPtr _wg_running_query_token_ptr;
     std::atomic<workgroup::RunningQueryToken*> _wg_running_query_token_atomic_ptr = nullptr;
+    std::shared_ptr<MemTracker> _mem_tracker;
+    std::shared_ptr<MemTracker> _connector_scan_mem_tracker;
 
     // STREAM MV
     std::shared_ptr<StreamEpochManager> _stream_epoch_manager;
 
-    std::unique_ptr<spill::QuerySpillManager> _spill_manager;
-
     int64_t _static_query_mem_limit = 0;
     ConnectorScanOperatorMemShareArbitrator* _connector_scan_operator_mem_share_arbitrator = nullptr;
+
+    GlobalLateMaterilizationContextMgr* _global_late_materialization_ctx_mgr = nullptr;
 };
 
 // TODO: use brpc::TimerThread refactor QueryContext
@@ -316,7 +408,7 @@ public:
     QueryContextManager(size_t log2_num_slots);
     ~QueryContextManager();
     Status init();
-    QueryContext* get_or_register(const TUniqueId& query_id);
+    StatusOr<QueryContext*> get_or_register(const TUniqueId& query_id, bool return_error_if_not_exist = false);
     QueryContextPtr get(const TUniqueId& query_id, bool need_prepared = false);
     size_t size();
     bool remove(const TUniqueId& query_id);
@@ -333,6 +425,7 @@ public:
 
     void collect_query_statistics(const PCollectQueryStatisticsRequest* request,
                                   PCollectQueryStatisticsResult* response);
+    void for_each_active_ctx(const std::function<void(QueryContextPtr)>& func);
 
 private:
     static void _clean_func(QueryContextManager* manager);

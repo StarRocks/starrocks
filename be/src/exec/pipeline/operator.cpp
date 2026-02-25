@@ -15,18 +15,21 @@
 #include "exec/pipeline/operator.h"
 
 #include <algorithm>
+#include <memory>
 #include <utility>
 
+#include "base/failpoint/fail_point.h"
 #include "common/logging.h"
-#include "exec/exec_node.h"
+#include "common/runtime_profile.h"
+#include "common/system/backend_options.h"
 #include "exec/pipeline/query_context.h"
+#include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
+#include "runtime/mem_tracker.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_state.h"
-#include "util/failpoint/fail_point.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {
 
@@ -39,7 +42,8 @@ Operator::Operator(OperatorFactory* factory, int32_t id, std::string name, int32
           _name(std::move(name)),
           _plan_node_id(plan_node_id),
           _is_subordinate(is_subordinate),
-          _driver_sequence(driver_sequence) {
+          _driver_sequence(driver_sequence),
+          _runtime_filter_probe_sequence(driver_sequence) {
     std::string upper_name(_name);
     std::transform(upper_name.begin(), upper_name.end(), upper_name.begin(), ::toupper);
     std::string profile_name = strings::Substitute("$0 (plan_node_id=$1)", upper_name, _plan_node_id);
@@ -68,31 +72,50 @@ Operator::Operator(OperatorFactory* factory, int32_t id, std::string name, int32
 
 Status Operator::prepare(RuntimeState* state) {
     FAIL_POINT_TRIGGER_RETURN_ERROR(random_error);
-    _mem_tracker = state->query_ctx()->operator_mem_tracker(_plan_node_id);
+
+    if (state->query_ctx() && state->query_ctx()->spill_manager()) {
+        _mem_resource_manager.prepare(this, state->query_ctx()->spill_manager());
+    }
+
+    return Status::OK();
+}
+
+Status Operator::prepare_local_state(RuntimeState* state) {
+    _mem_tracker = std::make_shared<MemTracker>();
+
     _total_timer = ADD_TIMER(_common_metrics, "OperatorTotalTime");
     _push_timer = ADD_TIMER(_common_metrics, "PushTotalTime");
     _pull_timer = ADD_TIMER(_common_metrics, "PullTotalTime");
-    _finishing_timer = ADD_TIMER(_common_metrics, "SetFinishingTime");
-    _finished_timer = ADD_TIMER(_common_metrics, "SetFinishedTime");
-    _close_timer = ADD_TIMER(_common_metrics, "CloseTime");
-    _prepare_timer = ADD_TIMER(_common_metrics, "PrepareTime");
-
+    _finishing_timer = ADD_TIMER_WITH_THRESHOLD(_common_metrics, "SetFinishingTime", 1_ms);
+    _finished_timer = ADD_TIMER_WITH_THRESHOLD(_common_metrics, "SetFinishedTime", 1_ms);
+    _close_timer = ADD_TIMER_WITH_THRESHOLD(_common_metrics, "CloseTime", 1_ms);
+    _local_prepare_timer = ADD_TIMER_WITH_THRESHOLD(_common_metrics, "LocalPrepareTime", 1_ms);
+    if (_global_prepare_time_ns > 1) {
+        _global_prepare_timer = ADD_TIMER_WITH_THRESHOLD(_common_metrics, "GlobalPrepareTime", 1_ms);
+        COUNTER_SET(_global_prepare_timer, _global_prepare_time_ns);
+    }
     _push_chunk_num_counter = ADD_COUNTER(_common_metrics, "PushChunkNum", TUnit::UNIT);
     _push_row_num_counter = ADD_COUNTER(_common_metrics, "PushRowNum", TUnit::UNIT);
     _pull_chunk_num_counter = ADD_COUNTER(_common_metrics, "PullChunkNum", TUnit::UNIT);
     _pull_row_num_counter = ADD_COUNTER(_common_metrics, "PullRowNum", TUnit::UNIT);
-    if (state->query_ctx() && state->query_ctx()->spill_manager()) {
-        _mem_resource_manager.prepare(this, state->query_ctx()->spill_manager());
-    }
+    _pull_chunk_bytes_counter = ADD_COUNTER(_common_metrics, "OutputChunkBytes", TUnit::BYTES);
+
     for_each_child_operator([&](Operator* child) {
         child->_common_metrics->add_info_string("IsSubordinate");
         child->_common_metrics->add_info_string("IsChild");
     });
+
     return Status::OK();
 }
 
 void Operator::set_prepare_time(int64_t cost_ns) {
-    _prepare_timer->set(cost_ns);
+    _global_prepare_time_ns = cost_ns;
+}
+
+void Operator::set_local_prepare_time(int64_t cost_ns) {
+    if (_local_prepare_timer != nullptr) {
+        COUNTER_SET(_local_prepare_timer, cost_ns);
+    }
 }
 
 void Operator::set_precondition_ready(RuntimeState* state) {
@@ -118,33 +141,29 @@ void Operator::close(RuntimeState* state) {
     _mem_resource_manager.close();
     if (auto* rf_bloom_filters = runtime_bloom_filters()) {
         _init_rf_counters(false);
-        _runtime_in_filter_num_counter->set((int64_t)runtime_in_filters().size());
-        _runtime_bloom_filter_num_counter->set((int64_t)rf_bloom_filters->size());
-    }
+        COUNTER_SET(_runtime_in_filter_num_counter, (int64_t)runtime_in_filters().size());
+        COUNTER_SET(_runtime_bloom_filter_num_counter, (int64_t)rf_bloom_filters->size());
 
-    if (!_is_subordinate) {
-        _common_metrics
-                ->add_counter("OperatorPeakMemoryUsage", TUnit::BYTES,
-                              RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG,
-                                                                       TCounterMergeType::SKIP_FIRST_MERGE))
-                ->set(_mem_tracker->peak_consumption());
-        _common_metrics
-                ->add_counter("OperatorAllocatedMemoryUsage", TUnit::BYTES,
-                              RuntimeProfile::Counter::create_strategy(TCounterAggregateType::SUM,
-                                                                       TCounterMergeType::SKIP_FIRST_MERGE))
-                ->set(_mem_tracker->allocation());
-        _common_metrics
-                ->add_counter("OperatorDeallocatedMemoryUsage", TUnit::BYTES,
-                              RuntimeProfile::Counter::create_strategy(TCounterAggregateType::SUM,
-                                                                       TCounterMergeType::SKIP_FIRST_MERGE))
-                ->set(_mem_tracker->deallocation());
+        if (!rf_bloom_filters->descriptors().empty()) {
+            std::string rf_desc = "";
+            for (const auto& [filter_id, desc] : rf_bloom_filters->descriptors()) {
+                rf_desc += "<" + std::to_string(filter_id) + ": ";
+                if (desc != nullptr && desc->runtime_filter(0) != nullptr) {
+                    rf_desc += desc->runtime_filter(0)->debug_string();
+                } else {
+                    rf_desc += "NULL";
+                }
+                rf_desc += "> ";
+            }
+            _common_metrics->add_info_string("RuntimeFilterDesc", rf_desc);
+        }
     }
 
     // Pipeline do not need the built in total time counter
     // Reset here to discard assignments from Analytor, Aggregator, etc.
-    _runtime_profile->total_time_counter()->set(0L);
-    _common_metrics->total_time_counter()->set(0L);
-    _unique_metrics->total_time_counter()->set(0L);
+    COUNTER_SET(_runtime_profile->total_time_counter(), (int64_t)0L);
+    COUNTER_SET(_common_metrics->total_time_counter(), (int64_t)0L);
+    COUNTER_SET(_unique_metrics->total_time_counter(), (int64_t)0L);
 }
 
 std::vector<ExprContext*>& Operator::runtime_in_filters() {
@@ -191,11 +210,11 @@ Status Operator::eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& 
     {
         SCOPED_TIMER(_conjuncts_timer);
         auto before = chunk->num_rows();
-        _conjuncts_input_counter->update(before);
-        RETURN_IF_ERROR(
-                starrocks::ExecNode::eval_conjuncts(_cached_conjuncts_and_in_filters, chunk, filter, apply_filter));
+        COUNTER_UPDATE(_conjuncts_input_counter, before);
+        RETURN_IF_ERROR(starrocks::ChunkPredicateEvaluator::eval_conjuncts(_cached_conjuncts_and_in_filters, chunk,
+                                                                           filter, apply_filter));
         auto after = chunk->num_rows();
-        _conjuncts_output_counter->update(after);
+        COUNTER_UPDATE(_conjuncts_output_counter, after);
     }
 
     return Status::OK();
@@ -216,10 +235,10 @@ Status Operator::eval_no_eq_join_runtime_in_filters(Chunk* chunk) {
             }
         }
         size_t before = chunk->num_rows();
-        _conjuncts_input_counter->update(before);
-        RETURN_IF_ERROR(starrocks::ExecNode::eval_conjuncts(selected_vector, chunk, nullptr));
+        COUNTER_UPDATE(_conjuncts_input_counter, before);
+        RETURN_IF_ERROR(starrocks::ChunkPredicateEvaluator::eval_conjuncts(selected_vector, chunk, nullptr));
         size_t after = chunk->num_rows();
-        _conjuncts_output_counter->update(after);
+        COUNTER_UPDATE(_conjuncts_output_counter, after);
     }
 
     return Status::OK();
@@ -236,10 +255,10 @@ Status Operator::eval_conjuncts(const std::vector<ExprContext*>& conjuncts, Chun
     {
         SCOPED_TIMER(_conjuncts_timer);
         size_t before = chunk->num_rows();
-        _conjuncts_input_counter->update(before);
-        RETURN_IF_ERROR(starrocks::ExecNode::eval_conjuncts(conjuncts, chunk, filter));
+        COUNTER_UPDATE(_conjuncts_input_counter, before);
+        RETURN_IF_ERROR(starrocks::ChunkPredicateEvaluator::eval_conjuncts(conjuncts, chunk, filter));
         size_t after = chunk->num_rows();
-        _conjuncts_output_counter->update(after);
+        COUNTER_UPDATE(_conjuncts_output_counter, after);
     }
 
     return Status::OK();
@@ -255,7 +274,7 @@ void Operator::eval_runtime_bloom_filters(Chunk* chunk) {
         bloom_filters->evaluate(chunk, _bloom_filter_eval_context);
     }
 
-    ExecNode::eval_filter_null_values(chunk, filter_null_value_columns());
+    ChunkPredicateEvaluator::eval_filter_null_values(chunk, filter_null_value_columns());
 }
 
 RuntimeState* Operator::runtime_state() const {
@@ -266,8 +285,8 @@ void Operator::_init_rf_counters(bool init_bloom) {
     if (_runtime_in_filter_num_counter == nullptr) {
         _runtime_in_filter_num_counter =
                 ADD_COUNTER_SKIP_MERGE(_common_metrics, "RuntimeInFilterNum", TUnit::UNIT, TCounterMergeType::SKIP_ALL);
-        _runtime_bloom_filter_num_counter = ADD_COUNTER_SKIP_MERGE(_common_metrics, "RuntimeBloomFilterNum",
-                                                                   TUnit::UNIT, TCounterMergeType::SKIP_ALL);
+        _runtime_bloom_filter_num_counter =
+                ADD_COUNTER_SKIP_MERGE(_common_metrics, "RuntimeFilterNum", TUnit::UNIT, TCounterMergeType::SKIP_ALL);
     }
     if (init_bloom && _bloom_filter_eval_context.join_runtime_filter_timer == nullptr) {
         _bloom_filter_eval_context.join_runtime_filter_timer = ADD_TIMER(_common_metrics, "JoinRuntimeFilterTime");
@@ -279,7 +298,7 @@ void Operator::_init_rf_counters(bool init_bloom) {
                 ADD_COUNTER(_common_metrics, "JoinRuntimeFilterOutputRows", TUnit::UNIT);
         _bloom_filter_eval_context.join_runtime_filter_eval_counter =
                 ADD_COUNTER(_common_metrics, "JoinRuntimeFilterEvaluate", TUnit::UNIT);
-        _bloom_filter_eval_context.driver_sequence = _driver_sequence;
+        _bloom_filter_eval_context.driver_sequence = _runtime_filter_probe_sequence;
     }
 }
 
@@ -288,6 +307,24 @@ void Operator::_init_conjuct_counters() {
         _conjuncts_timer = ADD_TIMER(_common_metrics, "ConjunctsTime");
         _conjuncts_input_counter = ADD_COUNTER(_common_metrics, "ConjunctsInputRows", TUnit::UNIT);
         _conjuncts_output_counter = ADD_COUNTER(_common_metrics, "ConjunctsOutputRows", TUnit::UNIT);
+    }
+}
+
+void Operator::update_exec_stats(RuntimeState* state) {
+    auto ctx = state->query_ctx();
+    if (!_is_subordinate && ctx != nullptr && ctx->need_record_exec_stats(_plan_node_id)) {
+        ctx->update_push_rows_stats(_plan_node_id, COUNTER_VALUE(_push_row_num_counter));
+        ctx->update_pull_rows_stats(_plan_node_id, COUNTER_VALUE(_pull_row_num_counter));
+        if (_conjuncts_input_counter != nullptr && _conjuncts_output_counter != nullptr) {
+            ctx->update_pred_filter_stats(
+                    _plan_node_id, COUNTER_VALUE(_conjuncts_input_counter) - COUNTER_VALUE(_conjuncts_output_counter));
+        }
+        if (_bloom_filter_eval_context.join_runtime_filter_input_counter != nullptr &&
+            _bloom_filter_eval_context.join_runtime_filter_output_counter != nullptr) {
+            int64_t input_rows = COUNTER_VALUE(_bloom_filter_eval_context.join_runtime_filter_input_counter);
+            int64_t output_rows = COUNTER_VALUE(_bloom_filter_eval_context.join_runtime_filter_output_counter);
+            ctx->update_rf_filter_stats(_plan_node_id, input_rows - output_rows);
+        }
     }
 }
 
@@ -306,22 +343,7 @@ Status OperatorFactory::prepare(RuntimeState* state) {
     if (_runtime_filter_collector) {
         // TODO(hcf) no proper profile for rf_filter_collector attached to
         RETURN_IF_ERROR(_runtime_filter_collector->prepare(state, _runtime_profile.get()));
-        auto& descriptors = _runtime_filter_collector->get_rf_probe_collector()->descriptors();
-        for (auto& [filter_id, desc] : descriptors) {
-            if (desc->is_local() || desc->runtime_filter(-1) != nullptr) {
-                continue;
-            }
-            auto grf = state->exec_env()->runtime_filter_cache()->get(state->query_id(), filter_id);
-            ExecEnv::GetInstance()->add_rf_event({_state->query_id(), filter_id, BackendOptions::get_localhost(),
-                                                  strings::Substitute("INSTALL_GRF_TO_OPERATOR(op_id=$0, success=$1",
-                                                                      this->_plan_node_id, grf != nullptr)});
-
-            if (grf == nullptr) {
-                continue;
-            }
-
-            desc->set_shared_runtime_filter(grf);
-        }
+        acquire_runtime_filter(state);
     }
     return Status::OK();
 }
@@ -348,8 +370,7 @@ void OperatorFactory::_prepare_runtime_holders(const std::vector<RuntimeFilterHo
 
         auto&& in_filters = collector->get_in_filters_bounded_by_tuple_ids(_tuple_ids);
         for (auto* filter : in_filters) {
-            WARN_IF_ERROR(filter->prepare(runtime_state()), "prepare filter expression failed");
-            WARN_IF_ERROR(filter->open(runtime_state()), "open filter expression failed");
+            DCHECK(filter->opened());
             runtime_in_filters->push_back(filter);
         }
     }
@@ -382,6 +403,30 @@ bool OperatorFactory::has_topn_filter() const {
     }
     auto* global_rf_collector = _runtime_filter_collector->get_rf_probe_collector();
     return global_rf_collector != nullptr && global_rf_collector->has_topn_filter();
+}
+
+void OperatorFactory::acquire_runtime_filter(RuntimeState* state) {
+    if (_runtime_filter_collector == nullptr) {
+        return;
+    }
+    auto& descriptors = _runtime_filter_collector->get_rf_probe_collector()->descriptors();
+    for (auto& [filter_id, desc] : descriptors) {
+        if (desc->is_local() || desc->runtime_filter(-1) != nullptr) {
+            continue;
+        }
+        auto grf = state->exec_env()->runtime_filter_cache()->get(state->query_id(), filter_id);
+        ExecEnv::GetInstance()->add_rf_event({state->query_id(), filter_id, BackendOptions::get_localhost(),
+                                              strings::Substitute("INSTALL_GRF_TO_OPERATOR(op_id=$0, success=$1",
+                                                                  this->_plan_node_id, grf != nullptr)});
+
+        if (grf == nullptr) {
+            continue;
+        }
+
+        VLOG_FILE << "OperatorFactory::acquire_runtime_filter(shared). filter_id = " << filter_id
+                  << ", filter = " << grf->debug_string();
+        desc->set_shared_runtime_filter(grf);
+    }
 }
 
 } // namespace starrocks::pipeline

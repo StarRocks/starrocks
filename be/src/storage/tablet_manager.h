@@ -44,6 +44,7 @@
 #include <vector>
 
 #include "agent/status.h"
+#include "base/concurrency/spinlock.h"
 #include "common/status.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/BackendService_types.h"
@@ -54,12 +55,15 @@
 #include "storage/olap_define.h"
 #include "storage/options.h"
 #include "storage/tablet.h"
-#include "util/spinlock.h"
 
 namespace starrocks {
 
 class Tablet;
+class BaseTablet;
+using BaseTabletSharedPtr = std::shared_ptr<BaseTablet>;
 class DataDir;
+class BaseRowset;
+using BaseRowsetSharedPtr = std::shared_ptr<BaseRowset>;
 struct TabletBasicInfo;
 class MetadataCache;
 
@@ -151,7 +155,9 @@ public:
                                 const std::string& schema_hash_path, bool force = false, bool restore = false);
 
     Status create_tablet_from_meta_snapshot(DataDir* data_dir, TTabletId tablet_id, SchemaHash schema_hash,
-                                            const std::string& schema_hash_path, bool restore = false);
+                                            const std::string& schema_hash_path, bool restore = false,
+                                            bool need_rebuild_pk_index = false,
+                                            int32_t rebuild_pk_index_wait_seconds = 0);
 
     void release_schema_change_lock(TTabletId tablet_id);
 
@@ -164,8 +170,8 @@ public:
     // Prevent schema change executed concurrently.
     bool try_schema_change_lock(TTabletId tablet_id);
 
-    void try_delete_unused_tablet_path(DataDir* data_dir, TTabletId tablet_id, SchemaHash schema_hash,
-                                       const string& tablet_id_path);
+    Status try_delete_unused_tablet_path(DataDir* data_dir, TTabletId tablet_id, SchemaHash schema_hash,
+                                         const string& tablet_id_path);
 
     void update_root_path_info(std::map<std::string, DataDirInfo>* path_map, size_t* tablet_counter);
 
@@ -198,8 +204,6 @@ public:
     std::vector<TabletAndScore> pick_tablets_to_do_pk_index_major_compaction();
 
     Status generate_pk_dump();
-
-    MetadataCache* metadata_cache() const { return _metadata_cache.get(); }
 
 private:
     using TabletMap = std::unordered_map<int64_t, TabletSharedPtr>;
@@ -273,13 +277,14 @@ private:
     // make sure use this function to add shutdown tablets
     // caller should acquire _shutdown_tablets_lock
     void _add_shutdown_tablet_unlocked(int64_t tablet_id, DroppedTabletInfo&& drop_info);
+    void sweep_shutdown_tablet(const DroppedTabletInfo& info, std::vector<DroppedTabletInfo>& finished_tablets);
+
+    std::vector<TabletSharedPtr> _get_all_tablets_from_shard(const TabletsShard& shard);
+    std::vector<TabletSharedPtr> _get_all_tablets_from_shard(const TabletsShard& shard, KeysType keys_type);
 
     static Status _remove_tablet_meta(const TabletSharedPtr& tablet);
     static Status _remove_tablet_directories(const TabletSharedPtr& tablet);
     static Status _move_tablet_directories_to_trash(const TabletSharedPtr& tablet);
-
-    // LRU cache for metadata
-    std::unique_ptr<MetadataCache> _metadata_cache;
 
     std::vector<TabletsShard> _tablets_shards;
     const int64_t _tablets_shards_mask;
@@ -287,11 +292,12 @@ private:
 
     // Protect _partition_tablet_map, should not be obtained before _tablet_map_lock to avoid deadlock
     mutable std::shared_mutex _partition_tablet_map_lock;
-    // Protect _shutdown_tablets, should not be obtained before _tablet_map_lock to avoid deadlock
+    // Protect _shutdown_tablets/_shutdown_tablets_redundant_map, should not be obtained before _tablet_map_lock to avoid deadlock
     mutable std::shared_mutex _shutdown_tablets_lock;
     // partition_id => tablet_info
     std::map<int64_t, std::set<TabletInfo>> _partition_tablet_map;
     std::map<int64_t, DroppedTabletInfo> _shutdown_tablets;
+    std::map<TabletUid, DroppedTabletInfo> _shutdown_tablets_redundant_map;
 
     std::mutex _tablet_stat_mutex;
     // cache to save tablets' statistics, such as data-size and row-count

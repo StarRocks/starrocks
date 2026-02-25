@@ -15,7 +15,7 @@
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 public class ScalarOperatorsReuseRuleTest extends PlanTestBase {
     @Test
@@ -92,6 +92,34 @@ public class ScalarOperatorsReuseRuleTest extends PlanTestBase {
             PlanTestBase.assertContains(plan, "1:Project\n" +
                     "  |  <slot 2> : uuid()\n" +
                     "  |  <slot 3> : uuid()");
+        }
+    }
+
+    @Test
+    public void testPredicateExprReuse() throws Exception {
+        {
+            String query = "select * from (select rand() as rnd) t where t.rnd < 10 or t.rnd > 20";
+            String plan = getFragmentPlan(query);
+            assertContains(plan, "2:SELECT\n" +
+                    "  |  predicates: (2: rand < 10.0) OR (2: rand > 20.0)\n" +
+                    "  |  \n" +
+                    "  1:Project\n" +
+                    "  |  <slot 2> : rand()\n" +
+                    "  |  \n" +
+                    "  0:UNION");
+        }
+        {
+            connectContext.getSessionVariable().setEnablePredicateExprReuse(false);
+            String query = "select * from (select rand() as rnd) t where t.rnd < 10 or t.rnd > 20";
+            String plan = getFragmentPlan(query);
+            assertContains(plan, " 2:SELECT\n" +
+                    "  |  predicates: (2: rand < 10.0) OR (2: rand > 20.0)\n" +
+                    "  |  \n" +
+                    "  1:Project\n" +
+                    "  |  <slot 2> : rand()\n" +
+                    "  |  \n" +
+                    "  0:UNION");
+            connectContext.getSessionVariable().setEnablePredicateExprReuse(true);
         }
     }
 }

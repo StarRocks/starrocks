@@ -12,13 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <deque>
+#include <memory>
 #include <utility>
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/column_visitor_adapter.h"
 #include "column/const_column.h"
-#include "column/datum.h"
+#include "column/german_string.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
@@ -27,6 +29,7 @@
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
 #include "runtime/chunk_cursor.h"
+#include "types/datum.h"
 
 namespace starrocks {
 
@@ -161,19 +164,26 @@ public:
     template <class T>
     Status do_visit(const FixedLengthColumn<T>& _) {
         using ColumnType = const FixedLengthColumn<T>;
-        using Container = typename ColumnType::Container;
-        auto& left_data = down_cast<ColumnType*>(_left_col)->get_data();
-        auto& right_data = down_cast<ColumnType*>(_right_col)->get_data();
+        using Container = typename ColumnType::ImmContainer;
+        const auto left_data = down_cast<ColumnType*>(_left_col)->immutable_data();
+        const auto right_data = down_cast<ColumnType*>(_right_col)->immutable_data();
         return merge_ordinary_column<Container, T>(left_data, right_data);
     }
 
     template <typename SizeT>
     Status do_visit(const BinaryColumnBase<SizeT>& _) {
         using ColumnType = const BinaryColumnBase<SizeT>;
-        using Container = typename BinaryColumnBase<SizeT>::BinaryDataProxyContainer;
-        auto& left_data = down_cast<const ColumnType*>(_left_col)->get_proxy_data();
-        auto& right_data = down_cast<const ColumnType*>(_right_col)->get_proxy_data();
-        return merge_ordinary_column<Container, Slice>(left_data, right_data);
+        if (use_german_string) {
+            using Container = typename BinaryColumnBase<SizeT>::GermanStringContainer;
+            auto& left_data = down_cast<const ColumnType*>(_left_col)->get_german_strings();
+            auto& right_data = down_cast<const ColumnType*>(_right_col)->get_german_strings();
+            return merge_ordinary_column<Container, GermanString>(left_data, right_data);
+        } else {
+            using Container = typename BinaryColumnBase<SizeT>::BinaryDataProxyContainer;
+            auto& left_data = down_cast<const ColumnType*>(_left_col)->get_proxy_data();
+            auto& right_data = down_cast<const ColumnType*>(_right_col)->get_proxy_data();
+            return merge_ordinary_column<Container, Slice>(left_data, right_data);
+        }
     }
 
     Status do_visit(const NullableColumn& _) {
@@ -183,12 +193,16 @@ public:
             const auto* lhs_data = down_cast<const NullableColumn*>(_left_col)->data_column().get();
             const auto* rhs_data = down_cast<const NullableColumn*>(_right_col)->data_column().get();
             MergeTwoColumn merge2({_sort_order, _null_first}, lhs_data, rhs_data, _equal_ranges, _perm);
+            merge2.set_use_german_string(is_use_german_string());
             return lhs_data->accept(&merge2);
         }
 
         // Slow path
         return do_visit_slow(_);
     }
+
+    bool is_use_german_string() const { return use_german_string; }
+    void set_use_german_string(bool value) { use_german_string = value; }
 
 private:
     constexpr static uint32_t kLeftIndex = 0;
@@ -200,6 +214,7 @@ private:
     const Column* _right_col;
     std::vector<EqualRange>* _equal_ranges;
     Permutation* _perm;
+    bool use_german_string = false;
 };
 
 // MergeTwoChunk merge two chunk in column-wise
@@ -268,6 +283,7 @@ public:
                     const Column* left_col = left_run.get_column(col);
                     const Column* right_col = right_run.get_column(col);
                     MergeTwoColumn merge2(sort_desc.get_column_desc(col), left_col, right_col, &equal_ranges, output);
+                    merge2.set_use_german_string(sort_desc.is_use_german_string());
                     Status st = left_col->accept(&merge2);
                     CHECK(st.ok());
                     if (equal_ranges.size() == 0) {
@@ -535,6 +551,50 @@ Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext
         return Status::OK();
     };
     return merge_sorted_cursor_cascade(descs, std::move(cursors), consumer);
+}
+
+Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs, MergedRuns& left,
+                           ChunkUniquePtr&& right, size_t limit, MergedRuns* output) {
+    std::vector<std::unique_ptr<SimpleChunkSortCursor>> cursors;
+    cursors.resize(2);
+    cursors[0] = std::make_unique<SimpleChunkSortCursor>(
+            [&left](ChunkUniquePtr* output, bool* eos) -> bool {
+                if (output == nullptr || eos == nullptr) {
+                    return true;
+                }
+                if (left.empty()) {
+                    *eos = true;
+                    return false;
+                }
+                DCHECK_EQ(left.front().start_index(), 0);
+                DCHECK_EQ(left.front().end_index(), left.front().num_rows());
+                *output = std::move(left.front().chunk);
+                left.pop_front();
+                return true;
+            },
+            sort_exprs);
+    cursors[1] = std::make_unique<SimpleChunkSortCursor>(
+            [&right](ChunkUniquePtr* output, bool* eos) -> bool {
+                if (output == nullptr || eos == nullptr) {
+                    return true;
+                }
+                *eos = true;
+                if (right == nullptr) {
+                    return false;
+                }
+                *output = std::move(right);
+                right.reset();
+                return true;
+            },
+            sort_exprs);
+
+    ChunkConsumer consumer = [&](ChunkUniquePtr chunk) {
+        ASSIGN_OR_RETURN(auto run, MergedRun::build(std::move(chunk), *sort_exprs));
+        output->push_back(std::move(run));
+        return Status::OK();
+    };
+
+    return merge_sorted_cursor_cascade(descs, std::move(cursors), consumer, limit);
 }
 
 Status merge_sorted_chunks_two_way_rowwise(const SortDescs& descs, const Columns& left_columns,

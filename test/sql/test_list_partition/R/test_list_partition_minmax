@@ -1,0 +1,31 @@
+-- name: test_list_partition_minmax
+create table t1(user_id int, dt datetime) partition by (dt);
+-- result:
+-- !result
+insert into t1 values (1, '2024-10-05 01:01:01'), (2, '2024-10-06 02:02:02'), (3, '2024-10-07 03:03:03'), (4, NULL);
+-- result:
+-- !result
+select min(dt), max(dt) from t1;
+-- result:
+2024-10-05 01:01:01	2024-10-07 03:03:03
+-- !result
+create table t2(user_id int, dt datetime) partition by date_trunc('day', dt);
+-- result:
+-- !result
+insert into t2 values (1, '2024-10-05 01:01:01'), (2, '2024-10-06 02:02:02'), (3, '2024-10-07 03:03:03'), (4, NULL);
+-- result:
+-- !result
+select min(dt), max(dt) from t2;
+-- result:
+2024-10-05 01:01:01	2024-10-07 03:03:03
+-- !result
+create table t3(user_id int, dt datetime) partition by (user_id, dt);
+-- result:
+-- !result
+insert into t3 values (1, '2024-10-05 01:01:01'), (2, '2024-10-06 02:02:02'), (3, '2024-10-07 03:03:03'), (4, NULL), (NULL, NULL);
+-- result:
+-- !result
+select min(dt), max(dt) from t3;
+-- result:
+2024-10-05 01:01:01	2024-10-07 03:03:03
+-- !result

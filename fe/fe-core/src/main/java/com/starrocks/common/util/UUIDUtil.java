@@ -15,22 +15,32 @@
 
 package com.starrocks.common.util;
 
-import com.fasterxml.uuid.EthernetAddress;
 import com.fasterxml.uuid.Generators;
-import com.fasterxml.uuid.impl.TimeBasedGenerator;
+import com.fasterxml.uuid.impl.TimeBasedEpochRandomGenerator;
 import com.starrocks.thrift.TUniqueId;
 
+import java.security.SecureRandom;
+import java.util.Random;
 import java.util.UUID;
 
 public class UUIDUtil {
-    private static final EthernetAddress ETHERNET_ADDRESS = EthernetAddress.fromInterface();
-    private static final TimeBasedGenerator UUID_GENERATOR = Generators.timeBasedGenerator(ETHERNET_ADDRESS);
+    // Prefer UUIDv7 values as they are ordered, and include timestamp.
+    // Using ThreadLocal to avoid lock contention in multithread environment.
+    // See https://github.com/StarRocks/starrocks/issues/58962 for more details.
+    private static final SecureRandom TRUE_RANDOM = new SecureRandom();
+    private static final ThreadLocal<TimeBasedEpochRandomGenerator> UUID7_FACTORY =
+            new ThreadLocal<>() {
+                @Override protected TimeBasedEpochRandomGenerator initialValue() {
+                    // SecureRandom return truly random values, but it is 4x slower than Random.
+                    // Random is pseudo-random, so it has to be initialized with a random seed
+                    // to avoid producing same results in a different thread
+                    long seed = TRUE_RANDOM.nextLong();
+                    return Generators.timeBasedEpochRandomGenerator(new Random(seed));
+                }
+            };
 
-    // java.util.UUID.randomUUID() uses SecureRandom to generate random uuid,
-    // and SecureRandom hold locks when generate random bytes.
-    // This method is faster than java.util.UUID.randomUUID() in high concurrency environment
     public static UUID genUUID() {
-        return UUID_GENERATOR.generate();
+        return UUID7_FACTORY.get().generate();
     }
 
     public static UUID fromTUniqueid(TUniqueId id) {
@@ -42,7 +52,7 @@ public class UUIDUtil {
     }
 
     public static TUniqueId genTUniqueId() {
-        return toTUniqueId(UUID_GENERATOR.generate());
+        return toTUniqueId(genUUID());
     }
 
 }

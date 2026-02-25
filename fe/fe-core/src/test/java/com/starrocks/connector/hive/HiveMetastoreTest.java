@@ -20,12 +20,11 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
 import com.starrocks.connector.DatabaseTableName;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.type.IntegerType;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsData;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
@@ -37,9 +36,10 @@ import org.apache.hadoop.hive.metastore.api.SerDeInfo;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -48,6 +48,7 @@ import java.util.Map;
 import static com.starrocks.connector.hive.RemoteFileInputFormat.ORC;
 import static org.apache.hadoop.hive.common.StatsSetupConst.NUM_FILES;
 import static org.apache.hadoop.hive.common.StatsSetupConst.ROW_COUNT;
+import static org.apache.hadoop.hive.common.StatsSetupConst.TASK;
 import static org.apache.hadoop.hive.common.StatsSetupConst.TOTAL_SIZE;
 
 public class HiveMetastoreTest {
@@ -56,7 +57,7 @@ public class HiveMetastoreTest {
         HiveMetaClient client = new MockedHiveMetaClient();
         HiveMetastore metastore = new HiveMetastore(client, "xxx", MetastoreType.HMS);
         List<String> databaseNames = metastore.getAllDatabaseNames();
-        Assert.assertEquals(Lists.newArrayList("db1", "db2"), databaseNames);
+        Assertions.assertEquals(Lists.newArrayList("db1", "db2"), databaseNames);
     }
 
     @Test
@@ -64,7 +65,7 @@ public class HiveMetastoreTest {
         HiveMetaClient client = new MockedHiveMetaClient();
         HiveMetastore metastore = new HiveMetastore(client, "xxx", MetastoreType.HMS);
         List<String> databaseNames = metastore.getAllTableNames("xxx");
-        Assert.assertEquals(Lists.newArrayList("table1", "table2"), databaseNames);
+        Assertions.assertEquals(Lists.newArrayList("table1", "table2"), databaseNames);
     }
 
     @Test
@@ -72,13 +73,13 @@ public class HiveMetastoreTest {
         HiveMetaClient client = new MockedHiveMetaClient();
         HiveMetastore metastore = new HiveMetastore(client, "xxx", MetastoreType.HMS);
         Database database = metastore.getDb("db1");
-        Assert.assertEquals("db1", database.getFullName());
+        Assertions.assertEquals("db1", database.getFullName());
 
         try {
             metastore.getDb("db2");
-            Assert.fail();
+            Assertions.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof StarRocksConnectorException);
+            Assertions.assertTrue(e instanceof StarRocksConnectorException);
         }
     }
 
@@ -88,28 +89,28 @@ public class HiveMetastoreTest {
         HiveMetastore metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
         com.starrocks.catalog.Table table = metastore.getTable("db1", "tbl1");
         HiveTable hiveTable = (HiveTable) table;
-        Assert.assertEquals("db1", hiveTable.getDbName());
-        Assert.assertEquals("tbl1", hiveTable.getTableName());
-        Assert.assertEquals(Lists.newArrayList("col1"), hiveTable.getPartitionColumnNames());
-        Assert.assertEquals(Lists.newArrayList("col2"), hiveTable.getDataColumnNames());
-        Assert.assertEquals("hdfs://127.0.0.1:10000/hive", hiveTable.getTableLocation());
-        Assert.assertEquals(ScalarType.INT, hiveTable.getPartitionColumns().get(0).getType());
-        Assert.assertEquals(ScalarType.INT, hiveTable.getBaseSchema().get(0).getType());
-        Assert.assertEquals("hive_catalog", hiveTable.getCatalogName());
+        Assertions.assertEquals("db1", hiveTable.getCatalogDBName());
+        Assertions.assertEquals("tbl1", hiveTable.getCatalogTableName());
+        Assertions.assertEquals(Lists.newArrayList("col1"), hiveTable.getPartitionColumnNames());
+        Assertions.assertEquals(Lists.newArrayList("col2"), hiveTable.getDataColumnNames());
+        Assertions.assertEquals("hdfs://127.0.0.1:10000/hive", hiveTable.getTableLocation());
+        Assertions.assertEquals(IntegerType.INT, hiveTable.getPartitionColumns().get(0).getType());
+        Assertions.assertEquals(IntegerType.INT, hiveTable.getBaseSchema().get(0).getType());
+        Assertions.assertEquals("hive_catalog", hiveTable.getCatalogName());
     }
 
     @Test
     public void testTableExists() {
         HiveMetaClient client = new MockedHiveMetaClient();
         HiveMetastore metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
-        Assert.assertTrue(metastore.tableExists("db1", "tbl1"));
+        Assertions.assertTrue(metastore.tableExists("db1", "tbl1"));
     }
 
     @Test
     public void testGetPartitionKeys() {
         HiveMetaClient client = new MockedHiveMetaClient();
         HiveMetastore metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
-        Assert.assertEquals(Lists.newArrayList("col1"), metastore.getPartitionKeysByValue("db1", "tbl1",
+        Assertions.assertEquals(Lists.newArrayList("col1"), metastore.getPartitionKeysByValue("db1", "tbl1",
                 HivePartitionValue.ALL_PARTITION_VALUES));
     }
 
@@ -118,18 +119,18 @@ public class HiveMetastoreTest {
         HiveMetaClient client = new MockedHiveMetaClient();
         HiveMetastore metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
         com.starrocks.connector.hive.Partition partition = metastore.getPartition("db1", "tbl1", Lists.newArrayList("par1"));
-        Assert.assertEquals(ORC, partition.getFileFormat());
-        Assert.assertEquals("100", partition.getParameters().get(TOTAL_SIZE));
+        Assertions.assertEquals(ORC, partition.getFileFormat());
+        Assertions.assertEquals("100", partition.getParameters().get(TOTAL_SIZE));
 
         partition = metastore.getPartition("db1", "tbl1", Lists.newArrayList());
-        Assert.assertEquals("100", partition.getParameters().get(TOTAL_SIZE));
+        Assertions.assertEquals("100", partition.getParameters().get(TOTAL_SIZE));
     }
 
     @Test
     public void testPartitionExists() {
         HiveMetaClient client = new MockedHiveMetaClient();
         HiveMetastore metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
-        Assert.assertTrue(metastore.partitionExists(metastore.getTable("db1", "tbl1"), new ArrayList<>()));
+        Assertions.assertTrue(metastore.partitionExists(metastore.getTable("db1", "tbl1"), new ArrayList<>()));
     }
 
     @Test
@@ -137,13 +138,15 @@ public class HiveMetastoreTest {
         HiveMetaClient client = new MockedHiveMetaClient();
         HiveMetastore metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
         HivePartition hivePartition = HivePartition.builder()
-                .setColumns(Lists.newArrayList(new Column("c1", Type.INT)))
+                .setColumns(Lists.newArrayList(new Column("c1", IntegerType.INT)))
                 .setStorageFormat(HiveStorageFormat.PARQUET)
                 .setDatabaseName("db")
                 .setTableName("table")
                 .setLocation("location")
                 .setValues(Lists.newArrayList("p1=1"))
-                .setParameters(new HashMap<>()).build();
+                .setParameters(new HashMap<>())
+                .setSerDeParameters(new HashMap<>())
+                .build();
 
         HivePartitionStats hivePartitionStats = HivePartitionStats.empty();
         HivePartitionWithStats hivePartitionWithStats = new HivePartitionWithStats("p1=1", hivePartition, hivePartitionStats);
@@ -166,14 +169,14 @@ public class HiveMetastoreTest {
                 metastore.getPartitionsByNames("db1", "table1", partitionNames);
 
         com.starrocks.connector.hive.Partition partition1 = partitions.get("part1=1/part2=2");
-        Assert.assertEquals(ORC, partition1.getFileFormat());
-        Assert.assertEquals("100", partition1.getParameters().get(TOTAL_SIZE));
-        Assert.assertEquals("hdfs://127.0.0.1:10000/hive.db/hive_tbl/part1=1/part2=2", partition1.getFullPath());
+        Assertions.assertEquals(ORC, partition1.getFileFormat());
+        Assertions.assertEquals("100", partition1.getParameters().get(TOTAL_SIZE));
+        Assertions.assertEquals("hdfs://127.0.0.1:10000/hive.db/hive_tbl/part1=1/part2=2", partition1.getFullPath());
 
         com.starrocks.connector.hive.Partition partition2 = partitions.get("part1=3/part2=4");
-        Assert.assertEquals(ORC, partition2.getFileFormat());
-        Assert.assertEquals("100", partition2.getParameters().get(TOTAL_SIZE));
-        Assert.assertEquals("hdfs://127.0.0.1:10000/hive.db/hive_tbl/part1=3/part2=4", partition2.getFullPath());
+        Assertions.assertEquals(ORC, partition2.getFileFormat());
+        Assertions.assertEquals("100", partition2.getParameters().get(TOTAL_SIZE));
+        Assertions.assertEquals("hdfs://127.0.0.1:10000/hive.db/hive_tbl/part1=3/part2=4", partition2.getFullPath());
     }
 
     @Test
@@ -182,12 +185,12 @@ public class HiveMetastoreTest {
         HiveMetastore metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
         HivePartitionStats statistics = metastore.getTableStatistics("db1", "table1");
         HiveCommonStats commonStats = statistics.getCommonStats();
-        Assert.assertEquals(50, commonStats.getRowNums());
-        Assert.assertEquals(100, commonStats.getTotalFileBytes());
+        Assertions.assertEquals(50, commonStats.getRowNums());
+        Assertions.assertEquals(100, commonStats.getTotalFileBytes());
         HiveColumnStats columnStatistics = statistics.getColumnStats().get("col1");
-        Assert.assertEquals(0, columnStatistics.getTotalSizeBytes());
-        Assert.assertEquals(1, columnStatistics.getNumNulls());
-        Assert.assertEquals(2, columnStatistics.getNdv());
+        Assertions.assertEquals(0, columnStatistics.getTotalSizeBytes());
+        Assertions.assertEquals(1, columnStatistics.getNumNulls());
+        Assertions.assertEquals(2, columnStatistics.getNdv());
     }
 
     @Test
@@ -196,23 +199,23 @@ public class HiveMetastoreTest {
         HiveMetastore metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
         HivePartitionStats statistics = metastore.getTableStatistics("db1", "spark_table");
         HiveCommonStats commonStats = statistics.getCommonStats();
-        Assert.assertEquals(3, commonStats.getRowNums());
-        Assert.assertEquals(5167, commonStats.getTotalFileBytes());
+        Assertions.assertEquals(3, commonStats.getRowNums());
+        Assertions.assertEquals(5167, commonStats.getTotalFileBytes());
         HiveColumnStats intColStats = statistics.getColumnStats().get("col_int");
-        Assert.assertEquals(0, intColStats.getTotalSizeBytes());
-        Assert.assertEquals(0, intColStats.getNumNulls());
-        Assert.assertEquals(3, intColStats.getNdv());
+        Assertions.assertEquals(0, intColStats.getTotalSizeBytes());
+        Assertions.assertEquals(0, intColStats.getNumNulls());
+        Assertions.assertEquals(3, intColStats.getNdv());
         HiveColumnStats doubleColStats = statistics.getColumnStats().get("col_double");
-        Assert.assertEquals(3, doubleColStats.getNdv());
-        Assert.assertEquals(358.4, doubleColStats.getMin(), 0);
-        Assert.assertEquals(958.4, doubleColStats.getMax(), 0);
+        Assertions.assertEquals(3, doubleColStats.getNdv());
+        Assertions.assertEquals(358.4, doubleColStats.getMin(), 0);
+        Assertions.assertEquals(958.4, doubleColStats.getMax(), 0);
         HiveColumnStats stringColStats = statistics.getColumnStats().get("col_string");
-        Assert.assertEquals(18, stringColStats.getTotalSizeBytes());
-        Assert.assertEquals(3, doubleColStats.getNdv());
+        Assertions.assertEquals(18, stringColStats.getTotalSizeBytes());
+        Assertions.assertEquals(3, doubleColStats.getNdv());
         HiveColumnStats booleanColStats = statistics.getColumnStats().get("col_boolean");
-        Assert.assertEquals(0, booleanColStats.getNumNulls());
+        Assertions.assertEquals(0, booleanColStats.getNumNulls());
         HiveColumnStats dateColStats = statistics.getColumnStats().get("col_date");
-        Assert.assertEquals(1, dateColStats.getNdv());
+        Assertions.assertEquals(1, dateColStats.getNdv());
     }
 
     @Test
@@ -225,21 +228,21 @@ public class HiveMetastoreTest {
 
         HivePartitionStats stats1 = statistics.get("col1=1");
         HiveCommonStats commonStats1 = stats1.getCommonStats();
-        Assert.assertEquals(50, commonStats1.getRowNums());
-        Assert.assertEquals(100, commonStats1.getTotalFileBytes());
+        Assertions.assertEquals(50, commonStats1.getRowNums());
+        Assertions.assertEquals(100, commonStats1.getTotalFileBytes());
         HiveColumnStats columnStatistics1 = stats1.getColumnStats().get("col2");
-        Assert.assertEquals(0, columnStatistics1.getTotalSizeBytes());
-        Assert.assertEquals(1, columnStatistics1.getNumNulls());
-        Assert.assertEquals(2, columnStatistics1.getNdv());
+        Assertions.assertEquals(0, columnStatistics1.getTotalSizeBytes());
+        Assertions.assertEquals(1, columnStatistics1.getNumNulls());
+        Assertions.assertEquals(2, columnStatistics1.getNdv());
 
         HivePartitionStats stats2 = statistics.get("col1=2");
         HiveCommonStats commonStats2 = stats2.getCommonStats();
-        Assert.assertEquals(50, commonStats2.getRowNums());
-        Assert.assertEquals(100, commonStats2.getTotalFileBytes());
+        Assertions.assertEquals(50, commonStats2.getRowNums());
+        Assertions.assertEquals(100, commonStats2.getTotalFileBytes());
         HiveColumnStats columnStatistics2 = stats2.getColumnStats().get("col2");
-        Assert.assertEquals(0, columnStatistics2.getTotalSizeBytes());
-        Assert.assertEquals(2, columnStatistics2.getNumNulls());
-        Assert.assertEquals(5, columnStatistics2.getNdv());
+        Assertions.assertEquals(0, columnStatistics2.getTotalSizeBytes());
+        Assertions.assertEquals(2, columnStatistics2.getNumNulls());
+        Assertions.assertEquals(5, columnStatistics2.getNdv());
     }
 
     @Test
@@ -328,9 +331,10 @@ public class HiveMetastoreTest {
             StorageDescriptor sd = new StorageDescriptor();
             sd.setCols(unPartKeys);
             sd.setLocation(hdfsPath);
-            sd.setInputFormat("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat");
+            sd.setInputFormat(HiveClassNames.ORC_INPUT_FORMAT_CLASS);
             SerDeInfo serDeInfo = new SerDeInfo();
             serDeInfo.setParameters(ImmutableMap.of());
+            serDeInfo.setSerializationLib(HiveClassNames.ORC_SERDE_CLASS);
             sd.setSerdeInfo(serDeInfo);
             Table msTable1 = new Table();
             msTable1.setDbName(dbName);
@@ -349,7 +353,9 @@ public class HiveMetastoreTest {
             } else {
                 msTable1.setPartitionKeys(new ArrayList<>());
             }
-
+            if (tblName.equals("external_table")) {
+                msTable1.setTableType("EXTERNAL_TABLE");
+            }
             return msTable1;
         }
 
@@ -487,7 +493,8 @@ public class HiveMetastoreTest {
 
             Partition partition = new Partition();
             partition.setSd(sd);
-            partition.setParameters(ImmutableMap.of(TOTAL_SIZE, "100", ROW_COUNT, "50"));
+            partition.setParameters(ImmutableMap.of(TOTAL_SIZE, "100",
+                                                    ROW_COUNT, "50", TASK, String.valueOf(Instant.now().getEpochSecond())));
             partition.setValues(partitionValues);
             return partition;
         }

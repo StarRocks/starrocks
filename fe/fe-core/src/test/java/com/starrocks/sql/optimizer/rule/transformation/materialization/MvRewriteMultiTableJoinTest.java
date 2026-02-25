@@ -15,19 +15,19 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
-public class MvRewriteMultiTableJoinTest extends MvRewriteTestBase {
+public class MvRewriteMultiTableJoinTest extends MVTestBase {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
-        MvRewriteTestBase.beforeClass();
+        MVTestBase.beforeClass();
         prepareDatas();
     }
 
-    @AfterClass
+    @AfterAll
     public static void afterClass() throws Exception {
         try {
             starRocksAssert.dropTable("tbl_1");
@@ -104,7 +104,7 @@ public class MvRewriteMultiTableJoinTest extends MvRewriteTestBase {
                 "\"replication_num\"=\"1\",\n" +
                 "\"in_memory\"=\"false\",\n" +
                 "\"storage_format\"=\"DEFAULT\",\n" +
-                "\"enable_persistent_index\"=\"false\",\n" +
+                "\"enable_persistent_index\"=\"true\",\n" +
                 "\"compression\"=\"LZ4\"\n" +
                 ")");
         createAndRefreshMv("CREATE MATERIALIZED VIEW test_mv1 \n" +

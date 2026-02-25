@@ -36,9 +36,9 @@ select count(1) from mv1;
 -- result:
 14
 -- !result
-function: check_hit_materialized_view("SELECT col_int, col_timestamp, col_double FROM mv_hudi_${uuid0}.sql_test_db.hudi_basic_table", "mv1")
+function: print_hit_materialized_view("SELECT col_int, col_timestamp, col_double FROM mv_hudi_${uuid0}.sql_test_db.hudi_basic_table", "mv1")
 -- result:
-None
+True
 -- !result
 SELECT col_int, col_timestamp, col_double FROM mv_hudi_${uuid0}.sql_test_db.hudi_basic_table order by 1, 2 limit 5;
 -- result:
@@ -49,9 +49,9 @@ None	None	None
 3	2020-03-01 00:00:04	3.0003
 -- !result
 refresh materialized view mv2 with sync mode;
-function: check_hit_materialized_view("SELECT col_int, count(col_timestamp) as count_ts, sum(col_double) as sum_int from mv1 group by col_int;", "mv2")
+function: print_hit_materialized_view("SELECT col_int, count(col_timestamp) as count_ts, sum(col_double) as sum_int from mv1 group by col_int;", "mv2")
 -- result:
-None
+True
 -- !result
 SELECT col_int, count(col_timestamp) as count_ts, sum(col_double) as sum_int from mv1 group by col_int order by 1, 2 limit 5;
 -- result:
@@ -62,9 +62,9 @@ None	0	None
 4	1	4.0004
 -- !result
 refresh materialized view mv3 with sync mode;
-function: check_hit_materialized_view("SELECT col_int, count_ts, sum_int from mv2 where col_int >1;", "mv3")
+function: print_hit_materialized_view("SELECT col_int, count_ts, sum_int from mv2 where col_int >1;", "mv3")
 -- result:
-None
+True
 -- !result
 SELECT col_int, count_ts, sum_int from mv2 where col_int >1 order by 1, 2 limit 5;
 -- result:

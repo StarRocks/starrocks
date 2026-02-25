@@ -14,30 +14,23 @@
 
 package com.starrocks.sql;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionNames;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.EtlJobType;
@@ -46,6 +39,7 @@ import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DataSink;
+import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.ExchangeNode;
 import com.starrocks.planner.FileScanNode;
 import com.starrocks.planner.OlapTableSink;
@@ -53,13 +47,19 @@ import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.StreamLoadScanNode;
+import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AggregateType;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.ImportColumnDesc;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.sql.plan.ExecPlan;
@@ -69,11 +69,14 @@ import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TRoutineLoadTask;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.type.IntegerType;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -119,7 +122,6 @@ public class LoadPlanner {
     private List<BrokerFileGroup> fileGroups;
     private List<List<TBrokerFileStatus>> fileStatusesList;
     private int filesAdded;
-    private Analyzer analyzer;
 
     IdGenerator<PlanNodeId> planNodeGenerator = PlanNodeId.createGenerator();
 
@@ -134,7 +136,7 @@ public class LoadPlanner {
     TRoutineLoadTask routineLoadTask;
     private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.ROW_MODE;
 
-    private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+    private final ComputeResource computeResource;
 
     private LoadJob.JSONOptions jsonOptions = new LoadJob.JSONOptions();
 
@@ -142,12 +144,30 @@ public class LoadPlanner {
 
     private String mergeConditionStr;
 
+    // Only valid for stream load
+    private boolean enableBatchWrite = false;
+    private int batchWriteIntervalMs;
+    private ImmutableMap<String, String> batchWriteParameters;
+    private Set<Long> batchWriteBackendIds;
+
+    @VisibleForTesting
     public LoadPlanner(long loadJobId, TUniqueId loadId, long txnId, long dbId, OlapTable destTable,
                        boolean strictMode, String timezone, long timeoutS,
                        long startTime, boolean partialUpdate, ConnectContext context,
                        Map<String, String> sessionVariables, long loadMemLimit, long execMemLimit,
                        BrokerDesc brokerDesc, List<BrokerFileGroup> brokerFileGroups,
                        List<List<TBrokerFileStatus>> fileStatusesList, int filesAdded) {
+        this(loadJobId, loadId, txnId, dbId, destTable, strictMode, timezone, timeoutS,
+                startTime, partialUpdate, context, sessionVariables, loadMemLimit, execMemLimit,
+                brokerDesc, brokerFileGroups, fileStatusesList, filesAdded, WarehouseManager.DEFAULT_RESOURCE);
+    }
+
+    public LoadPlanner(long loadJobId, TUniqueId loadId, long txnId, long dbId, OlapTable destTable,
+                       boolean strictMode, String timezone, long timeoutS,
+                       long startTime, boolean partialUpdate, ConnectContext context,
+                       Map<String, String> sessionVariables, long loadMemLimit, long execMemLimit,
+                       BrokerDesc brokerDesc, List<BrokerFileGroup> brokerFileGroups,
+                       List<List<TBrokerFileStatus>> fileStatusesList, int filesAdded, ComputeResource computeResource) {
         this.loadJobId = loadJobId;
         this.loadId = loadId;
         this.txnId = txnId;
@@ -162,15 +182,15 @@ public class LoadPlanner {
         } else {
             this.context = new ConnectContext();
         }
-        if (this.context.getSessionVariable().getEnableAdaptiveSinkDop()) {
-            this.parallelInstanceNum = this.context.getSessionVariable().getSinkDegreeOfParallelism();
+        this.computeResource = computeResource;
+        SessionVariable sv = this.context.getSessionVariable();
+        if (sv.getEnableAdaptiveSinkDop()) {
+            this.parallelInstanceNum = sv.getSinkDegreeOfParallelism(this.computeResource.getWarehouseId());
         } else {
             this.parallelInstanceNum = Config.load_parallel_instance_num;
         }
-        this.analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), this.context);
-        this.analyzer.setTimezone(timezone);
         this.timezone = timezone;
-        this.descTable = this.analyzer.getDescTbl();
+        this.descTable = new DescriptorTable();
         this.loadMemLimit = loadMemLimit;
         this.execMemLimit = execMemLimit;
         this.sessionVariables = sessionVariables;
@@ -210,11 +230,12 @@ public class LoadPlanner {
         this.parallelInstanceNum = parallelInstanceNum;
         this.columnDescs = columnDescs;
         this.streamLoadInfo = streamLoadInfo;
-        this.analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), this.context);
-        this.descTable = analyzer.getDescTbl();
+        this.descTable = new DescriptorTable();
         this.enableDictOptimize = Config.enable_dict_optimize_stream_load;
         this.startTime = System.currentTimeMillis();
         this.sessionVariables = sessionVariables;
+        this.computeResource = streamLoadInfo.getComputeResource();
+        this.mergeConditionStr = streamLoadInfo.getMergeConditionStr();
     }
 
     public LoadPlanner(long loadJobId, TUniqueId loadId, long txnId, long dbId, String dbName, OlapTable destTable,
@@ -231,12 +252,20 @@ public class LoadPlanner {
         this.context.getSessionVariable().setEnablePipelineEngine(true);
     }
 
-    public void setWarehouseId(long warehouseId) {
-        this.warehouseId = warehouseId;
+    public long getWarehouseId() {
+        return computeResource.getWarehouseId();
     }
 
-    public long getWarehouseId() {
-        return warehouseId;
+    public ComputeResource getComputeResource() {
+        return computeResource;
+    }
+
+    public void setBatchWrite(
+            int batchWriteIntervalMs, ImmutableMap<String, String> loadParameters, Set<Long> batchWriteBackendIds) {
+        this.enableBatchWrite = true;
+        this.batchWriteIntervalMs = batchWriteIntervalMs;
+        this.batchWriteParameters = loadParameters;
+        this.batchWriteBackendIds = new HashSet<>(batchWriteBackendIds);
     }
 
     public void setPartialUpdateMode(TPartialUpdateMode mode) {
@@ -251,7 +280,7 @@ public class LoadPlanner {
         this.jsonOptions = options;
     }
 
-    public void plan() throws UserException {
+    public void plan() throws StarRocksException {
         // 1. Generate tuple descriptor
         OlapTable olapDestTable = (OlapTable) destTable;
         List<Column> destColumns = Lists.newArrayList();
@@ -310,7 +339,7 @@ public class LoadPlanner {
                 fragments.add(scanFragment);
 
                 // Exchange node
-                List<Column> keyColumns = olapDestTable.getKeyColumnsByIndexId(olapDestTable.getBaseIndexId());
+                List<Column> keyColumns = olapDestTable.getKeyColumnsByIndexMetaId(olapDestTable.getBaseIndexMetaId());
                 List<Expr> partitionExprs = Lists.newArrayList();
                 keyColumns.forEach(column -> {
                     partitionExprs.add(new SlotRef(tupleDesc.getColumnSlot(column.getName())));
@@ -370,7 +399,7 @@ public class LoadPlanner {
         Collections.reverse(fragments);
     }
 
-    private void generateTupleDescriptor(List<Column> destColumns, boolean isPrimaryKey) throws UserException {
+    private void generateTupleDescriptor(List<Column> destColumns, boolean isPrimaryKey) throws StarRocksException {
         this.tupleDesc = descTable.createTupleDescriptor("DestTableTupleDescriptor");
         // Add column slotDesc for dest table
         for (Column col : destColumns) {
@@ -394,32 +423,37 @@ public class LoadPlanner {
         if (isPrimaryKey) {
             SlotDescriptor slotDesc = descTable.addSlotDescriptor(tupleDesc);
             slotDesc.setIsMaterialized(true);
-            slotDesc.setColumn(new Column(Load.LOAD_OP_COLUMN, Type.TINYINT));
+            slotDesc.setColumn(new Column(Load.LOAD_OP_COLUMN, IntegerType.TINYINT));
             slotDesc.setIsNullable(false);
         }
         descTable.computeMemLayout();
     }
 
-    private ScanNode prepareScanNodes() throws UserException {
+    private ScanNode prepareScanNodes() throws StarRocksException {
         ScanNode scanNode = null;
         if (this.etlJobType == EtlJobType.BROKER) {
             FileScanNode fileScanNode = new FileScanNode(new PlanNodeId(planNodeGenerator.getNextId().asInt()),
                     tupleDesc,
-                    "FileScanNode", fileStatusesList, filesAdded, warehouseId);
+                    "FileScanNode", fileStatusesList, filesAdded, computeResource);
             fileScanNode.setLoadInfo(loadJobId, txnId, destTable, brokerDesc, fileGroups, strictMode,
                     parallelInstanceNum);
             fileScanNode.setUseVectorizedLoad(true);
             fileScanNode.setJSONOptions(jsonOptions);
-            fileScanNode.init(analyzer);
-            fileScanNode.finalizeStats(analyzer);
+            fileScanNode.init(descTable);
+            fileScanNode.finalizeStats();
+            fileScanNode.setComputeResource(computeResource);
             scanNode = fileScanNode;
         } else if (this.etlJobType == EtlJobType.STREAM_LOAD || this.etlJobType == EtlJobType.ROUTINE_LOAD) {
             StreamLoadScanNode streamScanNode = new StreamLoadScanNode(loadId, new PlanNodeId(0), tupleDesc,
-                    destTable, streamLoadInfo, dbName, label, parallelInstanceNum, txnId, warehouseId);
+                    destTable, streamLoadInfo, dbName, label, parallelInstanceNum, txnId, computeResource);
             streamScanNode.setNeedAssignBE(true);
+            if (enableBatchWrite) {
+                streamScanNode.setBatchWrite(batchWriteIntervalMs, batchWriteParameters, batchWriteBackendIds);
+            }
             streamScanNode.setUseVectorizedLoad(true);
-            streamScanNode.init(analyzer);
-            streamScanNode.finalizeStats(analyzer);
+            streamScanNode.init(descTable);
+            streamScanNode.finalizeStats();
+            streamScanNode.setComputeResource(computeResource);
             scanNode = streamScanNode;
         }
         scanNodes.add(scanNode);
@@ -448,7 +482,8 @@ public class LoadPlanner {
     }
 
     private void prepareSinkFragment(PlanFragment sinkFragment, List<Long> partitionIds,
-                                     boolean completeTabletSink, boolean forceReplicatedStorage) throws UserException {
+                                     boolean completeTabletSink, boolean forceReplicatedStorage) throws
+            StarRocksException {
         DataSink dataSink = null;
         if (destTable instanceof OlapTable) {
             // 4. Olap table sink
@@ -462,7 +497,7 @@ public class LoadPlanner {
             Preconditions.checkState(!CollectionUtils.isEmpty(partitionIds));
             dataSink = new OlapTableSink(olapTable, tupleDesc, partitionIds,
                     olapTable.writeQuorum(), forceReplicatedStorage ? true : ((OlapTable) destTable).enableReplicatedStorage(),
-                    checkNullExprInAutoIncrement(), enableAutomaticPartition, warehouseId);
+                    checkNullExprInAutoIncrement(), enableAutomaticPartition, computeResource);
             if (this.missAutoIncrementColumn == Boolean.TRUE) {
                 ((OlapTableSink) dataSink).setMissAutoIncrementColumn();
             }
@@ -487,7 +522,7 @@ public class LoadPlanner {
         sinkFragment.setLoadGlobalDicts(globalDicts);
     }
 
-    public void completeTableSink(long txnId) throws AnalysisException, UserException {
+    public void completeTableSink(long txnId) throws AnalysisException, StarRocksException {
         if (destTable instanceof OlapTable) {
             OlapTableSink dataSink = (OlapTableSink) fragments.get(0).getSink();
             dataSink.init(loadId, txnId, dbId, timeoutS);
@@ -575,7 +610,7 @@ public class LoadPlanner {
         }
 
         if (KeysType.AGG_KEYS.equals(olapDestTable.getKeysType())) {
-            for (Map.Entry<Long, List<Column>> entry : olapDestTable.getIndexIdToSchema().entrySet()) {
+            for (Map.Entry<Long, List<Column>> entry : olapDestTable.getIndexMetaIdToSchema().entrySet()) {
                 List<Column> schema = entry.getValue();
                 for (Column column : schema) {
                     if (column.getAggregationType() == AggregateType.REPLACE

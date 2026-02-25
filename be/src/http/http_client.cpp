@@ -45,6 +45,7 @@ Status HttpClient::init(const std::string& url) {
         curl_easy_reset(_curl);
     }
 
+    _headers.clear();
     if (_header_list != nullptr) {
         curl_slist_free_all(_header_list);
         _header_list = nullptr;
@@ -138,6 +139,44 @@ void HttpClient::set_method(HttpMethod method) {
     }
 }
 
+void HttpClient::set_header(const std::string& key, const std::string& value) {
+    _headers.insert_or_assign(key, value);
+    _apply_headers();
+}
+
+void HttpClient::set_headers(const std::unordered_map<std::string, std::string>& headers) {
+    for (const auto& header : headers) {
+        _headers[header.first] = header.second;
+    }
+    _apply_headers();
+}
+
+void HttpClient::clear_headers() {
+    _headers.clear();
+    if (_header_list != nullptr) {
+        curl_slist_free_all(_header_list);
+        _header_list = nullptr;
+    }
+    curl_easy_setopt(_curl, CURLOPT_HTTPHEADER, _header_list);
+}
+
+void HttpClient::_apply_headers() {
+    // Clear the existing header list
+    if (_header_list) {
+        curl_slist_free_all(_header_list);
+        _header_list = nullptr;
+    }
+
+    // Append each header from the map
+    for (const auto& header : _headers) {
+        std::string header_entry = header.first + ": " + header.second;
+        _header_list = curl_slist_append(_header_list, header_entry.c_str());
+    }
+
+    // Apply the new header list
+    curl_easy_setopt(_curl, CURLOPT_HTTPHEADER, _header_list);
+}
+
 size_t HttpClient::on_response_data(const void* data, size_t length) {
     if (*_callback != nullptr) {
         bool is_continue = (*_callback)(data, length);
@@ -204,15 +243,14 @@ StatusOr<uint64_t> HttpClient::download(const std::string& local_path) {
     return output_file->size();
 }
 
-Status HttpClient::download(const std::function<Status(const void* data, size_t length)>& callback) {
+Status HttpClient::download(const std::function<Status(const void* data, size_t length)>& callback,
+                            int32_t min_speed_limit_kbps, int32_t min_speed_time_sec, int32_t max_speed_limit_kbps) {
     // set method to GET
     set_method(GET);
 
-    // TODO(zc) Move this download speed limit outside to limit download speed
-    // at system level
-    curl_easy_setopt(_curl, CURLOPT_LOW_SPEED_LIMIT, config::download_low_speed_limit_kbps * 1024);
-    curl_easy_setopt(_curl, CURLOPT_LOW_SPEED_TIME, config::download_low_speed_time);
-    curl_easy_setopt(_curl, CURLOPT_MAX_RECV_SPEED_LARGE, config::max_download_speed_kbps * 1024);
+    curl_easy_setopt(_curl, CURLOPT_LOW_SPEED_LIMIT, min_speed_limit_kbps * 1024);
+    curl_easy_setopt(_curl, CURLOPT_LOW_SPEED_TIME, min_speed_time_sec);
+    curl_easy_setopt(_curl, CURLOPT_MAX_RECV_SPEED_LARGE, max_speed_limit_kbps * 1024);
 
     Status status;
     auto download_cb = [&callback, &status](const void* data, size_t length) {

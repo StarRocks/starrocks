@@ -18,13 +18,20 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorProperties;
+import com.starrocks.connector.ConnectorType;
+import com.starrocks.connector.DatabaseTableName;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
-import com.starrocks.connector.TableVersionRange;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastore;
 import com.starrocks.connector.hive.HiveMetastoreTest;
 import com.starrocks.connector.hive.IHiveMetastore;
+import com.starrocks.connector.metastore.MetastoreTable;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.SemanticException;
 import io.delta.kernel.Scan;
 import io.delta.kernel.ScanBuilder;
 import io.delta.kernel.data.ColumnVector;
@@ -48,9 +55,9 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Optional;
@@ -59,7 +66,7 @@ public class DeltaLakeMetadataTest {
     private HiveMetaClient client;
     private DeltaLakeMetadata deltaLakeMetadata;
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(Maps.newHashMap());
 
@@ -72,35 +79,45 @@ public class DeltaLakeMetadataTest {
                 CachingDeltaLakeMetastore.createQueryLevelInstance(hmsBackedDeltaMetastore, 10000), false,
                 MetastoreType.HMS);
 
-        deltaLakeMetadata = new DeltaLakeMetadata(hdfsEnvironment, "delta0", deltaOps, null);
+        deltaLakeMetadata = new DeltaLakeMetadata(hdfsEnvironment, "delta0", deltaOps, null,
+                new ConnectorProperties(ConnectorType.DELTALAKE));
     }
 
     @Test
     public void testListDbNames() {
-        List<String> dbNames = deltaLakeMetadata.listDbNames();
-        Assert.assertEquals(2, dbNames.size());
-        Assert.assertEquals("db1", dbNames.get(0));
-        Assert.assertEquals("db2", dbNames.get(1));
+        List<String> dbNames = deltaLakeMetadata.listDbNames(new ConnectContext());
+        Assertions.assertEquals(2, dbNames.size());
+        Assertions.assertEquals("db1", dbNames.get(0));
+        Assertions.assertEquals("db2", dbNames.get(1));
     }
 
     @Test
     public void testListTableNames() {
-        List<String> tableNames = deltaLakeMetadata.listTableNames("db1");
-        Assert.assertEquals(2, tableNames.size());
-        Assert.assertEquals("table1", tableNames.get(0));
-        Assert.assertEquals("table2", tableNames.get(1));
+        List<String> tableNames = deltaLakeMetadata.listTableNames(new ConnectContext(), "db1");
+        Assertions.assertEquals(2, tableNames.size());
+        Assertions.assertEquals("table1", tableNames.get(0));
+        Assertions.assertEquals("table2", tableNames.get(1));
     }
 
     @Test
     public void testListPartitionNames(@Mocked SnapshotImpl snapshot, @Mocked ScanBuilder scanBuilder,
                                        @Mocked Scan scan) {
+        new MockUp<DeltaLakeMetastore>() {
+            @mockit.Mock
+            public DeltaLakeSnapshot getLatestSnapshot(String dbName, String tableName) {
+                return new DeltaLakeSnapshot("db1", "table1", null, null,
+                        new MetastoreTable("db1", "table1", "s3://bucket/path/to/table",
+                                123));
+            }
+        };
+
         new MockUp<DeltaUtils>() {
             @Mock
-            public DeltaLakeTable convertDeltaToSRTable(String catalog, String dbName, String tblName, String path,
-                                                        Engine deltaEngine, long createTime) {
+            public DeltaLakeTable convertDeltaSnapshotToSRTable(String catalog, DeltaLakeSnapshot deltaLakeSnapshot) {
                 return new DeltaLakeTable(1, "delta0", "db1", "table1",
-                        Lists.newArrayList(), Lists.newArrayList("ts"), snapshot,
-                        "s3://bucket/path/to/table", null, 0);
+                        Lists.newArrayList(), Lists.newArrayList("ts"), snapshot, null,
+                        new MetastoreTable("db1", "table1", "s3://bucket/path/to/table",
+                                123));
             }
         };
 
@@ -167,33 +184,81 @@ public class DeltaLakeMetadataTest {
                 minTimes = 0;
             }
         };
-        List<String> partitionNames = deltaLakeMetadata.listPartitionNames("db1", "table1",
-                TableVersionRange.empty());
-        Assert.assertEquals(3, partitionNames.size());
-        Assert.assertEquals("ts=1999", partitionNames.get(0));
-        Assert.assertEquals("ts=2000", partitionNames.get(1));
-        Assert.assertEquals("ts=2001", partitionNames.get(2));
+        List<String> partitionNames =
+                deltaLakeMetadata.listPartitionNames("db1", "table1", ConnectorMetadatRequestContext.DEFAULT);
+        Assertions.assertEquals(3, partitionNames.size());
+        Assertions.assertEquals("ts=1999", partitionNames.get(0));
+        Assertions.assertEquals("ts=2000", partitionNames.get(1));
+        Assertions.assertEquals("ts=2001", partitionNames.get(2));
     }
 
     @Test
     public void testTableExists() {
-        Assert.assertTrue(deltaLakeMetadata.tableExists("db1", "table1"));
+        Assertions.assertTrue(deltaLakeMetadata.tableExists(new ConnectContext(), "db1", "table1"));
     }
 
     @Test
     public void testGetTable() {
-        new MockUp<DeltaUtils>() {
+        new MockUp<CachingDeltaLakeMetastore>() {
             @mockit.Mock
-            public DeltaLakeTable convertDeltaToSRTable(String catalog, String dbName, String tblName, String path,
-                                                        Engine deltaEngine, long createTime) {
-                return new DeltaLakeTable(1, "delta0", "db1", "table1", Lists.newArrayList(),
-                        Lists.newArrayList("col1"), null, "path/to/table", null, 0);
+            public DeltaLakeSnapshot getCachedSnapshot(DatabaseTableName databaseTableName) {
+                return new DeltaLakeSnapshot("db1", "table1", null, null,
+                        new MetastoreTable("db1", "table1", "path/to/table",
+                                123));
             }
         };
-        DeltaLakeTable deltaTable = (DeltaLakeTable) deltaLakeMetadata.getTable("db1", "table1");
-        Assert.assertNotNull(deltaTable);
-        Assert.assertEquals("table1", deltaTable.getName());
-        Assert.assertEquals(Table.TableType.DELTALAKE, deltaTable.getType());
-        Assert.assertEquals("path/to/table", deltaTable.getTableLocation());
+
+        new MockUp<DeltaUtils>() {
+            @mockit.Mock
+            public DeltaLakeTable convertDeltaSnapshotToSRTable(String catalog, DeltaLakeSnapshot snapshot) {
+                return new DeltaLakeTable(1, "delta0", "db1", "table1", Lists.newArrayList(),
+                        Lists.newArrayList("col1"), null, null,
+                        new MetastoreTable("db1", "table1", "path/to/table",
+                        123));
+            }
+        };
+        DeltaLakeTable deltaTable = (DeltaLakeTable) deltaLakeMetadata.getTable(new ConnectContext(), "db1", "table1");
+        Assertions.assertNotNull(deltaTable);
+        Assertions.assertEquals("table1", deltaTable.getName());
+        Assertions.assertEquals(Table.TableType.DELTALAKE, deltaTable.getType());
+        Assertions.assertEquals("path/to/table", deltaTable.getTableLocation());
+    }
+
+    @Test
+    public void testGetTableWithSemanticRootCause(@Mocked DeltaMetastoreOperations deltaOps) throws Exception {
+        new Expectations() {
+            {
+                deltaOps.getTable("db_sem", "tbl_sem");
+                result = new RuntimeException(new SemanticException("semantic detail message"));
+            }
+        };
+
+        DeltaLakeMetadata metadata = new DeltaLakeMetadata(
+                new HdfsEnvironment(Maps.newHashMap()), "delta0", deltaOps, null,
+                new ConnectorProperties(ConnectorType.DELTALAKE));
+
+        StarRocksConnectorException ex = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> metadata.getTable(null, "db_sem", "tbl_sem"));
+        Assertions.assertTrue(ex.getMessage().contains("semantic detail message"));
+    }
+
+    @Test
+    public void testGetTableWithOtherRootCause(@Mocked DeltaMetastoreOperations deltaOps) throws Exception {
+        new Expectations() {
+            {
+                deltaOps.getTable("db_io", "tbl_io");
+                result = new RuntimeException(new java.io.IOException("io failure"));
+            }
+        };
+
+        DeltaLakeMetadata metadata = new DeltaLakeMetadata(
+                new HdfsEnvironment(Maps.newHashMap()), "delta0", deltaOps, null,
+                new ConnectorProperties(ConnectorType.DELTALAKE));
+
+        StarRocksConnectorException ex = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> metadata.getTable(null, "db_io", "tbl_io"));
+        String expectedPrefix = "Failed to get deltalake table delta0.db_io.tbl_io";
+        Assertions.assertTrue(ex.getMessage().contains(expectedPrefix));
+        Assertions.assertTrue(ex.getMessage().contains("io failure"));
     }
 }

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.statistics;
 
 public class StatisticsEstimateCoefficient {
@@ -36,16 +35,13 @@ public class StatisticsEstimateCoefficient {
     public static final double OVERLAP_INFINITE_RANGE_FILTER_COEFFICIENT = 0.5;
     // used in compute extra cost for multi distinct function, estimate whether to trigger streaming
     public static final double STREAMING_EXTRA_COST_THRESHOLD_COEFFICIENT = 0.8;
-    // default mysql external table output rows
-    public static final int DEFAULT_MYSQL_OUTPUT_ROWS = 10000;
-    // default es external table output rows
-    public static final int DEFAULT_ES_OUTPUT_ROWS = 5000;
-    // default JDBC external table output rows, JDBC maybe is a distribute system
-    public static final int DEFAULT_JDBC_OUTPUT_ROWS = 20000;
     // if after aggregate row count * DEFAULT_AGGREGATE_EFFECT_COEFFICIENT < input row count,
     // the aggregate has good effect.
+    public static final double LOWER_AGGREGATE_EFFECT_COEFFICIENT = 10000;
     public static final double LOW_AGGREGATE_EFFECT_COEFFICIENT = 1000;
     public static final double MEDIUM_AGGREGATE_EFFECT_COEFFICIENT = 100;
+    public static final int SMALL_BROADCAST_JOIN_MAX_NDV_LIMIT = 100000;
+    public static final int SMALL_BROADCAST_JOIN_MAX_COMBINED_NDV_LIMIT = 1000000;
 
     public static final double EXTREME_HIGH_AGGREGATE_EFFECT_COEFFICIENT = 3;
     // default selectivity for anti join
@@ -60,7 +56,6 @@ public class StatisticsEstimateCoefficient {
     // default or predicate limit
     public static final int DEFAULT_OR_OPERATOR_LIMIT = 16;
 
-
     public static final double EXECUTE_COST_PENALTY = 2;
     public static final int BROADCAST_JOIN_MEM_EXCEED_PENALTY = 1000;
 
@@ -69,4 +64,7 @@ public class StatisticsEstimateCoefficient {
     public static final double MAXIMUM_ROW_COUNT = Double.MAX_VALUE / Math.pow(10, 100);
 
     public static final double MAXIMUM_OUTPUT_SIZE = Double.MAX_VALUE / Math.pow(10, 80);
+
+    // used to estimate the cardinality of values not explicitly represented in the histogram.
+    public static final double HISTOGRAM_UNREPRESENTED_VALUE_COEFFICIENT = 0.1;
 }

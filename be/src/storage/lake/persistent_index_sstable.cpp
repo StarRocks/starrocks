@@ -16,15 +16,19 @@
 
 #include <butil/time.h> // NOLINT
 
+#include "base/debug/trace.h"
 #include "fs/fs.h"
+#include "fs/key_cache.h"
+#include "gen_cpp/types.pb.h"
+#include "storage/lake/lake_delvec_loader.h"
 #include "storage/lake/utils.h"
 #include "storage/sstable/table_builder.h"
-#include "util/trace.h"
 
 namespace starrocks::lake {
 
 Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const PersistentIndexSstablePB& sstable_pb,
-                                    Cache* cache, bool need_filter) {
+                                    Cache* cache, bool need_filter, DelVectorPtr delvec,
+                                    const TabletMetadataPtr& metadata, TabletManager* tablet_mgr) {
     sstable::Options options;
     if (need_filter) {
         _filter_policy.reset(const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
@@ -36,12 +40,31 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
     _sst.reset(table);
     _rf = std::move(rf);
     _sstable_pb.CopyFrom(sstable_pb);
+    // load delvec
+    if (_sstable_pb.has_delvec() && _sstable_pb.delvec().size() > 0) {
+        if (delvec) {
+            // If delvec is already provided, use it directly.
+            _delvec = std::move(delvec);
+        } else {
+            if (metadata == nullptr) {
+                return Status::InvalidArgument("metadata is null when loading delvec from file");
+            }
+            if (tablet_mgr == nullptr) {
+                return Status::InvalidArgument("tablet_mgr is null when loading delvec from file");
+            }
+            // otherwise, load delvec from file
+            LakeIOOptions lake_io_opts{.fill_data_cache = true, .skip_disk_cache = false};
+            auto delvec_loader =
+                    std::make_unique<LakeDelvecLoader>(tablet_mgr, nullptr, true /* fill cache */, lake_io_opts);
+            RETURN_IF_ERROR(delvec_loader->load_from_meta(metadata, _sstable_pb.delvec(), &_delvec));
+        }
+    }
     return Status::OK();
 }
 
-Status PersistentIndexSstable::build_sstable(
-        const phmap::btree_map<std::string, std::list<IndexValueWithVer>, std::less<>>& map, WritableFile* wf,
-        uint64_t* filesz) {
+Status PersistentIndexSstable::build_sstable(const phmap::btree_map<std::string, IndexValueWithVer, std::less<>>& map,
+                                             WritableFile* wf, uint64_t* filesz,
+                                             PersistentIndexSstableRangePB* range_pb) {
     std::unique_ptr<sstable::FilterPolicy> filter_policy;
     filter_policy.reset(const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
     sstable::Options options;
@@ -49,16 +72,19 @@ Status PersistentIndexSstable::build_sstable(
     sstable::TableBuilder builder(options, wf);
     for (const auto& [k, v] : map) {
         IndexValuesWithVerPB index_value_pb;
-        for (const auto& index_value_with_ver : v) {
-            auto* value = index_value_pb.add_values();
-            value->set_version(index_value_with_ver.first);
-            value->set_rssid(index_value_with_ver.second.get_rssid());
-            value->set_rowid(index_value_with_ver.second.get_rowid());
-        }
-        builder.Add(Slice(k), Slice(index_value_pb.SerializeAsString()));
+        auto* value = index_value_pb.add_values();
+        value->set_version(v.first);
+        value->set_rssid(v.second.get_rssid());
+        value->set_rowid(v.second.get_rowid());
+        RETURN_IF_ERROR(builder.Add(Slice(k), Slice(index_value_pb.SerializeAsString())));
     }
     RETURN_IF_ERROR(builder.Finish());
     *filesz = builder.FileSize();
+    if (range_pb != nullptr) {
+        auto [key_start, key_end] = builder.KeyRange();
+        range_pb->set_start_key(key_start.to_string());
+        range_pb->set_end_key(key_end.to_string());
+    }
     return Status::OK();
 }
 
@@ -68,6 +94,20 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
     sstable::ReadIOStat stat;
     sstable::ReadOptions options;
     options.stat = &stat;
+    std::unique_ptr<RandomAccessFile> rf;
+    if (config::enable_pk_index_parallel_execution) {
+        RandomAccessFileOptions opts;
+        if (!_sstable_pb.encryption_meta().empty()) {
+            ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(_sstable_pb.encryption_meta()));
+            opts.encryption_info = std::move(info);
+        }
+        ASSIGN_OR_RETURN(rf, fs::new_random_access_file(opts, _rf->filename()));
+    }
+    options.file = rf.get();
+    // Currently, there is no need to set predicate for MultiGet of persistent index sstable. Because predicate
+    // only used for sstable compaction to filter out some keys for tablet split purpose and such keys can not
+    // be read by the persistent index by designed. So even we provide a predicate, all keys read by multi_get
+    // will always meet the condition.
     auto start_ts = butil::gettimeofday_us();
     RETURN_IF_ERROR(_sst->MultiGet(options, keys, key_indexes.begin(), key_indexes.end(), &index_value_with_vers));
     auto end_ts = butil::gettimeofday_us();
@@ -86,6 +126,29 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
         if (!index_value_with_ver_pb.ParseFromString(index_value_with_vers[i])) {
             return Status::InternalError("parse index value info failed");
         }
+        // Check if this rowid is already filtered by delvec
+        if (_delvec) {
+            if (_delvec->roaring()->contains(index_value_with_ver_pb.values(0).rowid())) {
+                ++i;
+                continue;
+            }
+        }
+        // fill shared rssid & version if have
+        if (_sstable_pb.has_shared_version() && _sstable_pb.shared_version() > 0) {
+            DCHECK(_sstable_pb.has_shared_rssid());
+            for (size_t j = 0; j < index_value_with_ver_pb.values_size(); ++j) {
+                index_value_with_ver_pb.mutable_values(j)->set_rssid(_sstable_pb.shared_rssid());
+                index_value_with_ver_pb.mutable_values(j)->set_version(_sstable_pb.shared_version());
+            }
+        }
+        if (_sstable_pb.rssid_offset() != 0) {
+            for (size_t j = 0; j < index_value_with_ver_pb.values_size(); ++j) {
+                const int64_t rssid =
+                        static_cast<int64_t>(index_value_with_ver_pb.values(j).rssid()) + _sstable_pb.rssid_offset();
+                index_value_with_ver_pb.mutable_values(j)->set_rssid(static_cast<uint32_t>(rssid));
+            }
+        }
+
         if (index_value_with_ver_pb.values_size() > 0) {
             if (version < 0) {
                 values[key_index] = build_index_value(index_value_with_ver_pb.values(0));
@@ -103,6 +166,83 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
         ++i;
     }
     return Status::OK();
+}
+
+size_t PersistentIndexSstable::memory_usage() const {
+    return (_sst != nullptr) ? _sst->memory_usage() : 0;
+}
+
+Status PersistentIndexSstable::sample_keys(std::vector<std::string>* keys, size_t sample_interval_bytes) const {
+    if (_sst == nullptr) {
+        return Status::InvalidArgument("SSTable is not initialized");
+    }
+    return _sst->sample_keys(keys, sample_interval_bytes);
+}
+
+StatusOr<PersistentIndexSstableUniquePtr> PersistentIndexSstable::new_sstable(
+        const PersistentIndexSstablePB& sstable_pb, const std::string& location, Cache* cache, bool need_filter,
+        const DelVectorPtr& delvec, const TabletMetadataPtr& metadata, TabletManager* tablet_mgr) {
+    auto sstable = std::make_unique<PersistentIndexSstable>();
+    RandomAccessFileOptions opts;
+    if (!sstable_pb.encryption_meta().empty()) {
+        ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(sstable_pb.encryption_meta()));
+        opts.encryption_info = std::move(info);
+    }
+    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, location));
+    RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, cache, need_filter, delvec, metadata, tablet_mgr));
+    return std::move(sstable);
+}
+
+PersistentIndexSstableStreamBuilder::PersistentIndexSstableStreamBuilder(std::unique_ptr<WritableFile> wf,
+                                                                         std::string encryption_meta)
+        : _wf(std::move(wf)), _finished(false), _encryption_meta(std::move(encryption_meta)) {
+    _filter_policy.reset(const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
+    sstable::Options options;
+    options.filter_policy = _filter_policy.get();
+    _table_builder = std::make_unique<sstable::TableBuilder>(options, _wf.get());
+}
+
+Status PersistentIndexSstableStreamBuilder::add(const Slice& key) {
+    if (_finished) {
+        return Status::InvalidArgument("Builder already finished");
+    }
+
+    IndexValuesWithVerPB index_value_pb;
+    auto* val = index_value_pb.add_values();
+    val->set_rowid(_sst_rowid++);
+
+    RETURN_IF_ERROR(_table_builder->Add(key, Slice(index_value_pb.SerializeAsString())));
+    return _table_builder->status();
+}
+
+Status PersistentIndexSstableStreamBuilder::finish(uint64_t* file_size) {
+    if (_finished) {
+        return Status::InvalidArgument("Builder already finished");
+    }
+
+    RETURN_IF_ERROR(_table_builder->Finish());
+    _finished = true;
+    if (file_size != nullptr) {
+        *file_size = _table_builder->FileSize();
+    }
+    return _table_builder->status();
+}
+
+uint64_t PersistentIndexSstableStreamBuilder::num_entries() const {
+    return _table_builder ? _table_builder->NumEntries() : 0;
+}
+
+FileInfo PersistentIndexSstableStreamBuilder::file_info() const {
+    FileInfo file_info;
+    file_info.path = file_name(_wf->filename());
+    file_info.size = _table_builder ? _table_builder->FileSize() : 0;
+    file_info.encryption_meta = _encryption_meta;
+    return file_info;
+}
+
+std::pair<Slice, Slice> PersistentIndexSstableStreamBuilder::key_range() const {
+    DCHECK(_table_builder != nullptr);
+    return _table_builder->KeyRange();
 }
 
 } // namespace starrocks::lake

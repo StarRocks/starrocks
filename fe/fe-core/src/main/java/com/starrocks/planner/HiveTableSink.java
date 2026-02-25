@@ -15,18 +15,16 @@
 package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveStorageFormat;
-import com.starrocks.connector.hive.HiveWriteUtils;
+import com.starrocks.connector.hive.HiveUtils;
 import com.starrocks.connector.hive.TextFileFormatDesc;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TDataSink;
@@ -37,7 +35,6 @@ import com.starrocks.thrift.THiveTableSink;
 import java.util.List;
 import java.util.Optional;
 
-import static com.starrocks.analysis.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
 import static com.starrocks.connector.hive.HiveMetastoreApiConverter.toTextFileFormatDesc;
 
 public class HiveTableSink extends DataSink {
@@ -56,7 +53,7 @@ public class HiveTableSink extends DataSink {
 
     public HiveTableSink(HiveTable hiveTable, TupleDescriptor desc, boolean isStaticPartitionSink, SessionVariable sessionVariable) {
         this.desc = desc;
-        this.stagingDir = HiveWriteUtils.getStagingDir(hiveTable, sessionVariable.getHiveTempStagingDir());
+        this.stagingDir = HiveUtils.getStagingDir(hiveTable, sessionVariable.getHiveTempStagingDir());
         this.partitionColNames = hiveTable.getPartitionColumnNames();
         this.dataColNames = hiveTable.getDataColumnNames();
         this.tableIdentifier = hiveTable.getUUID();
@@ -71,9 +68,12 @@ public class HiveTableSink extends DataSink {
             this.textFileFormatDesc = Optional.of(toTextFileFormatDesc(hiveTable.getSerdeProperties()));
             this.compressionType = String.valueOf(TCompressionType.NO_COMPRESSION);
         } else {
-            this.compressionType = sessionVariable.getConnectorSinkCompressionCodec();
+            this.compressionType = hiveTable.getProperties().getOrDefault("compression_codec",
+                    sessionVariable.getConnectorSinkCompressionCodec());
         }
-        this.targetMaxFileSize = sessionVariable.getConnectorSinkTargetMaxFileSize();
+
+        this.targetMaxFileSize = sessionVariable.getConnectorSinkTargetMaxFileSize() > 0 ?
+            sessionVariable.getConnectorSinkTargetMaxFileSize() : 1024L * 1024 * 1024;
         String catalogName = hiveTable.getCatalogName();
         Connector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
         Preconditions.checkState(connector != null,

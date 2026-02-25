@@ -34,33 +34,38 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.analysis.NullLiteral;
-import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnDef.DefaultValueDef;
 import com.starrocks.sql.ast.IndexDef.IndexType;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.thrift.TColumn;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import com.starrocks.type.DateType;
+import com.starrocks.type.DecimalType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.JsonType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarcharType;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
-import static com.starrocks.sql.ast.ColumnDef.DefaultValueDef.CURRENT_TIMESTAMP_VALUE;
 import static com.starrocks.sql.ast.ColumnDef.DefaultValueDef.NOT_SET;
 import static com.starrocks.sql.ast.ColumnDef.DefaultValueDef.NULL_DEFAULT_VALUE;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class ColumnTest {
 
@@ -68,7 +73,11 @@ public class ColumnTest {
 
     private FakeGlobalStateMgr fakeGlobalStateMgr;
 
-    @Before
+    // default value for date type CURRENT_TIMESTAMP
+    public static DefaultValueDef CURRENT_TIMESTAMP_VALUE = new DefaultValueDef(true,
+            new FunctionCallExpr("now", new ArrayList<>()));
+
+    @BeforeEach
     public void setUp() {
         fakeGlobalStateMgr = new FakeGlobalStateMgr();
         globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
@@ -78,100 +87,40 @@ public class ColumnTest {
     }
 
     @Test
-    public void testSerialization() throws Exception {
-        // 1. Write objects to file
-        File file = new File("./columnTest");
-        file.createNewFile();
-        DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
-
-        Column column1 = new Column("user",
-                ScalarType.createCharType(20), false, AggregateType.SUM, "", "");
-        column1.write(dos);
-        Column column2 = new Column("age",
-                ScalarType.createType(PrimitiveType.INT), false, AggregateType.REPLACE, "20", "");
-        column2.write(dos);
-
-        Column column3 = new Column("name", Type.BIGINT);
-        column3.setIsKey(true);
-        column3.write(dos);
-
-        Column column4 = new Column("age",
-                ScalarType.createType(PrimitiveType.INT), false, AggregateType.REPLACE, "20",
-                "");
-        column4.write(dos);
-
-        dos.flush();
-        dos.close();
-
-        // 2. Read objects from file
-        DataInputStream dis = new DataInputStream(new FileInputStream(file));
-        Column rColumn1 = Column.read(dis);
-        Assert.assertEquals("user", rColumn1.getName());
-        Assert.assertEquals(PrimitiveType.CHAR, rColumn1.getPrimitiveType());
-        Assert.assertEquals(AggregateType.SUM, rColumn1.getAggregationType());
-        Assert.assertEquals("", rColumn1.getDefaultValue());
-        Assert.assertEquals(0, rColumn1.getScale());
-        Assert.assertEquals(0, rColumn1.getPrecision());
-        Assert.assertEquals(20, rColumn1.getStrLen());
-        Assert.assertFalse(rColumn1.isAllowNull());
-
-        // 3. Test read()
-        Column rColumn2 = Column.read(dis);
-        Assert.assertEquals("age", rColumn2.getName());
-        Assert.assertEquals(PrimitiveType.INT, rColumn2.getPrimitiveType());
-        Assert.assertEquals(AggregateType.REPLACE, rColumn2.getAggregationType());
-        Assert.assertEquals("20", rColumn2.getDefaultValue());
-
-        Column rColumn3 = Column.read(dis);
-        Assert.assertTrue(rColumn3.equals(column3));
-
-        Column rColumn4 = Column.read(dis);
-        Assert.assertTrue(rColumn4.equals(column4));
-
-        Assert.assertEquals(rColumn2.toString(), column2.toString());
-        Assert.assertTrue(column1.equals(column1));
-        Assert.assertFalse(column1.equals(this));
-
-        // 4. delete files
-        dis.close();
-        file.delete();
-    }
-
-    @Test
     public void testSchemaChangeNotAllow() throws DdlException {
-        Column oldColumn = new Column("user", ScalarType.createType(PrimitiveType.JSON), false, null, false,
+        Column oldColumn = new Column("user", JsonType.JSON, false, null, false,
                 NULL_DEFAULT_VALUE, "");
-        Column newColumn = new Column("user", ScalarType.createVarcharType(1), true, null, false,
+        Column newColumn = new Column("user", TypeFactory.createVarcharType(1), true, null, false,
                 NULL_DEFAULT_VALUE, "");
         try {
             oldColumn.checkSchemaChangeAllowed(newColumn);
-            Assert.fail();
+            Assertions.fail();
         } catch (DdlException e) {
-            Assert.assertTrue(e.getMessage().contains("JSON needs minimum length of "));
+            Assertions.assertTrue(e.getMessage().contains("JSON needs minimum length of "));
         }
 
-        Column largeColumn = new Column("user", ScalarType.createVarcharType(1025), true, null, false,
+        Column largeColumn = new Column("user", TypeFactory.createVarcharType(1025), true, null, false,
                 NULL_DEFAULT_VALUE, "");
         oldColumn.checkSchemaChangeAllowed(largeColumn);
     }
 
     @Test
     public void testSchemaChangeAllowNormal() throws DdlException {
-        Column oldColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, false,
+        Column oldColumn = new Column("user", IntegerType.INT, true, null, false,
                 NULL_DEFAULT_VALUE, "");
-        Column newColumn = new Column("user", ScalarType.createType(PrimitiveType.VARCHAR), true, null, false,
+        Column newColumn = new Column("user", VarcharType.VARCHAR, true, null, false,
                 NULL_DEFAULT_VALUE, "");
         oldColumn.checkSchemaChangeAllowed(newColumn);
 
-        oldColumn = new Column("user", ScalarType.createType(PrimitiveType.VARCHAR), true, null, false,
+        oldColumn = new Column("user", VarcharType.VARCHAR, true, null, false,
                 new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
-        newColumn = new Column("user", ScalarType.createType(PrimitiveType.VARCHAR), true, null, false,
+        newColumn = new Column("user", VarcharType.VARCHAR, true, null, false,
                 new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
         oldColumn.checkSchemaChangeAllowed(newColumn);
 
-        oldColumn = new Column("user", ScalarType.createType(PrimitiveType.DATETIME), true, null, false,
+        oldColumn = new Column("user", DateType.DATETIME, true, null, false,
                 CURRENT_TIMESTAMP_VALUE, "");
-        newColumn = new Column("user", ScalarType.createType(PrimitiveType.DATETIME), true, null, false,
+        newColumn = new Column("user", DateType.DATETIME, true, null, false,
                 CURRENT_TIMESTAMP_VALUE, "");
         oldColumn.checkSchemaChangeAllowed(newColumn);
     }
@@ -179,154 +128,156 @@ public class ColumnTest {
     @Test
     public void testSchemaChangeAllowedDefaultValue() {
         try {
-            Column oldColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, false,
+            Column oldColumn = new Column("user", IntegerType.INT, true, null, false,
                     new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
-            Column newColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, false,
+            Column newColumn = new Column("user", IntegerType.INT, true, null, false,
                     NOT_SET, "");
             oldColumn.checkSchemaChangeAllowed(newColumn);
-            Assert.fail("No exception throws.");
+            Assertions.fail("No exception throws.");
         } catch (DdlException ex) {
         }
 
         try {
-            Column oldColumn = new Column("dt", ScalarType.createType(PrimitiveType.DATETIME), true, null, false,
+            Column oldColumn = new Column("dt", DateType.DATETIME, true, null, false,
                     CURRENT_TIMESTAMP_VALUE, "");
-            Column newColumn = new Column("dt", ScalarType.createType(PrimitiveType.DATETIME), true, null, false,
+            Column newColumn = new Column("dt", DateType.DATETIME, true, null, false,
                     NOT_SET, "");
             oldColumn.checkSchemaChangeAllowed(newColumn);
-            Assert.fail("No exception throws.");
+            Assertions.fail("No exception throws.");
         } catch (DdlException ex) {
         }
 
         try {
-            Column oldColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, false,
+            Column oldColumn = new Column("user", IntegerType.INT, true, null, false,
                     NOT_SET, "");
-            Column newColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, false,
+            Column newColumn = new Column("user", IntegerType.INT, true, null, false,
                     new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
             oldColumn.checkSchemaChangeAllowed(newColumn);
-            Assert.fail("No exception throws.");
+            Assertions.fail("No exception throws.");
         } catch (DdlException ex) {
         }
 
         try {
-            Column oldColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, false,
+            Column oldColumn = new Column("user", IntegerType.INT, true, null, false,
                     NOT_SET, "");
-            Column newColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, false,
-                    CURRENT_TIMESTAMP_VALUE, "");
-            oldColumn.checkSchemaChangeAllowed(newColumn);
-            Assert.fail("No exception throws.");
-        } catch (DdlException ex) {
-        }
-
-        try {
-            Column oldColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, false,
-                    new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
-            Column newColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, false,
+            Column newColumn = new Column("user", IntegerType.INT, true, null, false,
                     CURRENT_TIMESTAMP_VALUE, "");
             oldColumn.checkSchemaChangeAllowed(newColumn);
-            Assert.fail("No exception throws.");
+            Assertions.fail("No exception throws.");
         } catch (DdlException ex) {
         }
 
         try {
-            Column oldColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, false,
+            Column oldColumn = new Column("user", IntegerType.INT, true, null, false,
                     new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
-            Column newColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, false,
+            Column newColumn = new Column("user", IntegerType.INT, true, null, false,
+                    CURRENT_TIMESTAMP_VALUE, "");
+            oldColumn.checkSchemaChangeAllowed(newColumn);
+            Assertions.fail("No exception throws.");
+        } catch (DdlException ex) {
+        }
+
+        try {
+            Column oldColumn = new Column("user", IntegerType.INT, true, null, false,
+                    new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
+            Column newColumn = new Column("user", IntegerType.INT, true, null, false,
                     new ColumnDef.DefaultValueDef(true, new StringLiteral("1")), "");
             oldColumn.checkSchemaChangeAllowed(newColumn);
-            Assert.fail("No exception throws.");
+            Assertions.fail("No exception throws.");
         } catch (DdlException ex) {
         }
 
         try {
-            Column oldColumn = new Column("dt", ScalarType.createType(PrimitiveType.DATETIME), true, null, false,
+            Column oldColumn = new Column("dt", DateType.DATETIME, true, null, false,
                     CURRENT_TIMESTAMP_VALUE, "");
-            Column newColumn = new Column("dt", ScalarType.createType(PrimitiveType.DATETIME), true, null, false,
+            Column newColumn = new Column("dt", DateType.DATETIME, true, null, false,
                     new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
             oldColumn.checkSchemaChangeAllowed(newColumn);
-            Assert.fail("No exception throws.");
+            Assertions.fail("No exception throws.");
         } catch (DdlException ex) {
         }
 
     }
 
-    @Test(expected = DdlException.class)
-    public void testSchemaChangeAllowedNullToNonNull() throws DdlException {
-        Column oldColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, true,
-                new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
-        Column newColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, false,
-                new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
-        oldColumn.checkSchemaChangeAllowed(newColumn);
-        Assert.fail("No exception throws.");
+    @Test
+    public void testSchemaChangeAllowedNullToNonNull() {
+        assertThrows(DdlException.class, () -> {
+            Column oldColumn = new Column("user", IntegerType.INT, true, null, true,
+                    new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
+            Column newColumn = new Column("user", IntegerType.INT, true, null, false,
+                    new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
+            oldColumn.checkSchemaChangeAllowed(newColumn);
+            Assertions.fail("No exception throws.");
+        });
     }
 
     @Test
     public void testAutoIncrement() {
-        Column col = new Column("col", ScalarType.createType(PrimitiveType.BIGINT), true, null, Boolean.FALSE,
+        Column col = new Column("col", IntegerType.BIGINT, true, null, Boolean.FALSE,
                 ColumnDef.DefaultValueDef.NOT_SET, "");
         col.setIsAutoIncrement(true);
-        Assert.assertTrue(col.isAutoIncrement() == true);
+        Assertions.assertTrue(col.isAutoIncrement() == true);
     }
 
     @Test
     public void testSchemaChangeAllowedInvolvingDecimalv3() throws DdlException {
         Column decimalColumn =
-                new Column("user", ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 15, 3), false, null, true,
+                new Column("user", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 15, 3), false, null, true,
                         new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
 
-        Column varcharColumn1 = new Column("user", ScalarType.createVarchar(50), false, null, true,
+        Column varcharColumn1 = new Column("user", TypeFactory.createVarcharType(50), false, null, true,
                 new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
         varcharColumn1.checkSchemaChangeAllowed(decimalColumn);
         decimalColumn.checkSchemaChangeAllowed(varcharColumn1);
 
-        Column varcharColumn2 = new Column("user", ScalarType.createVarchar(10), false, null, true,
+        Column varcharColumn2 = new Column("user", TypeFactory.createVarcharType(10), false, null, true,
                 new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
         varcharColumn2.checkSchemaChangeAllowed(decimalColumn);
         try {
             decimalColumn.checkSchemaChangeAllowed(varcharColumn2);
-            Assert.fail("No exception throws");
+            Assertions.fail("No exception throws");
         } catch (DdlException ex) {
         }
 
         Column decimalColumn2 =
-                new Column("user", ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 20, 4), false, null, true,
+                new Column("user", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 20, 4), false, null, true,
                         new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
         decimalColumn.checkSchemaChangeAllowed(decimalColumn2);
 
         try {
             decimalColumn2.checkSchemaChangeAllowed(decimalColumn);
-            Assert.fail("No exception throws");
+            Assertions.fail("No exception throws");
         } catch (DdlException ex) {
 
         }
 
-        Column decimalv2Column = new Column("user", ScalarType.createDecimalV2Type(), false, null, true,
+        Column decimalv2Column = new Column("user", DecimalType.DEFAULT_DECIMALV2, false, null, true,
                 new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
         Column decimalColumn3 =
-                new Column("user", ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 27, 9), false, null, true,
+                new Column("user", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 27, 9), false, null, true,
                         new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
         decimalv2Column.checkSchemaChangeAllowed(decimalColumn3);
 
         try {
             decimalColumn3.checkSchemaChangeAllowed(decimalv2Column);
-            Assert.fail("No exception throws");
+            Assertions.fail("No exception throws");
         } catch (DdlException ex) {
 
         }
 
         Column decimalColumn4 =
-                new Column("user", ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 13), false, null, true,
+                new Column("user", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 13), false, null, true,
                         new ColumnDef.DefaultValueDef(true, new StringLiteral("0")), "");
         try {
             decimalv2Column.checkSchemaChangeAllowed(decimalColumn4);
-            Assert.fail("No exception throws");
+            Assertions.fail("No exception throws");
         } catch (DdlException ex) {
 
         }
 
         try {
             decimalColumn4.checkSchemaChangeAllowed(decimalColumn2);
-            Assert.fail("No exception throws");
+            Assertions.fail("No exception throws");
         } catch (DdlException ex) {
 
         }
@@ -334,8 +285,8 @@ public class ColumnTest {
 
     @Test
     public void testLscColumn() {
-        Column f0 = new Column("f0", Type.INT, true, AggregateType.NONE, false,
-                new DefaultValueDef(true, NullLiteral.create(Type.INT)), "", 0);
+        Column f0 = new Column("f0", IntegerType.INT, true, AggregateType.NONE, null, false,
+                new DefaultValueDef(true, NullLiteral.create(IntegerType.INT)), "", 0);
 
         Index i0 = new Index("i0",
                 Collections.singletonList(ColumnId.create("f0")), IndexType.BITMAP, "");
@@ -345,13 +296,13 @@ public class ColumnTest {
         TColumn t0 = f0.toThrift();
         f0.setIndexFlag(t0, Collections.singletonList(i0), bfColumns);
 
-        Assert.assertEquals(t0.has_bitmap_index, true);
-        Assert.assertEquals(t0.is_bloom_filter_column, true);
+        Assertions.assertEquals(t0.has_bitmap_index, true);
+        Assertions.assertEquals(t0.is_bloom_filter_column, true);
 
-        Assert.assertEquals(f0.getUniqueId(), 0);
+        Assertions.assertEquals(f0.getUniqueId(), 0);
         f0.setUniqueId(1);
 
-        Assert.assertEquals(f0.getUniqueId(), 1);
+        Assertions.assertEquals(f0.getUniqueId(), 1);
 
     }
 
@@ -359,6 +310,15 @@ public class ColumnTest {
     public void testColumnDeserialization() {
         String str = "{\"name\": \"test\"}";
         Column column = GsonUtils.GSON.fromJson(str, Column.class);
-        Assert.assertEquals("test", column.getColumnId().getId());
+        Assertions.assertEquals("test", column.getColumnId().getId());
+    }
+
+    @Test
+    public void testToSqlWithoutAggregateTypeName() {
+        String comment = "{\"id\":\"0\",\"value\":\"1\"}";
+        Column column = new Column("col", JsonType.JSON, false, null, true, null, comment);
+        String toSql = column.toSqlWithoutAggregateTypeName(null);
+
+        Assertions.assertEquals("`col` json NULL COMMENT \"{\\\"id\\\":\\\"0\\\",\\\"value\\\":\\\"1\\\"}\"", toSql);
     }
 }

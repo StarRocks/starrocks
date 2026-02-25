@@ -14,9 +14,10 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.JoinOperator;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -48,27 +49,32 @@ public class PruneEmptyJoinRule extends TransformationRule {
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
-        if (!OperatorType.LOGICAL_VALUES.equals(input.inputAt(emptyIndex).getOp().getOpType())) {
+        OptExpression child = input.inputAt(emptyIndex);
+        while (child.getOp().getOpType() == OperatorType.LOGICAL_PROJECT) {
+            child = child.inputAt(0);
+        }
+        if (!OperatorType.LOGICAL_VALUES.equals(child.getOp().getOpType())) {
             return false;
         }
-        LogicalValuesOperator v = input.inputAt(emptyIndex).getOp().cast();
+        LogicalValuesOperator v = child.getOp().cast();
         return v.getRows().isEmpty();
     }
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
+        Preconditions.checkState(input.getOp().getProjection() == null);
         LogicalJoinOperator join = input.getOp().cast();
         JoinOperator type = join.getJoinType();
 
         int joinIndex; // 0 left, 1 right
-        if (type.isInnerJoin() || type.isCrossJoin() || type.isSemiJoin()) {
+        if (type.isAnyInnerJoin() || type.isCrossJoin() || type.isSemiJoin()) {
             /* inner join, cross join, semi join
              *      join
              *     /    \     ->  Empty
              *   Empty   B
              */
             return transToEmpty(input, context);
-        } else if (type.isRightOuterJoin() || type.isLeftOuterJoin()) {
+        } else if (type.isRightOuterJoin() || type.isAnyLeftOuterJoin()) {
             /* left outer join        Project (remain B columns(null))
              *     /     \        ->     |
              *    A      Empty           A

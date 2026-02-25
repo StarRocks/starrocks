@@ -252,7 +252,7 @@ OutPut Exchange Id: 08
 6:OlapScanNode
 table: part, rollup: part
 preAggregation: on
-Predicates: 21: P_NAME LIKE 'sienna%'
+Predicates: [21: P_NAME, VARCHAR, false] LIKE 'sienna%'
 partitionsRatio=1/1, tabletsRatio=10/10
 actualRows=0, avgRowSize=63.0
 cardinality: 5000000
@@ -358,9 +358,15 @@ column statistics:
   },
   "be_number": 3,
   "be_core_stat": {
-    "numOfHardwareCoresPerBe": "{}",
-    "cachedAvgNumOfHardwareCores": -1
+    "cachedAvgNumOfHardwareCores": -1,
+    "numOfHardwareCoresPerBe": "{}"
+  },
+  "be_core_stat_v2": {
+    "cachedAvgNumOfHardwareCores": -1,
+    "warehouses": [],
+    "currentWarehouseId": 0
   },
   "exception": []
 }
 [end]
+

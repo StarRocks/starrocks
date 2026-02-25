@@ -17,13 +17,18 @@ package com.starrocks.service;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
+import com.starrocks.authentication.UserIdentityUtils;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.authorization.PrivilegeException;
+import com.starrocks.authorization.RolePrivilegeCollectionV2;
 import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -32,8 +37,10 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.CaseSensibility;
+import com.starrocks.common.Config;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.proc.PartitionsProcDir;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -42,15 +49,19 @@ import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.PartitionStatistics;
 import com.starrocks.lake.compaction.Quantiles;
-import com.starrocks.monitor.unit.ByteSizeValue;
-import com.starrocks.privilege.AccessDeniedException;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.thrift.TApplicableRolesInfo;
 import com.starrocks.thrift.TAuthInfo;
+import com.starrocks.thrift.TGetApplicableRolesRequest;
+import com.starrocks.thrift.TGetApplicableRolesResponse;
+import com.starrocks.thrift.TGetKeywordsRequest;
+import com.starrocks.thrift.TGetKeywordsResponse;
 import com.starrocks.thrift.TGetPartitionsMetaRequest;
 import com.starrocks.thrift.TGetPartitionsMetaResponse;
 import com.starrocks.thrift.TGetTablesConfigRequest;
@@ -59,6 +70,7 @@ import com.starrocks.thrift.TGetTablesInfoRequest;
 import com.starrocks.thrift.TGetTablesInfoResponse;
 import com.starrocks.thrift.TGetTemporaryTablesInfoRequest;
 import com.starrocks.thrift.TGetTemporaryTablesInfoResponse;
+import com.starrocks.thrift.TKeywordInfo;
 import com.starrocks.thrift.TPartitionMetaInfo;
 import com.starrocks.thrift.TTableConfigInfo;
 import com.starrocks.thrift.TTableInfo;
@@ -69,10 +81,12 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
 
 public class InformationSchemaDataSource {
@@ -103,20 +117,24 @@ public class InformationSchemaDataSource {
             catalogName = authInfo.getCatalog_name();
         }
 
-        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
-        List<String> dbNames = metadataMgr.listDbNames(catalogName);
-        LOG.debug("get db names: {}", dbNames);
-
         UserIdentity currentUser;
         if (authInfo.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(authInfo.current_user_ident);
+            currentUser = UserIdentityUtils.fromThrift(authInfo.current_user_ident);
         } else {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(authInfo.user, authInfo.user_ip);
         }
+        ConnectContext context = new ConnectContext();
+        context.setCurrentUserIdentity(currentUser);
+        context.setCurrentRoleIds(currentUser);
+
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        List<String> dbNames = metadataMgr.listDbNames(context, catalogName);
+        LOG.debug("get db names: {}", dbNames);
+
         for (String fullName : dbNames) {
 
             try {
-                Authorizer.checkAnyActionOnOrInDb(currentUser, null, catalogName, fullName);
+                Authorizer.checkAnyActionOnOrInDb(context, catalogName, fullName);
             } catch (AccessDeniedException e) {
                 continue;
             }
@@ -129,6 +147,72 @@ public class InformationSchemaDataSource {
             authorizedDbs.add(fullName);
         }
         return new AuthDbRequestResult(authorizedDbs, currentUser);
+    }
+
+    // keywords
+    public static TGetKeywordsResponse generateKeywordsResponse(TGetKeywordsRequest request) throws TException {
+        TGetKeywordsResponse resp = new TGetKeywordsResponse();
+        List<TKeywordInfo> keywordList = new ArrayList<>();
+
+        AuthDbRequestResult result = getAuthDbRequestResult(request.getAuth_info());
+
+        if (result.authorizedDbs.isEmpty()) {
+            resp.setKeywords(keywordList);
+            return resp;
+        }
+        class KeywordElement {
+            public KeywordElement(String keyword, boolean reserved) {
+                this.keyword = keyword;
+                this.reserved = reserved;
+            }
+            public String getKeyword() {
+                return keyword;
+            }
+            public String keyword;
+            public boolean reserved;
+        }
+
+        TreeSet<KeywordElement> sortedKeywords = new TreeSet<>(Comparator.comparing(KeywordElement::getKeyword));
+
+        List<KeywordElement> keywords = new ArrayList<>();
+        keywords.add(new KeywordElement("SELECT", true));
+        keywords.add(new KeywordElement("INSERT", true));
+        keywords.add(new KeywordElement("UPDATE", true));
+        keywords.add(new KeywordElement("DELETE", true));
+        keywords.add(new KeywordElement("TABLE", true));
+        keywords.add(new KeywordElement("INDEX", true));
+        keywords.add(new KeywordElement("VIEW", true));
+        keywords.add(new KeywordElement("USER", false));
+        keywords.add(new KeywordElement("PASSWORD", false));
+        sortedKeywords.addAll(keywords);
+
+        long startTableIdOffset = request.isSetStart_table_id_offset() ? request.getStart_table_id_offset() : 0;
+        boolean startOffsetReached = startTableIdOffset == 0;
+        long currentOffset = 0;
+
+        for (KeywordElement ele : sortedKeywords) {
+            if (!startOffsetReached) {
+                if (currentOffset == startTableIdOffset) {
+                    startOffsetReached = true;
+                }
+                currentOffset++;
+                continue;
+            }
+
+            TKeywordInfo keywordInfo = new TKeywordInfo();
+            keywordInfo.setKeyword(ele.keyword);
+            keywordInfo.setReserved(ele.reserved);
+            keywordList.add(keywordInfo);
+
+            if (keywordList.size() >= 10000) {
+                resp.setNext_table_id_offset(currentOffset + 1);
+                break;
+            }
+            currentOffset++;
+        }
+
+        resp.setKeywords(keywordList);
+        return resp;
     }
 
     private static class AuthDbRequestResult {
@@ -150,16 +234,18 @@ public class InformationSchemaDataSource {
         AuthDbRequestResult result = getAuthDbRequestResult(request.getAuth_info());
 
         for (String dbName : result.authorizedDbs) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
             if (db != null) {
                 Locker locker = new Locker();
-                locker.lockDatabase(db, LockType.READ);
+                locker.lockDatabase(db.getId(), LockType.READ);
                 try {
-                    List<Table> allTables = db.getTables();
+                    List<Table> allTables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
                     for (Table table : allTables) {
                         try {
-                            Authorizer.checkAnyActionOnTableLikeObject(result.currentUser,
-                                    null, dbName, table);
+                            ConnectContext context = new ConnectContext();
+                            context.setCurrentUserIdentity(result.currentUser);
+                            context.setCurrentRoleIds(result.currentUser);
+                            Authorizer.checkAnyActionOnTableLikeObject(context, dbName, table);
                         } catch (AccessDeniedException e) {
                             LOG.warn("failed to check db: {} table: {} authorization", dbName, table, e);
                             continue;
@@ -169,19 +255,22 @@ public class InformationSchemaDataSource {
                         tableConfigInfo.setTable_schema(dbName);
                         tableConfigInfo.setTable_name(table.getName());
 
-                        if (table.isNativeTableOrMaterializedView() || table.getType() == TableType.OLAP_EXTERNAL) {
+                        if (table.isNativeTableOrMaterializedView() || table.isOlapExternalTable()) {
                             // OLAP (done)
                             // OLAP_EXTERNAL (done)
                             // MATERIALIZED_VIEW (done)
                             // LAKE (done)
                             // LAKE_MATERIALIZED_VIEW (done)
                             genNormalTableConfigInfo(table, tableConfigInfo);
+                        } else if (table.isView()) {
+                            // VIEW (done)
+                            tableConfigInfo.setTable_engine(table.getType().toString());
                         }
                         // TODO(cjs): other table type (HIVE, MYSQL, ICEBERG, HUDI, JDBC, ELASTICSEARCH)
                         tList.add(tableConfigInfo);
                     }
                 } finally {
-                    locker.unLockDatabase(db, LockType.READ);
+                    locker.unLockDatabase(db.getId(), LockType.READ);
                 }
             }
         }
@@ -233,7 +322,7 @@ public class InformationSchemaDataSource {
         tableConfigInfo.setDistribute_key(distributionInfo.getDistributionKey(olapTable.getIdToColumn()));
 
         // SORT KEYS
-        MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
+        MaterializedIndexMeta index = olapTable.getIndexMetaByMetaId(olapTable.getBaseIndexMetaId());
         if (index.getSortKeyIdxes() == null) {
             tableConfigInfo.setSort_key(pkSb);
         } else {
@@ -256,63 +345,92 @@ public class InformationSchemaDataSource {
 
         AuthDbRequestResult result = getAuthDbRequestResult(request.getAuth_info());
 
+        class Element {
+            public Element(String dbName, long dbId, Table table) {
+                this.dbName = dbName;
+                this.dbId = dbId;
+                this.table = table;
+            }
+            public long getTableId() {
+                return table.getId();
+            }
+            public String dbName;
+            public long dbId;
+            public Table table;
+        }
+        long startTableIdOffset = request.isSetStart_table_id_offset() ? request.getStart_table_id_offset() : 0;
+        TreeSet<Element> sortedElements = new TreeSet<>(Comparator.comparing(Element::getTableId));
         for (String dbName : result.authorizedDbs) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
             if (db == null) {
                 continue;
             }
-            List<Table> allTables = db.getTables();
-            for (Table table : allTables) {
-                try {
-                    Authorizer.checkAnyActionOnTableLikeObject(result.currentUser,
-                            null, dbName, table);
-                } catch (AccessDeniedException e) {
-                    LOG.warn("failed to check db: {} table: {} authorization", dbName, table, e);
+            List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
+            for (Table table : tables) {
+                if (table.getId() < startTableIdOffset) {
                     continue;
                 }
-                if (!table.isNativeTableOrMaterializedView()) {
-                    continue;
-                }
-                // only olap table/mv or cloud table/mv will reach here;
-                // use the same lock level with `SHOW PARTITIONS FROM XXX` to ensure other modification to
-                // partition does not trigger crash
-                Locker locker = new Locker();
-                locker.lockDatabase(db, LockType.READ);
-                try {
-                    OlapTable olapTable = (OlapTable) table;
-                    PartitionInfo tblPartitionInfo = olapTable.getPartitionInfo();
-                    // normal partition
-                    for (Partition partition : olapTable.getPartitions()) {
-                        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                            TPartitionMetaInfo partitionMetaInfo = new TPartitionMetaInfo();
-                            partitionMetaInfo.setDb_name(dbName);
-                            partitionMetaInfo.setTable_name(olapTable.getName());
-                            genPartitionMetaInfo(db, olapTable, tblPartitionInfo, partition, physicalPartition,
-                                    partitionMetaInfo, false /* isTemp */);
-                            pList.add(partitionMetaInfo);
-                        }
+                sortedElements.add(new Element(dbName, db.getId(), table));
+            }
+        }
+
+        for (Element ele : sortedElements) {
+            Table table = ele.table;
+            if (!table.isNativeTableOrMaterializedView()) {
+                continue;
+            }
+            try {
+                ConnectContext context = new ConnectContext();
+                context.setCurrentUserIdentity(result.currentUser);
+                context.setCurrentRoleIds(result.currentUser);
+                Authorizer.checkAnyActionOnTableLikeObject(context, ele.dbName, table);
+            } catch (AccessDeniedException e) {
+                LOG.warn("failed to check db: {} table: {} authorization", ele.dbName, table, e);
+                continue;
+            }
+            // only olap table/mv or cloud table/mv will reach here;
+            // use the same lock level with `SHOW PARTITIONS FROM XXX` to ensure other modification to
+            // partition does not trigger crash
+            Locker locker = new Locker();
+            locker.lockDatabase(ele.dbId, LockType.READ);
+            try {
+                OlapTable olapTable = (OlapTable) table;
+                PartitionInfo tblPartitionInfo = olapTable.getPartitionInfo();
+                // normal partition
+                for (Partition partition : olapTable.getPartitions()) {
+                    for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                        TPartitionMetaInfo partitionMetaInfo = new TPartitionMetaInfo();
+                        partitionMetaInfo.setDb_name(ele.dbName);
+                        partitionMetaInfo.setTable_name(olapTable.getName());
+                        genPartitionMetaInfo(ele.dbId, olapTable, tblPartitionInfo, partition, physicalPartition,
+                                partitionMetaInfo, false /* isTemp */);
+                        pList.add(partitionMetaInfo);
                     }
-                    // temp partition
-                    for (Partition partition : olapTable.getTempPartitions()) {
-                        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                            TPartitionMetaInfo partitionMetaInfo = new TPartitionMetaInfo();
-                            partitionMetaInfo.setDb_name(dbName);
-                            partitionMetaInfo.setTable_name(olapTable.getName());
-                            genPartitionMetaInfo(db, olapTable, tblPartitionInfo, partition, physicalPartition,
-                                    partitionMetaInfo, true /* isTemp */);
-                            pList.add(partitionMetaInfo);
-                        }
-                    }
-                } finally {
-                    locker.unLockDatabase(db, LockType.READ);
                 }
+                // temp partition
+                for (Partition partition : olapTable.getTempPartitions()) {
+                    for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                        TPartitionMetaInfo partitionMetaInfo = new TPartitionMetaInfo();
+                        partitionMetaInfo.setDb_name(ele.dbName);
+                        partitionMetaInfo.setTable_name(olapTable.getName());
+                        genPartitionMetaInfo(ele.dbId, olapTable, tblPartitionInfo, partition, physicalPartition,
+                                partitionMetaInfo, true /* isTemp */);
+                        pList.add(partitionMetaInfo);
+                    }
+                }
+                if (pList.size() >= Config.max_get_partitions_meta_result_count) {
+                    resp.setNext_table_id_offset(table.getId() + 1);
+                    break;
+                }
+            } finally {
+                locker.unLockDatabase(ele.dbId, LockType.READ);
             }
         }
         resp.partitions_meta_infos = pList;
         return resp;
     }
 
-    private static void genPartitionMetaInfo(Database db, OlapTable table,
+    private static void genPartitionMetaInfo(long dbId, OlapTable table,
                                              PartitionInfo partitionInfo, Partition partition,
                                              PhysicalPartition physicalPartition,
                                              TPartitionMetaInfo partitionMetaInfo, boolean isTemp) {
@@ -338,8 +456,10 @@ public class InformationSchemaDataSource {
         // REPLICATION_NUM
         partitionMetaInfo.setReplication_num(partitionInfo.getReplicationNum(partition.getId()));
         // DATA_SIZE
-        ByteSizeValue byteSizeValue = new ByteSizeValue(physicalPartition.storageDataSize());
-        partitionMetaInfo.setData_size(byteSizeValue.toString());
+        // DATA_SIZE in PARTITIONS_META is string before, and bigint is more programmer-friendly and change it to bigint
+        // We do not change the field type in `TPartitionMetaInfo` for compatibility and BE will finished the type 
+        // convertion.
+        partitionMetaInfo.setData_size(String.valueOf(physicalPartition.storageDataSize()));
         DataProperty dataProperty = partitionInfo.getDataProperty(partition.getId());
         // STORAGE_MEDIUM
         partitionMetaInfo.setStorage_medium(dataProperty.getStorageMedium().name());
@@ -347,8 +467,6 @@ public class InformationSchemaDataSource {
         partitionMetaInfo.setCooldown_time(dataProperty.getCooldownTimeMs() / 1000);
         // LAST_CONSISTENCY_CHECK_TIME
         partitionMetaInfo.setLast_consistency_check_time(partition.getLastCheckTime() / 1000);
-        // IS_IN_MEMORY
-        partitionMetaInfo.setIs_in_memory(partitionInfo.getIsInMemory(partition.getId()));
         // ROW_COUNT
         partitionMetaInfo.setRow_count(physicalPartition.storageRowCount());
         // IS_TEMP
@@ -356,14 +474,15 @@ public class InformationSchemaDataSource {
         // NEXT_VERSION
         partitionMetaInfo.setNext_version(physicalPartition.getNextVersion());
         if (table.isCloudNativeTableOrMaterializedView()) {
-            PartitionIdentifier identifier = new PartitionIdentifier(db.getId(), table.getId(), physicalPartition.getId());
+            PartitionIdentifier identifier = new PartitionIdentifier(dbId, table.getId(), physicalPartition.getId());
             PartitionStatistics statistics = GlobalStateMgr.getCurrentState().getCompactionMgr().getStatistics(identifier);
             Quantiles compactionScore = statistics != null ? statistics.getCompactionScore() : null;
             // COMPACT_VERSION
-            partitionMetaInfo.setCompact_version(statistics != null ? statistics.getCompactionVersion().getVersion() : 0);
+            partitionMetaInfo.setCompact_version(statistics != null && statistics.getCompactionVersion() != null ?
+                    statistics.getCompactionVersion().getVersion() : 0);
             DataCacheInfo cacheInfo = partitionInfo.getDataCacheInfo(partition.getId());
             // ENABLE_DATACACHE
-            partitionMetaInfo.setEnable_datacache(cacheInfo.isEnabled());
+            partitionMetaInfo.setEnable_datacache(cacheInfo != null && cacheInfo.isEnabled());
             // AVG_CS
             partitionMetaInfo.setAvg_cs(compactionScore != null ? compactionScore.getAvg() : 0.0);
             // P50_CS
@@ -373,11 +492,17 @@ public class InformationSchemaDataSource {
             // STORAGE_PATH
             partitionMetaInfo.setStorage_path(
                     table.getPartitionFilePathInfo(physicalPartition.getId()).getFullPath());
+            // METADATA_SWITCH_VERSION
+            partitionMetaInfo.setMetadata_switch_version(physicalPartition.getMetadataSwitchVersion());
         }
 
         partitionMetaInfo.setData_version(physicalPartition.getDataVersion());
         partitionMetaInfo.setVersion_epoch(physicalPartition.getVersionEpoch());
         partitionMetaInfo.setVersion_txn_type(physicalPartition.getVersionTxnType().toThrift());
+        // STORAGE_SIZE
+        partitionMetaInfo.setStorage_size(physicalPartition.storageDataSize() + physicalPartition.getExtraFileSize());
+        // TABLET_BALANCED
+        partitionMetaInfo.setTablet_balanced(physicalPartition.isTabletBalanced());
     }
 
     // tables
@@ -387,6 +512,19 @@ public class InformationSchemaDataSource {
 
         TAuthInfo authInfo = request.getAuth_info();
         AuthDbRequestResult result = getAuthDbRequestResult(authInfo);
+        ConnectContext context = new ConnectContext();
+        context.setCurrentUserIdentity(result.currentUser);
+        context.setCurrentRoleIds(result.currentUser);
+
+        PatternMatcher matcher = null;
+        boolean caseSensitive = CaseSensibility.DATABASE.getCaseSensibility();
+        if (request.isSetTable_name()) {
+            try {
+                matcher = PatternMatcher.createMysqlPattern(request.getTable_name(), caseSensitive);
+            } catch (SemanticException e) {
+                throw new TException("Pattern is in bad format: " + request.getTable_name());
+            }
+        }
 
         String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         if (authInfo.isSetCatalog_name()) {
@@ -396,50 +534,42 @@ public class InformationSchemaDataSource {
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
 
         for (String dbName : result.authorizedDbs) {
-            Database db = metadataMgr.getDb(catalogName, dbName);
+            Database db = metadataMgr.getDb(context, catalogName, dbName);
             if (db == null) {
                 continue;
             }
 
             List<BasicTable> tables = new ArrayList<>();
-            Locker locker = new Locker();
-            try {
-                locker.lockDatabase(db, LockType.READ);
-                List<String> tableNames = metadataMgr.listTableNames(catalogName, dbName);
-                for (String tableName : tableNames) {
-                    if (request.isSetTable_name()) {
-                        if (!tableName.equals(request.getTable_name())) {
-                            continue;
-                        }
-                    }
-
-                    BasicTable table = null;
-                    try {
-                        table = metadataMgr.getBasicTable(catalogName, dbName, tableName);
-                    } catch (Exception e) {
-                        LOG.warn(e.getMessage(), e);
-                    }
-                    if (table == null) {
-                        continue;
-                    }
-
-                    try {
-                        Authorizer.checkAnyActionOnTableLikeObject(result.currentUser, null, dbName, table);
-                    } catch (AccessDeniedException e) {
-                        continue;
-                    }
-
-                    tables.add(table);
+            List<String> tableNames = metadataMgr.listTableNames(context, catalogName, dbName);
+            for (String tableName : tableNames) {
+                if (request.isSetTable_name() &&
+                        !PatternMatcher.matchPattern(request.getTable_name(), tableName, matcher, caseSensitive)) {
+                    continue;
                 }
-            } finally {
-                locker.unLockDatabase(db, LockType.READ);
+
+                BasicTable table = null;
+                try {
+                    table = metadataMgr.getBasicTable(context, catalogName, dbName, tableName);
+                } catch (Exception e) {
+                    LOG.warn(e.getMessage(), e);
+                }
+                if (table == null) {
+                    continue;
+                }
+
+                try {
+                    Authorizer.checkAnyActionOnTableLikeObject(context, dbName, table);
+                } catch (AccessDeniedException e) {
+                    continue;
+                }
+                tables.add(table);
             }
 
             for (BasicTable table : tables) {
                 Locker tableLocker = new Locker();
                 try {
                     if (table.isNativeTableOrMaterializedView()) {
-                        tableLocker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(((OlapTable) table).getId()),
+                        tableLocker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(((OlapTable) table).getId()),
                                 LockType.READ);
                     }
 
@@ -485,8 +615,8 @@ public class InformationSchemaDataSource {
                     infos.add(info);
                 } finally {
                     if (table.isNativeTableOrMaterializedView()) {
-                        tableLocker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(((OlapTable) table).getId()),
-                                LockType.READ);
+                        tableLocker.unLockTablesWithIntensiveDbLock(db.getId(),
+                                Lists.newArrayList(((OlapTable) table).getId()), LockType.READ);
                     }
                 }
             }
@@ -495,11 +625,64 @@ public class InformationSchemaDataSource {
         return response;
     }
 
+    // applicable_roles
+    public static TGetApplicableRolesResponse generateApplicableRolesResp(TGetApplicableRolesRequest request) throws TException {
+        TGetApplicableRolesResponse response = new TGetApplicableRolesResponse();
+        List<TApplicableRolesInfo> roleList = new ArrayList<>();
+
+        AuthDbRequestResult result = getAuthDbRequestResult(request.getAuth_info());
+
+        if (result.authorizedDbs.isEmpty()) {
+            response.setRoles(roleList);
+            return response;
+        }
+
+        UserIdentity currentUser = result.currentUser;
+        if (currentUser == null) {
+            response.setRoles(roleList);
+            return response;
+        }
+
+        AuthorizationMgr authMgr = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+        try {
+            for (RolePrivilegeCollectionV2 role : authMgr.getApplicableRoles(currentUser)) {
+                String roleName = role.getName();
+                String roleHost = "%";
+
+                // TODO The related functions of 'isGrantable' may be expanded in the future
+                String isGrantable = "NO";
+                String isDefault = "NO";
+                String isMandatory = "NO";
+
+                TApplicableRolesInfo roleInfo = new TApplicableRolesInfo();
+                roleInfo.setUser(currentUser.getUser());
+                roleInfo.setHost(currentUser.getHost());
+                roleInfo.setGrantee(currentUser.getUser());
+                roleInfo.setGrantee_host(currentUser.getHost());
+                roleInfo.setRole_name(roleName);
+                roleInfo.setRole_host(roleHost);
+                roleInfo.setIs_grantable(isGrantable);
+                roleInfo.setIs_default(isDefault);
+                roleInfo.setIs_mandatory(isMandatory);
+
+                roleList.add(roleInfo);
+            }
+        } catch (PrivilegeException e) {
+            throw new RuntimeException(e);
+        }
+
+        response.setRoles(roleList);
+        return response;
+    }
+
     public static TGetTemporaryTablesInfoResponse generateTemporaryTablesInfoResponse(TGetTemporaryTablesInfoRequest request)
             throws TException {
         TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
         TAuthInfo authInfo = request.getAuth_info();
         AuthDbRequestResult result = getAuthDbRequestResult(authInfo);
+        ConnectContext context = new ConnectContext();
+        context.setCurrentUserIdentity(result.currentUser);
+        context.setCurrentRoleIds(result.currentUser);
 
         String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         if (authInfo.isSetCatalog_name()) {
@@ -510,7 +693,7 @@ public class InformationSchemaDataSource {
 
         Set<Long> requiredDbIds = new HashSet<>();
         for (String dbName : result.authorizedDbs) {
-            Database db = metadataMgr.getDb(catalogName, dbName);
+            Database db = metadataMgr.getDb(context, catalogName, dbName);
             if (db != null) {
                 requiredDbIds.add(db.getId());
             }
@@ -524,12 +707,12 @@ public class InformationSchemaDataSource {
             if (db != null) {
                 Map<Long, UUID> tableMap = allTables.row(databaseId);
                 Locker locker = new Locker();
-                locker.lockDatabase(db, LockType.READ);
+                locker.lockDatabase(db.getId(), LockType.READ);
                 try {
                     for (Map.Entry<Long, UUID> entry : tableMap.entrySet()) {
                         UUID sessionId = entry.getValue();
                         Long tableId = entry.getKey();
-                        Table table = db.getTable(tableId);
+                        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
                         if (table != null) {
                             TTableInfo info = new TTableInfo();
 
@@ -566,7 +749,7 @@ public class InformationSchemaDataSource {
                         break;
                     }
                 } finally {
-                    locker.unLockDatabase(db, LockType.READ);
+                    locker.unLockDatabase(db.getId(), LockType.READ);
                 }
             }
         }
@@ -575,7 +758,6 @@ public class InformationSchemaDataSource {
         response.setTables_infos(tableInfos);
         return response;
     }
-
 
     public static TTableInfo genNormalTableInfo(BasicTable table, TTableInfo info) {
 
@@ -588,8 +770,9 @@ public class InformationSchemaDataSource {
             if (partition.getVisibleVersionTime() > lastUpdateTime) {
                 lastUpdateTime = partition.getVisibleVersionTime();
             }
-            totalRowsOfTable = partition.getBaseIndex().getRowCount() + totalRowsOfTable;
-            totalBytesOfTable = partition.getBaseIndex().getDataSize() + totalBytesOfTable;
+            MaterializedIndex baseIndex = partition.getLatestBaseIndex();
+            totalRowsOfTable = baseIndex.getRowCount() + totalRowsOfTable;
+            totalBytesOfTable = baseIndex.getDataSize() + totalBytesOfTable;
         }
         // TABLE_ROWS
         info.setTable_rows(totalRowsOfTable);

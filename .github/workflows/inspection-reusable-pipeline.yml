@@ -4,39 +4,49 @@ on:
   workflow_call:
     inputs:
       BRANCH:
-        description: 'BRANCH'
+        description: "BRANCH"
         required: true
         type: string
       COMMIT_ID:
-        description: 'COMMIT ID'
+        description: "COMMIT ID"
         required: true
         type: string
-      TAR_PATH:
-        description: 'TAR PATH'
+      BE_OUTPUT_TAR:
+        description: "BE TAR PATH"
+        required: true
+        type: string
+      FE_OUTPUT_TAR:
+        description: "FE TAR PATH"
         required: true
         type: string
       BUILD_TYPE:
-        description: 'BUILD TYPE'
+        description: "BUILD TYPE"
         required: true
         type: string
       LINUX_DISTRO:
-        description: 'LINUX DISTRO'
+        description: "LINUX DISTRO"
         required: true
         type: string
-        default: 'centos7'
+        default: "centos7"
       CLUSTER_NAME:
-        description: 'CLUSTER NAME'
+        description: "CLUSTER NAME"
         required: false
         type: string
         default: ci-admit
       IS_SELF_BUILD:
-        description: 'IS SELF BUILD'
+        description: "IS SELF BUILD"
         type: string
-        default: 'false'
+        default: "false"
       INCLUDE_ADMIT:
-        description: 'RUN ADMIT?'
+        description: "RUN ADMIT?"
         type: string
-        default: 'true'
+        default: "true"
+      WITH_FEATURE_COV:
+        type: string
+        default: "false"
+      IS_ARM:
+        type: string
+        default: "false"
 
     outputs:
       CONF_FILE:
@@ -64,12 +74,15 @@ env:
   IS_INSPECTION: true
   BRANCH: ${{ inputs.BRANCH }}
   PR_NUMBER: ${{ inputs.COMMIT_ID }}
-  TAR_PATH: ${{ inputs.TAR_PATH }}
+  BE_OUTPUT_TAR: ${{ inputs.BE_OUTPUT_TAR }}
+  FE_OUTPUT_TAR: ${{ inputs.FE_OUTPUT_TAR }}
   BUILD_TYPE: ${{ inputs.BUILD_TYPE }}
   LINUX_DISTRO: ${{ inputs.LINUX_DISTRO }}
   CLUSTER_NAME: ${{ inputs.CLUSTER_NAME }}
   IS_SELF_BUILD: ${{ inputs.IS_SELF_BUILD }}
   INCLUDE_ADMIT: ${{ inputs.INCLUDE_ADMIT }}
+  WITH_FEATURE_COV: ${{ inputs.WITH_FEATURE_COV }}
+  IS_ARM: ${{ inputs.IS_ARM }}
 
 jobs:
   deploy:
@@ -88,7 +101,8 @@ jobs:
         id: apply_resource
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          ./bin/elastic-cluster.sh --template ${CLUSTER_NAME} --linuxdistro ${LINUX_DISTRO}
+          [[ "${IS_ARM}" == "true" ]] && arm_arg="--arm"
+          ./bin/elastic-cluster.sh --template ${CLUSTER_NAME} --linuxdistro ${LINUX_DISTRO} ${arm_arg}
           conf_name=/var/local/env/${PR_NUMBER}-${BUILD_TYPE}-${LINUX_DISTRO}-starrocks_deploy.conf
           cp conf/starrocks_deploy.conf ${conf_name}
           echo "deploy_conf_file=${conf_name}" >> $GITHUB_OUTPUT
@@ -98,16 +112,18 @@ jobs:
         if: always() && steps.apply_resource.outcome == 'success'
         run: |
           cd ci-tool && source lib/init.sh
-          echo ${TAR_PATH}
-          ./bin/deploy-cluster.sh -c ${CLUSTER_NAME} --output ${TAR_PATH}
+          echo "##### Package(BE): ${BE_OUTPUT_TAR}" >> $GITHUB_STEP_SUMMARY
+          echo "##### Package(FE): ${FE_OUTPUT_TAR}" >> $GITHUB_STEP_SUMMARY
+          [[ "${IS_ARM}" == "true" ]] && arm_arg="--arm"
+          ./bin/deploy-cluster.sh -c ${CLUSTER_NAME} --with-coverage ${arm_arg}
 
       - name: Clean ENV
         if: always()
         run: |
-          rm -rf ${{ github.workspace }}/* 
+          rm -rf ${{ github.workspace }}/*
 
   SQL-Tester:
-    runs-on: [ self-hosted, normal ]
+    runs-on: [self-hosted, normal]
     name: SQL-Tester
     needs:
       - deploy
@@ -122,14 +138,14 @@ jobs:
           rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
 
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Checkout Code
         run: |
           git checkout $BRANCH;
-          git reset ${PR_NUMBER} --hard 
+          git reset ${PR_NUMBER} --hard
 
       - name: Run Case (${{ needs.deploy.outputs.fe }})
         id: run_case
@@ -153,10 +169,10 @@ jobs:
           fail_on_failure: true
           detailed_summary: true
           token: ${{ secrets.GITHUB_TOKEN }}
-          report_paths: 'test/*.xml'
+          report_paths: "test/*.xml"
 
       - name: Upload log
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         if: always()
         with:
           name: SQL-Tester Log (${{ env.BUILD_TYPE }} ${{ env.LINUX_DISTRO }})
@@ -173,7 +189,7 @@ jobs:
           rm -rf ${{ github.workspace }}/*
 
   restart-fe:
-    runs-on: [ self-hosted, normal ]
+    runs-on: [self-hosted, normal]
     name: Restart FE
     needs:
       - deploy
@@ -189,7 +205,7 @@ jobs:
       - name: Restart FE (${{needs.deploy.outputs.fe}})
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          ./bin/restart-fe.sh --repository ${{ github.repository }}
+          ./bin/restart-fe.sh --repository ${{ github.repository }} --pr ${PR_NUMBER} --branch ${BRANCH} --build Release
 
       - name: Clean ENV
         if: always()
@@ -197,7 +213,7 @@ jobs:
           rm -rf ${{ github.workspace }}/*
 
   restart-be:
-    runs-on: [ self-hosted, normal ]
+    runs-on: [self-hosted, normal]
     name: Restart BE
     needs:
       - deploy
@@ -219,7 +235,8 @@ jobs:
       - name: Restart BE (${{needs.deploy.outputs.be_list}})
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          ./bin/system-cov-be.sh --pr ${PR_NUMBER} --branch ${BRANCH} --repository ${{ github.repository }} --skip-gcov
+          [[ "${WITH_FEATURE_COV}" != "true" ]] && skip_gcov="--skip-gcov"
+          ./bin/system-cov-be.sh --pr ${PR_NUMBER} --branch ${BRANCH} --repository ${{ github.repository }} ${skip_gcov}
 
       - name: Clean ENV
         if: always()
@@ -227,7 +244,7 @@ jobs:
           rm -rf ${{ github.workspace }}/*
 
   admit:
-    runs-on: [ self-hosted, normal ]
+    runs-on: [self-hosted, normal]
     name: ADMIT TEST
     needs:
       - restart-fe
@@ -277,9 +294,44 @@ jobs:
           fail_on_failure: true
           detailed_summary: true
           token: ${{ secrets.GITHUB_TOKEN }}
-          report_paths: './StarRocksTest/result/*.xml'
+          report_paths: "./StarRocksTest/result/*.xml"
 
       - name: Clean ENV
         if: always()
+        run: rm -rf ${{ github.workspace }}/*
+
+  clean:
+    runs-on: [self-hosted, normal]
+    name: CLEAN ENV
+    needs:
+      - deploy
+      - admit
+      - SQL-Tester
+    if: always()
+    env:
+      conf_file: ${{ needs.deploy.outputs.deploy_conf_file }}
+      mysql_eci_id: ${{ needs.SQL-Tester.outputs.MYSQL_ECI_ID }}
+    steps:
+      - name: init
+        run: rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull
+
+      - name: Backup Cluster Info
+        if: always() && env.conf_file != ''
         run: |
-          rm -rf ${{ github.workspace }}/*
+          cd ci-tool && source lib/init.sh
+          ./bin/backup_log_cores.sh \
+            --branch "${BRANCH}" \
+            --pr "${PR_NUMBER}" \
+            --build "${BUILD_TYPE}" \
+            --linuxdistro "${{ env.LINUX_DISTRO }}" \
+            --conf "${conf_file}" \
+            --repository "${GITHUB_REPOSITORY}" || true
+          ./bin/elastic-cluster.sh --delete
+
+      - name: Delete MySQL Env
+        if: always() && env.mysql_eci_id != ''
+        run: eci rm ${mysql_eci_id}
+
+      - name: Delete Conf
+        if: always() && env.conf_file != ''
+        run: rm -rf ${conf_file}

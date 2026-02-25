@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -23,12 +24,14 @@ import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
+import com.starrocks.sql.optimizer.operator.OpRuleBit;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.SortPhase;
 import com.starrocks.sql.optimizer.operator.TopNType;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.property.DomainProperty;
@@ -47,6 +50,18 @@ public class LogicalTopNOperator extends LogicalOperator {
     private SortPhase sortPhase;
     private TopNType topNType;
     private boolean isSplit;
+
+    // Only set when partial topN is pushed above local aggregation. To avoid introducing a local shuffle
+    // before the local aggregation the topN is evaluated for each pipeline without merging.
+    private boolean perPipeline;
+
+    // only set when rank <=1 with preAgg optimization is triggered
+    // please refer to PushDownPredicateRankingWindowRule and PushDownLimitRankingWindowRule  for more details
+    private ImmutableMap<ColumnRefOperator, CallOperator> partitionPreAggCall;
+
+    public record TopNSortInfo(List<Ordering> orderByElements, SortPhase sortPhase,
+                               TopNType topNType, long limit, long offset) {
+    }
 
     public LogicalTopNOperator(List<Ordering> orderByElements) {
         this(DEFAULT_LIMIT, null, null, null, DEFAULT_LIMIT, orderByElements, DEFAULT_OFFSET, SortPhase.FINAL,
@@ -68,7 +83,7 @@ public class LogicalTopNOperator extends LogicalOperator {
         super(OperatorType.LOGICAL_TOPN);
     }
 
-    private LogicalTopNOperator(long limit,
+    public LogicalTopNOperator(long limit,
                                 ScalarOperator predicate, Projection projection,
                                 List<ColumnRefOperator> partitionByColumns,
                                 long partitionLimit,
@@ -82,6 +97,7 @@ public class LogicalTopNOperator extends LogicalOperator {
         this.sortPhase = sortPhase;
         this.topNType = topNType;
         this.isSplit = isSplit;
+        this.partitionPreAggCall = ImmutableMap.of();
         Preconditions.checkState(limit != 0);
     }
 
@@ -101,6 +117,11 @@ public class LogicalTopNOperator extends LogicalOperator {
         ColumnRefSet columns = new ColumnRefSet();
         for (Ordering ordering : orderByElements) {
             columns.union(ordering.getColumnRef());
+        }
+        if (partitionPreAggCall != null && !partitionPreAggCall.isEmpty()) {
+            for (Map.Entry<ColumnRefOperator, CallOperator> entry : partitionPreAggCall.entrySet()) {
+                columns.union(entry.getValue().getUsedColumns());
+            }
         }
         return columns;
     }
@@ -125,6 +146,22 @@ public class LogicalTopNOperator extends LogicalOperator {
         return orderByElements;
     }
 
+    public ImmutableMap<ColumnRefOperator, CallOperator> getPartitionPreAggCall() {
+        return partitionPreAggCall;
+    }
+
+    public boolean isPerPipeline() {
+        return perPipeline;
+    }
+
+    public boolean isTopNPushDownAgg() {
+        return isOpRuleBitSet(OpRuleBit.OP_PUSH_DOWN_TOPN_AGG);
+    }
+
+    public void setTopNPushDownAgg() {
+        setOpRuleBit(OpRuleBit.OP_PUSH_DOWN_TOPN_AGG);
+    }
+
     @Override
     public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
         if (projection != null) {
@@ -136,6 +173,13 @@ public class LogicalTopNOperator extends LogicalOperator {
             for (Ordering ordering : orderByElements) {
                 columns.union(ordering.getColumnRef());
             }
+
+            if (partitionPreAggCall != null) {
+                for (Map.Entry<ColumnRefOperator, CallOperator> entry : partitionPreAggCall.entrySet()) {
+                    columns.union(entry.getKey());
+                }
+            }
+
             return columns;
         }
     }
@@ -149,6 +193,13 @@ public class LogicalTopNOperator extends LogicalOperator {
         for (Ordering ordering : orderByElements) {
             entryList.add(new ColumnOutputInfo(ordering.getColumnRef(), ordering.getColumnRef()));
         }
+
+        if (partitionPreAggCall != null) {
+            for (Map.Entry<ColumnRefOperator, CallOperator> entry : partitionPreAggCall.entrySet()) {
+                entryList.add(new ColumnOutputInfo(entry.getKey(), entry.getValue()));
+            }
+        }
+
         return new RowOutputInfo(entryList);
     }
 
@@ -184,12 +235,14 @@ public class LogicalTopNOperator extends LogicalOperator {
         return partitionLimit == that.partitionLimit && offset == that.offset && isSplit == that.isSplit &&
                 Objects.equals(partitionByColumns, that.partitionByColumns) &&
                 Objects.equals(orderByElements, that.orderByElements) &&
-                sortPhase == that.sortPhase && topNType == that.topNType;
+                sortPhase == that.sortPhase && topNType == that.topNType && perPipeline == that.perPipeline &&
+                Objects.equals(partitionPreAggCall, that.partitionPreAggCall);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), orderByElements, offset, sortPhase, topNType, isSplit);
+        return Objects.hash(super.hashCode(), orderByElements, offset, sortPhase, topNType, isSplit, perPipeline,
+                partitionPreAggCall);
     }
 
     public static Builder builder() {
@@ -214,6 +267,8 @@ public class LogicalTopNOperator extends LogicalOperator {
             builder.isSplit = topNOperator.isSplit;
             builder.partitionLimit = topNOperator.partitionLimit;
             builder.partitionByColumns = topNOperator.partitionByColumns;
+            builder.perPipeline = topNOperator.perPipeline;
+            builder.partitionPreAggCall = topNOperator.partitionPreAggCall;
             return this;
         }
 
@@ -249,6 +304,17 @@ public class LogicalTopNOperator extends LogicalOperator {
 
         public LogicalTopNOperator.Builder setIsSplit(boolean isSplit) {
             builder.isSplit = isSplit;
+            return this;
+        }
+
+        public LogicalTopNOperator.Builder setPartitionPreAggCall(
+                Map<ColumnRefOperator, CallOperator> partitionPreAggCall) {
+            builder.partitionPreAggCall = ImmutableMap.copyOf(partitionPreAggCall);
+            return this;
+        }
+
+        public LogicalTopNOperator.Builder setPerPipeline(boolean perPipeline) {
+            builder.perPipeline = perPipeline;
             return this;
         }
     }

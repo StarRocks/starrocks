@@ -16,11 +16,11 @@
 
 #include <iostream>
 
+#include "base/utility/guard.h"
 #include "common/logging.h"
 #include "gen_cpp/Opcodes_types.h"
 #include "gen_cpp/Types_types.h"
 #include "types/logical_type.h"
-#include "util/guard.h"
 
 namespace starrocks {
 
@@ -53,7 +53,8 @@ enum LogicalType {
     TYPE_OBJECT = 25,
 
     // Added by StarRocks
-
+    TYPE_DECIMAL256 = 26,
+    TYPE_INT256 = 27,
     // Reserved some field for commutiy version
 
     TYPE_NULL = 42,
@@ -71,10 +72,11 @@ enum LogicalType {
     TYPE_PERCENTILE = 53,
 
     TYPE_JSON = 54,
+    TYPE_VARIANT = 55,
 
     // max value of LogicalType, newly-added type should not exceed this value.
     // used to create a fixed-size hash map.
-    TYPE_MAX_VALUE = 55
+    TYPE_MAX_VALUE = 56
 };
 
 // TODO(lism): support varbinary for zone map.
@@ -99,6 +101,8 @@ template <>
 inline constexpr LogicalType DelegateType<TYPE_DECIMAL64> = TYPE_BIGINT;
 template <>
 inline constexpr LogicalType DelegateType<TYPE_DECIMAL128> = TYPE_LARGEINT;
+template <>
+inline constexpr LogicalType DelegateType<TYPE_DECIMAL256> = TYPE_INT256;
 
 inline LogicalType delegate_type(LogicalType type) {
     switch (type) {
@@ -108,6 +112,8 @@ inline LogicalType delegate_type(LogicalType type) {
         return TYPE_BIGINT;
     case TYPE_DECIMAL128:
         return TYPE_LARGEINT;
+    case TYPE_DECIMAL256:
+        return TYPE_INT256;
     default:
         return type;
     }
@@ -132,20 +138,14 @@ constexpr bool is_object_type(LogicalType type) {
 }
 
 inline bool is_decimalv3_field_type(LogicalType type) {
-    return type == TYPE_DECIMAL32 || type == TYPE_DECIMAL64 || type == TYPE_DECIMAL128;
+    return type == TYPE_DECIMAL32 || type == TYPE_DECIMAL64 || type == TYPE_DECIMAL128 || type == TYPE_DECIMAL256;
 }
 
 LogicalType string_to_logical_type(const std::string& type_str);
 const char* logical_type_to_string(LogicalType type);
 
-inline bool is_binary_type(LogicalType type) {
-    switch (type) {
-    case TYPE_BINARY:
-    case TYPE_VARBINARY:
-        return true;
-    default:
-        return false;
-    }
+constexpr bool is_binary_type(LogicalType type) {
+    return type == TYPE_BINARY || type == TYPE_VARBINARY;
 }
 
 inline bool is_scalar_field_type(LogicalType type) {
@@ -156,9 +156,23 @@ inline bool is_scalar_field_type(LogicalType type) {
     case TYPE_DECIMAL32:
     case TYPE_DECIMAL64:
     case TYPE_DECIMAL128:
+    case TYPE_DECIMAL256:
         return false;
     default:
         return true;
+    }
+}
+
+inline bool is_semi_type(LogicalType type) {
+    switch (type) {
+    case TYPE_STRUCT:
+    case TYPE_ARRAY:
+    case TYPE_MAP:
+    case TYPE_JSON:
+    case TYPE_VARIANT:
+        return true;
+    default:
+        return false;
     }
 }
 
@@ -230,7 +244,9 @@ constexpr bool is_scalar_logical_type(LogicalType ltype) {
     case TYPE_DECIMAL32:  /* 24 */
     case TYPE_DECIMAL64:  /* 25 */
     case TYPE_DECIMAL128: /* 26 */
+    case TYPE_DECIMAL256: /* 27 */
     case TYPE_JSON:
+    case TYPE_VARIANT:
         return true;
     default:
         return false;
@@ -258,8 +274,7 @@ constexpr bool support_column_expr_predicate(LogicalType ltype) {
     case TYPE_DECIMAL32:  /* 24 */
     case TYPE_DECIMAL64:  /* 25 */
     case TYPE_DECIMAL128: /* 26 */
-    case TYPE_JSON:
-    case TYPE_MAP:
+    case TYPE_DECIMAL256: /* 27 */
     case TYPE_STRUCT:
         return true;
     default:
@@ -301,15 +316,19 @@ VALUE_GUARD(LogicalType, FloatLTGuard, lt_is_float, TYPE_FLOAT, TYPE_DOUBLE)
 VALUE_GUARD(LogicalType, Decimal32LTGuard, lt_is_decimal32, TYPE_DECIMAL32)
 VALUE_GUARD(LogicalType, Decimal64LTGuard, lt_is_decimal64, TYPE_DECIMAL64)
 VALUE_GUARD(LogicalType, Decimal128LTGuard, lt_is_decimal128, TYPE_DECIMAL128)
-VALUE_GUARD(LogicalType, DecimalLTGuard, lt_is_decimal, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128)
+VALUE_GUARD(LogicalType, Decimal256LTGuard, lt_is_decimal256, TYPE_DECIMAL256)
+VALUE_GUARD(LogicalType, DecimalLTGuard, lt_is_decimal, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128,
+            TYPE_DECIMAL256)
 VALUE_GUARD(LogicalType, SumDecimal64LTGuard, lt_is_sum_decimal64, TYPE_DECIMAL32, TYPE_DECIMAL64)
 VALUE_GUARD(LogicalType, HllLTGuard, lt_is_hll, TYPE_HLL)
 VALUE_GUARD(LogicalType, ObjectLTGuard, lt_is_object, TYPE_OBJECT)
 VALUE_GUARD(LogicalType, StringLTGuard, lt_is_string, TYPE_CHAR, TYPE_VARCHAR)
 VALUE_GUARD(LogicalType, BinaryLTGuard, lt_is_binary, TYPE_BINARY, TYPE_VARBINARY)
 VALUE_GUARD(LogicalType, JsonGuard, lt_is_json, TYPE_JSON)
+VALUE_GUARD(LogicalType, VariantGuard, lt_is_variant, TYPE_VARIANT)
 VALUE_GUARD(LogicalType, FunctionGuard, lt_is_function, TYPE_FUNCTION)
-VALUE_GUARD(LogicalType, ObjectFamilyLTGuard, lt_is_object_family, TYPE_JSON, TYPE_HLL, TYPE_OBJECT, TYPE_PERCENTILE)
+VALUE_GUARD(LogicalType, ObjectFamilyLTGuard, lt_is_object_family, TYPE_JSON, TYPE_HLL, TYPE_OBJECT, TYPE_PERCENTILE,
+            TYPE_VARIANT)
 VALUE_GUARD(LogicalType, ArrayGuard, lt_is_array, TYPE_ARRAY)
 VALUE_GUARD(LogicalType, MapGuard, lt_is_map, TYPE_MAP)
 VALUE_GUARD(LogicalType, StructGurad, lt_is_struct, TYPE_STRUCT)
@@ -347,7 +366,7 @@ UNION_VALUE_GUARD(LogicalType, AggregateComplexLTGuard, lt_is_complex_aggregate,
                   lt_is_decimalv2_struct, lt_is_decimal_struct, lt_is_datetime_struct, lt_is_date_struct,
                   lt_is_json_struct)
 
-UNION_VALUE_GUARD(LogicalType, StringOrBinaryGaurd, lt_is_string_or_binary, lt_is_string_struct, lt_is_binary_struct)
+UNION_VALUE_GUARD(LogicalType, StringOrBinaryGuard, lt_is_string_or_binary, lt_is_string_struct, lt_is_binary_struct)
 
 TExprOpcode::type to_in_opcode(LogicalType t);
 LogicalType thrift_to_type(TPrimitiveType::type ttype);

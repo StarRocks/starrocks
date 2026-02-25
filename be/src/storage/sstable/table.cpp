@@ -6,6 +6,9 @@
 
 #include <butil/time.h> // NOLINT
 
+#include "base/coding.h"
+#include "base/container/lru_cache.h"
+#include "base/debug/trace.h"
 #include "common/status.h"
 #include "fs/fs.h"
 #include "runtime/exec_env.h"
@@ -17,9 +20,6 @@
 #include "storage/sstable/format.h"
 #include "storage/sstable/options.h"
 #include "storage/sstable/two_level_iterator.h"
-#include "util/coding.h"
-#include "util/lru_cache.h"
-#include "util/trace.h"
 
 namespace starrocks::sstable {
 
@@ -27,18 +27,20 @@ struct Table::Rep {
     ~Rep() {
         delete filter;
         delete[] filter_data;
+        filter_data_size = 0;
         delete index_block;
     }
 
     Options options;
     Status status;
-    RandomAccessFile* file;
-    uint64_t cache_id;
-    FilterBlockReader* filter;
-    const char* filter_data;
+    RandomAccessFile* file = nullptr;
+    uint64_t cache_id = 0;
+    FilterBlockReader* filter = nullptr;
+    const char* filter_data = nullptr;
+    size_t filter_data_size = 0;
 
     BlockHandle metaindex_handle; // Handle to metaindex_block: saved from footer
-    Block* index_block;
+    Block* index_block = nullptr;
 };
 
 Status Table::Open(const Options& options, RandomAccessFile* file, uint64_t size, Table** table) {
@@ -84,6 +86,40 @@ Status Table::Open(const Options& options, RandomAccessFile* file, uint64_t size
     }
 
     return s;
+}
+
+Status Table::sample_keys(std::vector<std::string>* keys, size_t sample_interval_bytes) const {
+    // create index block iterator
+    std::unique_ptr<Iterator> iiter =
+            std::unique_ptr<Iterator>(rep_->index_block->NewIterator(rep_->options.comparator));
+    iiter->SeekToFirst();
+    // skip interval_step keys per sample
+    DCHECK(rep_->options.block_size > 0);
+    size_t interval_step = sample_interval_bytes / rep_->options.block_size + 1;
+    size_t index = 1; // First key is already included, so start with 1 to skip it.
+    // If the key is last key in index block, it's a short successor key.
+    // E.g.
+    //      index block may contains ["key_0001", "key_0005", "l"]
+    //      "l" is short successor key of "key_0009"
+    bool contain_short_successor_key = false;
+    while (iiter->Valid()) {
+        if (index % interval_step == 0) {
+            keys->emplace_back(iiter->key().to_string());
+            contain_short_successor_key = true;
+        } else {
+            contain_short_successor_key = false;
+        }
+        index++;
+        iiter->Next();
+    }
+    if (contain_short_successor_key) {
+        // remove last key to make sure it's less than or equal to end_key.
+        // That is because when build index block, last key of index block
+        // had been set to short successor key via `FindShortSuccessor`
+        keys->pop_back();
+    }
+    auto st = iiter->status();
+    return st;
 }
 
 void Table::ReadMeta(const Footer& footer) {
@@ -135,7 +171,8 @@ void Table::ReadFilter(const Slice& filter_handle_value) {
         return;
     }
     if (block.heap_allocated) {
-        rep_->filter_data = block.data.get_data(); // Will need to delete later
+        rep_->filter_data = block.data.get_data();      // Will need to delete later
+        rep_->filter_data_size = block.data.get_size(); // mem tracker will track this piece of memory.
     }
     rep_->filter = new FilterBlockReader(rep_->options.filter_policy, block.data);
 }
@@ -191,7 +228,8 @@ Iterator* Table::BlockReader(void* arg, const ReadOptions& options, const Slice&
                 if (s.ok()) {
                     block = new Block(contents);
                     if (contents.cachable && options.fill_cache) {
-                        cache_handle = block_cache->insert(key, block, block->size(), &DeleteCachedBlock);
+                        size_t block_size = block->size();
+                        cache_handle = block_cache->insert(key, block, block_size, &DeleteCachedBlock);
                     }
                 }
                 if (options.stat != nullptr) {
@@ -300,6 +338,12 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt 
     TRACE_COUNTER_INCREMENT("multiget_t2_us", multiget_t2_us);
     TRACE_COUNTER_INCREMENT("multiget_t3_us", multiget_t3_us);
     return s;
+}
+
+size_t Table::memory_usage() const {
+    const size_t index_block_sz = (rep_->index_block != nullptr) ? rep_->index_block->size() : 0;
+    const size_t filter_data_sz = rep_->filter_data_size;
+    return index_block_sz + filter_data_sz;
 }
 
 // If new container wants to be supported in MultiGet, the initialization can be added here.

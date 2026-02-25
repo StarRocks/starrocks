@@ -20,12 +20,12 @@ import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.wildfly.common.Assert;
 
 public class AutoCloseableLockerTest {
-    @Before
+    @BeforeEach
     public void setUp() {
         GlobalStateMgr.getCurrentState().setLockManager(new LockManager());
     }
@@ -38,7 +38,12 @@ public class AutoCloseableLockerTest {
         Database db = new Database(0, "db");
         LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
 
-        try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(1L), LockType.WRITE)) {
+        try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(1L), LockType.WRITE)) {
+            Assert.assertTrue(lockManager.isOwner(1, new Locker(), LockType.WRITE));
+        }
+        Assert.assertFalse(lockManager.isOwner(1, new Locker(), LockType.WRITE));
+
+        try (AutoCloseableLock ignore = new AutoCloseableLock(db.getId(), Lists.newArrayList(1L), LockType.WRITE)) {
             Assert.assertTrue(lockManager.isOwner(1, new Locker(), LockType.WRITE));
         }
         Assert.assertFalse(lockManager.isOwner(1, new Locker(), LockType.WRITE));
@@ -49,7 +54,7 @@ public class AutoCloseableLockerTest {
         Database db = new Database(0, "db");
         LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
 
-        try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db, null, LockType.WRITE)) {
+        try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), null, LockType.WRITE)) {
             //test
         } catch (NullPointerException e) {
             Assert.assertFalse(lockManager.isOwner(1, new Locker(), LockType.WRITE));

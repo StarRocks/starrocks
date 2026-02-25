@@ -1,17 +1,21 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 toc_max_heading_level: 4
 ---
 
 # GRANT
 
-import UserPrivilegeCase from '../../../_assets/commonMarkdown/userPrivilegeCase.md'
+import UserPrivilegeCase from '../../../_assets/commonMarkdown/userPrivilegeCase.mdx'
+import GrantCreateWarehouse from '../../../_assets/commonMarkdown/grant_create_warehouse.mdx'
+import GrantWarehouse from '../../../_assets/commonMarkdown/grant_warehouse.mdx'
 
 ## 功能
 
-该语句用于将一个或多个权限授予给角色或用户，以及将角色授予给用户或其他角色。
+向用户、角色或外部组授予特定对象的权限或角色。
 
-有关权限项的详细信息，参见[权限项](../../../administration/user_privs/privilege_item.md)。
+有关权限项的详细信息，参见[权限项](../../../administration/user_privs/authorization/privilege_item.md)。
+
+有关创建外部组的更多信息，请参阅 [Group Provider](../../../administration/user_privs/group_provider.md)。
 
 授权后，您可以通过 [SHOW GRANTS](SHOW_GRANTS.md) 来查看权限授予的信息；通过 [REVOKE](REVOKE.md) 来撤销权限或角色。
 
@@ -31,12 +35,7 @@ import UserPrivilegeCase from '../../../_assets/commonMarkdown/userPrivilegeCase
 
 #### System 相关
 
-```SQL
-GRANT
-    { CREATE RESOURCE GROUP | CREATE RESOURCE | CREATE EXTERNAL CATALOG | REPOSITORY | BLACKLIST | FILE | OPERATE | CREATE STORAGE VOLUME } 
-    ON SYSTEM
-    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
-```
+<GrantCreateWarehouse />
 
 #### Resource group 相关
 
@@ -44,7 +43,7 @@ GRANT
 GRANT
     { ALTER | DROP | ALL [PRIVILEGES] } 
     ON { RESOURCE GROUP <resource_group_name> [, <resource_group_name >,...] ｜ ALL RESOURCE GROUPS} 
-    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
+    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
 ```
 
 #### Resource 相关
@@ -53,7 +52,7 @@ GRANT
 GRANT
     { USAGE | ALTER | DROP | ALL [PRIVILEGES] } 
     ON { RESOURCE <resource_name> [, < resource_name >,...] ｜ ALL RESOURCES} 
-    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
+    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
 ```
 
 #### Global UDF 相关
@@ -61,9 +60,9 @@ GRANT
 ```SQL
 GRANT
     { USAGE | DROP | ALL [PRIVILEGES]} 
-    ON { GLOBAL FUNCTION <function_name>(input_data_type) [, < function_name>(input_data_type),...]    
+    ON { GLOBAL FUNCTION <function_name>(input_data_type) [, <function_name>(input_data_type),...]    
        | ALL GLOBAL FUNCTIONS }
-    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
+    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
 ```
 
 示例：`GRANT usage ON GLOBAL FUNCTION a(string) to kevin;`
@@ -74,7 +73,7 @@ GRANT
 GRANT
     { USAGE | CREATE DATABASE | ALL [PRIVILEGES]} 
     ON CATALOG default_catalog
-    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
+    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
 ```
 
 #### External catalog 相关
@@ -83,7 +82,7 @@ GRANT
 GRANT
    { USAGE | DROP | ALL [PRIVILEGES] } 
    ON { CATALOG <catalog_name> [, <catalog_name>,...] | ALL CATALOGS}
-   TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
+   TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
 ```
 
 #### Database 相关
@@ -92,7 +91,7 @@ GRANT
 GRANT
     { ALTER | DROP | CREATE TABLE | CREATE VIEW | CREATE FUNCTION | CREATE MATERIALIZED VIEW | ALL [PRIVILEGES] } 
     ON { DATABASE <database_name> [, <database_name>,...] | ALL DATABASES }
-    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
+    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
 ```
 
 **注意**
@@ -103,12 +102,17 @@ GRANT
 #### Table 相关
 
 ```SQL
-GRANT  
-    { ALTER | DROP | SELECT | INSERT | EXPORT | UPDATE | DELETE | ALL [PRIVILEGES]} 
-    ON { TABLE <table_name> [, < table_name >,...]
-       | ALL TABLES IN 
-           { { DATABASE <database_name> } | ALL DATABASES }}
-    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
+-- 赋予**特定表**的权限。
+  GRANT
+    { ALTER | DROP | SELECT | INSERT | EXPORT | UPDATE | DELETE | ALL [PRIVILEGES]}
+    ON TABLE <table_name> [, < table_name >,...]
+    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
+
+-- 赋予特定或所有 Database 中的**所有表**的权限。
+  GRANT
+    { ALTER | DROP | SELECT | INSERT | EXPORT | UPDATE | DELETE | ALL [PRIVILEGES]}
+    ON ALL TABLES IN { { DATABASE <database_name> } | ALL DATABASES }
+    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
 ```
 
 > **注意**
@@ -117,7 +121,7 @@ GRANT
 > 2. 所有 Internal Catalog 和 External Catalog 下的表，都支持赋予 SELECT 权限。Hive 和 Iceberg catalog 下的表，还支持赋予 INSERT 权限 (从 3.1 版本起，支持赋予 Iceberg 表的 INSERT 权限；从 3.2 版本起，支持赋予 Hive 表的 INSERT 权限)。
 
 ```SQL
-GRANT <priv> ON TABLE <db_name>.<table_name> TO {ROLE <role_name> | USER <user_name>}
+GRANT <priv> ON TABLE <db_name>.<table_name> TO { ROLE <role_name> | USER <user_name> }
 ```
 
 #### View 相关
@@ -128,7 +132,7 @@ GRANT
     ON { VIEW <view_name> [, < view_name >,...]
        ｜ ALL VIEWS IN 
            { { DATABASE <database_name> }| ALL DATABASES }}
-    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
+    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
 ```
 
 > **注意**
@@ -137,7 +141,7 @@ GRANT
 > 2. 对于 External Catalog，仅 Hive 表视图支持 SELECT 权限。（3.1 及以后）
 
 ```SQL
-GRANT <priv> ON VIEW <db_name>.<view_name> TO {ROLE <role_name> | USER <user_name>}
+GRANT <priv> ON VIEW <db_name>.<view_name> TO { ROLE <role_name> | USER <user_name> }
 ```
 
 #### Materialized view 相关
@@ -148,13 +152,13 @@ GRANT
     ON { MATERIALIZED VIEW <mv_name> [, < mv_name >,...]
        ｜ ALL MATERIALIZED VIEWS IN 
            { { DATABASE <database_name> }| ALL DATABASES }}
-    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
+    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
 ```
 
 *注意：需要执行 SET CATALOG 之后才能使用。物化视图还可以用 `<db_name>.<mv_name>` 的方式来进行表示。
 
 ```SQL
-GRANT <priv> ON MATERIALIZED VIEW <db_name>.<mv_name> TO {ROLE <role_name> | USER <user_name>};
+GRANT <priv> ON MATERIALIZED VIEW <db_name>.<mv_name> TO { ROLE <role_name> | USER <user_name> };
 ```
 
 #### Function 相关
@@ -162,16 +166,16 @@ GRANT <priv> ON MATERIALIZED VIEW <db_name>.<mv_name> TO {ROLE <role_name> | USE
 ```SQL
 GRANT
     { USAGE | DROP | ALL [PRIVILEGES]} 
-    ON { FUNCTION <function_name>(input_data_type) [, < function_name >(input_data_type),...]
+    ON { FUNCTION <function_name>(input_data_type) [, <function_name>(input_data_type),...]
        ｜ ALL FUNCTIONS IN 
            { { DATABASE <database_name> }| ALL DATABASES }}
-    TO { ROLE | USER } {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
+    TO { ROLE | USER } { <role_name> | <user_identity> | <external_group_name> } [ WITH GRANT OPTION ]
 ```
 
 *注意：需要执行 SET CATALOG 之后才能使用。function 还可以用 `<db_name>.<function_name>` 的方式来进行表示。
 
 ```SQL
-GRANT <priv> ON FUNCTION <db_name>.<function_name> TO {ROLE <role_name> | USER <user_name>}
+GRANT <priv> ON FUNCTION <db_name>.<function_name>(input_data_type) TO { ROLE <role_name> | USER <user_name> }
 ```
 
 #### User 相关
@@ -186,14 +190,17 @@ GRANT IMPERSONATE ON USER <user_identity> TO USER <user_identity_1> [ WITH GRANT
 GRANT
     { USAGE | ALTER | DROP | ALL [PRIVILEGES] } 
     ON { STORAGE VOLUME < name > [, < name >,...] ｜ ALL STORAGE VOLUMES} 
-    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
+    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
 ```
+
+<GrantWarehouse />
 
 ### 授予角色给用户或者其他角色
 
 ```SQL
 GRANT <role_name> [,<role_name>, ...] TO ROLE <role_name>
 GRANT <role_name> [,<role_name>, ...] TO USER <user_identity>
+GRANT <role_name> [,<role_name>, ...] TO EXTERNAL GROUP <external_group_name>
 ```
 
 **注意：**
@@ -258,8 +265,15 @@ GRANT db_admin, user_admin, cluster_admin TO USER user_platform;
 GRANT IMPERSONATE ON USER 'rose'@'%' TO USER 'jack'@'%';
 ```
 
+示例十：将系统预置角色 `db_admin`、`user_admin` 以及 `cluster_admin` 赋予给外部组 `admin_group`。
+
+```SQL
+GRANT db_admin, user_admin, cluster_admin TO EXTERNAL GROUP admin_group;
+```
+
+
 ## 最佳实践 - 基于使用场景创建自定义角色
 
 <UserPrivilegeCase />
 
-有关多业务线权限管理的相关实践，参见 [多业务线权限管理](../../../administration/user_privs/User_privilege.md#多业务线权限管理)。
+有关多业务线权限管理的相关实践，参见 [多业务线权限管理](../../../administration/user_privs/authorization/User_privilege.md#多业务线权限管理)。

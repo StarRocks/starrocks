@@ -18,8 +18,10 @@
 #include <vector>
 
 #include "common/statusor.h"
+#include "storage/rowset/base_rowset.h"
 
 namespace starrocks {
+struct TabletBasicInfo;
 class TabletSchema;
 class TabletMetadataPB;
 class Schema;
@@ -78,11 +80,15 @@ public:
 
     StatusOr<std::unique_ptr<TabletReader>> new_reader(Schema schema);
 
-    StatusOr<std::unique_ptr<TabletReader>> new_reader(Schema schema, bool could_split, bool could_split_physically);
+    StatusOr<std::unique_ptr<TabletReader>> new_reader(Schema schema, bool could_split, bool could_split_physically,
+                                                       const std::vector<BaseRowsetSharedPtr>& base_rowsets,
+                                                       std::shared_ptr<const TabletSchema> tablet_schema = nullptr);
 
     TabletManager* tablet_manager() const { return _tablet_mgr; }
 
     bool has_delete_predicates() const;
+
+    TabletBasicInfo get_basic_info() const;
 
 private:
     TabletManager* _tablet_mgr;

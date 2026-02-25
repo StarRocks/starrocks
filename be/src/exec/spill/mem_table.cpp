@@ -20,13 +20,13 @@
 
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
+#include "common/runtime_profile.h"
 #include "exec/chunks_sorter.h"
 #include "exec/spill/executor.h"
 #include "exec/spill/input_stream.h"
 #include "exec/spill/serde.h"
 #include "exec/workgroup/scan_task_queue.h"
 #include "runtime/current_thread.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks::spill {
 
@@ -45,10 +45,21 @@ bool UnorderedMemTable::is_empty() {
 Status UnorderedMemTable::append(ChunkPtr chunk) {
     DCHECK(!_is_done);
     DCHECK(chunk != nullptr);
-    _tracker->consume(chunk->memory_usage());
-    COUNTER_ADD(_spiller->metrics().mem_table_peak_memory_usage, chunk->memory_usage());
+    auto chunk_mem_usage = chunk->memory_usage();
+    _tracker->consume(chunk_mem_usage);
+    COUNTER_ADD(_spiller->metrics().mem_table_peak_memory_usage, chunk_mem_usage);
+    auto num_rows = chunk->num_rows();
     _num_rows += chunk->num_rows();
-    _chunks.emplace_back(std::move(chunk));
+    if (_chunks.empty() || _chunks.back()->num_rows() >= _runtime_state->chunk_size()) {
+        _chunks.emplace_back(std::move(chunk));
+    } else if (_chunks.back()->num_rows() + num_rows > _runtime_state->chunk_size()) {
+        auto count = _runtime_state->chunk_size() - _chunks.back()->num_rows();
+        _chunks.back()->append(*chunk, chunk->num_rows() - count, count);
+        chunk->set_num_rows(chunk->num_rows() - count);
+        _chunks.emplace_back(std::move(chunk));
+    } else {
+        _chunks.back()->append(*chunk);
+    }
     return Status::OK();
 }
 
@@ -97,7 +108,6 @@ Status UnorderedMemTable::finalize(workgroup::YieldContext& yield_ctx, const Spi
 }
 
 void UnorderedMemTable::reset() {
-    DCHECK(_processed_index >= _chunks.size());
     SpillableMemTable::reset();
     _chunks.clear();
     _processed_index = 0;
@@ -167,7 +177,7 @@ Status OrderedMemTable::finalize(workgroup::YieldContext& yield_ctx, const Spill
             return Status::OK();
         }
         SCOPED_RAW_TIMER(&yield_ctx.time_spent_ns);
-        auto chunk = _chunk_slice.cutoff(_runtime_state->chunk_size());
+        ChunkPtr chunk = _chunk_slice.cutoff(_runtime_state->chunk_size());
         bool need_aligned = _runtime_state->spill_enable_direct_io();
 
         RETURN_IF_ERROR(serde->serialize(_runtime_state, serde_ctx, chunk, output, need_aligned));
@@ -187,6 +197,8 @@ void OrderedMemTable::reset() {
     SpillableMemTable::reset();
     _chunk_slice.reset(nullptr);
     _chunk.reset();
+    _permutation.clear();
+    _permutation.shrink_to_fit();
 }
 
 StatusOr<ChunkPtr> OrderedMemTable::_do_sort(const ChunkPtr& chunk) {

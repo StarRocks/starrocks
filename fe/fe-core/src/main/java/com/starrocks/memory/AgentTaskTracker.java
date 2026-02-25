@@ -16,18 +16,17 @@ package com.starrocks.memory;
 
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.task.AgentTaskQueue;
-import org.apache.spark.util.SizeEstimator;
 
 import java.util.Map;
 
 public class AgentTaskTracker implements MemoryTrackable {
     @Override
-    public long estimateSize() {
-        return SizeEstimator.estimate(AgentTaskQueue.tasks);
+    public Map<String, Long> estimateCount() {
+        return ImmutableMap.of("AgentTask", (long) AgentTaskQueue.getTaskNum());
     }
 
     @Override
-    public Map<String, Long> estimateCount() {
-        return ImmutableMap.of("AgentTask", (long) AgentTaskQueue.getTaskNum());
+    public long estimateSize() {
+        return AgentTaskQueue.estimateSize();
     }
 }

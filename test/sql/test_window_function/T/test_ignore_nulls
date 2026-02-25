@@ -1,0 +1,95 @@
+-- name: test_lead_lag_ignore_nulls
+CREATE TABLE `t0` (
+  `v1` int(11) NULL,
+  `v2` int(11) NULL,
+  `v3` int(11) NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`)
+DISTRIBUTED BY HASH(`v1`) BUCKETS 10
+PROPERTIES (
+  "replication_num" = "1"
+);
+
+INSERT INTO `t0` (v1, v2, v3) values
+    (1, 1, 1),
+    (1, 2, 2),
+    (1, 3, 3),
+    (1, 4, 4),
+    (2, 1, NULL),
+    (2, 2, 2),
+    (2, 3, 3),
+    (2, 4, 4),
+    (3, 1, 1),
+    (3, 2, NULL),
+    (3, 3, 3),
+    (3, 4, 4),
+    (4, 1, 1),
+    (4, 2, 2),
+    (4, 3, NULL),
+    (4, 4, 4),
+    (5, 1, 1),
+    (5, 2, 2),
+    (5, 3, 3),
+    (5, 4, NULL),
+    (6, 1, 1),
+    (6, 2, NULL),
+    (6, 3, NULL),
+    (6, 4, 4);
+
+SELECT v1, v2, v3, first_value(v3 IGNORE NULLS) OVER(ORDER BY v1, v2) FROM t0 ORDER BY v1, v2;
+SELECT v1, v2, v3, first_value(v3 IGNORE NULLS) OVER(ORDER BY v1, v2 rows between 1 preceding and 1 following) FROM t0 ORDER BY v1, v2;
+SELECT v1, v2, v3, first_value(v3 IGNORE NULLS) OVER(partition BY v1 ORDER BY v2) FROM t0 ORDER BY v1, v2;
+SELECT v1, v2, v3, first_value(v3 IGNORE NULLS) OVER(partition BY v1 ORDER BY v2 rows between 1 preceding and 1 following) FROM t0 ORDER BY v1, v2;
+SELECT v1, v2, v3, last_value(v3 IGNORE NULLS) OVER(ORDER BY v1, v2) FROM t0 ORDER BY v1, v2;
+SELECT v1, v2, v3, last_value(v3 IGNORE NULLS) OVER(ORDER BY v1, v2 rows between 1 preceding and 1 following) FROM t0 ORDER BY v1, v2;
+SELECT v1, v2, v3, last_value(v3 IGNORE NULLS) OVER(partition BY v1 ORDER BY v2) FROM t0 ORDER BY v1, v2;
+SELECT v1, v2, v3, last_value(v3 IGNORE NULLS) OVER(partition BY v1 ORDER BY v2 rows between 1 preceding and 1 following) FROM t0 ORDER BY v1, v2;
+SELECT v1, v2, v3, lead(v3 IGNORE NULLS, 1) OVER(ORDER BY v1, v2) FROM t0 ORDER BY v1, v2;
+SELECT v1, v2, v3, lead(v3 IGNORE NULLS, 1) OVER(partition BY v1 ORDER BY v2) FROM t0 ORDER BY v1, v2;
+SELECT v1, v2, v3, lead(v3 IGNORE NULLS, 2) OVER(ORDER BY v1, v2) FROM t0 ORDER BY v1, v2;
+SELECT v1, v2, v3, lead(v3 IGNORE NULLS, 2) OVER(partition BY v1 ORDER BY v2) FROM t0 ORDER BY v1, v2;
+SELECT v1, v2, v3, lag(v3 IGNORE NULLS, 1) OVER(ORDER BY v1, v2) FROM t0 ORDER BY v1, v2;
+SELECT v1, v2, v3, lag(v3 IGNORE NULLS, 1) OVER(partition BY v1 ORDER BY v2) FROM t0 ORDER BY v1, v2;
+SELECT v1, v2, v3, lag(v3 IGNORE NULLS, 2) OVER(ORDER BY v1, v2) FROM t0 ORDER BY v1, v2;
+SELECT v1, v2, v3, lag(v3 IGNORE NULLS, 2) OVER(partition BY v1 ORDER BY v2) FROM t0 ORDER BY v1, v2;
+
+-- name: test_lead_lag_ignore_nulls_all_nulls
+CREATE TABLE `t_all_null` (
+  `v1` int(11) NULL,
+  `v2` int(11) NULL,
+  `v3` int(11) NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`)
+DISTRIBUTED BY HASH(`v1`) BUCKETS 10
+PROPERTIES (
+  "replication_num" = "1"
+);
+
+INSERT INTO `t_all_null` (v1, v2, v3) values
+    (1, 1, NULL),
+    (1, 2, NULL),
+    (1, 3, NULL),
+    (1, 4, NULL),
+    (2, 1, NULL),
+    (2, 2, NULL),
+    (2, 3, NULL),
+    (2, 4, NULL),
+    (3, 1, NULL),
+    (3, 2, NULL),
+    (3, 3, NULL),
+    (3, 4, NULL),
+    (4, 1, NULL),
+    (4, 2, NULL),
+    (4, 3, NULL),
+    (4, 4, NULL),
+    (5, 1, NULL),
+    (5, 2, NULL),
+    (5, 3, NULL),
+    (5, 4, NULL),
+    (6, 1, NULL),
+    (6, 2, NULL),
+    (6, 3, NULL),
+    (6, 4, NULL);
+
+SELECT v1, v2, v3, lead(v3 IGNORE NULLS, 1) OVER(partition BY v1 ORDER BY v2) FROM t_all_null ORDER BY v1, v2;
+SELECT v1, v2, v3, lag(v3 IGNORE NULLS, 1) OVER(partition BY v1 ORDER BY v2) FROM t_all_null ORDER BY v1, v2;

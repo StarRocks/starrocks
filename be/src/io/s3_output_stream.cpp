@@ -21,18 +21,21 @@
 #include <aws/s3/model/UploadPartRequest.h>
 #include <fmt/format.h>
 
+#include "base/concurrency/stopwatch.hpp"
 #include "common/logging.h"
+#include "io/io_profiler.h"
 #include "io/s3_zero_copy_iostream.h"
 
 namespace starrocks::io {
 
 S3OutputStream::S3OutputStream(std::shared_ptr<Aws::S3::S3Client> client, std::string bucket, std::string object,
-                               int64_t max_single_part_size, int64_t min_upload_part_size)
+                               int64_t max_single_part_size, int64_t min_upload_part_size, std::string content_type)
         : _client(std::move(client)),
           _bucket(std::move(bucket)),
           _object(std::move(object)),
           _max_single_part_size(max_single_part_size),
           _min_upload_part_size(min_upload_part_size),
+          _content_type(std::move(content_type)),
           _buffer(),
           _upload_id(),
           _etags() {
@@ -40,6 +43,8 @@ S3OutputStream::S3OutputStream(std::shared_ptr<Aws::S3::S3Client> client, std::s
 }
 
 Status S3OutputStream::write(const void* data, int64_t size) {
+    MonotonicStopWatch watch;
+    watch.start();
     _buffer.append(static_cast<const char*>(data), size);
     if (_upload_id.empty() && _buffer.size() > _max_single_part_size) {
         RETURN_IF_ERROR(create_multipart_upload());
@@ -49,6 +54,7 @@ Status S3OutputStream::write(const void* data, int64_t size) {
         RETURN_IF_ERROR(multipart_upload());
         _buffer.clear();
     }
+    IOProfiler::add_write(size, watch.elapsed_time());
     return Status::OK();
 }
 
@@ -77,12 +83,15 @@ Status S3OutputStream::close() {
         return Status::OK();
     }
 
+    MonotonicStopWatch watch;
+    watch.start();
     if (_upload_id.empty()) {
         RETURN_IF_ERROR(singlepart_upload());
     } else {
         RETURN_IF_ERROR(multipart_upload());
         RETURN_IF_ERROR(complete_multipart_upload());
     }
+    IOProfiler::add_sync(watch.elapsed_time());
     _client = nullptr;
     return Status::OK();
 }
@@ -91,6 +100,7 @@ Status S3OutputStream::create_multipart_upload() {
     Aws::S3::Model::CreateMultipartUploadRequest req;
     req.SetBucket(_bucket);
     req.SetKey(_object);
+    req.SetContentType(_content_type);
     Aws::S3::Model::CreateMultipartUploadOutcome outcome = _client->CreateMultipartUpload(req);
     if (outcome.IsSuccess()) {
         _upload_id = outcome.GetResult().GetUploadId();
@@ -106,6 +116,7 @@ Status S3OutputStream::singlepart_upload() {
     Aws::S3::Model::PutObjectRequest req;
     req.SetBucket(_bucket);
     req.SetKey(_object);
+    req.SetContentType(_content_type);
     req.SetContentLength(static_cast<int64_t>(_buffer.size()));
     req.SetBody(Aws::MakeShared<S3ZeroCopyIOStream>(AWS_ALLOCATE_TAG, _buffer.data(), _buffer.size()));
     Aws::S3::Model::PutObjectOutcome outcome = _client->PutObject(req);

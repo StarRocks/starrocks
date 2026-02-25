@@ -24,6 +24,9 @@
 #include <utility>
 #include <vector>
 
+#include "base/testutil/assert.h"
+#include "base/uid_util.h"
+#include "base/utility/defer_op.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -34,6 +37,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "common/object_pool.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exec/sorting/merge.h"
@@ -48,19 +52,33 @@
 #include "exec/workgroup/scan_task_queue.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
+#include "exprs/expr_factory.h"
 #include "fs/fs.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "storage/olap_define.h"
-#include "testutil/assert.h"
 #include "types/logical_type.h"
-#include "util/defer_op.h"
-#include "util/runtime_profile.h"
-#include "util/uid_util.h"
 
 namespace starrocks::vectorized {
+
+namespace {
+
+ColumnRef* find_first_column_ref(Expr* expr) {
+    if (expr->is_slotref()) {
+        return down_cast<ColumnRef*>(expr);
+    }
+    for (Expr* child : expr->children()) {
+        if (ColumnRef* ref = find_first_column_ref(child); ref != nullptr) {
+            return ref;
+        }
+    }
+    return nullptr;
+}
+
+} // namespace
+
 class TExprBuilder {
 public:
     TExprBuilder& operator<<(const LogicalType& slot_type) {
@@ -107,8 +125,8 @@ public:
     }
 
     Status do_visit(NullableColumn* column) {
-        RETURN_IF_ERROR(fill(column->null_column().get()));
-        RETURN_IF_ERROR(column->data_column()->accept_mutable(this));
+        RETURN_IF_ERROR(fill(column->null_column_raw_ptr()));
+        RETURN_IF_ERROR(column->data_column_raw_ptr()->accept_mutable(this));
         return Status::OK();
     }
 
@@ -136,7 +154,7 @@ public:
         for (size_t i = 0; i < ctxs.size(); ++i) {
             auto ctx = ctxs[i];
             CHECK(ctx->root()->is_slotref());
-            auto ref = ctx->root()->get_column_ref();
+            auto ref = find_first_column_ref(ctx->root());
             auto col = ColumnHelper::create_column(ctx->root()->type(), nullable[i]);
             CHECK(col->accept_mutable(&filler).ok());
             chunk->append_column(std::move(col), ref->slot_id());
@@ -294,23 +312,6 @@ struct SpillerCaller {
     spill::Spiller* _spiller;
 };
 
-bool chunk_equals(const ChunkPtr& l, const ChunkPtr& r) {
-    if (l->columns() != r->columns() || l->num_columns() != r->num_columns() ||
-        l->get_slot_id_to_index_map() != r->get_slot_id_to_index_map()) {
-        return false;
-    }
-    size_t num_rows = l->num_rows();
-    auto& lcolumns = l->columns();
-    auto& rcolumns = r->columns();
-    for (size_t i = 0; i < lcolumns.size(); ++i) {
-        if (!lcolumns[i]->equals(num_rows, *rcolumns[i], num_rows)) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
 TEST_F(SpillTest, unsorted_process) {
     ObjectPool pool;
 
@@ -431,6 +432,67 @@ TEST_F(SpillTest, unsorted_process) {
     }
 }
 
+struct FailedGuard {
+    bool scoped_begin() const { return false; }
+    void scoped_end() const {}
+};
+
+TEST_F(SpillTest, yield_with_failed_guard) {
+    ObjectPool pool;
+    // order by id_int
+    TExprBuilder order_by_slots_builder;
+    order_by_slots_builder << TYPE_INT;
+    auto order_by_slots = order_by_slots_builder.get_res();
+    // full data id_int, id_smallint
+    std::vector<bool> nullables = {false, false};
+    TExprBuilder tuple_slots_builder;
+    tuple_slots_builder << TYPE_INT << TYPE_SMALLINT;
+    auto tuple_slots = tuple_slots_builder.get_res();
+
+    auto ctx_st = no_partition_context(&pool, &dummy_rt_st, order_by_slots, tuple_slots);
+    ASSERT_OK(ctx_st.status());
+    auto ctx = ctx_st.value();
+
+    auto& tuple = ctx->sort_exprs.sort_tuple_slot_expr_ctxs();
+
+    // create chunk
+    RandomChunkBuilder chunk_builder;
+
+    // create spilled factory
+    // auto factory_options = SpilledFactoryOptions(ctx->partition_nums, ctx->parition_exprs, ctx->sort_exprs, ctx->sort_descs, false);
+    auto factory = spill::make_spilled_factory();
+
+    // create spiller
+    SpilledOptions spill_options;
+    // 4 buffer chunk
+    spill_options.mem_table_pool_size = 4;
+    // file size: 1M
+    spill_options.spill_mem_table_bytes_size = 1 * 1024 * 1024;
+    // spill format type
+    spill_options.spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
+
+    spill_options.block_manager = dummy_block_mgr.get();
+
+    auto chunk_empty = chunk_builder.gen(tuple, nullables);
+
+    auto spiller = factory->create(spill_options);
+    spiller->set_metrics(metrics);
+    SpillerCaller<spill::RawSpillerWriter*, spill::SpillerReader*> caller(spiller.get());
+    ASSERT_OK(spiller->prepare(&dummy_rt_st));
+
+    size_t test_loop = 1024;
+    std::vector<ChunkPtr> holder;
+    {
+        for (size_t i = 0; i < test_loop; ++i) {
+            auto chunk = chunk_builder.gen(tuple, nullables);
+            ASSERT_OK(caller.spill<SyncExecutor>(&dummy_rt_st, chunk, EmptyMemGuard{}));
+            ASSERT_OK(spiller->_spilled_task_status);
+            holder.push_back(chunk);
+        }
+        ASSERT_OK(caller.flush<SyncExecutor>(&dummy_rt_st, FailedGuard{}));
+    }
+}
+
 TEST_F(SpillTest, order_by_process) {
     ObjectPool pool;
     // order by id_int
@@ -531,7 +593,7 @@ TEST_F(SpillTest, partition_process) {
     (void)ctx;
 
     std::vector<ExprContext*> tuple;
-    ASSERT_OK(Expr::create_expr_trees(&pool, tuple_slots, &tuple, &dummy_rt_st));
+    ASSERT_OK(ExprFactory::create_expr_trees(&pool, tuple_slots, &tuple, &dummy_rt_st));
 
     // create chunk
     RandomChunkBuilder chunk_builder;
@@ -570,6 +632,92 @@ TEST_F(SpillTest, partition_process) {
             holder.push_back(chunk);
         }
         ASSERT_OK(spiller->flush<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
+    }
+
+    {
+        for (size_t i = 0; i < test_loop; ++i) {
+            auto chunk = chunk_builder.gen(tuple, nullables);
+            auto hash_column = spill::SpillHashColumn::create(chunk->num_rows());
+            chunk->append_column(std::move(hash_column), -1);
+            ASSERT_OK(spiller->spill<SyncExecutor>(&dummy_rt_st, chunk, EmptyMemGuard{}));
+            ASSERT_OK(spiller->_spilled_task_status);
+            holder.push_back(chunk);
+        }
+        ASSERT_OK(spiller->flush<SyncExecutor>(&dummy_rt_st, FailedGuard{}));
+    }
+}
+
+struct PredoSyncExecutor {
+    static std::function<void()> predo;
+    static Status submit(workgroup::ScanTask task) {
+        do {
+            predo();
+            task.run();
+        } while (!task.is_finished());
+        return Status::OK();
+    }
+    static void force_submit(workgroup::ScanTask task) { (void)submit(std::move(task)); }
+};
+std::function<void()> PredoSyncExecutor::predo;
+
+TEST_F(SpillTest, partition_yield_with_failed) {
+    ObjectPool pool;
+
+    // order by id_int
+    // full data id_int, id_smallint
+    std::vector<bool> nullables = {false, false};
+    TExprBuilder tuple_slots_builder;
+    tuple_slots_builder << TYPE_INT;
+    auto tuple_slots = tuple_slots_builder.get_res();
+
+    auto ctx_st = no_partition_context(&pool, &dummy_rt_st, {}, tuple_slots);
+    ASSERT_OK(ctx_st.status());
+    auto ctx = ctx_st.value();
+    (void)ctx;
+
+    std::vector<ExprContext*> tuple;
+    ASSERT_OK(ExprFactory::create_expr_trees(&pool, tuple_slots, &tuple, &dummy_rt_st));
+
+    // create chunk
+    RandomChunkBuilder chunk_builder;
+
+    // create spilled factory
+    // auto factory_options = SpilledFactoryOptions(ctx->partition_nums, ctx->parition_exprs, ctx->sort_exprs, ctx->sort_descs, false);
+    auto factory = spill::make_spilled_factory();
+
+    // create spiller
+    SpilledOptions spill_options(4);
+    // 4 buffer chunk
+    spill_options.mem_table_pool_size = 1;
+    // file size: 1M
+    spill_options.spill_mem_table_bytes_size = 1 * 1024 * 1024;
+    // spill format type
+    spill_options.spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
+
+    spill_options.block_manager = dummy_block_mgr.get();
+
+    auto chunk_empty = chunk_builder.gen(tuple, nullables);
+
+    auto spiller = factory->create(spill_options);
+    spiller->set_metrics(metrics);
+    SpillerCaller<spill::PartitionedSpillerWriter*, spill::SpillerReader*> caller(spiller.get());
+    ASSERT_OK(spiller->prepare(&dummy_rt_st));
+
+    size_t test_loop = 1024;
+    std::vector<ChunkPtr> holder;
+    {
+        for (size_t i = 0; i < test_loop; ++i) {
+            auto chunk = chunk_builder.gen(tuple, nullables);
+            auto hash_column = spill::SpillHashColumn::create(chunk->num_rows());
+            chunk->append_column(std::move(hash_column), -1);
+            ASSERT_OK(spiller->spill<SyncExecutor>(&dummy_rt_st, chunk, EmptyMemGuard{}));
+            ASSERT_OK(spiller->_spilled_task_status);
+            holder.push_back(chunk);
+        }
+        auto dummy = std::make_shared<int>();
+        PredoSyncExecutor::predo = [&]() { dummy.reset(); };
+        ASSERT_OK(spiller->flush<PredoSyncExecutor>(&dummy_rt_st,
+                                                    spill::ResourceMemTrackerGuard(nullptr, std::weak_ptr(dummy))));
     }
 }
 

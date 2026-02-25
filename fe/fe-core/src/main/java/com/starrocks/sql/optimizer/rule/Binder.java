@@ -14,18 +14,23 @@
 
 package com.starrocks.sql.optimizer.rule;
 
+import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
+import com.starrocks.common.profile.Tracers;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.GroupExpression;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.pattern.MultiOpPattern;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 // Used to extract matched expression from GroupExpression
 public class Binder {
-
     private final Pattern pattern;
     private final GroupExpression groupExpression;
     // binder status
@@ -36,13 +41,14 @@ public class Binder {
     private final List<Integer> groupExpressionIndex;
 
     // `multiJoinBinder` is used for MULTI_JOIN pattern and is stateless so can be used in recursive.
-    private final MultiJoinBinder multiJoinBinder = new MultiJoinBinder();
+    private final MultiJoinBinder multiJoinBinder;
     // `isPatternWithoutChildren` is to mark whether the input pattern can be used for zero child optimization.
     private final boolean isPatternWithoutChildren;
     // `nextIdx` marks the current idx which iterates calling `next()` method and it's used for MULTI_JOIN pattern
     // to optimize iteration expansions.
     private int nextIdx = 0;
-
+    // if the binder is exhausted, no need to check again
+    private boolean isExhausted = false;
     /**
      * Extract a expression from GroupExpression which match the given pattern
      *
@@ -50,16 +56,18 @@ public class Binder {
      * @param groupExpression Search this for binding. Because GroupExpression's inputs are groups,
      *                        several Expressions matched the pattern should be bound from it
      */
-    public Binder(Pattern pattern, GroupExpression groupExpression) {
+    public Binder(OptimizerContext optimizerContext, Pattern pattern,
+                  GroupExpression groupExpression, Stopwatch stopwatch) {
         this.pattern = pattern;
         this.groupExpression = groupExpression;
         this.groupExpressionIndex = Lists.newArrayList(0);
 
+        this.multiJoinBinder = new MultiJoinBinder(optimizerContext, stopwatch);
         // MULTI_JOIN is a special pattern which can contain children groups if the input group expression
         // is not a scan node.
-        this.isPatternWithoutChildren = pattern.isPatternMultiJoin()
-                ? Pattern.ALL_SCAN_TYPES.contains(groupExpression.getOp().getOpType())
-                : pattern.children().size() == 0;
+        this.isPatternWithoutChildren = pattern.is(OperatorType.PATTERN_MULTIJOIN)
+                ? MultiOpPattern.ALL_SCAN_TYPES.contains(groupExpression.getOp().getOpType())
+                : pattern.children().isEmpty();
     }
 
     /*
@@ -89,23 +97,22 @@ public class Binder {
             this.groupTraceKey = 0;
 
             // Match with the next groupExpression of the last group node
-            int lastNode = this.groupExpressionIndex.size() - 1;
-            int lastNodeIndex = this.groupExpressionIndex.get(lastNode);
+            final int lastNode = this.groupExpressionIndex.size() - 1;
+            final int lastNodeIndex = this.groupExpressionIndex.get(lastNode);
             this.groupExpressionIndex.set(lastNode, lastNodeIndex + 1);
 
             expression = match(pattern, groupExpression);
-        } while (expression == null && this.groupExpressionIndex.size() != 1);
+        } while (!isExhausted && expression == null && this.groupExpressionIndex.size() != 1);
 
         nextIdx++;
         return expression;
     }
 
-
     /**
      * Pattern tree match groupExpression tree
      */
     private OptExpression match(Pattern pattern, GroupExpression groupExpression) {
-        if (pattern.isPatternMultiJoin()) {
+        if (pattern.is(OperatorType.PATTERN_MULTIJOIN)) {
             return multiJoinBinder.match(groupExpression);
         }
 
@@ -119,11 +126,14 @@ public class Binder {
         int patternIndex = 0;
         int groupExpressionIndex = 0;
 
-        while (patternIndex < pattern.children().size() && groupExpressionIndex < groupExpression.getInputs().size()) {
+        final int patternSize = pattern.children().size();
+        final int geSize = groupExpression.getInputs().size();
+        while (patternIndex < patternSize && groupExpressionIndex < geSize) {
             trace();
-            Group group = groupExpression.getInputs().get(groupExpressionIndex);
-            Pattern childPattern = pattern.childAt(patternIndex);
-            OptExpression opt = match(childPattern, extractGroupExpression(childPattern, group));
+
+            final Group group = groupExpression.getInputs().get(groupExpressionIndex);
+            final Pattern childPattern = pattern.childAt(patternIndex);
+            final OptExpression opt = match(childPattern, extractGroupExpression(childPattern, group));
 
             if (opt == null) {
                 return null;
@@ -131,9 +141,8 @@ public class Binder {
                 resultInputs.add(opt);
             }
 
-            if (!(childPattern.isPatternMultiLeaf() &&
-                    groupExpression.getInputs().size() - groupExpressionIndex >
-                            pattern.children().size() - patternIndex)) {
+            if (!(childPattern.is(OperatorType.PATTERN_MULTI_LEAF) &&
+                    geSize - groupExpressionIndex > patternSize - patternIndex)) {
                 patternIndex++;
             }
 
@@ -154,8 +163,8 @@ public class Binder {
      * extract GroupExpression by groupExpressionIndex
      */
     private GroupExpression extractGroupExpression(Pattern pattern, Group group) {
-        int valueIndex = groupExpressionIndex.get(groupTraceKey);
-        if (pattern.isPatternLeaf() || pattern.isPatternMultiLeaf()) {
+        final int valueIndex = groupExpressionIndex.get(groupTraceKey);
+        if (pattern.is(OperatorType.PATTERN_LEAF) || pattern.is(OperatorType.PATTERN_MULTI_LEAF)) {
             if (valueIndex > 0) {
                 groupExpressionIndex.remove(groupTraceKey);
                 return null;
@@ -180,36 +189,78 @@ public class Binder {
      * binding state and check the expression at the same time. But MULTI_JOIN could enumerate the GE without any check
      */
     private class MultiJoinBinder {
+        // Stopwatch to void infinite loop
+        private final Stopwatch watch;
+        // Time limit for the entire optimization
+        private final long timeLimit;
+        // to avoid stop watch costing too much time, only check exhausted every CHECK_EXHAUSTED_INTERVAL times
+        private static final int CHECK_EXHAUSTED_INTERVAL = 1000;
+        private long loopCount = 0;
+
+        public MultiJoinBinder(OptimizerContext optimizerContext, Stopwatch stopwatch) {
+            SessionVariable sessionVariable = optimizerContext.getSessionVariable();
+            this.watch = stopwatch;
+            this.timeLimit = Math.min(sessionVariable.getOptimizerMaterializedViewTimeLimitMillis(),
+                    sessionVariable.getOptimizerExecuteTimeout());
+        }
+
         public OptExpression match(GroupExpression ge) {
             // 1. Check if the entire tree is MULTI_JOIN
             // 2. Enumerate GE
-            if (ge == null || !isMultiJoin(ge)) {
+            if (ge == null || isExhausted || !isMultiJoin(ge)) {
                 return null;
             }
 
             return enumerate(ge);
         }
 
+        /**
+         * Check whether the binder is exhausted.
+         */
+        private boolean exhausted() {
+            if (isExhausted) {
+                return true;
+            }
+            // Only check elapsed time every CHECK_EXHAUSTED_INTERVAL iterations
+            if ((++loopCount % CHECK_EXHAUSTED_INTERVAL) == 0) {
+                long elapsed = watch.elapsed(TimeUnit.MILLISECONDS);
+                if (elapsed > timeLimit) {
+                    isExhausted = true;
+                    // Log only once to avoid log flooding
+                    Tracers.log(Tracers.Module.MV, args ->
+                            String.format("[MV TRACE] MultiJoinBinder exhausted after %d loops (elapsed: %d ms, limit: %d ms)%n",
+                                    loopCount, elapsed, timeLimit));
+                    return true;
+                }
+            }
+            return false;
+        }
+
         private OptExpression enumerate(GroupExpression ge) {
-            List<OptExpression> resultInputs = Lists.newArrayList();
+            final List<OptExpression> resultInputs = Lists.newArrayList();
+            final int geSize = ge.getInputs().size();
+
             int groupExpressionIndex = 0;
-            while (groupExpressionIndex < ge.getInputs().size()) {
+            while (groupExpressionIndex < geSize) {
+                // to avoid infinite loop
+                if (exhausted()) {
+                    return null;
+                }
                 trace();
 
-                Group group = ge.getInputs().get(groupExpressionIndex);
-                GroupExpression nextGroupExpression = extractGroupExpression(group);
+                final Group group = ge.getInputs().get(groupExpressionIndex);
+                final GroupExpression nextGroupExpression = extractGroupExpression(group);
                 // avoid recursive
                 if (nextGroupExpression == null || !isMultiJoinOp(nextGroupExpression)) {
                     return null;
                 }
 
-                OptExpression opt = enumerate(nextGroupExpression);
+                final OptExpression opt = enumerate(nextGroupExpression);
                 if (opt == null) {
                     return null;
                 } else {
                     resultInputs.add(opt);
                 }
-
                 groupExpressionIndex++;
             }
 
@@ -222,31 +273,36 @@ public class Binder {
                 groupExpressionIndex.remove(groupTraceKey);
                 return null;
             }
-            List<GroupExpression> groupExpressions = group.getLogicalExpressions();
+            final List<GroupExpression> groupExpressions = group.getLogicalExpressions();
             GroupExpression next = groupExpressions.get(valueIndex);
             if (nextIdx == 0) {
                 return next;
             }
 
             // shortcut for no child group expression
-            if (Pattern.ALL_SCAN_TYPES.contains(next.getOp().getOpType()) && valueIndex > 0) {
+            if (valueIndex > 0 && MultiOpPattern.ALL_SCAN_TYPES.contains(next.getOp().getOpType())) {
                 groupExpressionIndex.remove(groupTraceKey);
                 return null;
             }
             // directly return if next has rewritten by mv
             if (next.hasAppliedMVRules()) {
+                groupExpressionIndex.remove(groupTraceKey);
                 return next;
             }
 
             // NOTE: To avoid iterating all children group expressions which may take a lot of time, only iterate
             // group expressions which are already rewritten by mv except the first iteration, so can be used for
             // nested mv rewritten.
-            // TODO: Introduce rule based join-reorder for mv rewrite, so can reduce this iteration time.
-            int geSize = groupExpressions.size();
+            final int geSize = groupExpressions.size();
             while (++valueIndex < geSize) {
+                if (exhausted()) {
+                    groupExpressionIndex.remove(groupTraceKey);
+                    return null;
+                }
+
                 next = group.getLogicalExpressions().get(valueIndex);
                 if (next.hasAppliedMVRules()) {
-                    groupExpressionIndex.set(groupTraceKey, valueIndex);
+                    groupExpressionIndex.remove(groupTraceKey);
                     return next;
                 }
             }
@@ -256,7 +312,8 @@ public class Binder {
 
         private boolean isMultiJoinOp(GroupExpression ge) {
             OperatorType operatorType = ge.getOp().getOpType();
-            return operatorType.equals(OperatorType.LOGICAL_JOIN) || Pattern.ALL_SCAN_TYPES.contains(operatorType);
+            return operatorType.equals(OperatorType.LOGICAL_JOIN) ||
+                    MultiOpPattern.ALL_SCAN_TYPES.contains(operatorType);
         }
 
         private boolean isMultiJoin(GroupExpression ge) {
@@ -272,9 +329,13 @@ public class Binder {
             if (!isMultiJoinOp(ge)) {
                 return false;
             }
-
-            for (int i = 0; i < ge.getInputs().size(); i++) {
-                Group child = ge.inputAt(i);
+            final int geSize = ge.getInputs().size();
+            for (int i = 0; i < geSize; i++) {
+                // to avoid infinite loop
+                if (exhausted()) {
+                    return false;
+                }
+                final Group child = ge.inputAt(i);
                 if (isMultiJoinRecursive(child.getFirstLogicalExpression())) {
                     continue;
                 }
@@ -287,6 +348,7 @@ public class Binder {
 
         /**
          * Check Group's logical expressions except the first has already been rewritten by mv rules.
+         *
          * @param g : Group to check whether it has been rewritten by mv rules.
          * @return : true if the Group has GroupExpression which is rewritten by mv rules.
          */
@@ -295,17 +357,5 @@ public class Binder {
                     .skip(1) // since first logical expression has already been checked.
                     .anyMatch(ge -> ge.getOp().getOpType() == OperatorType.LOGICAL_OLAP_SCAN && ge.hasAppliedMVRules());
         }
-    }
-
-    /**
-     * Extract a expression from GroupExpression which match the given pattern once
-     *
-     * @param pattern         Bound expression should be matched
-     * @param groupExpression Search this for binding. Because GroupExpression's inputs are groups,
-     *                        several Expressions matched the pattern should be bound from it
-     */
-    public static OptExpression bind(Pattern pattern, GroupExpression groupExpression) {
-        Binder binder = new Binder(pattern, groupExpression);
-        return binder.next();
     }
 }

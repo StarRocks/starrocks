@@ -53,7 +53,7 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     public MetaRecoveryDaemon() {
-        super("meta_recovery");
+        super("meta-recovery");
     }
 
     @Override
@@ -71,15 +71,15 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
         List<PartitionVersion> partitionsToRecover = new ArrayList<>();
         List<Long> dbIds = stateMgr.getLocalMetastore().getDbIds();
         for (long dbId : dbIds) {
-            Database database = stateMgr.getDb(dbId);
+            Database database = stateMgr.getLocalMetastore().getDb(dbId);
             if (database == null || database.isSystemDatabase()) {
                 continue;
             }
 
             Locker locker = new Locker();
-            locker.lockDatabase(database, LockType.READ);
+            locker.lockDatabase(database.getId(), LockType.READ);
             try {
-                for (Table table : database.getTables()) {
+                for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(database.getId())) {
                     if (!table.isOlapTableOrMaterializedView()) {
                         continue;
                     }
@@ -97,7 +97,7 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
                             StringBuilder info = new StringBuilder();
                             boolean isFirstTablet = true;
                             boolean foundCommonVersion = true;
-                            for (MaterializedIndex idx : physicalPartition.getMaterializedIndices(
+                            for (MaterializedIndex idx : physicalPartition.getLatestMaterializedIndices(
                                     MaterializedIndex.IndexExtState.VISIBLE)) {
                                 for (Tablet tablet : idx.getTablets()) {
                                     LocalTablet localTablet = (LocalTablet) tablet;
@@ -171,30 +171,29 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
                     }
                 }
             } finally {
-                locker.unLockDatabase(database, LockType.READ);
+                locker.unLockDatabase(database.getId(), LockType.READ);
             }
         }
 
         PartitionVersionRecoveryInfo recoveryInfo =
                 new PartitionVersionRecoveryInfo(partitionsToRecover, System.currentTimeMillis());
 
-        recoverPartitionVersion(recoveryInfo);
-
         GlobalStateMgr.getCurrentState().getEditLog()
-                .logRecoverPartitionVersion(new PartitionVersionRecoveryInfo(partitionsToRecover, System.currentTimeMillis()));
+                .logRecoverPartitionVersion(recoveryInfo, wal -> recoverPartitionVersion(recoveryInfo));
     }
 
     public void recoverPartitionVersion(PartitionVersionRecoveryInfo recoveryInfo) {
         for (PartitionVersion version : recoveryInfo.getPartitionVersions()) {
-            Database database = GlobalStateMgr.getCurrentState().getDb(version.getDbId());
+            Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(version.getDbId());
             if (database == null) {
                 LOG.warn("recover partition version failed, db is null, versionInfo: {}", version);
                 continue;
             }
             Locker locker = new Locker();
-            locker.lockDatabase(database, LockType.WRITE);
+            locker.lockDatabase(database.getId(), LockType.WRITE);
             try {
-                Table table = database.getTable(version.getTableId());
+                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(database.getId(), version.getTableId());
                 if (table == null) {
                     LOG.warn("recover partition version failed, table is null, versionInfo: {}", version);
                     continue;
@@ -219,7 +218,7 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
                 long originNextVersion = physicalPartition.getNextVersion();
                 physicalPartition.setVisibleVersion(version.getVersion(), recoveryInfo.getRecoverTime());
                 physicalPartition.setNextVersion(version.getVersion() + 1);
-                for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
                     for (Tablet tablet : index.getTablets()) {
                         if (!(tablet instanceof LocalTablet)) {
                             continue;
@@ -243,7 +242,7 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
                 removeUnRecoveredPartitions(new UnRecoveredPartition(database.getFullName(),
                         table.getName(), partition.getName(), physicalPartition.getId(), null));
             } finally {
-                locker.unLockDatabase(database, LockType.WRITE);
+                locker.unLockDatabase(database.getId(), LockType.WRITE);
             }
         }
     }

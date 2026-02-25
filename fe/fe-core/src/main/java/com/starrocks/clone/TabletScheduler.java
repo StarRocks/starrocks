@@ -42,6 +42,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.catalog.DataProperty;
@@ -60,6 +61,8 @@ import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.UserIdentity;
+import com.starrocks.clone.BalanceStat.BalanceType;
 import com.starrocks.clone.SchedException.Status;
 import com.starrocks.clone.TabletSchedCtx.Priority;
 import com.starrocks.clone.TabletSchedCtx.Type;
@@ -73,7 +76,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.leader.ReportHandler;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.NodeSelector;
@@ -89,11 +92,13 @@ import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TGetTabletScheduleRequest;
 import com.starrocks.thrift.TGetTabletScheduleResponse;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -102,6 +107,7 @@ import java.util.PriorityQueue;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -163,7 +169,7 @@ public class TabletScheduler extends FrontendDaemon {
 
     // be id -> #working slots
     private final Map<Long, PathSlot> backendsWorkingSlots = Maps.newConcurrentMap();
-    private ClusterLoadStatistic loadStatistic;
+    private AtomicReference<ClusterLoadStatistic> loadStatistic = new AtomicReference<>(null);
     private long lastStatUpdateTime = 0;
     private long lastClusterLoadLoggingTime = 0;
 
@@ -184,7 +190,7 @@ public class TabletScheduler extends FrontendDaemon {
     }
 
     public TabletScheduler(TabletSchedulerStat stat) {
-        super("tablet scheduler", SCHEDULE_INTERVAL_MS);
+        super("tablet-scheduler", SCHEDULE_INTERVAL_MS);
         this.stat = stat;
         this.rebalancer = new DiskAndTabletLoadReBalancer();
     }
@@ -193,8 +199,12 @@ public class TabletScheduler extends FrontendDaemon {
         return stat;
     }
 
-    public void setLoadStatistic(ClusterLoadStatistic loadStatistic) {
-        this.loadStatistic = loadStatistic;
+    public void setClusterLoadStatistic(ClusterLoadStatistic loadStatistic) {
+        this.loadStatistic.set(loadStatistic);
+    }
+
+    public ClusterLoadStatistic getClusterLoadStatistic() {
+        return loadStatistic.get();
     }
 
     /*
@@ -322,12 +332,12 @@ public class TabletScheduler extends FrontendDaemon {
             do {
                 AddResult res = addTablet(tabletSchedCtx, forceAdd /* force or not */);
                 if (res == AddResult.LIMIT_EXCEED) {
-                    locker.unLockDatabase(db, LockType.READ);
+                    locker.unLockDatabase(db.getId(), LockType.READ);
                     // It's ok to sleep a relative long time here so that the scheduler will spare more
                     // slots after the sleep and the following adding won't block.
                     Thread.sleep(BLOCKING_ADD_SLEEP_DURATION_MS);
                     result.second += BLOCKING_ADD_SLEEP_DURATION_MS;
-                    locker.lockDatabase(db, LockType.READ);
+                    locker.lockDatabase(db.getId(), LockType.READ);
                 } else {
                     result.first = (res == AddResult.ADDED);
                     break;
@@ -335,7 +345,7 @@ public class TabletScheduler extends FrontendDaemon {
             } while (true);
         } catch (InterruptedException e) {
             LOG.warn("Failed to execute blockingAddTabletCtxToScheduler", e);
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
         }
 
         return result;
@@ -390,15 +400,19 @@ public class TabletScheduler extends FrontendDaemon {
      */
     public static void resetDecommStatForSingleReplicaTabletUnlocked(long tabletId, List<Replica> replicas) {
         TabletScheduler tabletScheduler = GlobalStateMgr.getCurrentState().getTabletScheduler();
+        if (tabletScheduler == null) {
+            return;
+        }
         TabletSchedCtx tabletSchedCtx = tabletScheduler.getTabletSchedCtx(tabletId);
         if (tabletSchedCtx != null) {
             Replica decommissionedReplica = tabletSchedCtx.getDecommissionedReplica();
             for (Replica replica : replicas) {
                 if (replica.getState() == Replica.ReplicaState.DECOMMISSION && replica.getLastFailedVersion() < 0
                         && decommissionedReplica != null && replica.getId() == decommissionedReplica.getId()) {
+                    String replicaInfo = tabletSchedCtx.getTablet() != null ?
+                            tabletSchedCtx.getTablet().getReplicaInfos() : "tablet is null";
                     tabletScheduler.finalizeTabletCtx(tabletSchedCtx, TabletSchedCtx.State.CANCELLED,
-                            "src replica of rebalance need to reset state, replicas: " +
-                                    tabletSchedCtx.getTablet().getReplicaInfos());
+                            "src replica of rebalance need to reset state, replicas: " + replicaInfo);
                     break;
                 }
             }
@@ -412,7 +426,7 @@ public class TabletScheduler extends FrontendDaemon {
         PriorityQueue<TabletSchedCtx> newPendingTablets = new PriorityQueue<>();
         for (TabletSchedCtx tabletCtx : pendingTablets) {
             if (tabletCtx.getDbId() == dbId && tabletCtx.getTblId() == tblId
-                    && partitionIds.contains(tabletCtx.getPartitionId())) {
+                    && partitionIds.contains(tabletCtx.getPhysicalPartitionId())) {
                 tabletCtx.setOrigPriority(Priority.VERY_HIGH);
             }
             newPendingTablets.add(tabletCtx);
@@ -471,7 +485,7 @@ public class TabletScheduler extends FrontendDaemon {
 
     private void updateClusterLoadStatisticsAndPriority() {
         updateClusterLoadStatistic();
-        rebalancer.updateLoadStatistic(loadStatistic);
+        rebalancer.updateLoadStatistic(getClusterLoadStatistic());
 
         adjustPriorities();
 
@@ -489,15 +503,20 @@ public class TabletScheduler extends FrontendDaemon {
                 new ClusterLoadStatistic(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
                         GlobalStateMgr.getCurrentState().getTabletInvertedIndex());
         clusterLoadStatistic.init();
+
+        // update disk balance stats using old load statistic
+        ClusterLoadStatistic oldLoadStatistic = getClusterLoadStatistic();
+        if (oldLoadStatistic != null) {
+            clusterLoadStatistic.updateClusterDiskBalanceStats(oldLoadStatistic.getClusterDiskBalanceStats());
+            clusterLoadStatistic.updateBackendDiskBalanceStats(oldLoadStatistic.getBackendDiskBalanceStats());
+        }
+
         if (System.currentTimeMillis() - lastClusterLoadLoggingTime > CLUSTER_LOAD_STATISTICS_LOGGING_INTERVAL_MS) {
-            LOG.info("update cluster load statistic:\n{}", clusterLoadStatistic.getBrief());
+            LOG.debug("update cluster load statistic:\n{}", clusterLoadStatistic.getBrief());
             lastClusterLoadLoggingTime = System.currentTimeMillis();
         }
-        this.loadStatistic = clusterLoadStatistic;
-    }
 
-    public ClusterLoadStatistic getLoadStatistic() {
-        return loadStatistic;
+        setClusterLoadStatistic(clusterLoadStatistic);
     }
 
     /**
@@ -534,7 +553,7 @@ public class TabletScheduler extends FrontendDaemon {
         LOG.debug("pending tablets current count: {}\n{}", pendingTablets.size(), sb);
     }
 
-    private boolean checkIfTabletExpired(TabletSchedCtx ctx) {
+    protected boolean checkIfTabletExpired(TabletSchedCtx ctx) {
         return checkIfTabletExpired(ctx, GlobalStateMgr.getCurrentState().getRecycleBin(), System.currentTimeMillis());
     }
 
@@ -553,9 +572,10 @@ public class TabletScheduler extends FrontendDaemon {
             LOG.warn("discard ctx because table {} will erase soon: {}", tableId, ctx);
             return true;
         }
-        long partitionId = ctx.getPartitionId();
-        if (recycleBin.getPartition(partitionId) != null
-                && !recycleBin.ensureEraseLater(partitionId, currentTimeMs)) {
+        long partitionId = ctx.getPhysicalPartitionId();
+        PhysicalPartition physicalPartition = recycleBin.getPhysicalPartition(partitionId);
+        if (physicalPartition != null
+                && !recycleBin.ensureEraseLater(physicalPartition.getParentId(), currentTimeMs)) {
             LOG.warn("discard ctx because partition {} will erase soon: {}", partitionId, ctx);
             return true;
         }
@@ -632,7 +652,9 @@ public class TabletScheduler extends FrontendDaemon {
                 LOG.warn("got unexpected exception, discard this schedule. tablet: {}",
                         tabletCtx.getTabletId(), e);
                 stat.counterTabletScheduledFailed.incrementAndGet();
-                finalizeTabletCtx(tabletCtx, TabletSchedCtx.State.UNEXPECTED, e.getMessage());
+                String errMsg = e.getMessage();
+                tabletCtx.setErrMsg(errMsg);
+                finalizeTabletCtx(tabletCtx, TabletSchedCtx.State.UNEXPECTED, errMsg);
                 continue;
             }
 
@@ -646,7 +668,7 @@ public class TabletScheduler extends FrontendDaemon {
             if (AgentTaskQueue.addTask(task)) {
                 stat.counterCloneTask.incrementAndGet();
             }
-            LOG.info("add task to agent task queue: {}", task);
+            LOG.debug("add task to agent task queue: {}", task);
         }
 
         // send task immediately
@@ -697,7 +719,7 @@ public class TabletScheduler extends FrontendDaemon {
 
         Pair<TabletHealthStatus, TabletSchedCtx.Priority> statusPair;
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db.getId(), LockType.READ);
         try {
             OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState()
                     .getLocalMetastore().getTableIncludeRecycleBin(db, tabletCtx.getTblId());
@@ -712,28 +734,30 @@ public class TabletScheduler extends FrontendDaemon {
 
             OlapTableState tableState = tbl.getState();
 
-            Partition partition = GlobalStateMgr.getCurrentState()
-                    .getLocalMetastore().getPartitionIncludeRecycleBin(tbl, tabletCtx.getPartitionId());
-            if (partition == null) {
-                throw new SchedException(Status.UNRECOVERABLE, "partition does not exist");
+            PhysicalPartition physicalPartition = GlobalStateMgr.getCurrentState()
+                    .getLocalMetastore().getPhysicalPartitionIncludeRecycleBin(tbl, tabletCtx.getPhysicalPartitionId());
+            if (physicalPartition == null) {
+                throw new SchedException(Status.UNRECOVERABLE, "physical partition "
+                        + tabletCtx.getPhysicalPartitionId() + "does not exist");
             }
 
-            short replicaNum = GlobalStateMgr.getCurrentState()
-                    .getLocalMetastore().getReplicationNumIncludeRecycleBin(tbl.getPartitionInfo(), partition.getId());
+            Partition logicalPartition = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getPartitionIncludeRecycleBin(tbl, physicalPartition.getParentId());
+            if (logicalPartition == null) {
+                throw new SchedException(Status.UNRECOVERABLE, "partition "
+                        + physicalPartition.getParentId() + "does not exist");
+            }
+
+            short replicaNum = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getReplicationNumIncludeRecycleBin(tbl.getPartitionInfo(), physicalPartition.getParentId());
             if (replicaNum == (short) -1) {
                 throw new SchedException(Status.UNRECOVERABLE, "invalid replication number");
             }
 
             DataProperty dataProperty = GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getDataPropertyIncludeRecycleBin(tbl.getPartitionInfo(), partition.getId());
+                    .getDataPropertyIncludeRecycleBin(tbl.getPartitionInfo(), physicalPartition.getParentId());
             if (dataProperty == null) {
                 throw new SchedException(Status.UNRECOVERABLE, "partition data property not exist");
-            }
-
-            PhysicalPartition physicalPartition = partition.getSubPartition(tabletCtx.getPhysicalPartitionId());
-            if (physicalPartition == null) {
-                throw new SchedException(Status.UNRECOVERABLE, "physical partition "
-                        + tabletCtx.getPhysicalPartitionId() + "does not exist");
             }
 
             MaterializedIndex idx = physicalPartition.getIndex(tabletCtx.getIndexId());
@@ -785,7 +809,7 @@ public class TabletScheduler extends FrontendDaemon {
             }
 
             if (statusPair.first != TabletHealthStatus.VERSION_INCOMPLETE
-                    && (partition.getState() != PartitionState.NORMAL || tableState != OlapTableState.NORMAL)
+                    && (logicalPartition.getState() != PartitionState.NORMAL || tableState != OlapTableState.NORMAL)
                     && tableState != OlapTableState.WAITING_STABLE) {
                 // If table is under ALTER process(before FINISHING), do not allow to add or delete replica.
                 // VERSION_INCOMPLETE will repair the replica in place, which is allowed.
@@ -815,9 +839,10 @@ public class TabletScheduler extends FrontendDaemon {
             // we do not concern priority here.
             // once we take the tablet out of priority queue, priority is meaningless.
             tabletCtx.setTablet(tablet);
-            tabletCtx.setVersionInfo(physicalPartition.getVisibleVersion(),
-                    physicalPartition.getCommittedVersion(), physicalPartition.getVisibleTxnId());
-            tabletCtx.setSchemaHash(tbl.getSchemaHashByIndexId(idx.getId()));
+            tabletCtx.setTabletKeysType(tbl.getKeysType());
+            tabletCtx.setVersionInfo(physicalPartition.getVisibleVersion(), physicalPartition.getCommittedVersion(),
+                    physicalPartition.getVisibleTxnId(), physicalPartition.getVisibleVersionTime());
+            tabletCtx.setSchemaHash(tbl.getSchemaHashByIndexMetaId(idx.getMetaId()));
             tabletCtx.setStorageMedium(dataProperty.getStorageMedium());
             if (!Objects.equals(oldStatus, statusPair.first)) {
                 LOG.info("change TabletSchedCtx status from {} to {}, partition visible version: {}," +
@@ -828,7 +853,7 @@ public class TabletScheduler extends FrontendDaemon {
                         tabletCtx.getTablet().getReplicaInfos());
             }
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockDatabase(db.getId(), LockType.READ);
         }
 
         handleTabletByTypeAndStatus(statusPair.first, tabletCtx, batchTask);
@@ -979,7 +1004,7 @@ public class TabletScheduler extends FrontendDaemon {
     private void handleReplicaVersionIncomplete(TabletSchedCtx tabletCtx, AgentBatchTask batchTask)
             throws SchedException {
         stat.counterReplicaVersionMissingErr.incrementAndGet();
-        ClusterLoadStatistic statistic = loadStatistic;
+        ClusterLoadStatistic statistic = getClusterLoadStatistic();
         if (statistic == null) {
             throw new SchedException(Status.UNRECOVERABLE, "cluster does not exist");
         }
@@ -1072,7 +1097,7 @@ public class TabletScheduler extends FrontendDaemon {
         }
         Locker locker = new Locker();
         try {
-            locker.lockDatabase(db, LockType.WRITE);
+            locker.lockDatabase(db.getId(), LockType.WRITE);
             checkMetaExist(tabletCtx);
             if (deleteBackendDropped(tabletCtx, force)
                     || deleteBadReplica(tabletCtx, force)
@@ -1089,9 +1114,10 @@ public class TabletScheduler extends FrontendDaemon {
                 throw new SchedException(Status.FINISHED, "redundant replica is deleted");
             }
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
-        throw new SchedException(Status.UNRECOVERABLE, "unable to delete any redundant replicas");
+        throw new SchedException(Status.UNRECOVERABLE, "unable to delete any redundant replicas. replicas: " +
+                tabletCtx.getTablet().getReplicaInfos());
     }
 
     private boolean deleteBackendDropped(TabletSchedCtx tabletCtx, boolean force) throws SchedException {
@@ -1151,11 +1177,37 @@ public class TabletScheduler extends FrontendDaemon {
             // won't delete location mismatched replica.
             return false;
         }
-        for (Replica replica : tabletCtx.getReplicas()) {
+
+        Set<Pair<String, String>> matchedLocations = new HashSet<>();
+        Replica dupReplica = null;
+        // 1. delete the unmatched replica
+        // To ensure the correctness of the cleanup process after a rebalance, we iterate the replicas in reverse order.
+        // After cloning a replica from the source BE to a newly added destination BE, the replica on the new BE will
+        // always be at the end of the list. By traversing the list in reverse, we process newer replicas first
+        // and preserve the newly added replica, preventing it from being mistakenly deleted.
+        List<Replica> replicas = tabletCtx.getReplicas();
+        for (int i = replicas.size() - 1; i >= 0; i--) {
+            Replica replica = replicas.get(i);
             if (!TabletChecker.isLocationMatch(replica.getBackendId(), tabletCtx.getRequiredLocation())) {
                 deleteReplicaInternal(tabletCtx, replica, "location mismatch", force);
                 return true;
+            } else {
+                Backend backend = systemInfoService.getBackend(replica.getBackendId());
+                if (backend != null) {
+                    Pair<String, String> location = backend.getSingleLevelLocationKV();
+                    if (location != null && matchedLocations.contains(location)) {
+                        dupReplica = replica;
+                    } else {
+                        matchedLocations.add(location);
+                    }
+                }
             }
+        }
+
+        //2. delete the duplicate location replica
+        if (dupReplica != null) {
+            deleteReplicaInternal(tabletCtx, dupReplica, "duplicate location", force);
+            return true;
         }
 
         return false;
@@ -1183,7 +1235,7 @@ public class TabletScheduler extends FrontendDaemon {
     }
 
     private boolean deleteReplicaOnSameHost(TabletSchedCtx tabletCtx, boolean force) throws SchedException {
-        ClusterLoadStatistic statistic = loadStatistic;
+        ClusterLoadStatistic statistic = getClusterLoadStatistic();
         if (statistic == null) {
             return false;
         }
@@ -1227,7 +1279,7 @@ public class TabletScheduler extends FrontendDaemon {
     }
 
     private boolean deleteReplicaOnHighLoadBackend(TabletSchedCtx tabletCtx, boolean force) throws SchedException {
-        ClusterLoadStatistic statistic = loadStatistic;
+        ClusterLoadStatistic statistic = getClusterLoadStatistic();
         if (statistic == null) {
             return false;
         }
@@ -1286,7 +1338,7 @@ public class TabletScheduler extends FrontendDaemon {
         }
         Locker locker = new Locker();
         try {
-            locker.lockDatabase(db, LockType.WRITE);
+            locker.lockDatabase(db.getId(), LockType.WRITE);
             checkMetaExist(tabletCtx);
             List<Replica> replicas = tabletCtx.getReplicas();
             for (Replica replica : replicas) {
@@ -1305,13 +1357,14 @@ public class TabletScheduler extends FrontendDaemon {
                 deleteReplicaInternal(tabletCtx, replica, "colocate redundant", forceDropBad);
                 throw new SchedException(Status.FINISHED, "colocate redundant replica is deleted");
             }
-            throw new SchedException(Status.UNRECOVERABLE, "unable to delete any colocate redundant replicas");
+            throw new SchedException(Status.UNRECOVERABLE, "unable to delete any colocate redundant replicas. replicas: " +
+                    tabletCtx.getTablet().getReplicaInfos() + ", backend set: " + backendSet);
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
     }
 
-    private void deleteReplicaInternal(TabletSchedCtx tabletCtx, Replica replica, String reason, boolean force)
+    protected void deleteReplicaInternal(TabletSchedCtx tabletCtx, Replica replica, String reason, boolean force)
             throws SchedException {
         if (Config.tablet_sched_always_force_decommission_replica) {
             force = true;
@@ -1351,14 +1404,6 @@ public class TabletScheduler extends FrontendDaemon {
             }
         }
 
-        String replicaInfos = tabletCtx.getTablet().getReplicaInfos();
-        // delete this replica from globalStateMgr.
-        // it will also delete replica from tablet inverted index.
-        if (!tabletCtx.deleteReplica(replica)) {
-            LOG.warn("delete replica for tablet: {} failed backend {} not found replicas:{}", tabletCtx.getTabletId(),
-                    replica.getBackendId(), replicaInfos);
-        }
-
         if (force) {
             // send the replica deletion task.
             // also this may not be necessary, but delete it will make things simpler.
@@ -1367,9 +1412,6 @@ public class TabletScheduler extends FrontendDaemon {
             // process.
             sendDeleteReplicaTask(replica.getBackendId(), tabletCtx.getTabletId(), tabletCtx.getSchemaHash());
         }
-        // NOTE: TabletScheduler is specific for LocalTablet, LakeTablet will never go here.
-        GlobalStateMgr.getCurrentState().getTabletInvertedIndex()
-                .markTabletForceDelete(tabletCtx.getTabletId(), replica.getBackendId());
 
         // write edit log
         ReplicaPersistInfo info = ReplicaPersistInfo.createForDelete(tabletCtx.getDbId(),
@@ -1378,8 +1420,19 @@ public class TabletScheduler extends FrontendDaemon {
                 tabletCtx.getIndexId(),
                 tabletCtx.getTabletId(),
                 replica.getBackendId());
+        String replicaInfos = tabletCtx.getTablet().getReplicaInfos();
+        GlobalStateMgr.getCurrentState().getEditLog().logDeleteReplica(info, wal -> {
+            // delete this replica from globalStateMgr.
+            // it will also delete replica from tablet inverted index.
+            if (!tabletCtx.deleteReplica(replica)) {
+                LOG.warn("delete replica for tablet: {} failed backend {} not found replicas:{}", tabletCtx.getTabletId(),
+                        replica.getBackendId(), replicaInfos);
+            }
 
-        GlobalStateMgr.getCurrentState().getEditLog().logDeleteReplica(info);
+            // NOTE: TabletScheduler is specific for LocalTablet, LakeTablet will never go here.
+            GlobalStateMgr.getCurrentState().getTabletInvertedIndex()
+                    .markTabletForceDelete(tabletCtx.getTabletId(), replica.getBackendId());
+        });
 
         LOG.info("delete replica. tablet id: {}, backend id: {}. reason: {}, force: {} replicas: {}",
                 tabletCtx.getTabletId(), replica.getBackendId(), reason, force, replicaInfos);
@@ -1446,7 +1499,7 @@ public class TabletScheduler extends FrontendDaemon {
         tabletCtx.setSrc(decommissionedReplica);
 
         // set dest path
-        BackendLoadStatistic beLoad = loadStatistic.getBackendLoadStatistic(decommissionedReplica.getBackendId());
+        BackendLoadStatistic beLoad = getClusterLoadStatistic().getBackendLoadStatistic(decommissionedReplica.getBackendId());
         List<RootPathLoadStatistic> pathLoadStatistics = beLoad.getPathStatistics(tabletCtx.getStorageMedium());
         if (pathLoadStatistics.size() < 2) {
             throw new SchedException(SchedException.Status.UNRECOVERABLE, "there is only one path on backend "
@@ -1500,18 +1553,18 @@ public class TabletScheduler extends FrontendDaemon {
             long tabletId = schedCtx.getTabletId();
             long indexId = schedCtx.getIndexId();
 
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
             if (db == null) {
                 continue;
             }
 
             Table tbl;
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             try {
-                tbl = db.getTable(tableId);
+                tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
 
             if (!(tbl instanceof OlapTable)) {
@@ -1526,7 +1579,7 @@ public class TabletScheduler extends FrontendDaemon {
             }
 
             OlapTable olaptable = (OlapTable) tbl;
-            if (ReportHandler.migratableTablet(db, olaptable, physicalPartitionId, indexId, tabletId)) {
+            if (ReportHandler.migrateTablet(db, olaptable, physicalPartitionId, indexId, tabletId)) {
                 newAlternativeTablets.add(schedCtx);
             }
         }
@@ -1641,7 +1694,7 @@ public class TabletScheduler extends FrontendDaemon {
     // choose a path on a backend which is fit for the tablet
     private RootPathLoadStatistic chooseAvailableDestPath(TabletSchedCtx tabletCtx, boolean forColocate)
             throws SchedException {
-        ClusterLoadStatistic statistic = loadStatistic;
+        ClusterLoadStatistic statistic = getClusterLoadStatistic();
         if (statistic == null) {
             throw new SchedException(Status.UNRECOVERABLE, "cluster does not exist");
         }
@@ -1744,7 +1797,6 @@ public class TabletScheduler extends FrontendDaemon {
 
     private void releaseTabletCtx(TabletSchedCtx tabletCtx, TabletSchedCtx.State state) {
         tabletCtx.setState(state);
-        tabletCtx.resetDecommissionedReplicaState();
         tabletCtx.releaseResource(this);
         tabletCtx.setFinishedTime(System.currentTimeMillis());
     }
@@ -1753,7 +1805,7 @@ public class TabletScheduler extends FrontendDaemon {
         runningTablets.remove(tabletCtx.getTabletId());
         allTabletIds.remove(tabletCtx.getTabletId());
         schedHistory.add(tabletCtx);
-        LOG.info("remove the tablet {}. because: {}", tabletCtx.getTabletId(), reason);
+        LOG.debug("remove the tablet {}. because: {}", tabletCtx.getTabletId(), reason);
     }
 
     @VisibleForTesting
@@ -1771,11 +1823,19 @@ public class TabletScheduler extends FrontendDaemon {
                 // no more tablets
                 break;
             }
-            // ignore tablets that will expire and erase soon
-            if (checkIfTabletExpired(tablet)) {
+            try {
+                // ignore tablets that will expire and erase soon
+                if (checkIfTabletExpired(tablet)) {
+                    finalizeTabletCtx(tablet, TabletSchedCtx.State.EXPIRED, "will erase soon");
+                    continue;
+                }
+                list.add(tablet);
+            } catch (Exception e) {
+                LOG.warn("got unexpected exception, discard this schedule. tablet: {}",
+                        tablet.getTabletId(), e);
+                finalizeTabletCtx(tablet, TabletSchedCtx.State.UNEXPECTED, e.getMessage());
                 continue;
             }
-            list.add(tablet);
             count--;
         }
         return list;
@@ -1791,7 +1851,7 @@ public class TabletScheduler extends FrontendDaemon {
 
         Preconditions.checkState(tabletCtx.getState() == TabletSchedCtx.State.RUNNING, tabletCtx.getState());
         try {
-            tabletCtx.finishCloneTask(cloneTask, request);
+            tabletCtx.finishCloneTask(cloneTask, request, stat);
         } catch (SchedException e) {
             tabletCtx.increaseFailedRunningCounter();
             tabletCtx.setErrMsg(e.getMessage());
@@ -1809,7 +1869,9 @@ public class TabletScheduler extends FrontendDaemon {
             LOG.warn("got unexpected exception when finish clone task. tablet: {}",
                     tabletCtx.getTabletId(), e);
             stat.counterTabletScheduledDiscard.incrementAndGet();
-            finalizeTabletCtx(tabletCtx, TabletSchedCtx.State.UNEXPECTED, e.getMessage());
+            String errMsg = e.getMessage();
+            tabletCtx.setErrMsg(errMsg);
+            finalizeTabletCtx(tabletCtx, TabletSchedCtx.State.UNEXPECTED, errMsg);
             return;
         }
 
@@ -1845,6 +1907,12 @@ public class TabletScheduler extends FrontendDaemon {
         // write edit log
         replica.setState(ReplicaState.NORMAL);
         TabletMeta meta = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletMeta(tabletId);
+        if (meta == null) {
+            LOG.warn("skip finishing create replica task because tablet meta not found, tablet:{} backend:{}",
+                    tabletId, task.getBackendId());
+            finalizeTabletCtx(tabletCtx, TabletSchedCtx.State.CANCELLED, "tablet meta missing");
+            return;
+        }
         ReplicaPersistInfo info = ReplicaPersistInfo.createForAdd(meta.getDbId(),
                 meta.getTableId(), meta.getPhysicalPartitionId(), meta.getIndexId(),
                 tabletId, replica.getBackendId(), replica.getId(), replica.getVersion(),
@@ -1940,6 +2008,132 @@ public class TabletScheduler extends FrontendDaemon {
         }
     }
 
+    public Set<TStorageMedium> getStorageMediums() {
+        ClusterLoadStatistic clusterLoadStat = getClusterLoadStatistic();
+        return clusterLoadStat == null ? Sets.newHashSet() : clusterLoadStat.getStorageMediums();
+    }
+
+    public List<List<String>> getClusterLoadStats() {
+        ClusterLoadStatistic clusterLoadStat = getClusterLoadStatistic();
+        return clusterLoadStat == null ? Lists.newArrayList() : clusterLoadStat.getClusterLoadStats();
+    }
+
+    public List<List<String>> getBackendLoadStats(TStorageMedium medium) {
+        ClusterLoadStatistic clusterLoadStat = getClusterLoadStatistic();
+        return clusterLoadStat == null ? Lists.newArrayList() : clusterLoadStat.getBackendLoadStats(medium);
+    }
+
+    // Get cluster balance types within each storage medium, includes both disk usage and tablet distribution types.
+    // If the cluster is balanced, returns empty set.
+    private Set<Pair<TStorageMedium, BalanceType>> getClusterBalanceTypes() {
+        Set<Pair<TStorageMedium, BalanceType>> mediumBalanceTypes = Sets.newHashSet();
+        getDiskBalanceTypes(mediumBalanceTypes);
+        getTabletBalanceTypes(mediumBalanceTypes);
+        return mediumBalanceTypes;
+    }
+
+    private void getDiskBalanceTypes(Set<Pair<TStorageMedium, BalanceType>> mediumBalanceTypes) {
+        ClusterLoadStatistic clusterLoadStat = getClusterLoadStatistic();
+        if (clusterLoadStat == null) {
+            return;
+        }
+
+        Map<TStorageMedium, BalanceStat> clusterDiskBalanceStats = clusterLoadStat.getClusterDiskBalanceStats();
+        for (Map.Entry<TStorageMedium, BalanceStat> entry : clusterDiskBalanceStats.entrySet()) {
+            BalanceStat balanceStat = entry.getValue();
+            if (!balanceStat.isBalanced()) {
+                mediumBalanceTypes.add(Pair.create(entry.getKey(), balanceStat.getBalanceType()));
+            }
+        }
+
+        Map<Pair<TStorageMedium, Long>, BalanceStat> backendDiskBalanceStats = clusterLoadStat.getBackendDiskBalanceStats();
+        for (Map.Entry<Pair<TStorageMedium, Long>, BalanceStat> entry : backendDiskBalanceStats.entrySet()) {
+            BalanceStat balanceStat = entry.getValue();
+            if (!balanceStat.isBalanced()) {
+                mediumBalanceTypes.add(Pair.create(entry.getKey().first, balanceStat.getBalanceType()));
+            }
+        }
+    }
+
+    private void getTabletBalanceTypes(Set<Pair<TStorageMedium, BalanceType>> mediumBalanceTypes) {
+        LocalMetastore localMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+
+        List<Long> dbIds = localMetastore.getDbIdsIncludeRecycleBin();
+        for (Long dbId : dbIds) {
+            Database db = localMetastore.getDbIncludeRecycleBin(dbId);
+            if (db == null) {
+                continue;
+            }
+
+            if (db.isSystemDatabase()) {
+                continue;
+            }
+
+            Locker locker = new Locker();
+            locker.lockDatabase(db.getId(), LockType.READ);
+            try {
+                for (Table table : localMetastore.getTablesIncludeRecycleBin(db)) {
+                    if (!table.isOlapTableOrMaterializedView()) {
+                        continue;
+                    }
+
+                    OlapTable olapTbl = (OlapTable) table;
+                    // Table not in NORMAL state is not allowed to do balance,
+                    // because the change of tablet location can cause Schema change or rollup failed
+                    if (olapTbl.getState() != OlapTable.OlapTableState.NORMAL) {
+                        continue;
+                    }
+
+                    for (Partition partition : localMetastore.getAllPartitionsIncludeRecycleBin(olapTbl)) {
+                        if (partition.getState() != PartitionState.NORMAL) {
+                            // when alter job is in FINISHING state, partition state will be set to NORMAL,
+                            // and we can schedule the tablets in it.
+                            continue;
+                        }
+
+                        DataProperty dataProperty = localMetastore.getDataPropertyIncludeRecycleBin(
+                                olapTbl.getPartitionInfo(), partition.getId());
+                        if (dataProperty == null) {
+                            continue;
+                        }
+
+                        TStorageMedium medium = dataProperty.getStorageMedium();
+
+                        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                            for (MaterializedIndex idx
+                                    : physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+                                if (!idx.isTabletBalanced()) {
+                                    mediumBalanceTypes.add(Pair.create(medium, idx.getBalanceType()));
+                                }
+                            }
+                        }
+                    }
+                }
+            } finally {
+                locker.unLockDatabase(db.getId(), LockType.READ);
+            }
+        }
+    }
+
+    public List<List<String>> getClusterBalanceStats() {
+        List<List<String>> stats = Lists.newArrayList();
+
+        Set<Pair<TStorageMedium, BalanceType>> mediumBalanceTypes = getClusterBalanceTypes();
+        Set<TStorageMedium> storageMediums = getStorageMediums();
+
+        for (TStorageMedium medium : storageMediums) {
+            for (BalanceType type : BalanceType.values()) {
+                boolean isBalanced = !mediumBalanceTypes.contains(Pair.create(medium, type));
+                long pendingTabletNum = getPendingBalanceTabletNum(medium, type);
+                long runningTabletNum = getRunningBalanceTabletNum(medium, type);
+                stats.add(Lists.newArrayList(medium.name(), type.label(), String.valueOf(isBalanced),
+                        String.valueOf(pendingTabletNum), String.valueOf(runningTabletNum)));
+            }
+        }
+
+        return stats;
+    }
+
     public List<List<String>> getPendingTabletsInfo(int limit) {
         List<TabletSchedCtx> tabletCtxs = getCopiedTablets(pendingTablets, limit);
         return collectTabletCtx(tabletCtxs);
@@ -1984,8 +2178,16 @@ public class TabletScheduler extends FrontendDaemon {
         return pendingTablets.size();
     }
 
+    public synchronized long getPendingNum(Type type) {
+        return pendingTablets.stream().filter(t -> t.getType() == type).count();
+    }
+
     public synchronized int getRunningNum() {
         return runningTablets.size();
+    }
+
+    public synchronized long getRunningNum(Type type) {
+        return runningTablets.values().stream().filter(t -> t.getType() == type).count();
     }
 
     public synchronized int getHistoryNum() {
@@ -2001,6 +2203,42 @@ public class TabletScheduler extends FrontendDaemon {
                 + runningTablets.values().stream().filter(t -> t.getType() == Type.BALANCE).count();
     }
 
+    private synchronized long getPendingRepairTabletNum(TStorageMedium medium, TabletHealthStatus status) {
+        return pendingTablets.stream()
+                .filter(t -> t.getStorageMedium() == medium && t.getType() == Type.REPAIR && t.getTabletHealthStatus() == status)
+                .count();
+    }
+
+    private synchronized long getPendingBalanceTabletNum(TStorageMedium medium, BalanceType balanceType) {
+        if (balanceType == BalanceType.COLOCATION_GROUP) {
+            return getPendingRepairTabletNum(medium, TabletHealthStatus.COLOCATE_MISMATCH);
+        } else if (balanceType == BalanceType.LABEL_AWARE_LOCATION) {
+            return getPendingRepairTabletNum(medium, TabletHealthStatus.LOCATION_MISMATCH);
+        }
+
+        return pendingTablets.stream()
+                .filter(t -> t.getStorageMedium() == medium && t.getType() == Type.BALANCE && t.getBalanceType() == balanceType)
+                .count();
+    }
+
+    private synchronized long getRunningRepairTabletNum(TStorageMedium medium, TabletHealthStatus status) {
+        return runningTablets.values().stream()
+                .filter(t -> t.getStorageMedium() == medium && t.getType() == Type.REPAIR && t.getTabletHealthStatus() == status)
+                .count();
+    }
+
+    private synchronized long getRunningBalanceTabletNum(TStorageMedium medium, BalanceType balanceType) {
+        if (balanceType == BalanceType.COLOCATION_GROUP) {
+            return getRunningRepairTabletNum(medium, TabletHealthStatus.COLOCATE_MISMATCH);
+        } else if (balanceType == BalanceType.LABEL_AWARE_LOCATION) {
+            return getRunningRepairTabletNum(medium, TabletHealthStatus.LOCATION_MISMATCH);
+        }
+
+        return runningTablets.values().stream()
+                .filter(t -> t.getStorageMedium() == medium && t.getType() == Type.BALANCE && t.getBalanceType() == balanceType)
+                .count();
+    }
+
     public TGetTabletScheduleResponse getTabletSchedule(TGetTabletScheduleRequest request) {
         long tableId = request.isSetTable_id() ? request.table_id : -1;
         long partitionId = request.isSetPartition_id() ? request.partition_id : -1;
@@ -2011,7 +2249,7 @@ public class TabletScheduler extends FrontendDaemon {
         List<TabletSchedCtx> tabletCtxs;
         UserIdentity currentUser = null;
         if (request.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(request.current_user_ident);
+            currentUser = UserIdentityUtils.fromThrift(request.current_user_ident);
         }
         synchronized (this) {
             Stream<TabletSchedCtx> all;
@@ -2037,7 +2275,7 @@ public class TabletScheduler extends FrontendDaemon {
             if (tabletId != -1) {
                 all = all.filter(t -> t.getTabletId() == tabletId);
             } else if (partitionId != -1) {
-                all = all.filter(t -> t.getPartitionId() == partitionId);
+                all = all.filter(t -> t.getPhysicalPartitionId() == partitionId);
             } else if (tableId != -1) {
                 all = all.filter(t -> t.getTblId() == tableId);
             }
@@ -2065,16 +2303,10 @@ public class TabletScheduler extends FrontendDaemon {
             throw new SchedException(Status.UNRECOVERABLE, "table " + ctx.getTblId() + " dose not exist");
         }
 
-        Partition partition =
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getPartitionIncludeRecycleBin(tbl, ctx.getPartitionId());
-        if (partition == null) {
-            throw new SchedException(Status.UNRECOVERABLE, "partition " + ctx.getPartitionId() + " dose not exist");
-        }
-
-        PhysicalPartition physicalPartition = partition.getSubPartition(ctx.getPhysicalPartitionId());
+        PhysicalPartition physicalPartition = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getPhysicalPartitionIncludeRecycleBin(tbl, ctx.getPhysicalPartitionId());
         if (physicalPartition == null) {
-            throw new SchedException(Status.UNRECOVERABLE,
-                    "physical partition " + ctx.getPhysicalPartitionId() + " dose not exist");
+            throw new SchedException(Status.UNRECOVERABLE, "partition " + ctx.getPhysicalPartitionId() + " dose not exist");
         }
 
         MaterializedIndex idx = physicalPartition.getIndex(ctx.getIndexId());

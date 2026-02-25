@@ -12,26 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/qe/AuditLogBuilder.java
-
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
-
 package com.starrocks.qe;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -90,16 +70,20 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
                 if (af == null) {
                     continue;
                 }
+                String fieldName = af.value();
 
                 // fields related to big queries are not written into audit log by default,
                 // they will be written into big query log.
-                if (af.value().equals("BigQueryLogCPUSecondThreshold") ||
-                        af.value().equals("BigQueryLogScanBytesThreshold") ||
-                        af.value().equals("BigQueryLogScanRowsThreshold")) {
+                if (fieldName.equals("BigQueryLogCPUSecondThreshold") ||
+                        fieldName.equals("BigQueryLogScanBytesThreshold") ||
+                        fieldName.equals("BigQueryLogScanRowsThreshold")) {
+                    continue;
+                }
+                if (fieldName.equalsIgnoreCase("features")) {
                     continue;
                 }
 
-                if (af.value().equals("Time")) {
+                if (fieldName.equals("Time")) {
                     queryTime = (long) f.get(event);
                 }
 
@@ -126,9 +110,15 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
                         continue;
                     }
                 }
+                if (value instanceof String) {
+                    String stringValue = (String) value;
+                    if ((stringValue == null || stringValue.isEmpty()) && af.ignore_empty()) {
+                        continue;
+                    }
+                }
 
                 if (Config.audit_log_json_format) {
-                    logMap.put(af.value(), value);
+                    logMap.put(fieldName, value);
                 } else {
                     sb.append("|").append(af.value()).append("=").append(value);
                 }
@@ -149,19 +139,43 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
                         logMap.put("bigQueryLogCPUSecondThreshold", event.bigQueryLogCPUSecondThreshold);
                         logMap.put("bigQueryLogScanBytesThreshold", event.bigQueryLogScanBytesThreshold);
                         logMap.put("bigQueryLogScanRowsThreshold", event.bigQueryLogScanRowsThreshold);
+                        AuditLog.getBigQueryAudit().log(objectMapper.writeValueAsString(logMap));
                     } else {
                         sb.append("|bigQueryLogCPUSecondThreshold=").append(event.bigQueryLogCPUSecondThreshold);
                         sb.append("|bigQueryLogScanBytesThreshold=").append(event.bigQueryLogScanBytesThreshold);
                         sb.append("|bigQueryLogScanRowsThreshold=").append(event.bigQueryLogScanRowsThreshold);
+                        AuditLog.getBigQueryAudit().log(sb.toString());
                     }
                 }
+                if (Config.enable_qe_slow_log && queryTime > Config.qe_slow_log_ms) {
+                    if (Config.audit_log_json_format) {
+                        AuditLog.getSlowAudit().log(objectMapper.writeValueAsString(logMap));
+                    } else {
+                        AuditLog.getSlowAudit().log(sb.toString());
+                    }
+                }
+                if (Config.enable_plan_feature_collection && event.features != null) {
+                    StringBuilder execution = new StringBuilder();
+                    execution.append("digest=").append(event.digest);
+                    execution.append("|cpuCostNs=").append(event.cpuCostNs);
+                    execution.append("|memCostBytes=").append(event.memCostBytes);
+                    execution.append("|scanBytes=").append(event.scanBytes);
+                    execution.append("|scanRows=").append(event.scanRows);
+                    execution.append("|returnRows=").append(event.returnRows);
+                    execution.append("|spilledBytes=").append(event.spilledBytes);
+                    execution.append("|time=").append(event.queryTime);
+                    execution.append("|state=").append(event.state);
+                    execution.append("|catalog=").append(event.catalog);
+                    execution.append("|database=").append(event.db);
+                    execution.append("|").append(event.features);
+                    AuditLog.getFeaturesAudit().info(execution.toString());
+                }
+                event.features = null;
                 if (Config.audit_log_json_format) {
                     AuditLog.getQueryAudit().log(objectMapper.writeValueAsString(logMap));
                 } else {
                     AuditLog.getQueryAudit().log(sb.toString());
                 }
-
-
             }
         } catch (Exception e) {
             LOG.warn("failed to process audit event", e);

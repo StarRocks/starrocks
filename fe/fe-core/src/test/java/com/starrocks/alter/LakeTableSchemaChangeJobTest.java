@@ -15,69 +15,80 @@
 package com.starrocks.alter;
 
 import com.google.api.client.util.Lists;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
+import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
-import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
-import com.starrocks.system.ComputeNode;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.task.AgentBatchTask;
+import com.starrocks.task.AlterReplicaTask;
+import com.starrocks.thrift.TAlterTabletReqV2;
+import com.starrocks.thrift.TTabletSchema;
+import com.starrocks.transaction.TransactionState;
+import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.UtFrameUtils;
-import com.starrocks.warehouse.DefaultWarehouse;
-import com.starrocks.warehouse.Warehouse;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
-import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
-import javax.validation.constraints.NotNull;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class LakeTableSchemaChangeJobTest {
     private static final int NUM_BUCKETS = 4;
     private static ConnectContext connectContext;
     private static final String DB_NAME = "db_lake_schema_change_test";
     private static Database db;
-    private LakeTableSchemaChangeJob schemaChangeJob;
     private LakeTable table;
 
     public LakeTableSchemaChangeJobTest() {
     }
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
         connectContext = UtFrameUtils.createDefaultCtx();
+        UtFrameUtils.stopBackgroundSchemaChangeHandler(60000);
     }
 
     private static LakeTable createTable(ConnectContext connectContext, String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getDb(createTableStmt.getDbName());
-        return (LakeTable) db.getTable(createTableStmt.getTableName());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createTableStmt.getDbName());
+        return (LakeTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), createTableStmt.getTableName());
     }
 
     private static void alterTable(ConnectContext connectContext, String sql) throws Exception {
@@ -89,52 +100,63 @@ public class LakeTableSchemaChangeJobTest {
         AlterJobMgr alterJobMgr = GlobalStateMgr.getCurrentState().getAlterJobMgr();
         List<AlterJobV2> jobs = alterJobMgr.getSchemaChangeHandler().getUnfinishedAlterJobV2ByTableId(table.getId());
         alterJobMgr.getSchemaChangeHandler().clearJobs();
-        Assert.assertEquals(1, jobs.size());
+        Assertions.assertEquals(1, jobs.size());
         AlterJobV2 alterJob = jobs.get(0);
-        Assert.assertTrue(alterJob instanceof LakeTableSchemaChangeJob);
+        Assertions.assertTrue(alterJob instanceof LakeTableSchemaChangeJob);
         return (LakeTableSchemaChangeJob) alterJob;
     }
 
-    @Before
+    private LakeTableSchemaChangeJob alterTableAddColumn() throws Exception {
+        alterTable(connectContext, "ALTER TABLE t0 ADD COLUMN c1 BIGINT key NOT NULL default \"0\"");
+        return getAlterJob(table);
+    }
+
+    @BeforeEach
     public void before() throws Exception {
         String createDbStmtStr = "create database " + DB_NAME;
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
         connectContext.setDatabase(DB_NAME);
-        db = GlobalStateMgr.getServingState().getDb(DB_NAME);
+        db = GlobalStateMgr.getServingState().getLocalMetastore().getDb(DB_NAME);
         table = createTable(connectContext, "CREATE TABLE t0(c0 INT) duplicate key(c0) distributed by hash(c0) buckets "
-                + NUM_BUCKETS);
-        Config.enable_fast_schema_evolution_in_share_data_mode = false;
-        alterTable(connectContext, "ALTER TABLE t0 ADD COLUMN c1 DOUBLE");
-        schemaChangeJob = getAlterJob(table);
-        Config.enable_fast_schema_evolution_in_share_data_mode = true;
+                    + NUM_BUCKETS);
     }
 
-    @After
+    @AfterEach
     public void after() throws Exception {
-        GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(DB_NAME, true);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(connectContext, DB_NAME, true);
     }
 
     @Test
-    public void testCancelPendingJob() throws IOException {
+    public void testCancelPendingJob() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         schemaChangeJob.cancel("test");
-        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
         // test cancel again
         schemaChangeJob.cancel("test");
-        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
     }
 
     @Test
-    public void testDropTableBeforeCancel() {
+    public void testDropTableBeforeCancel() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         db.dropTable(table.getName());
-
         schemaChangeJob.cancel("test");
-        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
     }
 
     @Test
-    public void testPendingJobNoAliveBackend() {
+    public void testPendingJobNoAliveBackend() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
+        MockedWarehouseManager mockedWarehouseManager = new MockedWarehouseManager();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return mockedWarehouseManager;
+            }
+        };
+
         new MockUp<Utils>() {
             @Mock
             public Long chooseNodeId(LakeTablet tablet) {
@@ -148,37 +170,20 @@ public class LakeTableSchemaChangeJobTest {
             }
         };
 
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public Warehouse getWarehouse(long warehouseId) {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            }
-
-            @Mock
-            public ComputeNode getComputeNodeAssignedToTablet(Long warehouseId, LakeTablet tablet) {
-                return null;
-            }
-
-            @Mock
-            public ComputeNode getComputeNodeAssignedToTablet(String warehouseName, LakeTablet tablet) {
-                return null;
-            }
-        };
-
-        Exception exception = Assert.assertThrows(AlterCancelException.class, () -> {
-            schemaChangeJob.runPendingJob();
-        });
-        Assert.assertTrue(exception.getMessage().contains("No alive backend"));
-        Assert.assertEquals(AlterJobV2.JobState.PENDING, schemaChangeJob.getJobState());
-        Assert.assertEquals(-1, schemaChangeJob.getWatershedTxnId());
+        mockedWarehouseManager.setComputeNodesAssignedToTablet(null);
+        Exception exception = Assertions.assertThrows(AlterCancelException.class, () ->
+                schemaChangeJob.runPendingJob());
+        Assertions.assertTrue(exception.getMessage().contains("No alive backend"));
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, schemaChangeJob.getJobState());
+        Assertions.assertEquals(-1, schemaChangeJob.getWatershedTxnId());
 
         schemaChangeJob.cancel("test");
-        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
     }
 
     @Test
-    public void testTableDroppedInPending() {
+    public void testTableDroppedInPending() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         new MockUp<Utils>() {
             @Mock
             public Long chooseNodeId(LakeTablet tablet) {
@@ -188,27 +193,24 @@ public class LakeTableSchemaChangeJobTest {
 
         db.dropTable(table.getName());
 
-        Exception exception = Assert.assertThrows(AlterCancelException.class, () -> {
-            schemaChangeJob.runPendingJob();
-        });
-        Assert.assertTrue(exception.getMessage().contains("Table does not exist"));
-        Assert.assertEquals(AlterJobV2.JobState.PENDING, schemaChangeJob.getJobState());
-        Assert.assertEquals(-1, schemaChangeJob.getWatershedTxnId());
+        Exception exception = Assertions.assertThrows(AlterCancelException.class, () -> schemaChangeJob.runPendingJob());
+        Assertions.assertTrue(exception.getMessage().contains("Table does not exist"));
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, schemaChangeJob.getJobState());
+        Assertions.assertEquals(-1, schemaChangeJob.getWatershedTxnId());
 
         GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().remove(db.getId());
-        exception = Assert.assertThrows(AlterCancelException.class, () -> {
-            schemaChangeJob.runPendingJob();
-        });
-        Assert.assertTrue(exception.getMessage().contains("Database does not exist"));
-        Assert.assertEquals(AlterJobV2.JobState.PENDING, schemaChangeJob.getJobState());
-        Assert.assertEquals(-1, schemaChangeJob.getWatershedTxnId());
+        exception = Assertions.assertThrows(AlterCancelException.class, () -> schemaChangeJob.runPendingJob());
+        Assertions.assertTrue(exception.getMessage().contains("Database does not exist"));
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, schemaChangeJob.getJobState());
+        Assertions.assertEquals(-1, schemaChangeJob.getWatershedTxnId());
 
         schemaChangeJob.cancel("test");
-        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
     }
 
     @Test
-    public void testCreateTabletFailed() {
+    public void testCreateTabletFailed() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         new MockUp<LakeTableSchemaChangeJob>() {
             @Mock
             public void sendAgentTaskAndWait(AgentBatchTask batchTask, MarkedCountDownLatch<Long, Long> countDownLatch,
@@ -218,33 +220,34 @@ public class LakeTableSchemaChangeJobTest {
             }
         };
 
-        Exception exception = Assert.assertThrows(AlterCancelException.class, () -> {
-            schemaChangeJob.runPendingJob();
-        });
-        Assert.assertTrue(exception.getMessage().contains("Create tablet failed"));
-        Assert.assertEquals(AlterJobV2.JobState.PENDING, schemaChangeJob.getJobState());
-        Assert.assertEquals(-1, schemaChangeJob.getWatershedTxnId());
+        Exception exception = Assertions.assertThrows(AlterCancelException.class, () -> schemaChangeJob.runPendingJob());
+        Assertions.assertTrue(exception.getMessage().contains("Create tablet failed"));
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, schemaChangeJob.getJobState());
+        Assertions.assertEquals(-1, schemaChangeJob.getWatershedTxnId());
 
         schemaChangeJob.cancel("test");
-        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
     }
 
     @Test
-    public void testCreateTabletSuccess() throws AlterCancelException {
+    public void testCreateTabletSuccess() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         schemaChangeJob.runPendingJob();
-        Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
 
         schemaChangeJob.cancel("test");
-        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
 
-        Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
 
         Partition partition = table.getPartitions().stream().findFirst().get();
-        Assert.assertEquals(0, partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+        Assertions.assertEquals(0, partition.getDefaultPhysicalPartition()
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
     }
 
     @Test
-    public void testPreviousTxnNotFinished() throws AlterCancelException {
+    public void testPreviousTxnNotFinished() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         new MockUp<LakeTableSchemaChangeJob>() {
             @Mock
             public boolean isPreviousLoadFinished(long dbId, long tableId, long txnId) {
@@ -253,22 +256,24 @@ public class LakeTableSchemaChangeJobTest {
         };
 
         schemaChangeJob.runPendingJob();
-        Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
 
         schemaChangeJob.runWaitingTxnJob();
-        Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
 
         schemaChangeJob.cancel("test");
-        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
 
-        Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
 
         Partition partition = table.getPartitions().stream().findFirst().get();
-        Assert.assertEquals(0, partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+        Assertions.assertEquals(0, partition.getDefaultPhysicalPartition()
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
     }
 
     @Test
-    public void testThrowAnalysisExceptionWhileWaitingTxn() throws AlterCancelException {
+    public void testThrowAnalysisExceptionWhileWaitingTxn() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         new MockUp<LakeTableSchemaChangeJob>() {
             @Mock
             public boolean isPreviousLoadFinished(long dbId, long tableId, long txnId) throws AnalysisException {
@@ -277,89 +282,86 @@ public class LakeTableSchemaChangeJobTest {
         };
 
         schemaChangeJob.runPendingJob();
-        Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
 
-        Exception exception = Assert.assertThrows(AlterCancelException.class, () -> {
-            schemaChangeJob.runWaitingTxnJob();
-        });
-        Assert.assertTrue(exception.getMessage().contains("sPreviousLoadFinished exception"));
-        Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+        Exception exception = Assertions.assertThrows(AlterCancelException.class, () -> schemaChangeJob.runWaitingTxnJob());
+        Assertions.assertTrue(exception.getMessage().contains("sPreviousLoadFinished exception"));
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
 
         schemaChangeJob.cancel("test");
-        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
 
-        Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
 
         Partition partition = table.getPartitions().stream().findFirst().get();
-        Assert.assertEquals(0, partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+        Assertions.assertEquals(0, partition.getDefaultPhysicalPartition()
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
     }
 
     @Test
-    public void testTableNotExistWhileWaitingTxn() throws AlterCancelException {
+    public void testTableNotExistWhileWaitingTxn() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         schemaChangeJob.runPendingJob();
-        Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
 
         db.dropTable(table.getName());
 
-        Exception exception = Assert.assertThrows(AlterCancelException.class, () -> {
-            schemaChangeJob.runWaitingTxnJob();
-        });
-        Assert.assertTrue(exception.getMessage().contains("Table does not exist."));
-        Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+        Exception exception = Assertions.assertThrows(AlterCancelException.class, () -> schemaChangeJob.runWaitingTxnJob());
+        Assertions.assertTrue(exception.getMessage().contains("Table does not exist."));
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
 
         GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().remove(db.getId());
-        exception = Assert.assertThrows(AlterCancelException.class, () -> {
-            schemaChangeJob.runWaitingTxnJob();
-        });
-        Assert.assertTrue(exception.getMessage().contains("Database does not exist"));
-        Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+        exception = Assertions.assertThrows(AlterCancelException.class, () -> schemaChangeJob.runWaitingTxnJob());
+        Assertions.assertTrue(exception.getMessage().contains("Database does not exist"));
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
 
         GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().put(db.getId(), db);
         db.registerTableUnlocked(table);
         schemaChangeJob.cancel("test");
-        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
 
-        Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
 
         Partition partition = table.getPartitions().stream().findFirst().get();
-        Assert.assertEquals(0, partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+        Assertions.assertEquals(0, partition.getDefaultPhysicalPartition()
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
     }
 
     @Test
-    public void testTableDroppedBeforeRewriting() throws AlterCancelException {
+    public void testTableDroppedBeforeRewriting() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         schemaChangeJob.runPendingJob();
-        Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
 
         schemaChangeJob.runWaitingTxnJob();
-        Assert.assertEquals(AlterJobV2.JobState.RUNNING, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, schemaChangeJob.getJobState());
 
         db.dropTable(table.getName());
-        Exception exception = Assert.assertThrows(AlterCancelException.class, () -> {
-            schemaChangeJob.runRunningJob();
-        });
-        Assert.assertTrue(exception.getMessage().contains("Table or database does not exist"));
+        Exception exception = Assertions.assertThrows(AlterCancelException.class, () -> schemaChangeJob.runRunningJob());
+        Assertions.assertTrue(exception.getMessage().contains("Table or database does not exist"));
 
         db.registerTableUnlocked(table);
         GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().remove(db.getId());
 
-        exception = Assert.assertThrows(AlterCancelException.class, () -> {
-            schemaChangeJob.runRunningJob();
-        });
-        Assert.assertTrue(exception.getMessage().contains("Table or database does not exist"));
+        exception = Assertions.assertThrows(AlterCancelException.class, () ->
+                schemaChangeJob.runRunningJob());
+        Assertions.assertTrue(exception.getMessage().contains("Table or database does not exist"));
 
         GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().put(db.getId(), db);
         db.registerTableUnlocked(table);
         schemaChangeJob.cancel("test");
-        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
 
-        Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
 
         Partition partition = table.getPartitions().stream().findFirst().get();
-        Assert.assertEquals(0, partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+        Assertions.assertEquals(0, partition.getDefaultPhysicalPartition()
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
     }
 
     @Test
-    public void testAlterTabletFailed() throws AlterCancelException {
+    public void testAlterTabletFailed() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         new MockUp<LakeTableSchemaChangeJob>() {
             @Mock
             public void sendAgentTask(AgentBatchTask batchTask) {
@@ -370,27 +372,27 @@ public class LakeTableSchemaChangeJobTest {
         };
 
         schemaChangeJob.runPendingJob();
-        Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
 
         schemaChangeJob.runWaitingTxnJob();
-        Assert.assertEquals(AlterJobV2.JobState.RUNNING, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, schemaChangeJob.getJobState());
 
-        Exception exception = Assert.assertThrows(AlterCancelException.class, () -> {
-            schemaChangeJob.runRunningJob();
-        });
-        Assert.assertTrue(exception.getMessage().contains("schema change task failed after try three times"));
+        Exception exception = Assertions.assertThrows(AlterCancelException.class, () -> schemaChangeJob.runRunningJob());
+        Assertions.assertTrue(exception.getMessage().contains("schema change task failed after try three times"));
 
         schemaChangeJob.cancel("test");
-        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
 
-        Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
 
         Partition partition = table.getPartitions().stream().findFirst().get();
-        Assert.assertEquals(0, partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+        Assertions.assertEquals(0, partition.getDefaultPhysicalPartition()
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
     }
 
     @Test
-    public void testAlterTabletSuccess() throws AlterCancelException {
+    public void testAlterTabletSuccess() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         new MockUp<LakeTableSchemaChangeJob>() {
             @Mock
             public void sendAgentTask(AgentBatchTask batchTask) {
@@ -399,48 +401,131 @@ public class LakeTableSchemaChangeJobTest {
         };
 
         schemaChangeJob.runPendingJob();
-        Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
 
         schemaChangeJob.runWaitingTxnJob();
-        Assert.assertEquals(AlterJobV2.JobState.RUNNING, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, schemaChangeJob.getJobState());
 
         schemaChangeJob.runRunningJob();
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
-        Assert.assertTrue(schemaChangeJob.getFinishedTimeMs() > System.currentTimeMillis() - 10_000L);
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
+        Assertions.assertTrue(schemaChangeJob.getFinishedTimeMs() > System.currentTimeMillis() - 10_000L);
         Collection<Partition> partitions = table.getPartitions();
-        Assert.assertEquals(1, partitions.size());
+        Assertions.assertEquals(1, partitions.size());
         Partition partition = partitions.stream().findFirst().orElse(null);
-        Assert.assertNotNull(partition);
-        Assert.assertEquals(3, partition.getNextVersion());
+        Assertions.assertNotNull(partition);
+        Assertions.assertEquals(3, partition.getDefaultPhysicalPartition().getNextVersion());
         List<MaterializedIndex> shadowIndexes =
-                partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
-        Assert.assertEquals(1, shadowIndexes.size());
+                    partition.getDefaultPhysicalPartition().getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
+        Assertions.assertEquals(1, shadowIndexes.size());
 
         // Does not support cancel job in FINISHED_REWRITING state.
         schemaChangeJob.cancel("test");
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
 
         // LakeTablet alter job will not mark tablet force delete into TabletInvertedIndex
-        Assert.assertTrue(GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getForceDeleteTablets().isEmpty());
+        Assertions.assertTrue(GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getForceDeleteTablets().isEmpty());
 
         // Drop the table, now it's ok to cancel the job
         db.dropTable(table.getName());
         schemaChangeJob.cancel("table does not exist anymore");
-        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
     }
 
     @Test
-    public void testPublishVersion() throws AlterCancelException {
-        new MockUp<Utils>() {
+    public void testAlterTabletSuccessEnableFileBundling() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
+        new MockUp<LakeTableSchemaChangeJob>() {
             @Mock
-            public void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
-                                       long newVersion, long warehouseId)
-                    throws
-                    RpcException {
-                throw new RpcException("publish version failed", "127.0.0.1");
+            public void sendAgentTask(AgentBatchTask batchTask) {
+                batchTask.getAllTasks().forEach(t -> t.setFinished(true));
             }
         };
 
+        LakeTable table1 = createTable(connectContext, 
+                    "CREATE TABLE t1(c0 INT) duplicate key(c0) distributed by hash(c0) buckets 3 " +
+                                "PROPERTIES('file_bundling'='true')");
+        
+        Config.enable_fast_schema_evolution_in_share_data_mode = false;
+        alterTable(connectContext, "ALTER TABLE t1 ADD COLUMN c1 BIGINT AS c0 + 2");
+        LakeTableSchemaChangeJob schemaChangeJob1 = getAlterJob(table1);
+        
+        schemaChangeJob1.runPendingJob();
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob1.getJobState());
+
+        schemaChangeJob1.runWaitingTxnJob();
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, schemaChangeJob1.getJobState());
+
+        schemaChangeJob1.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob1.getJobState());
+        Assertions.assertTrue(schemaChangeJob1.getFinishedTimeMs() > System.currentTimeMillis() - 10_000L);
+        Collection<Partition> partitions = table1.getPartitions();
+        Assertions.assertEquals(1, partitions.size());
+        Partition partition = partitions.stream().findFirst().orElse(null);
+        Assertions.assertNotNull(partition);
+        Assertions.assertEquals(3, partition.getDefaultPhysicalPartition().getNextVersion());
+        List<MaterializedIndex> shadowIndexes =
+                    partition.getDefaultPhysicalPartition().getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
+        Assertions.assertEquals(1, shadowIndexes.size());
+
+        // Does not support cancel job in FINISHED_REWRITING state.
+        schemaChangeJob.cancel("test");
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob1.getJobState());
+
+        while (schemaChangeJob1.getJobState() != AlterJobV2.JobState.FINISHED) {
+            schemaChangeJob1.runFinishedRewritingJob();
+            Thread.sleep(100);
+        }
+    }
+
+    @Test
+    public void testAlterTabletSuccessDisableFileBundling() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+            public void sendAgentTask(AgentBatchTask batchTask) {
+                batchTask.getAllTasks().forEach(t -> t.setFinished(true));
+            }
+        };
+
+        LakeTable table1 = createTable(connectContext, 
+                    "CREATE TABLE t1(c0 INT) duplicate key(c0) distributed by hash(c0) buckets 3 " +
+                                "PROPERTIES('file_bundling'='false')");
+        
+        Config.enable_fast_schema_evolution_in_share_data_mode = false;
+        alterTable(connectContext, "ALTER TABLE t1 ADD COLUMN c1 BIGINT AS c0 + 2");
+        LakeTableSchemaChangeJob schemaChangeJob1 = getAlterJob(table1);
+        
+        schemaChangeJob1.runPendingJob();
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob1.getJobState());
+
+        schemaChangeJob1.runWaitingTxnJob();
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, schemaChangeJob1.getJobState());
+
+        schemaChangeJob1.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob1.getJobState());
+        Assertions.assertTrue(schemaChangeJob1.getFinishedTimeMs() > System.currentTimeMillis() - 10_000L);
+        Collection<Partition> partitions = table1.getPartitions();
+        Assertions.assertEquals(1, partitions.size());
+        Partition partition = partitions.stream().findFirst().orElse(null);
+        Assertions.assertNotNull(partition);
+        Assertions.assertEquals(3, partition.getDefaultPhysicalPartition().getNextVersion());
+        List<MaterializedIndex> shadowIndexes =
+                    partition.getDefaultPhysicalPartition().getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
+        Assertions.assertEquals(1, shadowIndexes.size());
+
+        // Does not support cancel job in FINISHED_REWRITING state.
+        schemaChangeJob.cancel("test");
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob1.getJobState());
+
+        while (schemaChangeJob1.getJobState() != AlterJobV2.JobState.FINISHED) {
+            schemaChangeJob1.runFinishedRewritingJob();
+            Thread.sleep(100);
+        }
+    }
+
+    @Test
+    public void testPublishVersion() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         new MockUp<LakeTableSchemaChangeJob>() {
             @Mock
             public void sendAgentTask(AgentBatchTask batchTask) {
@@ -449,88 +534,136 @@ public class LakeTableSchemaChangeJobTest {
         };
 
         schemaChangeJob.runPendingJob();
-        Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
 
         schemaChangeJob.runWaitingTxnJob();
-        Assert.assertEquals(AlterJobV2.JobState.RUNNING, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, schemaChangeJob.getJobState());
 
         Collection<Partition> partitions = table.getPartitions();
-        Assert.assertEquals(1, partitions.size());
+        Assertions.assertEquals(1, partitions.size());
         Partition partition = partitions.stream().findFirst().orElse(null);
-        Assert.assertNotNull(partition);
+        Assertions.assertNotNull(partition);
 
-        Assert.assertEquals(1, partition.getVisibleVersion());
-        Assert.assertEquals(2, partition.getNextVersion());
+        Assertions.assertEquals(1, partition.getDefaultPhysicalPartition().getVisibleVersion());
+        Assertions.assertEquals(2, partition.getDefaultPhysicalPartition().getNextVersion());
         // Disable send publish version
-        partition.setNextVersion(3);
+        partition.getDefaultPhysicalPartition().setNextVersion(3);
 
         schemaChangeJob.runRunningJob();
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
 
         List<MaterializedIndex> shadowIndexes =
-                partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
-        Assert.assertEquals(1, shadowIndexes.size());
+                    partition.getDefaultPhysicalPartition().getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
+        Assertions.assertEquals(1, shadowIndexes.size());
 
         // The partition's visible version has not catch up with the commit version of this schema change job now.
         schemaChangeJob.runFinishedRewritingJob();
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
 
         // Reset partition's next version
-        partition.setVisibleVersion(2, System.currentTimeMillis());
+        partition.getDefaultPhysicalPartition().setVisibleVersion(2, System.currentTimeMillis());
 
         // Drop table
         db.dropTable(table.getName());
 
-        Exception exception = Assert.assertThrows(AlterCancelException.class, () -> {
-            schemaChangeJob.runFinishedRewritingJob();
-        });
-        Assert.assertTrue(exception.getMessage().contains("Table does not exist"));
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
+        Exception exception = Assertions.assertThrows(AlterCancelException.class, () ->
+                schemaChangeJob.runFinishedRewritingJob());
+        Assertions.assertTrue(exception.getMessage().contains("Table does not exist"));
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
 
         // Add table back to database
         db.registerTableUnlocked(table);
 
-        // We've mocked ColumnTypeConverter.publishVersion to throw RpcException, should this runFinishedRewritingJob will fail but
-        // should not throw any exception.
-        schemaChangeJob.runFinishedRewritingJob();
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
-
         // Make publish version success
-        new MockUp<Utils>() {
+        new MockUp<AlterJobV2>() {
             @Mock
-            public void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
-                                       long newVersion, long warehouseId) {
-                // nothing to do
+            public boolean publishVersion() {
+                return true;
             }
         };
 
-        schemaChangeJob.runFinishedRewritingJob();
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED, schemaChangeJob.getJobState());
-        Assert.assertTrue(schemaChangeJob.getFinishedTimeMs() > System.currentTimeMillis() - 10_000L);
+        while (schemaChangeJob.getJobState() != AlterJobV2.JobState.FINISHED) {
+            schemaChangeJob.runFinishedRewritingJob();
+            Thread.sleep(100);
+        }
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, schemaChangeJob.getJobState());
+        Assertions.assertTrue(schemaChangeJob.getFinishedTimeMs() > System.currentTimeMillis() - 10_000L);
 
-        Assert.assertEquals(2, table.getBaseSchema().size());
-        Assert.assertEquals("c0", table.getBaseSchema().get(0).getName());
-        Assert.assertEquals("c1", table.getBaseSchema().get(1).getName());
+        Assertions.assertEquals(2, table.getBaseSchema().size());
+        Assertions.assertEquals("c0", table.getBaseSchema().get(0).getName());
+        Assertions.assertEquals("c1", table.getBaseSchema().get(1).getName());
 
-        Assert.assertSame(partition, table.getPartitions().stream().findFirst().get());
-        Assert.assertEquals(3, partition.getVisibleVersion());
-        Assert.assertEquals(4, partition.getNextVersion());
+        Assertions.assertSame(partition, table.getPartitions().stream().findFirst().get());
+        Assertions.assertEquals(3, partition.getDefaultPhysicalPartition().getVisibleVersion());
+        Assertions.assertEquals(4, partition.getDefaultPhysicalPartition().getNextVersion());
 
-        shadowIndexes = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
-        Assert.assertEquals(0, shadowIndexes.size());
+        shadowIndexes = partition.getDefaultPhysicalPartition().getLatestMaterializedIndices(IndexExtState.SHADOW);
+        Assertions.assertEquals(0, shadowIndexes.size());
 
         List<MaterializedIndex> normalIndexes =
-                partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
-        Assert.assertEquals(1, normalIndexes.size());
+                    partition.getDefaultPhysicalPartition().getLatestMaterializedIndices(IndexExtState.VISIBLE);
+        Assertions.assertEquals(1, normalIndexes.size());
         MaterializedIndex normalIndex = normalIndexes.get(0);
 
         // Does not support cancel job in FINISHED state.
         schemaChangeJob.cancel("test");
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, schemaChangeJob.getJobState());
     }
 
     @Test
-    public void testTransactionRaceCondition() throws AlterCancelException {
+    public void testPublishRetry() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
+        AtomicInteger numPublishRetry = new AtomicInteger(0);
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+            public boolean lakePublishVersion() {
+                numPublishRetry.incrementAndGet();
+                return false;
+            }
+        };
+        
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+            public void sendAgentTask(AgentBatchTask batchTask) {
+                batchTask.getAllTasks().forEach(t -> t.setFinished(true));
+            }
+        };
+
+        schemaChangeJob.run();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
+        long timeoutMs = 10 * 60 * 1000L;
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        while (numPublishRetry.get() < 2) {
+            schemaChangeJob.run();
+            Thread.sleep(100);
+            Assertions.assertTrue(System.currentTimeMillis() < deadline,
+                    () -> String.format("publish does not retry before timeout, job state: %s", schemaChangeJob.getJobState()));
+        }
+
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+            public boolean lakePublishVersion() {
+                return true;
+            }
+        };
+
+        deadline = System.currentTimeMillis() + timeoutMs;
+        while (schemaChangeJob.getJobState() != AlterJobV2.JobState.FINISHED
+                || table.getState() != OlapTable.OlapTableState.NORMAL) {
+            schemaChangeJob.run();
+            Thread.sleep(100);
+            Assertions.assertTrue(System.currentTimeMillis() < deadline,
+                    () -> String.format("publish does not finish before timeout, job state: %s, table state: %s",
+                            schemaChangeJob.getJobState(), table.getState()));
+        }
+        Assertions.assertEquals(2, table.getBaseSchema().size());
+        Assertions.assertEquals("c0", table.getBaseSchema().get(0).getName());
+        Assertions.assertEquals("c1", table.getBaseSchema().get(1).getName());
+    }
+
+    @Test
+    public void testTransactionRaceCondition() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         new MockUp<LakeTableSchemaChangeJob>() {
             @Mock
             public void sendAgentTask(AgentBatchTask batchTask) {
@@ -553,43 +686,35 @@ public class LakeTableSchemaChangeJobTest {
             }
         };
 
-        Exception exception = Assert.assertThrows(AlterCancelException.class, () -> {
-            schemaChangeJob.runPendingJob();
-        });
-        Assert.assertTrue(exception.getMessage().contains(
-                "concurrent transaction detected while adding shadow index, please re-run the alter table command"));
-        Assert.assertEquals(AlterJobV2.JobState.PENDING, schemaChangeJob.getJobState());
-        Assert.assertEquals(10101L, schemaChangeJob.getWatershedTxnId());
+        Exception exception = Assertions.assertThrows(AlterCancelException.class, () ->
+                schemaChangeJob.runPendingJob());
+        Assertions.assertTrue(exception.getMessage().contains(
+                "concurrent transaction detected while adding shadow index, please re-run the alter table command"),
+                () -> {
+                    StringWriter sw = new java.io.StringWriter();
+                    PrintWriter pw = new java.io.PrintWriter(sw);
+                    exception.printStackTrace(pw);
+                    return sw.toString();
+                });
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, schemaChangeJob.getJobState());
+        Assertions.assertEquals(10101L, schemaChangeJob.getWatershedTxnId());
 
         schemaChangeJob.cancel("test");
-        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
     }
 
     @Test
     public void testShow() {
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public Warehouse getWarehouseAllowNull(long warehouseId) {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            }
-        };
+        UtFrameUtils.mockInitWarehouseEnv();
 
         SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
 
         LakeTableSchemaChangeJob alterJobV2 =
-                new LakeTableSchemaChangeJob(12345L, db.getId(), table.getId(), table.getName(), 10);
+                    new LakeTableSchemaChangeJob(12345L, db.getId(), table.getId(), table.getName(), 10);
         alterJobV2.addIndexSchema(1L, 2L, "a", (short) 1, Lists.newArrayList());
 
         schemaChangeHandler.addAlterJobV2(alterJobV2);
         System.out.println(schemaChangeHandler.getAlterJobInfosByDb(db));
-
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public Warehouse getWarehouseAllowNull(long warehouseId) {
-                return null;
-            }
-        };
 
         SchemaChangeHandler schemaChangeHandler2 = new SchemaChangeHandler();
         alterJobV2 = new LakeTableSchemaChangeJob(12345L, db.getId(), table.getId(), table.getName(), 10);
@@ -600,12 +725,158 @@ public class LakeTableSchemaChangeJobTest {
 
     @Test
     public void testCancelPendingJobWithFlag() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         schemaChangeJob.setIsCancelling(true);
         schemaChangeJob.runPendingJob();
         schemaChangeJob.setIsCancelling(false);
-     
+
         schemaChangeJob.setWaitingCreatingReplica(true);
         schemaChangeJob.cancel("");
         schemaChangeJob.setWaitingCreatingReplica(false);
+    }
+
+    @Test
+    public void testInsertConcurrent() throws Exception {
+        TransactionState.TxnCoordinator coordinator = new TransactionState.TxnCoordinator(
+                TransactionState.TxnSourceType.BE, "127.0.0.1");
+        // block the schema change job to simulate concurrent insert
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
+                db.getId(), List.of(table.getId()), UUID.randomUUID().toString(), coordinator,
+                TransactionState.LoadJobSourceType.BACKEND_STREAMING, 60000L);
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, schemaChangeJob.getJobState());
+        schemaChangeJob.run();
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+        ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(connectContext, "insert into t0 values (1)").second;
+        List<Column> fullSchema = table.getFullSchema();
+        Assertions.assertEquals(2, fullSchema.size());
+        Assertions.assertEquals("c0", fullSchema.get(0).getName());
+        Assertions.assertEquals("c1", fullSchema.get(1).getName());
+        List<Expr> outputExprs = execPlan.getOutputExprs();
+        Assertions.assertEquals(fullSchema.size(), outputExprs.size());
+        for (int i = 0; i < fullSchema.size(); i++) {
+            Assertions.assertEquals(fullSchema.get(i).getType(), outputExprs.get(i).getType());
+        }
+    }
+
+    @Test
+    public void testAlterAfterFseV2() throws Exception {
+        // Create a table with multiple partitions
+        LakeTable multiPartitionTable = createTable(connectContext,
+                "CREATE TABLE t_multi_partition(c0 INT) duplicate key(c0) " +
+                        "PARTITION BY RANGE(c0) (" +
+                        "PARTITION p1 VALUES [(\"0\"), (\"100\"))," +
+                        "PARTITION p2 VALUES [(\"100\"), (\"200\"))" +
+                        ") " +
+                        "distributed by hash(c0) buckets 3");
+
+        // Alter table to add a value column which is expected to use fast schema evolution v2
+        alterTable(connectContext, "ALTER TABLE t_multi_partition ADD COLUMN c1 BIGINT");
+        // Alter table to add a generated column
+        alterTable(connectContext, "ALTER TABLE t_multi_partition ADD COLUMN c2 BIGINT AS c0 + c1");
+        LakeTableSchemaChangeJob schemaChangeJob = getAlterJob(multiPartitionTable);
+
+        // Capture AgentBatchTask objects
+        List<AgentBatchTask> capturedBatchTasks = new ArrayList<>();
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+            public void sendAgentTask(AgentBatchTask batchTask) {
+                capturedBatchTasks.add(batchTask);
+                // Mark tasks as finished to allow job to proceed
+                batchTask.getAllTasks().forEach(t -> t.setFinished(true));
+            }
+        };
+
+        schemaChangeJob.runPendingJob();
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+
+        schemaChangeJob.runWaitingTxnJob();
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, schemaChangeJob.getJobState());
+
+        schemaChangeJob.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
+
+        // Verify that we captured at least one batch task
+        Assertions.assertFalse(capturedBatchTasks.isEmpty(), "Should have captured at least one AgentBatchTask");
+
+        // Extract all AlterReplicaTask objects
+        List<AlterReplicaTask> alterReplicaTasks = new ArrayList<>();
+        for (AgentBatchTask batchTask : capturedBatchTasks) {
+            for (com.starrocks.task.AgentTask agentTask : batchTask.getAllTasks()) {
+                if (agentTask instanceof AlterReplicaTask) {
+                    alterReplicaTasks.add((AlterReplicaTask) agentTask);
+                }
+            }
+        }
+
+        Assertions.assertFalse(alterReplicaTasks.isEmpty(), "Should have at least one AlterReplicaTask");
+
+        // Get table and TabletInvertedIndex for verification
+        OlapTable tbl = (OlapTable) multiPartitionTable;
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+
+        // Group tasks by originIndexId (the index ID of the origin tablet)
+        Map<Long, List<AlterReplicaTask>> tasksByOriginIndexId = new HashMap<>();
+        Map<Long, TTabletSchema> expectedSchemasByIndexId = new HashMap<>();
+
+        for (AlterReplicaTask task : alterReplicaTasks) {
+            // Verify baseTabletReadSchema is not null
+            TAlterTabletReqV2 request = task.toThrift();
+            Assertions.assertTrue(request.isSetBase_tablet_read_schema(),
+                    "base_tablet_read_schema should be set for tablet " + task.getBaseTabletId());
+            Assertions.assertNotNull(request.getBase_tablet_read_schema(),
+                    "base_tablet_read_schema should not be null for tablet " + task.getBaseTabletId());
+
+            // Get originIndexId from TabletInvertedIndex using baseTabletId
+            TabletMeta tabletMeta = invertedIndex.getTabletMeta(task.getBaseTabletId());
+            Assertions.assertNotNull(tabletMeta, "TabletMeta should exist for tablet " + task.getBaseTabletId());
+            long originIndexId = tabletMeta.getIndexId();
+
+            // Group tasks by originIndexId
+            tasksByOriginIndexId.computeIfAbsent(originIndexId, k -> new ArrayList<>()).add(task);
+
+            // Create expected schema if not already created
+            if (!expectedSchemasByIndexId.containsKey(originIndexId)) {
+                TTabletSchema expectedSchema = SchemaInfo.fromMaterializedIndex(
+                        tbl, originIndexId, tbl.getIndexMetaByMetaId(originIndexId)).toTabletSchema();
+                expectedSchemasByIndexId.put(originIndexId, expectedSchema);
+            }
+        }
+
+        // Verify that tasks with the same originIndexId use the same baseTabletReadSchema
+        for (Map.Entry<Long, List<AlterReplicaTask>> entry : tasksByOriginIndexId.entrySet()) {
+            long originIndexId = entry.getKey();
+            List<AlterReplicaTask> tasks = entry.getValue();
+            TTabletSchema expectedSchema = expectedSchemasByIndexId.get(originIndexId);
+
+            Assertions.assertNotNull(expectedSchema, "Expected schema should exist for index " + originIndexId);
+
+            // Verify all tasks for this index use the same schema
+            for (AlterReplicaTask task : tasks) {
+                TAlterTabletReqV2 request = task.toThrift();
+                TTabletSchema actualSchema = request.getBase_tablet_read_schema();
+
+                // Verify schema ID matches
+                Assertions.assertEquals(expectedSchema.getId(), actualSchema.getId(),
+                        "Schema ID should match for index " + originIndexId);
+                Assertions.assertEquals(expectedSchema.getKeys_type(), actualSchema.getKeys_type(),
+                        "Keys type should match for index " + originIndexId);
+                Assertions.assertEquals(expectedSchema.getShort_key_column_count(),
+                        actualSchema.getShort_key_column_count(),
+                        "Short key column count should match for index " + originIndexId);
+                Assertions.assertEquals(expectedSchema.getColumns().size(), actualSchema.getColumns().size(),
+                        "Column count should match for index " + originIndexId);
+            }
+        }
+
+        // Verify that different originIndexId use different schemas (if there are multiple indices)
+        if (tasksByOriginIndexId.size() > 1) {
+            List<Long> indexIds = new ArrayList<>(tasksByOriginIndexId.keySet());
+            TTabletSchema schema1 = expectedSchemasByIndexId.get(indexIds.get(0));
+            TTabletSchema schema2 = expectedSchemasByIndexId.get(indexIds.get(1));
+            // They might have the same schema if they're from the same origin index, but structure should be correct
+            Assertions.assertNotNull(schema1);
+            Assertions.assertNotNull(schema2);
+        }
     }
 }

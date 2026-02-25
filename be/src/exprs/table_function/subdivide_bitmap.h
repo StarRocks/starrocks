@@ -19,7 +19,7 @@
 #include "column/type_traits.h"
 #include "common/config.h"
 #include "exprs/table_function/table_function.h"
-#include "runtime/integer_overflow_arithmetics.h"
+#include "types/integer_overflow_arithmetics.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -41,11 +41,12 @@ public:
     Status open(RuntimeState* runtime_state, TableFunctionState* state) const override { return Status::OK(); }
 
     Status close(RuntimeState* runtime_state, TableFunctionState* state) const override {
-        SAFE_DELETE(state);
+        delete state;
         return Status::OK();
     }
 
-    void process_row(const std::vector<BitmapValue*>& src_bitmap_col, SrcSizeCppType batch_size, size_t row,
+    template <class ImmObjectContainer>
+    void process_row(const ImmObjectContainer& src_bitmap_col, SrcSizeCppType batch_size, size_t row,
                      Column* dst_bitmap_col, UInt32Column* dst_offset_col, uint32_t* compact_offset) const {
         auto* bitmap = src_bitmap_col[row];
 
@@ -82,8 +83,8 @@ public:
 
         const auto* src_bitmap_col = ColumnHelper::cast_to_raw<TYPE_OBJECT>(ColumnHelper::get_data_column(c0.get()));
         const auto* src_size_col = ColumnHelper::cast_to_raw<Type>(ColumnHelper::get_data_column(c1.get()));
-        const auto& src_bitmap_data = src_bitmap_col->get_data();
-        const auto& src_size_data = src_size_col->get_data();
+        const auto src_bitmap_data = src_bitmap_col->immutable_data();
+        const auto src_size_data = src_size_col->immutable_data();
         bool has_null = c0->has_null() || c1->has_null();
 
         if (has_null) {
@@ -105,21 +106,20 @@ public:
                             &compact_offset);
             }
         }
-        std::string err_msg;
-        auto ret = dst_bitmap_col->capacity_limit_reached(&err_msg);
-        if (ret) {
+        Status st = dst_bitmap_col->capacity_limit_reached();
+        if (!st.ok()) {
             state->set_status(Status::InternalError(
-                    fmt::format("Bitmap column generate by subdivide_bitmap reach limit, {}", err_msg)));
+                    fmt::format("Bitmap column generate by subdivide_bitmap reach limit, {}", st.message())));
             return {};
         }
-        ret = dst_offset_col->capacity_limit_reached(&err_msg);
-        if (ret) {
+        st = dst_offset_col->capacity_limit_reached();
+        if (!st.ok()) {
             state->set_status(Status::InternalError(
-                    fmt::format("Offset column generate by subdivide_bitmap reach limit, {}", err_msg)));
+                    fmt::format("Offset column generate by subdivide_bitmap reach limit, {}", st.message())));
             return {};
         }
         dst_columns.emplace_back(std::move(dst_bitmap_col));
-        return std::make_pair(dst_columns, dst_offset_col);
+        return std::make_pair(std::move(dst_columns), std::move(dst_offset_col));
     }
 };
 } // namespace starrocks

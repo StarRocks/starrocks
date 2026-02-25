@@ -17,18 +17,30 @@
 #include "column/fixed_length_column_base.h"
 namespace starrocks {
 template <typename T>
-class FixedLengthColumn final : public ColumnFactory<FixedLengthColumnBase<T>, FixedLengthColumn<T>, Column> {
+class FixedLengthColumn final : public CowFactory<ColumnFactory<FixedLengthColumnBase<T>, FixedLengthColumn<T>>,
+                                                  FixedLengthColumn<T>, Column> {
+    friend class CowFactory<ColumnFactory<FixedLengthColumnBase<T>, FixedLengthColumn<T>>, FixedLengthColumn<T>,
+                            Column>;
+
 public:
     using ValueType = T;
     using Container = Buffer<ValueType>;
-    using SuperClass = ColumnFactory<FixedLengthColumnBase<T>, FixedLengthColumn<T>, Column>;
+    using SuperClass =
+            CowFactory<ColumnFactory<FixedLengthColumnBase<T>, FixedLengthColumn<T>>, FixedLengthColumn<T>, Column>;
     FixedLengthColumn() = default;
 
     explicit FixedLengthColumn(const size_t n) : SuperClass(n) {}
 
     FixedLengthColumn(const size_t n, const ValueType x) : SuperClass(n, x) {}
 
-    FixedLengthColumn(const FixedLengthColumn& src) : SuperClass((const FixedLengthColumnBase<T>&)(src)) {}
-    MutableColumnPtr clone_empty() const override { return this->create_mutable(); }
+    DISALLOW_COPY_TEMPLATE(FixedLengthColumn, FixedLengthColumn<T>);
+
+    MutableColumnPtr clone_empty() const override { return this->create(); }
+
+    MutableColumnPtr clone() const override {
+        auto p = clone_empty();
+        p->append(*this, 0, this->size());
+        return p;
+    }
 };
 } // namespace starrocks

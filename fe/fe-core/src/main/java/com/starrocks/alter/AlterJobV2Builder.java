@@ -18,7 +18,12 @@ package com.starrocks.alter;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Index;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.OriginStatement;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 
 import java.util.HashMap;
 import java.util.List;
@@ -37,13 +42,83 @@ public abstract class AlterJobV2Builder {
     protected double bloomFilterFpp;
     protected boolean hasIndexChanged = false;
     protected List<Index> indexes;
-    protected Map<Long, List<Column>> newIndexSchema = new HashMap<>();
-    protected Map<Long, Short> newIndexShortKeyCount = new HashMap<>();
+    protected Map<Long, List<Column>> newIndexMetaIdToSchema = new HashMap<>();
+    protected Map<Long, Short> newIndexMetaIdToShortKeyCount = new HashMap<>();
     protected List<Integer> sortKeyIdxes;
-    protected long warehouseId;
     protected List<Integer> sortKeyUniqueIds;
+    protected ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
+    protected boolean disableReplicatedStorageForGIN = false;
+
+    // -------- for roll up-----------------
+    protected long baseIndexMetaId;
+    protected String baseIndexName;
+    protected long rollupIndexMetaId;
+    protected String rollupIndexName;
+    protected Expr whereClause;
+    List<Column> rollupColumns;
+    KeysType rollupKeysType;
+    short rollupShortKeyColumnCount;
+    protected OriginStatement origStmt;
+    protected String viewDefineSql;
+    protected boolean isColocateMVIndex;
+
 
     public AlterJobV2Builder() {
+    }
+
+    public AlterJobV2Builder withBaseIndexMetaId(long baseIndexMetaId) {
+        this.baseIndexMetaId = baseIndexMetaId;
+        return this;
+    }
+
+    public AlterJobV2Builder withMvKeysType(KeysType rollupKeysType) {
+        this.rollupKeysType = rollupKeysType;
+        return this;
+    }
+
+    public AlterJobV2Builder withMvIndexMetaId(long rollupIndexMetaId) {
+        this.rollupIndexMetaId = rollupIndexMetaId;
+        return this;
+    }
+
+    public AlterJobV2Builder withBaseIndexName(String baseIndexName) {
+        this.baseIndexName = baseIndexName;
+        return this;
+    }
+
+    public AlterJobV2Builder withMvName(String rollupIndexName) {
+        this.rollupIndexName = rollupIndexName;
+        return this;
+    }
+
+    public AlterJobV2Builder withMvColumns(List<Column> rollupColumns) {
+        this.rollupColumns = rollupColumns;
+        return this;
+    }
+
+    public AlterJobV2Builder withWhereClause(Expr whereClause) {
+        this.whereClause = whereClause;
+        return this;
+    }
+
+    public AlterJobV2Builder withMvShortkeyColumnCoun(short rollupShortKeyColumnCount) {
+        this.rollupShortKeyColumnCount = rollupShortKeyColumnCount;
+        return this;
+    }
+
+    public AlterJobV2Builder withOriginStmt(OriginStatement origStmt) {
+        this.origStmt = origStmt;
+        return this;
+    }
+
+    public AlterJobV2Builder withViewDefineSql(String viewDefineSql) {
+        this.viewDefineSql = viewDefineSql;
+        return this;
+    }
+
+    public AlterJobV2Builder withIsColocateMv(boolean isColocateMv) {
+        this.isColocateMVIndex = isColocateMv;
+        return this;
     }
 
     public AlterJobV2Builder withJobId(long jobId) {
@@ -83,23 +158,23 @@ public abstract class AlterJobV2Builder {
         return this;
     }
 
-    public AlterJobV2Builder withNewIndexShortKeyCount(long indexId, short shortKeyCount) {
-        this.newIndexShortKeyCount.put(indexId, shortKeyCount);
+    public AlterJobV2Builder withNewIndexMetaIdToShortKeyCount(long indexMetaId, short shortKeyCount) {
+        this.newIndexMetaIdToShortKeyCount.put(indexMetaId, shortKeyCount);
         return this;
     }
 
-    public AlterJobV2Builder withNewIndexShortKeyCount(Map<Long, Short> shortKeyCount) {
-        this.newIndexShortKeyCount.putAll(shortKeyCount);
+    public AlterJobV2Builder withNewIndexMetaIdToShortKeyCount(Map<Long, Short> shortKeyCount) {
+        this.newIndexMetaIdToShortKeyCount.putAll(shortKeyCount);
         return this;
     }
 
-    public AlterJobV2Builder withNewIndexSchema(long indexId, @NotNull List<Column> indexSchema) {
-        newIndexSchema.put(indexId, indexSchema);
+    public AlterJobV2Builder withNewIndexMetaIdToSchema(long indexMetaId, @NotNull List<Column> indexSchema) {
+        newIndexMetaIdToSchema.put(indexMetaId, indexSchema);
         return this;
     }
 
-    public AlterJobV2Builder withNewIndexSchema(@NotNull Map<Long, List<Column>> indexSchema) {
-        newIndexSchema.putAll(indexSchema);
+    public AlterJobV2Builder withNewIndexMetaIdToSchema(@NotNull Map<Long, List<Column>> indexSchema) {
+        newIndexMetaIdToSchema.putAll(indexSchema);
         return this;
     }
 
@@ -108,8 +183,8 @@ public abstract class AlterJobV2Builder {
         return this;
     }
 
-    public AlterJobV2Builder withWarehouse(@Nullable long warehouseId) {
-        this.warehouseId = warehouseId;
+    public AlterJobV2Builder withComputeResource(@NotNull ComputeResource computeResource) {
+        this.computeResource = computeResource;
         return this;
     }
 
@@ -118,5 +193,10 @@ public abstract class AlterJobV2Builder {
         return this;
     }
 
-    public abstract AlterJobV2 build() throws UserException;
+    public AlterJobV2Builder withDisableReplicatedStorageForGIN(boolean disableReplicatedStorageForGIN) {
+        this.disableReplicatedStorageForGIN = disableReplicatedStorageForGIN;
+        return this;
+    }
+
+    public abstract AlterJobV2 build() throws StarRocksException;
 }

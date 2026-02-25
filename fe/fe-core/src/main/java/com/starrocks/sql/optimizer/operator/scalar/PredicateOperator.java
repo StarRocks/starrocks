@@ -15,9 +15,9 @@
 package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.type.BooleanType;
 
 import java.util.List;
 import java.util.Objects;
@@ -25,30 +25,14 @@ import java.util.stream.Collectors;
 
 import static java.util.Objects.requireNonNull;
 
-public abstract class PredicateOperator extends ScalarOperator {
-    private List<ScalarOperator> arguments;
-
+public abstract class PredicateOperator extends ArgsScalarOperator {
     public PredicateOperator(OperatorType operatorType, ScalarOperator... arguments) {
         this(operatorType, Lists.newArrayList(arguments));
     }
 
     public PredicateOperator(OperatorType operatorType, List<ScalarOperator> arguments) {
-        super(operatorType, Type.BOOLEAN);
+        super(operatorType, BooleanType.BOOLEAN);
         this.arguments = requireNonNull(arguments, "arguments is null");
-    }
-
-    public List<ScalarOperator> getChildren() {
-        return arguments;
-    }
-
-    @Override
-    public ScalarOperator getChild(int index) {
-        return arguments.get(index);
-    }
-
-    @Override
-    public void setChild(int index, ScalarOperator child) {
-        arguments.set(index, child);
     }
 
     @Override
@@ -72,11 +56,16 @@ public abstract class PredicateOperator extends ScalarOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(opType, arguments);
+        return Objects.hash(hashCodeSelf(), opType, arguments);
     }
 
     @Override
-    public boolean equals(Object obj) {
+    public int hashCodeSelf() {
+        return Objects.hash(opType);
+    }
+
+    @Override
+    public boolean equalsSelf(Object obj) {
         if (this == obj) {
             return true;
         }
@@ -84,7 +73,7 @@ public abstract class PredicateOperator extends ScalarOperator {
             return false;
         }
         PredicateOperator other = (PredicateOperator) obj;
-        return Objects.equals(this.arguments, other.arguments);
+        return Objects.equals(this.opType, other.opType);
     }
 
     @Override
@@ -119,6 +108,6 @@ public abstract class PredicateOperator extends ScalarOperator {
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitPredicate(this, context);
+        return  visitor.visitPredicate(this, context);
     }
 }

@@ -17,16 +17,15 @@ package com.starrocks.sql.optimizer;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -44,8 +43,11 @@ import com.starrocks.sql.optimizer.rewrite.scalar.ScalarOperatorRewriteRule;
 import com.starrocks.sql.optimizer.transformer.CTETransformerContext;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
+import com.starrocks.sql.optimizer.transformer.MVTransformerContext;
 import com.starrocks.sql.optimizer.transformer.OptExprBuilder;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.Type;
 
 import java.util.Collection;
 import java.util.Iterator;
@@ -103,11 +105,12 @@ public class SubqueryUtils {
             relation.getOrderBy().clear();
         }
 
-        return new RelationTransformer(columnRefFactory, session, outer, cteContext).transform(relation);
+        return new RelationTransformer(columnRefFactory, session, outer, cteContext,
+                new MVTransformerContext(session, true)).transform(relation);
     }
 
     private static Function getAggregateFunction(String functionName, Type[] argTypes) {
-        Function func = Expr.getBuiltinFunction(functionName, argTypes,
+        Function func = ExprUtils.getBuiltinFunction(functionName, argTypes,
                 Function.CompareMode.IS_IDENTICAL);
         if (argTypes.length > 0 && argTypes[0].isDecimalV3()) {
             func = DecimalV3FunctionAnalyzer.rectifyAggregationFunction((AggregateFunction) func,
@@ -158,14 +161,14 @@ public class SubqueryUtils {
     }
 
     public static CallOperator createCountRowsOperator() {
-        Function count = getAggregateFunction(FunctionSet.COUNT, new Type[] {Type.BIGINT});
-        return new CallOperator(FunctionSet.COUNT, Type.BIGINT, Lists.newArrayList(ConstantOperator.createBigint(1)),
+        Function count = getAggregateFunction(FunctionSet.COUNT, new Type[] {IntegerType.BIGINT});
+        return new CallOperator(FunctionSet.COUNT, IntegerType.BIGINT, Lists.newArrayList(ConstantOperator.createBigint(1)),
                 count, false);
     }
 
     public static CallOperator createCountRowsOperator(ScalarOperator column) {
-        Function count = getAggregateFunction(FunctionSet.COUNT, new Type[] {Type.BIGINT});
-        return new CallOperator(FunctionSet.COUNT, Type.BIGINT, Lists.newArrayList(column), count, false);
+        Function count = getAggregateFunction(FunctionSet.COUNT, new Type[] {IntegerType.BIGINT});
+        return new CallOperator(FunctionSet.COUNT, IntegerType.BIGINT, Lists.newArrayList(column), count, false);
     }
 
     public static CallOperator createAnyValueOperator(ScalarOperator column) {

@@ -19,14 +19,16 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
+import com.staros.proto.ADLS2CredentialInfo;
+import com.staros.proto.ADLS2FileStoreInfo;
 import com.staros.proto.AwsCredentialInfo;
 import com.staros.proto.AzBlobCredentialInfo;
 import com.staros.proto.AzBlobFileStoreInfo;
 import com.staros.proto.FileStoreInfo;
+import com.staros.proto.GSFileStoreInfo;
 import com.staros.proto.HDFSFileStoreInfo;
 import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
@@ -34,12 +36,12 @@ import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
 import com.starrocks.persist.gson.GsonPostProcessable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
@@ -48,11 +50,15 @@ import java.util.List;
 import java.util.Map;
 
 public class StorageVolume implements Writable, GsonPostProcessable {
+    private static final Logger LOG = LogManager.getLogger(StorageVolume.class);
+
     public enum StorageVolumeType {
         UNKNOWN,
         S3,
         HDFS,
-        AZBLOB
+        AZBLOB,
+        ADLS2,
+        GS
     }
 
     // Without id, the scenario like "create storage volume 'a', drop storage volume 'a', create storage volume 'a'"
@@ -79,6 +85,24 @@ public class StorageVolume implements Writable, GsonPostProcessable {
 
     @SerializedName("e")
     private boolean enabled;
+
+    /**
+     * Each storage volume can have a virtual tablet bind to it.
+     * It is used to create a virtual shard in starmgr, and the value's persistence is guaranteed in filestore of starmgr.
+     * The value of `vTabletId` is not -1L if a virtual tablet needed.
+     */
+    @SerializedName("vt")
+    private long vTabletId = -1L;
+
+    /**
+     * Same as `vTabletId`, but it is used to create a virtual shard group in starmgr, and the value's persistence
+     * is also guaranteed in filestore of starmgr.
+     */
+    @SerializedName("vtg")
+    private long vTabletGroupId = -1L;
+
+    public static final String V_SHARD_ID = "v_shard_id";
+    public static final String V_SHARD_GROUP_ID = "v_shard_group_id";
 
     public static String CREDENTIAL_MASK = "******";
 
@@ -114,6 +138,8 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         this.locations = new ArrayList<>(sv.locations);
         this.comment = sv.comment;
         this.enabled = sv.enabled;
+        this.vTabletId = sv.vTabletId;
+        this.vTabletGroupId = sv.vTabletGroupId;
         this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(sv.params, true);
         this.params = new HashMap<>(sv.params);
         validateStorageVolumeConstraints();
@@ -167,6 +193,22 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         return enabled;
     }
 
+    public long getVTabletId() {
+        return vTabletId;
+    }
+
+    public void setVTabletId(long vTabletId) {
+        this.vTabletId = vTabletId;
+    }
+
+    public long getVTabletGroupId() {
+        return vTabletGroupId;
+    }
+
+    public void setVTabletGroupId(long vTabletGroupId) {
+        this.vTabletGroupId = vTabletGroupId;
+    }
+
     public void setComment(String comment) {
         this.comment = comment;
     }
@@ -174,15 +216,28 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     public String getComment() {
         return comment;
     }
+
+    public void setLocations(List<String> locations) {
+        this.locations = locations;
+    }
+
     public List<String> getLocations() {
         return locations;
+    }
+
+    public void setType(String type) {
+        this.svt = toStorageVolumeType(type);
     }
 
     public String getType() {
         return svt.toString();
     }
 
-    private StorageVolumeType toStorageVolumeType(String svt) {
+    public Map<String, String> getProperties() {
+        return params;
+    }
+
+    public static StorageVolumeType toStorageVolumeType(String svt) {
         switch (svt.toLowerCase()) {
             case "s3":
                 return StorageVolumeType.S3;
@@ -190,6 +245,10 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                 return StorageVolumeType.HDFS;
             case "azblob":
                 return StorageVolumeType.AZBLOB;
+            case "adls2":
+                return StorageVolumeType.ADLS2;
+            case "gs":
+                return StorageVolumeType.GS;
             default:
                 return StorageVolumeType.UNKNOWN;
         }
@@ -203,6 +262,10 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                 return cloudConfiguration.getCloudType() == CloudType.HDFS;
             case AZBLOB:
                 return cloudConfiguration.getCloudType() == CloudType.AZURE;
+            case ADLS2:
+                return cloudConfiguration.getCloudType() == CloudType.AZURE;
+            case GS:
+                return cloudConfiguration.getCloudType() == CloudType.GCP;
             default:
                 return false;
         }
@@ -213,6 +276,12 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         params.computeIfPresent(CloudConfigurationConstants.AWS_S3_SECRET_KEY, (key, value) -> CREDENTIAL_MASK);
         params.computeIfPresent(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY, (key, value) -> CREDENTIAL_MASK);
         params.computeIfPresent(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN, (key, value) -> CREDENTIAL_MASK);
+        params.computeIfPresent(CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY, (key, value) -> CREDENTIAL_MASK);
+        params.computeIfPresent(CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN, (key, value) -> CREDENTIAL_MASK);
+        params.computeIfPresent(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_EMAIL, (key, value) -> CREDENTIAL_MASK);
+        params.computeIfPresent(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY_ID,
+                (key, value) -> CREDENTIAL_MASK);
+        params.computeIfPresent(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY, (key, value) -> CREDENTIAL_MASK);
     }
 
     public void getProcNodeData(BaseProcResult result) {
@@ -234,20 +303,56 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     }
 
     public FileStoreInfo toFileStoreInfo() {
+        Map<String, String> properties = new HashMap<>();
+        if (vTabletId != -1L) {
+            properties.put(V_SHARD_ID, String.valueOf(vTabletId));
+        }
+        if (vTabletGroupId != -1L) {
+            properties.put(V_SHARD_GROUP_ID, String.valueOf(vTabletGroupId));
+        }
         FileStoreInfo.Builder builder = cloudConfiguration.toFileStoreInfo().toBuilder();
         builder.setFsKey(id)
                 .setFsName(this.name)
                 .setComment(this.comment)
                 .setEnabled(this.enabled)
-                .addAllLocations(locations);
+                .addAllLocations(locations)
+                .putAllProperties(properties);
         return builder.build();
     }
 
     public static StorageVolume fromFileStoreInfo(FileStoreInfo fsInfo) throws DdlException {
         String svt = fsInfo.getFsType().toString();
         Map<String, String> params = getParamsFromFileStoreInfo(fsInfo);
-        return new StorageVolume(fsInfo.getFsKey(), fsInfo.getFsName(), svt,
+        StorageVolume storageVolume = new StorageVolume(fsInfo.getFsKey(), fsInfo.getFsName(), svt,
                 fsInfo.getLocationsList(), params, fsInfo.getEnabled(), fsInfo.getComment());
+
+        Map<String, String> propertiesMap = fsInfo.getPropertiesMap();
+        if (propertiesMap.containsKey(V_SHARD_ID)) {
+            String vTabletId = propertiesMap.get(V_SHARD_ID);
+            try {
+                storageVolume.setVTabletId(StringUtils.isEmpty(vTabletId) ? -1L : Long.parseLong(vTabletId));
+            } catch (NumberFormatException e) {
+                LOG.error("Failed to parse vTabletId from properties, vTabletId: {}", vTabletId, e);
+            }
+        }
+        if (propertiesMap.containsKey(V_SHARD_GROUP_ID)) {
+            if (storageVolume.getVTabletId() == -1L) {
+                LOG.warn("vTabletId is not set for storage volume: {}, skip parsing and setting vTabletGroupId",
+                        storageVolume.getName());
+                return storageVolume;
+            }
+            String vTabletGroupId = propertiesMap.get(V_SHARD_GROUP_ID);
+            try {
+                storageVolume.setVTabletGroupId(
+                        StringUtils.isEmpty(vTabletGroupId) ? -1L : Long.parseLong(vTabletGroupId));
+            } catch (NumberFormatException e) {
+                // ignore processing further if the vTabletGroupId is not set, 
+                // the previous vTabletId will be cleared by StarMgrMetaSyncer
+                LOG.error("Failed to parse vTabletGroupId from properties, vTabletGroupId: {}", vTabletGroupId, e);
+            }
+        }
+
+        return storageVolume;
     }
 
     public static Map<String, String> getParamsFromFileStoreInfo(FileStoreInfo fsInfo) {
@@ -264,10 +369,18 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                     params.put(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX,
                             Integer.toString(s3FileStoreInfo.getNumPartitionedPrefix()));
                 }
+                if (s3FileStoreInfo.getPathStyleAccess() == 1) {
+                    params.put(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS,
+                            Boolean.toString(true));
+                } else if (s3FileStoreInfo.getPathStyleAccess() == 2) {
+                    params.put(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS,
+                            Boolean.toString(false));
+                }
                 AwsCredentialInfo credentialInfo = s3FileStoreInfo.getCredential();
                 if (credentialInfo.hasSimpleCredential()) {
                     params.put(CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE, "false");
                     params.put(CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "false");
+                    params.put(CloudConfigurationConstants.AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE, "false");
                     params.put(CloudConfigurationConstants.AWS_S3_ACCESS_KEY,
                             credentialInfo.getSimpleCredential().getAccessKey());
                     params.put(CloudConfigurationConstants.AWS_S3_SECRET_KEY,
@@ -275,6 +388,7 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                 } else if (credentialInfo.hasAssumeRoleCredential()) {
                     params.put(CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE, "true");
                     params.put(CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "false");
+                    params.put(CloudConfigurationConstants.AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE, "false");
                     params.put(CloudConfigurationConstants.AWS_S3_IAM_ROLE_ARN,
                             credentialInfo.getAssumeRoleCredential().getIamRoleArn());
                     params.put(CloudConfigurationConstants.AWS_S3_EXTERNAL_ID,
@@ -282,6 +396,7 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                 } else if (credentialInfo.hasProfileCredential()) {
                     params.put(CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE, "true");
                     params.put(CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "false");
+                    params.put(CloudConfigurationConstants.AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE, "false");
                 } else if (credentialInfo.hasDefaultCredential()) {
                     params.put(CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
                 }
@@ -294,7 +409,7 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                     params.put(CloudConfigurationConstants.HDFS_USERNAME_DEPRECATED, userName);
                 }
                 return params;
-            case AZBLOB:
+            case AZBLOB: {
                 AzBlobFileStoreInfo azBlobFileStoreInfo = fsInfo.getAzblobFsInfo();
                 params.put(CloudConfigurationConstants.AZURE_BLOB_ENDPOINT, azBlobFileStoreInfo.getEndpoint());
                 AzBlobCredentialInfo azBlobcredentialInfo = azBlobFileStoreInfo.getCredential();
@@ -307,6 +422,60 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                     params.put(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN, sasToken);
                 }
                 return params;
+            }
+            case ADLS2: {
+                ADLS2FileStoreInfo adls2FileStoreInfo = fsInfo.getAdls2FsInfo();
+                params.put(CloudConfigurationConstants.AZURE_ADLS2_ENDPOINT, adls2FileStoreInfo.getEndpoint());
+                ADLS2CredentialInfo adls2credentialInfo = adls2FileStoreInfo.getCredential();
+                String sharedKey = adls2credentialInfo.getSharedKey();
+                if (!Strings.isNullOrEmpty(sharedKey)) {
+                    params.put(CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY, sharedKey);
+                }
+                String sasToken = adls2credentialInfo.getSasToken();
+                if (!Strings.isNullOrEmpty(sasToken)) {
+                    params.put(CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN, sasToken);
+                }
+                String tenantId = adls2credentialInfo.getTenantId();
+                if (!Strings.isNullOrEmpty(tenantId)) {
+                    params.put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_TENANT_ID, tenantId);
+                }
+                String clientId = adls2credentialInfo.getClientId();
+                if (!Strings.isNullOrEmpty(clientId)) {
+                    params.put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ID, clientId);
+                }
+                if (!Strings.isNullOrEmpty(tenantId) && !Strings.isNullOrEmpty(clientId)) {
+                    params.put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_USE_MANAGED_IDENTITY, "true");
+                }
+                String clientSecret = adls2credentialInfo.getClientSecret();
+                if (!Strings.isNullOrEmpty(clientSecret)) {
+                    params.put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_SECRET, clientSecret);
+                }
+                String clientEndpoint = adls2credentialInfo.getAuthorityHost();
+                if (!Strings.isNullOrEmpty(clientEndpoint)) {
+                    params.put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ENDPOINT, clientEndpoint);
+                }
+                return params;
+            }
+            case GS: {
+                GSFileStoreInfo gsFileStoreInfo = fsInfo.getGsFsInfo();
+                params.put(CloudConfigurationConstants.GCP_GCS_ENDPOINT, gsFileStoreInfo.getEndpoint());
+                if (gsFileStoreInfo.getUseComputeEngineServiceAccount()) {
+                    params.put(CloudConfigurationConstants.GCP_GCS_USE_COMPUTE_ENGINE_SERVICE_ACCOUNT, "true");
+                } else {
+                    params.put(CloudConfigurationConstants.GCP_GCS_USE_COMPUTE_ENGINE_SERVICE_ACCOUNT, "false");
+                    params.put(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_EMAIL,
+                            gsFileStoreInfo.getServiceAccountEmail());
+                    params.put(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY_ID,
+                            gsFileStoreInfo.getServiceAccountPrivateKeyId());
+                    params.put(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY,
+                            gsFileStoreInfo.getServiceAccountPrivateKey());
+                }
+                if (!Strings.isNullOrEmpty(gsFileStoreInfo.getImpersonation())) {
+                    params.put(CloudConfigurationConstants.GCP_GCS_USE_COMPUTE_ENGINE_SERVICE_ACCOUNT,
+                            gsFileStoreInfo.getImpersonation());
+                }
+                return params;
+            }
             default:
                 return params;
         }
@@ -317,17 +486,6 @@ public class StorageVolume implements Writable, GsonPostProcessable {
             String container = locations.get(0).split("/")[0];
             params.put(CloudConfigurationConstants.AZURE_BLOB_CONTAINER, container);
         }
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
-    }
-
-    public static StorageVolume read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, StorageVolume.class);
     }
 
     @Override

@@ -14,14 +14,17 @@
 
 #include "connector/file_connector.h"
 
-#include "exec/avro_scanner.h"
-#include "exec/csv_scanner.h"
-#include "exec/exec_node.h"
-#include "exec/json_scanner.h"
-#include "exec/orc_scanner.h"
-#include "exec/parquet_scanner.h"
+#include "exec/file_scanner/avro_cpp_scanner.h"
+#include "exec/file_scanner/avro_scanner.h"
+#include "exec/file_scanner/csv_scanner.h"
+#include "exec/file_scanner/json_scanner.h"
+#include "exec/file_scanner/orc_scanner.h"
+#include "exec/file_scanner/parquet_scanner.h"
+#include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr.h"
 #include "file_chunk_sink.h"
+#include "runtime/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks::connector {
 
@@ -94,7 +97,14 @@ Status FileDataSource::_create_scanner() {
     } else if (_scan_range.ranges[0].format_type == TFileFormatType::FORMAT_JSON) {
         _scanner = std::make_unique<JsonScanner>(_runtime_state, _runtime_profile, _scan_range, &_counter);
     } else if (_scan_range.ranges[0].format_type == TFileFormatType::FORMAT_AVRO) {
-        _scanner = std::make_unique<AvroScanner>(_runtime_state, _runtime_profile, _scan_range, &_counter);
+        if (_scan_range.params.__isset.file_scan_type &&
+            (_scan_range.params.file_scan_type == TFileScanType::FILES_INSERT ||
+             _scan_range.params.file_scan_type == TFileScanType::FILES_QUERY)) {
+            _scanner = std::make_unique<AvroCppScanner>(_runtime_state, _runtime_profile, _scan_range, &_counter);
+        } else {
+            // avro routine load
+            _scanner = std::make_unique<AvroScanner>(_runtime_state, _runtime_profile, _scan_range, &_counter);
+        }
     } else {
         _scanner = std::make_unique<CSVScanner>(_runtime_state, _runtime_profile, _scan_range, &_counter);
     }
@@ -141,7 +151,7 @@ Status FileDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
 
         _counter.filtered_rows_read += before_rows;
         // eval conjuncts
-        RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
+        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
         _counter.num_rows_read += (*chunk)->num_rows();
         _counter.num_rows_unselected += (before_rows - (*chunk)->num_rows());
         _counter.num_bytes_read += (*chunk)->bytes_usage();
@@ -194,6 +204,11 @@ void FileDataSource::_init_counter() {
 void FileDataSource::_update_counter() {
     _runtime_state->update_num_rows_load_filtered(_counter.num_rows_filtered);
     _runtime_state->update_num_rows_load_unselected(_counter.num_rows_unselected);
+    // update the file scan metrics all together
+    auto* metric_repo = GlobalMetricsRegistry::instance()->file_scan_metrics();
+    if (metric_repo != nullptr) {
+        metric_repo->update(_scanner->file_format(), _scanner->scan_type(), _counter);
+    }
 
     COUNTER_UPDATE(_scanner_total_timer, _counter.total_ns);
     COUNTER_UPDATE(_scanner_fill_timer, _counter.fill_ns);

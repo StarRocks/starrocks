@@ -16,13 +16,13 @@ package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MaterializedViewRefreshType;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 
 public class ChangeMaterializedViewRefreshSchemeLog implements Writable {
@@ -33,7 +33,7 @@ public class ChangeMaterializedViewRefreshSchemeLog implements Writable {
     private long dbId;
 
     @SerializedName(value = "refreshType")
-    private MaterializedView.RefreshType refreshType;
+    private MaterializedViewRefreshType refreshType;
 
     @SerializedName(value = "asyncRefreshContext")
     private MaterializedView.AsyncRefreshContext asyncRefreshContext;
@@ -56,7 +56,7 @@ public class ChangeMaterializedViewRefreshSchemeLog implements Writable {
         return dbId;
     }
 
-    public MaterializedView.RefreshType getRefreshType() {
+    public MaterializedViewRefreshType  getRefreshType() {
         return refreshType;
     }
 
@@ -64,11 +64,7 @@ public class ChangeMaterializedViewRefreshSchemeLog implements Writable {
         return asyncRefreshContext;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
-    }
+
 
     public static ChangeMaterializedViewRefreshSchemeLog read(DataInput in) throws IOException {
         try {

@@ -275,7 +275,7 @@ Status BinlogDataSource::_mock_chunk(Chunk* chunk) {
             default:
                 return Status::InternalError(fmt::format("Not support to mock type {}", type));
             }
-            chunk->get_column_by_index(col)->append_datum(datum);
+            chunk->get_column_raw_ptr_by_index(col)->append_datum(datum);
         }
     }
     return Status::OK();
@@ -298,7 +298,7 @@ Status BinlogDataSource::_mock_chunk_test(ChunkPtr* chunk) {
             VLOG_ROW << "Append col:" << idx << ", row:" << start;
             column->append(start % ndv_count);
         }
-        chunk_temp->append_column(column, SlotId(idx));
+        chunk_temp->append_column(std::move(column), SlotId(idx));
     }
 
     // ops

@@ -49,12 +49,13 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "base/hash/hash_std.hpp"
+#include "base/uid_util.h"
+#include "base/utility/guard.h"
+#include "common/column_id.h"
+#include "common/delete_condition.h"
 #include "gen_cpp/Types_types.h"
-#include "storage/delete_condition.h"
 #include "storage/olap_define.h"
-#include "util/guard.h"
-#include "util/hash_util.hpp"
-#include "util/uid_util.h"
 
 #define LOW_56_BITS 0x00ffffffffffffff
 
@@ -149,10 +150,11 @@ enum ReaderType {
     READER_BASE_COMPACTION = 2,
     READER_CUMULATIVE_COMPACTION = 3,
     READER_CHECKSUM = 4,
+    READER_BYPASS_QUERY = 5,
 };
 
 inline bool is_query(ReaderType reader_type) {
-    return reader_type == READER_QUERY;
+    return reader_type == READER_QUERY || reader_type == READER_BYPASS_QUERY;
 }
 
 inline bool is_compaction(ReaderType reader_type) {
@@ -227,13 +229,18 @@ struct OlapReaderStatistics {
     int64_t block_seek_ns = 0;
 
     int64_t decode_dict_ns = 0;
+    int64_t decode_dict_count = 0; // rows * columns
     int64_t late_materialize_ns = 0;
+    int64_t late_materialize_rows = 0; // number of rows that are late materialized after the filter
 
     int64_t raw_rows_read = 0;
 
     int64_t rows_vec_cond_filtered = 0;
     int64_t vec_cond_ns = 0;
     int64_t vec_cond_evaluate_ns = 0;
+    int64_t rf_cond_input_rows = 0;
+    int64_t rf_cond_output_rows = 0;
+    int64_t rf_cond_evaluate_ns = 0;
     int64_t vec_cond_chunk_copy_ns = 0;
     int64_t branchless_cond_evaluate_ns = 0;
     int64_t expr_cond_evaluate_ns = 0;
@@ -253,6 +260,7 @@ struct OlapReaderStatistics {
     int64_t rows_after_key_range = 0;
     int64_t rows_key_range_num = 0;
     int64_t rows_stats_filtered = 0;
+    int64_t rows_vector_index_filtered = 0;
     int64_t rows_bf_filtered = 0;
     int64_t rows_del_filtered = 0;
     int64_t del_filter_ns = 0;
@@ -262,11 +270,21 @@ struct OlapReaderStatistics {
 
     int64_t rows_bitmap_index_filtered = 0;
     int64_t bitmap_index_filter_timer = 0;
+    int64_t get_row_ranges_by_vector_index_timer = 0;
+    int64_t vector_search_timer = 0;
+    int64_t process_vector_distance_and_id_timer = 0;
 
     int64_t rows_del_vec_filtered = 0;
 
-    int64_t rows_gin_filtered = 0;
     int64_t gin_index_filter_ns = 0;
+    int64_t rows_gin_filtered = 0;
+    int64_t gin_prefix_filter_ns = 0;
+    int64_t gin_ngram_filter_dict_ns = 0;
+    int64_t gin_predicate_filter_dict_ns = 0;
+    int64_t gin_dict_count = 0;
+    int64_t gin_ngram_dict_count = 0;
+    int64_t gin_ngram_dict_filtered = 0;
+    int64_t gin_predicate_dict_filtered = 0;
 
     int64_t rowsets_read_count = 0;
     int64_t segments_read_count = 0;
@@ -277,6 +295,11 @@ struct OlapReaderStatistics {
     int64_t read_pk_index_ns = 0;
 
     // ------ for lake tablet ------
+    // Rows skipped by segment metadata filter (sort key range filtering).
+    int64_t segment_metadata_filtered = 0;
+    // Number of segments skipped by segment metadata filter.
+    int64_t segments_metadata_filtered = 0;
+
     int64_t pages_from_local_disk = 0;
 
     int64_t compressed_bytes_read_local_disk = 0;
@@ -308,37 +331,36 @@ struct OlapReaderStatistics {
     std::unordered_map<std::string, int64_t> flat_json_hits;
     std::unordered_map<std::string, int64_t> merge_json_hits;
     std::unordered_map<std::string, int64_t> dynamic_json_hits;
+    std::unordered_map<std::string, int64_t> extract_json_hits;
+
+    // Counters for data sampling
+    int64_t sample_time_ns = 0;               // Records the time to prepare sample, actual IO time is not included
+    int64_t sample_size = 0;                  // Records the number of hits in the sample. Granularity can be BLOCK/PAGE
+    int64_t sample_population_size = 0;       // Records the total number of samples. Granularity can be BLOCK/PAGE
+    int64_t sample_build_histogram_count = 0; // Records the number of histogram built for sampling
+    int64_t sample_build_histogram_time_ns = 0; // Records the time to build histogram
 };
 
 // OlapWriterStatistics used to collect statistics when write data to storage
 struct OlapWriterStatistics {
-    int64_t segment_write_ns = 0;
+    int64_t write_remote_ns = 0;    // how much time is spent on write
+    int64_t bytes_write_remote = 0; // how many bytes are written
+    int64_t segment_count = 0;      // how many files are written
 };
 
 const char* const kBytesReadLocalDisk = "bytes_read_local_disk";
 const char* const kBytesWriteLocalDisk = "bytes_write_local_disk";
 const char* const kBytesReadRemote = "bytes_read_remote";
+const char* const kBytesWriteRemote = "bytes_write_remote";
 const char* const kIOCountLocalDisk = "io_count_local_disk";
 const char* const kIOCountRemote = "io_count_remote";
 const char* const kIONsReadLocalDisk = "io_ns_read_local_disk";
 const char* const kIONsWriteLocalDisk = "io_ns_write_local_disk";
-const char* const kIONsRemote = "io_ns_remote";
+const char* const kIONsReadRemote = "io_ns_read_remote";
+const char* const kIONsWriteRemote = "io_ns_write_remote";
 const char* const kPrefetchHitCount = "prefetch_hit_count";
 const char* const kPrefetchWaitFinishNs = "prefetch_wait_finish_ns";
 const char* const kPrefetchPendingNs = "prefetch_pending_ns";
-
-// The position index of a column in a specific TabletSchema starts from 0.
-// The position of the same column in different TabletSchema may be different, which
-// means that the same column may have a different ColumnId in different contexts, depending
-// on the TabletSchema used.
-// TODO: Change the name
-typedef uint32_t ColumnId;
-
-// A unique identifier for a column within the Tablet scope, unlike ColumnId, ColumnUID
-// is independent of where the column appears in the Tablet schema.
-// Since versions 3.2.3, ColumnUID are generated by the FE, which uses the Java int
-// type, corresponding to the int32_t.
-typedef int32_t ColumnUID;
 
 // 8 bit rowset id version
 // 56 bit, inc number from 1
@@ -396,6 +418,16 @@ struct RowsetId {
     friend std::ostream& operator<<(std::ostream& out, const RowsetId& rowset_id) {
         out << rowset_id.to_string();
         return out;
+    }
+};
+
+struct HashOfRowsetId {
+    size_t operator()(const RowsetId& rowset_id) const {
+        size_t seed = 0;
+        seed = HashUtil::hash64(&rowset_id.hi, sizeof(rowset_id.hi), seed);
+        seed = HashUtil::hash64(&rowset_id.mi, sizeof(rowset_id.mi), seed);
+        seed = HashUtil::hash64(&rowset_id.lo, sizeof(rowset_id.lo), seed);
+        return seed;
     }
 };
 

@@ -14,15 +14,18 @@
 
 #include "exec/pipeline/sink/export_sink_operator.h"
 
+#include "base/uid_util.h"
 #include "exec/data_sink.h"
 #include "exec/file_builder.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/sink/sink_io_buffer.h"
 #include "exec/plain_text_builder.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 #include "formats/csv/converter.h"
-#include "formats/csv/output_stream.h"
 #include "fs/fs_broker.h"
+#include "io/formatted_output_stream.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
@@ -109,10 +112,23 @@ Status ExportSinkIOBuffer::_open_file_writer() {
         return Status::NotSupported(strings::Substitute("Unsupported file type $0", file_type));
     }
 
-    _file_builder = std::make_unique<PlainTextBuilder>(
-            PlainTextBuilderOptions{.column_terminated_by = _t_export_sink.column_separator,
-                                    .line_terminated_by = _t_export_sink.row_delimiter},
-            std::move(output_file), _output_expr_ctxs);
+    PlainTextBuilderOptions builder_options{.column_terminated_by = _t_export_sink.column_separator,
+                                            .line_terminated_by = _t_export_sink.row_delimiter};
+
+    // Set header options if configured
+    if (_t_export_sink.__isset.with_header && _t_export_sink.with_header) {
+        builder_options.with_header = true;
+        if (_t_export_sink.__isset.column_names && !_t_export_sink.column_names.empty()) {
+            builder_options.column_names = _t_export_sink.column_names;
+        } else {
+            LOG(WARNING) << "with_header is enabled but column_names is empty, header row will be skipped"
+                         << ", query_id=" << print_id(_fragment_ctx->query_id())
+                         << ", fragment_instance_id=" << print_id(_fragment_ctx->fragment_instance_id());
+        }
+    }
+
+    _file_builder =
+            std::make_unique<PlainTextBuilder>(std::move(builder_options), std::move(output_file), _output_expr_ctxs);
 
     _state->add_export_output_file(file_path);
     return Status::OK();
@@ -149,7 +165,8 @@ bool ExportSinkOperator::is_finished() const {
 
 Status ExportSinkOperator::set_finishing(RuntimeState* state) {
     if (_num_sinkers.fetch_sub(1, std::memory_order_acq_rel) == 1) {
-        state->exec_env()->wg_driver_executor()->report_audit_statistics(state->query_ctx(), state->fragment_ctx());
+        state->fragment_ctx()->workgroup()->executors()->driver_executor()->report_audit_statistics(
+                state->query_ctx(), state->fragment_ctx());
     }
     return _export_sink_buffer->set_finishing();
 }
@@ -173,9 +190,9 @@ Status ExportSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk
 
 Status ExportSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
-    RETURN_IF_ERROR(Expr::create_expr_trees(state->obj_pool(), _t_output_expr, &_output_expr_ctxs, state));
-    RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprFactory::create_expr_trees(state->obj_pool(), _t_output_expr, &_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_output_expr_ctxs, state));
 
     _export_sink_buffer =
             std::make_shared<ExportSinkIOBuffer>(_t_export_sink, _output_expr_ctxs, _total_num_sinkers, _fragment_ctx);
@@ -183,7 +200,7 @@ Status ExportSinkOperatorFactory::prepare(RuntimeState* state) {
 }
 
 void ExportSinkOperatorFactory::close(RuntimeState* state) {
-    Expr::close(_output_expr_ctxs, state);
+    ExprExecutor::close(_output_expr_ctxs, state);
     OperatorFactory::close(state);
 }
 

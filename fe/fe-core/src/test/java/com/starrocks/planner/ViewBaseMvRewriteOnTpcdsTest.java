@@ -39,6 +39,7 @@ public class ViewBaseMvRewriteOnTpcdsTest extends MaterializedViewTestBase {
         MaterializedViewTestBase.beforeClass();
 
         connectContext.getSessionVariable().setEnableViewBasedMvRewrite(true);
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
 
         starRocksAssert.useDatabase("test");
         connectContext.executeSql("drop table if exists customer");

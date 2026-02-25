@@ -15,9 +15,12 @@
 
 package com.starrocks.connector.hive.glue.util;
 
+import com.starrocks.connector.hive.glue.metastore.AWSGlueMetastore;
 import org.apache.hadoop.hive.metastore.TableType;
 import software.amazon.awssdk.services.glue.model.InvalidInputException;
 import software.amazon.awssdk.services.glue.model.Table;
+
+import java.util.Map;
 
 import static org.apache.commons.lang3.StringUtils.isNotEmpty;
 import static org.apache.hadoop.hive.metastore.api.hive_metastoreConstants.META_TABLE_STORAGE;
@@ -28,7 +31,7 @@ import static org.apache.iceberg.BaseMetastoreTableOperations.TABLE_TYPE_PROP;
 public enum HiveTableValidator {
 
     REQUIRED_PROPERTIES_VALIDATOR {
-        public void validate(Table table) {
+        public void validate(Table table, AWSGlueMetastore metastore) {
             String missingProperty = null;
 
             if (notApplicableTableType(table)) {
@@ -54,6 +57,22 @@ public enum HiveTableValidator {
                         .message(String.format("%s cannot be null for table: %s", missingProperty, table.name()))
                         .build();
             }
+
+            // Check for partition projection tables
+            // Support both 'projection.enabled' (AWS standard) and 'projection.enable' (legacy)
+            if (table.parameters() != null) {
+                for (Map.Entry<String, String> entry : table.parameters().entrySet()) {
+                    String key = entry.getKey();
+                    String value = entry.getValue();
+                    if ((key.equalsIgnoreCase("projection.enabled") || key.equalsIgnoreCase("projection.enable"))
+                            && "true".equalsIgnoreCase(value)) {
+                        // Tables with partition projection enabled are treated as valid here and do not require
+                        // metastore partition validation, because partitions are dynamically generated from
+                        // table properties, so empty metastore partitions are expected and acceptable.
+                        return;
+                    }
+                }
+            }
         }
     };
 
@@ -63,7 +82,7 @@ public enum HiveTableValidator {
                 table.parameters().get(TABLE_TYPE_PROP).equalsIgnoreCase(ICEBERG_TABLE_TYPE_VALUE);
     }
 
-    public abstract void validate(Table table);
+    public abstract void validate(Table table, AWSGlueMetastore metastore);
 
     private static boolean notApplicableTableType(Table table) {
         if (isNotManagedOrExternalTable(table) ||

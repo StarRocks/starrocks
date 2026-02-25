@@ -16,19 +16,14 @@
 package com.starrocks.statistic;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.catalog.Type;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.StatsConstants.AnalyzeType;
 import com.starrocks.statistic.StatsConstants.ScheduleStatus;
 import com.starrocks.statistic.StatsConstants.ScheduleType;
+import com.starrocks.type.Type;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -184,22 +179,29 @@ public class ExternalAnalyzeJob implements AnalyzeJob, Writable {
     }
 
     @Override
-    public void run(ConnectContext statsConnectContext, StatisticExecutor statisticExecutor) {
+    public List<StatisticsCollectJob> instantiateJobs() {
+        return StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(this);
+    }
+
+    @Override
+    public void run(ConnectContext statsConnectContext, StatisticExecutor statisticExecutor,
+                    List<StatisticsCollectJob> jobs) {
         setStatus(StatsConstants.ScheduleStatus.RUNNING);
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().updateAnalyzeJobWithoutLog(this);
-        List<StatisticsCollectJob> statisticsCollectJobList =
-                StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(this);
 
         boolean hasFailedCollectJob = false;
-        for (StatisticsCollectJob statsJob : statisticsCollectJobList) {
+        for (StatisticsCollectJob statsJob : jobs) {
+            if (!StatisticAutoCollector.checkoutAnalyzeTime()) {
+                break;
+            }
             AnalyzeStatus analyzeStatus = new ExternalAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
                     statsJob.getCatalogName(), statsJob.getDb().getFullName(), statsJob.getTable().getName(),
-                    statsJob.getTable().getUUID(), statsJob.getColumnNames(), statsJob.getType(), statsJob.getScheduleType(),
-                    statsJob.getProperties(), LocalDateTime.now());
+                    statsJob.getTable().getUUID(), statsJob.getColumnNames(), statsJob.getAnalyzeType(),
+                    statsJob.getScheduleType(), statsJob.getProperties(), LocalDateTime.now());
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
 
-            statisticExecutor.collectStatistics(statsConnectContext, statsJob, analyzeStatus, true);
+            statisticExecutor.collectStatistics(statsConnectContext, statsJob, analyzeStatus, true, true /* resetWarehouse */);
             if (analyzeStatus.getStatus().equals(StatsConstants.ScheduleStatus.FAILED)) {
                 setStatus(StatsConstants.ScheduleStatus.FAILED);
                 setWorkTime(LocalDateTime.now());
@@ -215,17 +217,6 @@ public class ExternalAnalyzeJob implements AnalyzeJob, Writable {
             setWorkTime(LocalDateTime.now());
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().updateAnalyzeJobWithLog(this);
         }
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String s = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, s);
-    }
-
-    public static ExternalAnalyzeJob read(DataInput in) throws IOException {
-        String s = Text.readString(in);
-        return GsonUtils.GSON.fromJson(s, ExternalAnalyzeJob.class);
     }
 
     @Override

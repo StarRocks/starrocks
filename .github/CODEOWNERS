@@ -36,7 +36,6 @@
 /fe/fe-core/src/main/java/com/starrocks/privilege/                  @StarRocks/metadata-maintainer
 /fe/fe-core/src/main/java/com/starrocks/common/util/concurrent/     @StarRocks/metadata-maintainer
 /fe/fe-core/src/main/java/com/starrocks/mysql/                      @StarRocks/metadata-maintainer
-/fe/fe-core/src/main/java/com/starrocks/transaction/                @StarRocks/metadata-maintainer
 /fe/fe-core/src/main/java/com/starrocks/healthchecker/              @StarRocks/metadata-maintainer
 /fe/fe-core/src/main/java/com/starrocks/clone/                      @StarRocks/metadata-maintainer
 /fe/fe-core/src/main/java/com/starrocks/consistency/                @StarRocks/metadata-maintainer
@@ -124,10 +123,15 @@
 /be/src/http/action/compaction_action.cpp       @StarRocks/load-unload-maintainer
 /be/src/http/action/*stream_load.cpp    @StarRocks/load-unload-maintainer
 /be/src/http/action/restore*            @StarRocks/load-unload-maintainer
+/be/src/runtime/batch_write/*           @StarRocks/load-unload-maintainer
 /be/src/runtime/routine_load/*          @StarRocks/load-unload-maintainer
 /be/src/runtime/stream_load/*           @StarRocks/load-unload-maintainer
 /be/src/runtime/load*                   @StarRocks/load-unload-maintainer
 /be/src/runtime/tablets_channel.cpp     @StarRocks/load-unload-maintainer
+/be/src/runtime/local_tablets_channel*  @StarRocks/load-unload-maintainer
 /be/src/runtime/export_sink.cpp         @StarRocks/load-unload-maintainer
+
+# meta upgrade/downgrade compatibility
+/fe/fe-core/src/main/java/com/starrocks/persist/gson/GsonUtils.java @StarRocks/meta-compatibility-maintainer
 
 

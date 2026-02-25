@@ -34,6 +34,7 @@
 
 package com.starrocks.server;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
@@ -41,35 +42,31 @@ import com.google.gson.annotations.SerializedName;
 import com.google.gson.stream.JsonReader;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.common.Config;
-import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.LeaderInfo;
 import com.starrocks.http.meta.MetaBaseAction;
 import com.starrocks.leader.MetaHelper;
-import com.starrocks.persist.ImageFormatVersion;
-import com.starrocks.persist.ImageLoader;
+import com.starrocks.persist.DropFrontendInfo;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.Storage;
 import com.starrocks.persist.StorageInfo;
+import com.starrocks.persist.UpdateFrontendInfo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryStatisticsInfo;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Frontend;
@@ -77,9 +74,6 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TGetQueryStatisticsRequest;
 import com.starrocks.thrift.TGetQueryStatisticsResponse;
 import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.thrift.TSetConfigRequest;
-import com.starrocks.thrift.TSetConfigResponse;
-import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -92,6 +86,7 @@ import java.net.URL;
 import java.net.URLEncoder;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -122,6 +117,8 @@ public class NodeMgr {
      */
     @SerializedName(value = "f")
     private ConcurrentHashMap<String, Frontend> frontends = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<Integer, Frontend> frontendIds = new ConcurrentHashMap<>();
+
     @SerializedName(value = "rf")
     private ConcurrentLinkedQueue<String> removedFrontends = new ConcurrentLinkedQueue<>();
 
@@ -147,7 +144,6 @@ public class NodeMgr {
     private int clusterId;
     private String token;
     private String runMode;
-    private String imageDir;
 
     private final List<Pair<String, Integer>> helperNodes = Lists.newArrayList();
     private Pair<String, Integer> selfNode = null;
@@ -165,9 +161,16 @@ public class NodeMgr {
         this.brokerMgr = new BrokerMgr();
     }
 
-    public void initialize(String[] args) throws Exception {
+    // For test
+    protected NodeMgr(FrontendNodeType role, String nodeName, Pair<String, Integer> selfNode) {
+        this.role = role;
+        this.nodeName = nodeName;
+        this.selfNode = selfNode;
+    }
+
+    public void initialize(String helpers) throws Exception {
         getCheckedSelfHostPort();
-        getHelperNodes(args);
+        getHelperNodes(helpers);
     }
 
     private boolean tryLock(boolean mustLock) {
@@ -212,6 +215,17 @@ public class NodeMgr {
         return result;
     }
 
+    public long getAliveFrontendsCnt() {
+        return frontends.values().stream().filter(Frontend::isAlive).count();
+    }
+
+    public Frontend getFrontend(Integer frontendId) {
+        if (frontendId == 0) {
+            return getMySelf();
+        }
+        return frontendIds.get(frontendId);
+    }
+
     public List<String> getRemovedFrontendNames() {
         return Lists.newArrayList(removedFrontends);
     }
@@ -225,14 +239,14 @@ public class NodeMgr {
     }
 
     public boolean isVersionAndRoleFilesNotExist() {
-        File roleFile = new File(this.imageDir, Storage.ROLE_FILE);
-        File versionFile = new File(this.imageDir, Storage.VERSION_FILE);
+        File roleFile = new File(GlobalStateMgr.getImageDirPath(), Storage.ROLE_FILE);
+        File versionFile = new File(GlobalStateMgr.getImageDirPath(), Storage.VERSION_FILE);
         return !roleFile.exists() && !versionFile.exists();
     }
 
     private void removeMetaFileIfExist(String fileName) {
         try {
-            File file = new File(this.imageDir, fileName);
+            File file = new File(GlobalStateMgr.getImageDirPath(), fileName);
             if (file.exists()) {
                 if (file.delete()) {
                     LOG.warn("Deleted file {}, maybe because the firstly startup failed.", file.getAbsolutePath());
@@ -251,16 +265,17 @@ public class NodeMgr {
     }
 
     public void getClusterIdAndRoleOnStartup() throws IOException {
-        File roleFile = new File(this.imageDir, Storage.ROLE_FILE);
-        File versionFile = new File(this.imageDir, Storage.VERSION_FILE);
+        String imageDir = GlobalStateMgr.getImageDirPath();
+        File roleFile = new File(imageDir, Storage.ROLE_FILE);
+        File versionFile = new File(imageDir, Storage.VERSION_FILE);
 
         boolean isVersionFileChanged = false;
 
-        Storage storage = new Storage(this.imageDir);
+        Storage storage = new Storage(imageDir);
 
         // prepare starmgr dir
         if (RunMode.isSharedDataMode()) {
-            String subDir = this.imageDir + StarMgrServer.IMAGE_SUBDIR;
+            String subDir = imageDir + StarMgrServer.IMAGE_SUBDIR;
             File dir = new File(subDir);
             if (!dir.exists()) { // subDir might not exist
                 LOG.info("create image dir for star mgr, {}.", dir.getAbsolutePath());
@@ -302,7 +317,7 @@ public class NodeMgr {
                 // For compatibility. Because this is the very first time to start, so we arbitrarily choose
                 // a new name for this node
                 role = FrontendNodeType.FOLLOWER;
-                nodeName = GlobalStateMgr.genFeNodeName(selfNode.first, selfNode.second, false /* new style */);
+                nodeName = genFeNodeName(selfNode.first, selfNode.second, false /* new style */);
                 storage.writeFrontendRoleAndNodeName(role, nodeName);
                 LOG.info("very first time to start this node. role: {}, node name: {}", role.name(), nodeName);
             } else {
@@ -313,9 +328,18 @@ public class NodeMgr {
                     // But we will get a empty nodeName after upgrading.
                     // So for forward compatibility, we use the "old-style" way of naming: "ip_port",
                     // and update the ROLE file.
-                    nodeName = GlobalStateMgr.genFeNodeName(selfNode.first, selfNode.second, true/* old style */);
+                    nodeName = genFeNodeName(selfNode.first, selfNode.second, true/* old style */);
                     storage.writeFrontendRoleAndNodeName(role, nodeName);
                     LOG.info("forward compatibility. role: {}, node name: {}", role.name(), nodeName);
+                } else if (Config.bdbje_reset_election_group
+                        && !isFeNodeNameValid(nodeName, selfNode.first, selfNode.second)) {
+                    // Invalid node name, usually happened when the image dir is copied from another node.
+                    // Correct the node name
+                    String oldNodeName = nodeName;
+                    nodeName = genFeNodeName(selfNode.first, selfNode.second, false /* new style */);
+                    storage.writeFrontendRoleAndNodeName(role, nodeName);
+                    LOG.info("correct the node name {} to new node name: {}, role: {}", oldNodeName, nodeName,
+                            role.name());
                 }
             }
             Preconditions.checkNotNull(role);
@@ -325,15 +349,17 @@ public class NodeMgr {
                 clusterId = Storage.newClusterID();
                 token = Strings.isNullOrEmpty(Config.auth_token) ?
                         Storage.newToken() : Config.auth_token;
-                storage = new Storage(clusterId, token, this.imageDir);
+                storage = new Storage(clusterId, token, imageDir);
                 isVersionFileChanged = true;
 
                 isFirstTimeStartUp = true;
-                Frontend self = new Frontend(role, nodeName, selfNode.first, selfNode.second);
+                int fid = allocateNextFrontendId();
+                Frontend self = new Frontend(fid, role, nodeName, selfNode.first, selfNode.second);
                 // We don't need to check if frontends already contains self.
                 // frontends must be empty cause no image is loaded and no journal is replayed yet.
                 // And this frontend will be persisted later after opening bdbje environment.
                 frontends.put(nodeName, self);
+                frontendIds.put(fid, self);
             } else {
                 clusterId = storage.getClusterID();
                 if (storage.getToken() == null) {
@@ -373,7 +399,7 @@ public class NodeMgr {
 
             Pair<String, Integer> rightHelperNode = helperNodes.get(0);
 
-            storage = new Storage(this.imageDir);
+            storage = new Storage(imageDir);
             if (roleFile.exists() && (role != storage.getRole() || !nodeName.equals(storage.getNodeName()))
                     || !roleFile.exists()) {
                 storage.writeFrontendRoleAndNodeName(role, nodeName);
@@ -386,7 +412,7 @@ public class NodeMgr {
 
                 // NOTE: cluster_id will be init when Storage object is constructed,
                 //       so we new one.
-                storage = new Storage(this.imageDir);
+                storage = new Storage(imageDir);
                 clusterId = storage.getClusterID();
                 token = storage.getToken();
                 runMode = storage.getRunMode();
@@ -527,7 +553,7 @@ public class NodeMgr {
 
                 if (Strings.isNullOrEmpty(nodeName)) {
                     // For forward compatibility, we use old-style name: "ip_port"
-                    nodeName = GlobalStateMgr.genFeNodeName(selfNode.first, selfNode.second, true /* old style */);
+                    nodeName = genFeNodeName(selfNode.first, selfNode.second, true /* old style */);
                 }
             } catch (Exception e) {
                 LOG.warn("failed to get fe node type from helper node: {}.", helperNode, e);
@@ -585,25 +611,8 @@ public class NodeMgr {
         }
     }
 
-    private void getHelperNodes(String[] args) {
-        String helpers = null;
-        for (int i = 0; i < args.length; i++) {
-            if (args[i].equalsIgnoreCase("-helper")) {
-                if (i + 1 >= args.length) {
-                    System.out.println("-helper need parameter host:port,host:port");
-                    System.exit(-1);
-                }
-                helpers = args[i + 1];
-                if (!helpers.contains(":")) {
-                    System.out.print("helper's format seems was wrong [" + helpers + "]");
-                    System.out.println(", eg. host:port,host:port");
-                    System.exit(-1);
-                }
-                break;
-            }
-        }
-
-        if (helpers != null) {
+    private void getHelperNodes(String helpers) {
+        if (!Strings.isNullOrEmpty(helpers)) {
             String[] splittedHelpers = helpers.split(",");
             for (String helper : splittedHelpers) {
                 Pair<String, Integer> helperHostPort = SystemInfoService.validateHostAndPort(helper, false);
@@ -664,7 +673,7 @@ public class NodeMgr {
      * frontend log is deleted because of checkpoint.
      */
     public void checkCurrentNodeExist() {
-        if (Config.bdbje_reset_election_group.equals("true")) {
+        if (Config.bdbje_reset_election_group) {
             return;
         }
 
@@ -684,7 +693,7 @@ public class NodeMgr {
                 helperNode.first, Config.http_port) + "/version";
         LOG.info("Downloading version file from {}", url);
         try {
-            File dir = new File(this.imageDir);
+            File dir = new File(GlobalStateMgr.getImageDirPath());
             MetaHelper.getRemoteFile(url, HTTP_TIMEOUT_SECOND * 1000,
                     MetaHelper.getOutputStream(Storage.VERSION_FILE, dir));
             MetaHelper.complete(Storage.VERSION_FILE, dir);
@@ -701,31 +710,26 @@ public class NodeMgr {
      * Exception are free to raise on initialized phase
      */
     private void getNewImageOnStartup(Pair<String, Integer> helperNode, String subDir) throws IOException {
-        String dirStr = this.imageDir + subDir;
-        ImageLoader imageLoader = new ImageLoader(dirStr);
-        long localImageVersion = imageLoader.getImageJournalId();
+        String imageFileDir = MetaHelper.getImageFileDir(Strings.isNullOrEmpty(subDir));
+        Storage storage = new Storage(imageFileDir);
+        long localImageJournalId = storage.getImageJournalId();
 
         String accessibleHostPort = NetUtils.getHostPortInAccessibleFormat(helperNode.first, Config.http_port);
         URL infoUrl = new URL("http://" + accessibleHostPort + "/info?subdir=" + subDir);
         StorageInfo remoteStorageInfo = getStorageInfo(infoUrl);
-        long remoteImageVersion = remoteStorageInfo.getImageJournalId();
-        if (remoteImageVersion > localImageVersion) {
+        long remoteImageJournalId = remoteStorageInfo.getImageJournalId();
+        if (remoteImageJournalId > localImageJournalId) {
             String url = "http://" + accessibleHostPort + "/image?"
-                    + "version=" + remoteImageVersion
+                    + "version=" + remoteImageJournalId
                     + "&subdir=" + subDir
                     + "&image_format_version=" + remoteStorageInfo.getImageFormatVersion();
-            LOG.info("start to download image.{} version:{}, from {}", remoteImageVersion,
+            LOG.info("start to download image.{} version:{}, from {}", remoteImageJournalId,
                     remoteStorageInfo.getImageFormatVersion(), url);
-            File dir;
-            if (remoteStorageInfo.getImageFormatVersion() == ImageFormatVersion.v1) {
-                dir = new File(dirStr);
-            } else {
-                dir = new File(dirStr, remoteStorageInfo.getImageFormatVersion().toString());
-            }
-            MetaHelper.downloadImageFile(url, HTTP_TIMEOUT_SECOND * 1000, Long.toString(remoteImageVersion), dir);
+            MetaHelper.downloadImageFile(url, HTTP_TIMEOUT_SECOND * 1000,
+                    Long.toString(remoteImageJournalId), new File(imageFileDir));
         } else {
             LOG.info("skip download image for {}, current version {} >= version {} from {}",
-                    dirStr, localImageVersion, remoteImageVersion, helperNode);
+                    imageFileDir, localImageJournalId, remoteImageJournalId, helperNode);
         }
     }
 
@@ -743,21 +747,21 @@ public class NodeMgr {
                 throw new DdlException("unknown fqdn host: " + host);
             }
 
-            String nodeName = GlobalStateMgr.genFeNodeName(host, editLogPort, false /* new name style */);
+            String nodeName = genFeNodeName(host, editLogPort, false /* new name style */);
 
             if (removedFrontends.contains(nodeName)) {
                 throw new DdlException("frontend name already exists " + nodeName + ". Try again");
             }
 
-            Frontend fe = new Frontend(role, nodeName, host, editLogPort);
-            frontends.put(nodeName, fe);
-            if (role == FrontendNodeType.FOLLOWER) {
-                helperNodes.add(Pair.create(host, editLogPort));
+            int fid = allocateNextFrontendId();
+            if (fid == 0) {
+                throw new DdlException("No available frontend ID can allocate to new frontend");
             }
+
             if (GlobalStateMgr.getCurrentState().getHaProtocol() instanceof BDBHA) {
                 BDBHA bdbha = (BDBHA) GlobalStateMgr.getCurrentState().getHaProtocol();
                 if (role == FrontendNodeType.FOLLOWER) {
-                    bdbha.addUnstableNode(host, getFollowerCnt());
+                    bdbha.addUnstableNode(nodeName, getFollowerCnt() + 1);
                 }
 
                 // In some cases, for example, fe starts with the outdated meta, the node name that has been dropped
@@ -768,48 +772,88 @@ public class NodeMgr {
                 bdbha.removeNodeIfExist(host, editLogPort, nodeName);
             }
 
-            GlobalStateMgr.getCurrentState().getEditLog().logAddFrontend(fe);
+            Frontend fe = new Frontend(fid, role, nodeName, host, editLogPort);
+            GlobalStateMgr.getCurrentState().getEditLog().logAddFrontend(fe, wal -> applyAddFrontend((Frontend) wal));
         } finally {
             unlock();
         }
     }
 
+    private void applyAddFrontend(Frontend fe) {
+        frontends.put(fe.getNodeName(), fe);
+        frontendIds.put(fe.getFid(), fe);
+        if (fe.getRole() == FrontendNodeType.FOLLOWER) {
+            helperNodes.add(Pair.create(fe.getHost(), fe.getEditLogPort()));
+        }
+    }
+    
+    // relay function reuse the apply logic
+    public void replayAddFrontend(Frontend fe) {
+        tryLock(true);
+        try {
+            applyAddFrontend(fe);
+        } finally {
+            unlock();
+        }
+    }
+
+    /**
+     * Allocates the next available ID, ensuring it stays within the range [1, 255].
+     * If the ID reaches 255, it wraps around and searches from 1.
+     *
+     * @return the allocated ID, or 0 if all IDs are occupied.
+     */
+    public int allocateNextFrontendId() {
+        if (frontendIds.isEmpty()) {
+            return 1; // Start from 0 if no IDs are assigned yet
+        }
+
+        // Find the max key in the current map
+        int maxKey = Collections.max(frontendIds.keySet());
+
+        // Try to allocate the next available ID
+        for (int i = 0; i <= 255; i++) {
+            int candidateId = ((maxKey + i) % 255) + 1;
+            if (!frontendIds.containsKey(candidateId)) {
+                return candidateId; // Found an available ID
+            }
+        }
+
+        return 0; //No available frontend ID can allocate to new frontend
+    }
+
     public void modifyFrontendHost(ModifyFrontendAddressClause modifyFrontendAddressClause) throws DdlException {
-        String toBeModifyHost = modifyFrontendAddressClause.getSrcHost();
-        String fqdn = modifyFrontendAddressClause.getDestHost();
-        if (toBeModifyHost.equals(selfNode.first) && role == FrontendNodeType.LEADER) {
+        String srcHost = modifyFrontendAddressClause.getSrcHost();
+        String destHost = modifyFrontendAddressClause.getDestHost();
+        if (srcHost.equals(selfNode.first) && role == FrontendNodeType.LEADER) {
             throw new DdlException("can not modify current master node.");
         }
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
         try {
-            Frontend preUpdateFe = getFeByHost(toBeModifyHost);
-            if (preUpdateFe == null) {
-                throw new DdlException(String.format("frontend [%s] not found", toBeModifyHost));
+            Frontend frontend = getFeByHost(srcHost);
+            if (frontend == null) {
+                throw new DdlException(String.format("frontend [%s] not found", srcHost));
             }
 
-            Frontend existFe = null;
             for (Frontend fe : frontends.values()) {
-                if (fe.getHost().equals(fqdn)) {
-                    existFe = fe;
+                if (fe.getHost().equals(destHost)) {
+                    throw new DdlException("frontend with host [" + destHost + "] already exists ");
                 }
             }
 
-            if (null != existFe) {
-                throw new DdlException("frontend with host [" + fqdn + "] already exists ");
+            // update the fe information stored in bdb
+            HAProtocol haProtocol = GlobalStateMgr.getCurrentState().getHaProtocol();
+            if (haProtocol instanceof BDBHA bdbha) {
+                bdbha.updateFrontendHostAndPort(frontend.getNodeName(), destHost, frontend.getEditLogPort());
             }
 
-            // step 1 update the fe information stored in bdb
-            BDBHA bdbha = (BDBHA) GlobalStateMgr.getCurrentState().getHaProtocol();
-            bdbha.updateFrontendHostAndPort(preUpdateFe.getNodeName(), fqdn, preUpdateFe.getEditLogPort());
-            // step 2 update the fe information stored in memory
-            preUpdateFe.updateHostAndEditLogPort(fqdn, preUpdateFe.getEditLogPort());
-            frontends.put(preUpdateFe.getNodeName(), preUpdateFe);
-
             // editLog
-            GlobalStateMgr.getCurrentState().getEditLog().logUpdateFrontend(preUpdateFe);
-            LOG.info("send update fe editlog success, fe info is [{}]", preUpdateFe.toString());
+            GlobalStateMgr.getCurrentState().getEditLog().logUpdateFrontend(
+                    new UpdateFrontendInfo(frontend.getNodeName(), destHost),
+                    wal -> applyModifyFrontend((UpdateFrontendInfo) wal));
+            LOG.info("send update fe editlog success, fe info is [{}]", frontend.toString());
         } finally {
             unlock();
         }
@@ -834,86 +878,72 @@ public class NodeMgr {
                 throw new DdlException(role.toString() + " does not exist[" +
                         NetUtils.getHostPortInAccessibleFormat(host, port) + "]");
             }
-            frontends.remove(fe.getNodeName());
-            removedFrontends.add(fe.getNodeName());
 
             if (fe.getRole() == FrontendNodeType.FOLLOWER) {
                 GlobalStateMgr.getCurrentState().getHaProtocol().removeElectableNode(fe.getNodeName());
-                helperNodes.remove(Pair.create(host, port));
-
-                BDBHA ha = (BDBHA) GlobalStateMgr.getCurrentState().getHaProtocol();
-                ha.removeUnstableNode(host, getFollowerCnt());
+                GlobalStateMgr.getCurrentState().getHaProtocol().removeUnstableNode(fe.getNodeName(), getFollowerCnt() - 1);
             }
-            GlobalStateMgr.getCurrentState().getEditLog().logRemoveFrontend(fe);
+            Frontend finalFE = fe;
+            GlobalStateMgr.getCurrentState().getEditLog().logRemoveFrontend(
+                    new DropFrontendInfo(fe.getNodeName()), wal -> applyDropFrontend(finalFE));
         } finally {
             unlock();
 
             if (fe != null) {
-                GlobalStateMgr.getCurrentState().getSlotManager().notifyFrontendDeadAsync(fe.getNodeName());
+                dropFrontendHook(fe);
             }
         }
     }
 
-    public void replayAddFrontend(Frontend fe) {
+    private void dropFrontendHook(Frontend fe) {
+        GlobalStateMgr.getCurrentState().getSlotManager().notifyFrontendDeadAsync(fe.getNodeName());
+
+        GlobalStateMgr.getCurrentState().getCheckpointController().cancelCheckpoint(fe.getNodeName(), "FE is dropped");
+        if (RunMode.isSharedDataMode()) {
+            StarMgrServer.getCurrentState().getCheckpointController().cancelCheckpoint(fe.getNodeName(), "FE is dropped");
+        }
+    }
+
+    public void replayUpdateFrontend(UpdateFrontendInfo info) {
         tryLock(true);
         try {
-            Frontend existFe = unprotectCheckFeExist(fe.getHost(), fe.getEditLogPort());
-            if (existFe != null) {
-                LOG.warn("fe {} already exist.", existFe);
-                if (existFe.getRole() != fe.getRole()) {
-                    /*
-                     * This may happen if:
-                     * 1. first, add a FE as OBSERVER.
-                     * 2. This OBSERVER is restarted with ROLE and VERSION file being DELETED.
-                     *    In this case, this OBSERVER will be started as a FOLLOWER, and add itself to the frontends.
-                     * 3. this "FOLLOWER" begin to load image or replay journal,
-                     *    then find the origin OBSERVER in image or journal.
-                     * This will cause UNDEFINED behavior, so it is better to exit and fix it manually.
-                     */
-                    System.err.println("Try to add an already exist FE with different role" + fe.getRole());
-                    System.exit(-1);
-                }
-                return;
-            }
-            frontends.put(fe.getNodeName(), fe);
-            if (fe.getRole() == FrontendNodeType.FOLLOWER) {
-                helperNodes.add(Pair.create(fe.getHost(), fe.getEditLogPort()));
-            }
+            applyModifyFrontend(info);
+            LOG.info("update fe {} successfully", info.getNodeName());
         } finally {
             unlock();
         }
     }
 
-    public void replayUpdateFrontend(Frontend frontend) {
-        tryLock(true);
-        try {
-            Frontend fe = frontends.get(frontend.getNodeName());
-            if (fe == null) {
-                LOG.error("try to update frontend, but " + frontend.toString() + " does not exist.");
-                return;
-            }
-            fe.updateHostAndEditLogPort(frontend.getHost(), frontend.getEditLogPort());
-            frontends.put(fe.getNodeName(), fe);
-            LOG.info("update fe successfully, fe info is [{}]", frontend.toString());
-        } finally {
-            unlock();
+    // caller should hold the lock
+    public void applyModifyFrontend(UpdateFrontendInfo info) {
+        Frontend fe = frontends.get(info.getNodeName());
+        if (fe == null) {
+            LOG.error("try to update frontend, but {} does not exist.", info.getNodeName());
+            return;
+        }
+        fe.updateHost(info.getHost());
+    }
+
+    // caller should hold the lock
+    public void applyDropFrontend(Frontend frontend) {
+        frontends.remove(frontend.getNodeName());
+        frontendIds.remove(frontend.getFid());
+        removedFrontends.add(frontend.getNodeName());
+        if (frontend.getRole() == FrontendNodeType.FOLLOWER) {
+            helperNodes.remove(Pair.create(frontend.getHost(), frontend.getEditLogPort()));
         }
     }
 
-    public void replayDropFrontend(Frontend frontend) {
+    public void replayDropFrontend(DropFrontendInfo dropFrontendInfo) {
         tryLock(true);
         Frontend removedFe = null;
         try {
-            removedFe = frontends.remove(frontend.getNodeName());
+            removedFe = frontends.remove(dropFrontendInfo.getNodeName());
             if (removedFe == null) {
-                LOG.error(frontend.toString() + " does not exist.");
+                LOG.error(dropFrontendInfo + " does not exist.");
                 return;
             }
-            if (removedFe.getRole() == FrontendNodeType.FOLLOWER) {
-                helperNodes.remove(Pair.create(removedFe.getHost(), removedFe.getEditLogPort()));
-            }
-
-            removedFrontends.add(removedFe.getNodeName());
+            applyDropFrontend(removedFe);
         } finally {
             unlock();
 
@@ -1105,9 +1135,9 @@ public class NodeMgr {
                 TGetQueryStatisticsResponse response = ThriftRPCRequestExecutor.call(
                         ThriftConnectionPool.frontendPool,
                         new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
-                                Config.thrift_rpc_timeout_ms,
-                                Config.thrift_rpc_retry_times,
-                                client -> client.getQueryStatistics(request));
+                        Config.thrift_rpc_timeout_ms,
+                        Config.thrift_rpc_retry_times,
+                        client -> client.getQueryStatistics(request));
                 if (response.getStatus().getStatus_code() != TStatusCode.OK) {
                     LOG.warn("getQueryStatisticsInfo to remote fe: {} failed", fe.getHost());
                 } else if (response.isSetQueryStatistics_infos()) {
@@ -1123,57 +1153,39 @@ public class NodeMgr {
         return statisticsItems;
     }
 
-    public void setConfig(AdminSetConfigStmt stmt) throws DdlException {
-        setFrontendConfig(stmt.getConfig().getMap());
-
-        List<Frontend> allFrontends = getFrontends(null);
-        int timeout = ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000
-                + Config.thrift_rpc_timeout_ms;
-        StringBuilder errMsg = new StringBuilder();
-        for (Frontend fe : allFrontends) {
-            if (fe.getHost().equals(getSelfNode().first)) {
-                continue;
-            }
-
-            TSetConfigRequest request = new TSetConfigRequest();
-            request.setKeys(Lists.newArrayList(stmt.getConfig().getKey()));
-            request.setValues(Lists.newArrayList(stmt.getConfig().getValue()));
-            try {
-                TSetConfigResponse response = ThriftRPCRequestExecutor.call(
-                        ThriftConnectionPool.frontendPool,
-                        new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
-                        timeout,
-                        client -> client.setConfig(request));
-                TStatus status = response.getStatus();
-                if (status.getStatus_code() != TStatusCode.OK) {
-                    errMsg.append("set config for fe[").append(fe.getHost()).append("] failed: ");
-                    if (status.getError_msgs() != null && status.getError_msgs().size() > 0) {
-                        errMsg.append(String.join(",", status.getError_msgs()));
-                    }
-                    errMsg.append(";");
-                }
-            } catch (Exception e) {
-                LOG.warn("set remote fe: {} config failed", fe.getHost(), e);
-                errMsg.append("set config for fe[").append(fe.getHost()).append("] failed: ").append(e.getMessage());
-            }
-        }
-        if (errMsg.length() > 0) {
-            ErrorReport.reportDdlException(ErrorCode.ERROR_SET_CONFIG_FAILED, errMsg.toString());
-        }
-    }
-
-    public void setFrontendConfig(Map<String, String> configs) throws DdlException {
-        for (Map.Entry<String, String> entry : configs.entrySet()) {
-            ConfigBase.setMutableConfig(entry.getKey(), entry.getValue());
-        }
-    }
-
     public Frontend getMySelf() {
         return frontends.get(nodeName);
     }
 
+    @VisibleForTesting
+    public void setMySelf(Frontend frontend) {
+        selfNode = Pair.create(frontend.getHost(), frontend.getRpcPort());
+        nodeName = frontend.getNodeName();
+        role = frontend.getRole();
+    }
+
     public ConcurrentHashMap<String, Frontend> getFrontends() {
         return frontends;
+    }
+
+    public void resetFrontends() {
+        int fid = allocateNextFrontendId();
+        Frontend self = new Frontend(fid, role, nodeName, selfNode.first, selfNode.second);
+        self.setAlive(true);
+
+        GlobalStateMgr.getCurrentState().getEditLog().logResetFrontends(self, wal -> applyResetFrontends((Frontend) wal));
+    }
+
+    public void applyResetFrontends(Frontend frontend) {
+        frontends.clear();
+        frontendIds.clear();
+
+        frontend.setAlive(true);
+        frontends.put(frontend.getNodeName(), frontend);
+        frontendIds.put(frontend.getFid(), frontend);
+        // reset helper nodes
+        helperNodes.clear();
+        helperNodes.add(Pair.create(frontend.getHost(), frontend.getEditLogPort()));
     }
 
     public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
@@ -1200,14 +1212,27 @@ public class NodeMgr {
 
         systemInfo = nodeMgr.systemInfo;
         brokerMgr = nodeMgr.brokerMgr;
+
+        //Sort by frontend name to ensure the order of assigned IDs is consistent
+        List<Frontend> sortedList = frontends.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey()).map(Map.Entry::getValue).collect(Collectors.toList());
+        for (Frontend fe : sortedList) {
+            if (fe.getFid() == 0) {
+                int frontendId = allocateNextFrontendId();
+                LOG.info("Frontend has no ID assigned, newly assigned ID {} to {}", frontendId, fe.getNodeName());
+                fe.setFid(frontendId);
+            }
+            frontendIds.put(fe.getFid(), fe);
+        }
     }
 
     public void setLeaderInfo() {
-        this.leaderIp = FrontendOptions.getLocalHostAddress();
-        this.leaderRpcPort = Config.rpc_port;
-        this.leaderHttpPort = Config.http_port;
-        LeaderInfo info = new LeaderInfo(this.leaderIp, this.leaderHttpPort, this.leaderRpcPort);
-        GlobalStateMgr.getCurrentState().getEditLog().logLeaderInfo(info);
+        LeaderInfo info = new LeaderInfo(FrontendOptions.getLocalHostAddress(), Config.http_port, Config.rpc_port);
+        GlobalStateMgr.getCurrentState().getEditLog().logLeaderInfo(info, wal -> {
+            leaderIp = info.getIp();
+            leaderRpcPort = info.getRpcPort();
+            leaderHttpPort = info.getHttpPort();
+        });
 
         leaderChangeListeners.values().forEach(listener -> listener.accept(info));
     }
@@ -1220,7 +1245,31 @@ public class NodeMgr {
         return isElectable;
     }
 
-    public void setImageDir(String imageDir) {
-        this.imageDir = imageDir;
+    public static String genFeNodeName(String host, int port, boolean isOldStyle) {
+        String name = host + "_" + port;
+        if (isOldStyle) {
+            return name;
+        } else {
+            return name + "_" + System.currentTimeMillis();
+        }
+    }
+
+    public static boolean isFeNodeNameValid(String nodeName, String host, int port) {
+        return nodeName.startsWith(host + "_" + port);
+    }
+
+    public long getTotalCpuCores() {
+        return frontends.values()
+                .stream()
+                .mapToLong(Frontend::getCpuCores)
+                .sum() + systemInfo.getTotalCpuCores();
+    }
+
+    protected LeaderInfo getLeaderInfo() {
+        return new LeaderInfo(leaderIp, leaderHttpPort, leaderRpcPort);
+    }
+
+    public void setBrokerMgr(BrokerMgr brokerMgr) {
+        this.brokerMgr = brokerMgr;
     }
 }

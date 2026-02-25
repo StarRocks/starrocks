@@ -19,8 +19,8 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Version;
@@ -56,8 +56,8 @@ import static com.starrocks.connector.PartitionUtil.toPartitionValues;
 import static com.starrocks.connector.hive.HiveMetadata.STARROCKS_QUERY_ID;
 import static com.starrocks.connector.hive.HivePartitionStats.ReduceOperator.SUBTRACT;
 import static com.starrocks.connector.hive.HivePartitionStats.fromCommonStats;
-import static com.starrocks.connector.hive.HiveWriteUtils.fileCreatedByQuery;
-import static com.starrocks.connector.hive.HiveWriteUtils.isS3Url;
+import static com.starrocks.connector.hive.HiveUtils.fileCreatedByQuery;
+import static com.starrocks.connector.hive.HiveUtils.isS3Url;
 import static io.airlift.concurrent.MoreFutures.getFutureValue;
 import static java.util.Objects.requireNonNull;
 
@@ -120,11 +120,12 @@ public class HiveCommitter {
         List<Pair<PartitionUpdate, HivePartitionStats>> insertExistsPartitions = new ArrayList<>();
         for (PartitionUpdate pu : partitionUpdates) {
             PartitionUpdate.UpdateMode mode = pu.getUpdateMode();
-            HivePartitionStats updateStats = fromCommonStats(pu.getRowCount(), pu.getTotalSizeInBytes());
+            HivePartitionStats updateStats =
+                    fromCommonStats(pu.getRowCount(), pu.getTotalSizeInBytes(), pu.getFileCount());
             if (table.isUnPartitioned()) {
                 if (partitionUpdates.size() != 1) {
                     throw new StarRocksConnectorException("There are multiple updates in the unpartition table: %s.%s",
-                            table.getDbName(), table.getTableName());
+                            table.getCatalogDBName(), table.getCatalogTableName());
                 }
 
                 if (mode == PartitionUpdate.UpdateMode.APPEND) {
@@ -158,8 +159,8 @@ public class HiveCommitter {
 
     public void asyncRefreshOthersFeMetadataCache(List<PartitionUpdate> partitionUpdates) {
         String catalogName = table.getCatalogName();
-        String dbName = table.getDbName();
-        String tableName = table.getTableName();
+        String dbName = table.getCatalogDBName();
+        String tableName = table.getCatalogTableName();
         List<String> partitionNames;
         if (table.isUnPartitioned()) {
             partitionNames = new ArrayList<>();
@@ -192,8 +193,8 @@ public class HiveCommitter {
             fileOps.asyncRenameFiles(fsTaskFutures, fsTaskCancelled, pu.getWritePath(), pu.getTargetPath(), pu.getFileNames());
         }
         updateStatisticsTasks.add(new UpdateStatisticsTask(
-                table.getDbName(),
-                table.getTableName(),
+                table.getCatalogDBName(),
+                table.getCatalogTableName(),
                 Optional.empty(),
                 updateStats,
                 true));
@@ -202,18 +203,27 @@ public class HiveCommitter {
     private void prepareOverwriteTable(PartitionUpdate pu, HivePartitionStats updateStats) {
         Path writePath = pu.getWritePath();
         Path targetPath = pu.getTargetPath();
+        if (pu.isS3Url()) {
+            String queryId = ConnectContext.get().getQueryId().toString();
+            fileOps.removeNotCurrentQueryFiles(targetPath, queryId);
+        } else {
+            Path oldTableStagingPath = new Path(targetPath.getParent(), "_temp_" + targetPath.getName() + "_" +
+                    ConnectContext.get().getQueryId().toString());
+            Optional<String> writePathRelativeToTarget = getRelativePathIfDescendant(targetPath, writePath);
+            fileOps.renameDirectory(targetPath, oldTableStagingPath,
+                    () -> renameDirTasksForAbort.add(new RenameDirectoryTask(oldTableStagingPath, targetPath)));
+            clearPathsForFinish.add(oldTableStagingPath);
+
+            Path sourcePath = writePathRelativeToTarget
+                    .map(relative -> new Path(oldTableStagingPath, relative))
+                    .orElse(writePath);
+
+            fileOps.renameDirectory(sourcePath, targetPath,
+                    () -> clearTasksForAbort.add(new DirectoryCleanUpTask(targetPath, true)));
+
+        }
         remoteFilesCacheToRefresh.add(targetPath);
-
-        Path oldTableStagingPath = new Path(targetPath.getParent(), "_temp_" + targetPath.getName() + "_" +
-                ConnectContext.get().getQueryId().toString());
-        fileOps.renameDirectory(targetPath, oldTableStagingPath,
-                () -> renameDirTasksForAbort.add(new RenameDirectoryTask(oldTableStagingPath, targetPath)));
-        clearPathsForFinish.add(oldTableStagingPath);
-
-        fileOps.renameDirectory(writePath, targetPath,
-                () -> clearTasksForAbort.add(new DirectoryCleanUpTask(targetPath, true)));
-
-        UpdateStatisticsTask updateStatsTask = new UpdateStatisticsTask(table.getDbName(), table.getTableName(),
+        UpdateStatisticsTask updateStatsTask = new UpdateStatisticsTask(table.getCatalogDBName(), table.getCatalogTableName(),
                 Optional.empty(), updateStats, false);
         updateStatisticsTasks.add(updateStatsTask);
     }
@@ -267,8 +277,9 @@ public class HiveCommitter {
                     fileOps.asyncRenameFiles(fsTaskFutures, fsTaskCancelled, writePath, targetPath, pu.getFileNames());
                 }
 
-                UpdateStatisticsTask updateStatsTask = new UpdateStatisticsTask(table.getDbName(), table.getTableName(),
-                        Optional.of(pu.getName()), updateStats, true);
+                UpdateStatisticsTask updateStatsTask =
+                        new UpdateStatisticsTask(table.getCatalogDBName(), table.getCatalogTableName(),
+                                Optional.of(pu.getName()), updateStats, true);
                 updateStatisticsTasks.add(updateStatsTask);
             }
         }
@@ -298,7 +309,7 @@ public class HiveCommitter {
         }
 
         remoteFilesCacheToRefresh.add(targetPath);
-        UpdateStatisticsTask updateStatsTask = new UpdateStatisticsTask(table.getDbName(), table.getTableName(),
+        UpdateStatisticsTask updateStatsTask = new UpdateStatisticsTask(table.getCatalogDBName(), table.getCatalogTableName(),
                 Optional.of(pu.getName()), updateStats, false);
         updateStatisticsTasks.add(updateStatsTask);
     }
@@ -409,7 +420,8 @@ public class HiveCommitter {
         for (RenameDirectoryTask directoryRenameTask : renameDirTasksForAbort) {
             try {
                 if (fileOps.pathExists(directoryRenameTask.getRenameFrom())) {
-                    fileOps.renameDirectory(directoryRenameTask.getRenameFrom(), directoryRenameTask.getRenameTo(), () -> {});
+                    fileOps.renameDirectory(directoryRenameTask.getRenameFrom(), directoryRenameTask.getRenameTo(), () -> {
+                    });
                 }
             } catch (Throwable t) {
                 LOG.error("Failed to undo rename dir from {} to {}",
@@ -444,8 +456,8 @@ public class HiveCommitter {
 
     private HivePartition buildHivePartition(PartitionUpdate partitionUpdate) {
         return HivePartition.builder()
-                .setDatabaseName(table.getDbName())
-                .setTableName(table.getTableName())
+                .setDatabaseName(table.getCatalogDBName())
+                .setTableName(table.getCatalogTableName())
                 .setColumns(table.getDataColumnNames().stream()
                         .map(table::getColumn)
                         .collect(Collectors.toList()))
@@ -453,6 +465,9 @@ public class HiveCommitter {
                 .setParameters(ImmutableMap.<String, String>builder()
                         .put("starrocks_version", Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH)
                         .put(STARROCKS_QUERY_ID, ConnectContext.get().getQueryId().toString())
+                        .buildOrThrow())
+                .setSerDeParameters(ImmutableMap.<String, String>builder()
+                        .putAll(table.getSerdeProperties())
                         .buildOrThrow())
                 .setStorageFormat(table.getStorageFormat())
                 .setLocation(partitionUpdate.getTargetPath().toString())
@@ -595,7 +610,7 @@ public class HiveCommitter {
         private boolean done;
 
         public UpdateStatisticsTask(String dbName, String tableName, Optional<String> partitionName,
-                                         HivePartitionStats statistics, boolean merge) {
+                                    HivePartitionStats statistics, boolean merge) {
             this.dbName = requireNonNull(dbName, "dbName is null");
             this.tableName = requireNonNull(tableName, "tableName is null");
             this.partitionName = requireNonNull(partitionName, "partitionName is null");
@@ -627,7 +642,7 @@ public class HiveCommitter {
             if (partitionName.isPresent()) {
                 return "alter partition parameters " + tableName + " " + partitionName.get();
             } else {
-                return "alter table parameters " +  tableName;
+                return "alter table parameters " + tableName;
             }
         }
 
@@ -752,9 +767,28 @@ public class HiveCommitter {
         return new DeleteRecursivelyResult(false, notDeletedEligibleItems);
     }
 
+    private Optional<String> getRelativePathIfDescendant(Path parentPath, Path childPath) {
+        Path normalizedParent = Path.getPathWithoutSchemeAndAuthority(parentPath);
+        Path normalizedChild = Path.getPathWithoutSchemeAndAuthority(childPath);
+        String parent = ensureTrailingSlash(normalizedParent.toString());
+        String child = normalizedChild.toString();
+        if (!child.startsWith(parent)) {
+            return Optional.empty();
+        }
+        String relative = child.substring(parent.length());
+        if (relative.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(relative);
+    }
+
+    private String ensureTrailingSlash(String path) {
+        return path.endsWith("/") ? path : path + "/";
+    }
+
     private synchronized void addSuppressedExceptions(
             List<Throwable> suppressedExceptions, Throwable t,
-             List<String> descriptions, String description) {
+            List<String> descriptions, String description) {
         descriptions.add(description);
         if (suppressedExceptions.size() < 3) {
             suppressedExceptions.add(t);

@@ -21,17 +21,18 @@ import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.concurrent.ConcurrentLong2ObjectHashMap;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.Backend;
 import org.junit.jupiter.api.AfterAll;
@@ -49,7 +50,7 @@ import java.util.Comparator;
 import java.util.ConcurrentModificationException;
 import java.util.List;
 import java.util.UUID;
-
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * This is the base class for unit class that wants to start a FE service.
@@ -61,7 +62,7 @@ import java.util.UUID;
  * thus we could wrap common logic in this base class. It's more easy to use.
  * Note:
  * Unit-test method in derived classes must use the JUnit5 {@link org.junit.jupiter.api.Test}
- * annotation, rather than the old JUnit4 {@link org.junit.Test} or others.
+ * annotation, rather than the old JUnit4 {@link org.junit.jupiter.api.Test} or others.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public abstract class TestWithFeService {
@@ -169,7 +170,7 @@ public abstract class TestWithFeService {
     }
 
     public void createDatabase(String db) throws Exception {
-        GlobalStateMgr.getCurrentState().getMetadata().createDb(db);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(db);
     }
 
     public void useDatabase(String dbName) {
@@ -201,23 +202,24 @@ public abstract class TestWithFeService {
     }
 
     private void updateReplicaPathHash() {
-        com.google.common.collect.Table<Long, Long, Replica> replicaMetaTable =
-                GlobalStateMgr.getCurrentState().getTabletInvertedIndex()
-                        .getReplicaMetaTable();
-        for (com.google.common.collect.Table.Cell<Long, Long, Replica> cell : replicaMetaTable.cellSet()) {
-            long beId = cell.getColumnKey();
-            Backend be = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(beId);
-            if (be == null) {
-                continue;
-            }
-            Replica replica = cell.getValue();
-            TabletMeta tabletMeta =
-                    GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletMeta(cell.getRowKey());
-            ImmutableMap<String, DiskInfo> diskMap = be.getDisks();
-            for (DiskInfo diskInfo : diskMap.values()) {
-                if (diskInfo.getStorageMedium() == tabletMeta.getStorageMedium()) {
-                    replica.setPathHash(diskInfo.getPathHash());
-                    break;
+        ConcurrentLong2ObjectHashMap<CopyOnWriteArrayList<Replica>> tabletToReplicaMap =
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicaMetaTable();
+        for (Long tabletId : tabletToReplicaMap.keySet()) {
+            List<Replica> replicas = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(tabletId);
+            for (Replica replica : replicas) {
+                long beId = replica.getBackendId();
+                Backend be = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(beId);
+                if (be == null) {
+                    continue;
+                }
+                TabletMeta tabletMeta =
+                        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletMeta(tabletId);
+                ImmutableMap<String, DiskInfo> diskMap = be.getDisks();
+                for (DiskInfo diskInfo : diskMap.values()) {
+                    if (diskInfo.getStorageMedium() == tabletMeta.getStorageMedium()) {
+                        replica.setPathHash(diskInfo.getPathHash());
+                        break;
+                    }
                 }
             }
         }

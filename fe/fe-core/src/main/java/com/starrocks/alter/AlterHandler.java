@@ -39,8 +39,8 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.ThreadPoolManager;
-import com.starrocks.common.UserException;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.RemoveAlterJobV2OperationLog;
@@ -53,9 +53,11 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -122,15 +124,17 @@ public abstract class AlterHandler extends FrontendDaemon {
         return this.alterJobsV2;
     }
 
-    private void clearExpireFinishedOrCancelledAlterJobsV2() {
+    protected void clearExpireFinishedOrCancelledAlterJobsV2() {
         Iterator<Map.Entry<Long, AlterJobV2>> iterator = alterJobsV2.entrySet().iterator();
         while (iterator.hasNext()) {
             AlterJobV2 alterJobV2 = iterator.next().getValue();
-            if (alterJobV2.isExpire()) {
-                iterator.remove();
+            if (alterJobV2.isExpire() && GlobalStateMgr.getCurrentState()
+                    .getClusterSnapshotMgr().isDeletionSafeToExecute(alterJobV2.getFinishedTimeMs())) {
                 RemoveAlterJobV2OperationLog log =
                         new RemoveAlterJobV2OperationLog(alterJobV2.getJobId(), alterJobV2.getType());
-                GlobalStateMgr.getCurrentState().getEditLog().logRemoveExpiredAlterJobV2(log);
+                GlobalStateMgr.getCurrentState().getEditLog().logRemoveExpiredAlterJobV2(log, wal -> {
+                    iterator.remove();
+                });
                 LOG.info("remove expired {} job {}. finish at {}", alterJobV2.getType(),
                         alterJobV2.getJobId(), TimeUtils.longToTimeString(alterJobV2.getFinishedTimeMs()));
             }
@@ -152,6 +156,31 @@ public abstract class AlterHandler extends FrontendDaemon {
 
     public Long getAlterJobV2Num(com.starrocks.alter.AlterJobV2.JobState state) {
         return alterJobsV2.values().stream().filter(e -> e.getJobState() == state).count();
+    }
+
+    /**
+     * Returns the minimum active transaction ID across all active alter jobs for the given table.
+     * This is important because multiple concurrent alter jobs (e.g., rollup jobs when
+     * Config.max_running_rollup_job_num_per_table > 1) can exist for the same table.
+     * Since alterJobsV2 is a ConcurrentMap with nondeterministic iteration order,
+     * we must find the minimum to ensure vacuum operations don't delete data still
+     * needed by any active job.
+     */
+    public Optional<Long> getActiveTxnIdOfTable(long tableId) {
+        Map<Long, AlterJobV2> alterJobV2Map = getAlterJobsV2();
+        Long minTxnId = null;
+        for (AlterJobV2 job : alterJobV2Map.values()) {
+            AlterJobV2.JobState state = job.getJobState();
+            if (job.getTableId() == tableId && state != AlterJobV2.JobState.FINISHED && state != AlterJobV2.JobState.CANCELLED) {
+                Optional<Long> txnId = job.getTransactionId();
+                if (txnId.isPresent()) {
+                    if (minTxnId == null || txnId.get() < minTxnId) {
+                        minTxnId = txnId.get();
+                    }
+                }
+            }
+        }
+        return Optional.ofNullable(minTxnId);
     }
 
     // For UT
@@ -182,7 +211,7 @@ public abstract class AlterHandler extends FrontendDaemon {
      * entry function. handle alter ops
      */
     public abstract ShowResultSet process(List<AlterClause> alterClauses, Database db, OlapTable olapTable)
-            throws UserException;
+            throws StarRocksException;
 
     /*
      * cancel alter ops
@@ -203,5 +232,15 @@ public abstract class AlterHandler extends FrontendDaemon {
         } else {
             existingJob.replay(alterJob);
         }
+    }
+
+    public Map<Long, Long> getRunningAlterJobCount() {
+        Map<Long, Long> result = new HashMap<>();
+        for (AlterJobV2 alterJobV2 : alterJobsV2.values()) {
+            if (!alterJobV2.isDone()) {
+                result.compute(alterJobV2.getWarehouseId(), (key, value) -> value == null ? 1L : value + 1);
+            }
+        }
+        return result;
     }
 }

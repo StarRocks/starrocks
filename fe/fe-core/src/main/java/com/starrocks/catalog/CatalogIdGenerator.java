@@ -55,8 +55,9 @@ public class CatalogIdGenerator {
         if (nextId < batchEndId) {
             return nextId++;
         } else {
-            batchEndId = batchEndId + BATCH_ID_INTERVAL;
-            GlobalStateMgr.getCurrentState().getEditLog().logSaveNextId(batchEndId);
+            long newBachEndId = batchEndId + BATCH_ID_INTERVAL;
+            GlobalStateMgr.getCurrentState().getEditLog()
+                    .logSaveNextId(newBachEndId, wal -> batchEndId = newBachEndId);
             return nextId++;
         }
     }

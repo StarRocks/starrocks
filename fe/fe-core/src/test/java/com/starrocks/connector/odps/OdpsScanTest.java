@@ -21,10 +21,9 @@ import com.aliyun.odps.table.read.split.impl.IndexedInputSplit;
 import com.aliyun.odps.table.read.split.impl.RowRangeInputSplit;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OdpsTable;
-import com.starrocks.catalog.Type;
+import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -39,10 +38,12 @@ import com.starrocks.sql.optimizer.rule.implementation.OdpsScanImplementationRul
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TResultSinkType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.StringType;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -53,13 +54,13 @@ import static org.mockito.Mockito.when;
 
 public class OdpsScanTest extends MockedBase {
 
-    static ColumnRefOperator intColumnOperator = new ColumnRefOperator(1, Type.INT, "id", true);
-    static ColumnRefOperator strColumnOperator = new ColumnRefOperator(2, Type.STRING, "name", true);
+    static ColumnRefOperator intColumnOperator = new ColumnRefOperator(1, IntegerType.INT, "id", true);
+    static ColumnRefOperator strColumnOperator = new ColumnRefOperator(2, StringType.STRING, "name", true);
 
     static Map<ColumnRefOperator, Column> scanColumnMap = new HashMap<>() {
         {
-            put(intColumnOperator, new Column("id", Type.INT));
-            put(strColumnOperator, new Column("name", Type.STRING));
+            put(intColumnOperator, new Column("id", IntegerType.INT));
+            put(strColumnOperator, new Column("name", StringType.STRING));
         }
     };
 
@@ -71,14 +72,14 @@ public class OdpsScanTest extends MockedBase {
     @Mocked
     static OptimizerContext optimizerContext;
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws OdpsException, IOException {
         initMock();
         odpsTable = new OdpsTable("catalog", table);
         logicalOdpsScanOperator = new LogicalOdpsScanOperator(odpsTable,
                 scanColumnMap, Maps.newHashMap(), -1,
                 new BinaryPredicateOperator(BinaryType.EQ,
-                        new ColumnRefOperator(1, Type.INT, "id", true),
+                        new ColumnRefOperator(1, IntegerType.INT, "id", true),
                         ConstantOperator.createInt(1)));
         OptExpression scan = new OptExpression(logicalOdpsScanOperator);
         List<OptExpression> transform = odpsRule.transform(scan, optimizerContext);
@@ -88,10 +89,10 @@ public class OdpsScanTest extends MockedBase {
     @Test
     public void testPhysicalOdpsScanOperator() {
         ScanOperatorPredicates scanOperatorPredicates = physicalOdpsScanOperator.getScanOperatorPredicates();
-        Assert.assertNotNull(scanOperatorPredicates);
+        Assertions.assertNotNull(scanOperatorPredicates);
         ColumnRefSet usedColumns = physicalOdpsScanOperator.getUsedColumns();
-        Assert.assertNotNull(usedColumns);
-        Assert.assertEquals(2, usedColumns.size());
+        Assertions.assertNotNull(usedColumns);
+        Assertions.assertEquals(2, usedColumns.size());
     }
 
     @Test
@@ -103,15 +104,15 @@ public class OdpsScanTest extends MockedBase {
         ExecPlan plan = PlanFragmentBuilder.createPhysicalPlan(phys, connectContext,
                 physicalOdpsScanOperator.getOutputColumns(), columnRefFactory,
                 ImmutableList.of("id"), TResultSinkType.FILE, true);
-        Assert.assertNotNull(plan);
-        Assert.assertEquals("id", plan.getColNames().get(0));
+        Assertions.assertNotNull(plan);
+        Assertions.assertEquals("id", plan.getColNames().get(0));
     }
 
     @Test
     public void testLogicalOdpsScanOperatorBuilder() {
         LogicalOdpsScanOperator.Builder builder = new LogicalOdpsScanOperator.Builder();
         LogicalOdpsScanOperator cloneOperator = builder.withOperator(logicalOdpsScanOperator).build();
-        Assert.assertEquals(logicalOdpsScanOperator, cloneOperator);
+        Assertions.assertEquals(logicalOdpsScanOperator, cloneOperator);
     }
 
     @Test
@@ -122,8 +123,8 @@ public class OdpsScanTest extends MockedBase {
         OdpsSplitsInfo.SplitPolicy splitPolicy = splitsInfo.getSplitPolicy();
         String serializeSession = splitsInfo.getSerializeSession();
         List<InputSplit> splits = splitsInfo.getSplits();
-        Assert.assertEquals(OdpsSplitsInfo.SplitPolicy.SIZE, splitPolicy);
-        Assert.assertEquals(1, splits.size());
-        Assert.assertNotNull(serializeSession);
+        Assertions.assertEquals(OdpsSplitsInfo.SplitPolicy.SIZE, splitPolicy);
+        Assertions.assertEquals(1, splits.size());
+        Assertions.assertNotNull(serializeSession);
     }
 }

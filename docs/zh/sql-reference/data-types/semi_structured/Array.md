@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # ARRAY
@@ -35,7 +35,6 @@ ARRAY<type> NOT NULL
 > * 数组列暂时不能作为 Key 列。
 > * 数组列不能作为分桶（Distributed By）列。
 > * 数组列不能作为分区（Partition By）列。
-> * 数组列暂不支持 DECIMAL V3 数据类型。
 > * 数组列最多支持 14 层嵌套。
 
 示例：
@@ -200,7 +199,7 @@ INSERT INTO t0 VALUES(1, [1,2,3]);
 
 ### 通过 Broker Load 批量导入 ORC 或 Parquet 文件中的数组
 
-StarRocks 中的数组类型，与 ORC 或 Parquet 格式中的 List 结构相对应，所以无需额外指定。具体导入方法请参考 [Broker load](../../sql-statements/data-manipulation/BROKER_LOAD.md)。
+StarRocks 中的数组类型，与 ORC 或 Parquet 格式中的 List 结构相对应，所以无需额外指定。具体导入方法请参考 [Broker load](../../sql-statements/loading_unloading/BROKER_LOAD.md)。
 
 当前 StarRocks 支持直接导入 ORC 文件的 List 结构。Parquet 格式导入正在开发中。
 

@@ -14,15 +14,14 @@
 
 #pragma once
 
+#include "base/types/decimal12.h"
+#include "base/types/int96.h"
+#include "base/types/uint24.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
-#include "runtime/decimalv2_value.h"
-#include "storage/decimal12.h"
-#include "storage/uint24.h"
-#include "util/int96.h"
+#include "types/decimalv2_value.h"
 
 namespace starrocks {
-
 class ColumnVisitorMutable {
 public:
     virtual ~ColumnVisitorMutable() = default;
@@ -52,10 +51,12 @@ public:
     virtual Status visit(Decimal32Column* column);
     virtual Status visit(Decimal64Column* column);
     virtual Status visit(Decimal128Column* column);
+    virtual Status visit(Decimal256Column* column);
     virtual Status visit(HyperLogLogColumn* column);
     virtual Status visit(BitmapColumn* column);
     virtual Status visit(PercentileColumn* column);
     virtual Status visit(JsonColumn* column);
+    virtual Status visit(VariantColumn* column);
     virtual Status visit(FixedLengthColumn<int96_t>* column);
     virtual Status visit(FixedLengthColumn<uint24_t>* column);
     virtual Status visit(FixedLengthColumn<decimal12_t>* column);
@@ -71,6 +72,7 @@ public:
     virtual Status visit(FixedLengthColumnBase<int64_t>* column);
     virtual Status visit(FixedLengthColumnBase<uint64_t>* column);
     virtual Status visit(FixedLengthColumnBase<int128_t>* column);
+    virtual Status visit(FixedLengthColumnBase<int256_t>* column);
     virtual Status visit(FixedLengthColumnBase<float>* column);
     virtual Status visit(FixedLengthColumnBase<double>* column);
     virtual Status visit(FixedLengthColumnBase<DateValue>* column);
@@ -80,6 +82,8 @@ public:
     virtual Status visit(FixedLengthColumnBase<uint24_t>* column);
     virtual Status visit(FixedLengthColumnBase<decimal12_t>* column);
     virtual Status visit(ObjectColumn<JsonValue>* column);
+    virtual Status visit(ObjectColumn<VariantRowValue>* column);
+    virtual Status visit(ArrayViewColumn* column) { return Status::NotSupported("ArrayViewColumn is not supported"); }
+    virtual Status visit(ColumnView* column) { return Status::NotSupported("ColumnView is not supported"); }
 };
-
 } // namespace starrocks

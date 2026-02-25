@@ -42,15 +42,12 @@ import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.KafkaUtil;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -155,8 +152,8 @@ public class KafkaProgress extends RoutineLoadProgress {
     }
 
     // convert offset of OFFSET_END and OFFSET_BEGINNING to current offset number
-    public void convertOffset(String brokerList, String topic, Map<String, String> properties, long warehouseId)
-            throws UserException {
+    public void convertOffset(String brokerList, String topic, Map<String, String> properties, ComputeResource computeResource)
+            throws StarRocksException {
         List<Integer> beginningPartitions = Lists.newArrayList();
         List<Integer> endPartitions = Lists.newArrayList();
         for (Map.Entry<Integer, Long> entry : partitionIdToOffset.entrySet()) {
@@ -171,13 +168,13 @@ public class KafkaProgress extends RoutineLoadProgress {
         }
 
         if (beginningPartitions.size() > 0) {
-            Map<Integer, Long> partOffsets = KafkaUtil
-                    .getBeginningOffsets(brokerList, topic, ImmutableMap.copyOf(properties), beginningPartitions, warehouseId);
+            Map<Integer, Long> partOffsets = KafkaUtil.getBeginningOffsets(
+                    brokerList, topic, ImmutableMap.copyOf(properties), beginningPartitions, computeResource);
             partitionIdToOffset.putAll(partOffsets);
         }
         if (endPartitions.size() > 0) {
-            Map<Integer, Long> partOffsets =
-                    KafkaUtil.getLatestOffsets(brokerList, topic, ImmutableMap.copyOf(properties), endPartitions, warehouseId);
+            Map<Integer, Long> partOffsets = KafkaUtil.getLatestOffsets(
+                    brokerList, topic, ImmutableMap.copyOf(properties), endPartitions, computeResource);
             partitionIdToOffset.putAll(partOffsets);
         }
     }
@@ -206,23 +203,9 @@ public class KafkaProgress extends RoutineLoadProgress {
                 .forEach(entity -> this.partitionIdToOffset.put(entity.getKey(), entity.getValue() + 1));
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-        out.writeInt(partitionIdToOffset.size());
-        for (Map.Entry<Integer, Long> entry : partitionIdToOffset.entrySet()) {
-            out.writeInt((Integer) entry.getKey());
-            out.writeLong((Long) entry.getValue());
-        }
-    }
 
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        int size = in.readInt();
-        partitionIdToOffset = new HashMap<>();
-        for (int i = 0; i < size; i++) {
-            partitionIdToOffset.put(in.readInt(), in.readLong());
-        }
-    }
+
+
+
 
 }

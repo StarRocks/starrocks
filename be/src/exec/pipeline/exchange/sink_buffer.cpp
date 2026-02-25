@@ -16,13 +16,18 @@
 
 #include <bthread/bthread.h>
 
-#include <chrono>
+#include <cstddef>
+#include <mutex>
 #include <string_view>
 
+#include "base/time/time.h"
+#include "base/uid_util.h"
+#include "base/utility/defer_op.h"
+#include "common/brpc_helper.h"
+#include "common/config.h"
 #include "fmt/core.h"
-#include "util/defer_op.h"
-#include "util/time.h"
-#include "util/uid_util.h"
+#include "runtime/exec_env.h"
+#include "util/brpc_stub_cache.h"
 
 namespace starrocks::pipeline {
 
@@ -32,6 +37,7 @@ SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFra
           _mem_tracker(fragment_ctx->runtime_state()->instance_mem_tracker()),
           _brpc_timeout_ms(fragment_ctx->runtime_state()->query_options().query_timeout * 1000),
           _is_dest_merge(is_dest_merge),
+          _buffered_mem_usage(std::make_unique<MemTracker>()),
           _rpc_http_min_size(fragment_ctx->runtime_state()->get_rpc_http_min_size()),
           _sent_audit_stats_frequency_upper_limit(
                   std::max((int64_t)64, BitUtil::RoundUpToPowerOfTwo(fragment_ctx->total_dop() * 4))) {
@@ -42,25 +48,23 @@ SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFra
             continue;
         }
 
-        auto it = _num_sinkers.find(instance_id.lo);
-        if (it == _num_sinkers.end()) {
-            _num_sinkers[instance_id.lo] = 0;
-            _request_seqs[instance_id.lo] = -1;
-            _max_continuous_acked_seqs[instance_id.lo] = -1;
-            _discontinuous_acked_seqs[instance_id.lo] = std::unordered_set<int64_t>();
-            _buffers[instance_id.lo] = std::queue<TransmitChunkInfo, std::list<TransmitChunkInfo>>();
-            _num_finished_rpcs[instance_id.lo] = 0;
-            _num_in_flight_rpcs[instance_id.lo] = 0;
-            _network_times[instance_id.lo] = TimeTrace{};
-            _mutexes[instance_id.lo] = std::make_unique<Mutex>();
-            _dest_addrs[instance_id.lo] = dest.brpc_server;
+        if (_sink_ctxs.count(instance_id.lo) == 0) {
+            _sink_ctxs[instance_id.lo] = std::make_unique<SinkContext>();
+            auto& ctx = sink_ctx(instance_id.lo);
+            ctx.num_sinker = 0;
+            ctx.request_seq = -1;
+            ctx.max_continuous_acked_seqs = -1;
+            ctx.num_finished_rpcs = 0;
+            ctx.num_in_flight_rpcs = 0;
+            ctx.dest_addrs = dest.brpc_server;
 
             PUniqueId finst_id;
             finst_id.set_hi(instance_id.hi);
             finst_id.set_lo(instance_id.lo);
-            _instance_id2finst_id[instance_id.lo] = std::move(finst_id);
+            ctx.finst_id = std::move(finst_id);
         }
     }
+    _memory_limit = config::sink_buffer_mem_limit_per_driver * _sink_ctxs.size();
 }
 
 SinkBuffer::~SinkBuffer() {
@@ -70,15 +74,14 @@ SinkBuffer::~SinkBuffer() {
 
     DCHECK(is_finished());
 
-    _buffers.clear();
+    _sink_ctxs.clear();
 }
 
 void SinkBuffer::incr_sinker(RuntimeState* state) {
-    _num_uncancelled_sinkers++;
-    for (auto& [_, num_sinkers_per_instance] : _num_sinkers) {
-        num_sinkers_per_instance++;
+    for (auto& [_, sink_ctx] : _sink_ctxs) {
+        sink_ctx->num_sinker++;
     }
-    _num_remaining_eos += _num_sinkers.size();
+    _num_remaining_eos += _sink_ctxs.size();
 }
 
 Status SinkBuffer::add_request(TransmitChunkInfo& request) {
@@ -86,6 +89,7 @@ Status SinkBuffer::add_request(TransmitChunkInfo& request) {
     if (_is_finishing) {
         return Status::OK();
     }
+    _buffered_mem_usage->consume(request.request_byte_size);
     if (!request.attachment.empty()) {
         _bytes_enqueued += request.attachment.size();
         _request_enqueued++;
@@ -99,13 +103,17 @@ Status SinkBuffer::add_request(TransmitChunkInfo& request) {
             if (_sent_audit_stats_frequency < _sent_audit_stats_frequency_upper_limit) {
                 _sent_audit_stats_frequency = _sent_audit_stats_frequency << 1;
             }
-            if (auto part_stats = _fragment_ctx->runtime_state()->query_ctx()->intermediate_query_statistic()) {
+
+            if (auto part_stats = _fragment_ctx->runtime_state()->query_ctx()->intermediate_query_statistic(
+                        _delta_bytes_sent.exchange(0))) {
                 part_stats->to_pb(request.params->mutable_query_statistics());
             }
         }
 
         auto& instance_id = request.fragment_instance_id;
-        RETURN_IF_ERROR(_try_to_send_rpc(instance_id, [&]() { _buffers[instance_id.lo].push(request); }));
+        auto& context = sink_ctx(instance_id.lo);
+
+        RETURN_IF_ERROR(_try_to_send_rpc(instance_id, [&]() { context.buffer.push(request); }));
     }
 
     return Status::OK();
@@ -115,13 +123,16 @@ bool SinkBuffer::is_full() const {
     // std::queue' read is concurrent safe without mutex
     // Judgement may not that accurate because we do not known in advance which
     // instance the data to be sent corresponds to
-    size_t max_buffer_size = config::pipeline_sink_buffer_size * _buffers.size();
+    size_t max_buffer_size = config::pipeline_sink_buffer_size * _sink_ctxs.size();
     size_t buffer_size = 0;
-    for (auto& [_, buffer] : _buffers) {
-        buffer_size += buffer.size();
+    for (auto& [_, context] : _sink_ctxs) {
+        buffer_size += context->buffer.size();
     }
-    const bool is_full = buffer_size > max_buffer_size;
+    bool is_full = buffer_size > max_buffer_size;
 
+    if (!is_full && buffer_size > 0) {
+        is_full = _buffered_mem_usage->consumption() > _memory_limit;
+    }
     int64_t last_full_timestamp = _last_full_timestamp;
     int64_t full_time = _full_time;
 
@@ -138,6 +149,19 @@ bool SinkBuffer::is_full() const {
     return is_full;
 }
 
+void SinkBuffer::update_memory_limit(size_t mem_limit) {
+    _memory_limit = mem_limit;
+}
+
+std::string SinkBuffer::to_string() const {
+    size_t buffer_size = 0;
+    for (auto& [_, context] : _sink_ctxs) {
+        buffer_size += context->buffer.size();
+    }
+    return fmt::format("mem_limit:{} buffered_mem_usage: {}, buffer_size: {}", _memory_limit,
+                       _buffered_mem_usage->consumption(), buffer_size);
+}
+
 void SinkBuffer::set_finishing() {
     _pending_timestamp = MonotonicNanos();
 }
@@ -151,13 +175,13 @@ bool SinkBuffer::is_finished() const {
 }
 
 void SinkBuffer::update_profile(RuntimeProfile* profile) {
-    auto* rpc_count = ADD_COUNTER(profile, "RpcCount", TUnit::UNIT);
-    auto* rpc_avg_timer = ADD_TIMER(profile, "RpcAvgTime");
-    auto* network_timer = ADD_TIMER(profile, "NetworkTime");
-    auto* wait_timer = ADD_TIMER(profile, "WaitTime");
-    auto* overall_timer = ADD_TIMER(profile, "OverallTime");
+    RuntimeProfile::Counter* rpc_count = ADD_COUNTER(profile, "RpcCount", TUnit::UNIT);
+    RuntimeProfile::Counter* rpc_avg_timer = ADD_TIMER(profile, "RpcAvgTime");
+    RuntimeProfile::Counter* network_timer = ADD_TIMER(profile, "NetworkTime");
+    RuntimeProfile::Counter* wait_timer = ADD_TIMER(profile, "WaitTime");
+    RuntimeProfile::Counter* overall_timer = ADD_TIMER(profile, "OverallTime");
 
-    COUNTER_SET(rpc_count, _rpc_count);
+    COUNTER_SET(rpc_count, _rpc_count.load());
     COUNTER_SET(rpc_avg_timer, _rpc_cumulative_time / std::max(_rpc_count.load(), static_cast<int64_t>(1)));
 
     COUNTER_SET(network_timer, _network_time());
@@ -166,16 +190,16 @@ void SinkBuffer::update_profile(RuntimeProfile* profile) {
     // WaitTime consists two parts
     // 1. buffer full time
     // 2. pending finish time
-    COUNTER_SET(wait_timer, _full_time);
+    COUNTER_SET(wait_timer, _full_time.load());
     COUNTER_UPDATE(wait_timer, MonotonicNanos() - _pending_timestamp);
 
-    auto* bytes_sent_counter = ADD_COUNTER(profile, "BytesSent", TUnit::BYTES);
-    auto* request_sent_counter = ADD_COUNTER(profile, "RequestSent", TUnit::UNIT);
-    COUNTER_SET(bytes_sent_counter, _bytes_sent);
-    COUNTER_SET(request_sent_counter, _request_sent);
+    RuntimeProfile::Counter* bytes_sent_counter = ADD_COUNTER(profile, "BytesSent", TUnit::BYTES);
+    RuntimeProfile::Counter* request_sent_counter = ADD_COUNTER(profile, "RequestSent", TUnit::UNIT);
+    COUNTER_SET(bytes_sent_counter, _bytes_sent.load());
+    COUNTER_SET(request_sent_counter, _request_sent.load());
 
-    auto* bytes_unsent_counter = ADD_COUNTER(profile, "BytesUnsent", TUnit::BYTES);
-    auto* request_unsent_counter = ADD_COUNTER(profile, "RequestUnsent", TUnit::UNIT);
+    RuntimeProfile::Counter* bytes_unsent_counter = ADD_COUNTER(profile, "BytesUnsent", TUnit::BYTES);
+    RuntimeProfile::Counter* request_unsent_counter = ADD_COUNTER(profile, "RequestUnsent", TUnit::UNIT);
     COUNTER_SET(bytes_unsent_counter, _bytes_enqueued - _bytes_sent);
     COUNTER_SET(request_unsent_counter, _request_enqueued - _request_sent);
 
@@ -195,7 +219,8 @@ void SinkBuffer::update_profile(RuntimeProfile* profile) {
 
 int64_t SinkBuffer::_network_time() {
     int64_t max = 0;
-    for (auto& [_, time_trace] : _network_times) {
+    for (auto& [_, context] : _sink_ctxs) {
+        auto& time_trace = context->network_time;
         double average_concurrency =
                 static_cast<double>(time_trace.accumulated_concurrency) / std::max(1, time_trace.times);
         int64_t average_accumulated_time =
@@ -208,51 +233,26 @@ int64_t SinkBuffer::_network_time() {
 }
 
 void SinkBuffer::cancel_one_sinker(RuntimeState* const state) {
-    if (--_num_uncancelled_sinkers == 0) {
-        _is_finishing = true;
-        if (state != nullptr && state->query_ctx() && state->query_ctx()->is_query_expired()) {
-            // how many in-flight rpcs and what exchange receivers are.
-            if (_total_in_flight_rpc > 0) {
-                std::stringstream ss;
-                auto remain_rpc_num = 0;
-                for (auto& remain_rpc : _num_in_flight_rpcs) {
-                    std::lock_guard<Mutex> l(*_mutexes[remain_rpc.first]);
-                    if (remain_rpc.second > 0) {
-                        ss << (remain_rpc_num > 0 ? ", " : "") << print_id(_instance_id2finst_id[remain_rpc.first]);
-                        remain_rpc_num++;
-                    }
-                }
-                LOG(WARNING) << "Fragment " << print_id(_fragment_ctx->fragment_instance_id()) << " SinkBuffer remains "
-                             << remain_rpc_num << " rpcs, dest are " << ss.str();
-            }
-            // how many alive drivers left and what they are.
-            if (_num_remaining_eos > 0) {
-                std::stringstream ss;
-                for (auto& remain_eos : _num_sinkers) {
-                    ss << print_id(_instance_id2finst_id[remain_eos.first]) << "(" << remain_eos.second << "),";
-                }
-                LOG(WARNING) << "Fragment " << print_id(_fragment_ctx->fragment_instance_id())
-                             << " remains EOS : " << ss.str();
-            }
-        }
-    }
+    auto notify = this->defer_notify();
+    _is_finishing = true;
     if (state != nullptr && state->query_ctx() && state->query_ctx()->is_query_expired()) {
         // check how many cancel operations are issued, and show the state of that time.
         VLOG_OPERATOR << fmt::format(
-                "fragment_instance_id {}, _num_uncancelled_sinkers {}, _is_finishing {}, _num_remaining_eos {}, "
+                "fragment_instance_id {}, _is_finishing {}, _num_remaining_eos {}, "
                 "_num_sending_rpc {}, chunk is full {}",
-                print_id(_fragment_ctx->fragment_instance_id()), _num_uncancelled_sinkers, _is_finishing,
-                _num_remaining_eos, _num_sending_rpc, is_full());
+                print_id(_fragment_ctx->fragment_instance_id()), _is_finishing, _num_remaining_eos, _num_sending_rpc,
+                is_full());
     }
 }
 
 void SinkBuffer::_update_network_time(const TUniqueId& instance_id, const int64_t send_timestamp,
                                       const int64_t receiver_post_process_time) {
+    auto& context = sink_ctx(instance_id.lo);
     const int64_t get_response_timestamp = MonotonicNanos();
     _last_receive_time = get_response_timestamp;
-    int32_t concurrency = _num_in_flight_rpcs[instance_id.lo];
+    int32_t concurrency = context.num_in_flight_rpcs;
     int64_t time_usage = get_response_timestamp - send_timestamp - receiver_post_process_time;
-    _network_times[instance_id.lo].update(time_usage, concurrency);
+    context.network_time.update(time_usage, concurrency);
     _rpc_cumulative_time += time_usage;
     _rpc_count++;
 }
@@ -263,9 +263,10 @@ void SinkBuffer::_process_send_window(const TUniqueId& instance_id, const int64_
     if (!_is_dest_merge) {
         return;
     }
-    auto& seqs = _discontinuous_acked_seqs[instance_id.lo];
+    auto& context = sink_ctx(instance_id.lo);
+    auto& seqs = context.discontinuous_acked_seqs;
     seqs.insert(sequence);
-    auto& max_continuous_acked_seq = _max_continuous_acked_seqs[instance_id.lo];
+    auto& max_continuous_acked_seq = context.max_continuous_acked_seqs;
     std::unordered_set<int64_t>::iterator it;
     while ((it = seqs.find(max_continuous_acked_seq + 1)) != seqs.end()) {
         seqs.erase(it);
@@ -274,35 +275,42 @@ void SinkBuffer::_process_send_window(const TUniqueId& instance_id, const int64_
 }
 
 Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::function<void()>& pre_works) {
-    std::lock_guard<Mutex> l(*_mutexes[instance_id.lo]);
+    auto& context = sink_ctx(instance_id.lo);
+    std::lock_guard guard(context.mutex);
     pre_works();
 
     DeferOp decrease_defer([this]() { --_num_sending_rpc; });
     ++_num_sending_rpc;
+
+    // When the driver worker thread sends request and creates the protobuf request,
+    // also use process_mem_tracker to record the memory of the protobuf request.
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
+    // must in the same scope following the above
 
     for (;;) {
         if (_is_finishing) {
             return Status::OK();
         }
 
-        auto& buffer = _buffers[instance_id.lo];
+        auto& buffer = context.buffer;
 
         bool too_much_brpc_process = false;
         if (_is_dest_merge) {
             // discontinuous_acked_window_size means that we are not received all the ack
-            // with sequence from _max_continuous_acked_seqs[x] to _request_seqs[x]
+            // with sequence from max_continuous_acked_seqs to request_seqs
             // Limit the size of the window to avoid buffering too much out-of-order data at the receiving side
-            int64_t discontinuous_acked_window_size =
-                    _request_seqs[instance_id.lo] - _max_continuous_acked_seqs[instance_id.lo];
+            int64_t discontinuous_acked_window_size = context.request_seq - context.max_continuous_acked_seqs;
             too_much_brpc_process = discontinuous_acked_window_size >= config::pipeline_sink_brpc_dop;
         } else {
-            too_much_brpc_process = _num_in_flight_rpcs[instance_id.lo] >= config::pipeline_sink_brpc_dop;
+            too_much_brpc_process = context.num_in_flight_rpcs >= config::pipeline_sink_brpc_dop;
         }
         if (buffer.empty() || too_much_brpc_process) {
             return Status::OK();
         }
 
         TransmitChunkInfo& request = buffer.front();
+        size_t request_byte_size = request.request_byte_size;
+
         bool need_wait = false;
         DeferOp pop_defer([&need_wait, &buffer, mem_tracker = _mem_tracker]() {
             if (need_wait) {
@@ -319,25 +327,28 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         // The order of data transmiting in IO level may not be strictly the same as
         // the order of submitting data packets
         // But we must guarantee that first packet must be received first
-        if (_num_finished_rpcs[instance_id.lo] == 0 && _num_in_flight_rpcs[instance_id.lo] > 0) {
+        if (context.num_finished_rpcs == 0 && context.num_in_flight_rpcs > 0) {
             need_wait = true;
             return Status::OK();
         }
+
         if (request.params->eos()) {
             DeferOp eos_defer([this, &instance_id, &need_wait]() {
                 if (need_wait) {
                     return;
                 }
                 if (--_num_remaining_eos == 0) {
+                    auto notify = this->defer_notify();
                     _is_finishing = true;
                 }
-                --_num_sinkers[instance_id.lo];
+                sink_ctx(instance_id.lo).num_sinker--;
             });
             // Only the last eos is sent to ExchangeSourceOperator. it must be guaranteed that
             // eos is the last packet to send to finish the input stream of the corresponding of
             // ExchangeSourceOperator and eos is sent exactly-once.
-            if (_num_sinkers[instance_id.lo] > 1) {
+            if (context.num_sinker > 1) {
                 if (request.params->chunks_size() == 0) {
+                    _buffered_mem_usage->release(request_byte_size);
                     continue;
                 } else {
                     request.params->set_eos(false);
@@ -346,24 +357,32 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
                 // The order of data transmiting in IO level may not be strictly the same as
                 // the order of submitting data packets
                 // But we must guarantee that eos packent must be the last packet
-                if (_num_in_flight_rpcs[instance_id.lo] > 0) {
+                if (context.num_in_flight_rpcs > 0) {
                     need_wait = true;
                     return Status::OK();
                 }
+
+                if (!request.attachment.empty()) {
+                    incr_sent_bytes(static_cast<int64_t>(request.attachment.size()));
+                    _request_sent++;
+                }
                 // this is the last eos query, set query stats
-                if (auto final_stats = _fragment_ctx->runtime_state()->query_ctx()->intermediate_query_statistic()) {
+                if (auto final_stats = _fragment_ctx->runtime_state()->query_ctx()->intermediate_query_statistic(
+                            _delta_bytes_sent.exchange(0))) {
                     final_stats->to_pb(request.params->mutable_query_statistics());
                 }
             }
         }
 
-        *request.params->mutable_finst_id() = _instance_id2finst_id[instance_id.lo];
-        request.params->set_sequence(++_request_seqs[instance_id.lo]);
-
-        if (!request.attachment.empty()) {
-            _bytes_sent += request.attachment.size();
-            _request_sent++;
+        if (!request.params->eos() || context.num_sinker > 1) {
+            if (!request.attachment.empty()) {
+                incr_sent_bytes(static_cast<int64_t>(request.attachment.size()));
+                _request_sent++;
+            }
         }
+
+        *request.params->mutable_finst_id() = context.finst_id;
+        request.params->set_sequence(++context.request_seq);
 
         auto* closure = new DisposableClosure<PTransmitChunkResult, ClosureContext>(
                 {instance_id, request.params->sequence(), MonotonicNanos()});
@@ -371,37 +390,48 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             _first_send_time = MonotonicNanos();
         }
 
-        closure->addFailedHandler([this](const ClosureContext& ctx, std::string_view rpc_error_msg) noexcept {
+        auto failed_function = [this, request_byte_size](const ClosureContext& ctx,
+                                                         std::string_view rpc_error_msg) noexcept {
+            auto query_ctx = _fragment_ctx->runtime_state()->query_ctx();
+            auto query_ctx_guard = query_ctx->shared_from_this();
+            auto notify = this->defer_notify();
+
             auto defer = DeferOp([this]() { --_total_in_flight_rpc; });
             _is_finishing = true;
-            {
-                std::lock_guard<Mutex> l(*_mutexes[ctx.instance_id.lo]);
-                ++_num_finished_rpcs[ctx.instance_id.lo];
-                --_num_in_flight_rpcs[ctx.instance_id.lo];
-            }
+            auto& context = sink_ctx(ctx.instance_id.lo);
+            ++context.num_finished_rpcs;
+            --context.num_in_flight_rpcs;
+            _buffered_mem_usage->release(request_byte_size);
+            GlobalEnv::GetInstance()->brpc_iobuf_mem_tracker()->set(butil::IOBuf::block_memory());
 
-            const auto& dest_addr = _dest_addrs[ctx.instance_id.lo];
+            const auto& dest_addr = context.dest_addrs;
             std::string err_msg =
                     fmt::format("transmit chunk rpc failed [dest_instance_id={}] [dest={}:{}] detail:{}",
                                 print_id(ctx.instance_id), dest_addr.hostname, dest_addr.port, rpc_error_msg);
 
             _fragment_ctx->cancel(Status::ThriftRpcError(err_msg));
             LOG(WARNING) << err_msg;
-        });
-        closure->addSuccessHandler([this](const ClosureContext& ctx, const PTransmitChunkResult& result) noexcept {
-            // when _total_in_flight_rpc desc to 0, _fragment_ctx may be destructed
+        };
+
+        auto success_function = [this, request_byte_size](const ClosureContext& ctx,
+                                                          const PTransmitChunkResult& result) noexcept {
+            auto query_ctx = _fragment_ctx->runtime_state()->query_ctx();
+            auto query_ctx_guard = query_ctx->shared_from_this();
+            auto notify = this->defer_notify();
+
             auto defer = DeferOp([this]() { --_total_in_flight_rpc; });
             Status status(result.status());
-            {
-                std::lock_guard<Mutex> l(*_mutexes[ctx.instance_id.lo]);
-                ++_num_finished_rpcs[ctx.instance_id.lo];
-                --_num_in_flight_rpcs[ctx.instance_id.lo];
-            }
+            auto& context = sink_ctx(ctx.instance_id.lo);
+            ++context.num_finished_rpcs;
+            --context.num_in_flight_rpcs;
+            _buffered_mem_usage->release(request_byte_size);
+            GlobalEnv::GetInstance()->brpc_iobuf_mem_tracker()->set(butil::IOBuf::block_memory());
+
             if (!status.ok()) {
                 _is_finishing = true;
                 _fragment_ctx->cancel(status);
 
-                const auto& dest_addr = _dest_addrs[ctx.instance_id.lo];
+                const auto& dest_addr = context.dest_addrs;
                 LOG(WARNING) << fmt::format("transmit chunk rpc failed [dest_instance_id={}] [dest={}:{}] [msg={}]",
                                             print_id(ctx.instance_id), dest_addr.hostname, dest_addr.port,
                                             status.message());
@@ -411,31 +441,23 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
                     _process_send_window(ctx.instance_id, ctx.sequence);
                 }));
             }
-        });
+        };
+
+        closure->addFailureHandler(failed_function);
+        closure->addSuccessHandler(success_function);
 
         ++_total_in_flight_rpc;
-        ++_num_in_flight_rpcs[instance_id.lo];
+        ++context.num_in_flight_rpcs;
 
         // Attachment will be released by process_mem_tracker in closure->Run() in bthread, when receiving the response,
         // so decrease the memory usage of attachment from instance_mem_tracker immediately before sending the request.
-        _mem_tracker->release(request.attachment_physical_bytes);
-        GlobalEnv::GetInstance()->process_mem_tracker()->consume(request.attachment_physical_bytes);
+        _mem_tracker->release_without_root(request.attachment.size());
 
         closure->cntl.Reset();
         closure->cntl.set_timeout_ms(_brpc_timeout_ms);
         SET_IGNORE_OVERCROWDED(closure->cntl, query);
 
-        Status st;
-        if (bthread_self()) {
-            st = _send_rpc(closure, request);
-        } else {
-            // When the driver worker thread sends request and creates the protobuf request,
-            // also use process_mem_tracker to record the memory of the protobuf request.
-            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
-            // must in the same scope following the above
-            st = _send_rpc(closure, request);
-        }
-        return st;
+        return _send_rpc(closure, request);
     }
     return Status::OK();
 }

@@ -24,6 +24,12 @@ STARROCKS_HOME=${STARROCKS_ROOT}/fe
 FE_CONFFILE=$STARROCKS_HOME/conf/fe.conf
 META_DIR=$STARROCKS_HOME/meta
 EXIT_IN_PROGRESS=false
+IS_FE_OBSERVER=${IS_FE_OBSERVER:-"false"}
+
+case "$IS_FE_OBSERVER" in
+    1|true|True) IS_FE_OBSERVER="true" ;;
+    *) IS_FE_OBSERVER="false" ;;
+esac
 
 log_stderr()
 {
@@ -60,7 +66,7 @@ collect_env_info()
     POD_INDEX=`echo $POD_FQDN | awk -F'.' '{print $1}' | awk -F'-' '{print $NF}'`
 
     # edit_log_port from conf file
-    local edit_port=`parse_confval_from_fe_conf "edit_log_port"`
+    local edit_log_port=`parse_confval_from_fe_conf "edit_log_port"`
     if [[ "x$edit_log_port" != "x" ]] ; then
         EDIT_LOG_PORT=$edit_log_port
     fi
@@ -94,7 +100,7 @@ probe_leader_for_pod0()
             log_stderr "FE service is alive, check if has leader ..."
 
             memlist=`show_frontends $svc`
-            local leader=`echo "$memlist" | grep '\<LEADER\>' | awk '{print $2}'`
+            local leader=`echo "$memlist" | grep '\<LEADER\>' | awk '{print $3}'`
             if [[ "x$leader" != "x" ]] ; then
                 # has leader, done
                 log_stderr "Find leader: $leader!"
@@ -145,7 +151,7 @@ probe_leader_for_podX()
         NC="nc -z -w 2"
         if $NC $svc $QUERY_PORT ; then
             log_stderr "FE service is alive, check if has leader ..."
-            local leader=`show_frontends $svc | grep '\<LEADER\>' | awk '{print $2}'`
+            local leader=`show_frontends $svc | grep '\<LEADER\>' | awk '{print $3}'`
             if [[ "x$leader" != "x" ]] ; then
                 # has leader, done
                 log_stderr "Find leader: $leader!"
@@ -173,7 +179,7 @@ probe_leader()
 {
     local svc=$1
     # find leader under current service and set to FE_LEADER
-    if [[ "$POD_INDEX" -eq 0 ]] ; then
+    if [[ "$POD_INDEX" -eq 0 ]] && [[ "$IS_FE_OBSERVER" == "false" ]]; then
         probe_leader_for_pod0 $svc
     else
         probe_leader_for_podX $svc
@@ -218,8 +224,13 @@ start_fe_no_meta()
         local start=`date +%s`
         while true
         do
-            log_stderr "Add myself($MYSELF:$EDIT_LOG_PORT) to leader as follower ..."
-            mysql --connect-timeout 2 -h $FE_LEADER -P $QUERY_PORT -u root --skip-column-names --batch -e "ALTER SYSTEM ADD FOLLOWER \"$MYSELF:$EDIT_LOG_PORT\";"
+            if [[ "$IS_FE_OBSERVER" != "false" ]]; then
+                log_stderr "Add myself($MYSELF:$EDIT_LOG_PORT) to leader as observer ..."
+                mysql --connect-timeout 2 -h $FE_LEADER -P $QUERY_PORT -u root --skip-column-names --batch -e "ALTER SYSTEM ADD OBSERVER \"$MYSELF:$EDIT_LOG_PORT\";"
+            else
+                log_stderr "Add myself($MYSELF:$EDIT_LOG_PORT) to leader as follower ..."
+                mysql --connect-timeout 2 -h $FE_LEADER -P $QUERY_PORT -u root --skip-column-names --batch -e "ALTER SYSTEM ADD FOLLOWER \"$MYSELF:$EDIT_LOG_PORT\";"
+            fi
             # check if added successful
             if show_frontends $svc | grep -q -w "$MYSELF" &>/dev/null ; then
                 break;

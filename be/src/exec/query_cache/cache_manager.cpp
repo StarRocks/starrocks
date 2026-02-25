@@ -14,7 +14,7 @@
 
 #include "exec/query_cache/cache_manager.h"
 
-#include "util/defer_op.h"
+#include "base/utility/defer_op.h"
 namespace starrocks::query_cache {
 
 CacheManager::CacheManager(size_t capacity) : _cache(capacity) {}
@@ -25,7 +25,8 @@ static void delete_cache_entry(const CacheKey& key, void* value) {
 
 void CacheManager::populate(const std::string& key, const CacheValue& value) {
     auto* cache_value = new CacheValue(value);
-    auto* handle = _cache.insert(key, cache_value, cache_value->size(), &delete_cache_entry, CachePriority::NORMAL);
+    size_t value_size = cache_value->size();
+    auto* handle = _cache.insert(key, cache_value, value_size, &delete_cache_entry, CachePriority::NORMAL);
     _cache.release(handle);
 }
 

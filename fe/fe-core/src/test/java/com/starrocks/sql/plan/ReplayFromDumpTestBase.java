@@ -24,40 +24,43 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.qe.VariableMgr;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.system.BackendResourceStat;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-public class ReplayFromDumpTestBase {
+public class ReplayFromDumpTestBase extends StarRocksTestBase {
     public static ConnectContext connectContext;
-    public static StarRocksAssert starRocksAssert;
 
     public static List<String> MODEL_LISTS = Lists.newArrayList("[end]", "[dump]", "[result]", "[fragment]",
             "[fragment statistics]");
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         // Should disable Dynamic Partition in replay dump test
         Config.show_execution_groups = false;
+        Config.enable_virtual_columns = false;
         Config.dynamic_partition_enable = false;
         Config.tablet_sched_disable_colocate_overall_balance = true;
         // create connect context
@@ -65,12 +68,13 @@ public class ReplayFromDumpTestBase {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
         connectContext.getSessionVariable().setJoinImplementationMode("auto");
         connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
+        connectContext.getSessionVariable().setEnableJSONV2Rewrite(false);
         starRocksAssert = new StarRocksAssert(connectContext);
         FeConstants.runningUnitTest = true;
         FeConstants.showScanNodeLocalShuffleColumnsInExplain = false;
         FeConstants.enablePruneEmptyOutputScan = false;
         FeConstants.showJoinLocalShuffleInExplain = false;
-
+        FeConstants.setLengthForVarchar = false;
         new MockUp<EditLog>() {
             @Mock
             protected void logEdit(short op, Writable writable) {
@@ -79,15 +83,16 @@ public class ReplayFromDumpTestBase {
         };
     }
 
-    @Before
+    @BeforeEach
     public void before() throws Exception {
         BackendResourceStat.getInstance().reset();
         connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
         connectContext.setQueryId(UUIDUtil.genUUID());
         connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
+        super.before();
     }
 
-    @AfterClass
+    @AfterAll
     public static void afterClass() throws Exception {
         connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
         FeConstants.showScanNodeLocalShuffleColumnsInExplain = true;
@@ -117,7 +122,7 @@ public class ReplayFromDumpTestBase {
             }
         } catch (Exception e) {
             e.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         }
         return modelContentBuilder.toString();
     }
@@ -127,7 +132,7 @@ public class ReplayFromDumpTestBase {
     }
 
     public SessionVariable getTestSessionVariable() {
-        SessionVariable sessionVariable = VariableMgr.newSessionVariable();
+        SessionVariable sessionVariable = GlobalStateMgr.getCurrentState().getVariableMgr().newSessionVariable();
         sessionVariable.setMaxTransformReorderJoins(8);
         sessionVariable.setEnableGlobalRuntimeFilter(true);
         sessionVariable.setEnableMultiColumnsOnGlobbalRuntimeFilter(true);
@@ -141,12 +146,17 @@ public class ReplayFromDumpTestBase {
         String replayCostPlan = Stream.of(
                         PlanTestBase.format(getCostPlanFragment(dumpString, getTestSessionVariable()).second).split("\n"))
                 .filter(s -> !s.contains("tabletList")).collect(Collectors.joining("\n"));
-        Assert.assertEquals(originCostPlan, replayCostPlan);
+        Assertions.assertEquals(originCostPlan, replayCostPlan);
     }
 
     protected static String getDumpInfoFromFile(String fileName) throws Exception {
+        String completeFileName = fileName + ".json";
+        return geContentFromFile(completeFileName);
+    }
+
+    public static String geContentFromFile(String completeFileName) throws Exception {
         String path = Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("sql")).getPath();
-        File file = new File(path + "/" + fileName + ".json");
+        File file = new File(path + "/" + completeFileName);
         StringBuilder sb = new StringBuilder();
         String tempStr;
         try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
@@ -155,7 +165,7 @@ public class ReplayFromDumpTestBase {
             }
         } catch (IOException e) {
             e.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         }
 
         return sb.toString();
@@ -178,8 +188,54 @@ public class ReplayFromDumpTestBase {
         }
         queryDumpInfo.getSessionVariable().setOptimizerExecuteTimeout(30000000);
         queryDumpInfo.getSessionVariable().setCboPushDownAggregateMode(-1);
+        queryDumpInfo.getSessionVariable().setEnableInnerJoinToSemi(false);
         return new Pair<>(queryDumpInfo,
                 UtFrameUtils.getNewPlanAndFragmentFromDump(connectContext, queryDumpInfo).second.
                         getExplainString(level));
+    }
+
+    protected Pair<QueryDumpInfo, String> getPlanFragmentWithAggPushdown(String dumpJsonStr, SessionVariable sessionVariable,
+                                                          TExplainLevel level) throws Exception {
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpJsonStr);
+        if (sessionVariable != null) {
+            queryDumpInfo.setSessionVariable(sessionVariable);
+        }
+        queryDumpInfo.getSessionVariable().setOptimizerExecuteTimeout(30000000);
+        queryDumpInfo.getSessionVariable().setEnableInnerJoinToSemi(false);
+        return new Pair<>(queryDumpInfo,
+                UtFrameUtils.getNewPlanAndFragmentFromDump(connectContext, queryDumpInfo).second.
+                        getExplainString(level));
+    }
+
+    public String getPlanFragment(String fileName, TExplainLevel explainLevel) throws Exception {
+        String fileContent = getDumpInfoFromFile(fileName);
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(fileContent);
+        SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
+        QueryDebugOptions queryDebugOptions = new QueryDebugOptions();
+        queryDebugOptions.setEnableQueryTraceLog(true);
+        sessionVariable.setQueryDebugOptions(queryDebugOptions.toString());
+        if (isOutputSystemOut) {
+            System.out.println("==== Session Variable ====");
+            for (Map.Entry<String, SessionVariable.NonDefaultValue> e : sessionVariable.getNonDefaultVariables().entrySet()) {
+                System.out.printf("set %s='%s';\n", e.getKey(), e.getValue().actualValue);
+            }
+
+            System.out.println("==== Create Table Stmts ====");
+            for (Map.Entry<String, String> e : queryDumpInfo.getCreateTableStmtMap().entrySet()) {
+                System.out.println(e.getValue());
+            }
+
+            System.out.println("==== Create View Stmts ====");
+            for (Map.Entry<String, String> e : queryDumpInfo.getCreateViewStmtMap().entrySet()) {
+                String viewDDL = String.format("CREATE VIEW %s AS %s;", e.getKey(), e.getValue());
+                System.out.println(viewDDL);
+            }
+
+            System.out.println("==== Original Query ====");
+            System.out.println(queryDumpInfo.getOriginStmt());
+
+        }
+        Pair<QueryDumpInfo, String> result = getPlanFragment(fileContent, sessionVariable, explainLevel);
+        return result.second;
     }
 }

@@ -26,9 +26,12 @@
 #include "storage/primary_key_encoder.h"
 #include "storage/row_store_encoder_util.h"
 #include "storage/tablet_schema.h"
-#include "types/date_value.hpp"
+#include "types/date_value.h"
 
 namespace starrocks {
+
+// Import encoding utilities from primary_key_encoder.h
+using encoding_utils::encode_integral;
 
 Status RowStoreEncoderSimple::encode_columns_to_full_row_column(const Schema& schema, const Columns& columns,
                                                                 BinaryColumn& dest) {
@@ -106,7 +109,7 @@ Status RowStoreEncoderSimple::encode_chunk_to_full_row_column(const Schema& sche
 Status RowStoreEncoderSimple::decode_columns_from_full_row_column(const Schema& schema,
                                                                   const BinaryColumn& full_row_column,
                                                                   const std::vector<uint32_t>& read_column_ids,
-                                                                  std::vector<std::unique_ptr<Column>>* pdest) {
+                                                                  MutableColumns* pdest) {
     auto& dest = *pdest;
     int num_rows = full_row_column.size();
     for (size_t i = 0; i < num_rows; i++) {

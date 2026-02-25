@@ -17,6 +17,7 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include "base/phmap/phmap.h"
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
@@ -24,7 +25,6 @@
 #include "exprs/base64.h"
 #include "exprs/function_context.h"
 #include "types/bitmap_value.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 class VecBitmapFunctionsTest : public ::testing::Test {
@@ -62,7 +62,7 @@ TEST_F(VecBitmapFunctionsTest, toBitmapTest) {
         s->append(Slice("1"));
         s->append(Slice("0"));
 
-        columns.push_back(s);
+        columns.emplace_back(s);
 
         auto column = BitmapFunctions::to_bitmap<TYPE_VARCHAR>(ctx, columns).value();
 
@@ -84,7 +84,7 @@ TEST_F(VecBitmapFunctionsTest, toBitmapTest) {
         s->append(Slice("1"));
         s->append(Slice("0"));
 
-        columns.push_back(s);
+        columns.emplace_back(s);
 
         auto v = BitmapFunctions::to_bitmap<TYPE_VARCHAR>(ctx, columns).value();
 
@@ -109,7 +109,7 @@ TEST_F(VecBitmapFunctionsTest, toBitmapTest_Int) {
         s->append(1);
         s->append(0);
 
-        columns.push_back(s);
+        columns.emplace_back(s);
 
         auto v = BitmapFunctions::to_bitmap<TYPE_INT>(ctx, columns).value();
 
@@ -132,7 +132,7 @@ TEST_F(VecBitmapFunctionsTest, toBitmapTest_Int) {
         s->append(1);
         s->append(0);
 
-        columns.push_back(s);
+        columns.emplace_back(s);
 
         auto column = BitmapFunctions::to_bitmap<TYPE_BIGINT>(ctx, columns).value();
 
@@ -156,7 +156,7 @@ TEST_F(VecBitmapFunctionsTest, toBitmapTest_Int) {
         for (int128_t input : inputs) {
             s->append(input);
         }
-        columns.push_back(s);
+        columns.emplace_back(s);
 
         auto v = BitmapFunctions::to_bitmap<TYPE_LARGEINT>(ctx, columns).value();
 
@@ -186,7 +186,7 @@ TEST_F(VecBitmapFunctionsTest, bitmapHashTest) {
         s->append(Slice("1"));
         s->append(Slice("0"));
 
-        columns.push_back(s);
+        columns.emplace_back(s);
 
         auto column = BitmapFunctions::bitmap_hash(ctx, columns).value();
 
@@ -213,7 +213,7 @@ TEST_F(VecBitmapFunctionsTest, bitmapHashTest) {
         n->append(0);
         n->append(1);
 
-        columns.push_back(NullableColumn::create(s, n));
+        columns.emplace_back(NullableColumn::create(s, n));
 
         auto v = BitmapFunctions::bitmap_hash(ctx, columns).value();
 
@@ -224,6 +224,58 @@ TEST_F(VecBitmapFunctionsTest, bitmapHashTest) {
 
         ASSERT_EQ(5, p->get_object(0)->serialize_size());
         ASSERT_EQ(5, p->get_object(1)->serialize_size());
+        ASSERT_EQ(1, p->get_object(2)->serialize_size());
+    }
+}
+
+TEST_F(VecBitmapFunctionsTest, bitmapHash64Test) {
+    {
+        Columns columns;
+
+        auto s = BinaryColumn::create();
+
+        s->append(Slice("12312313"));
+        s->append(Slice("1"));
+        s->append(Slice("0"));
+
+        columns.emplace_back(s);
+
+        auto column = BitmapFunctions::bitmap_hash64(ctx, columns).value();
+
+        ASSERT_TRUE(column->is_object());
+
+        auto p = ColumnHelper::cast_to<TYPE_OBJECT>(column);
+
+        ASSERT_EQ(9, p->get_object(0)->serialize_size());
+        ASSERT_EQ(9, p->get_object(1)->serialize_size());
+        ASSERT_EQ(9, p->get_object(2)->serialize_size());
+    }
+
+    {
+        Columns columns;
+
+        auto s = BinaryColumn::create();
+        auto n = NullColumn::create();
+
+        s->append(Slice("-1"));
+        s->append(Slice("1"));
+        s->append(Slice("0"));
+
+        n->append(0);
+        n->append(0);
+        n->append(1);
+
+        columns.emplace_back(NullableColumn::create(s, n));
+
+        auto v = BitmapFunctions::bitmap_hash64(ctx, columns).value();
+
+        ASSERT_FALSE(v->is_nullable());
+        ASSERT_TRUE(v->is_object());
+
+        auto p = ColumnHelper::cast_to<TYPE_OBJECT>(v);
+
+        ASSERT_EQ(9, p->get_object(0)->serialize_size());
+        ASSERT_EQ(9, p->get_object(1)->serialize_size());
         ASSERT_EQ(1, p->get_object(2)->serialize_size());
     }
 }
@@ -264,7 +316,7 @@ TEST_F(VecBitmapFunctionsTest, bitmapCountTest) {
         s->append(&b3);
         s->append(&b4);
 
-        columns.push_back(s);
+        columns.emplace_back(s);
 
         auto column = BitmapFunctions::bitmap_count(ctx, columns).value();
 
@@ -294,7 +346,7 @@ TEST_F(VecBitmapFunctionsTest, bitmapCountTest) {
         n->append(1);
         n->append(1);
 
-        columns.push_back(NullableColumn::create(s, n));
+        columns.emplace_back(NullableColumn::create(s, n));
 
         auto v = BitmapFunctions::bitmap_count(ctx, columns).value();
 
@@ -347,8 +399,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapOrTest) {
         s2->append(&b3);
         s2->append(&b4);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_or(ctx, columns).value();
 
@@ -375,8 +427,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapOrTest) {
         n->append(0);
         n->append(1);
 
-        columns.push_back(NullableColumn::create(s1, n));
-        columns.push_back(s2);
+        columns.emplace_back(NullableColumn::create(s1, n));
+        columns.emplace_back(s2);
 
         auto v = BitmapFunctions::bitmap_or(ctx, columns).value();
 
@@ -427,8 +479,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapAndTest) {
         s2->append(&b3);
         s2->append(&b4);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_and(ctx, columns).value();
 
@@ -463,7 +515,7 @@ TEST_F(VecBitmapFunctionsTest, bitmapToStringTest) {
         s1->append(&b1);
         s1->append(&b2);
 
-        columns.push_back(s1);
+        columns.emplace_back(s1);
 
         auto column = BitmapFunctions::bitmap_to_string(ctx, columns).value();
 
@@ -498,7 +550,7 @@ TEST_F(VecBitmapFunctionsTest, bitmapToStringTest) {
         s1->append(&b3);
         s1->append(&b4);
 
-        columns.push_back(s1);
+        columns.emplace_back(s1);
 
         auto column = BitmapFunctions::bitmap_to_string(ctx, columns).value();
 
@@ -520,7 +572,7 @@ TEST_F(VecBitmapFunctionsTest, bitmapFromStringTest) {
         s1->append(Slice("1,2,3,4"));
         s1->append(Slice("4,5,6,7"));
 
-        columns.push_back(s1);
+        columns.emplace_back(s1);
 
         auto column = BitmapFunctions::bitmap_from_string(ctx, columns).value();
 
@@ -539,7 +591,7 @@ TEST_F(VecBitmapFunctionsTest, bitmapFromStringTest) {
         s1->append(Slice("1,2,3,4"));
         s1->append(Slice("asdf,7"));
 
-        columns.push_back(s1);
+        columns.emplace_back(s1);
 
         auto v = BitmapFunctions::bitmap_from_string(ctx, columns).value();
         ASSERT_TRUE(v->is_nullable());
@@ -577,8 +629,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapContainsTest) {
         b1->append(4);
         b1->append(1);
 
-        columns.push_back(s1);
-        columns.push_back(b1);
+        columns.emplace_back(s1);
+        columns.emplace_back(b1);
 
         auto column = BitmapFunctions::bitmap_contains(ctx, columns).value();
 
@@ -627,8 +679,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapHasAnyTest) {
         s2->append(&b3);
         s2->append(&b4);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_has_any(ctx, columns).value();
 
@@ -662,8 +714,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapNotTest) {
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_andnot(ctx, columns).value();
 
@@ -693,8 +745,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapNotTest) {
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_andnot(ctx, columns).value();
 
@@ -722,8 +774,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapNotTest) {
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_andnot(ctx, columns).value();
 
@@ -750,8 +802,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapNotTest) {
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_andnot(ctx, columns).value();
 
@@ -781,8 +833,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapNotTest) {
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_andnot(ctx, columns).value();
 
@@ -811,8 +863,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapNotTest) {
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_andnot(ctx, columns).value();
 
@@ -839,8 +891,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapNotTest) {
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_andnot(ctx, columns).value();
 
@@ -866,8 +918,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapNotTest) {
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_andnot(ctx, columns).value();
 
@@ -895,8 +947,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapNotTest) {
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_andnot(ctx, columns).value();
 
@@ -923,8 +975,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapNotTest) {
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_andnot(ctx, columns).value();
 
@@ -949,8 +1001,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapNotTest) {
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_andnot(ctx, columns).value();
 
@@ -974,8 +1026,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapNotTest) {
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_andnot(ctx, columns).value();
 
@@ -1002,8 +1054,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapNotTest) {
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_andnot(ctx, columns).value();
 
@@ -1029,8 +1081,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapNotTest) {
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_andnot(ctx, columns).value();
 
@@ -1054,8 +1106,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapNotTest) {
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_andnot(ctx, columns).value();
 
@@ -1078,8 +1130,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapNotTest) {
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_andnot(ctx, columns).value();
 
@@ -1112,8 +1164,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapXorTest) {
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_xor(ctx, columns).value();
 
@@ -1143,8 +1195,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapXorTest) {
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_xor(ctx, columns).value();
 
@@ -1172,8 +1224,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapXorTest) {
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_xor(ctx, columns).value();
 
@@ -1200,8 +1252,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapXorTest) {
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_xor(ctx, columns).value();
 
@@ -1231,8 +1283,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapXorTest) {
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_xor(ctx, columns).value();
 
@@ -1261,8 +1313,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapXorTest) {
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_xor(ctx, columns).value();
 
@@ -1289,8 +1341,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapXorTest) {
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_xor(ctx, columns).value();
 
@@ -1316,8 +1368,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapXorTest) {
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_xor(ctx, columns).value();
 
@@ -1345,8 +1397,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapXorTest) {
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_xor(ctx, columns).value();
 
@@ -1373,8 +1425,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapXorTest) {
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_xor(ctx, columns).value();
 
@@ -1399,8 +1451,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapXorTest) {
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_xor(ctx, columns).value();
 
@@ -1424,8 +1476,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapXorTest) {
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_xor(ctx, columns).value();
 
@@ -1452,8 +1504,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapXorTest) {
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_xor(ctx, columns).value();
 
@@ -1479,8 +1531,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapXorTest) {
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_xor(ctx, columns).value();
 
@@ -1504,8 +1556,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapXorTest) {
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_xor(ctx, columns).value();
 
@@ -1528,8 +1580,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapXorTest) {
         s1->append(&b1_column0);
         s2->append(&b1_column1);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_xor(ctx, columns).value();
 
@@ -1573,8 +1625,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapRemoveTest) {
         s2->append(634);
         s2->append(632);
 
-        columns.push_back(s1);
-        columns.push_back(s2);
+        columns.emplace_back(s1);
+        columns.emplace_back(s2);
 
         auto column = BitmapFunctions::bitmap_remove(ctx, columns).value();
 
@@ -1615,7 +1667,7 @@ TEST_F(VecBitmapFunctionsTest, bitmapToArrayTest) {
         s1->append(&b3);
         s1->append(&b4);
 
-        columns.push_back(s1);
+        columns.emplace_back(s1);
 
         auto column = BitmapFunctions::bitmap_to_array(ctx, columns).value();
         auto array_column = ColumnHelper::as_column<ArrayColumn>(column);
@@ -1675,7 +1727,7 @@ TEST_F(VecBitmapFunctionsTest, bitmapToArrayNullTest) {
         n->append(1);
         n->append(1);
 
-        columns.push_back(NullableColumn::create(s1, n));
+        columns.emplace_back(NullableColumn::create(s1, n));
 
         auto column = BitmapFunctions::bitmap_to_array(ctx, columns).value();
         auto null_column = ColumnHelper::as_column<NullableColumn>(column);
@@ -1713,7 +1765,7 @@ TEST_F(VecBitmapFunctionsTest, bitmapToArrayConstTest) {
 
         s1->append(&b1);
 
-        columns.push_back(ConstColumn::create(s1, 4));
+        columns.emplace_back(ConstColumn::create(s1, 4));
 
         auto column = BitmapFunctions::bitmap_to_array(ctx, columns).value();
         auto array_column = ColumnHelper::as_column<ArrayColumn>(column);
@@ -1733,8 +1785,8 @@ TEST_F(VecBitmapFunctionsTest, bitmapToArrayOnlyNullTest) {
     {
         Columns columns;
         size_t size = 8;
-        auto s1 = ColumnHelper::create_const_null_column(size);
-        columns.push_back(s1);
+        ColumnPtr s1 = ColumnHelper::create_const_null_column(size);
+        columns.emplace_back(s1);
 
         auto column = BitmapFunctions::bitmap_to_array(ctx, columns).value();
         // auto null_column = ColumnHelper::as_column<NullableColumn>(column);
@@ -1824,7 +1876,7 @@ TEST_F(VecBitmapFunctionsTest, bitmapMaxTest) {
         s->append(&b3);
         s->append(&b4);
 
-        columns.push_back(s);
+        columns.emplace_back(s);
 
         auto column = BitmapFunctions::bitmap_max(ctx, columns).value();
 
@@ -1863,7 +1915,7 @@ TEST_F(VecBitmapFunctionsTest, bitmapMaxTest) {
         n->append(1);
         n->append(0);
 
-        columns.push_back(NullableColumn::create(s, n));
+        columns.emplace_back(NullableColumn::create(s, n));
 
         auto v = BitmapFunctions::bitmap_max(ctx, columns).value();
 
@@ -1915,7 +1967,7 @@ TEST_F(VecBitmapFunctionsTest, bitmapMinTest) {
         s->append(&b3);
         s->append(&b4);
 
-        columns.push_back(s);
+        columns.emplace_back(s);
 
         auto column = BitmapFunctions::bitmap_min(ctx, columns).value();
 
@@ -1954,7 +2006,7 @@ TEST_F(VecBitmapFunctionsTest, bitmapMinTest) {
         n->append(1);
         n->append(0);
 
-        columns.push_back(NullableColumn::create(s, n));
+        columns.emplace_back(NullableColumn::create(s, n));
 
         auto v = BitmapFunctions::bitmap_min(ctx, columns).value();
 
@@ -2006,21 +2058,21 @@ TEST_F(VecBitmapFunctionsTest, array_to_bitmap_test) {
         auto offset_column = UInt32Column::create();
         offset_column->append(0);
         offset_column->append(val.size());
-        return ArrayColumn::create(ele_column, offset_column);
+        return ArrayColumn::create(std::move(ele_column), std::move(offset_column));
     };
 
     auto nullable_builder = [](const Buffer<int64_t>& val, const Buffer<int32_t>& null_idx) {
         auto ele_column = Int64Column::create();
         ele_column->append(val);
 
-        auto nullable_column = NullableColumn::create(ele_column, NullColumn::create(val.size()));
+        auto nullable_column = NullableColumn::create(std::move(ele_column), NullColumn::create(val.size()));
         for (auto idx : null_idx) {
             nullable_column->set_null(idx);
         }
         auto offset_column = UInt32Column::create();
         offset_column->append(0);
         offset_column->append(val.size());
-        return ArrayColumn::create(nullable_column, offset_column);
+        return ArrayColumn::create(std::move(nullable_column), std::move(offset_column));
     };
 
     Columns columns = {builder(Buffer<int64_t>{1, 2, 3, 4})};
@@ -2042,13 +2094,13 @@ TEST_F(VecBitmapFunctionsTest, bitmapToBase64Test) {
         auto s = BitmapColumn::create();
         BitmapValue empty;
         s->append(&empty);
-        columns.push_back(s);
+        columns.emplace_back(s);
 
         auto sliceCol = BitmapFunctions::bitmap_to_base64(ctx, columns);
 
         ColumnViewer<TYPE_VARCHAR> viewer(sliceCol.value());
         Columns columns2;
-        columns2.push_back(sliceCol.value());
+        columns2.emplace_back(sliceCol.value());
 
         auto bitmapCol = BitmapFunctions::base64_to_bitmap(ctx, columns2);
 
@@ -2060,17 +2112,17 @@ TEST_F(VecBitmapFunctionsTest, bitmapToBase64Test) {
     { // Single Bitmap
         Columns columns;
         auto s = BitmapColumn::create();
-        BitmapValue single({1});
+        BitmapValue single(1);
         s->append(&single);
 
-        columns.push_back(s);
+        columns.emplace_back(s);
 
         auto sliceCol = BitmapFunctions::bitmap_to_base64(ctx, columns);
 
         ColumnViewer<TYPE_VARCHAR> viewer(sliceCol.value());
 
         Columns columns2;
-        columns2.push_back(sliceCol.value());
+        columns2.emplace_back(sliceCol.value());
 
         auto bitmapCol = BitmapFunctions::base64_to_bitmap(ctx, columns2);
 
@@ -2091,14 +2143,14 @@ TEST_F(VecBitmapFunctionsTest, bitmapToBase64Test) {
         set.add(4);
         s->append(&set);
 
-        columns.push_back(s);
+        columns.emplace_back(s);
 
         auto sliceCol = BitmapFunctions::bitmap_to_base64(ctx, columns);
 
         ColumnViewer<TYPE_VARCHAR> viewer(sliceCol.value());
 
         Columns columns2;
-        columns2.push_back(sliceCol.value());
+        columns2.emplace_back(sliceCol.value());
         auto bitmapCol = BitmapFunctions::base64_to_bitmap(ctx, columns2);
 
         ColumnViewer<TYPE_OBJECT> viewer2(bitmapCol.value());
@@ -2117,14 +2169,14 @@ TEST_F(VecBitmapFunctionsTest, bitmapToBase64Test) {
         BitmapValue bmp32bit({1, 2, 3, 4});
         s->append(&bmp32bit);
 
-        columns.push_back(s);
+        columns.emplace_back(s);
 
         auto sliceCol = BitmapFunctions::bitmap_to_base64(ctx, columns);
 
         ColumnViewer<TYPE_VARCHAR> viewer(sliceCol.value());
 
         Columns columns2;
-        columns2.push_back(sliceCol.value());
+        columns2.emplace_back(sliceCol.value());
         auto bitmapCol = BitmapFunctions::base64_to_bitmap(ctx, columns2);
 
         ColumnViewer<TYPE_OBJECT> viewer2(bitmapCol.value());
@@ -2143,14 +2195,14 @@ TEST_F(VecBitmapFunctionsTest, bitmapToBase64Test) {
         BitmapValue bmp64bit({600123456781, 600123456782, 600123456783, 600123456784});
         s->append(&bmp64bit);
 
-        columns.push_back(s);
+        columns.emplace_back(s);
 
         auto sliceCol = BitmapFunctions::bitmap_to_base64(ctx, columns);
 
         ColumnViewer<TYPE_VARCHAR> viewer(sliceCol.value());
 
         Columns columns2;
-        columns2.push_back(sliceCol.value());
+        columns2.emplace_back(sliceCol.value());
         auto bitmapCol = BitmapFunctions::base64_to_bitmap(ctx, columns2);
 
         ColumnViewer<TYPE_OBJECT> viewer2(bitmapCol.value());
@@ -2398,7 +2450,7 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_special_cases) {
     // single bitmap
     {
         auto bitmap_column = BitmapColumn::create();
-        BitmapValue single({1});
+        BitmapValue single(1);
         bitmap_column->append(&single);
 
         Columns columns;
@@ -2418,7 +2470,7 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_special_cases) {
     // single bitmap
     {
         auto bitmap_column = BitmapColumn::create();
-        BitmapValue single({1});
+        BitmapValue single(1);
         bitmap_column->append(&single);
 
         Columns columns;
@@ -2437,7 +2489,7 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_special_cases) {
     // single bitmap
     {
         auto bitmap_column = BitmapColumn::create();
-        BitmapValue single({1});
+        BitmapValue single(1);
         bitmap_column->append(&single);
 
         Columns columns;
@@ -2508,7 +2560,7 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_special_cases) {
     {
         auto bitmap_column = BitmapColumn::create();
         // Constructing bitmap with vector which contains 32bit values makes it a 32bit bitmap
-        BitmapValue bmp32bit({1});
+        BitmapValue bmp32bit(1);
         bitmap_column->append(&bmp32bit);
 
         Columns columns;
@@ -2529,7 +2581,7 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_special_cases) {
     {
         auto bitmap_column = BitmapColumn::create();
         // Constructing bitmap with vector which contains 32bit values makes it a 32bit bitmap
-        BitmapValue bmp32bit({1});
+        BitmapValue bmp32bit(1);
         bitmap_column->append(&bmp32bit);
 
         Columns columns;
@@ -2846,7 +2898,7 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_limit_special_cases) {
     // single bitmap
     {
         auto bitmap_column = BitmapColumn::create();
-        BitmapValue single({1});
+        BitmapValue single(1);
         bitmap_column->append(&single);
 
         Columns columns;
@@ -2866,7 +2918,7 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_limit_special_cases) {
     // single bitmap
     {
         auto bitmap_column = BitmapColumn::create();
-        BitmapValue single({1});
+        BitmapValue single(1);
         bitmap_column->append(&single);
 
         Columns columns;
@@ -2886,7 +2938,7 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_limit_special_cases) {
     // single bitmap
     {
         auto bitmap_column = BitmapColumn::create();
-        BitmapValue single({1});
+        BitmapValue single(1);
         bitmap_column->append(&single);
 
         Columns columns;
@@ -2956,7 +3008,7 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_limit_special_cases) {
     {
         auto bitmap_column = BitmapColumn::create();
         // Constructing bitmap with vector which contains 32bit values makes it a 32bit bitmap
-        BitmapValue bmp32bit({1});
+        BitmapValue bmp32bit(1);
         bitmap_column->append(&bmp32bit);
 
         Columns columns;
@@ -2977,7 +3029,7 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_limit_special_cases) {
     {
         auto bitmap_column = BitmapColumn::create();
         // Constructing bitmap with vector which contains 32bit values makes it a 32bit bitmap
-        BitmapValue bmp32bit({1});
+        BitmapValue bmp32bit(1);
         bitmap_column->append(&bmp32bit);
 
         Columns columns;
@@ -2997,7 +3049,7 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_limit_special_cases) {
     {
         auto bitmap_column = BitmapColumn::create();
         // Constructing bitmap with vector which contains 32bit values makes it a 32bit bitmap
-        BitmapValue bmp32bit({1});
+        BitmapValue bmp32bit(1);
         bitmap_column->append(&bmp32bit);
 
         Columns columns;
@@ -3314,7 +3366,7 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_in_range_special_cases) {
     // single bitmap
     {
         auto bitmap_column = BitmapColumn::create();
-        BitmapValue single({1});
+        BitmapValue single(1);
         bitmap_column->append(&single);
 
         Columns columns;
@@ -3334,7 +3386,7 @@ TEST_F(VecBitmapFunctionsTest, bitmap_subset_in_range_special_cases) {
     // single bitmap
     {
         auto bitmap_column = BitmapColumn::create();
-        BitmapValue single({1});
+        BitmapValue single(1);
         bitmap_column->append(&single);
 
         Columns columns;

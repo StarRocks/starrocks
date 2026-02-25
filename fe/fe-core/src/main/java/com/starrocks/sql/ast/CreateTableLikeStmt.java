@@ -15,15 +15,14 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
 
 public class CreateTableLikeStmt extends DdlStmt {
     private final boolean ifNotExists;
-    private final TableName tableName;
-    private final TableName existedTableName;
+    private TableRef tableRef;
+    private TableRef existedTableRef;
 
     private final PartitionDesc partitionDesc;
     private final DistributionDesc distributionDesc;
@@ -31,16 +30,16 @@ public class CreateTableLikeStmt extends DdlStmt {
 
     private CreateTableStmt createTableStmt;
 
-    public CreateTableLikeStmt(boolean ifNotExists, TableName tableName,
-                               TableName existedTableName,
+    public CreateTableLikeStmt(boolean ifNotExists, TableRef tableRef,
+                               TableRef existedTableRef,
                                PartitionDesc partitionDesc,
                                DistributionDesc distributionDesc,
                                Map<String, String> properties,
                                NodePosition pos) {
         super(pos);
         this.ifNotExists = ifNotExists;
-        this.tableName = tableName;
-        this.existedTableName = existedTableName;
+        this.tableRef = tableRef;
+        this.existedTableRef = existedTableRef;
         this.partitionDesc = partitionDesc;
         this.distributionDesc = distributionDesc;
         this.properties = properties;
@@ -50,32 +49,44 @@ public class CreateTableLikeStmt extends DdlStmt {
         return ifNotExists;
     }
 
+    public TableRef getTableRef() {
+        return tableRef;
+    }
+
+    public void setTableRef(TableRef tableRef) {
+        this.tableRef = tableRef;
+    }
+
+    public TableRef getExistedTableRef() {
+        return existedTableRef;
+    }
+
+    public void setExistedTableRef(TableRef existedTableRef) {
+        this.existedTableRef = existedTableRef;
+    }
+
     public String getCatalogName() {
-        return tableName.getCatalog();
+        return tableRef == null ? null : tableRef.getCatalogName();
     }
 
     public String getDbName() {
-        return tableName.getDb();
+        return tableRef == null ? null : tableRef.getDbName();
     }
 
     public String getTableName() {
-        return tableName.getTbl();
+        return tableRef == null ? null : tableRef.getTableName();
+    }
+
+    public String getExistedCatalogName() {
+        return existedTableRef == null ? null : existedTableRef.getCatalogName();
     }
 
     public String getExistedDbName() {
-        return existedTableName.getDb();
+        return existedTableRef == null ? null : existedTableRef.getDbName();
     }
 
     public String getExistedTableName() {
-        return existedTableName.getTbl();
-    }
-
-    public TableName getDbTbl() {
-        return tableName;
-    }
-
-    public TableName getExistedDbTbl() {
-        return existedTableName;
+        return existedTableRef == null ? null : existedTableRef.getTableName();
     }
 
     public CreateTableStmt getCreateTableStmt() {
@@ -100,6 +111,6 @@ public class CreateTableLikeStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateTableLikeStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateTableLikeStatement(this, context);
     }
 }

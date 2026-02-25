@@ -1,0 +1,32 @@
+-- name: test_spill_hash_join_set_finishing_failed @sequential
+set enable_spill=true;
+-- result:
+-- !result
+set spill_mode="force";
+-- result:
+-- !result
+set pipeline_dop = 1;
+-- result:
+-- !result
+create table t1(c1 int, c2 int) properties("replication_num"="1");
+-- result:
+-- !result
+create table t2(c1 int, c2 int) properties("replication_num"="1");
+-- result:
+-- !result
+insert into t1 select generate_series,generate_series from table(generate_series(0,2000));
+-- result:
+-- !result
+insert into t2 select generate_series,generate_series from table(generate_series(0,2000));
+-- result:
+-- !result
+admin enable failpoint 'spill_flush_set_invalid_status';
+-- result:
+-- !result
+select sum(t1.c1), sum(t2.c2) from t1 join t2 on t1.c1=t2.c2;
+-- result:
+[REGEX] .*spill flush failed.*
+-- !result
+admin disable failpoint 'spill_flush_set_invalid_status';
+-- result:
+-- !result

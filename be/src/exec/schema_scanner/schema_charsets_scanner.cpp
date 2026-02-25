@@ -15,16 +15,15 @@
 #include "exec/schema_scanner/schema_charsets_scanner.h"
 
 #include "exec/schema_scanner/schema_helper.h"
-#include "runtime/string_value.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaCharsetsScanner::_s_css_columns[] = {
         //   name,       type,          size
-        {"CHARACTER_SET_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"DEFAULT_COLLATE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"DESCRIPTION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"CHARACTER_SET_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"DEFAULT_COLLATE_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"DESCRIPTION", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"MAXLEN", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
 };
 
@@ -45,35 +44,35 @@ Status SchemaCharsetsScanner::fill_chunk(ChunkPtr* chunk) {
         case 1: {
             // variables names
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(1);
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(1);
                 Slice value(_s_charsets[_index].charset, strlen(_s_charsets[_index].charset));
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             }
             break;
         }
         case 2: {
             // DEFAULT_COLLATE_NAME
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(2);
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(2);
                 Slice value(_s_charsets[_index].default_collation, strlen(_s_charsets[_index].default_collation));
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             }
             break;
         }
         case 3: {
             // DESCRIPTION
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(3);
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(3);
                 Slice value(_s_charsets[_index].description, strlen(_s_charsets[_index].description));
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             }
             break;
         }
         case 4: {
             // maxlen
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(4);
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&_s_charsets[_index].maxlen);
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(4);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&_s_charsets[_index].maxlen);
             }
             break;
         }

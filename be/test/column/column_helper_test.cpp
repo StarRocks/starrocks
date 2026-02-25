@@ -25,16 +25,28 @@ public:
     void TearDown() override {}
 
 protected:
-    ColumnPtr create_column() {
+    MutableColumnPtr create_column() {
         ColumnBuilder<TYPE_VARCHAR> builder(1);
         builder.append(Slice("v1"));
         return builder.build(false);
     }
 
-    ColumnPtr create_nullable_column() {
+    MutableColumnPtr create_nullable_column() {
         ColumnBuilder<TYPE_VARCHAR> builder(1);
         builder.append(Slice("v1"), true);
         return builder.build(false);
+    }
+
+    MutableColumnPtr create_const_column() {
+        ColumnBuilder<TYPE_VARCHAR> builder(1);
+        builder.append(Slice("v1"));
+        return builder.build(true);
+    }
+
+    MutableColumnPtr create_only_null_column() {
+        ColumnBuilder<TYPE_VARCHAR> builder(1);
+        builder.append_null();
+        return builder.build(true);
     }
 };
 
@@ -51,10 +63,39 @@ TEST_F(ColumnHelperTest, cast_to_nullable_column) {
 TEST_F(ColumnHelperTest, align_return_type) {
     auto nullable_column = create_nullable_column();
     auto not_null_column = create_column();
+    auto col_size = not_null_column->size();
     nullable_column->append(*ColumnHelper::align_return_type(
-            not_null_column, TypeDescriptor::from_logical_type(TYPE_VARCHAR), not_null_column->size(), true));
+            std::move(not_null_column), TypeDescriptor::from_logical_type(TYPE_VARCHAR), col_size, true));
     ASSERT_TRUE(nullable_column->is_nullable());
     ASSERT_FALSE(nullable_column->is_constant());
+}
+
+TEST_F(ColumnHelperTest, get_data_column_by_type) {
+    auto column = create_nullable_column();
+    const auto* data_column = ColumnHelper::get_data_column_by_type<TYPE_VARCHAR>(column.get());
+    ASSERT_TRUE(data_column->is_binary());
+
+    column = create_column();
+    data_column = ColumnHelper::get_data_column_by_type<TYPE_VARCHAR>(column.get());
+    ASSERT_TRUE(data_column->is_binary());
+
+    column = create_const_column();
+    data_column = ColumnHelper::get_data_column_by_type<TYPE_VARCHAR>(column.get());
+    ASSERT_TRUE(data_column->is_binary());
+}
+
+TEST_F(ColumnHelperTest, get_null_column) {
+    auto column = create_nullable_column();
+    const auto* null_column = ColumnHelper::get_null_column(column.get());
+    ASSERT_EQ(null_column->get_name(), "integral-1");
+
+    column = create_column();
+    null_column = ColumnHelper::get_null_column(column.get());
+    ASSERT_TRUE(null_column == nullptr);
+
+    column = create_const_column();
+    null_column = ColumnHelper::get_null_column(column.get());
+    ASSERT_EQ(null_column->get_name(), "integral-1");
 }
 
 } // namespace starrocks

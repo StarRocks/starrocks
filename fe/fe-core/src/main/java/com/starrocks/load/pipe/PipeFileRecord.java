@@ -18,6 +18,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.JsonSyntaxException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.load.pipe.filelist.FileListRepo;
@@ -34,6 +35,7 @@ import org.apache.logging.log4j.util.Strings;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -52,7 +54,7 @@ public class PipeFileRecord {
     //   "errorCount": 123,
     //   "errorLine": 123
     // }
-    private static final String JSON_FIELD_ERROR_MESSAGE = "errorMessage";
+    public static final String JSON_FIELD_ERROR_MESSAGE = "errorMessage";
     private static final String JSON_FIELD_ERROR_COUNT = "errorCount";
     private static final String JSON_FIELD_ERROR_LINE = "errorLine";
 
@@ -96,7 +98,7 @@ public class PipeFileRecord {
         } else {
             record.fileVersion = String.valueOf(file.getModificationTime());
         }
-        record.lastModified = DateUtils.fromEpochMillis(file.getModificationTime());
+        record.lastModified = DateUtils.fromEpochMillis(file.getModificationTime(), ZoneOffset.UTC);
         record.stagedTime = LocalDateTime.now();
         record.loadState = FileListRepo.PipeFileState.UNLOADED;
         return record;
@@ -137,12 +139,16 @@ public class PipeFileRecord {
             // Error info are encapsulated in a json object
             if (dataArray.size() > 9) {
                 String errorInfo = dataArray.get(9).getAsString();
-                if (StringUtils.isNotEmpty(errorInfo)) {
-                    JsonObject infoJson = (JsonObject) JsonParser.parseString(errorInfo);
-                    JsonElement errorMessageElement = infoJson.get(JSON_FIELD_ERROR_MESSAGE);
-                    if (errorMessageElement != null && !errorMessageElement.isJsonNull()) {
-                        file.errorMessage = errorMessageElement.getAsString();
+                try {
+                    if (StringUtils.isNotEmpty(errorInfo)) {
+                        JsonObject infoJson = (JsonObject) JsonParser.parseString(errorInfo);
+                        JsonElement errorMessageElement = infoJson.get(JSON_FIELD_ERROR_MESSAGE);
+                        if (errorMessageElement != null && !errorMessageElement.isJsonNull()) {
+                            file.errorMessage = errorMessageElement.getAsString();
+                        }
                     }
+                } catch (JsonSyntaxException e) {
+                    file.errorMessage = "parse json error";
                 }
             }
             if (dataArray.size() > 10) {

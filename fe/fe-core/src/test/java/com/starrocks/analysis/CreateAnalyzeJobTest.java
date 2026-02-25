@@ -16,21 +16,20 @@ package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class CreateAnalyzeJobTest {
     public static ConnectContext connectContext;
     public static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         // create connect context
@@ -45,22 +44,23 @@ public class CreateAnalyzeJobTest {
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (AnalysisException e) {
-            Assert.assertTrue(e.getMessage().contains("External table hive0.partitioned_db.t1 don't support SAMPLE analyze."));
+            Assertions.assertTrue(e.getMessage().contains("External table hive0.partitioned_db.t1 don't support SAMPLE analyze."));
         }
 
         connectContext.setCurrentCatalog("hive0");
         String sql1 = "create analyze all";
-        Assert.assertThrows(AnalysisException.class, () -> UtFrameUtils.parseStmtWithNewParser(sql1, connectContext));
+        Assertions.assertThrows(AnalysisException.class, () -> UtFrameUtils.parseStmtWithNewParser(sql1, connectContext));
 
         String sql2 = "create analyze sample table hive0.partitioned_db.t1";
-        Assert.assertThrows(AnalysisException.class, () -> UtFrameUtils.parseStmtWithNewParser(sql2, connectContext));
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql2, connectContext);
+        Assertions.assertTrue(statementBase instanceof CreateAnalyzeJobStmt);
 
         String sql3 = "create analyze database tpch";
-        Assert.assertThrows(AnalysisException.class, () -> UtFrameUtils.parseStmtWithNewParser(sql3, connectContext));
+        Assertions.assertThrows(AnalysisException.class, () -> UtFrameUtils.parseStmtWithNewParser(sql3, connectContext));
 
         String sql4 = "create analyze full table hive0.partitioned_db.t1";
-        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql4, connectContext);
-        Assert.assertTrue(statementBase instanceof CreateAnalyzeJobStmt);
+        statementBase = UtFrameUtils.parseStmtWithNewParser(sql4, connectContext);
+        Assertions.assertTrue(statementBase instanceof CreateAnalyzeJobStmt);
     }
 
 }

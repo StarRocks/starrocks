@@ -18,10 +18,13 @@
 
 #include <memory>
 
+#include "exprs/expr_factory.h"
 #include "runtime/current_thread.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/meta_file.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_writer.h"
@@ -35,6 +38,10 @@ namespace starrocks::lake {
 
 struct SchemaChangeParams {
     VersionedTablet base_tablet;
+    // Schema from FE catalog for reading data from base tablet.
+    // In Fast Schema Evolution v2, this may be newer than base_tablet.get_schema() (which comes from tablet metadata).
+    // Must use this schema to read data, otherwise correctness issues may occur.
+    TabletSchemaCSPtr base_tablet_read_schema = nullptr;
     VersionedTablet new_tablet;
     int64_t txn_id;
     MaterializedViewParamMap materialized_params_map;
@@ -42,6 +49,9 @@ struct SchemaChangeParams {
     bool sc_sorting = false;
     bool sc_directly = false;
     std::unique_ptr<ChunkChanger> chunk_changer = nullptr;
+
+    // materialzied view parameters
+    DescriptorTbl* desc_tbl = nullptr;
 };
 
 class SchemaChange {
@@ -72,10 +82,16 @@ public:
 
 class ConvertedSchemaChange : public SchemaChange {
 public:
+    // Constructs a schema change procedure that converts data from base tablet to new tablet.
+    //
+    // @param base_tablet_read_schema Schema from FE catalog for reading data from base tablet.
+    // @param chunk_changer Caller must ensure chunk_changer is not nullptr and outlives this object.
     explicit ConvertedSchemaChange(TabletManager* tablet_manager, int64_t txn_id, VersionedTablet base_tablet,
-                                   VersionedTablet new_tablet, ChunkChanger* chunk_changer)
+                                   TabletSchemaCSPtr base_tablet_read_schema, VersionedTablet new_tablet,
+                                   ChunkChanger* chunk_changer)
             : SchemaChange(tablet_manager, txn_id),
               _base_tablet(std::move(base_tablet)),
+              _base_tablet_read_schema(std::move(base_tablet_read_schema)),
               _new_tablet(std::move(new_tablet)),
               _chunk_changer(chunk_changer) {
         CHECK(_chunk_changer != nullptr);
@@ -87,6 +103,9 @@ public:
 
 protected:
     VersionedTablet _base_tablet;
+    // Schema from FE catalog for reading data from base tablet.
+    // In Fast Schema Evolution v2, this may be newer than base_tablet.get_schema().
+    TabletSchemaCSPtr _base_tablet_read_schema;
     VersionedTablet _new_tablet;
     ChunkChanger* _chunk_changer = nullptr;
 
@@ -103,10 +122,14 @@ protected:
 
 class DirectSchemaChange final : public ConvertedSchemaChange {
 public:
+    // Constructs a direct schema change procedure that converts data without sorting.
+    //
+    // @param base_tablet_read_schema Schema from FE catalog for reading data from base tablet.
     explicit DirectSchemaChange(TabletManager* tablet_manager, int64_t txn_id, VersionedTablet base_tablet,
-                                VersionedTablet new_tablet, ChunkChanger* chunk_changer)
-            : ConvertedSchemaChange(tablet_manager, txn_id, std::move(base_tablet), std::move(new_tablet),
-                                    chunk_changer) {}
+                                TabletSchemaCSPtr base_tablet_read_schema, VersionedTablet new_tablet,
+                                ChunkChanger* chunk_changer)
+            : ConvertedSchemaChange(tablet_manager, txn_id, std::move(base_tablet), std::move(base_tablet_read_schema),
+                                    std::move(new_tablet), chunk_changer) {}
 
     ~DirectSchemaChange() override = default;
 
@@ -117,10 +140,15 @@ public:
 
 class SortedSchemaChange final : public ConvertedSchemaChange {
 public:
+    // Constructs a sorted schema change procedure that converts and sorts data.
+    //
+    // @param base_tablet_read_schema Schema from FE catalog for reading data from base tablet.
+    // @param memory_limitation Maximum memory limit in bytes for the sorting operation.
     explicit SortedSchemaChange(TabletManager* tablet_manager, int64_t txn_id, VersionedTablet base_tablet,
-                                VersionedTablet new_tablet, ChunkChanger* chunk_changer, size_t memory_limitation)
-            : ConvertedSchemaChange(tablet_manager, txn_id, std::move(base_tablet), std::move(new_tablet),
-                                    chunk_changer),
+                                TabletSchemaCSPtr base_tablet_read_schema, VersionedTablet new_tablet,
+                                ChunkChanger* chunk_changer, size_t memory_limitation)
+            : ConvertedSchemaChange(tablet_manager, txn_id, std::move(base_tablet), std::move(base_tablet_read_schema),
+                                    std::move(new_tablet), chunk_changer),
               _memory_limitation(memory_limitation) {}
 
     ~SortedSchemaChange() override = default;
@@ -150,8 +178,8 @@ Status ConvertedSchemaChange::init() {
     _read_params.lake_io_opts.fill_data_cache = false;
     _read_params.sorted_by_keys_per_tablet = true;
 
-    auto base_tablet_schema = _base_tablet.get_schema();
-    _base_schema = ChunkHelper::convert_schema(base_tablet_schema, _chunk_changer->get_selected_column_indexes());
+    // Convert tablet schema to chunk reading schema using selected column indexes.
+    _base_schema = ChunkHelper::convert_schema(_base_tablet_read_schema, _chunk_changer->get_selected_column_indexes());
     _new_tablet_schema = _new_tablet.get_schema();
     _new_schema = ChunkHelper::convert_schema(_new_tablet_schema);
 
@@ -164,9 +192,10 @@ Status ConvertedSchemaChange::init() {
 }
 
 Status DirectSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_metadata) {
-    // create reader
+    // Create reader using FE catalog schema (base_tablet_read_schema) to ensure correct data reading
+    // in Fast Schema Evolution v2 scenarios.
     auto reader = std::make_unique<TabletReader>(_base_tablet.tablet_manager(), _base_tablet.metadata(), _base_schema,
-                                                 std::vector<RowsetPtr>{rowset}, _base_tablet.get_schema());
+                                                 std::vector<RowsetPtr>{rowset}, _base_tablet_read_schema);
     RETURN_IF_ERROR(reader->prepare());
     RETURN_IF_ERROR(reader->open(_read_params));
 
@@ -198,6 +227,12 @@ Status DirectSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
             return Status::InternalError("failed to convert chunk data");
         }
 
+        if (auto st = _chunk_changer->fill_generated_columns(_new_chunk); !st.ok()) {
+            std::stringstream ss;
+            ss << "fill generated columns failed: " << st.message();
+            return Status::InternalError(ss.str());
+        }
+
         ChunkHelper::padding_char_columns(_char_field_indexes, _new_schema, _new_tablet_schema, _new_chunk.get());
         RETURN_IF_ERROR(writer->write(*_new_chunk));
     }
@@ -205,17 +240,23 @@ Status DirectSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
     RETURN_IF_ERROR(writer->finish());
 
     // update new rowset meta
-    for (auto& f : writer->files()) {
-        new_rowset_metadata->add_segments(std::move(f.path));
+    for (const auto& f : writer->segments()) {
+        uint32_t segment_idx = new_rowset_metadata->segments_size();
+        new_rowset_metadata->add_segments(f.path);
         new_rowset_metadata->add_segment_size(f.size.value());
         new_rowset_metadata->add_segment_encryption_metas(f.encryption_meta);
+        auto* segment_meta = new_rowset_metadata->add_segment_metas();
+        f.sort_key_min.to_proto(segment_meta->mutable_sort_key_min());
+        f.sort_key_max.to_proto(segment_meta->mutable_sort_key_max());
+        segment_meta->set_num_rows(f.num_rows);
+        segment_meta->set_segment_idx(segment_idx);
     }
 
     new_rowset_metadata->set_id(_next_rowset_id);
     new_rowset_metadata->set_num_rows(writer->num_rows());
     new_rowset_metadata->set_data_size(writer->data_size());
     new_rowset_metadata->set_overlapped(rowset->is_overlapped());
-    _next_rowset_id += std::max(1, new_rowset_metadata->segments_size());
+    _next_rowset_id += get_rowset_id_step(*new_rowset_metadata);
     return Status::OK();
 }
 
@@ -236,9 +277,10 @@ Status SortedSchemaChange::init() {
 }
 
 Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_metadata) {
-    // create reader
+    // Create reader using FE catalog schema (base_tablet_read_schema) to ensure correct data reading
+    // in Fast Schema Evolution v2 scenarios.
     auto reader = std::make_unique<TabletReader>(_base_tablet.tablet_manager(), _base_tablet.metadata(), _base_schema,
-                                                 std::vector<RowsetPtr>{rowset}, _base_tablet.get_schema());
+                                                 std::vector<RowsetPtr>{rowset}, _base_tablet_read_schema);
     RETURN_IF_ERROR(reader->prepare());
     RETURN_IF_ERROR(reader->open(_read_params));
 
@@ -265,7 +307,7 @@ Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
         // it will return fail if memory is exhausted
         if (cur_usage > CurrentThread::mem_tracker()->limit() * 0.9) {
             RETURN_IF_ERROR_WITH_WARN(writer->flush(), "failed to flush writer.");
-            VLOG(1) << "SortedSchemaChange memory usage: " << cur_usage << " after writer flush "
+            VLOG(2) << "SortedSchemaChange memory usage: " << cur_usage << " after writer flush "
                     << CurrentThread::mem_tracker()->consumption();
         }
 #endif
@@ -290,10 +332,16 @@ Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
 
     RETURN_IF_ERROR(writer->finish());
 
-    for (auto& f : writer->files()) {
-        new_rowset_metadata->add_segments(std::move(f.path));
+    for (const auto& f : writer->segments()) {
+        uint32_t segment_idx = new_rowset_metadata->segments_size();
+        new_rowset_metadata->add_segments(f.path);
         new_rowset_metadata->add_segment_size(f.size.value());
         new_rowset_metadata->add_segment_encryption_metas(f.encryption_meta);
+        auto* segment_meta = new_rowset_metadata->add_segment_metas();
+        f.sort_key_min.to_proto(segment_meta->mutable_sort_key_min());
+        f.sort_key_max.to_proto(segment_meta->mutable_sort_key_max());
+        segment_meta->set_num_rows(f.num_rows);
+        segment_meta->set_segment_idx(segment_idx);
     }
 
     new_rowset_metadata->set_id(_next_rowset_id);
@@ -301,7 +349,7 @@ Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
     new_rowset_metadata->set_data_size(writer->data_size());
     // TODO: support writer final merge
     new_rowset_metadata->set_overlapped(true);
-    _next_rowset_id += std::max(1, new_rowset_metadata->segments_size());
+    _next_rowset_id += get_rowset_id_step(*new_rowset_metadata);
     return Status::OK();
 }
 
@@ -323,27 +371,92 @@ Status SchemaChangeHandler::do_process_alter_tablet(const TAlterTabletReqV2& req
     const auto alter_version = request.alter_version;
     ASSIGN_OR_RETURN(auto base_tablet, _tablet_manager->get_tablet(request.base_tablet_id, alter_version));
     ASSIGN_OR_RETURN(auto new_tablet, _tablet_manager->get_tablet(request.new_tablet_id, 1));
-    auto base_schema = base_tablet.get_schema();
+
+    // Determine the schema to use for reading data from base tablet.
+    // In Fast Schema Evolution v2, FE may send base_tablet_read_schema which is newer than the schema stored in tablet metadata.
+    // We must use the FE catalog schema (request.base_tablet_read_schema) if provided, otherwise fallback to tablet metadata schema.
+    TabletSchemaCSPtr base_tablet_read_schema;
+    if (request.__isset.base_tablet_read_schema) {
+        // Use schema from FE catalog (may be newer than tablet metadata schema).
+        auto schema_id = request.base_tablet_read_schema.id;
+        base_tablet_read_schema = _tablet_manager->get_cached_schema(schema_id);
+        if (base_tablet_read_schema == nullptr) {
+            TabletSchemaPB schema_pb;
+            RETURN_IF_ERROR(convert_t_schema_to_pb_schema(request.base_tablet_read_schema, &schema_pb));
+            base_tablet_read_schema = TabletSchema::create(schema_pb);
+            _tablet_manager->cache_schema(base_tablet_read_schema);
+        }
+    } else {
+        // Fallback to schema from tablet metadata (old behavior before Fast Schema Evolution v2).
+        base_tablet_read_schema = base_tablet.get_schema();
+    }
     auto new_schema = new_tablet.get_schema();
     auto has_delete_predicates = base_tablet.has_delete_predicates();
 
     std::vector<std::string> base_table_columns;
-    base_table_columns.reserve(base_schema->columns().size());
-    for (const auto& column : base_schema->columns()) {
-        base_table_columns.emplace_back(column.name());
+    if (!request.base_table_column_names.empty()) {
+        base_table_columns = request.base_table_column_names;
+    } else {
+        base_table_columns.reserve(base_tablet_read_schema->columns().size());
+        for (const auto& column : base_tablet_read_schema->columns()) {
+            base_table_columns.emplace_back(column.name());
+        }
     }
+
     // parse request and create schema change params
     SchemaChangeParams sc_params;
     sc_params.base_tablet = base_tablet;
+    sc_params.base_tablet_read_schema = base_tablet_read_schema;
     sc_params.new_tablet = new_tablet;
-    sc_params.chunk_changer =
-            std::make_unique<ChunkChanger>(base_schema, new_schema, base_table_columns, request.alter_job_type);
+    sc_params.chunk_changer = std::make_unique<ChunkChanger>(base_tablet_read_schema, new_schema, base_table_columns,
+                                                             request.alter_job_type);
     sc_params.txn_id = request.txn_id;
 
+    auto* chunk_changer = sc_params.chunk_changer.get();
+    if (request.alter_job_type == TAlterJobType::ROLLUP) {
+        if (!request.__isset.query_options || !request.__isset.query_globals) {
+            return Status::InternalError("change materialized view but query_options/query_globals is not set");
+        }
+        chunk_changer->init_runtime_state(request.query_options, request.query_globals);
+
+        RuntimeState* runtime_state = chunk_changer->get_runtime_state();
+        RETURN_IF_ERROR(DescriptorTbl::create(runtime_state, chunk_changer->get_object_pool(), request.desc_tbl,
+                                              &sc_params.desc_tbl, runtime_state->chunk_size()));
+        chunk_changer->set_query_slots(sc_params.desc_tbl);
+    }
+
+    // generated column index in new schema
+    std::unordered_set<int> generated_column_idxs;
+    if (request.materialized_column_req.mc_exprs.size() != 0) {
+        for (const auto& it : request.materialized_column_req.mc_exprs) {
+            generated_column_idxs.insert(it.first);
+        }
+    }
+
     SchemaChangeUtils::init_materialized_params(request, &sc_params.materialized_params_map, sc_params.where_expr);
-    RETURN_IF_ERROR(SchemaChangeUtils::parse_request(
-            base_schema, new_schema, sc_params.chunk_changer.get(), sc_params.materialized_params_map,
-            sc_params.where_expr, has_delete_predicates, &sc_params.sc_sorting, &sc_params.sc_directly, nullptr));
+    RETURN_IF_ERROR(SchemaChangeUtils::parse_request(base_tablet_read_schema, new_schema, sc_params.chunk_changer.get(),
+                                                     sc_params.materialized_params_map, sc_params.where_expr,
+                                                     has_delete_predicates, &sc_params.sc_sorting,
+                                                     &sc_params.sc_directly, &generated_column_idxs));
+
+    if (request.__isset.materialized_column_req && request.materialized_column_req.mc_exprs.size() != 0) {
+        DCHECK_EQ(sc_params.sc_sorting, false);
+        // for cloud native table, schema change for generated column must be in directly mode
+        sc_params.sc_directly = true;
+
+        chunk_changer->init_runtime_state(request.materialized_column_req.query_options,
+                                          request.materialized_column_req.query_globals);
+
+        for (const auto& it : request.materialized_column_req.mc_exprs) {
+            ExprContext* ctx = nullptr;
+            RETURN_IF_ERROR(ExprFactory::create_expr_tree(chunk_changer->get_object_pool(), it.second, &ctx,
+                                                          chunk_changer->get_runtime_state()));
+            RETURN_IF_ERROR(ctx->prepare(chunk_changer->get_runtime_state()));
+            RETURN_IF_ERROR(ctx->open(chunk_changer->get_runtime_state()));
+
+            chunk_changer->get_gc_exprs()->insert({it.first, ctx});
+        }
+    }
 
     // create txn log
     auto txn_log = std::make_shared<TxnLog>();
@@ -351,7 +464,6 @@ Status SchemaChangeHandler::do_process_alter_tablet(const TAlterTabletReqV2& req
     txn_log->set_txn_id(request.txn_id);
     auto op_schema_change = txn_log->mutable_op_schema_change();
     op_schema_change->set_alter_version(alter_version);
-
     // convert historical rowsets
     RETURN_IF_ERROR(convert_historical_rowsets(sc_params, op_schema_change));
 
@@ -391,14 +503,31 @@ Status SchemaChangeHandler::do_process_update_tablet_meta(const TTabletMetaInfo&
     if (tablet_meta_info.__isset.enable_persistent_index) {
         metadata_update_info->set_enable_persistent_index(tablet_meta_info.enable_persistent_index);
     }
+    if (tablet_meta_info.__isset.persistent_index_type) {
+        PersistentIndexTypePB index_type = tablet_meta_info.persistent_index_type == TPersistentIndexType::LOCAL
+                                                   ? PersistentIndexTypePB::LOCAL
+                                                   : PersistentIndexTypePB::CLOUD_NATIVE;
+        metadata_update_info->set_persistent_index_type(index_type);
+    }
     if (tablet_meta_info.__isset.tablet_schema) {
-        // FIXME: pass compression type
-        auto compression_type = TCompressionType::LZ4_FRAME;
         auto new_schema = metadata_update_info->mutable_tablet_schema();
-        RETURN_IF_ERROR(convert_t_schema_to_pb_schema(tablet_meta_info.tablet_schema, compression_type, new_schema));
+        RETURN_IF_ERROR(convert_t_schema_to_pb_schema(tablet_meta_info.tablet_schema, new_schema));
         if (tablet_meta_info.create_schema_file) {
             RETURN_IF_ERROR(_tablet_manager->create_schema_file(tablet_id, *new_schema));
         }
+    }
+
+    // TODO(zhangqiang)
+    // aggregate alter txn log
+    if (tablet_meta_info.__isset.bundle_tablet_metadata) {
+        metadata_update_info->set_bundle_tablet_metadata(tablet_meta_info.bundle_tablet_metadata);
+    }
+
+    if (tablet_meta_info.__isset.compaction_strategy) {
+        CompactionStrategyPB compaction_strategy = tablet_meta_info.compaction_strategy == TCompactionStrategy::DEFAULT
+                                                           ? CompactionStrategyPB::DEFAULT
+                                                           : CompactionStrategyPB::REAL_TIME;
+        metadata_update_info->set_compaction_strategy(compaction_strategy);
     }
 
     RETURN_IF_ERROR(tablet.put_txn_log(std::move(txn_log)));
@@ -420,7 +549,8 @@ Status SchemaChangeHandler::convert_historical_rowsets(const SchemaChangeParams&
         LOG(INFO) << "doing sorted schema change for base tablet: " << base_tablet.id();
         size_t memory_limitation =
                 static_cast<size_t>(config::memory_limitation_per_thread_for_schema_change) * 1024 * 1024 * 1024;
-        sc_procedure = std::make_unique<SortedSchemaChange>(_tablet_manager, sc_params.txn_id, base_tablet, new_tablet,
+        sc_procedure = std::make_unique<SortedSchemaChange>(_tablet_manager, sc_params.txn_id, base_tablet,
+                                                            sc_params.base_tablet_read_schema, new_tablet,
                                                             chunk_changer, memory_limitation);
         op_schema_change->set_linked_segment(false);
     } else {
@@ -428,8 +558,9 @@ Status SchemaChangeHandler::convert_historical_rowsets(const SchemaChangeParams&
         // so disable linked schema change and will support it in the later version.
         LOG(INFO) << "doing direct schema change for base tablet: " << base_tablet.id()
                   << ", params directly: " << sc_params.sc_directly;
-        sc_procedure = std::make_unique<DirectSchemaChange>(_tablet_manager, sc_params.txn_id, base_tablet, new_tablet,
-                                                            chunk_changer);
+        sc_procedure =
+                std::make_unique<DirectSchemaChange>(_tablet_manager, sc_params.txn_id, base_tablet,
+                                                     sc_params.base_tablet_read_schema, new_tablet, chunk_changer);
         op_schema_change->set_linked_segment(false);
     }
     RETURN_IF_ERROR(sc_procedure->init());

@@ -14,16 +14,15 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -33,59 +32,66 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFileScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.pattern.MultiOpPattern;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.NullType;
+import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
     private static final Logger LOG = LogManager.getLogger(RewriteSimpleAggToHDFSScanRule.class);
 
-    public static final RewriteSimpleAggToHDFSScanRule HIVE_SCAN_NO_PROJECT =
-            new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_HIVE_SCAN, true);
-    public static final RewriteSimpleAggToHDFSScanRule ICEBERG_SCAN_NO_PROJECT =
-            new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_ICEBERG_SCAN, true);
-    public static final RewriteSimpleAggToHDFSScanRule FILE_SCAN_NO_PROJECT =
-            new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_FILE_SCAN, true);
+    private static final Set<OperatorType> SUPPORTED = Set.of(OperatorType.LOGICAL_HIVE_SCAN,
+            OperatorType.LOGICAL_ICEBERG_SCAN,
+            OperatorType.LOGICAL_FILE_SCAN
+    );
 
-    public static final RewriteSimpleAggToHDFSScanRule HIVE_SCAN =
-            new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_HIVE_SCAN);
-    public static final RewriteSimpleAggToHDFSScanRule ICEBERG_SCAN =
-            new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_ICEBERG_SCAN);
-    public static final RewriteSimpleAggToHDFSScanRule FILE_SCAN =
-            new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_FILE_SCAN);
+    public static final RewriteSimpleAggToHDFSScanRule SCAN_NO_PROJECT =
+            new RewriteSimpleAggToHDFSScanRule(false);
 
-    final OperatorType scanOperatorType;
-    final boolean hasProjectOperator;
+    public static final RewriteSimpleAggToHDFSScanRule SCAN_AND_PROJECT =
+            new RewriteSimpleAggToHDFSScanRule();
 
-    private RewriteSimpleAggToHDFSScanRule(OperatorType logicalOperatorType, boolean withoutProject) {
+    private final boolean hasProjectOperator;
+
+    private RewriteSimpleAggToHDFSScanRule(boolean /* unused */ noProject) {
         super(RuleType.TF_REWRITE_SIMPLE_AGG, Pattern.create(OperatorType.LOGICAL_AGGR)
-                .addChildren(Pattern.create(logicalOperatorType)));
+                .addChildren(MultiOpPattern.of(SUPPORTED)));
         hasProjectOperator = false;
-        scanOperatorType = logicalOperatorType;
     }
 
-    private RewriteSimpleAggToHDFSScanRule(OperatorType logicalOperatorType) {
+    private RewriteSimpleAggToHDFSScanRule() {
         super(RuleType.TF_REWRITE_SIMPLE_AGG, Pattern.create(OperatorType.LOGICAL_AGGR)
-                .addChildren(Pattern.create(OperatorType.LOGICAL_PROJECT, logicalOperatorType)));
+                .addChildren(Pattern.create(OperatorType.LOGICAL_PROJECT).addChildren(MultiOpPattern.of(SUPPORTED))));
         hasProjectOperator = true;
-        scanOperatorType = logicalOperatorType;
     }
 
     private OptExpression buildAggScanOperator(LogicalAggregationOperator aggregationOperator,
                                                LogicalScanOperator scanOperator,
                                                OptimizerContext context) {
         ColumnRefFactory columnRefFactory = context.getColumnRefFactory();
+
+        // only need to handle count(*)
         Map<ColumnRefOperator, CallOperator> aggs = aggregationOperator.getAggregations();
+        Preconditions.checkArgument(aggs.entrySet().size() == 1);
+        ColumnRefOperator aggColumnRef = aggs.entrySet().iterator().next().getKey();
+        CallOperator aggCall = aggs.entrySet().iterator().next().getValue();
+        Preconditions.checkArgument(aggCall.getFnName().equals(FunctionSet.COUNT) && !aggCall.isDistinct());
 
         Map<ColumnRefOperator, CallOperator> newAggCalls = Maps.newHashMap();
         Map<ColumnRefOperator, Column> newScanColumnRefs = Maps.newHashMap();
@@ -97,7 +103,7 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
             if (tableRelationId == -1) {
                 tableRelationId = relationId;
             } else if (tableRelationId != relationId) {
-                LOG.warn("Table relationIds are different in columns, tableRelationId = %d, relationId = %d",
+                LOG.warn("Table relationIds are different in columns, tableRelationId = {}, relationId = {}",
                         tableRelationId, relationId);
                 return null;
             }
@@ -111,35 +117,25 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
             return null;
         }
 
-        ColumnRefOperator placeholderColumn = null;
-
-        for (Map.Entry<ColumnRefOperator, CallOperator> kv : aggs.entrySet()) {
-            CallOperator aggCall = kv.getValue();
-            // ___count___
+        ColumnRefOperator sumOutputColumnRef =
+                columnRefFactory.create("sum_" + aggCall.getFnName(), aggCall.getType(), aggCall.isNullable());
+        {
+            // generate a placeholder column for scan node.
+            // ___count___ must be the column name for backend code.
             String metaColumnName = "___" + aggCall.getFnName() + "___";
-            Type columnType = aggCall.getType();
+            Column c = new Column(metaColumnName, NullType.NULL);
+            c.setIsAllowNull(true);
+            ColumnRefOperator placeholderColumn =
+                    columnRefFactory.create(metaColumnName, aggCall.getType(), aggCall.isNullable());
+            columnRefFactory.updateColumnToRelationIds(placeholderColumn.getId(), tableRelationId);
+            columnRefFactory.updateColumnRefToColumns(placeholderColumn, c, scanOperator.getTable());
+            newScanColumnRefs.put(placeholderColumn, c);
 
-            if (placeholderColumn == null) {
-                Column c = new Column(metaColumnName, Type.NULL);
-                c.setIsAllowNull(true);
-                placeholderColumn = columnRefFactory.create(metaColumnName, columnType, aggCall.isNullable());
-                columnRefFactory.updateColumnToRelationIds(placeholderColumn.getId(), tableRelationId);
-                columnRefFactory.updateColumnRefToColumns(placeholderColumn, c, scanOperator.getTable());
-                newScanColumnRefs.put(placeholderColumn, c);
-            }
-
-            Function aggFunction = aggCall.getFunction();
-            String newAggFnName = aggCall.getFnName();
-            Type newAggReturnType = aggCall.getType();
-            if (aggCall.getFnName().equals(FunctionSet.COUNT)) {
-                aggFunction = Expr.getBuiltinFunction(FunctionSet.SUM,
-                        new Type[] {Type.BIGINT}, Function.CompareMode.IS_IDENTICAL);
-                newAggFnName = FunctionSet.SUM;
-                newAggReturnType = Type.BIGINT;
-            }
-            CallOperator newAggCall = new CallOperator(newAggFnName, newAggReturnType,
-                    Collections.singletonList(placeholderColumn), aggFunction);
-            newAggCalls.put(kv.getKey(), newAggCall);
+            CallOperator sumCall = new CallOperator(FunctionSet.SUM, IntegerType.BIGINT,
+                    Collections.singletonList(placeholderColumn),
+                    ExprUtils.getBuiltinFunction(FunctionSet.SUM, new Type[] {IntegerType.BIGINT},
+                            Function.CompareMode.IS_IDENTICAL));
+            newAggCalls.put(sumOutputColumnRef, sumCall);
         }
 
         Map<Column, ColumnRefOperator> newScanColumnMeta = Maps.newHashMap();
@@ -155,7 +151,7 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
         } else if (scanOperator instanceof LogicalIcebergScanOperator) {
             newMetaScan = new LogicalIcebergScanOperator(scanOperator.getTable(),
                     newScanColumnRefs, newScanColumnMeta, scanOperator.getLimit(), scanOperator.getPredicate(),
-                    scanOperator.getTableVersionRange());
+                    scanOperator.getTvrVersionRange());
         } else if (scanOperator instanceof LogicalFileScanOperator) {
             newMetaScan = new LogicalFileScanOperator(scanOperator.getTable(),
                     newScanColumnRefs, newScanColumnMeta, scanOperator.getLimit(), scanOperator.getPredicate());
@@ -163,18 +159,35 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
             LOG.warn("Unexpected scan operator: " + scanOperator);
             return null;
         }
+        newMetaScan.setScanOptimizeOption(scanOperator.getScanOptimizeOption());
+        newMetaScan.getScanOptimizeOption().setCanUseCountOpt(true);
         try {
             newMetaScan.setScanOperatorPredicates(scanOperator.getScanOperatorPredicates());
         } catch (AnalysisException e) {
             LOG.warn("Exception caught when set scan operator predicates", e);
             return null;
         }
+
         LogicalAggregationOperator newAggOperator = new LogicalAggregationOperator(aggregationOperator.getType(),
                 aggregationOperator.getGroupingKeys(), newAggCalls);
-
         newAggOperator.setProjection(aggregationOperator.getProjection());
-        OptExpression optExpression = OptExpression.create(newAggOperator);
-        optExpression.getInputs().add(OptExpression.create(newMetaScan));
+
+        // ifnull(sum(__count__)), 0) to avoid null result
+        CallOperator ifNullCall = new CallOperator(FunctionSet.IFNULL, IntegerType.BIGINT,
+                Lists.newArrayList(sumOutputColumnRef, ConstantOperator.createBigint(0)),
+                ExprUtils.getBuiltinFunction(FunctionSet.IFNULL, new Type[] {IntegerType.BIGINT, IntegerType.BIGINT},
+                        Function.CompareMode.IS_IDENTICAL));
+        Map<ColumnRefOperator, ScalarOperator> newProjectMap = Maps.newHashMap();
+        newProjectMap.putAll(newAggOperator.getColumnRefMap());
+        newProjectMap.remove(sumOutputColumnRef);
+        newProjectMap.put(aggColumnRef, ifNullCall);
+        LogicalProjectOperator newProjectOperator = new LogicalProjectOperator(newProjectMap);
+
+        // project(ifnull) -> agg(sum(__count__)) -> scan
+        OptExpression optExpression = OptExpression.create(newProjectOperator);
+        OptExpression aggExpression = OptExpression.create(newAggOperator);
+        optExpression.getInputs().add(aggExpression);
+        aggExpression.getInputs().add(OptExpression.create(newMetaScan));
         return optExpression;
     }
 
@@ -201,13 +214,9 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
             return false;
         }
 
-        // filter only involved with partition keys.
-        if (scanOperator.getPredicate() != null) {
-            if (!scanOperator.getPartitionColumns()
-                    .containsAll(scanOperator.getPredicate().getColumnRefs().stream().map(x -> x.getName()).collect(
-                            Collectors.toList()))) {
-                return false;
-            }
+        // no materialized column in predicate of scan
+        if (hasMaterializedColumnInPredicate(scanOperator, scanOperator.getPredicate())) {
+            return false;
         }
 
         // all group by keys are partition keys.
@@ -217,16 +226,20 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
             return false;
         }
 
-        // no predicate on agg operator
-        if (aggregationOperator.getPredicate() != null) {
+        // add check for column mapping
+        if (!scanOperator.getColRefToColumnMetaMap().keySet()
+                .containsAll(groupingKeys)) {
             return false;
         }
 
-        if (scanOperatorType == OperatorType.LOGICAL_ICEBERG_SCAN) {
-            IcebergTable icebergTable = (IcebergTable) scanOperator.getTable();
-            if (!icebergTable.isUnPartitioned() && !icebergTable.isAllPartitionColumnsAlwaysIdentity()) {
-                return false;
-            }
+        // no materialized column in predicate of aggregation
+        if (hasMaterializedColumnInPredicate(scanOperator, aggregationOperator.getPredicate())) {
+            return false;
+        }
+
+        // not applicable if there is no aggregation functions, like `distinct x`.
+        if (aggregationOperator.getAggregations().isEmpty()) {
+            return false;
         }
 
         boolean allValid = aggregationOperator.getAggregations().values().stream().allMatch(
@@ -250,6 +263,20 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
                 }
         );
         return allValid;
+    }
+
+    private static boolean hasMaterializedColumnInPredicate(LogicalScanOperator scanOperator, ScalarOperator predicate) {
+        if (predicate == null) {
+            return false;
+        }
+        List<ColumnRefOperator> columnRefOperators = predicate.getColumnRefs();
+        Set<String> partitionColumns = scanOperator.getPartitionColumns();
+        for (ColumnRefOperator c : columnRefOperators) {
+            if (!partitionColumns.contains(c.getName())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override

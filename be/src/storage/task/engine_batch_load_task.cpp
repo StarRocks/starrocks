@@ -40,16 +40,16 @@
 #include <iostream>
 #include <string>
 
+#include "base/utility/defer_op.h"
+#include "base/utility/pretty_printer.h"
 #include "runtime/current_thread.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/lake/spark_load.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/olap_common.h"
 #include "storage/push_handler.h"
 #include "storage/storage_engine.h"
-#include "util/defer_op.h"
-#include "util/pretty_printer.h"
-#include "util/starrocks_metrics.h"
 
 using apache::thrift::ThriftDebugString;
 using std::list;
@@ -272,7 +272,7 @@ Status EngineBatchLoadTask::_push(const TPushReq& request, std::vector<TTabletIn
 }
 
 Status EngineBatchLoadTask::_delete_data(const TPushReq& request, std::vector<TTabletInfo>* tablet_info_vec) {
-    LOG(INFO) << "begin to process delete data. request=" << ThriftDebugString(request);
+    VLOG(3) << "begin to process delete data. request=" << ThriftDebugString(request);
     StarRocksMetrics::instance()->delete_requests_total.increment(1);
 
     if (tablet_info_vec == nullptr) {
@@ -297,7 +297,7 @@ Status EngineBatchLoadTask::_delete_data(const TPushReq& request, std::vector<TT
         return res;
     }
 
-    LOG(INFO) << "Finish to delete data. tablet:" << tablet->full_name();
+    VLOG(3) << "Finish to delete data. tablet:" << tablet->full_name();
     return res;
 }
 

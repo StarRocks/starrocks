@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 sidebar_label: "Feature Support"
 ---
 
@@ -31,18 +31,19 @@ This document outlines the features of various data loading and unloading method
         <td>Local file systems, applications, connectors</td>
         <td>Yes</td>
         <td>Yes</td>
-        <td>/</td>
-        <td>/</td>
-        <td colspan="3">/</td>
+        <td>To be supported</td>
+        <td>To be supported</td>
+        <td colspan="3">To be supported</td>
     </tr>
     <tr>
         <td>INSERT from FILES</td>
-        <td rowspan="2">HDFS, S3, OSS, Azure, GCS</td>
+        <td rowspan="2">HDFS, S3, OSS, Azure, GCS, NFS(NAS) [5]</td>
         <td>Yes (v3.3+)</td>
-        <td>/</td>
+        <td>To be supported</td>
         <td>Yes (v3.1+)</td>
         <td>Yes (v3.1+)</td>
-        <td colspan="3">/</td>
+        <td>Yes (v3.4.4+)</td>
+        <td colspan="2">To be supported</td>
     </tr>
     <tr>
         <td>Broker Load</td>
@@ -50,45 +51,45 @@ This document outlines the features of various data loading and unloading method
         <td>Yes (v3.2.3+)</td>
         <td>Yes</td>
         <td>Yes</td>
-        <td colspan="3">/</td>
+        <td colspan="3">To be supported</td>
     </tr>
     <tr>
         <td>Routine Load</td>
         <td>Kafka</td>
         <td>Yes</td>
         <td>Yes</td>
-        <td>/</td>
-        <td>/</td>
+        <td>To be supported</td>
+        <td>To be supported</td>
         <td>Yes (v3.0+) [1]</td>
-        <td>/</td>
-        <td>/</td>
+        <td>To be supported</td>
+        <td>To be supported</td>
     </tr>
     <tr>
         <td>Spark Load</td>
         <td></td>
         <td>Yes</td>
-        <td>/</td>
+        <td>To be supported</td>
         <td>Yes</td>
         <td>Yes</td>
-        <td colspan="3">/</td>
+        <td colspan="3">To be supported</td>
     </tr>
     <tr>
         <td>Connectors</td>
         <td>Flink, Spark</td>
         <td>Yes</td>
         <td>Yes</td>
-        <td>/</td>
-        <td>/</td>
-        <td colspan="3">/</td>
+        <td>To be supported</td>
+        <td>To be supported</td>
+        <td colspan="3">To be supported</td>
     </tr>
     <tr>
         <td>Kafka Connector [2]</td>
         <td>Kafka</td>
         <td colspan="2">Yes (v3.0+)</td>
-        <td>/</td>
-        <td>/</td>
+        <td>To be supported</td>
+        <td>To be supported</td>
         <td colspan="2">Yes (v3.0+)</td>
-        <td>/</td>
+        <td>To be supported</td>
     </tr>
     <tr>
         <td>PIPE [4]</td>
@@ -103,6 +104,8 @@ This document outlines the features of various data loading and unloading method
 [3]\: JSON supports a variety of CDC formats. For details about the JSON CDC formats supported by StarRocks, see [JSON CDC format](#json-cdc-formats).
 
 [4]\: Currently, only INSERT from FILES is supported for loading with PIPE.
+
+[5]\: You need to mount a NAS device as NFS under the same directory of each BE or CN node to access the files in NFS via the `file://` protocol.
 
 :::
 
@@ -119,15 +122,15 @@ This document outlines the features of various data loading and unloading method
     </tr>
     <tr>
         <td>Debezium</td>
-        <td>/</td>
-        <td>/</td>
-        <td>/</td>
-        <td>/</td>
+        <td>To be supported</td>
+        <td>To be supported</td>
+        <td>To be supported</td>
+        <td>To be supported</td>
         <td>Yes (v3.0+)</td>
     </tr>
     <tr>
         <td>Canal</td>
-        <td colspan="5" rowspan="2">/</td>
+        <td colspan="5" rowspan="2">To be supported</td>
     </tr>
     <tr>
         <td>Maxwell</td>
@@ -158,10 +161,10 @@ This document outlines the features of various data loading and unloading method
     </tr>
     <tr>
         <td>INSERT INTO FILES</td>
-        <td>-</td>
-        <td>HDFS, S3, OSS, Azure, GCS</td>
+        <td>N/A</td>
+        <td>HDFS, S3, OSS, Azure, GCS, NFS(NAS) [3]</td>
         <td>Yes (v3.3+)</td>
-        <td>/</td>
+        <td>To be supported</td>
         <td>Yes (v3.2+)</td>
         <td>Yes (v3.3+)</td>
     </tr>
@@ -170,35 +173,35 @@ This document outlines the features of various data loading and unloading method
         <td>Hive</td>
         <td>HDFS, S3, OSS, Azure, GCS</td>
         <td>Yes (v3.3+)</td>
-        <td>/</td>
+        <td>To be supported</td>
         <td>Yes (v3.2+)</td>
         <td>Yes (v3.3+)</td>
     </tr>
     <tr>
         <td>Iceberg</td>
         <td>HDFS, S3, OSS, Azure, GCS</td>
-        <td>/</td>
-        <td>/</td>
+        <td>To be supported</td>
+        <td>To be supported</td>
         <td>Yes (v3.2+)</td>
-        <td>/</td>
+        <td>To be supported</td>
     </tr>
     <tr>
         <td>Hudi/Delta</td>
         <td></td>
-        <td colspan="4">/</td>
+        <td colspan="4">To be supported</td>
     </tr>
     <tr>
         <td>EXPORT</td>
-        <td>-</td>
+        <td>N/A</td>
         <td>HDFS, S3, OSS, Azure, GCS</td>
         <td>Yes [1]</td>
-        <td>/</td>
-        <td>/</td>
-        <td>/</td>
+        <td>To be supported</td>
+        <td>To be supported</td>
+        <td>To be supported</td>
     </tr>
     <tr>
         <td>PIPE</td>
-        <td colspan="6">/ [2]</td>
+        <td colspan="6">To be supported [2]</td>
     </tr>
 </table>
 
@@ -207,6 +210,8 @@ This document outlines the features of various data loading and unloading method
 [1]\: Configuring Broker process is supported.
 
 [2]\: Currently, unloading data using PIPE is not supported.
+
+[3]\: You need to mount a NAS device as NFS under the same directory of each BE or CN node to access the files in NFS via the `file://` protocol.
 
 :::
 
@@ -239,21 +244,21 @@ This document outlines the features of various data loading and unloading method
         <td>Yes</td>
         <td>Yes [2] (v3.1+)</td>
         <td>Yes [3] (v2.2+)</td>
-        <td>/</td>
+        <td>To be supported</td>
     </tr>
     <tr>
         <td>enclose</td>
         <td rowspan="4">Yes (v3.0+)</td>
         <td rowspan="4">Yes (v3.0+)</td>
         <td rowspan="2">Yes (v3.0+)</td>
-        <td rowspan="4">/</td>
+        <td rowspan="4">To be supported</td>
     </tr>
     <tr>
         <td>escape</td>
     </tr>
     <tr>
         <td>skip_header</td>
-        <td>/</td>
+        <td>To be supported</td>
     </tr>
     <tr>
         <td>trim_space</td>
@@ -263,10 +268,10 @@ This document outlines the features of various data loading and unloading method
         <td rowspan="4">JSON</td>
         <td>jsonpaths</td>
         <td rowspan="4">Yes</td>
-        <td rowspan="4">/</td>
+        <td rowspan="4">To be supported</td>
         <td rowspan="4">Yes (v3.2.3+)</td>
         <td rowspan="3">Yes</td>
-        <td rowspan="4">/</td>
+        <td rowspan="4">To be supported</td>
     </tr>
     <tr>
         <td>strip_outer_array</td>
@@ -276,7 +281,7 @@ This document outlines the features of various data loading and unloading method
     </tr>
     <tr>
         <td>ignore_json_size</td>
-        <td>/</td>
+        <td>To be supported</td>
     </tr>
 </table>
 
@@ -340,7 +345,7 @@ This document outlines the features of various data loading and unloading method
         <td>CSV</td>
         <td rowspan="2">
             <ul>
-                <li>defalte</li>
+                <li>deflate</li>
                 <li>bzip2</li>
                 <li>gzip</li>
                 <li>lz4_frame</li>
@@ -349,17 +354,17 @@ This document outlines the features of various data loading and unloading method
         </td>
         <td>Yes [1]</td>
         <td>Yes [2]</td>
-        <td>/</td>
-        <td>/</td>
-        <td>/</td>
+        <td>To be supported</td>
+        <td>To be supported</td>
+        <td>To be supported</td>
     </tr>
     <tr>
         <td>JSON</td>
         <td>Yes (v3.2.7+) [3]</td>
-        <td>/</td>
-        <td>-</td>
-        <td>/</td>
-        <td>-</td>
+        <td>To be supported</td>
+        <td>N/A</td>
+        <td>To be supported</td>
+        <td>N/A</td>
     </tr>
     <tr>
         <td>Parquet</td>
@@ -372,9 +377,9 @@ This document outlines the features of various data loading and unloading method
                 <li>zstd</li>
             </ul>
         </td>
-        <td rowspan="2">-</td>
+        <td rowspan="2">N/A</td>
         <td rowspan="2" colspan="2">Yes [4]</td>
-        <td rowspan="2">/</td>
+        <td rowspan="2">To be supported</td>
         <td rowspan="2">Yes [4]</td>
     </tr>
     <tr>
@@ -416,27 +421,27 @@ This document outlines the features of various data loading and unloading method
         <td>CSV</td>
         <td>
             <ul>
-                <li>defalte</li>
+                <li>deflate</li>
                 <li>bzip2</li>
                 <li>gzip</li>
                 <li>lz4_frame</li>
                 <li>zstd</li>
             </ul>
         </td>
-        <td>/</td>
-        <td>/</td>
-        <td>/</td>
-        <td>/</td>
-        <td>/</td>
+        <td>To be supported</td>
+        <td>To be supported</td>
+        <td>To be supported</td>
+        <td>To be supported</td>
+        <td>To be supported</td>
     </tr>
     <tr>
         <td>JSON</td>
-        <td>-</td>
-        <td>-</td>
-        <td>-</td>
-        <td>-</td>
-        <td>-</td>
-        <td>-</td>
+        <td>N/A</td>
+        <td>N/A</td>
+        <td>N/A</td>
+        <td>N/A</td>
+        <td>N/A</td>
+        <td>N/A</td>
     </tr>
     <tr>
         <td>Parquet</td>
@@ -451,8 +456,8 @@ This document outlines the features of various data loading and unloading method
         <td rowspan="2">Yes (v3.2+)</td>
         <td rowspan="2">Yes (v3.2+)</td>
         <td rowspan="2">Yes (v3.2+)</td>
-        <td rowspan="2">/</td>
-        <td rowspan="2">-</td>
+        <td rowspan="2">To be supported</td>
+        <td rowspan="2">N/A</td>
     </tr>
     <tr>
         <td>ORC</td>
@@ -477,7 +482,7 @@ This document outlines the features of various data loading and unloading method
     </tr>
     <tr>
         <td>Single Kerberos</td>
-        <td>-</td>
+        <td>N/A</td>
         <td>Yes (v3.1+)</td>
         <td>Yes [1] (versions earlier than v2.5)</td>
         <td>Yes [2] (v3.1.4+)</td>
@@ -485,17 +490,17 @@ This document outlines the features of various data loading and unloading method
     </tr>
     <tr>
         <td>Kerberos Ticket Granting Ticket (TGT)</td>
-        <td>-</td>
-        <td rowspan="2" colspan="3">/</td>
+        <td>N/A</td>
+        <td rowspan="2" colspan="3">To be supported</td>
         <td rowspan="2">Yes (v3.1.10+/v3.2.1+)</td>
     </tr>
     <tr>
         <td>Single KDC Multiple Kerberos</td>
-        <td>-</td>
+        <td>N/A</td>
     </tr>
     <tr>
         <td>Basic access authentications (Access Key pair, IAM Role)</td>
-        <td>-</td>
+        <td>N/A</td>
         <td colspan="2">Yes (HDFS and S3-compatible object storage)</td>
         <td>Yes [3]</td>
         <td>Yes</td>
@@ -514,9 +519,9 @@ This document outlines the features of various data loading and unloading method
 
 ### Unloading - Authentication
 
-|                 | INSERT INTO FILES | EXPORT |
-| :-------------- | :----------------: | :-----: |
-| Single Kerberos | /                 | /      |
+|                 | INSERT INTO FILES  | EXPORT          |
+| :-------------- | :----------------: | :-------------: |
+| Single Kerberos | To be supported    | To be supported |
 
 ## Loading - Other parameters and features
 
@@ -539,27 +544,27 @@ This document outlines the features of various data loading and unloading method
         <td>Yes (v3.0+)</td>
         <td colspan="2">Yes [1] (v3.3+)</td>
         <td>Yes (v3.0+)</td>
-        <td>-</td>
+        <td>N/A</td>
         <td>Yes (v3.0+)</td>
-        <td>/</td>
+        <td>To be supported</td>
     </tr>
     <tr>
         <td>partial_update_mode</td>
         <td>Yes (v3.1+)</td>
-        <td colspan="2">/</td>
+        <td colspan="2">To be supported</td>
         <td>Yes (v3.1+)</td>
-        <td>-</td>
-        <td>/</td>
-        <td>/</td>
+        <td>N/A</td>
+        <td>To be supported</td>
+        <td>To be supported</td>
     </tr>
     <tr>
         <td>COLUMNS FROM PATH</td>
-        <td>-</td>
+        <td>N/A</td>
         <td>Yes (v3.2+)</td>
-        <td>-</td>
+        <td>N/A</td>
         <td>Yes</td>
-        <td>-</td>
-        <td>-</td>
+        <td>N/A</td>
+        <td>N/A</td>
         <td>Yes</td>
     </tr>
     <tr>
@@ -568,9 +573,9 @@ This document outlines the features of various data loading and unloading method
         <td>Yes [4]</td>
         <td>Yes [4]</td>
         <td>Yes [4]</td>
-        <td>/</td>
+        <td>To be supported</td>
         <td>Yes [4]</td>
-        <td>/</td>
+        <td>To be supported</td>
     </tr>
     <tr>
         <td>Time accuracy - Microsecond</td>
@@ -578,7 +583,7 @@ This document outlines the features of various data loading and unloading method
         <td>Yes</td>
         <td>Yes</td>
         <td>Yes (v3.1.11+/v3.2.6+)</td>
-        <td>/</td>
+        <td>To be supported</td>
         <td>Yes</td>
         <td>Yes</td>
     </tr>
@@ -607,7 +612,7 @@ This document outlines the features of various data loading and unloading method
     <tr>
         <td>target_max_file_size</td>
         <td rowspan="3">Yes (v3.2+)</td>
-        <td rowspan="4">/</td>
+        <td rowspan="4">To be supported</td>
     </tr>
     <tr>
         <td>single</td>
@@ -617,11 +622,11 @@ This document outlines the features of various data loading and unloading method
     </tr>
     <tr>
         <td>Session variable time_zone</td>
-        <td>/</td>
+        <td>To be supported</td>
     </tr>
     <tr>
         <td>Time accuracy - Microsecond</td>
-        <td>/</td>
-        <td>/</td>
+        <td>To be supported</td>
+        <td>To be supported</td>
     </tr>
 </table>

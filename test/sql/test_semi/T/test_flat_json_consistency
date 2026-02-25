@@ -1,0 +1,190 @@
+-- name: test_flat_json_consistency
+
+-- Test case for FlatJSON consistency issue where non-existent fields
+-- were being created as empty objects during reconstruction
+
+CREATE TABLE `test_json_cast_map` (
+  `c1` bigint(20) NULL COMMENT "",
+  `c2` json NULL COMMENT ""
+) DISTRIBUTED BY HASH(c1) BUCKETS 1;
+
+-- Test 1: Inconsistent nested structure - should be rejected
+-- Some rows have level1.level2.level3.level4.5, others have level1.level2.level3.level4 but no 5
+insert into test_json_cast_map values
+(1, '{"level1": {"level2": {"level3": {"level4": {"5":"abc"}}}}}'),
+(2, '{"level1": {"level2": {"level3": {"level4": {}}}}}'),
+(9, '{"100": {"200": {"300": "abc"}}}');
+
+select * from test_json_cast_map order by c1;
+select flat_json_meta(c2) from test_json_cast_map [_META_];
+
+-- Test 2: Same inconsistent nested structure - should be rejected
+truncate table test_json_cast_map;
+
+insert into test_json_cast_map values
+(1, '{"level1": {"level2": {"level3": {"level4": {"5":"abc"}}}}}'),
+(2, '{"level1": {"level2": {"level3": {"level4": {}}}}}');
+
+select * from test_json_cast_map order by c1;
+select flat_json_meta(c2) from test_json_cast_map [_META_];
+
+-- Test 3: Different paths but consistent structure - should be flattenable
+truncate table test_json_cast_map;
+
+insert into test_json_cast_map values
+(1, '{"level1": {"level2": {"level3": {"level4": {"5":"abc"}}}}}'),
+(9, '{"100": {"200": {"300": "abc"}}}');
+
+select * from test_json_cast_map order by c1;
+select flat_json_meta(c2) from test_json_cast_map [_META_];
+
+-- Test 4: Same path with different values - should be flattenable
+truncate table test_json_cast_map;
+
+insert into test_json_cast_map values
+(1, '{"level1": {"level2": {"level3": {"level4": {"5":"abc"}}}}}'),
+(2, '{"level1": {"level2": {"level3": {"level4": {"5":"def"}}}}}'),
+(3, '{"level1": {"level2": {"level3": {"level4": {"6":"ghi"}}}}}');
+
+select * from test_json_cast_map order by c1;
+select flat_json_meta(c2) from test_json_cast_map [_META_];
+
+-- Test 5: Same path with different values - should be flattenable
+truncate table test_json_cast_map;
+
+insert into test_json_cast_map values
+(2, '{"level1": {"level2": {"level3": {"level4": {}}}}}'),
+(9, '{"100": {"200": {"300": "abc"}}}');
+
+select * from test_json_cast_map order by c1;
+select flat_json_meta(c2) from test_json_cast_map [_META_];
+
+-- Test 6: Same path with different values - should be flattenable
+truncate table test_json_cast_map;
+
+insert into test_json_cast_map values
+(1, '{"level1": {"level2": {"level3": {"level4": {"5":"abc"}}}}}'),
+(2, '{"level1": {"level2": {"level3": {"level4": {}}}}}'),
+(3, '{"level1": {"level2": {"level3": {}}}}'),
+(4, '{"level1": {"level2": {}}}'),
+(5, '{"level1": {}}');
+
+select * from test_json_cast_map order by c1;
+select flat_json_meta(c2) from test_json_cast_map [_META_];
+
+-- Test 7: Different paths but consistent structure - should be flattenable
+truncate table test_json_cast_map;
+
+insert into test_json_cast_map values
+(1, '{"level1": {"level2": {"level3": {"level4": {"5":"abc"}}}}}'),
+(5, '{"level1": {}}');
+
+select * from test_json_cast_map order by c1;
+select flat_json_meta(c2) from test_json_cast_map [_META_];
+
+
+-- Test 8: empty root object
+truncate table test_json_cast_map;
+
+insert into test_json_cast_map values
+(1, '{"100": {}}'),
+(9, '{"100": {"200": {"300": "abc"}}}');
+
+select * from test_json_cast_map order by c1;
+select flat_json_meta(c2) from test_json_cast_map [_META_];
+
+-- Test 9: inconsistent intermediate node
+CREATE TABLE source_data(c1 int, c2 json);
+insert into source_data values
+(1, '{"level1": {"level2": {"level3": {"level4": {"5":"abc"}}}}}'),
+(2, '{"level1": {"level2": {"level3": {"4":23234982794}}}}'),
+(3, '{"level1": {"level2": {"level3": {"4":true}}}}'),
+(4, '{"level1": {"level2": {"level3": {"4":null}}}}'),
+(5, '{"level1": {"level2": {"level3": {"4":["abc", 100, 200]}}}}'),
+(6, '{"level1": {"level2": {"level3": {"4":{"5": "abc"}}}}}'),
+(7, '{"level1": {"level2": {"level3": "abc"}}}'),
+(8, '{"100": {"200": {"300": {"500":"abc"}}}}'),
+(9, '{"100": {"200": {"300": "abc"}}}');
+
+-- bucket 1
+drop table test_json_cast_map;
+CREATE TABLE test_json_cast_map (c1 int, c2 json) 
+DISTRIBUTED BY RANDOM BUCKETS 1;
+insert into test_json_cast_map select * from source_data;
+select * from test_json_cast_map order by c1;
+
+-- bucket 2
+drop table test_json_cast_map;
+CREATE TABLE test_json_cast_map (c1 int, c2 json) 
+DISTRIBUTED BY RANDOM BUCKETS 2;
+insert into test_json_cast_map select * from source_data;
+select * from test_json_cast_map order by c1;
+
+-- bucket 3
+drop table test_json_cast_map;
+CREATE TABLE test_json_cast_map (c1 int, c2 json) 
+DISTRIBUTED BY RANDOM BUCKETS 3;
+insert into test_json_cast_map select * from source_data;
+select * from test_json_cast_map order by c1;
+
+-- bucket 4
+drop table test_json_cast_map;
+CREATE TABLE test_json_cast_map (c1 int, c2 json)
+DISTRIBUTED BY RANDOM BUCKETS 4;
+insert into test_json_cast_map select * from source_data;
+select * from test_json_cast_map order by c1;
+
+-- bucket 5
+drop table test_json_cast_map;
+CREATE TABLE test_json_cast_map (c1 int, c2 json)
+DISTRIBUTED BY RANDOM BUCKETS 5;
+insert into test_json_cast_map select * from source_data;
+select * from test_json_cast_map order by c1;
+
+drop table test_json_cast_map;
+
+
+-- Test 11: nested json
+CREATE TABLE t_flat_json_remain (c1 int, c2 json)
+DISTRIBUTED BY HASH(c1) BUCKETS 1;
+
+insert into t_flat_json_remain values
+(1, '{"k9": {"k2": {"k0": "A", "k1": "B", "k2": -1, "k3": 2, "k4": "Z"}}}');
+
+select flat_json_meta(c2) from t_flat_json_remain [_META_];
+select c2 -> '$.k9' from t_flat_json_remain;
+select c2 -> '$.k9.k2' from t_flat_json_remain;
+select c2 -> '$.k9.k2.k2' from t_flat_json_remain;
+
+truncate table t_flat_json_remain;
+insert into t_flat_json_remain values
+(1, '{"k9": {"k2": {"k0": "A", "k1": "B", "k2": 10, "k3": 20, "k4": "Z"}}}'),
+(2, '{"k9": {"k2": {"k0": "A", "k4": "Z"}}}');
+
+select flat_json_meta(c2) from t_flat_json_remain [_META_];
+select c1, c2 -> '$.k9.k2' from t_flat_json_remain order by c1;
+
+-- with remain
+truncate table t_flat_json_remain;
+insert into t_flat_json_remain values
+(1, '{"k9": {"k2": {"k0": "A", "k1": "B", "k2": 10, "k3": 20, "k4": "Z"}}}'),
+(2, '{"k9": {"k2": "JSON"}}');
+
+select flat_json_meta(c2) from t_flat_json_remain [_META_];
+select c1, c2 -> '$.k9' from t_flat_json_remain order by c1;
+select c1, c2 -> '$.k9.k2' from t_flat_json_remain order by c1;
+select c1, c2 -> '$.k9.k2.k0' from t_flat_json_remain order by c1;
+
+truncate table t_flat_json_remain;
+insert into t_flat_json_remain values
+(1, '{"k9": {"k2": {"k0": "A", "k1": "B", "k2": 10, "k3": 20, "k4": "Z"}}}'),
+(2, '{"k9": {"k1": "JSON"}}');
+
+select flat_json_meta(c2) from t_flat_json_remain [_META_];
+select c1, c2 -> '$.k9' from t_flat_json_remain order by c1;
+select c1, c2 -> '$.k9.k1' from t_flat_json_remain order by c1;
+select c1, c2 -> '$.k9.k2' from t_flat_json_remain order by c1;
+select c1, c2 -> '$.k9.k2.k0' from t_flat_json_remain order by c1;
+
+
+drop table t_flat_json_remain;

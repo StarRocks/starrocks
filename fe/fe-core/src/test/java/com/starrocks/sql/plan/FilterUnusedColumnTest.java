@@ -16,11 +16,11 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
 import com.starrocks.utframe.StarRocksAssert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class FilterUnusedColumnTest extends PlanTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
@@ -50,7 +50,7 @@ public class FilterUnusedColumnTest extends PlanTestBase {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"enable_persistent_index\" = \"false\"\n" +
+                "\"enable_persistent_index\" = \"true\"\n" +
                 ");");
         // for primary key table
         starRocksAssert.withTable("CREATE TABLE `primary_table` ( \n" +
@@ -69,6 +69,7 @@ public class FilterUnusedColumnTest extends PlanTestBase {
         FeConstants.USE_MOCK_DICT_MANAGER = true;
         connectContext.getSessionVariable().setSqlMode(2);
         connectContext.getSessionVariable().enableTrimOnlyFilteredColumnsInScanStage();
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
     }
 
     @Test
@@ -77,7 +78,7 @@ public class FilterUnusedColumnTest extends PlanTestBase {
                 "            ref_0.d_dow as c1 from tpcds_100g_date_dim as ref_0 \n" +
                 "            where ref_0.d_day_name = ref_0.d_day_name limit 137;\n";
         String plan = getThriftPlan(sql);
-        assertContains(plan, "unused_output_column_name:[]");
+        assertContains(plan, "unused_output_column_name:[d_day_name]");
     }
 
     @Test
@@ -190,7 +191,7 @@ public class FilterUnusedColumnTest extends PlanTestBase {
             // tags_id is can be pushdown, and only used by the pushdownable predicate.
             String sql = "select timestamp from primary_table where k3 = \"test\" and tags_id = 1;";
             String plan = getThriftPlan(sql);
-            System.out.println(plan);
+            logSysInfo(plan);
             assertContains(plan, "unused_output_column_name:[tags_id]");
         }
         {
@@ -198,7 +199,7 @@ public class FilterUnusedColumnTest extends PlanTestBase {
             // but it also be the output column.
             String sql = "select tags_id from primary_table where k3 = \"test\" and tags_id = 1;";
             String plan = getThriftPlan(sql);
-            System.out.println(plan);
+            logSysInfo(plan);
             assertContains(plan, "unused_output_column_name:[]");
         }
         {
@@ -206,7 +207,7 @@ public class FilterUnusedColumnTest extends PlanTestBase {
             // but it also be used by the non-pushdownable predicate.
             String sql = "select k3 from primary_table where timestamp + tags_id = \"test\" and tags_id = 1;";
             String plan = getThriftPlan(sql);
-            System.out.println(plan);
+            logSysInfo(plan);
             assertContains(plan, "unused_output_column_name:[]");
         }
         {
@@ -214,7 +215,7 @@ public class FilterUnusedColumnTest extends PlanTestBase {
             // but it also be used by the non-pushdownable predicate.
             String sql = "select timestamp from primary_table where k3 + tags_id = \"test\" and tags_id = 1;";
             String plan = getThriftPlan(sql);
-            System.out.println(plan);
+            logSysInfo(plan);
             assertContains(plan, "unused_output_column_name:[]");
         }
     }
@@ -223,15 +224,15 @@ public class FilterUnusedColumnTest extends PlanTestBase {
     public void testFilterDoublePredicateColumn() throws Exception {
         String sql = "select t1a from test_all_type where t1f > 1";
         String plan = getThriftPlan(sql);
-        assertContains(plan, "unused_output_column_name:[]");
+        assertContains(plan, "unused_output_column_name:[t1f]");
 
         sql = "select t1a from test_all_type where t1f is null";
         plan = getThriftPlan(sql);
-        assertContains(plan, "unused_output_column_name:[]");
+        assertContains(plan, "unused_output_column_name:[t1f]");
 
         sql = "select t1a from test_all_type where t1f in (1.0, 2.0)";
         plan = getThriftPlan(sql);
-        assertContains(plan, "unused_output_column_name:[]");
+        assertContains(plan, "unused_output_column_name:[t1f]");
     }
 
     @Test
@@ -306,7 +307,7 @@ public class FilterUnusedColumnTest extends PlanTestBase {
             String sql = "select k3 from primary_table " +
                     "where tags_id=1 or k3=1 ";
             String plan = getThriftPlan(sql);
-            assertContains(plan, "unused_output_column_name:[]");
+            assertContains(plan, "unused_output_column_name:[tags_id]");
         }
         {
             String sql = "select k3 from primary_table " +
@@ -320,13 +321,13 @@ public class FilterUnusedColumnTest extends PlanTestBase {
             String sql = "select /*+SET_VAR(enable_pushdown_or_predicate=false)*/ " +
                     "count(1) from test_all_type where t1a='a' or (t1b=1 and t1c=2)";
             String plan = getThriftPlan(sql);
-            assertContains(plan, "unused_output_column_name:[]");
+            assertContains(plan, "unused_output_column_name:[t1b, t1c]");
         }
         {
             String sql = "select /*+SET_VAR(enable_pushdown_or_predicate=false)*/ " +
                     "count(1) from test_all_type where t1a='a' or (t1b=1 and t1c=2 and t1a='b')";
             String plan = getThriftPlan(sql);
-            assertContains(plan, "unused_output_column_name:[]");
+            assertContains(plan, "unused_output_column_name:[t1b, t1c]");
         }
     }
 }

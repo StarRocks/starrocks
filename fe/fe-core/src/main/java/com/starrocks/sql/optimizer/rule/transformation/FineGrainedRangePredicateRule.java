@@ -19,15 +19,15 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
@@ -44,6 +44,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.OptExpressionDuplicator;
+import com.starrocks.type.DateType;
+import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 import org.apache.commons.lang3.tuple.Triple;
 
 import java.time.LocalDateTime;
@@ -213,6 +216,7 @@ public class FineGrainedRangePredicateRule extends TransformationRule {
 
         LogicalAggregationOperator newAggOp = rewriteAggOperator(aggColInfoList, unionOutputCols);
 
+        OptimizerTraceUtil.logMVRewrite(context, this, "FineGrainedRangePredicateRule applied");
         return Lists.newArrayList(OptExpression.create(newAggOp, unionOpt));
     }
 
@@ -291,7 +295,7 @@ public class FineGrainedRangePredicateRule extends TransformationRule {
                 CallOperator callOperator = (CallOperator) info.getScalarOp();
                 if (FunctionSet.SUM.equals(callOperator.getFnName()) || FunctionSet.COUNT.equals(callOperator.getFnName())) {
                     Type[] argTypes = new Type[] {inputCol.getType()};
-                    Function newFunc = Expr.getBuiltinFunction(FunctionSet.SUM, argTypes,
+                    Function newFunc = ExprUtils.getBuiltinFunction(FunctionSet.SUM, argTypes,
                             Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
                     Preconditions.checkNotNull(newFunc);
                     newFunc = newFunc.copy();
@@ -320,13 +324,17 @@ public class FineGrainedRangePredicateRule extends TransformationRule {
                                                             List<BinaryPredicateOperator> colPredicates) {
         BinaryPredicateOperator leftDayBeginPredicate = colPredicates.get(0);
         BinaryPredicateOperator rightDayEndPredicate = colPredicates.get(1);
-
         BinaryType firstType = leftDayBeginPredicate.getBinaryType();
         BinaryType secondType = rightDayEndPredicate.getBinaryType();
 
         //  make sure predicate is "col >= left And col <= right"
         if (BinaryType.LE.equals(firstType) || BinaryType.LT.equals(firstType)) {
             Collections.swap(colPredicates, 0, 1);
+            // swap left and right to keep the correct order
+            leftDayBeginPredicate = colPredicates.get(0);
+            rightDayEndPredicate = colPredicates.get(1);
+            firstType = leftDayBeginPredicate.getBinaryType();
+            secondType = rightDayEndPredicate.getBinaryType();
         }
 
         // calculate time points first
@@ -428,13 +436,13 @@ public class FineGrainedRangePredicateRule extends TransformationRule {
     private static CallOperator buildDateTrunc(ScalarOperator arg1, ScalarOperator arg2) {
         Type type;
         if (arg2.getType().isDatetime()) {
-            type = Type.DATETIME;
+            type = DateType.DATETIME;
         } else {
-            type = Type.DATE;
+            type = DateType.DATE;
         }
 
         Function searchDesc = new Function(new FunctionName(FunctionSet.DATE_TRUNC),
-                new Type[] {Type.VARCHAR, type}, type, false);
+                new Type[] {VarcharType.VARCHAR, type}, type, false);
         Function fn = GlobalStateMgr.getCurrentState().getFunction(searchDesc, IS_NONSTRICT_SUPERTYPE_OF);
         CallOperator result = new CallOperator(FunctionSet.DATE_TRUNC, type, Lists.newArrayList(arg1, arg2), fn);
         return result;

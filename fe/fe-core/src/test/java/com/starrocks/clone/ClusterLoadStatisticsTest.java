@@ -45,9 +45,9 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
@@ -62,7 +62,7 @@ public class ClusterLoadStatisticsTest {
     private SystemInfoService systemInfoService;
     private TabletInvertedIndex invertedIndex;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         // be1
         be1 = new Backend(10001, "192.168.0.1", 9051);
@@ -138,16 +138,16 @@ public class ClusterLoadStatisticsTest {
         // tablet
         invertedIndex = new TabletInvertedIndex();
 
-        invertedIndex.addTablet(50000, new TabletMeta(1, 2, 3, 4, 5, TStorageMedium.HDD));
+        invertedIndex.addTablet(50000, new TabletMeta(1, 2, 3, 4, TStorageMedium.HDD));
         invertedIndex.addReplica(50000, new Replica(50001, be1.getId(), 0, ReplicaState.NORMAL));
         invertedIndex.addReplica(50000, new Replica(50002, be2.getId(), 0, ReplicaState.NORMAL));
         invertedIndex.addReplica(50000, new Replica(50003, be3.getId(), 0, ReplicaState.NORMAL));
 
-        invertedIndex.addTablet(60000, new TabletMeta(1, 2, 3, 4, 5, TStorageMedium.HDD));
+        invertedIndex.addTablet(60000, new TabletMeta(1, 2, 3, 4, TStorageMedium.HDD));
         invertedIndex.addReplica(60000, new Replica(60002, be2.getId(), 0, ReplicaState.NORMAL));
         invertedIndex.addReplica(60000, new Replica(60003, be3.getId(), 0, ReplicaState.NORMAL));
 
-        invertedIndex.addTablet(70000, new TabletMeta(1, 2, 3, 4, 5, TStorageMedium.HDD));
+        invertedIndex.addTablet(70000, new TabletMeta(1, 2, 3, 4, TStorageMedium.HDD));
         invertedIndex.addReplica(70000, new Replica(70002, be2.getId(), 0, ReplicaState.NORMAL));
         invertedIndex.addReplica(70000, new Replica(70003, be3.getId(), 0, ReplicaState.NORMAL));
     }
@@ -156,9 +156,9 @@ public class ClusterLoadStatisticsTest {
     public void test() {
         ClusterLoadStatistic loadStatistic = new ClusterLoadStatistic(systemInfoService, invertedIndex);
         loadStatistic.init();
-        List<List<String>> infos = loadStatistic.getClusterStatistic(TStorageMedium.HDD);
+        List<List<String>> infos = loadStatistic.getBackendLoadStats(TStorageMedium.HDD);
         System.out.println(infos);
-        Assert.assertEquals(3, infos.size());
+        Assertions.assertEquals(3, infos.size());
     }
 
     @Test
@@ -167,7 +167,7 @@ public class ClusterLoadStatisticsTest {
         clusterLoad.init();
 
         BackendLoadStatistic beLoad = clusterLoad.getBackendLoadStatistic(10001);
-        Assert.assertEquals("{\"beId\":10001,\"clusterName\":\"default_cluster\",\"isAvailable\":true," +
+        Assertions.assertEquals("{\"beId\":10001,\"clusterName\":\"default_cluster\",\"isAvailable\":true," +
                 "\"cpuCores\":0,\"memLimit\":0,\"memUsed\":0," +
                 "\"mediums\":[{\"medium\":\"HDD\",\"replica\":1,\"used\":570000,\"total\":\"1.5MB\"," +
                 "\"score\":1.0040447504302925}," +

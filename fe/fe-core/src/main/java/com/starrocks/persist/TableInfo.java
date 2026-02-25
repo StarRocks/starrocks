@@ -18,12 +18,7 @@
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 
 public class TableInfo implements Writable {
 
@@ -31,8 +26,9 @@ public class TableInfo implements Writable {
     private long dbId;
     @SerializedName("tb")
     private long tableId;
+    // not change the SerializedName for compatibility
     @SerializedName("idx")
-    private long indexId;
+    private long indexMetaId;
     @SerializedName("pt")
     private long partitionId;
 
@@ -47,11 +43,11 @@ public class TableInfo implements Writable {
         // for persist
     }
 
-    private TableInfo(long dbId, long tableId, long indexId, long partitionId,
+    private TableInfo(long dbId, long tableId, long indexMetaId, long partitionId,
                       String newTableName, String newRollupName, String newPartitionName) {
         this.dbId = dbId;
         this.tableId = tableId;
-        this.indexId = indexId;
+        this.indexMetaId = indexMetaId;
         this.partitionId = partitionId;
 
         this.newTableName = newTableName;
@@ -63,8 +59,8 @@ public class TableInfo implements Writable {
         return new TableInfo(dbId, tableId, -1L, -1L, newTableName, "", "");
     }
 
-    public static TableInfo createForRollupRename(long dbId, long tableId, long indexId, String newRollupName) {
-        return new TableInfo(dbId, tableId, indexId, -1L, "", newRollupName, "");
+    public static TableInfo createForRollupRename(long dbId, long tableId, long indexMetaId, String newRollupName) {
+        return new TableInfo(dbId, tableId, indexMetaId, -1L, "", newRollupName, "");
     }
 
     public static TableInfo createForPartitionRename(long dbId, long tableId, long partitionId,
@@ -84,8 +80,8 @@ public class TableInfo implements Writable {
         return tableId;
     }
 
-    public long getIndexId() {
-        return indexId;
+    public long getIndexMetaId() {
+        return indexMetaId;
     }
 
     public long getPartitionId() {
@@ -104,32 +100,5 @@ public class TableInfo implements Writable {
         return newPartitionName;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        out.writeLong(dbId);
-        out.writeLong(tableId);
-        out.writeLong(indexId);
-        out.writeLong(partitionId);
 
-        Text.writeString(out, newTableName);
-        Text.writeString(out, newRollupName);
-        Text.writeString(out, newPartitionName);
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        dbId = in.readLong();
-        tableId = in.readLong();
-        indexId = in.readLong();
-        partitionId = in.readLong();
-
-        newTableName = Text.readString(in);
-        newRollupName = Text.readString(in);
-        newPartitionName = Text.readString(in);
-    }
-
-    public static TableInfo read(DataInput in) throws IOException {
-        TableInfo info = new TableInfo();
-        info.readFields(in);
-        return info;
-    }
 }

@@ -41,6 +41,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include "base/hash/hash_std.hpp"
+#include "base/uid_util.h"
 #include "common/status.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/StarrocksExternalService_types.h"
@@ -48,7 +50,6 @@
 #include "gen_cpp/internal_service.pb.h"
 #include "http/rest_monitor_iface.h"
 #include "runtime/mem_tracker.h"
-#include "util/hash_util.hpp"
 
 namespace starrocks {
 
@@ -59,7 +60,7 @@ class TUniqueId;
 class PlanFragmentExecutor;
 class ThreadPool;
 
-class JoinRuntimeFilter;
+class RuntimeFilter;
 std::string to_load_error_http_path(const std::string& file_name);
 
 // This class used to manage all the fragment execute in this instance
@@ -89,7 +90,7 @@ public:
     Status cancel(const TUniqueId& fragment_id, const PPlanFragmentCancelReason& reason);
 
     void receive_runtime_filter(const PTransmitRuntimeFilterParams& params,
-                                const std::shared_ptr<const JoinRuntimeFilter>& shared_rf);
+                                const std::shared_ptr<const RuntimeFilter>& shared_rf);
 
     void cancel_worker();
 

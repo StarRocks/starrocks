@@ -17,7 +17,7 @@
 
 package com.starrocks.fs.hdfs;
 
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.thrift.TBrokerCheckPathExistRequest;
 import com.starrocks.thrift.TBrokerCloseReaderRequest;
 import com.starrocks.thrift.TBrokerCloseWriterRequest;
@@ -50,12 +50,22 @@ public class HdfsService {
     }
 
     public void getTProperties(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
-            throws UserException {
+            throws StarRocksException {
         fileSystemManager.getTProperties(path, loadProperties, tProperties);
     }
 
+    public void copyToLocal(String srcPath, String destPath, Map<String, String> properties) throws StarRocksException {
+        fileSystemManager.copyToLocal(srcPath, destPath, properties);
+        LOG.info("Copied {} to local {}", srcPath, destPath);
+    }
+
+    public void copyFromLocal(String srcPath, String destPath, Map<String, String> properties) throws StarRocksException {
+        fileSystemManager.copyFromLocal(srcPath, destPath, properties);
+        LOG.info("Copied local {} to {}", srcPath, destPath);
+    }
+
     public void listPath(TBrokerListPathRequest request, List<TBrokerFileStatus> fileStatuses, boolean skipDir,
-                         boolean fileNameOnly) throws UserException {
+                         boolean fileNameOnly) throws StarRocksException {
         LOG.info("receive a list path request, path: {}", request.path);
         List<TBrokerFileStatus> allFileStatuses = fileSystemManager.listPath(request.path, fileNameOnly,
                 request.properties);
@@ -69,7 +79,7 @@ public class HdfsService {
     }
 
     public List<FileStatus> listFileMeta(String path, Map<String, String> properties, boolean skipDir)
-            throws UserException {
+            throws StarRocksException {
         LOG.info("try to list file meta: {}", path);
         List<FileStatus> allFileStatuses = fileSystemManager.listFileMeta(path, properties);
         if (skipDir) {
@@ -79,26 +89,26 @@ public class HdfsService {
     }
 
     public void deletePath(TBrokerDeletePathRequest request)
-            throws UserException {
+            throws StarRocksException {
         LOG.info("receive a delete path request, path: {}", request.path);
         fileSystemManager.deletePath(request.path, request.properties);
     }
 
     public void renamePath(TBrokerRenamePathRequest request)
-            throws UserException {
+            throws StarRocksException {
         LOG.info("receive a rename path request, source path: {}, dest path: {}",
                 request.srcPath, request.destPath);
         fileSystemManager.renamePath(request.srcPath, request.destPath, request.properties);
     }
 
     public boolean checkPathExist(
-            TBrokerCheckPathExistRequest request) throws UserException {
+            TBrokerCheckPathExistRequest request) throws StarRocksException {
         LOG.info("receive a check path request, path: {}", request.path);
         return fileSystemManager.checkPathExist(request.path, request.properties);
     }
 
     public TBrokerFD openReader(TBrokerOpenReaderRequest request)
-            throws UserException {
+            throws StarRocksException {
         LOG.info("receive a open reader request, path: {}, start offset: {}, client id: {}",
                 request.path, request.startOffset, request.clientId);
         return fileSystemManager.openReader(request.path,
@@ -106,26 +116,26 @@ public class HdfsService {
     }
 
     public byte[] pread(TBrokerPReadRequest request)
-            throws UserException {
+            throws StarRocksException {
         LOG.debug("receive a read request, fd: {}, offset: {}, length: {}",
                 request.fd, request.offset, request.length);
         return fileSystemManager.pread(request.fd, request.offset, request.length);
     }
 
     public void seek(TBrokerSeekRequest request)
-            throws UserException {
+            throws StarRocksException {
         LOG.debug("receive a seek request, fd: {}, offset: {}", request.fd, request.offset);
         fileSystemManager.seek(request.fd, request.offset);
     }
 
     public void closeReader(TBrokerCloseReaderRequest request)
-            throws UserException {
+            throws StarRocksException {
         LOG.info("receive a close reader request, fd: {}", request.fd);
         fileSystemManager.closeReader(request.fd);
     }
 
     public TBrokerFD openWriter(TBrokerOpenWriterRequest request)
-            throws UserException {
+            throws StarRocksException {
         LOG.info("receive a open writer request, path: {}, mode: {}, client id: {}",
                 request.path, request.openMode, request.clientId);
         TBrokerFD fd = fileSystemManager.openWriter(request.path, request.properties);
@@ -133,14 +143,14 @@ public class HdfsService {
     }
 
     public void pwrite(TBrokerPWriteRequest request)
-            throws UserException {
+            throws StarRocksException {
         LOG.debug("receive a pwrite request, fd: {}, offset: {}, size: {}",
                 request.fd, request.offset, request.data.remaining());
         fileSystemManager.pwrite(request.fd, request.offset, request.getData());
     }
 
     public void closeWriter(TBrokerCloseWriterRequest request)
-            throws UserException {
+            throws StarRocksException {
         LOG.info("receive a close writer request, fd: {}", request.fd);
         fileSystemManager.closeWriter(request.fd);
     }

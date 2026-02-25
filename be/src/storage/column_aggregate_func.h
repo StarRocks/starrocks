@@ -15,13 +15,17 @@
 #pragma once
 
 #include "column/field.h"
+#include "common/memory/mem_hook_allocator.h"
+#include "common/statusor.h"
 #include "storage/column_aggregator.h"
 
 namespace starrocks {
+
+static MemHookAllocator kDefaultColumnAggregatorAllocator = MemHookAllocator{};
 class ColumnAggregatorFactory {
 public:
     static ColumnAggregatorPtr create_key_column_aggregator(const FieldPtr& field);
-    static ColumnAggregatorPtr create_value_column_aggregator(const FieldPtr& field);
+    static StatusOr<ColumnAggregatorPtr> create_value_column_aggregator(const FieldPtr& field);
 };
 
 } // namespace starrocks

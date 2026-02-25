@@ -18,6 +18,7 @@ package com.starrocks.load;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -28,11 +29,14 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.common.DmlException;
+import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 import java.sql.SQLException;
 
@@ -42,7 +46,7 @@ public class InsertOverwriteJobRunnerTest {
     private static StarRocksAssert starRocksAssert;
     private static PseudoCluster cluster;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         Config.bdbje_heartbeat_timeout_second = 60;
         Config.bdbje_replica_ack_timeout_second = 60;
@@ -62,6 +66,11 @@ public class InsertOverwriteJobRunnerTest {
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
+
+        if (!starRocksAssert.databaseExist("_statistics_")) {
+            StatisticsMetaManager m = new StatisticsMetaManager();
+            m.createStatisticsTablesForTest();
+        }
 
         starRocksAssert.withDatabase("insert_overwrite_test").useDatabase("insert_overwrite_test")
                 .withTable(
@@ -83,31 +92,31 @@ public class InsertOverwriteJobRunnerTest {
 
     @Test
     public void testReplayInsertOverwrite() {
-        Database database = GlobalStateMgr.getCurrentState().getDb("insert_overwrite_test");
-        Table table = database.getTable("t1");
-        Assert.assertTrue(table instanceof OlapTable);
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("insert_overwrite_test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t1");
+        Assertions.assertTrue(table instanceof OlapTable);
         OlapTable olapTable = (OlapTable) table;
         InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(100L, database.getId(), olapTable.getId(),
-                Lists.newArrayList(olapTable.getPartition("t1").getId()));
+                Lists.newArrayList(olapTable.getPartition("t1").getId()), false);
         InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(insertOverwriteJob);
         runner.cancel();
-        Assert.assertEquals(InsertOverwriteJobState.OVERWRITE_FAILED, insertOverwriteJob.getJobState());
+        Assertions.assertEquals(InsertOverwriteJobState.OVERWRITE_FAILED, insertOverwriteJob.getJobState());
 
         InsertOverwriteJob insertOverwriteJob2 = new InsertOverwriteJob(100L, database.getId(), olapTable.getId(),
-                Lists.newArrayList(olapTable.getPartition("t1").getId()));
+                Lists.newArrayList(olapTable.getPartition("t1").getId()), false);
         InsertOverwriteStateChangeInfo stateChangeInfo = new InsertOverwriteStateChangeInfo(100L,
                 InsertOverwriteJobState.OVERWRITE_PENDING, InsertOverwriteJobState.OVERWRITE_RUNNING,
-                Lists.newArrayList(2000L), Lists.newArrayList(2001L));
-        Assert.assertEquals(100L, stateChangeInfo.getJobId());
-        Assert.assertEquals(InsertOverwriteJobState.OVERWRITE_PENDING, stateChangeInfo.getFromState());
-        Assert.assertEquals(InsertOverwriteJobState.OVERWRITE_RUNNING, stateChangeInfo.getToState());
-        Assert.assertEquals(Lists.newArrayList(2000L), stateChangeInfo.getSourcePartitionIds());
-        Assert.assertEquals(Lists.newArrayList(2001L), stateChangeInfo.getTmpPartitionIds());
+                Lists.newArrayList(2000L), null, Lists.newArrayList(2001L));
+        Assertions.assertEquals(100L, stateChangeInfo.getJobId());
+        Assertions.assertEquals(InsertOverwriteJobState.OVERWRITE_PENDING, stateChangeInfo.getFromState());
+        Assertions.assertEquals(InsertOverwriteJobState.OVERWRITE_RUNNING, stateChangeInfo.getToState());
+        Assertions.assertEquals(Lists.newArrayList(2000L), stateChangeInfo.getSourcePartitionIds());
+        Assertions.assertEquals(Lists.newArrayList(2001L), stateChangeInfo.getTmpPartitionIds());
 
         InsertOverwriteJobRunner runner2 = new InsertOverwriteJobRunner(insertOverwriteJob2);
         runner2.replayStateChange(stateChangeInfo);
         runner2.cancel();
-        Assert.assertEquals(InsertOverwriteJobState.OVERWRITE_FAILED, insertOverwriteJob2.getJobState());
+        Assertions.assertEquals(InsertOverwriteJobState.OVERWRITE_FAILED, insertOverwriteJob2.getJobState());
     }
 
     @Test
@@ -115,7 +124,7 @@ public class InsertOverwriteJobRunnerTest {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000000);
         String sql = "insert overwrite t1 select * from t2";
         cluster.runSql("insert_overwrite_test", sql);
-        Assert.assertFalse(GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getForceDeleteTablets().isEmpty());
+        Assertions.assertFalse(GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getForceDeleteTablets().isEmpty());
     }
 
     @Test
@@ -123,14 +132,14 @@ public class InsertOverwriteJobRunnerTest {
         String sql = "insert overwrite t1 select * from t2";
         InsertStmt insertStmt = (InsertStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         StmtExecutor executor = new StmtExecutor(connectContext, insertStmt);
-        Database database = GlobalStateMgr.getCurrentState().getDb("insert_overwrite_test");
-        Table table = database.getTable("t1");
-        Assert.assertTrue(table instanceof OlapTable);
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("insert_overwrite_test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t1");
+        Assertions.assertTrue(table instanceof OlapTable);
         OlapTable olapTable = (OlapTable) table;
         InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(100L, insertStmt, database.getId(), olapTable.getId(),
-                WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                WarehouseManager.DEFAULT_WAREHOUSE_ID, false);
         InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(insertOverwriteJob, connectContext, executor);
-        Assert.assertFalse(runner.isFinished());
+        Assertions.assertFalse(runner.isFinished());
     }
 
     @Test
@@ -138,5 +147,176 @@ public class InsertOverwriteJobRunnerTest {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000000);
         String sql = "insert overwrite t3 partitions(p1, p1) select * from t4";
         cluster.runSql("insert_overwrite_test", sql);
+    }
+
+    @Test
+    public void testInsertOverwriteConcurrencyWithSamePartitions() throws Exception {
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("insert_overwrite_test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t1");
+        Assertions.assertTrue(table instanceof OlapTable);
+        OlapTable olapTable = (OlapTable) table;
+        InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(100L, database.getId(), olapTable.getId(),
+                Lists.newArrayList(olapTable.getPartition("t1").getId()), false);
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(insertOverwriteJob);
+
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000000);
+        String sql = "insert overwrite t1 partitions(t1) select * from t2";
+        cluster.runSql("insert_overwrite_test", sql);
+
+        Assertions.assertThrows(DmlException.class, () -> runner.testDoCommit());
+        insertOverwriteJob.setSourcePartitionNames(Lists.newArrayList("t1"));
+        Assertions.assertThrows(DmlException.class, () -> runner.testDoCommit());
+    }
+
+    @Test
+    public void testEnsureTempPartitionsVisibleThrowsWhenPartitionMissing() {
+        InsertOverwriteJob job = new InsertOverwriteJob(1L, 2L, 3L, Lists.newArrayList(4L), false);
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job) {
+            @Override
+            protected boolean hasCommittedNotVisible(long partitionId) {
+                return false;
+            }
+        };
+        OlapTable table = Mockito.mock(OlapTable.class);
+        Assertions.assertThrows(DmlException.class,
+                () -> runner.ensureTempPartitionsVisible(table, Lists.newArrayList(10L)));
+    }
+
+    @Test
+    public void testEnsureTempPartitionsVisibleThrowsWhenNotVisible() {
+        InsertOverwriteJob job = new InsertOverwriteJob(1L, 2L, 3L, Lists.newArrayList(4L), false);
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job) {
+            @Override
+            protected boolean hasCommittedNotVisible(long partitionId) {
+                return partitionId == 10L;
+            }
+        };
+        OlapTable table = Mockito.mock(OlapTable.class);
+        Partition partition = Mockito.mock(Partition.class);
+        Mockito.when(partition.getName()).thenReturn("tmp_part");
+        Mockito.when(table.getPartition(10L)).thenReturn(partition);
+        Assertions.assertThrows(DmlException.class,
+                () -> runner.ensureTempPartitionsVisible(table, Lists.newArrayList(10L)));
+    }
+
+    @Test
+    public void testEnsureTempPartitionsVisiblePassesWhenVisible() {
+        InsertOverwriteJob job = new InsertOverwriteJob(1L, 2L, 3L, Lists.newArrayList(4L), false);
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job) {
+            @Override
+            protected boolean hasCommittedNotVisible(long partitionId) {
+                return false;
+            }
+        };
+        OlapTable table = Mockito.mock(OlapTable.class);
+        Partition partition = Mockito.mock(Partition.class);
+        Mockito.when(table.getPartition(10L)).thenReturn(partition);
+        Assertions.assertDoesNotThrow(
+                () -> runner.ensureTempPartitionsVisible(table, Lists.newArrayList(10L)));
+    }
+
+    @Test
+    public void testDynamicOverwriteGcAfterFeRestart() {
+        // Test that dynamic overwrite can clean up temp partitions after FE restart
+        // (when insertStmt is null because it's a transient field)
+        // txnId is set in prepare() phase and persisted in log, so after FE restart
+        // we can identify temp partitions by prefix "txn{txnId}_"
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("insert_overwrite_test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t3");
+        Assertions.assertTrue(table instanceof OlapTable);
+        OlapTable olapTable = (OlapTable) table;
+
+        // Create a dynamic overwrite job with empty sourcePartitionIds (simulating dynamic overwrite)
+        InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(200L, database.getId(), olapTable.getId(),
+                Lists.newArrayList(), true);
+        Assertions.assertTrue(insertOverwriteJob.isDynamicOverwrite());
+
+        // Set txnId to simulate txnId was set in prepare() and restored from log after FE restart
+        insertOverwriteJob.setTxnId(12345L);
+
+        // Simulate FE restart scenario: insertStmt is null (transient field)
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(insertOverwriteJob);
+
+        // After fix: txnId is set in prepare() phase, so we can identify temp partitions
+        // with prefix "txn{txnId}_"
+        // Since there are no temp partitions, it should complete without error
+        runner.cancel();
+        Assertions.assertEquals(InsertOverwriteJobState.OVERWRITE_FAILED, insertOverwriteJob.getJobState());
+    }
+
+    @Test
+    public void testDynamicOverwriteReplayStateChange() {
+        // Test that replaying state change for dynamic overwrite works correctly
+        // txnId should be restored from log
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("insert_overwrite_test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t3");
+        Assertions.assertTrue(table instanceof OlapTable);
+        OlapTable olapTable = (OlapTable) table;
+
+        // Create a dynamic overwrite job
+        InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(201L, database.getId(), olapTable.getId(),
+                Lists.newArrayList(), true);
+        Assertions.assertTrue(insertOverwriteJob.isDynamicOverwrite());
+
+        // Create state change info for transition to RUNNING state with txnId
+        // (txnId is set in prepare() phase for dynamic overwrite)
+        InsertOverwriteStateChangeInfo stateChangeInfo = new InsertOverwriteStateChangeInfo(201L,
+                InsertOverwriteJobState.OVERWRITE_PENDING, InsertOverwriteJobState.OVERWRITE_RUNNING,
+                Lists.newArrayList(), null, Lists.newArrayList(), 12345L);
+
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(insertOverwriteJob);
+        runner.replayStateChange(stateChangeInfo);
+
+        Assertions.assertEquals(InsertOverwriteJobState.OVERWRITE_RUNNING, insertOverwriteJob.getJobState());
+        Assertions.assertEquals(12345L, insertOverwriteJob.getTxnId());
+    }
+
+    @Test
+    public void testDynamicOverwriteReplayFailedStateChange() {
+        // Test that replaying OVERWRITE_FAILED state for dynamic overwrite works correctly
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("insert_overwrite_test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t3");
+        Assertions.assertTrue(table instanceof OlapTable);
+        OlapTable olapTable = (OlapTable) table;
+
+        // Create a dynamic overwrite job
+        InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(202L, database.getId(), olapTable.getId(),
+                Lists.newArrayList(), true);
+        Assertions.assertTrue(insertOverwriteJob.isDynamicOverwrite());
+
+        // Create state change info for transition to FAILED state with txnId
+        InsertOverwriteStateChangeInfo stateChangeInfo = new InsertOverwriteStateChangeInfo(202L,
+                InsertOverwriteJobState.OVERWRITE_PENDING, InsertOverwriteJobState.OVERWRITE_FAILED,
+                Lists.newArrayList(), null, Lists.newArrayList(), 12345L);
+
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(insertOverwriteJob);
+        runner.replayStateChange(stateChangeInfo);
+
+        Assertions.assertEquals(InsertOverwriteJobState.OVERWRITE_FAILED, insertOverwriteJob.getJobState());
+        Assertions.assertEquals(12345L, insertOverwriteJob.getTxnId());
+    }
+
+    @Test
+    public void testDynamicOverwriteCancelBeforePrepare() {
+        // Test that cancelling a dynamic overwrite job before prepare() completes
+        // (txnId not set) handles gracefully without assertion error
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("insert_overwrite_test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t3");
+        Assertions.assertTrue(table instanceof OlapTable);
+        OlapTable olapTable = (OlapTable) table;
+
+        // Create a dynamic overwrite job without txnId (simulating job cancelled before prepare())
+        InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(203L, database.getId(), olapTable.getId(),
+                Lists.newArrayList(), true);
+        Assertions.assertTrue(insertOverwriteJob.isDynamicOverwrite());
+        Assertions.assertEquals(-1, insertOverwriteJob.getTxnId());
+
+        // Simulate FE restart scenario where job was in PENDING state
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(insertOverwriteJob);
+
+        // Should complete without assertion error, even though txnId is not set
+        // No temp partitions to clean up since prepare() never completed
+        runner.cancel();
+        Assertions.assertEquals(InsertOverwriteJobState.OVERWRITE_FAILED, insertOverwriteJob.getJobState());
     }
 }

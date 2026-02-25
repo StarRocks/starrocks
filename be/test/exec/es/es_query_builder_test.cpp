@@ -39,6 +39,7 @@
 #include <string>
 #include <vector>
 
+#include "base/debug/leakcheck_disabler.h"
 #include "column/column_helper.h"
 #include "common/logging.h"
 #include "exec/es/es_predicate.h"
@@ -46,9 +47,7 @@
 #include "rapidjson/rapidjson.h"
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
-#include "runtime/string_value.h"
 #include "types/timestamp_value.h"
-#include "util/debug/leakcheck_disabler.h"
 
 namespace starrocks {
 

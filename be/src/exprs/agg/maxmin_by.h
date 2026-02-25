@@ -17,43 +17,49 @@
 #include <limits>
 #include <type_traits>
 
+#include "base/container/raw_container.h"
+#include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/type_traits.h"
+#include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/aggregate_traits.h"
 #include "gutil/casts.h"
 #include "types/logical_type.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 
-template <LogicalType LT, typename = guard::Guard>
+template <LogicalType LT, bool not_filter_nulls, typename = guard::Guard>
 struct MaxByAggregateData {};
 
-template <LogicalType LT>
-struct MaxByAggregateData<LT, AggregateComplexLTGuard<LT>> {
+template <LogicalType LT, bool not_filter_nulls>
+struct MaxByAggregateData<LT, not_filter_nulls, AggregateComplexLTGuard<LT>> {
+    static constexpr auto not_filter_nulls_flag = not_filter_nulls;
     using T = AggDataValueType<LT>;
     raw::RawVector<uint8_t> buffer_result;
     T value = RunTimeTypeLimits<LT>::min_value();
-
+    bool null_result = true;
     void reset() {
         buffer_result.clear();
         value = RunTimeTypeLimits<LT>::min_value();
+        null_result = true;
     }
 };
 
-template <LogicalType LT, typename = guard::Guard>
+template <LogicalType LT, bool not_filter_nulls, typename = guard::Guard>
 struct MinByAggregateData {};
 
-template <LogicalType LT>
-struct MinByAggregateData<LT, AggregateComplexLTGuard<LT>> {
+template <LogicalType LT, bool not_filter_nulls>
+struct MinByAggregateData<LT, not_filter_nulls, AggregateComplexLTGuard<LT>> {
+    static constexpr auto not_filter_nulls_flag = not_filter_nulls;
     using T = AggDataValueType<LT>;
     raw::RawVector<uint8_t> buffer_result;
     T value = RunTimeTypeLimits<LT>::max_value();
-
+    bool null_result = true;
     void reset() {
         buffer_result.clear();
         value = RunTimeTypeLimits<LT>::max_value();
+        null_result = true;
     }
 };
 
@@ -62,16 +68,40 @@ struct MaxByElement {
     using T = RunTimeCppType<LT>;
     void operator()(State& state, Column* col, size_t row_num, const T& right) const {
         if (right > state.value) {
-            state.value = right;
-            state.buffer_result.resize(col->serialize_size(row_num));
-            col->serialize(row_num, state.buffer_result.data());
+            bool is_null = col->only_null() || col->is_null(row_num);
+            if (is_null) {
+                if constexpr (State::not_filter_nulls_flag) {
+                    state.value = right;
+                    state.buffer_result.clear();
+                    state.null_result = true;
+                }
+            } else {
+                state.value = right;
+                auto* data_col = ColumnHelper::get_data_column(col);
+                state.buffer_result.resize(data_col->serialize_size(row_num));
+                data_col->serialize(row_num, state.buffer_result.data());
+                state.null_result = false;
+            }
         }
     }
-    void operator()(State& state, const char* buffer, size_t size, const T& right) const {
-        if (right > state.value) {
-            state.value = right;
-            state.buffer_result.resize(size);
-            memcpy(state.buffer_result.data(), buffer, size);
+    void operator()(State& state, bool is_null, const char* buffer, size_t size, const T& right) const {
+        if (right >= state.value) {
+            if constexpr (State::not_filter_nulls_flag) {
+                state.value = right;
+                if (is_null) {
+                    state.buffer_result.clear();
+                    state.null_result = true;
+                } else {
+                    state.buffer_result.resize(size);
+                    memcpy(state.buffer_result.data(), buffer, size);
+                    state.null_result = false;
+                }
+            } else {
+                state.value = right;
+                state.buffer_result.resize(size);
+                memcpy(state.buffer_result.data(), buffer, size);
+                state.null_result = false;
+            }
         }
     }
 };
@@ -81,17 +111,41 @@ struct MaxByElement<LT, State, JsonGuard<LT>> {
     using T = RunTimeCppType<LT>;
 
     void operator()(State& state, Column* col, size_t row_num, const T& right) const {
-        if (*right > state.value) {
-            AggDataTypeTraits<LT>::assign_value(state.value, right);
-            state.buffer_result.resize(col->serialize_size(row_num));
-            col->serialize(row_num, state.buffer_result.data());
+        if (*right >= state.value) {
+            bool is_null = col->only_null() || col->is_null(row_num);
+            if (is_null) {
+                if constexpr (State::not_filter_nulls_flag) {
+                    AggDataTypeTraits<LT>::assign_value(state.value, right);
+                    state.buffer_result.clear();
+                    state.null_result = true;
+                }
+            } else {
+                auto* data_col = ColumnHelper::get_data_column(col);
+                AggDataTypeTraits<LT>::assign_value(state.value, right);
+                state.buffer_result.resize(data_col->serialize_size(row_num));
+                data_col->serialize(row_num, state.buffer_result.data());
+                state.null_result = false;
+            }
         }
     }
-    void operator()(State& state, const char* buffer, size_t size, const T& right) const {
-        if (*right > state.value) {
-            AggDataTypeTraits<LT>::assign_value(state.value, right);
-            state.buffer_result.resize(size);
-            memcpy(state.buffer_result.data(), buffer, size);
+    void operator()(State& state, bool is_null, const char* buffer, size_t size, const T& right) const {
+        if (*right >= state.value) {
+            if constexpr (State::not_filter_nulls_flag) {
+                AggDataTypeTraits<LT>::assign_value(state.value, right);
+                if (is_null) {
+                    state.buffer_result.clear();
+                    state.null_result = true;
+                } else {
+                    state.buffer_result.resize(size);
+                    memcpy(state.buffer_result.data(), buffer, size);
+                    state.null_result = false;
+                }
+            } else {
+                AggDataTypeTraits<LT>::assign_value(state.value, right);
+                state.buffer_result.resize(size);
+                memcpy(state.buffer_result.data(), buffer, size);
+                state.null_result = false;
+            }
         }
     }
 };
@@ -100,17 +154,41 @@ template <LogicalType LT, typename State, typename = guard::Guard>
 struct MinByElement {
     using T = RunTimeCppType<LT>;
     void operator()(State& state, Column* col, size_t row_num, const T& right) const {
-        if (right < state.value) {
-            state.value = right;
-            state.buffer_result.resize(col->serialize_size(row_num));
-            col->serialize(row_num, state.buffer_result.data());
+        if (right <= state.value) {
+            auto is_null = col->only_null() || col->is_null(row_num);
+            if (is_null) {
+                if constexpr (State::not_filter_nulls_flag) {
+                    state.value = right;
+                    state.buffer_result.clear();
+                    state.null_result = true;
+                }
+            } else {
+                auto* data_col = ColumnHelper::get_data_column(col);
+                state.value = right;
+                state.buffer_result.resize(data_col->serialize_size(row_num));
+                data_col->serialize(row_num, state.buffer_result.data());
+                state.null_result = false;
+            }
         }
     }
-    void operator()(State& state, const char* buffer, size_t size, const T& right) const {
-        if (right < state.value) {
-            state.value = right;
-            state.buffer_result.resize(size);
-            memcpy(state.buffer_result.data(), buffer, size);
+    void operator()(State& state, bool is_null, const char* buffer, size_t size, const T& right) const {
+        if (right <= state.value) {
+            if constexpr (State::not_filter_nulls_flag) {
+                state.value = right;
+                if (is_null) {
+                    state.buffer_result.clear();
+                    state.null_result = true;
+                } else {
+                    state.buffer_result.resize(size);
+                    memcpy(state.buffer_result.data(), buffer, size);
+                    state.null_result = false;
+                }
+            } else {
+                state.value = right;
+                state.buffer_result.resize(size);
+                memcpy(state.buffer_result.data(), buffer, size);
+                state.null_result = false;
+            }
         }
     }
 };
@@ -120,46 +198,76 @@ struct MinByElement<LT, State, JsonGuard<LT>> {
     using T = RunTimeCppType<LT>;
 
     void operator()(State& state, Column* col, size_t row_num, const T& right) const {
-        if (*right < state.value) {
-            AggDataTypeTraits<LT>::assign_value(state.value, right);
-            state.buffer_result.resize(col->serialize_size(row_num));
-            col->serialize(row_num, state.buffer_result.data());
+        if (*right <= state.value) {
+            auto is_null = col->only_null() || col->is_null(row_num);
+            if (is_null) {
+                if constexpr (State::not_filter_nulls_flag) {
+                    AggDataTypeTraits<LT>::assign_value(state.value, right);
+                    state.buffer_result.clear();
+                    state.null_result = true;
+                }
+            } else {
+                AggDataTypeTraits<LT>::assign_value(state.value, right);
+                auto* data_col = ColumnHelper::get_data_column(col);
+                state.buffer_result.resize(data_col->serialize_size(row_num));
+                data_col->serialize(row_num, state.buffer_result.data());
+                state.null_result = false;
+            }
         }
     }
-    void operator()(State& state, const char* buffer, size_t size, const T& right) const {
-        if (*right < state.value) {
-            AggDataTypeTraits<LT>::assign_value(state.value, right);
-            state.buffer_result.resize(size);
-            memcpy(state.buffer_result.data(), buffer, size);
+    void operator()(State& state, bool is_null, const char* buffer, size_t size, const T& right) const {
+        if (*right <= state.value) {
+            if constexpr (State::not_filter_nulls_flag) {
+                AggDataTypeTraits<LT>::assign_value(state.value, right);
+                if (is_null) {
+                    state.buffer_result.clear();
+                    state.null_result = true;
+                } else {
+                    state.buffer_result.resize(size);
+                    memcpy(state.buffer_result.data(), buffer, size);
+                    state.null_result = false;
+                }
+            } else {
+                AggDataTypeTraits<LT>::assign_value(state.value, right);
+                state.buffer_result.resize(size);
+                memcpy(state.buffer_result.data(), buffer, size);
+                state.null_result = false;
+            }
         }
     }
 };
 
-template <LogicalType LT>
-struct MaxByAggregateData<LT, StringLTGuard<LT>> {
+template <LogicalType LT, bool not_filter_nulls>
+struct MaxByAggregateData<LT, not_filter_nulls, StringLTGuard<LT>> {
+    static constexpr auto not_filter_nulls_flag = not_filter_nulls;
     raw::RawVector<uint8_t> buffer_result;
     raw::RawVector<uint8_t> buffer;
     int32_t size = -1;
+    bool null_result = true;
     bool has_value() const { return size > -1; }
     Slice slice_max() const { return {buffer.data(), buffer.size()}; }
     void reset() {
         buffer_result.clear();
         buffer.clear();
         size = -1;
+        null_result = true;
     }
 };
 
-template <LogicalType LT>
-struct MinByAggregateData<LT, StringLTGuard<LT>> {
+template <LogicalType LT, bool not_filter_nulls>
+struct MinByAggregateData<LT, not_filter_nulls, StringLTGuard<LT>> {
+    static constexpr auto not_filter_nulls_flag = not_filter_nulls;
     raw::RawVector<uint8_t> buffer_result;
     raw::RawVector<uint8_t> buffer;
     int32_t size = -1;
+    bool null_result = true;
     bool has_value() const { return size > -1; }
     Slice slice_min() const { return {buffer.data(), buffer.size()}; }
     void reset() {
         buffer_result.clear();
         buffer.clear();
         size = -1;
+        null_result = true;
     }
 };
 
@@ -167,21 +275,46 @@ template <LogicalType LT, typename State>
 struct MaxByElement<LT, State, StringLTGuard<LT>> {
     void operator()(State& state, Column* col, size_t row_num, const Slice& right) const {
         if (!state.has_value() || state.slice_max().compare(right) < 0) {
-            state.buffer_result.resize(col->serialize_size(row_num));
-            col->serialize(row_num, state.buffer_result.data());
-            state.buffer.resize(right.size);
-            memcpy(state.buffer.data(), right.data, right.size);
-            state.size = right.size;
+            bool is_null = col->only_null() || col->is_null(row_num);
+            if (is_null) {
+                if constexpr (State::not_filter_nulls_flag) {
+                    state.buffer.resize(right.size);
+                    memcpy(state.buffer.data(), right.data, right.size);
+                    state.size = right.size;
+                    state.buffer_result.clear();
+                    state.null_result = true;
+                }
+            } else {
+                auto* data_col = ColumnHelper::get_data_column(col);
+                state.buffer_result.resize(data_col->serialize_size(row_num));
+                data_col->serialize(row_num, state.buffer_result.data());
+                state.null_result = false;
+                state.buffer.resize(right.size);
+                memcpy(state.buffer.data(), right.data, right.size);
+                state.size = right.size;
+            }
         }
     }
 
-    void operator()(State& state, const char* buffer, size_t size, const Slice& right) const {
+    void operator()(State& state, bool is_null, const char* buffer, size_t size, const Slice& right) const {
         if (!state.has_value() || state.slice_max().compare(right) < 0) {
-            state.buffer_result.resize(size);
-            memcpy(state.buffer_result.data(), buffer, size);
             state.buffer.resize(right.size);
             memcpy(state.buffer.data(), right.data, right.size);
             state.size = right.size;
+            if constexpr (State::not_filter_nulls_flag) {
+                if (is_null) {
+                    state.buffer_result.clear();
+                    state.null_result = true;
+                } else {
+                    state.buffer_result.resize(size);
+                    memcpy(state.buffer_result.data(), buffer, size);
+                    state.null_result = false;
+                }
+            } else {
+                state.buffer_result.resize(size);
+                memcpy(state.buffer_result.data(), buffer, size);
+                state.null_result = false;
+            }
         }
     }
 };
@@ -190,21 +323,46 @@ template <LogicalType LT, typename State>
 struct MinByElement<LT, State, StringLTGuard<LT>> {
     void operator()(State& state, Column* col, size_t row_num, const Slice& right) const {
         if (!state.has_value() || state.slice_min().compare(right) > 0) {
-            state.buffer_result.resize(col->serialize_size(row_num));
-            col->serialize(row_num, state.buffer_result.data());
-            state.buffer.resize(right.size);
-            memcpy(state.buffer.data(), right.data, right.size);
-            state.size = right.size;
+            bool is_null = col->only_null() || col->is_null(row_num);
+            if (is_null) {
+                if constexpr (State::not_filter_nulls_flag) {
+                    state.buffer_result.clear();
+                    state.null_result = true;
+                    state.buffer.resize(right.size);
+                    memcpy(state.buffer.data(), right.data, right.size);
+                    state.size = right.size;
+                }
+            } else {
+                auto* data_col = ColumnHelper::get_data_column(col);
+                state.buffer_result.resize(data_col->serialize_size(row_num));
+                data_col->serialize(row_num, state.buffer_result.data());
+                state.null_result = false;
+                state.buffer.resize(right.size);
+                memcpy(state.buffer.data(), right.data, right.size);
+                state.size = right.size;
+            }
         }
     }
 
-    void operator()(State& state, const char* buffer, size_t size, const Slice& right) const {
+    void operator()(State& state, bool is_null, const char* buffer, size_t size, const Slice& right) const {
         if (!state.has_value() || state.slice_min().compare(right) > 0) {
-            state.buffer_result.resize(size);
-            memcpy(state.buffer_result.data(), buffer, size);
             state.buffer.resize(right.size);
             memcpy(state.buffer.data(), right.data, right.size);
             state.size = right.size;
+            if constexpr (State::not_filter_nulls_flag) {
+                if (is_null) {
+                    state.buffer_result.clear();
+                    state.null_result = true;
+                } else {
+                    state.buffer_result.resize(size);
+                    memcpy(state.buffer_result.data(), buffer, size);
+                    state.null_result = false;
+                }
+            } else {
+                state.buffer_result.resize(size);
+                memcpy(state.buffer_result.data(), buffer, size);
+                state.null_result = false;
+            }
         }
     }
 };
@@ -221,16 +379,18 @@ public:
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
-        T column1_value;
-        if (columns[1]->is_nullable()) {
-            if (columns[1]->is_null(row_num)) {
-                return;
-            }
-            column1_value = down_cast<const NullableColumn*>(columns[1])->data_column()->get(row_num).get<T>();
-        } else {
-            column1_value = down_cast<const InputColumnType*>(columns[1])->get_data()[row_num];
+        if (columns[1]->only_null() || columns[1]->is_null(row_num)) {
+            return;
         }
-        OP()(this->data(state), (Column*)columns[0], row_num, column1_value);
+
+        RunTimeCppType<LT> rhs;
+        auto* data_col1 = down_cast<const InputColumnType*>(ColumnHelper::get_data_column(columns[1]));
+        if (columns[1]->is_constant()) {
+            rhs = data_col1->immutable_data()[0];
+        } else {
+            rhs = data_col1->immutable_data()[row_num];
+        }
+        OP()(this->data(state), (Column*)columns[0], row_num, rhs);
     }
 
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
@@ -241,27 +401,40 @@ public:
         }
     }
 
+    bool support_nullable_immediate_input() const override { return true; }
+
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         Slice src;
-        if (column->is_nullable()) {
-            if (column->is_null(row_num)) {
-                return;
-            }
-            const auto* nullable_column = down_cast<const NullableColumn*>(column);
-            src = nullable_column->data_column()->get(row_num).get_slice();
-        } else {
-            const auto* binary_column = down_cast<const BinaryColumn*>(column);
-            src = binary_column->get_slice(row_num);
+        if (column->only_null() || column->is_null(row_num)) {
+            return;
         }
+        auto* data_column = ColumnHelper::get_data_column(column);
+        const auto* binary_column = down_cast<const BinaryColumn*>(data_column);
+        src = binary_column->get_slice(row_num);
 
         if constexpr (LT != TYPE_JSON) {
             T value;
-            memcpy(&value, src.data, sizeof(T));
-            OP()(this->data(state), src.data + sizeof(T), src.size - sizeof(T), value);
+            auto p = src.data;
+            memcpy(&value, p, sizeof(T));
+            p += sizeof(T);
+            bool null_result = false;
+            if constexpr (State::not_filter_nulls_flag) {
+                null_result = (*p == 1);
+                p += 1;
+            }
+            OP()(this->data(state), null_result, p, src.size - (p - src.data), value);
         } else {
+            // it seems wrong, FE has forbidden max_by(t, JSON)
             JsonValue value(src);
             size_t value_size = value.serialize_size();
-            OP()(this->data(state), src.data + value_size, src.size - value_size, &value);
+            auto* p = src.data;
+            p += value_size;
+            bool null_result = false;
+            if constexpr (State::not_filter_nulls_flag) {
+                null_result = (*p == 1);
+                p += 1;
+            }
+            OP()(this->data(state), null_result, src.data + value_size, src.size - (p - src.data), &value);
         }
     }
 
@@ -269,23 +442,41 @@ public:
         raw::RawVector<uint8_t> buffer;
         if constexpr (LT != TYPE_JSON) {
             size_t value_size = sizeof(T);
-            buffer.resize(this->data(state).buffer_result.size() + value_size);
-            memcpy(buffer.data(), &(this->data(state).value), value_size);
-            memcpy(buffer.data() + value_size, this->data(state).buffer_result.data(),
-                   this->data(state).buffer_result.size());
+            size_t buffer_size = this->data(state).buffer_result.size() + value_size;
+            if constexpr (State::not_filter_nulls_flag) {
+                buffer_size += 1;
+            }
+            buffer.resize(buffer_size);
+            auto* p = buffer.data();
+            memcpy(p, &(this->data(state).value), value_size);
+            p += value_size;
+            if constexpr (State::not_filter_nulls_flag) {
+                *p = (this->data(state).null_result ? 1 : 0);
+                p += 1;
+            }
+            memcpy(p, this->data(state).buffer_result.data(), this->data(state).buffer_result.size());
         } else {
             size_t value_size = this->data(state).value.serialize_size();
-            buffer.resize(this->data(state).buffer_result.size() + value_size);
-            this->data(state).value.serialize(buffer.data());
-            memcpy(buffer.data() + value_size, this->data(state).buffer_result.data(),
-                   this->data(state).buffer_result.size());
+            size_t buffer_size = this->data(state).buffer_result.size() + value_size;
+            if constexpr (State::not_filter_nulls_flag) {
+                buffer_size += 1;
+            }
+            buffer.resize(buffer_size);
+            auto* p = buffer.data();
+            this->data(state).value.serialize(p);
+            p += value_size;
+            if constexpr (State::not_filter_nulls_flag) {
+                *p = (this->data(state).null_result ? 1 : 0);
+                p += 1;
+            }
+            memcpy(p, this->data(state).buffer_result.data(), this->data(state).buffer_result.size());
         }
         if (to->is_nullable()) {
             auto* column = down_cast<NullableColumn*>(to);
-            if (this->data(state).buffer_result.size() == 0) {
+            if (this->data(state).buffer_result.size() == 0 && !State::not_filter_nulls_flag) {
                 column->append_default();
             } else {
-                down_cast<BinaryColumn*>(column->data_column().get())->append(Slice(buffer.data(), buffer.size()));
+                down_cast<BinaryColumn*>(column->data_column_raw_ptr())->append(Slice(buffer.data(), buffer.size()));
                 column->null_column_data().push_back(0);
             }
         } else {
@@ -295,54 +486,90 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
-        const InputColumnType* col_maxmin = nullptr;
-        if (src[1]->is_nullable()) {
-            const auto* nullable_column = down_cast<const NullableColumn*>(src[1].get());
-            col_maxmin = down_cast<const InputColumnType*>(nullable_column->data_column().get());
-        } else {
-            col_maxmin = down_cast<const InputColumnType*>(src[1].get());
+                                     MutableColumnPtr& dst) const override {
+        if (src[1]->only_null()) {
+            DCHECK(dst->is_nullable());
+            dst->append_default(chunk_size);
+            return;
         }
 
+        const auto* col_maxmin = down_cast<const InputColumnType*>(ColumnHelper::get_data_column(src[1].get()));
+        const auto maxmin_datas = col_maxmin->immutable_data();
         BinaryColumn* result = nullptr;
-        if ((*dst)->is_nullable()) {
-            auto* dst_nullable_column = down_cast<NullableColumn*>((*dst).get());
-            result = down_cast<BinaryColumn*>(dst_nullable_column->data_column().get());
+        if (dst->is_nullable()) {
+            auto* dst_nullable_column = down_cast<NullableColumn*>(dst.get());
+            result = down_cast<BinaryColumn*>(dst_nullable_column->data_column_raw_ptr());
 
-            if (src[1]->is_nullable())
-                dst_nullable_column->null_column_data() =
-                        down_cast<const NullableColumn*>(src[1].get())->immutable_null_column_data();
-            else
+            if (src[1]->is_nullable()) {
+                auto null_column_data = down_cast<const NullableColumn*>(src[1].get())->immutable_null_column_data();
+                dst_nullable_column->null_column_data().assign(null_column_data.begin(), null_column_data.end());
+            } else {
                 dst_nullable_column->null_column_data().resize(chunk_size, 0);
-
+            }
         } else {
-            result = down_cast<BinaryColumn*>((*dst).get());
+            result = down_cast<BinaryColumn*>(dst.get());
         }
 
         Bytes& bytes = result->get_bytes();
         result->get_offset().resize(chunk_size + 1);
 
         size_t old_size = bytes.size();
+        size_t new_size = old_size;
         for (size_t i = 0; i < chunk_size; ++i) {
             if (src[1]->is_null(i)) {
-                auto* dst_nullable_column = down_cast<NullableColumn*>((*dst).get());
-                dst_nullable_column->set_has_null(true);
                 result->get_offset()[i + 1] = old_size;
+                DCHECK(dst->is_nullable());
+                down_cast<NullableColumn*>(dst.get())->set_has_null(true);
             } else {
-                size_t serde_size = src[0]->serialize_size(i);
-                T value = col_maxmin->get_data()[i];
-                size_t new_size;
-                if constexpr (LT != TYPE_JSON) {
-                    new_size = old_size + sizeof(T) + serde_size;
-                    bytes.resize(new_size);
-                    memcpy(bytes.data() + old_size, &value, sizeof(T));
-                    src[0]->serialize(i, bytes.data() + old_size + sizeof(T));
+                auto is_null = src[0]->only_null() || src[0]->is_null(i);
+                T value = maxmin_datas[i];
+                if (is_null) {
+                    if constexpr (State::not_filter_nulls_flag) {
+                        new_size = old_size + sizeof(T) + 1;
+                        bytes.resize(new_size);
+                        auto* p = bytes.data() + old_size;
+                        memcpy(p, &value, sizeof(T));
+                        p += sizeof(T);
+                        *p = 1;
+                    } else {
+                        auto* dst_nullable_column = down_cast<NullableColumn*>(dst.get());
+                        auto& dst_nulls = dst_nullable_column->null_column_data();
+                        dst_nulls[i] = DATUM_NULL;
+                        dst_nullable_column->set_has_null(true);
+                    }
                 } else {
-                    size_t value_size = value->serialize_size();
-                    new_size = old_size + value_size + serde_size;
-                    bytes.resize(new_size);
-                    value->serialize(bytes.data() + old_size);
-                    src[0]->serialize(i, bytes.data() + old_size + value_size);
+                    auto* data_column = ColumnHelper::get_data_column(src[0].get());
+                    size_t serde_size = data_column->serialize_size(i);
+                    if constexpr (LT != TYPE_JSON) {
+                        new_size = old_size + sizeof(T) + serde_size;
+                        if constexpr (State::not_filter_nulls_flag) {
+                            new_size += 1;
+                        }
+                        bytes.resize(new_size);
+                        auto* p = bytes.data() + old_size;
+                        memcpy(p, &value, sizeof(T));
+                        p += sizeof(T);
+                        if constexpr (State::not_filter_nulls_flag) {
+                            *p = 0;
+                            p += 1;
+                        }
+                        data_column->serialize(i, p);
+                    } else {
+                        size_t value_size = value->serialize_size();
+                        new_size = old_size + value_size + serde_size;
+                        if constexpr (State::not_filter_nulls_flag) {
+                            new_size += 1;
+                        }
+                        bytes.resize(new_size);
+                        auto* p = bytes.data() + old_size;
+                        value->serialize(p);
+                        p += value_size;
+                        if constexpr (State::not_filter_nulls_flag) {
+                            *p = 0;
+                            p += 1;
+                        }
+                        data_column->serialize(i, p);
+                    }
                 }
                 result->get_offset()[i + 1] = new_size;
                 old_size = new_size;
@@ -351,10 +578,63 @@ public:
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        if (this->data(state).buffer_result.empty())
-            to->append_default();
-        else
-            to->deserialize_and_append(this->data(state).buffer_result.data());
+        if constexpr (State::not_filter_nulls_flag) {
+            if (this->data(state).null_result) {
+                DCHECK(to->is_nullable());
+                to->append_default();
+            } else {
+                if (to->is_nullable()) {
+                    down_cast<NullableColumn*>(to)->null_column_raw_ptr()->append(DATUM_NOT_NULL);
+                }
+                ColumnHelper::get_data_column(to)->deserialize_and_append(this->data(state).buffer_result.data());
+            }
+        } else {
+            if (this->data(state).buffer_result.empty()) {
+                to->append_default();
+            } else {
+                if (to->is_nullable()) {
+                    down_cast<NullableColumn*>(to)->null_column_raw_ptr()->append(DATUM_NOT_NULL);
+                }
+                ColumnHelper::get_data_column(to)->deserialize_and_append(this->data(state).buffer_result.data());
+            }
+        }
+    }
+
+    void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
+                    size_t end) const override {
+        dst->resize(start);
+        if constexpr (State::not_filter_nulls_flag) {
+            if (this->data(state).null_result) {
+                DCHECK(dst->is_nullable());
+                for (size_t i = start; i < end; ++i) {
+                    dst->append_default();
+                }
+            } else {
+                if (dst->is_nullable()) {
+                    for (size_t i = start; i < end; ++i) {
+                        down_cast<NullableColumn*>(dst)->null_column_raw_ptr()->append(DATUM_NOT_NULL);
+                    }
+                }
+                for (size_t i = start; i < end; ++i) {
+                    ColumnHelper::get_data_column(dst)->deserialize_and_append(this->data(state).buffer_result.data());
+                }
+            }
+        } else {
+            if (this->data(state).buffer_result.empty()) {
+                for (size_t i = start; i < end; ++i) {
+                    dst->append_default();
+                }
+            } else {
+                if (dst->is_nullable()) {
+                    for (size_t i = start; i < end; ++i) {
+                        down_cast<NullableColumn*>(dst)->null_column_raw_ptr()->append(DATUM_NOT_NULL);
+                    }
+                }
+                for (size_t i = start; i < end; ++i) {
+                    ColumnHelper::get_data_column(dst)->deserialize_and_append(this->data(state).buffer_result.data());
+                }
+            }
+        }
     }
 
     std::string get_name() const override { return "maxmin_by"; }
@@ -370,16 +650,17 @@ public:
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
-        Slice column1_value;
-        if (columns[1]->is_nullable()) {
-            if (columns[1]->is_null(row_num)) {
-                return;
-            }
-            column1_value = down_cast<const NullableColumn*>(columns[1])->data_column()->get(row_num).get_slice();
-        } else {
-            column1_value = columns[1]->get(row_num).get_slice();
+        if (columns[1]->only_null() || columns[1]->is_null(row_num)) {
+            return;
         }
-        OP()(this->data(state), (Column*)columns[0], row_num, column1_value);
+        Slice rhs;
+        auto* binary_column = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(columns[1]));
+        if (columns[1]->is_constant()) {
+            rhs = binary_column->get_slice(0);
+        } else {
+            rhs = binary_column->get_slice(row_num);
+        }
+        OP()(this->data(state), (Column*)columns[0], row_num, rhs);
     }
 
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
@@ -390,29 +671,32 @@ public:
         }
     }
 
-    void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
-        Slice src;
-        if (column->is_nullable()) {
-            if (column->is_null(row_num)) {
-                return;
-            }
-            const auto* nullable_column = down_cast<const NullableColumn*>(column);
-            src = nullable_column->data_column()->get(row_num).get_slice();
-        } else {
-            const auto* binary_column = down_cast<const BinaryColumn*>(column);
-            src = binary_column->get_slice(row_num);
-        }
+    bool support_nullable_immediate_input() const override { return true; }
 
-        size_t size;
-        const char* c = src.get_data();
-        memcpy(&size, c, sizeof(size_t));
-        if (size == -1) return;
-        c += sizeof(size_t);
-        Slice value(c, size);
-        c += size;
-        memcpy(&size, c, sizeof(size_t));
-        c += sizeof(size_t);
-        OP()(this->data(state), c, size, value);
+    void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
+        if (column->only_null() || column->is_null(row_num)) {
+            return;
+        }
+        auto* data_column = ColumnHelper::get_data_column(column);
+        const auto* binary_column = down_cast<const BinaryColumn*>(data_column);
+        Slice src = binary_column->get_slice(row_num);
+
+        size_t value_size;
+        const char* p = src.get_data();
+        memcpy(&value_size, p, sizeof(size_t));
+        if (value_size == -1) return;
+        p += sizeof(size_t);
+        Slice value(p, value_size);
+        p += value_size;
+        bool null_result = false;
+        if constexpr (State::not_filter_nulls_flag) {
+            null_result = (*p == 1);
+            p += 1;
+        }
+        size_t state_size;
+        memcpy(&state_size, p, sizeof(size_t));
+        p += sizeof(size_t);
+        OP()(this->data(state), null_result, p, state_size, value);
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
@@ -425,15 +709,23 @@ public:
             buffer.resize(sizeof(size_t));
             memcpy(buffer.data(), &temp, sizeof(size_t));
         } else {
-            buffer.resize(result_size + value_size + 2 * sizeof(size_t));
-            unsigned char* c = buffer.data();
-            memcpy(c, &value_size, sizeof(size_t));
-            c += sizeof(size_t);
-            memcpy(c, this->data(state).buffer.data(), value_size);
-            c += value_size;
-            memcpy(c, &result_size, sizeof(size_t));
-            c += sizeof(size_t);
-            memcpy(c, this->data(state).buffer_result.data(), result_size);
+            auto buffer_size = result_size + value_size + 2 * sizeof(size_t);
+            if constexpr (State::not_filter_nulls_flag) {
+                buffer_size += 1;
+            }
+            buffer.resize(buffer_size);
+            unsigned char* p = buffer.data();
+            memcpy(p, &value_size, sizeof(size_t));
+            p += sizeof(size_t);
+            memcpy(p, this->data(state).buffer.data(), value_size);
+            p += value_size;
+            if constexpr (State::not_filter_nulls_flag) {
+                *p = (this->data(state).null_result ? 1 : 0);
+                p += 1;
+            }
+            memcpy(p, &result_size, sizeof(size_t));
+            p += sizeof(size_t);
+            memcpy(p, this->data(state).buffer_result.data(), result_size);
         }
 
         if (to->is_nullable()) {
@@ -441,7 +733,7 @@ public:
             if (!this->data(state).has_value()) {
                 column->append_default();
             } else {
-                down_cast<BinaryColumn*>(column->data_column().get())->append(Slice(buffer.data(), buffer.size()));
+                down_cast<BinaryColumn*>(column->data_column_raw_ptr())->append(Slice(buffer.data(), buffer.size()));
                 column->null_column_data().push_back(0);
             }
         } else {
@@ -451,28 +743,28 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
-        const BinaryColumn* col_maxmin = nullptr;
-        if (src[1]->is_nullable()) {
-            const auto* nullable_column = down_cast<const NullableColumn*>(src[1].get());
-            col_maxmin = down_cast<const BinaryColumn*>(nullable_column->data_column().get());
-        } else {
-            col_maxmin = down_cast<const BinaryColumn*>(src[1].get());
+                                     MutableColumnPtr& dst) const override {
+        if (src[1]->only_null()) {
+            DCHECK(dst->is_nullable());
+            dst->append_default(chunk_size);
+            return;
         }
+        const BinaryColumn* col_maxmin = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(src[1].get()));
 
         BinaryColumn* result = nullptr;
-        if ((*dst)->is_nullable()) {
-            auto* dst_nullable_column = down_cast<NullableColumn*>((*dst).get());
-            result = down_cast<BinaryColumn*>(dst_nullable_column->data_column().get());
+        if (dst->is_nullable()) {
+            auto* dst_nullable_column = down_cast<NullableColumn*>(dst.get());
+            result = down_cast<BinaryColumn*>(dst_nullable_column->data_column_raw_ptr());
 
-            if (src[1]->is_nullable())
-                dst_nullable_column->null_column_data() =
-                        down_cast<const NullableColumn*>(src[1].get())->immutable_null_column_data();
-            else
+            if (src[1]->is_nullable()) {
+                auto null_datas = down_cast<const NullableColumn*>(src[1].get())->immutable_null_column_data();
+                dst_nullable_column->null_column_data().assign(null_datas.begin(), null_datas.end());
+
+            } else {
                 dst_nullable_column->null_column_data().resize(chunk_size, 0);
-
+            }
         } else {
-            result = down_cast<BinaryColumn*>((*dst).get());
+            result = down_cast<BinaryColumn*>(dst.get());
         }
 
         Bytes& bytes = result->get_bytes();
@@ -481,23 +773,53 @@ public:
         size_t old_size = bytes.size();
         for (size_t i = 0; i < chunk_size; ++i) {
             if (src[1]->is_null(i)) {
-                auto* dst_nullable_column = down_cast<NullableColumn*>((*dst).get());
+                auto* dst_nullable_column = down_cast<NullableColumn*>(dst.get());
                 dst_nullable_column->set_has_null(true);
                 result->get_offset()[i + 1] = old_size;
             } else {
-                Slice value = col_maxmin->get(i).get_slice();
-                size_t value_size = value.size;
-                size_t serde_size = src[0]->serialize_size(i);
-                size_t new_size = old_size + 2 * sizeof(size_t) + value_size + serde_size;
-                bytes.resize(new_size);
-                unsigned char* c = bytes.data() + old_size;
-                memcpy(c, &value_size, sizeof(size_t));
-                c += sizeof(size_t);
-                memcpy(c, value.data, value_size);
-                c += value_size;
-                memcpy(c, &serde_size, sizeof(size_t));
-                c += sizeof(size_t);
-                src[0]->serialize(i, c);
+                size_t new_size = old_size;
+                auto is_null = src[0]->only_null() || src[0]->is_null(i);
+                if (is_null) {
+                    if constexpr (State::not_filter_nulls_flag) {
+                        Slice value = col_maxmin->get_slice(i);
+                        size_t value_size = value.size;
+                        new_size = old_size + sizeof(size_t) + value_size + 1;
+                        bytes.resize(new_size);
+                        auto* p = bytes.data() + old_size;
+                        memcpy(p, &value_size, sizeof(size_t));
+                        p += sizeof(size_t);
+                        memcpy(p, value.get_data(), value_size);
+                        p += value_size;
+                        *p = 1;
+                    } else {
+                        auto* dst_nullable_column = down_cast<NullableColumn*>(dst.get());
+                        auto& dst_nulls = dst_nullable_column->null_column_data();
+                        dst_nulls[i] = DATUM_NULL;
+                        dst_nullable_column->set_has_null(true);
+                    }
+                } else {
+                    Slice value = col_maxmin->get_slice(i);
+                    size_t value_size = value.size;
+                    auto* data_column = ColumnHelper::get_data_column(src[0].get());
+                    size_t serde_size = data_column->serialize_size(i);
+                    new_size = old_size + 2 * sizeof(size_t) + value_size + serde_size;
+                    if constexpr (State::not_filter_nulls_flag) {
+                        new_size += 1;
+                    }
+                    bytes.resize(new_size);
+                    unsigned char* p = bytes.data() + old_size;
+                    memcpy(p, &value_size, sizeof(size_t));
+                    p += sizeof(size_t);
+                    memcpy(p, value.data, value_size);
+                    p += value_size;
+                    if constexpr (State::not_filter_nulls_flag) {
+                        *p = 0;
+                        p += 1;
+                    }
+                    memcpy(p, &serde_size, sizeof(size_t));
+                    p += sizeof(size_t);
+                    data_column->serialize(i, p);
+                }
                 result->get_offset()[i + 1] = new_size;
                 old_size = new_size;
             }
@@ -505,10 +827,63 @@ public:
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        if (this->data(state).buffer_result.empty())
-            to->append_default();
-        else
-            to->deserialize_and_append(this->data(state).buffer_result.data());
+        if constexpr (State::not_filter_nulls_flag) {
+            if (this->data(state).null_result) {
+                DCHECK(to->is_nullable());
+                to->append_default();
+            } else {
+                if (to->is_nullable()) {
+                    down_cast<NullableColumn*>(to)->null_column_raw_ptr()->append(DATUM_NOT_NULL);
+                }
+                ColumnHelper::get_data_column(to)->deserialize_and_append(this->data(state).buffer_result.data());
+            }
+        } else {
+            if (this->data(state).buffer_result.empty()) {
+                to->append_default();
+            } else {
+                if (to->is_nullable()) {
+                    down_cast<NullableColumn*>(to)->null_column_raw_ptr()->append(DATUM_NOT_NULL);
+                }
+                ColumnHelper::get_data_column(to)->deserialize_and_append(this->data(state).buffer_result.data());
+            }
+        }
+    }
+
+    void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
+                    size_t end) const override {
+        dst->resize(start);
+        if constexpr (State::not_filter_nulls_flag) {
+            if (this->data(state).null_result) {
+                DCHECK(dst->is_nullable());
+                for (size_t i = start; i < end; ++i) {
+                    dst->append_default();
+                }
+            } else {
+                if (dst->is_nullable()) {
+                    for (size_t i = start; i < end; ++i) {
+                        down_cast<NullableColumn*>(dst)->null_column_raw_ptr()->append(DATUM_NOT_NULL);
+                    }
+                }
+                for (size_t i = start; i < end; ++i) {
+                    ColumnHelper::get_data_column(dst)->deserialize_and_append(this->data(state).buffer_result.data());
+                }
+            }
+        } else {
+            if (this->data(state).buffer_result.empty()) {
+                for (size_t i = start; i < end; ++i) {
+                    dst->append_default();
+                }
+            } else {
+                if (dst->is_nullable()) {
+                    for (size_t i = start; i < end; ++i) {
+                        down_cast<NullableColumn*>(dst)->null_column_raw_ptr()->append(DATUM_NOT_NULL);
+                    }
+                }
+                for (size_t i = start; i < end; ++i) {
+                    ColumnHelper::get_data_column(dst)->deserialize_and_append(this->data(state).buffer_result.data());
+                }
+            }
+        }
     }
 
     std::string get_name() const override { return "maxmin_by"; }

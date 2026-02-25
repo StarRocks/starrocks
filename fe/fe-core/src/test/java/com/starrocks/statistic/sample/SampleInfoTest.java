@@ -16,11 +16,9 @@ package com.starrocks.statistic.sample;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.InsertStmt;
@@ -30,11 +28,16 @@ import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.type.AnyStructType;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.Type;
 import com.starrocks.utframe.StarRocksAssert;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -48,7 +51,7 @@ public class SampleInfoTest extends PlanTestBase {
     private static TabletSampleManager tabletSampleManager;
 
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
@@ -62,14 +65,14 @@ public class SampleInfoTest extends PlanTestBase {
                 "c6 struct<a int, b int, c struct<a int, b int>, d array<int>>) " +
                 "duplicate key(c0) distributed by hash(c0) buckets 1 " +
                 "properties('replication_num'='1');");
-        db = GlobalStateMgr.getCurrentState().getMetadata().getDb("test");
-        table = GlobalStateMgr.getCurrentState().getMetadata().getTable("test", "t_struct");
+        db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "t_struct");
         tabletSampleManager = TabletSampleManager.init(Maps.newHashMap(), table);
     }
 
     @Test
     public void generateComplexTypeColumnTask() {
-        SampleInfo sampleInfo = tabletSampleManager.generateSampleInfo("test", "t_struct");
+        SampleInfo sampleInfo = tabletSampleManager.generateSampleInfo();
         List<String> columnNames = table.getColumns().stream().map(Column::getName).collect(Collectors.toList());
         List<Type> columnTypes = table.getColumns().stream().map(Column::getType).collect(Collectors.toList());
         ColumnSampleManager columnSampleManager = ColumnSampleManager.init(columnNames, columnTypes, table,
@@ -78,17 +81,17 @@ public class SampleInfoTest extends PlanTestBase {
         String complexSql = sampleInfo.generateComplexTypeColumnTask(table.getId(), db.getId(), table.getName(),
                 db.getFullName(), columnSampleManager.getComplexTypeStats());
         List<StatementBase> stmt = SqlParser.parse(complexSql, connectContext.getSessionVariable());
-        Assert.assertTrue(stmt.get(0) instanceof InsertStmt);
+        Assertions.assertTrue(stmt.get(0) instanceof InsertStmt);
         InsertStmt insertStmt = (InsertStmt) stmt.get(0);
-        Assert.assertTrue(insertStmt.getQueryStatement().getQueryRelation() instanceof ValuesRelation);
+        Assertions.assertTrue(insertStmt.getQueryStatement().getQueryRelation() instanceof ValuesRelation);
         ValuesRelation valuesRelation = (ValuesRelation) insertStmt.getQueryStatement().getQueryRelation();
-        Assert.assertTrue(valuesRelation.getRows().size() == 3);
-        Assert.assertTrue(valuesRelation.getRows().get(0).size() == 12);
+        Assertions.assertTrue(valuesRelation.getRows().size() == 3);
+        Assertions.assertTrue(valuesRelation.getRows().get(0).size() == 12);
     }
 
     @Test
     public void generatePrimitiveTypeColumnTask() {
-        SampleInfo sampleInfo = tabletSampleManager.generateSampleInfo("test", "t_struct");
+        SampleInfo sampleInfo = tabletSampleManager.generateSampleInfo();
         List<String> columnNames = table.getColumns().stream().map(Column::getName).collect(Collectors.toList());
         List<Type> columnTypes = table.getColumns().stream().map(Column::getType).collect(Collectors.toList());
         ColumnSampleManager columnSampleManager = ColumnSampleManager.init(columnNames, columnTypes, table,
@@ -97,21 +100,22 @@ public class SampleInfoTest extends PlanTestBase {
         String primitiveSql = sampleInfo.generatePrimitiveTypeColumnTask(table.getId(), db.getId(), table.getName(),
                 db.getFullName(), columnStatsBatch.get(0), tabletSampleManager);
         List<StatementBase> stmt = SqlParser.parse(primitiveSql, connectContext.getSessionVariable());
-        Assert.assertTrue(stmt.get(0) instanceof InsertStmt);
+        Assertions.assertTrue(stmt.get(0) instanceof InsertStmt);
         InsertStmt insertStmt = (InsertStmt) stmt.get(0);
-        Assert.assertTrue(insertStmt.getQueryStatement().getQueryRelation() instanceof UnionRelation);
+        Assertions.assertTrue(insertStmt.getQueryStatement().getQueryRelation() instanceof UnionRelation);
         UnionRelation unionRelation = (UnionRelation) insertStmt.getQueryStatement().getQueryRelation();
-        Assert.assertTrue(unionRelation.getRelations().size() == 4);
-        Assert.assertTrue(unionRelation.getRelations().get(0) instanceof SelectRelation);
+        Assertions.assertEquals(2, unionRelation.getRelations().size());
+        Assertions.assertTrue(unionRelation.getRelations().get(0) instanceof SelectRelation);
         SelectRelation selectRelation = (SelectRelation) unionRelation.getRelations().get(0);
-        Assert.assertTrue(selectRelation.getSelectList().getItems().size() == 12);
+        Assertions.assertTrue(selectRelation.getSelectList().getItems().size() == 12);
     }
 
     @Test
     public void generateSubFieldTypeColumnTask() {
-        SampleInfo sampleInfo = tabletSampleManager.generateSampleInfo("test", "t_struct");
+        SampleInfo sampleInfo = tabletSampleManager.generateSampleInfo();
         List<String> columnNames = Lists.newArrayList("c1", "c4.b", "c6.c.b");
-        List<Type> columnTypes = Lists.newArrayList(Type.DATE, new ArrayType(Type.ANY_STRUCT), Type.INT);
+        List<Type> columnTypes = Lists.newArrayList(DateType.DATE,
+                new ArrayType(AnyStructType.ANY_STRUCT), IntegerType.INT);
         ColumnSampleManager columnSampleManager = ColumnSampleManager.init(columnNames, columnTypes, table,
                 sampleInfo);
         List<List<ColumnStats>> columnStatsBatch = columnSampleManager.splitPrimitiveTypeStats();
@@ -119,15 +123,15 @@ public class SampleInfoTest extends PlanTestBase {
                 db.getFullName(), columnStatsBatch.get(0), tabletSampleManager);
 
         List<StatementBase> stmt = SqlParser.parse(sql, connectContext.getSessionVariable());
-        Assert.assertTrue(stmt.get(0) instanceof InsertStmt);
+        Assertions.assertTrue(stmt.get(0) instanceof InsertStmt);
         InsertStmt insertStmt = (InsertStmt) stmt.get(0);
-        Assert.assertTrue(insertStmt.getQueryStatement().getQueryRelation() instanceof UnionRelation);
+        Assertions.assertTrue(insertStmt.getQueryStatement().getQueryRelation() instanceof UnionRelation);
         UnionRelation unionRelation = (UnionRelation) insertStmt.getQueryStatement().getQueryRelation();
-        Assert.assertTrue(unionRelation.getRelations().size() == 2);
+        Assertions.assertTrue(unionRelation.getRelations().size() == 2);
     }
 
 
-    @AfterClass
+    @AfterAll
     public static void afterClass() {
         FeConstants.runningUnitTest = false;
     }

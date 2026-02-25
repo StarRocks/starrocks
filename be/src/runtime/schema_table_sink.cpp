@@ -18,18 +18,20 @@
 #include <sstream>
 
 #include "agent/master_info.h"
+#include "base/brpc/ref_count_closure.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
-#include "column/datum.h"
 #include "common/configbase.h"
+#include "common/runtime_profile.h"
 #include "exec/tablet_info.h"
 #include "exprs/expr.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 #include "gutil/strings/substitute.h"
 #include "http/action/update_config_action.h"
 #include "runtime/runtime_state.h"
+#include "types/datum.h"
 #include "util/brpc_stub_cache.h"
-#include "util/defer_op.h"
-#include "util/ref_count_closure.h"
-#include "util/runtime_profile.h"
 #include "util/stack_util.h"
 
 namespace starrocks {
@@ -48,20 +50,20 @@ Status SchemaTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     _be_id = o_id.has_value() ? o_id.value() : -1;
     _nodes_info = std::make_unique<StarRocksNodesInfo>(schema_table_sink.nodes_info);
 
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, _t_output_expr, &_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprFactory::create_expr_trees(_pool, _t_output_expr, &_output_expr_ctxs, state));
     return Status::OK();
 }
 
 Status SchemaTableSink::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(DataSink::prepare(state));
-    RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_output_expr_ctxs, state));
     _profile =
             state->obj_pool()->add(new RuntimeProfile(strings::Substitute("SchemaTableSink (table=$0)", _table_name)));
     return Status::OK();
 }
 
 Status SchemaTableSink::open(RuntimeState* state) {
-    return Expr::open(_output_expr_ctxs, state);
+    return ExprExecutor::open(_output_expr_ctxs, state);
 }
 
 static Status set_config_remote(const StarRocksNodesInfo& nodes_info, int64_t be_id, const string& name,
@@ -150,7 +152,7 @@ Status SchemaTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
 }
 
 Status SchemaTableSink::close(RuntimeState* state, Status exec_status) {
-    Expr::close(_output_expr_ctxs, state);
+    ExprExecutor::close(_output_expr_ctxs, state);
     return Status::OK();
 }
 

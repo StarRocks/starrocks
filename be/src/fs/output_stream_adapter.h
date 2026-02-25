@@ -15,7 +15,7 @@
 #pragma once
 
 #include "fs/fs.h"
-#include "io/output_stream.h"
+#include "io/core/output_stream.h"
 namespace starrocks {
 // // Wrap a `starrocks::io::OutputStream` into `starrocks::WritableFile`.
 class OutputStreamAdapter : public WritableFile {
@@ -54,6 +54,10 @@ public:
     uint64_t size() const override { return _bytes_written; }
 
     const std::string& filename() const override { return _name; }
+
+    StatusOr<std::unique_ptr<io::NumericStatistics>> get_numeric_statistics() override {
+        return _os->get_numeric_statistics();
+    }
 
 private:
     std::unique_ptr<io::OutputStream> _os;

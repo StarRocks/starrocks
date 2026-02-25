@@ -14,8 +14,6 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -24,13 +22,13 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.apache.hadoop.util.Lists;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -64,11 +62,11 @@ public class SchemaScanNodeTest {
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         SystemTable table = new SystemTable(0, "fe_metrics", null, null, null);
         desc.setTable(table);
-        SchemaScanNode scanNode = new SchemaScanNode(new PlanNodeId(0), desc);
+        SchemaScanNode scanNode = new SchemaScanNode(new PlanNodeId(0), desc, WarehouseManager.DEFAULT_RESOURCE);
 
         scanNode.computeFeNodes();
 
-        Assert.assertNotNull(scanNode.getFrontends());
+        Assertions.assertNotNull(scanNode.getFrontends());
     }
 
     @Test
@@ -80,12 +78,7 @@ public class SchemaScanNodeTest {
             }
         };
 
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public List<Long> getAllComputeNodeIds(long warehouseId) {
-                return Lists.newArrayList(1L);
-            }
-        };
+        UtFrameUtils.mockInitWarehouseEnv();
 
         new MockUp<SystemInfoService>() {
             @Mock
@@ -99,7 +92,7 @@ public class SchemaScanNodeTest {
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         SystemTable table = new SystemTable(0, "fe_metrics", null, null, null);
         desc.setTable(table);
-        SchemaScanNode scanNode = new SchemaScanNode(new PlanNodeId(0), desc);
+        SchemaScanNode scanNode = new SchemaScanNode(new PlanNodeId(0), desc, WarehouseManager.DEFAULT_RESOURCE);
         scanNode.computeBeScanRanges();
     }
 
@@ -117,8 +110,8 @@ public class SchemaScanNodeTest {
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         SystemTable table = new SystemTable(0, "be_datacache_metrics", null, null, null);
         desc.setTable(table);
-        SchemaScanNode scanNode = new SchemaScanNode(new PlanNodeId(0), desc);
+        SchemaScanNode scanNode = new SchemaScanNode(new PlanNodeId(0), desc, WarehouseManager.DEFAULT_RESOURCE);
         scanNode.computeBeScanRanges();
-        Assert.assertEquals(1, scanNode.getScanRangeLocations(0).size());
+        Assertions.assertEquals(1, scanNode.getScanRangeLocations(0).size());
     }
 }

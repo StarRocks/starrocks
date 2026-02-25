@@ -45,6 +45,9 @@ import org.apache.logging.log4j.core.config.ConfigurationSource;
 import org.apache.logging.log4j.core.config.xml.XmlConfiguration;
 import org.apache.logging.log4j.core.lookup.Interpolator;
 import org.apache.logging.log4j.core.lookup.StrSubstitutor;
+import org.slf4j.bridge.SLF4JBridgeHandler;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -64,7 +67,7 @@ public class Log4jConfig extends XmlConfiguration {
             "    <Console name=\"ConsoleErr\" target=\"SYSTEM_ERR\" follow=\"true\">\n" +
             "      ${syslog_default_layout}\n" +
             "    </Console>\n" +
-            "    <RollingFile name=\"Sys\" fileName=\"${sys_log_dir}/fe.log\" filePattern=\"${sys_log_dir}/fe.log.${sys_file_pattern}-%i\">\n" +
+            "    <RollingFile name=\"Sys\" fileName=\"${sys_log_dir}/fe.log\" filePattern=\"${sys_log_dir}/fe.log.${sys_file_pattern}-%i${sys_file_postfix}\">\n" +
             "      ${syslog_default_layout}\n" +
             "      <Policies>\n" +
             "        <TimeBasedTriggeringPolicy/>\n" +
@@ -77,7 +80,7 @@ public class Log4jConfig extends XmlConfiguration {
             "        </Delete>\n" +
             "      </DefaultRolloverStrategy>\n" +
             "    </RollingFile>\n" +
-            "    <RollingFile name=\"SysWF\" fileName=\"${sys_log_dir}/fe.warn.log\" filePattern=\"${sys_log_dir}/fe.warn.log.${sys_file_pattern}-%i\">\n" +
+            "    <RollingFile name=\"SysWF\" fileName=\"${sys_log_dir}/fe.warn.log\" filePattern=\"${sys_log_dir}/fe.warn.log.${sys_file_pattern}-%i${sys_file_postfix}\">\n" +
             "      ${syslog_warning_layout}\n" +
             "      <Policies>\n" +
             "        <TimeBasedTriggeringPolicy/>\n" +
@@ -90,13 +93,13 @@ public class Log4jConfig extends XmlConfiguration {
             "        </Delete>\n" +
             "      </DefaultRolloverStrategy>\n" +
             "    </RollingFile>\n" +
-            "    <RollingFile name=\"Auditfile\" fileName=\"${audit_log_dir}/fe.audit.log\" filePattern=\"${audit_log_dir}/fe.audit.log.${audit_file_pattern}-%i\">\n" +
+            "    <RollingFile name=\"Auditfile\" fileName=\"${audit_log_dir}/fe.audit.log\" filePattern=\"${audit_log_dir}/fe.audit.log.${audit_file_pattern}-%i${audit_file_postfix}\">\n" +
             "      ${syslog_audit_layout}\n" +
             "      <Policies>\n" +
             "        <TimeBasedTriggeringPolicy/>\n" +
             "        <SizeBasedTriggeringPolicy size=\"${audit_roll_maxsize}MB\"/>\n" +
             "      </Policies>\n" +
-            "      <DefaultRolloverStrategy max=\"${sys_roll_num}\" fileIndex=\"min\">\n" +
+            "      <DefaultRolloverStrategy max=\"${audit_roll_num}\" fileIndex=\"min\">\n" +
             "        <Delete basePath=\"${audit_log_dir}/\" maxDepth=\"1\" followLinks=\"true\">\n" +
             "          <IfFileName glob=\"fe.audit.log.*\" />\n" +
             "          <IfLastModified age=\"${audit_log_delete_age}\" />\n" +
@@ -129,6 +132,7 @@ public class Log4jConfig extends XmlConfiguration {
             "        </Delete>\n" +
             "      </DefaultRolloverStrategy>\n" +
             "    </RollingFile>\n" +
+
             "    <RollingFile name=\"ProfileFile\" fileName=\"${profile_log_dir}/fe.profile.log\" filePattern=\"${profile_log_dir}/fe.profile.log.${profile_file_pattern}-%i\">\n" +
             "      ${syslog_profile_layout}\n" +
             "      <Policies>\n" +
@@ -142,6 +146,22 @@ public class Log4jConfig extends XmlConfiguration {
             "        </Delete>\n" +
             "      </DefaultRolloverStrategy>\n" +
             "    </RollingFile>\n" +
+
+            "    <RollingFile name=\"FeaturesFile\" fileName=\"${profile_log_dir}/fe.features.log\" " +
+            "       filePattern=\"${profile_log_dir}/fe.features.log.${feature_file_pattern}-%i\">\n" +
+            "      ${syslog_profile_layout}\n" +
+            "      <Policies>\n" +
+            "        <TimeBasedTriggeringPolicy/>\n" +
+            "        <SizeBasedTriggeringPolicy size=\"${feature_log_roll_size_mb}MB\"/>\n" +
+            "      </Policies>\n" +
+            "      <DefaultRolloverStrategy max=\"${feature_log_roll_num}\" fileIndex=\"min\">\n" +
+            "        <Delete basePath=\"${feature_log_dir}/\" maxDepth=\"1\" followLinks=\"true\">\n" +
+            "          <IfFileName glob=\"fe.features.log.*\" />\n" +
+            "          <IfLastModified age=\"${feature_log_delete_age}\" />\n" +
+            "        </Delete>\n" +
+            "      </DefaultRolloverStrategy>\n" +
+            "    </RollingFile>\n" +
+
             "    <RollingFile name=\"InternalFile\" fileName=\"${internal_log_dir}/fe.internal.log\" filePattern=\"${internal_log_dir}/fe.internal.log.${internal_file_pattern}-%i\">\n" +
             "      ${syslog_default_layout}\n" +
             "      <Policies>\n" +
@@ -175,8 +195,8 @@ public class Log4jConfig extends XmlConfiguration {
             "    <Logger name=\"profile\" level=\"INFO\" additivity=\"false\">\n" +
             "      <AppenderRef ref=\"ProfileFile\"/>\n" +
             "    </Logger>\n" +
-            "    <Logger name=\"org.apache.kafka\" level=\"WARN\"> \n" +
-            "      <AppenderRef ref=\"SysWF\"/>\n" +
+            "    <Logger name=\"features\" level=\"INFO\" additivity=\"false\">\n" +
+            "      <AppenderRef ref=\"FeaturesFile\"/>\n" +
             "    </Logger>\n" +
             "<!--REPLACED BY AUDIT AND VERBOSE MODULE NAMES-->" +
             "  </Loggers>\n" +
@@ -197,6 +217,14 @@ public class Log4jConfig extends XmlConfiguration {
     private static String[] dumpModules;
     private static String[] bigQueryModules;
     private static String[] internalModules;
+    private static boolean compressSysLog;
+    private static boolean compressAuditLog;
+    private static String[] warnModules;
+    private static String[] builtinWarnModules = {
+            "org.apache.kafka",
+            "org.apache.hudi",
+            "org.apache.hadoop.io.compress",
+    };
 
     @VisibleForTesting
     static String generateActiveLog4jXmlConfig() throws IOException {
@@ -212,6 +240,8 @@ public class Log4jConfig extends XmlConfiguration {
         properties.put("sys_log_delete_age", String.valueOf(Config.sys_log_delete_age));
         properties.put("sys_log_level", sysLogLevel);
         properties.put("sys_file_pattern", getIntervalPattern("sys_log_roll_interval", Config.sys_log_roll_interval));
+        properties.put("sys_file_postfix", compressSysLog ? ".gz" : "");
+        properties.put("audit_file_postfix", compressAuditLog ? ".gz" : "");
 
         // audit log config
         properties.put("audit_log_dir", Config.audit_log_dir);
@@ -245,6 +275,14 @@ public class Log4jConfig extends XmlConfiguration {
         properties.put("profile_file_pattern",
                 getIntervalPattern("profile_log_roll_interval", Config.profile_log_roll_interval));
 
+        // feature log config
+        properties.put("feature_log_dir", Config.feature_log_dir);
+        properties.put("feature_log_roll_size_mb", String.valueOf(Config.feature_log_roll_size_mb));
+        properties.put("feature_log_roll_num", String.valueOf(Config.feature_log_roll_num));
+        properties.put("feature_log_delete_age", String.valueOf(Config.feature_log_delete_age));
+        properties.put("feature_file_pattern",
+                getIntervalPattern("feature_log_roll_interval", Config.feature_log_roll_interval));
+
         // internal log config
         properties.put("internal_log_dir", Config.internal_log_dir);
         properties.put("internal_roll_maxsize", String.valueOf(Config.log_roll_size_mb));
@@ -256,61 +294,28 @@ public class Log4jConfig extends XmlConfiguration {
         // appender layout
         final String jsonLoggingConfValue = "json";
         if (jsonLoggingConfValue.equalsIgnoreCase(Config.sys_log_format)) {
-            // json logging
-            String jsonLayout =
-                    "<JsonTemplateLayout maxStringLength=\"104857600\" locationInfoEnabled=\"true\">\n" +
-                            "        <EventTemplate><![CDATA[\n{\n" +
-                            "   \"@timestamp\": {\n" +
-                            "       \"$resolver\": \"timestamp\",\n" +
-                            "       \"pattern\": {\n" +
-                            "         \"format\": \"yyyy-MM-dd HH:mm:ss.SSSXXX\",\n" +
-                            "         \"timeZone\": \"UTC\"\n" +
-                            "        }\n" +
-                            "      },\n" +
-                            "      \"level\": {\n" +
-                            "       \"$resolver\": \"level\",\n" +
-                            "       \"field\": \"name\"\n" +
-                            "      },\n" +
-                            "      \"thread.name\": {\n" +
-                            "       \"$resolver\": \"thread\",\n" +
-                            "       \"field\": \"name\"\n" +
-                            "      },\n" +
-                            "      \"thread.id\": {\n" +
-                            "       \"$resolver\": \"thread\",\n" +
-                            "       \"field\": \"id\"\n" +
-                            "      },\n" +
-                            "      \"method\": {\n" +
-                            "       \"$resolver\": \"logger\",\n" +
-                            "       \"field\": \"name\",\n" +
-                            "       \"shorten\": {\n" +
-                            "         \"length\": 1,\n" +
-                            "         \"strategy\": \"tail\"\n" +
-                            "        }\n" +
-                            "      },\n" +
-                            "      \"line\": {\n" +
-                            "        \"$resolver\": \"source\",\n" +
-                            "        \"field\": \"lineNumber\"\n" +
-                            "      },\n" +
-                            "      \"message\": {\n" +
-                            "        \"$resolver\": \"message\",\n" +
-                            "        \"stringfield\": \"true\"\n" +
-                            "      },\n" +
-                            "      \"exception\": {\n" +
-                            "        \"$resolver\": \"exception\",\n" +
-                            "        \"field\": \"stackTrace\",\n" +
-                            "        \"stackTrace\": {\n" +
-                            "          \"stringified\": true,\n" +
-                            "          \"full\": true\n" +
-                            "        }\n" +
-                            "      }" +
-                            "      }\n]]></EventTemplate>\n" +
-                            "</JsonTemplateLayout>";
-            properties.put("syslog_default_layout", jsonLayout);
-            properties.put("syslog_warning_layout", jsonLayout);
-            properties.put("syslog_audit_layout", jsonLayout);
-            properties.put("syslog_dump_layout", jsonLayout);
-            properties.put("syslog_bigquery_layout", jsonLayout);
-            properties.put("syslog_profile_layout", jsonLayout);
+            // json logging, use `'` and replace them to `"` in batch to avoid too many escapes
+            String jsonConfig =
+                    "{'@timestamp':{'$resolver':'timestamp','pattern':{'format':'yyyy-MM-dd HH:mm:ss.SSSXXX','timeZone':'UTC'}}," +
+                            "'level':{'$resolver':'level','field':'name'}," +
+                            "'thread.name':{'$resolver':'thread','field':'name'}," +
+                            "'thread.id':{'$resolver':'thread','field':'id'}," +
+                            "'line':{'$resolver':'source','field':'lineNumber'}," +
+                            "'file':{'$resolver':'source','field':'fileName'}," +
+                            "'method':{'$resolver':'source','field':'methodName'}," +
+                            "'message':{'$resolver':'message','stringfield':'true'}," +
+                            "'exception':{'$resolver':'exception','field':'stackTrace','stackTrace':{'stringified':true,'full':true}}}";
+            jsonConfig = jsonConfig.replace("'", "\"");
+            String jsonLayoutFormatter = "<JsonTemplateLayout maxStringLength=\"%d\" locationInfoEnabled=\"true\">\n" +
+                    "<EventTemplate><![CDATA[" + jsonConfig + "]]></EventTemplate>\n" + "</JsonTemplateLayout>";
+            String jsonLayoutDefault = String.format(jsonLayoutFormatter, Config.sys_log_json_max_string_length);
+            String jsonLayoutProfile = String.format(jsonLayoutFormatter, Config.sys_log_json_profile_max_string_length);
+            properties.put("syslog_default_layout", jsonLayoutDefault);
+            properties.put("syslog_warning_layout", jsonLayoutDefault);
+            properties.put("syslog_audit_layout", jsonLayoutDefault);
+            properties.put("syslog_dump_layout", jsonLayoutDefault);
+            properties.put("syslog_bigquery_layout", jsonLayoutDefault);
+            properties.put("syslog_profile_layout", jsonLayoutProfile);
         } else {
             // fallback to plaintext logging
             properties.put("syslog_default_layout",
@@ -333,7 +338,31 @@ public class Log4jConfig extends XmlConfiguration {
     }
 
     private static void reconfig() throws IOException {
+
         String xmlConfTemplate = generateActiveLog4jXmlConfig();
+
+        SLF4JBridgeHandler.removeHandlersForRootLogger();
+        SLF4JBridgeHandler.install();
+
+        Level targetJulLevel = Level.INFO;
+        if (sysLogLevel != null) {
+            String normalizedLevel = sysLogLevel.toUpperCase();
+            if (DEBUG_LEVELS.contains(normalizedLevel)) {
+                if ("DEBUG".equals(normalizedLevel)) {
+                    targetJulLevel = Level.FINE;
+                } else if ("INFO".equals(normalizedLevel)) {
+                    targetJulLevel = Level.INFO;
+                } else if ("WARN".equals(normalizedLevel)) {
+                    targetJulLevel = Level.WARNING;
+                } else if ("ERROR".equals(normalizedLevel) || "FATAL".equals(normalizedLevel)) {
+                    targetJulLevel = Level.SEVERE;
+                }
+            } else {
+                targetJulLevel = Level.INFO;
+            }
+        }
+        Logger.getLogger("").setLevel(targetJulLevel);
+
         if (!FeConstants.runningUnitTest && !FeConstants.isReplayFromQueryDump) {
             System.out.println("=====");
             System.out.println(xmlConfTemplate);
@@ -377,6 +406,12 @@ public class Log4jConfig extends XmlConfiguration {
         for (String s : bigQueryModules) {
             sb.append("    <Logger name='big_query.").append(s).append("' level='INFO'/>\n");
         }
+        for (String s : builtinWarnModules) {
+            sb.append("    <Logger name='").append(s).append("' level='WARN'><AppenderRef ref='SysWF'/></Logger>\n");
+        }
+        for (String s : warnModules) {
+            sb.append("    <Logger name='").append(s).append("' level='WARN'><AppenderRef ref='SysWF'/></Logger>\n");
+        }
 
         String newXmlConfTemplate = APPENDER_TEMPLATE;
         newXmlConfTemplate += log2Console ? CONSOLE_LOGGER_TEMPLATE : FILE_LOGGER_TEMPLATE;
@@ -411,6 +446,9 @@ public class Log4jConfig extends XmlConfiguration {
         dumpModules = Config.dump_log_modules;
         bigQueryModules = Config.big_query_log_modules;
         internalModules = Config.internal_log_modules;
+        compressSysLog = Config.sys_log_enable_compress;
+        compressAuditLog = Config.audit_log_enable_compress;
+        warnModules = Config.sys_log_warn_modules;
         reconfig();
     }
 

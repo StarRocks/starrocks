@@ -22,26 +22,14 @@ namespace starrocks {
 class ColumnTestHelper {
 public:
     template <class T>
-    static ColumnPtr build_column(const std::vector<T>& values) {
-        if constexpr (std::is_same_v<T, uint8_t>) {
-            auto data = UInt8Column::create();
-            data->append_numbers(values.data(), values.size() * sizeof(T));
-            return data;
-        } else if constexpr (std::is_same_v<T, int32_t>) {
-            auto data = Int32Column::create();
-            data->append_numbers(values.data(), values.size() * sizeof(T));
-            return data;
-        } else if constexpr (std::is_same_v<T, int64_t>) {
-            auto data = Int64Column::create();
+    static MutableColumnPtr build_column(const std::vector<T>& values) {
+        if constexpr (std::is_integral_v<T> || std::is_floating_point_v<T>) {
+            auto data = ColumnTraits<T>::ColumnType::create();
             data->append_numbers(values.data(), values.size() * sizeof(T));
             return data;
         } else if constexpr (std::is_same_v<T, Slice>) {
             auto data = BinaryColumn::create();
-            data->append_strings(values);
-            return data;
-        } else if constexpr (std::is_same_v<T, double>) {
-            auto data = DoubleColumn ::create();
-            data->append_numbers(values.data(), values.size() * sizeof(T));
+            data->append_strings(values.data(), values.size());
             return data;
         } else {
             throw std::runtime_error("Type is not supported in build_column:%s" + std::string(typeid(T).name()));
@@ -49,7 +37,14 @@ public:
     }
 
     template <class T>
-    static ColumnPtr build_nullable_column(const std::vector<T>& values, const std::vector<uint8_t>& nullflags) {
+    static MutableColumnPtr build_nullable_column(const std::vector<T>& values) {
+        auto null_column = NullColumn::create(values.size(), 0);
+        auto data_column = build_column<T>(values);
+        return NullableColumn::create(std::move(data_column), std::move(null_column));
+    }
+
+    template <class T>
+    static MutableColumnPtr build_nullable_column(const std::vector<T>& values, const std::vector<uint8_t>& nullflags) {
         DCHECK_EQ(values.size(), nullflags.size());
         auto null = NullColumn::create();
         null->append_numbers(nullflags.data(), nullflags.size());
@@ -58,7 +53,7 @@ public:
     }
 
     template <LogicalType TYPE>
-    static ColumnPtr create_nullable_column() {
+    static MutableColumnPtr create_nullable_column() {
         return NullableColumn::create(RunTimeColumnType<TYPE>::create(), RunTimeColumnType<TYPE_NULL>::create());
     }
 };

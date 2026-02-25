@@ -61,13 +61,20 @@ public:
 
     Status next_batch(const SparseRange<>& range, Column* dst) override;
 
+    Status next_batch_with_filter(const SparseRange<>& range, Column* dst,
+                                  const std::vector<const ColumnPredicate*>& compound_and_predicates,
+                                  Buffer<uint8_t>* selection, Buffer<uint16_t>* selected_idx,
+                                  size_t* processed_rows) override;
+
     ordinal_t get_current_ordinal() const override { return _current_ordinal; }
 
     ordinal_t num_rows() const override { return _reader->num_rows(); }
 
+    bool has_zone_map() const override { return _reader->has_zone_map(); }
+
     Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicate,
                                       const ColumnPredicate* del_predicate, SparseRange<>* range,
-                                      CompoundNodeType pred_relationn) override;
+                                      CompoundNodeType pred_relation, const Range<>* src_range = nullptr) override;
 
     bool has_original_bloom_filter_index() const override;
     bool has_ngram_bloom_filter_index() const override;
@@ -94,6 +101,8 @@ public:
 
     ColumnReader* get_column_reader() override { return _reader; }
 
+    Status null_count(size_t* count) override;
+
     bool is_nullable();
 
     int64_t element_ordinal() const override { return _element_ordinal; }
@@ -101,6 +110,21 @@ public:
     // only work when all_page_dict_encoded was true.
     // used to acquire load local dict
     int dict_size() override;
+
+    StatusOr<std::vector<std::pair<int64_t, int64_t>>> get_io_range_vec(const SparseRange<>& range,
+                                                                        Column* dst) override;
+
+    std::string name() const override { return "ScalarColumnIterator"; }
+
+    void reserve_col(size_t n, Column* column) override {
+        if (_page != nullptr) {
+            _page->reserve_col(n, column);
+        } else {
+            column->reserve(n);
+        }
+    }
+
+    bool support_push_down_predicate(const std::vector<const ColumnPredicate*>& compound_and_predicates) override;
 
 private:
     static Status _seek_to_pos_in_page(ParsedPage* page, ordinal_t offset_in_page);
@@ -125,13 +149,17 @@ private:
     template <LogicalType Type>
     Status _fetch_all_dict_words(std::vector<Slice>* words) const;
 
-    template <typename ParseFunc>
-    Status _fetch_by_rowid(const rowid_t* rowids, size_t size, Column* values, ParseFunc&& page_parse);
+    template <typename RowidReaderFunc, typename RangeReaderFunc>
+    Status _fetch_by_rowid_helper(const rowid_t* rowids, size_t size, Column* values, RowidReaderFunc&& rowid_reader,
+                                  RangeReaderFunc&& range_reader);
 
     template <LogicalType Type>
     Status _load_dict_page();
 
     bool _contains_deleted_row(uint32_t page_index) const;
+
+    template <typename ReadFunc>
+    Status _next_batch_template(const SparseRange<>& range, Column* dst, ReadFunc&& read_func);
 
     ColumnReader* _reader;
 
@@ -143,9 +171,6 @@ private:
 
     // keep dict page decoder
     std::unique_ptr<PageDecoder> _dict_decoder;
-
-    // keep dict page handle to avoid released
-    PageHandle _dict_page_handle;
 
     // page iterator used to get next page when current page is finished.
     // This value will be reset when a new seek is issued

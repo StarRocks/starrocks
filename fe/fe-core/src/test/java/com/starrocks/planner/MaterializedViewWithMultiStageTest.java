@@ -14,20 +14,21 @@
 
 package com.starrocks.planner;
 
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 /**
  * Run all tests in MaterializedViewTest in multi stage mode.
  */
 public class MaterializedViewWithMultiStageTest extends MaterializedViewTest {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         MaterializedViewTest.beforeClass();
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
     }
 
     @Override
+    @Test
     public void testJoinDeriveRewrite() {
         // ignore test case
     }
@@ -35,13 +36,12 @@ public class MaterializedViewWithMultiStageTest extends MaterializedViewTest {
     @Test
     public void testViewDeltaJoinUKFK17() {
         // set join derive rewrite in view delta
-        setTracLogModule("Optimizer");
         String mv = "select emps.empid, emps.deptno, dependents.name from emps\n"
                 + "left outer join depts b on (emps.deptno=b.deptno)\n"
-                + "left outer join dependents using (empid)";
+                + "left outer join dependents on (emps.empid=dependents.empid)";
 
         String query = "select emps.empid, dependents.name from emps\n"
-                + " join dependents using (empid)\n"
+                + " join dependents on (emps.empid=dependents.empid)\n"
                 + "where dependents.name = 'name1'";
         testRewriteOK(mv, query);
     }

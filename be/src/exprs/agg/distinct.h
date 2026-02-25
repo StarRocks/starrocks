@@ -16,28 +16,27 @@
 
 #include <algorithm>
 #include <cstring>
-#include <limits>
 #include <string>
-#include <type_traits>
 
+#include "base/phmap/phmap_dump.h"
+#include "base/string/slice.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
-#include "column/fixed_length_column.h"
+#include "column/column_helper.h"
 #include "column/hash_set.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
+#include "exec/aggregator_fwd.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/aggregate_state_allocator.h"
+#include "exprs/agg/avg.h"
 #include "exprs/agg/sum.h"
 #include "exprs/function_context.h"
 #include "gen_cpp/Data_types.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
-#include "runtime/memory/counting_allocator.h"
 #include "thrift/protocol/TJSONProtocol.h"
-#include "util/phmap/phmap_dump.h"
-#include "util/slice.h"
 
 namespace starrocks {
 
@@ -60,7 +59,7 @@ struct DistinctAggregateState<LT, SumLT, FixedLengthLTGuard<LT>> {
 
     void prefetch(T key) { set.prefetch(key); }
 
-    int64_t disctint_count() const { return set.size(); }
+    int64_t distinct_count() const { return set.size(); }
 
     size_t serialize_size() const {
         size_t size = set.dump_bound();
@@ -70,7 +69,7 @@ struct DistinctAggregateState<LT, SumLT, FixedLengthLTGuard<LT>> {
 
     void serialize(uint8_t* dst) const {
         phmap::InMemoryOutput output(reinterpret_cast<char*>(dst));
-        set.dump(output);
+        [[maybe_unused]] auto err = set.dump(output);
         DCHECK(output.length() == set.dump_bound());
     }
 
@@ -78,10 +77,10 @@ struct DistinctAggregateState<LT, SumLT, FixedLengthLTGuard<LT>> {
         phmap::InMemoryInput input(reinterpret_cast<const char*>(src));
         auto old_size = set.size();
         if (old_size == 0) {
-            set.load(input);
+            [[maybe_unused]] auto err = set.load(input);
         } else {
             MyHashSet set_src;
-            set_src.load(input);
+            [[maybe_unused]] auto err = set_src.load(input);
             set.merge(set_src);
         }
     }
@@ -102,52 +101,168 @@ struct DistinctAggregateState<LT, SumLT, FixedLengthLTGuard<LT>> {
     MyHashSet set;
 };
 
-template <LogicalType LT, LogicalType SumLT>
-struct DistinctAggregateState<LT, SumLT, StringLTGuard<LT>> {
-    DistinctAggregateState() = default;
+struct AdaptiveSliceHashSet {
     using KeyType = typename SliceHashSet::key_type;
 
-    void update(MemPool* mem_pool, Slice raw_key) {
+    AdaptiveSliceHashSet() { set = std::make_shared<SliceHashSetWithAggStateAllocator>(); }
+
+    void clear() {
+        set = std::make_shared<SliceHashSetWithAggStateAllocator>();
+        two_level_set.reset();
+        distinct_size = 0;
+    }
+
+    void try_convert_to_two_level(MemPool* mem_pool) {
+        if (distinct_size % 65536 == 0 && mem_pool->total_allocated_bytes() >= agg::two_level_memory_threshold) {
+            two_level_set = std::make_shared<SliceTwoLevelHashSetWithAggStateAllocator>();
+            two_level_set->reserve(set->capacity());
+            two_level_set->insert(set->begin(), set->end());
+            set.reset();
+        }
+    }
+
+    void emplace(MemPool* mem_pool, Slice raw_key) {
         KeyType key(raw_key);
-        set.template lazy_emplace(key, [&](const auto& ctor) {
-            uint8_t* pos = mem_pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
-            assert(pos != nullptr);
-            memcpy(pos, key.data, key.size);
-            ctor(pos, key.size, key.hash);
-        });
+        if (set != nullptr) {
+#if defined(__clang__) && (__clang_major__ >= 16)
+            set->lazy_emplace(key, [&](const auto& ctor) {
+#else
+            set->template lazy_emplace(key, [&](const auto& ctor) {
+#endif
+                uint8_t* pos = mem_pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
+                assert(pos != nullptr);
+                memcpy(pos, key.data, key.size);
+                ctor(pos, key.size, key.hash);
+                distinct_size++;
+                try_convert_to_two_level(mem_pool);
+            });
+        } else {
+#if defined(__clang__) && (__clang_major__ >= 16)
+            two_level_set->lazy_emplace(key, [&](const auto& ctor) {
+#else
+            two_level_set->template lazy_emplace(key, [&](const auto& ctor) {
+#endif
+                uint8_t* pos = mem_pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
+                assert(pos != nullptr);
+                memcpy(pos, key.data, key.size);
+                ctor(pos, key.size, key.hash);
+                distinct_size++;
+            });
+        }
     }
 
-    void update_with_hash(MemPool* mem_pool, Slice raw_key, size_t hash) {
+    void lazy_emplace_with_hash(MemPool* mem_pool, Slice raw_key, size_t hash) {
         KeyType key(reinterpret_cast<uint8_t*>(raw_key.data), raw_key.size, hash);
-        set.template lazy_emplace_with_hash(key, hash, [&](const auto& ctor) {
-            uint8_t* pos = mem_pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
-            assert(pos != nullptr);
-            memcpy(pos, key.data, key.size);
-            ctor(pos, key.size, key.hash);
-        });
+        if (set != nullptr) {
+#if defined(__clang__) && (__clang_major__ >= 16)
+            set->lazy_emplace_with_hash(key, hash, [&](const auto& ctor) {
+#else
+            set->template lazy_emplace_with_hash(key, hash, [&](const auto& ctor) {
+#endif
+                uint8_t* pos = mem_pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
+                assert(pos != nullptr);
+                memcpy(pos, key.data, key.size);
+                ctor(pos, key.size, key.hash);
+                distinct_size++;
+                try_convert_to_two_level(mem_pool);
+            });
+        } else {
+#if defined(__clang__) && (__clang_major__ >= 16)
+            two_level_set->lazy_emplace_with_hash(key, hash, [&](const auto& ctor) {
+#else
+            two_level_set->template lazy_emplace_with_hash(key, hash, [&](const auto& ctor) {
+#endif
+                uint8_t* pos = mem_pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
+                assert(pos != nullptr);
+                memcpy(pos, key.data, key.size);
+                ctor(pos, key.size, key.hash);
+                distinct_size++;
+            });
+        }
     }
 
-    int64_t disctint_count() const { return set.size(); }
+    void prefetch_hash(size_t hash_value) {
+        if (set != nullptr) {
+            set->prefetch_hash(hash_value);
+        } else {
+            two_level_set->prefetch_hash(hash_value);
+        }
+    }
 
-    size_t serialize_size() const {
+    int64_t serialize_size() const {
         size_t size = 0;
-        for (auto& key : set) {
-            size += key.size + sizeof(uint32_t);
+        if (set != nullptr) {
+            for (auto& key : *set) {
+                size += key.size + sizeof(uint32_t);
+            }
+        } else {
+            for (auto& key : *two_level_set) {
+                size += key.size + sizeof(uint32_t);
+            }
         }
         return size;
     }
 
-    // TODO(kks): If we put all string key to one continue memory,
-    // then we could only one memcpy.
     void serialize(uint8_t* dst) const {
-        for (auto& key : set) {
-            auto size = (uint32_t)key.size;
-            memcpy(dst, &size, sizeof(uint32_t));
-            dst += sizeof(uint32_t);
-            memcpy(dst, key.data, key.size);
-            dst += key.size;
+        if (set != nullptr) {
+            for (auto& key : *set) {
+                auto size = (uint32_t)key.size;
+                memcpy(dst, &size, sizeof(uint32_t));
+                dst += sizeof(uint32_t);
+                memcpy(dst, key.data, key.size);
+                dst += key.size;
+            }
+        } else {
+            for (auto& key : *two_level_set) {
+                auto size = (uint32_t)key.size;
+                memcpy(dst, &size, sizeof(uint32_t));
+                dst += sizeof(uint32_t);
+                memcpy(dst, key.data, key.size);
+                dst += key.size;
+            }
         }
     }
+
+    void fill_vector(std::vector<std::string>& values) const {
+        if (set != nullptr) {
+            for (const auto& v : *set) {
+                values.emplace_back(v.data, v.size);
+            }
+        } else {
+            for (const auto& v : *two_level_set) {
+                values.emplace_back(v.data, v.size);
+            }
+        }
+    }
+
+    int64_t size() const { return distinct_size; }
+
+    std::shared_ptr<SliceHashSetWithAggStateAllocator> set;
+    std::shared_ptr<SliceTwoLevelHashSetWithAggStateAllocator> two_level_set;
+    int64_t distinct_size = 0;
+
+    HashOnSliceWithHash hash_function() const { return HashOnSliceWithHash(); }
+};
+
+template <LogicalType LT, LogicalType SumLT>
+struct DistinctAggregateState<LT, SumLT, StringOrBinaryGuard<LT>> {
+    DistinctAggregateState() = default;
+    using KeyType = typename SliceHashSet::key_type;
+
+    void reset() { set.clear(); }
+    void update(MemPool* mem_pool, Slice raw_key) { set.emplace(mem_pool, raw_key); }
+
+    void update_with_hash(MemPool* mem_pool, Slice raw_key, size_t hash) {
+        set.lazy_emplace_with_hash(mem_pool, raw_key, hash);
+    }
+
+    int64_t distinct_count() const { return set.distinct_size; }
+
+    size_t serialize_size() const { return set.serialize_size(); }
+
+    // TODO(kks): If we put all string key to one continue memory,
+    // then we could only one memcpy.
+    void serialize(uint8_t* dst) const { return set.serialize(dst); }
 
     void deserialize_and_merge(MemPool* mem_pool, const uint8_t* src, size_t len) {
         const uint8_t* end = src + len;
@@ -156,39 +271,52 @@ struct DistinctAggregateState<LT, SumLT, StringLTGuard<LT>> {
             memcpy(&size, src, sizeof(uint32_t));
             src += sizeof(uint32_t);
             Slice raw_key(src, size);
-            KeyType key(raw_key);
             // we only memcpy when the key is new
-            set.template lazy_emplace(key, [&](const auto& ctor) {
-                uint8_t* pos = mem_pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
-                assert(pos != nullptr);
-                memcpy(pos, key.data, key.size);
-                ctor(pos, key.size, key.hash);
-            });
+            set.emplace(mem_pool, raw_key);
             src += size;
         }
         DCHECK(src == end);
     }
 
-    SliceHashSetWithAggStateAllocator set;
+    AdaptiveSliceHashSet set;
 };
 
 // use a different way to do serialization to gain performance.
-template <LogicalType LT, LogicalType SumLT, typename = guard::Guard>
-struct DistinctAggregateStateV2 {};
+template <LogicalType LT, LogicalType SumLT, bool compute_sum = false, typename = guard::Guard>
+struct DistinctAggregateStateV2Base {};
 
-template <LogicalType LT, LogicalType SumLT>
-struct DistinctAggregateStateV2<LT, SumLT, FixedLengthLTGuard<LT>> {
+template <LogicalType LT, LogicalType SumLT, bool compute_sum>
+struct DistinctAggregateStateV2Base<LT, SumLT, compute_sum, FixedLengthLTGuard<LT>> {
     using T = RunTimeCppType<LT>;
     using SumType = RunTimeCppType<SumLT>;
     using MyHashSet = HashSetWithAggStateAllocator<T>;
 
-    void update(T key) { set.insert(key); }
+    void reset() {
+        set.clear();
+        sum = SumType{};
+    }
 
-    void update_with_hash([[maybe_unused]] MemPool* mempool, T key, size_t hash) { set.emplace_with_hash(hash, key); }
+    void update(T key) {
+        [[maybe_unused]] const auto result = set.insert(key);
+        if constexpr (compute_sum) {
+            if (result.second) {
+                sum += key;
+            }
+        }
+    }
+
+    void update_with_hash([[maybe_unused]] MemPool* mempool, T key, size_t hash) {
+        [[maybe_unused]] const auto result = set.emplace_with_hash(hash, key);
+        if constexpr (compute_sum) {
+            if (result.second) {
+                sum += key;
+            }
+        }
+    }
 
     void prefetch(T key) { set.prefetch(key); }
 
-    int64_t disctint_count() const { return set.size(); }
+    int64_t distinct_count() const { return set.size(); }
 
     size_t serialize_size() const {
         size_t size = set.size() * sizeof(T) + sizeof(size_t);
@@ -234,7 +362,7 @@ struct DistinctAggregateStateV2<LT, SumLT, FixedLengthLTGuard<LT>> {
     }
 
     // NOLINTBEGIN
-    ~DistinctAggregateStateV2() {
+    ~DistinctAggregateStateV2Base() {
 #ifdef PHMAP_USE_CUSTOM_INFO_HANDLE
         const auto& info = set.infoz();
         VLOG_FILE << "HashSet Info: # of insert = " << info.insert_number
@@ -244,18 +372,45 @@ struct DistinctAggregateStateV2<LT, SumLT, FixedLengthLTGuard<LT>> {
     // NOLINTEND
 
     MyHashSet set;
+    SumType sum{};
 };
 
 template <LogicalType LT, LogicalType SumLT>
-struct DistinctAggregateStateV2<LT, SumLT, StringLTGuard<LT>> : public DistinctAggregateState<LT, SumLT> {};
+struct DistinctAggregateStateV2Base<LT, SumLT, false, StringOrBinaryGuard<LT>>
+        : public DistinctAggregateState<LT, SumLT> {};
 
-// Dear god this template class as template parameter kills me!
+template <LogicalType LT, LogicalType SumLT, typename = guard::Guard>
+struct DistinctAggregateStateV2 : public DistinctAggregateStateV2Base<LT, SumLT, false> {};
+
+template <LogicalType LT, LogicalType SumLT, bool compute_sum, typename = guard::Guard>
+struct FusedMultiDistinctAggregateState : public DistinctAggregateStateV2Base<LT, SumLT, compute_sum> {
+    using CppType = RunTimeCppType<LT>;
+    using Base = DistinctAggregateStateV2Base<LT, SumLT, compute_sum>;
+    using Base::reset;
+    using Base::update;
+    MemPool mem_pool;
+
+    void update(CppType key) {
+        if constexpr (IsSlice<CppType>) {
+            this->Base::update(&mem_pool, key);
+        } else {
+            this->Base::update(key);
+        }
+    }
+
+    void reset() {
+        this->Base::reset();
+        mem_pool.clear();
+    }
+};
+
 template <LogicalType LT, LogicalType SumLT,
           template <LogicalType X, LogicalType Y, typename = guard::Guard> class TDistinctAggState,
           AggDistinctType DistinctType, typename T = RunTimeCppType<LT>>
-class TDistinctAggregateFunction : public AggregateFunctionBatchHelper<
-                                           TDistinctAggState<LT, SumLT>,
-                                           TDistinctAggregateFunction<LT, SumLT, TDistinctAggState, DistinctType, T>> {
+class TDistinctAggregateFunction final
+        : public AggregateFunctionBatchHelper<
+                  TDistinctAggState<LT, SumLT>,
+                  TDistinctAggregateFunction<LT, SumLT, TDistinctAggState, DistinctType, T>> {
 public:
     using ColumnType = RunTimeColumnType<LT>;
 
@@ -264,7 +419,8 @@ public:
         if constexpr (IsSlice<T>) {
             this->data(state).update(ctx->mem_pool(), column->get_slice(row_num));
         } else {
-            this->data(state).update(column->get_data()[row_num]);
+            const auto immutable_data = column->immutable_data();
+            this->data(state).update(immutable_data[row_num]);
         }
     }
 
@@ -281,7 +437,7 @@ public:
         };
 
         std::vector<CacheEntry> cache(chunk_size);
-        const auto& container_data = column->get_data();
+        const auto container_data = GetContainer<LT>::get_data(column);
         for (size_t i = 0; i < chunk_size; ++i) {
             size_t hash_value = agg_state.set.hash_function()(container_data[i]);
             cache[i] = CacheEntry{hash_value};
@@ -312,7 +468,7 @@ public:
         };
 
         std::vector<CacheEntry> cache(chunk_size);
-        const auto& container_data = column->get_data();
+        const auto container_data = GetContainer<LT>::get_data(column);
         for (size_t i = 0; i < chunk_size; ++i) {
             AggDataPtr state = states[i] + state_offset;
             auto& agg_state = this->data(state);
@@ -362,9 +518,9 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
-        DCHECK((*dst)->is_binary());
-        auto* dst_column = down_cast<BinaryColumn*>((*dst).get());
+                                     MutableColumnPtr& dst) const override {
+        DCHECK(dst->is_binary());
+        auto* dst_column = down_cast<BinaryColumn*>(dst.get());
         Bytes& bytes = dst_column->get_bytes();
 
         const auto* src_column = down_cast<const ColumnType*>(src[0].get());
@@ -389,7 +545,7 @@ public:
                 old_size += key.size;
                 dst_column->get_offset()[i + 1] = new_size;
             } else {
-                T key = src_column->get_data()[i];
+                T key = src_column->immutable_data()[i];
 
                 size_t new_size = old_size + sizeof(T);
                 bytes.resize(new_size);
@@ -404,7 +560,7 @@ public:
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(!to->is_nullable());
         if constexpr (DistinctType == AggDistinctType::COUNT) {
-            down_cast<Int64Column*>(to)->append(this->data(state).disctint_count());
+            down_cast<Int64Column*>(to)->append(this->data(state).distinct_count());
         } else if constexpr (DistinctType == AggDistinctType::SUM && is_starrocks_arithmetic<T>::value) {
             to->append_datum(Datum(this->data(state).sum_distinct()));
         }
@@ -420,33 +576,41 @@ public:
 };
 
 template <LogicalType LT, AggDistinctType DistinctType, typename T = RunTimeCppType<LT>>
-class DistinctAggregateFunction
-        : public TDistinctAggregateFunction<LT, SumResultLT<LT>, DistinctAggregateState, DistinctType, T> {};
+using DistinctAggregateFunction =
+        TDistinctAggregateFunction<LT, SumResultLT<LT>, DistinctAggregateState, DistinctType, T>;
 
 template <LogicalType LT, AggDistinctType DistinctType, typename T = RunTimeCppType<LT>>
-class DistinctAggregateFunctionV2
-        : public TDistinctAggregateFunction<LT, SumResultLT<LT>, DistinctAggregateStateV2, DistinctType, T> {};
+using DistinctAggregateFunctionV2 =
+        TDistinctAggregateFunction<LT, SumResultLT<LT>, DistinctAggregateStateV2, DistinctType, T>;
 
 template <LogicalType LT, AggDistinctType DistinctType, typename T = RunTimeCppType<LT>>
-class DecimalDistinctAggregateFunction
-        : public TDistinctAggregateFunction<LT, TYPE_DECIMAL128, DistinctAggregateStateV2, DistinctType, T> {};
+using DecimalDistinctAggregateFunction =
+        TDistinctAggregateFunction<LT, lt_is_decimal256<LT> ? TYPE_DECIMAL256 : TYPE_DECIMAL128,
+                                   DistinctAggregateStateV2, DistinctType, T>;
 
 // now we only support String
 struct DictMergeState : DistinctAggregateStateV2<TYPE_VARCHAR, SumResultLT<TYPE_VARCHAR>> {
     DictMergeState() = default;
 
+    void update_over_limit() { over_limit = set.size() > dict_threshold; }
+
     bool over_limit = false;
+    int dict_threshold = 255;
 };
 
 class DictMergeAggregateFunction final
         : public AggregateFunctionBatchHelper<DictMergeState, DictMergeAggregateFunction> {
 public:
-    static constexpr int DICT_DECODE_MAX_SIZE = 256;
-    static constexpr int FAKE_DICT_SIZE = DICT_DECODE_MAX_SIZE + 1;
+    void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const override {
+        AggregateFunctionBatchHelper::create(ctx, ptr);
+        if (ctx->get_num_constant_columns() > 1) {
+            this->data(ptr).dict_threshold = ctx->get_constant_column(1)->get(0).get_int32();
+        }
+    }
 
-    DictMergeState fake_dict_state(FunctionContext* ctx) const {
+    DictMergeState fake_dict_state(FunctionContext* ctx, int dict_threshold) const {
         DictMergeState fake_state;
-        for (int i = 0; i < FAKE_DICT_SIZE; ++i) {
+        for (int i = 0; i < dict_threshold + 1; ++i) {
             fake_state.update(ctx->mem_pool(), std::to_string(i));
         }
         return fake_state;
@@ -454,61 +618,57 @@ public:
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
-        DCHECK(false) << "this method shouldn't be called";
-    }
-
-    void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
-                                   AggDataPtr __restrict state) const override {
         auto& agg_state = this->data(state);
-        const auto* column = down_cast<const ArrayColumn*>(columns[0]);
         MemPool* mem_pool = ctx->mem_pool();
 
-        // if dict size greater than DICT_DECODE_MAX_SIZE. we return a FAKE dictionary
-        if (agg_state.over_limit) {
+        // if dict size greater than threshold. we return a FAKE dictionary
+        if (agg_state.over_limit || columns[0]->is_null(row_num)) {
             return;
         }
 
-        const auto& elements_column = column->elements();
-        if (column->elements().is_nullable()) {
-            const auto& null_column = down_cast<const NullableColumn&>(elements_column);
-            const auto& null_data = null_column.immutable_null_column_data();
-            const auto& binary_column = down_cast<const BinaryColumn&>(null_column.data_column_ref());
+        auto* data_column = ColumnHelper::get_data_column(columns[0]);
 
-            for (size_t i = 0; i < binary_column.size(); ++i) {
-                if (!null_data[i]) {
-                    agg_state.update(mem_pool, binary_column.get_slice(i));
+        if (data_column->is_array()) {
+            const auto* array_column = down_cast<const ArrayColumn*>(data_column);
+            const auto* column = array_column->elements_column().get();
+            const auto off = array_column->offsets().immutable_data();
+            const auto* binary_column = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(column));
+            for (auto i = off[row_num]; i < off[row_num + 1]; i++) {
+                if (!column->is_null(i)) {
+                    agg_state.update(mem_pool, binary_column->get_slice(i));
                 }
             }
-            agg_state.over_limit = agg_state.set.size() > DICT_DECODE_MAX_SIZE;
         } else {
-            const auto& binary_column = down_cast<const BinaryColumn&>(elements_column);
-            for (size_t i = 0; i < binary_column.size(); ++i) {
-                agg_state.update(mem_pool, binary_column.get_slice(i));
-            }
-            agg_state.over_limit = agg_state.set.size() > DICT_DECODE_MAX_SIZE;
+            const auto& binary_column = down_cast<const BinaryColumn&>(*data_column);
+            agg_state.update(mem_pool, binary_column.get_slice(row_num));
         }
+
+        agg_state.update_over_limit();
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         auto& agg_state = this->data(state);
 
-        if (agg_state.over_limit) {
+        if (agg_state.over_limit || column->is_null(row_num)) {
             return;
         }
 
-        const auto* input_column = down_cast<const BinaryColumn*>(column);
+        const auto* input_column = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(column));
         Slice slice = input_column->get_slice(row_num);
 
         this->data(state).deserialize_and_merge(ctx->mem_pool(), (const uint8_t*)slice.data, slice.size);
 
-        agg_state.over_limit = agg_state.set.size() > DICT_DECODE_MAX_SIZE;
+        agg_state.update_over_limit();
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         auto& agg_state = this->data(state);
 
         auto serialize = [=](const DictMergeState& dict_state) {
-            auto* column = down_cast<BinaryColumn*>(to);
+            auto* column = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(to));
+            if (to->is_nullable()) {
+                down_cast<NullableColumn*>(to)->null_column_data().emplace_back(0);
+            }
             size_t old_size = column->get_bytes().size();
             size_t new_size = old_size + dict_state.serialize_size();
             column->get_bytes().resize(new_size);
@@ -517,14 +677,14 @@ public:
         };
 
         if (agg_state.over_limit) {
-            serialize(fake_dict_state(ctx));
+            serialize(fake_dict_state(ctx, agg_state.dict_threshold));
         } else {
             serialize(this->data(state));
         }
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
+                                     MutableColumnPtr& dst) const override {
         DCHECK(false) << "this method shouldn't be called";
     }
 
@@ -539,7 +699,10 @@ public:
             std::vector<int32_t> dict_ids;
             dict_ids.resize(agg_state.set.size());
 
-            auto* binary_column = down_cast<BinaryColumn*>(to);
+            auto* binary_column = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(to));
+            if (to->is_nullable()) {
+                down_cast<NullableColumn*>(to)->null_column_data().emplace_back(0);
+            }
 
             // set dict_ids as [1...n]
             for (int i = 0; i < dict_ids.size(); ++i) {
@@ -552,9 +715,7 @@ public:
             tglobal_dict.__isset.strings = true;
             tglobal_dict.strings.reserve(dict_ids.size());
 
-            for (const auto& v : agg_state.set) {
-                tglobal_dict.strings.emplace_back(v.data, v.size);
-            }
+            agg_state.set.fill_vector(tglobal_dict.strings);
 
             // Since the id in global dictionary may be used for sorting,
             // we also need to ensure that the dictionary is ordered when we build it
@@ -576,7 +737,7 @@ public:
         };
 
         if (agg_state.over_limit) {
-            finalize(fake_dict_state(ctx), to);
+            finalize(fake_dict_state(ctx, agg_state.dict_threshold), to);
         } else {
             finalize(agg_state, to);
         }
@@ -584,5 +745,163 @@ public:
 
     std::string get_name() const override { return "dict_merge"; }
 };
+
+static constexpr int COMPUTE_SUM_BIT = 0x1;
+static constexpr int COMPUTE_AVG_BIT = 0x2;
+
+static constexpr int compute_bits(const bool compute_sum, const bool compute_avg) {
+    return (COMPUTE_SUM_BIT * compute_sum) | (COMPUTE_AVG_BIT * compute_avg);
+}
+
+static constexpr bool enable_bit_sum(const int bits) {
+    return (bits & COMPUTE_SUM_BIT) != 0;
+}
+
+static constexpr bool enable_bit_avg(const int bits) {
+    return (bits & COMPUTE_AVG_BIT) != 0;
+}
+
+template <LogicalType LT, LogicalType SumLT, int compute_bits,
+          template <LogicalType X, LogicalType Y, bool, typename = guard::Guard> class TDistinctAggState,
+          typename T = RunTimeCppType<LT>>
+struct TFusedMultiDistinctFunction final
+        : public AggregateFunctionBatchHelper<
+                  TDistinctAggState<LT, SumLT, lt_is_numeric<LT> && compute_bits != 0>,
+                  TFusedMultiDistinctFunction<LT, SumLT, compute_bits, TDistinctAggState, T>> {
+    using State = TDistinctAggState<LT, SumLT, lt_is_numeric<LT> && compute_bits != 0>;
+    using InputColumn = RunTimeColumnType<LT>;
+    using SumColumn = RunTimeColumnType<SumLT>;
+    static constexpr auto AvgLT = AvgResultLT<LT>;
+    using AvgColumn = RunTimeColumnType<AvgLT>;
+    using AvgCppType = RunTimeCppType<AvgLT>;
+
+    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
+        this->data(state).reset();
+    }
+
+    void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
+                    size_t end) const override {
+        auto& state_impl = this->data(const_cast<AggDataPtr>(state));
+        auto* struct_column = down_cast<StructColumn*>(dst);
+        // compute count
+        {
+            auto* count_column = struct_column->field_column_raw_ptr("count").value();
+            Column* count_data_col = const_cast<Column*>(ColumnHelper::get_data_column(count_column));
+            auto* count_data_column = static_cast<Int64Column*>(count_data_col);
+            const auto count = state_impl.distinct_count();
+            for (auto i = start; i < end; ++i) {
+                count_data_column->get_data()[i] = count;
+            }
+        }
+
+        // compute sum
+        if constexpr (lt_is_numeric<LT> && enable_bit_sum(compute_bits)) {
+            auto* sum_column = struct_column->field_column_raw_ptr("sum").value();
+            Column* sum_data_col = const_cast<Column*>(ColumnHelper::get_data_column(sum_column));
+            auto* sum_data_column = static_cast<SumColumn*>(sum_data_col);
+            const auto sum = state_impl.sum;
+            for (auto i = start; i < end; ++i) {
+                sum_data_column->get_data()[i] = sum;
+            }
+        }
+
+        // compute avg
+        if constexpr (lt_is_numeric<LT> && enable_bit_avg(compute_bits)) {
+            auto* avg_column = struct_column->field_column_raw_ptr("avg").value();
+            Column* avg_data_col = const_cast<Column*>(ColumnHelper::get_data_column(avg_column));
+            auto* avg_data_column = static_cast<AvgColumn*>(avg_data_col);
+            const auto sum = state_impl.sum;
+            const auto count = state_impl.distinct_count();
+
+            if (count == 0) {
+                DCHECK(avg_column->is_nullable());
+                auto* nullable_avg = down_cast<NullableColumn*>(avg_column);
+                auto& null_data = nullable_avg->null_column_data();
+                for (auto i = start; i < end; ++i) {
+                    null_data[i] = DATUM_NULL;
+                }
+                return;
+            }
+
+            AvgCppType avg;
+            if constexpr (lt_is_arithmetic<LT>) {
+                avg = static_cast<AvgCppType>(static_cast<double>(sum) / static_cast<double>(count));
+            } else if constexpr (lt_is_decimal<LT>) {
+                static_assert(lt_is_decimal128<AvgLT> || lt_is_decimal256<AvgLT>,
+                              "Result type of avg on decimal32/64/128/256 is decimal 128 or 256");
+                avg = decimal_div_integer<AvgCppType>(AvgCppType(sum), AvgCppType(count), ctx->get_arg_type(0)->scale);
+            } else {
+                DCHECK(false) << "Invalid LogicalTypes for avg function";
+            }
+            for (auto i = start; i < end; ++i) {
+                avg_data_column->get_data()[i] = avg;
+            }
+        }
+    }
+
+    void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
+        const auto* column = down_cast<const InputColumn*>(columns[0]);
+        if constexpr (IsSlice<T>) {
+            this->data(state).update(column->get_slice(row_num));
+        } else {
+            const auto immutable_data = column->immutable_data();
+            this->data(state).update(immutable_data[row_num]);
+        }
+    }
+
+    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
+                                              int64_t frame_end) const override {
+        const auto* column = down_cast<const InputColumn*>(columns[0]);
+        if constexpr (IsSlice<T>) {
+            for (auto i = frame_start; i < frame_end; ++i) {
+                this->data(state).update(column->get_slice(i));
+            }
+        } else {
+            const auto* data = column->immutable_data().data();
+            for (size_t i = frame_start; i < frame_end; ++i) {
+                this->data(state).update(data[i]);
+            }
+        }
+    }
+
+    std::string get_name() const override { return "fused_multi_distinct"; }
+
+    void merge(FunctionContext* ctx, const Column* column, AggDataPtr state, size_t row_num) const override {
+        DCHECK(false) << "Shouldn't call this method for window function!";
+    }
+
+    void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
+        DCHECK(false) << "Shouldn't call this method for window function!";
+    }
+
+    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
+        DCHECK(false) << "Shouldn't call this method for window function!";
+    }
+
+    void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
+                                     MutableColumnPtr& dst) const override {
+        DCHECK(false) << "Shouldn't call this method for window function!";
+    }
+};
+
+template <LogicalType LT, typename = guard::Guard>
+inline constexpr LogicalType DistinctSumLT = SumResultLT<LT>;
+
+template <LogicalType LT>
+inline constexpr LogicalType DistinctSumLT<LT, Decimal256LTGuard<LT>> = TYPE_DECIMAL256;
+
+template <LogicalType LT>
+inline constexpr LogicalType DistinctSumLT<LT, Decimal128LTGuard<LT>> = TYPE_DECIMAL128;
+
+template <LogicalType LT>
+inline constexpr LogicalType DistinctSumLT<LT, Decimal64LTGuard<LT>> = TYPE_DECIMAL128;
+
+template <LogicalType LT>
+inline constexpr LogicalType DistinctSumLT<LT, Decimal32LTGuard<LT>> = TYPE_DECIMAL128;
+
+template <LogicalType LT, int compute_bits, typename T = RunTimeCppType<LT>>
+using FusedMultiDistinctFunction =
+        TFusedMultiDistinctFunction<LT, DistinctSumLT<LT>, compute_bits, FusedMultiDistinctAggregateState, T>;
 
 } // namespace starrocks

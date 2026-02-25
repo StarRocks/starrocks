@@ -36,11 +36,15 @@ package com.starrocks.catalog;
 
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.PartitionKeySerializer;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PartitionValue;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -65,18 +69,18 @@ public class PartitionKeyTest {
 
     private GlobalStateMgr globalStateMgr;
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() {
         TimeZone tz = TimeZone.getTimeZone("ETC/GMT-0");
         TimeZone.setDefault(tz);
 
-        tinyInt = new Column("tinyint", Type.TINYINT);
-        smallInt = new Column("smallint", Type.SMALLINT);
-        int32 = new Column("int32", Type.INT);
-        bigInt = new Column("bigint", Type.BIGINT);
-        largeInt = new Column("largeint", Type.LARGEINT);
-        date = new Column("date", Type.DATE);
-        datetime = new Column("datetime", Type.DATETIME);
+        tinyInt = new Column("tinyint", IntegerType.TINYINT);
+        smallInt = new Column("smallint", IntegerType.SMALLINT);
+        int32 = new Column("int32", IntegerType.INT);
+        bigInt = new Column("bigint", IntegerType.BIGINT);
+        largeInt = new Column("largeint", IntegerType.LARGEINT);
+        date = new Column("date", DateType.DATE);
+        datetime = new Column("datetime", DateType.DATETIME);
 
         allColumns = Arrays.asList(tinyInt, smallInt, int32, bigInt, largeInt, date, datetime);
     }
@@ -90,28 +94,28 @@ public class PartitionKeyTest {
         pk1 = PartitionKey.createPartitionKey(Arrays.asList(new PartitionValue("127"), new PartitionValue("32767")),
                 Arrays.asList(tinyInt, smallInt));
         pk2 = PartitionKey.createInfinityPartitionKey(Arrays.asList(tinyInt, smallInt), true);
-        Assert.assertTrue(!pk1.equals(pk2) && pk1.compareTo(pk2) == -1);
+        Assertions.assertTrue(!pk1.equals(pk2) && pk1.compareTo(pk2) == -1);
 
         // case2
         pk1 = PartitionKey.createPartitionKey(Arrays.asList(new PartitionValue("127")),
                 Arrays.asList(tinyInt, smallInt));
         pk2 = PartitionKey.createPartitionKey(Arrays.asList(new PartitionValue("127"), new PartitionValue("-32768")),
                 Arrays.asList(tinyInt, smallInt));
-        Assert.assertTrue(pk1.equals(pk2) && pk1.compareTo(pk2) == 0);
+        Assertions.assertTrue(pk1.equals(pk2) && pk1.compareTo(pk2) == 0);
 
         // case3
         pk1 = PartitionKey.createPartitionKey(Arrays.asList(new PartitionValue("127")),
                 Arrays.asList(int32, bigInt));
         pk2 = PartitionKey.createPartitionKey(Arrays.asList(new PartitionValue("128"), new PartitionValue("-32768")),
                 Arrays.asList(int32, bigInt));
-        Assert.assertTrue(!pk1.equals(pk2) && pk1.compareTo(pk2) == -1);
+        Assertions.assertTrue(!pk1.equals(pk2) && pk1.compareTo(pk2) == -1);
 
         // case4
         pk1 = PartitionKey.createPartitionKey(Arrays.asList(new PartitionValue("127"), new PartitionValue("12345")),
                 Arrays.asList(largeInt, bigInt));
         pk2 = PartitionKey.createPartitionKey(Arrays.asList(new PartitionValue("127"), new PartitionValue("12346")),
                 Arrays.asList(largeInt, bigInt));
-        Assert.assertTrue(!pk1.equals(pk2) && pk1.compareTo(pk2) == -1);
+        Assertions.assertTrue(!pk1.equals(pk2) && pk1.compareTo(pk2) == -1);
 
         // case5
         pk1 = PartitionKey.createPartitionKey(
@@ -120,25 +124,25 @@ public class PartitionKeyTest {
         pk2 = PartitionKey.createPartitionKey(
                 Arrays.asList(new PartitionValue("2014-12-12"), new PartitionValue("2014-12-12 10:00:01")),
                 Arrays.asList(date, datetime));
-        Assert.assertTrue(!pk1.equals(pk2) && pk1.compareTo(pk2) == -1);
+        Assertions.assertTrue(!pk1.equals(pk2) && pk1.compareTo(pk2) == -1);
 
         // case6
         pk1 = PartitionKey.createPartitionKey(Arrays.asList(new PartitionValue("-128")),
                 Arrays.asList(tinyInt, smallInt));
         pk2 = PartitionKey.createInfinityPartitionKey(Arrays.asList(tinyInt, smallInt), false);
-        Assert.assertTrue(pk1.equals(pk2) && pk1.compareTo(pk2) == 0);
+        Assertions.assertTrue(pk1.equals(pk2) && pk1.compareTo(pk2) == 0);
 
         // case7
         pk1 = PartitionKey.createPartitionKey(Arrays.asList(new PartitionValue("127")),
                 Arrays.asList(tinyInt, smallInt));
         pk2 = PartitionKey.createInfinityPartitionKey(Arrays.asList(tinyInt, smallInt), true);
-        Assert.assertTrue(!pk1.equals(pk2) && pk1.compareTo(pk2) == -1);
+        Assertions.assertTrue(!pk1.equals(pk2) && pk1.compareTo(pk2) == -1);
 
         // case7
         pk1 = PartitionKey.createPartitionKey(Arrays.asList(new PartitionValue("127"), new PartitionValue("32767")),
                 Arrays.asList(tinyInt, smallInt));
         pk2 = PartitionKey.createInfinityPartitionKey(Arrays.asList(tinyInt, smallInt), true);
-        Assert.assertTrue(!pk1.equals(pk2) && pk1.compareTo(pk2) == -1);
+        Assertions.assertTrue(!pk1.equals(pk2) && pk1.compareTo(pk2) == -1);
 
         // case8
         pk1 = PartitionKey.createPartitionKey(Arrays.asList(new PartitionValue("127"), new PartitionValue("32767"),
@@ -147,7 +151,7 @@ public class PartitionKeyTest {
                         new PartitionValue("9999-12-31"), new PartitionValue("9999-12-31 23:59:59")),
                 allColumns);
         pk2 = PartitionKey.createInfinityPartitionKey(allColumns, true);
-        Assert.assertTrue(!pk1.equals(pk2) && pk1.compareTo(pk2) == -1);
+        Assertions.assertTrue(!pk1.equals(pk2) && pk1.compareTo(pk2) == -1);
 
         // case9
         pk1 = PartitionKey.createPartitionKey(Arrays.asList(new PartitionValue("-128"), new PartitionValue("-32768"),
@@ -156,7 +160,7 @@ public class PartitionKeyTest {
                         new PartitionValue("0000-01-01"), new PartitionValue("0000-01-01 00:00:00")),
                 allColumns);
         pk2 = PartitionKey.createInfinityPartitionKey(allColumns, false);
-        Assert.assertTrue(pk1.equals(pk2) && pk1.compareTo(pk2) == 0);
+        Assertions.assertTrue(pk1.equals(pk2) && pk1.compareTo(pk2) == 0);
 
         // case10
         pk1 = PartitionKey.createPartitionKey(Arrays.asList(new PartitionValue("-128"), new PartitionValue("-32768"),
@@ -164,7 +168,7 @@ public class PartitionKeyTest {
                         new PartitionValue("0"), new PartitionValue("1970-01-01"), new PartitionValue("1970-01-01 00:00:00")),
                 allColumns);
         pk2 = PartitionKey.createInfinityPartitionKey(allColumns, false);
-        Assert.assertTrue(!pk1.equals(pk2) && pk1.compareTo(pk2) == 1);
+        Assertions.assertTrue(!pk1.equals(pk2) && pk1.compareTo(pk2) == 1);
     }
 
     @Test
@@ -178,42 +182,61 @@ public class PartitionKeyTest {
         DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
 
         PartitionKey keyEmpty = new PartitionKey();
-        keyEmpty.write(dos);
+        PartitionKeySerializer.write(dos, keyEmpty);
 
         List<PartitionValue> keys = new ArrayList<PartitionValue>();
         List<Column> columns = new ArrayList<Column>();
         keys.add(new PartitionValue("100"));
-        columns.add(new Column("column2", Type.TINYINT, true, null, "", ""));
+        columns.add(new Column("column2", IntegerType.TINYINT, true, null, "", ""));
         keys.add(new PartitionValue("101"));
-        columns.add(new Column("column3", Type.SMALLINT, true, null, "", ""));
+        columns.add(new Column("column3", IntegerType.SMALLINT, true, null, "", ""));
         keys.add(new PartitionValue("102"));
-        columns.add(new Column("column4", Type.INT, true, null, "", ""));
+        columns.add(new Column("column4", IntegerType.INT, true, null, "", ""));
         keys.add(new PartitionValue("103"));
-        columns.add(new Column("column5", Type.BIGINT, true, null, "", ""));
+        columns.add(new Column("column5", IntegerType.BIGINT, true, null, "", ""));
         keys.add(new PartitionValue("2014-12-26"));
-        columns.add(new Column("column10", Type.DATE, true, null, "", ""));
+        columns.add(new Column("column10", DateType.DATE, true, null, "", ""));
         keys.add(new PartitionValue("2014-12-27 11:12:13"));
-        columns.add(new Column("column11", Type.DATETIME, true, null, "", ""));
+        columns.add(new Column("column11", DateType.DATETIME, true, null, "", ""));
 
         PartitionKey key = PartitionKey.createPartitionKey(keys, columns);
-        key.write(dos);
+        PartitionKeySerializer.write(dos, key);
 
         dos.flush();
         dos.close();
 
         // 2. Read objects from file
         DataInputStream dis = new DataInputStream(new FileInputStream(file));
-        PartitionKey rKeyEmpty = PartitionKey.read(dis);
-        Assert.assertTrue(keyEmpty.equals(rKeyEmpty));
+        PartitionKey rKeyEmpty = PartitionKeySerializer.read(dis);
+        Assertions.assertTrue(keyEmpty.equals(rKeyEmpty));
 
-        PartitionKey rKey = new PartitionKey();
-        rKey.readFields(dis);
-        Assert.assertTrue(key.equals(rKey));
-        Assert.assertTrue(key.equals(key));
-        Assert.assertFalse(key.equals(this));
+        PartitionKey rKey = PartitionKeySerializer.read(dis);
+        Assertions.assertTrue(key.equals(rKey));
+        Assertions.assertTrue(key.equals(key));
+        Assertions.assertFalse(key.equals(this));
 
         // 3. delete files
         dis.close();
         file.delete();
+    }
+
+    private PartitionKey createPartitionKey(String key) throws AnalysisException {
+        return PartitionKey.ofDateTime(DateUtils.parseStrictDateTime(key));
+    }
+
+    @Test
+    public void testPartitionKeys() throws AnalysisException {
+        List<PartitionKey> list = Arrays.asList(
+                createPartitionKey("20230801"),
+                createPartitionKey("20230802"),
+                createPartitionKey("20230804"),
+                createPartitionKey("20230805"),
+                createPartitionKey("20230806"),
+                createPartitionKey("20230807"));
+        Assertions.assertEquals(0, PartitionKey.findLastLessEqualInOrderedList(createPartitionKey("20230731"), list));
+        Assertions.assertEquals(0, PartitionKey.findLastLessEqualInOrderedList(createPartitionKey("20230801"), list));
+        Assertions.assertEquals(1, PartitionKey.findLastLessEqualInOrderedList(createPartitionKey("20230802"), list));
+        Assertions.assertEquals(1, PartitionKey.findLastLessEqualInOrderedList(createPartitionKey("20230803"), list));
+        Assertions.assertEquals(5, PartitionKey.findLastLessEqualInOrderedList(createPartitionKey("20230808"), list));
     }
 }

@@ -81,7 +81,7 @@ public class PartitionColumnValueOnlyOnScanRule extends TransformationRule {
         for (ColumnRefOperator c : scanOperator.getOutputColumns()) {
             if (!partitionColumns.contains(c.getName())) {
                 // materialized column could be taken durding prune stage.
-                if (!scanOperator.getScanOptimzeOption().getCanUseAnyColumn()) {
+                if (!scanOperator.getScanOptimizeOption().getCanUseAnyColumn()) {
                     return false;
                 }
             } else {
@@ -94,7 +94,7 @@ public class PartitionColumnValueOnlyOnScanRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalScanOperator scanOperator = (LogicalScanOperator) input.getInputs().get(0).getInputs().get(0).getOp();
-        scanOperator.getScanOptimzeOption().setUsePartitionColumnValueOnly(true);
+        scanOperator.getScanOptimizeOption().setUsePartitionColumnValueOnly(true);
         return Collections.emptyList();
     }
 }

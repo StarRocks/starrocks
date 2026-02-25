@@ -17,31 +17,43 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.base.Strings;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.sql.parser.NodePosition;
-import org.junit.Assert;
-import org.junit.Test;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.ColumnPosition;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class ColumnPositionTest {
     @Test
     public void testNormal() throws AnalysisException {
         ColumnPosition pos = ColumnPosition.FIRST;
-        pos.analyze();
-        Assert.assertEquals("FIRST", pos.toString());
-        Assert.assertNull(pos.getLastCol());
-        Assert.assertTrue(pos.isFirst());
+        analyze(pos);
+        Assertions.assertEquals("FIRST", pos.toString());
+        Assertions.assertNull(pos.getLastCol());
+        Assertions.assertTrue(pos.isFirst());
 
         pos = new ColumnPosition("col");
-        pos.analyze();
-        Assert.assertEquals("AFTER `col`", pos.toString());
-        Assert.assertEquals("col", pos.getLastCol());
-        Assert.assertFalse(pos.isFirst());
+        analyze(pos);
+        Assertions.assertEquals("AFTER `col`", pos.toString());
+        Assertions.assertEquals("col", pos.getLastCol());
+        Assertions.assertFalse(pos.isFirst());
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testNoCol() throws AnalysisException {
-        ColumnPosition pos = new ColumnPosition("");
-        pos.analyze();
-        Assert.fail("No exception throws.");
+    @Test
+    public void testNoCol() {
+        assertThrows(SemanticException.class, () -> {
+            ColumnPosition pos = new ColumnPosition("");
+            analyze(pos);
+            Assertions.fail("No exception throws.");
+        });
+    }
+
+    private void analyze(ColumnPosition pos) {
+        if (pos != ColumnPosition.FIRST && Strings.isNullOrEmpty(pos.getLastCol())) {
+            throw new SemanticException("Column is empty.");
+        }
     }
 }

@@ -27,6 +27,7 @@ public:
     ~SpillablePartitionSortSinkOperator() override = default;
 
     Status prepare(RuntimeState* state) override;
+    Status prepare_local_state(RuntimeState* state) override { return Status::OK(); }
 
     void close(RuntimeState* state) override;
 
@@ -67,6 +68,8 @@ public:
 
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
+
+    bool support_event_scheduler() const override { return false; }
 
 private:
     std::shared_ptr<spill::SpilledOptions> _spill_options;

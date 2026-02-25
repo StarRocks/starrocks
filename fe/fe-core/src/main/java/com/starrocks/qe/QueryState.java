@@ -70,6 +70,9 @@ public class QueryState {
 
         IO_ERR,
 
+        // execution Timeout
+        EXEC_TIME_OUT,
+
         UNKNOWN
     }
 
@@ -126,6 +129,12 @@ public class QueryState {
         this.stateType = MysqlStateType.ERR;
         this.setMsg(errorMsg);
         isFinished = true;
+    }
+
+    public void resetError() {
+        this.stateType = MysqlStateType.OK;
+        this.errorCode = null;
+        this.errorMessage = null;
     }
 
     public boolean isError() {

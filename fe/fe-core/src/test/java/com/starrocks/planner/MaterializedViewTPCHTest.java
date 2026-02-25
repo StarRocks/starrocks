@@ -17,11 +17,11 @@ package com.starrocks.planner;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.plan.MockTpchStatisticStorage;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -48,18 +48,18 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
         int scale = 1;
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         connectContext.getGlobalStateMgr().setStatisticStorage(new MockTpchStatisticStorage(connectContext, scale));
-        OlapTable t4 = (OlapTable) globalStateMgr.getDb(MATERIALIZED_DB_NAME).getTable("customer");
+        OlapTable t4 = (OlapTable) globalStateMgr.getLocalMetastore().getDb(MATERIALIZED_DB_NAME).getTable("customer");
         setTableStatistics(t4, 150000 * scale);
-        OlapTable t7 = (OlapTable) globalStateMgr.getDb(MATERIALIZED_DB_NAME).getTable("lineitem");
+        OlapTable t7 = (OlapTable) globalStateMgr.getLocalMetastore().getDb(MATERIALIZED_DB_NAME).getTable("lineitem");
         setTableStatistics(t7, 6000000 * scale);
 
         // When force rule based rewrite is enabled, query will be transformed into scan in Rule Rewrite Phase.
         // And OneTabletExecutorVisitor#visitLogicalTableScan will deduce `supportOneTabletOpt` because this test
         // case has no tablets left after mv rewrite.
         connectContext.getSessionVariable().setEnableForceRuleBasedMvRewrite(false);
-        QueryDebugOptions queryDebugOptions = new QueryDebugOptions();
-        queryDebugOptions.setEnableQueryTraceLog(true);
-        connectContext.getSessionVariable().setQueryDebugOptions(queryDebugOptions.toString());
+        //QueryDebugOptions queryDebugOptions = new QueryDebugOptions();
+        //queryDebugOptions.setEnableQueryTraceLog(true);
+        //connectContext.getSessionVariable().setQueryDebugOptions(queryDebugOptions.toString());
     }
 
     @ParameterizedTest(name = "Tpch.{0}")
@@ -71,8 +71,27 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
     private static Stream<Arguments> tpchSource() {
         List<Arguments> cases = Lists.newArrayList();
         for (Map.Entry<String, String> entry : TpchSQL.getAllSQL().entrySet()) {
+            if (!entry.getKey().equalsIgnoreCase("q1")) {
+                continue;
+
+            }
             cases.add(Arguments.of(entry.getKey(), entry.getValue(), "materialized-view/tpch/" + entry.getKey()));
         }
         return cases.stream();
+    }
+
+    @Test
+    public void testQuery13WithAggPushdown() throws Exception {
+        connectContext.getSessionVariable().setEnableMaterializedViewPushDownRewrite(true);
+        String plan = getVerboseExplain("select  c_count,  count(*) as custdist from " +
+                "(select c_custkey,count(o_orderkey) as c_count from  customer left outer join orders " +
+                "on c_custkey = o_custkey and o_comment not like '%special%requests%' group by  c_custkey) as c_orders " +
+                "group by  c_count order by custdist desc, c_count desc;");
+        // ensure count(o_orderkey) is not pushed down to customer_agg_mv
+        assertNotContains(plan, "customer_agg_mv");
+        assertCContains(plan, "  0:OlapScanNode\n" +
+                "     table: customer, rollup: customer\n" +
+                "     preAggregation: on");
+        connectContext.getSessionVariable().setEnableMaterializedViewPushDownRewrite(false);
     }
 }

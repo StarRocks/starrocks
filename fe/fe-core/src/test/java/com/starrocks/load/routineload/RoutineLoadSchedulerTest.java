@@ -52,8 +52,8 @@ import com.starrocks.thrift.TResourceInfo;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -104,12 +104,6 @@ public class RoutineLoadSchedulerTest {
                 routineLoadManager.getRoutineLoadJobByState(Sets.newHashSet(RoutineLoadJob.JobState.NEED_SCHEDULE));
                 minTimes = 0;
                 result = routineLoadJobList;
-                globalStateMgr.getDb(anyLong);
-                minTimes = 0;
-                result = database;
-                database.getTable(1L);
-                minTimes = 0;
-                result = olapTable;
                 systemInfoService.getBackendIds(true);
                 minTimes = 0;
                 result = beIds;
@@ -128,10 +122,10 @@ public class RoutineLoadSchedulerTest {
         for (RoutineLoadTaskInfo routineLoadTaskInfo : routineLoadTaskInfoList) {
             KafkaTaskInfo kafkaTaskInfo = (KafkaTaskInfo) routineLoadTaskInfo;
             if (kafkaTaskInfo.getPartitions().size() == 2) {
-                Assert.assertTrue(kafkaTaskInfo.getPartitions().contains(100));
-                Assert.assertTrue(kafkaTaskInfo.getPartitions().contains(300));
+                Assertions.assertTrue(kafkaTaskInfo.getPartitions().contains(100));
+                Assertions.assertTrue(kafkaTaskInfo.getPartitions().contains(300));
             } else {
-                Assert.assertTrue(kafkaTaskInfo.getPartitions().contains(200));
+                Assertions.assertTrue(kafkaTaskInfo.getPartitions().contains(200));
             }
         }
     }
@@ -172,7 +166,7 @@ public class RoutineLoadSchedulerTest {
                 globalStateMgr.getRoutineLoadMgr();
                 minTimes = 0;
                 result = routineLoadManager;
-                globalStateMgr.getDb(anyLong);
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = database;
                 systemInfoService.getBackendIds(true);

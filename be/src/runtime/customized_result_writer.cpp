@@ -14,22 +14,23 @@
 
 #include "runtime/customized_result_writer.h"
 
+#include "base/string/faststring.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "common/util/thrift_util.h"
 #include "exprs/expr.h"
+#include "exprs/expr_context.h"
 #include "gen_cpp/Row_types.h"
 #include "runtime/buffer_control_block.h"
 #include "types/logical_type.h"
-#include "util/faststring.h"
-#include "util/thrift_util.h"
 
 namespace starrocks {
 
 CustomizedResultWriter::CustomizedResultWriter(BufferControlBlock* sinker,
                                                const std::vector<ExprContext*>& output_expr_ctxs,
                                                starrocks::RuntimeProfile* parent_profile)
-        : _sinker(sinker), _output_expr_ctxs(output_expr_ctxs), _parent_profile(parent_profile) {}
+        : BufferControlResultWriter(sinker, parent_profile), _output_expr_ctxs(output_expr_ctxs) {}
 
 CustomizedResultWriter::~CustomizedResultWriter() = default;
 
@@ -45,14 +46,7 @@ Status CustomizedResultWriter::init(RuntimeState* state) {
     return Status::OK();
 }
 
-void CustomizedResultWriter::_init_profile() {
-    _total_timer = ADD_TIMER(_parent_profile, "TotalSendTime");
-    _serialize_timer = ADD_CHILD_TIMER(_parent_profile, "SerializeTime", "TotalSendTime");
-    _sent_rows_counter = ADD_COUNTER(_parent_profile, "NumSentRows", TUnit::UNIT);
-}
-
 Status CustomizedResultWriter::append_chunk(Chunk* chunk) {
-    SCOPED_TIMER(_total_timer);
     auto process_status = _process_chunk(chunk);
     if (!process_status.ok() || process_status.value() == nullptr) {
         return process_status.status();
@@ -71,7 +65,8 @@ Status CustomizedResultWriter::append_chunk(Chunk* chunk) {
 }
 
 StatusOr<TFetchDataResultPtrs> CustomizedResultWriter::process_chunk(Chunk* chunk) {
-    SCOPED_TIMER(_total_timer);
+    SCOPED_TIMER(_append_chunk_timer);
+
     TFetchDataResultPtrs results;
     auto process_status = _process_chunk(chunk);
     if (!process_status.ok()) {
@@ -81,26 +76,6 @@ StatusOr<TFetchDataResultPtrs> CustomizedResultWriter::process_chunk(Chunk* chun
         results.push_back(std::move(process_status.value()));
     }
     return results;
-}
-
-StatusOr<bool> CustomizedResultWriter::try_add_batch(TFetchDataResultPtrs& results) {
-    size_t num_rows = 0;
-    for (auto& result : results) {
-        num_rows += result->result_batch.rows.size();
-    }
-
-    auto status = _sinker->try_add_batch(results);
-
-    if (status.ok()) {
-        if (status.value()) {
-            _written_rows += num_rows;
-            results.clear();
-        }
-    } else {
-        results.clear();
-        LOG(WARNING) << "Append customized result to sink failed.";
-    }
-    return status;
 }
 
 StatusOr<TFetchDataResultPtr> CustomizedResultWriter::_process_chunk(Chunk* chunk) {
@@ -154,11 +129,6 @@ StatusOr<TFetchDataResultPtr> CustomizedResultWriter::_process_chunk(Chunk* chun
         rows[i] = std::move(str_row);
     }
     return result;
-}
-
-Status CustomizedResultWriter::close() {
-    COUNTER_SET(_sent_rows_counter, _written_rows);
-    return Status::OK();
 }
 
 } // namespace starrocks

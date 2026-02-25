@@ -21,16 +21,16 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class ColumnRenameTest {
 
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         FeConstants.runningUnitTest = true;
         UtFrameUtils.createMinStarRocksCluster();
@@ -84,27 +84,27 @@ public class ColumnRenameTest {
 
     @Test
     public void testReplayRenameColumn() throws Exception {
-        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
-        Table table = testDb.getTable("tbl1");
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "tbl1");
         ColumnRenameInfo columnRenameInfo = new ColumnRenameInfo(testDb.getId(), table.getId(), "k1", "k3");
         GlobalStateMgr.getCurrentState().getLocalMetastore().replayRenameColumn(columnRenameInfo);
-        Assert.assertEquals("k3", table.getColumn("k3").getName());
+        Assertions.assertEquals("k3", table.getColumn("k3").getName());
 
 
-        table = testDb.getTable("tbl2");
+        table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "tbl2");
         columnRenameInfo = new ColumnRenameInfo(testDb.getId(), table.getId(), "k1", "k3");
         GlobalStateMgr.getCurrentState().getLocalMetastore().replayRenameColumn(columnRenameInfo);
-        Assert.assertEquals("k3", table.getColumn("k3").getName());
+        Assertions.assertEquals("k3", table.getColumn("k3").getName());
 
-        table = testDb.getTable("tbl3");
+        table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "tbl3");
         columnRenameInfo = new ColumnRenameInfo(testDb.getId(), table.getId(), "k1", "k3");
         GlobalStateMgr.getCurrentState().getLocalMetastore().replayRenameColumn(columnRenameInfo);
-        Assert.assertEquals("k3", table.getColumn("k3").getName());
+        Assertions.assertEquals("k3", table.getColumn("k3").getName());
 
-        table = testDb.getTable("tbl4");
+        table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "tbl4");
         columnRenameInfo = new ColumnRenameInfo(testDb.getId(), table.getId(), "k1", "k3");
         GlobalStateMgr.getCurrentState().getLocalMetastore().replayRenameColumn(columnRenameInfo);
-        Assert.assertEquals("k3", table.getColumn("k3").getName());
+        Assertions.assertEquals("k3", table.getColumn("k3").getName());
     }
 
 }

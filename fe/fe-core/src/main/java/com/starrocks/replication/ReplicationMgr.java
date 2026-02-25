@@ -14,12 +14,13 @@
 
 package com.starrocks.replication;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -28,6 +29,7 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.task.RemoteSnapshotTask;
 import com.starrocks.task.ReplicateSnapshotTask;
 import com.starrocks.thrift.TFinishTaskRequest;
@@ -36,6 +38,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.util.Collection;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
@@ -52,33 +56,26 @@ public class ReplicationMgr extends FrontendDaemon {
     private final Map<Long, ReplicationJob> abortedJobs = Maps.newConcurrentMap(); // Aborted jobs, will retry later
 
     public ReplicationMgr() {
-        super("ReplicationMgr", Config.replication_interval_ms);
+        super("replication-mgr", Config.replication_interval_ms);
     }
 
     @Override
     protected void runAfterCatalogReady() {
-        List<ReplicationJob> toRemovedJobs = Lists.newArrayList();
-        for (ReplicationJob job : runningJobs.values()) {
-            job.run();
-
-            ReplicationJobState state = job.getState();
-            if (state.equals(ReplicationJobState.COMMITTED)) {
-                toRemovedJobs.add(job);
-                committedJobs.put(job.getTableId(), job);
-            } else if (state.equals(ReplicationJobState.ABORTED)) {
-                toRemovedJobs.add(job);
-                abortedJobs.put(job.getTableId(), job);
-            }
-        }
-
-        for (ReplicationJob job : toRemovedJobs) {
-            runningJobs.remove(job.getTableId(), job);
-        }
+        runRunningJobs();
+        clearExpiredJobs();
     }
 
-    public void addReplicationJob(TTableReplicationRequest request) throws UserException {
-        ReplicationJob job = new ReplicationJob(request);
+    public void addReplicationJob(TTableReplicationRequest request) throws StarRocksException {
+        LOG.debug("Add replication job, database id: {}, table id: {}, job id: {}",
+                request.getDatabase_id(), request.getTable_id(), request.getJob_id());
+        ReplicationJob job = isLakeReplicationJob(request) ?
+                new LakeReplicationJob(request) : new ReplicationJob(request);
         addReplicationJob(job);
+    }
+
+    private boolean isLakeReplicationJob(TTableReplicationRequest request) {
+        return request != null && request.src_cluster_run_mode != null
+                && request.src_cluster_run_mode == RunMode.toTRunMode(RunMode.SHARED_DATA);
     }
 
     public void addReplicationJob(ReplicationJob job) throws AlreadyExistsException {
@@ -119,18 +116,16 @@ public class ReplicationMgr extends FrontendDaemon {
                 job.getDatabaseId(), job.getTableId(), job.getReplicationDataSize(), replicatingDataSizeMB);
     }
 
-    public boolean hasRunningJobs() {
-        return !runningJobs.isEmpty();
+    public Collection<ReplicationJob> getRunningJobs() {
+        return runningJobs.values();
     }
 
-    public boolean hasFailedJobs() {
-        return !abortedJobs.isEmpty();
+    public Collection<ReplicationJob> getCommittedJobs() {
+        return committedJobs.values();
     }
 
-    public void clearFinishedJobs() {
-        committedJobs.clear();
-        abortedJobs.clear();
-        GlobalStateMgr.getServingState().getEditLog().logReplicationJob(null);
+    public Collection<ReplicationJob> getAbortedJobs() {
+        return abortedJobs.values();
     }
 
     public void cancelRunningJobs() {
@@ -147,6 +142,11 @@ public class ReplicationMgr extends FrontendDaemon {
         for (ReplicationJob job : toRemovedJobs) {
             runningJobs.remove(job.getTableId(), job);
         }
+    }
+
+    @VisibleForTesting
+    public void removeRunningJob(ReplicationJob job) {
+        runningJobs.remove(job.getTableId(), job);
     }
 
     public void finishRemoteSnapshotTask(RemoteSnapshotTask task, TFinishTaskRequest request) {
@@ -170,12 +170,6 @@ public class ReplicationMgr extends FrontendDaemon {
     }
 
     public void replayReplicationJob(ReplicationJob replicationJob) {
-        if (replicationJob == null) {
-            committedJobs.clear();
-            abortedJobs.clear();
-            return;
-        }
-
         if (replicationJob.getState().equals(ReplicationJobState.COMMITTED)) {
             committedJobs.put(replicationJob.getTableId(), replicationJob);
             runningJobs.remove(replicationJob.getTableId());
@@ -184,6 +178,16 @@ public class ReplicationMgr extends FrontendDaemon {
             runningJobs.remove(replicationJob.getTableId());
         } else {
             runningJobs.put(replicationJob.getTableId(), replicationJob);
+        }
+    }
+
+    public void replayDeleteReplicationJob(ReplicationJob replicationJob) {
+        if (replicationJob.getState().equals(ReplicationJobState.COMMITTED)) {
+            committedJobs.remove(replicationJob.getTableId());
+        } else if (replicationJob.getState().equals(ReplicationJobState.ABORTED)) {
+            abortedJobs.remove(replicationJob.getTableId());
+        } else {
+            runningJobs.remove(replicationJob.getTableId());
         }
     }
 
@@ -201,6 +205,50 @@ public class ReplicationMgr extends FrontendDaemon {
             replicatingDataSize += job.getReplicationDataSize();
         }
         return replicatingDataSize;
+    }
+
+    private void runRunningJobs() {
+        List<ReplicationJob> toRemovedJobs = Lists.newArrayList();
+        for (ReplicationJob job : runningJobs.values()) {
+            job.run();
+
+            ReplicationJobState state = job.getState();
+            if (state.equals(ReplicationJobState.COMMITTED)) {
+                toRemovedJobs.add(job);
+                committedJobs.put(job.getTableId(), job);
+            } else if (state.equals(ReplicationJobState.ABORTED)) {
+                toRemovedJobs.add(job);
+                abortedJobs.put(job.getTableId(), job);
+            }
+        }
+
+        for (ReplicationJob job : toRemovedJobs) {
+            runningJobs.remove(job.getTableId(), job);
+        }
+    }
+
+    protected void clearExpiredJobs() {
+        for (Iterator<Map.Entry<Long, ReplicationJob>> it = committedJobs.entrySet().iterator(); it.hasNext();) {
+            ReplicationJob job = it.next().getValue();
+            if (!job.isExpired()) {
+                continue;
+            }
+
+            GlobalStateMgr.getServingState().getEditLog().logDeleteReplicationJob(job, wal -> {
+                it.remove();
+            });
+        }
+
+        for (Iterator<Map.Entry<Long, ReplicationJob>> it = abortedJobs.entrySet().iterator(); it.hasNext();) {
+            ReplicationJob job = it.next().getValue();
+            if (!job.isExpired()) {
+                continue;
+            }
+
+            GlobalStateMgr.getServingState().getEditLog().logDeleteReplicationJob(job, wal -> {
+                it.remove();
+            });
+        }
     }
 
     public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {

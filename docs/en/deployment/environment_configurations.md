@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Check environment configurations
@@ -364,7 +364,7 @@ You must configure time synchronization between nodes within your StarRocks clus
 
    ```Bash
    rpm -qa | grep ntp
-   systemctl status chrony
+   systemctl status chronyd
    ```
 
 2. Install the NTP service if there is not one.

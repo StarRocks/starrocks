@@ -39,7 +39,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.Expr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
@@ -50,8 +49,11 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.type.PrimitiveType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -137,14 +139,14 @@ public class RangePartitionInfo extends PartitionInfo {
     }
 
     public void addPartition(long partitionId, boolean isTemp, Range<PartitionKey> range, DataProperty dataProperty,
-                             short replicationNum, boolean isInMemory, DataCacheInfo dataCacheInfo) {
-        addPartition(partitionId, dataProperty, replicationNum, isInMemory, dataCacheInfo);
+                             short replicationNum, DataCacheInfo dataCacheInfo) {
+        addPartition(partitionId, dataProperty, replicationNum, dataCacheInfo);
         setRangeInternal(partitionId, isTemp, range);
     }
 
     public void addPartition(long partitionId, boolean isTemp, Range<PartitionKey> range, DataProperty dataProperty,
-                             short replicationNum, boolean isInMemory) {
-        this.addPartition(partitionId, isTemp, range, dataProperty, replicationNum, isInMemory, null);
+                             short replicationNum) {
+        this.addPartition(partitionId, isTemp, range, dataProperty, replicationNum, null);
     }
 
     public Range<PartitionKey> checkAndCreateRange(Map<ColumnId, Column> schema, SingleRangePartitionDesc desc, boolean isTemp)
@@ -222,6 +224,10 @@ public class RangePartitionInfo extends PartitionInfo {
         }
         newRange = Range.closedOpen(lowKey, newRangeUpper);
 
+        if (lastRange != null) {
+            RangeUtils.checkRangeIntersect(newRange, lastRange);
+        }
+        
         if (currentRange != null) {
             // check if range intersected
             RangeUtils.checkRangeIntersect(newRange, currentRange);
@@ -239,10 +245,8 @@ public class RangePartitionInfo extends PartitionInfo {
             // Range.closedOpen may throw this if (lower > upper)
             throw new DdlException("Invalid key range: " + e.getMessage());
         }
-        idToDataProperty.put(partitionId, desc.getPartitionDataProperty());
-        idToReplicationNum.put(partitionId, desc.getReplicationNum());
-        idToInMemory.put(partitionId, desc.isInMemory());
-        idToStorageCacheInfo.put(partitionId, desc.getDataCacheInfo());
+        super.addPartition(partitionId, desc.getPartitionDataProperty(), desc.getReplicationNum(),
+                desc.getDataCacheInfo());
         return range;
     }
 
@@ -260,10 +264,8 @@ public class RangePartitionInfo extends PartitionInfo {
         } catch (AnalysisException e) {
             throw new DdlException("Invalid key range: " + e.getMessage());
         }
-        idToDataProperty.put(partitionId, new DataProperty(TStorageMedium.HDD));
-        idToReplicationNum.put(partitionId, Short.valueOf(replicateNum));
-        idToInMemory.put(partitionId, false);
-        idToStorageCacheInfo.put(partitionId, new DataCacheInfo(true, false));
+        super.addPartition(partitionId, new DataProperty(TStorageMedium.HDD), Short.valueOf(replicateNum),
+                new DataCacheInfo(true, false));
     }
 
     public void handleNewRangePartitionDescs(Map<ColumnId, Column> schema,
@@ -284,10 +286,8 @@ public class RangePartitionInfo extends PartitionInfo {
                         // Range.closedOpen may throw this if (lower > upper)
                         throw new DdlException("Invalid key range: " + e.getMessage());
                     }
-                    idToDataProperty.put(partitionId, desc.getPartitionDataProperty());
-                    idToReplicationNum.put(partitionId, desc.getReplicationNum());
-                    idToInMemory.put(partitionId, desc.isInMemory());
-                    idToStorageCacheInfo.put(partitionId, desc.getDataCacheInfo());
+                    super.addPartition(partitionId, desc.getPartitionDataProperty(), desc.getReplicationNum(),
+                            desc.getDataCacheInfo());
                 }
             }
         } catch (Exception e) {
@@ -295,22 +295,16 @@ public class RangePartitionInfo extends PartitionInfo {
             partitionList.forEach(entry -> {
                 long partitionId = entry.first.getId();
                 removeRangeInternal(partitionId, isTemp);
-                idToDataProperty.remove(partitionId);
-                idToReplicationNum.remove(partitionId);
-                idToInMemory.remove(partitionId);
-                idToStorageCacheInfo.remove(partitionId);
+                super.dropPartition(partitionId);
             });
             throw e;
         }
     }
 
     public void unprotectHandleNewSinglePartitionDesc(long partitionId, boolean isTemp, Range<PartitionKey> range,
-                                                      DataProperty dataProperty, short replicationNum,
-                                                      boolean isInMemory) {
+                                                      DataProperty dataProperty, short replicationNum) {
         setRangeInternal(partitionId, isTemp, range);
-        idToDataProperty.put(partitionId, dataProperty);
-        idToReplicationNum.put(partitionId, replicationNum);
-        idToInMemory.put(partitionId, isInMemory);
+        super.addPartition(partitionId, dataProperty, replicationNum);
     }
 
     /**
@@ -321,10 +315,7 @@ public class RangePartitionInfo extends PartitionInfo {
         Partition partition = info.getPartition();
         long partitionId = partition.getId();
         setRangeInternal(partitionId, info.isTempPartition(), info.getRange());
-        idToDataProperty.put(partitionId, info.getDataProperty());
-        idToReplicationNum.put(partitionId, info.getReplicationNum());
-        idToInMemory.put(partitionId, info.isInMemory());
-        idToStorageCacheInfo.put(partitionId, info.getDataCacheInfo());
+        super.addPartition(partitionId, info.getDataProperty(), info.getReplicationNum(), info.getDataCacheInfo());
     }
 
     public void setRange(long partitionId, boolean isTemp, Range<PartitionKey> range) {
@@ -337,6 +328,18 @@ public class RangePartitionInfo extends PartitionInfo {
         } else {
             return idToRange;
         }
+    }
+
+    // return ranges without empty ranges, like shadow partition range
+    public Map<Long, Range<PartitionKey>> getNonEmptyRanges(boolean isTemp) {
+        Set<Map.Entry<Long, Range<PartitionKey>>> entrySet = null;
+        if (isTemp) {
+            entrySet = idToTempRange.entrySet();
+        } else {
+            entrySet = idToRange.entrySet();
+        }
+        return entrySet.stream().filter(x -> !x.getValue().isEmpty())
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
     public Range<PartitionKey> getRange(long partitionId) {
@@ -358,7 +361,7 @@ public class RangePartitionInfo extends PartitionInfo {
     public static void checkExpressionRangeColumnType(Column column, Expr expr) throws AnalysisException {
         PrimitiveType type = column.getPrimitiveType();
         if (!type.isFixedPointType() && !type.isDateType()) {
-            throw new AnalysisException("Expr[" + expr.toSql() + "] type[" + type
+            throw new AnalysisException("Expr[" + ExprToSql.toSql(expr) + "] type[" + type
                     + "] cannot be a range partition key.");
         }
     }
@@ -397,6 +400,18 @@ public class RangePartitionInfo extends PartitionInfo {
             return Lists.newArrayList();
         }
         return sortedList.stream().map(Map.Entry::getKey).collect(Collectors.toList());
+    }
+
+    /**
+     * For RangePartition, NULL value would be put in the MIN_VALUE partition but not a real NULL.
+     * It's a little bit tricky, as that partition might contain NULL, or might not.
+     */
+    @Override
+    public Set<Long> getNullValuePartitions() {
+        return idToRange.entrySet().stream()
+                .filter(x -> x.getValue().lowerEndpoint().isMinValue())
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toSet());
     }
 
     // get a sorted range list, exclude partitions which ids are in 'excludePartitionIds'
@@ -581,5 +596,30 @@ public class RangePartitionInfo extends PartitionInfo {
         info.idToTempRange = new ConcurrentHashMap<>(this.idToTempRange);
         info.isMultiColumnPartition = partitionColumnIds.size() > 1;
         return info;
+    }
+
+    @Override
+    public void setPartitionIdsForRestore(Map<Long, Long> partitionOldIdToNewId) {
+        super.setPartitionIdsForRestore(partitionOldIdToNewId);
+
+        Map<Long, Range<PartitionKey>> oldIdToRange = this.idToRange;
+        Map<Long, Range<PartitionKey>> oldIdToTempRange = this.idToTempRange;
+
+        this.idToRange = new ConcurrentHashMap<>();
+        this.idToTempRange = new ConcurrentHashMap<>();
+
+        for (Map.Entry<Long, Long> entry : partitionOldIdToNewId.entrySet()) {
+            Long oldId = entry.getKey();
+            Long newId = entry.getValue();
+
+            Range<PartitionKey> range = oldIdToRange.get(oldId);
+            if (range != null) {
+                this.idToRange.put(newId, range);
+            }
+            Range<PartitionKey> tempRange = oldIdToTempRange.get(oldId);
+            if (tempRange != null) {
+                this.idToTempRange.put(newId, tempRange);
+            }
+        }
     }
 }

@@ -15,6 +15,7 @@
 #include "exec/pipeline/scan/olap_scan_prepare_operator.h"
 
 #include "exec/olap_scan_node.h"
+#include "exprs/expr_executor.h"
 #include "storage/storage_engine.h"
 
 namespace starrocks::pipeline {
@@ -42,7 +43,7 @@ Status OlapScanPrepareOperator::prepare(RuntimeState* state) {
 
     RETURN_IF_ERROR(_ctx->prepare(state));
 
-    auto* capture_tablet_rowsets_timer = ADD_TIMER(_unique_metrics, "CaptureTabletRowsetsTime");
+    RuntimeProfile::Counter* capture_tablet_rowsets_timer = ADD_TIMER(_unique_metrics, "CaptureTabletRowsetsTime");
     {
         SCOPED_TIMER(capture_tablet_rowsets_timer);
         RETURN_IF_ERROR(_ctx->capture_tablet_rowsets(_morsel_queue->prepare_olap_scan_ranges()));
@@ -83,8 +84,13 @@ StatusOr<ChunkPtr> OlapScanPrepareOperator::pull_chunk(RuntimeState* state) {
     }
     _morsel_queue->set_tablet_rowsets(std::move(tablet_rowsets));
 
+    if (!tablets.empty()) {
+        _morsel_queue->set_tablet_schema(tablets[0]->tablet_schema());
+    }
+
     DeferOp defer([&]() {
         _ctx->set_prepare_finished();
+        _ctx->notify_observers();
         TEST_SYNC_POINT("OlapScnPrepareOperator::pull_chunk::after_set_prepare_finished");
     });
 
@@ -123,15 +129,15 @@ Status OlapScanPrepareOperatorFactory::prepare(RuntimeState* state) {
                                            &(tuple_desc->decoded_slots()));
     DictOptimizeParser::disable_open_rewrite(&conjunct_ctxs);
 
-    RETURN_IF_ERROR(Expr::prepare(conjunct_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(conjunct_ctxs, state));
 
     return Status::OK();
 }
 
 void OlapScanPrepareOperatorFactory::close(RuntimeState* state) {
     const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
-    Expr::close(conjunct_ctxs, state);
+    ExprExecutor::close(conjunct_ctxs, state);
 
     SourceOperatorFactory::close(state);
 }

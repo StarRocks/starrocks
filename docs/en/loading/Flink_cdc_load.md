@@ -1,10 +1,15 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+keywords:
+  - MySql
+  - mysql
+  - sync
+  - Flink CDC
 ---
 
 # Realtime synchronization from MySQL
 
-import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.mdx'
 
 StarRocks supports multiple methods to synchronize data from MySQL to StarRocks in real time, delivering low latency real-time analytics of massive data.
 
@@ -286,7 +291,7 @@ To synchronize data from MySQL in real time, the system needs to read data from 
 
     > **NOTICE**
     >
-    > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/Data_distribution.md#set-the-number-of-buckets).
+    > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/data_distribution/Data_distribution.md#set-the-number-of-buckets).
 
 ## Synchronize data
 
@@ -425,7 +430,9 @@ flink.starrocks.password=xxxxxx
 flink.starrocks.sink.properties.format=csv
 flink.starrocks.sink.properties.column_separator=\x01
 flink.starrocks.sink.properties.row_delimiter=\x02
-flink.starrocks.sink.buffer-flush.interval-ms=15000[table-rule.2]
+flink.starrocks.sink.buffer-flush.interval-ms=15000
+
+[table-rule.2]
 # Pattern to match databases for setting properties
 database = ^order2.*$
 # Pattern to match tables for setting properties

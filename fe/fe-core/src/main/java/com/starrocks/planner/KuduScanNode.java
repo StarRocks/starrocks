@@ -14,20 +14,22 @@
 
 package com.starrocks.planner;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.KuduTable;
-import com.starrocks.catalog.Type;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.kudu.KuduRemoteFileDesc;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;
@@ -37,6 +39,8 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.type.Type;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.kudu.client.KuduScanToken;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -103,7 +107,7 @@ public class KuduScanNode extends ScanNode {
         List<KuduScanToken> tokens = remoteFileDesc.getKuduScanTokens();
         if (tokens.isEmpty()) {
             LOG.warn("There is no tokens on {}.{} and predicate: [{}]",
-                    kuduTable.getDbName(), kuduTable.getTableName(), predicate);
+                    kuduTable.getCatalogDBName(), kuduTable.getCatalogTableName(), predicate);
             return;
         }
         List<Long> nodeIds = getAllAvailableBackendOrComputeIds();
@@ -139,10 +143,25 @@ public class KuduScanNode extends ScanNode {
         scanRangeLocationsList.add(scanRangeLocations);
     }
 
-    private List<Long> getAllAvailableBackendOrComputeIds() {
-        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-        List<Long> allNodes = infoService.getAvailableBackendIds();
-        allNodes.addAll(infoService.getAvailableComputeNodeIds());
+    @VisibleForTesting
+    public List<Long> getAllAvailableBackendOrComputeIds() {
+        List<Long> allNodes;
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        if (RunMode.isSharedDataMode()) {
+            ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
+            if (ConnectContext.get() != null) {
+                computeResource = ConnectContext.get().getCurrentComputeResource();
+            }
+            final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            allNodes = warehouseManager.getAliveComputeNodes(computeResource)
+                    .stream()
+                    .map(ComputeNode::getId)
+                    .collect(Collectors.toList());
+        } else {
+            allNodes = systemInfoService.getAvailableBackendIds();
+            assert allNodes != null;
+            allNodes.addAll(systemInfoService.getAvailableComputeNodeIds());
+        }
         return allNodes;
     }
 
@@ -157,19 +176,19 @@ public class KuduScanNode extends ScanNode {
         }
         if (!scanNodePredicates.getPartitionConjuncts().isEmpty()) {
             output.append(prefix).append("PARTITION PREDICATES: ").append(
-                    getExplainString(scanNodePredicates.getPartitionConjuncts())).append("\n");
+                    explainExpr(scanNodePredicates.getPartitionConjuncts())).append("\n");
         }
         if (!scanNodePredicates.getNonPartitionConjuncts().isEmpty()) {
             output.append(prefix).append("NON-PARTITION PREDICATES: ").append(
-                    getExplainString(scanNodePredicates.getNonPartitionConjuncts())).append("\n");
+                    explainExpr(scanNodePredicates.getNonPartitionConjuncts())).append("\n");
         }
         if (!scanNodePredicates.getNoEvalPartitionConjuncts().isEmpty()) {
             output.append(prefix).append("NO EVAL-PARTITION PREDICATES: ").append(
-                    getExplainString(scanNodePredicates.getNoEvalPartitionConjuncts())).append("\n");
+                    explainExpr(scanNodePredicates.getNoEvalPartitionConjuncts())).append("\n");
         }
         if (!scanNodePredicates.getMinMaxConjuncts().isEmpty()) {
             output.append(prefix).append("MIN/MAX PREDICATES: ").append(
-                    getExplainString(scanNodePredicates.getMinMaxConjuncts())).append("\n");
+                    explainExpr(scanNodePredicates.getMinMaxConjuncts())).append("\n");
         }
 
         // TODO: support it in verbose

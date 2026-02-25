@@ -21,12 +21,13 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.qe.ConnectContext;
 import com.zaxxer.hikari.HikariDataSource;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -53,7 +54,7 @@ public class ClickhouseSchemaResolverTest {
     private MockResultSet tableResult;
     private MockResultSet columnResult;
 
-    @Before
+    @BeforeEach
     public void setUp() throws SQLException {
         dbResult = new MockResultSet("catalog");
         dbResult.addColumn("TABLE_SCHEM", Arrays.asList("clickhouse", "template1", "test"));
@@ -65,21 +66,21 @@ public class ClickhouseSchemaResolverTest {
                         Types.BIGINT, Types.NUMERIC, Types.NUMERIC, Types.NUMERIC, Types.NUMERIC, Types.NUMERIC,
                         Types.FLOAT,
                         Types.DOUBLE, Types.BOOLEAN, Types.DATE, Types.TIMESTAMP, Types.VARCHAR, Types.VARCHAR,
-                        Types.DECIMAL
+                        Types.DECIMAL, Types.DECIMAL, Types.TIMESTAMP_WITH_TIMEZONE
                 ));
         columnResult.addColumn("TYPE_NAME", Arrays.asList("Int8", "UInt8", "Int16", "UInt16", "Int32", "Int64",
                 "UInt32", "UInt64", "Int128", "UInt128", "Int256", "UInt256", "Float32", "Float64", "Bool", "Date",
                 "DateTime",
-                "String", "Nullable(String)", "Decimal(9,9)"));
+                "String", "Nullable(String)", "Decimal(9,9)", "Nullable(Decimal(9,9))", "DateTime64(3, 'Asia/Shanghai')"));
         columnResult.addColumn("COLUMN_SIZE",
-                Arrays.asList(3, 3, 5, 5, 10, 19, 10, 20, 39, 39, 77, 78, 12, 22, 1, 10, 29, 0, 0, 9));
+                Arrays.asList(3, 3, 5, 5, 10, 19, 10, 20, 39, 39, 77, 78, 12, 22, 1, 10, 29, 0, 0, 9, 9, 29));
         columnResult.addColumn("DECIMAL_DIGITS",
-                Arrays.asList(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, 0, 0, null, null, 9));
+                Arrays.asList(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, null, 0, 0, null, null, 9, 9, null));
         columnResult.addColumn("COLUMN_NAME", Arrays.asList("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l",
-                "m", "n", "o", "p", "q", "r", "s", "t"));
+                "m", "n", "o", "p", "q", "r", "s", "t", "u", "v"));
         columnResult.addColumn("IS_NULLABLE",
                 Arrays.asList("NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO",
-                        "NO", "NO", "NO", "YES", "NO"));
+                        "NO", "NO", "NO", "YES", "NO", "YES", "NO"));
         properties = new HashMap<>();
         properties.put(DRIVER_CLASS, "com.clickhouse.jdbc.ClickHouseDriver");
         properties.put(JDBCResource.URI, "jdbc:clickhouse://127.0.0.1:8123");
@@ -104,11 +105,11 @@ public class ClickhouseSchemaResolverTest {
         };
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-            List<String> result = jdbcMetadata.listDbNames();
+            List<String> result = jdbcMetadata.listDbNames(new ConnectContext());
             List<String> expectResult = Lists.newArrayList("clickhouse", "template1", "test");
-            Assert.assertEquals(expectResult, result);
+            Assertions.assertEquals(expectResult, result);
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -127,10 +128,10 @@ public class ClickhouseSchemaResolverTest {
         };
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-            Database db = jdbcMetadata.getDb("test");
-            Assert.assertEquals("test", db.getOriginName());
+            Database db = jdbcMetadata.getDb(new ConnectContext(), "test");
+            Assertions.assertEquals("test", db.getOriginName());
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -154,11 +155,11 @@ public class ClickhouseSchemaResolverTest {
         };
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "t1", dataSource);
-            List<String> result = jdbcMetadata.listTableNames("test");
+            List<String> result = jdbcMetadata.listTableNames(new ConnectContext(), "test");
             List<String> expectResult = Lists.newArrayList("tbl1", "tbl2", "tbl3");
-            Assert.assertEquals(expectResult, result);
+            Assertions.assertEquals(expectResult, result);
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -182,9 +183,9 @@ public class ClickhouseSchemaResolverTest {
         };
 
         JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-        List<String> result = jdbcMetadata.listTableNames("test");
+        List<String> result = jdbcMetadata.listTableNames(new ConnectContext(), "test");
         List<String> expectResult = Lists.newArrayList("tbl1", "tbl2", "tbl3");
-        Assert.assertEquals(expectResult, result);
+        Assertions.assertEquals(expectResult, result);
 
     }
 
@@ -207,20 +208,21 @@ public class ClickhouseSchemaResolverTest {
         };
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-            Table table = jdbcMetadata.getTable("test", "tbl1");
-            Assert.assertTrue(table instanceof JDBCTable);
-            Assert.assertEquals("catalog.test.tbl1", table.getUUID());
-            Assert.assertEquals("tbl1", table.getName());
-            Assert.assertNull(properties.get(JDBCTable.JDBC_TABLENAME));
+            Table table = jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
+            Assertions.assertTrue(table instanceof JDBCTable);
+            Assertions.assertEquals("catalog.test.tbl1", table.getUUID());
+            Assertions.assertEquals("tbl1", table.getName());
+            Assertions.assertNull(properties.get(JDBCTable.JDBC_TABLENAME));
             ClickhouseSchemaResolver clickhouseSchemaResolver = new ClickhouseSchemaResolver(properties);
             ResultSet columnSet = clickhouseSchemaResolver.getColumns(connection, "test", "tbl1");
             List<Column> fullSchema = clickhouseSchemaResolver.convertToSRTable(columnSet);
             Table table1 = clickhouseSchemaResolver.getTable(1, "tbl1", fullSchema, "test", "catalog", properties);
-            Assert.assertTrue(table1 instanceof JDBCTable);
-            Assert.assertNull(properties.get(JDBCTable.JDBC_TABLENAME));
+            Assertions.assertTrue(table1 instanceof JDBCTable);
+            Assertions.assertNull(properties.get(JDBCTable.JDBC_TABLENAME));
         } catch (Exception e) {
             System.out.println(e.getMessage());
-            Assert.fail();
+            e.printStackTrace();
+            Assertions.fail();
         }
     }
 
@@ -238,8 +240,8 @@ public class ClickhouseSchemaResolverTest {
             }
         };
         JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-        List<String> result = jdbcMetadata.listDbNames();
+        List<String> result = jdbcMetadata.listDbNames(new ConnectContext());
         List<String> expectResult = Lists.newArrayList("clickhouse", "template1", "test");
-        Assert.assertEquals(expectResult, result);
+        Assertions.assertEquals(expectResult, result);
     }
 }

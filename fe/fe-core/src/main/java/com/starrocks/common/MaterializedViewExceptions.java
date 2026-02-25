@@ -14,7 +14,6 @@
 
 package com.starrocks.common;
 
-import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.commons.lang3.StringUtils;
 
@@ -25,11 +24,27 @@ import java.util.Set;
  */
 public class MaterializedViewExceptions {
 
+    // reason for base table optimized, base table's partition is optimized which mv cannot be actived again.
+    public static final String INACTIVE_REASON_FOR_BASE_TABLE_OPTIMIZED = "base-table optimized:";
+
+    public static final String INACTIVE_REASON_FOR_BASE_TABLE_REORDER_COLUMNS = "base-table reordered columns:";
+
+    public static final String INACTIVE_REASON_FOR_METADATA_TABLE_RESTORE_CORRUPTED = "metadata backup/restore mv corrupted:";
+
+    public static final String INACTIVE_REASON_FOR_CONSECUTIVE_FAILURES = "mv consecutive failures: ";
+
     /**
      * Create the inactive reason when base table not exists
      */
     public static String inactiveReasonForBaseTableNotExists(String tableName) {
         return "base-table dropped: " + tableName;
+    }
+
+    /**
+     * Create the inactive reason when base table changed, eg: drop & recreated
+     */
+    public static String inactiveReasonForBaseTableChanged(String tableName) {
+        return "base-table changed: " + tableName;
     }
 
     public static String inactiveReasonForBaseTableNotExists(long tableId) {
@@ -44,7 +59,19 @@ public class MaterializedViewExceptions {
         return "base-table swapped: " + tableName;
     }
 
-    public static String inactiveReasonForBaseTableActive(String tableName) {
+    public static String inactiveReasonForBaseTableOptimized(String tableName) {
+        return INACTIVE_REASON_FOR_BASE_TABLE_OPTIMIZED + tableName;
+    }
+
+    public static String inactiveReasonForBaseTableReorderColumns(String tableName) {
+        return INACTIVE_REASON_FOR_BASE_TABLE_REORDER_COLUMNS + tableName;
+    }
+
+    public static String inactiveReasonForMetadataTableRestoreCorrupted(String tableName) {
+        return INACTIVE_REASON_FOR_METADATA_TABLE_RESTORE_CORRUPTED + tableName;
+    }
+
+    public static String inactiveReasonForBaseTableInActive(String tableName) {
         return "base-mv inactive: " + tableName;
     }
 
@@ -68,7 +95,18 @@ public class MaterializedViewExceptions {
         return "base table schema changed for columns: " + StringUtils.join(columns, ",");
     }
 
-    public static SemanticException reportBaseTableNotExists(BaseTableInfo baseTableInfo) {
-        return new SemanticException(inactiveReasonForBaseTableNotExists(baseTableInfo.getTableName()));
+    public static SemanticException reportBaseTableNotExists(String tableName) {
+        return new SemanticException(inactiveReasonForBaseTableNotExists(tableName));
+    }
+
+    public static String inactiveReasonForConsecutiveFailures(String mvName) {
+        return INACTIVE_REASON_FOR_CONSECUTIVE_FAILURES + mvName;
+    }
+
+    public static String unSupportedReasonForMVFSE(String reason) {
+        return String.format("fast schema evolution failed: %s. Please use 1) 'CREATE a new MV " +
+                "and use `SWAP MV` to replace the current', or 2) `ALTER MATERIALIZED VIEW <NAME> SET " +
+                "('query_rewrite_consistency'='force_mv')` to force query rewrite. or 3) `ALTER MATERIALIZED VIEW " +
+                "<NAME> set ('enable_query_rewrite'='false')` to disable query rewrite.", reason);
     }
 }

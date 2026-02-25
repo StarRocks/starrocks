@@ -67,7 +67,7 @@ public:
         int64_t temp = 1 + this->data(state).count;
 
         TResult delta;
-        delta = column->get_data()[row_num] - this->data(state).mean;
+        delta = column->immutable_data()[row_num] - this->data(state).mean;
 
         TResult r;
         if constexpr (lt_is_decimalv2<LT>) {
@@ -155,9 +155,9 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
-        DCHECK((*dst)->is_binary());
-        auto* dst_column = down_cast<BinaryColumn*>((*dst).get());
+                                     MutableColumnPtr& dst) const override {
+        DCHECK(dst->is_binary());
+        auto* dst_column = down_cast<BinaryColumn*>(dst.get());
         Bytes& bytes = dst_column->get_bytes();
         size_t old_size = bytes.size();
 
@@ -177,7 +177,7 @@ public:
 
         int64_t count = 1;
         for (size_t i = 0; i < chunk_size; ++i) {
-            mean = src_column->get_data()[i];
+            mean = src_column->immutable_data()[i];
             memcpy(bytes.data() + old_size, &mean, sizeof(TResult));
             memcpy(bytes.data() + old_size + sizeof(TResult), &m2, sizeof(TResult));
             memcpy(bytes.data() + old_size + sizeof(TResult) * 2, &count, sizeof(int64_t));

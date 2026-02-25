@@ -1,5 +1,6 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+keywords: ['jian kong']
 ---
 
 # 使用 Prometheus 和 Grafana 监控报警
@@ -138,6 +139,10 @@ wget https://github.com/prometheus/prometheus/releases/download/v2.45.0/promethe
            labels:
              group: be
    ```
+
+   :::note
+   请注意，在集群进行扩缩容后，Prometheus 将无法检测到服务（`targets`）变更。例如，对于部署在 AWS 上的集群，可为托管 Prometheus 服务的 EC2 实例授予 `ec2:DescribeInstances` 和 `ec2:DescribeTags` 权限，并在 **prometheus/prometheus.yml** 中添加 `ec2_sd_configs` 和 `relabel_configs` 属性。详细操作指南请参阅 [附录 - 为 Prometheus 启用服务检测](#为-prometheus-启用服务检测)。
+   :::
 
    配置文件修改完成后，您可以使用 `promtool` 检查配置文件语法是否合规。
 
@@ -319,11 +324,9 @@ wget https://dl.grafana.com/enterprise/release/grafana-enterprise-10.0.3-1.x86_6
 
 1. 请根据您的 StarRocks 版本下载对应的 Dashboard 模板。
 
-   - [StarRocks-1.19.0 之前版本 Dashboard 模版](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Overview.json)
-   - [StarRocks-1.19.0 开始到 StarRocks-2.4.0 之前版本 Dashboard 模版](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Overview-19.json)
-   - [StarRocks-2.4.0 及其之后版本 Dashboard 模版](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Overview-24-new.json)
-   - [存算分离 Dashboard 模版 - General](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Shared_data-General.json)
-   - [存算分离 Dashboard 模版 - Starlet](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Shared_data-Starlet.json)
+   - [全架构 Dashboard 模版](https://releases.starrocks.io/resources/Dashboard-All-Arch-20260113.json)
+   - [存算分离 Dashboard 模版 - General](https://releases.starrocks.io/resources/Dashboard-Shared-data-General-3.5.json)
+   - [存算分离 Dashboard 模版 - Starlet](https://releases.starrocks.io/resources/Dashboard-Shared-data-Starlet-3.5.json)
 
    > **注意**
    >
@@ -775,6 +778,81 @@ BE 节点的 CPU Idle，即 CPU 空闲率。
 4. 在 **Add details for your alert rule** 区域，点击 **Add annotation**，选择 **Description**，输入报警内容，例如：“FE 堆内存使用率过高，请在 FE 配置文件 **fe.conf** 中调整堆内存上限”。
 5. 在 **Notifications** 区域，**Labels** 配置与 FE 报警规则相同 。若不配置 Label，Granfana 将使用 Default policy，将报警邮件发送至 “StarRocksOp” 报警渠道。
 
+## 附录
+
+### 为 Prometheus 启用服务检测
+
+您可以为 Prometheus 启用服务检测功能，使其能够在集群进行扩缩容后自动检测服务（节点）。
+
+:::note
+以下部分以 AWS 为例进行说明。
+:::
+
+1. 使用 IAM Policy 为托管 Prometheus 服务的 EC2 实例授予以下权限：
+
+   ```JSON
+   {
+         "Version": "2012-10-17",
+         "Statement": [
+                  {
+                           "Effect": "Allow",
+                           "Action": [
+                                 "ec2:DescribeInstances",
+                                 "ec2:DescribeTags"
+                           ],
+                           "Resource": "*"
+                  }
+         ]
+   }
+   ```
+
+   有关配置 AWS 认证信息的详细说明，请参阅 [配置 AWS 认证信息](../../../integrations/authenticate_to_aws_resources.md)。
+
+   通过这些权限，Prometheus能够列出 Region 内的实例及其标签。
+
+2. 在 **prometheus/prometheus.yml** 中添加 `ec2_sd_configs` 和 `relabel_configs` 部分。
+
+   示例：
+
+   ```Yaml
+   global:
+   scrape_interval: 15s # Set the global scrape interval to 15s. The default is 1 min.
+   evaluation_interval: 15s # Set the global rule evaluation interval to 15s. The default is 1 min.
+   scrape_configs:
+   - job_name: 'StarRocks_Cluster01'
+      metrics_path: '/metrics'
+      # highlight-start
+      ec2_sd_configs:
+         - region: us-west-2
+         port: 8030
+         filters:
+            - name: tag:ClusterName
+               values: ['test-stage-20251021']
+            - name: tag:ProcessType
+               values: ['FE']
+         - region: us-west-2
+         port: 8040
+         filters:
+            - name: tag:ClusterName
+               values: ['test-stage-20251021']
+            - name: tag:ProcessType
+               values: ['BE']
+      relabel_configs:
+         - source_labels: [__meta_ec2_tag_ClusterName]
+         regex: test-stage-20251021
+         target_label: cluster
+         replacement: test-stage-20251021
+         - source_labels: [__meta_ec2_tag_ProcessType]
+         regex: FE
+         target_label: group
+         replacement: fe
+         - source_labels: [__meta_ec2_tag_ProcessType]
+         regex: BE
+         target_label: group
+         replacement: be
+      # highlight-end
+   ```
+
 ## Q&A
 
 ### Q：为什么 Dashboard 无法感知异常？
@@ -787,3 +865,49 @@ A：以 Query Error 项为例，您可以为其创建两个报警规则，设置
 
 - **风险**：设置失败率大于 0.05 时，提示为风险，报警发送给开发团队。
 - **严重**：设置失败率大于 0.20 时，提示为严重，报警发送给运维团队。此时报警通知将同时发送给开发团队和运维团队。
+
+### Q: 如何获取更详细的监控指标，包括表级别指标、物化视图指标以及带有用户标签的连接统计信息？
+
+A: 默认情况下，`/metrics` 接口以精简模式收集指标，以尽量减少对性能的影响。要获取详细指标，您需要在请求中添加特定参数，并提供具有 ADMIN 权限用户的 Basic Authentication 凭据。
+
+**支持的参数：**
+
+- `with_table_metrics=all`：收集所有表级别指标。
+- `with_materialized_view_metrics=all`：收集所有物化视图指标。
+- `with_user_connections=all`：收集按用户标签分类的连接统计信息。
+
+**认证要求：**
+
+这些参数仅在请求包含有效的 ADMIN 用户 Basic Authentication 凭据时生效。如果请求是匿名的或用户缺乏 ADMIN 权限，这些参数将被忽略，仅返回默认指标。
+
+**Curl 命令示例：**
+
+```bash
+curl -u <admin_username>:<admin_password> \
+"http://<fe_host>:<fe_http_port>/metrics?with_table_metrics=all&with_materialized_view_metrics=all&with_user_connections=all"
+```
+
+**Prometheus 配置示例：**
+
+要在 Prometheus 中启用详细指标收集，请在 `prometheus.yml` 中配置 `params` 和 `basic_auth`：
+
+```yaml
+scrape_configs:
+  - job_name: 'StarRocks_Detailed_Metrics'
+    metrics_path: '/metrics'
+    params:
+      with_table_metrics: ['all']
+      with_materialized_view_metrics: ['all']
+      with_user_connections: ['all']
+    basic_auth:
+      username: '<admin_username>'
+      password: '<admin_password>'
+    static_configs:
+      - targets: ['<fe_host>:<fe_http_port>']
+```
+
+:::note
+
+收集所有表和物化视图指标可能会增加 FE 节点的负载。在大规模环境中，请谨慎使用这些参数。
+
+:::

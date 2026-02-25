@@ -19,12 +19,15 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.proc.ReplicationsProcNode;
 import com.starrocks.leader.LeaderImpl;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
-import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.system.Backend;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -43,13 +46,12 @@ import com.starrocks.thrift.TTableReplicationRequest;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TTabletReplicationInfo;
 import com.starrocks.utframe.StarRocksAssert;
-import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -67,23 +69,22 @@ public class ReplicationMgrTest {
     private ReplicationJob job;
     private ReplicationMgr replicationMgr;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster();
-        AnalyzeTestUtil.init();
-        starRocksAssert = new StarRocksAssert(AnalyzeTestUtil.getConnectContext());
-        starRocksAssert.withDatabase("test").useDatabase("test");
+        FeConstants.runningUnitTest = true;
+        AnalyzeTestUtil.initWithoutTableAndDb(RunMode.SHARED_DATA);
+        GlobalStateMgr.getCurrentState().getPublishVersionDaemon().setStop();
+        starRocksAssert = AnalyzeTestUtil.starRocksAssert;
 
-        db = GlobalStateMgr.getCurrentState().getDb("test");
+        db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
 
         String sql = "create table single_partition_duplicate_key (key1 int, key2 varchar(10))\n" +
                 "distributed by hash(key1) buckets 1\n" +
                 "properties('replication_num' = '1'); ";
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql,
-                AnalyzeTestUtil.getConnectContext());
-        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
+        starRocksAssert.withTable(sql);
 
-        table = (OlapTable) db.getTable("single_partition_duplicate_key");
+        table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "single_partition_duplicate_key");
         srcTable = DeepCopy.copyWithGson(table, OlapTable.class);
 
         partition = table.getPartitions().iterator().next();
@@ -97,14 +98,14 @@ public class ReplicationMgrTest {
         };
     }
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
-        partition.updateVersionForRestore(10);
-        srcPartition.updateVersionForRestore(100);
-        partition.setDataVersion(8);
-        partition.setNextDataVersion(9);
-        srcPartition.setDataVersion(98);
-        srcPartition.setNextDataVersion(99);
+        partition.getDefaultPhysicalPartition().updateVersionForRestore(10);
+        srcPartition.getDefaultPhysicalPartition().updateVersionForRestore(100);
+        partition.getDefaultPhysicalPartition().setDataVersion(8);
+        partition.getDefaultPhysicalPartition().setNextDataVersion(9);
+        srcPartition.getDefaultPhysicalPartition().setDataVersion(98);
+        srcPartition.getDefaultPhysicalPartition().setNextDataVersion(99);
 
         job = new ReplicationJob(null, "test_token", db.getId(), table, srcTable,
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
@@ -114,17 +115,17 @@ public class ReplicationMgrTest {
 
     @Test
     public void testNormal() throws Exception {
-        Assert.assertFalse(ReplicationJobState.INITIALIZING.equals(job));
-        Assert.assertEquals(ReplicationJobState.INITIALIZING, job.getState());
-        Assert.assertEquals(ReplicationJobState.INITIALIZING.name(), job.getState().name());
-        Assert.assertEquals(ReplicationJobState.INITIALIZING.toString(), job.getState().toString());
-        Assert.assertEquals(ReplicationJobState.INITIALIZING.hashCode(), job.getState().hashCode());
+        Assertions.assertFalse(ReplicationJobState.INITIALIZING.equals(job));
+        Assertions.assertEquals(ReplicationJobState.INITIALIZING, job.getState());
+        Assertions.assertEquals(ReplicationJobState.INITIALIZING.name(), job.getState().name());
+        Assertions.assertEquals(ReplicationJobState.INITIALIZING.toString(), job.getState().toString());
+        Assertions.assertEquals(ReplicationJobState.INITIALIZING.hashCode(), job.getState().hashCode());
 
         replicationMgr.runAfterCatalogReady();
-        Assert.assertEquals(ReplicationJobState.SNAPSHOTING, job.getState());
+        Assertions.assertEquals(ReplicationJobState.SNAPSHOTING, job.getState());
 
         replicationMgr.runAfterCatalogReady();
-        Assert.assertEquals(ReplicationJobState.SNAPSHOTING, job.getState());
+        Assertions.assertEquals(ReplicationJobState.SNAPSHOTING, job.getState());
 
         replicationMgr.replayReplicationJob(job);
 
@@ -142,7 +143,7 @@ public class ReplicationMgrTest {
         }
 
         replicationMgr.runAfterCatalogReady();
-        Assert.assertEquals(ReplicationJobState.REPLICATING, job.getState());
+        Assertions.assertEquals(ReplicationJobState.REPLICATING, job.getState());
 
         replicationMgr.replayReplicationJob(job);
 
@@ -158,51 +159,80 @@ public class ReplicationMgrTest {
         }
 
         replicationMgr.runAfterCatalogReady();
-        Assert.assertEquals(ReplicationJobState.COMMITTED, job.getState());
+        Assertions.assertEquals(ReplicationJobState.COMMITTED, job.getState());
 
-        Assert.assertEquals(partition.getCommittedVersion(), srcPartition.getVisibleVersion());
-        Assert.assertEquals(partition.getCommittedDataVersion(), srcPartition.getDataVersion());
+        Assertions.assertEquals(partition.getDefaultPhysicalPartition().getCommittedVersion(),
+                srcPartition.getDefaultPhysicalPartition().getVisibleVersion());
+        Assertions.assertEquals(partition.getDefaultPhysicalPartition().getCommittedDataVersion(),
+                srcPartition.getDefaultPhysicalPartition().getDataVersion());
 
         replicationMgr.replayReplicationJob(job);
+
+        Assertions.assertTrue(replicationMgr.getRunningJobs().isEmpty());
+        Assertions.assertFalse(replicationMgr.getCommittedJobs().isEmpty());
+
+        int old = Config.history_job_keep_max_second;
+        Config.history_job_keep_max_second = -1;
+        Assertions.assertTrue(job.isExpired());
+
+        replicationMgr.runAfterCatalogReady();
+        Assertions.assertTrue(replicationMgr.getCommittedJobs().isEmpty());
+
+        replicationMgr.replayDeleteReplicationJob(job);
+        Assertions.assertTrue(replicationMgr.getCommittedJobs().isEmpty());
+
+        Config.history_job_keep_max_second = old;
     }
 
     @Test
     public void testInitializingCancel() {
-        Assert.assertEquals(ReplicationJobState.INITIALIZING, job.getState());
+        Assertions.assertEquals(ReplicationJobState.INITIALIZING, job.getState());
 
         replicationMgr.cancelRunningJobs();
-        Assert.assertEquals(ReplicationJobState.ABORTED, job.getState());
+        Assertions.assertEquals(ReplicationJobState.ABORTED, job.getState());
 
         replicationMgr.runAfterCatalogReady();
-        Assert.assertEquals(ReplicationJobState.ABORTED, job.getState());
+        Assertions.assertEquals(ReplicationJobState.ABORTED, job.getState());
 
-        Assert.assertFalse(replicationMgr.hasRunningJobs());
-        Assert.assertTrue(replicationMgr.hasFailedJobs());
-
-        replicationMgr.clearFinishedJobs();
-        replicationMgr.replayReplicationJob(null);
+        Assertions.assertTrue(replicationMgr.getRunningJobs().isEmpty());
+        Assertions.assertFalse(replicationMgr.getAbortedJobs().isEmpty());
     }
 
     @Test
     public void testSnapshotingCancel() {
-        Assert.assertEquals(ReplicationJobState.INITIALIZING, job.getState());
+        Assertions.assertEquals(ReplicationJobState.INITIALIZING, job.getState());
 
         replicationMgr.runAfterCatalogReady();
-        Assert.assertEquals(ReplicationJobState.SNAPSHOTING, job.getState());
+        Assertions.assertEquals(ReplicationJobState.SNAPSHOTING, job.getState());
 
         replicationMgr.cancelRunningJobs();
-        Assert.assertEquals(ReplicationJobState.ABORTED, job.getState());
+        Assertions.assertEquals(ReplicationJobState.ABORTED, job.getState());
 
         replicationMgr.runAfterCatalogReady();
-        Assert.assertEquals(ReplicationJobState.ABORTED, job.getState());
+        Assertions.assertEquals(ReplicationJobState.ABORTED, job.getState());
+
+        Assertions.assertTrue(replicationMgr.getRunningJobs().isEmpty());
+        Assertions.assertFalse(replicationMgr.getAbortedJobs().isEmpty());
+
+        int old = Config.history_job_keep_max_second;
+        Config.history_job_keep_max_second = -1;
+        Assertions.assertTrue(job.isExpired());
+
+        replicationMgr.runAfterCatalogReady();
+        Assertions.assertTrue(replicationMgr.getAbortedJobs().isEmpty());
+
+        replicationMgr.replayDeleteReplicationJob(job);
+        Assertions.assertTrue(replicationMgr.getAbortedJobs().isEmpty());
+
+        Config.history_job_keep_max_second = old;
     }
 
     @Test
     public void testReplicatingCancel() {
-        Assert.assertEquals(ReplicationJobState.INITIALIZING, job.getState());
+        Assertions.assertEquals(ReplicationJobState.INITIALIZING, job.getState());
 
         replicationMgr.runAfterCatalogReady();
-        Assert.assertEquals(ReplicationJobState.SNAPSHOTING, job.getState());
+        Assertions.assertEquals(ReplicationJobState.SNAPSHOTING, job.getState());
 
         Map<AgentTask, AgentTask> runningTasks = Deencapsulation.getField(job, "runningTasks");
         for (AgentTask task : runningTasks.values()) {
@@ -213,24 +243,24 @@ public class ReplicationMgrTest {
         }
 
         replicationMgr.runAfterCatalogReady();
-        Assert.assertEquals(ReplicationJobState.REPLICATING, job.getState());
+        Assertions.assertEquals(ReplicationJobState.REPLICATING, job.getState());
 
         replicationMgr.cancelRunningJobs();
-        Assert.assertEquals(ReplicationJobState.ABORTED, job.getState());
+        Assertions.assertEquals(ReplicationJobState.ABORTED, job.getState());
 
         replicationMgr.runAfterCatalogReady();
-        Assert.assertEquals(ReplicationJobState.ABORTED, job.getState());
+        Assertions.assertEquals(ReplicationJobState.ABORTED, job.getState());
     }
 
     @Test
     public void testCommittedCancel() {
-        Assert.assertEquals(ReplicationJobState.INITIALIZING, job.getState());
+        Assertions.assertEquals(ReplicationJobState.INITIALIZING, job.getState());
 
         replicationMgr.runAfterCatalogReady();
-        Assert.assertEquals(ReplicationJobState.SNAPSHOTING, job.getState());
+        Assertions.assertEquals(ReplicationJobState.SNAPSHOTING, job.getState());
 
         replicationMgr.runAfterCatalogReady();
-        Assert.assertEquals(ReplicationJobState.SNAPSHOTING, job.getState());
+        Assertions.assertEquals(ReplicationJobState.SNAPSHOTING, job.getState());
 
         Map<AgentTask, AgentTask> runningTasks = Deencapsulation.getField(job, "runningTasks");
         for (AgentTask task : runningTasks.values()) {
@@ -241,7 +271,7 @@ public class ReplicationMgrTest {
         }
 
         replicationMgr.runAfterCatalogReady();
-        Assert.assertEquals(ReplicationJobState.REPLICATING, job.getState());
+        Assertions.assertEquals(ReplicationJobState.REPLICATING, job.getState());
 
         for (AgentTask task : runningTasks.values()) {
             TFinishTaskRequest request = new TFinishTaskRequest();
@@ -250,21 +280,21 @@ public class ReplicationMgrTest {
         }
 
         replicationMgr.runAfterCatalogReady();
-        Assert.assertEquals(ReplicationJobState.COMMITTED, job.getState());
+        Assertions.assertEquals(ReplicationJobState.COMMITTED, job.getState());
 
         replicationMgr.cancelRunningJobs();
-        Assert.assertEquals(ReplicationJobState.COMMITTED, job.getState());
+        Assertions.assertEquals(ReplicationJobState.COMMITTED, job.getState());
     }
 
     @Test
     public void testSnapshotingFailed() throws Exception {
-        Assert.assertEquals(ReplicationJobState.INITIALIZING, job.getState());
+        Assertions.assertEquals(ReplicationJobState.INITIALIZING, job.getState());
 
         replicationMgr.runAfterCatalogReady();
-        Assert.assertEquals(ReplicationJobState.SNAPSHOTING, job.getState());
+        Assertions.assertEquals(ReplicationJobState.SNAPSHOTING, job.getState());
 
         replicationMgr.runAfterCatalogReady();
-        Assert.assertEquals(ReplicationJobState.SNAPSHOTING, job.getState());
+        Assertions.assertEquals(ReplicationJobState.SNAPSHOTING, job.getState());
 
         Map<AgentTask, AgentTask> runningTasks = Deencapsulation.getField(job, "runningTasks");
         for (AgentTask task : runningTasks.values()) {
@@ -274,18 +304,18 @@ public class ReplicationMgrTest {
         }
 
         replicationMgr.runAfterCatalogReady();
-        Assert.assertEquals(ReplicationJobState.ABORTED, job.getState());
+        Assertions.assertEquals(ReplicationJobState.ABORTED, job.getState());
     }
 
     @Test
     public void testReplicatingFailed() throws Exception {
-        Assert.assertEquals(ReplicationJobState.INITIALIZING, job.getState());
+        Assertions.assertEquals(ReplicationJobState.INITIALIZING, job.getState());
 
         replicationMgr.runAfterCatalogReady();
-        Assert.assertEquals(ReplicationJobState.SNAPSHOTING, job.getState());
+        Assertions.assertEquals(ReplicationJobState.SNAPSHOTING, job.getState());
 
         replicationMgr.runAfterCatalogReady();
-        Assert.assertEquals(ReplicationJobState.SNAPSHOTING, job.getState());
+        Assertions.assertEquals(ReplicationJobState.SNAPSHOTING, job.getState());
 
         Map<AgentTask, AgentTask> runningTasks = Deencapsulation.getField(job, "runningTasks");
         for (AgentTask task : runningTasks.values()) {
@@ -296,7 +326,7 @@ public class ReplicationMgrTest {
         }
 
         replicationMgr.runAfterCatalogReady();
-        Assert.assertEquals(ReplicationJobState.REPLICATING, job.getState());
+        Assertions.assertEquals(ReplicationJobState.REPLICATING, job.getState());
 
         for (AgentTask task : runningTasks.values()) {
             TFinishTaskRequest request = new TFinishTaskRequest();
@@ -307,7 +337,7 @@ public class ReplicationMgrTest {
         }
 
         replicationMgr.runAfterCatalogReady();
-        Assert.assertEquals(ReplicationJobState.ABORTED, job.getState());
+        Assertions.assertEquals(ReplicationJobState.ABORTED, job.getState());
     }
 
     @Test
@@ -326,16 +356,16 @@ public class ReplicationMgrTest {
         Partition partition = table.getPartitions().iterator().next();
         Partition srcPartition = srcTable.getPartitions().iterator().next();
         partitionInfo.partition_id = partition.getId();
-        partitionInfo.src_version = srcPartition.getVisibleVersion();
-        partitionInfo.src_version_epoch = srcPartition.getVersionEpoch();
+        partitionInfo.src_version = srcPartition.getDefaultPhysicalPartition().getVisibleVersion();
+        partitionInfo.src_version_epoch = srcPartition.getDefaultPhysicalPartition().getVersionEpoch();
         request.partition_replication_infos.put(partitionInfo.partition_id, partitionInfo);
 
         partitionInfo.index_replication_infos = new HashMap<Long, TIndexReplicationInfo>();
         TIndexReplicationInfo indexInfo = new TIndexReplicationInfo();
-        MaterializedIndex index = partition.getBaseIndex();
-        MaterializedIndex srcIndex = srcPartition.getBaseIndex();
+        MaterializedIndex index = partition.getDefaultPhysicalPartition().getLatestBaseIndex();
+        MaterializedIndex srcIndex = srcPartition.getDefaultPhysicalPartition().getLatestBaseIndex();
         indexInfo.index_id = index.getId();
-        indexInfo.src_schema_hash = srcTable.getSchemaHashByIndexId(srcIndex.getId());
+        indexInfo.src_schema_hash = srcTable.getSchemaHashByIndexMetaId(srcIndex.getMetaId());
         partitionInfo.index_replication_infos.put(indexInfo.index_id, indexInfo);
 
         indexInfo.tablet_replication_infos = new HashMap<Long, TTabletReplicationInfo>();
@@ -360,7 +390,7 @@ public class ReplicationMgrTest {
         try {
             new LeaderImpl().startTableReplication(request);
         } catch (Exception e) {
-            Assert.assertNull(e);
+            Assertions.assertNull(e);
         }
     }
 
@@ -370,5 +400,15 @@ public class ReplicationMgrTest {
         tSnapshotInfo.setSnapshot_path(snapshotPath);
         tSnapshotInfo.setIncremental_snapshot(incrementalSnapshot);
         return tSnapshotInfo;
+    }
+
+    @Test
+    public void testReplicationsProcNode() {
+        ReplicationsProcNode procNode = new ReplicationsProcNode();
+        try {
+            procNode.fetchResult();
+        } catch (Exception e) {
+            Assertions.assertNull(e);
+        }
     }
 }

@@ -19,17 +19,15 @@ import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.common.io.Text;
-import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.catalog.TabletRange;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -59,8 +57,20 @@ public class LakeTablet extends Tablet {
     @SerializedName(value = JSON_KEY_DATA_SIZE_UPDATE_TIME)
     private volatile long dataSizeUpdateTime = 0L;
 
+    private volatile long minVersion = 0L;
+
+    public long rebuildPindexVersion = 0L;
+
+    public LakeTablet() {
+        super();
+    }
+
     public LakeTablet(long id) {
         super(id);
+    }
+
+    public LakeTablet(long id, TabletRange range) {
+        super(id, range);
     }
 
     public long getShardId() {
@@ -85,6 +95,14 @@ public class LakeTablet extends Tablet {
         return dataSizeUpdateTime;
     }
 
+    public long getMinVersion() {
+        return minVersion;
+    }
+
+    public void setMinVersion(long minVersion) {
+        this.minVersion = minVersion;
+    }
+
     // version is not used
     @Override
     public long getRowCount(long version) {
@@ -102,19 +120,25 @@ public class LakeTablet extends Tablet {
 
     @Override
     public Set<Long> getBackendIds() {
-        return getBackendIds(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        return getBackendIds(WarehouseManager.DEFAULT_RESOURCE);
     }
 
-    public Set<Long> getBackendIds(long warehouseId) {
+    public Set<Long> getBackendIds(ComputeResource computeResource) {
         if (GlobalStateMgr.isCheckpointThread()) {
             // NOTE: defensive code: don't touch any backend RPC if in checkpoint thread
             return Collections.emptySet();
         }
+
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         try {
-            return GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                    .getAllComputeNodeIdsAssignToTablet(warehouseId, this);
+            List<Long> ids = warehouseManager.getAllComputeNodeIdsAssignToTablet(computeResource, getId());
+            if (ids == null) {
+                return Sets.newHashSet();
+            } else {
+                return new HashSet<Long>(ids);
+            }
         } catch (Exception e) {
-            LOG.warn("Failed to get backends by shard. tablet id: {}", getId(), e);
+            LOG.warn("Failed to get backends by shard id: {}", getId(), e);
             return Sets.newHashSet();
         }
     }
@@ -123,7 +147,7 @@ public class LakeTablet extends Tablet {
     public List<Replica> getAllReplicas() {
         List<Replica> replicas = Lists.newArrayList();
         getQueryableReplicas(replicas, null, 0, -1, 0,
-                WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                WarehouseManager.DEFAULT_RESOURCE, null);
         return replicas;
     }
 
@@ -132,14 +156,21 @@ public class LakeTablet extends Tablet {
     public void getQueryableReplicas(List<Replica> allQuerableReplicas, List<Replica> localReplicas,
                                      long visibleVersion, long localBeId, int schemaHash) {
         getQueryableReplicas(allQuerableReplicas, localReplicas, visibleVersion, localBeId,
-                schemaHash, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                schemaHash, WarehouseManager.DEFAULT_RESOURCE, null);
     }
 
     @Override
     public void getQueryableReplicas(List<Replica> allQuerableReplicas, List<Replica> localReplicas,
-                                     long visibleVersion, long localBeId, int schemaHash, long warehouseId) {
-        Set<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                .getAllComputeNodeIdsAssignToTablet(warehouseId, this);
+                                     long visibleVersion, long localBeId, int schemaHash,
+                                     ComputeResource computeResource, List<Long> locations) {
+        List<Long> computeNodeIds = locations;
+        if (computeNodeIds == null) { // initial location hint is null, grab the info from warehouse manager.
+            final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            computeNodeIds = warehouseManager.getAllComputeNodeIdsAssignToTablet(computeResource, getId());
+        }
+        if (computeNodeIds == null) {
+            return;
+        }
         for (long backendId : computeNodeIds) {
             Replica replica = new Replica(getId(), backendId, visibleVersion, schemaHash, getDataSize(true),
                     getRowCount(visibleVersion), NORMAL, -1, visibleVersion);
@@ -148,17 +179,6 @@ public class LakeTablet extends Tablet {
                 localReplicas.add(replica);
             }
         }
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
-    }
-
-    public static LakeTablet read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, LakeTablet.class);
     }
 
     @Override
@@ -177,5 +197,15 @@ public class LakeTablet extends Tablet {
 
         LakeTablet tablet = (LakeTablet) obj;
         return (id == tablet.id && dataSize == tablet.dataSize && rowCount == tablet.rowCount);
+    }
+
+    public void setRebuildPindexVersion(long rebuildPindexVersion) {
+        if (rebuildPindexVersion > this.rebuildPindexVersion) {
+            this.rebuildPindexVersion = rebuildPindexVersion;
+        }
+    }
+
+    public long rebuildPindexVersion() {
+        return rebuildPindexVersion;
     }
 }

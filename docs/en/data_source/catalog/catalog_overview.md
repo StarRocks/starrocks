@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Overview
@@ -23,10 +23,11 @@ Currently, StarRocks provides two types of catalogs: internal catalog and extern
 
 - **External catalog** acts like a link to externally managed metastores, which grants StarRocks direct access to external data sources. You can query external data directly with zero data loading or migration. Currently, StarRocks supports the following types of external catalogs:
   - [Hive catalog](../catalog/hive_catalog.md): used to query data from Hive.
-  - [Iceberg catalog](../catalog/iceberg_catalog.md): used to query data from Iceberg.
+  - [Iceberg catalog](./iceberg/iceberg_catalog.md): used to query data from Iceberg.
   - [Hudi catalog](../catalog/hudi_catalog.md): used to query data from Hudi.
   - [Delta Lake catalog](../catalog/deltalake_catalog.md): used to query data from Delta Lake.
   - [JDBC catalog](../catalog/jdbc_catalog.md): used to query data from JDBC-compatible data sources.
+  - [Benchmark catalog](../catalog/benchmark_catalog.md): used to query in-flight generated datasets for TPC-H, TPC-DS, and SSB schemas.
   - [Elasticsearch catalog](../catalog/elasticsearch_catalog.md): used to query data from Elasticsearch. Elasticsearch catalogs are supported from v3.1 onwards.
   - [Paimon catalog](../catalog/paimon_catalog.md): used to query data from Paimon. Paimon catalogs are supported from v3.1 onwards.
   - [Unified catalog](../catalog/unified_catalog.md): used to query data from from Hive, Iceberg, Hudi, and Delta Lake data sources as a unified data source. Unified catalogs are supported from v3.2 onwards.
@@ -39,7 +40,7 @@ Currently, StarRocks provides two types of catalogs: internal catalog and extern
 
 ## Access catalog
 
-You can use the [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) statement to switch to a specified catalog in the current session. Then, you can query data by using that catalog.
+You can use the [SET CATALOG](../../sql-reference/sql-statements/Catalog/SET_CATALOG.md) statement to switch to a specified catalog in the current session. Then, you can query data by using that catalog.
 
 ## Query data
 

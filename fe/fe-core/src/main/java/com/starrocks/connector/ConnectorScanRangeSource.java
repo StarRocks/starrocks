@@ -18,13 +18,34 @@ import com.starrocks.thrift.TScanRangeLocations;
 
 import java.util.List;
 
-public interface ConnectorScanRangeSource {
+public abstract class ConnectorScanRangeSource implements AutoCloseable {
+    RemoteFilesSampleStrategy strategy = new RemoteFilesSampleStrategy();
 
-    List<TScanRangeLocations> getOutputs(int maxSize);
+    protected abstract List<TScanRangeLocations> getSourceOutputs(int maxSize);
 
-    default List<TScanRangeLocations> getAllOutputs() {
+    public List<TScanRangeLocations> getOutputs(int maxSize) {
+        return strategy.sample(getSourceOutputs(maxSize));
+    }
+
+    public List<TScanRangeLocations> getAllOutputs() {
         return getOutputs(Integer.MAX_VALUE);
     }
 
-    boolean hasMoreOutput();
+    protected abstract boolean sourceHasMoreOutput();
+
+    public boolean hasMoreOutput() {
+        if (strategy.enough()) {
+            return false;
+        }
+        return sourceHasMoreOutput();
+    }
+
+    public void setSampleStrategy(RemoteFilesSampleStrategy strategy) {
+        this.strategy = strategy;
+    }
+
+    @Override
+    public void close() throws Exception {
+        // default no-op
+    }
 }

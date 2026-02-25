@@ -51,27 +51,39 @@ public class Constants {
         public boolean isMergeable() {
             return this == MV;
         }
+
+        public boolean isMVTask() {
+            return this == MV;
+        }
     }
 
     //                   ------> FAILED
     //                  |
-    //                  |
     //     PENDING -> RUNNING -> SUCCESS
-    //        |
+    //        |         |
+    //        |          ------> SKIPPED
     //        |
     //         ----------------> MERGED
     public enum TaskRunState {
-        PENDING,    // The task run is created and in the pending queue waiting to be scheduled
-        RUNNING,    // The task run is scheduled into running queue and is running
-        FAILED,     // The task run is failed
-        SUCCESS,    // The task run is finished successfully
-        MERGED;     // The task run is merged
+        // The task run is created and in the pending queue waiting to be scheduled
+        PENDING,
+        // The task run is scheduled into running queue and is running
+        RUNNING,
+        // The task run is failed
+        FAILED,
+        // The task run is finished successfully
+        SUCCESS,
+        // The task run is merged
+        MERGED,
+        // The task run is skipped, which means the task run is not executed due to some conditions(eg: no partitions to
+        // refresh, no data to process, etc.)
+        SKIPPED;
 
         /**
          * Whether the task run state is a success state
          */
         public boolean isSuccessState() {
-            return this.equals(TaskRunState.SUCCESS) || this.equals(TaskRunState.MERGED);
+            return this.equals(TaskRunState.SUCCESS) || this.equals(TaskRunState.MERGED) || this.equals(TaskRunState.SKIPPED);
         }
 
         /**
@@ -85,7 +97,7 @@ public class Constants {
     // Used to determine the scheduling order of Pending TaskRun to Running TaskRun
     // The bigger the priority, the higher the priority, the default value is LOWEST
     public enum TaskRunPriority {
-        LOWEST(0), LOW(20), NORMAL(50), HIGH(80), HIGHEST(100);
+        LOWEST(0), LOW(20), NORMAL(50), HIGH(80), HIGHER(90), HIGHEST(100);
 
         private final int value;
 

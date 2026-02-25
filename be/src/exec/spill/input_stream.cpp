@@ -23,14 +23,14 @@
 #include <utility>
 #include <vector>
 
+#include "base/concurrency/blocking_queue.hpp"
+#include "base/utility/defer_op.h"
 #include "common/status.h"
 #include "exec/spill/block_manager.h"
 #include "exec/spill/serde.h"
 #include "exec/spill/spiller.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/sorted_chunks_merger.h"
-#include "util/blocking_queue.hpp"
-#include "util/defer_op.h"
 
 namespace starrocks::spill {
 
@@ -499,9 +499,17 @@ StatusOr<InputStreamPtr> BlockGroupSet::build_ordered_stream(std::vector<BlockGr
         auto stream = std::make_shared<SequenceInputStream>(group->blocks(), serde, read_options);
         streams.emplace_back(std::make_shared<BufferedInputStream>(chunk_buffer_max_size, stream, spiller));
     }
-    auto stream = std::make_shared<OrderedInputStream>(std::move(streams), state);
-    RETURN_IF_ERROR(stream->init(serde, sort_exprs, sort_descs, spiller));
-    return stream;
+
+    InputStreamPtr res;
+    if (streams.empty() || state->is_cancelled()) {
+        res = std::make_shared<RawChunkInputStream>(std::vector<ChunkPtr>(), spiller);
+    } else {
+        auto stream = std::make_shared<OrderedInputStream>(std::move(streams), state);
+        RETURN_IF_ERROR(stream->init(serde, sort_exprs, sort_descs, spiller));
+        res = std::move(stream);
+    }
+
+    return res;
 }
 
 } // namespace starrocks::spill

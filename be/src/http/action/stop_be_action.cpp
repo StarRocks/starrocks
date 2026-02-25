@@ -17,13 +17,17 @@
 #include <sstream>
 #include <string>
 
+#include "base/utility/defer_op.h"
+#include "common/process_exit.h"
 #include "http/http_channel.h"
 #include "http/http_request.h"
 #include "http/http_status.h"
-#include "util/defer_op.h"
+
+#ifdef USE_STAROS
+#include "service/staros_worker.h"
+#endif
 
 namespace starrocks {
-extern std::atomic<bool> k_starrocks_exit_quick;
 
 std::string StopBeAction::construct_response_message(const std::string& msg) {
     std::stringstream ss;
@@ -39,13 +43,14 @@ void StopBeAction::handle(HttpRequest* req) {
     LOG(INFO) << "Accept one stop_be request " << req->debug_string();
 
     DeferOp defer([&]() {
-        if (!k_starrocks_exit_quick.load(std::memory_order_acquire)) {
-            k_starrocks_exit_quick.store(true);
-        }
+#ifdef USE_STAROS
+        set_starlet_in_shutdown();
+#endif
+        set_process_quick_exit();
     });
 
     std::string response_msg = construct_response_message("OK");
-    if (k_starrocks_exit_quick.load(std::memory_order_acquire)) {
+    if (process_exit_in_progress()) {
         response_msg = construct_response_message("Be is shutting down");
     }
 

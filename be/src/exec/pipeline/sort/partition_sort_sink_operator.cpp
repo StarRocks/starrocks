@@ -22,6 +22,7 @@
 #include "exec/chunks_sorter_topn.h"
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exprs/expr.h"
+#include "exprs/expr_executor.h"
 #include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Types_types.h"
@@ -42,6 +43,14 @@ Status PartitionSortSinkOperator::prepare(RuntimeState* state) {
     _sort_context->ref();
     _sort_context->incr_sinker();
 
+    _sort_context->attach_sink_observer(state, observer());
+
+    return Status::OK();
+}
+
+Status PartitionSortSinkOperator::prepare_local_state(RuntimeState* state) {
+    RETURN_IF_ERROR(Operator::prepare_local_state(state));
+    DCHECK(this->mem_tracker() != nullptr);
     _chunks_sorter->setup_runtime(state, _unique_metrics.get(), this->mem_tracker());
 
     return Status::OK();
@@ -76,12 +85,13 @@ Status PartitionSortSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr
         for (size_t i = 0; i < build_runtime_filters.size(); ++i) {
             build_runtime_filters[i]->set_or_intersect_filter((*runtime_filter)[i]);
             auto rf = build_runtime_filters[i]->runtime_filter();
-            VLOG(1) << "runtime filter version:" << rf->rf_version() << "," << rf->debug_string() << rf;
-            RuntimeBloomFilterList lst = {build_runtime_filters[i]};
+            VLOG(2) << "runtime filter version:" << rf->rf_version() << "," << rf->debug_string() << rf;
+            RuntimeMembershipFilterList lst = {build_runtime_filters[i]};
             _sort_context->set_runtime_filter_collector(
                     _hub, _plan_node_id,
                     std::make_unique<RuntimeFilterCollector>(RuntimeInFilterList{}, std::move(lst)));
         }
+
         state->runtime_filter_port()->publish_runtime_filters(build_descs);
     }
 
@@ -90,6 +100,7 @@ Status PartitionSortSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr
 
 Status PartitionSortSinkOperator::set_finishing(RuntimeState* state) {
     ONCE_DETECT(_set_finishing_once);
+    auto notify = _sort_context->defer_notify_source();
     // skip sorting if cancelled
     if (state->is_cancelled()) {
         _is_finished = true;
@@ -108,8 +119,8 @@ Status PartitionSortSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
     RETURN_IF_ERROR(_sort_exec_exprs.prepare(state, _parent_node_row_desc, _parent_node_child_row_desc));
     RETURN_IF_ERROR(_sort_exec_exprs.open(state));
-    RETURN_IF_ERROR(Expr::prepare(_analytic_partition_exprs, state));
-    RETURN_IF_ERROR(Expr::open(_analytic_partition_exprs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_analytic_partition_exprs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_analytic_partition_exprs, state));
     return Status::OK();
 }
 
@@ -121,10 +132,11 @@ OperatorPtr PartitionSortSinkOperatorFactory::create(int32_t dop, int32_t driver
                     runtime_state(), &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first,
                     _sort_keys, 0, _limit + _offset);
         } else {
-            size_t max_buffered_chunks = ChunksSorterTopn::tunning_buffered_chunks(_limit);
+            size_t max_buffered_chunks = ChunksSorterTopn::max_buffered_chunks(_limit);
             chunks_sorter = std::make_unique<ChunksSorterTopn>(
                     runtime_state(), &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first,
-                    _sort_keys, 0, _limit + _offset, _topn_type, max_buffered_chunks);
+                    _sort_keys, 0, _limit + _offset, _topn_type, _max_buffered_rows, _max_buffered_bytes,
+                    max_buffered_chunks);
         }
     } else {
         chunks_sorter = std::make_unique<ChunksSorterFullSort>(
@@ -141,7 +153,7 @@ OperatorPtr PartitionSortSinkOperatorFactory::create(int32_t dop, int32_t driver
 }
 
 void PartitionSortSinkOperatorFactory::close(RuntimeState* state) {
-    Expr::close(_analytic_partition_exprs, state);
+    ExprExecutor::close(_analytic_partition_exprs, state);
     _sort_exec_exprs.close(state);
     OperatorFactory::close(state);
 }

@@ -14,25 +14,27 @@
 
 #include "storage/chunk_helper.h"
 
+#include <numeric>
+#include <utility>
+
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
-#include "column/column_pool.h"
+#include "column/column_visitor_adapter.h"
+#include "column/json_column.h"
 #include "column/map_column.h"
 #include "column/schema.h"
 #include "column/struct_column.h"
 #include "column/type_traits.h"
+#include "column/vectorized_fwd.h"
+#include "exprs/expr_context.h"
 #include "gutil/strings/fastmem.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "simd/simd.h"
 #include "storage/olap_type_infra.h"
 #include "storage/tablet_schema.h"
-#include "storage/type_traits.h"
-#include "storage/type_utils.h"
 #include "storage/types.h"
-#include "util/metrics.h"
-#include "util/percentile_value.h"
+#include "types/type_traits.h"
 
 namespace starrocks {
 
@@ -108,7 +110,7 @@ Field ChunkHelper::convert_field(ColumnId id, const TabletColumn& c) {
 
     TypeInfoPtr type_info = nullptr;
     if (type == TYPE_ARRAY || type == TYPE_MAP || type == TYPE_STRUCT || type == TYPE_DECIMAL32 ||
-        type == TYPE_DECIMAL64 || type == TYPE_DECIMAL128) {
+        type == TYPE_DECIMAL64 || type == TYPE_DECIMAL128 || type == TYPE_DECIMAL256) {
         // ARRAY and DECIMAL should be handled specially
         // Array is nested type, the message is stored in TabletColumn
         // Decimal has precision and scale, the message is stored in TabletColumn
@@ -120,6 +122,7 @@ Field ChunkHelper::convert_field(ColumnId id, const TabletColumn& c) {
     f.set_is_key(c.is_key());
     f.set_length(c.length());
     f.set_uid(c.unique_id());
+    f.set_is_virtual(c.is_virtual_column());
 
     if (type == TYPE_ARRAY) {
         const TabletColumn& sub_column = c.subcolumn(0);
@@ -141,6 +144,7 @@ Field ChunkHelper::convert_field(ColumnId id, const TabletColumn& c) {
 
     f.set_short_key_length(c.index_length());
     f.set_aggregate_method(c.aggregation());
+    f.set_agg_state_desc(c.get_agg_state_desc());
     return f;
 }
 
@@ -228,94 +232,78 @@ ColumnId ChunkHelper::max_column_id(const starrocks::Schema& schema) {
 }
 
 template <typename T>
-struct ColumnDeleter {
-    ColumnDeleter(size_t chunk_size) : chunk_size(chunk_size) {}
-    void operator()(Column* ptr) const { return_column<T>(down_cast<T*>(ptr), chunk_size); }
-    size_t chunk_size;
-};
-
-template <typename T, bool force>
-inline std::shared_ptr<T> get_column_ptr(size_t chunk_size) {
-    if constexpr (std::negation_v<HasColumnPool<T>>) {
-        return std::make_shared<T>();
-    } else {
-        T* ptr = get_column<T, force>();
-        if (LIKELY(ptr != nullptr)) {
-            return std::shared_ptr<T>(ptr, ColumnDeleter<T>(chunk_size));
-        } else {
-            return std::make_shared<T>();
-        }
-    }
+inline typename T::MutablePtr get_column_ptr() {
+    return T::create();
 }
 
-template <typename T, bool force>
-inline std::shared_ptr<DecimalColumnType<T>> get_decimal_column_ptr(int precision, int scale, size_t chunk_size) {
-    auto column = get_column_ptr<T, force>(chunk_size);
+template <typename T>
+inline typename DecimalColumnType<T>::MutablePtr get_decimal_column_ptr(int precision, int scale) {
+    auto column = get_column_ptr<T>();
     column->set_precision(precision);
     column->set_scale(scale);
     return column;
 }
 
-template <bool force>
 struct ColumnPtrBuilder {
     template <LogicalType ftype>
-    ColumnPtr operator()(size_t chunk_size, const Field& field, int precision, int scale) {
-        auto NullableIfNeed = [&](ColumnPtr c) -> ColumnPtr {
+    MutableColumnPtr operator()(const Field& field, int precision, int scale) {
+        auto NullableIfNeed = [&](MutableColumnPtr&& c) -> MutableColumnPtr {
             return field.is_nullable()
-                           ? NullableColumn::create(std::move(c), get_column_ptr<NullColumn, force>(chunk_size))
-                           : c;
+                           ? MutableColumnPtr(NullableColumn::create(std::move(c), get_column_ptr<NullColumn>()))
+                           : std::move(c);
         };
 
         if constexpr (ftype == TYPE_ARRAY) {
-            auto elements = NullableColumn::wrap_if_necessary(field.sub_field(0).create_column());
-            auto offsets = get_column_ptr<UInt32Column, force>(chunk_size);
-            auto array = ArrayColumn::create(std::move(elements), offsets);
-            return NullableIfNeed(array);
+            auto elements = NullableColumn::wrap_if_necessary(ChunkHelper::column_from_field(field.sub_field(0)));
+            auto offsets = UInt32Column::create();
+            auto array = ArrayColumn::create(std::move(elements), std::move(offsets));
+            return NullableIfNeed(std::move(array));
         } else if constexpr (ftype == TYPE_MAP) {
-            auto keys = NullableColumn::wrap_if_necessary(field.sub_field(0).create_column());
-            auto values = NullableColumn::wrap_if_necessary(field.sub_field(1).create_column());
-            auto offsets = get_column_ptr<UInt32Column, force>(chunk_size);
-            auto map = MapColumn::create(std::move(keys), std::move(values), offsets);
-            return NullableIfNeed(map);
+            auto keys = NullableColumn::wrap_if_necessary(ChunkHelper::column_from_field(field.sub_field(0)));
+            auto values = NullableColumn::wrap_if_necessary(ChunkHelper::column_from_field(field.sub_field(1)));
+            auto offsets = get_column_ptr<UInt32Column>();
+            auto map = MapColumn::create(std::move(keys), std::move(values), std::move(offsets));
+            return NullableIfNeed(std::move(map));
         } else if constexpr (ftype == TYPE_STRUCT) {
             std::vector<std::string> names;
-            std::vector<ColumnPtr> fields;
+            MutableColumns fields;
             for (auto& sub_field : field.sub_fields()) {
-                names.template emplace_back(sub_field.name());
-                fields.template emplace_back(sub_field.create_column());
+                names.emplace_back(sub_field.name());
+                fields.emplace_back(ChunkHelper::column_from_field(sub_field));
             }
             auto struct_column = StructColumn::create(std::move(fields), std::move(names));
-            return NullableIfNeed(struct_column);
+            return NullableIfNeed(std::move(struct_column));
         } else {
             switch (ftype) {
             case TYPE_DECIMAL32:
-                return NullableIfNeed(get_decimal_column_ptr<Decimal32Column, force>(precision, scale, chunk_size));
+                return NullableIfNeed(get_decimal_column_ptr<Decimal32Column>(precision, scale));
             case TYPE_DECIMAL64:
-                return NullableIfNeed(get_decimal_column_ptr<Decimal64Column, force>(precision, scale, chunk_size));
+                return NullableIfNeed(get_decimal_column_ptr<Decimal64Column>(precision, scale));
             case TYPE_DECIMAL128:
-                return NullableIfNeed(get_decimal_column_ptr<Decimal128Column, force>(precision, scale, chunk_size));
+                return NullableIfNeed(get_decimal_column_ptr<Decimal128Column>(precision, scale));
+            case TYPE_DECIMAL256:
+                return NullableIfNeed(get_decimal_column_ptr<Decimal256Column>(precision, scale));
             default: {
-                return NullableIfNeed(get_column_ptr<typename CppColumnTraits<ftype>::ColumnType, force>(chunk_size));
+                return NullableIfNeed(get_column_ptr<typename CppColumnTraits<ftype>::ColumnType>());
             }
             }
         }
     }
 };
 
-template <bool force>
-ColumnPtr column_from_pool(const Field& field, size_t chunk_size) {
+MutableColumnPtr column_from_pool(const Field& field) {
     auto precision = field.type()->precision();
     auto scale = field.type()->scale();
-    return field_type_dispatch_column(field.type()->type(), ColumnPtrBuilder<force>(), chunk_size, field, precision,
-                                      scale);
+    return field_type_dispatch_column(field.type()->type(), ColumnPtrBuilder(), field, precision, scale);
 }
 
-Chunk* ChunkHelper::new_chunk_pooled(const Schema& schema, size_t chunk_size, bool force) {
+Chunk* ChunkHelper::new_chunk_pooled(const Schema& schema, size_t chunk_size) {
     Columns columns;
     columns.reserve(schema.num_fields());
     for (size_t i = 0; i < schema.num_fields(); i++) {
         const FieldPtr& f = schema.field(i);
-        auto column = force ? column_from_pool<true>(*f, chunk_size) : column_from_pool<false>(*f, chunk_size);
+        auto column = column_from_pool(*f);
+        // TODO: call reserve in SegmentIterator::read
         column->reserve(chunk_size);
         columns.emplace_back(std::move(column));
     }
@@ -333,80 +321,87 @@ std::vector<size_t> ChunkHelper::get_char_field_indexes(const Schema& schema) {
     return char_field_indexes;
 }
 
+void ChunkHelper::padding_char_column(const starrocks::TabletSchemaCSPtr& tschema, const Field& field, Column* column) {
+    size_t num_rows = column->size();
+    Column* data_column = ColumnHelper::get_data_column(column);
+    auto* binary = down_cast<BinaryColumn*>(data_column);
+
+    Offsets& offset = binary->get_offset();
+    Bytes& bytes = binary->get_bytes();
+
+    // Padding 0 to CHAR field, the storage bitmap index and zone map need it.
+    // TODO(kks): we could improve this if there are many null valus
+    auto new_binary = BinaryColumn::create();
+    Offsets& new_offset = new_binary->get_offset();
+    Bytes& new_bytes = new_binary->get_bytes();
+
+    // |schema| maybe partial columns in vertical compaction, so get char column length by name.
+    uint32_t len = tschema->column(tschema->field_index(field.name())).length();
+
+    new_offset.resize(num_rows + 1);
+    new_bytes.assign(num_rows * len, 0); // padding 0
+
+    uint32_t from = 0;
+    for (size_t j = 0; j < num_rows; ++j) {
+        uint32_t copy_data_len = std::min(len, offset[j + 1] - offset[j]);
+        strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset[j], copy_data_len);
+        from += len; // no copy data will be 0
+    }
+
+    for (size_t j = 1; j <= num_rows; ++j) {
+        new_offset[j] = static_cast<uint32_t>(len * j);
+    }
+
+    if (field.is_nullable()) {
+        auto* nullable_column = down_cast<NullableColumn*>(column);
+        auto null_column = NullColumn::static_pointer_cast(std::move(*nullable_column->null_column()).mutate());
+        auto new_column = NullableColumn::create(std::move(new_binary), std::move(null_column));
+        new_column->swap_column(*column);
+    } else {
+        new_binary->swap_column(*column);
+    }
+}
+
 void ChunkHelper::padding_char_columns(const std::vector<size_t>& char_column_indexes, const Schema& schema,
                                        const starrocks::TabletSchemaCSPtr& tschema, Chunk* chunk) {
-    size_t num_rows = chunk->num_rows();
     for (auto field_index : char_column_indexes) {
-        Column* column = chunk->get_column_by_index(field_index).get();
-        Column* data_column = ColumnHelper::get_data_column(column);
-        auto* binary = down_cast<BinaryColumn*>(data_column);
-
-        Offsets& offset = binary->get_offset();
-        Bytes& bytes = binary->get_bytes();
-
-        // Padding 0 to CHAR field, the storage bitmap index and zone map need it.
-        // TODO(kks): we could improve this if there are many null valus
-        auto new_binary = BinaryColumn::create();
-        Offsets& new_offset = new_binary->get_offset();
-        Bytes& new_bytes = new_binary->get_bytes();
-
-        // |schema| maybe partial columns in vertical compaction, so get char column length by name.
-        uint32_t len = tschema->column(tschema->field_index(schema.field(field_index)->name())).length();
-
-        new_offset.resize(num_rows + 1);
-        new_bytes.assign(num_rows * len, 0); // padding 0
-
-        uint32_t from = 0;
-        for (size_t j = 0; j < num_rows; ++j) {
-            uint32_t copy_data_len = std::min(len, offset[j + 1] - offset[j]);
-            strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset[j], copy_data_len);
-            from += len; // no copy data will be 0
-        }
-
-        for (size_t j = 1; j <= num_rows; ++j) {
-            new_offset[j] = static_cast<uint32_t>(len * j);
-        }
-
-        const auto& field = schema.field(field_index);
-
-        if (field->is_nullable()) {
-            auto* nullable_column = down_cast<NullableColumn*>(column);
-            auto new_column = NullableColumn::create(new_binary, nullable_column->null_column());
-            new_column->swap_column(*column);
-        } else {
-            new_binary->swap_column(*column);
-        }
+        Column* column = chunk->get_column_raw_ptr_by_index(field_index);
+        padding_char_column(tschema, *schema.field(field_index), column);
     }
 }
 
 struct ColumnBuilder {
     template <LogicalType ftype>
-    ColumnPtr operator()(bool nullable) {
-        [[maybe_unused]] auto NullableIfNeed = [&](ColumnPtr col) -> ColumnPtr {
-            return nullable ? NullableColumn::create(std::move(col), NullColumn::create()) : col;
+    MutableColumnPtr operator()(bool nullable) {
+        [[maybe_unused]] auto NullableIfNeed = [&](MutableColumnPtr&& col) -> MutableColumnPtr {
+            return nullable ? MutableColumnPtr(NullableColumn::create(std::move(col), NullColumn::create()))
+                            : std::move(col);
         };
 
         if constexpr (ftype == TYPE_ARRAY) {
             CHECK(false) << "array not supported";
+            return nullptr;
         } else if constexpr (ftype == TYPE_MAP) {
             CHECK(false) << "array not supported";
+            return nullptr;
         } else if constexpr (ftype == TYPE_STRUCT) {
             CHECK(false) << "array not supported";
+            return nullptr;
         } else {
             return NullableIfNeed(CppColumnTraits<ftype>::ColumnType::create());
         }
     }
 };
 
-ColumnPtr ChunkHelper::column_from_field_type(LogicalType type, bool nullable) {
+MutableColumnPtr ChunkHelper::column_from_field_type(LogicalType type, bool nullable) {
     return field_type_dispatch_column(type, ColumnBuilder(), nullable);
 }
 
-ColumnPtr ChunkHelper::column_from_field(const Field& field) {
-    auto NullableIfNeed = [&](ColumnPtr col) -> ColumnPtr {
-        return field.is_nullable() ? NullableColumn::create(std::move(col), NullColumn::create()) : col;
+MutableColumnPtr ChunkHelper::column_from_field(const Field& field) {
+    [[maybe_unused]] auto NullableIfNeed = [&](MutableColumnPtr&& col) -> MutableColumnPtr {
+        return field.is_nullable() ? MutableColumnPtr(NullableColumn::create(std::move(col), NullColumn::create()))
+                                   : std::move(col);
     };
-
     auto type = field.type()->type();
     switch (type) {
     case TYPE_DECIMAL32:
@@ -415,6 +410,8 @@ ColumnPtr ChunkHelper::column_from_field(const Field& field) {
         return NullableIfNeed(Decimal64Column::create(field.type()->precision(), field.type()->scale()));
     case TYPE_DECIMAL128:
         return NullableIfNeed(Decimal128Column::create(field.type()->precision(), field.type()->scale()));
+    case TYPE_DECIMAL256:
+        return NullableIfNeed(Decimal256Column::create(field.type()->precision(), field.type()->scale()));
     case TYPE_ARRAY: {
         return NullableIfNeed(ArrayColumn::create(column_from_field(field.sub_field(0)), UInt32Column::create()));
     }
@@ -423,13 +420,13 @@ ColumnPtr ChunkHelper::column_from_field(const Field& field) {
                                                 column_from_field(field.sub_field(1)), UInt32Column::create()));
     case TYPE_STRUCT: {
         std::vector<std::string> names;
-        std::vector<ColumnPtr> fields;
+        MutableColumns fields;
         for (auto& sub_field : field.sub_fields()) {
-            names.template emplace_back(sub_field.name());
-            fields.template emplace_back(sub_field.create_column());
+            names.emplace_back(sub_field.name());
+            fields.emplace_back(ChunkHelper::column_from_field(sub_field));
         }
         auto struct_column = StructColumn::create(std::move(fields), std::move(names));
-        return NullableIfNeed(struct_column);
+        return NullableIfNeed(std::move(struct_column));
     }
     default:
         return NullableIfNeed(column_from_field_type(type, false));
@@ -442,8 +439,9 @@ ChunkUniquePtr ChunkHelper::new_chunk(const Schema& schema, size_t n) {
     columns.reserve(fields);
     for (size_t i = 0; i < fields; i++) {
         const FieldPtr& f = schema.field(i);
-        columns.emplace_back(column_from_field(*f));
-        columns.back()->reserve(n);
+        auto col = column_from_field(*f);
+        col->reserve(n);
+        columns.emplace_back(std::move(col));
     }
     return std::make_unique<Chunk>(std::move(columns), std::make_shared<Schema>(schema));
 }
@@ -457,9 +455,85 @@ ChunkUniquePtr ChunkHelper::new_chunk(const std::vector<SlotDescriptor*>& slots,
     for (const auto slot : slots) {
         auto column = ColumnHelper::create_column(slot->type(), slot->is_nullable());
         column->reserve(n);
-        chunk->append_column(column, slot->id());
+        chunk->append_column(std::move(column), slot->id());
     }
     return chunk;
+}
+
+// create object column then reserve is exception safe.
+
+StatusOr<Chunk*> ChunkHelper::new_chunk_pooled_checked(const Schema& schema, size_t n) {
+    TRY_CATCH_ALLOC_SCOPE_START()
+    auto* chunk = ChunkHelper::new_chunk_pooled(schema, n);
+    return chunk;
+    TRY_CATCH_ALLOC_SCOPE_END();
+}
+
+StatusOr<ChunkUniquePtr> ChunkHelper::new_chunk_checked(const Schema& schema, size_t n) {
+    TRY_CATCH_ALLOC_SCOPE_START()
+    ChunkUniquePtr chunk;
+    chunk = ChunkHelper::new_chunk(schema, n);
+    return chunk;
+    TRY_CATCH_ALLOC_SCOPE_END();
+}
+
+StatusOr<ChunkUniquePtr> ChunkHelper::new_chunk_checked(const std::vector<SlotDescriptor*>& slots, size_t n) {
+    TRY_CATCH_ALLOC_SCOPE_START()
+    ChunkUniquePtr chunk;
+    chunk = ChunkHelper::new_chunk(slots, n);
+    return chunk;
+    TRY_CATCH_ALLOC_SCOPE_END();
+}
+
+StatusOr<ChunkUniquePtr> ChunkHelper::new_chunk_checked(const TupleDescriptor& tuple_desc, size_t n) {
+    return ChunkHelper::new_chunk_checked(tuple_desc.slots(), n);
+}
+
+MutableChunkPtr ChunkHelper::new_mutable_chunk(const Schema& schema, size_t n) {
+    size_t fields = schema.num_fields();
+    MutableColumns columns;
+    columns.reserve(fields);
+    for (size_t i = 0; i < fields; i++) {
+        const FieldPtr& f = schema.field(i);
+        auto col = column_from_field(*f);
+        col->reserve(n);
+        columns.emplace_back(std::move(col));
+    }
+    return std::make_shared<MutableChunk>(std::move(columns), std::make_shared<Schema>(schema));
+}
+
+MutableChunkPtr ChunkHelper::new_mutable_chunk(const TupleDescriptor& tuple_desc, size_t n) {
+    return new_mutable_chunk(tuple_desc.slots(), n);
+}
+
+MutableChunkPtr ChunkHelper::new_mutable_chunk(const std::vector<SlotDescriptor*>& slots, size_t n) {
+    auto chunk = std::make_shared<MutableChunk>();
+    for (const auto slot : slots) {
+        auto column = ColumnHelper::create_column(slot->type(), slot->is_nullable());
+        column->reserve(n);
+        chunk->append_column(std::move(column), slot->id());
+    }
+    return chunk;
+}
+
+StatusOr<MutableChunkPtr> ChunkHelper::new_mutable_chunk_checked(const Schema& schema, size_t n) {
+    TRY_CATCH_ALLOC_SCOPE_START()
+    MutableChunkPtr chunk;
+    chunk = ChunkHelper::new_mutable_chunk(schema, n);
+    return chunk;
+    TRY_CATCH_ALLOC_SCOPE_END();
+}
+
+StatusOr<MutableChunkPtr> ChunkHelper::new_mutable_chunk_checked(const std::vector<SlotDescriptor*>& slots, size_t n) {
+    TRY_CATCH_ALLOC_SCOPE_START()
+    MutableChunkPtr chunk;
+    chunk = ChunkHelper::new_mutable_chunk(slots, n);
+    return chunk;
+    TRY_CATCH_ALLOC_SCOPE_END();
+}
+
+StatusOr<MutableChunkPtr> ChunkHelper::new_mutable_chunk_checked(const TupleDescriptor& tuple_desc, size_t n) {
+    return ChunkHelper::new_mutable_chunk_checked(tuple_desc.slots(), n);
 }
 
 void ChunkHelper::reorder_chunk(const TupleDescriptor& tuple_desc, Chunk* chunk) {
@@ -495,6 +569,34 @@ void ChunkAccumulator::reset() {
     _accumulate_count = 0;
 }
 
+namespace {
+bool check_json_schema_compatibility(const Chunk* one, const Chunk* two) {
+    if (one->num_columns() != two->num_columns()) {
+        return false;
+    }
+
+    for (size_t i = 0; i < one->num_columns(); i++) {
+        auto& c1 = one->get_column_by_index(i);
+        auto& c2 = two->get_column_by_index(i);
+        const auto* a1 = ColumnHelper::get_data_column(c1.get());
+        const auto* a2 = ColumnHelper::get_data_column(c2.get());
+
+        if (a1->is_json() && a2->is_json()) {
+            auto json1 = down_cast<const JsonColumn*>(a1);
+            if (!json1->is_equallity_schema(a2)) {
+                return false;
+            }
+        } else if (a1->is_json() || a2->is_json()) {
+            // never hit
+            DCHECK_EQ(a1->is_json(), a2->is_json());
+            return false;
+        }
+    }
+
+    return true;
+}
+} // namespace
+
 Status ChunkAccumulator::push(ChunkPtr&& chunk) {
     size_t input_rows = chunk->num_rows();
     // TODO: optimize for zero-copy scenario
@@ -504,7 +606,16 @@ Status ChunkAccumulator::push(ChunkPtr&& chunk) {
         size_t need_rows = 0;
         if (_tmp_chunk) {
             need_rows = std::min(_desired_size - _tmp_chunk->num_rows(), remain_rows);
-            TRY_CATCH_BAD_ALLOC(_tmp_chunk->append(*chunk, start, need_rows));
+            // Check JSON schema compatibility before appending
+            if (!check_json_schema_compatibility(_tmp_chunk.get(), chunk.get())) {
+                // Schema mismatch, output current chunk and create a new one
+                _output.emplace_back(std::move(_tmp_chunk));
+                _tmp_chunk = chunk->clone_empty(_desired_size);
+                TRY_CATCH_BAD_ALLOC(_tmp_chunk->append(*chunk, start, need_rows));
+            } else {
+                TRY_CATCH_BAD_ALLOC(_tmp_chunk->append(*chunk, start, need_rows));
+            }
+            RETURN_IF_ERROR(_tmp_chunk->capacity_limit_reached());
         } else {
             need_rows = std::min(_desired_size, remain_rows);
             _tmp_chunk = chunk->clone_empty(_desired_size);
@@ -545,6 +656,10 @@ void ChunkAccumulator::finalize() {
     _accumulate_count = 0;
 }
 
+bool ChunkPipelineAccumulator::_check_json_schema_equallity(const Chunk* one, const Chunk* two) {
+    return check_json_schema_compatibility(one, two);
+}
+
 void ChunkPipelineAccumulator::push(const ChunkPtr& chunk) {
     chunk->check_or_die();
     DCHECK(_out_chunk == nullptr);
@@ -552,7 +667,8 @@ void ChunkPipelineAccumulator::push(const ChunkPtr& chunk) {
         _in_chunk = chunk;
         _mem_usage = chunk->bytes_usage();
     } else if (_in_chunk->num_rows() + chunk->num_rows() > _max_size ||
-               _in_chunk->owner_info() != chunk->owner_info()) {
+               _in_chunk->owner_info() != chunk->owner_info() || _in_chunk->owner_info().is_last_chunk() ||
+               !_check_json_schema_equallity(chunk.get(), _in_chunk.get())) {
         _out_chunk = std::move(_in_chunk);
         _in_chunk = chunk;
         _mem_usage = chunk->bytes_usage();
@@ -601,6 +717,444 @@ bool ChunkPipelineAccumulator::need_input() const {
 
 bool ChunkPipelineAccumulator::is_finished() const {
     return _finalized && _out_chunk == nullptr && _in_chunk == nullptr;
+}
+
+template <class ColumnT>
+inline constexpr bool is_object =
+        std::is_same_v<ColumnT, ArrayColumn> || std::is_same_v<ColumnT, StructColumn> ||
+        std::is_same_v<ColumnT, MapColumn> || std::is_same_v<ColumnT, JsonColumn> ||
+        std::is_same_v<ColumnT, VariantColumn> || std::is_same_v<ObjectColumn<typename ColumnT::ValueType>, ColumnT>;
+
+// Selective-copy data from SegmentedColumn according to provided index
+class SegmentedColumnSelectiveCopy final : public ColumnVisitorAdapter<SegmentedColumnSelectiveCopy> {
+public:
+    SegmentedColumnSelectiveCopy(SegmentedColumnPtr segment_column, const uint32_t* indexes, uint32_t from,
+                                 uint32_t size)
+            : ColumnVisitorAdapter(this),
+              _segment_column(std::move(segment_column)),
+              _indexes(indexes),
+              _from(from),
+              _size(size) {}
+
+    template <class T>
+    Status do_visit(const FixedLengthColumnBase<T>& column) {
+        using ColumnT = FixedLengthColumn<T>;
+        using ContainerT = typename ColumnT::Container;
+        using ImmContainerT = typename ColumnT::ImmContainer;
+
+        _result = column.clone_empty();
+        auto* output = down_cast<ColumnT*>(_result->as_mutable_raw_ptr());
+        const size_t segment_size = _segment_column->segment_size();
+
+        std::vector<ImmContainerT> imm_containers;
+        std::vector<const T*> buffers;
+        auto columns = _segment_column->columns();
+        for (auto& seg_column : columns) {
+            auto imm_data = ColumnHelper::as_column<ColumnT>(seg_column)->immutable_data();
+            imm_containers.push_back(imm_data);
+            buffers.push_back(imm_data.data());
+        }
+
+        ContainerT& output_items = output->get_data();
+        output_items.resize(_size);
+        size_t from = _from;
+        for (size_t i = 0; i < _size; i++) {
+            size_t idx = _indexes[from + i];
+            auto [segment_id, segment_offset] = _segment_address(idx, segment_size);
+            DCHECK_LT(segment_id, columns.size());
+            DCHECK_LT(segment_offset, columns[segment_id]->size());
+
+            output_items[i] = buffers[segment_id][segment_offset];
+        }
+        return {};
+    }
+
+    // Implementation refers to BinaryColumn::append_selective
+    template <class Offset>
+    Status do_visit(const BinaryColumnBase<Offset>& column) {
+        using ColumnT = BinaryColumnBase<Offset>;
+        using ContainerT = typename ColumnT::Container*;
+        using Bytes = typename ColumnT::Bytes;
+        using Byte = typename ColumnT::Byte;
+        using Offsets = typename ColumnT::Offsets;
+
+        _result = column.clone_empty();
+        auto* output = down_cast<ColumnT*>(_result->as_mutable_raw_ptr());
+        auto& output_offsets = output->get_offset();
+        auto& output_bytes = output->get_bytes();
+        const size_t segment_size = _segment_column->segment_size();
+
+        // input
+        auto columns = _segment_column->columns();
+        std::vector<const Byte*> input_bytes;
+        std::vector<const Offsets*> input_offsets;
+        for (auto& seg_column : columns) {
+            auto col_ptr = ColumnHelper::as_column<ColumnT>(seg_column);
+            input_bytes.push_back(col_ptr->continuous_data());
+            input_offsets.push_back(&col_ptr->get_offset());
+        }
+
+#ifndef NDEBUG
+        for (auto& src_col : columns) {
+            src_col->check_or_die();
+        }
+#endif
+
+        // assign offsets
+        output_offsets.resize(_size + 1);
+        size_t num_bytes = 0;
+        size_t from = _from;
+        for (size_t i = 0; i < _size; i++) {
+            size_t idx = _indexes[from + i];
+            auto [segment_id, segment_offset] = _segment_address(idx, segment_size);
+            DCHECK_LT(segment_id, columns.size());
+            DCHECK_LT(segment_offset, columns[segment_id]->size());
+
+            const Offsets& src_offsets = *input_offsets[segment_id];
+            Offset str_size = src_offsets[segment_offset + 1] - src_offsets[segment_offset];
+
+            output_offsets[i + 1] = output_offsets[i] + str_size;
+            num_bytes += str_size;
+        }
+        output_bytes.resize(num_bytes);
+
+        // copy bytes
+        Byte* dest_bytes = output_bytes.data();
+        for (size_t i = 0; i < _size; i++) {
+            size_t idx = _indexes[from + i];
+            auto [segment_id, segment_offset] = _segment_address(idx, segment_size);
+            const Byte* src_bytes = input_bytes[segment_id];
+            const Offsets& src_offsets = *input_offsets[segment_id];
+            Offset str_size = src_offsets[segment_offset + 1] - src_offsets[segment_offset];
+            const Byte* str_data = src_bytes + src_offsets[segment_offset];
+
+            strings::memcpy_inlined(dest_bytes + output_offsets[i], str_data, str_size);
+        }
+
+#ifndef NDEBUG
+        output->check_or_die();
+#endif
+
+        return {};
+    }
+
+    // Inefficient fallback implementation, it's usually used for Array/Struct/Map/Json/Variant
+    template <class ColumnT>
+    typename std::enable_if_t<is_object<ColumnT>, Status> do_visit(const ColumnT& column) {
+        _result = column.clone_empty();
+        auto* output = down_cast<ColumnT*>(_result->as_mutable_raw_ptr());
+        const size_t segment_size = _segment_column->segment_size();
+        output->reserve(_size);
+
+        auto columns = _segment_column->columns();
+        size_t from = _from;
+        for (size_t i = 0; i < _size; i++) {
+            size_t idx = _indexes[from + i];
+            auto [segment_id, segment_offset] = _segment_address(idx, segment_size);
+            output->append(*columns[segment_id], segment_offset, 1);
+        }
+        return {};
+    }
+
+    Status do_visit(const NullableColumn& column) {
+        Columns data_columns, null_columns;
+        for (auto& column : _segment_column->columns()) {
+            NullableColumn::Ptr nullable = ColumnHelper::as_column<NullableColumn>(column);
+            data_columns.push_back(nullable->data_column());
+            null_columns.push_back(nullable->null_column());
+        }
+
+        auto segmented_data_column = std::make_shared<SegmentedColumn>(data_columns, _segment_column->segment_size());
+        SegmentedColumnSelectiveCopy copy_data(segmented_data_column, _indexes, _from, _size);
+        (void)data_columns[0]->accept(&copy_data);
+        auto segmented_null_column = std::make_shared<SegmentedColumn>(null_columns, _segment_column->segment_size());
+        SegmentedColumnSelectiveCopy copy_null(segmented_null_column, _indexes, _from, _size);
+        (void)null_columns[0]->accept(&copy_null);
+        _result = NullableColumn::create(copy_data.result(), ColumnHelper::as_column<NullColumn>(copy_null.result()));
+
+        return {};
+    }
+
+    Status do_visit(const ConstColumn& column) { return Status::NotSupported("SegmentedColumnVisitor"); }
+
+    ColumnPtr result() { return _result; }
+
+private:
+    __attribute__((always_inline)) std::pair<size_t, size_t> _segment_address(size_t idx, size_t segment_size) {
+        size_t segment_id = idx / segment_size;
+        size_t segment_offset = idx % segment_size;
+        return {segment_id, segment_offset};
+    }
+
+    SegmentedColumnPtr _segment_column;
+    ColumnPtr _result;
+    const uint32_t* _indexes;
+    uint32_t _from;
+    uint32_t _size;
+};
+
+SegmentedColumn::SegmentedColumn(const SegmentedChunkPtr& chunk, size_t column_index)
+        : _chunk(chunk), _column_index(column_index), _segment_size(chunk->segment_size()) {}
+
+SegmentedColumn::SegmentedColumn(Columns columns, size_t segment_size)
+        : _segment_size(segment_size), _cached_columns(std::move(columns)) {}
+
+ColumnPtr SegmentedColumn::clone_selective(const uint32_t* indexes, uint32_t from, uint32_t size) {
+    if (num_segments() == 1) {
+        auto first = columns()[0];
+        auto result = first->clone_empty();
+        result->append_selective(*first, indexes, from, size);
+        return result;
+    } else {
+        SegmentedColumnSelectiveCopy visitor(shared_from_this(), indexes, from, size);
+        (void)columns()[0]->accept(&visitor);
+        return visitor.result();
+    }
+}
+
+ColumnPtr SegmentedColumn::materialize() const {
+    auto actual_columns = columns();
+    if (actual_columns.empty()) {
+        return {};
+    }
+    MutableColumnPtr result = actual_columns[0]->clone_empty();
+    for (size_t i = 0; i < actual_columns.size(); i++) {
+        result->append(*actual_columns[i]);
+    }
+    return result;
+}
+
+size_t SegmentedColumn::segment_size() const {
+    return _segment_size;
+}
+
+size_t SegmentedColumn::num_segments() const {
+    return _chunk.lock()->num_segments();
+}
+
+size_t SegmentedChunk::segment_size() const {
+    return _segment_size;
+}
+
+bool SegmentedColumn::is_nullable() const {
+    return columns()[0]->is_nullable();
+}
+
+bool SegmentedColumn::has_null() const {
+    for (auto& column : columns()) {
+        RETURN_IF(column->has_null(), true);
+    }
+    return false;
+}
+
+size_t SegmentedColumn::size() const {
+    size_t result = 0;
+    for (auto& column : columns()) {
+        result += column->size();
+    }
+    return result;
+}
+
+Columns SegmentedColumn::columns() const {
+    if (!_cached_columns.empty()) {
+        return _cached_columns;
+    }
+    Columns columns;
+    for (auto& segment : _chunk.lock()->segments()) {
+        columns.push_back(segment->get_column_by_index(_column_index));
+    }
+    return columns;
+}
+
+void SegmentedColumn::upgrade_to_nullable() {
+    for (auto& segment : _chunk.lock()->segments()) {
+        auto& column = segment->get_column_by_index(_column_index);
+        column = NullableColumn::wrap_if_necessary(std::move(column));
+    }
+}
+
+SegmentedChunk::SegmentedChunk(size_t segment_size) : _segment_size(segment_size) {
+    // put at least one chunk there
+    _segments.resize(1);
+    _segments[0] = std::make_shared<Chunk>();
+}
+
+SegmentedChunkPtr SegmentedChunk::create(size_t segment_size) {
+    return std::make_shared<SegmentedChunk>(segment_size);
+}
+
+void SegmentedChunk::append_column(ColumnPtr column, SlotId slot_id) {
+    // It's only used when initializing the chunk, so append the column to first chunk is enough
+    DCHECK_EQ(_segments.size(), 1);
+    _segments[0]->append_column(std::move(column), slot_id);
+}
+
+void SegmentedChunk::append_chunk(const ChunkPtr& chunk, const std::vector<SlotId>& slots) {
+    ChunkPtr open_segment = _segments.back();
+    size_t append_rows = chunk->num_rows();
+    size_t append_index = 0;
+    while (append_rows > 0) {
+        size_t open_segment_append_rows = std::min(_segment_size - open_segment->num_rows(), append_rows);
+        for (int i = 0; i < slots.size(); i++) {
+            SlotId slot = slots[i];
+            ColumnPtr column = chunk->get_column_by_slot_id(slot);
+            open_segment->get_column_raw_ptr_by_index(i)->append(*column, append_index, open_segment_append_rows);
+        }
+        append_index += open_segment_append_rows;
+        append_rows -= open_segment_append_rows;
+        if (open_segment->num_rows() == _segment_size) {
+            open_segment->check_or_die();
+            open_segment = open_segment->clone_empty();
+            _segments.emplace_back(open_segment);
+        }
+    }
+}
+
+void SegmentedChunk::append_chunk(const ChunkPtr& chunk) {
+    ChunkPtr open_segment = _segments.back();
+    size_t append_rows = chunk->num_rows();
+    size_t append_index = 0;
+    while (append_rows > 0) {
+        size_t open_segment_append_rows = std::min(_segment_size - open_segment->num_rows(), append_rows);
+        open_segment->append_safe(*chunk, append_index, open_segment_append_rows);
+        append_index += open_segment_append_rows;
+        append_rows -= open_segment_append_rows;
+        if (open_segment->num_rows() == _segment_size) {
+            open_segment->check_or_die();
+            open_segment = open_segment->clone_empty();
+            _segments.emplace_back(open_segment);
+        }
+    }
+}
+
+void SegmentedChunk::append(const SegmentedChunkPtr& chunk, size_t offset) {
+    auto& input_segments = chunk->segments();
+    size_t segment_index = offset / chunk->_segment_size;
+    size_t segment_offset = offset % chunk->_segment_size;
+    for (size_t i = segment_index; i < chunk->num_segments(); i++) {
+        // The segment need to cutoff
+        if (i == segment_index && segment_offset > 0) {
+            auto cutoff = input_segments[i]->clone_empty();
+            size_t count = input_segments[i]->num_rows() - segment_offset;
+            cutoff->append(*input_segments[i], segment_offset, count);
+            append_chunk(std::move(cutoff));
+        } else {
+            append_chunk(input_segments[i]);
+        }
+    }
+    for (auto& segment : _segments) {
+        segment->check_or_die();
+    }
+}
+
+void SegmentedChunk::build_columns() {
+    DCHECK(_segments.size() >= 1);
+    size_t num_columns = _segments[0]->num_columns();
+    for (int i = 0; i < num_columns; i++) {
+        _columns.emplace_back(std::make_shared<SegmentedColumn>(shared_from_this(), i));
+    }
+}
+
+size_t SegmentedChunk::memory_usage() const {
+    size_t result = 0;
+    for (auto& chunk : _segments) {
+        result += chunk->memory_usage();
+    }
+    return result;
+}
+
+size_t SegmentedChunk::num_rows() const {
+    size_t result = 0;
+    for (auto& chunk : _segments) {
+        result += chunk->num_rows();
+    }
+    return result;
+}
+
+SegmentedColumnPtr SegmentedChunk::get_column_by_slot_id(SlotId slot_id) {
+    DCHECK(!!_segments[0]);
+    auto& map = _segments[0]->get_slot_id_to_index_map();
+    auto iter = map.find(slot_id);
+    if (iter == map.end()) {
+        return nullptr;
+    }
+    return _columns[iter->second];
+}
+
+const SegmentedColumns& SegmentedChunk::columns() const {
+    return _columns;
+}
+
+SegmentedColumns& SegmentedChunk::columns() {
+    return _columns;
+}
+
+Status SegmentedChunk::upgrade_if_overflow() {
+    for (auto& chunk : _segments) {
+        RETURN_IF_ERROR(chunk->upgrade_if_overflow());
+    }
+    return {};
+}
+
+Status SegmentedChunk::downgrade() {
+    for (auto& chunk : _segments) {
+        RETURN_IF_ERROR(chunk->downgrade());
+    }
+    return {};
+}
+
+bool SegmentedChunk::has_large_column() const {
+    for (auto& chunk : _segments) {
+        if (chunk->has_large_column()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+size_t SegmentedChunk::num_segments() const {
+    return _segments.size();
+}
+
+const std::vector<ChunkPtr>& SegmentedChunk::segments() const {
+    return _segments;
+}
+std::vector<ChunkPtr>& SegmentedChunk::segments() {
+    return _segments;
+}
+
+ChunkUniquePtr SegmentedChunk::clone_empty(size_t reserve) {
+    return _segments[0]->clone_empty(reserve);
+}
+
+void SegmentedChunk::reset() {
+    for (auto& chunk : _segments) {
+        chunk->reset();
+    }
+}
+
+void SegmentedChunk::check_or_die() {
+    for (auto& chunk : _segments) {
+        chunk->check_or_die();
+    }
+}
+
+CommonExprEvalScopeGuard::CommonExprEvalScopeGuard(const ChunkPtr& chunk,
+                                                   const std::map<SlotId, ExprContext*>& common_expr_ctxs)
+        : _chunk(chunk), _common_expr_ctxs(common_expr_ctxs) {}
+
+CommonExprEvalScopeGuard::~CommonExprEvalScopeGuard() {
+    for (const auto& [slot_id, _] : _common_expr_ctxs) {
+        _chunk->remove_column_by_slot_id(slot_id);
+    }
+}
+
+Status CommonExprEvalScopeGuard::evaluate() {
+    for (const auto& [slot_id, ctx] : _common_expr_ctxs) {
+        ASSIGN_OR_RETURN(auto column, ctx->evaluate(_chunk.get()));
+        _chunk->append_column(std::move(column), slot_id);
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks

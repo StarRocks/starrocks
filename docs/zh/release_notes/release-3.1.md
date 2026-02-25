@@ -1,8 +1,52 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # StarRocks version 3.1
+
+## 3.1.17
+
+发布日期：2025 年 01 月 03 日
+
+### 问题修复
+
+修复了如下问题：
+
+- 跨集群数据迁移工具在迁移数据时，由于未考虑目标集群分区删除的情况，在同步数据并做 Commit 时导致 Follower FE Crash。[#54061](https://github.com/StarRocks/starrocks/pull/54061)
+- 使用跨集群数据迁移工具同步有过 DELETE 操作的表时，目标集群的 BE 可能会 Crash。[#54081](https://github.com/StarRocks/starrocks/pull/54081)
+- BDBJE 的 Handshake 存在 Bug，导致 Leader FE 和 Follower FE 链接重连的时候会被 Leader FE 拒绝，从而导致 Follwer FE 节点退出。[#50412](https://github.com/StarRocks/starrocks/pull/50412)
+- FE 中内存统计有重复统计的情况，会导致消耗大量内存。[#53055](https://github.com/StarRocks/starrocks/pull/53055)
+- 异步物化视图刷新时的任务状态在多个 FE 之间不一致，导致查询时的状态不准确。[#54236](https://github.com/StarRocks/starrocks/pull/54236)
+
+## 3.1.16
+
+发布日期：2024 年 12 月 16 日
+
+### 功能优化
+
+- 优化了表相关统计信息。[#50316](https://github.com/StarRocks/starrocks/pull/50316)
+
+### 问题修复
+
+修复了如下问题：
+
+- 由于系统对磁盘写满时的错误码判断不够细化，导致 BE 认为磁盘有错误而误删数据。[#51411](https://github.com/StarRocks/starrocks/pull/51411)
+- 通过 HTTP 1.0 提交的 Stream Load 失败。[#53010](https://github.com/StarRocks/starrocks/pull/53010) [#53008](https://github.com/StarRocks/starrocks/pull/53008)
+- Routine Load 因事务过期而导致任务取消（当前仅有数据库或表不存在任务才会被取消，事务过期时任务会被暂停）。[#50334](https://github.com/StarRocks/starrocks/pull/50334)
+- 使用 EXPORT 命令通过  Broker 方式导出数据到 `file://` 时，系统会报文件 RENAME 错误进而导致导出失败。[#52544](https://github.com/StarRocks/starrocks/pull/52544)
+- Equal-join 中，如果 JOIN 的条件是基于一个低基数列的表达式，系统会错误地下推一个 Runtime Filter 谓词，导致 BE Crash。[#50690](https://github.com/StarRocks/starrocks/pull/50690)
+
+## 3.1.15
+
+发布日期：2024 年 9 月 4 日
+
+### 问题修复
+
+修复了如下问题：
+
+- 在通过异步物化视图改写查询时，部分表 `count(*)` 返回的结果为 NULL。[#49288](https://github.com/StarRocks/starrocks/pull/49288)
+- `partition_linve_nubmer` 不生效。[#49213](https://github.com/StarRocks/starrocks/pull/49213)
+- FE 汇报 Tablet 异常：BE 磁盘下线，Tablet 无法迁移。[#47833](https://github.com/StarRocks/starrocks/pull/47833)
 
 ## 3.1.14
 
@@ -409,7 +453,13 @@ displayed_sidebar: "Chinese"
 - 从 3.1.4 版本开始，新搭建集群的主键表持久化索引在表创建时默认打开（如若从低版本升级到 3.1.4 版本则保持不变）。[#33374](https://github.com/StarRocks/starrocks/pull/33374)
 - 新增 FE 参数 `enable_sync_publish` 且默认开启。设置为 `true` 时，主键表导入的 Publish 过程会等 Apply 完成后才返回结果，这样，导入作业返回成功后数据立即可见，但可能会导致主键表导入比原来有延迟。（之前无此参数，导入时 Publish 过程中 Apply 是异步的）。[#27055](https://github.com/StarRocks/starrocks/pull/27055)
 
-## 3.1.3
+## 3.1.3（已下线）
+
+:::tip
+
+此版本已经下线。
+
+:::
 
 发布日期：2023 年 9 月 25 日
 
@@ -505,8 +555,8 @@ displayed_sidebar: "Chinese"
 #### 存算分离架构
 
 - 新增支持主键表，暂不支持持久化索引。
-- 支持自增列属性 [AUTO_INCREMENT](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/auto_increment/)，提供表内全局唯一 ID，简化数据管理。
-- 支持[导入时自动创建分区和使用分区表达式定义分区规则](https://docs.starrocks.io/zh/docs/table_design/expression_partitioning/)，提高了分区创建的易用性和灵活性。
+- 支持自增列属性 [AUTO_INCREMENT](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/table_bucket_part_index/auto_increment/)，提供表内全局唯一 ID，简化数据管理。
+- 支持[导入时自动创建分区和使用分区表达式定义分区规则](https://docs.starrocks.io/zh/docs/table_design/data_distribution/expression_partitioning/)，提高了分区创建的易用性和灵活性。
 - 支持[存储卷（Storage Volume）抽象](https://docs.starrocks.io/zh/docs/deployment/shared_data/s3/)，方便在存算分离架构中配置存储位置及鉴权等相关信息。后续创建库表时可以直接引用，提升易用性。
 
 #### 数据湖分析

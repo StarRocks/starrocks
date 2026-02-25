@@ -15,12 +15,12 @@
 
 package com.starrocks.rpc;
 
-import com.baidu.bjf.remoting.protobuf.utils.JDKCompilerHelper;
-import com.baidu.bjf.remoting.protobuf.utils.compiler.JdkCompiler;
 import com.baidu.jprotobuf.pbrpc.client.ProtobufRpcProxy;
 import com.baidu.jprotobuf.pbrpc.transport.RpcClient;
 import com.baidu.jprotobuf.pbrpc.transport.RpcClientOptions;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.DnsCache;
+import com.starrocks.service.FrontendOptions;
 import com.starrocks.thrift.TNetworkAddress;
 
 import java.util.concurrent.ConcurrentHashMap;
@@ -30,17 +30,6 @@ public class BrpcProxy {
     // TODO: Eviction
     private final ConcurrentHashMap<TNetworkAddress, PBackendService> backendServiceMap;
     private final ConcurrentHashMap<TNetworkAddress, LakeService> lakeServiceMap;
-
-    static {
-        String javaMajorVersion = "11";
-        try {
-            javaMajorVersion = System.getProperty("java.version").split("\\.")[0];
-        } catch (Exception e) {
-            // ignore
-        }
-        JDKCompilerHelper
-                .setCompiler(new JdkCompiler(JdkCompiler.class.getClassLoader(), javaMajorVersion));
-    }
 
     public BrpcProxy() {
         final RpcClientOptions rpcOptions = new RpcClientOptions();
@@ -55,6 +44,11 @@ public class BrpcProxy {
         // Therefore, MaxIdleSize shouldn't less than MaxTotal for the async requests.
         rpcOptions.setMaxIdleSize(Config.brpc_connection_pool_size);
         rpcOptions.setMaxWait(Config.brpc_idle_wait_max_time);
+        rpcOptions.setJmxEnabled(true);
+        rpcOptions.setReuseAddress(Config.brpc_reuse_addr);
+        rpcOptions.setMinEvictableIdleTime(Config.brpc_min_evictable_idle_time_ms);
+        rpcOptions.setShortConnection(Config.brpc_short_connection);
+        rpcOptions.setInnerResuePool(Config.brpc_inner_reuse_pool);
 
         rpcClient = new RpcClient(rpcOptions);
         backendServiceMap = new ConcurrentHashMap<>();
@@ -72,6 +66,14 @@ public class BrpcProxy {
         BrpcProxy.SingletonHolder.INSTANCE = proxy;
     }
 
+    public static TNetworkAddress convertToIpAddress(TNetworkAddress address) {
+        if (!FrontendOptions.isUseFqdn()) {
+            return address;
+        }
+        String ip = DnsCache.tryLookup(address.getHostname());
+        return new TNetworkAddress(ip, address.getPort());
+    }
+
     public static PBackendService getBackendService(TNetworkAddress address) {
         return getInstance().getBackendServiceImpl(address);
     }
@@ -85,12 +87,14 @@ public class BrpcProxy {
     }
 
     protected PBackendService getBackendServiceImpl(TNetworkAddress address) {
-        return backendServiceMap.computeIfAbsent(address, this::createBackendService);
+        TNetworkAddress cacheAddress = convertToIpAddress(address);
+        return backendServiceMap.computeIfAbsent(cacheAddress, this::createBackendService);
     }
 
     protected LakeService getLakeServiceImpl(TNetworkAddress address) throws RpcException {
         try {
-            return lakeServiceMap.computeIfAbsent(address, this::createLakeService);
+            TNetworkAddress cacheAddress = convertToIpAddress(address);
+            return lakeServiceMap.computeIfAbsent(cacheAddress, this::createLakeService);
         } catch (Exception e) {
             throw new RpcException("fail to initialize the LakeService on node " + address.getHostname(), e);
         }
@@ -100,14 +104,14 @@ public class BrpcProxy {
         ProtobufRpcProxy<PBackendService> proxy = new ProtobufRpcProxy<>(rpcClient, PBackendService.class);
         proxy.setHost(address.getHostname());
         proxy.setPort(address.getPort());
-        return proxy.proxy();
+        return new PBackendServiceWithMetrics(proxy.proxy());
     }
 
     private LakeService createLakeService(TNetworkAddress address) {
         ProtobufRpcProxy<LakeService> proxy = new ProtobufRpcProxy<>(rpcClient, LakeService.class);
         proxy.setHost(address.getHostname());
         proxy.setPort(address.getPort());
-        return proxy.proxy();
+        return new LakeServiceWithMetrics(proxy.proxy());
     }
 
     private static class SingletonHolder {

@@ -14,12 +14,12 @@
 
 #include "storage/default_compaction_policy.h"
 
+#include "base/debug/trace.h"
+#include "base/time/time.h"
+#include "base/utility/defer_op.h"
 #include "runtime/current_thread.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/compaction_task_factory.h"
-#include "util/defer_op.h"
-#include "util/starrocks_metrics.h"
-#include "util/time.h"
-#include "util/trace.h"
 
 namespace starrocks {
 
@@ -351,7 +351,7 @@ Status DefaultCumulativeBaseCompactionPolicy::_pick_rowsets_to_base_compact(std:
         return Status::OK();
     }
 
-    VLOG(1) << "don't satisfy the base compaction policy. tablet=" << _tablet->tablet_id()
+    VLOG(2) << "don't satisfy the base compaction policy. tablet=" << _tablet->tablet_id()
             << ", num_cumulative_rowsets=" << input_rowsets->size() - 1
             << ", cumulative_base_ratio=" << cumulative_base_ratio
             << ", interval_since_last_base_compaction=" << interval_since_last_base_compaction

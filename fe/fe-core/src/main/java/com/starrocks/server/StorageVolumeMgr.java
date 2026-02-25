@@ -15,6 +15,7 @@
 package com.starrocks.server;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.staros.util.LockCloseable;
@@ -28,6 +29,7 @@ import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.persist.DropStorageVolumeLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.SetDefaultStorageVolumeLog;
+import com.starrocks.persist.TableStorageInfos;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -42,8 +44,6 @@ import com.starrocks.sql.ast.SetDefaultStorageVolumeStmt;
 import com.starrocks.storagevolume.StorageVolume;
 
 import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.net.URI;
@@ -70,6 +70,10 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
     private static final String S3 = "s3";
 
     private static final String AZBLOB = "azblob";
+
+    private static final String ADLS2 = "adls2";
+
+    private static final String GS = "gs";
 
     private static final String HDFS = "hdfs";
 
@@ -114,7 +118,7 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
     }
 
     public String createStorageVolume(String name, String svType, List<String> locations, Map<String, String> params,
-                                      Optional<Boolean> enabled, String comment)
+            Optional<Boolean> enabled, String comment)
             throws DdlException, AlreadyExistsException {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             validateParams(svType, params);
@@ -136,6 +140,10 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
             if (sv == null) {
                 throw new MetaNotFoundException(String.format("Storage volume '%s' does not exist", name));
             }
+            String svName = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshotSvName();
+            if (svName != null && svName.equals(name)) {
+                throw new DdlException(String.format("Snapshot enabled on storage volume '%s', drop volume failed.", name));
+            }
             Preconditions.checkState(!defaultStorageVolumeId.equals(sv.getId()),
                     "default storage volume can not be removed");
             Set<Long> dbs = storageVolumeToDbs.getOrDefault(sv.getId(), new HashSet<>());
@@ -152,28 +160,34 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
         }
     }
 
-    public void updateStorageVolume(AlterStorageVolumeStmt stmt) throws DdlException {
-        Map<String, String> params = new HashMap<>();
-        Optional<Boolean> enabled = parseProperties(stmt.getProperties(), params);
-        updateStorageVolume(stmt.getName(), params, enabled, stmt.getComment());
+    public void updateStorageVolume(AlterStorageVolumeStmt stmt) throws DdlException, MetaNotFoundException {
+        updateStorageVolume(stmt.getName(), null, null, stmt.getProperties(), stmt.getComment());
     }
 
-    public void updateStorageVolume(String name, Map<String, String> params, Optional<Boolean> enabled, String comment)
-            throws DdlException {
+    public void updateStorageVolume(String name, String svType, List<String> locations,
+            Map<String, String> properties, String comment) throws DdlException, MetaNotFoundException {
+        Map<String, String> params = new HashMap<>();
+        Optional<Boolean> enabled = parseProperties(properties, params);
+        updateStorageVolume(name, svType, locations, params, enabled, comment);
+    }
+
+    public void updateStorageVolume(String name, String svType, List<String> locations,
+            Map<String, String> params, Optional<Boolean> enabled, String comment) throws DdlException, MetaNotFoundException {
+        List<String> immutableProperties = Lists.newArrayList(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX,
+                CloudConfigurationConstants.AWS_S3_ENABLE_PARTITIONED_PREFIX);
+        for (String param : immutableProperties) {
+            if (params.containsKey(param)) {
+                throw new DdlException(String.format("Storage volume property '%s' is immutable!", param));
+            }
+        }
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             StorageVolume sv = getStorageVolumeByName(name);
-            Preconditions.checkState(sv != null, "Storage volume '%s' does not exist", name);
+            if (sv == null) {
+                throw new MetaNotFoundException(String.format("Storage volume '%s' does not exist", name));
+            }
             StorageVolume copied = new StorageVolume(sv);
             validateParams(copied.getType(), params);
 
-            List<String> immutableProperties =
-                    Lists.newArrayList(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX,
-                            CloudConfigurationConstants.AWS_S3_ENABLE_PARTITIONED_PREFIX);
-            for (String param : immutableProperties) {
-                if (params.containsKey(param)) {
-                    throw new DdlException(String.format("Storage volume property '%s' is immutable!", param));
-                }
-            }
             if (enabled.isPresent()) {
                 boolean enabledValue = enabled.get();
                 if (!enabledValue) {
@@ -183,7 +197,15 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
                 copied.setEnabled(enabledValue);
             }
 
-            if (!comment.isEmpty()) {
+            if (!Strings.isNullOrEmpty(svType)) {
+                copied.setType(svType);
+            }
+
+            if (locations != null) {
+                copied.setLocations(locations);
+            }
+
+            if (!Strings.isNullOrEmpty(comment)) {
                 copied.setComment(comment);
             }
 
@@ -193,6 +215,79 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
 
             updateInternalNoLock(copied);
         }
+    }
+
+    public void replaceStorageVolume(String name, String svType, List<String> locations,
+            Map<String, String> properties, String comment) throws DdlException {
+        Map<String, String> params = new HashMap<>();
+        Optional<Boolean> enabled = parseProperties(properties, params);
+        validateParams(svType, params);
+
+        String locationChangedStorageVolumeId = null;
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            StorageVolume oldStorageVolume = getStorageVolumeByName(name);
+            Preconditions.checkState(oldStorageVolume != null, "Storage volume '%s' does not exist", name);
+            if (enabled.isPresent()) {
+                if (!enabled.get()) {
+                    Preconditions.checkState(!oldStorageVolume.getId().equals(defaultStorageVolumeId),
+                            "Default volume can not be disabled");
+                }
+            }
+
+            StorageVolume newStorageVolume = null;
+            if (oldStorageVolume.getType().equalsIgnoreCase(svType)) {
+                newStorageVolume = new StorageVolume(oldStorageVolume);
+                if (enabled.isPresent()) {
+                    newStorageVolume.setEnabled(enabled.get());
+                }
+
+                if (!Strings.isNullOrEmpty(svType)) {
+                    newStorageVolume.setType(svType);
+                }
+
+                if (locations != null) {
+                    if (!oldStorageVolume.getLocations().equals(locations)) {
+                        validateLocations(svType, locations);
+                        newStorageVolume.setLocations(locations);
+                        locationChangedStorageVolumeId = newStorageVolume.getId();
+                    }
+                }
+
+                if (!Strings.isNullOrEmpty(comment)) {
+                    newStorageVolume.setComment(comment);
+                }
+
+                if (!params.isEmpty()) {
+                    newStorageVolume.setCloudConfiguration(params);
+                }
+            } else {
+                Preconditions.checkState(locations != null, "Location is null");
+                validateLocations(svType, locations);
+                newStorageVolume = new StorageVolume(oldStorageVolume.getId(), name, svType, locations, params,
+                        enabled.orElse(oldStorageVolume.getEnabled()), comment);
+
+                if (oldStorageVolume.getVTabletId() != -1) {
+                    newStorageVolume.setVTabletId(oldStorageVolume.getVTabletId());
+                }
+
+                if (oldStorageVolume.getVTabletGroupId() != -1) {
+                    newStorageVolume.setVTabletGroupId(oldStorageVolume.getVTabletGroupId());
+                }
+
+                locationChangedStorageVolumeId = newStorageVolume.getId();
+            }
+
+            replaceInternalNoLock(newStorageVolume);
+        }
+
+        if (locationChangedStorageVolumeId != null) {
+            updateTableStorageInfo(locationChangedStorageVolumeId);
+        }
+    }
+
+    public void updateStorageVolumeVTabletMapping(String name, long vTabletId, long vTabletGroupId)
+            throws DdlException {
+        throw new DdlException("Not implemented");
     }
 
     public void setDefaultStorageVolume(SetDefaultStorageVolumeStmt stmt) {
@@ -205,8 +300,8 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
             Preconditions.checkState(sv != null, "Storage volume '%s' does not exist", svName);
             Preconditions.checkState(sv.getEnabled(), "Storage volume '%s' is disabled", svName);
             SetDefaultStorageVolumeLog log = new SetDefaultStorageVolumeLog(sv.getId());
-            GlobalStateMgr.getCurrentState().getEditLog().logSetDefaultStorageVolume(log);
-            this.defaultStorageVolumeId = sv.getId();
+            GlobalStateMgr.getCurrentState().getEditLog()
+                    .logSetDefaultStorageVolume(log, wal -> this.defaultStorageVolumeId = sv.getId());
         }
     }
 
@@ -292,6 +387,10 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
     public void replayDropStorageVolume(DropStorageVolumeLog log) {
     }
 
+    public void replayUpdateTableStorageInfos(TableStorageInfos tableStorageInfos) {
+        throw new RuntimeException("Not implemented");
+    }
+
     protected void validateParams(String svType, Map<String, String> params) throws DdlException {
         if (svType.equalsIgnoreCase(HDFS)) {
             return;
@@ -341,6 +440,8 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
                 switch (svType.toLowerCase()) {
                     case S3:
                     case AZBLOB:
+                    case ADLS2:
+                    case GS:
                         if (!scheme.equalsIgnoreCase(svType)) {
                             throw new DdlException("Invalid location " + location);
                         }
@@ -395,11 +496,6 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
         }
     }
 
-    public long saveStorageVolumes(DataOutputStream dos, long checksum) throws IOException {
-        write(dos);
-        return checksum;
-    }
-
     public void load(DataInput in) throws IOException {
         String json = Text.readString(in);
         StorageVolumeMgr data = GsonUtils.GSON.fromJson(json, StorageVolumeMgr.class);
@@ -410,11 +506,6 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
         this.tableToStorageVolume = data.tableToStorageVolume;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
-
     public abstract StorageVolume getStorageVolumeByName(String svName);
 
     public abstract StorageVolume getStorageVolume(String svId);
@@ -422,10 +513,12 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
     public abstract List<String> listStorageVolumeNames() throws DdlException;
 
     protected abstract String createInternalNoLock(String name, String svType, List<String> locations,
-                                                   Map<String, String> params, Optional<Boolean> enabled, String comment)
+            Map<String, String> params, Optional<Boolean> enabled, String comment)
             throws DdlException;
 
     protected abstract void updateInternalNoLock(StorageVolume sv) throws DdlException;
+
+    protected abstract void replaceInternalNoLock(StorageVolume sv) throws DdlException;
 
     protected abstract void removeInternalNoLock(StorageVolume sv) throws DdlException;
 
@@ -446,4 +539,11 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
     public abstract void validateStorageVolumeConfig() throws InvalidConfException;
 
     protected abstract List<List<Long>> getBindingsOfBuiltinStorageVolume();
+
+    protected abstract void updateTableStorageInfo(String storageVolumeId) throws DdlException;
+
+    public abstract long getOrCreateVirtualTabletId(String storageVolumeName, String srcServiceId)
+            throws MetaNotFoundException;
+
+    public abstract boolean hasStorageVolumeBindAsVirtualGroup(long shardGroupId);
 }

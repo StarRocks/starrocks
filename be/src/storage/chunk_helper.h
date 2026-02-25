@@ -14,12 +14,12 @@
 
 #pragma once
 
+// NOTE: This file is included by 200+ files. Be cautious when adding more includes to avoid unnecessary recompilation or increased build dependencies.
 #include <memory>
-#include <queue>
 
+#include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "storage/olap_common.h"
-#include "storage/olap_type_infra.h"
 #include "tablet_schema.h"
 
 namespace starrocks {
@@ -60,23 +60,36 @@ public:
 
     static ColumnId max_column_id(const Schema& schema);
 
-    // Create an empty chunk according to the |schema| and reserve it of size |n|.
-    static ChunkUniquePtr new_chunk(const Schema& schema, size_t n);
-
-    // Create an empty chunk according to the |tuple_desc| and reserve it of size |n|.
-    static ChunkUniquePtr new_chunk(const TupleDescriptor& tuple_desc, size_t n);
+    static Chunk* new_chunk_pooled(const Schema& schema, size_t n);
+    // a wrapper of new_chunk_pooled with memory check
+    static StatusOr<Chunk*> new_chunk_pooled_checked(const Schema& schema, size_t n);
 
     // Create an empty chunk according to the |slots| and reserve it of size |n|.
     static ChunkUniquePtr new_chunk(const std::vector<SlotDescriptor*>& slots, size_t n);
+    // Create an empty chunk according to the |schema| and reserve it of size |n|.
+    static ChunkUniquePtr new_chunk(const Schema& schema, size_t n);
+    // Create an empty chunk according to the |tuple_desc| and reserve it of size |n|.
+    static ChunkUniquePtr new_chunk(const TupleDescriptor& tuple_desc, size_t n);
+    // a wrapper of new_chunk with memory check
+    static StatusOr<ChunkUniquePtr> new_chunk_checked(const Schema& schema, size_t n);
+    static StatusOr<ChunkUniquePtr> new_chunk_checked(const std::vector<SlotDescriptor*>& slots, size_t n);
+    static StatusOr<ChunkUniquePtr> new_chunk_checked(const TupleDescriptor& tuple_desc, size_t n);
 
-    static Chunk* new_chunk_pooled(const Schema& schema, size_t n, bool force);
+    // Create an empty mutable chunk according to the |slots| and reserve it of size |n|.
+    static MutableChunkPtr new_mutable_chunk(const std::vector<SlotDescriptor*>& slots, size_t n);
+    static MutableChunkPtr new_mutable_chunk(const Schema& schema, size_t n);
+    static MutableChunkPtr new_mutable_chunk(const TupleDescriptor& tuple_desc, size_t n);
+    // a wrapper of new_mutable_chunk with memory check
+    static StatusOr<MutableChunkPtr> new_mutable_chunk_checked(const Schema& schema, size_t n);
+    static StatusOr<MutableChunkPtr> new_mutable_chunk_checked(const std::vector<SlotDescriptor*>& slots, size_t n);
+    static StatusOr<MutableChunkPtr> new_mutable_chunk_checked(const TupleDescriptor& tuple_desc, size_t n);
 
     // Create a vectorized column from field .
     // REQUIRE: |type| must be scalar type.
-    static std::shared_ptr<Column> column_from_field_type(LogicalType type, bool nullable);
+    static MutableColumnPtr column_from_field_type(LogicalType type, bool nullable);
 
     // Create a vectorized column from field.
-    static std::shared_ptr<Column> column_from_field(const Field& field);
+    static MutableColumnPtr column_from_field(const Field& field);
 
     // Get char column indexes
     static std::vector<size_t> get_char_field_indexes(const Schema& schema);
@@ -84,6 +97,9 @@ public:
     // Padding char columns
     static void padding_char_columns(const std::vector<size_t>& char_column_indexes, const Schema& schema,
                                      const TabletSchemaCSPtr& tschema, Chunk* chunk);
+
+    // Padding one char column
+    static void padding_char_column(const starrocks::TabletSchemaCSPtr& tschema, const Field& field, Column* column);
 
     // Reorder columns of `chunk` according to the order of |tuple_desc|.
     static void reorder_chunk(const TupleDescriptor& tuple_desc, Chunk* chunk);
@@ -131,6 +147,9 @@ public:
     bool is_finished() const;
 
 private:
+    static bool _check_json_schema_equallity(const Chunk* one, const Chunk* two);
+
+private:
     static constexpr double LOW_WATERMARK_ROWS_RATE = 0.75; // 0.75 * chunk_size
 #ifdef BE_TEST
     static constexpr size_t LOW_WATERMARK_BYTES = 64 * 1024; // 64KB.
@@ -144,6 +163,95 @@ private:
     // so incremental calculation is used to avoid becoming a performance bottleneck.
     size_t _mem_usage = 0;
     bool _finalized = false;
+};
+
+class SegmentedColumn final : public std::enable_shared_from_this<SegmentedColumn> {
+public:
+    SegmentedColumn(const SegmentedChunkPtr& chunk, size_t column_index);
+    SegmentedColumn(Columns columns, size_t segment_size);
+    ~SegmentedColumn() = default;
+
+    ColumnPtr clone_selective(const uint32_t* indexes, uint32_t from, uint32_t size);
+    ColumnPtr materialize() const;
+
+    bool is_nullable() const;
+    bool has_null() const;
+    size_t size() const;
+    void upgrade_to_nullable();
+    size_t segment_size() const;
+    size_t num_segments() const;
+    Columns columns() const;
+
+private:
+    SegmentedChunkWeakPtr _chunk; // The chunk it belongs to
+    size_t _column_index;         // The index in original chunk
+    const size_t _segment_size;
+
+    Columns _cached_columns; // Only used for SelectiveCopy
+};
+
+// A big-chunk would be segmented into multi small ones, to avoid allocating large-continuous memory
+// It's not a transparent replacement for Chunk, but must be aware of and set a reasonale chunk_size
+class SegmentedChunk final : public std::enable_shared_from_this<SegmentedChunk> {
+public:
+    SegmentedChunk(size_t segment_size);
+    ~SegmentedChunk() = default;
+
+    static SegmentedChunkPtr create(size_t segment_size);
+
+    void append_column(ColumnPtr column, SlotId slot_id);
+    void append_chunk(const ChunkPtr& chunk, const std::vector<SlotId>& slots);
+    void append_chunk(const ChunkPtr& chunk);
+    void append(const SegmentedChunkPtr& chunk, size_t offset);
+    void build_columns();
+
+    SegmentedColumnPtr get_column_by_slot_id(SlotId slot_id);
+    const SegmentedColumns& columns() const;
+    SegmentedColumns& columns();
+    size_t num_segments() const;
+    const std::vector<ChunkPtr>& segments() const;
+    std::vector<ChunkPtr>& segments();
+    ChunkUniquePtr clone_empty(size_t reserve);
+
+    size_t segment_size() const;
+    void reset();
+    size_t memory_usage() const;
+    size_t num_rows() const;
+    Status upgrade_if_overflow();
+    Status downgrade();
+    bool has_large_column() const;
+    void check_or_die();
+
+private:
+    std::vector<ChunkPtr> _segments;
+    SegmentedColumns _columns;
+
+    const size_t _segment_size;
+};
+
+class ExprContext;
+/**
+ * RAII guard for evaluating common expressions on a chunk.
+ * 
+ * This class provides automatic scope management for evaluating common expressions
+ * that are temporarily used during expression computation. Common expressions are
+ * computed once and reused across multiple expressions to avoid redundant computation,
+ * but they are only needed during the computation phase and should be cleaned up
+ * from the chunk after computation completes.
+ * 
+ * The destructor automatically removes the common expressions from the chunk
+ * to prevent memory leaks and ensure proper cleanup.
+ */
+class CommonExprEvalScopeGuard {
+public:
+    CommonExprEvalScopeGuard(const ChunkPtr& chunk, const std::map<SlotId, ExprContext*>& common_expr_ctxs);
+    ~CommonExprEvalScopeGuard();
+
+    Status evaluate();
+
+private:
+    const ChunkPtr& _chunk;
+    const std::map<SlotId, ExprContext*>& _common_expr_ctxs;
 };
 
 } // namespace starrocks

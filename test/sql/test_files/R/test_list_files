@@ -1,0 +1,203 @@
+-- name: test_list_files
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_files/list_files/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+shell: ossutil64 cp --force ./sql/test_files/csv_format/basic1.csv oss://${oss_bucket}/test_files/list_files/${uuid0}/ | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 52. OK num: 1(upload 1 files).
+-- !result
+
+shell: ossutil64 cp --force ./sql/test_files/csv_format/basic2.csv oss://${oss_bucket}/test_files/list_files/${uuid0}/ | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 34. OK num: 1(upload 1 files).
+-- !result
+
+select path, size, is_dir from files(
+    "path" = "oss://${oss_bucket}/test_files/list_files/${uuid0}/*",
+    "list_files_only" = "true",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+[REGEX].*basic1.csv	52	0
+.*basic2.csv	34	0
+-- !result
+
+select path, size, is_dir from files(
+    "path" = "oss://${oss_bucket}/test_files/list_files/${uuid0}/*/*",
+    "list_files_only" = "true",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+[REGEX].*failed to parse files: No files were found matching the pattern\(s\) or path\(s\).*
+-- !result
+
+select path, size, is_dir from files(
+    "path" = "oss://${oss_bucket}/test_files/list_files/${uuid0}/xxxxxx",
+    "list_files_only" = "true",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+[REGEX].*failed to parse files: No files were found matching the pattern\(s\) or path\(s\).*
+-- !result
+
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_files/list_files/${uuid0}/parquet >/dev/null || echo "exit 0" >/dev/null
+
+shell: ossutil64 cp --force ./sql/test_files/parquet_format/basic_type.parquet oss://${oss_bucket}/test_files/list_files/${uuid0}/parquet/ | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 2,281. OK num: 1(upload 1 files).
+-- !result
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_files/list_files/${uuid0}/orc0 >/dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 mkdir oss://${oss_bucket}/test_files/list_files/${uuid0}/orc0/orc1 >/dev/null || echo "exit 0" >/dev/null
+
+shell: ossutil64 cp --force ./sql/test_files/orc_format/basic_type.orc oss://${oss_bucket}/test_files/list_files/${uuid0}/orc0/orc1/ | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 1,027. OK num: 1(upload 1 files).
+-- !result
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_files/list_files/${uuid0}/orc1 >/dev/null || echo "exit 0" >/dev/null
+
+shell: ossutil64 cp --force ./sql/test_files/orc_format/basic_type.orc oss://${oss_bucket}/test_files/list_files/${uuid0}/orc1/ | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 1,027. OK num: 1(upload 1 files).
+-- !result
+
+select path, size, is_dir from files(
+    "path" = "oss://${oss_bucket}/test_files/list_files/${uuid0}/",
+    "list_files_only" = "true",
+    "list_recursively" = "false",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+[REGEX].*basic1.csv	52	0
+.*basic2.csv	34	0
+.*orc0	0	1
+.*orc1	0	1
+.*parquet	0	1
+-- !result
+
+select path, size, is_dir from files(
+    "path" = "oss://${oss_bucket}/test_files/list_files/${uuid0}/",
+    "list_files_only" = "true",
+    "list_recursively" = "true",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+[REGEX].*	0	1
+.*basic1.csv	52	0
+.*basic2.csv	34	0
+.*orc0	0	1
+.*orc0/orc1	0	1
+.*orc0/orc1/basic_type.orc	1027	0
+.*orc1	0	1
+.*orc1/basic_type.orc	1027	0
+.*parquet	0	1
+.*parquet/basic_type.parquet	2281	0
+-- !result
+
+select path, size, is_dir from files(
+    "path" = "oss://${oss_bucket}/test_files/list_files/${uuid0}/*",
+    "list_files_only" = "true",
+    "list_recursively" = "false",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+[REGEX].*basic1.csv	52	0
+.*basic2.csv	34	0
+.*orc0/orc1	0	1
+.*orc1/basic_type.orc	1027	0
+.*parquet/basic_type.parquet	2281	0
+-- !result
+
+select path, size, is_dir from files(
+    "path" = "oss://${oss_bucket}/test_files/list_files/${uuid0}/*",
+    "list_files_only" = "true",
+    "list_recursively" = "true",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+[REGEX].*basic1.csv	52	0
+.*basic2.csv	34	0
+.*orc0	0	1
+.*orc0/orc1	0	1
+.*orc0/orc1/basic_type.orc	1027	0
+.*orc1	0	1
+.*orc1/basic_type.orc	1027	0
+.*parquet	0	1
+.*parquet/basic_type.parquet	2281	0
+-- !result
+
+select path, size, is_dir from files(
+    "path" = "oss://${oss_bucket}/test_files/list_files/${uuid0}/*/*",
+    "list_files_only" = "true",
+    "list_recursively" = "false",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+[REGEX].*orc0/orc1/basic_type.orc	1027	0
+.*orc1/basic_type.orc	1027	0
+.*parquet/basic_type.parquet	2281	0
+-- !result
+
+select path, size, is_dir from files(
+    "path" = "oss://${oss_bucket}/test_files/list_files/${uuid0}/*/*",
+    "list_files_only" = "true",
+    "list_recursively" = "true",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+[REGEX].*orc0/orc1	0	1
+.*orc0/orc1/basic_type.orc	1027	0
+.*orc1/basic_type.orc	1027	0
+.*parquet/basic_type.parquet	2281	0
+-- !result
+
+select path, size, is_dir from files(
+    "path" = "oss://${oss_bucket}/test_files/list_files/${uuid0}/orc*",
+    "list_files_only" = "true",
+    "list_recursively" = "false",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+[REGEX].*orc0/orc1	0	1
+.*orc1/basic_type.orc	1027	0
+-- !result
+
+select path, size, is_dir from files(
+    "path" = "oss://${oss_bucket}/test_files/list_files/${uuid0}/orc*",
+    "list_files_only" = "true",
+    "list_recursively" = "true",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+[REGEX].*orc0	0	1
+.*orc0/orc1	0	1
+.*orc0/orc1/basic_type.orc	1027	0
+.*orc1	0	1
+.*orc1/basic_type.orc	1027	0
+-- !result
+
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/list_files/${uuid0}/ > /dev/null

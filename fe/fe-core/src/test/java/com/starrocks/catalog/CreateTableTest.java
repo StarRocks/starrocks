@@ -34,12 +34,17 @@
 
 package com.starrocks.catalog;
 
+import com.google.api.client.util.Lists;
+import com.google.common.collect.HashMultimap;
+import com.google.common.collect.ImmutableMap;
 import com.starrocks.alter.AlterJobException;
+import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.CreateTableInfo;
@@ -53,28 +58,34 @@ import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AlterSystemStmtAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
+import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
-public class CreateTableTest {
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
+public class CreateTableTest extends StarRocksTestBase {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         Backend be = UtFrameUtils.addMockBackend(10002);
@@ -89,9 +100,9 @@ public class CreateTableTest {
         // create database
         String createDbStmtStr = "create database test;";
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
-
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
         UtFrameUtils.setUpForPersistTest();
+        starRocksAssert.useDatabase("test");
     }
 
     private static void createTable(String sql) throws Exception {
@@ -104,38 +115,38 @@ public class CreateTableTest {
         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(connectContext, alterTableStmt);
     }
 
-    @Test(expected = DdlException.class)
-    public void testNotSpecifyReplicateNum() throws Exception {
-        createTable(
-                "CREATE TABLE test.`duplicate_table_with_null` ( `k1`  date, `k2`  datetime,`k3`  " +
-                        "char(20), `k4`  varchar(20), `k5`  boolean, `k6`  tinyint, `k7`  smallint, " +
-                        "`k8`  int, `k9`  bigint, `k10` largeint, `k11` float, `k12` double, " +
-                        "`k13` decimal(27,9)) DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`) PARTITION BY " +
-                        "time_slice(k2, interval 1 hour) DISTRIBUTED BY HASH(`k1`, `k2`, `k3`); "
-        );
+    @Test
+    public void testNotSpecifyReplicateNum() {
+        assertThrows(DdlException.class, () -> createTable(
+                    "CREATE TABLE test.`duplicate_table_with_null` ( `k1`  date, `k2`  datetime,`k3`  " +
+                            "char(20), `k4`  varchar(20), `k5`  boolean, `k6`  tinyint, `k7`  smallint, " +
+                            "`k8`  int, `k9`  bigint, `k10` largeint, `k11` float, `k12` double, " +
+                            "`k13` decimal(27,9)) DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`) PARTITION BY " +
+                            "time_slice(k2, interval 1 hour) DISTRIBUTED BY HASH(`k1`, `k2`, `k3`); "
+            ));
     }
 
-    @Test(expected = SemanticException.class)
-    public void testCreateUnsupportedType() throws Exception {
-        createTable(
-                "CREATE TABLE test.ods_warehoused (\n" +
-                        " warehouse_id                                bigint(20)                 COMMENT        ''\n" +
-                        ",company_id                                        bigint(20)                 COMMENT        ''\n" +
-                        ",company_name                                string                        COMMENT        ''\n" +
-                        ",is_sort_express_by_cost        tinyint(1)                COMMENT        ''\n" +
-                        ",is_order_intercepted                tinyint(1)                COMMENT        ''\n" +
-                        ",intercept_time_type                tinyint(3)                 COMMENT        ''\n" +
-                        ",intercept_time                                time                        COMMENT        ''\n" +
-                        ",intercept_begin_time                time                        COMMENT        ''\n" +
-                        ",intercept_end_time                        time                        COMMENT        ''\n" +
-                        ")\n" +
-                        "PRIMARY KEY(warehouse_id)\n" +
-                        "COMMENT \"\"\n" +
-                        "DISTRIBUTED BY HASH(warehouse_id)\n" +
-                        "PROPERTIES (\n" +
-                        "\"replication_num\" = \"1\"\n" +
-                        ");"
-        );
+    @Test
+    public void testCreateUnsupportedType() {
+        assertThrows(SemanticException.class, () -> createTable(
+                    "CREATE TABLE test.ods_warehoused (\n" +
+                            " warehouse_id                                bigint(20)                 COMMENT        ''\n" +
+                            ",company_id                                        bigint(20)                 COMMENT        ''\n" +
+                            ",company_name                                string                        COMMENT        ''\n" +
+                            ",is_sort_express_by_cost        tinyint(1)                COMMENT        ''\n" +
+                            ",is_order_intercepted                tinyint(1)                COMMENT        ''\n" +
+                            ",intercept_time_type                tinyint(3)                 COMMENT        ''\n" +
+                            ",intercept_time                                time                        COMMENT        ''\n" +
+                            ",intercept_begin_time                time                        COMMENT        ''\n" +
+                            ",intercept_end_time                        time                        COMMENT        ''\n" +
+                            ")\n" +
+                            "PRIMARY KEY(warehouse_id)\n" +
+                            "COMMENT \"\"\n" +
+                            "DISTRIBUTED BY HASH(warehouse_id)\n" +
+                            "PROPERTIES (\n" +
+                            "\"replication_num\" = \"1\"\n" +
+                            ");"
+            ));
     }
 
     @Test
@@ -212,7 +223,7 @@ public class CreateTableTest {
                         + "partition by range(k2)\n" + "(partition p1 values less than(\"10\"))\n"
                         + "distributed by hash(k2) buckets 1\n" + "properties('replication_num' = '1');"));
 
-        ConfigBase.setMutableConfig("enable_strict_storage_medium_check", "false");
+        ConfigBase.setMutableConfig("enable_strict_storage_medium_check", "false", false, "");
         ExceptionChecker
                 .expectThrowsNoException(() -> createTable("create table test.tb7(key1 int, key2 varchar(10)) \n"
                         +
@@ -297,16 +308,16 @@ public class CreateTableTest {
                         "    \"dynamic_partition.history_partition_num\" = \"0\"\n" +
                         ");"));
 
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
-        OlapTable tbl6 = (OlapTable) db.getTable("tbl6");
-        Assert.assertTrue(tbl6.getColumn("k1").isKey());
-        Assert.assertTrue(tbl6.getColumn("k2").isKey());
-        Assert.assertTrue(tbl6.getColumn("k3").isKey());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable tbl6 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl6");
+        Assertions.assertTrue(tbl6.getColumn("k1").isKey());
+        Assertions.assertTrue(tbl6.getColumn("k2").isKey());
+        Assertions.assertTrue(tbl6.getColumn("k3").isKey());
 
-        OlapTable tbl7 = (OlapTable) db.getTable("tbl7");
-        Assert.assertTrue(tbl7.getColumn("k1").isKey());
-        Assert.assertFalse(tbl7.getColumn("k2").isKey());
-        Assert.assertTrue(tbl7.getColumn("k2").getAggregationType() == AggregateType.NONE);
+        OlapTable tbl7 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl7");
+        Assertions.assertTrue(tbl7.getColumn("k1").isKey());
+        Assertions.assertFalse(tbl7.getColumn("k2").isKey());
+        Assertions.assertTrue(tbl7.getColumn("k2").getAggregationType() == AggregateType.NONE);
     }
 
     @Test
@@ -331,9 +342,9 @@ public class CreateTableTest {
                         "    \"dynamic_partition.buckets\" = \"32\",\n" +
                         "    \"dynamic_partition.history_partition_num\" = \"0\"\n" +
                         ");"));
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         Table str2dateTable = db.getTable("partition_str2date");
-        Assert.assertTrue(DynamicPartitionUtil.isDynamicPartitionTable(str2dateTable));
+        Assertions.assertTrue(DynamicPartitionUtil.isDynamicPartitionTable(str2dateTable));
 
         ExceptionChecker
                 .expectThrowsNoException(() -> createTable("CREATE TABLE test.partition_from_unixtime (\n" +
@@ -356,7 +367,7 @@ public class CreateTableTest {
                         "    \"dynamic_partition.history_partition_num\" = \"0\"\n" +
                         ");"));
         Table fromUnixtimeTable = db.getTable("partition_from_unixtime");
-        Assert.assertTrue(DynamicPartitionUtil.isDynamicPartitionTable(fromUnixtimeTable));
+        Assertions.assertTrue(DynamicPartitionUtil.isDynamicPartitionTable(fromUnixtimeTable));
     }
 
     @Test
@@ -400,7 +411,7 @@ public class CreateTableTest {
                                 + "duplicate key(k1, k2, k3)\n" + "distributed by hash(k1) buckets 1\n"
                                 + "properties('replication_num' = '1');"));
 
-        ConfigBase.setMutableConfig("enable_strict_storage_medium_check", "true");
+        ConfigBase.setMutableConfig("enable_strict_storage_medium_check", "true", false, "");
         ExceptionChecker
                 .expectThrowsWithMsg(DdlException.class,
                         "Failed to find enough hosts with storage " +
@@ -509,7 +520,7 @@ public class CreateTableTest {
                         "PRIMARY KEY( k0, k1, k2) \n" +
                         "PARTITION BY RANGE (k1) (START (\"1970-01-01\") END (\"2022-09-30\") " +
                         "EVERY (INTERVAL 60 day)) DISTRIBUTED BY HASH(k0) BUCKETS 1 " +
-                        "PROPERTIES (\"replication_num\"=\"1\",\"enable_persistent_index\" = \"false\"," +
+                        "PROPERTIES (\"replication_num\"=\"1\",\"enable_persistent_index\" = \"true\"," +
                         "\"datacache.enable\" = \"true\",\"asd\" = \"true\");"));
 
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
@@ -556,7 +567,7 @@ public class CreateTableTest {
                         "\"dynamic_partition.history_partition_num\" = \"0\",\n" +
                         "\"in_memory\" = \"false\",\n" +
                         "\"storage_format\" = \"DEFAULT\",\n" +
-                        "\"enable_persistent_index\" = \"false\",\n" +
+                        "\"enable_persistent_index\" = \"true\",\n" +
                         "\"compression\" = \"LZ4\"\n" +
                         ");"));
     }
@@ -682,9 +693,55 @@ public class CreateTableTest {
         ExceptionChecker.expectThrowsNoException(
                 () -> createTable("create table test.tmp1\n" + "(k1 int, k2 int)\n"));
         ExceptionChecker.expectThrowsNoException(
-                () -> createTable("create table test.tmp2\n" + "(k1 int, k2 float) PROPERTIES(\"replication_num\" = \"1\");\n"));
+                () -> createTable(
+                        "create table test.tmp2\n" + "(k1 int, k2 float) PROPERTIES(\"replication_num\" = \"1\");\n"));
         ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Data type of first column cannot be HLL",
                 () -> createTable("create table test.tmp3\n" + "(k1 hll, k2 float)\n"));
+    }
+
+    @Test
+    public void testCreateTableWithReserveColumn() {
+        Config.allow_system_reserved_names = true;
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "Column name '__op' is reserved for primary key table",
+                () -> createTable(
+                "CREATE TABLE test.test_op (\n" +
+                        "k1 INT,\n" +
+                        "__op INT\n" +
+                        ") ENGINE=OLAP\n" +
+                        "PRIMARY KEY(k1)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ");"));
+
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "Column name '__row' is reserved for primary key table",
+                        () -> createTable(
+                        "CREATE TABLE test.test_row (\n" +
+                                "k1 INT,\n" +
+                                "__row INT\n" +
+                                ") ENGINE=OLAP\n" +
+                                "PRIMARY KEY(k1)\n" +
+                                "COMMENT \"OLAP\"\n" +
+                                "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                                "PROPERTIES (\n" +
+                                "\"replication_num\" = \"1\"\n" +
+                                ");"));
+
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "Column name '__ROW' is reserved for primary key table",
+                        () -> createTable(
+                        "CREATE TABLE test.test_row (\n" +
+                                "k1 INT,\n" +
+                                "__ROW INT\n" +
+                                ") ENGINE=OLAP\n" +
+                                "PRIMARY KEY(k1)\n" +
+                                "COMMENT \"OLAP\"\n" +
+                                "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                                "PROPERTIES (\n" +
+                                "\"replication_num\" = \"1\"\n" +
+                                ");"));
+
+        Config.allow_system_reserved_names = false;
     }
 
     @Test
@@ -700,12 +757,12 @@ public class CreateTableTest {
                 "AGGREGATE KEY(id_int)\n" +
                 "DISTRIBUTED BY HASH(id_int) BUCKETS 10\n" +
                 "PROPERTIES(\"replication_num\" = \"1\");");
-        final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getDb(connectContext.getDatabase())
+        final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb(connectContext.getDatabase())
                 .getTable("aggregate_table_sum");
         String columns = table.getColumns().toString();
-        System.out.println("columns = " + columns);
-        Assert.assertTrue(columns.contains("`sum_decimal` decimal(38, 4) SUM"));
-        Assert.assertTrue(columns.contains("`sum_bigint` bigint(20) SUM "));
+        logSysInfo("columns = " + columns);
+        Assertions.assertTrue(columns.contains("`sum_decimal` decimal(38, 4) SUM"));
+        Assertions.assertTrue(columns.contains("`sum_bigint` bigint(20) SUM "));
     }
 
     @Test
@@ -724,20 +781,22 @@ public class CreateTableTest {
         UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testCreateSumSmallTypeAgg() throws Exception {
-        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
-        starRocksAssert.useDatabase("test");
-        starRocksAssert.withTable("CREATE TABLE aggregate_table_sum\n" +
-                "(\n" +
-                "    id_int INT,\n" +
-                "    sum_int int SUM DEFAULT '0',\n" +
-                "    sum_smallint smallint SUM DEFAULT '0',\n" +
-                "    sum_tinyint tinyint SUM DEFAULT '0'\n" +
-                ")\n" +
-                "AGGREGATE KEY(id_int)\n" +
-                "DISTRIBUTED BY HASH(id_int) BUCKETS 10\n" +
-                "PROPERTIES(\"replication_num\" = \"1\");");
+    @Test
+    public void testCreateSumSmallTypeAgg() {
+        assertThrows(AnalysisException.class, () -> {
+            StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+            starRocksAssert.useDatabase("test");
+            starRocksAssert.withTable("CREATE TABLE aggregate_table_sum\n" +
+                    "(\n" +
+                    "    id_int INT,\n" +
+                    "    sum_int int SUM DEFAULT '0',\n" +
+                    "    sum_smallint smallint SUM DEFAULT '0',\n" +
+                    "    sum_tinyint tinyint SUM DEFAULT '0'\n" +
+                    ")\n" +
+                    "AGGREGATE KEY(id_int)\n" +
+                    "DISTRIBUTED BY HASH(id_int) BUCKETS 10\n" +
+                    "PROPERTIES(\"replication_num\" = \"1\");");
+        });
     }
 
     @Test
@@ -748,10 +807,10 @@ public class CreateTableTest {
                 "than_64_chars VARCHAR(100)) DISTRIBUTED BY HASH(oh_my_gosh_this_is_a_long_column_name_look_at_it_it_" +
                 "has_more_than_64_chars) BUCKETS 8 PROPERTIES(\"replication_num\" = \"1\");";
         starRocksAssert.withTable(sql);
-        final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getDb(connectContext.getDatabase())
+        final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb(connectContext.getDatabase())
                 .getTable("long_column_table");
-        Assert.assertEquals(1, table.getColumns().size());
-        Assert.assertNotNull(
+        Assertions.assertEquals(1, table.getColumns().size());
+        Assertions.assertNotNull(
                 table.getColumn("oh_my_gosh_this_is_a_long_column_name_look_at_it_it_has_more_than_64_chars"));
     }
 
@@ -771,9 +830,9 @@ public class CreateTableTest {
                 "    \"in_memory\" = \"false\"\n" +
                 ");";
         starRocksAssert.withTable(sql);
-        final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getDb(connectContext.getDatabase())
+        final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb(connectContext.getDatabase())
                 .getTable("test_create_default_current_timestamp");
-        Assert.assertEquals(2, table.getColumns().size());
+        Assertions.assertEquals(2, table.getColumns().size());
     }
 
     @Test
@@ -792,9 +851,9 @@ public class CreateTableTest {
                 "    \"in_memory\" = \"false\"\n" +
                 ");";
         starRocksAssert.withTable(sql);
-        final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getDb(connectContext.getDatabase())
+        final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb(connectContext.getDatabase())
                 .getTable("test_create_default_uuid");
-        Assert.assertEquals(2, table.getColumns().size());
+        Assertions.assertEquals(2, table.getColumns().size());
 
         String sql2 = "CREATE TABLE `test_create_default_uuid_numeric` (\n" +
                 "    k1 int,\n" +
@@ -809,9 +868,9 @@ public class CreateTableTest {
                 ");";
         starRocksAssert.withTable(sql2);
 
-        final Table table2 = starRocksAssert.getCtx().getGlobalStateMgr().getDb(connectContext.getDatabase())
+        final Table table2 = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb(connectContext.getDatabase())
                 .getTable("test_create_default_uuid_numeric");
-        Assert.assertEquals(2, table2.getColumns().size());
+        Assertions.assertEquals(2, table2.getColumns().size());
     }
 
     @Test
@@ -860,11 +919,11 @@ public class CreateTableTest {
 
     @Test
     public void testCreateTableWithLocation() throws Exception {
-        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
 
         // add label to backend
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-        System.out.println(systemInfoService.getBackends());
+        logSysInfo(systemInfoService.getBackends());
         List<Long> backendIds = systemInfoService.getBackendIds();
         Backend backend = systemInfoService.getBackend(backendIds.get(0));
         String modifyBackendPropSqlStr = "alter system modify backend '" + backend.getHost() +
@@ -886,19 +945,20 @@ public class CreateTableTest {
                 "    \"in_memory\" = \"false\"\n" +
                 ");");
 
-        OlapTable table = (OlapTable) testDb.getTable("test_location_no_prop");
-        Assert.assertNotNull(table.getLocation());
-        System.out.println(table.getLocation());
-        Assert.assertTrue(table.getLocation().containsKey("*"));
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), "test_location_no_prop");
+        Assertions.assertNotNull(table.getLocation());
+        logSysInfo(table.getLocation());
+        Assertions.assertTrue(table.getLocation().containsKey("*"));
 
         // verify the location property in show create table result, should be "*"
         String showSql = "show create table test.`test_location_no_prop`";
         ShowCreateTableStmt showCreateTableStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showSql,
                 connectContext);
-        
+
         ShowResultSet showResultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
-        System.out.println(showResultSet.getResultRows());
-        Assert.assertTrue(showResultSet.getResultRows().get(0).toString().contains("\"" +
+        logSysInfo(showResultSet.getResultRows());
+        Assertions.assertTrue(showResultSet.getResultRows().get(0).toString().contains("\"" +
                 PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "\" = \"*\""));
 
         // remove the location property from backend
@@ -920,16 +980,17 @@ public class CreateTableTest {
                 "    \"replication_num\" = \"1\",\n" +
                 "    \"in_memory\" = \"false\"\n" +
                 ");");
-        table = (OlapTable) testDb.getTable("test_location_no_backend_prop");
-        Assert.assertNull(table.getLocation());
+        table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), "test_location_no_backend_prop");
+        Assertions.assertNull(table.getLocation());
 
         // verify the location property in show create table result, shouldn't exist
         showSql = "show create table test.`test_location_no_backend_prop`";
         showCreateTableStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showSql,
                 connectContext);
         showResultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
-        System.out.println(showResultSet.getResultRows());
-        Assert.assertFalse(showResultSet.getResultRows().get(0).toString().contains("\"" +
+        logSysInfo(showResultSet.getResultRows());
+        Assertions.assertFalse(showResultSet.getResultRows().get(0).toString().contains("\"" +
                 PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "\" = \"*\""));
 
         // set 5 backends with location: key:a, key:b, key:c, key1:a, key_2:b
@@ -947,7 +1008,7 @@ public class CreateTableTest {
 
         for (int i = 0; i < 5; i++) {
             backend = systemInfoService.getBackend(backendIds.get(i));
-            System.out.println("backend " + backend.getId() + " location: " + backend.getLocation());
+            logSysInfo("backend " + backend.getId() + " location: " + backend.getLocation());
         }
 
         // **test create table with valid/invalid location property format
@@ -959,7 +1020,7 @@ public class CreateTableTest {
                 null, "", null, null, null, null, null};
         for (int i = 0; i < tableLocationProps.length; i++) {
             String tableLocationProp = tableLocationProps[i];
-            System.out.println(tableLocationProp);
+            logSysInfo(tableLocationProp);
             String expectedAnalyzedProp = expectedAnalyzedProps[i];
             String createTableSql = "CREATE TABLE test.`test_location_prop_" + i + "` (\n" +
                     "    k1 int,\n" +
@@ -985,14 +1046,15 @@ public class CreateTableTest {
                 }
             } else {
                 createTable(createTableSql);
-                table = (OlapTable) testDb.getTable("test_location_prop_" + i);
+                table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(testDb.getFullName(), "test_location_prop_" + i);
                 if (tableLocationProp.isEmpty()) {
-                    Assert.assertNull(table.getLocation());
+                    Assertions.assertNull(table.getLocation());
                     continue;
                 }
-                Assert.assertNotNull(table.getLocation());
-                System.out.println(table.getLocation());
-                Assert.assertEquals(PropertyAnalyzer.convertLocationMapToString(table.getLocation()),
+                Assertions.assertNotNull(table.getLocation());
+                logSysInfo(table.getLocation());
+                Assertions.assertEquals(PropertyAnalyzer.convertLocationMapToString(table.getLocation()),
                         expectedAnalyzedProp);
 
                 // verify the location property in show create table result
@@ -1000,8 +1062,8 @@ public class CreateTableTest {
                 showCreateTableStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showSql,
                         connectContext);
                 showResultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
-                System.out.println(showResultSet.getResultRows());
-                Assert.assertTrue(showResultSet.getResultRows().get(0).toString().contains("\"" +
+                logSysInfo(showResultSet.getResultRows());
+                Assertions.assertTrue(showResultSet.getResultRows().get(0).toString().contains("\"" +
                         PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "\" = \"" + expectedAnalyzedProp + "\""));
             }
         }
@@ -1018,7 +1080,7 @@ public class CreateTableTest {
     public void testCreateTableLocationPropPersist() throws Exception {
         // add label to backend
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-        System.out.println(systemInfoService.getBackends());
+        logSysInfo(systemInfoService.getBackends());
         List<Long> backendIds = systemInfoService.getBackendIds();
         Backend backend = systemInfoService.getBackend(backendIds.get(0));
         String modifyBackendPropSqlStr = "alter system modify backend '" + backend.getHost() +
@@ -1056,22 +1118,22 @@ public class CreateTableTest {
         localMetastoreFollower.replayCreateTable(info);
         OlapTable olapTable = (OlapTable) localMetastoreFollower.getDb("test")
                 .getTable("test_location_persist_t1");
-        System.out.println(olapTable.getLocation());
-        Assert.assertEquals(1, olapTable.getLocation().size());
-        Assert.assertTrue(olapTable.getLocation().containsKey("rack"));
+        logSysInfo(olapTable.getLocation());
+        Assertions.assertEquals(1, olapTable.getLocation().size());
+        Assertions.assertTrue(olapTable.getLocation().containsKey("rack"));
 
         // ** test load from image(simulate restart)
         LocalMetastore localMetastoreLeader = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
         localMetastoreLeader.load(finalImage.getMetaBlockReader());
         olapTable = (OlapTable) localMetastoreLeader.getDb("test")
                 .getTable("test_location_persist_t1");
-        System.out.println(olapTable.getLocation());
-        Assert.assertEquals(1, olapTable.getLocation().size());
-        Assert.assertTrue(olapTable.getLocation().containsKey("rack"));
+        logSysInfo(olapTable.getLocation());
+        Assertions.assertEquals(1, olapTable.getLocation().size());
+        Assertions.assertTrue(olapTable.getLocation().containsKey("rack"));
     }
 
     @Test
-    public void testCreateVarBinaryTable() {
+    public void testCreateVarBinaryTable() throws Exception {
         // duplicate table
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "create table test.varbinary_tbl\n" +
@@ -1114,20 +1176,16 @@ public class CreateTableTest {
                 "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
 
         // failed
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
-                "Invalid data type of key column 'k2': 'VARBINARY'",
-                () -> createTable("create table test.varbinary_tbl0\n"
+        createTable("create table test.varbinary_tbl00\n"
                         + "(k1 int, k2 varbinary)\n"
                         + "duplicate key(k1, k2)\n"
                         + "distributed by hash(k1) buckets 1\n"
-                        + "properties('replication_num' = '1');"));
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "VARBINARY(10) column can not be distribution column",
-                () -> createTable("create table test.varbinary_tbl0 \n"
+                + "properties('replication_num' = '1');");
+        createTable("create table test.varbinary_tbl01 \n"
                         + "(k1 int, k2 varbinary(10) )\n"
                         + "duplicate key(k1)\n"
                         + "distributed by hash(k2) buckets 1\n"
-                        + "properties('replication_num' = '1');"));
+                + "properties('replication_num' = '1');");
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "Column[j] type[VARBINARY] cannot be a range partition key",
                 () -> createTable("create table test.varbinary_tbl0 \n" +
@@ -1139,7 +1197,7 @@ public class CreateTableTest {
     }
 
     @Test
-    public void testCreateBinaryTable() {
+    public void testCreateBinaryTable() throws Exception {
         // duplicate table
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "create table test.binary_tbl\n" +
@@ -1182,20 +1240,16 @@ public class CreateTableTest {
                 "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
 
         // failed
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
-                "Invalid data type of key column 'k2': 'VARBINARY'",
-                () -> createTable("create table test.binary_tbl0\n"
+        createTable("create table test.binary_tbl01\n"
                         + "(k1 int, k2 binary)\n"
                         + "duplicate key(k1, k2)\n"
                         + "distributed by hash(k1) buckets 1\n"
-                        + "properties('replication_num' = '1');"));
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "VARBINARY(10) column can not be distribution column",
-                () -> createTable("create table test.binary_tbl0 \n"
+                + "properties('replication_num' = '1');");
+        createTable("create table test.binary_tbl11 \n"
                         + "(k1 int, k2 binary(10) )\n"
                         + "duplicate key(k1)\n"
                         + "distributed by hash(k2) buckets 1\n"
-                        + "properties('replication_num' = '1');"));
+                + "properties('replication_num' = '1');");
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "Column[j] type[VARBINARY] cannot be a range partition key",
                 () -> createTable("create table test.binary_tbl0 \n" +
@@ -1339,24 +1393,25 @@ public class CreateTableTest {
                         ");"
         ));
 
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
-        OlapTable table = (OlapTable) db.getTable("binlog_table");
-        Assert.assertNotNull(table.getCurBinlogConfig());
-        Assert.assertTrue(table.isBinlogEnabled());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table =
+                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "binlog_table");
+        Assertions.assertNotNull(table.getCurBinlogConfig());
+        Assertions.assertTrue(table.isBinlogEnabled());
 
         long version = table.getBinlogVersion();
-        Assert.assertEquals(0, version);
+        Assertions.assertEquals(0, version);
         long binlogMaxSize = table.getCurBinlogConfig().getBinlogMaxSize();
-        Assert.assertEquals(100, binlogMaxSize);
+        Assertions.assertEquals(100, binlogMaxSize);
         long binlogTtlSecond = table.getCurBinlogConfig().getBinlogTtlSecond();
-        Assert.assertEquals(100, binlogTtlSecond);
+        Assertions.assertEquals(100, binlogTtlSecond);
 
         ExceptionChecker.expectThrowsNoException(
                 () -> alterTableWithNewParser("ALTER TABLE test.binlog_table SET " +
                         "(\"binlog_enable\" = \"false\",\"binlog_max_size\" = \"200\")"));
-        Assert.assertFalse(table.isBinlogEnabled());
-        Assert.assertEquals(1, table.getBinlogVersion());
-        Assert.assertEquals(200, table.getCurBinlogConfig().getBinlogMaxSize());
+        Assertions.assertFalse(table.isBinlogEnabled());
+        Assertions.assertEquals(1, table.getBinlogVersion());
+        Assertions.assertEquals(200, table.getCurBinlogConfig().getBinlogMaxSize());
 
     }
 
@@ -1375,18 +1430,19 @@ public class CreateTableTest {
                         ");"
         ));
 
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
-        OlapTable table = (OlapTable) db.getTable("not_binlog_table");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "not_binlog_table");
 
-        Assert.assertFalse(table.containsBinlogConfig());
-        Assert.assertFalse(table.isBinlogEnabled());
+        Assertions.assertFalse(table.containsBinlogConfig());
+        Assertions.assertFalse(table.isBinlogEnabled());
 
         ExceptionChecker.expectThrowsNoException(
                 () -> alterTableWithNewParser("ALTER TABLE test.not_binlog_table SET " +
                         "(\"binlog_enable\" = \"true\",\"binlog_max_size\" = \"200\")"));
-        Assert.assertTrue(table.isBinlogEnabled());
-        Assert.assertEquals(0, table.getBinlogVersion());
-        Assert.assertEquals(200, table.getCurBinlogConfig().getBinlogMaxSize());
+        Assertions.assertTrue(table.isBinlogEnabled());
+        Assertions.assertEquals(0, table.getBinlogVersion());
+        Assertions.assertEquals(200, table.getCurBinlogConfig().getBinlogMaxSize());
     }
 
     @Test
@@ -1405,15 +1461,16 @@ public class CreateTableTest {
                         ");"
         ));
 
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
-        OlapTable table = (OlapTable) db.getTable("parent_table1");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table =
+                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "parent_table1");
 
-        Assert.assertTrue(table.hasUniqueConstraints());
+        Assertions.assertTrue(table.hasUniqueConstraints());
         List<UniqueConstraint> uniqueConstraint = table.getUniqueConstraints();
-        Assert.assertEquals(1, uniqueConstraint.size());
-        Assert.assertEquals(2, uniqueConstraint.get(0).getUniqueColumnNames().size());
-        Assert.assertEquals("k1", uniqueConstraint.get(0).getUniqueColumnNames().get(0));
-        Assert.assertEquals("k2", uniqueConstraint.get(0).getUniqueColumnNames().get(1));
+        Assertions.assertEquals(1, uniqueConstraint.size());
+        Assertions.assertEquals(2, uniqueConstraint.get(0).getUniqueColumnNames(table).size());
+        Assertions.assertEquals("k1", uniqueConstraint.get(0).getUniqueColumnNames(table).get(0));
+        Assertions.assertEquals("k2", uniqueConstraint.get(0).getUniqueColumnNames(table).get(1));
 
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "CREATE TABLE test.parent_table2(\n" +
@@ -1429,15 +1486,16 @@ public class CreateTableTest {
                         ");"
         ));
 
-        OlapTable table2 = (OlapTable) db.getTable("parent_table2");
+        OlapTable table2 =
+                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "parent_table2");
 
-        Assert.assertTrue(table2.hasUniqueConstraints());
+        Assertions.assertTrue(table2.hasUniqueConstraints());
         List<UniqueConstraint> uniqueConstraint2 = table2.getUniqueConstraints();
-        Assert.assertEquals(2, uniqueConstraint2.size());
-        Assert.assertEquals(1, uniqueConstraint2.get(0).getUniqueColumnNames().size());
-        Assert.assertEquals("k1", uniqueConstraint2.get(0).getUniqueColumnNames().get(0));
-        Assert.assertEquals(1, uniqueConstraint2.get(1).getUniqueColumnNames().size());
-        Assert.assertEquals("k2", uniqueConstraint2.get(1).getUniqueColumnNames().get(0));
+        Assertions.assertEquals(2, uniqueConstraint2.size());
+        Assertions.assertEquals(1, uniqueConstraint2.get(0).getUniqueColumnNames(table2).size());
+        Assertions.assertEquals("k1", uniqueConstraint2.get(0).getUniqueColumnNames(table2).get(0));
+        Assertions.assertEquals(1, uniqueConstraint2.get(1).getUniqueColumnNames(table2).size());
+        Assertions.assertEquals("k2", uniqueConstraint2.get(1).getUniqueColumnNames(table2).get(0));
 
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "CREATE TABLE test.parent_primary_key_table1(\n" +
@@ -1868,17 +1926,17 @@ public class CreateTableTest {
         starRocksAssert.withTable(sql2);
 
         List<List<String>> result = GlobalStateMgr.getCurrentState().getColocateTableIndex().getInfos();
-        System.out.println(result);
+        logSysInfo(result);
         List<String> groupIds = new ArrayList<>();
         for (List<String> e : result) {
             if (e.get(1).contains("ship_id_public")) {
                 groupIds.add(e.get(0));
             }
         }
-        Assert.assertEquals(2, groupIds.size());
-        System.out.println(groupIds);
+        Assertions.assertEquals(2, groupIds.size());
+        logSysInfo(groupIds);
         // colocate groups in different db should have same `GroupId.grpId`
-        Assert.assertEquals(groupIds.get(0).split("\\.")[1], groupIds.get(1).split("\\.")[1]);
+        Assertions.assertEquals(groupIds.get(0).split("\\.")[1], groupIds.get(1).split("\\.")[1]);
     }
 
     @Test
@@ -1893,7 +1951,24 @@ public class CreateTableTest {
                 "\"replication_num\" = \"1\",\n" +
                 "\"colocate_with\" = \"ship_id_public\"" +
                 ");";
-        Assert.assertThrows(AnalysisException.class, () -> starRocksAssert.withTable(sql1));
+        Assertions.assertThrows(AnalysisException.class, () -> starRocksAssert.withTable(sql1));
+    }
+
+    @Test
+    public void testPrimaryKeyDisableInMemoryIndex() {
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.useDatabase("test");
+        String sql1 = "CREATE TABLE test.disable_inmemory_index (\n" +
+                "ship_id int(11) NOT NULL COMMENT \" \",\n" +
+                "sub_ship_id bigint(20) NOT NULL COMMENT \" \"\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(ship_id) COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(ship_id) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"enable_persistent_index\" = \"false\"" +
+                ");";
+        ExceptionChecker.expectThrows(DdlException.class, () -> starRocksAssert.withTable(sql1));
     }
 
     @Test
@@ -2049,8 +2124,8 @@ public class CreateTableTest {
         String sql1 = "create table tbl_simple_pk(key0 string, __op boolean) primary key(key0)" +
                 " distributed by hash(key0) properties(\"replication_num\"=\"1\");";
         ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Getting analyzing error." +
-                " Detail message: Column name [__op] is a system reserved name." +
-                " If you are sure you want to use it, please set FE configuration allow_system_reserved_names",
+                        " Detail message: Column name [__op] is a system reserved name." +
+                        " Please choose a different one.",
                 () -> starRocksAssert.withTable(sql1));
     }
 
@@ -2092,5 +2167,137 @@ public class CreateTableTest {
         String createTableSql = starRocksAssert.showCreateTable("show create table news_rt_non_pk;");
         starRocksAssert.dropTable("news_rt_non_pk");
         starRocksAssert.withTable(createTableSql);
+    }
+
+    @Test
+    public void testDefaultValueHasChineseChars() throws Exception {
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.useDatabase("test");
+        String sql1 = "CREATE TABLE `news_rt1` (\n" +
+                "  `id` bigint(20) NOT NULL COMMENT \"pkid\",\n" +
+                "  `title` varchar(65533) NOT NULL DEFAULT \"撒\" COMMENT \"撒\"\n" +
+                ") ENGINE=OLAP \n" +
+                "PRIMARY KEY(`id`)\n" +
+                "COMMENT \"news\"\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 1 \n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        starRocksAssert.withTable(sql1);
+        String createTableSql = starRocksAssert.showCreateTable("show create table news_rt1;");
+        starRocksAssert.dropTable("news_rt1");
+        starRocksAssert.withTable(createTableSql);
+        Assertions.assertTrue(createTableSql.contains("撒"), createTableSql);
+    }
+
+    @Test
+    public void testDefaultValueHasChineseCharsNonPK() throws Exception {
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.useDatabase("test");
+        String sql1 = "CREATE TABLE `news_rt1_non_pk` (\n" +
+                "  `id` bigint(20) NOT NULL COMMENT \"pkid\",\n" +
+                "  `title` varchar(65533) NOT NULL DEFAULT \"撒\" COMMENT \"撒\"\n" +
+                ") ENGINE=OLAP \n" +
+                "DUPLICATE KEY(`id`)\n" +
+                "COMMENT \"news\"\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 1 \n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        starRocksAssert.withTable(sql1);
+        String createTableSql = starRocksAssert.showCreateTable("show create table news_rt1_non_pk;");
+        starRocksAssert.dropTable("news_rt1_non_pk");
+        starRocksAssert.withTable(createTableSql);
+        Assertions.assertTrue(createTableSql.contains("撒"), createTableSql);
+    }
+
+    @Test
+    public void testCreateTableWithNullableColumns1() throws Exception {
+        String createSQL = "CREATE TABLE list_partition_tbl1 (\n" +
+                "      id BIGINT,\n" +
+                "      age SMALLINT,\n" +
+                "      dt VARCHAR(10),\n" +
+                "      province VARCHAR(64) \n" +
+                ")\n" +
+                "DUPLICATE KEY(id)\n" +
+                "PARTITION BY LIST (province) (\n" +
+                "     PARTITION p1 VALUES IN ((NULL),(\"chongqing\")) ,\n" +
+                "     PARTITION p2 VALUES IN ((\"guangdong\")) \n" +
+                ")\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        starRocksAssert.withTable(createSQL);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(),
+                "list_partition_tbl1");
+        PartitionInfo info = table.getPartitionInfo();
+        Assertions.assertTrue(info.isListPartition());
+        ListPartitionInfo listPartitionInfo = (ListPartitionInfo) info;
+        Map<Long, List<List<LiteralExpr>>> long2Literal =  listPartitionInfo.getMultiLiteralExprValues();
+        Assertions.assertEquals(2, long2Literal.size());
+    }
+
+    @Test
+    public void testCreateTableWithNullableColumns2() {
+        String createSQL = "\n" +
+                "CREATE TABLE t3 (\n" +
+                "  dt date,\n" +
+                "  city varchar(20),\n" +
+                "  name varchar(20),\n" +
+                "  num int\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(dt, city, name)\n" +
+                "PARTITION BY LIST (dt) (\n" +
+                "    PARTITION p1 VALUES IN ((NULL), (\"2022-04-01\")),\n" +
+                "    PARTITION p2 VALUES IN ((\"2022-04-02\")),\n" +
+                "    PARTITION p3 VALUES IN ((\"2022-04-03\"))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(dt) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");";
+        try {
+            starRocksAssert.withTable(createSQL);
+            Assertions.fail();
+        } catch (Exception e) {
+            Assertions.assertTrue(e.getMessage().contains("Partition column[dt] could not be null but contains null " +
+                    "value in partition[p1]."));
+        }
+    }
+
+    @Test
+    public void testChosenBackendIdBySeqWhenDiskOffline() {
+        List<Backend> backends = Lists.newArrayList();
+        Backend be0 = new Backend(10000, "127.0.0.1", 9050);
+        DiskInfo disk = new DiskInfo("/path");
+        disk.setState(DiskInfo.DiskState.ONLINE);
+        be0.setDisks(ImmutableMap.of("/path", disk));
+        backends.add(be0);
+        Backend be1 = new Backend(10001, "127.0.0.2", 9050);
+        be1.setDisks(ImmutableMap.of("/path", disk));
+        backends.add(be1);
+        Backend be2 = new Backend(10002, "127.0.0.3", 9050);
+        DiskInfo disk2 = new DiskInfo("/path");
+        disk2.setState(DiskInfo.DiskState.OFFLINE);
+        be2.setDisks(ImmutableMap.of("/path", disk2));
+        backends.add(be2);
+
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public List<Backend> getAvailableBackends() {
+                return backends;
+            }
+        };
+
+        try {
+            LocalMetastore metastore = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
+            Deencapsulation.invoke(metastore, "chosenBackendIdBySeq", 3, HashMultimap.create());
+            Assertions.fail();
+        } catch (Exception e) {
+            Assertions.assertTrue(e.getMessage().contains("Current available backends: [10000,10001]"));
+            Assertions.assertTrue(e.getMessage().contains("backends without enough disk space: [10002]"));
+        }
     }
 }

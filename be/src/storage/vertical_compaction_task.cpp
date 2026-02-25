@@ -16,6 +16,8 @@
 
 #include <vector>
 
+#include "base/debug/trace.h"
+#include "base/time/time.h"
 #include "column/schema.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
@@ -27,8 +29,6 @@
 #include "storage/rowset/rowset_writer.h"
 #include "storage/tablet_reader.h"
 #include "storage/tablet_reader_params.h"
-#include "util/time.h"
-#include "util/trace.h"
 
 namespace starrocks {
 
@@ -53,7 +53,7 @@ Status VerticalCompactionTask::_vertical_compaction_data(Statistics* statistics)
     if (_output_rowset != nullptr) {
         return Status::OK();
     }
-    TRACE("[Compaction] start vertical comapction data");
+    TRACE("[Compaction] start vertical compaction data");
     int64_t max_rows_per_segment = CompactionUtils::get_segment_max_rows(
             config::max_segment_file_size, _task_info.input_rows_num, _task_info.input_rowsets_size);
 
@@ -138,7 +138,7 @@ Status VerticalCompactionTask::_compact_column_group(bool is_key, int column_gro
         return ret.status();
     }
     int32_t chunk_size = ret.value();
-    VLOG(1) << "compaction task_id:" << _task_info.task_id << ", tablet=" << _tablet->tablet_id()
+    VLOG(2) << "compaction task_id:" << _task_info.task_id << ", tablet=" << _tablet->tablet_id()
             << ", column group=" << column_group_index << ", reader chunk size=" << chunk_size;
     reader_params.chunk_size = chunk_size;
     RETURN_IF_ERROR(reader.open(reader_params));

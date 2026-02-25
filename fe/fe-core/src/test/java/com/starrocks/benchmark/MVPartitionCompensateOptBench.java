@@ -14,34 +14,38 @@
 
 package com.starrocks.benchmark;
 
-import com.carrotsearch.junitbenchmarks.BenchmarkOptions;
-import com.carrotsearch.junitbenchmarks.BenchmarkRule;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.common.QueryDebugOptions;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteTestBase;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Ignore;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.TestRule;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
+import org.openjdk.jmh.annotations.BenchmarkMode;
+import org.openjdk.jmh.annotations.Fork;
+import org.openjdk.jmh.annotations.Measurement;
+import org.openjdk.jmh.annotations.Mode;
+import org.openjdk.jmh.annotations.OutputTimeUnit;
+import org.openjdk.jmh.annotations.Warmup;
 
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
-@Ignore
-public class MVPartitionCompensateOptBench extends MvRewriteTestBase {
+@Disabled
+@BenchmarkMode(Mode.AverageTime)
+@OutputTimeUnit(TimeUnit.MILLISECONDS)
+@Warmup(iterations = 3)
+@Measurement(iterations = 10)
+@Fork(1)
+public class MVPartitionCompensateOptBench extends MVTestBase {
 
     private static final int MV_NUMS = 100;
-    private static final int BENCHMARK_RUNS = 10;
 
-    @Rule
-    public TestRule mvPartitionCompensateBench = new BenchmarkRule();
-
-    @BeforeClass
+    @BeforeAll
     public static void setup() throws Exception {
-        MvRewriteTestBase.beforeClass();
+        MVTestBase.beforeClass();
         starRocksAssert.withTable(cluster, "table_with_day_partition");
         starRocksAssert.withTable(cluster, "table_with_day_partition1");
         starRocksAssert.withTable(cluster, "table_with_day_partition2");
@@ -65,7 +69,6 @@ public class MVPartitionCompensateOptBench extends MvRewriteTestBase {
         while (i < MV_NUMS) {
             for (String mvPartitionExpr : mvPartitionExprs) {
                 String mvName = "mv_partition_compensate_" + i;
-                System.out.println(mvName);
                 String mvSQL = String.format("CREATE MATERIALIZED VIEW if not exists %s \n" +
                         "PARTITION BY %s \n" +
                         "REFRESH DEFERRED MANUAL " +
@@ -117,73 +120,72 @@ public class MVPartitionCompensateOptBench extends MvRewriteTestBase {
                 PlanTestBase.assertNotContains(plan, "mv_partition_compensate_");
             }
         } catch (Exception e) {
-            e.printStackTrace();
-            Assert.fail();
+            Assertions.fail(e.getMessage());
         }
     }
 
     @Test
-    @BenchmarkOptions(warmupRounds = 3, benchmarkRounds = BENCHMARK_RUNS)
+    @Disabled("This benchmark should not be run as a test")
     public void testMVPartitionCompensatePerf0() {
         testMVPartitionCompensatePerf(0);
     }
 
     @Test
-    @BenchmarkOptions(warmupRounds = 3, benchmarkRounds = BENCHMARK_RUNS)
+    @Disabled("This benchmark should not be run as a test")
     public void testMVPartitionCompensatePerf1() {
         testMVPartitionCompensatePerf(1);
     }
 
     @Test
-    @BenchmarkOptions(warmupRounds = 3, benchmarkRounds = BENCHMARK_RUNS)
+    @Disabled("This benchmark should not be run as a test")
     public void testMVPartitionCompensatePerf2() {
         testMVPartitionCompensatePerf(2);
     }
 
     @Test
-    @BenchmarkOptions(warmupRounds = 3, benchmarkRounds = BENCHMARK_RUNS)
+    @Disabled("This benchmark should not be run as a test")
     public void testMVPartitionCompensatePerf3() {
         testMVPartitionCompensatePerf(3);
     }
 
     @Test
-    @BenchmarkOptions(warmupRounds = 3, benchmarkRounds = BENCHMARK_RUNS)
+    @Disabled("This benchmark should not be run as a test")
     public void testMVPartitionCompensatePerf4() {
         testMVPartitionCompensatePerf(4);
     }
 
     @Test
-    @BenchmarkOptions(warmupRounds = 3, benchmarkRounds = BENCHMARK_RUNS)
+    @Disabled("This benchmark should not be run as a test")
     public void testMVPartitionCompensatePerf5() {
         testMVPartitionCompensatePerf(5);
     }
 
     @Test
-    @BenchmarkOptions(warmupRounds = 3, benchmarkRounds = BENCHMARK_RUNS)
+    @Disabled("This benchmark should not be run as a test")
     public void testMVPartitionCompensatePerf6() {
         testMVPartitionCompensatePerf(6);
     }
 
     @Test
-    @BenchmarkOptions(warmupRounds = 3, benchmarkRounds = BENCHMARK_RUNS)
+    @Disabled("This benchmark should not be run as a test")
     public void testMVPartitionCompensatePerf7() {
         testMVPartitionCompensatePerf(7);
     }
 
     @Test
-    @BenchmarkOptions(warmupRounds = 3, benchmarkRounds = BENCHMARK_RUNS)
+    @Disabled("This benchmark should not be run as a test")
     public void testMVPartitionCompensatePerf8() {
         testMVPartitionCompensatePerf(8);
     }
 
     @Test
-    @BenchmarkOptions(warmupRounds = 3, benchmarkRounds = BENCHMARK_RUNS)
+    @Disabled("This benchmark should not be run as a test")
     public void testMVPartitionCompensatePerf9() {
         testMVPartitionCompensatePerf(9);
     }
 
     @Test
-    @BenchmarkOptions(warmupRounds = 3, benchmarkRounds = BENCHMARK_RUNS)
+    @Disabled("This benchmark should not be run as a test")
     public void testMVPartitionCompensatePerf10() {
         testMVPartitionCompensatePerf(10);
     }

@@ -14,8 +14,6 @@
 
 package com.starrocks.benchmark;
 
-import com.carrotsearch.junitbenchmarks.BenchmarkOptions;
-import com.carrotsearch.junitbenchmarks.BenchmarkRule;
 import com.google.api.client.util.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -25,13 +23,13 @@ import com.starrocks.schema.MSchema;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteTestBase;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.TestRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
+import org.openjdk.jmh.annotations.BenchmarkMode;
 
 import java.util.List;
 import java.util.Random;
@@ -41,12 +39,11 @@ import java.util.Random;
  * x dbs which contains one table
  * y mvs which contains x/2 tables and uses `union all` to concatenate them
  *
- * refresh mvs with concurrency to test lock and preformance
+ * refresh mvs with concurrency to test lock and performance
  */
-public class MvRefreshConcurrencyTest extends MvRewriteTestBase {
-
-    @Rule
-    public TestRule benchRun = new BenchmarkRule();
+@Disabled
+@BenchmarkMode(org.openjdk.jmh.annotations.Mode.AverageTime)
+public class MvRefreshConcurrencyTest extends MVTestBase {
 
     private static String buildDbName(int idx) {
         return "mock_db_" + idx;
@@ -60,9 +57,9 @@ public class MvRefreshConcurrencyTest extends MvRewriteTestBase {
         return "mock_mv_" + idx;
     }
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
-        MvRewriteTestBase.beforeClass();
+        MVTestBase.beforeClass();
 
         // Env
         Config.mv_plan_cache_max_size = 1024;
@@ -70,7 +67,7 @@ public class MvRefreshConcurrencyTest extends MvRewriteTestBase {
         starRocksAssert.getCtx().setDumpInfo(null);
     }
 
-    @Before
+    @BeforeEach
     public void before() {
     }
 
@@ -118,15 +115,15 @@ public class MvRefreshConcurrencyTest extends MvRewriteTestBase {
             List<MaterializedView> mvs = Lists.newArrayList();
             try {
                 for (int i = 0; i < mvNum; i++) {
-                    System.out.println("create mv " + i);
+                    logSysInfo("create mv " + i);
                     String sql = buildMV(rnd, tables, i);
-                    System.out.println(sql);
+                    logSysInfo(sql);
                     starRocksAssert.withMaterializedView(sql);
 
-                    Database db = GlobalStateMgr.getCurrentState().getDb("test");
+                    Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
                     String mvName = buildMVName(i);
-                    Table table = db.getTable(mvName);
-                    Assert.assertTrue(table != null);
+                    Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), mvName);
+                    Assertions.assertTrue(table != null);
                     mvs.add((MaterializedView) table);
                     starRocksAssert.useDatabase("test");
                     starRocksAssert.refreshMV(connectContext, mvName);
@@ -138,7 +135,7 @@ public class MvRefreshConcurrencyTest extends MvRewriteTestBase {
                 while (finishedCount != mvNum) {
                     finishedCount = refreshFinishedMVCount(mvs);
                 }
-                Assert.assertTrue(finishedCount == mvNum);
+                Assertions.assertTrue(finishedCount == mvNum);
             } finally {
                 starRocksAssert.useDatabase("test");
                 for (MaterializedView mv : mvs) {
@@ -149,25 +146,25 @@ public class MvRefreshConcurrencyTest extends MvRewriteTestBase {
     }
 
     @Test
-    @BenchmarkOptions(warmupRounds = 0, benchmarkRounds = 1)
+    @Disabled
     public void testWithTables2_c4() {
         testRefreshWithConcurrency(4, 2);
     }
 
     @Test
-    @BenchmarkOptions(warmupRounds = 0, benchmarkRounds = 1)
+    @Disabled
     public void testWithTables10_c4() {
         testRefreshWithConcurrency(10, 4);
     }
 
     @Test
-    @BenchmarkOptions(warmupRounds = 0, benchmarkRounds = 1)
+    @Disabled
     public void testWithTables20_c4() {
         testRefreshWithConcurrency(20, 10);
     }
 
     @Test
-    @BenchmarkOptions(warmupRounds = 0, benchmarkRounds = 1)
+    @Disabled
     public void testWithTables50_c16() {
         Config.task_runs_concurrency = 16;
         testRefreshWithConcurrency(50, 50);
@@ -175,7 +172,7 @@ public class MvRefreshConcurrencyTest extends MvRewriteTestBase {
     }
 
     @Test
-    @BenchmarkOptions(warmupRounds = 0, benchmarkRounds = 1)
+    @Disabled
     public void testWithTables50_c50() {
         Config.task_runs_concurrency = 50;
         testRefreshWithConcurrency(50, 50);

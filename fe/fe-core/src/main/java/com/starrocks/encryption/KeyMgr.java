@@ -27,6 +27,7 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.proto.EncryptionKeyPB;
 import com.starrocks.proto.EncryptionMetaPB;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TGetKeysRequest;
 import com.starrocks.thrift.TGetKeysResponse;
@@ -72,10 +73,9 @@ public class KeyMgr {
     }
 
     private void addKey(EncryptionKey key) {
-        idToKey.put(key.id, key);
         EncryptionKeyPB pb = new EncryptionKeyPB();
         key.toPB(pb, this);
-        GlobalStateMgr.getCurrentState().getEditLog().logAddKey(pb);
+        GlobalStateMgr.getCurrentState().getEditLog().logAddKey(pb, wal -> idToKey.put(key.id, key));
     }
 
     public void replayAddKey(EncryptionKeyPB keyPB) {
@@ -102,6 +102,7 @@ public class KeyMgr {
 
     public void initDefaultMasterKey() {
         String defaultMasterKeySpec = Config.default_master_key;
+        GlobalVariable.enableTde = isEncrypted();
         keysLock.writeLock().lock();
         try {
             if (defaultMasterKeySpec.isEmpty()) {
@@ -189,13 +190,12 @@ public class KeyMgr {
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         keysLock.writeLock().lock();
         try {
-            int cnt = reader.readInt();
-            LOG.info("loading {} keys", cnt);
-            for (int i = 0; i < cnt; i++) {
-                EncryptionKeyPB pb = reader.readJson(EncryptionKeyPB.class);
+            reader.readCollection(EncryptionKeyPB.class, pb -> {
                 EncryptionKey key = create(pb);
                 idToKey.put(key.id, key);
-            }
+            });
+            LOG.info("loaded {} keys", idToKey.size());
+
             if (MetricRepo.hasInit) {
                 MetricRepo.GAUGE_ENCRYPTION_KEY_NUM.setValue((long) idToKey.size());
             }

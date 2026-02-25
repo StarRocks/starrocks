@@ -14,15 +14,86 @@
 
 #include "function_helper.h"
 
-#include <util/raw_container.h>
+#include <base/container/raw_container.h>
+#include <fmt/format.h>
 
-#include "simd/multi_version.h"
+#include <stdexcept>
+
+#include "base/simd/multi_version.h"
+#include "column/array_column.h"
+#include "column/map_column.h"
+#include "column/struct_column.h"
+#include "column/type_traits.h"
 
 namespace starrocks {
 
-NullColumnPtr FunctionHelper::union_nullable_column(const ColumnPtr& v1, const ColumnPtr& v2) {
+struct ColumnBuilder {
+    template <LogicalType Type>
+    ColumnPtr operator()(const TypeDescriptor& type_desc) {
+        if constexpr (lt_is_decimal<Type>) {
+            return RunTimeColumnType<Type>::create(type_desc.precision, type_desc.scale);
+        } else if constexpr (lt_is_collection<Type>) {
+            throw std::runtime_error(fmt::format("Unsupported collection type {}", Type));
+            return nullptr;
+        } else if constexpr (Type == TYPE_UNKNOWN || Type == TYPE_BINARY || Type == TYPE_DECIMAL) {
+            throw std::runtime_error(fmt::format("Unsupported column type {}", Type));
+            return nullptr;
+        } else {
+            return RunTimeColumnType<Type>::create();
+        }
+    }
+};
+
+MutableColumnPtr FunctionHelper::create_column(const TypeDescriptor& type_desc, bool nullable) {
+    const auto type = type_desc.type;
+    MutableColumnPtr p = nullptr;
+
+    if (type == TYPE_STRUCT) {
+        size_t field_size = type_desc.children.size();
+        DCHECK_EQ(field_size, type_desc.field_names.size());
+        MutableColumns columns;
+        for (size_t i = 0; i < field_size; i++) {
+            auto field_column = create_column(type_desc.children[i], true);
+            columns.emplace_back(std::move(field_column));
+        }
+        p = StructColumn::create(std::move(columns), type_desc.field_names);
+    } else if (type == TYPE_ARRAY) {
+        auto offsets = UInt32Column::create();
+        auto data = create_column(type_desc.children[0], true);
+        p = ArrayColumn::create(std::move(data), std::move(offsets));
+    } else if (type == TYPE_MAP) {
+        auto offsets = UInt32Column::create();
+        MutableColumnPtr keys = nullptr;
+        MutableColumnPtr values = nullptr;
+        if (type_desc.children[0].type == TYPE_UNKNOWN) {
+            TypeDescriptor desc;
+            desc.type = TYPE_NULL;
+            keys = create_column(desc, true);
+        } else {
+            keys = create_column(type_desc.children[0], true);
+        }
+        if (type_desc.children[1].type == TYPE_UNKNOWN) {
+            TypeDescriptor desc;
+            desc.type = TYPE_NULL;
+            values = create_column(desc, true);
+        } else {
+            values = create_column(type_desc.children[1], true);
+        }
+        p = MapColumn::create(std::move(keys), std::move(values), std::move(offsets));
+    } else {
+        auto col = type_dispatch_column(type, ColumnBuilder(), type_desc);
+        p = col ? std::move(*col).mutate() : nullptr;
+    }
+
+    if (nullable && p != nullptr) {
+        return NullableColumn::create(std::move(p), NullColumn::create());
+    }
+    return p;
+}
+
+NullColumn::MutablePtr FunctionHelper::union_nullable_column(const ColumnPtr& v1, const ColumnPtr& v2) {
     // union nullable column
-    ColumnPtr result;
+    MutableColumnPtr result;
     if (v1->is_nullable() && v2->is_nullable()) {
         const auto& n1 = ColumnHelper::as_raw_column<NullableColumn>(v1)->null_column();
         const auto& n2 = ColumnHelper::as_raw_column<NullableColumn>(v2)->null_column();
@@ -38,19 +109,18 @@ NullColumnPtr FunctionHelper::union_nullable_column(const ColumnPtr& v1, const C
     } else if (v2->is_nullable()) {
         result = ColumnHelper::as_raw_column<NullableColumn>(v2)->null_column()->clone();
     } else {
-        DCHECK(false);
         return nullptr;
     }
 
-    return ColumnHelper::cast_to<TYPE_NULL>(result);
+    return NullColumn::static_pointer_cast(std::move(result));
 }
 
 void FunctionHelper::union_produce_nullable_column(const ColumnPtr& v1, const ColumnPtr& v2,
-                                                   NullColumnPtr* produce_null_column) {
+                                                   NullColumn::MutablePtr* produce_null_column) {
     auto* result = (*produce_null_column)->get_data().data();
 
     if (v1->has_null()) {
-        auto* null1 = down_cast<NullableColumn*>(v1.get())->null_column()->get_data().data();
+        auto* null1 = down_cast<const NullableColumn*>(v1.get())->null_column()->immutable_data().data();
 
         int size = v1->size();
         for (int i = 0; i < size; ++i) {
@@ -59,7 +129,7 @@ void FunctionHelper::union_produce_nullable_column(const ColumnPtr& v1, const Co
     }
 
     if (v2->has_null()) {
-        auto* null2 = down_cast<NullableColumn*>(v2.get())->null_column()->get_data().data();
+        auto* null2 = down_cast<const NullableColumn*>(v2.get())->null_column()->immutable_data().data();
 
         int size = v2->size();
         for (int i = 0; i < size; ++i) {
@@ -68,11 +138,11 @@ void FunctionHelper::union_produce_nullable_column(const ColumnPtr& v1, const Co
     }
 }
 
-void FunctionHelper::union_produce_nullable_column(const ColumnPtr& v1, NullColumnPtr* produce_null_column) {
+void FunctionHelper::union_produce_nullable_column(const ColumnPtr& v1, NullColumn::MutablePtr* produce_null_column) {
     auto* result = (*produce_null_column)->get_data().data();
 
     if (v1->has_null()) {
-        auto* null1 = down_cast<NullableColumn*>(v1.get())->null_column()->get_data().data();
+        const auto* null1 = down_cast<const NullableColumn*>(v1.get())->null_column()->immutable_data().data();
 
         int size = v1->size();
         for (int i = 0; i < size; ++i) {
@@ -81,7 +151,7 @@ void FunctionHelper::union_produce_nullable_column(const ColumnPtr& v1, NullColu
     }
 }
 
-MFV_AVX512(void union_null_column_impl(uint8_t* dest, const uint8_t* v1, const uint8_t* v2, const size_t bytes) {
+MFV_AVX512F(void union_null_column_impl(uint8_t* dest, const uint8_t* v1, const uint8_t* v2, const size_t bytes) {
     constexpr auto SIMD_SIZE = sizeof(__m512i);
     const auto null1_end = v1 + bytes;
     const auto null1_simd_end = v1 + (bytes & ~(SIMD_SIZE - 1));
@@ -128,13 +198,13 @@ MFV_DEFAULT(void union_null_column_impl(uint8_t* dest, const uint8_t* v1, const 
     }
 })
 
-NullColumnPtr FunctionHelper::union_null_column(const NullColumnPtr& v1, const NullColumnPtr& v2) {
+NullColumn::MutablePtr FunctionHelper::union_null_column(const NullColumnPtr& v1, const NullColumnPtr& v2) {
     // union null column
-    auto null1_begin = (uint8_t*)v1->get_data().data();
-    auto null2_begin = (uint8_t*)v2->get_data().data();
+    auto null1_begin = (uint8_t*)v1->immutable_data().data();
+    auto null2_begin = (uint8_t*)v2->immutable_data().data();
 
     const size_t row_num = v1->size();
-    NullColumnPtr null_result = NullColumn::create();
+    NullColumn::MutablePtr null_result = NullColumn::create();
 
     auto& result_data = null_result->get_data();
     raw::make_room(&result_data, row_num);
@@ -149,16 +219,16 @@ ColumnPtr FunctionHelper::merge_column_and_null_column(ColumnPtr&& column, NullC
     if (column->only_null()) {
         return std::move(column);
     } else if (column->is_constant()) {
-        auto* const_column = down_cast<ConstColumn*>(column.get());
+        const auto* const_column = down_cast<const ConstColumn*>(column.get());
         const auto& data_column = const_column->data_column();
         auto new_data_column = data_column->clone();
         new_data_column->assign(null_column->size(), 0);
         return NullableColumn::create(std::move(new_data_column), std::move(null_column));
     } else if (column->is_nullable()) {
         DCHECK_EQ(column->size(), null_column->size());
-        auto* nullable_column = down_cast<NullableColumn*>(column.get());
+        const auto* nullable_column = down_cast<const NullableColumn*>(column.get());
         auto new_null_column = union_null_column(nullable_column->null_column(), null_column);
-        return NullableColumn::create(std::move(nullable_column->data_column()), new_null_column);
+        return NullableColumn::create(nullable_column->data_column()->clone(), std::move(new_null_column));
     } else {
         return NullableColumn::create(std::move(column), std::move(null_column));
     }

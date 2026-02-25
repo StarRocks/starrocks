@@ -18,12 +18,12 @@
 
 #include "column/chunk.h"
 #include "common/object_pool.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "exprs/expr_context.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/descriptors.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 // forehead declar class, because jni function init in StarRocksServer.

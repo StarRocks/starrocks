@@ -38,10 +38,10 @@
 
 #include <memory>
 
+#include "base/types/int128.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "gutil/int128.h"
-#include "runtime/large_int_value.h"
 #include "runtime/mem_pool.h"
 #include "storage/chunk_helper.h"
 #include "storage/rowset/options.h"

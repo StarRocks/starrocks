@@ -5,10 +5,14 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <string>
+
+#include "storage/del_vector.h"
 
 namespace starrocks {
 class Cache;
+class RandomAccessFile;
 
 namespace sstable {
 
@@ -126,6 +130,18 @@ struct ReadOptions {
     uint64_t max_rss_rowid = 0;
 
     ReadIOStat* stat = nullptr;
+
+    // When sst was generated during data write & compaction process,
+    // these two fields are used to indicate the shared rssid & version
+    uint32_t shared_rssid = 0;
+    int64_t shared_version = 0;
+    int32_t rssid_offset = 0;
+
+    // Mark rows that have been deleted in this sst
+    DelVectorPtr delvec = nullptr;
+
+    // Use for multi-thread read scenario, to avoid multiple threads read same file concurrently
+    RandomAccessFile* file = nullptr;
 };
 
 // Options that control write operations

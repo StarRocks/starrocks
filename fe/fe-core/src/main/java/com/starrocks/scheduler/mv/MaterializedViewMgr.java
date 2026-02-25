@@ -50,6 +50,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 /**
@@ -59,6 +60,9 @@ import java.util.stream.Collectors;
 public class MaterializedViewMgr {
     private static final Logger LOG = LogManager.getLogger(MaterializedViewMgr.class);
 
+    // MV's global timeliness info manager
+    private final MVTimelinessMgr mvTimelinessMgr = new MVTimelinessMgr();
+    // MV's maintenance job
     private final Map<MvId, MVMaintenanceJob> jobMap = new ConcurrentHashMap<>();
 
     public MaterializedView createSinkTable(CreateMaterializedViewStatement stmt, PartitionInfo partitionInfo,
@@ -163,12 +167,16 @@ public class MaterializedViewMgr {
 
             // Create the job but not execute it
             MVMaintenanceJob job = new MVMaintenanceJob(view);
-            Preconditions.checkState(jobMap.putIfAbsent(view.getMvId(), job) == null, "job already existed");
-
-            IMTCreator.createIMT(stmt, view);
-
             // TODO(murphy) atomic persist the meta of MV (IMT, MaintenancePlan) along with materialized view
-            GlobalStateMgr.getCurrentState().getEditLog().logMVJobState(job);
+            AtomicBoolean jobExist = new AtomicBoolean(false);
+            GlobalStateMgr.getCurrentState().getEditLog().logMVJobState(job, wal -> {
+                if (jobMap.putIfAbsent(view.getMvId(), job) != null) {
+                    jobExist.set(true);
+                }
+            });
+            if (!jobExist.get()) {
+                IMTCreator.createIMT(stmt, view);
+            }
             LOG.info("create the maintenance job for MV: {}", view.getName());
         } catch (Exception e) {
             jobMap.remove(view.getMvId());
@@ -275,8 +283,13 @@ public class MaterializedViewMgr {
         throw UnsupportedException.unsupportedException("rebuild mv job is not supported");
     }
 
-    private MVMaintenanceJob getJob(MvId mvId) {
+    protected MVMaintenanceJob getJob(MvId mvId) {
         return jobMap.get(mvId);
+    }
+
+    // fot test
+    protected void clearJobs() {
+        jobMap.clear();
     }
 
     public List<MVMaintenanceJob> getRunnableJobs() {
@@ -300,13 +313,19 @@ public class MaterializedViewMgr {
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        int numJson = reader.readInt();
-        for (int i = 0; i < numJson; ++i) {
-            MVMaintenanceJob mvMaintenanceJob = reader.readJson(MVMaintenanceJob.class);
+        reader.readCollection(MVMaintenanceJob.class, mvMaintenanceJob -> {
             // NOTE: job's view is not serialized, cannot use it directly!
             MvId mvId = new MvId(mvMaintenanceJob.getDbId(), mvMaintenanceJob.getViewId());
             mvMaintenanceJob.restore();
             jobMap.put(mvId, mvMaintenanceJob);
-        }
+        });
+    }
+
+    public MVTimelinessMgr getMvTimelinessMgr() {
+        return mvTimelinessMgr;
+    }
+
+    public void triggerTimelessInfoEvent(MaterializedView mv, MVTimelinessMgr.MVChangeEvent event) {
+        mvTimelinessMgr.triggerEvent(mv, event);
     }
 }

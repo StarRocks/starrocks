@@ -17,11 +17,11 @@
 #include <sstream>
 #include <utility>
 
+#include "base/network/network_util.h"
+#include "common/runtime_profile.h"
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "util/network_util.h"
-#include "util/runtime_profile.h"
 #include "util/thrift_rpc_helper.h"
 
 namespace starrocks {
@@ -192,6 +192,13 @@ Status SchemaHelper::get_tablet_schedules(const SchemaScannerState& state, const
     });
 }
 
+Status SchemaHelper::get_fe_threads(const SchemaScannerState& state, const TGetFeThreadsRequest& request,
+                                    TGetFeThreadsResponse* response) {
+    return _call_rpc(state, [&request, &response](FrontendServiceConnection& client) {
+        client->getFeThreads(*response, request);
+    });
+}
+
 Status SchemaHelper::get_role_edges(const SchemaScannerState& state, const TGetRoleEdgesRequest& request,
                                     TGetRoleEdgesResponse* response) {
     return _call_rpc(state, [&request, &response](FrontendServiceConnection& client) {
@@ -211,6 +218,71 @@ Status SchemaHelper::get_partitions_meta(const SchemaScannerState& state, const 
     return _call_rpc(state, [&var_params, &var_result](FrontendServiceConnection& client) {
         client->getPartitionsMeta(*var_result, var_params);
     });
+}
+
+Status SchemaHelper::listRecycleBinCatalogs(const SchemaScannerState& state, const TListRecycleBinCatalogsParams& req,
+                                            TListRecycleBinCatalogsResult* res) {
+    return _call_rpc(state,
+                     [&req, &res](FrontendServiceConnection& client) { client->listRecycleBinCatalogs(*res, req); });
+}
+
+Status SchemaHelper::get_column_stats_usage(const SchemaScannerState& state, const TColumnStatsUsageReq& var_params,
+                                            TColumnStatsUsageRes* var_result) {
+    return _call_rpc(state, [&var_params, &var_result](FrontendServiceConnection& client) {
+        client->getColumnStatsUsage(*var_result, var_params);
+    });
+}
+
+Status SchemaHelper::get_analyze_status(const SchemaScannerState& state, const TAnalyzeStatusReq& var_params,
+                                        TAnalyzeStatusRes* var_result) {
+    return _call_rpc(state, [&var_params, &var_result](FrontendServiceConnection& client) {
+        client->getAnalyzeStatus(*var_result, var_params);
+    });
+}
+
+Status SchemaHelper::get_cluster_snapshots_info(const SchemaScannerState& state, const TClusterSnapshotsRequest& req,
+                                                TClusterSnapshotsResponse* res) {
+    return _call_rpc(state,
+                     [&req, &res](FrontendServiceConnection& client) { client->getClusterSnapshotsInfo(*res, req); });
+}
+
+Status SchemaHelper::get_cluster_snapshot_jobs_info(const SchemaScannerState& state,
+                                                    const TClusterSnapshotJobsRequest& req,
+                                                    TClusterSnapshotJobsResponse* res) {
+    return _call_rpc(
+            state, [&req, &res](FrontendServiceConnection& client) { client->getClusterSnapshotJobsInfo(*res, req); });
+}
+
+Status SchemaHelper::get_applicable_roles(const SchemaScannerState& state, const TGetApplicableRolesRequest& req,
+                                          TGetApplicableRolesResponse* res) {
+    return _call_rpc(state, [&req, &res](FrontendServiceConnection& client) { client->getApplicableRoles(*res, req); });
+}
+
+Status SchemaHelper::get_keywords(const SchemaScannerState& state, const TGetKeywordsRequest& request,
+                                  TGetKeywordsResponse* response) {
+    return _call_rpc(state, [&request, &response](FrontendServiceConnection& client) {
+        client->getKeywords(*response, request);
+    });
+}
+
+Status SchemaHelper::get_warehouse_metrics(const SchemaScannerState& state, const TGetWarehouseMetricsRequest& request,
+                                           TGetWarehouseMetricsRespone* response) {
+    return _call_rpc(state, [&request, &response](FrontendServiceConnection& client) {
+        client->getWarehouseMetrics(*response, request);
+    });
+}
+
+Status SchemaHelper::get_warehouse_queries(const SchemaScannerState& state, const TGetWarehouseQueriesRequest& request,
+                                           TGetWarehouseQueriesResponse* response) {
+    return _call_rpc(state, [&request, &response](FrontendServiceConnection& client) {
+        client->getWarehouseQueries(*response, request);
+    });
+}
+
+Status SchemaHelper::get_tablet_reshard_jobs_info(const SchemaScannerState& state, const TTabletReshardJobsRequest& req,
+                                                  TTabletReshardJobsResponse* res) {
+    return _call_rpc(state,
+                     [&req, &res](FrontendServiceConnection& client) { client->getTabletReshardJobsInfo(*res, req); });
 }
 
 void fill_data_column_with_null(Column* data_column) {

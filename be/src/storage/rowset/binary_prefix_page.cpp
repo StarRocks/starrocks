@@ -39,13 +39,13 @@
 #include <cstring>
 #include <map>
 
+#include "base/coding.h"
+#include "base/string/faststring.h"
+#include "base/string/slice.h"
 #include "column/column.h"
 #include "common/logging.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/mem_pool.h"
-#include "util/coding.h"
-#include "util/faststring.h"
-#include "util/slice.h"
 
 namespace starrocks {
 
@@ -304,32 +304,31 @@ Status BinaryPrefixPageDecoder<Type>::next_batch(const SparseRange<>& range, Col
     if constexpr (Type == TYPE_CHAR) {
         while (to_read > 0) {
             RETURN_IF_ERROR(seek_to_position_in_page(iter.begin()));
-            bool ok = dst->append_strings({_current_value});
+            bool ok = dst->append_strings(std::vector<Slice>{_current_value});
             DCHECK(ok);
             Range<> r = iter.next(to_read);
             for (size_t i = 1; i < r.span_size(); ++i) {
                 RETURN_IF_ERROR(_next_value(&_current_value));
                 size_t len = strnlen(reinterpret_cast<const char*>(_current_value.data()), _current_value.size());
-                (void)dst->append_strings({Slice(_current_value.data(), len)});
+                (void)dst->append_strings(std::vector<Slice>{Slice(_current_value.data(), len)});
             }
             to_read -= r.span_size();
         }
     } else {
         while (to_read > 0) {
             RETURN_IF_ERROR(seek_to_position_in_page(iter.begin()));
-            bool ok = dst->append_strings({_current_value});
+            bool ok = dst->append_strings(std::vector<Slice>{_current_value});
             DCHECK(ok);
             Range<> r = iter.next(to_read);
             for (size_t i = 1; i < r.span_size(); ++i) {
                 RETURN_IF_ERROR(_next_value(&_current_value));
-                (void)dst->append_strings({_current_value});
+                (void)dst->append_strings(std::vector<Slice>{_current_value});
             }
             to_read -= r.span_size();
         }
     }
     return Status::OK();
 }
-
 template class BinaryPrefixPageDecoder<TYPE_CHAR>;
 template class BinaryPrefixPageDecoder<TYPE_VARCHAR>;
 

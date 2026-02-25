@@ -17,7 +17,6 @@ package com.starrocks.server;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.LocalTablet;
@@ -25,7 +24,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.PhysicalPartitionImpl;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.system.SystemId;
@@ -37,42 +36,56 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.EditLog;
-import com.starrocks.persist.ModifyPartitionInfo;
+import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PhysicalPartitionPersistInfoV2;
 import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.TruncateTableAnalyzer;
 import com.starrocks.sql.ast.ColumnRenameClause;
-import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.ast.TruncateTableStmt;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Expectations;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.spy;
 
 public class LocalMetaStoreTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         Config.alter_scheduler_interval_millisecond = 1000;
         FeConstants.runningUnitTest = true;
 
-        UtFrameUtils.createMinStarRocksCluster();
+        UtFrameUtils.createMinStarRocksCluster(true, RunMode.SHARED_NOTHING);
 
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
@@ -80,18 +93,27 @@ public class LocalMetaStoreTest {
         starRocksAssert = new StarRocksAssert(connectContext);
 
         starRocksAssert.withDatabase("test").useDatabase("test")
-                .withTable(
-                        "CREATE TABLE test.t1(k1 int, k2 int, k3 int)" +
-                                " distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
+                    .withTable(
+                                "CREATE TABLE test.t1(k1 int, k2 int, k3 int)" +
+                                            " distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
 
-        UtFrameUtils.PseudoImage.setUpImageVersion();
+    }
+
+    @BeforeEach
+    public void setUp() {
+        UtFrameUtils.setUpForPersistTest();
+    }
+
+    @AfterEach
+    public void teardown() {
+        UtFrameUtils.tearDownForPersisTest();
     }
 
     @Test
     public void testGetNewPartitionsFromPartitions() throws DdlException {
-        Database db = connectContext.getGlobalStateMgr().getDb("test");
-        Table table = db.getTable("t1");
-        Assert.assertTrue(table instanceof OlapTable);
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t1");
+        Assertions.assertTrue(table instanceof OlapTable);
         OlapTable olapTable = (OlapTable) table;
         Partition sourcePartition = olapTable.getPartition("t1");
         List<Long> sourcePartitionIds = Lists.newArrayList(sourcePartition.getId());
@@ -99,65 +121,30 @@ public class LocalMetaStoreTest {
         LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
         Map<Long, String> origPartitions = Maps.newHashMap();
         OlapTable copiedTable = localMetastore.getCopiedTable(db, olapTable, sourcePartitionIds, origPartitions);
-        Assert.assertEquals(olapTable.getName(), copiedTable.getName());
+        Assertions.assertEquals(olapTable.getName(), copiedTable.getName());
         Set<Long> tabletIdSet = Sets.newHashSet();
         List<Partition> newPartitions = localMetastore.getNewPartitionsFromPartitions(db,
-                olapTable, sourcePartitionIds, origPartitions, copiedTable, "_100", tabletIdSet, tmpPartitionIds,
-                null, WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        Assert.assertEquals(sourcePartitionIds.size(), newPartitions.size());
-        Assert.assertEquals(1, newPartitions.size());
+                    olapTable, sourcePartitionIds, origPartitions, copiedTable, "_100", tabletIdSet, tmpPartitionIds,
+                    null, WarehouseManager.DEFAULT_RESOURCE);
+        Assertions.assertEquals(sourcePartitionIds.size(), newPartitions.size());
+        Assertions.assertEquals(1, newPartitions.size());
         Partition newPartition = newPartitions.get(0);
-        Assert.assertEquals("t1_100", newPartition.getName());
+        Assertions.assertEquals("t1_100", newPartition.getName());
         olapTable.addTempPartition(newPartition);
 
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         partitionInfo.addPartition(newPartition.getId(), partitionInfo.getDataProperty(sourcePartition.getId()),
-                partitionInfo.getReplicationNum(sourcePartition.getId()),
-                partitionInfo.getIsInMemory(sourcePartition.getId()));
-        olapTable.replacePartition("t1", "t1_100");
+                    partitionInfo.getReplicationNum(sourcePartition.getId()));
+        olapTable.replacePartition(db.getId(), "t1", "t1_100");
 
-        Assert.assertEquals(newPartition.getId(), olapTable.getPartition("t1").getId());
-    }
-
-    @Test
-    public void testGetPartitionIdToStorageMediumMap() throws Exception {
-        starRocksAssert.withMaterializedView(
-                "CREATE MATERIALIZED VIEW test.mv1\n" +
-                        "distributed by hash(k1) buckets 3\n" +
-                        "refresh async\n" +
-                        "properties(\n" +
-                        "'replication_num' = '1'\n" +
-                        ")\n" +
-                        "as\n" +
-                        "select k1,k2 from test.t1;");
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
-        new MockUp<PartitionInfo>() {
-            @Mock
-            public DataProperty getDataProperty(long partitionId) {
-                return new DataProperty(TStorageMedium.SSD, 0);
-            }
-        };
-        new MockUp<EditLog>() {
-            @Mock
-            public void logModifyPartition(ModifyPartitionInfo info) {
-                Assert.assertNotNull(info);
-                Assert.assertTrue(db.getTable(info.getTableId()).isOlapTableOrMaterializedView());
-                Assert.assertEquals(TStorageMedium.HDD, info.getDataProperty().getStorageMedium());
-                Assert.assertEquals(DataProperty.MAX_COOLDOWN_TIME_MS, info.getDataProperty().getCooldownTimeMs());
-            }
-        };
-
-        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
-        localMetastore.getPartitionIdToStorageMediumMap();
-        // Clean test.mv1, avoid its refreshment affecting other cases in this testsuite.
-        starRocksAssert.dropMaterializedView("test.mv1");
+        Assertions.assertEquals(newPartition.getId(), olapTable.getPartition("t1").getId());
     }
 
     @Test
     public void testLoadClusterV2() throws Exception {
         LocalMetastore localMetaStore = new LocalMetastore(GlobalStateMgr.getCurrentState(),
-                GlobalStateMgr.getCurrentState().getRecycleBin(),
-                GlobalStateMgr.getCurrentState().getColocateTableIndex());
+                    GlobalStateMgr.getCurrentState().getRecycleBin(),
+                    GlobalStateMgr.getCurrentState().getColocateTableIndex());
 
         UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
         localMetaStore.save(image.getImageWriter());
@@ -166,24 +153,23 @@ public class LocalMetaStoreTest {
         localMetaStore.load(reader);
         reader.close();
 
-        Assert.assertNotNull(localMetaStore.getDb(SystemId.INFORMATION_SCHEMA_DB_ID));
-        Assert.assertNotNull(localMetaStore.getDb(InfoSchemaDb.DATABASE_NAME));
-        Assert.assertNotNull(localMetaStore.getDb(SystemId.SYS_DB_ID));
-        Assert.assertNotNull(localMetaStore.getDb(SysDb.DATABASE_NAME));
+        Assertions.assertNotNull(localMetaStore.getDb(SystemId.INFORMATION_SCHEMA_DB_ID));
+        Assertions.assertNotNull(localMetaStore.getDb(InfoSchemaDb.DATABASE_NAME));
+        Assertions.assertNotNull(localMetaStore.getDb(SystemId.SYS_DB_ID));
+        Assertions.assertNotNull(localMetaStore.getDb(SysDb.DATABASE_NAME));
     }
 
     @Test
     public void testReplayAddSubPartition() throws DdlException {
-        Database db = connectContext.getGlobalStateMgr().getDb("test");
-        OlapTable table = (OlapTable) db.getTable("t1");
-        Partition p = table.getPartitions().stream().findFirst().get();
-        int schemaHash = table.getSchemaHashByIndexId(p.getBaseIndex().getId());
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t1");
+        PhysicalPartition p = table.getPartitions().stream().findFirst().get().getDefaultPhysicalPartition();
         MaterializedIndex index = new MaterializedIndex();
         TabletMeta tabletMeta = new TabletMeta(db.getId(), table.getId(), p.getId(),
-                index.getId(), schemaHash, table.getPartitionInfo().getDataProperty(p.getId()).getStorageMedium());
+                    index.getId(), table.getPartitionInfo().getDataProperty(p.getParentId()).getStorageMedium());
         index.addTablet(new LocalTablet(0), tabletMeta);
         PhysicalPartitionPersistInfoV2 info = new PhysicalPartitionPersistInfoV2(
-                db.getId(), table.getId(), p.getId(), new PhysicalPartitionImpl(123, "", p.getId(), 0, index));
+                    db.getId(), table.getId(), p.getParentId(), new PhysicalPartition(123, p.getId(), index));
 
         LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
         localMetastore.replayAddSubPartition(info);
@@ -191,8 +177,8 @@ public class LocalMetaStoreTest {
 
     @Test
     public void testReplayTruncateTable() throws DdlException {
-        Database db = connectContext.getGlobalStateMgr().getDb("test");
-        OlapTable table = (OlapTable) db.getTable("t1");
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t1");
         Partition p = table.getPartitions().stream().findFirst().get();
         TruncateTableInfo info = new TruncateTableInfo(db.getId(), table.getId(), Lists.newArrayList(p), false);
 
@@ -202,65 +188,66 @@ public class LocalMetaStoreTest {
 
     @Test
     public void testModifyAutomaticBucketSize() throws DdlException {
-        Database db = connectContext.getGlobalStateMgr().getDb("test");
-        OlapTable table = (OlapTable) db.getTable("t1");
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t1");
 
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
+        locker.lockDatabase(db.getId(), LockType.WRITE);
         try {
             Map<String, String> properties = Maps.newHashMap();
             LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
-            table.setTableProperty(null);
             localMetastore.modifyTableAutomaticBucketSize(db, table, properties);
             localMetastore.modifyTableAutomaticBucketSize(db, table, properties);
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
     }
 
     @Test
     public void testCreateTableIfNotExists() throws Exception {
         // create table if not exists, if the table already exists, do nothing
-        Database db = connectContext.getGlobalStateMgr().getDb("test");
-        Table table = db.getTable("t1");
-        Assert.assertTrue(table instanceof OlapTable);
-        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t1");
+        Assertions.assertTrue(table instanceof OlapTable);
+        AtomicInteger invokeCount = new AtomicInteger(0);
 
-        new Expectations(localMetastore) {
-            {
-                localMetastore.onCreate((Database) any, (Table) any, anyString, anyBoolean);
-                // don't expect any invoke to this method
-                minTimes = 0;
-                maxTimes = 0;
-                result = null;
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public void onCreate(Invocation invocation, Database db, Table table, String storageVolumeId,
+                                 boolean isSetIfNotExists) throws DdlException {
+                invokeCount.incrementAndGet();
+                invocation.proceed(db, table, storageVolumeId, isSetIfNotExists);
             }
         };
 
         starRocksAssert = new StarRocksAssert(connectContext);
         // with IF NOT EXIST
         starRocksAssert.useDatabase("test").withTable(
-                "CREATE TABLE IF NOT EXISTS test.t1(k1 int, k2 int, k3 int)" +
-                        " distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
+                    "CREATE TABLE IF NOT EXISTS test.t1(k1 int, k2 int, k3 int)" +
+                                " distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
 
         // w/o IF NOT EXIST
-        Assert.assertThrows(AnalysisException.class, () ->
-                starRocksAssert.useDatabase("test").withTable(
-                        "CREATE TABLE test.t1(k1 int, k2 int, k3 int)" +
-                                " distributed by hash(k1) buckets 3 properties('replication_num' = '1');"));
+        Assertions.assertThrows(AnalysisException.class, () ->
+                    starRocksAssert.useDatabase("test").withTable(
+                                "CREATE TABLE test.t1(k1 int, k2 int, k3 int)" +
+                                            " distributed by hash(k1) buckets 3 properties('replication_num' = '1');"));
+
+        // No invocation at all
+        Assertions.assertEquals(0, invokeCount.get());
     }
 
     @Test
     public void testAlterTableProperties() throws Exception {
-        Database db = connectContext.getGlobalStateMgr().getDb("test");
-        OlapTable table = (OlapTable) db.getTable("t1");
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t1");
 
         Map<String, String> properties = Maps.newHashMap();
         properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION, "abcd");
         LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
         try {
             localMetastore.alterTableProperties(db, table, properties);
-        } catch (RuntimeException e) {
-            Assert.assertEquals("Cannot parse text to Duration", e.getMessage());
+        } catch (DdlException e) {
+            Assertions.assertEquals("Cannot parse text to Duration", e.getMessage());
         }
     }
 
@@ -271,44 +258,312 @@ public class LocalMetaStoreTest {
         try {
             Table table = new HiveTable();
             localMetastore.renameColumn(null, table, null);
-            Assert.fail("should not happen");
+            Assertions.fail("should not happen");
         } catch (ErrorReportException e) {
-            Assert.assertEquals(e.getErrorCode(), ErrorCode.ERR_COLUMN_RENAME_ONLY_FOR_OLAP_TABLE);
+            Assertions.assertEquals(e.getErrorCode(), ErrorCode.ERR_COLUMN_RENAME_ONLY_FOR_OLAP_TABLE);
         }
 
         Database db = localMetastore.getDb("test");
-        Table table = db.getTable("t1");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t1");
         try {
             localMetastore.renameColumn(new Database(1, "_statistics_"), table, null);
-            Assert.fail("should not happen");
+            Assertions.fail("should not happen");
         } catch (ErrorReportException e) {
-            Assert.assertEquals(e.getErrorCode(), ErrorCode.ERR_CANNOT_RENAME_COLUMN_IN_INTERNAL_DB);
+            Assertions.assertEquals(e.getErrorCode(), ErrorCode.ERR_CANNOT_RENAME_COLUMN_IN_INTERNAL_DB);
         }
 
         try {
             OlapTable olapTable = new OlapTable();
             olapTable.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
             localMetastore.renameColumn(db, olapTable, null);
-            Assert.fail("should not happen");
+            Assertions.fail("should not happen");
         } catch (ErrorReportException e) {
-            Assert.assertEquals(e.getErrorCode(), ErrorCode.ERR_CANNOT_RENAME_COLUMN_OF_NOT_NORMAL_TABLE);
+            Assertions.assertEquals(e.getErrorCode(), ErrorCode.ERR_CANNOT_RENAME_COLUMN_OF_NOT_NORMAL_TABLE);
         }
 
         try {
             ColumnRenameClause columnRenameClause = new ColumnRenameClause("k4", "k5");
             localMetastore.renameColumn(db, table, columnRenameClause);
-            Assert.fail("should not happen");
+            Assertions.fail("should not happen");
         } catch (ErrorReportException e) {
-            Assert.assertEquals(e.getErrorCode(), ErrorCode.ERR_BAD_FIELD_ERROR);
+            Assertions.assertEquals(e.getErrorCode(), ErrorCode.ERR_BAD_FIELD_ERROR);
         }
 
         try {
             ColumnRenameClause columnRenameClause = new ColumnRenameClause("k3", "k2");
             localMetastore.renameColumn(db, table, columnRenameClause);
-            Assert.fail("should not happen");
+            Assertions.fail("should not happen");
         } catch (ErrorReportException e) {
-            Assert.assertEquals(e.getErrorCode(), ErrorCode.ERR_DUP_FIELDNAME);
+            Assertions.assertEquals(e.getErrorCode(), ErrorCode.ERR_DUP_FIELDNAME);
         }
     }
 
+    @Test
+    public void testCreateTableSerializeException() {
+        final long tableId = 1000010L;
+        final String tableName = "test";
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
+        SerializeFailedTable table = new SerializeFailedTable(1000010L, "serialize_test");
+
+        Assertions.assertThrows(DdlException.class, () -> localMetastore.onCreate(db, table, "", true));
+
+        Assertions.assertNull(db.getTable(tableId));
+        Assertions.assertNull(db.getTable(tableName));
+    }
+
+    @Test
+    public void testTruncateInTheMiddleOfDatabaseDropped() throws Exception {
+        String dbName = "db_to_be_dropped";
+        starRocksAssert.withDatabase(dbName).useDatabase(dbName)
+                .withTable("CREATE TABLE t1(k1 int, k2 int, k3 int) distributed by " +
+                        "hash(k1) buckets 3 properties('replication_num' = '1');");
+
+        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
+        Database db = localMetastore.getDb(dbName);
+        long t1TableId = db.getTable("t1").getId();
+        AtomicBoolean writeLockAcquired = new AtomicBoolean(false);
+
+        long tabletsCountBefore = connectContext.getGlobalStateMgr().getTabletInvertedIndex().getTabletCount();
+        new MockUp<Locker>() {
+            @Mock
+            public boolean lockTableAndCheckDbExist(Invocation invocation, Database database, long tableId,
+                                                    LockType lockType)
+                    throws DdlException, MetaNotFoundException {
+                if (lockType == LockType.WRITE && database.getId() == db.getId() && t1TableId == tableId) {
+                    // simulate that the database is dropped after locking the table
+                    localMetastore.dropDb(connectContext, dbName, false);
+                    long tabletCountInMiddle =
+                            connectContext.getGlobalStateMgr().getTabletInvertedIndex().getTabletCount();
+                    // The new partition is ready, but not committed yet, so 3 more tablets are created
+                    Assertions.assertEquals(tabletsCountBefore + 3, tabletCountInMiddle,
+                            "3 new tablets should be created for the new partition during truncate");
+                    writeLockAcquired.set(true);
+                    return false;
+                } else {
+                    return Boolean.TRUE.equals(invocation.proceed(database, tableId, lockType));
+                }
+            }
+        };
+
+
+        List<String> parts = Lists.newArrayList(dbName, "t1");
+        TableRef tableRef = new TableRef(QualifiedName.of(parts), null, NodePosition.ZERO);
+        TruncateTableStmt stmt = new TruncateTableStmt(tableRef);
+        DdlException exception =
+                Assertions.assertThrows(DdlException.class, () -> localMetastore.truncateTable(stmt, connectContext));
+        Assertions.assertEquals("Unknown database 'db_to_be_dropped'", exception.getMessage());
+        long tabletsCountAfter = connectContext.getGlobalStateMgr().getTabletInvertedIndex().getTabletCount();
+        Assertions.assertEquals(tabletsCountBefore, tabletsCountAfter,
+                "Tablets should not be changed when truncate fails");
+        Assertions.assertTrue(writeLockAcquired.get(), "Write lock should be acquired during truncate");
+    }
+
+    @Test
+    public void testTruncateTableEditLog() throws Exception {
+        String catalogName = connectContext.getCurrentCatalog();
+        String dbFullName = "test";
+        String tableName = "edit_log_t1";
+        starRocksAssert.useDatabase("test").withTable(
+                        "CREATE TABLE test.edit_log_t1(k1 int, k2 int, k3 int)" +
+                                " distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
+        // Include catalog name in QualifiedName, use dbFullName for database name
+        QualifiedName qualifiedName = QualifiedName.of(List.of(catalogName, dbFullName, tableName));
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+        TruncateTableStmt stmt = new TruncateTableStmt(tableRef, NodePosition.ZERO);
+        // Analyze the statement (normally done before execution)
+        TruncateTableAnalyzer.analyze(stmt, connectContext);
+
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbFullName);
+        OlapTable table = (OlapTable) database.getTable(tableName);
+        OlapTable followerTable  = AnalyzerUtils.getShadowCopyTable(table);
+        long oldPartitionId = table.getPartition(tableName).getId();
+
+        // 3. Execute truncateTable
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        metastore.truncateTable(stmt, connectContext);
+
+        // 4. Verify master state - partition is replaced with new one
+        // For unpartitioned table, partition name should be the same as table name
+        Partition newPartition = table.getPartition(tableName);
+        Assertions.assertNotNull(newPartition);
+        Assertions.assertNotEquals(oldPartitionId, newPartition.getId());
+
+        // 5. Test follower replay
+        TruncateTableInfo replayInfo = (TruncateTableInfo) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_TRUNCATE_TABLE);
+
+        Assertions.assertNotNull(replayInfo);
+        Assertions.assertEquals(database.getId(), replayInfo.getDbId());
+        Assertions.assertEquals(table.getId(), replayInfo.getTblId());
+        Assertions.assertNotNull(replayInfo.getPartitions());
+        Assertions.assertFalse(replayInfo.getPartitions().isEmpty());
+
+        LocalMetastore followerLocalMetastore = new LocalMetastore(GlobalStateMgr.getCurrentState(),
+                GlobalStateMgr.getCurrentState().getRecycleBin(),
+                GlobalStateMgr.getCurrentState().getColocateTableIndex());
+        Database followerDatabase = new Database(database.getId(), database.getFullName());
+        followerLocalMetastore.replayCreateDb(followerDatabase);
+        followerDatabase.registerTableUnlocked(followerTable);
+        followerLocalMetastore.replayTruncateTable(replayInfo);
+        Partition followerPartition = followerTable.getPartition(tableName);
+        Assertions.assertNotNull(followerPartition);
+        Assertions.assertNotEquals(oldPartitionId, followerPartition.getId());
+
+        UtFrameUtils.tearDownForPersisTest();
+    }
+
+    @Test
+    public void testTruncateTableEditLogException() throws Exception {
+        String catalogName = connectContext.getCurrentCatalog();
+        String dbFullName = "test";
+        String tableName = "edit_log_t2";
+        starRocksAssert.useDatabase(dbFullName).withTable(
+                        "CREATE TABLE " + tableName + "(k1 int, k2 int, k3 int)" +
+                                " distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
+        // Include catalog name in QualifiedName, use dbFullName for database name
+        QualifiedName qualifiedName = QualifiedName.of(List.of(catalogName, dbFullName, tableName));
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+        TruncateTableStmt stmt = new TruncateTableStmt(tableRef, NodePosition.ZERO);
+        // Analyze the statement (normally done before execution)
+        TruncateTableAnalyzer.analyze(stmt, connectContext);
+
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbFullName);
+        OlapTable table = (OlapTable) database.getTable(tableName);
+        long oldPartitionId = table.getPartition(tableName).getId();
+
+        // 3. Mock EditLog.logTruncateTable to throw exception
+        EditLog spyEditLog = spy(new EditLog(null));
+        doThrow(new RuntimeException("EditLog write failed"))
+                .when(spyEditLog).logTruncateTable(any(TruncateTableInfo.class), any());
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+
+        // 4. Execute truncateTable and expect exception
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
+            metastore.truncateTable(stmt, connectContext);
+        });
+        Assertions.assertTrue(exception.getMessage().contains("EditLog write failed"));
+
+        // 5. Verify partition ID remains unchanged after exception
+        // For unpartitioned table, partition name should be the same as table name
+        Assertions.assertEquals(oldPartitionId, table.getPartition(tableName).getId());
+    }
+
+    @Test
+    public void testAddPhysicalPartitionForNonPartitionedTable() throws Exception {
+        // Create a non-partitioned table with random distribution
+        starRocksAssert.useDatabase("test").withTable(
+                "CREATE TABLE test.add_pp_random(k1 INT, k2 VARCHAR(50), v1 INT) " +
+                        "ENGINE=olap DUPLICATE KEY(k1) DISTRIBUTED BY RANDOM BUCKETS 8 " +
+                        "PROPERTIES ('replication_num' = '1')");
+
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        Database db = metastore.getDb("test");
+        OlapTable table = (OlapTable) db.getTable("add_pp_random");
+        Assertions.assertEquals(1, table.getPhysicalPartitions().size());
+
+        // Record original mutableBucketNum to verify it is not modified
+        long originalMutableBucketNum = table.getMutableBucketNum();
+
+        // Add physical partition with custom bucket number
+        metastore.addPhysicalPartition("test", "add_pp_random", null, 4);
+        Assertions.assertEquals(2, table.getPhysicalPartitions().size());
+
+        // Verify the new physical partition has the specified bucket number
+        Partition partition = table.getPartitions().iterator().next();
+        List<PhysicalPartition> subPartitions = new java.util.ArrayList<>(partition.getSubPartitions());
+        // The newly added physical partition (not the default one) should have bucketNum = 4
+        PhysicalPartition newPartition = subPartitions.stream()
+                .filter(p -> p.getId() != partition.getDefaultPhysicalPartition().getId())
+                .findFirst().orElseThrow();
+        Assertions.assertEquals(4, newPartition.getBucketNum());
+
+        // Verify the original table's mutableBucketNum is NOT modified (concurrency-safe)
+        Assertions.assertEquals(originalMutableBucketNum, table.getMutableBucketNum());
+
+        starRocksAssert.dropTable("test.add_pp_random");
+    }
+
+    @Test
+    public void testAddPhysicalPartitionForPartitionedTable() throws Exception {
+        // Create a partitioned table with random distribution
+        starRocksAssert.useDatabase("test").withTable(
+                "CREATE TABLE test.add_pp_part(k1 DATE, k2 INT, v1 VARCHAR(100)) " +
+                        "ENGINE=olap DUPLICATE KEY(k1, k2) " +
+                        "PARTITION BY RANGE (k1) (" +
+                        "  PARTITION p20240101 VALUES LESS THAN ('2024-01-02')," +
+                        "  PARTITION p20240102 VALUES LESS THAN ('2024-01-03')" +
+                        ") DISTRIBUTED BY RANDOM BUCKETS 10 " +
+                        "PROPERTIES ('replication_num' = '1')");
+
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        Database db = metastore.getDb("test");
+        OlapTable table = (OlapTable) db.getTable("add_pp_part");
+        Partition partition = table.getPartition("p20240101");
+        Assertions.assertEquals(2, table.getPhysicalPartitions().size());
+        Assertions.assertEquals(1, partition.getSubPartitions().size());
+
+        long originalMutableBucketNum = table.getMutableBucketNum();
+
+        // Add physical partition to a specific partition with default bucket
+        metastore.addPhysicalPartition("test", "add_pp_part", "p20240101", 0);
+        Assertions.assertEquals(3, table.getPhysicalPartitions().size());
+        Assertions.assertEquals(2, partition.getSubPartitions().size());
+
+        // Add physical partition with custom bucket number to another partition
+        Partition partition2 = table.getPartition("p20240102");
+        metastore.addPhysicalPartition("test", "add_pp_part", "p20240102", 6);
+        Assertions.assertEquals(4, table.getPhysicalPartitions().size());
+        Assertions.assertEquals(2, partition2.getSubPartitions().size());
+
+        // Verify the new physical partition in p20240102 has the specified bucket number
+        PhysicalPartition newPartition = partition2.getSubPartitions().stream()
+                .filter(p -> p.getId() != partition2.getDefaultPhysicalPartition().getId())
+                .findFirst().orElseThrow();
+        Assertions.assertEquals(6, newPartition.getBucketNum());
+
+        // Verify the original table's mutableBucketNum is NOT modified
+        Assertions.assertEquals(originalMutableBucketNum, table.getMutableBucketNum());
+
+        starRocksAssert.dropTable("test.add_pp_part");
+    }
+
+    @Test
+    public void testAddPhysicalPartitionErrors() throws Exception {
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+
+        // 1. Database not found
+        Assertions.assertThrows(DdlException.class, () ->
+                metastore.addPhysicalPartition("nonexistent_db", "t", null, 0));
+
+        // 2. Table not found
+        Assertions.assertThrows(DdlException.class, () ->
+                metastore.addPhysicalPartition("test", "nonexistent_table", null, 0));
+
+        // 3. Hash distribution table (t1 uses hash distribution)
+        DdlException hashEx = Assertions.assertThrows(DdlException.class, () ->
+                metastore.addPhysicalPartition("test", "t1", null, 0));
+        Assertions.assertTrue(hashEx.getMessage().contains("random distribution"));
+
+        // 4. Partitioned table without partition name & non-existent partition & negative bucket
+        starRocksAssert.useDatabase("test").withTable(
+                "CREATE TABLE test.add_pp_err(k1 DATE, k2 INT) ENGINE=olap DUPLICATE KEY(k1, k2) " +
+                        "PARTITION BY RANGE (k1) (PARTITION p1 VALUES LESS THAN ('2024-01-02')) " +
+                        "DISTRIBUTED BY RANDOM BUCKETS 8 PROPERTIES ('replication_num' = '1')");
+
+        DdlException partEx = Assertions.assertThrows(DdlException.class, () ->
+                metastore.addPhysicalPartition("test", "add_pp_err", null, 0));
+        Assertions.assertTrue(partEx.getMessage().contains("Partition name must be specified"));
+
+        DdlException notFoundEx = Assertions.assertThrows(DdlException.class, () ->
+                metastore.addPhysicalPartition("test", "add_pp_err", "no_such_partition", 0));
+        Assertions.assertTrue(notFoundEx.getMessage().contains("does not exist"));
+
+        DdlException bucketEx = Assertions.assertThrows(DdlException.class, () ->
+                metastore.addPhysicalPartition("test", "add_pp_err", "p1", -1));
+        Assertions.assertTrue(bucketEx.getMessage().contains("non-negative"));
+
+        starRocksAssert.dropTable("test.add_pp_err");
+    }
 }

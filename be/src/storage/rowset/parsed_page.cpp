@@ -36,18 +36,24 @@
 
 #include <fmt/format.h>
 
+#include <cstddef>
 #include <memory>
 
+#include "base/bit/rle_encoding.h"
+#include "base/simd/simd.h"
+#include "base/string/faststring.h"
+#include "column/append_with_mask.h"
 #include "column/nullable_column.h"
 #include "common/status.h"
 #include "gutil/strings/substitute.h"
+#include "storage/column_predicate.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/bitshuffle_page.h"
 #include "storage/rowset/encoding_info.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_handle.h"
+#include "storage/rowset/page_handle_fwd.h"
 #include "util/compression/block_compression.h"
-#include "util/rle_encoding.h"
 
 namespace starrocks {
 
@@ -96,7 +102,10 @@ public:
                 _null_decoder = RleDecoder<bool>((const uint8_t*)_null_bitmap.data, _null_bitmap.size, 1);
             }
 
-            auto skip_nulls = _null_decoder.Skip(skips);
+            size_t skip_nulls = 0;
+            if (UNLIKELY(!_null_decoder.Skip(skips, &skip_nulls))) {
+                return Status::InternalError("ParsedPage V1 seek error");
+            }
             pos_in_data = offset_in_data + skips - skip_nulls;
         }
 
@@ -208,6 +217,68 @@ public:
         return Status::OK();
     }
 
+    size_t read_null_count() override {
+        DCHECK_EQ(_offset_in_page, 0);
+        size_t nrows_to_read = _num_rows;
+        size_t count = 0;
+        if (_has_null) {
+            while (nrows_to_read > 0) {
+                bool is_null = false;
+                size_t this_run = _null_decoder.GetNextRun(&is_null, nrows_to_read);
+                if (is_null) {
+                    count += this_run;
+                }
+                nrows_to_read -= this_run;
+                _offset_in_page += this_run;
+            }
+        }
+        return count;
+    }
+
+    Status read_by_rowids(Column* column, const rowid_t* rowids, size_t* count) override {
+        return Status::NotSupported("V1 version don't support read_by_rowds");
+    }
+
+    Status read_dict_codes_by_rowids(Column* column, const rowid_t* rowids, size_t* count) override {
+        return Status::NotSupported("V1 version don't support read_dict_codes_by_rowids");
+    }
+
+    // v1 can't support read_with_filter efficiently, so we read first and then filter
+    // since at least 80% rows is null, so it won't hurt performance much
+    Status read_with_filter(Column* column, const SparseRange<>& range,
+                            const std::vector<const ColumnPredicate*>& compound_and_predicates, uint8_t* selection,
+                            uint16_t* selected_idx) override {
+        DCHECK_LE(range.span_size(), remaining());
+
+        size_t original_col_size = column->size();
+        size_t num_rows = range.span_size();
+
+        // Clone a new column for reading data
+        auto temp_column = column->clone_empty();
+
+        // Read data to temp column (read will handle null flags automatically)
+        RETURN_IF_ERROR(read(temp_column.get(), range));
+
+        // Evaluate predicates on the temporary column
+        RETURN_IF_ERROR(compound_and_predicates_evaluate(compound_and_predicates, temp_column.get(), selection,
+                                                         selected_idx, 0, num_rows));
+
+        uint32_t selected_count = SIMD::count_nonzero(selection, num_rows);
+        if (selected_count == 0) {
+            return Status::OK();
+        }
+
+        RETURN_IF_ERROR(append_with_mask</*PositiveSelect=*/true>(column, *temp_column, selection, num_rows));
+
+        size_t added_col_size = column->size() - original_col_size;
+        if (selected_count != added_col_size) {
+            return Status::InternalError(
+                    fmt::format("Selected size:{}, does not match added col size:{}", selected_count, added_col_size));
+        }
+
+        return Status::OK();
+    }
+
 private:
     friend Status parse_page_v1(std::unique_ptr<ParsedPage>* result, PageHandle handle, const Slice& body,
                                 const DataPageFooterPB& footer, const EncodingInfo* encoding,
@@ -234,8 +305,8 @@ public:
             RETURN_IF_ERROR(_data_decoder->next_batch(count, column));
         } else {
             auto nc = down_cast<NullableColumn*>(column);
-            RETURN_IF_ERROR(_data_decoder->next_batch(count, nc->data_column().get()));
-            nc->null_column()->append_numbers(_null_flags.data() + _offset_in_page, *count);
+            RETURN_IF_ERROR(_data_decoder->next_batch(count, nc->data_column_raw_ptr()));
+            nc->null_column_raw_ptr()->append_numbers(_null_flags.data() + _offset_in_page, *count);
             nc->update_has_null();
         }
         _offset_in_page += *count;
@@ -250,16 +321,68 @@ public:
             _offset_in_page = range.end();
         } else {
             auto nc = down_cast<NullableColumn*>(column);
-            RETURN_IF_ERROR(_data_decoder->next_batch(range, nc->data_column().get()));
+            RETURN_IF_ERROR(_data_decoder->next_batch(range, nc->data_column_raw_ptr()));
             SparseRangeIterator<> iter = range.new_iterator();
             size_t size = range.span_size();
             while (iter.has_more()) {
                 _offset_in_page = iter.begin();
                 Range<> r = iter.next(size);
-                nc->null_column()->append_numbers(_null_flags.data() + _offset_in_page, r.span_size());
+                nc->null_column_raw_ptr()->append_numbers(_null_flags.data() + _offset_in_page, r.span_size());
                 _offset_in_page += r.span_size();
                 size -= r.span_size();
             }
+            nc->update_has_null();
+        }
+        return Status::OK();
+    }
+
+    Status read_with_filter(Column* column, const SparseRange<>& range,
+                            const std::vector<const ColumnPredicate*>& compound_and_predicates, uint8_t* selection,
+                            uint16_t* selected_idx) override {
+        DCHECK_EQ(_offset_in_page, range.begin());
+        DCHECK_EQ(_offset_in_page, _data_decoder->current_index());
+
+        size_t original_col_size = column->size();
+
+        if (_null_flags.size() == 0) {
+            RETURN_IF_ERROR(_data_decoder->next_batch_with_filter(column, range, compound_and_predicates, nullptr,
+                                                                  selection, selected_idx));
+        } else {
+            // For ParsedPageV2 with nulls: pass null flags to data_decoder
+            // The data_decoder will handle null predicates
+            auto nc = down_cast<NullableColumn*>(column);
+
+            // Pass the null flags starting from current offset
+            // The data_decoder will handle appending null flags to the column
+            const uint8_t* null_data = _null_flags.data() + _offset_in_page;
+            RETURN_IF_ERROR(_data_decoder->next_batch_with_filter(nc, range, compound_and_predicates, null_data,
+                                                                  selection, selected_idx));
+        }
+
+        size_t selected_size = SIMD::count_nonzero(selection, range.span_size());
+        size_t added_col_size = column->size() - original_col_size;
+        if (selected_size != added_col_size) {
+            return Status::InternalError(
+                    fmt::format("Selected size:{}, does not match added col size:{}", selected_size, added_col_size));
+        }
+        _offset_in_page = range.end();
+
+        return Status::OK();
+    }
+
+    Status read_by_rowids(Column* column, const rowid_t* rowids, size_t* count) override {
+        if (_null_flags.size() == 0) {
+            RETURN_IF_ERROR(_data_decoder->read_by_rowids(_first_ordinal, rowids, count, column));
+        } else {
+            auto nc = down_cast<NullableColumn*>(column);
+            RETURN_IF_ERROR(_data_decoder->read_by_rowids(_first_ordinal, rowids, count, nc->data_column_raw_ptr()));
+            std::vector<uint8_t> null_flags;
+            for (size_t i = 0; i < *count; i++) {
+                ordinal_t ord = rowids[i] - _first_ordinal;
+                DCHECK_LT(ord, _num_rows);
+                null_flags.emplace_back(_null_flags[ord]);
+            }
+            nc->null_column_raw_ptr()->append_numbers(null_flags.data(), null_flags.size());
             nc->update_has_null();
         }
         return Status::OK();
@@ -270,11 +393,30 @@ public:
             RETURN_IF_ERROR(_data_decoder->next_dict_codes(count, column));
         } else {
             auto nc = down_cast<NullableColumn*>(column);
-            RETURN_IF_ERROR(_data_decoder->next_dict_codes(count, nc->data_column().get()));
-            (void)nc->null_column()->append_numbers(_null_flags.data() + _offset_in_page, *count);
+            RETURN_IF_ERROR(_data_decoder->next_dict_codes(count, nc->data_column_raw_ptr()));
+            (void)nc->null_column_raw_ptr()->append_numbers(_null_flags.data() + _offset_in_page, *count);
             nc->update_has_null();
         }
         _offset_in_page += *count;
+        return Status::OK();
+    }
+
+    Status read_dict_codes_by_rowids(Column* column, const rowid_t* rowids, size_t* count) override {
+        if (_null_flags.size() == 0) {
+            RETURN_IF_ERROR(_data_decoder->read_dict_codes_by_rowids(_first_ordinal, rowids, count, column));
+        } else {
+            auto nc = down_cast<NullableColumn*>(column);
+            RETURN_IF_ERROR(
+                    _data_decoder->read_dict_codes_by_rowids(_first_ordinal, rowids, count, nc->data_column_raw_ptr()));
+            std::vector<uint8_t> null_flags;
+            for (size_t i = 0; i < *count; i++) {
+                ordinal_t ord = rowids[i] - _first_ordinal;
+                DCHECK_LT(ord, _num_rows);
+                null_flags.emplace_back(_null_flags[ord]);
+            }
+            nc->null_column_raw_ptr()->append_numbers(null_flags.data(), null_flags.size());
+            nc->update_has_null();
+        }
         return Status::OK();
     }
 
@@ -287,13 +429,13 @@ public:
             _offset_in_page = range.end();
         } else {
             auto nc = down_cast<NullableColumn*>(column);
-            RETURN_IF_ERROR(_data_decoder->next_dict_codes(range, nc->data_column().get()));
+            RETURN_IF_ERROR(_data_decoder->next_dict_codes(range, nc->data_column_raw_ptr()));
             SparseRangeIterator<> iter = range.new_iterator();
             size_t size = range.span_size();
             while (iter.has_more()) {
                 _offset_in_page = iter.begin();
                 Range<> r = iter.next(size);
-                nc->null_column()->append_numbers(_null_flags.data() + _offset_in_page, r.span_size());
+                nc->null_column_raw_ptr()->append_numbers(_null_flags.data() + _offset_in_page, r.span_size());
                 _offset_in_page += r.span_size();
             }
             nc->update_has_null();
@@ -302,13 +444,23 @@ public:
         return Status::OK();
     }
 
+    size_t read_null_count() override {
+        DCHECK_EQ(_offset_in_page, 0);
+        size_t count = 0;
+        if (_null_flags.size() > 0) {
+            count = SIMD::count_nonzero(_null_flags.data(), _num_rows);
+            _offset_in_page += _num_rows;
+        }
+        return count;
+    }
+
 private:
     friend Status parse_page_v2(std::unique_ptr<ParsedPage>* result, PageHandle handle, const Slice& body,
                                 const DataPageFooterPB& footer, const EncodingInfo* encoding,
                                 const PagePointer& page_pointer, uint32_t page_index);
 
     faststring _null_flags;
-    PageHandle _page_handle;
+    std::shared_ptr<PageHandle> _page_handle;
 };
 
 Status parse_page_v1(std::unique_ptr<ParsedPage>* result, PageHandle handle, const Slice& body,
@@ -316,6 +468,7 @@ Status parse_page_v1(std::unique_ptr<ParsedPage>* result, PageHandle handle, con
                      uint32_t page_index) {
     auto page = std::make_unique<ParsedPageV1>();
     page->_page_handle = std::move(handle);
+    page->_version = 1;
 
     auto null_size = footer.nullmap_size();
     page->_has_null = null_size > 0;
@@ -344,8 +497,10 @@ Status parse_page_v2(std::unique_ptr<ParsedPage>* result, PageHandle handle, con
                      const DataPageFooterPB& footer, const EncodingInfo* encoding, const PagePointer& page_pointer,
                      uint32_t page_index) {
     auto page = std::make_unique<ParsedPageV2>();
-    page->_page_handle = std::move(handle);
+    page->_page_handle = std::make_shared<PageHandle>(std::move(handle));
+    page->_version = 2;
 
+    // TODO: port the nulls decode to null pages
     auto null_size = footer.nullmap_size();
     if (null_size > 0) {
         Slice null_flags(body.data + body.size - null_size, null_size);
@@ -383,6 +538,7 @@ Status parse_page_v2(std::unique_ptr<ParsedPage>* result, PageHandle handle, con
     PageDecoder* decoder = nullptr;
     RETURN_IF_ERROR(encoding->create_page_decoder(data_slice, &decoder));
     page->_data_decoder.reset(decoder);
+    page->_data_decoder->set_page_handle(page->_page_handle);
     RETURN_IF_ERROR(page->_data_decoder->init());
 
     page->_first_ordinal = footer.first_ordinal();

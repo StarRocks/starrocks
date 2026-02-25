@@ -14,23 +14,34 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.catalog.PartitionType;
-import com.starrocks.catalog.Type;
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.PrintableMap;
-import com.starrocks.sql.analyzer.FeNameFormat;
+import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.Type;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+/**
+ * It was used to represent single-column list partition, like `PARTITION BY LIST(c)
+ * But somehow it's misused in many places so current single-column list partition may also use the MultiItem.
+ * This inconsistency can lead to serious bugs like the query result would be incorrect.
+ * The plan to fix it:
+ * 1. Step one is to trying to convert SingleItem to MultiItem when adding new partitions if it's already a MultiItem
+ * 2. Remove the SingleItem and change all metadata when reloading metadata
+ */
+@Deprecated
 public class SingleItemListPartitionDesc extends SinglePartitionDesc {
     private final List<String> values;
     private List<ColumnDef> columnDefList;
 
+    @VisibleForTesting
     public SingleItemListPartitionDesc(boolean ifNotExists, String partitionName, List<String> values,
                                        Map<String, String> properties) {
         this(ifNotExists, partitionName, values, properties, NodePosition.ZERO);
@@ -39,7 +50,6 @@ public class SingleItemListPartitionDesc extends SinglePartitionDesc {
     public SingleItemListPartitionDesc(boolean ifNotExists, String partitionName, List<String> values,
                                        Map<String, String> properties, NodePosition pos) {
         super(ifNotExists, partitionName, properties, pos);
-        this.type = PartitionType.LIST;
         this.values = values;
     }
 
@@ -58,14 +68,19 @@ public class SingleItemListPartitionDesc extends SinglePartitionDesc {
         return partitionValues;
     }
 
-    public void analyze(List<ColumnDef> columnDefList, Map<String, String> tableProperties) throws AnalysisException {
-        FeNameFormat.checkPartitionName(this.getPartitionName());
-        analyzeProperties(tableProperties, null);
-
-        if (columnDefList.size() != 1) {
-            throw new AnalysisException("Partition column size should be one when use single list partition ");
-        }
+    public void setColumnDefList(List<ColumnDef> columnDefList) {
         this.columnDefList = columnDefList;
+    }
+
+    /**
+     * {@link SingleItemListPartitionDesc}
+     */
+    public MultiItemListPartitionDesc upgradeToMultiItem() throws AnalysisException {
+        List<List<String>> valueList = values.stream().map(Lists::newArrayList).collect(Collectors.toList());
+        MultiItemListPartitionDesc desc = new MultiItemListPartitionDesc(isSetIfNotExists(), getPartitionName(),
+                valueList, getProperties(), getPos());
+        Preconditions.checkState(columnDefList == null, "has not analyzed");
+        return desc;
     }
 
     @Override

@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # element_at
@@ -20,7 +20,7 @@ element_at(any_map, any_key)
 
 ## 参数说明
 
-- `any_mao`: Map 表达式。
+- `any_map`: Map 表达式。
 - `key`: 指定的 key。如果 `key` 不存在，返回 NULL。
 
 ## 返回值说明

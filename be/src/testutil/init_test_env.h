@@ -14,27 +14,31 @@
 
 #pragma once
 
-#include "butil/file_util.h"
+#include <butil/file_util.h>
+#include <butil/files/file_path.h>
+
+#include "base/path/file_util.h"
+#include "base/time/timezone_utils.h"
+#include "cache/datacache.h"
 #include "column/column_helper.h"
-#include "column/column_pool.h"
 #include "common/config.h"
+#include "common/system/cpu_info.h"
+#include "common/system/disk_info.h"
+#include "common/system/mem_info.h"
 #include "exec/pipeline/query_context.h"
 #include "gtest/gtest.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/memory/mem_chunk_allocator.h"
-#include "runtime/time_types.h"
 #include "runtime/user_function_cache.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/options.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/update_manager.h"
-#include "util/cpu_info.h"
-#include "util/disk_info.h"
+#include "types/time_types.h"
 #include "util/logging.h"
-#include "util/mem_info.h"
-#include "util/timezone_utils.h"
 
 namespace starrocks {
 
@@ -63,21 +67,25 @@ int init_test_env(int argc, char** argv) {
     config::spill_local_storage_dir = spill_path.value();
 
     FLAGS_alsologtostderr = true;
-    init_glog("be_test", true);
+    init_glog(argv[0], true);
     CpuInfo::init();
     DiskInfo::init();
     MemInfo::init();
     CHECK(UserFunctionCache::instance()->init(config::user_function_dir).ok());
 
     date::init_date_cache();
-    TimezoneUtils::init_time_zones();
+    // Disable global cache of timezone info when running unit tests
+    // Save tons of time in parallel unit test mode
+    // TimezoneUtils::init_time_zones();
 
     std::vector<StorePath> paths;
     paths.emplace_back(config::storage_root_path);
 
-    auto metadata_mem_tracker = std::make_unique<MemTracker>();
-    auto tablet_schema_mem_tracker = std::make_unique<MemTracker>(-1, "tablet_schema", metadata_mem_tracker.get());
-    auto schema_change_mem_tracker = std::make_unique<MemTracker>();
+    auto* global_env = GlobalEnv::GetInstance();
+    config::disable_storage_page_cache = true;
+    auto st = global_env->init();
+    CHECK(st.ok()) << st;
+
     auto compaction_mem_tracker = std::make_unique<MemTracker>();
     auto update_mem_tracker = std::make_unique<MemTracker>();
     StorageEngine* engine = nullptr;
@@ -93,30 +101,39 @@ int init_test_env(int argc, char** argv) {
         return -1;
     }
     engine->start_schedule_apply_thread();
-    auto* global_env = GlobalEnv::GetInstance();
-    config::disable_storage_page_cache = true;
-    auto st = global_env->init();
-    CHECK(st.ok()) << st;
-    auto* exec_env = ExecEnv::GetInstance();
-    // Pagecache is turned on by default, and some test cases require cache to be turned on,
+
+    // Pagecache is turned off by default, and some test cases require cache to be turned on,
     // and some test cases do not. For easy management, we turn cache off during unit test
     // initialization. If there are test cases that require Pagecache, it must be responsible
     // for managing it.
+    auto* cache_env = DataCache::GetInstance();
+    config::datacache_enable = false;
+    st = cache_env->init(paths);
+    CHECK(st.ok()) << st;
+
+    auto* exec_env = ExecEnv::GetInstance();
     st = exec_env->init(paths);
     CHECK(st.ok()) << st;
 
     int r = RUN_ALL_TESTS();
 
     // clear some trash objects kept in tablet_manager so mem_tracker checks will not fail
-    CHECK(StorageEngine::instance()->tablet_manager()->start_trash_sweep().ok());
+    CHECK(engine->tablet_manager()->start_trash_sweep().ok());
     (void)butil::DeleteFile(storage_root, true);
-    TEST_clear_all_columns_this_thread();
+    exec_env->wait_for_finish();
     // delete engine
-    StorageEngine::instance()->stop();
+    engine->stop();
     // destroy exec env
     tls_thread_status.set_mem_tracker(nullptr);
     exec_env->stop();
+#ifdef USE_STAROS
+    if (exec_env->lake_tablet_manager() != nullptr) {
+        exec_env->lake_tablet_manager()->stop();
+    }
+#endif
+    delete engine;
     exec_env->destroy();
+    cache_env->destroy();
     global_env->stop();
 
     shutdown_tracer();

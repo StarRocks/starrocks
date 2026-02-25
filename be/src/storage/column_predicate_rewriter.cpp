@@ -19,9 +19,9 @@
 #include <limits>
 #include <utility>
 
+#include "base/simd/simd.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
-#include "column/datum.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
@@ -33,12 +33,12 @@
 #include "gutil/casts.h"
 #include "runtime/global_dict/config.h"
 #include "runtime/global_dict/miscs.h"
-#include "simd/simd.h"
 #include "storage/column_expr_predicate.h"
 #include "storage/column_predicate.h"
 #include "storage/range.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/scalar_column_iterator.h"
+#include "types/datum.h"
 
 namespace starrocks {
 
@@ -66,7 +66,12 @@ struct RewritePredicateTreeVisitor {
         }
 
         const auto& field = _cid_to_field.find(cid)->second;
-        DCHECK(_rewriter._column_iterators[cid]->all_page_dict_encoded());
+        // NOTE: for regular column, if a column can be rewritten will be checked before
+        // but for JSON extended column, it depends on the segment dicts, if the segment doesn't have the dicts,
+        // the column can't be rewritten, so we need to check it here.
+        if (!_rewriter._column_iterators[cid]->all_page_dict_encoded()) {
+            return RewriteStatus::UNCHANGED;
+        }
 
         ColumnPredicate* rewrited_pred;
         ASSIGN_OR_RETURN(auto rewrite_status, _rewriter._rewrite_predicate(_pool, field, col_pred, &rewrited_pred));
@@ -179,7 +184,6 @@ StatusOr<ColumnPredicateRewriter::RewriteStatus> ColumnPredicateRewriter::_rewri
         return RewriteStatus::UNCHANGED;
     }
     DCHECK(_column_iterators[cid]->all_page_dict_encoded());
-
     if (PredicateType::kEQ == pred->type()) {
         Datum value = pred->value();
         int code = _column_iterators[cid]->dict_lookup(value.get_slice());
@@ -317,6 +321,9 @@ StatusOr<ColumnPredicateRewriter::RewriteStatus> ColumnPredicateRewriter::_rewri
 
         return _rewrite_expr_predicate(pool, dict_column, code_column, field->is_nullable(), pred, dest_pred);
     }
+    if (PredicateType::kPlaceHolder == pred->type()) {
+        return RewriteStatus::ALWAYS_TRUE;
+    }
 
     return RewriteStatus::UNCHANGED;
 }
@@ -339,6 +346,10 @@ Status ColumnPredicateRewriter::_load_segment_dict(std::vector<std::pair<std::st
     // We already loaded dicts, no need to do once more.
     if (!dicts->empty()) {
         return Status::OK();
+    }
+    // NOTE: for JSON extended column, it might be a JsonColumnIterator, so we need to check it here.
+    if (dynamic_cast<ScalarColumnIterator*>(iter) == nullptr) {
+        return Status::NotSupported("not support dict predicate for non-string column");
     }
     auto column_iterator = down_cast<ScalarColumnIterator*>(iter);
     auto dict_size = column_iterator->dict_size();
@@ -372,6 +383,10 @@ StatusOr<const ColumnPredicateRewriter::DictAndCodes*> ColumnPredicateRewriter::
 
 Status ColumnPredicateRewriter::_load_segment_dict_vec(ColumnIterator* iter, ColumnPtr* dict_column,
                                                        ColumnPtr* code_column, bool field_nullable) {
+    // NOTE: for JSON extended column, it might be a JsonColumnIterator, so we need to check it here.
+    if (dynamic_cast<ScalarColumnIterator*>(iter) == nullptr) {
+        return Status::NotSupported("not support dict predicate for non-string column");
+    }
     auto column_iterator = down_cast<ScalarColumnIterator*>(iter);
     auto dict_size = column_iterator->dict_size();
     int dict_codes[dict_size];
@@ -382,14 +397,14 @@ Status ColumnPredicateRewriter::_load_segment_dict_vec(ColumnIterator* iter, Col
 
     if (field_nullable) {
         // create nullable column with NULL at last.
-        NullColumnPtr null_col = NullColumn::create();
+        NullColumn::MutablePtr null_col = NullColumn::create();
         null_col->resize(dict_size);
-        auto null_column = NullableColumn::create(dict_col, null_col);
+        auto null_column = NullableColumn::create(std::move(dict_col), std::move(null_col));
         null_column->append_default();
-        *dict_column = null_column;
+        *dict_column = std::move(null_column);
     } else {
         // otherwise we just give binary column.
-        *dict_column = dict_col;
+        *dict_column = std::move(dict_col);
     }
 
     auto code_col = Int32Column::create();
@@ -398,7 +413,7 @@ Status ColumnPredicateRewriter::_load_segment_dict_vec(ColumnIterator* iter, Col
     for (int i = 0; i < dict_size; i++) {
         code_buf[i] = dict_codes[i];
     }
-    *code_column = code_col;
+    *code_column = std::move(code_col);
     return Status::OK();
 }
 
@@ -431,7 +446,7 @@ StatusOr<ColumnPredicateRewriter::RewriteStatus> ColumnPredicateRewriter::_rewri
 
     size_t code_size = raw_code_column->size();
     const auto& code_column = ColumnHelper::cast_to<TYPE_INT>(raw_code_column);
-    const auto& code_values = code_column->get_data();
+    const auto code_values = code_column->immutable_data();
     if (field_nullable) {
         DCHECK((code_size + 1) == value_size);
     } else {
@@ -478,7 +493,7 @@ StatusOr<ColumnPredicateRewriter::RewriteStatus> ColumnPredicateRewriter::_rewri
     builder.set_is_not_in(is_not_in);
     builder.use_array_set(code_size);
     DCHECK_IF_ERROR(builder.create());
-    (void)builder.add_values(used_values, 0);
+    (void)builder.add_values(std::move(used_values), 0);
     ExprContext* filter = builder.get_in_const_predicate();
 
     DCHECK_IF_ERROR(filter->prepare(state));
@@ -512,7 +527,7 @@ StatusOr<ColumnPredicatePtr> GlobalDictPredicatesRewriter::_rewrite_predicate(co
     RETURN_IF_ERROR(pred->evaluate(binary_column.get(), selection.data(), 0, dict_rows));
 
     std::vector<uint8_t> code_mapping;
-    code_mapping.resize(DICT_DECODE_MAX_SIZE + 1);
+    code_mapping.resize(dict_rows + 1);
     for (size_t i = 0; i < codes.size(); ++i) {
         code_mapping[codes[i]] = selection[i];
     }

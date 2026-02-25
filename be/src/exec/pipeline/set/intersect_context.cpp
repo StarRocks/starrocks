@@ -18,14 +18,15 @@
 
 namespace starrocks::pipeline {
 
-Status IntersectContext::prepare(RuntimeState* state, const std::vector<ExprContext*>& build_exprs) {
+Status IntersectContext::prepare(RuntimeState* state, const std::vector<ExprContext*>& build_exprs,
+                                 bool has_outer_join_child) {
     RETURN_IF_ERROR(_hash_set->init(state));
     _build_pool = std::make_unique<MemPool>();
 
     _dst_tuple_desc = state->desc_tbl().get_tuple_descriptor(_dst_tuple_id);
     _dst_nullables.reserve(build_exprs.size());
     for (auto build_expr : build_exprs) {
-        _dst_nullables.emplace_back(build_expr->root()->is_nullable());
+        _dst_nullables.emplace_back(build_expr->root()->is_nullable() || has_outer_join_child);
     }
 
     return Status::OK();
@@ -63,7 +64,7 @@ StatusOr<ChunkPtr> IntersectContext::pull_chunk(RuntimeState* state) {
     ChunkPtr dst_chunk = std::make_shared<Chunk>();
     if (num_remained_keys > 0) {
         // 2. Create dest columns.
-        Columns dst_columns(_dst_nullables.size());
+        MutableColumns dst_columns(_dst_nullables.size());
         for (size_t i = 0; i < _dst_nullables.size(); ++i) {
             const auto& slot = _dst_tuple_desc->slots()[i];
             dst_columns[i] = ColumnHelper::create_column(slot->type(), _dst_nullables[i]);

@@ -15,19 +15,17 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.ClearDataCacheRulesStmt;
 import com.starrocks.sql.ast.CreateDataCacheRuleStmt;
 import com.starrocks.sql.ast.DataCacheSelectStatement;
@@ -37,6 +35,8 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.SlotRef;
 
 import java.time.Duration;
 import java.time.format.DateTimeParseException;
@@ -52,7 +52,7 @@ public class DataCacheStmtAnalyzer {
         new DataCacheStmtAnalyzerVisitor().analyze(stmt, session);
     }
 
-    static class DataCacheStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class DataCacheStmtAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
         private final DataCacheMgr dataCacheMgr = DataCacheMgr.getInstance();
 
         public void analyze(StatementBase statement, ConnectContext session) {
@@ -85,7 +85,7 @@ public class DataCacheStmtAnalyzer {
             throwExceptionIfTargetIsInvalid(catalogName, dbName, tblName);
 
             // If catalog/db/tbl does not exist, it will throw exception
-            Optional<Table> optionalTable = getTable(catalogName, dbName, tblName);
+            Optional<Table> optionalTable = getTable(context, catalogName, dbName, tblName);
 
             // Check new dataCache rule is conflicted with existed rule
             dataCacheMgr.throwExceptionIfRuleIsConflicted(catalogName, dbName, tblName);
@@ -132,6 +132,9 @@ public class DataCacheStmtAnalyzer {
             Analyzer.analyze(queryStatement, context);
 
             SelectRelation selectRelation = (SelectRelation) queryStatement.getQueryRelation();
+            if (!(selectRelation.getRelation() instanceof TableRelation)) {
+                throw new SemanticException("Cache select only support olap table, external table or materialized view.");
+            }
             TableRelation tableRelation = (TableRelation) selectRelation.getRelation();
             TableName tableName = tableRelation.getResolveTableName();
             if (CatalogMgr.isInternalCatalog(tableName.getCatalog()) && RunMode.isSharedNothingMode()) {
@@ -192,7 +195,8 @@ public class DataCacheStmtAnalyzer {
         }
     }
 
-    private static Optional<Table> getTable(String catalogName, String dbName, String tblName) throws SemanticException {
+    private static Optional<Table> getTable(ConnectContext context, String catalogName, String dbName, String tblName)
+            throws SemanticException {
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
 
         // Check target is existed
@@ -205,14 +209,14 @@ public class DataCacheStmtAnalyzer {
 
             if (!isSelectAll(dbName)) {
                 // Check db is existed
-                Database db = metadataMgr.getDb(catalogName, dbName);
+                Database db = metadataMgr.getDb(context, catalogName, dbName);
                 if (db == null) {
                     throw new SemanticException(String.format("DataCache target database: %s does not exist " +
                             "in [catalog: %s]", dbName, catalogName));
                 }
                 if (!isSelectAll(tblName)) {
                     // Check tbl is existed
-                    table = metadataMgr.getTable(catalogName, dbName, tblName);
+                    table = metadataMgr.getTable(context, catalogName, dbName, tblName);
                     if (table == null) {
                         throw new SemanticException(String.format("DataCache target table: %s does not exist in " +
                                 "[catalog: %s, database: %s]", tblName, catalogName, dbName));

@@ -1,0 +1,21 @@
+-- name: test_mv_with_multi_partition_columns_basic 
+CREATE TABLE t1 (
+    k1 int,
+    k2 date,
+    k3 string
+)
+DUPLICATE KEY(k1)
+PARTITION BY date_trunc("day", k2), k3;
+
+INSERT INTO t1 VALUES (1,'2020-06-02','BJ'),(3,'2020-06-02','SZ'),(2,'2020-07-02','SH');
+
+-- Create Fail: mv's partition columns are not the same as table's partition columns
+CREATE MATERIALIZED VIEW test_mv1
+partition by (date_trunc("day", k2))
+REFRESH MANUAL
+AS select sum(k1), k2, k3 from t1 group by k2, k3;
+
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+
+function: print_hit_materialized_view("select sum(k1), k2, k3 from t1 group by k2, k3;", "test_mv1")
+select sum(k1), k2, k3 from t1 group by k2, k3;

@@ -20,14 +20,15 @@
 #include <exception>
 #include <utility>
 
+#include "base/failpoint/fail_point.h"
+#include "base/testutil/sync_point.h"
+#include "common/system/backend_options.h"
 #include "fs/encrypt_file.h"
 #include "fs/fs_util.h"
 #include "fs/hdfs/hdfs_fs_cache.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/file_result_writer.h"
-#include "testutil/sync_point.h"
 #include "udf/java/utils.h"
-#include "util/failpoint/fail_point.h"
 #include "util/hdfs_util.h"
 
 using namespace fmt::literals;
@@ -36,7 +37,7 @@ namespace starrocks {
 
 class GetHdfsFileReadOnlyHandle {
 public:
-    GetHdfsFileReadOnlyHandle(const FSOptions options, std::string path, int buffer_size)
+    GetHdfsFileReadOnlyHandle(const FSOptions& options, std::string path, int buffer_size)
             : _options(std::move(options)), _path(std::move(path)), _buffer_size(buffer_size) {}
 
     StatusOr<hdfsFS> getOrCreateFS() {
@@ -57,10 +58,12 @@ public:
             _file = hdfsOpenFile(st.value(), _path.c_str(), O_RDONLY, _buffer_size, 0, 0);
             if (_file == nullptr) {
                 if (errno == ENOENT) {
-                    return Status::RemoteFileNotFound(fmt::format("hdfsOpenFile failed, file={}", _path));
+                    return Status::RemoteFileNotFound(fmt::format("hdfsOpenFile failed, backend={}, file={}",
+                                                                  BackendOptions::get_localhost(), _path));
                 } else {
-                    return Status::InternalError(
-                            fmt::format("hdfsOpenFile failed, file={}. err_msg: {}", _path, get_hdfs_err_msg()));
+                    return Status::InternalError(fmt::format("hdfsOpenFile failed, backend={}, file={}. err_msg: {}",
+                                                             BackendOptions::get_localhost(), _path,
+                                                             get_hdfs_err_msg()));
                 }
             }
         }
@@ -381,7 +384,7 @@ Status HDFSWritableFile::close() {
 
 class HdfsFileSystem : public FileSystem {
 public:
-    HdfsFileSystem(const FSOptions& options) : _options(options) {}
+    HdfsFileSystem(const FSOptions& options) : _options(std::move(options)) {}
     ~HdfsFileSystem() override = default;
 
     HdfsFileSystem(const HdfsFileSystem&) = delete;
@@ -415,32 +418,149 @@ public:
 
     Status iterate_dir2(const std::string& dir, const std::function<bool(DirEntry)>& cb) override;
 
-    Status delete_file(const std::string& path) override { return Status::NotSupported("HdfsFileSystem::delete_file"); }
+    // Implementation Notes:
+    // To avoid an unnecessary HDFS API call for path type validation, the target path’s type (file or directory)
+    // is not checked prior to issuing the delete request. Consequently, the hdfsDelete() function successfully
+    // handles both files and empty directories. This means the delete operation will complete successfully even
+    // if the target path is an empty directory rather than a file. This is similar to `delete_dir()`.
+    Status delete_file(const std::string& path) override {
+        std::string namenode;
+        RETURN_IF_ERROR(get_namenode_from_path(path, &namenode));
+        std::shared_ptr<HdfsFsClient> hdfs_client;
+        RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, hdfs_client, _options));
+
+        if (hdfsDelete(hdfs_client->hdfs_fs, path.c_str(), 0) == 0) {
+            return Status::OK();
+        }
+        int err_number = errno;
+
+        Status exists_status = _path_exists(hdfs_client->hdfs_fs, path);
+        if (!exists_status.ok()) {
+            return exists_status;
+        }
+
+        ASSIGN_OR_RETURN(bool is_dir, _is_directory(hdfs_client->hdfs_fs, path));
+        if (is_dir) {
+            return Status::InvalidArgument(fmt::format("path {} is a directory, not a file", path));
+        }
+        return hdfs_error_to_status(fmt::format("Failed to delete HDFS file: {}.", path), err_number);
+    }
 
     Status create_dir(const std::string& dirname) override {
-        return Status::NotSupported("HdfsFileSystem::create_dir");
+        std::string namenode;
+        RETURN_IF_ERROR(get_namenode_from_path(dirname, &namenode));
+        std::shared_ptr<HdfsFsClient> hdfs_client;
+        RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, hdfs_client, _options));
+
+        if (hdfsCreateDirectory(hdfs_client->hdfs_fs, dirname.c_str()) != 0) {
+            int err_number = errno;
+            if (err_number == EEXIST) {
+                return Status::OK();
+            } else {
+                return hdfs_error_to_status(fmt::format("Failed to create HDFS directory: {}.", dirname), err_number);
+            }
+        }
+        return Status::OK();
     }
 
     Status create_dir_if_missing(const std::string& dirname, bool* created) override {
-        return Status::NotSupported("HdfsFileSystem::create_dir_if_missing");
+        std::string namenode;
+        RETURN_IF_ERROR(get_namenode_from_path(dirname, &namenode));
+        std::shared_ptr<HdfsFsClient> hdfs_client;
+        RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, hdfs_client, _options));
+
+        // Check if directory already exists
+        Status exists_status = _path_exists(hdfs_client->hdfs_fs, dirname);
+        if (exists_status.ok()) {
+            // Path exists, check if it's a directory
+            ASSIGN_OR_RETURN(bool is_dir, _is_directory(hdfs_client->hdfs_fs, dirname));
+            if (is_dir) {
+                if (created) *created = false;
+                return Status::OK();
+            } else {
+                return Status::InvalidArgument(fmt::format("Path {} exists but is not a directory", dirname));
+            }
+        }
+
+        // Directory doesn't exist, create it
+        if (hdfsCreateDirectory(hdfs_client->hdfs_fs, dirname.c_str()) != 0) {
+            return hdfs_error_to_status(fmt::format("Failed to create HDFS directory: {}.", dirname), errno);
+        }
+
+        if (created) *created = true;
+        return Status::OK();
     }
 
     Status create_dir_recursive(const std::string& dirname) override {
-        return Status::NotSupported("HdfsFileSystem::create_dir_recursive");
+        // For HDFS, hdfsCreateDirectory already creates parent directories recursively
+        // This is the default behavior in HDFS - it works like "mkdir -p"
+        return create_dir_if_missing(dirname, nullptr);
     }
 
+    // Implementation Notes:
+    // To avoid an unnecessary HDFS API call for path type validation, the target path’s type (file or directory)
+    // is not checked prior to issuing the delete request. Consequently, the hdfsDelete() function successfully
+    // handles both files and empty directories. This means the delete operation will complete successfully even
+    // if the target path is a file rather than an empty directory. This is similar to `delete_file()`.
     Status delete_dir(const std::string& dirname) override {
-        return Status::NotSupported("HdfsFileSystem::delete_dir");
+        std::string namenode;
+        RETURN_IF_ERROR(get_namenode_from_path(dirname, &namenode));
+        std::shared_ptr<HdfsFsClient> hdfs_client;
+        RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, hdfs_client, _options));
+
+        if (hdfsDelete(hdfs_client->hdfs_fs, dirname.c_str(), 0) == 0) {
+            return Status::OK();
+        }
+        int err_number = errno;
+
+        Status exists_status = _path_exists(hdfs_client->hdfs_fs, dirname);
+        if (!exists_status.ok()) {
+            return exists_status;
+        }
+
+        ASSIGN_OR_RETURN(bool is_dir, _is_directory(hdfs_client->hdfs_fs, dirname));
+        if (!is_dir) {
+            return Status::InvalidArgument(fmt::format("path {} is not a directory", dirname));
+        }
+        return hdfs_error_to_status(fmt::format("Failed to delete HDFS directory: {}.", dirname), err_number);
     }
 
     Status delete_dir_recursive(const std::string& dirname) override {
-        return Status::NotSupported("HdfsFileSystem::delete_dir_recursive");
+        std::string namenode;
+        RETURN_IF_ERROR(get_namenode_from_path(dirname, &namenode));
+        std::shared_ptr<HdfsFsClient> hdfs_client;
+        RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, hdfs_client, _options));
+
+        if (hdfsDelete(hdfs_client->hdfs_fs, dirname.c_str(), 1) == 0) {
+            return Status::OK();
+        }
+        int err_number = errno;
+
+        Status exists_status = _path_exists(hdfs_client->hdfs_fs, dirname);
+        if (exists_status.is_not_found()) {
+            return Status::OK();
+        }
+        if (!exists_status.ok()) {
+            return exists_status;
+        }
+
+        ASSIGN_OR_RETURN(bool is_dir, _is_directory(hdfs_client->hdfs_fs, dirname));
+        if (!is_dir) {
+            return Status::InvalidArgument(fmt::format("path {} is not a directory", dirname));
+        }
+        return hdfs_error_to_status(fmt::format("Failed to recursively delete HDFS directory: {}.", dirname),
+                                    err_number);
     }
 
     Status sync_dir(const std::string& dirname) override { return Status::NotSupported("HdfsFileSystem::sync_dir"); }
 
     StatusOr<bool> is_directory(const std::string& path) override {
-        return Status::NotSupported("HdfsFileSystem::is_directory");
+        std::string namenode;
+        RETURN_IF_ERROR(get_namenode_from_path(path, &namenode));
+        std::shared_ptr<HdfsFsClient> hdfs_client;
+        RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, hdfs_client, _options));
+
+        return _is_directory(hdfs_client->hdfs_fs, path);
     }
 
     Status canonicalize(const std::string& path, std::string* file) override {
@@ -463,6 +583,7 @@ public:
 
 private:
     Status _path_exists(hdfsFS fs, const std::string& path);
+    static StatusOr<bool> _is_directory(hdfsFS fs, const std::string& path);
 
     FSOptions _options;
 };
@@ -557,6 +678,17 @@ Status HdfsFileSystem::_path_exists(hdfsFS fs, const std::string& path) {
     return status == 0 ? Status::OK() : Status::NotFound(path);
 }
 
+StatusOr<bool> HdfsFileSystem::_is_directory(hdfsFS fs, const std::string& path) {
+    hdfsFileInfo* file_info = hdfsGetPathInfo(fs, path.c_str());
+    if (file_info == nullptr) {
+        return hdfs_error_to_status(fmt::format("Failed to get HDFS path info: {}.", path), errno);
+    }
+
+    bool is_dir = (file_info->mKind == kObjectKindDirectory);
+    hdfsFreeFileInfo(file_info, 1);
+    return is_dir;
+}
+
 StatusOr<std::unique_ptr<WritableFile>> HdfsFileSystem::new_writable_file(const std::string& path) {
     return HdfsFileSystem::new_writable_file(WritableFileOptions(), path);
 }
@@ -568,11 +700,8 @@ StatusOr<std::unique_ptr<WritableFile>> HdfsFileSystem::new_writable_file(const 
     std::shared_ptr<HdfsFsClient> hdfs_client;
     RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, hdfs_client, _options));
     int flags = O_WRONLY;
-    if (opts.mode == FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE) {
-        if (auto st = _path_exists(hdfs_client->hdfs_fs, path); st.ok()) {
-            return Status::NotSupported(fmt::format("Cannot truncate a file by hdfs writer, path={}", path));
-        }
-    } else if (opts.mode == MUST_CREATE) {
+    // O_WRONLY means create or overwrite for hdfsOpenFile, which is exactly CREATE_OR_OPEN_WITH_TRUNCATE
+    if (opts.mode == MUST_CREATE) {
         if (auto st = _path_exists(hdfs_client->hdfs_fs, path); st.ok()) {
             return Status::AlreadyExist(path);
         }
@@ -580,12 +709,10 @@ StatusOr<std::unique_ptr<WritableFile>> HdfsFileSystem::new_writable_file(const 
         return Status::NotSupported("Open with MUST_EXIST not supported by hdfs writer");
     } else if (opts.mode == CREATE_OR_OPEN) {
         return Status::NotSupported("Open with CREATE_OR_OPEN not supported by hdfs writer");
-    } else {
+    } else if (opts.mode != CREATE_OR_OPEN_WITH_TRUNCATE) {
         auto msg = strings::Substitute("Unsupported open mode $0", opts.mode);
         return Status::NotSupported(msg);
     }
-
-    flags |= O_CREAT;
 
     // `io.file.buffer.size` of https://apache.github.io/hadoop/hadoop-project-dist/hadoop-common/core-default.xml
     int hdfs_write_buffer_size = 0;
@@ -597,7 +724,7 @@ StatusOr<std::unique_ptr<WritableFile>> HdfsFileSystem::new_writable_file(const 
         hdfs_write_buffer_size = _options.export_sink->hdfs_write_buffer_size_kb;
     }
     if (_options.upload != nullptr && _options.upload->__isset.hdfs_write_buffer_size_kb) {
-        hdfs_write_buffer_size = _options.upload->__isset.hdfs_write_buffer_size_kb;
+        hdfs_write_buffer_size = _options.upload->hdfs_write_buffer_size_kb;
     }
 
     hdfsFile file = hdfsOpenFile(hdfs_client->hdfs_fs, path.c_str(), flags, hdfs_write_buffer_size, 0, 0);

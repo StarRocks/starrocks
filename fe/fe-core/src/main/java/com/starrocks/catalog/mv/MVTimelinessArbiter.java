@@ -14,29 +14,47 @@
 
 package com.starrocks.catalog.mv;
 
+import com.google.common.base.Preconditions;
+import com.google.common.base.Stopwatch;
+import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvBaseTableUpdateInfo;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.sql.common.PCell;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.common.PCellSetMapping;
+import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.common.PCellUtils;
+import com.starrocks.sql.common.PCellWithName;
+import com.starrocks.sql.common.PartitionDiff;
+import com.starrocks.sql.common.PartitionDiffResult;
+import com.starrocks.sql.common.PartitionDiffer;
+import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
-import java.util.function.Consumer;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.MvRefreshArbiter.getMvBaseTableUpdateInfo;
 import static com.starrocks.catalog.MvRefreshArbiter.needsToRefreshTable;
+import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 
 /**
  * {@link MVTimelinessArbiter} is the base class of all materialized view timeliness arbiters which is used to determine the mv's
@@ -49,12 +67,65 @@ public abstract class MVTimelinessArbiter {
 
     // the materialized view to check
     protected final MaterializedView mv;
-    // whether is query rewrite or mv refresh
-    protected final boolean isQueryRewrite;
+    // differ
+    protected PartitionDiffer differ;
 
-    public MVTimelinessArbiter(MaterializedView mv, boolean isQueryRewrite) {
+    // parameters for query rewrite
+    public static class QueryRewriteParams {
+        private final boolean isQueryRewrite;
+        private final OptimizerContext optimizerContext;
+        private final long timeLimit;
+        private long loopCounter = 0;
+
+        public QueryRewriteParams(boolean isQueryRewrite, OptimizerContext optimizerContext) {
+            this.isQueryRewrite = isQueryRewrite;
+            this.optimizerContext = optimizerContext;
+            if (optimizerContext != null) {
+                SessionVariable sessionVariable = optimizerContext.getSessionVariable();
+                this.timeLimit = Math.max(sessionVariable.getOptimizerExecuteTimeout() / 2, 1000);
+            } else {
+                this.timeLimit = -1;
+            }
+        }
+
+        public static QueryRewriteParams ofRefresh() {
+            return new QueryRewriteParams(false, null);
+        }
+
+        public static QueryRewriteParams ofQueryRewrite(OptimizerContext optimizerContext) {
+            return new QueryRewriteParams(true, optimizerContext);
+        }
+
+        public void checkQueryRewriteExhausted() {
+            if (!isQueryRewrite || timeLimit <= 0) {
+                return;
+            }
+            // to avoid too frequent check, check every 100 loops
+            if (++loopCounter % 100 != 0) {
+                return;
+            }
+            Stopwatch stopwatch = optimizerContext.getOptimizerTimer();
+            long elapsed = stopwatch.elapsed(TimeUnit.MILLISECONDS);
+            if (elapsed > timeLimit) {
+                throw new RuntimeException(String.format("Materialized view query rewrite time limit exceeded, " +
+                        ",time limit: %d ms, elapsed: %d ms", timeLimit, elapsed));
+            }
+        }
+
+        public boolean isQueryRewrite() {
+            return isQueryRewrite;
+        }
+
+        public OptimizerContext getOptimizerContext() {
+            return optimizerContext;
+        }
+    }
+    protected final QueryRewriteParams queryRewriteParams;
+
+    public MVTimelinessArbiter(MaterializedView mv,
+                               QueryRewriteParams queryRewriteParams) {
         this.mv = mv;
-        this.isQueryRewrite = isQueryRewrite;
+        this.queryRewriteParams = queryRewriteParams;
     }
 
     /**
@@ -76,10 +147,13 @@ public abstract class MVTimelinessArbiter {
      * @return : partitioned materialized view's all need updated partition names.
      */
     public MvUpdateInfo getMVTimelinessUpdateInfo(TableProperty.QueryRewriteConsistencyMode mode) throws AnalysisException {
-        if (mode == TableProperty.QueryRewriteConsistencyMode.LOOSE) {
-            return getMVTimelinessUpdateInfoInLoose();
-        } else {
-            return getMVTimelinessUpdateInfoInChecked();
+        switch (mode) {
+            case LOOSE:
+                return getMVTimelinessUpdateInfoInLoose();
+            case FORCE_MV:
+                return getMVTimelinessUpdateInfoInForceMVMode();
+            default:
+                return getMVTimelinessUpdateInfoInChecked();
         }
     }
 
@@ -90,17 +164,11 @@ public abstract class MVTimelinessArbiter {
     protected abstract MvUpdateInfo getMVTimelinessUpdateInfoInChecked() throws AnalysisException;
 
     /**
-     * In Loose mode, do not need to check mv partition's data is consistent with base table's partition's data.
-     * Only need to check the mv partition existence.
-     */
-    protected abstract MvUpdateInfo getMVTimelinessUpdateInfoInLoose();
-
-    /**
      * Determine the refresh type of the materialized view.
-     * @param refBaseTableAndColumns ref base table partition infos
+     * @param refBaseTablePartitionCols ref base table partition infos
      * @return the refresh type of the materialized view
      */
-    protected boolean needsRefreshOnNonRefBaseTables(Map<Table, Column> refBaseTableAndColumns) {
+    protected boolean needsRefreshOnNonRefBaseTables(Map<Table, List<Column>> refBaseTablePartitionCols) {
         TableProperty tableProperty = mv.getTableProperty();
         boolean isDisableExternalForceQueryRewrite = tableProperty != null &&
                 tableProperty.getForceExternalTableQueryRewrite() == TableProperty.QueryRewriteConsistencyMode.DISABLE;
@@ -110,7 +178,7 @@ public abstract class MVTimelinessArbiter {
             if (baseTable.isView()) {
                 continue;
             }
-            if (refBaseTableAndColumns.containsKey(baseTable)) {
+            if (refBaseTablePartitionCols.containsKey(baseTable)) {
                 continue;
             }
             // skip external table not supported for query rewrite, return all partitions ?
@@ -119,7 +187,7 @@ public abstract class MVTimelinessArbiter {
                 return true;
             }
             // If the non-ref table has already changed, need refresh all materialized views' partitions.
-            if (needsToRefreshTable(mv, baseTable, isQueryRewrite)) {
+            if (needsToRefreshTable(mv, tableInfo, baseTable, queryRewriteParams)) {
                 return true;
             }
         }
@@ -131,26 +199,28 @@ public abstract class MVTimelinessArbiter {
      * @param baseChangedPartitionNames base table changed partition names
      * @param baseToMvNameRef base table to mv name reference
      */
-    protected Set<String> getMVToRefreshPartitionNames(
-            Map<Table, Set<String>> baseChangedPartitionNames,
-            Map<Table, Map<String, Set<String>>> baseToMvNameRef) throws AnalysisException {
-        Set<String> needRefreshMvPartitionNames = Sets.newHashSet();
+    protected PCellSortedSet getMVToRefreshPartitionNames(
+            Map<Table, PCellSortedSet> baseChangedPartitionNames,
+            Map<Table, PCellSetMapping> baseToMvNameRef) throws AnalysisException {
+        PCellSortedSet needRefreshMvPartitionNames = PCellSortedSet.of();
         if (baseToMvNameRef.isEmpty()) {
             return needRefreshMvPartitionNames;
         }
-        for (Map.Entry<Table, Set<String>> entry : baseChangedPartitionNames.entrySet()) {
+        for (Map.Entry<Table, PCellSortedSet> entry : baseChangedPartitionNames.entrySet()) {
             Table baseTable = entry.getKey();
             if (!baseToMvNameRef.containsKey(baseTable)) {
                 throw new AnalysisException(String.format("Can't find base table %s from baseToMvNameRef",
                         baseTable.getName()));
             }
-            Map<String, Set<String>> baseTableRefMvPartNames = baseToMvNameRef.get(baseTable);
-            for (String partitionName : entry.getValue()) {
-                if (!baseTableRefMvPartNames.containsKey(partitionName)) {
+            PCellSetMapping baseTableRefMvPartNames = baseToMvNameRef.get(baseTable);
+            for (PCellWithName pCell : entry.getValue().getPartitions()) {
+                String partitionName = pCell.name();
+                PCellSortedSet baseToMVPCellSet = baseTableRefMvPartNames.get(partitionName);
+                if (baseToMVPCellSet == null) {
                     throw new AnalysisException(String.format("Can't find base table %s from baseToMvNameRef",
                             baseTable.getName()));
                 }
-                needRefreshMvPartitionNames.addAll(baseTableRefMvPartNames.get(partitionName));
+                needRefreshMvPartitionNames.addAll(baseToMVPCellSet);
             }
         }
         return needRefreshMvPartitionNames;
@@ -161,16 +231,15 @@ public abstract class MVTimelinessArbiter {
      * @param refBaseTableAndColumns ref base table and columns of mv
      * @return ref base table's changed partition names
      */
-    protected Map<Table, Set<String>> collectBaseTableUpdatePartitionNames(Map<Table, Column> refBaseTableAndColumns,
-                                                                           MvUpdateInfo mvUpdateInfo) {
-        Map<Table, Set<String>> baseChangedPartitionNames = Maps.newHashMap();
-        for (Map.Entry<Table, Column> e : refBaseTableAndColumns.entrySet()) {
-            Table baseTable = e.getKey();
+    protected Map<Table, PCellSortedSet> collectBaseTableUpdatePartitionNames(Map<Table, List<Column>> refBaseTableAndColumns,
+                                                                              MvUpdateInfo mvUpdateInfo) {
+        Map<Table, PCellSortedSet> baseChangedPartitionNames = Maps.newHashMap();
+        for (Table baseTable : refBaseTableAndColumns.keySet()) {
             MvBaseTableUpdateInfo mvBaseTableUpdateInfo = getMvBaseTableUpdateInfo(mv, baseTable,
-                    true, isQueryRewrite);
+                    true, queryRewriteParams);
             mvUpdateInfo.getBaseTableUpdateInfos().put(baseTable, mvBaseTableUpdateInfo);
             // If base table is a mv, its to-update partitions may not be created yet, skip it
-            baseChangedPartitionNames.put(baseTable, mvBaseTableUpdateInfo.getToRefreshPartitionNames());
+            baseChangedPartitionNames.put(baseTable, mvBaseTableUpdateInfo.getToRefreshPCells());
         }
         return baseChangedPartitionNames;
     }
@@ -181,14 +250,17 @@ public abstract class MVTimelinessArbiter {
      * @param baseTableUpdateInfoMap base table update info from MvTimelinessInfo
      * @return the base table to its changed partition and cell map if it's mv, empty else
      */
-    protected void collectExtraBaseTableChangedPartitions(
-            Map<Table, MvBaseTableUpdateInfo> baseTableUpdateInfoMap,
-            Consumer<Map.Entry<Table, Map<String, PCell>>> consumer) {
-        Map<Table, Map<String, PCell>> extraChangedPartitions = baseTableUpdateInfoMap.entrySet().stream()
-                .filter(e -> !e.getValue().getMvPartitionNameToCellMap().isEmpty())
-                .collect(Collectors.toMap(e -> e.getKey(), e -> e.getValue().getMvPartitionNameToCellMap()));
-        for (Map.Entry<Table, Map<String, PCell>> entry : extraChangedPartitions.entrySet()) {
-            consumer.accept(entry);
+    protected void collectExtraBaseTableChangedPartitions(Map<Table, MvBaseTableUpdateInfo> baseTableUpdateInfoMap,
+                                                          Map<Table, PCellSortedSet> basePartitionNameToRangeMap) {
+        Map<Table, PCellSortedSet> extraChangedPartitions = baseTableUpdateInfoMap.entrySet().stream()
+                .filter(e -> !e.getValue().getRefBaseNestedMVPCells().isEmpty())
+                .collect(Collectors.toMap(e -> e.getKey(), e -> e.getValue().getRefBaseNestedMVPCells()));
+        for (Map.Entry<Table, PCellSortedSet> entry : extraChangedPartitions.entrySet()) {
+            Table baseTable = entry.getKey();
+            Preconditions.checkState(basePartitionNameToRangeMap.containsKey(baseTable));
+            PCellSortedSet refBaseTablePartitionRangeMap = basePartitionNameToRangeMap.get(baseTable);
+            PCellSortedSet basePartitionNameToRanges = entry.getValue();
+            refBaseTablePartitionRangeMap.addAll(basePartitionNameToRanges);
         }
     }
 
@@ -198,11 +270,143 @@ public abstract class MVTimelinessArbiter {
         if (!allOlapTables) {
             return;
         }
-        mv.getRangePartitionMap().keySet().forEach(mvPartitionName -> {
-            if (!mv.getPartition(mvPartitionName).hasStorageData()) {
+        mv.getVisiblePartitionNames().forEach(mvPartitionName -> {
+            Partition partition = mv.getPartition(mvPartitionName);
+            if (partition != null && !partition.getDefaultPhysicalPartition().hasStorageData()) {
                 // add empty partitions
-                mvUpdateInfo.addMvToRefreshPartitionNames(mvPartitionName);
+                Optional<PCellWithName> pCellWithName = PCellUtils.of(mv, mvPartitionName);
+                Preconditions.checkState(pCellWithName.isPresent());
+                mvUpdateInfo.addMVToRefreshPartitionNames(pCellWithName.get());
             }
         });
+    }
+
+    /**
+     * Collect mv ref base table's partition cells into mv update info.
+     */
+    public Map<Table, PCellSortedSet> syncBaseTablePartitions(MvUpdateInfo mvUpdateInfo) {
+        PartitionInfo partitionInfo = mv.getPartitionInfo();
+        if (partitionInfo.isUnPartitioned()) {
+            return null;
+        }
+        Map<Table, PCellSortedSet> basePartitionNameToRangeMap = differ.syncBaseTablePartitionInfos();
+        if (CollectionUtils.sizeIsEmpty(basePartitionNameToRangeMap)) {
+            return null;
+        }
+        // add into base table info
+        mvUpdateInfo.addRefBaseTablePCells(basePartitionNameToRangeMap);
+        return basePartitionNameToRangeMap;
+    }
+
+    public PartitionDiff getChangedPartitionDiff(MaterializedView mv,
+                                                 Map<Table, PCellSortedSet> basePartitionNameToRangeMap)  {
+        PartitionInfo partitionInfo = mv.getPartitionInfo();
+        try {
+            if (partitionInfo.isUnPartitioned()) {
+                return null;
+            }
+            PartitionDiffResult result = differ.computePartitionDiff(null,
+                    basePartitionNameToRangeMap);
+            if (result == null) {
+                logMVPrepare(mv, "Partitioned mv compute list diff failed");
+                return null;
+            }
+            return result.diff;
+        } catch (Exception e) {
+            logMVPrepare(mv, "Materialized view compute partition difference with base table failed:" + e);
+        }
+        return null;
+    }
+
+    /**
+     * In Loose mode, do not need to check mv partition's data is consistent with base table's partition's data.
+     * Only need to check the mv partition existence.
+     */
+    public MvUpdateInfo getMVTimelinessUpdateInfoInLoose() {
+        MvUpdateInfo mvUpdateInfo = MvUpdateInfo.partialRefresh(mv, TableProperty.QueryRewriteConsistencyMode.LOOSE);
+        Map<Table, PCellSortedSet> refBaseTablePartitionMap = syncBaseTablePartitions(mvUpdateInfo);
+        if (refBaseTablePartitionMap == null) {
+            logMVPrepare(mv, "Sync base table partition infos failed");
+            return MvUpdateInfo.fullRefresh(mv);
+        }
+
+        PartitionDiff diff;
+        try (Timer ignored = Tracers.watchScope("GetChangedPartitionDiff")) {
+            diff = getChangedPartitionDiff(mv, refBaseTablePartitionMap);
+            if (diff == null) {
+                return null;
+            }
+        }
+        PCellSortedSet adds = diff.getAdds();
+        if (adds != null && !adds.isEmpty()) {
+            mvUpdateInfo.getMVToRefreshPCells().addAll(adds);
+        }
+        addEmptyPartitionsToRefresh(mvUpdateInfo);
+        try (Timer ignored = Tracers.watchScope("CollectBaseTableUpdatePartitionNames")) {
+            collectBaseTableUpdatePartitionNamesInLoose(mvUpdateInfo);
+        }
+        try (Timer ignored = Tracers.watchScope("CollectMVToBaseTablePartitionNames")) {
+            collectMVToBaseTablePartitionNames(refBaseTablePartitionMap, diff, mvUpdateInfo);
+        }
+        return mvUpdateInfo;
+    }
+
+    /**
+     * Collect mv to base table partition names mapping to be used in {@code MvUpdate#getBaseTableToRefreshPartitionNames}
+     * for union compensate rewrite.
+     */
+    protected void collectMVToBaseTablePartitionNames(Map<Table, PCellSortedSet> refBaseTablePartitionMap,
+                                                      PartitionDiff diff,
+                                                      MvUpdateInfo mvUpdateInfo) {
+        PCellSortedSet mvPartitionToCells = mv.getPartitionCells(Optional.empty());
+        diff.getDeletes().forEach(mvPartitionToCells::remove);
+        mvPartitionToCells.addAll(diff.getAdds());
+        Map<String, Map<Table, PCellSortedSet>> mvToBaseNameRef = differ
+                .generateMvRefMap(mvPartitionToCells, refBaseTablePartitionMap);
+        mvUpdateInfo.getMVPartNameToBasePCells().putAll(mvToBaseNameRef);
+    }
+    
+    /**
+     * TODO: Optimize performance in loos/force_mv mode
+     * TODO: in loose mode, ignore partition that both exists in baseTable and mv
+     */
+    protected void collectBaseTableUpdatePartitionNamesInLoose(MvUpdateInfo mvUpdateInfo) {
+        Map<Table, List<Column>> refBaseTableAndColumns = mv.getRefBaseTablePartitionColumns();
+        // collect & update mv's to refresh partitions based on base table's partition changes
+        collectBaseTableUpdatePartitionNames(refBaseTableAndColumns, mvUpdateInfo);
+    }
+
+    /**
+     * In Force MV mode, do not to check mv's consistency with base table's partition's data if ttl is not expired.
+     * - if mv contains no ttl, always no need to refresh;
+     * - if mv contains ttl, no need to refresh if query's partitions is in ttl's lifecycle; and need to refresh if
+     * query's partitions is out of ttl's lifecycle.
+     */
+    public MvUpdateInfo getMVTimelinessUpdateInfoInForceMVMode() {
+        String retentionCondition = mv.getTableProperty().getPartitionRetentionCondition();
+        if (Strings.isNullOrEmpty(retentionCondition)) {
+            return MvUpdateInfo.noRefresh(mv);
+        }
+        MvUpdateInfo mvUpdateInfo = MvUpdateInfo.partialRefresh(mv, TableProperty.QueryRewriteConsistencyMode.FORCE_MV);
+        Map<Table, PCellSortedSet> refBaseTablePartitionMap = syncBaseTablePartitions(mvUpdateInfo);
+        if (refBaseTablePartitionMap == null) {
+            logMVPrepare(mv, "Sync base table partition infos failed");
+            return MvUpdateInfo.fullRefresh(mv);
+        }
+
+        PartitionDiff diff;
+        try (Timer ignored = Tracers.watchScope("GetChangedPartitionDiff")) {
+            diff = getChangedPartitionDiff(mv, refBaseTablePartitionMap);
+            if (diff == null) {
+                logMVPrepare(mv, "Materialized view compute partition difference with base table failed");
+                return null;
+            }
+        }
+        PCellSortedSet adds = diff.getAdds();
+        addEmptyPartitionsToRefresh(mvUpdateInfo);
+        if (adds != null && !adds.isEmpty()) {
+            mvUpdateInfo.getMVToRefreshPCells().addAll(adds);
+        }
+        return mvUpdateInfo;
     }
 }

@@ -20,11 +20,9 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.ExpectedException;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -33,10 +31,7 @@ public class JDBCConfigSetTest {
 
     private static ConnectContext connectContext;
 
-    @Rule
-    public ExpectedException expectedEx = ExpectedException.none();
-
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
 
@@ -49,23 +44,23 @@ public class JDBCConfigSetTest {
         try {
             Map<String, String> properties = new HashMap<>();
             JDBCMetaCache<String, Integer> cacheWithDefaultClose = new JDBCMetaCache<>(properties, false);
-            Assert.assertFalse(cacheWithDefaultClose.isEnableCache());
+            Assertions.assertFalse(cacheWithDefaultClose.isEnableCache());
             JDBCCacheTestUtil.openCacheEnable(connectContext);
-            Assert.assertTrue(Config.jdbc_meta_default_cache_enable);
+            Assertions.assertTrue(Config.jdbc_meta_default_cache_enable);
             JDBCMetaCache<String, Integer> cacheWithDefaultOpen = new JDBCMetaCache<>(properties, false);
-            Assert.assertTrue(cacheWithDefaultOpen.isEnableCache());
-            Assert.assertEquals(cacheWithDefaultOpen.getCurrentExpireSec(), Config.jdbc_meta_default_cache_expire_sec);
+            Assertions.assertTrue(cacheWithDefaultOpen.isEnableCache());
+            Assertions.assertEquals(cacheWithDefaultOpen.getCurrentExpireSec(), Config.jdbc_meta_default_cache_expire_sec);
             properties.put("jdbc_meta_cache_enable", "true");
             properties.put("jdbc_meta_cache_expire_sec", "60");
             JDBCMetaCache<String, Integer> cacheOpen = new JDBCMetaCache<>(properties, false);
-            Assert.assertTrue(cacheOpen.isEnableCache());
-            Assert.assertNotEquals(cacheOpen.getCurrentExpireSec(), Config.jdbc_meta_default_cache_expire_sec);
+            Assertions.assertTrue(cacheOpen.isEnableCache());
+            Assertions.assertNotEquals(cacheOpen.getCurrentExpireSec(), Config.jdbc_meta_default_cache_expire_sec);
             properties.put("jdbc_meta_cache_enable", "false");
             JDBCMetaCache<String, Integer> cacheClose = new JDBCMetaCache<>(properties, false);
-            Assert.assertFalse(cacheClose.isEnableCache());
+            Assertions.assertFalse(cacheClose.isEnableCache());
             JDBCCacheTestUtil.closeCacheEnable(connectContext);
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -76,9 +71,9 @@ public class JDBCConfigSetTest {
             JDBCMetaCache<String, Integer> cache = new JDBCMetaCache<>(properties, false);
             int step1 = cache.get("testKey", k -> 20231111);
             int step2 = cache.get("testKey", k -> 20231212);
-            Assert.assertNotEquals(step1, step2);
+            Assertions.assertNotEquals(step1, step2);
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -86,17 +81,17 @@ public class JDBCConfigSetTest {
     public void testJDBCCacheGetWithEnable() {
         try {
             JDBCCacheTestUtil.openCacheEnable(connectContext);
-            Assert.assertTrue(Config.jdbc_meta_default_cache_enable);
+            Assertions.assertTrue(Config.jdbc_meta_default_cache_enable);
             Map<String, String> properties = new HashMap<>();
             properties.put("jdbc_meta_cache_enable", "true");
             JDBCMetaCache<String, Integer> cache = new JDBCMetaCache<>(properties, false);
-            Assert.assertTrue(cache.isEnableCache());
+            Assertions.assertTrue(cache.isEnableCache());
             int step1 = cache.get("testKey", k -> 20231111);
             int step2 = cache.get("testKey", k -> 20231212);
-            Assert.assertEquals(step1, step2);
+            Assertions.assertEquals(step1, step2);
             JDBCCacheTestUtil.closeCacheEnable(connectContext);
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -108,13 +103,13 @@ public class JDBCConfigSetTest {
             properties.put("jdbc_meta_cache_enable", "true");
             JDBCMetaCache<String, Integer> cache = new JDBCMetaCache<>(properties, false);
             int invalidateBefore = cache.get("testKey", k -> 20231111);
-            Assert.assertEquals(invalidateBefore, 20231111);
+            Assertions.assertEquals(invalidateBefore, 20231111);
             cache.invalidate("testKey");
             int invalidateAfter = cache.get("testKey", k -> 20231212);
-            Assert.assertEquals(invalidateAfter, 20231212);
+            Assertions.assertEquals(invalidateAfter, 20231212);
             JDBCCacheTestUtil.closeCacheEnable(connectContext);
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -126,13 +121,13 @@ public class JDBCConfigSetTest {
             properties.put("jdbc_meta_cache_enable", "true");
             JDBCMetaCache<String, Integer> cache = new JDBCMetaCache<>(properties, false);
             int changeBefore = cache.get("testKey", k -> 20231111);
-            Assert.assertEquals(changeBefore, 20231111);
+            Assertions.assertEquals(changeBefore, 20231111);
             cache.invalidate("testKey");
             int changeAfter = cache.get("testKey", k -> 20231212);
-            Assert.assertEquals(changeAfter, 20231212);
+            Assertions.assertEquals(changeAfter, 20231212);
             JDBCCacheTestUtil.closeCacheEnable(connectContext);
         } catch (Exception e) {
-            Assert.fail();
+            Assertions.fail();
         }
     }
 
@@ -141,6 +136,6 @@ public class JDBCConfigSetTest {
         AdminSetConfigStmt adminSetConfigStmt =
                 (AdminSetConfigStmt) UtFrameUtils.parseStmtWithNewParser(setStmt, connectContext);
         DDLStmtExecutor.execute(adminSetConfigStmt, connectContext);
-        Assert.assertEquals(6000, Config.jdbc_meta_default_cache_expire_sec);
+        Assertions.assertEquals(6000, Config.jdbc_meta_default_cache_expire_sec);
     }
 }

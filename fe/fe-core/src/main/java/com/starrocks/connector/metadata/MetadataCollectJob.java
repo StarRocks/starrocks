@@ -15,13 +15,13 @@
 package com.starrocks.connector.metadata;
 
 import com.google.common.collect.Sets;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TResultSinkType;
 import org.apache.logging.log4j.LogManager;
@@ -108,7 +108,7 @@ public abstract class MetadataCollectJob {
     }
 
     protected ConnectContext buildConnectContext(SessionVariable originSessionVariable) {
-        ConnectContext context = new ConnectContext();
+        ConnectContext context = ConnectContext.buildInner();
         context.getSessionVariable().setEnableProfile(originSessionVariable.isEnableMetadataProfile());
         context.getSessionVariable().setParallelExecInstanceNum(1);
         context.getSessionVariable().setQueryTimeoutS(originSessionVariable.getMetadataCollectQueryTimeoutS());

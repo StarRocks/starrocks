@@ -20,27 +20,30 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.AggregatedMaterializedViewPushDownRewriter;
+import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.lang3.StringUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import static com.starrocks.sql.optimizer.rule.transformation.materialization.AggregateFunctionRollupUtils.REWRITE_ROLLUP_FUNCTION_MAP;
-import static com.starrocks.sql.optimizer.rule.transformation.materialization.AggregateFunctionRollupUtils.SAFE_REWRITE_ROLLUP_FUNCTION_MAP;
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase.getAggFunction;
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregateFunctionRollupUtils.REWRITE_ROLLUP_FUNCTION_MAP;
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregateFunctionRollupUtils.SAFE_REWRITE_ROLLUP_FUNCTION_MAP;
 
 public class MaterializedViewAggPushDownRewriteTest extends MaterializedViewTestBase {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         FeConstants.USE_MOCK_DICT_MANAGER = true;
         MaterializedViewTestBase.beforeClass();
@@ -129,21 +132,6 @@ public class MaterializedViewAggPushDownRewriteTest extends MaterializedViewTest
                     "   group by LO_ORDERDATE having sum(%s + 1) > 10", queryAggArg, queryAggArg);
             sql(query).contains("mv0");
         });
-    }
-
-    private String getAggFunction(String funcName, String aggArg) {
-        if (funcName.equals(FunctionSet.ARRAY_AGG)) {
-            funcName = String.format("array_agg(distinct %s)", aggArg);
-        } else if (funcName.equals(FunctionSet.BITMAP_UNION)) {
-            funcName = String.format("bitmap_union(to_bitmap(%s))", aggArg);
-        } else if (funcName.equals(FunctionSet.PERCENTILE_UNION)) {
-            funcName = String.format("percentile_union(percentile_hash(%s))", aggArg);
-        } else if (funcName.equals(FunctionSet.HLL_UNION)) {
-            funcName = String.format("hll_union(hll_hash(%s))", aggArg);
-        } else {
-            funcName = String.format("%s(%s)", funcName, aggArg);
-        }
-        return funcName;
     }
 
     @Test
@@ -678,7 +666,7 @@ public class MaterializedViewAggPushDownRewriteTest extends MaterializedViewTest
             {
                 String query = "select sum(LO_REVENUE) as revenue_sum\n" +
                         "   from lineorder l join supplier s on l.lo_suppkey = s.s_suppkey";
-                // TODO: It's safe to push down count(distinct) to mv only when join keys are uniqe constraint in this case.
+                // TODO: It's safe to push down count(distinct) to mv only when join keys are unique constraint in this case.
                 // TODO: support this if group by keys are equals to join keys
                 sql(query).match("mv0");
             }
@@ -1002,7 +990,7 @@ public class MaterializedViewAggPushDownRewriteTest extends MaterializedViewTest
                     sql(query).contains("mv1");
                 }
             } catch (Exception e) {
-                Assert.fail();
+                Assertions.fail();
             }
         });
     }
@@ -1064,5 +1052,325 @@ public class MaterializedViewAggPushDownRewriteTest extends MaterializedViewTest
                 sql(query).contains("mv0");
             });
         }
+    }
+
+    @Test
+    public void testAggPushDown_RollupFunctions_Avg() {
+        String mv = String.format("CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL as " +
+                "select LO_ORDERDATE, sum(LO_REVENUE) as revenue_sum, count(LO_REVENUE) as revenue_cnt \n" +
+                "from lineorder l group by LO_ORDERDATE");
+        starRocksAssert.withMaterializedView(mv, () -> {
+            String query = String.format("select LO_ORDERDATE, avg(LO_REVENUE) as revenue_sum\n" +
+                    "   from lineorder l join dates d on l.LO_ORDERDATE = d.d_datekey\n" +
+                    "   group by LO_ORDERDATE");
+            sql(query).contains("mv0");
+        });
+    }
+
+    @Test
+    public void testAggPushDown_RollupFunctions_MultiAvgs1() {
+        String mv = String.format("CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL as " +
+                "select LO_ORDERDATE, sum(LO_REVENUE) as revenue_sum, count(LO_REVENUE) as revenue_cnt \n" +
+                "from lineorder l group by LO_ORDERDATE");
+        starRocksAssert.withMaterializedView(mv, () -> {
+            String query = String.format("select LO_ORDERDATE, avg(LO_REVENUE) as avg1, avg(LO_REVENUE) as avg2\n" +
+                    "   from lineorder l join dates d on l.LO_ORDERDATE = d.d_datekey\n" +
+                    "   group by LO_ORDERDATE");
+            sql(query).contains("mv0");
+        });
+    }
+
+    @Test
+    public void testAggPushDown_RollupFunctions_MultiAvgs2() {
+        String mv = String.format("CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL as " +
+                "select LO_ORDERDATE, sum(LO_REVENUE) as revenue_sum, count(LO_REVENUE) as revenue_cnt,\n" +
+                " sum(lo_custkey) as sum_lo_custkey, count(lo_custkey) as count_lo_custkey\n" +
+                "from lineorder l group by LO_ORDERDATE");
+        starRocksAssert.withMaterializedView(mv, () -> {
+            String query = String.format("select LO_ORDERDATE, sum(LO_REVENUE), avg(LO_REVENUE) as avg1, " +
+                    "avg(LO_REVENUE) as avg2, avg(lo_custkey) as avg3 from lineorder l \n" +
+                    "join dates d on l.LO_ORDERDATE = d.d_datekey group by LO_ORDERDATE");
+            sql(query).contains("mv0");
+        });
+    }
+
+    @Test
+    public void testAggPushDownWithDecimalTypes() throws Exception {
+        String tbl1 = "CREATE TABLE `test_pt8` (\n" +
+                "  `id` bigint(20) NULL,\n" +
+                "  `pt` date NOT NULL,\n" +
+                "  `gmv` bigint(20) NULL,\n" +
+                "  `gmv2` bigint(20) NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`id`)\n" +
+                "PARTITION BY date_trunc('day', pt)\n" +
+                "DISTRIBUTED BY HASH(`pt`)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        String tbl2 = "CREATE TABLE `test_pt9` (\n" +
+                "  `id` bigint(20) NULL COMMENT \"id\",\n" +
+                "  `pt` date NOT NULL,\n" +
+                "  `name` varchar(20) NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`id`)\n" +
+                "PARTITION BY date_trunc('day', pt)\n" +
+                "DISTRIBUTED BY HASH(`pt`)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");\n" ;
+        starRocksAssert.withTable(tbl1);
+        starRocksAssert.withTable(tbl2);
+        String mv = "CREATE MATERIALIZED VIEW `test_pt8_mv` \n" +
+                "PARTITION BY (`pt`)\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 1\n" +
+                "REFRESH ASYNC START(\"2024-11-22 17:34:45\") EVERY(INTERVAL 1 MINUTE)\n" +
+                "PROPERTIES (\n" +
+                "\"query_rewrite_consistency\" = \"LOOSE\",\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS\n" +
+                "SELECT  `id`,`pt`,SUM((`gmv` + `gmv2`) * 0.01) AS `sum_channel_direct_indirect_gmv`\n" +
+                "FROM `test_pt8` GROUP BY  `id`,`pt`;\n";
+        starRocksAssert.withRefreshedMaterializedView(mv);
+        String query = "SELECT SUM((gmv+gmv2)*0.01)\n" +
+                "FROM test_pt8 WHERE pt = '20241126' AND id IN ( SELECT id FROM test_pt9 WHERE id = '1' )";
+        String plan = getQueryPlan(query, TExplainLevel.VERBOSE);
+        starRocksAssert.dropTable("test_pt8");
+        starRocksAssert.dropTable("test_pt9");
+        starRocksAssert.dropMaterializedView("test_pt8_mv");
+    }
+
+    @Test
+    public void testAggPushDownWithSubQuery() throws Exception {
+        String tbl1 = "CREATE TABLE `test_pt8` (\n" +
+                "  `id` bigint(20) NULL,\n" +
+                "  `pt` date NOT NULL,\n" +
+                "  `gmv` bigint(20) NULL,\n" +
+                "  `gmv2` bigint(20) NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`id`)\n" +
+                "PARTITION BY date_trunc('day', pt)\n" +
+                "DISTRIBUTED BY HASH(`pt`)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        String tbl2 = "CREATE TABLE `test_pt9` (\n" +
+                "  `id` bigint(20) NULL COMMENT \"id\",\n" +
+                "  `pt` date NOT NULL,\n" +
+                "  `name` varchar(20) NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`id`)\n" +
+                "PARTITION BY date_trunc('day', pt)\n" +
+                "DISTRIBUTED BY HASH(`pt`)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");\n" ;
+        starRocksAssert.withTable(tbl1);
+        starRocksAssert.withTable(tbl2);
+        String mv1 = "CREATE MATERIALIZED VIEW `test_pt8_mv` \n" +
+                "PARTITION BY (`pt`)\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 1\n" +
+                "REFRESH ASYNC START(\"2024-11-22 17:34:45\") EVERY(INTERVAL 1 MINUTE)\n" +
+                "PROPERTIES (\n" +
+                "\"query_rewrite_consistency\" = \"LOOSE\",\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS\n" +
+                "SELECT  `id`,`pt`,SUM(`gmv`) AS `sum_gmv`\n" +
+                "FROM `test_pt8` GROUP BY  `id`,`pt`;\n";
+        starRocksAssert.withRefreshedMaterializedView(mv1);
+        String mv2 = "CREATE MATERIALIZED VIEW `test_pt9_mv` \n" +
+                "PARTITION BY (`pt`)\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 1\n" +
+                "REFRESH ASYNC START(\"2024-11-22 17:34:45\") EVERY(INTERVAL 1 MINUTE)\n" +
+                "PROPERTIES (\n" +
+                "\"query_rewrite_consistency\" = \"LOOSE\",\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS\n" +
+                "SELECT  `id`,`pt`,count(1) AS `sum_gmv`\n" +
+                "FROM `test_pt9` GROUP BY  `id`,`pt`;\n";
+        starRocksAssert.withRefreshedMaterializedView(mv2);
+        String query = "SELECT SUM(gmv)\n" +
+                "FROM test_pt8 WHERE id IN ( SELECT distinct id FROM test_pt9 WHERE id in (select 1 from lineorder) )";
+        sql(query).contains("test_pt8_mv").contains("test_pt9_mv");
+        starRocksAssert.dropTable("test_pt8");
+        starRocksAssert.dropTable("test_pt9");
+        starRocksAssert.dropMaterializedView("test_pt8_mv");
+        starRocksAssert.dropMaterializedView("test_pt9_mv");
+    }
+
+    @Test
+    public void testAggPushDownTypeCastBug() throws Exception {
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `mv1` \n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"" +
+                ")\n" +
+                "AS SELECT `l`.`LO_ORDERDATE`, " +
+                "sum(`l`.`LO_REVENUE` + 1), " +
+                "max(`l`.`LO_REVENUE` + 1), " +
+                "min(`l`.`LO_REVENUE` + 1), " +
+                "bitmap_agg(`l`.`LO_REVENUE` + 1), " +
+                "hll_union(hll_hash(`l`.`LO_REVENUE` + 1)), " +
+                "percentile_union(percentile_hash(`l`.`LO_REVENUE` + 1)), " +
+                "any_value(`l`.`LO_REVENUE` + 1) , " +
+                "array_agg(DISTINCT `l`.`LO_REVENUE` + 1)\n" +
+                "FROM `lineorder` AS `l`\n" +
+                "GROUP BY `l`.`LO_ORDERDATE`;");
+        String query = " select LO_ORDERDATE, sum(LO_REVENUE + 1), max(LO_REVENUE + 1), sum(LO_REVENUE + 1), max(LO_REVENUE + " +
+                "1) , sum(LO_REVENUE + 1), max(LO_REVENUE + 1), count(distinct LO_REVENUE + 1), count(distinct LO_REVENUE + 1) " +
+                "from lineorder l join dates d " +
+                "on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE order by LO_ORDERDATE;";
+        String plan = getQueryPlan(query, TExplainLevel.NORMAL);
+        System.out.println(plan);
+        PlanTestBase.assertNotContains(plan, ": count AS BIGINT)");
+        PlanTestBase.assertContains(plan, "mv1",
+                "  2:AGGREGATE (update serialize)\n" +
+                        "  |  STREAMING\n" +
+                        "  |  output: sum(40: sum(l.LO_REVENUE + 1)), max(41: max(l.LO_REVENUE + 1)), " +
+                        "bitmap_union(43: bitmap_agg(l.LO_REVENUE + 1))\n" +
+                        "  |  group by: 57: cast, 39: LO_ORDERDATE");
+        starRocksAssert.dropMaterializedView("mv1");
+    }
+
+    @Test
+    public void testAggPushDownFailWithGroupByFunc0() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE fact_event_requests\n" +
+                "(\n" +
+                "    event_date                DATE                        NOT NULL,\n" +
+                "    request_id                VARCHAR(64)                NOT NULL,\n" +
+                "    event_time                DATETIME                  NOT NULL, \n" +
+                "    event_status              VARCHAR(32)                       ,\n" +
+                "    region_id                 INT                               ,\n" +
+                "    site_id                   INT                               ,\n" +
+                "    event_type                VARCHAR(16)                       ,\n" +
+                "    location_path             ARRAY<VARCHAR(12)>               ,\n" +
+                "    channel                   VARCHAR(8)                        \n" +
+                ")\n" +
+                "ENGINE = olap\n" +
+                "PARTITION BY RANGE (event_date)\n" +
+                "(\n" +
+                "    START (\"20250101\") END (\"20260101\") EVERY (INTERVAL 1 DAY)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(channel, request_id) BUCKETS 16\n" +
+                "PROPERTIES\n" +
+                "(\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");\n");
+        starRocksAssert.withTable("CREATE TABLE dim_location_area\n" +
+                "(\n" +
+                "    geohash              VARCHAR(12) NOT NULL,\n" +
+                "    area_name            VARCHAR(64)        \n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(geohash) BUCKETS 8\n" +
+                "PROPERTIES\n" +
+                "(\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_hourly_events\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "Partition by (event_date)\n" +
+                "AS\n" +
+                "SELECT\n" +
+                "    event_date,\n" +
+                "    DATE_TRUNC('hour', event_time) as metric_time_1h,\n" +
+                "    region_id,\n" +
+                "    site_id,\n" +
+                "    channel,\n" +
+                "    location_path[cardinality(location_path)] as last_geohash,\n" +
+                "    COUNT(request_id) as total_requests\n" +
+                "FROM fact_event_requests  \n" +
+                "WHERE event_type = 'TYPE_A'\n" +
+                "GROUP BY event_date, metric_time_1h, region_id, site_id, channel, last_geohash;\n");
+        UtFrameUtils.mockTimelinessForAsyncMVTest(connectContext);
+        {
+            String query = "SELECT " +
+                    "    DATE_TRUNC('hour', event_time) as metric_time_1h,\n" +
+                    "    location_path[cardinality(location_path)] as last_geohash,\n" +
+                    "    COUNT(request_id) as total_requests\n" +
+                    "FROM fact_event_requests  \n" +
+                    "WHERE event_type = 'TYPE_A'\n" +
+                    "GROUP BY metric_time_1h, last_geohash;";
+            String plan = getFragmentPlan(query);
+            System.out.println(plan);
+            PlanTestBase.assertContains(plan, "mv_hourly_events");
+        }
+    }
+
+    @Test
+    public void testAggPushDownFailWithGroupByFunc2() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE fact_event_requests\n" +
+                "(\n" +
+                "    event_date                DATE                        NOT NULL,\n" +
+                "    request_id                VARCHAR(64)                NOT NULL,\n" +
+                "    event_time                DATETIME                  NOT NULL, \n" +
+                "    event_status              VARCHAR(32)                       ,\n" +
+                "    region_id                 INT                               ,\n" +
+                "    site_id                   INT                               ,\n" +
+                "    event_type                VARCHAR(16)                       ,\n" +
+                "    location_path             ARRAY<VARCHAR(12)>               ,\n" +
+                "    channel                   VARCHAR(8)                        \n" +
+                ")\n" +
+                "ENGINE = olap\n" +
+                "PARTITION BY RANGE (event_date)\n" +
+                "(\n" +
+                "    START (\"20250101\") END (\"20260101\") EVERY (INTERVAL 1 DAY)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(channel, request_id) BUCKETS 16\n" +
+                "PROPERTIES\n" +
+                "(\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");\n");
+        starRocksAssert.withTable("CREATE TABLE dim_location_area\n" +
+                "(\n" +
+                "    geohash              VARCHAR(12) NOT NULL,\n" +
+                "    area_name            VARCHAR(64)        \n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(geohash) BUCKETS 8\n" +
+                "PROPERTIES\n" +
+                "(\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_hourly_events\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "Partition by (event_date)\n" +
+                "AS\n" +
+                "SELECT\n" +
+                "    event_date,\n" +
+                "    DATE_TRUNC('hour', event_time) as metric_time_1h,\n" +
+                "    region_id,\n" +
+                "    site_id,\n" +
+                "    channel,\n" +
+                "    location_path[cardinality(location_path)] as last_geohash,\n" +
+                "    COUNT(request_id) as total_requests\n" +
+                "FROM fact_event_requests  \n" +
+                "WHERE event_type = 'TYPE_A'\n" +
+                "GROUP BY event_date, metric_time_1h, region_id, site_id, channel, last_geohash;\n");
+        UtFrameUtils.mockTimelinessForAsyncMVTest(connectContext);
+        String sql = "SELECT\n" +
+                "  DATE_TRUNC('hour', event_time) as metric_time_1h,\n" +
+                "  CAST(COUNT(request_id) AS DOUBLE)\n" +
+                "FROM\n" +
+                "  fact_event_requests AS fact_data_source\n" +
+                "LEFT JOIN (\n" +
+                "  SELECT\n" +
+                "    geohash,\n" +
+                "    max(area_name) AS area_name\n" +
+                "  FROM\n" +
+                "    dim_location_area\n" +
+                "  GROUP BY\n" +
+                "    1) AS dim_location_area \n" +
+                "    ON dim_location_area.geohash = location_path[cardinality(location_path)]\n" +
+                "WHERE event_date = 20251001\n" +
+                "  AND (region_id = 2\n" +
+                "    AND site_id IN (4)\n" +
+                "      AND area_name IN ('Zone-1')\n" +
+                "        AND event_type = 'TYPE_A'\n" +
+                "        AND channel IN ('mobile'))\n" +
+                "GROUP BY 1";
+        String plan = getFragmentPlan(sql);
+        PlanTestBase.assertContains(plan, "mv_hourly_events");
     }
 }

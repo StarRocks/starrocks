@@ -14,13 +14,14 @@
 
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/connector")
 
-add_library(Connector STATIC
+ADD_BE_LIB(Connector
         connector.cpp
         hive_connector.cpp
         es_connector.cpp
         jdbc_connector.cpp
         lake_connector.cpp
         mysql_connector.cpp
+        benchmark_connector.cpp
         file_connector.cpp
         binlog_connector.cpp
         iceberg_connector.cpp
@@ -31,4 +32,9 @@ add_library(Connector STATIC
         utils.cpp
         async_flush_stream_poller.cpp
         sink_memory_manager.cpp
+        partition_chunk_writer.cpp
+        connector_sink_executor.cpp
+        deletion_vector/deletion_vector.cpp
+        deletion_vector/deletion_bitmap.cpp
+        iceberg_delete_sink.cpp
 )

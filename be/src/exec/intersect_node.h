@@ -16,6 +16,9 @@
 
 #include <unordered_set>
 
+#include "base/hash/hash_std.hpp"
+#include "base/phmap/phmap.h"
+#include "base/string/slice.h"
 #include "column/chunk.h"
 #include "column/column_hash.h"
 #include "column/column_helper.h"
@@ -24,9 +27,6 @@
 #include "exec/olap_common.h"
 #include "exprs/expr_context.h"
 #include "runtime/mem_pool.h"
-#include "util/hash_util.hpp"
-#include "util/phmap/phmap.h"
-#include "util/slice.h"
 
 namespace starrocks {
 class DescriptorTbl;
@@ -68,8 +68,10 @@ private:
     const int _tuple_id;
     // Descriptor for tuples this union node constructs.
     const TupleDescriptor* _tuple_desc;
+    bool _has_outer_join_child = false;
     // Exprs materialized by this node. The i-th result expr list refers to the i-th child.
     std::vector<std::vector<ExprContext*>> _child_expr_lists;
+    std::vector<std::vector<ExprContext*>> _local_partition_by_exprs;
 
     struct IntersectColumnTypes {
         TypeDescriptor result_type;

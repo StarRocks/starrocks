@@ -15,6 +15,7 @@
 
 package com.starrocks.connector.delta;
 
+import com.starrocks.type.Type;
 import io.delta.kernel.types.ArrayType;
 import io.delta.kernel.types.BinaryType;
 import io.delta.kernel.types.BooleanType;
@@ -79,7 +80,7 @@ public enum DeltaDataType {
 
     /**
      * @param deltaDataType A concrete implementation of {@link DataType} class that we would
-     *                      like to map to {@link com.starrocks.catalog.Type} instance.
+     *                      like to map to {@link Type} instance.
      * @return mapped instance of {@link DeltaDataType} Enum.
      */
     public static DeltaDataType instanceFrom(Class<? extends DataType> deltaDataType) {

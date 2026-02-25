@@ -15,23 +15,24 @@
 
 package com.starrocks.sql.optimizer;
 
-
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
+import com.starrocks.sql.ast.JoinOperator;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -41,19 +42,20 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.statistic.StatsConstants;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class UtilsTest {
     private static final String DEFAULT_CREATE_TABLE_TEMPLATE = ""
@@ -84,11 +86,11 @@ public class UtilsTest {
 
     protected static void setTableStatistics(OlapTable table, long rowCount) {
         for (Partition partition : table.getAllPartitions()) {
-            partition.getBaseIndex().setRowCount(rowCount);
+            partition.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(rowCount);
         }
     }
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         Config.alter_scheduler_interval_millisecond = 1;
         UtFrameUtils.createMinStarRocksCluster();
@@ -129,7 +131,7 @@ public class UtilsTest {
 
         CreateDbStmt dbStmt = new CreateDbStmt(false, StatsConstants.STATISTICS_DB_NAME);
         try {
-            GlobalStateMgr.getCurrentState().getMetadata().createDb(dbStmt.getFullDbName());
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(dbStmt.getFullDbName());
         } catch (DdlException e) {
             return;
         }
@@ -165,11 +167,11 @@ public class UtilsTest {
                         ConstantOperator.createBoolean(false),
                         new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND,
                                 new BinaryPredicateOperator(BinaryType.EQ,
-                                        new ColumnRefOperator(3, Type.INT, "hello", true),
+                                        new ColumnRefOperator(3, IntegerType.INT, "hello", true),
                                         ConstantOperator.createInt(1)),
                                 new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND,
-                                        new ColumnRefOperator(1, Type.INT, "name", true),
-                                        new ColumnRefOperator(2, Type.INT, "age", true))));
+                                        new ColumnRefOperator(1, IntegerType.INT, "name", true),
+                                        new ColumnRefOperator(2, IntegerType.INT, "age", true))));
 
         List<ColumnRefOperator> list = Utils.extractColumnRef(root);
 
@@ -261,39 +263,47 @@ public class UtilsTest {
     public void unknownStats1() {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
 
-        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
         setTableStatistics(t0, 10);
         GlobalStateMgr.getCurrentState().getStatisticStorage().addColumnStatistic(t0, "v1",
                 new ColumnStatistic(1, 1, 0, 1, 1));
 
         Map<ColumnRefOperator, Column> columnRefMap = new HashMap<>();
-        columnRefMap.put(new ColumnRefOperator(1, Type.BIGINT, "v1", true),
+        columnRefMap.put(new ColumnRefOperator(1, IntegerType.BIGINT, "v1", true),
                 t0.getBaseColumn("v1"));
-        columnRefMap.put(new ColumnRefOperator(2, Type.BIGINT, "v2", true),
+        columnRefMap.put(new ColumnRefOperator(2, IntegerType.BIGINT, "v2", true),
                 t0.getBaseColumn("v2"));
-        columnRefMap.put(new ColumnRefOperator(3, Type.BIGINT, "v3", true),
+        columnRefMap.put(new ColumnRefOperator(3, IntegerType.BIGINT, "v3", true),
                 t0.getBaseColumn("v3"));
 
         OptExpression opt =
                 new OptExpression(new LogicalOlapScanOperator(t0, columnRefMap, Maps.newHashMap(), null, -1, null));
-        Assert.assertTrue(Utils.hasUnknownColumnsStats(opt));
+        Assertions.assertTrue(Utils.hasUnknownColumnsStats(opt));
 
         GlobalStateMgr.getCurrentState().getStatisticStorage().addColumnStatistic(t0, "v2",
                 new ColumnStatistic(1, 1, 0, 1, 1));
         GlobalStateMgr.getCurrentState().getStatisticStorage().addColumnStatistic(t0, "v3",
                 new ColumnStatistic(1, 1, 0, 1, 1));
         opt = new OptExpression(new LogicalOlapScanOperator(t0, columnRefMap, Maps.newHashMap(), null, -1, null));
-        Assert.assertFalse(Utils.hasUnknownColumnsStats(opt));
+        Assertions.assertFalse(Utils.hasUnknownColumnsStats(opt));
+    }
+
+    @Test
+    public void testPaimonUnknownColumnsStats() {
+        PaimonTable t = new PaimonTable();
+        OptExpression opt =
+                new OptExpression(new LogicalPaimonScanOperator(t, Maps.newHashMap(), Maps.newHashMap(), -1, null));
+        Assertions.assertFalse(Utils.hasUnknownColumnsStats(opt));
     }
 
     @Test
     public void unknownStats2() {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
         OptExpression opt =
                 new OptExpression(
                         new LogicalOlapScanOperator(t1, Maps.newHashMap(), Maps.newHashMap(), null, -1, null));
-        Assert.assertFalse(Utils.hasUnknownColumnsStats(opt));
+        Assertions.assertFalse(Utils.hasUnknownColumnsStats(opt));
     }
 
     @Test
@@ -355,25 +365,85 @@ public class UtilsTest {
 
     @Test
     public void testComputeMaxLEPower2() {
-        Assert.assertEquals(0, Utils.computeMaxLEPower2(0));
+        Assertions.assertEquals(0, Utils.computeMaxLEPower2(0));
 
         for (int i = 1; i < 10000; i++) {
             int out = Utils.computeMaxLEPower2(i);
             // The number i belongs to the range [out, out*2).
-            Assert.assertTrue(out <= i);
-            Assert.assertTrue(out * 2 > i);
+            Assertions.assertTrue(out <= i);
+            Assertions.assertTrue(out * 2 > i);
         }
     }
 
     @Test
     public void testComputeMinGEPower2() {
-        Assert.assertEquals(1, Utils.computeMinGEPower2(0));
+        Assertions.assertEquals(1, Utils.computeMinGEPower2(0));
 
         for (int i = 1; i < 10000; i++) {
             int out = Utils.computeMinGEPower2(i);
             // The number i belongs to the range (out/2, out].
-            Assert.assertTrue(out >= i);
-            Assert.assertTrue(out / 2 < i);
+            Assertions.assertTrue(out >= i);
+            Assertions.assertTrue(out / 2 < i);
+        }
+    }
+
+    @Test
+    public void testMergeWithProject1() {
+        Map<ColumnRefOperator, ScalarOperator> columnRefMap1 = new HashMap<>();
+        Map<ColumnRefOperator, ScalarOperator> columnRefMap2 = new HashMap<>();
+        for (int i = 0; i < 10; i++) {
+            ColumnRefOperator midColRef;
+            {
+                String colName = "v" + (i + 1);
+                ColumnRefOperator colRef = new ColumnRefOperator(i, IntegerType.BIGINT, colName, true);
+                midColRef = new ColumnRefOperator(i + 50, IntegerType.BIGINT, colName, true);
+                columnRefMap1.put(colRef, midColRef);
+            }
+            {
+                String colName = "v" + (i + 100);
+                ColumnRefOperator colRef = new ColumnRefOperator(i, IntegerType.BIGINT, colName, true);
+                columnRefMap2.put(midColRef, colRef);
+            }
+        }
+        Projection projection1 = new Projection(columnRefMap1);
+        Projection projection2 = new Projection(columnRefMap2);
+        Projection mergedProjection = Utils.mergeWithProject(projection1, projection2);
+        Assertions.assertEquals(10, mergedProjection.getColumnRefMap().size());
+        for (int i = 0; i < 10; i++) {
+            ColumnRefOperator colRef = new ColumnRefOperator(i, IntegerType.BIGINT, "v" + (i + 1), true);
+            Assertions.assertTrue(mergedProjection.getColumnRefMap().containsKey(colRef));
+            ScalarOperator scalarOperator = mergedProjection.getColumnRefMap().get(colRef);
+            Assertions.assertTrue(scalarOperator instanceof ColumnRefOperator);
+            Assertions.assertEquals("v" + (i + 100), ((ColumnRefOperator) scalarOperator).getName());
+        }
+    }
+
+    @Test void testMergeWithProject2() {
+        Map<ColumnRefOperator, ScalarOperator> columnRefMap1 = new HashMap<>();
+        Map<ColumnRefOperator, ScalarOperator> columnRefMap2 = new HashMap<>();
+        for (int i = 0; i < 10; i++) {
+            ColumnRefOperator midColRef;
+            {
+                String colName = "v" + (i + 1);
+                ColumnRefOperator colRef = new ColumnRefOperator(i, IntegerType.BIGINT, colName, true);
+                midColRef = new ColumnRefOperator(i + 50, IntegerType.BIGINT, colName, true);
+                columnRefMap1.put(colRef, midColRef);
+            }
+            {
+                String colName = "v" + (i + 100);
+                ColumnRefOperator colRef = new ColumnRefOperator(i, IntegerType.BIGINT, colName, true);
+                columnRefMap2.put(midColRef, colRef);
+            }
+        }
+        Projection projection2 = new Projection(columnRefMap2);
+        Map<ColumnRefOperator, ScalarOperator> mergedColRefMap = Utils.mergeWithProject(columnRefMap1, projection2);
+        Assertions.assertEquals(10, mergedColRefMap.size());
+        for (int i = 0; i < 10; i++) {
+            ColumnRefOperator colRef = new ColumnRefOperator(i, IntegerType.BIGINT, "v" + (i + 1), true);
+            Assertions.assertTrue(mergedColRefMap.containsKey(colRef));
+            ScalarOperator scalarOperator = mergedColRefMap.get(colRef);
+            Assertions.assertTrue(scalarOperator instanceof ColumnRefOperator);
+            Assertions.assertEquals("v" + (i + 100), ((ColumnRefOperator) scalarOperator).getName());
         }
     }
 }

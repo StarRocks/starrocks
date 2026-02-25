@@ -15,12 +15,12 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.ArrowExpr;
-import com.starrocks.analysis.Expr;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.expression.ArrowExpr;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -28,9 +28,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
 import java.util.List;
@@ -39,7 +39,7 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeExprTest {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
@@ -79,28 +79,28 @@ public class AnalyzeExprTest {
         ScalarOperator so =
                 SqlToScalarOperatorTranslator.translate(arrow, new ExpressionMapping(null, Collections.emptyList()),
                         new ColumnRefFactory());
-        Assert.assertEquals(OperatorType.CALL, so.getOpType());
+        Assertions.assertEquals(OperatorType.CALL, so.getOpType());
         CallOperator callOperator = (CallOperator) so;
-        Assert.assertEquals(expected, callOperator.toString());
+        Assertions.assertEquals(expected, callOperator.toString());
     }
 
     @Test
     public void testQuotedToString() {
         QueryRelation query = ((QueryStatement) analyzeSuccess(
                 " select (select 1 as v),v1 from t0")).getQueryRelation();
-        Assert.assertEquals("(SELECT 1 AS v),v1", String.join(",", query.getColumnOutputNames()));
+        Assertions.assertEquals("(SELECT 1 AS v),v1", String.join(",", query.getColumnOutputNames()));
     }
 
     @Test
     public void testExpressionPreceding() {
         String sql = "select v2&~v1|v3^1 from t0";
         StatementBase statementBase = analyzeSuccess(sql);
-        Assert.assertTrue(AstToStringBuilder.toString(statementBase)
+        Assertions.assertTrue(AstToStringBuilder.toString(statementBase)
                 .contains("(test.t0.v2 & (~test.t0.v1)) | (test.t0.v3 ^ 1)"));
 
         sql = "select v1 * v1 / v1 % v1 + v1 - v1 DIV v1 from t0";
         statementBase = analyzeSuccess(sql);
-        Assert.assertTrue(AstToStringBuilder.toString(statementBase)
+        Assertions.assertTrue(AstToStringBuilder.toString(statementBase)
                 .contains("((((test.t0.v1 * test.t0.v1) / test.t0.v1) % test.t0.v1) + test.t0.v1) " +
                         "- (test.t0.v1 DIV test.t0.v1)"));
     }
@@ -504,6 +504,87 @@ public class AnalyzeExprTest {
         analyzeFail("select array_sortby([1, 2, 3], [1, 2, 3], 'a')");
         analyzeFail("select array_sortby([map{'a':1, 'b':2, 'c':3}], " +
                 "[map{'a':1, 'b':2, 'c':3}], [map{'c':4, 'd':5, 'e':6}])");
+    }
+    @Test
+    public void testArraySort() {
+        // Basic array_sort with lambda comparator
+        analyzeSuccess("select array_sort([1, 2, 3], (x, y) -> IF(x < y, 1, IF(x = y, 0, -1)))");
+        analyzeSuccess("select array_sort([3, 2, 5, 1, 2], (x, y) -> IF(x < y, 1, IF(x = y, 0, -1)))");
+        analyzeSuccess("select array_sort(['bc', 'ab', 'dc'], (x, y) -> IF(x < y, 1, IF(x = y, 0, -1)))");
+
+        // Empty arrays
+        analyzeSuccess("select array_sort([], (x, y) -> IF(x < y, -1, IF(x = y, 0, 1)))");
+        analyzeSuccess("select array_sort([], (x, y) -> 0)");
+
+        // Null arrays
+        analyzeSuccess("select array_sort(null, (x, y) -> 0)");
+        analyzeSuccess("select array_sort(null, (x, y) -> IF(x < y, -1, IF(x = y, 0, 1)))");
+
+        // Null handling in comparator
+        analyzeSuccess("select array_sort([3, 2, null, 5, null, 1, 2]," +
+                "  (x, y) -> CASE WHEN x IS NULL THEN -1" +
+                "               WHEN y IS NULL THEN 1" +
+                "               WHEN x < y THEN 1" +
+                "               WHEN x = y THEN 0" +
+                "               ELSE -1 END)");
+
+        // Sort with complex expressions
+        analyzeSuccess("select array_sort(['a', 'abcd', 'abc']," +
+                "  (x, y) -> IF(length(x) < length(y), -1," +
+                "               IF(length(x) = length(y), 0, 1)))");
+
+        // Sort nested arrays by cardinality
+        analyzeSuccess("select array_sort([[2, 3, 1], [4, 2, 1, 4], [1, 2]]," +
+                "  (x, y) -> IF(cardinality(x) < cardinality(y), -1," +
+                "               IF(cardinality(x) = cardinality(y), 0, 1)))");
+
+        // Ascending order
+        analyzeSuccess("select array_sort([3, 2, 5, 1, 2], (x, y) -> IF(x < y, -1, IF(x = y, 0, 1)))");
+
+        // Multiple parameter combinations
+        analyzeSuccess("select array_sort([1], (x, y) -> x - y)");
+        analyzeSuccess("select array_sort([null], (x, y) -> IF(x IS NULL, 0, 1))");
+
+        // With column reference
+        analyzeSuccess("select array_sort(v3, (x, y) -> IF(x < y, -1, IF(x = y, 0, 1))) from tarray");
+
+        // With array_agg
+        analyzeSuccess("select array_sort(array_agg(v1), (x, y) -> IF(x < y, -1, IF(x = y, 0, 1))) from tarray");
+
+        // Nested in other functions
+        analyzeSuccess("select array_length(array_sort([1, 2, 3], (x, y) -> 0))");
+        analyzeSuccess("select array_concat(array_sort([1, 2], (x, y) -> 0), [3, 4])");
+
+        // Multiple comparisons with captured variables
+        analyzeSuccess("select array_sort([1, 2, 3], (x, y) -> IF(x + v1 < y + v1, -1, 0)) from t0");
+
+        // Invalid comparator - not a lambda
+        analyzeFail("select array_sort([1, 2, 3], 1)");
+
+        // Wrong number of lambda parameters
+        analyzeFail("select array_sort([1, 2, 3], (x) -> x)");
+        analyzeFail("select array_sort([1, 2, 3], (x, y, z) -> x)");
+
+        // Undefined variable in comparator
+        analyzeFail("select array_sort([1, 2, 3], (x, y) -> z)");
+
+        // Wrong array type
+        analyzeFail("select array_sort('not_an_array', (x, y) -> 0)");
+        analyzeFail("select array_sort(123, (x, y) -> 0)");
+
+        // Duplicate parameter names
+        analyzeFail("select array_sort([1, 2, 3], (x, x) -> 0)");
+
+        // No parameters in lambda
+        analyzeFail("select array_sort([1, 2, 3], () -> 0)");
+    }
+
+    @Test
+    public void testArraySortLambdaDispatch() {
+        // Verify that array_sort with lambda is correctly dispatched to array_sort_lambda function
+        QueryStatement stmt = (QueryStatement) analyzeSuccess(
+                "select array_sort([3, 2, 5, 1, 2], (x, y) -> IF(x < y, 1, IF(x = y, 0, -1)))");
+
     }
 
     @Test

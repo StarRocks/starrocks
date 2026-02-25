@@ -108,15 +108,15 @@ struct EpochInfo {
  */
 class StreamChunkConverter {
 public:
-    static StreamChunkPtr make_stream_chunk(ChunkPtr chunk, const Int8ColumnPtr& ops);
+    static StreamChunkPtr make_stream_chunk(ChunkPtr chunk, Int8Column::MutablePtr&& ops);
 
     static bool has_ops_column(const StreamChunk& chunk);
     static bool has_ops_column(const StreamChunkPtr& chunk_ptr);
     static bool has_ops_column(const StreamChunk* chunk_ptr);
 
-    static Int8Column* ops_col(const StreamChunk& stream_chunk);
-    static Int8Column* ops_col(const StreamChunkPtr& stream_chunk_ptr);
-    static Int8Column* ops_col(const StreamChunk* stream_chunk_ptr);
+    static const Int8Column* ops_col(const StreamChunk& stream_chunk);
+    static const Int8Column* ops_col(const StreamChunkPtr& stream_chunk_ptr);
+    static const Int8Column* ops_col(const StreamChunk* stream_chunk_ptr);
 
     static const StreamRowOp* ops(const StreamChunk& stream_chunk);
     static const StreamRowOp* ops(const StreamChunk* stream_chunk);

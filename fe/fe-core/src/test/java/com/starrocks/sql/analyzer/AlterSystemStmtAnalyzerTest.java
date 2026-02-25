@@ -15,8 +15,10 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.OperationType;
+import com.starrocks.persist.UpdateBackendInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
@@ -27,29 +29,30 @@ import com.starrocks.sql.ast.CancelAlterSystemStmt;
 import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.sql.ast.ShowBackendsStmt;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.net.InetAddress;
 import java.util.List;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
-public class AlterSystemStmtAnalyzerTest {
+public class AlterSystemStmtAnalyzerTest extends StarRocksTestBase {
     private static StarRocksAssert starRocksAssert;
     private static ConnectContext connectContext;
 
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         connectContext = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
@@ -87,25 +90,29 @@ public class AlterSystemStmtAnalyzerTest {
         Void result = visitor.visitModifyFrontendHostClause(clause, null);
     }
 
-    @Test(expected = SemanticException.class)
+    @Test
     public void testVisitModifyBackendClauseException() {
-        AlterSystemStmtAnalyzer visitor = new AlterSystemStmtAnalyzer();
-        ModifyBackendClause clause = new ModifyBackendClause("127.0.0.2", "127.0.0.1");
-        visitor.visitModifyBackendClause(clause, null);
+        assertThrows(SemanticException.class, () -> {
+            AlterSystemStmtAnalyzer visitor = new AlterSystemStmtAnalyzer();
+            ModifyBackendClause clause = new ModifyBackendClause("127.0.0.2", "127.0.0.1");
+            visitor.visitModifyBackendClause(clause, null);
+        });
     }
 
-    @Test(expected = SemanticException.class)
+    @Test
     public void testVisitModifyFrontendHostClauseException() {
-        AlterSystemStmtAnalyzer visitor = new AlterSystemStmtAnalyzer();
-        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("127.0.0.2", "127.0.0.1");
-        visitor.visitModifyFrontendHostClause(clause, null);
+        assertThrows(SemanticException.class, () -> {
+            AlterSystemStmtAnalyzer visitor = new AlterSystemStmtAnalyzer();
+            ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("127.0.0.2", "127.0.0.1");
+            visitor.visitModifyFrontendHostClause(clause, null);
+        });
     }
 
     @Test
     public void testAnalyzeCancelAlterSystem() {
         CancelAlterSystemStmt cancelAlterSystemStmt = (CancelAlterSystemStmt) analyzeSuccess(
                 "CANCEL DECOMMISSION BACKEND \"127.0.0.1:8080\", \"127.0.0.2:8080\"");
-        Assert.assertEquals("[127.0.0.1:8080, 127.0.0.2:8080]", cancelAlterSystemStmt.getHostPortPairs().toString());
+        Assertions.assertEquals("[127.0.0.1:8080, 127.0.0.2:8080]", cancelAlterSystemStmt.getHostPortPairs().toString());
     }
 
     @Test
@@ -118,32 +125,32 @@ public class AlterSystemStmtAnalyzerTest {
         for (String loc : testLocs) {
             String stmtStr = "alter system modify backend '127.0.0.1:9091' set ('" +
                     AlterSystemStmtAnalyzer.PROP_KEY_LOCATION + "' = '" + loc + "')";
-            System.out.println(stmtStr);
+            logSysInfo(stmtStr);
             try {
                 UtFrameUtils.parseStmtWithNewParser(stmtStr, connectContext);
             } catch (Exception e) {
-                System.out.println(e.getMessage());
-                Assert.assertFalse(analyzeSuccess[i++]);
+                logSysInfo(e.getMessage());
+                Assertions.assertFalse(analyzeSuccess[i++]);
                 continue;
             }
 
-            Assert.assertTrue(analyzeSuccess[i++]);
+            Assertions.assertTrue(analyzeSuccess[i++]);
         }
 
         String stmtStr = "alter system modify backend '127.0.0.1:9091'" +
                 " set ('invalid_prop_key' = 'val', '" + PropertyAnalyzer.PROPERTIES_LABELS_LOCATION +  "' = 'a:b')";
-        System.out.println(stmtStr);
+        logSysInfo(stmtStr);
         try {
             UtFrameUtils.parseStmtWithNewParser(stmtStr, connectContext);
         } catch (Exception e) {
-            System.out.println(e.getMessage());
-            Assert.assertTrue(e.getMessage().contains("unsupported property: invalid_prop_key"));
+            logSysInfo(e.getMessage());
+            Assertions.assertTrue(e.getMessage().contains("unsupported property: invalid_prop_key"));
         }
     }
 
     private void modifyBackendLocation(String location) throws Exception {
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-        System.out.println(systemInfoService.getBackends());
+        logSysInfo(systemInfoService.getBackends());
         List<Long> backendIds = systemInfoService.getBackendIds();
         Backend backend = systemInfoService.getBackend(backendIds.get(0));
         String modifyBackendPropSqlStr = "alter system modify backend '" + backend.getHost() +
@@ -160,8 +167,8 @@ public class AlterSystemStmtAnalyzerTest {
         ShowBackendsStmt showBackendsStmt = (ShowBackendsStmt) UtFrameUtils.parseStmtWithNewParser(showBackendLocationSqlStr,
                 connectContext);
         ShowResultSet showResultSet = ShowExecutor.execute(showBackendsStmt, connectContext);
-        System.out.println(showResultSet.getResultRows());
-        Assert.assertTrue(showResultSet.getResultRows().get(0).toString().contains("a:b"));
+        logSysInfo(showResultSet.getResultRows());
+        Assertions.assertTrue(showResultSet.getResultRows().get(0).toString().contains("a:b"));
     }
 
     @Test
@@ -179,16 +186,17 @@ public class AlterSystemStmtAnalyzerTest {
         // test replay
         NodeMgr nodeMgrFollower = new NodeMgr();
         nodeMgrFollower.load(initialImage.getMetaBlockReader());
-        Backend persistentState =
-                (Backend) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_BACKEND_STATE_CHANGE_V2);
-        nodeMgrFollower.getClusterInfo().updateInMemoryStateBackend(persistentState);
-        Assert.assertEquals("{c=d}",
-                nodeMgrFollower.getClusterInfo().getBackend(persistentState.getId()).getLocation().toString());
+        UpdateBackendInfo info =
+                (UpdateBackendInfo) UtFrameUtils.PseudoJournalReplayer
+                        .replayNextJournal(OperationType.OP_BACKEND_STATE_CHANGE_V2);
+        nodeMgrFollower.getClusterInfo().replayBackendStateChange(info);
+        Assertions.assertEquals("{c=d}",
+                nodeMgrFollower.getClusterInfo().getBackend(info.getId()).getLocation().toString());
 
         // test restart
         NodeMgr nodeMgrLeader = new NodeMgr();
         nodeMgrLeader.load(finalImage.getMetaBlockReader());
-        Assert.assertEquals("{c=d}",
-                nodeMgrLeader.getClusterInfo().getBackend(persistentState.getId()).getLocation().toString());
+        Assertions.assertEquals("{c=d}",
+                nodeMgrLeader.getClusterInfo().getBackend(info.getId()).getLocation().toString());
     }
 }

@@ -38,13 +38,13 @@
 #include <cstring>
 #include <memory>
 
+#include "base/testutil/sync_point.h"
 #include "common/logging.h"
 #include "gutil/strings/fastmem.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "storage/utils.h"
-#include "testutil/sync_point.h"
 
 namespace starrocks {
 
@@ -63,17 +63,82 @@ struct MemTrackerDeleter {
     }
 };
 
+enum class ByteBufferMetaType { NONE, KAFKA };
+
+std::string byte_buffer_meta_type_name(ByteBufferMetaType type);
+
+class ByteBufferMeta {
+public:
+    virtual ~ByteBufferMeta() = default;
+    virtual ByteBufferMetaType type() = 0;
+    virtual Status copy_from(ByteBufferMeta* source) = 0;
+    virtual std::string to_string() = 0;
+
+    static StatusOr<ByteBufferMeta*> create(ByteBufferMetaType meta_type);
+};
+
+class NoneByteBufferMeta : public ByteBufferMeta {
+public:
+    NoneByteBufferMeta(const NoneByteBufferMeta&) = delete;
+    NoneByteBufferMeta& operator=(const NoneByteBufferMeta&) = delete;
+    NoneByteBufferMeta(NoneByteBufferMeta&&) = delete;
+    NoneByteBufferMeta& operator=(NoneByteBufferMeta&&) = delete;
+
+    ByteBufferMetaType type() override { return ByteBufferMetaType::NONE; }
+
+    Status copy_from(ByteBufferMeta* source) override;
+    std::string to_string() override { return "none"; }
+
+    static NoneByteBufferMeta* instance() {
+        static NoneByteBufferMeta instance;
+        return &instance;
+    }
+
+private:
+    NoneByteBufferMeta() = default;
+};
+
+class KafkaByteBufferMeta : public ByteBufferMeta {
+public:
+    KafkaByteBufferMeta() = default;
+
+    ByteBufferMetaType type() override { return ByteBufferMetaType::KAFKA; }
+
+    void set_partition(int32_t partition) { _partition = partition; }
+    int32_t partition() const { return _partition; }
+    void set_offset(int64_t offset) { _offset = offset; }
+    int64_t offset() const { return _offset; }
+
+    Status copy_from(ByteBufferMeta* source) override;
+
+    std::string to_string() override { return fmt::format("kafka partition: {}, offset: {}", _partition, _offset); }
+
+private:
+    int32_t _partition{-1};
+    int64_t _offset{-1};
+};
+
 struct ByteBuffer {
-    static StatusOr<ByteBufferPtr> allocate_with_tracker(size_t size) {
+    static StatusOr<ByteBufferPtr> allocate_with_tracker(size_t size, size_t padding = 0,
+                                                         ByteBufferMetaType meta_type = ByteBufferMetaType::NONE) {
         auto tracker = CurrentThread::mem_tracker();
         if (tracker == nullptr) {
             return Status::InternalError("current thread memory tracker Not Found when allocate ByteBuffer");
         }
 #ifndef BE_TEST
         // check limit before allocation
-        TRY_CATCH_BAD_ALLOC(ByteBufferPtr ptr(new ByteBuffer(size), MemTrackerDeleter(tracker)); return ptr;);
+        TRY_CATCH_BAD_ALLOC({
+            ASSIGN_OR_RETURN(auto meta, ByteBufferMeta::create(meta_type));
+            // if allocate buffer failed, meta will be deleted
+            DeferOp defer([&]() { delete_meta_safely(meta); });
+            ByteBufferPtr ptr(new ByteBuffer(size, padding, meta), MemTrackerDeleter(tracker));
+            // set meta to nullptr to avoid being deleted
+            meta = nullptr;
+            return ptr;
+        });
 #else
-        ByteBufferPtr ptr(new ByteBuffer(size), MemTrackerDeleter(tracker));
+        ASSIGN_OR_RETURN(auto meta, ByteBufferMeta::create(meta_type));
+        ByteBufferPtr ptr(new ByteBuffer(size, padding, meta), MemTrackerDeleter(tracker));
         Status ret = Status::OK();
         TEST_SYNC_POINT_CALLBACK("ByteBuffer::allocate_with_tracker", &ret);
         if (ret.ok()) {
@@ -85,14 +150,19 @@ struct ByteBuffer {
     }
 
     static StatusOr<ByteBufferPtr> reallocate_with_tracker(const ByteBufferPtr& old_ptr, size_t new_size) {
-        if (new_size <= old_ptr->capacity) return old_ptr;
+        size_t new_capacity = new_size + old_ptr->padding;
+        if (new_capacity <= old_ptr->capacity) return old_ptr;
 
-        ASSIGN_OR_RETURN(ByteBufferPtr ptr, allocate_with_tracker(new_size));
+        ASSIGN_OR_RETURN(ByteBufferPtr ptr, allocate_with_tracker(new_size, old_ptr->padding, old_ptr->meta()->type()));
         ptr->put_bytes(old_ptr->ptr, old_ptr->pos);
+        RETURN_IF_ERROR(ptr->meta()->copy_from(old_ptr->meta()));
         return ptr;
     }
 
-    ~ByteBuffer() { delete[] ptr; }
+    ~ByteBuffer() {
+        delete[] ptr;
+        delete_meta_safely(_meta);
+    }
 
     void put_bytes(const char* data, size_t size) {
         strings::memcpy_inlined(ptr + pos, data, size);
@@ -105,21 +175,56 @@ struct ByteBuffer {
         DCHECK(pos <= limit);
     }
 
-    void flip() {
+    void flip_to_read() {
         limit = pos;
         pos = 0;
+    }
+
+    void flip_to_write() {
+        if (pos > 0) {
+            if (has_remaining()) {
+                size_t size = remaining();
+                std::memmove(ptr, ptr + pos, size);
+                pos = size;
+            } else {
+                pos = 0;
+            }
+        } else {
+            pos = limit;
+        }
+        limit = capacity - padding;
     }
 
     size_t remaining() const { return limit - pos; }
     bool has_remaining() const { return limit > pos; }
 
+    ByteBufferMeta* meta() const { return _meta; }
+
+    char* write_ptr() const { return ptr + pos; }
+
     char* const ptr;
     size_t pos{0};
     size_t limit;
-    size_t capacity;
+    const size_t padding;
+    const size_t capacity;
 
 private:
-    ByteBuffer(size_t capacity_) : ptr(new char[capacity_]), limit(capacity_), capacity(capacity_) {}
+    ByteBuffer(size_t size_, size_t padding_ = 0, ByteBufferMeta* meta = NoneByteBufferMeta::instance())
+            : ptr(new char[size_ + padding_]),
+              limit(size_),
+              padding(padding_),
+              capacity(size_ + padding_),
+              _meta(meta) {
+        DCHECK(_meta != nullptr);
+    };
+
+    static void delete_meta_safely(ByteBufferMeta* meta) {
+        if (meta != nullptr && meta != NoneByteBufferMeta::instance()) {
+            delete meta;
+        }
+    }
+
+    ByteBufferMeta* _meta;
 };
 
 } // namespace starrocks

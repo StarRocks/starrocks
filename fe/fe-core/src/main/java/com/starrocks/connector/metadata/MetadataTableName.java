@@ -30,7 +30,24 @@ public class MetadataTableName {
     private final MetadataTableType tableType;
 
     public static boolean isMetadataTable(String tableName) {
-        return TABLE_PATTERN.matcher(tableName).matches();
+        Matcher match = TABLE_PATTERN.matcher(tableName);
+        if (!match.matches()) {
+            return false;
+        }
+
+        String typeString = match.group("type");
+        if (typeString == null) {
+            return false;
+        }
+
+        MetadataTableType type;
+        try {
+            type = MetadataTableType.get(typeString);
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+
+        return true;
     }
 
     public MetadataTableName(String tableName, MetadataTableType tableType) {

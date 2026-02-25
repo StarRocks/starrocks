@@ -20,7 +20,7 @@
 #include <map>
 #include <memory>
 
-#include "util/metrics.h"
+#include "base/metrics.h"
 
 namespace starrocks {
 
@@ -32,6 +32,15 @@ class SnmpMetrics;
 class QueryCacheMetrics;
 class VectorIndexCacheMetrics;
 class RuntimeFilterMetrics;
+class VectorIndexCacheMetrics;
+
+class IOMetrics {
+public:
+    METRIC_DEFINE_INT_GAUGE(read_ops, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(read_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(write_ops, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(write_bytes, MetricUnit::BYTES);
+};
 
 class MemoryMetrics {
 public:
@@ -46,6 +55,7 @@ public:
     // MemPool metrics
     METRIC_DEFINE_INT_GAUGE(process_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(query_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(connector_scan_pool_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(load_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(metadata_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(tablet_metadata_mem_bytes, MetricUnit::BYTES);
@@ -61,31 +71,15 @@ public:
     METRIC_DEFINE_INT_GAUGE(short_key_index_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(compaction_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(schema_change_mem_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(storage_page_cache_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(jit_cache_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(update_mem_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(chunk_allocator_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(passthrough_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(brpc_iobuf_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(clone_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(consistency_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(datacache_mem_bytes, MetricUnit::BYTES);
-
-    // column pool metrics.
-    METRIC_DEFINE_INT_GAUGE(column_pool_total_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_local_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_central_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_binary_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_uint8_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_int8_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_int16_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_int32_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_int64_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_int128_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_float_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_double_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_decimal_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_date_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_datetime_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(replication_mem_bytes, MetricUnit::BYTES);
 };
 
 class SystemMetrics {
@@ -108,6 +102,9 @@ public:
                              const std::map<std::string, int64_t>& lst_rcv_map, int64_t interval_sec,
                              int64_t* send_rate, int64_t* rcv_rate);
     const MemoryMetrics* memory_metrics() const { return _memory_metrics.get(); }
+    IOMetrics* get_io_metrics_by_tag(uint32_t tag) const { return !_io_metrics.empty() ? _io_metrics[tag] : nullptr; }
+
+    void update_memory_metrics();
 
 private:
     void _install_cpu_metrics(MetricRegistry*);
@@ -116,7 +113,6 @@ private:
     void _update_cpu_metrics();
 
     void _install_memory_metrics(MetricRegistry* registry);
-    void _update_memory_metrics();
 
     void _install_disk_metrics(MetricRegistry* registry, const std::set<std::string>& devices);
     void _update_disk_metrics();
@@ -144,6 +140,11 @@ private:
 
     void _update_vector_index_cache_metrics();
 
+    void _install_io_metrics(MetricRegistry* registry);
+
+    void _update_datacache_mem_tracker();
+    void _update_pagecache_mem_tracker();
+
 private:
     static const char* const _s_hook_name;
 
@@ -157,6 +158,7 @@ private:
     std::map<std::string, RuntimeFilterMetrics*> _runtime_filter_metrics;
     int _proc_net_dev_version = 0;
     std::unique_ptr<SnmpMetrics> _snmp_metrics;
+    std::vector<IOMetrics*> _io_metrics;
 
     char* _line_ptr = nullptr;
     size_t _line_buf_size = 0;

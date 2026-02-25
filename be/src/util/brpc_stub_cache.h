@@ -38,146 +38,101 @@
 #include <mutex>
 #include <vector>
 
-#include "common/config.h"
+#include "base/brpc/brpc.h"
+#include "base/concurrency/spinlock.h"
+#include "base/network/network_util.h"
 #include "common/statusor.h"
+#include "exec/pipeline/schedule/pipeline_timer.h"
 #include "gen_cpp/Types_types.h" // TNetworkAddress
-#include "gen_cpp/doris_internal_service.pb.h"
-#include "gen_cpp/internal_service.pb.h"
-#include "service/brpc.h"
 #include "util/internal_service_recoverable_stub.h"
-#include "util/network_util.h"
-#include "util/spinlock.h"
-#include "util/starrocks_metrics.h"
+
+#ifndef __APPLE__
+#include "util/lake_service_recoverable_stub.h"
+#endif
 
 namespace starrocks {
 
-// map used
-class BrpcStubCache {
+constexpr int TIMER_TASK_RUNNING = 1;
+
+class ExecEnv;
+
+template <typename StubCacheT>
+class EndpointCleanupTask : public starrocks::pipeline::LightTimerTask {
 public:
-    BrpcStubCache() {
-        _stub_map.init(239);
-        REGISTER_GAUGE_STARROCKS_METRIC(brpc_endpoint_stub_count, [this]() {
-            std::lock_guard<SpinLock> l(_lock);
-            return _stub_map.size();
-        });
-    }
-    ~BrpcStubCache() {
-        for (auto& stub : _stub_map) {
-            delete stub.second;
-        }
-    }
-
-    std::shared_ptr<PInternalService_RecoverableStub> get_stub(const butil::EndPoint& endpoint) {
-        std::lock_guard<SpinLock> l(_lock);
-        auto stub_pool = _stub_map.seek(endpoint);
-        if (stub_pool == nullptr) {
-            StubPool* pool = new StubPool();
-            _stub_map.insert(endpoint, pool);
-            return pool->get_or_create(endpoint);
-        }
-        return (*stub_pool)->get_or_create(endpoint);
-    }
-
-    std::shared_ptr<PInternalService_RecoverableStub> get_stub(const TNetworkAddress& taddr) {
-        return get_stub(taddr.hostname, taddr.port);
-    }
-
-    std::shared_ptr<PInternalService_RecoverableStub> get_stub(const std::string& host, int port) {
-        butil::EndPoint endpoint;
-        std::string realhost;
-        std::string brpc_url;
-        realhost = host;
-        if (!is_valid_ip(host)) {
-            Status status = hostname_to_ip(host, realhost);
-            if (!status.ok()) {
-                LOG(WARNING) << "failed to get ip from host:" << status.to_string();
-                return nullptr;
-            }
-        }
-        brpc_url = get_host_port(realhost, port);
-        if (str2endpoint(brpc_url.c_str(), &endpoint)) {
-            LOG(WARNING) << "unknown endpoint, host=" << host;
-            return nullptr;
-        }
-        return get_stub(endpoint);
-    }
+    EndpointCleanupTask(StubCacheT* cache, const butil::EndPoint& endpoint) : _cache(cache), _endpoint(endpoint){};
+    void Run() override { _cache->cleanup_expired(_endpoint); }
 
 private:
-    // StubPool is used to store all stubs with a single endpoint, and the client in the same BE process maintains up to
-    // brpc_max_connections_per_server single connections with each server.
-    // These connections will be created during the first few accesses and will be reused later.
-    struct StubPool {
-        StubPool() { _stubs.reserve(config::brpc_max_connections_per_server); }
+    StubCacheT* _cache;
+    butil::EndPoint _endpoint;
+};
 
-        std::shared_ptr<PInternalService_RecoverableStub> get_or_create(const butil::EndPoint& endpoint) {
-            if (UNLIKELY(_stubs.size() < config::brpc_max_connections_per_server)) {
-                auto stub = std::make_shared<PInternalService_RecoverableStub>(endpoint);
-                if (!stub->reset_channel().ok()) {
-                    return nullptr;
-                }
-                _stubs.push_back(stub);
-                return stub;
-            }
-            if (++_idx >= config::brpc_max_connections_per_server) {
-                _idx = 0;
-            }
-            return _stubs[_idx];
-        }
+class BrpcStubCache {
+public:
+    BrpcStubCache(ExecEnv* exec_env);
+    ~BrpcStubCache();
+
+    std::shared_ptr<PInternalService_RecoverableStub> get_stub(const butil::EndPoint& endpoint);
+    std::shared_ptr<PInternalService_RecoverableStub> get_stub(const TNetworkAddress& taddr);
+    std::shared_ptr<PInternalService_RecoverableStub> get_stub(const std::string& host, int port);
+    void cleanup_expired(const butil::EndPoint& endpoint);
+
+private:
+    struct StubPool {
+        StubPool();
+        ~StubPool();
+        std::shared_ptr<PInternalService_RecoverableStub> get_or_create(const butil::EndPoint& endpoint);
 
         std::vector<std::shared_ptr<PInternalService_RecoverableStub>> _stubs;
-        int64_t _idx = -1;
+        int64_t _idx;
+        std::shared_ptr<EndpointCleanupTask<BrpcStubCache>> _cleanup_task;
     };
 
     SpinLock _lock;
-    butil::FlatMap<butil::EndPoint, StubPool*> _stub_map;
+    butil::FlatMap<butil::EndPoint, std::shared_ptr<StubPool>> _stub_map;
+    pipeline::PipelineTimer* _pipeline_timer;
 };
 
 class HttpBrpcStubCache {
 public:
-    static HttpBrpcStubCache* getInstance() {
-        static HttpBrpcStubCache cache;
-        return &cache;
-    }
-
-    StatusOr<std::shared_ptr<PInternalService_RecoverableStub>> get_http_stub(const TNetworkAddress& taddr) {
-        butil::EndPoint endpoint;
-        std::string realhost;
-        std::string brpc_url;
-        realhost = taddr.hostname;
-        if (!is_valid_ip(taddr.hostname)) {
-            Status status = hostname_to_ip(taddr.hostname, realhost);
-            if (!status.ok()) {
-                LOG(WARNING) << "failed to get ip from host:" << status.to_string();
-                return nullptr;
-            }
-        }
-        brpc_url = get_host_port(realhost, taddr.port);
-        if (str2endpoint(brpc_url.c_str(), &endpoint)) {
-            return Status::RuntimeError("unknown endpoint, host = " + taddr.hostname);
-        }
-        // get is exist
-        std::lock_guard<SpinLock> l(_lock);
-        auto stub_ptr = _stub_map.seek(endpoint);
-        if (stub_ptr != nullptr) {
-            return *stub_ptr;
-        }
-        // create
-        auto stub = std::make_shared<PInternalService_RecoverableStub>(endpoint);
-        if (!stub->reset_channel().ok()) {
-            return Status::RuntimeError("init brpc http channel error on " + taddr.hostname + ":" +
-                                        std::to_string(taddr.port));
-        }
-        _stub_map.insert(endpoint, stub);
-        return stub;
-    }
+    static HttpBrpcStubCache* getInstance();
+    StatusOr<std::shared_ptr<PInternalService_RecoverableStub>> get_http_stub(const TNetworkAddress& taddr);
+    void cleanup_expired(const butil::EndPoint& endpoint);
+    void shutdown();
 
 private:
-    HttpBrpcStubCache() { _stub_map.init(500); }
-    HttpBrpcStubCache(const HttpBrpcStubCache& cache) = delete;
-    HttpBrpcStubCache& operator=(const HttpBrpcStubCache& cache) = delete;
+    HttpBrpcStubCache();
+    HttpBrpcStubCache(const HttpBrpcStubCache&) = delete;
+    HttpBrpcStubCache& operator=(const HttpBrpcStubCache&) = delete;
+    ~HttpBrpcStubCache();
 
     SpinLock _lock;
-    butil::FlatMap<butil::EndPoint, std::shared_ptr<PInternalService_RecoverableStub>> _stub_map;
+    butil::FlatMap<butil::EndPoint, std::pair<std::shared_ptr<PInternalService_RecoverableStub>,
+                                              std::shared_ptr<EndpointCleanupTask<HttpBrpcStubCache>>>>
+            _stub_map;
+    pipeline::PipelineTimer* _pipeline_timer;
 };
+
+#ifndef __APPLE__
+class LakeServiceBrpcStubCache {
+public:
+    static LakeServiceBrpcStubCache* getInstance();
+    StatusOr<std::shared_ptr<starrocks::LakeService_RecoverableStub>> get_stub(const std::string& host, int port);
+    void cleanup_expired(const butil::EndPoint& endpoint);
+    void shutdown();
+
+private:
+    LakeServiceBrpcStubCache();
+    LakeServiceBrpcStubCache(const LakeServiceBrpcStubCache&) = delete;
+    LakeServiceBrpcStubCache& operator=(const LakeServiceBrpcStubCache&) = delete;
+    ~LakeServiceBrpcStubCache();
+
+    SpinLock _lock;
+    butil::FlatMap<butil::EndPoint, std::pair<std::shared_ptr<LakeService_RecoverableStub>,
+                                              std::shared_ptr<EndpointCleanupTask<LakeServiceBrpcStubCache>>>>
+            _stub_map;
+    pipeline::PipelineTimer* _pipeline_timer;
+};
+#endif
 
 } // namespace starrocks

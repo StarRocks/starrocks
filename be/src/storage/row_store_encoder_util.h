@@ -19,62 +19,26 @@
 #include "common/status.h"
 #include "gutil/endian.h"
 #include "gutil/stringprintf.h"
+#include "storage/primary_key_encoder.h"
 #include "types/bitmap_value.h"
 
 namespace starrocks {
 //declare and defines of template class must be in a file, so we exctract it here
 
-template <class UT>
-inline UT to_bigendian(UT v);
-
-template <>
-inline uint8_t to_bigendian(uint8_t v) {
-    return v;
-}
-template <>
-inline uint16_t to_bigendian(uint16_t v) {
-    return BigEndian::FromHost16(v);
-}
-template <>
-inline uint32_t to_bigendian(uint32_t v) {
-    return BigEndian::FromHost32(v);
-}
-template <>
-inline uint64_t to_bigendian(uint64_t v) {
-    return BigEndian::FromHost64(v);
-}
-template <>
-inline uint128_t to_bigendian(uint128_t v) {
-    return BigEndian::FromHost128(v);
-}
-
-template <class T>
-inline size_t encode_integral(const T& v, std::string* dest) {
-    if constexpr (std::is_signed<T>::value) {
-        typedef typename std::make_unsigned<T>::type UT;
-        UT uv = v;
-        uv ^= static_cast<UT>(1) << (sizeof(UT) * 8 - 1);
-        uv = to_bigendian(uv);
-        dest->append(reinterpret_cast<const char*>(&uv), sizeof(uv));
-        return sizeof(uv);
-    } else {
-        T nv = to_bigendian(v);
-        dest->append(reinterpret_cast<const char*>(&nv), sizeof(nv));
-        return sizeof(nv);
-    }
-}
+// Note: to_bigendian and encode_integral functions are now available in
+// storage/primary_key_encoder.h under the encoding_utils namespace
 
 template <class T>
 inline void decode_integral(Slice* src, T* v) {
     if constexpr (std::is_signed<T>::value) {
         typedef typename std::make_unsigned<T>::type UT;
         UT uv = *(UT*)(src->data);
-        uv = to_bigendian(uv);
+        uv = encoding_utils::to_bigendian(uv);
         uv ^= static_cast<UT>(1) << (sizeof(UT) * 8 - 1);
         *v = uv;
     } else {
         T nv = *(T*)(src->data);
-        *v = to_bigendian(nv);
+        *v = encoding_utils::to_bigendian(nv);
     }
     src->remove_prefix(sizeof(T));
 }

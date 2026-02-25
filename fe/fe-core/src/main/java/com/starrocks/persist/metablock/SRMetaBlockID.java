@@ -97,6 +97,21 @@ public class SRMetaBlockID {
 
     public static final SRMetaBlockID PIPE_MGR = new SRMetaBlockID(32);
 
+    public static final SRMetaBlockID CLUSTER_SNAPSHOT_MGR = new SRMetaBlockID(33);
+
+    public static final SRMetaBlockID BLACKLIST_MGR = new SRMetaBlockID(34);
+
+    public static final SRMetaBlockID HISTORICAL_NODE_MGR = new SRMetaBlockID(35);
+
+    public static final SRMetaBlockID TABLET_RESHARD_JOB_MGR = new SRMetaBlockID(36);
+
+    public static final SRMetaBlockID DIGEST_BLACKLIST_MGR = new SRMetaBlockID(37);
+
+    /**
+     * NOTICE: SRMetaBlockID cannot use a value exceeding 20000, please follow the above sequence number
+     */
+    public static final SRMetaBlockID WAREHOUSE_MGR = new SRMetaBlockID(20001);
+
     @Override
     public String toString() {
         return String.valueOf(id);

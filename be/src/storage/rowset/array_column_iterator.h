@@ -64,6 +64,11 @@ public:
 
     ColumnReader* get_column_reader() override { return _reader; }
 
+    StatusOr<std::vector<std::pair<int64_t, int64_t>>> get_io_range_vec(const SparseRange<>& range,
+                                                                        Column* dst) override;
+
+    std::string name() const override { return "ArrayColumnIterator"; }
+
 private:
     Status next_batch_null_offsets(size_t* n, UInt32Column* offsets, UInt8Column* nulls, size_t* element_rows);
     Status next_batch_null_offsets(const SparseRange<>& range, UInt32Column* offsets, UInt8Column* nulls,

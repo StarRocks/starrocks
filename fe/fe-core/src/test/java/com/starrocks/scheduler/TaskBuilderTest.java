@@ -16,38 +16,22 @@ package com.starrocks.scheduler;
 
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.TableProperty;
-import com.starrocks.server.WarehouseManager;
-import com.starrocks.warehouse.DefaultWarehouse;
-import com.starrocks.warehouse.Warehouse;
-import mockit.Mock;
-import mockit.MockUp;
-import org.junit.Assert;
-import org.junit.Test;
+import com.starrocks.utframe.UtFrameUtils;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class TaskBuilderTest {
 
     @Test
     public void testTaskBuilderForMv() {
         // mock the warehouse of MaterializedView for creating task
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public Warehouse getWarehouse(long warehouseId) {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            }
-
-            @Mock
-            public Warehouse getWarehouse(String warehouse) {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            }
-        };
+        UtFrameUtils.mockInitWarehouseEnv();
 
         MaterializedView mv = new MaterializedView();
         mv.setName("aa.bb.cc");
         mv.setViewDefineSql("select * from table1");
         mv.setTableProperty(new TableProperty());
         Task task = TaskBuilder.buildMvTask(mv, "test");
-        Assert.assertEquals("insert overwrite `aa.bb.cc` select * from table1", task.getDefinition());
+        Assertions.assertEquals("insert overwrite `aa.bb.cc` select * from table1", task.getDefinition());
     }
 }

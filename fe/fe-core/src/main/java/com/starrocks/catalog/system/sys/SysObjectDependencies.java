@@ -14,24 +14,28 @@
 
 package com.starrocks.catalog.system.sys;
 
+import com.starrocks.authentication.UserIdentityUtils;
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
-import com.starrocks.privilege.AccessDeniedException;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TObjectDependencyItem;
 import com.starrocks.thrift.TObjectDependencyReq;
 import com.starrocks.thrift.TObjectDependencyRes;
 import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.TypeFactory;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -40,26 +44,24 @@ import java.util.Collection;
 import java.util.Optional;
 
 public class SysObjectDependencies {
-
-    public static final String NAME = "object_dependencies";
-
     private static final Logger LOG = LogManager.getLogger(SysObjectDependencies.class);
 
+    public static final String NAME = "object_dependencies";
 
     public static SystemTable create() {
         return new SystemTable(SystemId.OBJECT_DEPENDENCIES, NAME, Table.TableType.SCHEMA,
                 SystemTable.builder()
-                        .column("object_id", ScalarType.BIGINT)
-                        .column("object_name", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
-                        .column("object_database", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
-                        .column("object_catalog", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
-                        .column("object_type", ScalarType.createVarcharType(64))
+                        .column("object_id", IntegerType.BIGINT)
+                        .column("object_name", TypeFactory.createVarcharType(SystemTable.NAME_CHAR_LEN))
+                        .column("object_database", TypeFactory.createVarcharType(SystemTable.NAME_CHAR_LEN))
+                        .column("object_catalog", TypeFactory.createVarcharType(SystemTable.NAME_CHAR_LEN))
+                        .column("object_type", TypeFactory.createVarcharType(64))
 
-                        .column("ref_object_id", ScalarType.BIGINT)
-                        .column("ref_object_name", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
-                        .column("ref_object_database", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
-                        .column("ref_object_catalog", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
-                        .column("ref_object_type", ScalarType.createVarcharType(64))
+                        .column("ref_object_id", IntegerType.BIGINT)
+                        .column("ref_object_name", TypeFactory.createVarcharType(SystemTable.NAME_CHAR_LEN))
+                        .column("ref_object_database", TypeFactory.createVarcharType(SystemTable.NAME_CHAR_LEN))
+                        .column("ref_object_catalog", TypeFactory.createVarcharType(SystemTable.NAME_CHAR_LEN))
+                        .column("ref_object_type", TypeFactory.createVarcharType(64))
                         .build(),
                 TSchemaTableType.STARROCKS_OBJECT_DEPENDENCIES);
     }
@@ -68,54 +70,56 @@ public class SysObjectDependencies {
         TAuthInfo auth = req.getAuth_info();
         TObjectDependencyRes response = new TObjectDependencyRes();
 
-        UserIdentity currentUser;
-        if (auth.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(auth.getCurrent_user_ident());
-        } else {
-            currentUser = UserIdentity.createAnalyzedUserIdentWithIp(auth.getUser(), auth.getUser_ip());
-        }
+        ConnectContext context = new ConnectContext();
+        UserIdentityUtils.setAuthInfoFromThrift(context, auth);
 
         // list dependencies of mv
+        Locker locker = new Locker();
         Collection<Database> dbs = GlobalStateMgr.getCurrentState().getLocalMetastore().getFullNameToDb().values();
         for (Database db : CollectionUtils.emptyIfNull(dbs)) {
             String catalog = Optional.ofNullable(db.getCatalogName())
                     .orElse(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
-            for (Table table : db.getTables()) {
-                // If it is not a materialized view, we do not need to verify permissions
-                if (!table.isMaterializedView()) {
-                    continue;
-                }
-                // Only show tables with privilege
-                try {
-                    Authorizer.checkAnyActionOnTableLikeObject(currentUser, null, db.getFullName(), table);
-                } catch (AccessDeniedException e) {
-                    continue;
-                }
-
-                MaterializedView mv = (MaterializedView) table;
-                for (BaseTableInfo refObj : CollectionUtils.emptyIfNull(mv.getBaseTableInfos())) {
-                    TObjectDependencyItem item = new TObjectDependencyItem();
-                    item.setObject_id(mv.getId());
-                    item.setObject_name(mv.getName());
-                    item.setDatabase(db.getFullName());
-                    item.setCatalog(catalog);
-                    item.setObject_type(mv.getType().toString());
-
-                    item.setRef_object_id(refObj.getTableId());
-                    item.setRef_database(refObj.getDbName());
-                    item.setRef_catalog(refObj.getCatalogName());
-                    Optional<Table> refTable = MvUtils.getTableWithIdentifier(refObj);
-                    item.setRef_object_type(getRefObjectType(refTable, mv.getName()));
-                    // If the ref table is dropped/swapped/renamed, the actual info would be inconsistent with
-                    // BaseTableInfo, so we use the source-of-truth information
-                    if (refTable.isEmpty()) {
-                        item.setRef_object_name(refObj.getTableName());
-                    } else {
-                        item.setRef_object_name(refTable.get().getName());
+            locker.lockDatabase(db.getId(), LockType.READ);
+            try {
+                for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
+                    // If it is not a materialized view, we do not need to verify permissions
+                    if (!table.isMaterializedView()) {
+                        continue;
+                    }
+                    // Only show tables with privilege
+                    try {
+                        Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), table);
+                    } catch (AccessDeniedException e) {
+                        continue;
                     }
 
-                    response.addToItems(item);
+                    MaterializedView mv = (MaterializedView) table;
+                    for (BaseTableInfo refObj : CollectionUtils.emptyIfNull(mv.getBaseTableInfos())) {
+                        TObjectDependencyItem item = new TObjectDependencyItem();
+                        item.setObject_id(mv.getId());
+                        item.setObject_name(mv.getName());
+                        item.setDatabase(db.getFullName());
+                        item.setCatalog(catalog);
+                        item.setObject_type(mv.getType().toString());
+
+                        item.setRef_object_id(refObj.getTableId());
+                        item.setRef_database(refObj.getDbName());
+                        item.setRef_catalog(refObj.getCatalogName());
+                        Optional<Table> refTable = MvUtils.getTableWithIdentifier(refObj);
+                        item.setRef_object_type(getRefObjectType(refTable, mv.getName()));
+                        // If the ref table is dropped/swapped/renamed, the actual info would be inconsistent with
+                        // BaseTableInfo, so we use the source-of-truth information
+                        if (refTable.isEmpty()) {
+                            item.setRef_object_name(refObj.getTableName());
+                        } else {
+                            item.setRef_object_name(refTable.get().getName());
+                        }
+
+                        response.addToItems(item);
+                    }
                 }
+            } finally {
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         }
 

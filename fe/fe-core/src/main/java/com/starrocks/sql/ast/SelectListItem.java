@@ -16,11 +16,14 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ParseNode;
-import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.TableName;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.parser.NodePosition;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 public class SelectListItem implements ParseNode {
     private Expr expr;
     // for "[name.]*"
@@ -30,12 +33,14 @@ public class SelectListItem implements ParseNode {
 
     private final NodePosition pos;
 
+    private final List<String> excludedColumns;
+
     public SelectListItem(Expr expr, String alias) {
         this(expr, alias, NodePosition.ZERO);
     }
 
     public SelectListItem(TableName tblName) {
-        this(tblName, NodePosition.ZERO);
+        this(tblName, NodePosition.ZERO, Collections.emptyList());
     }
 
     public SelectListItem(Expr expr, String alias, NodePosition pos) {
@@ -45,13 +50,15 @@ public class SelectListItem implements ParseNode {
         this.alias = alias;
         this.tblName = null;
         this.isStar = false;
+        this.excludedColumns = Collections.emptyList();
     }
 
-    public SelectListItem(TableName tblName, NodePosition pos) {
+    public SelectListItem(TableName tblName, NodePosition pos, List<String> excludedColumns) {
         this.pos = pos;
         this.expr = null;
         this.tblName = tblName;
         this.isStar = true;
+        this.excludedColumns = excludedColumns;
     }
 
     protected SelectListItem(SelectListItem other) {
@@ -59,11 +66,12 @@ public class SelectListItem implements ParseNode {
         if (other.expr == null) {
             expr = null;
         } else {
-            expr = other.expr.clone().reset();
+            expr = ExprUtils.reset(other.expr.clone());
         }
         tblName = other.tblName;
         isStar = other.isStar;
         alias = other.alias;
+        this.excludedColumns = new ArrayList<>(other.excludedColumns);
     }
 
     @Override
@@ -98,6 +106,10 @@ public class SelectListItem implements ParseNode {
 
     public void setAlias(String alias) {
         this.alias = alias;
+    }
+
+    public List<String> getExcludedColumns() {
+        return excludedColumns;
     }
 
 }

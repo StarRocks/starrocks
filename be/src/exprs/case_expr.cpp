@@ -20,15 +20,19 @@
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "column/simd_mulselector.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
-#include "exprs/jit/ir_helper.h"
 #include "gutil/casts.h"
 #include "runtime/runtime_state.h"
-#include "simd/mulselector.h"
 #include "types/logical_type_infra.h"
-#include "util/percentile_value.h"
+#include "types/percentile_value.h"
+
+#ifdef STARROCKS_JIT_ENABLE
+#include "exprs/jit/expr_jit_codegen.h"
+#include "exprs/jit/ir_helper.h"
+#endif
 
 namespace starrocks {
 
@@ -51,7 +55,13 @@ namespace starrocks {
  */
 
 template <LogicalType WhenType, LogicalType ResultType>
-class VectorizedCaseExpr final : public Expr {
+#ifdef STARROCKS_JIT_ENABLE
+class VectorizedCaseExpr final : public Expr,
+                                 public JITCodegenNode
+#else
+class VectorizedCaseExpr final : public Expr
+#endif
+{
 public:
     explicit VectorizedCaseExpr(const TExprNode& node)
             : Expr(node), _has_case_expr(node.case_expr.has_case_expr), _has_else_expr(node.case_expr.has_else_expr) {}
@@ -71,6 +81,7 @@ public:
         return _children.size() % 2 == 1 ? Status::OK() : Status::InvalidArgument("case when children is error!");
     }
 
+#ifdef STARROCKS_JIT_ENABLE
     bool is_compilable(RuntimeState* state) const override {
         if (_has_case_expr) {
             return state->can_jit_expr(CompilableExprType::CASE) && IRHelper::support_jit(WhenType) &&
@@ -105,13 +116,13 @@ public:
             }
             VLOG_QUERY << i << "-th score: " << tmp.score << " / " << tmp.num << " = "
                        << tmp.score / (tmp.num ? tmp.num : 1) << " "
-                       << " valid = " << valid << "  " << _children[i]->jit_func_name(state);
+                       << " valid = " << valid << "  " << ExprJITCodegen::func_name(_children[i], state);
         }
         int expr_num = _children.size() / 2;
         VLOG_QUERY << "JIT score case: when_score =  " << when_valid << " / " << expr_num << " = "
                    << when_valid * 1.0 / expr_num << ", then_score = " << then_valid << " / " << expr_num << " = "
                    << then_valid * 1.0 / expr_num;
-        if (when_valid > expr_num * IRHelper::jit_score_ratio || then_valid > expr_num * IRHelper::jit_score_ratio) {
+        if (when_valid > expr_num * kExprJitScoreRatio || then_valid > expr_num * kExprJitScoreRatio) {
             return {expr_num, expr_num};
         }
         return {0, expr_num};
@@ -137,7 +148,7 @@ public:
                                                           head->getParent());
                     auto* next = llvm::BasicBlock::Create(head->getContext(), "next_" + std::to_string(i),
                                                           head->getParent());
-                    ASSIGN_OR_RETURN(auto datum_i, _children[i]->generate_ir(context, jit_ctx))
+                    ASSIGN_OR_RETURN(auto datum_i, ExprJITCodegen::generate_ir(context, _children[i], jit_ctx))
                     if (i == 0) { // if caseExpr is null, go to else
                         datum_0 = datum_i;
                         llvm::Value* is_null = nullptr;
@@ -164,7 +175,8 @@ public:
                             b.CreateCondBr(cmp_eq, then, next);
                         }
                         b.SetInsertPoint(then);
-                        ASSIGN_OR_RETURN(auto datum_i_1, _children[i + 1]->generate_ir(context, jit_ctx))
+                        ASSIGN_OR_RETURN(auto datum_i_1,
+                                         ExprJITCodegen::generate_ir(context, _children[i + 1], jit_ctx))
                         b.CreateStore(datum_i_1.value, res);
                         b.CreateStore(datum_i_1.null_flag, res_null);
                         b.CreateBr(join);
@@ -177,7 +189,7 @@ public:
                                                           head->getParent());
                     auto* next = llvm::BasicBlock::Create(head->getContext(), "next_" + std::to_string(i),
                                                           head->getParent());
-                    ASSIGN_OR_RETURN(auto datum_i, _children[i]->generate_ir(context, jit_ctx))
+                    ASSIGN_OR_RETURN(auto datum_i, ExprJITCodegen::generate_ir(context, _children[i], jit_ctx))
                     auto* is_true = IRHelper::bool_to_cond(b, datum_i.value);
                     if (_children[i]->is_nullable()) {
                         auto* not_null = b.CreateICmpEQ(datum_i.null_flag, llvm::ConstantInt::get(b.getInt8Ty(), 0));
@@ -187,7 +199,7 @@ public:
                     }
                     b.SetInsertPoint(then);
 
-                    ASSIGN_OR_RETURN(auto datum_i_1, _children[i + 1]->generate_ir(context, jit_ctx))
+                    ASSIGN_OR_RETURN(auto datum_i_1, ExprJITCodegen::generate_ir(context, _children[i + 1], jit_ctx))
                     b.CreateStore(datum_i_1.value, res);
                     b.CreateStore(datum_i_1.null_flag, res_null);
                     b.CreateBr(join);
@@ -198,7 +210,7 @@ public:
             b.SetInsertPoint(else_block);
             LLVMDatum else_val;
             if (_has_else_expr) {
-                ASSIGN_OR_RETURN(else_val, _children.back()->generate_ir(context, jit_ctx))
+                ASSIGN_OR_RETURN(else_val, ExprJITCodegen::generate_ir(context, _children.back(), jit_ctx))
             } else {
                 ASSIGN_OR_RETURN(else_val.value, IRHelper::create_ir_number(b, ResultType, 0))
                 else_val.null_flag = llvm::ConstantInt::get(b.getInt8Ty(), 1);
@@ -235,11 +247,12 @@ public:
                     out << "T";
                 }
             }
-            out << "<" << _children[i]->jit_func_name(state) << ">";
+            out << "<" << ExprJITCodegen::func_name(_children[i], state) << ">";
         }
         out << "}" << (is_constant() ? "c:" : "") << (is_nullable() ? "n:" : "") << type().debug_string();
         return out.str();
     }
+#endif
 
     std::string debug_string() const override {
         std::stringstream out;
@@ -307,7 +320,7 @@ private:
 
         ASSIGN_OR_RETURN(ColumnPtr case_column, _children[0]->evaluate_checked(context, chunk));
         if (ColumnHelper::count_nulls(case_column) == case_column->size()) {
-            return else_column->clone();
+            return Column::mutate(std::move(else_column));
         }
 
         int loop_end = _children.size() - 1;
@@ -333,7 +346,7 @@ private:
         }
 
         if (when_columns.empty()) {
-            return else_column->clone();
+            return Column::mutate(std::move(else_column));
         }
         then_columns.emplace_back(else_column);
         size_t size = when_columns[0]->size();
@@ -345,7 +358,7 @@ private:
                     res_nullable = true;
                 }
             }
-            ColumnPtr res = ColumnHelper::create_column(this->type(), res_nullable);
+            MutableColumnPtr res = ColumnHelper::create_column(this->type(), res_nullable);
 
             for (auto& then_column : then_columns) {
                 then_column = ColumnHelper::unpack_and_duplicate_const_column(size, then_column);
@@ -357,15 +370,15 @@ private:
 
             // then_columns.size >= when_columns.size as else_column maybe exist.
             auto when_num = when_columns.size();
-            NullColumnPtr case_nulls = nullptr;
+            const NullColumn* case_nulls = nullptr;
             if (case_column->is_nullable()) {
-                case_nulls = down_cast<NullableColumn*>(case_column.get())->null_column();
+                case_nulls = down_cast<const NullableColumn*>(case_column.get())->null_column_raw_ptr();
             }
             auto case_data = ColumnHelper::get_data_column(case_column.get());
 
             for (auto row = 0; row < size; ++row) {
                 int i = 0;
-                while ((i < when_num) && ((case_nulls != nullptr && case_nulls->get_data()[row]) ||
+                while ((i < when_num) && ((case_nulls != nullptr && case_nulls->immutable_data()[row]) ||
                                           !when_columns[i]->equals(row, *case_data, row))) {
                     ++i;
                 }
@@ -484,7 +497,7 @@ private:
 
             // direct return if first when is all true
             if (when_viewers.empty() && trues_count == when_column->size()) {
-                return then_column->clone();
+                return Column::mutate(std::move(then_column));
             }
 
             when_columns.emplace_back(when_column);
@@ -493,7 +506,7 @@ private:
         }
 
         if (when_viewers.empty()) {
-            return else_column->clone();
+            return Column::mutate(std::move(else_column));
         }
         then_columns.emplace_back(else_column);
 
@@ -512,7 +525,7 @@ private:
                     res_nullable = true;
                 }
             }
-            ColumnPtr res = ColumnHelper::create_column(this->type(), res_nullable);
+            MutableColumnPtr res = ColumnHelper::create_column(this->type(), res_nullable);
 
             for (auto& then_column : then_columns) {
                 then_column = ColumnHelper::unpack_and_duplicate_const_column(size, then_column);
@@ -525,7 +538,7 @@ private:
                     while (i < when_num && !(when_viewers[i].value(row))) {
                         ++i;
                     }
-                    if (then_columns[i]->is_null(i)) {
+                    if (then_columns[i]->is_null(row)) {
                         res->append_nulls(1);
                     } else {
                         res->append(*then_columns[i], row, 1);
@@ -537,7 +550,7 @@ private:
                     while ((i < when_num) && (when_viewers[i].is_null(row) || !when_viewers[i].value(row))) {
                         ++i;
                     }
-                    if (then_columns[i]->is_null(i)) {
+                    if (then_columns[i]->is_null(row)) {
                         res->append_nulls(1);
                     } else {
                         res->append(*then_columns[i], row, 1);
@@ -569,29 +582,32 @@ private:
                 if (check_could_use_multi_simd_selector) {
                     int then_column_size = then_columns.size();
                     int when_column_size = when_columns.size();
-                    // TODO: avoid unpack const column
+                    std::vector<bool> then_column_is_const(then_column_size);
                     for (int i = 0; i < then_column_size; ++i) {
-                        then_columns[i] = ColumnHelper::unpack_and_duplicate_const_column(size, then_columns[i]);
+                        then_column_is_const[i] = then_columns[i]->is_constant();
                     }
                     for (int i = 0; i < when_column_size; ++i) {
                         when_columns[i] = ColumnHelper::unpack_and_duplicate_const_column(size, when_columns[i]);
                     }
                     for (int i = 0; i < when_column_size; ++i) {
-                        ColumnHelper::merge_nullable_filter(when_columns[i].get());
+                        ColumnHelper::merge_nullable_filter(when_columns[i]->as_mutable_raw_ptr());
                     }
 
                     using ResultContainer = typename RunTimeColumnType<ResultType>::Container;
 
-                    ResultContainer* select_list[then_column_size];
+                    const ResultContainer* select_list[then_column_size];
                     for (int i = 0; i < then_column_size; ++i) {
-                        auto* data_column = ColumnHelper::get_data_column(then_columns[i].get());
-                        select_list[i] = &down_cast<RunTimeColumnType<ResultType>*>(data_column)->get_data();
+                        auto* data_column = const_cast<Column*>(ColumnHelper::get_data_column(then_columns[i].get()));
+                        auto* typed_column = const_cast<RunTimeColumnType<ResultType>*>(
+                                down_cast<const RunTimeColumnType<ResultType>*>(data_column));
+                        select_list[i] = &typed_column->get_data();
                     }
 
                     uint8_t* select_vec[when_column_size];
                     for (int i = 0; i < when_column_size; ++i) {
-                        auto* data_column = ColumnHelper::get_data_column(when_columns[i].get());
-                        select_vec[i] = down_cast<BooleanColumn*>(data_column)->get_data().data();
+                        const auto* data_column = ColumnHelper::get_data_column(when_columns[i].get());
+                        select_vec[i] = const_cast<uint8_t*>(
+                                down_cast<const BooleanColumn*>(data_column)->immutable_data().data());
                     }
 
                     auto res = RunTimeColumnType<ResultType>::create();
@@ -604,7 +620,8 @@ private:
                     auto& container = res->get_data();
                     container.resize(size);
                     SIMD_muti_selector<ResultType>::multi_select_if(select_vec, when_column_size, container,
-                                                                    select_list, then_column_size);
+                                                                    select_list, then_column_size, then_column_is_const,
+                                                                    size);
                     return res;
                 }
             }
@@ -670,6 +687,7 @@ private:
         CASE_WHEN_RESULT_TYPE(TYPE_DECIMAL32, RESULT_TYPE);                               \
         CASE_WHEN_RESULT_TYPE(TYPE_DECIMAL64, RESULT_TYPE);                               \
         CASE_WHEN_RESULT_TYPE(TYPE_DECIMAL128, RESULT_TYPE);                              \
+        CASE_WHEN_RESULT_TYPE(TYPE_DECIMAL256, RESULT_TYPE);                              \
         CASE_WHEN_RESULT_TYPE(TYPE_JSON, RESULT_TYPE);                                    \
         CASE_WHEN_RESULT_TYPE(TYPE_ARRAY, RESULT_TYPE);                                   \
         CASE_WHEN_RESULT_TYPE(TYPE_MAP, RESULT_TYPE);                                     \

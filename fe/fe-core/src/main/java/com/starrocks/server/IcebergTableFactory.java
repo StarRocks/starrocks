@@ -19,11 +19,11 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.type.UnknownType;
 import org.apache.iceberg.types.Types;
 
 import java.util.List;
@@ -44,8 +44,8 @@ public class IcebergTableFactory extends ExternalTableFactory {
                                             Map<String, String> properties) {
         tableBuilder.setCatalogName(catalogTable.getCatalogName())
                 .setResourceName(properties.get(RESOURCE))
-                .setRemoteDbName(catalogTable.getRemoteDbName())
-                .setRemoteTableName(catalogTable.getRemoteTableName())
+                .setCatalogDBName(catalogTable.getCatalogDBName())
+                .setCatalogTableName(catalogTable.getCatalogTableName())
                 .setIcebergProperties(properties)
                 .setNativeTable(catalogTable.getNativeTable());
     }
@@ -99,7 +99,7 @@ public class IcebergTableFactory extends ExternalTableFactory {
             }
 
             Column oColumn = oTable.getColumn(column.getName());
-            if (oColumn.getType() == Type.UNKNOWN_TYPE) {
+            if (oColumn.getType() == UnknownType.UNKNOWN_TYPE) {
                 throw new DdlException("Column type convert failed on column: " + column.getName());
             }
 

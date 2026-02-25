@@ -29,7 +29,7 @@ SortedAggregateStreamingSinkOperator::SortedAggregateStreamingSinkOperator(
 
 Status SortedAggregateStreamingSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
-    RETURN_IF_ERROR(_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get()));
+    RETURN_IF_ERROR(_aggregator->prepare(state, _unique_metrics.get()));
     _accumulator.set_max_size(state->chunk_size());
     return _aggregator->open(state);
 }
@@ -91,6 +91,7 @@ Status SortedAggregateStreamingSinkOperator::push_chunk(RuntimeState* state, con
         _aggregator->offer_chunk_to_buffer(accumulated);
     }
     DCHECK(_accumulator.need_input());
+    RETURN_IF_ERROR(_aggregator->check_has_error());
 
     return Status::OK();
 }

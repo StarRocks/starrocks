@@ -15,15 +15,15 @@
 #include <chrono>
 #include <random>
 
+#include "base/testutil/assert.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/workgroup/work_group.h"
 #include "gtest/gtest.h"
-#include "testutil/assert.h"
 
 namespace starrocks::pipeline {
 
 TEST(QueryContextManagerTest, testSingleThreadOperations) {
-    auto parent_mem_tracker = std::make_shared<MemTracker>(MemTracker::QUERY_POOL, 1073741824L, "parent", nullptr);
+    auto parent_mem_tracker = std::make_shared<MemTracker>(MemTrackerType::QUERY_POOL, 1073741824L, "parent", nullptr);
     {
         auto query_ctx_mgr = std::make_shared<QueryContextManager>(6);
         ASSERT_TRUE(query_ctx_mgr->init().ok());
@@ -31,7 +31,7 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
             TUniqueId query_id;
             query_id.hi = 100;
             query_id.lo = i;
-            auto* query_ctx = query_ctx_mgr->get_or_register(query_id);
+            ASSIGN_OR_ASSERT_FAIL(auto* query_ctx, query_ctx_mgr->get_or_register(query_id));
             ASSERT_TRUE(query_ctx != nullptr);
             query_ctx->set_delivery_expire_seconds(60);
             query_ctx->set_query_expire_seconds(300);
@@ -71,7 +71,7 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
         TUniqueId query_id;
         query_id.hi = 100;
         query_id.lo = 1;
-        auto* query_ctx = query_ctx_mgr->get_or_register(query_id);
+        ASSIGN_OR_ASSERT_FAIL(auto* query_ctx, query_ctx_mgr->get_or_register(query_id));
         query_ctx->set_total_fragments(8);
         query_ctx->set_delivery_expire_seconds(60);
         query_ctx->set_query_expire_seconds(300);
@@ -81,7 +81,7 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
         query_ctx->init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker.get());
 
         for (int i = 0; i < 7; ++i) {
-            auto* tmp_query_ctx = query_ctx_mgr->get_or_register(query_id);
+            ASSIGN_OR_ASSERT_FAIL(auto* tmp_query_ctx, query_ctx_mgr->get_or_register(query_id));
             tmp_query_ctx->init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker.get());
             ASSERT_TRUE(tmp_query_ctx != nullptr);
         }
@@ -100,7 +100,7 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
         TUniqueId query_id;
         query_id.hi = 100;
         query_id.lo = 2;
-        auto* query_ctx = query_ctx_mgr->get_or_register(query_id);
+        ASSIGN_OR_ASSERT_FAIL(auto* query_ctx, query_ctx_mgr->get_or_register(query_id));
         query_ctx->set_total_fragments(8);
         query_ctx->set_delivery_expire_seconds(60);
         query_ctx->set_query_expire_seconds(300);
@@ -110,7 +110,7 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
         query_ctx->init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker.get());
 
         for (int i = 0; i < 3; ++i) {
-            auto* tmp_query_ctx = query_ctx_mgr->get_or_register(query_id);
+            ASSIGN_OR_ASSERT_FAIL(auto* tmp_query_ctx, query_ctx_mgr->get_or_register(query_id));
             tmp_query_ctx->init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker.get());
             ASSERT_TRUE(tmp_query_ctx != nullptr);
         }
@@ -122,7 +122,7 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
         query_ctx_mgr->remove(query_id);
         ASSERT_TRUE(query_ctx_mgr->get(query_id) != nullptr);
         for (int i = 0; i < 3; ++i) {
-            auto* tmp_query_ctx = query_ctx_mgr->get_or_register(query_id);
+            ASSIGN_OR_ASSERT_FAIL(auto* tmp_query_ctx, query_ctx_mgr->get_or_register(query_id));
             tmp_query_ctx->init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker.get());
             ASSERT_TRUE(query_ctx != nullptr);
             tmp_query_ctx->count_down_fragments();
@@ -131,7 +131,7 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
             ASSERT_FALSE(tmp_query_ctx->is_dead());
             ASSERT_TRUE(query_ctx_mgr->get(query_id) != nullptr);
         }
-        query_ctx = query_ctx_mgr->get_or_register(query_id);
+        ASSIGN_OR_ASSERT_FAIL(query_ctx, query_ctx_mgr->get_or_register(query_id));
         query_ctx->count_down_fragments();
         query_ctx->init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker.get());
         ASSERT_TRUE(query_ctx->is_dead());
@@ -145,7 +145,7 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
         TUniqueId query_id;
         query_id.hi = 100;
         query_id.lo = 3;
-        auto* query_ctx = query_ctx_mgr->get_or_register(query_id);
+        ASSIGN_OR_ASSERT_FAIL(auto* query_ctx, query_ctx_mgr->get_or_register(query_id));
         query_ctx->set_total_fragments(8);
         query_ctx->set_delivery_expire_seconds(60);
         query_ctx->set_query_expire_seconds(300);
@@ -154,7 +154,7 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
         query_ctx->count_down_fragments();
         query_ctx->init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker.get());
         for (int i = 0; i < 3; ++i) {
-            auto* tmp_query_ctx = query_ctx_mgr->get_or_register(query_id);
+            ASSIGN_OR_ASSERT_FAIL(auto* tmp_query_ctx, query_ctx_mgr->get_or_register(query_id));
             tmp_query_ctx->init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker.get());
             ASSERT_TRUE(tmp_query_ctx != nullptr);
         }
@@ -171,16 +171,44 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
         sleep(2);
         ASSERT_TRUE(query_ctx_mgr->get(query_id) == nullptr);
     }
+
+    {
+        auto query_ctx_mgr = std::make_shared<QueryContextManager>(6);
+        ASSERT_TRUE(query_ctx_mgr->init().ok());
+        TUniqueId query_id;
+        query_id.hi = 100;
+        query_id.lo = 3;
+        ASSIGN_OR_ASSERT_FAIL(auto* query_ctx, query_ctx_mgr->get_or_register(query_id));
+        query_ctx->set_total_fragments(8);
+        query_ctx->set_delivery_expire_seconds(60);
+        query_ctx->set_query_expire_seconds(300);
+        query_ctx->extend_delivery_lifetime();
+        query_ctx->extend_query_lifetime();
+        query_ctx->init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker.get());
+        // port query_ctx to second map
+        query_ctx->count_down_fragments(query_ctx_mgr.get());
+
+        // Single thread cannot reproduce query context registration success,
+        // while this query context is in the second case. So let's simulate it here.
+        query_ctx->increment_num_fragments();
+
+        // cancel
+        query_ctx->cancel(Status::Cancelled("cannelled"), true);
+
+        ASSERT_TRUE(query_ctx_mgr->get_or_register(query_id).status().is_cancelled());
+
+        ASSERT_TRUE(query_ctx_mgr->get(query_id) != nullptr);
+    }
 }
 
 TEST(QueryContextManagerTest, testMulitiThreadOperations) {
-    auto parent_mem_tracker = std::make_shared<MemTracker>(MemTracker::QUERY_POOL, 1073741824L, "parent", nullptr);
+    auto parent_mem_tracker = std::make_shared<MemTracker>(MemTrackerType::QUERY_POOL, 1073741824L, "parent", nullptr);
     auto query_ctx_mgr = std::make_shared<QueryContextManager>(6);
     ASSERT_TRUE(query_ctx_mgr->init().ok());
     TUniqueId query_id;
     query_id.lo = 100;
     query_id.hi = 2;
-    auto* query_ctx = query_ctx_mgr->get_or_register(query_id);
+    ASSIGN_OR_ASSERT_FAIL(auto* query_ctx, query_ctx_mgr->get_or_register(query_id));
     query_ctx->set_total_fragments(202);
     query_ctx->set_delivery_expire_seconds(60);
     query_ctx->set_query_expire_seconds(300);
@@ -197,7 +225,7 @@ TEST(QueryContextManagerTest, testMulitiThreadOperations) {
             std::random_device rd;
             std::uniform_int_distribution<int> dist(1, 100);
             for (int k = 0; k < 20; ++k) {
-                auto* query_ctx = query_ctx_mgr->get_or_register(query_id);
+                ASSIGN_OR_ASSERT_FAIL(auto* query_ctx, query_ctx_mgr->get_or_register(query_id));
                 query_ctx->init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker.get());
                 ASSERT_TRUE(query_ctx != nullptr);
                 ASSERT_FALSE(query_ctx->is_delivery_expired());
@@ -213,7 +241,7 @@ TEST(QueryContextManagerTest, testMulitiThreadOperations) {
         threads[i].join();
     }
 
-    query_ctx = query_ctx_mgr->get_or_register(query_id);
+    ASSIGN_OR_ASSERT_FAIL(query_ctx, query_ctx_mgr->get_or_register(query_id));
     query_ctx->count_down_fragments();
     query_ctx->init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker.get());
     ASSERT_TRUE(query_ctx->is_dead());
@@ -228,7 +256,11 @@ QueryContext* gen_query_ctx(MemTracker* parent_mem_tracker, QueryContextManager*
     query_id.hi = query_id_hi;
     query_id.lo = query_id_lo;
 
-    auto* query_ctx = query_ctx_mgr->get_or_register(query_id);
+    auto res = query_ctx_mgr->get_or_register(query_id);
+    if (!res.ok()) {
+        return nullptr;
+    }
+    auto* query_ctx = res.value();
     query_ctx->set_total_fragments(total_fragments);
     query_ctx->set_delivery_expire_seconds(delivery_expire_seconds);
     query_ctx->set_query_expire_seconds(query_expire_seconds);
@@ -241,13 +273,13 @@ QueryContext* gen_query_ctx(MemTracker* parent_mem_tracker, QueryContextManager*
 }
 
 TEST(QueryContextManagerTest, testSetWorkgroup) {
-    auto parent_mem_tracker = std::make_shared<MemTracker>(MemTracker::QUERY_POOL, 1073741824L, "parent", nullptr);
+    auto parent_mem_tracker = std::make_shared<MemTracker>(MemTrackerType::QUERY_POOL, 1073741824L, "parent", nullptr);
     auto query_ctx_mgr = std::make_shared<QueryContextManager>(6);
     ASSERT_TRUE(query_ctx_mgr->init().ok());
 
-    workgroup::WorkGroupPtr wg = std::make_shared<workgroup::WorkGroup>("wg1", 1, 1, 1, 1, 1 /* concurrency_limit */,
-                                                                        1.0 /* spill_mem_limit_threshold */,
-                                                                        workgroup::WorkGroupType::WG_NORMAL);
+    workgroup::WorkGroupPtr wg = std::make_shared<workgroup::WorkGroup>(
+            "wg1", 1, 1, 1, 1, 1 /* concurrency_limit */, 1.0 /* spill_mem_limit_threshold */,
+            workgroup::WorkGroupType::WG_NORMAL, workgroup::WorkGroup::DEFAULT_MEM_POOL);
 
     auto* query_ctx1 = gen_query_ctx(parent_mem_tracker.get(), query_ctx_mgr.get(), 0, 1, 3, 60, 300);
     auto* query_ctx_overloaded = gen_query_ctx(parent_mem_tracker.get(), query_ctx_mgr.get(), 1, 2, 3, 60, 300);
@@ -261,7 +293,7 @@ TEST(QueryContextManagerTest, testSetWorkgroup) {
     ASSERT_EQ(1, wg->concurrency_overflow_count());
     // All the fragments comes.
     for (int i = 1; i < query_ctx1->total_fragments(); ++i) {
-        auto* cur_query_ctx = query_ctx_mgr->get_or_register(query_id1);
+        ASSIGN_OR_ASSERT_FAIL(auto* cur_query_ctx, query_ctx_mgr->get_or_register(query_id1));
         ASSERT_EQ(query_ctx1, cur_query_ctx);
     }
     while (!query_ctx1->has_no_active_instances()) {
@@ -281,7 +313,7 @@ TEST(QueryContextManagerTest, testSetWorkgroup) {
     ASSERT_OK(query_ctx2->init_query_once(wg.get(), false)); // None-first invocations have no side-effects.
     ASSERT_EQ(1, wg->num_running_queries());
     for (int i = 2; i < query_ctx2->total_fragments(); ++i) {
-        auto* cur_query_ctx = query_ctx_mgr->get_or_register(query_id2);
+        ASSIGN_OR_ASSERT_FAIL(auto* cur_query_ctx, query_ctx_mgr->get_or_register(query_id2));
         ASSERT_EQ(query_ctx2, cur_query_ctx);
     }
     while (!query_ctx2->has_no_active_instances()) {
@@ -293,6 +325,13 @@ TEST(QueryContextManagerTest, testSetWorkgroup) {
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
     ASSERT_FALSE(query_ctx_mgr->remove(query_id2)); // Trigger _clean_slot.
     ASSERT_EQ(0, wg->num_running_queries());
+}
+
+TEST(QueryContextManagerTest, testReadStats) {
+    QueryContext ctx;
+    ctx.incr_read_stats(100, 200);
+    ASSERT_EQ(100, ctx.get_read_local_cnt());
+    ASSERT_EQ(200, ctx.get_read_remote_cnt());
 }
 
 } // namespace starrocks::pipeline

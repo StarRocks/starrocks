@@ -1,0 +1,6 @@
+position: 70 # float position is supported
+label: 'Computing distinct value count'
+collapsible: true
+collapsed: true
+link:
+  type: generated-index

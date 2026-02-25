@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/failpoint/fail_point.h"
+#include "base/failpoint/fail_point.h"
 
 #include <gtest/gtest.h>
 
@@ -93,7 +93,7 @@ TEST(FailPointTest, fp_demo) {
 
     PFailPointTriggerMode trigger_mode;
     trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
-    fpfp_test.setMode(trigger_mode);
+    fp_fp_test.setMode(trigger_mode);
 
     ASSERT_FALSE(test_func());
 }
@@ -110,7 +110,7 @@ TEST(FailPointTest, sfp_demo) {
 
     PFailPointTriggerMode trigger_mode;
     trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
-    sfpsfp_test.setMode(trigger_mode);
+    sfp_sfp_test.setMode(trigger_mode);
 
     ASSERT_TRUE(test_func());
 

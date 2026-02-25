@@ -18,7 +18,7 @@
 #include <cstdint>
 #include <limits>
 
-#include "common/config.h"
+#include "base/utility/updater.h"
 #include "common/logging.h"
 
 namespace starrocks::pipeline {
@@ -41,13 +41,27 @@ public:
     }
 
     void update_memory_usage(int64_t memory_usage, int64_t num_rows) {
-        _memory_usage += memory_usage;
-        _buffered_num_rows += num_rows;
+        bool prev_full = is_full();
+        size_t prev_memusage = _memory_usage.fetch_add(memory_usage);
+        size_t prev_num_rows = _buffered_num_rows.fetch_add(num_rows);
+        _update_peak_memusage();
+        _update_peak_num_rows();
+        bool is_full =
+                prev_memusage + memory_usage >= _max_memory_usage || prev_num_rows + num_rows > _max_buffered_rows;
+        bool expect = false;
+        bool full_changed = prev_full != is_full;
+        if (!full_changed) {
+            return;
+        }
+        _full_events_changed.compare_exchange_strong(expect, full_changed);
     }
 
     size_t get_memory_limit_per_driver() const { return _max_memory_usage_per_driver; }
 
     int64_t get_memory_usage() const { return _memory_usage; }
+
+    int64_t get_peak_memory_usage() const { return _peak_memory_usage.load(); }
+    int64_t get_peak_num_rows() const { return _peak_num_rows.load(); }
 
     bool is_full() const { return _memory_usage >= _max_memory_usage || _buffered_num_rows > _max_buffered_rows; }
 
@@ -65,12 +79,27 @@ public:
         _buffered_num_rows = 0;
     }
 
+    bool full_events_changed() {
+        if (!_full_events_changed.load(std::memory_order_acquire)) {
+            return false;
+        }
+        bool val = true;
+        return _full_events_changed.compare_exchange_strong(val, false);
+    }
+
 private:
+    void _update_peak_memusage() { atomic_max(_peak_memory_usage, _memory_usage); }
+
+    void _update_peak_num_rows() { atomic_max(_peak_num_rows, _buffered_num_rows); }
+
     std::atomic<size_t> _max_memory_usage{128UL * 1024 * 1024 * 1024}; // 128GB
     size_t _max_memory_usage_per_driver = 128 * 1024 * 1024UL;         // 128MB
     size_t _max_buffered_rows{};
     std::atomic<int64_t> _memory_usage{};
     std::atomic<int64_t> _buffered_num_rows{};
+    std::atomic<int64_t> _peak_memory_usage{};
+    std::atomic<int64_t> _peak_num_rows{};
     size_t _max_input_dop;
+    std::atomic<bool> _full_events_changed{};
 };
 } // namespace starrocks::pipeline

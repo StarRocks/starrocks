@@ -22,14 +22,16 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class StatisticProcDirTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         FeConstants.runningUnitTest = true;
 
@@ -45,12 +47,12 @@ public class StatisticProcDirTest {
                         "CREATE TABLE test.t1(k1 int, k2 int, k3 int)" +
                                 " distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
 
-        UtFrameUtils.PseudoImage.setUpImageVersion();
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testLookupInvalid() throws AnalysisException {
-        new StatisticProcDir(GlobalStateMgr.getCurrentState()).lookup("12345");
+    @Test
+    public void testLookupInvalid() {
+        assertThrows(AnalysisException.class, () ->
+            new StatisticProcDir(GlobalStateMgr.getCurrentState()).lookup("12345"));
     }
 
     @Test

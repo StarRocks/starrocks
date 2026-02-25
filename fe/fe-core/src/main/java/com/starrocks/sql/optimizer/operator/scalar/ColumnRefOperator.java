@@ -14,10 +14,10 @@
 
 package com.starrocks.sql.optimizer.operator.scalar;
 
-import com.starrocks.catalog.Type;
 import com.starrocks.common.util.SRStringUtils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.type.Type;
 
 import java.util.Collection;
 import java.util.List;
@@ -43,7 +43,8 @@ public final class ColumnRefOperator extends ScalarOperator {
     }
 
     public ColumnRefOperator(int id, Type type, String name, boolean nullable, boolean isLambdaArgument) {
-        // lambda arguments cannot be seen by outer scopes, so set it a different operator type.
+        // lambda arguments cannot be seen by outer scopes, so set it a different
+        // operator type.
         super(isLambdaArgument ? OperatorType.LAMBDA_ARGUMENT : OperatorType.VARIABLE, type);
         this.id = id;
         this.name = requireNonNull(name, "name is null");
@@ -107,7 +108,6 @@ public final class ColumnRefOperator extends ScalarOperator {
         columns.add(this);
     }
 
-
     @Override
     public String toString() {
         return id + ": " + name;
@@ -122,13 +122,13 @@ public final class ColumnRefOperator extends ScalarOperator {
     }
 
     @Override
-    public int hashCode() {
+    public int hashCodeSelf() {
         return Objects.hash(id);
     }
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitVariableReference(this, context);
+        return  visitor.visitVariableReference(this, context);
     }
 
     public static boolean equals(List<ColumnRefOperator> lhs, List<ColumnRefOperator> rhs) {
@@ -151,17 +151,19 @@ public final class ColumnRefOperator extends ScalarOperator {
 
     @Override
     public boolean equals(Object obj) {
-        if (!(obj instanceof ColumnRefOperator)) {
-            return false;
-        }
+        return equalsSelf(obj);
+    }
 
-        if (obj == this) {
+    @Override
+    public boolean equalsSelf(Object obj) {
+        if (this == obj) {
             return true;
         }
-
-        final ColumnRefOperator column = (ColumnRefOperator) obj;
-        // The column id is unique
-        return id == column.id;
+        if (obj == null || getClass() != obj.getClass()) {
+            return false;
+        }
+        ColumnRefOperator that = (ColumnRefOperator) obj;
+        return id == that.id;
     }
 
     @Override
@@ -175,9 +177,16 @@ public final class ColumnRefOperator extends ScalarOperator {
         }
 
         ColumnRefOperator rightColumn = (ColumnRefOperator) obj;
-        return SRStringUtils.areColumnNamesEqual(this.getName(), rightColumn.getName())
-                && this.getType().equals(rightColumn.getType())
-                && this.isNullable() == rightColumn.isNullable();
+        if (!SRStringUtils.areColumnNamesEqual(this.getName(), rightColumn.getName())
+                || this.isNullable() != rightColumn.isNullable()) {
+            return false;
+        }
+        if (type.isStringType()) {
+            // for string type, we only care about the type is string or not, since the length can be not strictly equal
+            return rightColumn.getType().isStringType();
+        } else {
+            return this.type.equals(rightColumn.type);
+        }
     }
 
     /**

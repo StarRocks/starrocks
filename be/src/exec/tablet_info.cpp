@@ -14,13 +14,17 @@
 
 #include "exec/tablet_info.h"
 
+#include "base/string/string_parser.hpp"
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "exprs/expr.h"
+#include "exprs/expr_context.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 #include "runtime/mem_pool.h"
+#include "storage/metadata_util.h"
 #include "storage/tablet_schema.h"
 #include "types/constexpr.h"
-#include "util/string_parser.hpp"
 
 namespace starrocks {
 
@@ -71,11 +75,15 @@ void OlapTableIndexSchema::to_protobuf(POlapTableIndexSchema* pindex) const {
     pindex->set_id(index_id);
     pindex->set_schema_hash(schema_hash);
     pindex->set_schema_id(schema_id);
+    pindex->set_is_shadow(is_shadow);
     for (auto slot : slots) {
         pindex->add_columns(slot->col_name());
     }
     if (column_param != nullptr) {
         column_param->to_protobuf(pindex->mutable_column_param());
+    }
+    for (auto& [name, value] : column_to_expr_value) {
+        pindex->mutable_column_to_expr_value()->insert({name, value});
     }
 }
 
@@ -120,6 +128,18 @@ Status OlapTableSchemaParam::init(const POlapTableSchemaParam& pschema) {
         } else {
             index->schema_id = p_index.id();
         }
+
+        for (auto& entry : p_index.column_to_expr_value()) {
+            index->column_to_expr_value.insert({entry.first, entry.second});
+        }
+
+        if (p_index.has_is_shadow()) {
+            index->is_shadow = p_index.is_shadow();
+            if (index->is_shadow) {
+                _shadow_indexes++;
+            }
+        }
+
         _indexes.emplace_back(index);
     }
 
@@ -153,7 +173,15 @@ Status OlapTableSchemaParam::init(const TOlapTableSchemaParam& tschema, RuntimeS
 
         if (t_index.__isset.column_param) {
             auto col_param = _obj_pool.add(new OlapTableColumnParam());
-            for (auto& tcolumn_desc : t_index.column_param.columns) {
+            std::vector<TColumn> columns_copy = t_index.column_param.columns;
+            Status preprocess_status = preprocess_default_expr_for_tcolumns(columns_copy);
+            if (!preprocess_status.ok()) {
+                LOG(WARNING) << "Failed to preprocess default_expr in OlapTableSchemaParam::init: "
+                             << preprocess_status.to_string();
+                columns_copy = t_index.column_param.columns;
+            }
+
+            for (auto& tcolumn_desc : columns_copy) {
                 TabletColumn* tc = _obj_pool.add(new TabletColumn());
                 tc->init_from_thrift(tcolumn_desc);
                 col_param->columns.emplace_back(tc);
@@ -165,13 +193,26 @@ Status OlapTableSchemaParam::init(const TOlapTableSchemaParam& tschema, RuntimeS
             index->column_param = col_param;
         }
         if (t_index.__isset.where_clause) {
-            RETURN_IF_ERROR(Expr::create_expr_tree(&_obj_pool, t_index.where_clause, &index->where_clause, state));
+            RETURN_IF_ERROR(
+                    ExprFactory::create_expr_tree(&_obj_pool, t_index.where_clause, &index->where_clause, state));
         }
         if (t_index.__isset.schema_id) {
             index->schema_id = t_index.schema_id;
         } else {
             // schema id is same with index id in previous version, for compatibility
             index->schema_id = t_index.id;
+        }
+
+        if (t_index.__isset.column_to_expr_value) {
+            for (auto& entry : t_index.column_to_expr_value) {
+                index->column_to_expr_value.insert({entry.first, entry.second});
+            }
+        }
+        if (t_index.__isset.is_shadow) {
+            index->is_shadow = t_index.is_shadow;
+            if (index->is_shadow) {
+                _shadow_indexes++;
+            }
         }
         _indexes.emplace_back(index);
     }
@@ -242,14 +283,20 @@ Status OlapTablePartitionParam::init(RuntimeState* state) {
         if (state == nullptr) {
             return Status::InternalError("state is null when partition_exprs is not empty");
         }
-        RETURN_IF_ERROR(Expr::create_expr_trees(&_obj_pool, _t_param.partition_exprs, &_partitions_expr_ctxs, state));
+        RETURN_IF_ERROR(
+                ExprFactory::create_expr_trees(&_obj_pool, _t_param.partition_exprs, &_partitions_expr_ctxs, state));
+    }
+
+    if (_t_param.__isset.distribution_type) {
+        _distribution_type = _t_param.distribution_type;
+    } else {
+        _distribution_type = std::nullopt;
     }
 
     // initial partitions
     for (auto& t_part : _t_param.partitions) {
         OlapTablePartition* part = _obj_pool.add(new OlapTablePartition());
         part->id = t_part.id;
-        part->num_buckets = t_part.num_buckets;
         auto num_indexes = _schema->indexes().size();
         if (t_part.indexes.size() != num_indexes) {
             std::stringstream ss;
@@ -263,13 +310,15 @@ Status OlapTablePartitionParam::init(RuntimeState* state) {
                   [](const OlapTableIndexTablets& lhs, const OlapTableIndexTablets& rhs) {
                       return lhs.index_id < rhs.index_id;
                   });
+
         // check index
         for (int j = 0; j < num_indexes; ++j) {
-            if (part->indexes[j].index_id != _schema->indexes()[j]->index_id) {
+            const auto& index_tablets = part->indexes[j];
+            const auto& index_schema = _schema->indexes()[j];
+            if (index_tablets.index_id != index_schema->index_id) {
                 std::stringstream ss;
                 ss << "partition's index is not equal with schema's"
-                   << ", part_index=" << part->indexes[j].index_id
-                   << ", schema_index=" << _schema->indexes()[j]->index_id;
+                   << ", part_index=" << index_tablets.index_id << ", schema_index=" << index_schema->index_id;
                 LOG(WARNING) << ss.str();
                 return Status::InternalError(ss.str());
             }
@@ -277,7 +326,7 @@ Status OlapTablePartitionParam::init(RuntimeState* state) {
         _partitions.emplace(part->id, part);
 
         if (t_part.is_shadow_partition) {
-            VLOG(1) << "add shadow partition:" << part->id;
+            VLOG(2) << "add shadow partition:" << part->id;
             continue;
         }
 
@@ -302,7 +351,7 @@ Status OlapTablePartitionParam::init(RuntimeState* state) {
             }
         } else {
             _partitions_map[&part->end_key].push_back(part->id);
-            VLOG(1) << "add partition:" << part->id << " start " << part->start_key.debug_string() << " end "
+            VLOG(2) << "add partition:" << part->id << " start " << part->start_key.debug_string() << " end "
                     << part->end_key.debug_string();
         }
     }
@@ -311,17 +360,17 @@ Status OlapTablePartitionParam::init(RuntimeState* state) {
 }
 
 Status OlapTablePartitionParam::prepare(RuntimeState* state) {
-    RETURN_IF_ERROR(Expr::prepare(_partitions_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_partitions_expr_ctxs, state));
     return Status::OK();
 }
 
 Status OlapTablePartitionParam::open(RuntimeState* state) {
-    RETURN_IF_ERROR(Expr::open(_partitions_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_partitions_expr_ctxs, state));
     return Status::OK();
 }
 
 void OlapTablePartitionParam::close(RuntimeState* state) {
-    Expr::close(_partitions_expr_ctxs, state);
+    ExprExecutor::close(_partitions_expr_ctxs, state);
 }
 
 Status OlapTablePartitionParam::_create_partition_keys(const std::vector<TExprNode>& t_exprs, ChunkRow* part_key) {
@@ -349,12 +398,12 @@ Status OlapTablePartitionParam::_create_partition_keys(const std::vector<TExprNo
                 continue;
             } else {
                 // append not null value
-                column->mutable_null_column()->append(0);
+                column->null_column_raw_ptr()->append(0);
             }
         }
 
         // unwrap nullable column since partition column can be nullable
-        auto* partition_data_column = ColumnHelper::get_data_column(_partition_columns[i].get());
+        auto* partition_data_column = ColumnHelper::get_data_column(_partition_columns[i]->as_mutable_raw_ptr());
         switch (type) {
         case TYPE_DATE: {
             DateValue v;
@@ -461,12 +510,12 @@ Status OlapTablePartitionParam::add_partitions(const std::vector<TOlapTableParti
             }
         }
 
-        part->num_buckets = t_part.num_buckets;
         auto num_indexes = _schema->indexes().size();
-        if (t_part.indexes.size() != num_indexes) {
+        if (t_part.indexes.size() != num_indexes - _schema->shadow_index_size()) {
             std::stringstream ss;
             ss << "number of partition's index is not equal with schema's"
-               << ", num_part_indexes=" << t_part.indexes.size() << ", num_schema_indexes=" << num_indexes;
+               << ", num_part_indexes=" << t_part.indexes.size() << ", num_schema_indexes=" << num_indexes
+               << ", num_shadow_indexes=" << _schema->shadow_index_size();
             LOG(WARNING) << ss.str();
             return Status::InternalError(ss.str());
         }
@@ -475,26 +524,36 @@ Status OlapTablePartitionParam::add_partitions(const std::vector<TOlapTableParti
                   [](const OlapTableIndexTablets& lhs, const OlapTableIndexTablets& rhs) {
                       return lhs.index_id < rhs.index_id;
                   });
+
         // check index
-        for (int j = 0; j < num_indexes; ++j) {
-            if (part->indexes[j].index_id != _schema->indexes()[j]->index_id) {
+        // If an add_partition operation is executed during the ALTER process, the ALTER operation will be canceled first.
+        // Therefore, the latest indexes will not include shadow indexes.
+        // However, the schema's index may still contain shadow indexes, so these shadow indexes need to be ignored.
+        int j = 0;
+        for (int i = 0; i < num_indexes; ++i) {
+            if (_schema->indexes()[i]->is_shadow) {
+                continue;
+            }
+            if (part->indexes[j].index_id != _schema->indexes()[i]->index_id) {
                 std::stringstream ss;
                 ss << "partition's index is not equal with schema's"
                    << ", part_index=" << part->indexes[j].index_id
-                   << ", schema_index=" << _schema->indexes()[j]->index_id;
+                   << ", schema_index=" << _schema->indexes()[i]->index_id;
                 LOG(WARNING) << ss.str();
                 return Status::InternalError(ss.str());
             }
+            j++;
         }
+
         _partitions.emplace(part->id, part);
         if (t_part.__isset.in_keys) {
             for (auto& in_key : part->in_keys) {
                 _partitions_map[&in_key].push_back(part->id);
-                VLOG(1) << "add automatic partition:" << part->id << ", in_key:" << in_key.debug_string();
+                VLOG(2) << "add automatic partition:" << part->id << ", in_key:" << in_key.debug_string();
             }
         } else {
             _partitions_map[&part->end_key].push_back(part->id);
-            VLOG(1) << "add automatic partition:" << part->id << " start " << part->start_key.debug_string() << " end "
+            VLOG(2) << "add automatic partition:" << part->id << " start " << part->start_key.debug_string() << " end "
                     << part->end_key.debug_string();
         }
     }
@@ -512,28 +571,34 @@ Status OlapTablePartitionParam::remove_partitions(const std::vector<int64_t>& pa
         if (part->in_keys.empty()) {
             auto& part_ids = _partitions_map[&part->end_key];
             part_ids.erase(std::remove(part_ids.begin(), part_ids.end(), id), part_ids.end());
+            if (part_ids.empty()) {
+                _partitions_map.erase(&part->end_key);
+            }
         } else {
             for (auto& in_key : part->in_keys) {
                 auto& part_ids = _partitions_map[&in_key];
                 part_ids.erase(std::remove(part_ids.begin(), part_ids.end(), id), part_ids.end());
+                if (part_ids.empty()) {
+                    _partitions_map.erase(&in_key);
+                }
             }
         }
 
         _partitions.erase(it);
     }
+    LOG_IF(INFO, _partitions.empty()) << "Empty partitions for db:" << db_id() << ", table_id:" << table_id();
 
     return Status::OK();
 }
 
 Status OlapTablePartitionParam::_find_tablets_with_list_partition(
-        Chunk* chunk, Columns partition_columns, std::vector<OlapTablePartition*>* partitions,
-        std::vector<uint32_t>* indexes, std::vector<uint8_t>* selection, std::vector<int>* invalid_row_indexs,
-        std::vector<std::vector<std::string>>* partition_not_exist_row_values) {
+        Chunk* chunk, const MutableColumns& partition_columns, const std::vector<uint32_t>& hashes,
+        std::vector<OlapTablePartition*>* partitions, std::vector<uint8_t>* selection,
+        std::vector<int>* invalid_row_indexs, std::vector<std::vector<std::string>>* partition_not_exist_row_values) {
     size_t num_rows = chunk->num_rows();
-    ChunkRow row;
-    row.columns = &partition_columns;
-    row.index = 0;
-    std::vector<Column*> partition_data_columns;
+    ChunkRow row(&partition_columns, 0);
+
+    std::vector<const Column*> partition_data_columns;
     partition_data_columns.reserve(partition_columns.size());
     for (auto& column : *(row.columns)) {
         partition_data_columns.emplace_back(ColumnHelper::get_data_column(column.get()));
@@ -549,11 +614,9 @@ Status OlapTablePartitionParam::_find_tablets_with_list_partition(
         row.index = i;
         // list partition
         auto it = _partitions_map.find(&row);
-        if (it != _partitions_map.end() &&
-            (part = _partitions[it->second[(*indexes)[i] % it->second.size()]]) != nullptr &&
+        if (it != _partitions_map.end() && (part = _partitions[it->second[hashes[i] % it->second.size()]]) != nullptr &&
             _part_contains(part, &row)) {
             (*partitions)[i] = part;
-            (*indexes)[i] = (*indexes)[i] % part->num_buckets;
         } else {
             if (partition_not_exist_row_values) {
                 auto partition_value_items = std::make_unique<std::vector<std::string>>();
@@ -584,13 +647,11 @@ Status OlapTablePartitionParam::_find_tablets_with_list_partition(
 }
 
 Status OlapTablePartitionParam::_find_tablets_with_range_partition(
-        Chunk* chunk, Columns partition_columns, std::vector<OlapTablePartition*>* partitions,
-        std::vector<uint32_t>* indexes, std::vector<uint8_t>* selection, std::vector<int>* invalid_row_indexs,
-        std::vector<std::vector<std::string>>* partition_not_exist_row_values) {
+        Chunk* chunk, const MutableColumns& partition_columns, const std::vector<uint32_t>& hashes,
+        std::vector<OlapTablePartition*>* partitions, std::vector<uint8_t>* selection,
+        std::vector<int>* invalid_row_indexs, std::vector<std::vector<std::string>>* partition_not_exist_row_values) {
     size_t num_rows = chunk->num_rows();
-    ChunkRow row;
-    row.columns = &partition_columns;
-    row.index = 0;
+    ChunkRow row(&partition_columns, 0);
 
     std::set<std::vector<std::string>, VectorCompare> partition_columns_set;
     for (size_t i = 0; i < num_rows; ++i) {
@@ -601,11 +662,9 @@ Status OlapTablePartitionParam::_find_tablets_with_range_partition(
         row.index = i;
         // range partition
         auto it = _partitions_map.upper_bound(&row);
-        if (it != _partitions_map.end() &&
-            (part = _partitions[it->second[(*indexes)[i] % it->second.size()]]) != nullptr &&
+        if (it != _partitions_map.end() && (part = _partitions[it->second[hashes[i] % it->second.size()]]) != nullptr &&
             _part_contains(part, &row)) {
             (*partitions)[i] = part;
-            (*indexes)[i] = (*indexes)[i] % part->num_buckets;
         } else {
             if (partition_not_exist_row_values) {
                 // only support single column partition for range partition now
@@ -637,35 +696,37 @@ Status OlapTablePartitionParam::_find_tablets_with_range_partition(
 }
 
 Status OlapTablePartitionParam::find_tablets(Chunk* chunk, std::vector<OlapTablePartition*>* partitions,
-                                             std::vector<uint32_t>* indexes, std::vector<uint8_t>* selection,
+                                             std::vector<uint32_t>* hashes, std::vector<uint8_t>* selection,
                                              std::vector<int>* invalid_row_indexs, int64_t txn_id,
                                              std::vector<std::vector<std::string>>* partition_not_exist_row_values) {
     size_t num_rows = chunk->num_rows();
     partitions->resize(num_rows);
 
-    _compute_hashes(chunk, indexes);
+    _compute_hashes(chunk, hashes);
 
     if (!_partition_columns.empty()) {
-        Columns partition_columns(_partition_slot_descs.size());
+        MutableColumns partition_columns(_partition_slot_descs.size());
         if (!_partitions_expr_ctxs.empty()) {
             for (size_t i = 0; i < partition_columns.size(); ++i) {
-                ASSIGN_OR_RETURN(partition_columns[i], _partitions_expr_ctxs[i]->evaluate(chunk));
-                partition_columns[i] = ColumnHelper::unfold_const_column(_partition_slot_descs[i]->type(), num_rows,
-                                                                         partition_columns[i]);
+                ASSIGN_OR_RETURN(auto partition_column, _partitions_expr_ctxs[i]->evaluate(chunk));
+                partition_columns[i] =
+                        ColumnHelper::unfold_const_column(_partition_slot_descs[i]->type(), num_rows, partition_column)
+                                ->as_mutable_ptr();
             }
         } else {
             for (size_t i = 0; i < partition_columns.size(); ++i) {
-                partition_columns[i] = chunk->get_column_by_slot_id(_partition_slot_descs[i]->id());
+                partition_columns[i] =
+                        chunk->get_column_raw_ptr_by_slot_id(_partition_slot_descs[i]->id())->as_mutable_ptr();
                 DCHECK(partition_columns[i] != nullptr);
             }
         }
 
         bool is_list_partition = _t_param.partitions[0].__isset.in_keys;
         if (is_list_partition) {
-            return _find_tablets_with_list_partition(chunk, partition_columns, partitions, indexes, selection,
+            return _find_tablets_with_list_partition(chunk, partition_columns, *hashes, partitions, selection,
                                                      invalid_row_indexs, partition_not_exist_row_values);
         } else {
-            return _find_tablets_with_range_partition(chunk, partition_columns, partitions, indexes, selection,
+            return _find_tablets_with_range_partition(chunk, partition_columns, *hashes, partitions, selection,
                                                       invalid_row_indexs, partition_not_exist_row_values);
         }
     } else {
@@ -675,30 +736,48 @@ Status OlapTablePartitionParam::find_tablets(Chunk* chunk, std::vector<OlapTable
         auto& part_ids = _partitions_map.begin()->second;
         for (size_t i = 0; i < num_rows; ++i) {
             if ((*selection)[i]) {
-                (*partitions)[i] = _partitions[part_ids[(*indexes)[i] % _partitions.size()]];
-                (*indexes)[i] = (*indexes)[i] % (*partitions)[i]->num_buckets;
+                if (_partitions.empty()) {
+                    // Don't know the reason yet, just defensive coding not crashing the process and possibly for further investigation
+                    LOG(WARNING) << "empty partition for selection[i=" << i << "]=" << (*selection)[i]
+                                 << ", db=" << db_id() << ", table_id=" << table_id();
+                    return Status::InternalError(
+                            fmt::format("empty partitions for db={}, table={}", db_id(), table_id()));
+                }
+                (*partitions)[i] = _partitions[part_ids[(*hashes)[i] % _partitions.size()]];
             }
         }
     }
     return Status::OK();
 }
 
-void OlapTablePartitionParam::_compute_hashes(Chunk* chunk, std::vector<uint32_t>* indexes) {
+void OlapTablePartitionParam::_compute_hashes(const Chunk* chunk, std::vector<uint32_t>* hashes) {
     size_t num_rows = chunk->num_rows();
-    indexes->assign(num_rows, 0);
+    hashes->assign(num_rows, 0);
 
-    for (size_t i = 0; i < _distributed_slot_descs.size(); ++i) {
-        _distributed_columns[i] = chunk->get_column_by_slot_id(_distributed_slot_descs[i]->id()).get();
-        _distributed_columns[i]->crc32_hash(&(*indexes)[0], 0, num_rows);
-    }
-
-    // if no distributed columns, use random distribution
-    if (_distributed_slot_descs.size() == 0) {
+    if (is_hash_distribution()) {
+        for (size_t i = 0; i < _distributed_slot_descs.size(); ++i) {
+            _distributed_columns[i] = chunk->get_column_by_slot_id(_distributed_slot_descs[i]->id()).get();
+            _distributed_columns[i]->crc32_hash(&(*hashes)[0], 0, num_rows);
+        }
+    } else if (is_random_distribution()) {
         uint32_t r = _rand.Next();
         for (auto i = 0; i < num_rows; ++i) {
-            (*indexes)[i] = r++;
+            (*hashes)[i] = r++;
         }
     }
+}
+
+Status OlapTablePartitionParam::test_add_partitions(OlapTablePartition* partition) {
+    _partitions[partition->id] = partition;
+    std::vector<int64_t> part_ids{partition->id};
+    if (partition->in_keys.empty()) {
+        _partitions_map[&(partition->end_key)] = part_ids;
+    } else {
+        for (auto& in_key : partition->in_keys) {
+            _partitions_map[&in_key] = part_ids;
+        }
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks

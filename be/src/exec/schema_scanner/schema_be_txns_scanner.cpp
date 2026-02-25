@@ -15,26 +15,25 @@
 #include "exec/schema_scanner/schema_be_txns_scanner.h"
 
 #include "agent/master_info.h"
+#include "base/metrics.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/string_value.h"
 #include "storage/storage_engine.h"
 #include "storage/txn_manager.h"
 #include "types/logical_type.h"
-#include "util/metrics.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaBeTxnsScanner::_s_columns[] = {
         {"BE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
-        {"LOAD_ID", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"LOAD_ID", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"TXN_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"PARTITION_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"TABLET_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"CREATE_TIME", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"COMMIT_TIME", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"PUBLISH_TIME", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
-        {"ROWSET_ID", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"ROWSET_ID", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"NUM_SEGMENT", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"NUM_DELFILE", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"NUM_ROW", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
@@ -65,79 +64,79 @@ Status SchemaBeTxnsScanner::fill_chunk(ChunkPtr* chunk) {
             if (slot_id < 1 || slot_id > 14) {
                 return Status::InternalError(strings::Substitute("invalid slot id:$0", slot_id));
             }
-            ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
+            auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(slot_id);
             switch (slot_id) {
             case 1: {
                 // be id
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&_be_id);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&_be_id);
                 break;
             }
             case 2: {
                 // load id
                 auto load_id_str = info.load_id.to_string();
                 Slice v(load_id_str);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&v);
                 break;
             }
             case 3: {
                 // txn id
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.txn_id);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.txn_id);
                 break;
             }
             case 4: {
                 // partition id
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.partition_id);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.partition_id);
                 break;
             }
             case 5: {
                 // tablet id
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.tablet_id);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.tablet_id);
                 break;
             }
             case 6: {
                 // create time
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.create_time);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.create_time);
                 break;
             }
             case 7: {
                 // commit time
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.commit_time);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.commit_time);
                 break;
             }
             case 8: {
                 // publish time
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.publish_time);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.publish_time);
                 break;
             }
             case 9: {
                 // rowset id
                 Slice v(info.rowset_id);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&v);
                 break;
             }
             case 10: {
                 // num segment
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.num_segment);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.num_segment);
                 break;
             }
             case 11: {
                 // num delfile
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.num_delfile);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.num_delfile);
                 break;
             }
             case 12: {
                 // num row
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.num_row);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.num_row);
                 break;
             }
             case 13: {
                 // data size
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.data_size);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.data_size);
                 break;
             }
             case 14: {
                 // version
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.version);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.version);
                 break;
             }
             default:

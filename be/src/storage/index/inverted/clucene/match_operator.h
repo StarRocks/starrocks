@@ -22,6 +22,14 @@
 
 namespace starrocks {
 
+template <typename T>
+void clDelete(T* p) {
+    _CLDELETE(p);
+}
+
+using TermPtr = std::unique_ptr<lucene::index::Term, void (*)(lucene::index::Term*)>;
+using TermQueryPtr = std::unique_ptr<lucene::search::TermQuery, void (*)(lucene::search::TermQuery*)>;
+
 // MatchOperator is the base operator which wraps index search operations
 // and it would be the minimum cache unit in the searching of inverted index.
 class MatchOperator {
@@ -48,6 +56,32 @@ public:
 protected:
     std::wstring _term;
     Status _match_internal(lucene::search::HitCollector* hit_collector) override;
+};
+
+class MatchAnyOperator : public MatchOperator {
+public:
+    MatchAnyOperator(lucene::search::IndexSearcher* searcher, lucene::store::Directory* dir, std::wstring field_name,
+                     std::vector<std::wstring> tokens)
+            : MatchOperator(searcher, dir, std::move(field_name)), _tokens(std::move(tokens)) {}
+
+protected:
+    Status _match_internal(lucene::search::HitCollector* hit_collector) override;
+
+private:
+    std::vector<std::wstring> _tokens;
+};
+
+class MatchAllOperator : public MatchOperator {
+public:
+    MatchAllOperator(lucene::search::IndexSearcher* searcher, lucene::store::Directory* dir, std::wstring field_name,
+                     std::vector<std::wstring> tokens)
+            : MatchOperator(searcher, dir, std::move(field_name)), _tokens(std::move(tokens)) {}
+
+protected:
+    Status _match_internal(lucene::search::HitCollector* hit_collector) override;
+
+private:
+    std::vector<std::wstring> _tokens;
 };
 
 class MatchRangeOperator : public MatchOperator {

@@ -31,8 +31,8 @@ import com.starrocks.service.FrontendOptions;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -50,7 +50,7 @@ public class AnalyzeSnapshotTest {
     @Mocked
     private BlobStorage storage;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         AlterTest.beforeClass();
         AnalyzeTestUtil.init();
@@ -93,7 +93,7 @@ public class AnalyzeSnapshotTest {
         BlobStorage storage = new BlobStorage(brokerName, Maps.newHashMap());
         Repository repo = new Repository(10000, "repo", false, location, storage);
         repo.initRepository();
-        GlobalStateMgr.getCurrentState().getBackupHandler().getRepoMgr().addAndInitRepoIfNotExist(repo, false);
+        GlobalStateMgr.getCurrentState().getBackupHandler().getRepoMgr().addAndInitRepoIfNotExist(repo);
 
         analyzeSuccess("SHOW SNAPSHOT ON `repo` WHERE SNAPSHOT = \"backup1\" AND TIMESTAMP = \"2018-05-05-15-34-26\";");
         analyzeSuccess("SHOW SNAPSHOT ON `repo` WHERE SNAPSHOT IN (\"backup1\")");

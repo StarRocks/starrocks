@@ -17,19 +17,20 @@ package com.starrocks.sql.analyzer;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.utframe.StarRocksAssert;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getStarRocksAssert;
 
 public class AnalyzeDropTableTest {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
         StarRocksAssert starRocksAssert = getStarRocksAssert();
@@ -48,7 +49,7 @@ public class AnalyzeDropTableTest {
         MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
         new Expectations(metadata) {
             {
-                metadata.getDb(anyString, anyString);
+                metadata.getDb((ConnectContext) any, anyString, anyString);
                 result = null;
                 minTimes = 0;
             }
@@ -57,11 +58,11 @@ public class AnalyzeDropTableTest {
 
         new Expectations(metadata) {
             {
-                metadata.getDb(anyString, anyString);
+                metadata.getDb((ConnectContext) any, anyString, anyString);
                 result = new Database();
                 minTimes = 0;
 
-                metadata.getTable(anyString, anyString, anyString);
+                metadata.getTable((ConnectContext) any, anyString, anyString, anyString);
                 result = null;
                 minTimes = 0;
             }
@@ -70,7 +71,7 @@ public class AnalyzeDropTableTest {
 
         new Expectations(metadata) {
             {
-                metadata.getTable(anyString, anyString, anyString);
+                metadata.getTable((ConnectContext) any, anyString, anyString, anyString);
                 result = new Table(Table.TableType.ICEBERG);
                 minTimes = 0;
             }
@@ -84,11 +85,11 @@ public class AnalyzeDropTableTest {
 
         new Expectations(metadata, hiveTable) {
             {
-                metadata.getDb(anyString, anyString);
+                metadata.getDb((ConnectContext) any, anyString, anyString);
                 result = new Database();
                 minTimes = 0;
 
-                metadata.getTable(anyString, anyString, anyString);
+                metadata.getTable((ConnectContext) any, anyString, anyString, anyString);
                 result = hiveTable;
                 minTimes = 0;
 

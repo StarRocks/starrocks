@@ -87,6 +87,10 @@ public abstract class OptExpressionVisitor<R, C> {
         return visit(optExpression, context);
     }
 
+    public R visitLogicalRawValues(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
     public R visitLogicalRepeat(OptExpression optExpression, C context) {
         return visit(optExpression, context);
     }
@@ -134,6 +138,10 @@ public abstract class OptExpressionVisitor<R, C> {
         return visitPhysicalScan(optExpression, context);
     }
 
+    public R visitPhysicalIcebergEqualityDeleteScan(OptExpression optExpression, C context) {
+        return visitPhysicalScan(optExpression, context);
+    }
+
     public R visitPhysicalHudiScan(OptExpression optExpression, C context) {
         return visitPhysicalScan(optExpression, context);
     }
@@ -175,6 +183,10 @@ public abstract class OptExpressionVisitor<R, C> {
     }
 
     public R visitPhysicalJDBCScan(OptExpression optExpression, C context) {
+        return visitPhysicalScan(optExpression, context);
+    }
+
+    public R visitPhysicalBenchmarkScan(OptExpression optExpression, C context) {
         return visitPhysicalScan(optExpression, context);
     }
 
@@ -234,6 +246,10 @@ public abstract class OptExpressionVisitor<R, C> {
         return visit(optExpression, context);
     }
 
+    public R visitPhysicalRawValues(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
     public R visitPhysicalRepeat(OptExpression optExpression, C context) {
         return visit(optExpression, context);
     }
@@ -283,6 +299,26 @@ public abstract class OptExpressionVisitor<R, C> {
     }
 
     public R visitPhysicalTableFunctionTableScan(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
+    public R visitPhysicalSplitProducer(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
+    public R visitPhysicalSplitConsumer(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
+    public R visitPhysicalConcatenater(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
+    public R visitPhysicalFetch(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
+    public R visitPhysicalLookUp(OptExpression optExpression, C context) {
         return visit(optExpression, context);
     }
 }

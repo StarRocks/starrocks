@@ -17,9 +17,14 @@
 #include <algorithm>
 #include <memory>
 
+#include "base/container/raw_container.h"
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "common/logging.h"
+#include "common/runtime_profile.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange_sink_operator.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/spill/block_manager.h"
 #include "exec/spill/data_stream.h"
 #include "exec/spill/dir_manager.h"
@@ -28,12 +33,9 @@
 #include "exec/spill/options.h"
 #include "fmt/format.h"
 #include "fs/fs.h"
+#include "gen_cpp/InternalService_types.h"
 #include "serde/column_array_serde.h"
 #include "serde/protobuf_serde.h"
-#include "testutil/sync_point.h"
-#include "util/defer_op.h"
-#include "util/raw_container.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {
 
@@ -117,10 +119,9 @@ Status MemLimitedChunkQueue::push(const ChunkPtr& chunk) {
     _tail->cells.emplace_back(cell);
     _tail->memory_usage += chunk->memory_usage();
 
+#ifndef BE_TEST
     size_t in_memory_rows = _total_accumulated_rows - _flushed_accumulated_rows + _current_load_rows;
     size_t in_memory_bytes = _total_accumulated_bytes - _flushed_accumulated_bytes + _current_load_bytes;
-
-#ifndef BE_TEST
     _peak_memory_rows_counter->set(in_memory_rows);
     _peak_memory_bytes_counter->set(in_memory_bytes);
 #endif
@@ -260,6 +261,11 @@ void MemLimitedChunkQueue::close_consumer(int32_t consumer_index) {
         _opened_source_number--;
         _close_consumer(consumer_index);
     }
+}
+
+bool MemLimitedChunkQueue::is_all_source_finished() const {
+    std::shared_lock l(_mutex);
+    return _opened_source_number == 0;
 }
 
 void MemLimitedChunkQueue::open_producer() {
@@ -413,8 +419,7 @@ Status MemLimitedChunkQueue::_flush() {
     // 2. serialize data
     for (auto& chunk : chunks) {
         for (const auto& column : chunk->columns()) {
-            buf = serde::ColumnArraySerde::serialize(*column, buf, false, _opts.encode_level);
-            RETURN_IF(buf == nullptr, Status::InternalError("serialize data error"));
+            ASSIGN_OR_RETURN(buf, serde::ColumnArraySerde::serialize(*column, buf, false, _opts.encode_level));
         }
     }
     size_t content_length = buf - begin;
@@ -468,8 +473,8 @@ Status MemLimitedChunkQueue::_submit_flush_task() {
         RETURN_IF(!guard.scoped_begin(), (void)0);
         DEFER_GUARD_END(guard);
         auto defer = DeferOp([&]() {
-            _has_flush_io_task.store(false);
             TEST_SYNC_POINT("MemLimitedChunkQueue::after_execute_flush_task");
+            _has_flush_io_task.store(false);
         });
 
         auto status = _flush();
@@ -479,7 +484,8 @@ Status MemLimitedChunkQueue::_submit_flush_task() {
         }
     };
 
-    auto io_task = workgroup::ScanTask(_state->fragment_ctx()->workgroup().get(), std::move(flush_task));
+    auto io_task = workgroup::ScanTask(_state->fragment_ctx()->workgroup(), std::move(flush_task));
+    io_task.set_query_type(_state->query_options().query_type);
     RETURN_IF_ERROR(spill::IOTaskExecutor::submit(std::move(io_task)));
     return Status::OK();
 }
@@ -517,8 +523,9 @@ Status MemLimitedChunkQueue::_load(Block* block) {
     for (auto& chunk : chunks) {
         chunk = _chunk_builder->clone_empty();
         for (auto& column : chunk->columns()) {
-            read_cursor = serde::ColumnArraySerde::deserialize(read_cursor, column.get(), false, _opts.encode_level);
-            RETURN_IF(read_cursor == nullptr, Status::InternalError("deserialize failed"));
+            ASSIGN_OR_RETURN(read_cursor,
+                             serde::ColumnArraySerde::deserialize(read_cursor, column->as_mutable_raw_ptr(), false,
+                                                                  _opts.encode_level));
         }
     }
     {
@@ -551,7 +558,8 @@ Status MemLimitedChunkQueue::_submit_load_task(Block* block) {
             _update_io_task_status(status);
         }
     };
-    auto io_task = workgroup::ScanTask(_state->fragment_ctx()->workgroup().get(), std::move(load_task));
+    auto io_task = workgroup::ScanTask(_state->fragment_ctx()->workgroup(), std::move(load_task));
+    io_task.set_query_type(_state->query_options().query_type);
     RETURN_IF_ERROR(spill::IOTaskExecutor::submit(std::move(io_task)));
     return Status::OK();
 }

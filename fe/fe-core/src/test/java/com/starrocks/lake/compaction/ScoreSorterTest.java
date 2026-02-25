@@ -15,8 +15,8 @@
 
 package com.starrocks.lake.compaction;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -26,60 +26,87 @@ public class ScoreSorterTest {
 
     @Test
     public void test() {
-        List<PartitionStatistics> statisticsList = new ArrayList<>();
+        List<PartitionStatisticsSnapshot> statisticsList = new ArrayList<>();
         PartitionStatistics statistics = new PartitionStatistics(new PartitionIdentifier(1, 2, 3));
         statistics.setCompactionScore(Quantiles.compute(Arrays.asList(0.0, 0.0, 0.0)));
-        statisticsList.add(statistics);
+        statisticsList.add(new PartitionStatisticsSnapshot(statistics));
 
         statistics = new PartitionStatistics(new PartitionIdentifier(1, 2, 6));
         statistics.setCompactionScore(Quantiles.compute(Arrays.asList(1.1, 1.1, 1.2)));
-        statisticsList.add(statistics);
+        statisticsList.add(new PartitionStatisticsSnapshot(statistics));
 
         statistics = new PartitionStatistics(new PartitionIdentifier(1, 2, 4));
         statistics.setCompactionScore(Quantiles.compute(Arrays.asList(0.99, 0.99, 0.99)));
-        statisticsList.add(statistics);
+        statisticsList.add(new PartitionStatisticsSnapshot(statistics));
 
         statistics = new PartitionStatistics(new PartitionIdentifier(1, 2, 5));
         statistics.setCompactionScore(Quantiles.compute(Arrays.asList(1.0, 1.0)));
-        statisticsList.add(statistics);
+        statisticsList.add(new PartitionStatisticsSnapshot(statistics));
 
         ScoreSorter sorter = new ScoreSorter();
 
-        List<PartitionStatistics> sortedList = sorter.sort(statisticsList);
-        Assert.assertEquals(4, sortedList.size());
-        Assert.assertEquals(6, sortedList.get(0).getPartition().getPartitionId());
-        Assert.assertEquals(5, sortedList.get(1).getPartition().getPartitionId());
-        Assert.assertEquals(4, sortedList.get(2).getPartition().getPartitionId());
-        Assert.assertEquals(3, sortedList.get(3).getPartition().getPartitionId());
+        List<PartitionStatisticsSnapshot> sortedList = sorter.sort(statisticsList);
+        Assertions.assertEquals(4, sortedList.size());
+        Assertions.assertEquals(6, sortedList.get(0).getPartition().getPartitionId());
+        Assertions.assertEquals(5, sortedList.get(1).getPartition().getPartitionId());
+        Assertions.assertEquals(4, sortedList.get(2).getPartition().getPartitionId());
+        Assertions.assertEquals(3, sortedList.get(3).getPartition().getPartitionId());
     }
 
     @Test
     public void testPriority() {
-        List<PartitionStatistics> statisticsList = new ArrayList<>();
-        PartitionStatistics statistics = new PartitionStatistics(new PartitionIdentifier(1, 2, 3));
-        statistics.setCompactionScore(Quantiles.compute(Arrays.asList(0.0, 0.0, 0.0)));
-        statisticsList.add(statistics);
+        // no priority
+        {
+            List<PartitionStatisticsSnapshot> statisticsList = new ArrayList<>();
+            PartitionStatistics statistics = new PartitionStatistics(new PartitionIdentifier(1, 2, 3));
+            statistics.setCompactionScore(Quantiles.compute(Arrays.asList(0.0, 0.0, 0.0)));
+            statisticsList.add(new PartitionStatisticsSnapshot(statistics));
 
-        statistics = new PartitionStatistics(new PartitionIdentifier(1, 2, 4));
-        statistics.setCompactionScore(Quantiles.compute(Arrays.asList(1.1, 1.1, 1.2)));
-        statisticsList.add(statistics);
+            statistics = new PartitionStatistics(new PartitionIdentifier(1, 2, 4));
+            statistics.setCompactionScore(Quantiles.compute(Arrays.asList(1.1, 1.1, 1.2)));
+            statisticsList.add(new PartitionStatisticsSnapshot(statistics));
 
-        ScoreSorter sorter = new ScoreSorter();
+            ScoreSorter sorter = new ScoreSorter();
+            List<PartitionStatisticsSnapshot> sortedList = sorter.sort(statisticsList);
+            Assertions.assertEquals(4, sortedList.get(0).getPartition().getPartitionId());
+            Assertions.assertEquals(3, sortedList.get(1).getPartition().getPartitionId());
+        }
 
-        List<PartitionStatistics> sortedList = sorter.sort(statisticsList);
-        Assert.assertEquals(4, sortedList.get(0).getPartition().getPartitionId());
-        Assert.assertEquals(3, sortedList.get(1).getPartition().getPartitionId());
+        // with priority
+        {
+            List<PartitionStatisticsSnapshot> statisticsList = new ArrayList<>();
+            PartitionStatistics statistics = new PartitionStatistics(new PartitionIdentifier(1, 2, 3));
+            statistics.setCompactionScore(Quantiles.compute(Arrays.asList(0.0, 0.0, 0.0)));
+            statistics.setPriority(PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
+            statisticsList.add(new PartitionStatisticsSnapshot(statistics));
 
-        // sort by priority first
-        statisticsList.get(0).setPriority(PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
-        sortedList = sorter.sort(statisticsList);
-        Assert.assertEquals(3, sortedList.get(0).getPartition().getPartitionId());
-        Assert.assertEquals(4, sortedList.get(1).getPartition().getPartitionId());
+            statistics = new PartitionStatistics(new PartitionIdentifier(1, 2, 4));
+            statistics.setCompactionScore(Quantiles.compute(Arrays.asList(1.1, 1.1, 1.2)));
+            statisticsList.add(new PartitionStatisticsSnapshot(statistics));
 
-        // when having same priority value, should compare by compaction score
-        statisticsList.get(1).setPriority(PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
-        sortedList = sorter.sort(statisticsList);
-        Assert.assertEquals(4, sortedList.get(0).getPartition().getPartitionId());
-        Assert.assertEquals(3, sortedList.get(1).getPartition().getPartitionId());
+            ScoreSorter sorter = new ScoreSorter();
+            List<PartitionStatisticsSnapshot> sortedList = sorter.sort(statisticsList);
+            Assertions.assertEquals(3, sortedList.get(0).getPartition().getPartitionId());
+            Assertions.assertEquals(4, sortedList.get(1).getPartition().getPartitionId());
+        }
+
+        // same priority, should sort by compaction score
+        {
+            List<PartitionStatisticsSnapshot> statisticsList = new ArrayList<>();
+            PartitionStatistics statistics = new PartitionStatistics(new PartitionIdentifier(1, 2, 3));
+            statistics.setCompactionScore(Quantiles.compute(Arrays.asList(0.0, 0.0, 0.0)));
+            statistics.setPriority(PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
+            statisticsList.add(new PartitionStatisticsSnapshot(statistics));
+
+            statistics = new PartitionStatistics(new PartitionIdentifier(1, 2, 4));
+            statistics.setCompactionScore(Quantiles.compute(Arrays.asList(1.1, 1.1, 1.2)));
+            statistics.setPriority(PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
+            statisticsList.add(new PartitionStatisticsSnapshot(statistics));
+
+            ScoreSorter sorter = new ScoreSorter();
+            List<PartitionStatisticsSnapshot> sortedList = sorter.sort(statisticsList);
+            Assertions.assertEquals(4, sortedList.get(0).getPartition().getPartitionId());
+            Assertions.assertEquals(3, sortedList.get(1).getPartition().getPartitionId());
+        }
     }
 }

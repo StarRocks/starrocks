@@ -22,15 +22,12 @@ PROPERTIES
     "format" = "parquet"
 );
 -- result:
-[]
 -- !result
 set enable_connector_split_io_tasks = true;
 -- result:
-[]
 -- !result
 set connector_max_split_size = 64;
 -- result:
-[]
 -- !result
 select c1, count(1) from multi_stripes where c0 % 26 in (0, 25) group by c1 order by c1;
 -- result:
@@ -39,7 +36,6 @@ z	76
 -- !result
 set connector_max_split_size = 64 * 1024 * 1024;
 -- result:
-[]
 -- !result
 select c1, count(1) from multi_stripes where c0 % 26 in (0, 25) group by c1 order by c1;
 -- result:

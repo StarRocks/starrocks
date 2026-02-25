@@ -16,16 +16,19 @@
 
 #include <limits>
 
+#include "base/types/int256.h"
 #include "column/binary_column.h"
 #include "column/decimalv3_column.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "column/object_column.h"
 #include "column/struct_column.h"
+#include "column/variant_column.h"
 #include "column/vectorized_fwd.h"
 #include "types/constexpr.h"
+#include "types/json_value.h"
 #include "types/logical_type.h"
-#include "util/json.h"
+#include "types/variant_value.h"
 
 namespace starrocks {
 
@@ -41,6 +44,11 @@ template <>
 inline constexpr bool IsInt128<int128_t> = true;
 
 template <typename T>
+constexpr bool IsInt256 = false;
+template <>
+inline constexpr bool IsInt256<int256_t> = true;
+
+template <typename T>
 constexpr bool IsSlice = false;
 template <>
 inline constexpr bool IsSlice<Slice> = true;
@@ -53,7 +61,8 @@ template <>
 inline constexpr bool IsDateTime<DateValue> = true;
 
 template <typename T>
-using is_starrocks_arithmetic = std::integral_constant<bool, std::is_arithmetic_v<T> || IsDecimal<T>>;
+using is_starrocks_arithmetic =
+        std::integral_constant<bool, std::is_arithmetic_v<T> || IsDecimal<T> || std::is_same_v<T, int256_t>>;
 
 // If isArithmeticLT is true, means this type support +,-,*,/
 template <LogicalType logical_type>
@@ -77,6 +86,8 @@ template <>
 inline constexpr bool isArithmeticLT<TYPE_JSON> = false;
 template <>
 inline constexpr bool isArithmeticLT<TYPE_VARBINARY> = false;
+template <>
+inline constexpr bool isArithmeticLT<TYPE_VARIANT> = false;
 
 template <LogicalType logical_type>
 constexpr bool isSliceLT = false;
@@ -97,119 +108,133 @@ template <>
 struct RunTimeTypeTraits<TYPE_BOOLEAN> {
     using CppType = uint8_t;
     using ColumnType = BooleanColumn;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
 struct RunTimeTypeTraits<TYPE_TINYINT> {
     using CppType = int8_t;
     using ColumnType = Int8Column;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
 struct RunTimeTypeTraits<TYPE_UNSIGNED_TINYINT> {
     using CppType = uint8_t;
     using ColumnType = UInt8Column;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
 struct RunTimeTypeTraits<TYPE_SMALLINT> {
     using CppType = int16_t;
     using ColumnType = Int16Column;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
 struct RunTimeTypeTraits<TYPE_UNSIGNED_SMALLINT> {
     using CppType = uint16_t;
     using ColumnType = UInt16Column;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
 struct RunTimeTypeTraits<TYPE_INT> {
     using CppType = int32_t;
     using ColumnType = Int32Column;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
 struct RunTimeTypeTraits<TYPE_UNSIGNED_INT> {
     using CppType = uint32_t;
     using ColumnType = UInt32Column;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
 struct RunTimeTypeTraits<TYPE_BIGINT> {
     using CppType = int64_t;
     using ColumnType = Int64Column;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
 struct RunTimeTypeTraits<TYPE_UNSIGNED_BIGINT> {
     using CppType = uint64_t;
     using ColumnType = UInt64Column;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
 struct RunTimeTypeTraits<TYPE_LARGEINT> {
     using CppType = int128_t;
     using ColumnType = Int128Column;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
 struct RunTimeTypeTraits<TYPE_FLOAT> {
     using CppType = float;
     using ColumnType = FloatColumn;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
 struct RunTimeTypeTraits<TYPE_DOUBLE> {
     using CppType = double;
     using ColumnType = DoubleColumn;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
 struct RunTimeTypeTraits<TYPE_DECIMALV2> {
     using CppType = DecimalV2Value;
     using ColumnType = DecimalColumn;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
 struct RunTimeTypeTraits<TYPE_DECIMAL32> {
     using CppType = int32_t;
     using ColumnType = Decimal32Column;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
 struct RunTimeTypeTraits<TYPE_DECIMAL64> {
     using CppType = int64_t;
     using ColumnType = Decimal64Column;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
 struct RunTimeTypeTraits<TYPE_DECIMAL128> {
     using CppType = int128_t;
     using ColumnType = Decimal128Column;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
+};
+
+template <>
+struct RunTimeTypeTraits<TYPE_DECIMAL256> {
+    using CppType = int256_t;
+    using ColumnType = Decimal256Column;
+    using ProxyContainerType = ColumnType::ImmContainer;
+};
+
+template <>
+struct RunTimeTypeTraits<TYPE_INT256> {
+    using CppType = int256_t;
+    using ColumnType = Int256Column;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
 struct RunTimeTypeTraits<TYPE_NULL> {
     using CppType = uint8_t;
     using ColumnType = NullColumn;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
@@ -230,21 +255,21 @@ template <>
 struct RunTimeTypeTraits<TYPE_DATE> {
     using CppType = DateValue;
     using ColumnType = DateColumn;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
 struct RunTimeTypeTraits<TYPE_DATETIME> {
     using CppType = TimestampValue;
     using ColumnType = TimestampColumn;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
 struct RunTimeTypeTraits<TYPE_TIME> {
     using CppType = double;
     using ColumnType = DoubleColumn;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
@@ -272,7 +297,14 @@ template <>
 struct RunTimeTypeTraits<TYPE_JSON> {
     using CppType = JsonValue*;
     using ColumnType = JsonColumn;
-    using ProxyContainerType = ColumnType::Container;
+    using ProxyContainerType = ColumnType::ImmContainer;
+};
+
+template <>
+struct RunTimeTypeTraits<TYPE_VARIANT> {
+    using CppType = VariantRowValue*;
+    using ColumnType = VariantColumn;
+    using ProxyContainerType = ColumnType::ImmContainer;
 };
 
 template <>
@@ -362,6 +394,11 @@ struct ColumnTraits<int32_t> {
 };
 
 template <>
+struct ColumnTraits<uint32_t> {
+    using ColumnType = UInt32Column;
+};
+
+template <>
 struct ColumnTraits<int64_t> {
     using ColumnType = Int64Column;
 };
@@ -399,6 +436,11 @@ struct ColumnTraits<DateValue> {
 template <>
 struct ColumnTraits<TimestampValue> {
     using ColumnType = TimestampColumn;
+};
+
+template <>
+struct ColumnTraits<int256_t> {
+    using ColumnType = Int256Column;
 };
 
 // Length of fixed-length type, 0 for dynamic-length type
@@ -480,8 +522,16 @@ template <>
 struct RunTimeTypeLimits<TYPE_JSON> {
     using value_type = JsonValue;
 
-    static value_type min_value() { return JsonValue{vpack::Slice::minKeySlice()}; }
-    static value_type max_value() { return JsonValue{vpack::Slice::maxKeySlice()}; }
+    static value_type min_value();
+    static value_type max_value();
+};
+
+template <>
+struct RunTimeTypeLimits<TYPE_VARIANT> {
+    using value_type = VariantRowValue;
+
+    static value_type min_value() { return VariantRowValue::from_null(); }
+    static value_type max_value() { return VariantRowValue::create(Slice::max_value()).value(); }
 };
 
 } // namespace starrocks

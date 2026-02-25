@@ -44,8 +44,8 @@ import com.starrocks.thrift.TUniqueId;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -62,19 +62,19 @@ public class InsertLoadJobTest {
         String tableName = "table1";
         new Expectations() {
             {
-                globalStateMgr.getDb(anyLong);
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
                 result = database;
-                database.getTable(anyLong);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), anyLong);
                 result = table;
                 table.getName();
                 result = tableName;
             }
         };
         Set<String> tableNames = insertLoadJob.getTableNamesForShow();
-        Assert.assertEquals(1, tableNames.size());
-        Assert.assertEquals(true, tableNames.contains(tableName));
-        Assert.assertEquals(JobState.FINISHED, insertLoadJob.getState());
-        Assert.assertEquals(Integer.valueOf(100), Deencapsulation.getField(insertLoadJob, "progress"));
+        Assertions.assertEquals(1, tableNames.size());
+        Assertions.assertEquals(true, tableNames.contains(tableName));
+        Assertions.assertEquals(JobState.FINISHED, insertLoadJob.getState());
+        Assertions.assertEquals(Integer.valueOf(100), Deencapsulation.getField(insertLoadJob, "progress"));
 
     }
 
@@ -82,17 +82,6 @@ public class InsertLoadJobTest {
     public void testUpdateProgress(@Mocked GlobalStateMgr globalStateMgr,
                                    @Injectable Database database,
                                    @Injectable Table table) throws MetaNotFoundException {
-        new Expectations() {
-            {
-                globalStateMgr.getDb(anyLong);
-                result = database;
-                database.getTable(anyLong);
-                result = table;
-                table.getName();
-                result = "some_table";
-            }
-        };
-
         {
             InsertLoadJob loadJob = new InsertLoadJob("label", 1L,
                     1L, 1000, "", "", null);
@@ -115,10 +104,10 @@ public class InsertLoadJobTest {
             params.setFragment_instance_id(fragmentId);
 
             loadJob.updateProgress(params);
-            Assert.assertEquals(39, loadJob.getProgress());
+            Assertions.assertEquals(39, loadJob.getProgress());
 
-            Assert.assertTrue(loadJob.getTabletCommitInfos().isEmpty());
-            Assert.assertTrue(loadJob.getTabletFailInfos().isEmpty());
+            Assertions.assertTrue(loadJob.getTabletCommitInfos().isEmpty());
+            Assertions.assertTrue(loadJob.getTabletFailInfos().isEmpty());
         }
 
         {
@@ -143,10 +132,10 @@ public class InsertLoadJobTest {
             params.setSource_scan_bytes(80);
 
             loadJob.updateProgress(params);
-            Assert.assertEquals(80, loadJob.getProgress());
+            Assertions.assertEquals(80, loadJob.getProgress());
 
-            Assert.assertTrue(loadJob.getTabletCommitInfos().isEmpty());
-            Assert.assertTrue(loadJob.getTabletFailInfos().isEmpty());
+            Assertions.assertTrue(loadJob.getTabletCommitInfos().isEmpty());
+            Assertions.assertTrue(loadJob.getTabletFailInfos().isEmpty());
         }
     }
 }

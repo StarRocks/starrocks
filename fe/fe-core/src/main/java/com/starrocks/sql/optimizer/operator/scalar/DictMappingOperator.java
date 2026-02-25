@@ -15,9 +15,10 @@
 
 package com.starrocks.sql.optimizer.operator.scalar;
 
-import com.starrocks.catalog.Type;
+import com.google.common.base.Preconditions;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.type.Type;
 
 import java.util.Collections;
 import java.util.List;
@@ -35,6 +36,7 @@ public class DictMappingOperator extends ScalarOperator {
         super(OperatorType.DICT_MAPPING, retType);
         this.dictColumn = dictColumn;
         this.originScalaOperator = originScalaOperator;
+        incrDepth(originScalaOperator);
     }
 
     public DictMappingOperator(Type type, ColumnRefOperator dictColumn, ScalarOperator originScalaOperator,
@@ -43,6 +45,7 @@ public class DictMappingOperator extends ScalarOperator {
         this.dictColumn = dictColumn;
         this.originScalaOperator = originScalaOperator;
         this.stringProvideOperator = stringScalarOperator;
+        incrDepth(originScalaOperator, stringScalarOperator);
     }
 
     public ColumnRefOperator getDictColumn() {
@@ -64,16 +67,28 @@ public class DictMappingOperator extends ScalarOperator {
 
     @Override
     public List<ScalarOperator> getChildren() {
-        return Collections.emptyList();
+        return stringProvideOperator == null ? Collections.emptyList() : List.of(stringProvideOperator);
     }
 
     @Override
     public ScalarOperator getChild(int index) {
-        return null;
+        return index == 0 && stringProvideOperator != null ? stringProvideOperator : null;
     }
 
     @Override
     public void setChild(int index, ScalarOperator child) {
+        Preconditions.checkState(index == 0);
+        stringProvideOperator = child;
+    }
+
+    @Override
+    public boolean isConstant() {
+        return false;
+    }
+
+    @Override
+    public boolean isVariable() {
+        return true;
     }
 
     @Override
@@ -83,12 +98,12 @@ public class DictMappingOperator extends ScalarOperator {
     }
 
     @Override
-    public int hashCode() {
+    public int hashCodeSelf() {
         return Objects.hash(getType(), dictColumn, originScalaOperator);
     }
 
     @Override
-    public boolean equals(Object o) {
+    public boolean equalsSelf(Object o) {
         if (this == o) {
             return true;
         }
@@ -97,19 +112,26 @@ public class DictMappingOperator extends ScalarOperator {
         }
 
         DictMappingOperator that = (DictMappingOperator) o;
-        return Objects.equals(dictColumn, that.dictColumn) &&
+        return Objects.equals(getType(), that.getType()) &&
+                Objects.equals(dictColumn, that.dictColumn) &&
                 Objects.equals(originScalaOperator, that.originScalaOperator) &&
                 Objects.equals(stringProvideOperator, that.stringProvideOperator);
     }
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitDictMappingOperator(this, context);
+        return  visitor.visitDictMappingOperator(this, context);
     }
 
     @Override
     public ColumnRefSet getUsedColumns() {
-        return dictColumn.getUsedColumns();
+        if (stringProvideOperator != null) {
+            // When stringProviderOperator is set, dictColumn and originScalaOperator are meta columns, only columns
+            // in stringProviderOperator are used in eval.
+            return stringProvideOperator.getUsedColumns();
+        } else {
+            return dictColumn.getUsedColumns();
+        }
     }
 
     @Override

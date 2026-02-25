@@ -14,11 +14,11 @@
 
 #pragma once
 
-#include "column/datum.h"
 #include "column/field.h"
 #include "column/schema.h"
 #include "exec/stream/state/state_table.h"
 #include "storage/chunk_iterator.h"
+#include "types/datum.h"
 
 namespace starrocks::stream {
 
@@ -68,7 +68,7 @@ public:
     Status open(RuntimeState* state) override;
 
     Status seek(const Columns& keys, StateTableResult& values) const override;
-    Status seek(const Columns& keys, const std::vector<uint8_t>& selection, StateTableResult& values) const override;
+    Status seek(const Columns& keys, const Filter& selection, StateTableResult& values) const override;
 
     Status seek(const Columns& keys, const std::vector<std::string>& projection_columns,
                 StateTableResult& values) const override;

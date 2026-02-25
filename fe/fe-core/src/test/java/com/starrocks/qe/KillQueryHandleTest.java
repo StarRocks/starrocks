@@ -14,12 +14,13 @@
 
 package com.starrocks.qe;
 
+import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.utframe.StarRocksAssert;
@@ -28,12 +29,10 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.spark.internal.config.R;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
-
-import java.nio.channels.SocketChannel;
-import java.util.UUID;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.xnio.StreamConnection;
 
 public class KillQueryHandleTest {
 
@@ -41,7 +40,7 @@ public class KillQueryHandleTest {
 
     private static ConnectContext connectContext;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
 
@@ -50,17 +49,17 @@ public class KillQueryHandleTest {
     }
 
     @Test
-    public void testKillStmt(@Mocked SocketChannel socketChannel) throws Exception {
+    public void testKillStmt(@Mocked StreamConnection connection) throws Exception {
         // test killing query successfully
-        ConnectContext ctx1 = prepareConnectContext(socketChannel);
+        ConnectContext ctx1 = prepareConnectContext(connection);
 
-        Assert.assertFalse(ctx1.isKilled());
+        Assertions.assertFalse(ctx1.isKilled());
         ConnectContext ctx = kill(ctx1.getQueryId().toString(), false);
         // isKilled is set
-        Assert.assertTrue(ctx1.isKilled());
-        Assert.assertEquals(QueryState.MysqlStateType.OK, ctx.getState().getStateType());
+        Assertions.assertTrue(ctx1.isKilled());
+        Assertions.assertEquals(QueryState.MysqlStateType.OK, ctx.getState().getStateType());
 
-        ctx1.getConnectScheduler().unregisterConnection(ctx1);
+        ExecuteEnv.getInstance().getScheduler().unregisterConnection(ctx1);
     }
 
     public static ConnectContext getConnectContext() {
@@ -68,7 +67,7 @@ public class KillQueryHandleTest {
     }
 
     @Test
-    public void testKillStmt2(@Mocked SocketChannel socketChannel, @Mocked TMasterOpResult result)
+    public void testKillStmt2(@Mocked StreamConnection connection, @Mocked TMasterOpResult result)
             throws Exception {
         // test killing query is forwarded to fe and query is successfully killed
         new MockUp(ThriftRPCRequestExecutor.class) {
@@ -81,29 +80,29 @@ public class KillQueryHandleTest {
                 return (T) result;
             }
         };
-        ConnectContext ctx1 = prepareConnectContext(socketChannel);
+        ConnectContext ctx1 = prepareConnectContext(connection);
 
         ConnectContext ctx = kill(ctx1.getQueryId().toString(), true);
-        Assert.assertEquals(QueryState.MysqlStateType.OK, ctx.getState().getStateType());
+        Assertions.assertEquals(QueryState.MysqlStateType.OK, ctx.getState().getStateType());
 
-        ctx1.getConnectScheduler().unregisterConnection(ctx1);
+        ExecuteEnv.getInstance().getScheduler().unregisterConnection(ctx1);
     }
 
     @Test
-    public void testKillStmtWhenQueryIdNotFound(@Mocked SocketChannel socketChannel)
+    public void testKillStmtWhenQueryIdNotFound(@Mocked StreamConnection connection)
             throws Exception {
         // test killing query but query not found
-        ConnectContext ctx1 = prepareConnectContext(socketChannel);
+        ConnectContext ctx1 = prepareConnectContext(connection);
 
         ConnectContext ctx = kill("xxx", false);
-        Assert.assertEquals(QueryState.MysqlStateType.ERR, ctx.getState().getStateType());
-        Assert.assertEquals("Unknown query id: xxx", ctx.getState().getErrorMessage());
+        Assertions.assertEquals(QueryState.MysqlStateType.ERR, ctx.getState().getStateType());
+        Assertions.assertEquals("Unknown query id: xxx", ctx.getState().getErrorMessage());
 
-        ctx1.getConnectScheduler().unregisterConnection(ctx1);
+        ExecuteEnv.getInstance().getScheduler().unregisterConnection(ctx1);
     }
 
     @Test
-    public void testKillStmtWhenQueryIdNotFound2(@Mocked SocketChannel socketChannel, @Mocked TMasterOpResult result)
+    public void testKillStmtWhenQueryIdNotFound2(@Mocked StreamConnection connection, @Mocked TMasterOpResult result)
             throws Exception {
         // test killing query is forwarded to fe and query not found
         new MockUp<TMasterOpResult>() {
@@ -127,29 +126,29 @@ public class KillQueryHandleTest {
                 return (T) result;
             }
         };
-        ConnectContext ctx1 = prepareConnectContext(socketChannel);
+        ConnectContext ctx1 = prepareConnectContext(connection);
 
         ConnectContext ctx = kill(ctx1.getQueryId().toString(), true);
-        Assert.assertEquals(QueryState.MysqlStateType.ERR, ctx.getState().getStateType());
-        Assert.assertEquals("query xxx not found", ctx.getState().getErrorMessage());
+        Assertions.assertEquals(QueryState.MysqlStateType.ERR, ctx.getState().getStateType());
+        Assertions.assertEquals("query xxx not found", ctx.getState().getErrorMessage());
 
-        ctx1.getConnectScheduler().unregisterConnection(ctx1);
+        ExecuteEnv.getInstance().getScheduler().unregisterConnection(ctx1);
     }
 
     @Test
-    public void testKillStmtWhenConnectionFail(@Mocked SocketChannel socketChannel) throws Exception {
+    public void testKillStmtWhenConnectionFail(@Mocked StreamConnection connection) throws Exception {
         // test killing query is forwarded to fe but fe is down
-        ConnectContext ctx1 = prepareConnectContext(socketChannel);
+        ConnectContext ctx1 = prepareConnectContext(connection);
 
         ConnectContext ctx = kill(ctx1.getQueryId().toString(), true);
-        Assert.assertEquals(QueryState.MysqlStateType.ERR, ctx.getState().getStateType());
-        Assert.assertTrue(ctx.getState().getErrorMessage().contains("Connection refused"));
+        Assertions.assertEquals(QueryState.MysqlStateType.ERR, ctx.getState().getStateType());
+        Assertions.assertTrue(ctx.getState().getErrorMessage().contains("ConnectException"));
 
-        ctx1.getConnectScheduler().unregisterConnection(ctx1);
+        ExecuteEnv.getInstance().getScheduler().unregisterConnection(ctx1);
     }
 
     @Test
-    public void testKillStmtWhenForwardWithUnknownError(@Mocked SocketChannel socketChannel) throws Exception {
+    public void testKillStmtWhenForwardWithUnknownError(@Mocked StreamConnection connection) throws Exception {
         // test killing query is forwarded to fe with unexpected error
         new MockUp(ThriftRPCRequestExecutor.class) {
             @Mock
@@ -160,33 +159,33 @@ public class KillQueryHandleTest {
                 throw new Exception("Unknown error x");
             }
         };
-        ConnectContext ctx1 = prepareConnectContext(socketChannel);
+        ConnectContext ctx1 = prepareConnectContext(connection);
 
         ConnectContext ctx = kill(ctx1.getQueryId().toString(), true);
-        Assert.assertEquals(QueryState.MysqlStateType.ERR, ctx.getState().getStateType());
-        Assert.assertEquals("Failed to connect to fe 127.0.0.1:9020 due to Unknown error x",
+        Assertions.assertEquals(QueryState.MysqlStateType.ERR, ctx.getState().getStateType());
+        Assertions.assertEquals("Failed to connect to fe 127.0.0.1:9020 due to Unknown error x",
                 ctx.getState().getErrorMessage());
 
-        ctx1.getConnectScheduler().unregisterConnection(ctx1);
+        ExecuteEnv.getInstance().getScheduler().unregisterConnection(ctx1);
     }
 
     @Test
-    public void testKillStmtWithCustomQueryId(@Mocked SocketChannel socketChannel) throws Exception {
+    public void testKillStmtWithCustomQueryId(@Mocked StreamConnection connection) throws Exception {
         // test killing query successfully
-        ConnectContext ctx1 = prepareConnectContext(socketChannel);
+        ConnectContext ctx1 = prepareConnectContext(connection);
         ctx1.getSessionVariable().setCustomQueryId("a_custom_query_id");
 
-        Assert.assertFalse(ctx1.isKilled());
+        Assertions.assertFalse(ctx1.isKilled());
         ConnectContext ctx = kill("a_custom_query_id", false);
         // isKilled is set
-        Assert.assertTrue(ctx1.isKilled());
-        Assert.assertEquals(QueryState.MysqlStateType.OK, ctx.getState().getStateType());
+        Assertions.assertTrue(ctx1.isKilled());
+        Assertions.assertEquals(QueryState.MysqlStateType.OK, ctx.getState().getStateType());
 
-        ctx1.getConnectScheduler().unregisterConnection(ctx1);
+        ExecuteEnv.getInstance().getScheduler().unregisterConnection(ctx1);
     }
 
-    private ConnectContext prepareConnectContext(SocketChannel socketChannel) {
-        ConnectContext ctx1 = new ConnectContext(socketChannel) {
+    private ConnectContext prepareConnectContext(StreamConnection connection) {
+        ConnectContext ctx1 = new ConnectContext(connection) {
             @Override
             public void kill(boolean killConnection, String cancelledMessage) {
                 super.isKilled = true;
@@ -196,8 +195,7 @@ public class KillQueryHandleTest {
         ctx1.setQualifiedUser("root");
         ctx1.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         ctx1.setConnectionId(1);
-        ctx1.setQueryId(UUID.randomUUID());
-        ctx1.setConnectScheduler(ExecuteEnv.getInstance().getScheduler());
+        ctx1.setQueryId(UUIDUtil.genUUID());
 
         ExecuteEnv.getInstance().getScheduler().registerConnection(ctx1);
         return ctx1;
@@ -205,7 +203,6 @@ public class KillQueryHandleTest {
 
     private ConnectContext kill(String queryId, boolean forward) throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
-        ctx.setConnectScheduler(ExecuteEnv.getInstance().getScheduler());
         // reset state
         ctx.getState().reset();
         ctx.setForwardTimes(0);

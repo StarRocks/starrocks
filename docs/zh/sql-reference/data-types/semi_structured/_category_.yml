@@ -1,0 +1,6 @@
+position: 40 # float position is supported
+label: '半结构化类型'
+collapsible: true
+collapsed: true
+link:
+  type: generated-index

@@ -1,6 +1,7 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 keywords: ['suoyin']
+sidebar_position: 10
 ---
 
 # 前缀索引和排序键
@@ -123,4 +124,4 @@ ORDER BY (uid, name);
 
 ## 如何判断前缀索引是否生效
 
-执行查询后，您可以通过 [Query Profile](../../administration/query_profile_overview.md) 的 scan 节点中的详细指标查看前缀索引是否生效以及过滤效果，例如 `ShortKeyFilterRows` 等指标。
+执行查询后，您可以通过 [Query Profile](../../best_practices/query_tuning/query_profile_overview.md) 的 scan 节点中的详细指标查看前缀索引是否生效以及过滤效果，例如 `ShortKeyFilterRows` 等指标。

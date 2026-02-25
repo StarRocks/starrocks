@@ -26,10 +26,19 @@ import java.util.List;
 public class LogicalUnionOperator extends LogicalSetOperator {
     private boolean isUnionAll;
 
+    // record if this union is derived from IcebergEqualityDeleteRewriteRule
+    private boolean fromIcebergEqualityDeleteRewrite;
+
     public LogicalUnionOperator(List<ColumnRefOperator> result, List<List<ColumnRefOperator>> childOutputColumns,
                                 boolean isUnionAll) {
+        this(result, childOutputColumns, isUnionAll, false);
+    }
+
+    public LogicalUnionOperator(List<ColumnRefOperator> result, List<List<ColumnRefOperator>> childOutputColumns,
+                                boolean isUnionAll, boolean fromIcebergEqualityDeleteRewrite) {
         super(OperatorType.LOGICAL_UNION, result, childOutputColumns, Operator.DEFAULT_LIMIT, null);
         this.isUnionAll = isUnionAll;
+        this.fromIcebergEqualityDeleteRewrite = fromIcebergEqualityDeleteRewrite;
     }
 
     private LogicalUnionOperator() {
@@ -38,6 +47,10 @@ public class LogicalUnionOperator extends LogicalSetOperator {
 
     public boolean isUnionAll() {
         return isUnionAll;
+    }
+
+    public boolean isFromIcebergEqualityDeleteRewrite() {
+        return fromIcebergEqualityDeleteRewrite;
     }
 
     @Override
@@ -83,11 +96,17 @@ public class LogicalUnionOperator extends LogicalSetOperator {
         public Builder withOperator(LogicalUnionOperator unionOperator) {
             super.withOperator(unionOperator);
             builder.isUnionAll = unionOperator.isUnionAll;
+            builder.fromIcebergEqualityDeleteRewrite = unionOperator.fromIcebergEqualityDeleteRewrite;
             return this;
         }
 
         public Builder isUnionAll(boolean isUnionAll) {
             builder.isUnionAll = isUnionAll;
+            return this;
+        }
+
+        public Builder isFromIcebergEqualityDeleteRewrite(boolean isFromIcebergEqualityDeleteRewrite) {
+            builder.fromIcebergEqualityDeleteRewrite = isFromIcebergEqualityDeleteRewrite;
             return this;
         }
     }

@@ -63,11 +63,11 @@ TEST_F(VectorizedArithmeticExprTest, addExpr) {
             ASSERT_FALSE(ptr->is_nullable());
             ASSERT_TRUE(ptr->is_numeric());
 
-            auto v = std::static_pointer_cast<Int8Column>(ptr);
+            auto v = Int8Column::static_pointer_cast(ptr);
             ASSERT_EQ(10, v->size());
 
             for (int j = 0; j < v->size(); ++j) {
-                ASSERT_EQ(3, v->get_data()[j]);
+                ASSERT_EQ(3, v->immutable_data()[j]);
             }
         });
     }
@@ -91,11 +91,11 @@ TEST_F(VectorizedArithmeticExprTest, addExpr) {
             ASSERT_FALSE(ptr->is_nullable());
             ASSERT_TRUE(ptr->is_numeric());
 
-            auto v = std::static_pointer_cast<Int32Column>(ptr);
+            auto v = Int32Column::static_pointer_cast(ptr);
             ASSERT_EQ(10, v->size());
 
             for (int j = 0; j < v->size(); ++j) {
-                ASSERT_EQ(3, v->get_data()[j]);
+                ASSERT_EQ(3, v->immutable_data()[j]);
             }
         });
     }
@@ -119,11 +119,11 @@ TEST_F(VectorizedArithmeticExprTest, addExpr) {
             ASSERT_FALSE(ptr->is_nullable());
             ASSERT_TRUE(ptr->is_numeric());
 
-            auto v = std::static_pointer_cast<Int128Column>(ptr);
+            auto v = Int128Column::static_pointer_cast(ptr);
             ASSERT_EQ(10, v->size());
 
             for (int j = 0; j < v->size(); ++j) {
-                ASSERT_EQ(7, v->get_data()[j]);
+                ASSERT_EQ(7, v->immutable_data()[j]);
             }
         });
     }
@@ -147,11 +147,11 @@ TEST_F(VectorizedArithmeticExprTest, addExpr) {
             ASSERT_FALSE(ptr->is_nullable());
             ASSERT_TRUE(ptr->is_numeric());
 
-            auto v = std::static_pointer_cast<FloatColumn>(ptr);
+            auto v = FloatColumn::static_pointer_cast(ptr);
             ASSERT_EQ(10, v->size());
 
             for (int j = 0; j < v->size(); ++j) {
-                ASSERT_EQ(3, v->get_data()[j]);
+                ASSERT_EQ(3, v->immutable_data()[j]);
             }
         });
     }
@@ -171,11 +171,11 @@ TEST_F(VectorizedArithmeticExprTest, mulExpr) {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
 
         ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
-            auto v = std::static_pointer_cast<Int32Column>(ptr);
+            auto v = Int32Column::static_pointer_cast(ptr);
             ASSERT_EQ(10, v->size());
 
             for (int j = 0; j < v->size(); ++j) {
-                ASSERT_EQ(20, v->get_data()[j]);
+                ASSERT_EQ(20, v->immutable_data()[j]);
             }
         });
     }
@@ -207,9 +207,9 @@ TEST_F(VectorizedArithmeticExprTest, nullMulExpr) {
             }
         }
 
-        auto ptr = std::static_pointer_cast<NullableColumn>(v)->data_column();
+        auto ptr = NullableColumn::static_pointer_cast(v)->data_column();
         for (int j = 0; j < v->size(); ++j) {
-            ASSERT_EQ(10, std::static_pointer_cast<Int32Column>(ptr)->get_data()[j]);
+            ASSERT_EQ(10, Int32Column::static_pointer_cast(ptr)->immutable_data()[j]);
         }
     }
 
@@ -233,7 +233,7 @@ TEST_F(VectorizedArithmeticExprTest, nullMulExpr) {
             ASSERT_TRUE(ptr->is_nullable());
             ASSERT_FALSE(ptr->is_numeric());
 
-            auto v = std::static_pointer_cast<NullableColumn>(ptr);
+            auto v = NullableColumn::static_pointer_cast(ptr);
             ASSERT_EQ(10, v->size());
 
             for (int j = 0; j < v->size(); ++j) {
@@ -259,14 +259,14 @@ TEST_F(VectorizedArithmeticExprTest, divExpr) {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
 
         ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
-            auto v = std::static_pointer_cast<NullableColumn>(ptr);
+            auto v = NullableColumn::static_pointer_cast(ptr);
             ASSERT_TRUE(v->is_nullable());
             ASSERT_EQ(10, v->size());
 
-            auto nums = std::static_pointer_cast<Int32Column>(v->data_column());
+            auto nums = Int32Column::static_pointer_cast(v->data_column());
 
             for (int j = 0; j < nums->size(); ++j) {
-                ASSERT_EQ(5, nums->get_data()[j]);
+                ASSERT_EQ(5, nums->immutable_data()[j]);
             }
 
             for (int j = 0; j < nums->size(); ++j) {
@@ -285,15 +285,15 @@ TEST_F(VectorizedArithmeticExprTest, divExpr) {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
 
         ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
-            auto v = std::static_pointer_cast<NullableColumn>(ptr);
+            auto v = NullableColumn::static_pointer_cast(ptr);
             ASSERT_TRUE(v->is_nullable());
             ASSERT_EQ(1, v->size());
 
-            auto nums = std::static_pointer_cast<Int32Column>(v->data_column());
+            auto nums = Int32Column::static_pointer_cast(v->data_column());
 
             ASSERT_EQ(nums->size(), 1);
             int32_t zero = 0;
-            ASSERT_EQ(crc_hash_32(&nums->get_data()[0], sizeof(int32_t), 0x811C9DC5),
+            ASSERT_EQ(crc_hash_32(&nums->immutable_data()[0], sizeof(int32_t), 0x811C9DC5),
                       crc_hash_32(&zero, sizeof(int32_t), 0x811C9DC5));
         });
     }
@@ -327,11 +327,11 @@ TEST_F(VectorizedArithmeticExprTest, produceNullModExpr) {
             ASSERT_TRUE(ptr->is_nullable());
             ASSERT_FALSE(ptr->is_numeric());
 
-            auto v = std::static_pointer_cast<NullableColumn>(ptr);
+            auto v = NullableColumn::static_pointer_cast(ptr);
             ASSERT_EQ(10, v->size());
 
             for (int j = 0; j < v->size(); ++j) {
-                ASSERT_EQ(0, std::static_pointer_cast<Int32Column>(v->data_column())->get_data()[j]);
+                ASSERT_EQ(0, Int32Column::static_pointer_cast(v->data_column())->get_data()[j]);
             }
 
             for (int j = 0; j < v->size(); ++j) {
@@ -391,11 +391,11 @@ TEST_F(VectorizedArithmeticExprTest, mergeNullDivExpr) {
             ASSERT_TRUE(ptr->is_nullable());
             ASSERT_FALSE(ptr->is_numeric());
 
-            auto v = std::static_pointer_cast<NullableColumn>(ptr);
+            auto v = NullableColumn::static_pointer_cast(ptr);
             ASSERT_EQ(10, v->size());
 
             for (int j = 0; j < v->size(); ++j) {
-                ASSERT_EQ(5, std::static_pointer_cast<Int32Column>(v->data_column())->get_data()[j]);
+                ASSERT_EQ(5, Int32Column::static_pointer_cast(v->data_column())->get_data()[j]);
             }
 
             for (int j = 0; j < v->size(); ++j) {
@@ -419,7 +419,7 @@ TEST_F(VectorizedArithmeticExprTest, constVectorMulExpr) {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
 
         ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
-            auto v = std::static_pointer_cast<Int32Column>(ptr);
+            auto v = Int32Column::static_pointer_cast(ptr);
             ASSERT_EQ(10, v->size());
 
             for (int j = 0; j < v->size(); ++j) {
@@ -443,11 +443,11 @@ TEST_F(VectorizedArithmeticExprTest, constConstAddExpr) {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
 
         ASSERT_TRUE(ptr->is_constant());
-        auto v = std::static_pointer_cast<ConstColumn>(ptr)->data_column();
+        auto v = ConstColumn::static_pointer_cast(ptr)->data_column();
         ASSERT_EQ(1, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
-            ASSERT_EQ(13, std::static_pointer_cast<Int32Column>(v)->get_data()[j]);
+            ASSERT_EQ(13, Int32Column::static_pointer_cast(v)->get_data()[j]);
         }
     }
 }
@@ -485,11 +485,11 @@ TEST_F(VectorizedArithmeticExprTest, produceNullVecotConstModExpr) {
             ASSERT_TRUE(ptr->is_nullable());
             ASSERT_FALSE(ptr->is_numeric());
 
-            auto v = std::static_pointer_cast<NullableColumn>(ptr);
+            auto v = NullableColumn::static_pointer_cast(ptr);
             ASSERT_EQ(10, v->size());
 
             for (int j = 0; j < v->size(); ++j) {
-                ASSERT_EQ(0, std::static_pointer_cast<Int32Column>(v->data_column())->get_data()[j]);
+                ASSERT_EQ(0, Int32Column::static_pointer_cast(v->data_column())->get_data()[j]);
             }
 
             for (int j = 0; j < v->size(); ++j) {
@@ -510,7 +510,7 @@ TEST_F(VectorizedArithmeticExprTest, bitNotExpr) {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
 
         ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
-            auto v = std::static_pointer_cast<Int32Column>(ptr);
+            auto v = Int32Column::static_pointer_cast(ptr);
 
             for (int j = 0; j < ptr->size(); ++j) {
                 ASSERT_EQ(~1, v->get_data()[j]);
@@ -535,8 +535,8 @@ TEST_F(VectorizedArithmeticExprTest, constBitNotExpr) {
 
         ASSERT_TRUE(ptr->is_constant());
 
-        auto re = std::static_pointer_cast<ConstColumn>(ptr);
-        auto v = std::static_pointer_cast<Int32Column>(re->data_column());
+        auto re = ConstColumn::static_pointer_cast(ptr);
+        auto v = Int32Column::static_pointer_cast(re->data_column());
 
         for (int j = 0; j < ptr->size(); ++j) {
             ASSERT_EQ(~2, v->get_data()[j]);
@@ -584,7 +584,7 @@ TEST_F(VectorizedArithmeticExprTest, constModExpr) {
         ASSERT_TRUE(ptr->is_constant());
         ASSERT_FALSE(ptr->is_numeric());
 
-        auto v = std::static_pointer_cast<ConstColumn>(ptr);
+        auto v = ConstColumn::static_pointer_cast(ptr);
         ASSERT_EQ(1, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
@@ -636,7 +636,7 @@ TEST_F(VectorizedArithmeticExprTest, constMod128Expr) {
                     ASSERT_TRUE(ptr->is_constant());
                     ASSERT_FALSE(ptr->is_numeric());
 
-                    auto v = std::static_pointer_cast<ConstColumn>(ptr);
+                    auto v = ConstColumn::static_pointer_cast(ptr);
                     ASSERT_EQ(1, v->size());
 
                     for (int j = 0; j < v->size(); ++j) {
@@ -690,7 +690,7 @@ TEST_F(VectorizedArithmeticExprTest, constModN128Expr) {
                     ASSERT_TRUE(ptr->is_constant());
                     ASSERT_FALSE(ptr->is_numeric());
 
-                    auto v = std::static_pointer_cast<ConstColumn>(ptr);
+                    auto v = ConstColumn::static_pointer_cast(ptr);
                     ASSERT_EQ(1, v->size());
 
                     for (int j = 0; j < v->size(); ++j) {

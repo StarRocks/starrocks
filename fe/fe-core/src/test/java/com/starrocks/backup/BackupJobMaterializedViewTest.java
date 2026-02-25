@@ -16,22 +16,21 @@ package com.starrocks.backup;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.BackupJob.BackupJobState;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FsBroker;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UnitTestUtil;
 import com.starrocks.metric.MetricRepo;
-import com.starrocks.persist.EditLog;
+import com.starrocks.persist.TableRefPersist;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -43,16 +42,16 @@ import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTaskType;
-import mockit.Delegate;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
-import mockit.Mocked;
-import org.junit.Assert;
-import org.junit.Ignore;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
@@ -87,9 +86,6 @@ public class BackupJobMaterializedViewTest {
 
     private static List<Path> pathsNeedToBeDeleted = Lists.newArrayList();
 
-    @Mocked
-    private GlobalStateMgr globalStateMgr;
-
     private MockBackupHandler backupHandler;
 
     private MockRepositoryMgr repoMgr;
@@ -118,11 +114,8 @@ public class BackupJobMaterializedViewTest {
         }
     }
 
-    @Mocked
-    private EditLog editLog;
-
     private Repository repo = new Repository(repoId, "repo", false, "my_repo",
-            new BlobStorage("broker", Maps.newHashMap()));
+                new BlobStorage("broker", Maps.newHashMap()));
 
     @BeforeAll
     public static void start() {
@@ -141,14 +134,15 @@ public class BackupJobMaterializedViewTest {
             File backupDir = new File(path.toString());
             if (backupDir.exists()) {
                 Files.walk(path, FileVisitOption.FOLLOW_LINKS).sorted(Comparator.reverseOrder()).map(Path::toFile)
-                        .forEach(File::delete);
+                            .forEach(File::delete);
             }
         }
     }
 
     @BeforeEach
     public void setUp() {
-
+        UtFrameUtils.setUpForPersistTest();
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         repoMgr = new MockRepositoryMgr();
         backupHandler = new MockBackupHandler(globalStateMgr);
 
@@ -156,35 +150,9 @@ public class BackupJobMaterializedViewTest {
         Deencapsulation.setField(globalStateMgr, "backupHandler", backupHandler);
 
         db = UnitTestUtil.createDbWithMaterializedView(dbId, tblId, partId, idxId, tabletId,
-                backendId, version, KeysType.DUP_KEYS);
+                    backendId, version, KeysType.DUP_KEYS);
 
-        new Expectations(globalStateMgr) {
-            {
-                globalStateMgr.getDb(anyLong);
-                minTimes = 0;
-                result = db;
-
-                globalStateMgr.getNextId();
-                minTimes = 0;
-                result = id.getAndIncrement();
-
-                globalStateMgr.getEditLog();
-                minTimes = 0;
-                result = editLog;
-            }
-        };
-
-        new Expectations() {
-            {
-                editLog.logBackupJob((BackupJob) any);
-                minTimes = 0;
-                result = new Delegate() {
-                    public void logBackupJob(BackupJob job) {
-                        System.out.println("log backup job: " + job);
-                    }
-                };
-            }
-        };
+        globalStateMgr.getLocalMetastore().replayCreateDb(db);
 
         new MockUp<AgentTaskExecutor>() {
             @Mock
@@ -206,10 +174,10 @@ public class BackupJobMaterializedViewTest {
             }
         };
 
-        List<TableRef> tableRefs = Lists.newArrayList();
+        List<TableRefPersist> tableRefs = Lists.newArrayList();
         // disorder
-        tableRefs.add(new TableRef(new TableName(UnitTestUtil.DB_NAME, UnitTestUtil.MATERIALIZED_VIEW_NAME), null));
-        tableRefs.add(new TableRef(new TableName(UnitTestUtil.DB_NAME, UnitTestUtil.TABLE_NAME), null));
+        tableRefs.add(new TableRefPersist(new TableName(UnitTestUtil.DB_NAME, UnitTestUtil.MATERIALIZED_VIEW_NAME), null));
+        tableRefs.add(new TableRefPersist(new TableName(UnitTestUtil.DB_NAME, UnitTestUtil.TABLE_NAME), null));
 
         job = new BackupJob(MV_LABEL, dbId, UnitTestUtil.DB_NAME, tableRefs, 13600 * 1000, globalStateMgr, repo.getId());
         new Expectations(job) {
@@ -221,41 +189,50 @@ public class BackupJobMaterializedViewTest {
         };
     }
 
-    @Ignore
+    @AfterEach
+    public void tearDown() {
+        UtFrameUtils.tearDownForPersisTest();
+    }
+
+    @Disabled
     public void testRunNormal() {
         // 1.pending
-        Assert.assertEquals(BackupJobState.PENDING, job.getState());
+        Assertions.assertEquals(BackupJobState.PENDING, job.getState());
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(BackupJobState.SNAPSHOTING, job.getState());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(BackupJobState.SNAPSHOTING, job.getState());
 
         BackupMeta backupMeta = job.getBackupMeta();
-        Assert.assertEquals(2, backupMeta.getTables().size());
+        Assertions.assertEquals(2, backupMeta.getTables().size());
 
         // test backup meta
         {
             {
                 OlapTable backupTbl = (OlapTable) backupMeta.getTable(UnitTestUtil.TABLE_NAME);
                 List<String> partNames = Lists.newArrayList(backupTbl.getPartitionNames());
-                Assert.assertNotNull(backupTbl);
-                Assert.assertEquals(backupTbl.getSignature(BackupHandler.SIGNATURE_VERSION, partNames, true),
-                        ((OlapTable) db.getTable(tblId)).getSignature(BackupHandler.SIGNATURE_VERSION, partNames, true));
+                Assertions.assertNotNull(backupTbl);
+                Assertions.assertEquals(RestoreJob.getSignature(backupTbl, BackupHandler.SIGNATURE_VERSION, partNames, true),
+                            RestoreJob.getSignature(((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                        .getTable(db.getId(), tblId)), BackupHandler.SIGNATURE_VERSION, partNames,
+                                        true));
             }
             {
                 OlapTable backupTbl = (OlapTable) backupMeta.getTable(UnitTestUtil.MATERIALIZED_VIEW_NAME);
                 List<String> partNames = Lists.newArrayList(backupTbl.getPartitionNames());
-                Assert.assertNotNull(backupTbl);
-                Assert.assertEquals(backupTbl.getSignature(BackupHandler.SIGNATURE_VERSION, partNames, true),
-                        ((OlapTable) db.getTable(tblId + 1)).getSignature(BackupHandler.SIGNATURE_VERSION, partNames, true));
+                Assertions.assertNotNull(backupTbl);
+                Assertions.assertEquals(RestoreJob.getSignature(backupTbl, BackupHandler.SIGNATURE_VERSION, partNames, true),
+                            RestoreJob.getSignature(((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                        .getTable(db.getId(), tblId + 1)), BackupHandler.SIGNATURE_VERSION, partNames,
+                                        true));
             }
         }
 
-        Assert.assertEquals(2, AgentTaskQueue.getTaskNum());
+        Assertions.assertEquals(2, AgentTaskQueue.getTaskNum());
 
         // 2. snapshoting
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(BackupJobState.SNAPSHOTING, job.getState());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(BackupJobState.SNAPSHOTING, job.getState());
 
         // 3. snapshot finished
         String snapshotPath = "/path/to/snapshot";
@@ -268,138 +245,139 @@ public class BackupJobMaterializedViewTest {
         // run task 1
         {
             AgentTask task = AgentTaskQueue.getTask(backendId, TTaskType.MAKE_SNAPSHOT, tabletId);
-            Assert.assertTrue(task instanceof SnapshotTask);
+            Assertions.assertTrue(task instanceof SnapshotTask);
             SnapshotTask snapshotTask = (SnapshotTask) task;
             TFinishTaskRequest request = new TFinishTaskRequest(tBackend, TTaskType.MAKE_SNAPSHOT,
-                    snapshotTask.getSignature(), taskStatus);
+                        snapshotTask.getSignature(), taskStatus);
             request.setSnapshot_files(snapshotFiles);
             request.setSnapshot_path(snapshotPath);
-            Assert.assertTrue(job.finishTabletSnapshotTask(snapshotTask, request));
+            Assertions.assertTrue(job.finishTabletSnapshotTask(snapshotTask, request));
             job.run();
-            Assert.assertEquals(Status.OK, job.getStatus());
+            Assertions.assertEquals(Status.OK, job.getStatus());
         }
         // run task 2
         {
             AgentTask task = AgentTaskQueue.getTask(backendId, TTaskType.MAKE_SNAPSHOT, tabletId + 1);
-            Assert.assertTrue(task instanceof SnapshotTask);
+            Assertions.assertTrue(task instanceof SnapshotTask);
             SnapshotTask snapshotTask = (SnapshotTask) task;
             TFinishTaskRequest request = new TFinishTaskRequest(tBackend, TTaskType.MAKE_SNAPSHOT,
-                    snapshotTask.getSignature(), taskStatus);
+                        snapshotTask.getSignature(), taskStatus);
             request.setSnapshot_files(snapshotFiles);
             request.setSnapshot_path(snapshotPath);
-            Assert.assertTrue(job.finishTabletSnapshotTask(snapshotTask, request));
+            Assertions.assertTrue(job.finishTabletSnapshotTask(snapshotTask, request));
             job.run();
-            Assert.assertEquals(Status.OK, job.getStatus());
+            Assertions.assertEquals(Status.OK, job.getStatus());
         }
-        Assert.assertEquals(BackupJobState.UPLOAD_SNAPSHOT, job.getState());
+        Assertions.assertEquals(BackupJobState.UPLOAD_SNAPSHOT, job.getState());
 
         // 4. upload snapshots
         AgentTaskQueue.clearAllTasks();
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(BackupJobState.UPLOADING, job.getState());
-        Assert.assertEquals(1, AgentTaskQueue.getTaskNum());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(BackupJobState.UPLOADING, job.getState());
+        Assertions.assertEquals(1, AgentTaskQueue.getTaskNum());
 
         AgentTask task = AgentTaskQueue.getTask(backendId, TTaskType.UPLOAD, id.get() - 1);
-        Assert.assertTrue(task instanceof UploadTask);
+        Assertions.assertTrue(task instanceof UploadTask);
         UploadTask upTask = (UploadTask) task;
 
-        Assert.assertEquals(job.getJobId(), upTask.getJobId());
+        Assertions.assertEquals(job.getJobId(), upTask.getJobId());
         Map<String, String> srcToDest = upTask.getSrcToDestPath();
-        Assert.assertEquals(1, srcToDest.size());
-        String dest = srcToDest.get(snapshotPath + "/" + tabletId  + "/" + 0);
-        Assert.assertNotNull(dest);
+        Assertions.assertEquals(1, srcToDest.size());
+        String dest = srcToDest.get(snapshotPath + "/" + tabletId + "/" + 0);
+        Assertions.assertNotNull(dest);
 
         // 5. uploading
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(BackupJobState.UPLOADING, job.getState());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(BackupJobState.UPLOADING, job.getState());
         Map<Long, List<String>> tabletFileMap = Maps.newHashMap();
         TFinishTaskRequest request = new TFinishTaskRequest(tBackend, TTaskType.UPLOAD,
-                upTask.getSignature(), taskStatus);
+                    upTask.getSignature(), taskStatus);
         request.setTablet_files(tabletFileMap);
 
-        Assert.assertFalse(job.finishSnapshotUploadTask(upTask, request));
+        Assertions.assertFalse(job.finishSnapshotUploadTask(upTask, request));
         List<String> tabletFiles = Lists.newArrayList();
         tabletFileMap.put(tabletId, tabletFiles);
-        Assert.assertFalse(job.finishSnapshotUploadTask(upTask, request));
+        Assertions.assertFalse(job.finishSnapshotUploadTask(upTask, request));
         tabletFiles.add("1.dat.4f158689243a3d6030352fec3cfd3798");
         tabletFiles.add("wrong_files.4f158689243a3d6030352fec3cfd3798");
-        Assert.assertFalse(job.finishSnapshotUploadTask(upTask, request));
+        Assertions.assertFalse(job.finishSnapshotUploadTask(upTask, request));
         tabletFiles.clear();
         tabletFiles.add("1.dat.4f158689243a3d6030352fec3cfd3798");
         tabletFiles.add("meta.4f158689243a3d6030352fec3cfd3798");
-        Assert.assertTrue(job.finishSnapshotUploadTask(upTask, request));
+        Assertions.assertTrue(job.finishSnapshotUploadTask(upTask, request));
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(BackupJobState.SAVE_META, job.getState());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(BackupJobState.SAVE_META, job.getState());
 
         // 6. save meta
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(BackupJobState.UPLOAD_INFO, job.getState());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(BackupJobState.UPLOAD_INFO, job.getState());
         File metaInfo = new File(job.getLocalMetaInfoFilePath());
-        Assert.assertTrue(metaInfo.exists());
+        Assertions.assertTrue(metaInfo.exists());
         File jobInfo = new File(job.getLocalJobInfoFilePath());
-        Assert.assertTrue(jobInfo.exists());
+        Assertions.assertTrue(jobInfo.exists());
 
         BackupMeta restoreMetaInfo = null;
         BackupJobInfo restoreJobInfo = null;
         try {
             restoreMetaInfo = BackupMeta.fromFile(job.getLocalMetaInfoFilePath(), FeConstants.STARROCKS_META_VERSION);
-            Assert.assertEquals(2, restoreMetaInfo.getTables().size());
+            Assertions.assertEquals(2, restoreMetaInfo.getTables().size());
 
             {
                 OlapTable olapTable = (OlapTable) restoreMetaInfo.getTable(tblId);
-                Assert.assertNotNull(olapTable);
-                Assert.assertNotNull(restoreMetaInfo.getTable(UnitTestUtil.TABLE_NAME));
+                Assertions.assertNotNull(olapTable);
+                Assertions.assertNotNull(restoreMetaInfo.getTable(UnitTestUtil.TABLE_NAME));
                 List<String> names = Lists.newArrayList(olapTable.getPartitionNames());
-                Assert.assertEquals(((OlapTable) db.getTable(tblId)).getSignature(BackupHandler.SIGNATURE_VERSION, names, true),
-                        olapTable.getSignature(BackupHandler.SIGNATURE_VERSION, names, true));
+                Assertions.assertEquals(RestoreJob.getSignature(((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                        .getTable(db.getId(), tblId)), BackupHandler.SIGNATURE_VERSION, names, true),
+                            RestoreJob.getSignature(olapTable, BackupHandler.SIGNATURE_VERSION, names, true));
             }
             {
                 MaterializedView mv = (MaterializedView) restoreMetaInfo.getTable(tblId + 1);
-                Assert.assertNotNull(mv);
-                Assert.assertNotNull(restoreMetaInfo.getTable(UnitTestUtil.MATERIALIZED_VIEW_NAME));
+                Assertions.assertNotNull(mv);
+                Assertions.assertNotNull(restoreMetaInfo.getTable(UnitTestUtil.MATERIALIZED_VIEW_NAME));
                 List<String> names = Lists.newArrayList(mv.getPartitionNames());
-                Assert.assertEquals(((OlapTable) db.getTable(tblId + 1)).getSignature(BackupHandler.SIGNATURE_VERSION, names,
-                                true), mv.getSignature(BackupHandler.SIGNATURE_VERSION, names, true));
+                Assertions.assertEquals(RestoreJob.getSignature(((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(db.getId(), tblId + 1)), BackupHandler.SIGNATURE_VERSION, names,
+                            true), RestoreJob.getSignature(mv, BackupHandler.SIGNATURE_VERSION, names, true));
             }
 
             restoreJobInfo = BackupJobInfo.fromFile(job.getLocalJobInfoFilePath());
-            Assert.assertEquals(UnitTestUtil.DB_NAME, restoreJobInfo.dbName);
-            Assert.assertEquals(job.getLabel(), restoreJobInfo.name);
-            Assert.assertEquals(2, restoreJobInfo.tables.size());
+            Assertions.assertEquals(UnitTestUtil.DB_NAME, restoreJobInfo.dbName);
+            Assertions.assertEquals(job.getLabel(), restoreJobInfo.name);
+            Assertions.assertEquals(2, restoreJobInfo.tables.size());
 
             // base table
             BackupJobInfo.BackupTableInfo baseTableBackupInfo = restoreJobInfo.getTableInfo(UnitTestUtil.TABLE_NAME);
-            Assert.assertTrue(baseTableBackupInfo != null);
+            Assertions.assertTrue(baseTableBackupInfo != null);
             Table remoteBaseTable = backupMeta.getTable(UnitTestUtil.TABLE_NAME);
-            Assert.assertTrue(remoteBaseTable != null);
+            Assertions.assertTrue(remoteBaseTable != null);
 
             // mv
             BackupJobInfo.BackupTableInfo mvBackupInfo = restoreJobInfo.getTableInfo(UnitTestUtil.TABLE_NAME);
-            Assert.assertTrue(mvBackupInfo != null);
+            Assertions.assertTrue(mvBackupInfo != null);
             Table mvTable = backupMeta.getTable(UnitTestUtil.MATERIALIZED_VIEW_NAME);
-            Assert.assertTrue(mvTable != null);
-            Assert.assertTrue(mvTable instanceof MaterializedView);
+            Assertions.assertTrue(mvTable != null);
+            Assertions.assertTrue(mvTable instanceof MaterializedView);
             MaterializedView mv = (MaterializedView) mvTable;
-            Assert.assertTrue(mv != null);
-            Assert.assertTrue(!mv.isActive());
-            Assert.assertTrue(mv.getInactiveReason().contains(String.format("Set the materialized view %s inactive in backup",
-                    UnitTestUtil.MATERIALIZED_VIEW_NAME)));
+            Assertions.assertTrue(mv != null);
+            Assertions.assertTrue(!mv.isActive());
+            Assertions.assertTrue(mv.getInactiveReason().contains(String.format("Set the materialized view %s inactive in backup",
+                        UnitTestUtil.MATERIALIZED_VIEW_NAME)));
         } catch (IOException e) {
-            e.printStackTrace();
-            Assert.fail();
+            Assertions.fail(e.getMessage());
         }
 
-        Assert.assertNull(job.getBackupMeta());
-        Assert.assertNull(job.getJobInfo());
+        Assertions.assertNull(job.getBackupMeta());
+        Assertions.assertNull(job.getJobInfo());
 
         // 7. upload_info
         job.run();
-        Assert.assertEquals(Status.OK, job.getStatus());
-        Assert.assertEquals(BackupJobState.FINISHED, job.getState());
+        Assertions.assertEquals(Status.OK, job.getStatus());
+        Assertions.assertEquals(BackupJobState.FINISHED, job.getState());
 
         if (job.getLocalJobDirPath() != null) {
             pathsNeedToBeDeleted.add(job.getLocalJobDirPath());
@@ -412,15 +390,15 @@ public class BackupJobMaterializedViewTest {
         // 1.pending
         AgentTaskQueue.clearAllTasks();
 
-        List<TableRef> tableRefs = Lists.newArrayList();
-        tableRefs.add(new TableRef(new TableName(UnitTestUtil.DB_NAME, "unknown_tbl"), null));
-        tableRefs.add(new TableRef(new TableName(UnitTestUtil.DB_NAME, "unknown_mv"), null));
+        List<TableRefPersist> tableRefs = Lists.newArrayList();
+        tableRefs.add(new TableRefPersist(new TableName(UnitTestUtil.DB_NAME, "unknown_tbl"), null));
+        tableRefs.add(new TableRefPersist(new TableName(UnitTestUtil.DB_NAME, "unknown_mv"), null));
 
         job = new BackupJob("mv_label_abnormal", dbId, UnitTestUtil.DB_NAME, tableRefs, 13600 * 1000,
-                globalStateMgr, repo.getId());
+                    GlobalStateMgr.getCurrentState(), repo.getId());
         job.run();
-        Assert.assertEquals(Status.ErrCode.NOT_FOUND, job.getStatus().getErrCode());
-        Assert.assertEquals(BackupJobState.CANCELLED, job.getState());
+        Assertions.assertEquals(Status.ErrCode.NOT_FOUND, job.getStatus().getErrCode());
+        Assertions.assertEquals(BackupJobState.CANCELLED, job.getState());
 
         if (job.getLocalJobDirPath() != null) {
             pathsNeedToBeDeleted.add(job.getLocalJobDirPath());

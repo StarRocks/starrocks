@@ -14,8 +14,8 @@
 
 package com.starrocks.sql.optimizer.validate;
 
-import com.starrocks.catalog.Type;
-import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.AggType;
@@ -24,12 +24,16 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamAggOperator;
 import com.starrocks.sql.optimizer.task.TaskContext;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
 
 import java.util.List;
 import java.util.Map;
@@ -40,7 +44,6 @@ import static com.starrocks.catalog.FunctionSet.ANY_VALUE;
 import static com.starrocks.catalog.FunctionSet.APPROX_COUNT_DISTINCT;
 import static com.starrocks.catalog.FunctionSet.AVG;
 import static com.starrocks.catalog.FunctionSet.BITMAP_UNION_INT;
-import static com.starrocks.catalog.FunctionSet.COUNT;
 import static com.starrocks.catalog.FunctionSet.HLL_RAW;
 import static com.starrocks.catalog.FunctionSet.INTERSECT_COUNT;
 import static com.starrocks.catalog.FunctionSet.MAX;
@@ -49,9 +52,9 @@ import static com.starrocks.catalog.FunctionSet.MIN;
 import static com.starrocks.catalog.FunctionSet.MIN_BY;
 import static com.starrocks.catalog.FunctionSet.NDV;
 import static com.starrocks.catalog.FunctionSet.PERCENTILE_APPROX;
+import static com.starrocks.catalog.FunctionSet.PERCENTILE_APPROX_WEIGHTED;
 import static com.starrocks.catalog.FunctionSet.PERCENTILE_CONT;
 import static com.starrocks.catalog.FunctionSet.PERCENTILE_UNION;
-import static com.starrocks.catalog.FunctionSet.STDDEV;
 import static com.starrocks.catalog.FunctionSet.SUM;
 
 public class TypeChecker implements PlanValidator.Checker {
@@ -111,7 +114,12 @@ public class TypeChecker implements PlanValidator.Checker {
         @Override
         public Void visitPhysicalAnalytic(OptExpression optExpression, Void context) {
             PhysicalWindowOperator operator = (PhysicalWindowOperator) optExpression.getOp();
-            checkFuncCall(operator.getAnalyticCall());
+            // if input is binary, which only happen with rank-pre-agg optimization
+            // in this case, The type of col -> aggCall in intermediate phase is a bit of messy, check it may
+            // lead to forbid normal plan.
+            if (!operator.isInputIsBinary()) {
+                checkFuncCall(operator.getAnalyticCall());
+            }
             visit(optExpression, context);
             return null;
         }
@@ -192,21 +200,169 @@ public class TypeChecker implements PlanValidator.Checker {
             }
         }
 
+        private boolean checkDecimalType(Type decimalType) {
+            ScalarType type = (ScalarType) decimalType;
+            final int scale = type.getScalarScale();
+            final int precision = type.getScalarPrecision();
+            final PrimitiveType primitiveType = type.getPrimitiveType();
+            return scale >= 0 && scale <= precision && precision <= PrimitiveType.getMaxPrecisionOfDecimal(primitiveType);
+        }
+
         private void checkColType(ScalarOperator arg, ScalarOperator expr, Type defined, Type actual) {
+            if (actual.isDecimalV3()) {
+                checkArgument(checkDecimalType(actual),
+                        "expr '%s' invalid actual type: %s",
+                        PREFIX, expr, actual);
+            }
+            if (defined.isDecimalV3()) {
+                checkArgument(checkDecimalType(actual),
+                        "expr '%s' invalid defined type: %s",
+                        PREFIX, expr, defined);
+            }
             checkArgument(actual.matchesType(defined),
                     "%s the type of arg %s in expr '%s' is defined as %s, but the actual type is %s",
                     PREFIX, arg, expr, defined, actual);
         }
 
-        private void checkPercentileApprox(List<ScalarOperator> arguments) {
-            ScalarOperator arg1 = arguments.get(1);
-            if (!(arguments.get(1) instanceof ConstantOperator)) {
-                throw new IllegalArgumentException("percentile_approx " +
-                        "requires the second parameter's type is numeric constant type");
+        /**
+         * Check percentile parameter for percentile_approx and percentile_approx_weighted functions.
+         * The percentile parameter must be a constant value (DOUBLE or ARRAY<DOUBLE>).
+         *
+         * @param percentileArg The percentile argument (can be DOUBLE or ARRAY<DOUBLE>)
+         * @param functionName The function name for error messages
+         */
+        private void checkPercentileParameter(ScalarOperator percentileArg, String functionName) {
+            // Percentile parameter must be constant
+            if (!percentileArg.isConstant()) {
+                throw new StarRocksPlannerException(
+                        String.format("%s percentile parameter must be constant in %s, but got: %s",
+                                PREFIX, functionName, percentileArg),
+                        ErrorType.USER_ERROR);
             }
-            ConstantOperator rate = (ConstantOperator) arg1;
-            if (rate.getDouble() < 0 || rate.getDouble() > 1) {
-                throw new SemanticException("percentile_approx second parameter'value must be between 0 and 1");
+
+            // Handle different constant operator
+            if (percentileArg instanceof ArrayOperator) {
+                // Array mode: constant arrays are always represented as ArrayOperator
+                // (e.g., [0.5, 0.8] which may have been cast to array<double>)
+                validatePercentileArrayOperator((ArrayOperator) percentileArg, functionName);
+            } else if (percentileArg instanceof ConstantOperator) {
+                // Single value mode: validate value is between 0 and 1
+                // Note: ConstantOperator does not support array types, arrays are always ArrayOperator
+                ConstantOperator percentileConst = (ConstantOperator) percentileArg;
+                validatePercentileValue(percentileConst.getDouble(), functionName);
+            } else {
+                // Unexpected type (e.g., CastOperator that wasn't folded - should not happen)
+                throw new StarRocksPlannerException(
+                        String.format("%s percentile parameter should be a ConstantOperator or ArrayOperator in %s, but got: %s",
+                                PREFIX, functionName, percentileArg.getClass().getSimpleName()),
+                        ErrorType.USER_ERROR);
+            }
+        }
+
+        /**
+         * Validate that a single percentile value is between 0 and 1.
+         */
+        private void validatePercentileValue(double value, String functionName) {
+            if (!(value >= 0 && value <= 1)) {
+                throw new StarRocksPlannerException(
+                        String.format("%s percentile parameter must be between 0 and 1 in %s, but got: %s",
+                                PREFIX, functionName, value),
+                        ErrorType.USER_ERROR);
+            }
+        }
+
+        /**
+         * Validate that all elements in a percentile ArrayOperator are between 0 and 1.
+         * Note: Constant arrays are always represented as ArrayOperator in the optimizer,
+         * not as ConstantOperator with array type.
+         */
+        private void validatePercentileArrayOperator(ArrayOperator arrayOp, String functionName) {
+            List<ScalarOperator> children = arrayOp.getChildren();
+            
+            if (children.isEmpty()) {
+                throw new StarRocksPlannerException(
+                        String.format("%s percentile array cannot be empty in %s",
+                                PREFIX, functionName),
+                        ErrorType.USER_ERROR);
+            }
+
+            for (int i = 0; i < children.size(); i++) {
+                ScalarOperator child = children.get(i);
+                if (child instanceof ConstantOperator) {
+                    ConstantOperator element = (ConstantOperator) child;
+                    if (!element.isNull()) {
+                        double value = element.getDouble();
+                        if (!(value >= 0 && value <= 1)) {
+                            throw new StarRocksPlannerException(
+                                    String.format("%s percentile array element[%s] must be between 0 and 1 in %s, but got: %s",
+                                            PREFIX, i, functionName, value),
+                                    ErrorType.USER_ERROR);
+                        }
+                    }
+                } else {
+                    // All children should be constants since arrayOp.isConstant() returned true
+                    throw new StarRocksPlannerException(
+                            String.format("%s percentile array element[%s] should be constant in %s, but got: %s",
+                                    PREFIX, i, functionName, child.getClass().getSimpleName()),
+                            ErrorType.USER_ERROR);
+                }
+            }
+        }
+
+        /**
+         * Check compression parameter for percentile_approx and percentile_approx_weighted functions.
+         * @param compressionArg The compression argument
+         * @param functionName The function name for error messages
+         */
+        private void checkCompressionParameter(ScalarOperator compressionArg, String functionName) {
+            // Compression parameter must be constant
+            if (!compressionArg.isConstant()) {
+                throw new StarRocksPlannerException(
+                        String.format("%s want constant arg in %s (compression), but input is %s",
+                                PREFIX, functionName, compressionArg),
+                        ErrorType.USER_ERROR);
+            }
+
+            // Note: CastOperator wrapping constants should have been folded by FoldConstantsRule
+            // before reaching TypeChecker, so compressionArg should be a ConstantOperator directly.
+            if (!(compressionArg instanceof ConstantOperator)) {
+                throw new StarRocksPlannerException(
+                        String.format("%s compression parameter should be a ConstantOperator in %s, but got: %s",
+                                PREFIX, functionName, compressionArg.getClass().getSimpleName()),
+                        ErrorType.USER_ERROR);
+            }
+
+            ConstantOperator compressionConst = (ConstantOperator) compressionArg;
+            
+            // Validate compression value range (must be positive), skip if NULL
+            if (!compressionConst.isNull()) {
+                double compression = compressionConst.getDouble();
+                if (!(compression > 0)) {
+                    throw new StarRocksPlannerException(
+                            String.format("%s compression parameter must be positive in %s, but got: %s",
+                                    PREFIX, functionName, compression),
+                            ErrorType.USER_ERROR);
+                }
+            }
+        }
+
+        private void checkPercentileApprox(List<ScalarOperator> arguments) {
+            // Check percentile parameter (second argument)
+            checkPercentileParameter(arguments.get(1), "percentile_approx");
+
+            // Check compression parameter (if present)
+            if (arguments.size() == 3) {
+                checkCompressionParameter(arguments.get(2), "percentile_approx");
+            }
+        }
+
+        private void checkPercentileApproxWeighted(List<ScalarOperator> arguments) {
+            // Check percentile parameter (third argument)
+            checkPercentileParameter(arguments.get(2), "percentile_approx_weighted");
+
+            // Check compression parameter (if present)
+            if (arguments.size() == 4) {
+                checkCompressionParameter(arguments.get(3), "percentile_approx_weighted");
             }
         }
 
@@ -216,9 +372,6 @@ public class TypeChecker implements PlanValidator.Checker {
             Type[] definedTypes = aggCall.getFunction().getArgs();
             List<Type> argTypes = arguments.stream().map(ScalarOperator::getType).collect(Collectors.toList());
             switch (functionName) {
-                case COUNT:
-                case STDDEV:
-                    break;
                 case MIN:
                 case MAX:
                 case ANY_VALUE:
@@ -250,6 +403,15 @@ public class TypeChecker implements PlanValidator.Checker {
                     checkPercentileApprox(arguments);
                     if (!isMergeAggFn) {
                         checkColType(arguments.get(0), aggCall, definedTypes[0], argTypes.get(0));
+                    } else {
+                        // check args in merge phase
+                    }
+                    break;
+                case PERCENTILE_APPROX_WEIGHTED:
+                    checkPercentileApproxWeighted(arguments);
+                    if (!isMergeAggFn) {
+                        checkColType(arguments.get(0), aggCall, definedTypes[0], argTypes.get(0));
+                        checkColType(arguments.get(1), aggCall, definedTypes[1], argTypes.get(1));
                     } else {
                         // check args in merge phase
                     }

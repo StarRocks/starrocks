@@ -15,13 +15,11 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.Pair;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.type.TypeFactory;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Comparator;
@@ -32,30 +30,30 @@ import java.util.stream.Collectors;
 public class ShowResourceGroupUsageStmt extends ShowStmt {
     private static final List<Pair<Column, Function<ShowItem, String>>> META_DATA =
             ImmutableList.of(
-                    Pair.create(new Column("Name", ScalarType.createVarchar(64)),
+                    Pair.create(new Column("Name", TypeFactory.createVarcharType(64)),
                             item -> item.usage.getGroup().getName()),
-                    Pair.create(new Column("Id", ScalarType.createVarchar(64)),
+                    Pair.create(new Column("Id", TypeFactory.createVarcharType(64)),
                             item -> Long.toString(item.usage.getGroup().getId())),
-                    Pair.create(new Column("Backend", ScalarType.createVarchar(64)),
+                    Pair.create(new Column("Backend", TypeFactory.createVarcharType(64)),
                             item -> item.worker.getHost()),
-                    Pair.create(new Column("BEInUseCpuCores", ScalarType.createVarchar(64)),
+                    Pair.create(new Column("BEInUseCpuCores", TypeFactory.createVarcharType(64)),
                             item -> Double.toString(item.usage.getCpuCoreUsagePermille() / 1000.0D)),
-                    Pair.create(new Column("BEInUseMemBytes", ScalarType.createVarchar(64)),
+                    Pair.create(new Column("BEInUseMemBytes", TypeFactory.createVarcharType(64)),
                             item -> Long.toString(item.usage.getMemUsageBytes())),
-                    Pair.create(new Column("BERunningQueries", ScalarType.createVarchar(64)),
-                            item -> Integer.toString(item.usage.getNumRunningQueries()))
+                    Pair.create(new Column("BERunningQueries", TypeFactory.createVarcharType(64)),
+                            item -> Integer.toString(item.usage.getNumRunningQueries())),
+                    Pair.create(new Column("BEMemLimitBytes", TypeFactory.createVarcharType(64)),
+                            item -> Long.toString(item.usage.getMemLimitBytes())),
+                    Pair.create(new Column("BEMemPool", TypeFactory.createVarcharType(64)),
+                            item -> item.usage.getMemPool()),
+                    Pair.create(new Column("BEMemPoolInUseMemBytes", TypeFactory.createVarcharType(64)),
+                            item -> Long.toString(item.usage.getMemPoolMemUsageBytes())),
+                    Pair.create(new Column("BEMemPoolMemLimitBytes", TypeFactory.createVarcharType(64)),
+                            item -> Long.toString(item.usage.getMemPoolMemLimitBytes()))
             );
-
-    private static final ShowResultSetMetaData COLUMN_META_DATA;
 
     private static final List<Function<ShowItem, String>> COLUMN_SUPPLIERS = META_DATA.stream()
             .map(item -> item.second).collect(Collectors.toList());
-
-    static {
-        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        META_DATA.forEach(item -> builder.addColumn(item.first));
-        COLUMN_META_DATA = builder.build();
-    }
 
     private final String groupName;
 
@@ -70,17 +68,7 @@ public class ShowResourceGroupUsageStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowResourceGroupUsageStatement(this, context);
-    }
-
-    @Override
-    public ShowResultSetMetaData getMetaData() {
-        return COLUMN_META_DATA;
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_NO_SYNC;
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowResourceGroupUsageStatement(this, context);
     }
 
     public String getGroupName() {

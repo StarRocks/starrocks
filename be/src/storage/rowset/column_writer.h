@@ -34,6 +34,8 @@
 
 #pragma once
 
+#include <storage/flat_json_config.h>
+
 #include <memory> // for unique_ptr
 
 #include "column/vectorized_fwd.h"
@@ -41,13 +43,16 @@
 #include "gen_cpp/segment.pb.h" // for EncodingTypePB
 #include "gutil/strings/substitute.h"
 #include "runtime/global_dict/types.h"
+#include "runtime/global_dict/types_fwd_decl.h"
+#ifndef __APPLE__
 #include "storage/index/inverted/inverted_writer.h"
+#endif
+#include "base/bit/bitmap.h"   // for BitmapChange
+#include "base/string/slice.h" // for OwnedSlice
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/page_pointer.h" // for PagePointer
 #include "storage/tablet_schema.h"       // for TabletColumn
-#include "util/bitmap.h"                 // for BitmapChange
-#include "util/slice.h"                  // for OwnedSlice
 
 namespace starrocks {
 
@@ -70,10 +75,12 @@ struct ColumnWriterOptions {
     // space saving = 1 - compressed_size / uncompressed_size
     double compression_min_space_saving = 0.1;
     bool need_zone_map = false;
+    bool zone_map_truncate_string = false; // truncate string at write time to reduce comparison/metadata overhead.
     bool need_bitmap_index = false;
     bool need_bloom_filter = false;
     bool need_vector_index = false;
     bool need_inverted_index = false;
+
     std::unordered_map<IndexType, std::string> standalone_index_file_paths;
     std::unordered_map<IndexType, TabletIndex> tablet_index;
 
@@ -83,12 +90,46 @@ struct ColumnWriterOptions {
 
     // when column data is encoding by dict
     // if global_dict is not nullptr, will checkout whether global_dict can cover all data
-    GlobalDictMap* global_dict = nullptr;
+    const GlobalDictMap* global_dict = nullptr;
+    // map<sub_column_name, dict> for FlatJSON
+    std::unordered_map<std::string, const GlobalDictMap> flat_json_dicts;
 
-    bool need_flat = false;
     bool is_compaction = false;
+    bool need_flat = false;
 
     std::string field_name;
+    const FlatJsonConfig* flat_json_config = nullptr;
+
+    std::string to_string() const {
+        std::string meta_str;
+        if (meta) {
+            meta_str = meta->DebugString();
+            std::replace(meta_str.begin(), meta_str.end(), '\n', ',');
+        } else {
+            meta_str = "null";
+        }
+        std::ostringstream oss;
+        oss << "ColumnWriterOptions{";
+        oss << "meta=" << meta_str << ", ";
+        oss << "data_page_size=" << data_page_size << ", ";
+        oss << "page_format=" << page_format << ", ";
+        oss << "compression_min_space_saving=" << compression_min_space_saving << ", ";
+        oss << "need_zone_map=" << need_zone_map << ", ";
+        oss << "need_bitmap_index=" << need_bitmap_index << ", ";
+        oss << "need_bloom_filter=" << need_bloom_filter << ", ";
+        oss << "need_vector_index=" << need_vector_index << ", ";
+        oss << "need_inverted_index=" << need_inverted_index << ", ";
+        // oss << "standalone_index_file_paths.size=" << standalone_index_file_paths.size() << ", ";
+        // oss << "tablet_index.size=" << tablet_index.size() << ", ";
+        oss << "need_speculate_encoding=" << need_speculate_encoding << ", ";
+        // oss << "global_dict=" << (global_dict ? "set" : "null") << ", ";
+        oss << "is_compaction=" << is_compaction << ", ";
+        oss << "need_flat=" << need_flat << ", ";
+        oss << "field_name=\"" << field_name << "\", ";
+        oss << "flat_json_config=" << (flat_json_config ? flat_json_config->to_string() : "null");
+        oss << "}";
+        return oss.str();
+    }
 };
 
 class BitmapIndexWriter;
@@ -262,11 +303,12 @@ private:
     std::unique_ptr<ZoneMapIndexWriter> _zone_map_index_builder;
     std::unique_ptr<BitmapIndexWriter> _bitmap_index_builder;
     std::unique_ptr<BloomFilterIndexWriter> _bloom_filter_index_builder;
+#ifndef __APPLE__
     std::unique_ptr<InvertedWriter> _inverted_index_builder;
+#endif
 
     // _zone_map_index_builder != NULL || _bitmap_index_builder != NULL || _bloom_filter_index_builder != NULL
     bool _has_index_builder = false;
-    bool _has_inverted_builder = false;
     int64_t _element_ordinal = 0;
     int64_t _previous_ordinal = 0;
 

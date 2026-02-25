@@ -14,6 +14,7 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column.h"
@@ -30,7 +31,6 @@
 #include "storage/rowset/map_column_iterator.h"
 #include "storage/rowset/segment.h"
 #include "storage/tablet_schema_helper.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -167,7 +167,7 @@ protected:
                 auto dst_offsets = UInt32Column::create();
                 auto dst_keys = NullableColumn::create(Int32Column::create(), NullColumn::create());
                 auto dst_values = NullableColumn::create(Int32Column::create(), NullColumn::create());
-                auto dst_column = MapColumn::create(dst_keys, dst_values, dst_offsets);
+                auto dst_column = MapColumn::create(std::move(dst_keys), std::move(dst_values), std::move(dst_offsets));
                 size_t rows_read = src_column->size();
                 st = iter->next_batch(&rows_read, dst_column.get());
                 ASSERT_TRUE(st.ok());
@@ -202,7 +202,7 @@ protected:
                 auto dst_offsets = UInt32Column::create();
                 auto dst_keys = NullableColumn::create(Int32Column::create(), NullColumn::create());
                 auto dst_values = NullableColumn::create(Int32Column::create(), NullColumn::create());
-                auto dst_column = MapColumn::create(dst_keys, dst_values, dst_offsets);
+                auto dst_column = MapColumn::create(std::move(dst_keys), std::move(dst_values), std::move(dst_offsets));
                 size_t rows_read = src_column->size();
                 st = iter->next_batch(&rows_read, dst_column.get());
                 ASSERT_TRUE(st.ok());
@@ -240,7 +240,7 @@ protected:
                 auto dst_offsets = UInt32Column::create();
                 auto dst_keys = NullableColumn::create(Int32Column::create(), NullColumn::create());
                 auto dst_values = NullableColumn::create(Int32Column::create(), NullColumn::create());
-                auto dst_column = MapColumn::create(dst_keys, dst_values, dst_offsets);
+                auto dst_column = MapColumn::create(std::move(dst_keys), std::move(dst_values), std::move(dst_offsets));
                 size_t rows_read = src_column->size();
                 st = iter->next_batch(&rows_read, dst_column.get());
                 ASSERT_TRUE(st.ok());
@@ -252,6 +252,27 @@ protected:
                 ASSERT_EQ("{2:CONST: NULL,3:CONST: NULL}", dst_column->debug_item(2));
                 ASSERT_EQ("{4:CONST: NULL,5:CONST: NULL,6:CONST: NULL}", dst_column->debug_item(3));
             }
+        }
+
+        {
+            ASSIGN_OR_ABORT(auto iter, reader->new_iterator());
+            ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
+
+            ColumnIteratorOptions iter_opts;
+            OlapReaderStatistics stats;
+            iter_opts.stats = &stats;
+            iter_opts.read_file = read_file.get();
+            ASSERT_TRUE(iter->init(iter_opts).ok());
+
+            auto dst_offsets = UInt32Column::create();
+            auto dst_keys = NullableColumn::create(Int32Column::create(), NullColumn::create());
+            auto dst_values = NullableColumn::create(Int32Column::create(), NullColumn::create());
+            auto dst_column = MapColumn::create(std::move(dst_keys), std::move(dst_values), std::move(dst_offsets));
+            SparseRange<> range;
+            range.add(Range<>(0, src_column->size()));
+            auto status_or = iter->get_io_range_vec(range, dst_column.get());
+            ASSERT_TRUE(status_or.ok());
+            ASSERT_EQ((*status_or).size(), 2);
         }
     }
 

@@ -16,19 +16,19 @@ package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.Type;
+import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.RemoteFilesSampleStrategy;
 import com.starrocks.connector.hive.HiveConnectorScanRangeSource;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.datacache.DataCacheOptions;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.optimizer.ScanOptimzeOption;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.optimizer.ScanOptimizeOption;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
+import com.starrocks.thrift.TBucketProperty;
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TDataCacheOptions;
 import com.starrocks.thrift.TExplainLevel;
@@ -36,7 +36,9 @@ import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.type.Type;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static com.starrocks.thrift.TExplainLevel.VERBOSE;
@@ -55,13 +57,12 @@ import static com.starrocks.thrift.TExplainLevel.VERBOSE;
  * TODO: Dictionary pruning
  */
 public class HdfsScanNode extends ScanNode {
+    private volatile boolean reachLimit = false;
     private HiveConnectorScanRangeSource scanRangeSource = null;
 
     private HiveTable hiveTable = null;
     private CloudConfiguration cloudConfiguration = null;
     private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
-
-    private DescriptorTable descTbl;
 
     public HdfsScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
@@ -86,7 +87,6 @@ public class HdfsScanNode extends ScanNode {
     }
 
     public void setupScanRangeLocations(DescriptorTable descTbl) {
-        this.descTbl = descTbl;
         this.scanRangeSource = new HiveConnectorScanRangeSource(descTbl, hiveTable, scanNodePredicates);
         this.scanRangeSource.setup();
     }
@@ -106,7 +106,20 @@ public class HdfsScanNode extends ScanNode {
 
     @Override
     public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
-        return scanRangeSource.getAllOutputs();
+        if (maxScanRangeLength == 0) {
+            return scanRangeSource.getAllOutputs();
+        }
+        return scanRangeSource.getOutputs((int) maxScanRangeLength);
+    }
+
+    @Override
+    public boolean hasMoreScanRanges() {
+        return !reachLimit && scanRangeSource.hasMoreOutput();
+    }
+
+    @Override
+    public void setReachLimit() {
+        reachLimit = true;
     }
 
     @Override
@@ -120,19 +133,19 @@ public class HdfsScanNode extends ScanNode {
         }
         if (!scanNodePredicates.getPartitionConjuncts().isEmpty()) {
             output.append(prefix).append("PARTITION PREDICATES: ").append(
-                    getExplainString(scanNodePredicates.getPartitionConjuncts())).append("\n");
+                    explainExpr(scanNodePredicates.getPartitionConjuncts())).append("\n");
         }
         if (!scanNodePredicates.getNonPartitionConjuncts().isEmpty()) {
             output.append(prefix).append("NON-PARTITION PREDICATES: ").append(
-                    getExplainString(scanNodePredicates.getNonPartitionConjuncts())).append("\n");
+                    explainExpr(scanNodePredicates.getNonPartitionConjuncts())).append("\n");
         }
         if (!scanNodePredicates.getNoEvalPartitionConjuncts().isEmpty()) {
             output.append(prefix).append("NO EVAL-PARTITION PREDICATES: ").append(
-                    getExplainString(scanNodePredicates.getNoEvalPartitionConjuncts())).append("\n");
+                    explainExpr(scanNodePredicates.getNoEvalPartitionConjuncts())).append("\n");
         }
         if (!scanNodePredicates.getMinMaxConjuncts().isEmpty()) {
             output.append(prefix).append("MIN/MAX PREDICATES: ").append(
-                    getExplainString(scanNodePredicates.getMinMaxConjuncts())).append("\n");
+                    explainExpr(scanNodePredicates.getMinMaxConjuncts())).append("\n");
         }
 
         output.append(prefix).append(
@@ -151,6 +164,8 @@ public class HdfsScanNode extends ScanNode {
 
         if (detailLevel == TExplainLevel.VERBOSE) {
             HdfsScanNode.appendDataCacheOptionsInExplain(output, prefix, dataCacheOptions);
+
+            output.append(explainColumnDict(prefix));
 
             for (SlotDescriptor slotDescriptor : desc.getSlots()) {
                 Type type = slotDescriptor.getOriginType();
@@ -193,10 +208,11 @@ public class HdfsScanNode extends ScanNode {
     }
 
     public static void setScanOptimizeOptionToThrift(THdfsScanNode tHdfsScanNode, ScanNode scanNode) {
-        ScanOptimzeOption option = scanNode.getScanOptimzeOption();
+        ScanOptimizeOption option = scanNode.getScanOptimizeOption();
         tHdfsScanNode.setCan_use_any_column(option.getCanUseAnyColumn());
-        tHdfsScanNode.setCan_use_min_max_count_opt(option.getCanUseMinMaxCountOpt());
+        tHdfsScanNode.setCan_use_min_max_opt(option.getCanUseMinMaxOpt());
         tHdfsScanNode.setUse_partition_column_value_only(option.getUsePartitionColumnValueOnly());
+        tHdfsScanNode.setCan_use_count_opt(option.getCanUseCountOpt());
     }
 
     public static void setCloudConfigurationToThrift(THdfsScanNode tHdfsScanNode, CloudConfiguration cc) {
@@ -215,13 +231,21 @@ public class HdfsScanNode extends ScanNode {
         }
     }
 
+    public static void setBucketProperties(THdfsScanNode tHdfsScanNode, List<BucketProperty> bucketProperties) {
+        List<TBucketProperty> tBucketProperties = new ArrayList<>();
+        for (BucketProperty bucketProperty : bucketProperties) {
+            tBucketProperties.add(bucketProperty.toThrift());
+        }
+        tHdfsScanNode.setBucket_properties(tBucketProperties);
+    }
+
     public static void setMinMaxConjunctsToThrift(THdfsScanNode tHdfsScanNode, ScanNode scanNode,
                                                   HDFSScanNodePredicates scanNodePredicates) {
         List<Expr> minMaxConjuncts = scanNodePredicates.getMinMaxConjuncts();
         if (!minMaxConjuncts.isEmpty()) {
             String minMaxSqlPredicate = scanNode.getExplainString(minMaxConjuncts);
             for (Expr expr : minMaxConjuncts) {
-                tHdfsScanNode.addToMin_max_conjuncts(expr.treeToThrift());
+                tHdfsScanNode.addToMin_max_conjuncts(ExprToThrift.treeToThrift(expr));
             }
             tHdfsScanNode.setMin_max_tuple_id(scanNodePredicates.getMinMaxTuple().getId().asInt());
             tHdfsScanNode.setMin_max_sql_predicates(minMaxSqlPredicate);
@@ -233,7 +257,7 @@ public class HdfsScanNode extends ScanNode {
         List<Expr> noEvalPartitionConjuncts = scanNodePredicates.getNoEvalPartitionConjuncts();
         String partitionSqlPredicate = scanNode.getExplainString(noEvalPartitionConjuncts);
         for (Expr expr : noEvalPartitionConjuncts) {
-            tHdfsScanNode.addToPartition_conjuncts(expr.treeToThrift());
+            tHdfsScanNode.addToPartition_conjuncts(ExprToThrift.treeToThrift(expr));
         }
         tHdfsScanNode.setPartition_sql_predicates(partitionSqlPredicate);
     }
@@ -243,7 +267,7 @@ public class HdfsScanNode extends ScanNode {
         List<Expr> partitionConjuncts = scanNodePredicates.getPartitionConjuncts();
         String partitionSqlPredicate = scanNode.getExplainString(partitionConjuncts);
         for (Expr expr : partitionConjuncts) {
-            tHdfsScanNode.addToPartition_conjuncts(expr.treeToThrift());
+            tHdfsScanNode.addToPartition_conjuncts(ExprToThrift.treeToThrift(expr));
         }
         tHdfsScanNode.setPartition_sql_predicates(partitionSqlPredicate);
     }
@@ -257,7 +281,7 @@ public class HdfsScanNode extends ScanNode {
 
         List<Expr> nonPartitionConjuncts = scanNodePredicates.getNonPartitionConjuncts();
         for (Expr expr : nonPartitionConjuncts) {
-            msg.addToConjuncts(expr.treeToThrift());
+            msg.addToConjuncts(ExprToThrift.treeToThrift(expr));
         }
         String sqlPredicate = scanNode.getExplainString(nonPartitionConjuncts);
         msg.hdfs_scan_node.setSql_predicates(sqlPredicate);
@@ -271,5 +295,10 @@ public class HdfsScanNode extends ScanNode {
     @Override
     protected boolean supportTopNRuntimeFilter() {
         return true;
+    }
+
+    @Override
+    public void setScanSampleStrategy(RemoteFilesSampleStrategy strategy) {
+        scanRangeSource.setSampleStrategy(strategy);
     }
 }

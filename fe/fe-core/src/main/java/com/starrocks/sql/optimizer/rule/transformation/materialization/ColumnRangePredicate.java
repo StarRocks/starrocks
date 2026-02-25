@@ -25,7 +25,6 @@ import com.google.common.collect.RangeSet;
 import com.google.common.collect.Sets;
 import com.google.common.collect.TreeRangeSet;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -34,6 +33,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.type.VarcharType;
 
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -65,6 +65,15 @@ public class ColumnRangePredicate extends RangePredicate {
 
     private TreeRangeSet<ConstantOperator> canonicalColumnRanges;
 
+    public static ColumnRangePredicate FALSE = new ColumnRangePredicate(TreeRangeSet.create());
+
+    public ColumnRangePredicate(TreeRangeSet<ConstantOperator> columnRanges) {
+        this.columnRanges = columnRanges;
+        this.expression = null;
+        this.columnRef = null;
+        this.canonicalColumnRanges = columnRanges;
+    }
+
     public ColumnRangePredicate(ScalarOperator expression, TreeRangeSet<ConstantOperator> columnRanges) {
         this.expression = expression;
         List<ColumnRefOperator> columns = Utils.collect(expression, ColumnRefOperator.class);
@@ -73,9 +82,18 @@ public class ColumnRangePredicate extends RangePredicate {
         this.columnRanges = columnRanges;
         List<Range<ConstantOperator>> canonicalRanges = new ArrayList<>();
         if (ConstantOperatorDiscreteDomain.isSupportedType(this.expression.getType())) {
-            for (Range range : this.columnRanges.asRanges()) {
-                Range canonicalRange = range.canonical(new ConstantOperatorDiscreteDomain());
-                canonicalRanges.add(canonicalRange);
+            // for open range (+∞, +∞), it can not be canonicalized into a close-open range and
+            // IllegalArgumentException/AssertionError is thrown. open range (+∞, +∞) is generated when trying
+            // to canonicalize the range (MAX_VALUE, +∞) yielded by column > MAX_VALUE. for an
+            // example: col > 9223372036854775807 (col is bigint type)
+            try {
+                for (Range range : this.columnRanges.asRanges()) {
+                    Range canonicalRange = range.canonical(new ConstantOperatorDiscreteDomain());
+                    canonicalRanges.add(canonicalRange);
+                }
+            } catch (Throwable ignored) {
+                this.canonicalColumnRanges = columnRanges;
+                return;
             }
             this.canonicalColumnRanges = TreeRangeSet.create(canonicalRanges);
         } else {
@@ -94,17 +112,24 @@ public class ColumnRangePredicate extends RangePredicate {
     public static ColumnRangePredicate andRange(
             ColumnRangePredicate rangePredicate, ColumnRangePredicate otherRangePredicate) {
         List<Range<ConstantOperator>> ranges = new ArrayList<>();
+        boolean isConnected = false;
         for (Range<ConstantOperator> range : rangePredicate.columnRanges.asRanges()) {
             if (otherRangePredicate.columnRanges.intersects(range)) {
                 for (Range<ConstantOperator> otherRange : otherRangePredicate.columnRanges.asRanges()) {
-                    if (range.isConnected(otherRange)) {
-                        Range<ConstantOperator> intersection = range.intersection(otherRange);
-                        if (!intersection.isEmpty()) {
-                            ranges.add(intersection);
-                        }
+                    if (!range.isConnected(otherRange)) {
+                        continue;
+                    }
+                    Range<ConstantOperator> intersection = range.intersection(otherRange);
+                    if (!intersection.isEmpty()) {
+                        isConnected = true;
+                        ranges.add(intersection);
                     }
                 }
             }
+        }
+        // once there is a range that is not connected with the range, the result is null
+        if (!isConnected) {
+            return FALSE;
         }
         return new ColumnRangePredicate(rangePredicate.getExpression(), TreeRangeSet.create(ranges));
     }
@@ -173,17 +198,19 @@ public class ColumnRangePredicate extends RangePredicate {
     private Range<ConstantOperator> convertRange(Range<ConstantOperator> from, DateTimeFormatter format) {
         if (from.hasLowerBound() && from.hasUpperBound()) {
             return Range.range(
-                    ConstantOperator.createChar(from.lowerEndpoint().getDate().toLocalDate().format(format), Type.VARCHAR),
+                    ConstantOperator.createChar(from.lowerEndpoint().getDate().toLocalDate().format(format),
+                            VarcharType.VARCHAR),
                     from.lowerBoundType(),
-                    ConstantOperator.createChar(from.upperEndpoint().getDate().toLocalDate().format(format), Type.VARCHAR),
+                    ConstantOperator.createChar(from.upperEndpoint().getDate().toLocalDate().format(format),
+                            VarcharType.VARCHAR),
                     from.upperBoundType());
         } else if (from.hasUpperBound()) {
             return Range.upTo(ConstantOperator.createChar(
-                    from.upperEndpoint().getDate().toLocalDate().format(format), Type.VARCHAR),
+                    from.upperEndpoint().getDate().toLocalDate().format(format), VarcharType.VARCHAR),
                     from.upperBoundType());
         } else if (from.hasLowerBound()) {
             return Range.downTo(ConstantOperator.createChar(
-                    from.lowerEndpoint().getDate().toLocalDate().format(format), Type.VARCHAR),
+                    from.lowerEndpoint().getDate().toLocalDate().format(format), VarcharType.VARCHAR),
                     from.lowerBoundType());
         }
         return Range.all();

@@ -38,7 +38,6 @@
 #include <queue>
 #include <vector>
 
-#include "column/datum.h"
 #include "column/datum_convert.h"
 #include "gen_cpp/AgentService_types.h"
 #include "storage/chunk_helper.h"
@@ -47,6 +46,7 @@
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/schema_change_utils.h"
+#include "types/datum.h"
 
 namespace starrocks {
 class Field;
@@ -141,6 +141,8 @@ public:
 
     void set_alter_msg_header(std::string msg) { _alter_msg_header = msg; }
 
+    const std::string& get_task_detail_msg() { return _task_detail_msg; }
+
 private:
     Status _get_versions_to_be_changed(const TabletSharedPtr& base_tablet,
                                        std::vector<Version>* versions_to_be_changed);
@@ -156,6 +158,7 @@ private:
 
     DISALLOW_COPY(SchemaChangeHandler);
     std::string _alter_msg_header;
+    std::string _task_detail_msg = "";
 };
 
 } // namespace starrocks

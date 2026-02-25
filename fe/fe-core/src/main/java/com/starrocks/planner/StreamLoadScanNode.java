@@ -34,34 +34,33 @@
 
 package com.starrocks.planner;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.ArithmeticExpr;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.NullLiteral;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.CsvFormat;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.Load;
 import com.starrocks.load.streamload.StreamLoadInfo;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.sql.ast.AggregateType;
+import com.starrocks.sql.ast.expression.ArithmeticExpr;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TBrokerRangeDesc;
 import com.starrocks.thrift.TBrokerScanRange;
 import com.starrocks.thrift.TBrokerScanRangeParams;
@@ -75,17 +74,23 @@ import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.type.HLLType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-import java.util.UUID;
+import java.util.Set;
 
-import static com.starrocks.catalog.DefaultExpr.SUPPORTED_DEFAULT_FNS;
+import static com.starrocks.catalog.DefaultExpr.isValidDefaultFunction;
+
+
 
 /**
  * used to scan from stream
@@ -99,9 +104,6 @@ public class StreamLoadScanNode extends LoadScanNode {
     private Table dstTable;
     private StreamLoadInfo streamLoadInfo;
     private int numInstances;
-
-    // helper
-    private Analyzer analyzer;
 
     private List<TScanRangeLocations> locationsList = Lists.newArrayList();
 
@@ -117,7 +119,12 @@ public class StreamLoadScanNode extends LoadScanNode {
 
     private boolean needAssignBE;
 
-    private List<Backend> backends;
+    private boolean enableBatchWrite = false;
+    private int batchWriteIntervalMs;
+    private ImmutableMap<String, String> batchWriteParameters;
+    private Set<Long> batchWriteBackendIds;
+
+    private List<ComputeNode> computeNodes;
     private int nextBe = 0;
     private final Random random = new Random(System.currentTimeMillis());
     private String dbName;
@@ -132,7 +139,7 @@ public class StreamLoadScanNode extends LoadScanNode {
 
     private ParamCreateContext paramCreateContext;
     private boolean nullExprInAutoIncrement;
-
+    private DescriptorTable descriptorTable;
 
     // used to construct for streaming loading
     public StreamLoadScanNode(TUniqueId loadId, PlanNodeId id, TupleDescriptor tupleDesc, Table dstTable, StreamLoadInfo streamLoadInfo) {
@@ -150,7 +157,7 @@ public class StreamLoadScanNode extends LoadScanNode {
     public StreamLoadScanNode(
             TUniqueId loadId, PlanNodeId id, TupleDescriptor tupleDesc, Table dstTable,
             StreamLoadInfo streamLoadInfo, String dbName, String label,
-            int numInstances, long txnId, long warehouseId) {
+            int numInstances, long txnId, ComputeResource computeResource) {
         super(id, tupleDesc, "StreamLoadScanNode");
         this.loadId = loadId;
         this.dstTable = dstTable;
@@ -164,7 +171,7 @@ public class StreamLoadScanNode extends LoadScanNode {
         this.txnId = txnId;
         this.curChannelId = 0;
         this.nullExprInAutoIncrement = true;
-        this.warehouseId = warehouseId;
+        this.computeResource = computeResource;
     }
 
     public void setUseVectorizedLoad(boolean useVectorizedLoad) {
@@ -175,24 +182,31 @@ public class StreamLoadScanNode extends LoadScanNode {
         this.needAssignBE = needAssignBE;
     }
 
+    public void setBatchWrite(int batchWriteIntervalMs, ImmutableMap<String, String> loadParameters, Set<Long> batchWriteBackendIds) {
+        setNeedAssignBE(true);
+        this.enableBatchWrite = true;
+        this.batchWriteIntervalMs = batchWriteIntervalMs;
+        this.batchWriteParameters = loadParameters;
+        this.batchWriteBackendIds = new HashSet<>(batchWriteBackendIds);
+    }
+
     public boolean nullExprInAutoIncrement() {
         return nullExprInAutoIncrement;
     }
 
-    @Override
-    public void init(Analyzer analyzer) throws UserException {
+    public void init(DescriptorTable descriptorTable) throws StarRocksException {
         // can't call super.init(), because after super.init, conjuncts would be null
         if (needAssignBE) {
             assignBackends();
         }
-        assignConjuncts(analyzer);
-        this.analyzer = analyzer;
+
+        this.descriptorTable = descriptorTable;
         paramCreateContext = new ParamCreateContext();
         initParams();
     }
 
     // Called from init, construct source tuple information
-    private void initParams() throws UserException {
+    private void initParams() throws StarRocksException {
         TBrokerScanRangeParams params = new TBrokerScanRangeParams();
         paramCreateContext.params = params;
 
@@ -234,36 +248,47 @@ public class StreamLoadScanNode extends LoadScanNode {
             params.setConfluent_schema_registry_url(streamLoadInfo.getConfluentSchemaRegistryUrl());
         }
         initColumns();
-        initWhereExpr(streamLoadInfo.getWhereExpr(), analyzer);
+        initWhereExpr(streamLoadInfo.getWhereExpr());
     }
 
-    private void initColumns() throws UserException {
-        paramCreateContext.tupleDescriptor = analyzer.getDescTbl().createTupleDescriptor("StreamLoadScanNode");
+    private void initColumns() throws StarRocksException {
+        paramCreateContext.tupleDescriptor = descriptorTable.createTupleDescriptor("StreamLoadScanNode");
         Load.initColumns(dstTable, streamLoadInfo.getColumnExprDescs(), null /* no hadoop function */,
-                exprsByName, analyzer, paramCreateContext.tupleDescriptor, slotDescByName,
+                exprsByName, descriptorTable, paramCreateContext.tupleDescriptor, slotDescByName,
                 paramCreateContext.params, true, useVectorizedLoad, Lists.newArrayList(),
                 streamLoadInfo.getFormatType() == TFileFormatType.FORMAT_JSON, streamLoadInfo.isPartialUpdate());
     }
 
     @Override
-    public void finalizeStats(Analyzer analyzer) throws UserException, UserException {
+    public void finalizeStats() throws StarRocksException, StarRocksException {
         finalizeParams();
     }
 
-    private void assignBackends() throws UserException {
-        backends = Lists.newArrayList();
-        for (Backend be : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend().values()) {
-            if (be.isAvailable()) {
-                backends.add(be);
+    private void assignBackends() throws StarRocksException {
+        if (enableBatchWrite) {
+            computeNodes = Lists.newArrayList();
+            for (long backendId : batchWriteBackendIds) {
+                // backendId is assigned by CoordinatorBackendAssignerImpl which have considered to use
+                // backend or cn for different deployment mode. Here just try to get the node from both
+                ComputeNode computeNode = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(backendId);
+                if (computeNode == null) {
+                    throw new StarRocksException(String.format("Can't find batch write backend [%s]", backendId));
+                }
+                if (!computeNode.isAvailable()) {
+                    throw new StarRocksException(String.format("Batch write backend [%s] is not available", backendId));
+                }
+                computeNodes.add(computeNode);
             }
+        } else {
+            computeNodes = getAvailableComputeNodes(computeResource);
+            Collections.shuffle(computeNodes, random);
         }
-        if (backends.isEmpty()) {
-            throw new UserException("No available backends");
+        if (computeNodes.isEmpty()) {
+            throw new StarRocksException("No available backends: " + computeResource);
         }
-        Collections.shuffle(backends, random);
     }
 
-    private void finalizeParams() throws UserException {
+    private void finalizeParams() throws StarRocksException {
         boolean negative = streamLoadInfo.getNegative();
         Map<Integer, Integer> destSidToSrcSidWithoutTrans = Maps.newHashMap();
         for (SlotDescriptor dstSlotDesc : desc.getSlots()) {
@@ -291,10 +316,10 @@ public class StreamLoadScanNode extends LoadScanNode {
                     if (defaultValueType == Column.DefaultValueType.CONST) {
                         expr = new StringLiteral(column.calculatedDefaultValue());
                     } else if (defaultValueType == Column.DefaultValueType.VARY) {
-                        if (SUPPORTED_DEFAULT_FNS.contains(column.getDefaultExpr().getExpr())) {
+                        if (isValidDefaultFunction(column.getDefaultExpr().getExpr())) {
                             expr = column.getDefaultExpr().obtainExpr();
                         } else {
-                            throw new UserException("Column(" + column + ") has unsupported default value:"
+                            throw new StarRocksException("Column(" + column + ") has unsupported default value:"
                                     + column.getDefaultExpr().getExpr());
                         }
                     } else if (defaultValueType == Column.DefaultValueType.NULL) {
@@ -317,24 +342,24 @@ public class StreamLoadScanNode extends LoadScanNode {
                             + dstSlotDesc.getColumn().getName() + "=" + FunctionSet.HLL_HASH + "(xxx)");
                 }
                 FunctionCallExpr fn = (FunctionCallExpr) expr;
-                if (!fn.getFnName().getFunction().equalsIgnoreCase(FunctionSet.HLL_HASH)
-                        && !fn.getFnName().getFunction().equalsIgnoreCase("hll_empty")) {
+                if (!fn.getFunctionName().equalsIgnoreCase(FunctionSet.HLL_HASH)
+                        && !fn.getFunctionName().equalsIgnoreCase("hll_empty")) {
                     throw new AnalysisException("HLL column must use " + FunctionSet.HLL_HASH + " function, like "
                             + dstSlotDesc.getColumn().getName() + "=" + FunctionSet.HLL_HASH
                             + "(xxx) or " + dstSlotDesc.getColumn().getName() + "=hll_empty()");
                 }
-                expr.setType(Type.HLL);
+                expr.setType(HLLType.HLL);
             }
 
-            checkBitmapCompatibility(analyzer, dstSlotDesc, expr);
+            checkBitmapCompatibility(dstSlotDesc, expr);
 
             if (negative && dstSlotDesc.getColumn().getAggregationType() == AggregateType.SUM) {
                 expr = new ArithmeticExpr(ArithmeticExpr.Operator.MULTIPLY, expr, new IntLiteral(-1));
-                expr = Expr.analyzeAndCastFold(expr);
+                expr = ExprUtils.analyzeAndCastFold(expr);
             }
             expr = castToSlot(dstSlotDesc, expr);
 
-            paramCreateContext.params.putToExpr_of_dest_slot(dstSlotDesc.getId().asInt(), expr.treeToThrift());
+            paramCreateContext.params.putToExpr_of_dest_slot(dstSlotDesc.getId().asInt(), ExprToThrift.treeToThrift(expr));
         }
         paramCreateContext.params.setDest_sid_to_src_sid_without_trans(destSidToSrcSidWithoutTrans);
         paramCreateContext.params.setSrc_tuple_id(paramCreateContext.tupleDescriptor.getId().asInt());
@@ -351,7 +376,7 @@ public class StreamLoadScanNode extends LoadScanNode {
         createScanRange();
     }
 
-    private void createScanRange() throws UserException {
+    private void createScanRange() throws StarRocksException {
         for (int i = 0; i < this.numInstances; i++) {
             TBrokerScanRange brokerScanRange = new TBrokerScanRange();
             brokerScanRange.setParams(paramCreateContext.params);
@@ -381,23 +406,25 @@ public class StreamLoadScanNode extends LoadScanNode {
                 case FILE_STREAM:
                     rangeDesc.setPath("Invalid Path");
                     if (needAssignBE) {
-                        UUID uuid = UUID.randomUUID();
-                        rangeDesc.setLoad_id(new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()));
+                        rangeDesc.setLoad_id(UUIDUtil.genTUniqueId());
                     } else {
                         rangeDesc.setLoad_id(loadId);
                     }
                     break;
                 default:
-                    throw new UserException("unsupported file type, type=" + streamLoadInfo.getFileType());
+                    throw new StarRocksException("unsupported file type, type=" + streamLoadInfo.getFileType());
             }
             rangeDesc.setStart_offset(0);
             rangeDesc.setSize(-1);
-            rangeDesc.setNum_of_columns_from_file(paramCreateContext.tupleDescriptor.getSlots().size());
+            rangeDesc.setNum_of_columns_from_file(paramCreateContext.params.getSrc_slot_idsSize());
             rangeDesc.setCompression_type(streamLoadInfo.getPayloadCompressionType());
             brokerScanRange.addToRanges(rangeDesc);
             brokerScanRange.setBroker_addresses(Lists.newArrayList());
             if (needAssignBE) {
                 brokerScanRange.setChannel_id(curChannelId++);
+                brokerScanRange.setEnable_batch_write(enableBatchWrite);
+                brokerScanRange.setBatch_write_interval_ms(batchWriteIntervalMs);
+                brokerScanRange.setBatch_write_parameters(batchWriteParameters);
             }
             TScanRangeLocations locations = new TScanRangeLocations();
             TScanRange scanRange = new TScanRange();
@@ -405,8 +432,8 @@ public class StreamLoadScanNode extends LoadScanNode {
             locations.setScan_range(scanRange);
 
             if (needAssignBE) {
-                Backend selectedBackend = backends.get(nextBe++);
-                nextBe = nextBe % backends.size();
+                ComputeNode selectedBackend = computeNodes.get(nextBe++);
+                nextBe = nextBe % computeNodes.size();
                 TScanRangeLocation location = new TScanRangeLocation();
                 location.setBackend_id(selectedBackend.getId());
                 location.setServer(new TNetworkAddress(selectedBackend.getHost(), selectedBackend.getBePort()));

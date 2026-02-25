@@ -14,40 +14,57 @@
 
 package com.starrocks.server;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.staros.proto.FileCacheInfo;
+import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.util.LockCloseable;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.InvalidConfException;
+import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
+import com.starrocks.lake.StarOSAgent;
+import com.starrocks.lake.StorageInfo;
+import com.starrocks.persist.TableStorageInfo;
+import com.starrocks.persist.TableStorageInfos;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.storagevolume.StorageVolume;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 import static com.starrocks.server.GlobalStateMgr.NEXT_ID_INIT_VALUE;
+import static com.starrocks.storagevolume.StorageVolume.V_SHARD_GROUP_ID;
 
 public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     private static final Logger LOG = LogManager.getLogger(SharedDataStorageVolumeMgr.class);
+
+    private final Map<String, Long> storageVolumeIdToVTabletGroupId = new ConcurrentHashMap<>();
 
     @Override
     public StorageVolume getStorageVolumeByName(String svName) {
@@ -87,9 +104,39 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
         }
     }
 
+    /**
+     * refresh `storageVolumeIdToVTabletGroupId` at startup time of FE leader or after this FE transferred to leader.
+     */
+    public void restoreStorageVolumeToVTabletGroupMappings() {
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            try {
+                List<FileStoreInfo> fileStoreInfos = GlobalStateMgr.getCurrentState().getStarOSAgent().listFileStore();
+
+                Map<String, Long> newMappings = new HashMap<>();
+                for (FileStoreInfo fsInfo : fileStoreInfos) {
+                    String vTabletIdGroupId = fsInfo.getPropertiesMap().get(V_SHARD_GROUP_ID);
+                    if (StringUtils.isEmpty(vTabletIdGroupId)) {
+                        continue;
+                    }
+                    try {
+                        newMappings.put(fsInfo.getFsName(), Long.parseLong(vTabletIdGroupId));
+                    } catch (NumberFormatException e) {
+                        LOG.warn("found invalid v_shard_group_id" +
+                                " while restoring storage volume to virtual tablet group mapping: {}", vTabletIdGroupId);
+                    }
+                }
+
+                storageVolumeIdToVTabletGroupId.clear();
+                storageVolumeIdToVTabletGroupId.putAll(newMappings);
+            } catch (DdlException e) {
+                LOG.warn("failed to restore storage volume to tablet, keeping existing mappings", e);
+            }
+        }
+    }
+
     @Override
     protected String createInternalNoLock(String name, String svType, List<String> locations,
-                                          Map<String, String> params, Optional<Boolean> enabled, String comment)
+            Map<String, String> params, Optional<Boolean> enabled, String comment)
             throws DdlException {
         FileStoreInfo fileStoreInfo = StorageVolume.createFileStoreInfo(name, svType,
                 locations, params, enabled.orElse(true), comment);
@@ -102,8 +149,24 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
     }
 
     @Override
+    protected void replaceInternalNoLock(StorageVolume sv) throws DdlException {
+        GlobalStateMgr.getCurrentState().getStarOSAgent().replaceFileStore(sv.toFileStoreInfo());
+    }
+
+    @Override
     protected void removeInternalNoLock(StorageVolume sv) throws DdlException {
         GlobalStateMgr.getCurrentState().getStarOSAgent().removeFileStoreByName(sv.getName());
+
+        // remove virtual tablets
+        if (sv.getVTabletId() != -1) {
+            GlobalStateMgr.getCurrentState().getStarOSAgent().deleteShards(Collections.singleton(sv.getVTabletId()));
+        }
+
+        if (sv.getVTabletGroupId() != -1) {
+            GlobalStateMgr.getCurrentState().getStarOSAgent().deleteShardGroup(
+                    Collections.singletonList(sv.getVTabletGroupId()));
+            storageVolumeIdToVTabletGroupId.remove(sv.getName());
+        }
     }
 
     @Override
@@ -142,6 +205,9 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
             if (!isReplay && !storageVolumeToDbs.containsKey(svId) && getStorageVolume(svId) == null) {
                 return false;
             }
+            // remove existing bind if exists
+            unbindDbToStorageVolume(dbId);
+
             Set<Long> dbs = storageVolumeToDbs.getOrDefault(svId, new HashSet<>());
             dbs.add(dbId);
             storageVolumeToDbs.put(svId, dbs);
@@ -313,9 +379,20 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                 // validate azure_blob_path configuration
                 normalizeConfigPath(Config.azure_blob_path, "azblob", "Config.azure_blob_path", true);
                 break;
+            case "adls2":
+                if (Config.azure_adls2_endpoint.isEmpty()) {
+                    throw new InvalidConfException("The configuration item \"azure_adls2_endpoint\" is empty.");
+                }
+                // validate azure_adls2_path configuration
+                normalizeConfigPath(Config.azure_adls2_path, "adls2", "Config.azure_adls2_path", true);
+                break;
+            case "gs":
+                normalizeConfigPath(Config.gcp_gcs_path, "gs", "Config.gcp_gcs_path", true);
+                break;
             default:
                 throw new InvalidConfException(String.format(
-                        "The configuration item \"cloud_native_storage_type = %s\" is invalid, must be HDFS or S3 or AZBLOB.",
+                        "The configuration item \"cloud_native_storage_type = %s\" is invalid, must" +
+                                " be HDFS S3 AZBLOB ADLS2 or GS.",
                         Config.cloud_native_storage_type));
         }
     }
@@ -330,7 +407,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
         for (Long dbId : dbIds) {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(dbId);
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockDatabase(db.getId(), LockType.READ);
             if (dbToStorageVolume.containsKey(dbId)) {
                 continue;
             }
@@ -344,7 +421,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                     }
                 }
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         }
         bindings.add(dbBindings);
@@ -352,15 +429,104 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
         return bindings;
     }
 
-    private static URI normalizeConfigPath(String uriStr, String defaultScheme, String configNameInErrMsg, boolean matchScheme)
+    @Override
+    public void replayUpdateTableStorageInfos(TableStorageInfos tableStorageInfos) {
+        for (Map.Entry<Long, List<TableStorageInfo>> entry : tableStorageInfos.getDbToTableStorageInfos().entrySet()) {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(entry.getKey());
+            if (db == null) {
+                continue;
+            }
+            for (TableStorageInfo tableStorageInfo : entry.getValue()) {
+                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTableIncludeRecycleBin(db,
+                        tableStorageInfo.getTableId());
+                if (table == null) {
+                    continue;
+                }
+                OlapTable olapTable = ((OlapTable) table);
+                TableProperty tableProperty = olapTable.getTableProperty();
+                if (tableProperty != null) {
+                    StorageInfo storageInfo = tableProperty.getStorageInfo();
+                    if (storageInfo != null) {
+                        // Update file path info, do not need to lock
+                        storageInfo.setFilePathInfo(tableStorageInfo.getFilePathInfo());
+                    }
+                }
+            }
+        }
+    }
+
+    @Override
+    protected void updateTableStorageInfo(String storageVolumeId) throws DdlException {
+        Map<Long, List<TableStorageInfo>> dbToTableStorageInfos = new HashMap<>();
+        List<Pair<StorageInfo, FilePathInfo>> updateList = new ArrayList<>();
+        for (Map.Entry<Database, List<Table>> entry : getBindedTablesOfStorageVolume(storageVolumeId).entrySet()) {
+            Database db = entry.getKey();
+            List<Table> tables = entry.getValue();
+            List<TableStorageInfo> tableStorageInfos = new ArrayList<>(tables.size());
+            for (Table table : tables) {
+                OlapTable olapTable = ((OlapTable) table);
+                FilePathInfo filePathInfo = GlobalStateMgr.getCurrentState().getStarOSAgent()
+                        .allocateFilePath(storageVolumeId, db.getId(), table.getId());
+                TableProperty tableProperty = olapTable.getTableProperty();
+                if (tableProperty != null) {
+                    StorageInfo storageInfo = tableProperty.getStorageInfo();
+                    if (storageInfo != null) {
+                        updateList.add(Pair.create(storageInfo, filePathInfo));
+                        tableStorageInfos.add(new TableStorageInfo(table.getId(), filePathInfo));
+                    }
+                }
+            }
+            dbToTableStorageInfos.put(db.getId(), tableStorageInfos);
+        }
+
+        TableStorageInfos tableStorageInfos = new TableStorageInfos(dbToTableStorageInfos);
+        GlobalStateMgr.getCurrentState().getEditLog().logUpdateTableStorageInfos(tableStorageInfos, wal -> {
+            for (Pair<StorageInfo, FilePathInfo> pair : updateList) {
+                StorageInfo storageInfo = pair.first;
+                FilePathInfo filePathInfo = pair.second;
+                // Update file path info, do not need to lock
+                storageInfo.setFilePathInfo(filePathInfo);
+            }
+        });
+    }
+
+    private Map<Database, List<Table>> getBindedTablesOfStorageVolume(String storageVolumeId) {
+        Map<Database, List<Table>> bindedTables = new HashMap<>();
+
+        Set<Long> tableIds = new HashSet<>();
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            tableIds.addAll(storageVolumeToTables.getOrDefault(storageVolumeId, Collections.emptySet()));
+        }
+
+        for (Long dbId : GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIdsIncludeRecycleBin()) {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(dbId);
+            if (db == null) {
+                continue;
+            }
+            List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTablesIncludeRecycleBin(db).stream().filter(table -> tableIds.contains(table.getId()))
+                    .collect(Collectors.toList());
+
+            bindedTables.put(db, tables);
+        }
+
+        return bindedTables;
+    }
+
+    private static URI normalizeConfigPath(String uriStr, String defaultScheme, String configNameInErrMsg,
+            boolean matchScheme)
             throws InvalidConfException {
         try {
             URI uri = new URI(uriStr);
             if (!uri.isAbsolute()) {
                 uri = new URI(defaultScheme + "://" + uriStr);
             }
-            if (Strings.isNullOrEmpty(uri.getAuthority()) || uri.getPort() != -1) {
-                // no bucket or bucket name contains ':'
+            if (Strings.isNullOrEmpty(uri.getAuthority())) {
+                throw new InvalidConfException("");
+            }
+            if (uri.getPort() != -1 && "s3".equals(defaultScheme)) {
+                // s3 uri, not allow `:` in authority, e.g. the following url is invalid
+                // - s3://{bucket}:3020/b/c
                 throw new InvalidConfException("");
             }
             if (matchScheme && !uri.getScheme().equals(defaultScheme)) {
@@ -380,7 +546,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
             // remove leading '/' for backwards compatibility
             path = path.substring(1);
         }
-        return new String[] {uri.getAuthority(), path};
+        return new String[] { uri.getAuthority(), path };
     }
 
     private String getAwsCredentialType() {
@@ -405,7 +571,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
             return "simple";
         }
 
-        //assume_role with ak sk, not supported now, just return null
+        // assume_role with ak sk, not supported now, just return null
         return null;
     }
 
@@ -424,6 +590,14 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                 break;
             case "azblob":
                 uri = normalizeConfigPath(Config.azure_blob_path, "azblob", "Config.azure_blob_path", true);
+                locations.add(uri.toString());
+                break;
+            case "adls2":
+                uri = normalizeConfigPath(Config.azure_adls2_path, "adls2", "Config.azure_adls2_path", true);
+                locations.add(uri.toString());
+                break;
+            case "gs":
+                uri = normalizeConfigPath(Config.gcp_gcs_path, "gs", "Config.gcp_gcs_path", true);
                 locations.add(uri.toString());
                 break;
             default:
@@ -455,6 +629,33 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                 params.put(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN, Config.azure_blob_sas_token);
                 params.put(CloudConfigurationConstants.AZURE_BLOB_ENDPOINT, Config.azure_blob_endpoint);
                 break;
+            case "adls2":
+                params.put(CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY, Config.azure_adls2_shared_key);
+                params.put(CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN, Config.azure_adls2_sas_token);
+                params.put(CloudConfigurationConstants.AZURE_ADLS2_ENDPOINT, Config.azure_adls2_endpoint);
+                params.put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_USE_MANAGED_IDENTITY,
+                        String.valueOf(Config.azure_adls2_oauth2_use_managed_identity));
+                params.put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_TENANT_ID,
+                        Config.azure_adls2_oauth2_tenant_id);
+                params.put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ID,
+                        Config.azure_adls2_oauth2_client_id);
+                params.put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_SECRET,
+                        Config.azure_adls2_oauth2_client_secret);
+                params.put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ENDPOINT,
+                        Config.azure_adls2_oauth2_oauth2_client_endpoint);
+                break;
+            case "gs":
+                params.put(CloudConfigurationConstants.GCP_GCS_ENDPOINT, Config.gcp_gcs_endpoint);
+                params.put(CloudConfigurationConstants.GCP_GCS_USE_COMPUTE_ENGINE_SERVICE_ACCOUNT,
+                        Config.gcp_gcs_use_compute_engine_service_account);
+                params.put(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_EMAIL, Config.gcp_gcs_service_account_email);
+                params.put(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY,
+                        Config.gcp_gcs_service_account_private_key);
+                params.put(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY_ID,
+                        Config.gcp_gcs_service_account_private_key_id);
+                params.put(CloudConfigurationConstants.GCP_GCS_IMPERSONATION_SERVICE_ACCOUNT,
+                        Config.gcp_gcs_impersonation_service_account);
+                break;
             default:
                 return params;
         }
@@ -474,6 +675,70 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                 return "";
             default:
                 return "";
+        }
+    }
+
+    @Override
+    public void updateStorageVolumeVTabletMapping(String name, long vTabletId, long vTabletGroupId)
+            throws DdlException {
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            StorageVolume sv = getStorageVolumeByName(name);
+            Preconditions.checkState(sv != null, "Storage volume '%s' does not exist", name);
+            StorageVolume copied = new StorageVolume(sv);
+            // reset global unique id
+            copied.setVTabletId(vTabletId);
+            copied.setVTabletGroupId(vTabletGroupId);
+            updateInternalNoLock(copied);
+            storageVolumeIdToVTabletGroupId.put(name, vTabletGroupId);
+        }
+    }
+
+    @Override
+    public boolean hasStorageVolumeBindAsVirtualGroup(long shardGroupId) {
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            return storageVolumeIdToVTabletGroupId.values().stream()
+                    .anyMatch(vTabletGroupId -> shardGroupId == vTabletGroupId);
+        }
+    }
+
+    public long getOrCreateVirtualTabletId(String storageVolumeName, String srcServiceId)
+            throws MetaNotFoundException {
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            StorageVolume storageVolume = this.getStorageVolumeByName(storageVolumeName);
+            if (storageVolume == null) {
+                throw new MetaNotFoundException("Unknown src storage volume while creating virtual tablet: " + storageVolumeName);
+            }
+
+            long vTabletId = storageVolume.getVTabletId();
+            if (vTabletId != -1) {
+                return vTabletId;
+            }
+
+            long shardGroupId = -1;
+            try {
+                StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
+                FilePathInfo pathInfo = starOSAgent.allocateFilePath(storageVolume.getId(), srcServiceId);
+                FileCacheInfo cacheInfo =
+                        FileCacheInfo.newBuilder().setEnableCache(false).setTtlSeconds(-1).setAsyncWriteBack(false).build();
+                // assume each shard group has only one shard
+                shardGroupId = starOSAgent.createShardGroupForVirtualTablet();
+                Map<String, String> properties = new HashMap<>();
+                // create a new id as tablet id
+                vTabletId = GlobalStateMgr.getCurrentState().getNextId();
+
+                starOSAgent.createShardWithVirtualTabletId(pathInfo, cacheInfo, shardGroupId, properties, vTabletId,
+                        WarehouseManager.DEFAULT_RESOURCE);
+                LOG.info("Created shard for storage volume: {}, vTablet id: {}, group id: {}, src service id: {}",
+                        storageVolumeName, vTabletId, shardGroupId, srcServiceId);
+
+                // update storage volume
+                updateStorageVolumeVTabletMapping(storageVolumeName, vTabletId, shardGroupId);
+                return vTabletId;
+            } catch (Exception e) {
+                // StarMgrMetaSyncer would clean the orphaned shards & shard groups
+                LOG.error("Failed to create shard for storage volume {} ", storageVolumeName, e);
+                throw new RuntimeException("Failed to create shard for storage volume: " + storageVolumeName, e);
+            }
         }
     }
 }

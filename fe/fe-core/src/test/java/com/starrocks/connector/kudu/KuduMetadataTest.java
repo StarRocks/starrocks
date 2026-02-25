@@ -16,13 +16,15 @@ package com.starrocks.connector.kudu;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.KuduTable;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileInfo;
-import com.starrocks.connector.TableVersionRange;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.TypeFactory;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.kudu.Schema;
@@ -33,10 +35,10 @@ import org.apache.kudu.client.PartitionSchema;
 import org.apache.kudu.client.RpcRemoteException;
 import org.apache.kudu.client.Status;
 import org.apache.kudu.rpc.RpcHeader;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Constructor;
 import java.util.ArrayList;
@@ -46,7 +48,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static com.starrocks.catalog.KuduTableTest.genColumnSchema;
-import static com.starrocks.catalog.ScalarType.CATALOG_MAX_VARCHAR_LENGTH;
+import static com.starrocks.type.TypeFactory.CATALOG_MAX_VARCHAR_LENGTH;
 
 public class KuduMetadataTest {
     @Mocked
@@ -68,12 +70,12 @@ public class KuduMetadataTest {
 
     private final List<KuduScanToken> tokens = new ArrayList<>();
 
-    @Before
+    @BeforeEach
     public void setUp() {
         this.tokens.add(token);
     }
 
-    @After
+    @AfterEach
     public void setDown() throws KuduException {
         if (client != null) {
             client.close();
@@ -96,18 +98,18 @@ public class KuduMetadataTest {
                 result = EMPTY_PARTITION_SCHEMA;
             }
         };
-        Table table = metadata.getTable("db1", "tbl1");
+        Table table = metadata.getTable(new ConnectContext(), "db1", "tbl1");
         KuduTable kuduTable = (KuduTable) table;
-        Assert.assertEquals("test_kudu_catalog", kuduTable.getCatalogName());
-        Assert.assertEquals("db1", kuduTable.getDbName());
-        Assert.assertEquals("tbl1", kuduTable.getTableName());
-        Assert.assertEquals(2, kuduTable.getColumns().size());
-        Assert.assertEquals(0, kuduTable.getPartitionColumnNames().size());
-        Assert.assertEquals(ScalarType.INT, kuduTable.getColumns().get(0).getType());
-        Assert.assertTrue(kuduTable.getBaseSchema().get(0).isAllowNull());
-        Assert.assertEquals(ScalarType.createVarcharType(CATALOG_MAX_VARCHAR_LENGTH),
+        Assertions.assertEquals("test_kudu_catalog", kuduTable.getCatalogName());
+        Assertions.assertEquals("db1", kuduTable.getCatalogDBName());
+        Assertions.assertEquals("tbl1", kuduTable.getCatalogTableName());
+        Assertions.assertEquals(2, kuduTable.getColumns().size());
+        Assertions.assertEquals(0, kuduTable.getPartitionColumnNames().size());
+        Assertions.assertEquals(IntegerType.INT, kuduTable.getColumns().get(0).getType());
+        Assertions.assertTrue(kuduTable.getBaseSchema().get(0).isAllowNull());
+        Assertions.assertEquals(TypeFactory.createVarcharType(CATALOG_MAX_VARCHAR_LENGTH),
                 kuduTable.getBaseSchema().get(1).getType());
-        Assert.assertTrue(kuduTable.getBaseSchema().get(1).isAllowNull());
+        Assertions.assertTrue(kuduTable.getBaseSchema().get(1).isAllowNull());
     }
 
     @Test
@@ -121,9 +123,9 @@ public class KuduMetadataTest {
                 result = tableNames;
             }
         };
-        List<String> tables = metadata.listTableNames("db1");
-        Assert.assertEquals(1, tables.size());
-        Assert.assertEquals("tbl1", tables.get(0));
+        List<String> tables = metadata.listTableNames(new ConnectContext(), "db1");
+        Assertions.assertEquals(1, tables.size());
+        Assertions.assertEquals("tbl1", tables.get(0));
     }
 
     @Test
@@ -143,14 +145,14 @@ public class KuduMetadataTest {
                 result = tokens;
             }
         };
-        Table table = metadata.getTable("db1", "tbl1");
+        Table table = metadata.getTable(new ConnectContext(), "db1", "tbl1");
         KuduTable kuduTable = (KuduTable) table;
         GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder().setFieldNames(requiredNames).build();
         List<RemoteFileInfo> remoteFileInfos = metadata.getRemoteFiles(kuduTable, params);
-        Assert.assertEquals(1, remoteFileInfos.size());
-        Assert.assertEquals(1, remoteFileInfos.get(0).getFiles().size());
+        Assertions.assertEquals(1, remoteFileInfos.size());
+        Assertions.assertEquals(1, remoteFileInfos.get(0).getFiles().size());
         KuduRemoteFileDesc desc = (KuduRemoteFileDesc) remoteFileInfos.get(0).getFiles().get(0);
-        Assert.assertEquals(1, desc.getKuduScanTokens().size());
+        Assertions.assertEquals(1, desc.getKuduScanTokens().size());
     }
 
     @Test
@@ -170,11 +172,12 @@ public class KuduMetadataTest {
                 result = exception;
             }
         };
-        Table table = metadata.getTable("db1", "tbl1");
+        Table table = metadata.getTable(new ConnectContext(), "db1", "tbl1");
         KuduTable kuduTable = (KuduTable) table;
         Statistics statistics = metadata.getTableStatistics(
-                null, kuduTable, Collections.emptyMap(), Collections.emptyList(), null, -1, TableVersionRange.empty());
-        Assert.assertEquals(1D, statistics.getOutputRowCount(), 0.01);
+                null, kuduTable, Collections.emptyMap(), Collections.emptyList(), null, -1,
+                TvrTableSnapshot.empty());
+        Assertions.assertEquals(1D, statistics.getOutputRowCount(), 0.01);
     }
 
     private RpcRemoteException createRpcRemoteException(String message) throws Exception {

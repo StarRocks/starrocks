@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.operator.physical;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariableConstants;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -27,13 +27,15 @@ import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
-import com.starrocks.sql.optimizer.operator.DataSkewInfo;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.skew.DataSkewInfo;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.List;
@@ -51,15 +53,21 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
     // For normal aggregate function, partitionByColumns are same with groupingKeys
     // but for single distinct function, partitionByColumns are not same with groupingKeys
     private final List<ColumnRefOperator> partitionByColumns;
-    private final Map<ColumnRefOperator, CallOperator> aggregations;
+    private Map<ColumnRefOperator, CallOperator> aggregations;
 
     // The flag for this aggregate operator has split to
     // two stage aggregate or three stage aggregate
-    private final boolean isSplit;
+    private boolean isSplit;
 
     // TODO introduce builder mode to change these fields to final fields
-    // flg for this aggregate operator's parent had been pruned
+    // flag for this aggregate operator's parent had been pruned
     private boolean mergedLocalAgg;
+
+    // Only set when partial topN is pushed above local aggregation. In this case streaming aggregation has to be
+    // forced to pre-aggregate because the data has to be fully reduced before evaluating the topN.
+    private boolean topNLocalAgg;
+    // Only set when partial topN is pushed above local aggregation.
+    private LogicalTopNOperator.TopNSortInfo topNSortInfo;
 
     private boolean useSortAgg = false;
 
@@ -68,6 +76,15 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
     private boolean withoutColocateRequirement = false;
 
     private DataSkewInfo distinctColumnDataSkew = null;
+
+    private boolean forcePreAggregation = false;
+
+    private boolean withLocalShuffle = false;
+
+    private long localLimit = DEFAULT_LIMIT;
+
+    private List<Pair<ConstantOperator, ConstantOperator>> groupByMinMaxStatistic = Lists.newArrayList();
+
     public PhysicalHashAggregateOperator(AggType type,
                                          List<ColumnRefOperator> groupBys,
                                          List<ColumnRefOperator> partitionByColumns,
@@ -87,12 +104,38 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         this.projection = projection;
     }
 
+    public PhysicalHashAggregateOperator(PhysicalHashAggregateOperator aggregateOperator) {
+        this(aggregateOperator.getType(),
+                aggregateOperator.getGroupBys(),
+                aggregateOperator.getPartitionByColumns(),
+                aggregateOperator.getAggregations(),
+                aggregateOperator.isSplit(),
+                aggregateOperator.getLimit(),
+                aggregateOperator.getPredicate(),
+                aggregateOperator.getProjection());
+        this.mergedLocalAgg = aggregateOperator.mergedLocalAgg;
+        this.topNLocalAgg = aggregateOperator.topNLocalAgg;
+        this.topNSortInfo = aggregateOperator.topNSortInfo;
+        this.useSortAgg = aggregateOperator.useSortAgg;
+        this.usePerBucketOptmize = aggregateOperator.usePerBucketOptmize;
+        this.withoutColocateRequirement = aggregateOperator.withoutColocateRequirement;
+        this.distinctColumnDataSkew = aggregateOperator.distinctColumnDataSkew;
+        this.groupByMinMaxStatistic = aggregateOperator.groupByMinMaxStatistic;
+        this.forcePreAggregation = aggregateOperator.forcePreAggregation;
+        this.withLocalShuffle = aggregateOperator.withLocalShuffle;
+        this.localLimit = aggregateOperator.localLimit;
+    }
+
     public List<ColumnRefOperator> getGroupBys() {
         return groupBys;
     }
 
     public Map<ColumnRefOperator, CallOperator> getAggregations() {
         return aggregations;
+    }
+
+    public void setAggregations(Map<ColumnRefOperator, CallOperator> aggregations) {
+        this.aggregations = aggregations;
     }
 
     public AggType getType() {
@@ -117,6 +160,22 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         this.mergedLocalAgg = mergedLocalAgg;
     }
 
+    public boolean isTopNLocalAgg() {
+        return topNLocalAgg;
+    }
+
+    public void setTopNLocalAgg(boolean topNLocalAgg) {
+        this.topNLocalAgg = topNLocalAgg;
+    }
+
+    public LogicalTopNOperator.TopNSortInfo getTopNSortInfo() {
+        return topNSortInfo;
+    }
+
+    public void setTopNSortInfo(LogicalTopNOperator.TopNSortInfo topNSortInfo) {
+        this.topNSortInfo = topNSortInfo;
+    }
+
     public List<ColumnRefOperator> getPartitionByColumns() {
         return partitionByColumns;
     }
@@ -129,6 +188,10 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         return isSplit;
     }
 
+    public void setSplit(boolean split) {
+        isSplit = split;
+    }
+
     public boolean canUseStreamingPreAgg() {
         if (type.isGlobal() || type.isDistinctGlobal()) {
             return false;
@@ -139,10 +202,10 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         }
     }
 
-
     public String getNeededPreaggregationMode() {
         String mode = ConnectContext.get().getSessionVariable().getStreamingPreaggregationMode();
-        if (canUseStreamingPreAgg() && (type.isDistinctLocal() || hasRemovedDistinctFunc())) {
+        if (canUseStreamingPreAgg() && (type.isDistinctLocal() || hasRemovedDistinctFunc() || isTopNLocalAgg() ||
+                forcePreAggregation)) {
             mode = SessionVariableConstants.FORCE_PREAGGREGATION;
         }
         return mode;
@@ -164,8 +227,16 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         return withoutColocateRequirement;
     }
 
+    public long getLocalLimit() {
+        return localLimit;
+    }
+
     public void setWithoutColocateRequirement(boolean withoutColocateRequirement) {
         this.withoutColocateRequirement = withoutColocateRequirement;
+    }
+
+    public void setLocalLimit(long localLimit) {
+        this.localLimit = localLimit;
     }
 
     public void setUsePerBucketOptmize(boolean usePerBucketOptmize) {
@@ -176,8 +247,32 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         this.distinctColumnDataSkew = distinctColumnDataSkew;
     }
 
+    public void setGroupByMinMaxStatistic(List<Pair<ConstantOperator, ConstantOperator>> groupByMinMaxStatistic) {
+        this.groupByMinMaxStatistic = groupByMinMaxStatistic;
+    }
+
+    public List<Pair<ConstantOperator, ConstantOperator>> getGroupByMinMaxStatistic() {
+        return this.groupByMinMaxStatistic;
+    }
+
     public DataSkewInfo getDistinctColumnDataSkew() {
         return distinctColumnDataSkew;
+    }
+
+    public void setForcePreAggregation(boolean forcePreAggregation) {
+        this.forcePreAggregation = forcePreAggregation;
+    }
+
+    public boolean isForcePreAggregation() {
+        return forcePreAggregation;
+    }
+
+    public boolean isWithLocalShuffle() {
+        return withLocalShuffle;
+    }
+
+    public void setWithLocalShuffle(boolean withLocalShuffle) {
+        this.withLocalShuffle = withLocalShuffle;
     }
 
     @Override
@@ -191,7 +286,7 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), type, groupBys, aggregations.keySet());
+        return Objects.hash(super.hashCode(), type, groupBys, aggregations.keySet(), partitionByColumns, topNLocalAgg);
     }
 
     @Override
@@ -206,7 +301,8 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
         PhysicalHashAggregateOperator that = (PhysicalHashAggregateOperator) o;
         return type == that.type && Objects.equals(aggregations, that.aggregations) &&
-                Objects.equals(groupBys, that.groupBys);
+                Objects.equals(groupBys, that.groupBys) && Objects.equals(partitionByColumns, that.partitionByColumns) &&
+                topNLocalAgg == that.topNLocalAgg;
     }
 
     @Override

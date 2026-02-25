@@ -13,8 +13,8 @@
 // limitations under the License.
 package com.starrocks.connector.partitiontraits;
 
+import com.google.api.client.util.Sets;
 import com.starrocks.catalog.BaseTableInfo;
-import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HudiPartitionKey;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionKey;
@@ -23,12 +23,6 @@ import java.util.List;
 import java.util.Set;
 
 public class HudiPartitionTraits extends DefaultTraits {
-
-    @Override
-    public String getDbName() {
-        return ((HiveMetaStoreTable) table).getDbName();
-    }
-
     @Override
     public PartitionKey createEmptyKey() {
         return new HudiPartitionKey();
@@ -41,14 +35,14 @@ public class HudiPartitionTraits extends DefaultTraits {
 
     @Override
     public String getTableName() {
-        return ((HiveMetaStoreTable) table).getTableName();
+        return table.getCatalogTableName();
     }
 
     @Override
     public Set<String> getUpdatedPartitionNames(List<BaseTableInfo> baseTables,
                                                 MaterializedView.AsyncRefreshContext context) {
-        // TODO: implement
-        return null;
+        // TODO: Implement Hudi partition update logic, currently we just return empty set which means
+        //  no check updated partitions
+        return Sets.newHashSet();
     }
 }
-

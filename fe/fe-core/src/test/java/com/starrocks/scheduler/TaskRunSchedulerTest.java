@@ -17,20 +17,25 @@ package com.starrocks.scheduler;
 
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.DefaultWarehouse;
 import mockit.Expectations;
 import org.assertj.core.util.Sets;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 public class TaskRunSchedulerTest {
@@ -38,7 +43,9 @@ public class TaskRunSchedulerTest {
     private static final int N = 100;
     private static ConnectContext connectContext;
 
-    @Before
+    private WarehouseManager warehouseManager;
+
+    @BeforeEach
     public void setUp() {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         new Expectations() {
@@ -55,12 +62,15 @@ public class TaskRunSchedulerTest {
         };
     }
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         FeConstants.runningUnitTest = true;
         UtFrameUtils.createMinStarRocksCluster();
 
         connectContext = UtFrameUtils.createDefaultCtx();
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        globalStateMgr.getWarehouseMgr().addWarehouse(new DefaultWarehouse(1, "w1"));
+        globalStateMgr.getWarehouseMgr().addWarehouse(new DefaultWarehouse(2, "w2"));
     }
 
     private static ExecuteOption makeExecuteOption(boolean isMergeRedundant, boolean isSync) {
@@ -68,7 +78,8 @@ public class TaskRunSchedulerTest {
     }
 
     private static ExecuteOption makeExecuteOption(boolean isMergeRedundant, boolean isSync, int priority) {
-        ExecuteOption executeOption = new ExecuteOption(isMergeRedundant);
+        ExecuteOption executeOption = new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(), isMergeRedundant,
+                Maps.newHashMap());
         executeOption.setSync(isSync);
         executeOption.setPriority(priority);
         return executeOption;
@@ -105,17 +116,17 @@ public class TaskRunSchedulerTest {
             taskRuns.add(taskRun);
             scheduler.addPendingTaskRun(taskRun);
         }
-        Assert.assertTrue(scheduler.getCopiedPendingTaskRuns().size() == N);
+        Assertions.assertTrue(scheduler.getCopiedPendingTaskRuns().size() == N);
 
         List<TaskRun> queue = scheduler.getCopiedPendingTaskRuns();
-        Assert.assertEquals(N, queue.size());
+        Assertions.assertEquals(N, queue.size());
 
         List<TaskRun> pendingTaskRuns = scheduler.getCopiedPendingTaskRuns();
         for (int i = 0; i < N; i++) {
             int j = i;
             scheduler.scheduledPendingTaskRun(taskRun -> {
-                Assert.assertTrue(taskRun.equals(taskRuns.get(N - 1 - j)));
-                Assert.assertTrue(taskRun.equals(pendingTaskRuns.get(j)));
+                Assertions.assertTrue(taskRun.equals(taskRuns.get(N - 1 - j)));
+                Assertions.assertTrue(taskRun.equals(pendingTaskRuns.get(j)));
             });
         }
     }
@@ -133,14 +144,14 @@ public class TaskRunSchedulerTest {
             taskRuns.add(taskRun);
             scheduler.addPendingTaskRun(taskRun);
         }
-        Assert.assertTrue(scheduler.getCopiedPendingTaskRuns().size() == N);
+        Assertions.assertTrue(scheduler.getCopiedPendingTaskRuns().size() == N);
 
         List<TaskRun> queue = scheduler.getCopiedPendingTaskRuns();
-        Assert.assertEquals(N, queue.size());
+        Assertions.assertEquals(N, queue.size());
 
         for (int i = 0; i < N; i++) {
             TaskRun taskRun = queue.get(i);
-            Assert.assertTrue(taskRun.equals(taskRuns.get(i)));
+            Assertions.assertTrue(taskRun.equals(taskRuns.get(i)));
         }
     }
 
@@ -157,16 +168,14 @@ public class TaskRunSchedulerTest {
         }
 
         Set<TaskRun> runningTaskRuns = Sets.newHashSet(taskRuns.subList(0, Config.task_runs_concurrency));
-        scheduler.scheduledPendingTaskRun(taskRun -> {
-            Assert.assertTrue(runningTaskRuns.contains(taskRun));
-        });
-        Assert.assertTrue(scheduler.getRunningTaskCount() == Config.task_runs_concurrency);
-        Assert.assertTrue(scheduler.getPendingQueueCount() == N - Config.task_runs_concurrency);
+        scheduler.scheduledPendingTaskRun(taskRun -> Assertions.assertTrue(runningTaskRuns.contains(taskRun)));
+        Assertions.assertTrue(scheduler.getRunningTaskCount() == Config.task_runs_concurrency);
+        Assertions.assertTrue(scheduler.getPendingQueueCount() == N - Config.task_runs_concurrency);
         for (int i = 0; i < Config.task_runs_concurrency; i++) {
-            Assert.assertTrue(scheduler.getRunnableTaskRun(i).equals(taskRuns.get(i)));
+            Assertions.assertTrue(scheduler.getRunnableTaskRun(i).equals(taskRuns.get(i)));
         }
         for (int i = Config.task_runs_concurrency; i < N; i++) {
-            Assert.assertTrue(scheduler.getRunnableTaskRun(i).equals(taskRuns.get(i)));
+            Assertions.assertTrue(scheduler.getRunnableTaskRun(i).equals(taskRuns.get(i)));
         }
     }
 
@@ -179,27 +188,24 @@ public class TaskRunSchedulerTest {
         for (int i = 0; i < 10; i++) {
             TaskRun taskRun = makeTaskRun(1, task, makeExecuteOption(true, false, 1), i);
             taskRuns.add(taskRun);
-            Assert.assertTrue(scheduler.addPendingTaskRun(taskRun));
+            Assertions.assertTrue(scheduler.addPendingTaskRun(taskRun));
         }
 
         Set<TaskRun> runningTaskRuns = Sets.newHashSet(taskRuns.subList(0, 1));
-        scheduler.scheduledPendingTaskRun(taskRun -> {
-            Assert.assertTrue(runningTaskRuns.contains(taskRun));
-        });
+        scheduler.scheduledPendingTaskRun(taskRun -> Assertions.assertTrue(runningTaskRuns.contains(taskRun)));
         // running queue only support one task with same task id
-        Assert.assertTrue(scheduler.getRunningTaskCount() == 1);
-        Assert.assertTrue(scheduler.getPendingQueueCount() == 9);
+        Assertions.assertTrue(scheduler.getRunningTaskCount() == 1);
+        Assertions.assertTrue(scheduler.getPendingQueueCount() == 9);
 
-        System.out.println(scheduler);
         for (int i = 0; i < 1; i++) {
-            Assert.assertTrue(scheduler.getRunnableTaskRun(1).equals(taskRuns.get(i)));
+            Assertions.assertTrue(scheduler.getRunnableTaskRun(1).equals(taskRuns.get(i)));
         }
         List<TaskRun> pendingTaskRuns = scheduler.getCopiedPendingTaskRuns();
         for (int i = 1; i < 10; i++) {
             int j = i;
             scheduler.scheduledPendingTaskRun(taskRun -> {
-                Assert.assertTrue(taskRun.equals(taskRuns.get(j)));
-                Assert.assertTrue(taskRun.equals(pendingTaskRuns.get(j - 1)));
+                Assertions.assertTrue(taskRun.equals(taskRuns.get(j)));
+                Assertions.assertTrue(taskRun.equals(pendingTaskRuns.get(j - 1)));
             });
         }
     }
@@ -218,28 +224,26 @@ public class TaskRunSchedulerTest {
                 scheduler.addPendingTaskRun(taskRun);
             }
             Set<TaskRun> runningTaskRuns = Sets.newHashSet(taskRuns.subList(0, Config.task_runs_concurrency));
-            scheduler.scheduledPendingTaskRun(taskRun -> {
-                Assert.assertTrue(runningTaskRuns.contains(taskRun));
-            });
+            scheduler.scheduledPendingTaskRun(taskRun -> Assertions.assertTrue(runningTaskRuns.contains(taskRun)));
             str = scheduler.toString();
         }
 
         // test json result
         {
             TaskRunScheduler scheduler = GsonUtils.GSON.fromJson(str, TaskRunScheduler.class);
-            Assert.assertTrue(scheduler.getRunningTaskCount() == 4);
-            Assert.assertTrue(scheduler.getPendingQueueCount() == 6);
+            Assertions.assertTrue(scheduler.getRunningTaskCount() == 4);
+            Assertions.assertTrue(scheduler.getPendingQueueCount() == 6);
 
             Set<Long> expPendingTaskIds = ImmutableSet.of(4L, 5L, 6L, 7L, 8L, 9L);
             for (TaskRun taskRun : scheduler.getCopiedPendingTaskRuns()) {
-                Assert.assertTrue(taskRun != null);
-                Assert.assertTrue(expPendingTaskIds.contains(taskRun.getTaskId()));
+                Assertions.assertTrue(taskRun != null);
+                Assertions.assertTrue(expPendingTaskIds.contains(taskRun.getTaskId()));
             }
 
             Set<Long> expRunningTaskIds = ImmutableSet.of(0L, 1L, 2L, 3L);
             for (TaskRun taskRun : scheduler.getCopiedRunningTaskRuns()) {
-                Assert.assertTrue(taskRun != null);
-                Assert.assertTrue(expRunningTaskIds.contains(taskRun.getTaskId()));
+                Assertions.assertTrue(taskRun != null);
+                Assertions.assertTrue(expRunningTaskIds.contains(taskRun.getTaskId()));
             }
         }
     }
@@ -257,7 +261,7 @@ public class TaskRunSchedulerTest {
         }
         long pendingTaskRunsCount = taskRunScheduler.getPendingQueueCount();
         long runningTaskRunsCount = taskRunScheduler.getRunningTaskCount();
-        Assert.assertEquals(N, pendingTaskRunsCount + runningTaskRunsCount);
+        Assertions.assertEquals(N, pendingTaskRunsCount + runningTaskRunsCount);
     }
 
     @Test
@@ -273,7 +277,7 @@ public class TaskRunSchedulerTest {
         }
         long pendingTaskRunsCount = taskRunScheduler.getPendingQueueCount();
         long runningTaskRunsCount = taskRunScheduler.getRunningTaskCount();
-        Assert.assertEquals(1, pendingTaskRunsCount + runningTaskRunsCount);
+        Assertions.assertEquals(1, pendingTaskRunsCount + runningTaskRunsCount);
     }
 
     @Test
@@ -289,7 +293,104 @@ public class TaskRunSchedulerTest {
         }
         long pendingTaskRunsCount = taskRunScheduler.getPendingQueueCount();
         long runningTaskRunsCount = taskRunScheduler.getRunningTaskCount();
-        System.out.println(taskRunScheduler);
-        Assert.assertEquals(N, pendingTaskRunsCount + runningTaskRunsCount);
+        Assertions.assertEquals(N, pendingTaskRunsCount + runningTaskRunsCount);
+    }
+
+    @Test
+    public void testGetAllRunnableTaskCount() {
+        ConnectContext context1 = new ConnectContext();
+        context1.setGlobalStateMgr(connectContext.getGlobalStateMgr());
+        ConnectContext context2 = new ConnectContext();
+        context2.getSessionVariable().setWarehouseName("w1");
+        context2.setGlobalStateMgr(connectContext.getGlobalStateMgr());
+        ConnectContext context3 = new ConnectContext();
+        context3.getSessionVariable().setWarehouseName("w2");
+        context3.setGlobalStateMgr(connectContext.getGlobalStateMgr());
+
+        TaskRunScheduler taskRunScheduler = new TaskRunScheduler();
+        TaskRun run1 = new TaskRun();
+        run1.setRunCtx(context1);
+        run1.setTaskId(1L);
+        taskRunScheduler.addPendingTaskRun(run1);
+        TaskRun run2 = new TaskRun();
+        run2.setRunCtx(context2);
+        run2.setTaskId(2L);
+        taskRunScheduler.addPendingTaskRun(run2);
+        TaskRun run3 = new TaskRun();
+        run3.setRunCtx(context3);
+        run3.setTaskId(3L);
+        taskRunScheduler.addPendingTaskRun(run3);
+        TaskRun runNull = new TaskRun();
+        runNull.setRunCtx(null);
+        runNull.setTaskId(4L);
+        taskRunScheduler.addPendingTaskRun(runNull);
+
+        TaskRun run4 = new TaskRun();
+        run4.setRunCtx(context1);
+        run4.setTaskId(4L);
+        taskRunScheduler.addRunningTaskRun(run4);
+        TaskRun run5 = new TaskRun();
+        run5.setRunCtx(context2);
+        run5.setTaskId(5L);
+        taskRunScheduler.addRunningTaskRun(run5);
+        TaskRun run6 = new TaskRun();
+        run6.setRunCtx(context3);
+        run6.setTaskId(6L);
+        taskRunScheduler.addRunningTaskRun(run6);
+        TaskRun runNull2 = new TaskRun();
+        runNull2.setRunCtx(null);
+        runNull2.setTaskId(7L);
+        taskRunScheduler.addRunningTaskRun(runNull2);
+
+        TaskRun run7 = new TaskRun();
+        run7.setRunCtx(context1);
+        run7.setTaskId(7L);
+        taskRunScheduler.addSyncRunningTaskRun(run7);
+        TaskRun run8 = new TaskRun();
+        run8.setRunCtx(context2);
+        run8.setTaskId(8L);
+        taskRunScheduler.addSyncRunningTaskRun(run8);
+        TaskRun run9 = new TaskRun();
+        run9.setRunCtx(context3);
+        run9.setTaskId(9L);
+        taskRunScheduler.addSyncRunningTaskRun(run9);
+        TaskRun runNull3 = new TaskRun();
+        runNull3.setRunCtx(null);
+        runNull3.setTaskId(10L);
+        taskRunScheduler.addSyncRunningTaskRun(runNull3);
+
+        Map<Long, Long> result = taskRunScheduler.getAllRunnableTaskCount();
+        Assertions.assertEquals(3, result.size());
+        Assertions.assertEquals(Long.valueOf(3), result.get(0L));
+        Assertions.assertEquals(Long.valueOf(3), result.get(1L));
+        Assertions.assertEquals(Long.valueOf(3), result.get(2L));
+    }
+
+    @Test
+    public void testTaskRunProgress() {
+        ConnectContext context1 = new ConnectContext();
+        context1.setGlobalStateMgr(connectContext.getGlobalStateMgr());
+        Task task = new Task("test");
+        TaskRun run = makeTaskRun(1, task, makeExecuteOption(true, false), System.currentTimeMillis());
+        Assertions.assertTrue(run.getStatus() != null);
+        Assertions.assertEquals(0, run.getStatus().getProgress());
+
+        TaskRunStatus status = run.getStatus();
+        status.setState(Constants.TaskRunState.SUCCESS);
+        Assertions.assertEquals(100, run.getStatus().getProgress());
+        status.setState(Constants.TaskRunState.MERGED);
+        Assertions.assertEquals(100, run.getStatus().getProgress());
+
+        // keep original progress
+        status.setState(Constants.TaskRunState.FAILED);
+        Assertions.assertEquals(100, run.getStatus().getProgress());
+
+        status.setState(Constants.TaskRunState.RUNNING);
+        status.setProgress(10);
+        // should not throw exception
+        Assertions.assertEquals(10, run.getStatus().getProgress());
+
+        status.setProgress(100);
+        Assertions.assertEquals(100, run.getStatus().getProgress());
     }
 }

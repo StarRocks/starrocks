@@ -435,3 +435,5 @@ Status GeoFunctions::st_polygon_prepare(FunctionContext* ctx, FunctionContext::F
 }
 
 } // namespace starrocks
+
+#include "gen_cpp/opcode/GeoFunctions.inc"

@@ -1,0 +1,43 @@
+-- name: test_arrow_flight_2 @arrow_flight_sql
+
+CREATE TABLE test (id INT, name STRING) ENGINE=OLAP PRIMARY KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+
+INSERT INTO test VALUES (1, 'Alice'), (2, 'Bob');
+
+INSERT INTO test VALUES (1, 'Alice'), (2, 'Bob');
+
+INSERT INTO test VALUES (3, 'Zac'), (4, 'Tom');
+
+SELECT * FROM test order by id asc;
+
+UPDATE test SET name = 'Charlie' WHERE id = 1;
+
+SELECT * FROM test order by id asc;
+
+UPDATE test SET name = 'Charlie' WHERE id = 1;
+
+SELECT * FROM test order by id asc;
+
+DELETE FROM test WHERE id = 2;
+
+ALTER TABLE test ADD COLUMN age INT;
+
+function: wait_alter_table_finish()
+
+ALTER TABLE test MODIFY COLUMN name STRING;
+
+function: wait_alter_table_finish()
+
+INSERT INTO test (id, name, age) VALUES (5, 'Eve', 30);
+
+SELECT * FROM test WHERE id = 5;
+
+SELECT * FROM test order by id asc;
+
+SHOW CREATE TABLE test;
+
+CREATE TABLE test2 (id INT, age INT) ENGINE=OLAP PRIMARY KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+
+INSERT INTO test2 VALUES (1, 18), (2, 20);
+
+SELECT * FROM (SELECT id, name FROM test) AS sub WHERE id = 1;

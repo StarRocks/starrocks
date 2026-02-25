@@ -50,6 +50,16 @@ public:
     DEFINE_VECTORIZED_FN(uuid_numeric);
 
     /**
+     * returns UUID v7 (time-ordered UUID according to RFC 9562).
+     */
+    DEFINE_VECTORIZED_FN(uuid_v7);
+
+    /**
+     * Returns UUID v7 in numeric form (128-bit integer).
+     */
+    DEFINE_VECTORIZED_FN(uuid_v7_numeric);
+
+    /**
      * assert whether input is true
      * returns true if input is true
      * report runtime error if input is false
@@ -61,6 +71,15 @@ public:
     DEFINE_VECTORIZED_FN(host_name);
 
     DEFINE_VECTORIZED_FN(get_query_profile);
+
+    // Draw a bar graph
+    DEFINE_VECTORIZED_FN(bar);
+
+    // Build a equi-width histogram
+    DEFINE_VECTORIZED_FN(equiwidth_bucket);
+
+    // Build an order-preserving composite binary key from heterogeneous arguments
+    DEFINE_VECTORIZED_FN(encode_sort_key);
 };
 
 } // namespace starrocks

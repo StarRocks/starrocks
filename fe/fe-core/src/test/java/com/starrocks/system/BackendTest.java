@@ -14,8 +14,10 @@
 
 package com.starrocks.system;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+
+import static com.starrocks.server.WarehouseManager.DEFAULT_WAREHOUSE_ID;
 
 public class BackendTest {
 
@@ -23,54 +25,54 @@ public class BackendTest {
     public void testSetHeartbeatPort() {
         Backend be = new Backend();
         be.setHeartbeatPort(1000);
-        Assert.assertTrue(be.getHeartbeatPort() == 1000);
+        Assertions.assertTrue(be.getHeartbeatPort() == 1000);
     }
 
     @Test
     public void cpuCoreUpdate() {
-        BackendResourceStat.getInstance().setNumHardwareCoresOfBe(1, 8);
-        Assert.assertEquals(8, BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe());
-        Assert.assertEquals(4, BackendResourceStat.getInstance().getDefaultDOP());
+        BackendResourceStat.getInstance().setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, 1, 8);
+        Assertions.assertEquals(8, BackendResourceStat.getInstance().getAvgNumCoresOfBe());
+        Assertions.assertEquals(4, BackendResourceStat.getInstance().getDefaultDOP(DEFAULT_WAREHOUSE_ID));
 
-        BackendResourceStat.getInstance().setNumHardwareCoresOfBe(1, 16);
-        Assert.assertEquals(16, BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe());
-        Assert.assertEquals(8, BackendResourceStat.getInstance().getDefaultDOP());
+        BackendResourceStat.getInstance().setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, 1, 16);
+        Assertions.assertEquals(16, BackendResourceStat.getInstance().getAvgNumCoresOfBe());
+        Assertions.assertEquals(8, BackendResourceStat.getInstance().getDefaultDOP(DEFAULT_WAREHOUSE_ID));
 
         // add new backend 2
-        BackendResourceStat.getInstance().setNumHardwareCoresOfBe(2, 8);
-        Assert.assertEquals(12, BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe());
-        Assert.assertEquals(6, BackendResourceStat.getInstance().getDefaultDOP());
+        BackendResourceStat.getInstance().setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, 2, 8);
+        Assertions.assertEquals(12, BackendResourceStat.getInstance().getAvgNumCoresOfBe());
+        Assertions.assertEquals(6, BackendResourceStat.getInstance().getDefaultDOP(DEFAULT_WAREHOUSE_ID));
 
         // remove new backend 2
-        BackendResourceStat.getInstance().removeBe(2);
-        Assert.assertEquals(16, BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe());
-        Assert.assertEquals(8, BackendResourceStat.getInstance().getDefaultDOP());
+        BackendResourceStat.getInstance().removeBe(DEFAULT_WAREHOUSE_ID, 2);
+        Assertions.assertEquals(16, BackendResourceStat.getInstance().getAvgNumCoresOfBe());
+        Assertions.assertEquals(8, BackendResourceStat.getInstance().getDefaultDOP(DEFAULT_WAREHOUSE_ID));
     }
 
     @Test
     public void defaultSinkDopTest() {
-        BackendResourceStat.getInstance().setNumHardwareCoresOfBe(1, 8);
-        Assert.assertEquals(8, BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe());
-        Assert.assertEquals(2, BackendResourceStat.getInstance().getSinkDefaultDOP());
+        BackendResourceStat.getInstance().setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, 1, 8);
+        Assertions.assertEquals(8, BackendResourceStat.getInstance().getAvgNumCoresOfBe());
+        Assertions.assertEquals(2, BackendResourceStat.getInstance().getSinkDefaultDOP(DEFAULT_WAREHOUSE_ID));
 
-        BackendResourceStat.getInstance().setNumHardwareCoresOfBe(1, 16);
-        Assert.assertEquals(16, BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe());
-        Assert.assertEquals(5, BackendResourceStat.getInstance().getSinkDefaultDOP());
+        BackendResourceStat.getInstance().setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, 1, 16);
+        Assertions.assertEquals(16, BackendResourceStat.getInstance().getAvgNumCoresOfBe());
+        Assertions.assertEquals(5, BackendResourceStat.getInstance().getSinkDefaultDOP(DEFAULT_WAREHOUSE_ID));
 
-        BackendResourceStat.getInstance().setNumHardwareCoresOfBe(1, 24);
-        Assert.assertEquals(24, BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe());
-        Assert.assertEquals(8, BackendResourceStat.getInstance().getSinkDefaultDOP());
+        BackendResourceStat.getInstance().setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, 1, 24);
+        Assertions.assertEquals(24, BackendResourceStat.getInstance().getAvgNumCoresOfBe());
+        Assertions.assertEquals(8, BackendResourceStat.getInstance().getSinkDefaultDOP(DEFAULT_WAREHOUSE_ID));
 
-        BackendResourceStat.getInstance().setNumHardwareCoresOfBe(1, 32);
-        Assert.assertEquals(32, BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe());
-        Assert.assertEquals(8, BackendResourceStat.getInstance().getSinkDefaultDOP());
+        BackendResourceStat.getInstance().setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, 1, 32);
+        Assertions.assertEquals(32, BackendResourceStat.getInstance().getAvgNumCoresOfBe());
+        Assertions.assertEquals(8, BackendResourceStat.getInstance().getSinkDefaultDOP(DEFAULT_WAREHOUSE_ID));
 
-        BackendResourceStat.getInstance().setNumHardwareCoresOfBe(1, 48);
-        Assert.assertEquals(48, BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe());
-        Assert.assertEquals(12, BackendResourceStat.getInstance().getSinkDefaultDOP());
+        BackendResourceStat.getInstance().setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, 1, 48);
+        Assertions.assertEquals(48, BackendResourceStat.getInstance().getAvgNumCoresOfBe());
+        Assertions.assertEquals(12, BackendResourceStat.getInstance().getSinkDefaultDOP(DEFAULT_WAREHOUSE_ID));
 
-        BackendResourceStat.getInstance().setNumHardwareCoresOfBe(1, 64);
-        Assert.assertEquals(64, BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe());
-        Assert.assertEquals(16, BackendResourceStat.getInstance().getSinkDefaultDOP());
+        BackendResourceStat.getInstance().setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, 1, 64);
+        Assertions.assertEquals(64, BackendResourceStat.getInstance().getAvgNumCoresOfBe());
+        Assertions.assertEquals(16, BackendResourceStat.getInstance().getSinkDefaultDOP(DEFAULT_WAREHOUSE_ID));
     }
 }

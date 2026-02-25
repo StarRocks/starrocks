@@ -86,7 +86,9 @@ public:
     // Note: this does not take a const RuntimeProfile&, because it might need to call
     // functions like PrettyPrint() or to_thrift(), neither of which is const
     // because they take locks.
-    typedef std::function<void(const Status& status, RuntimeProfile* profile, bool done)> report_status_callback;
+    typedef std::function<void(const Status& status, RuntimeProfile* profile, RuntimeProfile* load_channel_profile,
+                               bool done)>
+            report_status_callback;
 
     // if report_status_cb is not empty, is used to report the accumulated profile
     // information periodically during execution open().
@@ -171,6 +173,8 @@ private:
     // If load_profile_collect_second is set and time cost of load is less than the value,
     // then profile will not be reported to FE even though enable_profile=true
     int32_t load_profile_collect_second = -1;
+
+    int64_t _start_time_ms;
 
     // If this is set to false, and 'enable_profile' is false as well,
     // This executor will not report status to FE on being cancelled.

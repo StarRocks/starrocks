@@ -14,18 +14,27 @@
 
 #include "storage/persistent_index_compaction_manager.h"
 
+#include "common/thread/threadpool.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_updates.h"
-#include "util/starrocks_metrics.h"
-#include "util/threadpool.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
 PersistentIndexCompactionManager::~PersistentIndexCompactionManager() {
+    stop();
+}
+
+void PersistentIndexCompactionManager::stop() {
+    if (_stopped) {
+        return;
+    }
     if (_worker_thread_pool != nullptr) {
         _worker_thread_pool->shutdown();
     }
+    _stopped = true;
 }
 
 Status PersistentIndexCompactionManager::init() {

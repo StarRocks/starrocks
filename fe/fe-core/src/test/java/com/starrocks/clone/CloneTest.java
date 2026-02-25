@@ -19,13 +19,13 @@ import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.pseudocluster.PseudoClusterUtils;
 import com.starrocks.pseudocluster.Tablet;
 import com.starrocks.server.GlobalStateMgr;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 public class CloneTest {
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         // set timeout to a really long time so that ut can pass even when load of ut machine is very high
         Config.bdbje_heartbeat_timeout_second = 60;
@@ -45,7 +45,7 @@ public class CloneTest {
                         "PROPERTIES(\"replication_num\" = \"3\", \"storage_medium\" = \"SSD\");");
     }
 
-    @AfterClass
+    @AfterAll
     public static void tearDown() throws Exception {
         PseudoCluster.getInstance().shutdown(false);
     }
@@ -54,7 +54,7 @@ public class CloneTest {
     public void test1ReplicaWriteFailTriggerRepairClone() throws Exception {
         PseudoCluster cluster = PseudoCluster.getInstance();
         Tablet tablet = PseudoClusterUtils.triggerIncrementalCloneOnce(cluster, 10001);
-        Assert.assertEquals(3, tablet.maxContinuousVersion());
-        Assert.assertEquals(3, tablet.maxVersion());
+        Assertions.assertEquals(3, tablet.maxContinuousVersion());
+        Assertions.assertEquals(3, tablet.maxVersion());
     }
 }

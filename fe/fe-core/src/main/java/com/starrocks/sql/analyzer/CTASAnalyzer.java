@@ -16,13 +16,8 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TypeDef;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.TableName;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.ColumnDef;
@@ -31,13 +26,18 @@ import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.KeysDesc;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.MultiRangePartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RangePartitionDesc;
-import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.parser.ParsingException;
+import com.starrocks.type.Type;
 
 import java.util.HashMap;
 import java.util.List;
@@ -87,8 +87,13 @@ public class CTASAnalyzer {
             }
         }
 
-        TableName tableNameObject = createTableStmt.getDbTbl();
-        MetaUtils.normalizationTableName(session, tableNameObject);
+        TableRef tableRef = createTableStmt.getTableRef();
+        if (tableRef == null) {
+            throw new SemanticException("Table reference is null in CTAS statement");
+        }
+        TableRef normalizedTableRef = AnalyzerUtils.normalizedTableRef(tableRef, session);
+        createTableStmt.setTableRef(normalizedTableRef);
+        TableName tableNameObject = TableName.fromTableRef(normalizedTableRef);
         CreateTableAnalyzer.analyzeEngineName(createTableStmt, tableNameObject.getCatalog());
 
         for (int i = 0; i < allFields.size(); i++) {
@@ -96,7 +101,7 @@ public class CTASAnalyzer {
                     createTableStmt.isOlapEngine());
             Expr originExpression = allFields.get(i).getOriginExpression();
             ColumnDef columnDef = new ColumnDef(finalColumnNames.get(i), new TypeDef(type), false,
-                    null, originExpression.isNullable(), ColumnDef.DefaultValueDef.NOT_SET, "");
+                    null, null, originExpression.isNullable(), ColumnDef.DefaultValueDef.NOT_SET, "");
             if (isPKTable && keysDesc.containsCol(finalColumnNames.get(i))) {
                 columnDef.setAllowNull(false);
             }

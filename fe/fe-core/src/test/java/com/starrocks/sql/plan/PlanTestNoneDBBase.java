@@ -41,14 +41,15 @@ import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import kotlin.text.Charsets;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.provider.Arguments;
 
 import java.io.BufferedReader;
@@ -71,15 +72,16 @@ import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-public class PlanTestNoneDBBase {
+public class PlanTestNoneDBBase extends StarRocksTestBase {
     // use a unique dir so that it won't be conflict with other unit test which
     // may also start a Mocked Frontend
     public static ConnectContext connectContext;
     public static StarRocksAssert starRocksAssert;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         Config.show_execution_groups = false;
+        Config.enable_virtual_columns = false;
         // disable checking tablets
         Config.tablet_sched_max_scheduling_tablets = -1;
         Config.alter_scheduler_interval_millisecond = 1;
@@ -90,12 +92,14 @@ public class PlanTestNoneDBBase {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
         connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
         connectContext.getSessionVariable().setCboEqBaseType(SessionVariableConstants.VARCHAR);
+        connectContext.getSessionVariable().setUseCorrelatedPredicateEstimate(false);
         FeConstants.enablePruneEmptyOutputScan = false;
         FeConstants.showJoinLocalShuffleInExplain = false;
         FeConstants.showFragmentCost = false;
+        FeConstants.setLengthForVarchar = false;
     }
 
-    @Before
+    @BeforeEach
     public void setUp() {
         connectContext.setQueryId(UUIDUtil.genUUID());
         connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
@@ -106,12 +110,22 @@ public class PlanTestNoneDBBase {
             String ignoreExpect = normalizeLogicalPlan(text);
             for (String actual : pattern) {
                 String ignoreActual = normalizeLogicalPlan(actual);
-                Assert.assertTrue(text, ignoreExpect.contains(ignoreActual));
+                Assertions.assertTrue(ignoreExpect.contains(ignoreActual), text);
             }
         }  else {
             for (String s : pattern) {
-                Assert.assertTrue(text, text.contains(s));
+                Assertions.assertTrue(text.contains(s), text);
             }
+        }
+    }
+
+    public static void assertContainsAny(String text, String... pattern) {
+        boolean contains = false;
+        for (String s : pattern) {
+            contains |= text.contains(s);
+        }
+        if (!contains) {
+            Assertions.fail(text);
         }
     }
 
@@ -199,7 +213,7 @@ public class PlanTestNoneDBBase {
             // If pattern contains multi lines, only check line by line.
             String normS = normalizeNormalPlan(s);
             for (String line : normS.split("\n")) {
-                Assert.assertTrue(text, normT.contains(line));
+                Assertions.assertTrue(normT.contains(line), text);
             }
         }
     }
@@ -213,46 +227,46 @@ public class PlanTestNoneDBBase {
 
     public static void assertMatches(String text, String pattern) {
         Pattern regex = Pattern.compile(pattern);
-        Assert.assertTrue(text, regex.matcher(text).find());
+        Assertions.assertTrue(regex.matcher(text).find(), text);
     }
 
     public static void assertNotMatches(String text, String pattern) {
         Pattern regex = Pattern.compile(pattern);
-        Assert.assertFalse(text, regex.matcher(text).find());
+        Assertions.assertFalse(regex.matcher(text).find(), text);
     }
 
     public static void assertContains(String text, List<String> patterns) {
         for (String s : patterns) {
-            Assert.assertTrue(s + "\n" + text, text.contains(s));
+            Assertions.assertTrue(text.contains(s), s + "\n" + text);
         }
     }
 
     public void assertCContains(String text, String... pattern) {
         for (String s : pattern) {
-            Assert.assertTrue(text, text.contains(s));
+            Assertions.assertTrue(text.contains(s), text);
         }
     }
 
     public static void assertNotContains(String text, String pattern) {
-        Assert.assertFalse(text, text.contains(pattern));
+        Assertions.assertFalse(text.contains(pattern), text);
     }
 
     public static void assertNotContains(String text, String... pattern) {
         for (String s : pattern) {
-            Assert.assertFalse(text, text.contains(s));
+            Assertions.assertFalse(text.contains(s), text);
         }
     }
 
     public static void setTableStatistics(OlapTable table, long rowCount) {
         for (Partition partition : table.getAllPartitions()) {
-            partition.getBaseIndex().setRowCount(rowCount);
+            partition.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(rowCount);
         }
     }
 
     public static void setPartitionStatistics(OlapTable table, String partitionName, long rowCount) {
         for (Partition partition : table.getAllPartitions()) {
             if (partition.getName().equals(partitionName)) {
-                partition.getBaseIndex().setRowCount(rowCount);
+                partition.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(rowCount);
             }
         }
     }
@@ -271,14 +285,18 @@ public class PlanTestNoneDBBase {
     }
 
     public String getFragmentPlan(String sql, String traceModule) throws Exception {
+        return getFragmentPlan(sql, TExplainLevel.NORMAL, traceModule);
+    }
+
+    public String getFragmentPlan(String sql, TExplainLevel tExplainLevel, String traceModule) throws Exception {
         Pair<String, Pair<ExecPlan, String>> result =
                 UtFrameUtils.getFragmentPlanWithTrace(connectContext, sql, traceModule);
         Pair<ExecPlan, String> execPlanWithQuery = result.second;
         String traceLog = execPlanWithQuery.second;
         if (!Strings.isNullOrEmpty(traceLog)) {
-            System.out.println(traceLog);
+            logSysInfo(traceLog);
         }
-        return execPlanWithQuery.first.getExplainString(TExplainLevel.NORMAL);
+        return execPlanWithQuery.first.getExplainString(tExplainLevel);
     }
 
     public String getLogicalFragmentPlan(String sql) throws Exception {
@@ -294,6 +312,14 @@ public class PlanTestNoneDBBase {
     public String getCostExplain(String sql) throws Exception {
         return UtFrameUtils.getPlanAndFragment(connectContext, sql).second.
                 getExplainString(TExplainLevel.COSTS);
+    }
+
+    public String getCostExplainWithLabels(String sql) throws Exception {
+        connectContext.getSessionVariable().setEnableLabeledColumnStatisticOutput(true);
+        String plan = UtFrameUtils.getPlanAndFragment(connectContext, sql).second.
+                getExplainString(TExplainLevel.COSTS);
+        connectContext.getSessionVariable().setEnableLabeledColumnStatisticOutput(false);
+        return plan;
     }
 
     public String getDumpString(String sql) throws Exception {
@@ -369,8 +395,8 @@ public class PlanTestNoneDBBase {
             } catch (IOException e) {
                 e.printStackTrace();
             }
-            System.out.println("DEBUG MODE!");
-            System.out.println("DEBUG FILE: " + debugFile.getPath());
+            logSysInfo("DEBUG MODE!");
+            logSysInfo("DEBUG FILE: " + debugFile.getPath());
         }
 
         Pattern regex = Pattern.compile("\\[plan-(\\d+)]");
@@ -407,7 +433,7 @@ public class PlanTestNoneDBBase {
                         // will create new file
                         if (null == writer) {
                             writer = new BufferedWriter(new FileWriter(debugFile, true));
-                            System.out.println("DEBUG MODE!");
+                            logSysInfo("DEBUG MODE!");
                         }
                         continue;
                     case "[planCount]":
@@ -499,15 +525,15 @@ public class PlanTestNoneDBBase {
                 }
             }
         } catch (Exception e) {
-            System.out.println(sql);
+            logSysInfo(sql);
             e.printStackTrace();
-            Assert.fail();
+            Assertions.fail();
         }
 
         if (CollectionUtils.isNotEmpty(errorCollector)) {
             StringJoiner joiner = new StringJoiner("\n");
             errorCollector.stream().forEach(e -> joiner.add(e.getMessage()));
-            Assert.fail(joiner.toString());
+            Assertions.fail(joiner.toString());
         }
     }
 
@@ -540,10 +566,11 @@ public class PlanTestNoneDBBase {
             pair = UtFrameUtils.getFragmentPlanWithTrace(connectContext, sql.toString(), logModule);
         } catch (Exception ex) {
             if (!exceptString.toString().isEmpty()) {
-                Assert.assertEquals(exceptString.toString(), ex.getMessage());
+                Assertions.assertEquals(exceptString.toString(), ex.getMessage());
                 return true;
             }
-            Assert.fail("Planning failed, message: " + ex.getMessage() + ", sql: " + sql);
+            ex.printStackTrace();
+            Assertions.fail("Planning failed, message: " + ex.getMessage() + ", sql: " + sql);
         }
 
         try {
@@ -554,7 +581,7 @@ public class PlanTestNoneDBBase {
 
             ExecPlan execPlan = pair.second.first;
             if (debugOptions.isEnableQueryTraceLog()) {
-                System.out.println(pair.second.second);
+                logSysInfo(pair.second.second);
             }
             if (hasResult && !isDebug) {
                 checkWithIgnoreTabletList(result.toString().trim(), pair.first.trim());
@@ -577,7 +604,7 @@ public class PlanTestNoneDBBase {
                         .filter(s -> !s.contains("\"session_variables\""))
                         .collect(Collectors.joining("\n"));
                 if (!isDebug) {
-                    Assert.assertEquals(dumpInfoString.toString().trim(), dumpStr.trim());
+                    Assertions.assertEquals(dumpInfoString.toString().trim(), dumpStr.trim());
                 }
             }
             if (hasScheduler) {
@@ -585,11 +612,12 @@ public class PlanTestNoneDBBase {
                     actualSchedulerPlan =
                             UtFrameUtils.getPlanAndStartScheduling(connectContext, sql.toString()).first;
                 } catch (Exception ex) {
+                    ex.printStackTrace();
                     if (!exceptString.toString().isEmpty()) {
-                        Assert.assertEquals(exceptString.toString(), ex.getMessage());
+                        Assertions.assertEquals(exceptString.toString(), ex.getMessage());
                         return true;
                     }
-                    Assert.fail("Scheduling failed, message: " + ex.getMessage() + ", sql: " + sql);
+                    Assertions.fail("Scheduling failed, message: " + ex.getMessage() + ", sql: " + sql);
                 }
 
                 if (!isDebug) {
@@ -602,7 +630,7 @@ public class PlanTestNoneDBBase {
                         actualSchedulerPlan);
             }
             if (isEnumerate) {
-                Assert.assertEquals("plan count mismatch", planCount, execPlan.getPlanCount());
+                Assertions.assertEquals(planCount, execPlan.getPlanCount(), "plan count mismatch");
                 checkWithIgnoreTabletList(planEnumerate.toString().trim(), pair.first.trim());
                 connectContext.getSessionVariable().setUseNthExecPlan(0);
             }
@@ -697,7 +725,7 @@ public class PlanTestNoneDBBase {
             String aline = actualLines[ai];
             ei++;
             ai++;
-            Assert.assertEquals(actual, eline, aline);
+            Assertions.assertEquals(eline, aline, actual);
             if ("INSTANCES".equals(eline.trim())) {
                 // The instances of the fragment may be in random order,
                 // so we need to extract each instance and check if they have exactly the same elements in any order.
@@ -709,7 +737,7 @@ public class PlanTestNoneDBBase {
                         .containsExactlyInAnyOrderEntriesOf(eInstances);
             }
         }
-        Assert.assertEquals(ei, ai);
+        Assertions.assertEquals(ei, ai);
     }
 
     private static int extractInstancesFromSchedulerPlan(String[] lines, int startIndex, Map<Long, String> instances) {
@@ -747,7 +775,7 @@ public class PlanTestNoneDBBase {
         if (isIgnoreExplicitColRefIds()) {
             String ignoreExpect = normalizeLogicalPlan(expect);
             String ignoreActual = normalizeLogicalPlan(actual);
-            Assert.assertEquals(actual, ignoreExpect, ignoreActual);
+            Assertions.assertEquals(ignoreExpect, ignoreActual, actual);
         } else {
             expect = Stream.of(expect.split("\n")).
                     filter(s -> !s.contains("tabletList")).collect(Collectors.joining("\n"));
@@ -755,7 +783,7 @@ public class PlanTestNoneDBBase {
                     .collect(Collectors.joining("\n"));
             actual = Stream.of(actual.split("\n")).filter(s -> !s.contains("tabletList"))
                     .collect(Collectors.joining("\n"));
-            Assert.assertEquals(expect, actual);
+            Assertions.assertEquals(expect, actual);
         }
     }
 
@@ -763,8 +791,8 @@ public class PlanTestNoneDBBase {
         String explainString = getFragmentPlan(sql);
 
         for (String expected : explain) {
-            Assert.assertTrue("expected is:\n" + expected + "\n but plan is \n" + explainString,
-                    StringUtils.containsIgnoreCase(explainString.toLowerCase(), expected));
+            Assertions.assertTrue(StringUtils.containsIgnoreCase(explainString.toLowerCase(), expected),
+                    "expected is:\n" + expected + "\n but plan is \n" + explainString);
         }
     }
 
@@ -772,8 +800,8 @@ public class PlanTestNoneDBBase {
         String explainString = getLogicalFragmentPlan(sql);
 
         for (String expected : explain) {
-            Assert.assertTrue("expected is: " + expected + " but plan is \n" + explainString,
-                    StringUtils.containsIgnoreCase(explainString.toLowerCase(), expected));
+            Assertions.assertTrue(StringUtils.containsIgnoreCase(explainString.toLowerCase(), expected),
+                    "expected is: " + expected + " but plan is \n" + explainString);
         }
     }
 
@@ -781,8 +809,8 @@ public class PlanTestNoneDBBase {
         String explainString = getVerboseExplain(sql);
 
         for (String expected : explain) {
-            Assert.assertTrue("expected is: " + expected + " but plan is \n" + explainString,
-                    StringUtils.containsIgnoreCase(explainString.toLowerCase(), expected));
+            Assertions.assertTrue(StringUtils.containsIgnoreCase(explainString.toLowerCase(), expected),
+                    "expected is: " + expected + " but plan is \n" + explainString);
         }
     }
 
@@ -790,8 +818,8 @@ public class PlanTestNoneDBBase {
         String explainString = getVerboseExplain(sql);
 
         for (String expected : explain) {
-            Assert.assertFalse("expected is: " + expected + " but plan is \n" + explainString,
-                    StringUtils.containsIgnoreCase(explainString.toLowerCase(), expected));
+            Assertions.assertFalse(StringUtils.containsIgnoreCase(explainString.toLowerCase(), expected),
+                    "expected is: " + expected + " but plan is \n" + explainString);
         }
     }
 
@@ -800,13 +828,13 @@ public class PlanTestNoneDBBase {
             getFragmentPlan(sql);
             throw new Error();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage(), e.getMessage().contains(message));
+            Assertions.assertTrue(e.getMessage().contains(message), e.getMessage());
         }
     }
 
     public Table getTable(String t) {
         GlobalStateMgr globalStateMgr = starRocksAssert.getCtx().getGlobalStateMgr();
-        return globalStateMgr.getDb("test").getTable(t);
+        return globalStateMgr.getLocalMetastore().getDb("test").getTable(t);
     }
 
     public OlapTable getOlapTable(String t) {
@@ -824,7 +852,7 @@ public class PlanTestNoneDBBase {
 
     protected static void createTables(String dirName, List<String> fileNames) {
         getSqlList(dirName, fileNames).forEach(createTblSql -> {
-            System.out.println("create table sql:" + createTblSql);
+            logSysInfo("create table sql:" + createTblSql);
             try {
                 starRocksAssert.withTable(createTblSql);
             } catch (Exception e) {
@@ -835,7 +863,7 @@ public class PlanTestNoneDBBase {
 
     protected static void createMaterializedViews(String dirName, List<String> fileNames) {
         getSqlList(dirName, fileNames).forEach(sql -> {
-            System.out.println("create mv sql:" + sql);
+            logSysInfo("create mv sql:" + sql);
             try {
                 starRocksAssert.withMaterializedView(sql);
             } catch (Exception e) {
@@ -847,7 +875,7 @@ public class PlanTestNoneDBBase {
     protected static List<String> getSqlList(String dirName, List<String> fileNames) {
         ClassLoader loader = PlanTestBase.class.getClassLoader();
         List<String> createTableSqlList = fileNames.stream().map(n -> {
-            System.out.println("file name:" + n);
+            logSysInfo("file name:" + n);
             try {
                 return CharStreams.toString(
                         new InputStreamReader(
@@ -857,13 +885,13 @@ public class PlanTestNoneDBBase {
                 return null;
             }
         }).collect(Collectors.toList());
-        Assert.assertFalse(createTableSqlList.contains(null));
+        Assertions.assertFalse(createTableSqlList.contains(null));
         return createTableSqlList;
     }
 
     public static String getFileContent(String fileName) throws Exception {
         ClassLoader loader = PlanTestNoneDBBase.class.getClassLoader();
-        System.out.println("file name:" + fileName);
+        logSysInfo("file name:" + fileName);
         String content = "";
         try {
             content = CharStreams.toString(
@@ -880,9 +908,9 @@ public class PlanTestNoneDBBase {
         String sql = getFileContent(fileName);
         List<StatementBase> statements = SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode());
         for (StatementBase stmt : statements) {
-            StmtExecutor stmtExecutor = new StmtExecutor(connectContext, stmt);
+            StmtExecutor stmtExecutor = StmtExecutor.newInternalExecutor(connectContext, stmt);
             stmtExecutor.execute();
-            Assert.assertEquals("", connectContext.getState().getErrorMessage());
+            Assertions.assertEquals("", connectContext.getState().getErrorMessage());
         }
     }
 }

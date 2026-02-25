@@ -36,16 +36,18 @@ package com.starrocks.connector.elasticsearch;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.EsTable;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.JsonType;
+import com.starrocks.type.VarcharType;
 import mockit.Expectations;
 import mockit.Injectable;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.net.URISyntaxException;
@@ -55,18 +57,18 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 public class MappingPhaseTest extends EsTestCase {
 
     List<Column> columns = new ArrayList<>();
 
-    @Before
+    @BeforeEach
     public void setUp() {
-        Column k1 = new Column("k1", Type.BIGINT);
-        Column k2 = new Column("k2", Type.VARCHAR);
-        Column k3 = new Column("k3", Type.VARCHAR);
+        Column k1 = new Column("k1", IntegerType.BIGINT);
+        Column k2 = new Column("k2", VarcharType.VARCHAR);
+        Column k3 = new Column("k3", VarcharType.VARCHAR);
         columns.add(k1);
         columns.add(k2);
         columns.add(k3);
@@ -145,7 +147,7 @@ public class MappingPhaseTest extends EsTestCase {
             props.put(EsTable.KEY_INDEX, "test");
             props.put(EsTable.KEY_TYPE, "_doc");
             props.put(EsTable.KEY_VERSION, "6.5.3");
-            Assert.assertThrows(DdlException.class, () -> {
+            Assertions.assertThrows(DdlException.class, () -> {
                 EsTable t = new EsTable(new Random().nextLong(), "fake", columns, props, null);
             });
         }
@@ -173,7 +175,7 @@ public class MappingPhaseTest extends EsTestCase {
         List<Column> columns = EsUtil.convertColumnSchema(client, "xxx");
         for (Column c : columns) {
             if (c.getName().equals("contactData")) {
-                assertEquals(c.getType(), Type.JSON);
+                assertEquals(c.getType(), JsonType.JSON);
             }
         }
     }

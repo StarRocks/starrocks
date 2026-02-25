@@ -40,9 +40,6 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.Arrays;
 import java.util.Map;
 
@@ -113,27 +110,8 @@ public class RestoreFileMapping implements Writable {
             return Arrays.hashCode(chain);
         }
 
-        @Override
-        public void write(DataOutput out) throws IOException {
-            out.writeInt(chain.length);
-            for (Long id : chain) {
-                out.writeLong(id);
-            }
-        }
 
-        public void readFields(DataInput in) throws IOException {
-            int size = in.readInt();
-            chain = new Long[size];
-            for (int i = 0; i < size; i++) {
-                chain[i] = in.readLong();
-            }
-        }
 
-        public static IdChain read(DataInput in) throws IOException {
-            IdChain chain = new IdChain();
-            chain.readFields(in);
-            return chain;
-        }
     }
 
     // globalStateMgr ids -> repository ids
@@ -167,42 +145,8 @@ public class RestoreFileMapping implements Writable {
         return false;
     }
 
-    public static RestoreFileMapping read(DataInput in) throws IOException {
-        RestoreFileMapping mapping = new RestoreFileMapping();
-        mapping.readFields(in);
-        return mapping;
-    }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        out.writeInt(mapping.size());
-        for (Map.Entry<IdChain, IdChain> entry : mapping.entrySet()) {
-            entry.getKey().write(out);
-            entry.getValue().write(out);
-        }
 
-        out.writeInt(overwriteMap.size());
-        for (Map.Entry<Long, Boolean> entry : overwriteMap.entrySet()) {
-            out.writeLong(entry.getKey());
-            out.writeBoolean(entry.getValue());
-        }
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        int size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            IdChain key = IdChain.read(in);
-            IdChain val = IdChain.read(in);
-            mapping.put(key, val);
-        }
-
-        size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            long tabletId = in.readLong();
-            boolean overwrite = in.readBoolean();
-            overwriteMap.put(tabletId, overwrite);
-        }
-    }
 
     @Override
     public String toString() {

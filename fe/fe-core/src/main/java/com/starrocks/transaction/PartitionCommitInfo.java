@@ -37,21 +37,18 @@ package com.starrocks.transaction;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.ColumnId;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.lake.compaction.Quantiles;
-import com.starrocks.persist.gson.GsonUtils;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import javax.annotation.Nullable;
 
 public class PartitionCommitInfo implements Writable {
 
     @SerializedName(value = "partitionId")
-    private long partitionId;
+    private long physicalPartitionId;
     @SerializedName(value = "version")
     private long version;
 
@@ -86,25 +83,27 @@ public class PartitionCommitInfo implements Writable {
     @SerializedName(value = "compactionScore")
     private Quantiles compactionScore;
 
+    private final Map<Long, Long> tabletIdToRowCountForPartitionFirstLoad = new HashMap<>();
+
     private boolean isDoubleWrite = false;
 
     public PartitionCommitInfo() {
 
     }
 
-    public PartitionCommitInfo(long partitionId, long version, long visibleTime) {
+    public PartitionCommitInfo(long physicalPartitionId, long version, long visibleTime) {
         super();
-        this.partitionId = partitionId;
+        this.physicalPartitionId = physicalPartitionId;
         this.version = version;
         this.versionTime = visibleTime;
     }
 
-    public PartitionCommitInfo(long partitionId, long version, long visibleTime,
+    public PartitionCommitInfo(long physicalPartitionId, long version, long visibleTime,
                                List<ColumnId> invalidDictCacheColumns,
                                List<ColumnId> validDictCacheColumns,
                                List<Long> dictCollectedVersions) {
         super();
-        this.partitionId = partitionId;
+        this.physicalPartitionId = physicalPartitionId;
         this.version = version;
         this.versionTime = visibleTime;
         this.invalidDictCacheColumns = invalidDictCacheColumns;
@@ -112,23 +111,12 @@ public class PartitionCommitInfo implements Writable {
         this.dictCollectedVersions = dictCollectedVersions;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
-    }
-
-    public static PartitionCommitInfo read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, PartitionCommitInfo.class);
-    }
-
     public void setVersionTime(long time) {
         this.versionTime = time;
     }
 
-    public long getPartitionId() {
-        return partitionId;
+    public long getPhysicalPartitionId() {
+        return physicalPartitionId;
     }
 
     public long getVersion() {
@@ -183,6 +171,10 @@ public class PartitionCommitInfo implements Writable {
         this.compactionScore = compactionScore;
     }
 
+    public Map<Long, Long> getTabletIdToRowCountForPartitionFirstLoad() {
+        return tabletIdToRowCountForPartitionFirstLoad;
+    }
+
     @Nullable
     public Quantiles getCompactionScore() {
         return compactionScore;
@@ -190,10 +182,9 @@ public class PartitionCommitInfo implements Writable {
 
     @Override
     public String toString() {
-        StringBuilder sb = new StringBuilder("partitionid=");
-        sb.append(partitionId);
+        StringBuilder sb = new StringBuilder("partitionId=");
+        sb.append(physicalPartitionId);
         sb.append(", version=").append(version);
-        sb.append(", versionHash=").append(0);
         sb.append(", versionTime=").append(versionTime);
         sb.append(", isDoubleWrite=").append(isDoubleWrite);
         return sb.toString();

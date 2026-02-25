@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "base/utility/defer_op.h"
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/hash_set.h"
@@ -25,7 +26,6 @@
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -40,7 +40,11 @@ struct ArrayUnionAggAggregateState {
                 for (int i = 0; i < count; i++) {
                     auto raw_key = column.get_slice(offset + i);
                     KeyType key(raw_key);
+#if defined(__clang__) && (__clang_major__ >= 16)
+                    set.lazy_emplace(key, [&](const auto& ctor) {
+#else
                     set.template lazy_emplace(key, [&](const auto& ctor) {
+#endif
                         uint8_t* pos = mem_pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
                         assert(pos != nullptr);
                         memcpy(pos, key.data, key.size);
@@ -49,7 +53,7 @@ struct ArrayUnionAggAggregateState {
                 }
             } else {
                 for (int i = 0; i < count; i++) {
-                    set.emplace(column.get_data()[offset + i]);
+                    set.emplace(column.immutable_data()[offset + i]);
                 }
             }
         } else {
@@ -101,7 +105,7 @@ struct ArrayUnionAggAggregateState {
 };
 
 template <LogicalType LT, bool is_distinct, typename MyHashSet = std::set<int>>
-class ArrayUnionAggAggregateFunction
+class ArrayUnionAggAggregateFunction final
         : public AggregateFunctionBatchHelper<ArrayUnionAggAggregateState<LT, is_distinct, MyHashSet>,
                                               ArrayUnionAggAggregateFunction<LT, is_distinct, MyHashSet>> {
 public:
@@ -155,8 +159,9 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
-        (*dst)->append(*(src[0].get()));
+                                     MutableColumnPtr& dst) const override {
+        const Column* src_data = ColumnHelper::get_data_column(src[0].get());
+        dst->append(*src_data);
     }
 
     std::string get_name() const override { return is_distinct ? "array_unique_agg" : "array_union_agg"; }

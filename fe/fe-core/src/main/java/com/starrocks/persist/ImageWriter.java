@@ -18,48 +18,40 @@ import com.google.gson.stream.JsonWriter;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
-import com.starrocks.persist.metablock.SRMetaBlockWriterV1;
 import com.starrocks.persist.metablock.SRMetaBlockWriterV2;
 
 import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.zip.CRC32;
 import java.util.zip.CheckedOutputStream;
 
 public class ImageWriter {
-    private final ImageFormatVersion imageFormatVersion;
     private final String imageDir;
     private final long imageJournalId;
 
-    private OutputStream outputStream;
     private CheckedOutputStream checkedOutputStream;
     private JsonWriter jsonWriter;
     private DataOutputStream dataOutputStream;
 
-    public ImageWriter(String imageDir, ImageFormatVersion imageFormatVersion, long imageJournalId) {
+    public ImageWriter(String imageDir, long imageJournalId) {
         this.imageDir = imageDir;
-        this.imageFormatVersion = imageFormatVersion;
         this.imageJournalId = imageJournalId;
     }
 
     public void setOutputStream(OutputStream outputStream) {
-        this.outputStream = outputStream;
         this.checkedOutputStream = new CheckedOutputStream(outputStream, new CRC32());
         this.dataOutputStream = new DataOutputStream(checkedOutputStream);
         this.jsonWriter = new JsonWriter(new OutputStreamWriter(checkedOutputStream, StandardCharsets.UTF_8));
     }
 
     public SRMetaBlockWriter getBlockWriter(SRMetaBlockID id, int numJson) throws SRMetaBlockException {
-        if (imageFormatVersion == ImageFormatVersion.v1) {
-            return new SRMetaBlockWriterV1(outputStream, id, numJson);
-        } else {
-            return new SRMetaBlockWriterV2(jsonWriter, id, numJson);
-        }
+        return new SRMetaBlockWriterV2(jsonWriter, id, numJson);
     }
 
     public DataOutputStream getDataOutputStream() {
@@ -67,10 +59,11 @@ public class ImageWriter {
     }
 
     public void saveChecksum() throws IOException {
-        if (imageFormatVersion == ImageFormatVersion.v2) {
-            Path path = Path.of(imageDir, Storage.CHECKSUM + "." + imageJournalId);
-            String checksum = String.valueOf(checkedOutputStream.getChecksum().getValue());
-            Files.writeString(path, checksum);
+        File checksumFile = Path.of(imageDir, Storage.CHECKSUM + "." + imageJournalId).toFile();
+        String checksum = String.valueOf(checkedOutputStream.getChecksum().getValue());
+        try (FileOutputStream fos = new FileOutputStream(checksumFile)) {
+            fos.write(checksum.getBytes(StandardCharsets.UTF_8));
+            fos.getChannel().force(true);
         }
     }
 }

@@ -68,6 +68,7 @@ public:
             : OperatorFactory(id, "local_partition_topn_sink", plan_node_id),
               _partition_topn_ctx_factory(std::move(partition_topn_ctx_factory)) {}
     ~LocalPartitionTopnSinkOperatorFactory() override = default;
+    bool support_event_scheduler() const override { return true; }
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 

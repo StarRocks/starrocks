@@ -14,16 +14,20 @@
 
 #pragma once
 
+#ifdef __APPLE__
+#include <sys/mount.h>
+#else
 #include <sys/statfs.h>
+#endif
 
 #include <atomic>
 #include <memory>
 #include <utility>
 
+#include "base/random/random.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "fs/fs.h"
-#include "util/random.h"
 
 namespace starrocks::spill {
 
@@ -101,7 +105,11 @@ private:
         struct statfs stat1, stat2;
         statfs(path1.c_str(), &stat1);
         statfs(path2.c_str(), &stat2);
+#ifdef __APPLE__
+        return stat1.f_fsid.val[0] == stat2.f_fsid.val[0] && stat1.f_fsid.val[1] == stat2.f_fsid.val[1];
+#else
         return stat1.f_fsid.__val[0] == stat2.f_fsid.__val[0] && stat1.f_fsid.__val[1] == stat2.f_fsid.__val[1];
+#endif
     }
 
     std::vector<DirPtr> _dirs;
@@ -112,5 +120,9 @@ private:
     Random _rand{0};
 #endif
 };
+
+#define DISK_ACQUIRE_ERROR(acquire_size, dir)                                                                      \
+    Status::RuntimeError(fmt::format("acquire size error: dir {} try acquire:{} usage:{} capacity:{}", dir->dir(), \
+                                     acquire_size, dir->get_current_size(), dir->get_max_size()))
 
 } // namespace starrocks::spill

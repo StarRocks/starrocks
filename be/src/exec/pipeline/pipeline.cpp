@@ -83,6 +83,11 @@ void Pipeline::instantiate_drivers(RuntimeState* state) {
             driver = std::make_shared<PipelineDriver>(std::move(operators), query_ctx, fragment_ctx, this,
                                                       fragment_ctx->next_driver_id());
         }
+
+        if (state->enable_event_scheduler()) {
+            driver->assign_observer();
+        }
+
         setup_drivers_profile(driver);
         driver->set_workgroup(workgroup);
         _drivers.emplace_back(std::move(driver));
@@ -104,9 +109,9 @@ void Pipeline::instantiate_drivers(RuntimeState* state) {
             scan_operator->set_workgroup(workgroup);
             scan_operator->set_query_ctx(query_ctx->get_shared_ptr());
             if (scan_operator->sched_entity_type() == workgroup::ScanSchedEntityType::CONNECTOR) {
-                scan_operator->set_scan_executor(state->exec_env()->connector_scan_executor());
+                scan_operator->set_scan_executor(workgroup->executors()->connector_scan_executor());
             } else {
-                scan_operator->set_scan_executor(state->exec_env()->scan_executor());
+                scan_operator->set_scan_executor(workgroup->executors()->scan_executor());
             }
         }
     }
@@ -117,14 +122,14 @@ void Pipeline::setup_pipeline_profile(RuntimeState* runtime_state) {
 }
 
 void Pipeline::setup_drivers_profile(const DriverPtr& driver) {
-    runtime_profile()->add_info_string("isGroupExecution",
+    runtime_profile()->add_info_string("IsGroupExecution",
                                        _execution_group->is_colocate_exec_group() ? "true" : "false");
     runtime_profile()->add_child(driver->runtime_profile(), true, nullptr);
     auto* dop_counter =
             ADD_COUNTER_SKIP_MERGE(runtime_profile(), "DegreeOfParallelism", TUnit::UNIT, TCounterMergeType::SKIP_ALL);
     COUNTER_SET(dop_counter, static_cast<int64_t>(source_operator_factory()->degree_of_parallelism()));
     auto* total_dop_counter = ADD_COUNTER(runtime_profile(), "TotalDegreeOfParallelism", TUnit::UNIT);
-    COUNTER_SET(total_dop_counter, dop_counter->value());
+    COUNTER_SET(total_dop_counter, COUNTER_VALUE(dop_counter));
     auto& operators = driver->operators();
     for (int32_t i = operators.size() - 1; i >= 0; --i) {
         auto& curr_op = operators[i];

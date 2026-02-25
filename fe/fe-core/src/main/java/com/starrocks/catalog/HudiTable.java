@@ -22,17 +22,17 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hudi.HudiRemoteFileDesc;
+import com.starrocks.planner.DescriptorTable;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.THdfsPartition;
 import com.starrocks.thrift.THdfsPartitionLocation;
@@ -45,6 +45,8 @@ import org.apache.hudi.common.table.timeline.HoodieInstant;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -57,7 +59,7 @@ import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceM
  * Currently, we depend on Hive metastore to obtain table/partition path and statistics.
  * This logic should be decoupled from metastore when the related interfaces are ready.
  */
-public class HudiTable extends Table implements HiveMetaStoreTable {
+public class HudiTable extends Table {
     private static final Logger LOG = LogManager.getLogger(HudiTable.class);
 
     private static final String JSON_KEY_HUDI_DB = "database";
@@ -68,6 +70,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
     private static final String JSON_KEY_HUDI_PROPERTIES = "hudiProperties";
 
     public static final String HUDI_TABLE_TYPE = "hudi.table.type";
+    public static final String HUDI_HMS_TABLE_TYPE = "hudi.hms.table.type";
     public static final String HUDI_BASE_PATH = "hudi.table.base.path";
     public static final String HUDI_TABLE_SERDE_LIB = "hudi.table.serde.lib";
     public static final String HUDI_TABLE_INPUT_FOAMT = "hudi.table.input.format";
@@ -124,10 +127,12 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         this.tableType = type;
     }
 
-    public String getDbName() {
+    @Override
+    public String getCatalogDBName() {
         return hiveDbName;
     }
 
+    @Override
     public String getResourceName() {
         return resourceName;
     }
@@ -141,6 +146,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         return HoodieTableType.valueOf(hudiProperties.get(HUDI_TABLE_TYPE));
     }
 
+    @Override
     public String getTableLocation() {
         return hudiProperties.get(HUDI_BASE_PATH);
     }
@@ -150,7 +156,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
     }
 
     @Override
-    public String getTableName() {
+    public String getCatalogTableName() {
         return hiveTableName;
     }
 
@@ -175,6 +181,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         return partColumnNames;
     }
 
+    @Override
     public List<String> getDataColumnNames() {
         return dataColumnNames;
     }
@@ -258,7 +265,9 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
             tPartition.setFile_format(hudiPartitions.get(i).getFormat().toThrift());
 
             List<LiteralExpr> keys = key.getKeys();
-            tPartition.setPartition_key_exprs(keys.stream().map(Expr::treeToThrift).collect(Collectors.toList()));
+            tPartition.setPartition_key_exprs(keys.stream()
+                    .map(ExprToThrift::treeToThrift)
+                    .collect(Collectors.toList()));
 
             THdfsPartitionLocation tPartitionLocation = new THdfsPartitionLocation();
             tPartitionLocation.setPrefix_index(-1);
@@ -293,7 +302,8 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         }
 
         if (tableType == HudiTableType.MOR) {
-            tHudiTable.setInstant_time(lastInstant == null ? "" : lastInstant.getTimestamp());
+            tHudiTable.setInstant_time(lastInstant == null ? "" :
+                    Collections.max(Arrays.asList(lastInstant.requestedTime(), lastInstant.getCompletionTime())));
         }
 
         tHudiTable.setHive_column_names(hudiProperties.get(HUDI_TABLE_COLUMN_NAMES));
@@ -310,6 +320,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
 
     @Override
     public void onDrop(Database db, boolean force, boolean replay) {
+        super.onDrop(db, force, replay);
         if (isResourceMappingCatalog(getCatalogName())) {
             GlobalStateMgr.getCurrentState().getMetadataMgr().dropTable(getCatalogName(), db.getFullName(), name);
         }
@@ -318,6 +329,11 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
     @Override
     public boolean isSupported() {
         return true;
+    }
+
+    @Override
+    public boolean isHMSExternalTable() {
+        return hudiProperties.get(HUDI_HMS_TABLE_TYPE).equals("EXTERNAL_TABLE");
     }
 
     @Override
@@ -352,6 +368,11 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         return Objects.equal(catalogName, otherTable.getCatalogName()) &&
                 Objects.equal(hiveDbName, otherTable.hiveDbName) &&
                 Objects.equal(tableIdentifier, otherTable.getTableIdentifier());
+    }
+
+    @Override
+    public Set<TableOperation> getSupportedOperations() {
+        return Sets.newHashSet(TableOperation.READ, TableOperation.ALTER);
     }
 
     public static Builder builder() {

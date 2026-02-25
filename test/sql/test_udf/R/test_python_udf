@@ -286,3 +286,36 @@ select add_one(2200000000);
 -- result:
 2200000001
 -- !result
+
+CREATE FUNCTION get_invalid_input(boolean) RETURNS
+string
+properties(
+    "symbol" = "echo",
+    "type" = "Python",
+    "file" = "inline",
+    "input" = "invalid"
+)
+AS
+$$
+def echo(x):
+    return type(x)
+$$;
+-- result:
+[REGEX].*unknown input type.*
+-- !result
+CREATE FUNCTION get_invalid_input(boolean) RETURNS
+string
+properties(
+    "symbol" = "echo",
+    "type" = "Python",
+    "file" = "invalid",
+    "input" = "scalar"
+)
+AS
+$$
+def echo(x):
+    return type(x)
+$$;
+-- result:
+[REGEX].*inline function file should be.*
+-- !result

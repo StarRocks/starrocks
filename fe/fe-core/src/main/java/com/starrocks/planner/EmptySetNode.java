@@ -35,8 +35,6 @@
 package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.TupleId;
 import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
@@ -56,13 +54,9 @@ public class EmptySetNode extends PlanNode {
     }
 
     @Override
-    public void computeStats(Analyzer analyzer) {
+    public void computeStats() {
         avgRowSize = 0;
         cardinality = 0;
-    }
-
-    @Override
-    public void init(Analyzer analyzer) {
     }
 
     @Override

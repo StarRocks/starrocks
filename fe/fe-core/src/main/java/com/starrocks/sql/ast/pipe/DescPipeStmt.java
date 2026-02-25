@@ -14,33 +14,12 @@
 
 package com.starrocks.sql.ast.pipe;
 
-import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.load.pipe.Pipe;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.parser.NodePosition;
 
-import java.util.List;
-import java.util.Optional;
-
 public class DescPipeStmt extends ShowStmt {
-
-    private static final ShowResultSetMetaData META_DATA =
-            ShowResultSetMetaData.builder()
-                    .addColumn(new Column("DATABASE_ID", ScalarType.BIGINT))
-                    .addColumn(new Column("ID", ScalarType.BIGINT))
-                    .addColumn(new Column("NAME", ScalarType.createVarchar(64)))
-                    .addColumn(new Column("TYPE", ScalarType.createVarchar(8)))
-                    .addColumn(new Column("TABLE_NAME", ScalarType.createVarchar(64)))
-                    .addColumn(new Column("SOURCE", ScalarType.createVarcharType(128)))
-                    .addColumn(new Column("SQL", ScalarType.createVarcharType(128)))
-                    .addColumn(new Column("PROPERTIES", ScalarType.createVarchar(512)))
-                    .build();
-
     private final PipeName name;
 
     public DescPipeStmt(NodePosition pos, PipeName name) {
@@ -48,33 +27,12 @@ public class DescPipeStmt extends ShowStmt {
         this.name = name;
     }
 
-    public static void handleDesc(List<String> row, Pipe pipe) {
-        row.add(String.valueOf(pipe.getPipeId().getDbId()));
-        row.add(String.valueOf(pipe.getPipeId().getId()));
-        row.add(pipe.getName());
-        row.add(String.valueOf(pipe.getType()));
-        row.add(Optional.ofNullable(pipe.getTargetTable()).map(TableName::toString).orElse(""));
-        row.add(pipe.getPipeSource().toString());
-        row.add(pipe.getOriginSql());
-        row.add(pipe.getPropertiesJson());
-    }
-
     public PipeName getName() {
         return name;
     }
 
     @Override
-    public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_NO_SYNC;
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDescPipeStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitDescPipeStatement(this, context);
     }
 }

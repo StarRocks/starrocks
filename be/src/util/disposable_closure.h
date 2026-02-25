@@ -20,7 +20,7 @@
 #include <string_view>
 #include <utility>
 
-#include "service/brpc.h"
+#include "base/brpc/brpc.h"
 
 namespace starrocks {
 
@@ -40,7 +40,7 @@ public:
     DisposableClosure(const DisposableClosure& other) = delete;
     DisposableClosure& operator=(const DisposableClosure& other) = delete;
 
-    void addFailedHandler(FailedFunc fn) { _failed_handler = std::move(fn); }
+    void addFailureHandler(FailedFunc fn) { _failed_handler = std::move(fn); }
     void addSuccessHandler(SuccessFunc fn) { _success_handler = fn; }
 
     void Run() noexcept override {

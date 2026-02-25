@@ -18,19 +18,21 @@
 #include <limits>
 #include <type_traits>
 
+#include "base/hash/unaligned_access.h"
+#include "base/orlp/pdqsort.h"
+#include "base/phmap/phmap.h"
+#include "base/phmap/phmap_fwd_decl.h"
+#include "base/string/slice.h"
 #include "column/column_hash.h"
 #include "column/column_helper.h"
 #include "column/object_column.h"
+#include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
+#include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/function_context.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
-#include "util/orlp/pdqsort.h"
-#include "util/phmap/phmap.h"
-#include "util/phmap/phmap_fwd_decl.h"
-#include "util/slice.h"
-#include "util/unaligned_access.h"
 
 namespace starrocks {
 
@@ -41,28 +43,39 @@ inline constexpr LogicalType PercentileResultLT = LT;
 template <LogicalType LT>
 inline constexpr LogicalType PercentileResultLT<LT, true, ArithmeticLTGuard<LT>> = TYPE_DOUBLE;
 
+template <LogicalType LT>
+struct PercentileStateTypes {
+    using CppType = RunTimeCppType<LT>;
+    using ItemType = VectorWithAggStateAllocator<CppType>;
+    using GridType = VectorWithAggStateAllocator<ItemType>;
+};
+
 template <LogicalType LT, typename = guard::Guard>
 struct PercentileState {
-    using CppType = RunTimeCppType<LT>;
+    using CppType = typename PercentileStateTypes<LT>::CppType;
+    using ItemType = typename PercentileStateTypes<LT>::ItemType;
+    using GridType = typename PercentileStateTypes<LT>::GridType;
+
     void update(CppType item) { items.emplace_back(item); }
-    void update_batch(const std::vector<CppType>& vec) {
+    void update_batch(const ImmBuffer<CppType> vec) {
         size_t old_size = items.size();
         items.resize(old_size + vec.size());
         memcpy(items.data() + old_size, vec.data(), vec.size() * sizeof(CppType));
     }
-    std::vector<CppType> items;
-    std::vector<std::vector<CppType>> grid;
+    ItemType items;
+    GridType grid;
     double rate = 0.0;
 };
 
 template <LogicalType LT, typename CppType, bool reverse>
-void kWayMergeSort(const std::vector<std::vector<CppType>>& grid, std::vector<CppType>& b, std::vector<int>& ls,
-                   std::map<int, int>& mp, size_t goal, int k, CppType& junior_elm, CppType& senior_elm) {
+void kWayMergeSort(const typename PercentileStateTypes<LT>::GridType& grid, std::vector<CppType>& b,
+                   std::vector<int>& ls, std::vector<int>& mp, size_t goal, int k, CppType& junior_elm,
+                   CppType& senior_elm) {
     CppType minV = RunTimeTypeLimits<LT>::min_value();
     CppType maxV = RunTimeTypeLimits<LT>::max_value();
-
     b.resize(k + 1);
     ls.resize(k);
+    mp.resize(k);
     for (int i = 0; i < k; ++i) {
         if constexpr (reverse) {
             mp[i] = grid[i].size() - 2;
@@ -166,39 +179,62 @@ public:
     using InputCppType = RunTimeCppType<LT>;
     using InputColumnType = RunTimeColumnType<LT>;
 
+    void init_state_if_needed(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state) const {
+        if (UNLIKELY(ctx->get_num_args() != 2)) {
+            ctx->set_error("Percentile rate is required");
+            return;
+        }
+        const auto* rate = down_cast<const ConstColumn*>(columns[1]);
+        double rate_value = rate->get(0).get_double();
+        if (UNLIKELY(rate_value < 0 || rate_value > 1)) {
+            ctx->set_error("Percentile rate must be between 0 and 1");
+            return;
+        }
+        this->data(state).rate = rate_value;
+    }
+
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
-        const auto& column = down_cast<const InputColumnType&>(*columns[0]);
-        this->data(state).update(column.get_data()[row_num]);
+        this->init_state_if_needed(ctx, columns, state);
 
-        if (ctx->get_num_args() == 2) {
-            const auto* rate = down_cast<const ConstColumn*>(columns[1]);
-            this->data(state).rate = rate->get(row_num).get_double();
-            DCHECK(this->data(state).rate >= 0 && this->data(state).rate <= 1);
-        }
+        const auto& column = down_cast<const InputColumnType&>(*columns[0]);
+        auto column_data = column.immutable_data();
+        this->data(state).update(column_data[row_num]);
     }
 
     void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
-        const auto& column = down_cast<const InputColumnType&>(*columns[0]);
-        this->data(state).update_batch(column.get_data());
+        this->init_state_if_needed(ctx, columns, state);
 
-        if (ctx->get_num_args() == 2) {
-            const auto* rate = down_cast<const ConstColumn*>(columns[1]);
-            this->data(state).rate = rate->get(0).get_double();
-        }
+        const auto& column = down_cast<const InputColumnType&>(*columns[0]);
+        auto column_data = column.immutable_data();
+        this->data(state).update_batch(column_data);
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         DCHECK(column->is_binary());
 
         const Slice slice = column->get(row_num).get_slice();
-        double rate = *reinterpret_cast<double*>(slice.data);
-        size_t items_size = *reinterpret_cast<size_t*>(slice.data + sizeof(double));
-        auto data_ptr = slice.data + sizeof(double) + sizeof(size_t);
-        std::vector<std::vector<InputCppType>>& grid = this->data(state).grid;
+        constexpr size_t kHeaderSize = sizeof(double) + sizeof(size_t);
+        if (UNLIKELY(slice.size < kHeaderSize)) {
+            ctx->set_error("Invalid percentile_cont merge data: insufficient header");
+            return;
+        }
+        double rate = *reinterpret_cast<const double*>(slice.data);
+        size_t items_size = *reinterpret_cast<const size_t*>(slice.data + sizeof(double));
+        if (UNLIKELY(items_size > (std::numeric_limits<size_t>::max() - kHeaderSize) / sizeof(InputCppType))) {
+            ctx->set_error("Invalid percentile_cont merge data: items size overflow");
+            return;
+        }
+        size_t payload_size = items_size * sizeof(InputCppType);
+        if (UNLIKELY(slice.size < kHeaderSize + payload_size)) {
+            ctx->set_error("Invalid percentile_cont merge data: payload size mismatch");
+            return;
+        }
+        auto data_ptr = slice.data + kHeaderSize;
+        auto& grid = this->data(state).grid;
 
-        std::vector<InputCppType> vec;
+        typename PercentileStateTypes<LT>::ItemType vec;
         vec.resize(items_size + 2);
         memcpy(vec.data() + 1, data_ptr, items_size * sizeof(InputCppType));
         vec[0] = RunTimeTypeLimits<LT>::min_value();
@@ -241,15 +277,15 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
+                                     MutableColumnPtr& dst) const override {
         if (chunk_size <= 0) {
             return;
         }
-        auto* dst_column = down_cast<BinaryColumn*>((*dst).get());
+        auto* dst_column = down_cast<BinaryColumn*>(dst.get());
         Bytes& bytes = dst_column->get_bytes();
         double rate = ColumnHelper::get_const_value<TYPE_DOUBLE>(src[1]);
-        auto src_column = *down_cast<const InputColumnType*>(src[0].get());
-        InputCppType* src_data = src_column.get_data().data();
+        const auto& src_column = *down_cast<const InputColumnType*>(src[0].get());
+        const InputCppType* src_data = src_column.immutable_data().data();
         for (auto i = 0; i < chunk_size; ++i) {
             size_t old_size = bytes.size();
             bytes.resize(old_size + sizeof(double) + sizeof(size_t) + sizeof(InputCppType));
@@ -265,23 +301,33 @@ template <LogicalType LT>
 class PercentileContDiscAggregateFunction<LT, StringLTGuard<LT>>
         : public AggregateFunctionBatchHelper<PercentileState<LT>, PercentileContDiscAggregateFunction<LT>> {
 public:
+    void init_state_if_needed(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state) const {
+        if (UNLIKELY(ctx->get_num_args() != 2)) {
+            ctx->set_error("Percentile rate is required");
+            return;
+        }
+        const auto* rate = down_cast<const ConstColumn*>(columns[1]);
+        double rate_value = rate->get(0).get_double();
+        if (UNLIKELY(rate_value < 0 || rate_value > 1)) {
+            ctx->set_error("Percentile rate must be between 0 and 1");
+            return;
+        }
+        this->data(state).rate = rate_value;
+    }
+
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
-        const auto& column = down_cast<const BinaryColumn&>(*columns[0]);
+        this->init_state_if_needed(ctx, columns, state);
 
+        const auto& column = down_cast<const BinaryColumn&>(*columns[0]);
+        const auto& column_data = column.get_proxy_data();
         // use mem_pool to hold the slice's data, otherwise after chunk is processed, the memory of slice used is gone
-        size_t element_size = column.get_data()[row_num].get_size();
+        size_t element_size = column_data[row_num].get_size();
         uint8_t* pos = ctx->mem_pool()->allocate(element_size);
         ctx->add_mem_usage(element_size);
-        memcpy(pos, column.get_data()[row_num].get_data(), element_size);
+        memcpy(pos, column_data[row_num].get_data(), element_size);
 
         this->data(state).update(Slice(pos, element_size));
-
-        if (ctx->get_num_args() == 2) {
-            const auto* rate = down_cast<const ConstColumn*>(columns[1]);
-            this->data(state).rate = rate->get(row_num).get_double();
-            DCHECK(this->data(state).rate >= 0 && this->data(state).rate <= 1);
-        }
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
@@ -353,16 +399,16 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
+                                     MutableColumnPtr& dst) const override {
         if (chunk_size <= 0) {
             return;
         }
-        auto* dst_column = down_cast<BinaryColumn*>((*dst).get());
+        auto* dst_column = down_cast<BinaryColumn*>(dst.get());
         Bytes& bytes = dst_column->get_bytes();
         double rate = ColumnHelper::get_const_value<TYPE_DOUBLE>(src[1]);
 
-        auto src_column = *down_cast<const BinaryColumn*>(src[0].get());
-        Slice* src_data = src_column.get_data().data();
+        const auto& src_column = *down_cast<const BinaryColumn*>(src[0].get());
+        const auto& src_data = src_column.get_proxy_data();
         for (auto i = 0; i < chunk_size; ++i) {
             size_t old_size = bytes.size();
             // [rate, 1, element ith size, element ith data]
@@ -387,13 +433,13 @@ class PercentileContAggregateFunction final : public PercentileContDiscAggregate
     using ResultColumnType = RunTimeColumnType<ResultLT>;
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        const std::vector<std::vector<InputCppType>>& grid = this->data(state).grid;
+        const auto& grid = this->data(state).grid;
         const double& rate = this->data(state).rate;
 
         // for group by
         if (grid.size() == 0) {
             ResultColumnType* column = down_cast<ResultColumnType*>(to);
-            auto& items = const_cast<std::vector<InputCppType>&>(this->data(state).items);
+            auto& items = const_cast<typename PercentileStateTypes<LT>::ItemType&>(this->data(state).items);
             std::sort(items.begin(), items.end());
 
             if (items.size() == 0) {
@@ -414,7 +460,7 @@ class PercentileContAggregateFunction final : public PercentileContDiscAggregate
 
         std::vector<InputCppType> b;
         std::vector<int> ls;
-        std::map<int, int> mp;
+        std::vector<int> mp;
 
         size_t k = grid.size();
         size_t rowsNum = 0;
@@ -468,7 +514,7 @@ class PercentileDiscAggregateFunction final : public PercentileContDiscAggregate
     using ResultColumnType = RunTimeColumnType<ResultLT>;
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        std::vector<InputCppType> new_vector = std::move(this->data(state).items);
+        typename PercentileStateTypes<LT>::ItemType new_vector = std::move(this->data(state).items);
         for (auto& innerData : this->data(state).grid) {
             std::move(innerData.begin() + 1, innerData.end() - 1, std::back_inserter(new_vector));
         }
@@ -477,7 +523,10 @@ class PercentileDiscAggregateFunction final : public PercentileContDiscAggregate
         const double& rate = this->data(state).rate;
 
         ResultColumnType* column = down_cast<ResultColumnType*>(to);
-        DCHECK(!new_vector.empty());
+        if (new_vector.empty()) {
+            column->append_default();
+            return;
+        }
         if (new_vector.size() == 1 || rate == 1) {
             column->append(new_vector.back());
             return;
@@ -510,7 +559,7 @@ struct LowCardPercentileState {
     constexpr int static ser_header = 0x3355 | LT << 16;
     void update(CppType item) { items[item]++; }
 
-    void update_batch(const std::vector<CppType>& vec) {
+    void update_batch(const ImmBuffer<CppType> vec) {
         for (const auto& item : vec) {
             items[item]++;
         }
@@ -596,13 +645,13 @@ public:
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
         const auto& column = down_cast<const InputColumnType&>(*columns[0]);
-        this->data(state).update(column.get_data()[row_num]);
+        this->data(state).update(column.immutable_data()[row_num]);
     }
 
     void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
         const auto& column = down_cast<const InputColumnType&>(*columns[0]);
-        this->data(state).update_batch(column.get_data());
+        this->data(state).update_batch(column.immutable_data());
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
@@ -625,19 +674,19 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
+                                     MutableColumnPtr& dst) const override {
         size_t serialize_row = (sizeof(int) + sizeof(InputCppType) + sizeof(int64_t));
         size_t serialize_size = serialize_row * chunk_size;
 
-        auto* column = down_cast<BinaryColumn*>(dst->get());
+        auto* column = down_cast<BinaryColumn*>(dst.get());
         Bytes& bytes = column->get_bytes();
         size_t old_size = bytes.size();
         size_t new_size = old_size + serialize_size;
         bytes.resize(new_size);
         unsigned char* cur = bytes.data() + old_size;
 
-        auto src_column = *down_cast<const InputColumnType*>(src[0].get());
-        InputCppType* src_data = src_column.get_data().data();
+        const auto& src_column = *down_cast<const InputColumnType*>(src[0].get());
+        const InputCppType* src_data = src_column.immutable_data().data();
 
         size_t cur_size = old_size;
         for (size_t i = 0; i < chunk_size; ++i) {

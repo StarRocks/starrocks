@@ -37,6 +37,8 @@
 #include <memory>
 #include <utility>
 
+#include "base/hash/crc32c.h"
+#include "base/string/faststring.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
@@ -45,16 +47,16 @@
 #include "common/logging.h" // LOG
 #include "fs/fs.h"          // FileSystem
 #include "gen_cpp/segment.pb.h"
+#include "storage/chunk_variant_helper.h"
 #include "storage/index/index_descriptor.h"
 #include "storage/row_store_encoder.h"
 #include "storage/rowset/column_writer.h" // ColumnWriter
+#include "storage/rowset/json_column_writer.h"
 #include "storage/rowset/page_io.h"
 #include "storage/seek_tuple.h"
 #include "storage/short_key_index.h"
+#include "types/json_value.h"
 #include "types/logical_type.h"
-#include "util/crc32c.h"
-#include "util/faststring.h"
-#include "util/json.h"
 
 namespace starrocks {
 
@@ -94,8 +96,8 @@ void SegmentWriter::_init_column_meta(ColumnMetaPB* meta, uint32_t column_id, co
     if (column.type() == TYPE_JSON) {
         JsonMetaPB* json_meta = meta->mutable_json_meta();
         json_meta->set_format_version(kJsonMetaDefaultFormatVersion);
-        json_meta->set_is_flat(false);
         json_meta->set_has_remain(false);
+        json_meta->set_is_flat(false);
     }
 
     for (uint32_t i = 0; i < column.subcolumn_count(); ++i) {
@@ -168,6 +170,10 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         const bool enable_dup_zone_map =
                 _tablet_schema->keys_type() == KeysType::DUP_KEYS && is_zone_map_key_type(column.type());
         opts.need_zone_map = column.is_key() || enable_pk_zone_map || enable_dup_zone_map || column.is_sort_key();
+        // Create prefix zonemap for string type, but only truncate it for non-key columns
+        opts.need_zone_map |= config::enable_string_prefix_zonemap && is_string_type(column.type());
+        opts.zone_map_truncate_string =
+                config::enable_string_prefix_zonemap && is_string_type(column.type()) && !column.is_key();
         if (column.type() == LogicalType::TYPE_ARRAY) {
             opts.need_zone_map = false;
         }
@@ -206,9 +212,29 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
                 _global_dict_columns_valid_info[iter->first] = true;
             }
         }
+        if (column.type() == LogicalType::TYPE_JSON && _opts.global_dicts != nullptr) {
+            opts.field_name = column.name();
+            std::string_view col_name = column.name();
+            for (auto& [k, dict_v] : *_opts.global_dicts) {
+                // k can be a.b.c, we must check the first token matches column.name()
+                size_t dot_pos = k.find('.');
+                std::string first_token = (dot_pos == std::string::npos) ? k : k.substr(0, dot_pos);
+                if (first_token == col_name) {
+                    opts.flat_json_dicts.emplace(k, dict_v.dict);
+                    _global_dict_columns_valid_info[k] = true;
+                    VLOG(2) << "set global dict for json column: " << k;
+                }
+            }
+        }
 
         opts.need_flat = config::enable_json_flat;
         opts.is_compaction = _opts.is_compaction;
+
+        if (column.type() == LogicalType::TYPE_JSON && _opts.flat_json_config != nullptr) {
+            opts.need_flat = _opts.flat_json_config->is_flat_json_enabled();
+            opts.flat_json_config = _opts.flat_json_config.get();
+        }
+
         ASSIGN_OR_RETURN(auto writer, ColumnWriter::create(opts, &column, _wfile.get()));
         RETURN_IF_ERROR(writer->init());
         _column_writers.push_back(std::move(writer));
@@ -311,11 +337,7 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
         *index_size += _wfile->size() - index_offset + standalone_index_size;
 
         // check global dict valid
-        const auto& column = _tablet_schema->column(column_index);
-        if (!column_writer->is_global_dict_valid() && is_string_type(column.type())) {
-            std::string col_name(column.name());
-            _global_dict_columns_valid_info[col_name] = false;
-        }
+        _check_column_global_dict_valid(column_writer.get(), column_index);
 
         // reset to release memory
         column_writer.reset();
@@ -387,7 +409,7 @@ Status SegmentWriter::append_chunk(const Chunk& chunk) {
     size_t chunk_num_rows = chunk.num_rows();
     size_t chunk_num_columns = chunk.num_columns();
     for (size_t i = 0; i < chunk_num_columns; ++i) {
-        const Column* col = chunk.get_column_by_index(i).get();
+        const Column* col = chunk.get_column_raw_ptr_by_index(i);
         RETURN_IF_ERROR(_column_writers[i]->append(*col));
     }
 
@@ -398,7 +420,7 @@ Status SegmentWriter::append_chunk(const Chunk& chunk) {
         _tablet_schema->columns().back().name() == Schema::FULL_ROW_COLUMN &&
         chunk_num_columns + 1 == _column_writers.size()) {
         // just missing full row column, generate it and write to file
-        auto full_row_col = std::make_unique<BinaryColumn>();
+        auto full_row_col = BinaryColumn::create();
         auto row_encoder = RowStoreEncoderFactory::instance()->get_or_create_encoder(SIMPLE);
         RETURN_IF_ERROR(row_encoder->encode_chunk_to_full_row_column(*_schema_without_full_row_column, chunk,
                                                                      full_row_col.get()));
@@ -408,6 +430,15 @@ Status SegmentWriter::append_chunk(const Chunk& chunk) {
     }
 
     if (_has_key) {
+        if (chunk_num_rows > 0) {
+            if (_sort_key_min.empty()) {
+                // The append_chunk is ordered, so the first is min
+                _sort_key_min = build_variant_tuple_from_chunk_row(chunk, 0, _sort_column_indexes);
+            }
+            // The append_chunk is ordered, so the last is max
+            _sort_key_max = build_variant_tuple_from_chunk_row(chunk, chunk_num_rows - 1, _sort_column_indexes);
+        }
+
         for (size_t i = 0; i < chunk_num_rows; i++) {
             // At the begin of one block, so add a short key index entry
             if ((_num_rows_written % _opts.num_rows_per_block) == 0) {
@@ -433,6 +464,36 @@ void SegmentWriter::_verify_footer() {
         CHECK(ok) << "Segment footer contains duplicate column id=" << col.unique_id() << ": " << _footer.DebugString();
     }
 #endif
+}
+
+int64_t SegmentWriter::bundle_file_offset() const {
+    return _wfile->bundle_file_offset();
+}
+
+StatusOr<std::unique_ptr<io::NumericStatistics>> SegmentWriter::get_numeric_statistics() {
+    return _wfile->get_numeric_statistics();
+}
+
+void SegmentWriter::_check_column_global_dict_valid(ColumnWriter* column_writer, uint32_t column_index) {
+    const auto& column = _tablet_schema->column(column_index);
+
+    // Check global dict valid for string types
+    if (!column_writer->is_global_dict_valid() && is_string_type(column.type())) {
+        std::string col_name(column.name());
+        _global_dict_columns_valid_info[col_name] = false;
+    }
+
+    // Check global dict valid for JSON type and collect sub-column dict info
+    if (column.type() == LogicalType::TYPE_JSON) {
+        auto* flat_json_writer = dynamic_cast<FlatJsonColumnWriter*>(column_writer);
+        if (flat_json_writer != nullptr) {
+            // Collect dict validity for each sub-column
+            const auto& subcolumn_dict_valid = flat_json_writer->get_subcolumn_dict_valid();
+            for (const auto& kv : subcolumn_dict_valid) {
+                _global_dict_columns_valid_info[kv.first] = kv.second;
+            }
+        }
+    }
 }
 
 } // namespace starrocks

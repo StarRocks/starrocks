@@ -25,19 +25,17 @@ import com.starrocks.proto.DropTableResponse;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.warehouse.DefaultWarehouse;
-import com.starrocks.warehouse.Warehouse;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.assertj.core.util.Lists;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -47,17 +45,14 @@ public class LakeTableCleanerTest {
     @Mocked
     private StarOSAgent starOSAgent;
 
-    @Mocked
-    private WarehouseManager warehouseManager;
-
     public LakeTableCleanerTest() {
         shardInfo = ShardInfo.newBuilder().setFilePath(FilePathInfo.newBuilder().setFullPath("oss://1/2")).build();
-        warehouseManager = new WarehouseManager();
-        warehouseManager.initDefaultWarehouse();
     }
 
-    @Before
+    @BeforeEach
     public void setup() {
+        UtFrameUtils.mockInitWarehouseEnv();
+
         new MockUp<GlobalStateMgr>() {
             @Mock
             public StarOSAgent getStarOSAgent() {
@@ -95,18 +90,6 @@ public class LakeTableCleanerTest {
             }
         };
 
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public Warehouse getWarehouse(String warehouseName) {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            }
-
-            @Mock
-            public Warehouse getWarehouse(long warehouseId) {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            }
-        };
-
         new Expectations() {
             {
                 table.getAllPhysicalPartitions();
@@ -114,7 +97,7 @@ public class LakeTableCleanerTest {
                 minTimes = 1;
                 maxTimes = 1;
 
-                partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
                 minTimes = 1;
                 maxTimes = 1;
@@ -131,7 +114,7 @@ public class LakeTableCleanerTest {
             }
         };
 
-        Assert.assertTrue(cleaner.cleanTable());
+        Assertions.assertTrue(cleaner.cleanTable());
     }
 
     @Test
@@ -149,7 +132,7 @@ public class LakeTableCleanerTest {
                 minTimes = 1;
                 maxTimes = 1;
 
-                partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
                 minTimes = 1;
                 maxTimes = 1;
@@ -161,7 +144,7 @@ public class LakeTableCleanerTest {
             }
         };
 
-        Assert.assertTrue(cleaner.cleanTable());
+        Assertions.assertTrue(cleaner.cleanTable());
     }
 
     @Test
@@ -179,18 +162,6 @@ public class LakeTableCleanerTest {
             }
         };
 
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public Warehouse getWarehouse(String warehouseName) {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            }
-
-            @Mock
-            public Warehouse getWarehouse(long warehouseId) {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            }
-        };
-
         new Expectations() {
             {
                 table.getAllPhysicalPartitions();
@@ -198,7 +169,7 @@ public class LakeTableCleanerTest {
                 minTimes = 1;
                 maxTimes = 1;
 
-                partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
                 minTimes = 1;
                 maxTimes = 1;
@@ -210,7 +181,7 @@ public class LakeTableCleanerTest {
             }
         };
 
-        Assert.assertFalse(cleaner.cleanTable());
+        Assertions.assertFalse(cleaner.cleanTable());
     }
 
     @Test
@@ -221,18 +192,6 @@ public class LakeTableCleanerTest {
                                        @Mocked LakeService lakeService) throws StarClientException {
         LakeTableCleaner cleaner = new LakeTableCleaner(table);
 
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public Warehouse getWarehouse(String warehouseName) {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            }
-
-            @Mock
-            public Warehouse getWarehouse(long warehouseId) {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            }
-        };
-
         new Expectations() {
             {
                 table.getAllPhysicalPartitions();
@@ -240,7 +199,7 @@ public class LakeTableCleanerTest {
                 minTimes = 1;
                 maxTimes = 1;
 
-                partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
                 minTimes = 1;
                 maxTimes = 1;
@@ -252,7 +211,7 @@ public class LakeTableCleanerTest {
             }
         };
 
-        Assert.assertFalse(cleaner.cleanTable());
+        Assertions.assertFalse(cleaner.cleanTable());
     }
 
     @Test
@@ -277,18 +236,6 @@ public class LakeTableCleanerTest {
             }
         };
 
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public Warehouse getWarehouse(String warehouseName) {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            }
-
-            @Mock
-            public Warehouse getWarehouse(long warehouseId) {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            }
-        };
-
         new Expectations() {
             {
                 table.getAllPhysicalPartitions();
@@ -296,7 +243,7 @@ public class LakeTableCleanerTest {
                 minTimes = 1;
                 maxTimes = 1;
 
-                partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
                 minTimes = 1;
                 maxTimes = 1;
@@ -313,7 +260,7 @@ public class LakeTableCleanerTest {
             }
         };
 
-        Assert.assertFalse(cleaner.cleanTable());
+        Assertions.assertFalse(cleaner.cleanTable());
     }
 
     @Test
@@ -324,18 +271,6 @@ public class LakeTableCleanerTest {
                                   @Mocked LakeService lakeService) throws StarClientException {
         LakeTableCleaner cleaner = new LakeTableCleaner(table);
 
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public Warehouse getWarehouse(String warehouseName) {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            }
-
-            @Mock
-            public Warehouse getWarehouse(long warehouseId) {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            }
-        };
-
         new Expectations() {
             {
                 table.getAllPhysicalPartitions();
@@ -343,7 +278,7 @@ public class LakeTableCleanerTest {
                 minTimes = 1;
                 maxTimes = 1;
 
-                partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
                 minTimes = 1;
                 maxTimes = 1;
@@ -362,6 +297,6 @@ public class LakeTableCleanerTest {
             }
         };
 
-        Assert.assertTrue(cleaner.cleanTable());
+        Assertions.assertTrue(cleaner.cleanTable());
     }
 }

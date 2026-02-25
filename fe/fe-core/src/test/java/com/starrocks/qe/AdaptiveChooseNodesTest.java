@@ -22,8 +22,8 @@ import com.starrocks.qe.scheduler.dag.ExecutionDAG;
 import com.starrocks.sql.plan.DistributedEnvPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TUniqueId;
-import org.junit.Assert;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
@@ -49,7 +49,7 @@ public class AdaptiveChooseNodesTest extends DistributedEnvPlanTestBase {
     @Test
     @Order(1)
     void testIncreaseNodes() throws Exception {
-        ConfigBase.setMutableConfig("adaptive_choose_instances_threshold", "3");
+        ConfigBase.setMutableConfig("adaptive_choose_instances_threshold", "3", false, "");
         connectContext.getSessionVariable().setChooseExecuteInstancesMode("auto");
         connectContext.getSessionVariable().setPipelineDop(2);
         connectContext.setExecutionId(new TUniqueId(0x33, 0x0));
@@ -63,12 +63,12 @@ public class AdaptiveChooseNodesTest extends DistributedEnvPlanTestBase {
 
         ExecutionDAG dag = prepare.getExecutionDAG();
         // scan fragment only hit one tablet use 1 nodes
-        Assert.assertEquals(1, dag.getFragmentsInCreatedOrder().get(2).getInstances().size());
-        Assert.assertEquals(1, dag.getFragmentsInCreatedOrder().get(3).getInstances().size());
+        Assertions.assertEquals(1, dag.getFragmentsInCreatedOrder().get(2).getInstances().size());
+        Assertions.assertEquals(1, dag.getFragmentsInCreatedOrder().get(3).getInstances().size());
 
         // join fragment only use compute nodes
-        Assert.assertEquals(1, dag.getFragmentsInCreatedOrder().get(1).getInstances().size());
-        Assert.assertEquals(10004L, (long) dag.getFragmentsInCreatedOrder().get(1).getInstances().get(0).getWorkerId());
+        Assertions.assertEquals(1, dag.getFragmentsInCreatedOrder().get(1).getInstances().size());
+        Assertions.assertEquals(10004L, (long) dag.getFragmentsInCreatedOrder().get(1).getInstances().get(0).getWorkerId());
 
         connectContext.getSessionVariable().setPreferComputeNode(false);
         execPlan = getExecPlan(sql);
@@ -78,17 +78,17 @@ public class AdaptiveChooseNodesTest extends DistributedEnvPlanTestBase {
 
         dag = prepare.getExecutionDAG();
         // scan fragment only hit one tablet use 1 nodes
-        Assert.assertEquals(1, dag.getFragmentsInCreatedOrder().get(2).getInstances().size());
-        Assert.assertEquals(1, dag.getFragmentsInCreatedOrder().get(3).getInstances().size());
+        Assertions.assertEquals(1, dag.getFragmentsInCreatedOrder().get(2).getInstances().size());
+        Assertions.assertEquals(1, dag.getFragmentsInCreatedOrder().get(3).getInstances().size());
 
         // join fragment use all be nodes
-        Assert.assertEquals(3, dag.getFragmentsInCreatedOrder().get(1).getInstances().size());
+        Assertions.assertEquals(3, dag.getFragmentsInCreatedOrder().get(1).getInstances().size());
     }
 
     @Test
     @Order(2)
     void testDecreaseNodesInPipeline() throws Exception {
-        ConfigBase.setMutableConfig("adaptive_choose_instances_threshold", "3");
+        ConfigBase.setMutableConfig("adaptive_choose_instances_threshold", "3", false, "");
         connectContext.getSessionVariable().setChooseExecuteInstancesMode("auto");
         connectContext.getSessionVariable().setPipelineDop(2);
         connectContext.setExecutionId(new TUniqueId(0x33, 0x0));
@@ -101,11 +101,11 @@ public class AdaptiveChooseNodesTest extends DistributedEnvPlanTestBase {
         ExecutionDAG dag = prepare.getExecutionDAG();
 
         // bottom fragment use 3 nodes
-        Assert.assertEquals(3, dag.getFragmentsInCreatedOrder().get(2).getInstances().size());
+        Assertions.assertEquals(3, dag.getFragmentsInCreatedOrder().get(2).getInstances().size());
 
         // remote fragment use 1 nodes
-        Assert.assertEquals(1, dag.getFragmentsInCreatedOrder().get(1).getInstances().size());
-        Assert.assertEquals(1, dag.getFragmentsInCreatedOrder().get(1).getNumSendersPerExchange().size());
+        Assertions.assertEquals(1, dag.getFragmentsInCreatedOrder().get(1).getInstances().size());
+        Assertions.assertEquals(1, dag.getFragmentsInCreatedOrder().get(1).getNumSendersPerExchange().size());
 
         connectContext.getSessionVariable().setEnablePipelineEngine(false);
         execPlan = getExecPlan(sql);
@@ -115,20 +115,20 @@ public class AdaptiveChooseNodesTest extends DistributedEnvPlanTestBase {
         dag = prepare.getExecutionDAG();
 
         // bottom fragment use 3 nodes
-        Assert.assertEquals(3, dag.getFragmentsInCreatedOrder().get(2).getInstances().size());
+        Assertions.assertEquals(3, dag.getFragmentsInCreatedOrder().get(2).getInstances().size());
 
         // not in pipeline engine, decrease nodes to 1. The instance exec param size also be 3.
-        Assert.assertEquals(3, dag.getFragmentsInCreatedOrder().get(1).getInstances().size());
-        Assert.assertEquals(1, dag.getFragmentsInCreatedOrder().get(1).getInstances()
+        Assertions.assertEquals(3, dag.getFragmentsInCreatedOrder().get(1).getInstances().size());
+        Assertions.assertEquals(1, dag.getFragmentsInCreatedOrder().get(1).getInstances()
                 .stream().map(e -> e.getWorkerId()).collect(Collectors.toSet()).size());
-        Assert.assertEquals(1, dag.getFragmentsInCreatedOrder().get(1).getNumSendersPerExchange().size());
+        Assertions.assertEquals(1, dag.getFragmentsInCreatedOrder().get(1).getNumSendersPerExchange().size());
     }
 
     @ParameterizedTest
     @MethodSource("getCases")
     public void testNumberEstimateFormula(long outputOfMostLeftChild, long maxOutputOfRightChild, int dop,
                                           int candidateSize, long expected) {
-        Assert.assertEquals(expected,
+        Assertions.assertEquals(expected,
                 RemoteFragmentAssignmentStrategy.getOptimalNodeNums(outputOfMostLeftChild,
                         maxOutputOfRightChild, dop, candidateSize));
     }
@@ -161,7 +161,7 @@ public class AdaptiveChooseNodesTest extends DistributedEnvPlanTestBase {
     public static void afterAll() throws Exception {
         connectContext.getSessionVariable().setEnablePipelineEngine(true);
         connectContext.getSessionVariable().setChooseExecuteInstancesMode("locality");
-        ConfigBase.setMutableConfig("adaptive_choose_instances_threshold", "32");
+        ConfigBase.setMutableConfig("adaptive_choose_instances_threshold", "32", false, "");
     }
 
 

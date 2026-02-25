@@ -14,18 +14,25 @@
 
 package com.starrocks.sql.optimizer.operator.logical;
 
-import com.starrocks.analysis.Expr;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 // the logical operator to scan view just like LogicalOlapScanOperator to scan olap table,
 // which is a virtual logical operator used by view based mv rewrite and has no corresponding physical operator.
@@ -34,12 +41,12 @@ public class LogicalViewScanOperator  extends LogicalScanOperator {
     private int relationId;
     private ColumnRefSet outputColumnSet;
     private Map<Expr, ColumnRefOperator> expressionToColumns;
-
-    private OptExpression originalPlan;
-
-    // add output mapping from new column to original column
-    // used to construct partition predicates
-    private Map<ColumnRefOperator, ColumnRefOperator> columnRefOperatorMap;
+    // Original plan evaluator(inlined view) for the input logical plan tree which has not done rule based rewrite yet,
+    // this is only used when the view scan operator cannot be rewritten by view-based rewrite rules.
+    private OptPlanEvaluator optPlanEvaluator;
+    // this maps original inlined view's column ref to non-inlined column ref which can be used for
+    // replacing from non-inlined column refs to inlined view's column ref.
+    private Map<ColumnRefOperator, ScalarOperator> originalColumnRefToInlinedColumnRefMap;
 
     public LogicalViewScanOperator(
             int relationId,
@@ -47,12 +54,15 @@ public class LogicalViewScanOperator  extends LogicalScanOperator {
             Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
             Map<Column, ColumnRefOperator> columnMetaToColRefMap,
             ColumnRefSet outputColumnSet,
-            Map<Expr, ColumnRefOperator> expressionToColumns) {
+            Map<Expr, ColumnRefOperator> expressionToColumns,
+            Map<ColumnRefOperator, ScalarOperator> originalColumnRefToInlinedColumnRefMap) {
         super(OperatorType.LOGICAL_VIEW_SCAN, table, colRefToColumnMetaMap,
                 columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null, null);
         this.relationId = relationId;
         this.outputColumnSet = outputColumnSet;
         this.expressionToColumns = expressionToColumns;
+        // copy the originalColumnRefToInlinedColumnRefMap to avoid modification by projection
+        this.originalColumnRefToInlinedColumnRefMap = Maps.newHashMap(originalColumnRefToInlinedColumnRefMap);
     }
 
     private LogicalViewScanOperator() {
@@ -74,12 +84,49 @@ public class LogicalViewScanOperator  extends LogicalScanOperator {
         return relationId;
     }
 
-    public void setOriginalPlan(OptExpression originalPlan) {
-        this.originalPlan = originalPlan;
+    public void setOriginalPlanEvaluator(OptPlanEvaluator optPlanEvaluator) {
+        this.optPlanEvaluator = optPlanEvaluator;
     }
 
-    public OptExpression getOriginalPlan() {
-        return this.originalPlan;
+    public OptExpression getOriginalPlanEvaluator() {
+        return this.optPlanEvaluator.evaluate();
+    }
+
+    public Map<ColumnRefOperator, ScalarOperator> getOriginalColumnRefToInlinedColumnRefMap() {
+        return originalColumnRefToInlinedColumnRefMap;
+    }
+
+    /**
+     * Evaluate the original plan and return the optimized plan for the input logical plan tree which is with inlined view and
+     * has not done rule based rewrite yet.
+     */
+    public static class OptPlanEvaluator {
+        private final OptExpression logicalTree;
+        private final ConnectContext connectContext;
+        private final ColumnRefSet requiredColumns;
+        private final ColumnRefFactory columnRefFactory;
+
+        private Optional<OptExpression> originalPlan = Optional.empty();
+
+        public OptPlanEvaluator(OptExpression logicalTree,
+                                ConnectContext connectContext,
+                                ColumnRefSet requiredColumns,
+                                ColumnRefFactory columnRefFactory) {
+            this.logicalTree = logicalTree;
+            this.connectContext = connectContext;
+            this.requiredColumns = requiredColumns;
+            this.columnRefFactory = columnRefFactory;
+        }
+
+        public OptExpression evaluate() {
+            if (!originalPlan.isPresent()) {
+                OptExpression optExpression = MvUtils.optimizeViewPlan(logicalTree, connectContext, requiredColumns,
+                        columnRefFactory);
+                originalPlan = Optional.of(optExpression);
+            }
+            Preconditions.checkArgument(originalPlan.isPresent(), "Original plan is not set");
+            return originalPlan.get();
+        }
     }
 
     @Override
@@ -115,18 +162,14 @@ public class LogicalViewScanOperator  extends LogicalScanOperator {
             return new LogicalViewScanOperator();
         }
 
-        public Builder setOriginalPlan(OptExpression originalPlan) {
-            builder.originalPlan = originalPlan;
-            return this;
-        }
-
         @Override
         public LogicalViewScanOperator.Builder withOperator(LogicalViewScanOperator scanOperator) {
             super.withOperator(scanOperator);
             builder.relationId = scanOperator.relationId;
             builder.expressionToColumns = scanOperator.expressionToColumns;
             builder.outputColumnSet = scanOperator.outputColumnSet;
-            builder.originalPlan = scanOperator.originalPlan;
+            builder.optPlanEvaluator = scanOperator.optPlanEvaluator;
+            builder.originalColumnRefToInlinedColumnRefMap = scanOperator.originalColumnRefToInlinedColumnRefMap;
             return this;
         }
     }

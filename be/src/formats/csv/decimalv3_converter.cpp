@@ -16,21 +16,22 @@
 
 #include "column/decimalv3_column.h"
 #include "common/logging.h"
-#include "runtime/decimalv3.h"
+#include "types/decimalv3.h"
 
 namespace starrocks::csv {
 
 template <typename T>
-Status DecimalV3Converter<T>::write_string(OutputStream* os, const Column& column, size_t row_num,
+Status DecimalV3Converter<T>::write_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
                                            const Options& options) const {
     auto decimalv3_column = down_cast<const DecimalV3Column<T>*>(&column);
+    const auto immutable_data = decimalv3_column->immutable_data();
     // TODO(zhuming): avoid this string construction
-    auto s = DecimalV3Cast::to_string<T>(decimalv3_column->get_data()[row_num], _precision, _scale);
+    auto s = DecimalV3Cast::to_string<T>(immutable_data[row_num], _precision, _scale);
     return os->write(Slice(s));
 }
 
 template <typename T>
-Status DecimalV3Converter<T>::write_quoted_string(OutputStream* os, const Column& column, size_t row_num,
+Status DecimalV3Converter<T>::write_quoted_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
                                                   const Options& options) const {
     return write_string(os, column, row_num, options);
 }
@@ -56,5 +57,6 @@ bool DecimalV3Converter<T>::read_quoted_string(Column* column, const Slice& s, c
 template class DecimalV3Converter<int32_t>;
 template class DecimalV3Converter<int64_t>;
 template class DecimalV3Converter<int128_t>;
+template class DecimalV3Converter<int256_t>;
 
 } // namespace starrocks::csv

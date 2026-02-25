@@ -16,11 +16,11 @@
 
 #include <future>
 
+#include "base/utility/exclusive_ptr.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "exec/workgroup/work_group_fwd.h"
-#include "util/exclusive_ptr.h"
 
 namespace starrocks {
 
@@ -77,6 +77,7 @@ public:
 
     virtual bool reach_limit() { return false; }
 
+    virtual void update_chunk_exec_stats(RuntimeState* state) {}
     // Used to print custom error msg in be.out when coredmp
     // Don't do heavey work, it calls frequently
     virtual const std::string get_custom_coredump_msg() const { return ""; }

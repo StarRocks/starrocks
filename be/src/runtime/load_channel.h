@@ -41,10 +41,11 @@
 #include <unordered_map>
 #include <unordered_set>
 
-#include "column/chunk.h"
+#include "base/uid_util.h"
+#include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
-#include "common/tracer.h"
+#include "common/tracer_fwd.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
@@ -52,7 +53,6 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/tablets_channel.h"
 #include "serde/protobuf_serde.h"
-#include "util/uid_util.h"
 
 namespace brpc {
 class Controller;
@@ -71,6 +71,14 @@ namespace lake {
 class TabletManager;
 }
 
+struct LoadChannelOpenContext {
+    brpc::Controller* cntl;
+    const PTabletWriterOpenRequest* request;
+    PTabletWriterOpenResult* response;
+    google::protobuf::Closure* done;
+    int64_t receive_rpc_time_ns;
+};
+
 // A LoadChannel manages tablets channels for all indexes
 // corresponding to a certain load job
 class LoadChannel {
@@ -88,8 +96,7 @@ public:
 
     // Open a new load channel if it does not exist.
     // NOTE: This method may be called multiple times, and each time with a different |request|.
-    void open(brpc::Controller* cntl, const PTabletWriterOpenRequest& request, PTabletWriterOpenResult* response,
-              google::protobuf::Closure* done);
+    void open(const LoadChannelOpenContext& open_context);
 
     void add_chunk(const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response);
 
@@ -98,7 +105,7 @@ public:
     void add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
                      PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done);
 
-    void cancel();
+    void cancel(const std::string& reason);
 
     void abort();
 
@@ -114,18 +121,26 @@ public:
 
     std::shared_ptr<TabletsChannel> get_tablets_channel(const TabletsChannelKey& key);
 
-    void remove_tablets_channel(const TabletsChannelKey& key);
-
     MemTracker* mem_tracker() { return _mem_tracker.get(); }
 
     Span get_span() { return _span; }
 
     void report_profile(PTabletWriterAddBatchResult* result, bool print_profile);
 
+    void diagnose(const std::string& remote_ip, const PLoadDiagnoseRequest* request, PLoadDiagnoseResult* response);
+    void get_load_replica_status(const std::string& remote_ip, const PLoadReplicaStatusRequest* request,
+                                 PLoadReplicaStatusResult* response);
+
 private:
-    void _add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response);
+    void _remove_tablets_channel(const TabletsChannelKey& key);
+    void _add_chunk(Chunk* chunk, const MonotonicStopWatch* watch, const PTabletWriterAddChunkRequest& request,
+                    PTabletWriterAddBatchResult* response);
     Status _build_chunk_meta(const ChunkPB& pb_chunk);
     Status _deserialize_chunk(const ChunkPB& pchunk, Chunk& chunk, faststring* uncompressed_buffer);
+    bool _should_enable_profile();
+    std::vector<std::shared_ptr<TabletsChannel>> _get_all_channels();
+    Status _update_and_serialize_profile(std::string* serialized_profile, bool print_profile);
+    void _check_and_log_timeout_rpc(const std::string& rpc_name, int64_t cost_ms, int64_t timeout_ms);
 
     LoadChannelMgr* _load_mgr;
     LakeTabletManager* _lake_tablet_mgr;
@@ -151,6 +166,7 @@ private:
     bthread::Mutex _lock;
     // key -> tablets channel
     std::map<TabletsChannelKey, std::shared_ptr<TabletsChannel>> _tablets_channels;
+    std::atomic<bool> _cancelled{false};
     std::atomic<bool> _closed{false};
 
     Span _span;
@@ -163,13 +179,21 @@ private:
     int64_t _runtime_profile_report_interval_ns = std::numeric_limits<int64_t>::max();
     std::atomic<int64_t> _last_report_time_ns{0};
     std::atomic<bool> _final_report{false};
+    std::atomic<bool> _is_reporting_profile{false};
 
     RuntimeProfile::Counter* _index_num = nullptr;
     RuntimeProfile::Counter* _peak_memory_usage = nullptr;
+    RuntimeProfile::Counter* _deserialize_chunk_count = nullptr;
+    RuntimeProfile::Counter* _deserialize_chunk_timer = nullptr;
+    RuntimeProfile::Counter* _profile_report_count = nullptr;
+    RuntimeProfile::Counter* _profile_report_timer = nullptr;
+    RuntimeProfile::Counter* _profile_serialized_size = nullptr;
+    RuntimeProfile::Counter* _open_request_count = nullptr;
+    RuntimeProfile::Counter* _open_request_pending_timer = nullptr;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const LoadChannel& load_channel) {
-    os << "LoadChannel(id=" << load_channel.load_id()
+    os << "LoadChannel(id=" << print_id(load_channel.load_id())
        << ", last_update_time=" << static_cast<uint64_t>(load_channel.last_updated_time()) << ")";
     return os;
 }

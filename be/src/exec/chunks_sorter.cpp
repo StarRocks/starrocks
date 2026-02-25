@@ -16,39 +16,18 @@
 
 #include <utility>
 
+#include "base/concurrency/stopwatch.hpp"
+#include "base/orlp/pdqsort.h"
 #include "column/column_helper.h"
 #include "column/type_traits.h"
+#include "common/runtime_profile.h"
 #include "exec/sorting/sort_permute.h"
 #include "exprs/expr.h"
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
-#include "util/orlp/pdqsort.h"
-#include "util/stopwatch.hpp"
 
 namespace starrocks {
-
-static void get_compare_results_colwise(size_t rows_to_sort, Columns& order_by_columns,
-                                        std::vector<CompareVector>& compare_results_array,
-                                        std::vector<DataSegment>& data_segments, const SortDescs& sort_desc) {
-    size_t dats_segment_size = data_segments.size();
-
-    for (size_t i = 0; i < dats_segment_size; ++i) {
-        size_t rows = data_segments[i].chunk->num_rows();
-        compare_results_array[i].resize(rows, 0);
-    }
-
-    size_t order_by_column_size = order_by_columns.size();
-
-    for (size_t i = 0; i < dats_segment_size; i++) {
-        std::vector<Datum> rhs_values;
-        auto& segment = data_segments[i];
-        for (size_t col_idx = 0; col_idx < order_by_column_size; col_idx++) {
-            rhs_values.push_back(order_by_columns[col_idx]->get(rows_to_sort));
-        }
-        compare_columns(segment.order_by_columns, compare_results_array[i], rhs_values, sort_desc);
-    }
-}
 
 void DataSegment::init(const std::vector<ExprContext*>* sort_exprs, const ChunkPtr& cnk) {
     chunk = cnk;
@@ -56,84 +35,6 @@ void DataSegment::init(const std::vector<ExprContext*>* sort_exprs, const ChunkP
     for (ExprContext* expr_ctx : (*sort_exprs)) {
         order_by_columns.push_back(EVALUATE_NULL_IF_ERROR(expr_ctx, expr_ctx->root(), chunk.get()));
     }
-}
-
-Status DataSegment::get_filter_array(std::vector<DataSegment>& data_segments, size_t rows_to_sort,
-                                     std::vector<std::vector<uint8_t>>& filter_array, const SortDescs& sort_desc,
-                                     uint32_t& smaller_num, uint32_t& include_num) {
-    size_t dats_segment_size = data_segments.size();
-    std::vector<CompareVector> compare_results_array(dats_segment_size);
-
-    // First compare the chunk with last row of this segment.
-    {
-        get_compare_results_colwise(rows_to_sort - 1, order_by_columns, compare_results_array, data_segments,
-                                    sort_desc);
-    }
-
-    // Since the first and the last of segment is the same value,
-    // we can get both `SMALLER_THAN_MIN_OF_SEGMENT` and `INCLUDE_IN_SEGMENT` parts
-    // with only one comparation
-    if (rows_to_sort == 1) {
-        smaller_num = 0, include_num = 0;
-        filter_array.resize(dats_segment_size);
-        for (size_t i = 0; i < dats_segment_size; ++i) {
-            size_t rows = data_segments[i].chunk->num_rows();
-            filter_array[i].resize(rows);
-
-            for (size_t j = 0; j < rows; ++j) {
-                if (compare_results_array[i][j] < 0) {
-                    filter_array[i][j] = DataSegment::SMALLER_THAN_MIN_OF_SEGMENT;
-                    ++smaller_num;
-                } else {
-                    filter_array[i][j] = DataSegment::INCLUDE_IN_SEGMENT;
-                    ++include_num;
-                }
-            }
-        }
-    } else {
-        include_num = 0;
-        filter_array.resize(dats_segment_size);
-        for (size_t i = 0; i < dats_segment_size; ++i) {
-            DataSegment& segment = data_segments[i];
-            size_t rows = segment.chunk->num_rows();
-            filter_array[i].resize(rows);
-
-            for (size_t j = 0; j < rows; ++j) {
-                if (compare_results_array[i][j] <= 0) {
-                    filter_array[i][j] = DataSegment::INCLUDE_IN_SEGMENT;
-                    ++include_num;
-                }
-            }
-        }
-
-        // Second compare with first row of this chunk, use rows from first compare.
-        {
-            for (size_t i = 0; i < dats_segment_size; i++) {
-                for (auto& cmp : compare_results_array[i]) {
-                    if (cmp < 0) {
-                        cmp = 0;
-                    }
-                }
-            }
-            get_compare_results_colwise(0, order_by_columns, compare_results_array, data_segments, sort_desc);
-        }
-
-        smaller_num = 0;
-        for (size_t i = 0; i < dats_segment_size; ++i) {
-            DataSegment& segment = data_segments[i];
-            size_t rows = segment.chunk->num_rows();
-
-            for (size_t j = 0; j < rows; ++j) {
-                if (compare_results_array[i][j] < 0) {
-                    filter_array[i][j] = DataSegment::SMALLER_THAN_MIN_OF_SEGMENT;
-                    ++smaller_num;
-                }
-            }
-        }
-        include_num -= smaller_num;
-    }
-
-    return Status::OK();
 }
 
 ChunksSorter::ChunksSorter(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs,
@@ -144,6 +45,7 @@ ChunksSorter::ChunksSorter(RuntimeState* state, const std::vector<ExprContext*>*
           _sort_desc(*is_asc, *is_null_first),
           _sort_keys(std::move(sort_keys)),
           _is_topn(is_topn) {
+    set_use_german_string(state->enable_full_sort_use_german_string());
     DCHECK(_sort_exprs != nullptr);
     DCHECK(is_asc != nullptr);
     DCHECK(is_null_first != nullptr);
@@ -158,8 +60,10 @@ void ChunksSorter::setup_runtime(RuntimeState* state, RuntimeProfile* profile, M
     _sort_timer = ADD_TIMER(profile, "SortingTime");
     _merge_timer = ADD_TIMER(profile, "MergingTime");
     _output_timer = ADD_TIMER(profile, "OutputTime");
+    _sort_cnt = ADD_COUNTER(profile, "SortingCnt", TUnit::UNIT);
     profile->add_info_string("SortKeys", _sort_keys);
     profile->add_info_string("SortType", _is_topn ? "TopN" : "All");
+    profile->add_info_string("UseGermanString", is_use_german_string() ? "True" : "False");
 }
 
 StatusOr<ChunkPtr> ChunksSorter::materialize_chunk_before_sort(Chunk* chunk, TupleDescriptor* materialized_tuple_desc,
@@ -181,9 +85,9 @@ StatusOr<ChunkPtr> ChunksSorter::materialize_chunk_before_sort(Chunk* chunk, Tup
             if (col->is_nullable()) {
                 // Constant null column doesn't have original column data type information,
                 // so replace it by a nullable column of original data type filled with all NULLs.
-                ColumnPtr new_col = ColumnHelper::create_column(order_by_types[i].type_desc, true);
+                MutableColumnPtr new_col = ColumnHelper::create_column(order_by_types[i].type_desc, true);
                 new_col->append_nulls(row_num);
-                materialize_chunk->append_column(new_col, slots_in_row_descriptor[i]->id());
+                materialize_chunk->append_column(std::move(new_col), slots_in_row_descriptor[i]->id());
             } else {
                 // Case 1: an expression may generate a constant column which will be reused by
                 // another call of evaluate(). We clone its data column to resize it as same as
@@ -191,17 +95,17 @@ StatusOr<ChunkPtr> ChunksSorter::materialize_chunk_before_sort(Chunk* chunk, Tup
                 // if this ConstColumn is the first column of the chunk.
                 // Case 2: an expression may generate a constant column for one Chunk, but a
                 // non-constant one for another Chunk, we replace them all by non-constant columns.
-                auto* const_col = down_cast<ConstColumn*>(col.get());
+                auto* const_col = down_cast<const ConstColumn*>(col.get());
                 const auto& data_col = const_col->data_column();
                 auto new_col = data_col->clone_empty();
                 new_col->append(*data_col, 0, 1);
                 new_col->assign(row_num, 0);
                 if (order_by_types[i].is_nullable) {
                     ColumnPtr nullable_column =
-                            NullableColumn::create(ColumnPtr(new_col.release()), NullColumn::create(row_num, 0));
-                    materialize_chunk->append_column(nullable_column, slots_in_row_descriptor[i]->id());
+                            NullableColumn::create(std::move(new_col), NullColumn::create(row_num, 0));
+                    materialize_chunk->append_column(std::move(nullable_column), slots_in_row_descriptor[i]->id());
                 } else {
-                    materialize_chunk->append_column(ColumnPtr(new_col.release()), slots_in_row_descriptor[i]->id());
+                    materialize_chunk->append_column(std::move(new_col), slots_in_row_descriptor[i]->id());
                 }
             }
         } else {
@@ -209,7 +113,7 @@ StatusOr<ChunkPtr> ChunksSorter::materialize_chunk_before_sort(Chunk* chunk, Tup
             if (!col->is_nullable() && order_by_types[i].is_nullable) {
                 col = NullableColumn::create(col, NullColumn::create(col->size(), 0));
             }
-            materialize_chunk->append_column(col, slots_in_row_descriptor[i]->id());
+            materialize_chunk->append_column(std::move(col), slots_in_row_descriptor[i]->id());
         }
     }
 

@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 description: Monitor with Datadog
 sidebar_label: Datadog
 ---

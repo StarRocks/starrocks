@@ -17,13 +17,14 @@ package com.starrocks.qe.scheduler.slot;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.metric.MetricRepo;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import com.starrocks.server.WarehouseManager;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class DefaultSlotSelectionStrategyTest {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() {
         MetricRepo.init();
     }
@@ -32,7 +33,7 @@ public class DefaultSlotSelectionStrategyTest {
     public void testReleaseSlot() throws InterruptedException {
         DefaultSlotSelectionStrategy strategy =
                 new DefaultSlotSelectionStrategy(() -> false, (groupId) -> false);
-        SlotTracker slotTracker = new SlotTracker(ImmutableList.of(strategy));
+        SlotTracker slotTracker = new SlotTracker(null, ImmutableList.of(strategy));
 
         LogicalSlot slot1 = generateSlot(1, 0);
         LogicalSlot slot2 = generateSlot(1, 0);
@@ -69,6 +70,7 @@ public class DefaultSlotSelectionStrategyTest {
     }
 
     private static LogicalSlot generateSlot(int numSlots, long groupId) {
-        return new LogicalSlot(UUIDUtil.genTUniqueId(), "fe", groupId, numSlots, 0, 0, 0, 0, 0);
+        return new LogicalSlot(UUIDUtil.genTUniqueId(), "fe", WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                groupId, numSlots, 0, 0, 0, 0, 0);
     }
 }

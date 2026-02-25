@@ -19,6 +19,7 @@
 #include <mutex>
 #include <utility>
 
+#include "block_manager.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exec/sort_exec_exprs.h"
@@ -81,6 +82,7 @@ private:
 class BlockGroup {
 public:
     BlockGroup() = default;
+    BlockGroup(BlockAffinityGroup affinity_group) : _affinity_group(affinity_group) {}
 
     void append(BlockPtr block) {
         DCHECK(block != nullptr);
@@ -108,11 +110,13 @@ public:
         }
         return num_rows;
     }
+    BlockAffinityGroup get_affinity_group() const { return _affinity_group; }
 
 private:
     // used to cache data_size in blocks
     mutable std::optional<size_t> _data_size;
     std::vector<BlockPtr> _blocks;
+    BlockAffinityGroup _affinity_group = kDefaultBlockAffinityGroup;
 };
 using BlockGroupPtr = std::shared_ptr<BlockGroup>;
 

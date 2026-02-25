@@ -14,14 +14,14 @@
 
 package com.starrocks.sql.analyzer;
 
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeArrayTest {
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
     }
@@ -73,5 +73,22 @@ public class AnalyzeArrayTest {
         analyzeSuccess("select array_concat([1.0, 2.0, 3.0], [2.00, 2.0])");
         analyzeSuccess("select array_concat([1.0, 2.0, 3.0], ['2.00', '2.0'])");
         analyzeFail("select array_concat([1, 2, 3], [[1, 1], [2, 2]])");
+    }
+
+    @Test
+    public void testArrayFlatten() {
+        analyzeFail("select array_flatten()");
+        analyzeFail("select array_flatten(1)");
+        analyzeFail("select array_flatten([1, 2, 3])");
+        analyzeSuccess("select array_flatten([[1, 2], [1, 4]])");
+    }
+
+    @Test
+    public void testNullOrEmpty() {
+        analyzeFail("select null_or_empty()");
+        analyzeSuccess("select null_or_empty('abc')");
+        analyzeSuccess("select null_or_empty([])");
+        analyzeSuccess("select null_or_empty([1, 2, 3])");
+        analyzeSuccess("select null_or_empty([[1, 2], [1, 4]])");
     }
 }

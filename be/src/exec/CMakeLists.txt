@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-cmake_minimum_required(VERSION 2.8.12)
+cmake_minimum_required(VERSION 3.16.12)
 
 # where to put generated libraries
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exec")
@@ -21,10 +21,14 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 
 set(EXEC_FILES
+    fetch_node.cpp
+    lookup_node.cpp
     capture_version_node.cpp
     data_sink.cpp
     empty_set_node.cpp
+    exec_factory.cpp
     exec_node.cpp
+    exec_node_executor.cpp
     exchange_node.cpp
     scan_node.cpp
     select_node.cpp
@@ -37,9 +41,11 @@ set(EXEC_FILES
     tablet_sink_colocate_sender.cpp
     tablet_sink_index_channel.cpp
     tablet_sink_sender.cpp
+    range_tablet_sink_sender.cpp
     write_combined_txn_log.cpp
     multi_olap_table_sink.cpp
     mysql_scanner.cpp
+    benchmark_scanner.cpp
     es/es_predicate.cpp
     es/es_scan_reader.cpp
     es/es_scroll_query.cpp
@@ -47,19 +53,21 @@ set(EXEC_FILES
     es/es_scroll_parser.cpp
     local_file_writer.cpp
     plain_text_builder.cpp
+    agg_runtime_filter_builder.cpp
     aggregator.cpp
     sorted_streaming_aggregator.cpp
     aggregate/agg_hash_variant.cpp
+    aggregate/compress_serializer.cpp
     aggregate/aggregate_base_node.cpp
     aggregate/aggregate_blocking_node.cpp
     aggregate/distinct_blocking_node.cpp
     aggregate/aggregate_streaming_node.cpp
     aggregate/distinct_streaming_node.cpp
+    partition/bucket_aware_partition.cpp
     partition/chunks_partitioner.cpp
     partition/partition_hash_variant.cpp
     analytic_node.cpp
     analytor.cpp
-    csv_scanner.cpp
     tablet_scanner.cpp
     olap_scan_node.cpp
     olap_scan_prepare.cpp
@@ -71,23 +79,22 @@ set(EXEC_FILES
     hash_joiner.cpp
     hash_join_node.cpp
     hash_join_components.cpp
-    join_hash_map.cpp
+    join/join_hash_table_descriptor.cpp
+    join/join_key_constructor.cpp
+    join/join_hash_table.cpp
     topn_node.cpp
     chunks_sorter.cpp
     chunks_sorter_heap_sort.cpp
     chunks_sorter_topn.cpp
     chunks_sorter_full_sort.cpp
-    spillable_chunks_sorter_full_sort.cpp
+    spillable_chunks_sorter.cpp
     cross_join_node.cpp
     union_node.cpp
+    raw_values_node.cpp
     except_hash_set.cpp
     except_node.cpp
-    file_scanner.cpp
-    orc_scanner.cpp
-    jni_scanner.cpp
     arrow_to_starrocks_converter.cpp
     arrow_to_json_converter.cpp
-    parquet_scanner.cpp
     parquet_schema_builder.cpp
     parquet_reader.cpp
     parquet_writer.cpp
@@ -96,16 +103,7 @@ set(EXEC_FILES
     assert_num_rows_node.cpp
     intersect_hash_set.cpp
     intersect_node.cpp
-    hdfs_scanner.cpp
-    hdfs_scanner_orc.cpp
-    hdfs_scanner_parquet.cpp
-    hdfs_scanner_text.cpp
-    hdfs_scanner_partition.cpp
-    cache_select_scanner.cpp
-    mor_processor.cpp
-    json_scanner.cpp
     json_parser.cpp
-    avro_scanner.cpp
     project_node.cpp
     dict_decode_node.cpp
     repeat_node.cpp
@@ -113,14 +111,32 @@ set(EXEC_FILES
     schema_scanner.cpp
     schema_scan_node.cpp
     dictionary_cache_writer.cpp
-    iceberg/iceberg_delete_builder.cpp
-    iceberg/iceberg_delete_file_iterator.cpp
+    arrow_flight_batch_reader.cpp
+    range_router.cpp
+    iceberg/iceberg_delete_builder.cpp    
     paimon/paimon_delete_file_builder.cpp
+    hdfs_scanner/cache_select_scanner.cpp
+    hdfs_scanner/hdfs_scanner_text.cpp
+    hdfs_scanner/hdfs_scanner_json.cpp
+    hdfs_scanner/hdfs_scanner_partition.cpp
+    hdfs_scanner/hdfs_scanner_parquet.cpp
+    hdfs_scanner/hdfs_scanner_orc.cpp
+    hdfs_scanner/hdfs_scanner.cpp
+    hdfs_scanner/jni_scanner.cpp
+    file_scanner/avro_cpp_scanner.cpp
+    file_scanner/avro_scanner.cpp
+    file_scanner/csv_scanner.cpp
+    file_scanner/file_scanner.cpp
+    file_scanner/json_scanner.cpp
+    file_scanner/orc_scanner.cpp
+    file_scanner/parquet_scanner.cpp
+    schema_scanner/schema_analyze_status.cpp
     schema_scanner/schema_tables_scanner.cpp
     schema_scanner/schema_dummy_scanner.cpp
     schema_scanner/schema_schemata_scanner.cpp
     schema_scanner/schema_variables_scanner.cpp
     schema_scanner/schema_columns_scanner.cpp
+    schema_scanner/schema_column_stats_usage_scanner.cpp
     schema_scanner/schema_charsets_scanner.cpp
     schema_scanner/schema_collations_scanner.cpp
     schema_scanner/schema_statistics_scanner.cpp
@@ -144,12 +160,15 @@ set(EXEC_FILES
     schema_scanner/schema_be_threads_scanner.cpp
     schema_scanner/schema_be_logs_scanner.cpp
     schema_scanner/schema_fe_metrics_scanner.cpp
+    schema_scanner/schema_fe_threads_scanner.cpp
     schema_scanner/schema_fe_tablet_schedules_scanner.cpp
     schema_scanner/schema_be_compactions_scanner.cpp
     schema_scanner/schema_be_bvars_scanner.cpp
     schema_scanner/schema_be_cloud_native_compactions_scanner.cpp
+    schema_scanner/schema_be_tablet_write_log_scanner.cpp
     schema_scanner/schema_pipe_files.cpp
     schema_scanner/schema_pipes.cpp
+    schema_scanner/schema_recyclebin_catalogs.cpp
     schema_scanner/starrocks_role_edges_scanner.cpp
     schema_scanner/starrocks_grants_to_scanner.cpp
     schema_scanner/schema_helper.cpp
@@ -160,8 +179,16 @@ set(EXEC_FILES
     schema_scanner/sys_fe_locks.cpp
     schema_scanner/sys_fe_memory_usage.cpp
     schema_scanner/schema_temp_tables_scanner.cpp
+    schema_scanner/schema_warehouse_metrics.cpp
+    schema_scanner/schema_warehouse_queries.cpp
+    schema_scanner/schema_cluster_snapshots_scanner.cpp
+    schema_scanner/schema_cluster_snapshot_jobs_scanner.cpp
+    schema_scanner/schema_applicable_roles_scanner.cpp
+    schema_scanner/schema_keywords_scanner.cpp
+    schema_scanner/schema_tablet_reshard_jobs_scanner.cpp
     jdbc_scanner.cpp
     sorting/compare_column.cpp
+    sorting/merge.cpp
     sorting/merge_column.cpp
     sorting/merge_path.cpp
     sorting/merge_cascade.cpp
@@ -181,16 +208,17 @@ set(EXEC_FILES
     pipeline/exchange/spillable_multi_cast_local_exchange.cpp
     pipeline/exchange/multi_cast_local_exchange_sink_operator.cpp
     pipeline/exchange/multi_cast_local_exchange_source_operator.cpp
+    pipeline/exchange/split_local_exchange.cpp
     pipeline/exchange/sink_buffer.cpp
     pipeline/fragment_executor.cpp
     pipeline/operator.cpp
     pipeline/source_operator.cpp
     pipeline/limit_operator.cpp
+    pipeline/offset_operator.cpp
     pipeline/pipeline_builder.cpp
     pipeline/project_operator.cpp
     pipeline/dict_decode_operator.cpp
-    pipeline/result_sink_operator.cpp
-    pipeline/olap_table_sink_operator.cpp
+    pipeline/scan/glm_manager.cpp
     pipeline/scan/balanced_chunk_buffer.cpp
     pipeline/scan/chunk_source.cpp
     pipeline/scan/morsel.cpp
@@ -210,9 +238,9 @@ set(EXEC_FILES
     pipeline/scan/schema_scan_operator.cpp
     pipeline/scan/schema_scan_context.cpp
     pipeline/sink/connector_sink_operator.cpp
-    pipeline/sink/iceberg_table_sink_operator.cpp
+    pipeline/sink/olap_table_sink_operator.cpp
+    pipeline/sink/result_sink_operator.cpp
     pipeline/sink/sink_io_buffer.cpp
-    pipeline/sink/hive_table_sink_operator.cpp
     pipeline/sink/table_function_table_sink_operator.cpp
     pipeline/sink/blackhole_table_sink_operator.cpp
     pipeline/scan/morsel.cpp
@@ -236,6 +264,7 @@ set(EXEC_FILES
     pipeline/sort/spillable_partition_sort_sink_operator.cpp
     pipeline/sort/local_parallel_merge_sort_source_operator.cpp
     pipeline/sort/sort_context.cpp
+    pipeline/pipeline_metrics.cpp
     pipeline/pipeline_driver_executor.cpp
     pipeline/pipeline_driver_queue.cpp
     pipeline/pipeline_driver_poller.cpp
@@ -256,6 +285,7 @@ set(EXEC_FILES
     pipeline/assert_num_rows_operator.cpp
     pipeline/set/union_passthrough_operator.cpp
     pipeline/set/union_const_source_operator.cpp
+    pipeline/set/raw_values_source_operator.cpp
     pipeline/hashjoin/hash_join_build_operator.cpp
     pipeline/hashjoin/hash_join_probe_operator.cpp
     pipeline/hashjoin/hash_joiner_factory.cpp
@@ -284,7 +314,22 @@ set(EXEC_FILES
     pipeline/group_execution/execution_group.cpp
     pipeline/group_execution/execution_group_builder.cpp
     pipeline/group_execution/group_operator.cpp
+    pipeline/schedule/timeout_tasks.cpp
+    pipeline/schedule/event_scheduler.cpp
+    pipeline/schedule/observer.cpp
+    pipeline/schedule/pipeline_timer.cpp
+    pipeline/wait_operator.cpp
+    pipeline/runtime_filter_types.cpp
+    pipeline/fetch_task.cpp
+    pipeline/fetch_processor.cpp
+    pipeline/fetch_sink_operator.cpp
+    pipeline/fetch_source_operator.cpp
+    pipeline/lookup_request.cpp
+    pipeline/lookup_operator.cpp
+    workgroup/pipeline_executor_set.cpp
+    workgroup/pipeline_executor_set_manager.cpp
     workgroup/work_group.cpp
+    workgroup/mem_tracker_manager.cpp
     workgroup/scan_executor.cpp
     workgroup/scan_task_queue.cpp
     query_cache/multilane_operator.cpp
@@ -315,6 +360,26 @@ set(EXEC_FILES
     stream/aggregate/stream_aggregate_operator.cpp
     stream/stream_aggregate_node.cpp)
 
-add_library(Exec STATIC
+add_library(join_hash_map_inst_objs OBJECT
+    join/join_hash_map_mapping_inst.cpp
+    join/join_hash_map_linear_chained_inst.cpp
+    join/join_hash_map_linear_chained_set_inst.cpp
+    join/join_hash_map_bucket_chained_inst.cpp
+    join/join_hash_map_asof_inst.cpp
+)
+
+IF(ENABLE_MULTI_DYNAMIC_LIBS)
+    set_property(TARGET join_hash_map_inst_objs PROPERTY POSITION_INDEPENDENT_CODE ON)
+ENDIF()
+
+target_precompile_headers(join_hash_map_inst_objs
+    PRIVATE
+    join/join_hash_map.h
+    join/join_hash_map.hpp
+    join/join_hash_map_method.hpp
+)
+
+ADD_BE_LIB(Exec
     ${EXEC_FILES}
+    $<TARGET_OBJECTS:join_hash_map_inst_objs>
 )

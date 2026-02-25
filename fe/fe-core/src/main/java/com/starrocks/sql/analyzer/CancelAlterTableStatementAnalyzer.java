@@ -19,14 +19,17 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
-import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.ast.TableRef;
+
+import static com.starrocks.sql.analyzer.AnalyzerUtils.normalizedTableRef;
 
 public class CancelAlterTableStatementAnalyzer {
 
     public static void analyze(CancelAlterTableStmt statement, ConnectContext context) {
-        MetaUtils.normalizationTableName(context, statement.getDbTableName());
+        TableRef tableRef = normalizedTableRef(statement.getTableRef(), context);
+        statement.setTableRef(tableRef);
         // Check db.
-        if (context.getGlobalStateMgr().getDb(statement.getDbName()) == null) {
+        if (context.getGlobalStateMgr().getLocalMetastore().getDb(statement.getDbName()) == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, statement.getDbName());
         }
     }

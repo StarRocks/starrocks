@@ -19,6 +19,8 @@
 
 #include "exec/schema_scanner.h"
 #include "exec/workgroup/work_group.h"
+#include "exprs/chunk_predicate_evaluator.h"
+#include "runtime/descriptors_ext.h"
 
 namespace starrocks::pipeline {
 
@@ -54,6 +56,45 @@ Status SchemaChunkSource::prepare(RuntimeState* state) {
 
     const std::vector<SlotDescriptor*>& src_slot_descs = _schema_scanner->get_slot_descs();
     const std::vector<SlotDescriptor*>& dest_slot_descs = _dest_tuple_desc->slots();
+
+    // For compatibility of xxx_time column type changed from double to datetime in fe_tablet_schedules table.
+    // TODO(wyb): introduced in v4.0, can be removed in the v4.1
+    if (schema_table->schema_table_type() == TSchemaTableType::SCH_FE_TABLET_SCHEDULES) {
+        for (auto* slot_desc : dest_slot_descs) {
+            const auto& col_name = slot_desc->col_name();
+            if (slot_desc->type().type == TYPE_DOUBLE &&
+                (boost::iequals(col_name, "CREATE_TIME") || boost::iequals(col_name, "SCHEDULE_TIME") ||
+                 boost::iequals(col_name, "FINISH_TIME"))) {
+                slot_desc->type().type = TYPE_DATETIME;
+            }
+        }
+    } else if (schema_table->schema_table_type() == TSchemaTableType::SCH_MATERIALIZED_VIEWS) {
+        for (auto* slot_desc : dest_slot_descs) {
+            const auto& col_name = slot_desc->col_name();
+            if (slot_desc->type().type == TYPE_VARCHAR && boost::iequals(col_name, "MATERIALIZED_VIEW_ID")) {
+                slot_desc->type().type = TYPE_BIGINT;
+            } else if (slot_desc->type().type == TYPE_VARCHAR && boost::iequals(col_name, "TASK_ID")) {
+                slot_desc->type().type = TYPE_BIGINT;
+            } else if (slot_desc->type().type == TYPE_VARCHAR && boost::iequals(col_name, "LAST_REFRESH_START_TIME")) {
+                slot_desc->type().type = TYPE_DATETIME;
+            } else if (slot_desc->type().type == TYPE_VARCHAR &&
+                       boost::iequals(col_name, "LAST_REFRESH_FINISHED_TIME")) {
+                slot_desc->type().type = TYPE_DATETIME;
+            } else if (slot_desc->type().type == TYPE_VARCHAR && boost::iequals(col_name, "TABLE_ROWS")) {
+                slot_desc->type().type = TYPE_BIGINT;
+            } else if (slot_desc->type().type == TYPE_VARCHAR && boost::iequals(col_name, "LAST_REFRESH_DURATION")) {
+                slot_desc->type().type = TYPE_DOUBLE;
+            }
+        }
+    } else if (schema_table->schema_table_type() == TSchemaTableType::SCH_PARTITIONS_META) {
+        for (auto* slot_desc : dest_slot_descs) {
+            const auto& col_name = slot_desc->col_name();
+            if (slot_desc->type().type == TYPE_VARCHAR && boost::iequals(col_name, "DATA_SIZE")) {
+                slot_desc->type().type = TYPE_BIGINT;
+            }
+        }
+    }
+
     int slot_num = dest_slot_descs.size();
     if (src_slot_descs.empty()) {
         slot_num = 0;
@@ -116,7 +157,7 @@ Status SchemaChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
         DCHECK(dest_slot_descs[i]->is_materialized());
         int j = _index_map[i];
         SlotDescriptor* src_slot = src_slot_descs[j];
-        ColumnPtr column = ColumnHelper::create_column(src_slot->type(), src_slot->is_nullable());
+        MutableColumnPtr column = ColumnHelper::create_column(src_slot->type(), src_slot->is_nullable());
         column->reserve(state->chunk_size());
         chunk_src->append_column(std::move(column), src_slot->id());
     }
@@ -127,7 +168,7 @@ Status SchemaChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
     }
 
     for (auto dest_slot_desc : dest_slot_descs) {
-        ColumnPtr column = ColumnHelper::create_column(dest_slot_desc->type(), dest_slot_desc->is_nullable());
+        MutableColumnPtr column = ColumnHelper::create_column(dest_slot_desc->type(), dest_slot_desc->is_nullable());
         chunk_dst->append_column(std::move(column), dest_slot_desc->id());
     }
 
@@ -148,8 +189,8 @@ Status SchemaChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
 
         for (size_t i = 0; i < dest_slot_descs.size(); ++i) {
             int j = _index_map[i];
-            ColumnPtr& src_column = chunk_src->get_column_by_slot_id(src_slot_descs[j]->id());
-            ColumnPtr& dst_column = chunk_dst->get_column_by_slot_id(dest_slot_descs[i]->id());
+            const ColumnPtr& src_column = chunk_src->get_column_by_slot_id(src_slot_descs[j]->id());
+            auto* dst_column = chunk_dst->get_column_raw_ptr_by_slot_id(dest_slot_descs[i]->id());
             dst_column->append(*src_column);
         }
 
@@ -157,7 +198,7 @@ Status SchemaChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
             SCOPED_TIMER(_filter_timer);
             auto& conjunct_ctxs = _ctx->conjunct_ctxs();
             if (!conjunct_ctxs.empty()) {
-                RETURN_IF_ERROR(ExecNode::eval_conjuncts(conjunct_ctxs, chunk_dst.get()));
+                RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(conjunct_ctxs, chunk_dst.get()));
             }
         }
         row_num = chunk_dst->num_rows();

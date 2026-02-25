@@ -14,9 +14,14 @@
 
 #pragma once
 
-#include "column/hash_set.h"
-#include "common/config.h"
-#include "runtime/memory/allocator.h"
+#include <type_traits>
+
+#include "base/hash/hash_fwd.h"
+#include "base/phmap/phmap_fwd_decl.h"
+#include "common/logging.h"
+#include "common/memory/allocator.h"
+#include "exec/agg_hash_fwd.h"
+#include "runtime/memory/roaring_hook.h"
 
 namespace starrocks {
 
@@ -43,7 +48,7 @@ public:
 
     T* allocate(size_t n) {
         DCHECK(tls_agg_state_allocator != nullptr);
-        return static_cast<T*>(tls_agg_state_allocator->alloc(n * sizeof(T)));
+        return static_cast<T*>(tls_agg_state_allocator->checked_alloc(n * sizeof(T)));
     }
 
     void deallocate(T* ptr, size_t n) {
@@ -80,6 +85,8 @@ public:
 private:
     Allocator* _prev = nullptr;
 };
+#define SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(allocator) \
+    auto VARNAME_LINENUM(alloc_setter) = ThreadLocalAggregateStateAllocatorSetter(allocator)
 
 template <typename T>
 using HashSetWithAggStateAllocator =
@@ -87,4 +94,26 @@ using HashSetWithAggStateAllocator =
 
 using SliceHashSetWithAggStateAllocator = phmap::flat_hash_set<SliceWithHash, HashOnSliceWithHash, EqualOnSliceWithHash,
                                                                AggregateStateAllocator<SliceWithHash>>;
+using SliceTwoLevelHashSetWithAggStateAllocator =
+        phmap::parallel_flat_hash_set<SliceWithHash, HashOnSliceWithHash, EqualOnSliceWithHash,
+                                      AggregateStateAllocator<SliceWithHash>>;
+
+template <typename T>
+using VectorWithAggStateAllocator = std::vector<T, AggregateStateAllocator<T>>;
+
+// Thread local aggregate state allocator setter with roaring allocator
+class ThreadLocalStateAllocatorSetter {
+public:
+    ThreadLocalStateAllocatorSetter(Allocator* allocator)
+            : _agg_state_allocator_setter(allocator), _roaring_allocator_setter(allocator) {}
+    ~ThreadLocalStateAllocatorSetter() = default;
+
+private:
+    ThreadLocalAggregateStateAllocatorSetter _agg_state_allocator_setter;
+    ThreadLocalRoaringAllocatorSetter _roaring_allocator_setter;
+};
+
+#define SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(allocator) \
+    auto VARNAME_LINENUM(alloc_setter) = ThreadLocalStateAllocatorSetter(allocator)
+
 } // namespace starrocks

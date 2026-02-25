@@ -17,11 +17,11 @@
 #include <condition_variable>
 #include <utility>
 
+#include "base/concurrency/moodycamel/concurrentqueue.h"
+#include "base/concurrency/spinlock.h"
 #include "column/vectorized_fwd.h"
 #include "runtime/data_stream_recvr.h"
 #include "serde/protobuf_serde.h"
-#include "util/moodycamel/concurrentqueue.h"
-#include "util/spinlock.h"
 
 namespace google::protobuf {
 class Closure;
@@ -260,11 +260,11 @@ private:
     // distribution of received sequence numbers:
     // part1: { sequence | 1 <= sequence <= _max_processed_sequence }
     // part2: { sequence | seq = _max_processed_sequence + i, i > 1 }
-    phmap::flat_hash_map<int, int64_t> _max_processed_sequences;
+    phmap::flat_hash_map<int, int64_t, StdHash<int>> _max_processed_sequences;
     // chunk request may be out-of-order, but we have to deal with it in order
     // key of first level is be_number
     // key of second level is request sequence
-    phmap::flat_hash_map<int, phmap::flat_hash_map<int64_t, ChunkList>> _buffered_chunk_queues;
+    phmap::flat_hash_map<int, phmap::flat_hash_map<int64_t, ChunkList>, StdHash<int>> _buffered_chunk_queues;
 
     std::atomic<bool> _is_chunk_meta_built{false};
 

@@ -15,22 +15,22 @@
 #include "exec/schema_scanner/schema_be_threads_scanner.h"
 
 #include "agent/master_info.h"
+#include "common/thread/thread.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/string_value.h"
 #include "types/logical_type.h"
-#include "util/thread.h"
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaBeThreadsScanner::_s_columns[] = {
         {"BE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
-        {"GROUP", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"GROUP", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"PTHREAD_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"TID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"IDLE", TypeDescriptor::from_logical_type(TYPE_BOOLEAN), 1, false},
         {"FINISHED_TASKS", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"BOUND_CPUS", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
 };
 
 SchemaBeThreadsScanner::SchemaBeThreadsScanner()
@@ -53,46 +53,51 @@ Status SchemaBeThreadsScanner::fill_chunk(ChunkPtr* chunk) {
     for (; _cur_idx < end; _cur_idx++) {
         auto& info = _infos[_cur_idx];
         for (const auto& [slot_id, index] : slot_id_to_index_map) {
-            if (slot_id < 1 || slot_id > 7) {
+            if (slot_id < 1 || slot_id > 8) {
                 return Status::InternalError(strings::Substitute("invalid slot id:$0", slot_id));
             }
-            ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
+            auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(slot_id);
             switch (slot_id) {
             case 1: {
                 // be id
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&_be_id);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&_be_id);
                 break;
             }
             case 2: {
                 // group
                 Slice v(info.group);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&v);
                 break;
             }
             case 3: {
                 // name
                 Slice v(info.name);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&v);
                 break;
             }
             case 4: {
                 // pthread_id
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.pthread_id);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.pthread_id);
                 break;
             }
             case 5: {
                 // os tid
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.tid);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.tid);
                 break;
             }
             case 6: {
                 // idle
-                fill_column_with_slot<TYPE_BOOLEAN>(column.get(), (void*)&info.idle);
+                fill_column_with_slot<TYPE_BOOLEAN>(column, (void*)&info.idle);
                 break;
             }
             case 7: {
                 // finished_tasks
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.finished_tasks);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.finished_tasks);
+                break;
+            }
+            case 8: {
+                // num_bound_cpu_cores
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.num_bound_cpu_cores);
                 break;
             }
             default:

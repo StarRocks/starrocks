@@ -41,6 +41,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.TraceManager;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.memory.estimate.IgnoreMemoryTrack;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TPublishVersionRequest;
@@ -65,6 +66,7 @@ public class PublishVersionTask extends AgentTask {
     private final List<Long> errorTablets;
     private Set<Long> errorReplicas;
     private final long commitTimestamp;
+    @IgnoreMemoryTrack
     private final TransactionState txnState;
     private Span span;
     private boolean enableSyncPublish;
@@ -189,7 +191,7 @@ public class PublishVersionTask extends AgentTask {
             LOG.warn("backend not found or no replicas on backend, backendid={}", backendId);
             return;
         }
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             LOG.warn("db not found dbid={}", dbId);
             return;
@@ -204,7 +206,7 @@ public class PublishVersionTask extends AgentTask {
             LOG.info("during publish version some tablets were dropped(maybe by alter), tabletIds={}", droppedTablets);
         }
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
+        locker.lockDatabase(db.getId(), LockType.WRITE);
         try {
             // TODO: persistent replica version
             for (int i = 0; i < tabletVersions.size(); i++) {
@@ -213,10 +215,13 @@ public class PublishVersionTask extends AgentTask {
                 if (replica == null) {
                     continue;
                 }
-                replica.updateVersion(tabletVersion.version);
+                long reportedVersion = tabletVersion.version;
+                long minReadableVersion = tabletVersion.isSetMin_readable_version() ?
+                        tabletVersion.getMin_readable_version() : replica.getMinReadableVersion();
+                replica.updateRowCount(reportedVersion, minReadableVersion, replica.getDataSize(), replica.getRowCount());
             }
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
             if (span != null) {
                 span.addEvent("update_replica_version_finish");
             }

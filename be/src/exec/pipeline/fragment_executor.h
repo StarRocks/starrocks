@@ -77,6 +77,8 @@ public:
         return _unique_request.params.__isset.pipeline_sink_dop ? _unique_request.params.pipeline_sink_dop : 1;
     }
 
+    const std::vector<TExecDebugOption>& debug_actions() const { return _unique_request.params.exec_debug_options; }
+
     const TUniqueId& fragment_instance_id() const { return _unique_request.params.fragment_instance_id; }
     int32_t sender_id() const { return _unique_request.params.sender_id; }
 
@@ -105,8 +107,13 @@ public:
                    const TExecPlanFragmentParams& unique_request);
     Status execute(ExecEnv* exec_env);
 
-private:
+    static Status append_incremental_scan_ranges(ExecEnv* exec_env, const TExecPlanFragmentParams& request,
+                                                 TExecPlanFragmentResult* response);
+
+    Status prepare_global_state(ExecEnv* exec_env, const TExecPlanFragmentParams& common_request);
     void _fail_cleanup(bool fragment_has_registed);
+
+private:
     uint32_t _calc_dop(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) const;
     uint32_t _calc_sink_dop(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) const;
     int _calc_delivery_expired_seconds(const UnifiedExecPlanFragmentParams& request) const;

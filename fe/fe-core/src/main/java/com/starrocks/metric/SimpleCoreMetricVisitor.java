@@ -72,6 +72,8 @@ public class SimpleCoreMetricVisitor extends MetricVisitor {
 
     public static final String MAX_TABLET_COMPACTION_SCORE = "max_tablet_compaction_score";
 
+    public static final String CACHE_MISS_RATIO = "cache_miss_ratio";
+
     private static final Map<String, String> CORE_METRICS = Maps.newHashMap();
 
     static {
@@ -82,6 +84,7 @@ public class SimpleCoreMetricVisitor extends MetricVisitor {
         CORE_METRICS.put(REQUEST_PER_SECOND, TYPE_DOUBLE);
         CORE_METRICS.put(QUERY_ERR_RATE, TYPE_DOUBLE);
         CORE_METRICS.put(MAX_TABLET_COMPACTION_SCORE, TYPE_LONG);
+        CORE_METRICS.put(CACHE_MISS_RATIO, TYPE_DOUBLE);
     }
 
     private StringBuilder sb;
@@ -131,7 +134,16 @@ public class SimpleCoreMetricVisitor extends MetricVisitor {
     }
 
     @Override
+    public void visitHistogram(HistogramMetric histogram) {
+    }
+
+    @Override
     public void visitHistogram(String name, Histogram histogram) {
+        // skip HistogramMetric since it needs extra processing
+        if (histogram instanceof HistogramMetric) {
+            visitHistogram((HistogramMetric) histogram);
+            return;
+        }
         if (!CORE_METRICS.containsKey(name)) {
             return;
         }

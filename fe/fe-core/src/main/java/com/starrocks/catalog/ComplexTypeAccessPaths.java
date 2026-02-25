@@ -16,6 +16,7 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.starrocks.type.ComplexTypeAccessPath;
 
 import java.util.Objects;
 

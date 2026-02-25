@@ -16,18 +16,19 @@
 #include <immintrin.h>
 #endif
 
-#include <runtime/decimalv3.h>
+#include <base/decimal_types.h>
+#include <types/decimalv3.h>
 #include <types/logical_type.h>
-#include <util/decimal_types.h>
 
 #include <cmath>
 #include <random>
 
+#include "base/hash/murmur_hash3.h"
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "exprs/expr.h"
+#include "exprs/function_helper.h"
 #include "exprs/math_functions.h"
-#include "util/time.h"
 
 namespace starrocks {
 
@@ -159,10 +160,6 @@ DEFINE_UNARY_FN_WITH_IMPL(ZeroCheck, value) {
     DEFINE_BINARY_FUNCTION(NAME##Impl, FN);                                                        \
     DEFINE_MATH_BINARY_WITH_OUTPUT_NAN_CHECK_FN(NAME, LTYPE, RTYPE, RESULT_TYPE);
 
-#define DEFINE_MATH_BINARY_WITH_OUTPUT_INF_NAN_CHECK_FN_WITH_IMPL(NAME, LTYPE, RTYPE, RESULT_TYPE, FN) \
-    DEFINE_BINARY_FUNCTION(NAME##Impl, FN);                                                            \
-    DEFINE_MATH_BINARY_WITH_OUTPUT_INF_NAN_CHECK_FN(NAME, LTYPE, RTYPE, RESULT_TYPE);
-
 // ============ math function impl ==========
 StatusOr<ColumnPtr> MathFunctions::pi(FunctionContext* context, const Columns& columns) {
     return ColumnHelper::create_const_column<TYPE_DOUBLE>(M_PI, 1);
@@ -263,6 +260,7 @@ DEFINE_MATH_UNARY_FN_CAST_WITH_IMPL(abs_tinyint, TYPE_TINYINT, TYPE_SMALLINT, st
 DEFINE_MATH_UNARY_FN_WITH_IMPL(abs_decimal32, TYPE_DECIMAL32, TYPE_DECIMAL32, std::abs);
 DEFINE_MATH_UNARY_FN_WITH_IMPL(abs_decimal64, TYPE_DECIMAL64, TYPE_DECIMAL64, std::abs);
 DEFINE_MATH_UNARY_FN_WITH_IMPL(abs_decimal128, TYPE_DECIMAL128, TYPE_DECIMAL128, std::abs);
+DEFINE_MATH_UNARY_FN_WITH_IMPL(abs_decimal256, TYPE_DECIMAL256, TYPE_DECIMAL256, std::abs);
 
 // degrees
 DEFINE_UNARY_FN_WITH_IMPL(abs_decimalv2valImpl, v) {
@@ -306,11 +304,364 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(round_up_toImpl, l, r) {
     return MathFunctions::double_round(l, r, false, false);
 }
 
+DEFINE_BINARY_FUNCTION_WITH_IMPL(powImpl, l, r) {
+    // fast path
+    if (r == 1.0) {
+        return l;
+    } else if (r == 2.0) {
+        return l * l;
+    } else if (r == -1.0) {
+        return 1.0 / l;
+    } else if (r == 0) {
+        return 1.0;
+    }
+    return std::pow(l, r);
+}
+DEFINE_MATH_BINARY_WITH_OUTPUT_INF_NAN_CHECK_FN(pow, TYPE_DOUBLE, TYPE_DOUBLE, TYPE_DOUBLE);
+
 // binary math
 DEFINE_MATH_BINARY_FN_WITH_NAN_CHECK(truncate, TYPE_DOUBLE, TYPE_INT, TYPE_DOUBLE);
 DEFINE_MATH_BINARY_FN(round_up_to, TYPE_DOUBLE, TYPE_INT, TYPE_DOUBLE);
-DEFINE_MATH_BINARY_WITH_OUTPUT_INF_NAN_CHECK_FN_WITH_IMPL(pow, TYPE_DOUBLE, TYPE_DOUBLE, TYPE_DOUBLE, std::pow);
 DEFINE_MATH_BINARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(atan2, TYPE_DOUBLE, TYPE_DOUBLE, TYPE_DOUBLE, std::atan2);
+
+template <LogicalType Type>
+StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_decimal(FunctionContext* context, const Columns& columns) {
+    ColumnPtr c0 = columns[0];
+    ColumnPtr c1 = columns[1];
+    NullColumn::MutablePtr null_flags;
+    bool has_null = false;
+    bool c0_is_const = false;
+    PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
+    const int size = c0->size();
+    int64_t width = c1->get(0).get_int32();
+    auto decimalv3_col = ColumnHelper::cast_to_raw<Type>(c0);
+    const int32_t original_scale = decimalv3_col->scale();
+    const int32_t original_precision = decimalv3_col->precision();
+    auto& null_data = null_flags->get_data();
+    uint8_t* raw_null_flags = null_data.data();
+    RunTimeCppType<Type> max_val = 1;
+    int32 pow = original_precision;
+    while (pow > 0) {
+        max_val *= 10;
+        pow--;
+    }
+
+    const RunTimeCppType<Type>* raw_c0 = decimalv3_col->get_data().data();
+    MutableColumnPtr res = RunTimeColumnType<Type>::create(original_precision, original_scale);
+    res->resize_uninitialized(size);
+
+    // result column is mutable, use non-const raw pointer
+    RunTimeCppType<Type>* raw_res = ColumnHelper::cast_to_raw<Type>(res.get())->get_data().data();
+    // If c2 is not const, than we need to keep the originl scale
+    if (c0_is_const) {
+        raw_res[0] = raw_c0[0] - ((raw_c0[0] % width) + width) % width;
+        res->resize(1);
+        res = ConstColumn::create(std::move(res), size);
+    } else {
+        for (auto i = 0; i < size; i++) {
+            raw_res[i] = raw_c0[i] - ((raw_c0[i] % width) + width) % width;
+        }
+    }
+#define ABS(x) ((x) < 0 ? -(x) : (x))
+    for (int i = 0; i < size; i++) {
+        if (raw_null_flags[i] != 1 && ABS(raw_res[i]) >= max_val) {
+            std::stringstream error;
+            error << "Truncate to decimal(" << original_precision << ", " << original_scale
+                  << ") failed, because the result is overflow.";
+            context->set_error(error.str().c_str());
+            return Status::RuntimeError(error.str());
+        }
+    }
+#undef ABS
+    if (has_null) {
+        res = NullableColumn::create(std::move(res), std::move(null_flags));
+    }
+    return res;
+}
+
+template StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_decimal<TYPE_DECIMAL32>(FunctionContext*, const Columns&);
+template StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_decimal<TYPE_DECIMAL64>(FunctionContext*, const Columns&);
+template StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_decimal<TYPE_DECIMAL128>(FunctionContext*, const Columns&);
+
+template <LogicalType Type>
+StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_int(FunctionContext* context, const Columns& columns) {
+    ColumnPtr c0 = columns[0];
+    ColumnPtr c1 = columns[1];
+    NullColumn::MutablePtr null_flags;
+    bool has_null = false;
+    bool c0_is_const = false;
+    PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
+    const int size = c0->size();
+    int64_t width = c1->get(0).get_int32();
+
+    uint8_t* raw_null_flags = null_flags->get_data().data();
+    auto int_col = ColumnHelper::cast_to_raw<Type>(c0);
+    const RunTimeCppType<Type>* raw_c0 = int_col->get_data().data();
+    MutableColumnPtr res = RunTimeColumnType<Type>::create();
+    res->resize_uninitialized(size);
+
+    // result column is mutable, use non-const raw pointer
+    RunTimeCppType<Type>* raw_res = ColumnHelper::cast_to_raw<Type>(res.get())->get_data().data();
+    // If c2 is not const, than we need to keep the originl scale
+    if (c0_is_const) {
+        raw_res[0] = raw_c0[0] - ((raw_c0[0] % width) + width) % width;
+        res->resize(1);
+        res = ConstColumn::create(std::move(res), size);
+    } else {
+        for (auto i = 0; i < size; i++) {
+            raw_res[i] = raw_c0[i] - ((raw_c0[i] % width) + width) % width;
+        }
+    }
+#define haveDifferentSigns(x, y) (((x) ^ (y)) < 0)
+    for (int i = 0; i < size; i++) {
+        if (raw_null_flags[i] != 1 && haveDifferentSigns(raw_res[i], raw_c0[i])) {
+            std::stringstream error;
+            error << "Truncate to integer failed, because the result is overflow.";
+            context->set_error(error.str().c_str());
+            return Status::RuntimeError(error.str());
+        }
+    }
+#undef haveDifferentSigns
+    if (has_null) {
+        res = NullableColumn::create(std::move(res), std::move(null_flags));
+    }
+    return res;
+}
+template StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_int<TYPE_INT>(FunctionContext*, const Columns&);
+template StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_int<TYPE_BIGINT>(FunctionContext*, const Columns&);
+
+template <LogicalType Type>
+StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_int(FunctionContext* context, const Columns& columns) {
+    ColumnPtr c0 = columns[0];
+    ColumnPtr c1 = columns[1];
+    NullColumn::MutablePtr null_flags;
+    bool has_null = false;
+    bool c0_is_const = false;
+    PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
+    const int size = c0->size();
+    int64_t width = c1->get(0).get_int32();
+
+    auto col = ColumnHelper::cast_to_raw<Type>(c0);
+    MutableColumnPtr res = RunTimeColumnType<TYPE_UNSIGNED_INT>::create();
+    res->resize_uninitialized(size);
+    const RunTimeCppType<Type>* raw_c0 = col->get_data().data();
+    // result column is mutable, use non-const raw pointer
+    RunTimeCppType<TYPE_UNSIGNED_INT>* raw_res =
+            ColumnHelper::cast_to_raw<TYPE_UNSIGNED_INT>(res.get())->get_data().data();
+    // If c2 is not const, than we need to keep the originl scale
+
+    if (c0_is_const) {
+        int64_t val = raw_c0[0];
+        murmur_hash3_x86_32(&val, sizeof(val), 0, (void*)&raw_res[0]);
+        raw_res[0] = (raw_res[0] & INT_MAX) % width;
+        res->resize(1);
+        res = ConstColumn::create(std::move(res), size);
+    } else {
+        for (auto i = 0; i < size; i++) {
+            int64_t val = raw_c0[i];
+            murmur_hash3_x86_32(&val, sizeof(val), 0, (void*)&raw_res[i]);
+            raw_res[i] = (raw_res[i] & INT_MAX) % width;
+        }
+    }
+
+    if (has_null) {
+        res = NullableColumn::create(std::move(res), std::move(null_flags));
+    }
+    return res;
+}
+
+template StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_int<TYPE_INT>(FunctionContext*, const Columns&);
+template StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_int<TYPE_BIGINT>(FunctionContext*, const Columns&);
+
+StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_string(FunctionContext* context, const Columns& columns) {
+    ColumnPtr c0 = columns[0];
+    ColumnPtr c1 = columns[1];
+    NullColumn::MutablePtr null_flags;
+    bool has_null = false;
+    bool c0_is_const = false;
+    PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
+    const int size = c0->size();
+    int64_t width = c1->get(0).get_int32();
+
+    auto col = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(c0);
+    MutableColumnPtr res = RunTimeColumnType<TYPE_UNSIGNED_INT>::create();
+    res->resize_uninitialized(size);
+    auto raw_c0 = col->get_proxy_data();
+    // result column is mutable, use non-const raw pointer
+    RunTimeCppType<TYPE_UNSIGNED_INT>* raw_res =
+            ColumnHelper::cast_to_raw<TYPE_UNSIGNED_INT>(res.get())->get_data().data();
+    // If c2 is not const, than we need to keep the originl scale
+
+    if (c0_is_const) {
+        murmur_hash3_x86_32(raw_c0[0].data, raw_c0[0].size, 0, (void*)&raw_res[0]);
+        raw_res[0] = (raw_res[0] & INT_MAX) % width;
+        res->resize(1);
+        res = ConstColumn::create(std::move(res), size);
+    } else {
+        for (auto i = 0; i < size; i++) {
+            murmur_hash3_x86_32(raw_c0[i].data, raw_c0[i].size, 0, (void*)&raw_res[i]);
+            raw_res[i] = (raw_res[i] & INT_MAX) % width;
+        }
+    }
+
+    if (has_null) {
+        res = NullableColumn::create(std::move(res), std::move(null_flags));
+    }
+    return res;
+}
+
+StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_date(FunctionContext* context, const Columns& columns) {
+    ColumnPtr c0 = columns[0];
+    ColumnPtr c1 = columns[1];
+    NullColumn::MutablePtr null_flags;
+    bool has_null = false;
+    bool c0_is_const = false;
+    PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
+    const int size = c0->size();
+    int64_t width = c1->get(0).get_int32();
+
+    auto col = ColumnHelper::cast_to_raw<TYPE_DATE>(c0);
+    MutableColumnPtr res = RunTimeColumnType<TYPE_UNSIGNED_INT>::create();
+    res->resize_uninitialized(size);
+    const RunTimeCppType<TYPE_DATE>* raw_c0 = col->get_data().data();
+    // result column is mutable, use non-const raw pointer
+    RunTimeCppType<TYPE_UNSIGNED_INT>* raw_res =
+            ColumnHelper::cast_to_raw<TYPE_UNSIGNED_INT>(res.get())->get_data().data();
+    // If c2 is not const, than we need to keep the originl scale
+
+    if (c0_is_const) {
+        int64_t val = raw_c0[0].julian() - date::UNIX_EPOCH_JULIAN;
+        murmur_hash3_x86_32(&val, sizeof(int64_t), 0, (void*)&raw_res[0]);
+        raw_res[0] = (raw_res[0] & INT_MAX) % width;
+        res->resize(1);
+        res = ConstColumn::create(std::move(res), size);
+    } else {
+        for (auto i = 0; i < size; i++) {
+            int64_t val = raw_c0[i].julian() - date::UNIX_EPOCH_JULIAN;
+            murmur_hash3_x86_32(&val, sizeof(int64_t), 0, (void*)&raw_res[i]);
+            raw_res[i] = (raw_res[i] & INT_MAX) % width;
+        }
+    }
+
+    if (has_null) {
+        res = NullableColumn::create(std::move(res), std::move(null_flags));
+    }
+    return res;
+}
+
+StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_datetime(FunctionContext* context, const Columns& columns) {
+    ColumnPtr c0 = columns[0];
+    ColumnPtr c1 = columns[1];
+    NullColumn::MutablePtr null_flags;
+    bool has_null = false;
+    bool c0_is_const = false;
+    PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
+    const int size = c0->size();
+    int64_t width = c1->get(0).get_int32();
+
+    auto col = ColumnHelper::cast_to_raw<TYPE_DATETIME>(c0);
+    MutableColumnPtr res = RunTimeColumnType<TYPE_UNSIGNED_INT>::create();
+    res->resize_uninitialized(size);
+    const RunTimeCppType<TYPE_DATETIME>* raw_c0 = col->get_data().data();
+    // result column is mutable, use non-const raw pointer
+    RunTimeCppType<TYPE_UNSIGNED_INT>* raw_res =
+            ColumnHelper::cast_to_raw<TYPE_UNSIGNED_INT>(res.get())->get_data().data();
+    // If c2 is not const, than we need to keep the originl scale
+
+    if (c0_is_const) {
+        int64_t result = timestamp::to_julian(raw_c0[0].timestamp());
+        result *= SECS_PER_DAY;
+        result -= timestamp::UNIX_EPOCH_SECONDS;
+        result *= 1000000L;
+        result += timestamp::to_time(raw_c0[0].timestamp());
+        murmur_hash3_x86_32(&result, sizeof(int64_t), 0, (void*)&raw_res[0]);
+        raw_res[0] = (raw_res[0] & INT_MAX) % width;
+        res->resize(1);
+        res = ConstColumn::create(std::move(res), size);
+    } else {
+        for (auto i = 0; i < size; i++) {
+            int64_t result = timestamp::to_julian(raw_c0[i].timestamp());
+            result *= SECS_PER_DAY;
+            result -= timestamp::UNIX_EPOCH_SECONDS;
+            result *= 1000000L;
+            result += timestamp::to_time(raw_c0[i].timestamp());
+            murmur_hash3_x86_32(&result, sizeof(int64_t), 0, (void*)&raw_res[i]);
+            raw_res[i] = (raw_res[i] & INT_MAX) % width;
+        }
+    }
+
+    if (has_null) {
+        res = NullableColumn::create(std::move(res), std::move(null_flags));
+    }
+    return res;
+}
+
+template <typename T>
+vector<uint8_t> MathFunctions::int_to_byte_array(T value) {
+    std::vector<uint8_t> byteArray(sizeof(value));
+    memcpy(byteArray.data(), &value, sizeof(value));
+    if (value < 0) {
+        value = ~value;
+    }
+    int bitLength = 0;
+    while (value > 0) {
+        value >>= 1;
+        bitLength++;
+    }
+    // Convert the integer to its byte representation (Big Endian)
+    byteArray.resize(bitLength / 8 + 1);
+    std::reverse(byteArray.begin(), byteArray.end());
+    return byteArray;
+}
+
+template vector<uint8_t> MathFunctions::int_to_byte_array<int32_t>(int32_t value);
+template vector<uint8_t> MathFunctions::int_to_byte_array<int64_t>(int64_t value);
+template vector<uint8_t> MathFunctions::int_to_byte_array<int128_t>(int128_t value);
+
+template <LogicalType Type>
+StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_decimal(FunctionContext* context, const Columns& columns) {
+    ColumnPtr c0 = columns[0];
+    ColumnPtr c1 = columns[1];
+    NullColumn::MutablePtr null_flags;
+    bool has_null = false;
+    bool c0_is_const = false;
+    PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
+    const int size = c0->size();
+    int64_t width = c1->get(0).get_int32();
+    auto decimalv3_col = ColumnHelper::cast_to_raw<Type>(c0);
+
+    MutableColumnPtr res = RunTimeColumnType<TYPE_UNSIGNED_INT>::create();
+    res->resize_uninitialized(size);
+    const RunTimeCppType<Type>* raw_c0 = decimalv3_col->get_data().data();
+    // result column is mutable, use non-const raw pointer
+    RunTimeCppType<TYPE_UNSIGNED_INT>* raw_res =
+            ColumnHelper::cast_to_raw<TYPE_UNSIGNED_INT>(res.get())->get_data().data();
+    // If c2 is not const, than we need to keep the originl scale
+    if (c0_is_const) {
+        auto result = raw_c0[0];
+        auto byte_array = int_to_byte_array(result);
+        murmur_hash3_x86_32(byte_array.data(), byte_array.size(), 0, (void*)&raw_res[0]);
+        raw_res[0] = (raw_res[0] & INT_MAX) % width;
+        res->resize(1);
+        res = ConstColumn::create(std::move(res), size);
+    } else {
+        for (auto i = 0; i < size; i++) {
+            auto result = raw_c0[i];
+            auto byte_array = int_to_byte_array(result);
+            murmur_hash3_x86_32(byte_array.data(), byte_array.size(), 0, (void*)&raw_res[i]);
+            raw_res[i] = (raw_res[i] & INT_MAX) % width;
+        }
+    }
+
+    if (has_null) {
+        res = NullableColumn::create(std::move(res), std::move(null_flags));
+    }
+    return res;
+}
+
+template StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_decimal<TYPE_DECIMAL32>(FunctionContext*, const Columns&);
+template StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_decimal<TYPE_DECIMAL64>(FunctionContext*, const Columns&);
+template StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_decimal<TYPE_DECIMAL128>(FunctionContext*, const Columns&);
 
 #undef DEFINE_MATH_UNARY_FN
 #undef DEFINE_MATH_UNARY_FN_WITH_IMPL
@@ -504,7 +855,7 @@ StatusOr<ColumnPtr> MathFunctions::decimal_round(FunctionContext* context, const
         return ColumnHelper::create_const_null_column(c0->size());
     }
 
-    NullColumnPtr null_flags;
+    NullColumn::MutablePtr null_flags;
     bool has_null = false;
     if (c0->has_null() || c1->has_null()) {
         has_null = true;
@@ -527,15 +878,20 @@ StatusOr<ColumnPtr> MathFunctions::decimal_round(FunctionContext* context, const
     c0 = FunctionHelper::get_data_column_of_nullable(c0);
     c1 = FunctionHelper::get_data_column_of_nullable(c1);
 
-    ColumnPtr res = RunTimeColumnType<TYPE_DECIMAL128>::create(type.precision, type.scale);
+    MutableColumnPtr res = RunTimeColumnType<TYPE_DECIMAL128>::create(type.precision, type.scale);
     res->resize_uninitialized(size);
 
     const int32_t original_scale = ColumnHelper::cast_to_raw<TYPE_DECIMAL128>(c0)->scale();
 
-    int128_t* raw_c0 = ColumnHelper::cast_to_raw<TYPE_DECIMAL128>(c0)->get_data().data();
-    int32_t* raw_c1 = ColumnHelper::cast_to_raw<TYPE_INT>(c1)->get_data().data();
-    int128_t* raw_res = ColumnHelper::cast_to_raw<TYPE_DECIMAL128>(res)->get_data().data();
-    uint8_t* raw_null_flags = null_flags->get_data().data();
+    auto* res_col = ColumnHelper::cast_to_raw<TYPE_DECIMAL128>(res.get());
+    auto* c0_col = ColumnHelper::cast_to_raw<TYPE_DECIMAL128>(c0);
+    auto* c1_col = ColumnHelper::cast_to_raw<TYPE_INT>(c1);
+
+    const int128_t* raw_c0 = c0_col->get_data().data();
+    const int32_t* raw_c1 = c1_col->get_data().data();
+    int128_t* raw_res = res_col->get_data().data();
+    auto& null_data = null_flags->get_data();
+    uint8_t* raw_null_flags = null_data.data();
 
     // If c2 is not const, than we need to keep the originl scale
     // TODO(hcf) For truncate(v, d), we also to keep the scale if d is constant
@@ -547,7 +903,7 @@ StatusOr<ColumnPtr> MathFunctions::decimal_round(FunctionContext* context, const
             res = ColumnHelper::create_const_null_column(size);
         } else {
             res->resize(1);
-            res = ConstColumn::create(res, size);
+            res = ConstColumn::create(std::move(res), size);
         }
     } else if (c0_is_const) {
         for (auto i = 0; i < size; i++) {
@@ -769,9 +1125,10 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
     const Column* target = columns[1].get();
     size_t target_size = target->size();
     if (base->size() != target_size) {
-        return Status::InvalidArgument(fmt::format(
-                "cosine_similarity requires equal length arrays. base array size is {} and target array size is {}.",
-                base->size(), target->size()));
+        return Status::InvalidArgument(
+                fmt::format("cosine_similarity requires equal length arrays. base array size is {} and target "
+                            "array size is {}.",
+                            base->size(), target->size()));
     }
     if (base->has_null() || target->has_null()) {
         return Status::InvalidArgument(
@@ -779,13 +1136,13 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
                             base->has_null() ? "base" : "target"));
     }
     if (base->is_constant()) {
-        auto* const_column = down_cast<const ConstColumn*>(base);
-        const_column->data_column()->assign(base->size(), 0);
+        const auto* const_column = down_cast<const ConstColumn*>(base);
+        const_column->data_column()->as_mutable_raw_ptr()->assign(base->size(), 0);
         base = const_column->data_column().get();
     }
     if (target->is_constant()) {
-        auto* const_column = down_cast<const ConstColumn*>(target);
-        const_column->data_column()->assign(target->size(), 0);
+        const auto* const_column = down_cast<const ConstColumn*>(target);
+        const_column->data_column()->as_mutable_raw_ptr()->assign(target->size(), 0);
         target = const_column->data_column().get();
     }
 
@@ -798,12 +1155,12 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
 
     // check dimension equality.
     const Column* base_flat = down_cast<const ArrayColumn*>(base)->elements_column().get();
-    const uint32_t* base_offset = down_cast<const ArrayColumn*>(base)->offsets().get_data().data();
+    const uint32_t* base_offset = down_cast<const ArrayColumn*>(base)->offsets().immutable_data().data();
     size_t base_flat_size = base_flat->size();
 
     const Column* target_flat = down_cast<const ArrayColumn*>(target)->elements_column().get();
     size_t target_flat_size = target_flat->size();
-    const uint32_t* target_offset = down_cast<const ArrayColumn*>(target)->offsets().get_data().data();
+    const uint32_t* target_offset = down_cast<const ArrayColumn*>(target)->offsets().immutable_data().data();
 
     if (base_flat_size != target_flat_size) {
         return Status::InvalidArgument("cosine_similarity requires equal length arrays");
@@ -822,11 +1179,11 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
     using CppType = RunTimeCppType<TYPE>;
     using ColumnType = RunTimeColumnType<TYPE>;
 
-    const CppType* base_data_head = down_cast<const ColumnType*>(base_flat)->get_data().data();
-    const CppType* target_data_head = down_cast<const ColumnType*>(target_flat)->get_data().data();
+    const CppType* base_data_head = down_cast<const ColumnType*>(base_flat)->immutable_data().data();
+    const CppType* target_data_head = down_cast<const ColumnType*>(target_flat)->immutable_data().data();
 
     // prepare result with nullable value.
-    ColumnPtr result = ColumnHelper::create_column(TypeDescriptor{TYPE}, false, false, target_size);
+    MutableColumnPtr result = ColumnHelper::create_column(TypeDescriptor{TYPE}, false, false, target_size);
     ColumnType* data_result = down_cast<ColumnType*>(result.get());
     CppType* result_data = data_result->get_data().data();
 
@@ -886,9 +1243,12 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
                 target_sum += target_data[j] * target_data[j];
             }
         }
-
         if constexpr (!isNorm) {
-            result_value = sum / (std::sqrt(base_sum) * std::sqrt(target_sum));
+            if (base_sum == 0 || target_sum == 0) {
+                result_value = 0;
+            } else {
+                result_value = sum / (std::sqrt(base_sum) * std::sqrt(target_sum));
+            }
         } else {
             result_value = sum;
         }
@@ -899,10 +1259,115 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
     return result;
 }
 
-// explicitly instaniate template function.
+// explicitly instantiate template function.
 template StatusOr<ColumnPtr> MathFunctions::cosine_similarity<TYPE_FLOAT, true>(FunctionContext* context,
                                                                                 const Columns& columns);
 template StatusOr<ColumnPtr> MathFunctions::cosine_similarity<TYPE_FLOAT, false>(FunctionContext* context,
                                                                                  const Columns& columns);
 
+template <LogicalType TYPE>
+StatusOr<ColumnPtr> MathFunctions::l2_distance(FunctionContext* context, const Columns& columns) {
+    DCHECK_EQ(columns.size(), 2);
+
+    const Column* base = columns[0].get();
+    const Column* target = columns[1].get();
+    size_t target_size = target->size();
+    if (base->size() != target_size) {
+        return Status::InvalidArgument(fmt::format(
+                "l2_distance requires equal length arrays. base array size is {} and target array size is {}.",
+                base->size(), target->size()));
+    }
+    if (base->has_null() || target->has_null()) {
+        return Status::InvalidArgument(fmt::format("l2_distance does not support null values. {} array has null value.",
+                                                   base->has_null() ? "base" : "target"));
+    }
+    if (base->is_constant()) {
+        auto* const_column = down_cast<const ConstColumn*>(base);
+        const_column->data_column()->as_mutable_raw_ptr()->assign(base->size(), 0);
+        base = const_column->data_column().get();
+    }
+    if (target->is_constant()) {
+        auto* const_column = down_cast<const ConstColumn*>(target);
+        const_column->data_column()->as_mutable_raw_ptr()->assign(target->size(), 0);
+        target = const_column->data_column().get();
+    }
+    if (base->is_nullable()) {
+        base = down_cast<const NullableColumn*>(base)->data_column().get();
+    }
+    if (target->is_nullable()) {
+        target = down_cast<const NullableColumn*>(target)->data_column().get();
+    }
+
+    // check dimension equality.
+    const Column* base_flat = down_cast<const ArrayColumn*>(base)->elements_column().get();
+    const uint32_t* base_offset = down_cast<const ArrayColumn*>(base)->offsets().immutable_data().data();
+    size_t base_flat_size = base_flat->size();
+
+    const Column* target_flat = down_cast<const ArrayColumn*>(target)->elements_column().get();
+    size_t target_flat_size = target_flat->size();
+    const uint32_t* target_offset = down_cast<const ArrayColumn*>(target)->offsets().immutable_data().data();
+
+    if (base_flat_size != target_flat_size) {
+        return Status::InvalidArgument("l2_distance requires equal length arrays");
+    }
+
+    if (base_flat->has_null() || target_flat->has_null()) {
+        return Status::InvalidArgument("l2_distance does not support null values");
+    }
+    if (base_flat->is_nullable()) {
+        base_flat = down_cast<const NullableColumn*>(base_flat)->data_column().get();
+    }
+    if (target_flat->is_nullable()) {
+        target_flat = down_cast<const NullableColumn*>(target_flat)->data_column().get();
+    }
+
+    using CppType = RunTimeCppType<TYPE>;
+    using ColumnType = RunTimeColumnType<TYPE>;
+
+    const CppType* base_data_head = down_cast<const ColumnType*>(base_flat)->immutable_data().data();
+    const CppType* target_data_head = down_cast<const ColumnType*>(target_flat)->immutable_data().data();
+
+    // prepare result with nullable value.
+    MutableColumnPtr result = ColumnHelper::create_column(TypeDescriptor{TYPE}, false, false, target_size);
+    ColumnType* data_result = down_cast<ColumnType*>(result.get());
+    CppType* result_data = data_result->get_data().data();
+
+    for (size_t i = 0; i < target_size; i++) {
+        size_t t_dim_size = target_offset[i + 1] - target_offset[i];
+        size_t b_dim_size = base_offset[i + 1] - base_offset[i];
+        if (t_dim_size != b_dim_size) {
+            return Status::InvalidArgument(
+                    fmt::format("l2_distance requires equal length arrays in each row. base array dimension size "
+                                "is {}, target array dimension size is {}.",
+                                b_dim_size, t_dim_size));
+        }
+        if (t_dim_size == 0) {
+            return Status::InvalidArgument("l2_distance requires non-empty arrays in each row");
+        }
+    }
+
+    const CppType* target_data = target_data_head;
+    const CppType* base_data = base_data_head;
+
+    for (size_t i = 0; i < target_size; i++) {
+        CppType sum = 0;
+        size_t dim_size = target_offset[i + 1] - target_offset[i];
+        for (size_t j = 0; j < dim_size; j++) {
+            CppType distance;
+            distance = (base_data[j] - target_data[j]) * (base_data[j] - target_data[j]);
+            sum += distance;
+        }
+        result_data[i] = sum;
+        target_data += dim_size;
+        base_data += dim_size;
+    }
+
+    return result;
+}
+
+// explicitly instantiate template function.
+template StatusOr<ColumnPtr> MathFunctions::l2_distance<TYPE_FLOAT>(FunctionContext* context, const Columns& columns);
+
 } // namespace starrocks
+
+#include "gen_cpp/opcode/MathFunctions.inc"

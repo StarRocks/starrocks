@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Preconditions;
@@ -21,7 +20,6 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
-import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 
 import java.util.BitSet;
@@ -62,7 +60,10 @@ public class CTEUtils {
 
             if (root.arity() > 0) {
                 collectCteOperatorsImpl(root.inputAt(0), context, searchConsume);
+            } else {
+                context.getCteContext().addForceCTE(consume.getCteId());
             }
+
             return;
         }
 
@@ -97,13 +98,14 @@ public class CTEUtils {
     // Collect statistics of CTEProduceOperator outside of memo, used by only by table pruning features.
     public static void collectForceCteStatisticsOutsideMemo(OptExpression root, OptimizerContext context) {
         root.getInputs().forEach(input -> collectForceCteStatisticsOutsideMemo(input, context));
-        if (OperatorType.LOGICAL_CTE_ANCHOR.equals(root.getOp().getOpType())) {
-            Preconditions.checkState(root.getInputs().get(0).getOp() instanceof LogicalCTEProduceOperator);
-            LogicalCTEProduceOperator produce = (LogicalCTEProduceOperator) root.getInputs().get(0).getOp();
-            calculateStatistics(root.inputAt(0), context);
-            context.getCteContext().addCTEStatistics(produce.getCteId(), root.inputAt(0).getStatistics());
+        if (OperatorType.LOGICAL_CTE_PRODUCE.equals(root.getOp().getOpType())) {
+            LogicalCTEProduceOperator produce = (LogicalCTEProduceOperator) root.getOp();
+
+            calculateStatistics(root, context);
+            context.getCteContext().addCTEStatistics(produce.getCteId(), root.getStatistics());
         }
     }
+
     private static void calculateStatistics(OptExpression expr, OptimizerContext context) {
         // don't ask cte consume children
         if (expr.getOp().getOpType() != OperatorType.LOGICAL_CTE_CONSUME) {
@@ -122,7 +124,7 @@ public class CTEUtils {
                         .anyMatch(ColumnStatistic::isUnknown)) {
             // Can't evaluated the effect of CTE if don't know statistic,
             // Mark output rows is zero, will choose inline when CTEContext check output rows
-            expr.setStatistics(Statistics.buildFrom(expressionContext.getStatistics()).setOutputRowCount(0).build());
+            expr.setStatistics(expressionContext.getStatistics().withOutputRowCount(0));
         } else {
             expr.setStatistics(expressionContext.getStatistics());
         }

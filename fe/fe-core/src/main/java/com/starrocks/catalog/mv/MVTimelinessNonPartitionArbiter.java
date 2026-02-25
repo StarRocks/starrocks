@@ -25,7 +25,6 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
-import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -37,8 +36,8 @@ import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 public final class MVTimelinessNonPartitionArbiter extends MVTimelinessArbiter {
     private static final Logger LOG = LogManager.getLogger(MVTimelinessNonPartitionArbiter.class);
 
-    public MVTimelinessNonPartitionArbiter(MaterializedView mv, boolean isQueryRewrite) {
-        super(mv, isQueryRewrite);
+    public MVTimelinessNonPartitionArbiter(MaterializedView mv, QueryRewriteParams queryRewriteParams) {
+        super(mv, queryRewriteParams);
     }
 
     /**
@@ -64,29 +63,35 @@ public final class MVTimelinessNonPartitionArbiter extends MVTimelinessArbiter {
             // skip check external table if the external does not support rewrite.
             if (!table.isNativeTableOrMaterializedView() && isDisableExternalForceQueryRewrite) {
                 logMVPrepare(mv, "Non-partitioned contains external table, and it's disabled query rewrite");
-                return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.FULL);
+                return MvUpdateInfo.fullRefresh(mv);
             }
 
             // once mv's base table has updated, refresh the materialized view totally.
-            // once mv's base table has updated, refresh the materialized view totally.
-            MvBaseTableUpdateInfo mvBaseTableUpdateInfo = getMvBaseTableUpdateInfo(mv, table, true, isQueryRewrite);
+            MvBaseTableUpdateInfo mvBaseTableUpdateInfo = getMvBaseTableUpdateInfo(mv, table, true, queryRewriteParams);
             // TODO: fixme if mvBaseTableUpdateInfo is null, should return full refresh?
             if (mvBaseTableUpdateInfo != null &&
-                    CollectionUtils.isNotEmpty(mvBaseTableUpdateInfo.getToRefreshPartitionNames())) {
+                    mvBaseTableUpdateInfo.getToRefreshPCells() != null &&
+                    !mvBaseTableUpdateInfo.getToRefreshPCells().isEmpty()) {
                 logMVPrepare(mv, "Non-partitioned base table has updated, need refresh totally.");
-                return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.FULL);
+                return MvUpdateInfo.fullRefresh(mv);
             }
         }
-        return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.NO_REFRESH);
+        return MvUpdateInfo.noRefresh(mv);
     }
 
     @Override
-    protected MvUpdateInfo getMVTimelinessUpdateInfoInLoose() {
+    public MvUpdateInfo getMVTimelinessUpdateInfoInLoose() {
         List<Partition> partitions = Lists.newArrayList(mv.getPartitions());
-        if (partitions.size() > 0 && partitions.get(0).getVisibleVersion() <= 1) {
+        if (partitions.size() > 0 && partitions.get(0).getDefaultPhysicalPartition().getVisibleVersion() <= 1) {
             // the mv is newly created, can not use it to rewrite query.
-            return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.FULL);
+            return MvUpdateInfo.fullRefresh(mv);
         }
-        return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.NO_REFRESH);
+        return MvUpdateInfo.noRefresh(mv);
+    }
+
+    @Override
+    public MvUpdateInfo getMVTimelinessUpdateInfoInForceMVMode() {
+        // for force mv mode, always no need to refresh for non-partitioned mv.
+        return MvUpdateInfo.noRefresh(mv);
     }
 }

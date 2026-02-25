@@ -14,10 +14,8 @@
 
 #pragma once
 
-#include "exprs/anyval_util.h"
-#include "runtime/datetime_value.h"
-#include "runtime/string_value.h"
 #include "types/bitmap_value.h"
+#include "types/datetime_value.h"
 
 namespace starrocks {
 
@@ -49,10 +47,6 @@ inline int32_t serialize_size(const DecimalV2Value& v) {
     return DECIMAL_BYTE_SIZE;
 }
 
-template <>
-inline int32_t serialize_size(const StringValue& v) {
-    return v.len + 4;
-}
 // serialize_size end
 
 // write_to start

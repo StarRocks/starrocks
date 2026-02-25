@@ -19,6 +19,7 @@
 #include <memory>
 #include <vector>
 
+#include "base/testutil/assert.h"
 #include "column/column_helper.h"
 #include "storage/column_aggregate_func.h"
 
@@ -40,6 +41,7 @@ TEST(ChunkAggregatorTest, testNoneAggregator) {
     SchemaPtr schema = std::make_shared<Schema>(fields);
 
     ChunkAggregator aggregator(schema.get(), 1024, 0.9);
+    ASSERT_OK(aggregator.prepare());
 
     ASSERT_EQ(true, aggregator.source_exhausted());
 
@@ -51,9 +53,9 @@ TEST(ChunkAggregatorTest, testNoneAggregator) {
         v_col->append(1);
     }
 
-    Columns cols{k_col, v_col};
+    Columns cols({std::move(k_col), std::move(v_col)});
 
-    ChunkPtr chunk = std::make_shared<Chunk>(cols, schema);
+    ChunkPtr chunk = std::make_shared<Chunk>(std::move(cols), schema);
 
     aggregator.update_source(chunk);
     ASSERT_EQ(true, aggregator.is_do_aggregate());
@@ -71,7 +73,7 @@ TEST(ChunkAggregatorTest, testNoneAggregator) {
 
     ASSERT_EQ(1, ck->num_rows());
 
-    auto r_col = down_cast<Int32Column*>(ck->get_column_by_index(1).get());
+    auto r_col = down_cast<const Int32Column*>(ck->get_column_raw_ptr_by_index(1));
 
     ASSERT_EQ(1024, r_col->get_data()[0]);
 
@@ -89,7 +91,7 @@ TEST(ChunkAggregatorTest, testNonKeyColumnsByMask) {
     SchemaPtr schema = std::make_shared<Schema>(fields);
 
     ChunkAggregator aggregator(schema.get(), 1024, 0, true, false);
-
+    ASSERT_OK(aggregator.prepare());
     ASSERT_EQ(true, aggregator.source_exhausted());
 
     auto v_col = Int32Column::create();
@@ -102,8 +104,8 @@ TEST(ChunkAggregatorTest, testNonKeyColumnsByMask) {
             source_masks.emplace_back(RowSourceMask{0, true});
         }
     }
-    Columns cols{v_col};
-    ChunkPtr chunk = std::make_shared<Chunk>(cols, schema);
+    Columns cols{std::move(v_col)};
+    ChunkPtr chunk = std::make_shared<Chunk>(std::move(cols), schema);
 
     aggregator.update_source(chunk, &source_masks);
     ASSERT_EQ(true, aggregator.is_do_aggregate());
@@ -118,7 +120,7 @@ TEST(ChunkAggregatorTest, testNonKeyColumnsByMask) {
 
     auto ck = aggregator.aggregate_result();
     ASSERT_EQ(512, ck->num_rows());
-    auto r_col = down_cast<Int32Column*>(ck->get_column_by_index(0).get());
+    auto r_col = down_cast<const Int32Column*>(ck->get_column_raw_ptr_by_index(0));
     for (size_t i = 0; i < ck->num_rows(); ++i) {
         ASSERT_EQ(2, r_col->get_data()[i]);
     }

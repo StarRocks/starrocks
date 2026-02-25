@@ -50,7 +50,7 @@ public class LoadTimeoutChecker extends FrontendDaemon {
     private LoadMgr loadManager;
 
     public LoadTimeoutChecker(LoadMgr loadManager) {
-        super("Load job timeout checker", Config.load_checker_interval_second * 1000L);
+        super("load-job-timeout-checker", Config.load_checker_interval_second * 1000L);
         this.loadManager = loadManager;
     }
 

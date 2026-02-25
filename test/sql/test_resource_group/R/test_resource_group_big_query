@@ -45,12 +45,25 @@ create resource group rg_${uuid0}
 with w1 as (select * from t1 union all select * from t1 
     union all select * from t1 union all select * from t1 
     union all select * from t1 union all select * from t1 
+    union all select * from t1 union all select * from t1 
+    union all select * from t1 union all select * from t1 
+    union all select * from t1 union all select * from t1 
+    union all select * from t1 union all select * from t1
+    union all select * from t1 union all select * from t1
+    union all select * from t1 union all select * from t1
+    union all select * from t1 union all select * from t1
+    union all select * from t1 union all select * from t1
+    union all select * from t1 union all select * from t1
+    union all select * from t1 union all select * from t1
     union all select * from t1 union all select * from t1)
 select /*+SET_VAR(resource_group='rg_${uuid0}')*/ count(1) from w1;
 -- result:
 [REGEX].*exceed big query cpu limit: current is \d+ns but limit is 1000000000ns.*
 -- !result
 alter resource group rg_${uuid0} with ('big_query_cpu_second_limit'='0','big_query_scan_rows_limit'='1');
+-- result:
+-- !result
+set enable_rewrite_simple_agg_to_meta_scan = false;
 -- result:
 -- !result
 select /*+SET_VAR(resource_group='rg_${uuid0}')*/ count(1) from t1;

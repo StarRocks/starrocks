@@ -1,0 +1,7 @@
+label: Query Tuning
+position: 200
+collapsed: true
+link:
+  type: generated-index
+  title: Query Tuning Best Practices
+  description: Learn how to analyze, tune, and optimize queries in StarRocks.

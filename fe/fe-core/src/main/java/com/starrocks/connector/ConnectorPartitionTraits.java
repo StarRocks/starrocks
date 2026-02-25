@@ -17,16 +17,14 @@ package com.starrocks.connector;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Range;
-import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.connector.partitiontraits.BenchmarkPartitionTraits;
 import com.starrocks.connector.partitiontraits.CachedPartitionTraits;
 import com.starrocks.connector.partitiontraits.DeltaLakePartitionTraits;
 import com.starrocks.connector.partitiontraits.HivePartitionTraits;
@@ -38,12 +36,15 @@ import com.starrocks.connector.partitiontraits.OdpsPartitionTraits;
 import com.starrocks.connector.partitiontraits.OlapPartitionTraits;
 import com.starrocks.connector.partitiontraits.PaimonPartitionTraits;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.common.PListCell;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
+import com.starrocks.type.Type;
 import org.apache.commons.lang.NotImplementedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -74,9 +75,12 @@ public abstract class ConnectorPartitionTraits {
                     .put(Table.TableType.KUDU, KuduPartitionTraits::new)
                     .put(Table.TableType.JDBC, JDBCPartitionTraits::new)
                     .put(Table.TableType.DELTALAKE, DeltaLakePartitionTraits::new)
+                    .put(Table.TableType.BENCHMARK, BenchmarkPartitionTraits::new)
                     .build();
 
     protected Table table;
+
+    protected boolean queryMVRewrite = false;
 
     public static boolean isSupported(Table.TableType tableType) {
         return TRAITS_TABLE.containsKey(tableType);
@@ -100,12 +104,15 @@ public abstract class ConnectorPartitionTraits {
      * @param table the table to build partition traits
      * @return the partition traits
      */
-    public static ConnectorPartitionTraits buildWithCache(ConnectContext ctx, Table table) {
+    public static ConnectorPartitionTraits buildWithCache(ConnectContext ctx, MaterializedView mv, Table table) {
         ConnectorPartitionTraits delegate = buildWithoutCache(table);
         if (Config.enable_mv_query_context_cache && ctx != null && ctx.getQueryMVContext() != null) {
             QueryMaterializationContext queryMVContext = ctx.getQueryMVContext();
             Cache<Object, Object> cache = queryMVContext.getMvQueryContextCache();
-            return new CachedPartitionTraits(cache, delegate, queryMVContext.getQueryCacheStats());
+            if (cache == null || queryMVContext.getQueryCacheStats() == null) {
+                return delegate;
+            }
+            return new CachedPartitionTraits(cache, delegate, queryMVContext.getQueryCacheStats(), mv);
         } else {
             return delegate;
         }
@@ -116,9 +123,14 @@ public abstract class ConnectorPartitionTraits {
      * @param table the table to build partition traits
      * @return the partition traits
      */
+    public static ConnectorPartitionTraits build(MaterializedView mv, Table table) {
+        ConnectContext ctx = ConnectContext.get();
+        return buildWithCache(ctx, mv, table);
+    }
+
     public static ConnectorPartitionTraits build(Table table) {
         ConnectContext ctx = ConnectContext.get();
-        return buildWithCache(ctx, table);
+        return buildWithCache(ctx, null, table);
     }
 
     private static ConnectorPartitionTraits buildWithoutCache(Table table) {
@@ -145,8 +157,15 @@ public abstract class ConnectorPartitionTraits {
      */
     public abstract PartitionKey createEmptyKey();
 
-    public abstract String getDbName();
+    public String getCatalogDBName() {
+        return table.getCatalogDBName();
+    }
 
+    /**
+     * `createPartitionKeyWithType` is deprecated, use `createPartitionKey` instead.
+     * partition values should take care time zone for Iceberg table which is handled by `createPartitionKey`.
+     */
+    @Deprecated
     public abstract PartitionKey createPartitionKeyWithType(List<String> values, List<Type> types) throws AnalysisException;
 
     public abstract PartitionKey createPartitionKey(List<String> partitionValues, List<Column> partitionColumns)
@@ -166,7 +185,7 @@ public abstract class ConnectorPartitionTraits {
      *
      * @apiNote it must be a range-partitioned table
      */
-    public abstract Map<String, Range<PartitionKey>> getPartitionKeyRange(Column partitionColumn, Expr partitionExpr)
+    public abstract PCellSortedSet getPartitionKeyRange(Column partitionColumn, Expr partitionExpr)
             throws AnalysisException;
 
     /**
@@ -174,7 +193,7 @@ public abstract class ConnectorPartitionTraits {
      *
      * @apiNote it must be a list-partitioned table
      */
-    public abstract Map<String, PListCell> getPartitionList(Column partitionColumn) throws AnalysisException;
+    public abstract PCellSortedSet getPartitionCells(List<Column> partitionColumns) throws AnalysisException;
 
     public abstract Map<String, PartitionInfo> getPartitionNameWithPartitionInfo();
 
@@ -194,4 +213,29 @@ public abstract class ConnectorPartitionTraits {
      */
     public abstract Set<String> getUpdatedPartitionNames(List<BaseTableInfo> baseTables,
                                                          MaterializedView.AsyncRefreshContext context);
+
+    /**
+     * Get updated partitions based on updated time, return partition names if the partition is updated after the checkTime.
+     * For external table, we get partition update time from other system, there may be a time
+     * inconsistency between the two systems, so we add extraSeconds to make sure partition update
+     * time is later than check time
+     * @param checkTime the time to check
+     * @param extraSeconds partition updated time would add extraSeconds to check whether it is after checkTime
+     */
+    public abstract Set<String> getUpdatedPartitionNames(LocalDateTime checkTime, int extraSeconds);
+
+    /**
+     * Get the last update time of the table,
+     * For external table, we get partition update time from other system, there may be a time
+     * inconsistency between the two systems, so we add extraSeconds
+     */
+    public abstract LocalDateTime getTableLastUpdateTime(int extraSeconds);
+
+    public void setQueryMVRewrite(boolean value) {
+        queryMVRewrite = value;
+    }
+
+    public boolean isQueryMVRewrite() {
+        return queryMVRewrite;
+    }
 }

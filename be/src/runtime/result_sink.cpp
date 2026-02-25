@@ -38,23 +38,27 @@
 
 #include "common/config.h"
 #include "exprs/expr.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 #include "runtime/buffer_control_block.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#ifndef __APPLE__
 #include "runtime/file_result_writer.h"
+#endif
+#include "base/uid_util.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/mysql_result_writer.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/runtime_state.h"
 #include "runtime/statistic_result_writer.h"
 #include "runtime/variable_result_writer.h"
-#include "util/uid_util.h"
 
 namespace starrocks {
 
 ResultSink::ResultSink(const RowDescriptor& row_desc, const std::vector<TExpr>& t_output_expr, const TResultSink& sink,
                        int buffer_size)
-        : _t_output_expr(t_output_expr), _buf_size(buffer_size) {
+        : _row_desc(row_desc), _t_output_expr(t_output_expr), _buf_size(buffer_size) {
     if (!sink.__isset.type || sink.type == TResultSinkType::MYSQL_PROTOCAL) {
         _sink_type = TResultSinkType::MYSQL_PROTOCAL;
     } else {
@@ -65,19 +69,25 @@ ResultSink::ResultSink(const RowDescriptor& row_desc, const std::vector<TExpr>& 
         _format_type = sink.format;
     }
 
+#ifndef __APPLE__
     if (_sink_type == TResultSinkType::FILE) {
         CHECK(sink.__isset.file_options);
         _file_opts = std::make_shared<ResultFileOptions>(sink.file_options);
     }
+#endif
 
     _is_binary_format = sink.is_binary_row;
+
+    if (sink.__isset.output_column_names) {
+        _output_column_names = sink.output_column_names;
+    }
 }
 
 Status ResultSink::prepare_exprs(RuntimeState* state) {
     // From the thrift expressions create the real exprs.
-    RETURN_IF_ERROR(Expr::create_expr_trees(state->obj_pool(), _t_output_expr, &_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprFactory::create_expr_trees(state->obj_pool(), _t_output_expr, &_output_expr_ctxs, state));
     // Prepare the exprs to run.
-    RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_output_expr_ctxs, state));
     return Status::OK();
 }
 
@@ -103,10 +113,12 @@ Status ResultSink::prepare(RuntimeState* state) {
         _writer.reset(new (std::nothrow)
                               MysqlResultWriter(_sender.get(), _output_expr_ctxs, _is_binary_format, _profile));
         break;
+#ifndef __APPLE__
     case TResultSinkType::FILE:
         CHECK(_file_opts.get() != nullptr);
         _writer.reset(new (std::nothrow) FileResultWriter(_file_opts.get(), _output_expr_ctxs, _profile));
         break;
+#endif
     case TResultSinkType::STATISTIC:
         _writer.reset(new (std::nothrow) StatisticResultWriter(_sender.get(), _output_expr_ctxs, _profile));
         break;
@@ -125,7 +137,7 @@ Status ResultSink::prepare(RuntimeState* state) {
 
 Status ResultSink::open(RuntimeState* state) {
     RETURN_IF_ERROR(_writer->open(state));
-    return Expr::open(_output_expr_ctxs, state);
+    return ExprExecutor::open(_output_expr_ctxs, state);
 }
 
 Status ResultSink::send_chunk(RuntimeState* state, Chunk* chunk) {
@@ -162,7 +174,7 @@ Status ResultSink::close(RuntimeState* state, Status exec_status) {
     }
     (void)state->exec_env()->result_mgr()->cancel_at_time(time(nullptr) + config::result_buffer_cancelled_interval_time,
                                                           state->fragment_instance_id());
-    Expr::close(_output_expr_ctxs, state);
+    ExprExecutor::close(_output_expr_ctxs, state);
 
     _closed = true;
     return Status::OK();

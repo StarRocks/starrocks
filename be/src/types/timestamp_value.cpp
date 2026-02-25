@@ -14,8 +14,9 @@
 
 #include "types/timestamp_value.h"
 
-#include "runtime/time_types.h"
-#include "util/timezone_utils.h"
+#include "base/time/time.h"
+#include "base/time/timezone_utils.h"
+#include "types/time_types.h"
 
 namespace starrocks {
 TimestampValue TimestampValue::MAX_TIMESTAMP_VALUE{timestamp::MAX_TIMESTAMP};
@@ -105,21 +106,17 @@ bool TimestampValue::from_string(const char* date_str, size_t len) {
         return false;
     }
 
-    auto process = [&](int year, int month, int day, int hour, int minute, int second, int microsecond) {
-        if (!timestamp::check(year, month, day, hour, minute, second, microsecond)) {
-            return false;
-        }
-        from_timestamp(year, month, day, hour, minute, second, microsecond);
-        return true;
-    };
-
-    // If `date_str` only contains date part, then pass constant zero for hour/minute/second/usec
-    // to make compiler eliminate some compution logic.
-    if (is_only_date) {
-        return process(res.year, res.month, res.day, 0, 0, 0, 0);
-    } else {
-        return process(res.year, res.month, res.day, res.hour, res.minute, res.second, res.microsecond);
+    if (!is_only_date && !timestamp::check_time(res.hour, res.minute, res.second, res.microsecond)) {
+        return false;
     }
+
+    // The from_string_to_datetime function already validates parsed values
+    // in both SIMD and generic parsing paths, so no need for redundant checks
+    _timestamp = is_only_date ? timestamp::from_datetime(res.year, res.month, res.day, 0, 0, 0, 0)
+                              : timestamp::from_datetime(res.year, res.month, res.day, res.hour, res.minute, res.second,
+                                                         res.microsecond);
+
+    return true;
 }
 
 // process string content based on format like "%Y-%m-%d". '-' means any char.
@@ -827,11 +824,39 @@ void TimestampValue::trunc_to_quarter() {
     _timestamp = timestamp::from_datetime(year, month_to_quarter[month], 1, 0, 0, 0, 0);
 }
 
+// return seconds since epoch.
 int64_t TimestampValue::to_unix_second() const {
     int64_t result = timestamp::to_julian(_timestamp);
     result *= SECS_PER_DAY;
     result += timestamp::to_time(_timestamp) / USECS_PER_SEC;
     result -= timestamp::UNIX_EPOCH_SECONDS;
+    return result;
+}
+
+// return microseconds since epoch.
+int64_t TimestampValue::to_unix_microsecond() const {
+    int64_t result = timestamp::to_julian(_timestamp);
+    result *= SECS_PER_DAY;
+    result -= timestamp::UNIX_EPOCH_SECONDS;
+    result *= USECS_PER_SEC;
+    result += timestamp::to_time(_timestamp);
+    return result;
+}
+
+// return milliseconds since epoch.
+int64_t TimestampValue::to_unixtime() const {
+    int64_t result = timestamp::to_julian(_timestamp);
+    result *= SECS_PER_DAY;
+    result -= timestamp::UNIX_EPOCH_SECONDS;
+    result *= 1000L;
+    result += timestamp::to_time(_timestamp) / USECS_PER_MILLIS;
+    return result;
+}
+
+int64_t TimestampValue::to_unixtime(const cctz::time_zone& ctz) const {
+    int64_t offset = TimezoneUtils::to_utc_offset(ctz);
+    int64_t result = to_unixtime();
+    result -= offset * MILLIS_PER_SEC;
     return result;
 }
 
@@ -874,8 +899,11 @@ bool TimestampValue::is_valid_non_strict() const {
     return is_valid();
 }
 
-std::string TimestampValue::to_string() const {
-    return timestamp::to_string(_timestamp);
+std::string TimestampValue::to_string(bool igonre_microsecond) const {
+    if (igonre_microsecond) {
+        return timestamp::to_string<false, true>(_timestamp);
+    }
+    return timestamp::to_string<false, false>(_timestamp);
 }
 
 int TimestampValue::to_string(char* s, size_t n) const {

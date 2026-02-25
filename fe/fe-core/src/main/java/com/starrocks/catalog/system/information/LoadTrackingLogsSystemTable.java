@@ -13,29 +13,31 @@
 // limitations under the License.
 package com.starrocks.catalog.system.information;
 
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.MAX_FIELD_VARCHAR_LENGTH;
 import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class LoadTrackingLogsSystemTable {
+    public static final String NAME = "load_tracking_logs";
+
     public static SystemTable create() {
         return new SystemTable(SystemId.LOAD_TRACKING_LOGS_ID,
-                "load_tracking_logs",
+                NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("ID", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("JOB_ID", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("LABEL", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("DATABASE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("TRACKING_LOG", ScalarType.createVarchar(MAX_FIELD_VARCHAR_LENGTH))
-                        .column("TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("ID", IntegerType.BIGINT)
+                        .column("JOB_ID", IntegerType.BIGINT)
+                        .column("LABEL", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("DATABASE_NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("TRACKING_LOG", TypeFactory.createVarcharType(MAX_FIELD_VARCHAR_LENGTH))
+                        .column("TYPE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .build(), TSchemaTableType.SCH_LOAD_TRACKING_LOGS);
     }
 }

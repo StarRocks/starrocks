@@ -14,9 +14,9 @@
 
 package com.starrocks.sql.optimizer.rule.tree;
 
+import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
-import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CloneOperator;
@@ -58,16 +58,19 @@ public class CloneDuplicateColRefRule implements TreeRewriteRule {
                             .sorted(Comparator.comparing(entry -> entry.getKey().getId()))
                             .collect(Collectors.toList());
 
-            ColumnRefSet duplicateColRefs = new ColumnRefSet();
-            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : entries) {
-                if (!entry.getValue().isColumnRef()) {
-                    continue;
+            Map<ScalarOperator, Integer> duplicateColRefs = Maps.newHashMap();
+            colRefMap.forEach((k, v) -> {
+                if (!v.isColumnRef()) {
+                    return;
                 }
-                ColumnRefOperator colRef = entry.getValue().cast();
-                if (duplicateColRefs.contains(colRef)) {
-                    entry.setValue(new CloneOperator(colRef));
-                } else {
-                    duplicateColRefs.union(colRef);
+                duplicateColRefs.put(v, duplicateColRefs.getOrDefault(v, 0) + 1);
+            });
+
+            for (ColumnRefOperator key : colRefMap.keySet()) {
+                ScalarOperator value = colRefMap.get(key);
+                if (value.isColumnRef() && duplicateColRefs.get(value) > 1 && !key.equals(value)) {
+                    duplicateColRefs.put(value, duplicateColRefs.get(value) - 1);
+                    colRefMap.put(key, new CloneOperator(value));
                 }
             }
         }

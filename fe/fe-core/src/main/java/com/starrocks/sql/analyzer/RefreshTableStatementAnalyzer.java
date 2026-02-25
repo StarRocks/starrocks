@@ -15,23 +15,23 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.TableName;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.RefreshTableStmt;
-import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.ast.TableRef;
 
 public class RefreshTableStatementAnalyzer {
     public static void analyze(RefreshTableStmt statement, ConnectContext context) {
         new RefreshTableStatementAnalyzer.RefreshTableStatementAnalyzerVisitor().visit(statement, context);
     }
 
-    static class RefreshTableStatementAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class RefreshTableStatementAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
         private final MetadataMgr metadataMgr;
 
         public RefreshTableStatementAnalyzerVisitor() {
@@ -44,19 +44,19 @@ public class RefreshTableStatementAnalyzer {
 
         @Override
         public Void visitRefreshTableStatement(RefreshTableStmt statement, ConnectContext context) {
-            TableName tableName = statement.getTableName();
-            MetaUtils.normalizationTableName(context, tableName);
-            String catalogName = tableName.getCatalog();
-            String dbName = tableName.getDb();
-            String tblName = tableName.getTbl();
+            TableRef tableRef = AnalyzerUtils.normalizedTableRef(statement.getTableRef(), context);
+            statement.setTableRef(tableRef);
+            String catalogName = tableRef.getCatalogName();
+            String dbName = tableRef.getDbName();
+            String tblName = tableRef.getTableName();
 
             if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
             }
-            if (metadataMgr.getDb(catalogName, dbName) == null) {
+            if (metadataMgr.getDb(context, catalogName, dbName) == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, dbName);
             }
-            if (metadataMgr.getTable(catalogName, dbName, tblName) == null) {
+            if (metadataMgr.getTable(context, catalogName, dbName, tblName) == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tblName);
             }
 

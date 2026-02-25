@@ -19,12 +19,13 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Multiset;
 import com.google.common.collect.TreeMultiset;
-import org.junit.Assert;
-import org.junit.Test;
+import com.starrocks.utframe.StarRocksTestBase;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.CountDownLatch;
 
-public class JournalObservableTest {
+public class JournalObservableTest extends StarRocksTestBase {
     @Test
     public void testUpperBound() {
         Multiset<JournalObserver> elements = TreeMultiset.create();
@@ -36,16 +37,16 @@ public class JournalObservableTest {
 
         // empty
         {
-            Assert.assertEquals(0, JournalObservable.upperBound(elements.toArray(), 0, 1L));
+            Assertions.assertEquals(0, JournalObservable.upperBound(elements.toArray(), 0, 1L));
         }
 
         // one element
         {
             elements.add(ovserver2);
             int size = elements.size();
-            Assert.assertEquals(0, JournalObservable.upperBound(elements.toArray(), size, 1L));
-            Assert.assertEquals(1, JournalObservable.upperBound(elements.toArray(), size, 2L));
-            Assert.assertEquals(1, JournalObservable.upperBound(elements.toArray(), size, 3L));
+            Assertions.assertEquals(0, JournalObservable.upperBound(elements.toArray(), size, 1L));
+            Assertions.assertEquals(1, JournalObservable.upperBound(elements.toArray(), size, 2L));
+            Assertions.assertEquals(1, JournalObservable.upperBound(elements.toArray(), size, 3L));
         }
 
         // same element
@@ -58,20 +59,20 @@ public class JournalObservableTest {
             elements.add(ovserver42);
 
             for (JournalObserver journalObserver : elements) {
-                System.out.println(journalObserver);
+                logSysInfo(journalObserver);
             }
 
             int size = elements.size();
-            Assert.assertEquals(0, JournalObservable.upperBound(elements.toArray(), size, 1L));
-            Assert.assertEquals(1, JournalObservable.upperBound(elements.toArray(), size, 2L));
-            Assert.assertEquals(1, JournalObservable.upperBound(elements.toArray(), size, 3L));
-            Assert.assertEquals(4, JournalObservable.upperBound(elements.toArray(), size, 4L));
+            Assertions.assertEquals(0, JournalObservable.upperBound(elements.toArray(), size, 1L));
+            Assertions.assertEquals(1, JournalObservable.upperBound(elements.toArray(), size, 2L));
+            Assertions.assertEquals(1, JournalObservable.upperBound(elements.toArray(), size, 3L));
+            Assertions.assertEquals(4, JournalObservable.upperBound(elements.toArray(), size, 4L));
             elements.remove(ovserver41);
-            Assert.assertEquals(3, JournalObservable.upperBound(elements.toArray(), elements.size(), 4L));
+            Assertions.assertEquals(3, JournalObservable.upperBound(elements.toArray(), elements.size(), 4L));
             elements.remove(ovserver4);
-            Assert.assertEquals(2, JournalObservable.upperBound(elements.toArray(), elements.size(), 4L));
+            Assertions.assertEquals(2, JournalObservable.upperBound(elements.toArray(), elements.size(), 4L));
             elements.remove(ovserver42);
-            Assert.assertEquals(1, JournalObservable.upperBound(elements.toArray(), elements.size(), 4L));
+            Assertions.assertEquals(1, JournalObservable.upperBound(elements.toArray(), elements.size(), 4L));
         }
 
         // same element 2
@@ -81,11 +82,11 @@ public class JournalObservableTest {
             elements.add(ovserver41);
 
             int size = elements.size();
-            Assert.assertEquals(2, JournalObservable.upperBound(elements.toArray(), size, 4L));
+            Assertions.assertEquals(2, JournalObservable.upperBound(elements.toArray(), size, 4L));
             elements.remove(ovserver41);
-            Assert.assertEquals(1, JournalObservable.upperBound(elements.toArray(), elements.size(), 4L));
+            Assertions.assertEquals(1, JournalObservable.upperBound(elements.toArray(), elements.size(), 4L));
             elements.remove(ovserver4);
-            Assert.assertEquals(0, JournalObservable.upperBound(elements.toArray(), elements.size(), 4L));
+            Assertions.assertEquals(0, JournalObservable.upperBound(elements.toArray(), elements.size(), 4L));
         }
 
         // odd elements
@@ -98,17 +99,17 @@ public class JournalObservableTest {
             elements.add(ovserver6);
             elements.add(ovserver6);
             int size = elements.size();
-            //            System.out.println("size=" + size);
+            //            logSysInfo("size=" + size);
             //            for(int i = 0; i < size; i ++) {
-            //                System.out.println("array " + i + " = " + ((MasterOpExecutor)elements.get(i)).getTargetJournalId());
+            //                logSysInfo("array " + i + " = " + ((MasterOpExecutor)elements.get(i)).getTargetJournalId());
             //            }
-            Assert.assertEquals(0, JournalObservable.upperBound(elements.toArray(), size, 1L));
-            Assert.assertEquals(2, JournalObservable.upperBound(elements.toArray(), size, 2L));
-            Assert.assertEquals(2, JournalObservable.upperBound(elements.toArray(), size, 3L));
-            Assert.assertEquals(4, JournalObservable.upperBound(elements.toArray(), size, 4L));
-            Assert.assertEquals(4, JournalObservable.upperBound(elements.toArray(), size, 5L));
-            Assert.assertEquals(6, JournalObservable.upperBound(elements.toArray(), size, 6L));
-            Assert.assertEquals(6, JournalObservable.upperBound(elements.toArray(), size, 7L));
+            Assertions.assertEquals(0, JournalObservable.upperBound(elements.toArray(), size, 1L));
+            Assertions.assertEquals(2, JournalObservable.upperBound(elements.toArray(), size, 2L));
+            Assertions.assertEquals(2, JournalObservable.upperBound(elements.toArray(), size, 3L));
+            Assertions.assertEquals(4, JournalObservable.upperBound(elements.toArray(), size, 4L));
+            Assertions.assertEquals(4, JournalObservable.upperBound(elements.toArray(), size, 5L));
+            Assertions.assertEquals(6, JournalObservable.upperBound(elements.toArray(), size, 6L));
+            Assertions.assertEquals(6, JournalObservable.upperBound(elements.toArray(), size, 7L));
         }
         // even elements
         {
@@ -121,28 +122,28 @@ public class JournalObservableTest {
             elements.add(ovserver6);
             elements.add(ovserver6);
             int size = elements.size();
-            Assert.assertEquals(0, JournalObservable.upperBound(elements.toArray(), size, 1L));
-            Assert.assertEquals(2, JournalObservable.upperBound(elements.toArray(), size, 2L));
-            Assert.assertEquals(2, JournalObservable.upperBound(elements.toArray(), size, 3L));
-            Assert.assertEquals(5, JournalObservable.upperBound(elements.toArray(), size, 4L));
-            Assert.assertEquals(5, JournalObservable.upperBound(elements.toArray(), size, 5L));
-            Assert.assertEquals(7, JournalObservable.upperBound(elements.toArray(), size, 6L));
-            Assert.assertEquals(7, JournalObservable.upperBound(elements.toArray(), size, 7L));
+            Assertions.assertEquals(0, JournalObservable.upperBound(elements.toArray(), size, 1L));
+            Assertions.assertEquals(2, JournalObservable.upperBound(elements.toArray(), size, 2L));
+            Assertions.assertEquals(2, JournalObservable.upperBound(elements.toArray(), size, 3L));
+            Assertions.assertEquals(5, JournalObservable.upperBound(elements.toArray(), size, 4L));
+            Assertions.assertEquals(5, JournalObservable.upperBound(elements.toArray(), size, 5L));
+            Assertions.assertEquals(7, JournalObservable.upperBound(elements.toArray(), size, 6L));
+            Assertions.assertEquals(7, JournalObservable.upperBound(elements.toArray(), size, 7L));
         }
         {
             CountDownLatch latch = new CountDownLatch(1);
-            System.out.println(latch.getCount());
+            logSysInfo(latch.getCount());
 
             latch.countDown();
-            System.out.println(latch.getCount());
+            logSysInfo(latch.getCount());
 
             latch.countDown();
-            System.out.println(latch.getCount());
+            logSysInfo(latch.getCount());
 
             latch.countDown();
-            System.out.println(latch.getCount());
+            logSysInfo(latch.getCount());
         }
-        System.out.println("success");
+        logSysInfo("success");
     }
 }
 

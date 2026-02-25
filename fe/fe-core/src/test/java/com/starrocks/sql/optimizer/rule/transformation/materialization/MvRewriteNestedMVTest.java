@@ -16,27 +16,27 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.FixMethodOrder;
-import org.junit.Test;
-import org.junit.runners.MethodSorters;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.MethodOrderer.MethodName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 
-@FixMethodOrder(MethodSorters.NAME_ASCENDING)
-public class MvRewriteNestedMVTest extends MvRewriteTestBase {
+@TestMethodOrder(MethodName.class)
+public class MvRewriteNestedMVTest extends MVTestBase {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
-        MvRewriteTestBase.beforeClass();
+        MVTestBase.beforeClass();
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
 
         starRocksAssert.withTable(cluster, "depts");
         starRocksAssert.withTable(cluster, "emps");
-        starRocksAssert.withTable(cluster, "t1");
     }
 
     @Test
     public void testNestedMv() throws Exception {
+        starRocksAssert.withTable(cluster, "t1");
         starRocksAssert.withTable("CREATE TABLE nest_base_table_1 (\n" +
                 "    k1 INT,\n" +
                 "    v1 INT,\n" +
@@ -86,7 +86,7 @@ public class MvRewriteNestedMVTest extends MvRewriteTestBase {
                 " distributed by hash(empid) as" +
                 " select * from nested_mv2 where empid > 1;");
         String plan = getFragmentPlan("select empid, sum(deptno) from emps where empid > 1 group by empid");
-        Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
+        Assertions.assertTrue(plan.contains("0:OlapScanNode\n" +
                 "     TABLE: nested_mv3\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     partitions=1/1\n" +
@@ -107,11 +107,84 @@ public class MvRewriteNestedMVTest extends MvRewriteTestBase {
                         " as select * from hive_nested_mv_2 where s_suppkey > 1");
         String query1 = "select s_suppkey, sum(s_acctbal) from hive0.tpch.supplier where s_suppkey > 1 group by s_suppkey ";
         String plan1 = getFragmentPlan(query1);
-        Assert.assertTrue(plan1.contains("0:OlapScanNode\n" +
+        Assertions.assertTrue(plan1.contains("0:OlapScanNode\n" +
                 "     TABLE: hive_nested_mv_3\n" +
                 "     PREAGGREGATION: ON\n"));
         dropMv("test", "hive_nested_mv_1");
         dropMv("test", "hive_nested_mv_2");
         dropMv("test", "hive_nested_mv_3");
+    }
+
+    @Test
+    public void testRangePredicateRewrite() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `t0` (\n" +
+                "  `date_col` date,\n" +
+                "  `id` int(11),\n" +
+                "  `int_col` int(11),\n" +
+                "  `float_col_1` float,\n" +
+                "  `float_col_2` float,\n" +
+                "  `varchar_col` varchar(255),\n" +
+                "  `tinyint_col` tinyint(4)\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`date_col`, `id`)\n" +
+                "DISTRIBUTED BY HASH(`id`)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");\n");
+        starRocksAssert.withTable("CREATE TABLE `t1` (\n" +
+                "  `id_1` int(11),\n" +
+                "  `varchar_col_1` varchar(255),\n" +
+                "  `varchar_col_2` varchar(255),\n" +
+                "  `int_col_1` int(11),\n" +
+                "  `tinyint_col_1` tinyint(4)\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`id_1`, `varchar_col_1`)\n" +
+                "DISTRIBUTED BY HASH(`id_1`)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+        executeInsertSql("INSERT INTO `t0` VALUES ('2024-02-01', 1, 100, 10.5, 20.5, 'varchar_value_1', 1);");
+        executeInsertSql("INSERT INTO `t1` VALUES (1, 'varchar_value_1', 'varchar_value_21', 100, 1);");
+        starRocksAssert.withRefreshedMaterializedView("create MATERIALIZED VIEW flat_mv\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") as select t0.id, t0.date_col, t0.float_col_1, t0.float_col_2, t0.varchar_col, " +
+                "t0.tinyint_col, t1.varchar_col_1, t1.varchar_col_2, t1.int_col_1, t1.tinyint_col_1 " +
+                "from t0 join t1 on t0.tinyint_col = t1.tinyint_col_1;\n");
+        starRocksAssert.withRefreshedMaterializedView("create MATERIALIZED VIEW join_filter_mv\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") as select id, date_col, float_col_1, int_col_1, tinyint_col, " +
+                "tinyint_col_1 from flat_mv where id in (1, 2, 3, 4, 5, 6, 6, 7, 9, 10);\n");
+        starRocksAssert.withRefreshedMaterializedView("create MATERIALIZED VIEW date_mv\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")   as select tinyint_col, date_col , sum(float_col_1 * int_col_1) as sum_value " +
+                "from join_filter_mv group by tinyint_col, date_col;\n");
+        starRocksAssert.withRefreshedMaterializedView("create MATERIALIZED VIEW month_mv\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")  as select tinyint_col, date_trunc('month', date_col) as date_col, sum(sum_value) as sum_value " +
+                "from date_mv group by tinyint_col, date_trunc('month', date_col);\n");
+        starRocksAssert.withRefreshedMaterializedView("create MATERIALIZED VIEW year_mv\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")   as select  tinyint_col, date_trunc('year', date_col) as date_col, sum(sum_value) " +
+                "as sum_value from date_mv group by tinyint_col, date_trunc('year', date_col);\n");
+        String sql = "select sum(t0.float_col_1 * t1.int_col_1), t0.tinyint_col " +
+                "from  t0 join t1 on t0.tinyint_col = t1.tinyint_col_1 where t0.id in (1, 2, 3, 4, 5, 6, 6, 7, 9, 10)\n" +
+                "and date_col > '2024-02-11' and date_col < '2028-05-14' group by tinyint_col order by 1;";
+        connectContext.getSessionVariable().setNestedMvRewriteMaxLevel(10);
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
+        connectContext.getSessionVariable().setEnableFineGrainedRangePredicate(true);
+        connectContext.getSessionVariable().setEnableMaterializedViewTimeSeriesPushDownRewrite(false);
+        connectContext.getSessionVariable().setEnableMaterializedViewPushDownRewrite(false);
+        String plan = getFragmentPlan(sql);
+        PlanTestBase.assertContains(plan, "date_mv", "month_mv", "year_mv");
     }
 }

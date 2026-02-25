@@ -14,8 +14,11 @@
 
 package com.starrocks.plugin;
 
-import org.junit.Assert;
-import org.junit.Test;
+import com.starrocks.server.RunMode;
+import mockit.Mock;
+import mockit.MockUp;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class AuditEventTest {
     @Test
@@ -30,23 +33,51 @@ public class AuditEventTest {
                 .setState("state")
                 .setBigQueryLogCPUSecondThreshold(1)
                 .setCatalog("catalog")
+                .setQueryId("queryId")
+                .setWriteClientTimeMs(100)
+                .setStmtId(123)
+                .setStmt("stmt")
                 .setDigest("digest")
                 .setErrorCode("errorCode")
                 .setIsQuery(true)
-                .setWarehouse("wh");
+                .setWarehouse("wh")
+                .setSessionId("sessionId")
+                .setCustomQueryId("customQueryId")
+                .setCustomSessionName("customSessionName")
+                .setCNGroup("test_cngroup")
+                .addReadLocalCnt(100)
+                .addReadRemoteCnt(100);
+
+        new MockUp<RunMode>() {
+            @Mock
+            public static boolean isSharedNothingMode() {
+                return false;
+            }
+        };
         AuditEvent event = builder.build();
 
-        Assert.assertEquals(AuditEvent.EventType.CONNECTION, event.type);
-        Assert.assertEquals("user", event.user);
-        Assert.assertEquals("authorizedUser", event.authorizedUser);
-        Assert.assertEquals("clientIp", event.clientIp);
-        Assert.assertEquals("feIp", event.feIp);
-        Assert.assertEquals("db", event.db);
-        Assert.assertEquals("state", event.state);
-        Assert.assertEquals(1, event.bigQueryLogCPUSecondThreshold);
-        Assert.assertEquals("catalog", event.catalog);
-        Assert.assertEquals("errorCode", event.errorCode);
-        Assert.assertEquals(true, event.isQuery);
-        Assert.assertEquals("wh", event.warehouse);
+        Assertions.assertEquals(AuditEvent.EventType.CONNECTION, event.type);
+        Assertions.assertEquals("user", event.user);
+        Assertions.assertEquals("authorizedUser", event.authorizedUser);
+        Assertions.assertEquals("clientIp", event.clientIp);
+        Assertions.assertEquals("feIp", event.feIp);
+        Assertions.assertEquals("db", event.db);
+        Assertions.assertEquals("state", event.state);
+        Assertions.assertEquals(1, event.bigQueryLogCPUSecondThreshold);
+        Assertions.assertEquals("catalog", event.catalog);
+        Assertions.assertEquals("queryId", event.queryId);
+        Assertions.assertEquals(123, event.stmtId);
+        Assertions.assertEquals("stmt", event.stmt);
+        Assertions.assertEquals("digest", event.digest);
+        Assertions.assertEquals("errorCode", event.errorCode);
+        Assertions.assertEquals(true, event.isQuery);
+        Assertions.assertEquals("wh", event.warehouse);
+        Assertions.assertEquals("sessionId", event.sessionId);
+        Assertions.assertEquals("customQueryId", event.customQueryId);
+        Assertions.assertEquals("customSessionName", event.customSessionName);
+        Assertions.assertEquals("test_cngroup", event.cnGroup);
+        Assertions.assertEquals("50.0%", event.cacheHitRatio);
+        Assertions.assertEquals(100, event.writeClientTimeMs);
+        Assertions.assertEquals((float) 50, event.getCacheMissRatio());
     }
 }

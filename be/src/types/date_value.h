@@ -14,13 +14,13 @@
 
 #pragma once
 
+#include <chrono>
 #include <cstdint>
 #include <string>
 
-#include "runtime/time_types.h"
-#include "storage/uint24.h"
-#include "util/hash_util.hpp"
-#include "util/slice.h"
+#include "base/string/slice.h"
+#include "base/types/uint24.h"
+#include "types/time_types.h"
 
 namespace starrocks {
 class TimestampValue;
@@ -39,10 +39,16 @@ public:
 
     inline static DateValue create(int year, int month, int day);
 
+    inline static DateValue from_days_since_unix_epoch(int days_since_unix_epoch);
+
 public:
     void from_date(int year, int month, int day);
 
     int32_t to_date_literal() const;
+
+    int64_t to_unixtime() const;
+
+    int32_t to_days_since_unix_epoch() const;
 
     void from_date_literal(int64_t date_literal);
 
@@ -96,10 +102,15 @@ public:
 
     JulianDate julian() const { return _julian; }
 
+    // Convert to C++20 chrono sys_days for time arithmetic
+    inline std::chrono::sys_days to_sys_days() const;
+
     template <TimeUnit UNIT>
     inline DateValue add(int count) const;
 
     inline operator TimestampValue() const;
+
+    explicit operator int32_t() const { return _julian; }
 
 public:
     static const DateValue MAX_DATE_VALUE;
@@ -113,6 +124,28 @@ DateValue DateValue::create(int year, int month, int day) {
     DateValue dv;
     dv.from_date(year, month, day);
     return dv;
+}
+
+DateValue DateValue::from_days_since_unix_epoch(int days_since_unix_epoch) {
+    DateValue dv;
+    dv._julian = days_since_unix_epoch + date::UNIX_EPOCH_JULIAN;
+    return dv;
+}
+
+inline int32_t DateValue::to_days_since_unix_epoch() const {
+    return _julian - date::UNIX_EPOCH_JULIAN;
+}
+
+inline void DateValue::to_date(int* year, int* month, int* day) const {
+    date::to_date_with_cache(_julian, year, month, day);
+}
+
+inline std::chrono::sys_days DateValue::to_sys_days() const {
+    int year, month, day;
+    to_date(&year, &month, &day);
+    return std::chrono::sys_days{std::chrono::year_month_day{std::chrono::year{year},
+                                                             std::chrono::month{static_cast<unsigned>(month)},
+                                                             std::chrono::day{static_cast<unsigned>(day)}}};
 }
 
 template <TimeUnit UNIT>
@@ -154,5 +187,17 @@ namespace std {
 template <>
 struct hash<starrocks::DateValue> {
     size_t operator()(const starrocks::DateValue& v) const { return std::hash<int32_t>()(v._julian); }
+};
+
+template <>
+struct numeric_limits<starrocks::DateValue> {
+public:
+    static starrocks::DateValue min() { return starrocks::DateValue::MIN_DATE_VALUE; }
+    static starrocks::DateValue max() { return starrocks::DateValue::MAX_DATE_VALUE; }
+
+    // Must define the following static constants.
+    static constexpr bool is_specialized = true;
+    static constexpr bool is_integer = false;
+    static constexpr bool is_signed = false;
 };
 } // namespace std

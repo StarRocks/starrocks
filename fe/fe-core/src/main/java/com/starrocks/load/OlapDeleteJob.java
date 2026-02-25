@@ -39,26 +39,26 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.Predicate;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
-import com.starrocks.common.UserException;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
@@ -67,6 +67,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.QueryStateException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DeleteStmt;
+import com.starrocks.sql.ast.expression.Predicate;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
@@ -79,6 +80,7 @@ import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
+import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -121,21 +123,29 @@ public class OlapDeleteJob extends DeleteJob {
         OlapTable olapTable = (OlapTable) table;
         MarkedCountDownLatch<Long, Long> countDownLatch;
         List<Predicate> conditions = getDeleteConditions();
+        TransactionState txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getTransactionState(db.getId(), getTransactionId());
+        if (txnState == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_TXN_NOT_EXIST, getTransactionId());
+        }
 
         try (AutoCloseableLock ignore =
-                    new AutoCloseableLock(new Locker(), db, Lists.newArrayList(table.getId()), LockType.READ)) {
+                    new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()), LockType.READ)) {
             // task sent to be
             AgentBatchTask batchTask = new AgentBatchTask();
             // count total replica num
             int totalReplicaNum = 0;
             for (Partition partition : partitions) {
                 for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                    for (MaterializedIndex index : physicalPartition
-                                .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+                    List<Long> indexIds = Lists.newArrayList();
+                    for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+                        indexIds.add(index.getId());
                         for (Tablet tablet : index.getTablets()) {
                             totalReplicaNum += ((LocalTablet) tablet).getImmutableReplicas().size();
                         }
                     }
+
+                    txnState.addPartitionLoadedIndexes(table.getId(), physicalPartition.getId(), indexIds);
                 }
             }
 
@@ -143,13 +153,12 @@ public class OlapDeleteJob extends DeleteJob {
 
             for (Partition partition : partitions) {
                 for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                    for (MaterializedIndex index : physicalPartition
-                                .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
-                        long indexId = index.getId();
-                        int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
+                    for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+                        long indexMetaId = index.getMetaId();
+                        int schemaHash = olapTable.getSchemaHashByIndexMetaId(indexMetaId);
 
                         List<TColumn> columnsDesc = new ArrayList<>();
-                        for (Column column : olapTable.getSchemaByIndexId(indexId)) {
+                        for (Column column : olapTable.getSchemaByIndexMetaId(indexMetaId)) {
                             columnsDesc.add(column.toThrift());
                         }
 
@@ -167,7 +176,7 @@ public class OlapDeleteJob extends DeleteJob {
                                 // create push task for each replica
                                 PushTask pushTask = new PushTask(null,
                                             replica.getBackendId(), db.getId(), olapTable.getId(),
-                                            physicalPartition.getId(), indexId,
+                                            physicalPartition.getId(), index.getId(),
                                             tabletId, replicaId, schemaHash,
                                             -1, 0,
                                             -1, type, conditions,
@@ -298,16 +307,16 @@ public class OlapDeleteJob extends DeleteJob {
      */
     public void checkAndUpdateQuorum() throws MetaNotFoundException {
         long dbId = deleteInfo.getDbId();
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             throw new MetaNotFoundException("can not find database " + dbId + " when commit delete");
         }
 
         for (TabletDeleteInfo tDeleteInfo : getTabletDeleteInfo()) {
-            Short replicaNum = partitionToReplicateNum.get(tDeleteInfo.getPartitionId());
+            Short replicaNum = partitionToReplicateNum.get(tDeleteInfo.getPhysicalPartitionId());
             if (replicaNum == null) {
                 // should not happen
-                throw new MetaNotFoundException("Unknown partition " + tDeleteInfo.getPartitionId() +
+                throw new MetaNotFoundException("Unknown partition " + tDeleteInfo.getPhysicalPartitionId() +
                             " when commit delete job");
             }
             if (tDeleteInfo.getFinishedReplicas().size() == replicaNum) {
@@ -339,8 +348,8 @@ public class OlapDeleteJob extends DeleteJob {
         return pushTasks;
     }
 
-    public boolean addFinishedReplica(long partitionId, long tabletId, Replica replica) {
-        tabletDeleteInfoMap.putIfAbsent(tabletId, new TabletDeleteInfo(partitionId, tabletId));
+    public boolean addFinishedReplica(long physicalPartitionId, long tabletId, Replica replica) {
+        tabletDeleteInfoMap.putIfAbsent(tabletId, new TabletDeleteInfo(physicalPartitionId, tabletId));
         TabletDeleteInfo tDeleteInfo = tabletDeleteInfoMap.get(tabletId);
         return tDeleteInfo.addFinishedReplica(replica);
     }
@@ -390,7 +399,7 @@ public class OlapDeleteJob extends DeleteJob {
     }
 
     @Override
-    public boolean commitImpl(Database db, long timeoutMs) throws UserException {
+    public boolean commitImpl(Database db, long timeoutMs) throws StarRocksException {
         long transactionId = getTransactionId();
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         try {
@@ -405,16 +414,9 @@ public class OlapDeleteJob extends DeleteJob {
     @Override
     protected List<TabletCommitInfo> getTabletCommitInfos() {
         List<TabletCommitInfo> tabletCommitInfos = Lists.newArrayList();
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
-        for (TabletDeleteInfo tDeleteInfo : getTabletDeleteInfo()) {
-            for (Replica replica : tDeleteInfo.getFinishedReplicas()) {
-                // the inverted index contains rolling up replica
-                Long tabletId = invertedIndex.getTabletIdByReplica(replica.getId());
-                if (tabletId == null) {
-                    LOG.warn("could not find tablet id for replica {}, the tablet maybe dropped", replica);
-                    continue;
-                }
-                tabletCommitInfos.add(new TabletCommitInfo(tabletId, replica.getBackendId()));
+        for (TabletDeleteInfo tabletDeleteInfo : getTabletDeleteInfo()) {
+            for (Replica replica : tabletDeleteInfo.getFinishedReplicas()) {
+                tabletCommitInfos.add(new TabletCommitInfo(tabletDeleteInfo.getTabletId(), replica.getBackendId()));
             }
         }
         return tabletCommitInfos;

@@ -20,6 +20,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
@@ -113,6 +114,16 @@ public class ScanOperatorPredicates {
         minMaxColumnRefMap.clear();
     }
 
+    public ColumnRefSet getUsedColumns() {
+        ColumnRefSet refs = new ColumnRefSet();
+        noEvalPartitionConjuncts.forEach(d -> refs.union(d.getUsedColumns()));
+        nonPartitionConjuncts.forEach(d -> refs.union(d.getUsedColumns()));
+        partitionConjuncts.forEach(d -> refs.union(d.getUsedColumns()));
+        minMaxConjuncts.forEach(d -> refs.union(d.getUsedColumns()));
+        getMinMaxColumnRefMap().keySet().forEach(refs::union);
+        return refs;
+    }
+
     @Override
     public ScanOperatorPredicates clone() {
         ScanOperatorPredicates other = new ScanOperatorPredicates();
@@ -123,6 +134,7 @@ public class ScanOperatorPredicates {
         other.nonPartitionConjuncts.addAll(this.nonPartitionConjuncts);
         other.minMaxConjuncts.addAll(this.minMaxConjuncts);
         other.minMaxColumnRefMap.putAll(this.minMaxColumnRefMap);
+        other.hasPrunedPartition = this.hasPrunedPartition;
 
         return other;
     }

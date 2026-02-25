@@ -1,0 +1,16 @@
+-- name: test_spill_with_bad_alloc @sequential
+set enable_spill=true;
+set spill_mode="force";
+set pipeline_dop=1;
+
+CREATE TABLE t0 (
+    k1 INT,
+    k2 VARCHAR(20))
+DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) PROPERTIES('replication_num'='1');
+
+insert into t0 SELECT generate_series, 4096 - generate_series FROM TABLE(generate_series(1,  40960));
+
+admin enable failpoint 'spill_hash_join_throw_bad_alloc';
+[UC] select count(l.k1),count(l.k2),count(r.k1),count(r.k2) from t0 l join t0 r on l.k1=r.k1;
+admin disable failpoint 'spill_hash_join_throw_bad_alloc';

@@ -14,18 +14,31 @@
 
 #pragma once
 
+#include "base/phmap/btree.h"
+#include "common/thread/threadpool.h"
+#include "storage/lake/types_fwd.h"
 #include "storage/persistent_index.h"
-#include "util/phmap/btree.h"
 
 namespace starrocks::lake {
 
-using KeyIndex = size_t;
-using KeyIndexSet = std::set<KeyIndex>;
-using IndexValueWithVer = std::pair<int64_t, IndexValue>;
+class TabletManager;
+class PersistentIndexSstable;
 
-class PersistentIndexMemtable {
+// PersistentIndexMemtable is an in-memory index for persistent index.
+// It supports upsert/insert/erase/replace/get operations.
+// That this class can be submitted to a thread pool for async flush,
+// after flush finish, we can get sstable via `release_sstable()`.
+// E.g.
+// PersistentIndexMemtable memtable;
+// thread_pool->submit(&memtable); // async flush
+// ...
+// RETURN_IF_ERROR(memtable.flush_status()); // check flush status
+// auto sstable = memtable.release_sstable(); // get sstable after flush finish
+class PersistentIndexMemtable : public Runnable {
 public:
-    PersistentIndexMemtable(uint64_t max_rss_rowid = 0) : _max_rss_rowid(max_rss_rowid) {}
+    PersistentIndexMemtable(TabletManager* tablet_mgr = nullptr, int64_t tablet_id = 0, uint64_t max_rss_rowid = 0)
+            : _tablet_mgr(tablet_mgr), _tablet_id(tablet_id), _max_rss_rowid(max_rss_rowid) {}
+    ~PersistentIndexMemtable();
     // |version|: version of index values
     Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
                   KeyIndexSet* not_founds, size_t* num_found, int64_t version);
@@ -65,21 +78,39 @@ public:
 
     size_t memory_usage() const;
 
-    Status flush(WritableFile* wf, uint64_t* filesize);
+    Status flush();
 
     void clear();
 
     const uint64_t max_rss_rowid() const { return _max_rss_rowid; }
 
+    bool empty() const { return _map.size() == 0; }
+
+    std::unique_ptr<PersistentIndexSstable> release_sstable();
+
+    void run() override;
+
+    void cancel() override;
+
+    Status flush_status() const;
+
 private:
-    static void update_index_value(std::list<IndexValueWithVer>* index_value_info, int64_t version,
-                                   const IndexValue& value);
+    Status flush(WritableFile* wf, uint64_t* filesize, PersistentIndexSstableRangePB* range_pb);
+    static void update_index_value(IndexValueWithVer* index_value_info, int64_t version, const IndexValue& value);
 
 private:
     // The size can be up to 230K. The performance of std::map may be poor.
-    phmap::btree_map<std::string, std::list<IndexValueWithVer>, std::less<>> _map;
-    int64_t _keys_size{0};
+    phmap::btree_map<std::string, IndexValueWithVer, std::less<>> _map;
+    int64_t _keys_heap_size{0};
+    TabletManager* _tablet_mgr{nullptr};
+    int64_t _tablet_id{0};
     uint64_t _max_rss_rowid{0};
+    // sstable generated after flush
+    std::unique_ptr<PersistentIndexSstable> _sstable;
+    // flush status
+    Status _flush_status = Status::OK();
+    // flush state mutex
+    mutable std::mutex _flush_mutex;
 };
 
 } // namespace starrocks::lake

@@ -16,28 +16,30 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.proc.LakeTabletsProcDir;
 import com.starrocks.common.proc.LocalTabletsProcDir;
-import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
+import com.starrocks.sql.ast.OrderByElement;
+import com.starrocks.sql.ast.OrderByPair;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.ShowTabletStmt;
+import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.BoolLiteral;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -48,13 +50,14 @@ public class ShowTabletStmtAnalyzer {
         new ShowTabletStmtAnalyzerVisitor().visit(statement, context);
     }
 
-    static class ShowTabletStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class ShowTabletStmtAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
 
         private long version = -1;
         private long backendId = -1;
         private String indexName = null;
         private Replica.ReplicaState replicaState = null;
         private ArrayList<OrderByPair> orderByPairs = null;
+        private Boolean isConsistent = null;
 
         public void analyze(ShowTabletStmt statement, ConnectContext session) {
             visit(statement, session);
@@ -62,15 +65,14 @@ public class ShowTabletStmtAnalyzer {
 
         @Override
         public Void visitShowTabletStatement(ShowTabletStmt statement, ConnectContext context) {
-            String dbName = statement.getDbName();
             boolean isShowSingleTablet = statement.isShowSingleTablet();
-            if (!isShowSingleTablet && Strings.isNullOrEmpty(dbName)) {
-                dbName = context.getDatabase();
+            if (!isShowSingleTablet) {
+                TableRef normalizedRef = AnalyzerUtils.normalizedTableRef(statement.getTableRef(), context);
+                statement.setTableRef(normalizedRef);
             }
-            statement.setDbName(dbName);
 
             // partitionNames.
-            PartitionNames partitionNames = statement.getPartitionNames();
+            PartitionRef partitionNames = statement.getPartitionNames();
             if (partitionNames != null) {
                 // check if partition name is not empty string
                 if (partitionNames.getPartitionNames().stream().anyMatch(entity -> Strings.isNullOrEmpty(entity))) {
@@ -82,7 +84,7 @@ public class ShowTabletStmtAnalyzer {
             if (whereClause != null) {
                 if (whereClause instanceof CompoundPredicate) {
                     CompoundPredicate cp = (CompoundPredicate) whereClause;
-                    if (cp.getOp() != com.starrocks.analysis.CompoundPredicate.Operator.AND) {
+                    if (cp.getOp() != CompoundPredicate.Operator.AND) {
                         throw new SemanticException("Only allow compound predicate with operator AND");
                     }
                     analyzeSubPredicate(cp.getChild(0));
@@ -94,21 +96,26 @@ public class ShowTabletStmtAnalyzer {
             // order by
             List<OrderByElement> orderByElements = statement.getOrderByElements();
             if (orderByElements != null && !orderByElements.isEmpty()) {
-                Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+                TableRef tableRef = statement.getTableRef();
+                if (tableRef == null) {
+                    throw new SemanticException("Table ref is null");
+                }
+                String dbName = tableRef.getDbName();
+                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
                 if (db == null) {
                     throw new SemanticException("Database %s is not found", dbName);
                 }
-                String tableName = statement.getTableName();
+                String tableName = tableRef.getTableName();
                 Table table = null;
                 Locker locker = new Locker();
-                locker.lockDatabase(db, LockType.READ);
+                locker.lockDatabase(db.getId(), LockType.READ);
                 try {
-                    table = db.getTable(tableName);
+                    table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
                     if (table == null) {
                         throw new SemanticException("Table %s is not found", tableName);
                     }
                 } finally {
-                    locker.unLockDatabase(db, LockType.READ);
+                    locker.unLockDatabase(db.getId(), LockType.READ);
                 }
 
                 orderByPairs = new ArrayList<>();
@@ -138,6 +145,7 @@ public class ShowTabletStmtAnalyzer {
             statement.setReplicaState(replicaState);
             statement.setBackendId(backendId);
             statement.setOrderByPairs(orderByPairs);
+            statement.setIsConsistent(isConsistent);
             return null;
         }
 
@@ -147,7 +155,7 @@ public class ShowTabletStmtAnalyzer {
             }
             if (subExpr instanceof CompoundPredicate) {
                 CompoundPredicate cp = (CompoundPredicate) subExpr;
-                if (cp.getOp() != com.starrocks.analysis.CompoundPredicate.Operator.AND) {
+                if (cp.getOp() != CompoundPredicate.Operator.AND) {
                     throw new SemanticException("Only allow compound predicate with operator AND");
                 }
 
@@ -203,6 +211,12 @@ public class ShowTabletStmtAnalyzer {
                         valid = false;
                         break;
                     }
+                } else if (leftKey.equalsIgnoreCase("IsConsistent")) {
+                    if (!(subExpr.getChild(1) instanceof BoolLiteral)) {
+                        valid = false;
+                        break;
+                    }
+                    isConsistent = ((BoolLiteral) subExpr.getChild(1)).getValue();
                 } else {
                     valid = false;
                     break;
@@ -212,7 +226,8 @@ public class ShowTabletStmtAnalyzer {
             if (!valid) {
                 throw new SemanticException("Where clause should looks like: Version = \"version\","
                         + " or state = \"NORMAL|ROLLUP|CLONE|DECOMMISSION\", or BackendId = 10000,"
-                        + " indexname=\"rollup_name\" or compound predicate with operator AND");
+                        + " indexname=\"rollup_name\" or IsConsistent=\"true|false\""
+                        + " or compound predicate with operator AND");
             }
         }
     }

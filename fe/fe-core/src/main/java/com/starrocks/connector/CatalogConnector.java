@@ -56,16 +56,20 @@ public class CatalogConnector implements Connector {
     }
 
     @Override
-    public long estimateSize() {
-        return normalConnector.estimateSize();
-    }
-
-    @Override
     public Map<String, Long> estimateCount() {
         return normalConnector.estimateCount();
     }
 
+    @Override
+    public long estimateSize() {
+        return normalConnector.estimateSize();
+    }
+
     public String normalConnectorClassName() {
-        return normalConnector.getClass().getSimpleName();
+        if (normalConnector instanceof LazyConnector) {
+            return ((LazyConnector) normalConnector).getRealConnectorClassName();
+        } else {
+            return normalConnector.getClass().getSimpleName();
+        }
     }
 }

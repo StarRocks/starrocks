@@ -32,6 +32,7 @@ public:
         slot_ids->emplace_back(_column_id);
         return 1;
     }
+    void for_each_slot_id(const std::function<void(SlotId)>& cb) const override { cb(_column_id); }
 
 private:
     SlotId _column_id;

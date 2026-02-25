@@ -16,17 +16,18 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
-public class MvRewriteListPartitionTest extends MvRewriteTestBase {
+public class MvRewriteListPartitionTest extends MVTestBase {
     private static String T1;
     private static String T2;
     private static String T3;
     private static String T4;
     private static String T5;
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         // table whose partitions have multiple values
         T1 = "CREATE TABLE t1 (\n" +
@@ -89,7 +90,7 @@ public class MvRewriteListPartitionTest extends MvRewriteTestBase {
                 "DUPLICATE KEY(id)\n" +
                 "PARTITION BY (province, dt) \n" +
                 "DISTRIBUTED BY RANDOM\n";
-        MvRewriteTestBase.beforeClass();
+        MVTestBase.beforeClass();
     }
 
     @Test
@@ -290,43 +291,18 @@ public class MvRewriteListPartitionTest extends MvRewriteTestBase {
     @Test
     public void testRewriteMultiColumnsPartitionedMVWithTTLPartitionNumber() {
         starRocksAssert.withTable(T3, () -> {
-            // update base table
-            String insertSql = "insert into t3 partition(p1) values(1, 1, '2021-12-01', 'beijing');";
-            executeInsertSql(connectContext, insertSql);
-            // refresh complete
-            withRefreshedMV("create materialized view mv1\n" +
-                            "partition by province \n" +
-                            "distributed by random \n" +
-                            "REFRESH DEFERRED MANUAL \n" +
-                            "properties ('partition_ttl_number' = '1')" +
-                            "as select dt, province, sum(age) from t3 group by dt, province;",
-                    () -> {
-                        // TODO: support list partition partial refresh
-                        // refreshMaterializedViewWithPartition(DB_NAME, mvName, "beijing", "beijing");
-
-                        String query = "select dt, province, sum(age) from t3 group by dt, province;";
-                        {
-                            String plan = getFragmentPlan(query);
-                            // assert contains mv1
-                            PlanTestBase.assertContains(plan, "     TABLE: mv1\n" +
-                                    "     PREAGGREGATION: ON\n" +
-                                    "     partitions=1/1\n" +
-                                    "     rollup: mv1");
-                        }
-                        {
-                            String sql = "insert into t3 partition(p2) values(1, 1, '2021-12-02', 'beijing');";
-                            executeInsertSql(connectContext, sql);
-                            // mv is only partially refreshed, needs it to union rewrite
-                            String plan = getFragmentPlan(query);
-                            PlanTestBase.assertContains(plan, "UNION");
-                            PlanTestBase.assertContains(plan, "     TABLE: mv1\n" +
-                                    "     PREAGGREGATION: ON\n" +
-                                    "     partitions=1/1");
-                            PlanTestBase.assertContains(plan, "     TABLE: t3\n" +
-                                    "     PREAGGREGATION: ON\n" +
-                                    "     partitions=2/4");
-                        }
-                    });
+            try {
+                starRocksAssert.withMaterializedView("create materialized view mv1\n" +
+                        "partition by province \n" +
+                        "distributed by random \n" +
+                        "REFRESH DEFERRED MANUAL \n" +
+                        "properties ('partition_ttl_number' = '1')" +
+                        "as select dt, province, sum(age) from t3 group by dt, province;");
+                Assertions.fail();
+            } catch (Exception e) {
+                Assertions.assertTrue(e.getMessage().contains("Invalid parameter partition_ttl_number does not support " +
+                        "non-range-partitioned materialized view"));
+            }
         });
     }
 
@@ -355,7 +331,7 @@ public class MvRewriteListPartitionTest extends MvRewriteTestBase {
                                 "SELECT * from mv1 where province = 'guangdong'",
                         };
                         for (String query : sqls) {
-                            System.out.println("start to check: " + query);
+                            logSysInfo("start to check: " + query);
                             String plan = getFragmentPlan(query);
                             PlanTestBase.assertContains(plan, "UNION", "mv1", "t2");
                         }
@@ -452,6 +428,7 @@ public class MvRewriteListPartitionTest extends MvRewriteTestBase {
 
     @Test
     public void testRewriteWithNestedMVs() {
+        disableMVRewriteConsiderDataLayout();
         starRocksAssert.withTables(ImmutableList.of(T2, T3), () -> {
             // update base table
             String insertSql = "insert into t2 partition(p1) values(1, 1, '2021-12-01', 'beijing');";
@@ -545,5 +522,6 @@ public class MvRewriteListPartitionTest extends MvRewriteTestBase {
             starRocksAssert.dropMaterializedView("mv2");
             starRocksAssert.dropMaterializedView("mv1");
         });
+        enableMVRewriteConsiderDataLayout();
     }
 }

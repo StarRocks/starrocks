@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 使用 Docker 编译 StarRocks
@@ -19,6 +19,9 @@ StarRocks 的不同版本对应 [StarRocks Docker Hub](https://hub.docker.com/u/
   | **分支名** | **镜像名**                          |
   | ---------- | ----------------------------------- |
   | main       | starrocks/dev-env-ubuntu:latest     |
+  | branch-3.5 | starrocks/dev-env-ubuntu:3.5-latest |
+  | branch-3.4 | starrocks/dev-env-ubuntu:3.4-latest |
+  | branch-3.3 | starrocks/dev-env-ubuntu:3.3-latest |
   | branch-3.2 | starrocks/dev-env-ubuntu:3.2-latest |
   | branch-3.1 | starrocks/dev-env-ubuntu:3.1-latest |
   | branch-3.0 | starrocks/dev-env-ubuntu:3.0-latest |
@@ -29,6 +32,9 @@ StarRocks 的不同版本对应 [StarRocks Docker Hub](https://hub.docker.com/u/
   | **分支名** | **镜像名**                           |
   | ---------- | ------------------------------------ |
   | main       | starrocks/dev-env-centos7:latest     |
+  | branch-3.5 | starrocks/dev-env-centos7:3.5-latest |
+  | branch-3.4 | starrocks/dev-env-centos7:3.4-latest |
+  | branch-3.3 | starrocks/dev-env-centos7:3.3-latest |
   | branch-3.2 | starrocks/dev-env-centos7:3.2-latest |
   | branch-3.1 | starrocks/dev-env-centos7:3.1-latest |
   | branch-3.0 | starrocks/dev-env-centos7:3.0-latest |
@@ -45,7 +51,7 @@ StarRocks 的不同版本对应 [StarRocks Docker Hub](https://hub.docker.com/u/
 - **软件**
 
   - 机器必须运行 Ubuntu 22.04 或 CentOS 7.9
-  - 机器必须安装 Docker
+  - 机器必须安装 Docker, docker 版本至少为 v20.10.10
 
 ## 第一步：下载镜像
 

@@ -19,13 +19,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DeltaLakeTable;
-import com.starrocks.catalog.HiveMetaStoreTable;
-import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
@@ -34,6 +29,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.elasticsearch.EsShardPartitions;
@@ -43,6 +39,9 @@ import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.planner.PartitionPruner;
 import com.starrocks.planner.RangePartitionPruner;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -61,6 +60,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.ListPartitionPruner;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.paimon.data.BinaryRow;
+import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.Split;
 
 import java.util.ArrayList;
@@ -290,9 +291,8 @@ public class OptExternalPartitionPruner {
         // RemoteScanPartitionPruneRule may be run multiple times, such like after MaterializedViewRewriter rewrite，
         // the predicates of scan operator may changed, it need to re-compute the ScanOperatorPredicates.
         operator.getScanOperatorPredicates().clear();
-        if (table instanceof HiveMetaStoreTable) {
-            HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) table;
-            List<Column> partitionColumns = hmsTable.getPartitionColumns();
+        if (table.isHMSTable()) {
+            List<Column> partitionColumns = table.getPartitionColumns();
             List<ColumnRefOperator> partitionColumnRefOperators = new ArrayList<>();
             for (Column column : partitionColumns) {
                 ColumnRefOperator partitionColumnRefOperator = operator.getColumnReference(column);
@@ -303,18 +303,21 @@ public class OptExternalPartitionPruner {
 
             if (context.getDumpInfo() != null) {
                 context.getDumpInfo()
-                        .getHMSTable(hmsTable.getResourceName(), hmsTable.getDbName(), hmsTable.getTableName())
+                        .getHMSTable(table.getResourceName(), table.getCatalogDBName(), table.getCatalogTableName())
                         .setPartitionNames(new ArrayList<>());
             }
 
             List<Pair<PartitionKey, Long>> partitionKeys = Lists.newArrayList();
-            if (!hmsTable.isUnPartitioned()) {
+            if (!table.isUnPartitioned()) {
                 if (!context.getSessionVariable().isAllowHiveWithoutPartitionFilter()
                         && !checkPartitionPredicates(operator, partitionColumns)) {
                     LOG.warn("Partition pruning is invalid. queryId: {}", DebugUtil.printId(context.getQueryId()));
                     throw new AnalysisException("Partition pruning is invalid, please check: "
                             + "1. The partition predicate must be included. "
-                            + "2. The left and right children of the partition predicate cannot be function parameters.");
+                            + "2. The left and right children of the partition predicate cannot be function parameters. "
+                            + "Table: " + table.getCatalogName() + "." + table.getCatalogDBName()
+                            + "." + table.getCatalogTableName() + " " + "Partition columns: "
+                            + partitionColumns.stream().map(Column::getName).collect(Collectors.joining(", ")));
                 }
 
                 // get partition names
@@ -325,19 +328,19 @@ public class OptExternalPartitionPruner {
                 if (effectivePartitionPredicate.stream().anyMatch(Optional::isPresent)) {
                     List<Optional<String>> partitionValues = getPartitionValue(effectivePartitionPredicate);
                     partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                            .listPartitionNamesByValue(hmsTable.getCatalogName(), hmsTable.getDbName(),
-                                    hmsTable.getTableName(), partitionValues);
+                            .listPartitionNamesByValue(table.getCatalogName(), table.getCatalogDBName(),
+                                    table.getCatalogTableName(), partitionValues);
                 } else {
                     partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                            .listPartitionNames(hmsTable.getCatalogName(), hmsTable.getDbName(),
-                                    hmsTable.getTableName());
+                            .listPartitionNames(table.getCatalogName(), table.getCatalogDBName(),
+                                    table.getCatalogTableName(), ConnectorMetadatRequestContext.DEFAULT);
                 }
 
                 List<PartitionKey> keys = new ArrayList<>();
                 List<Long> ids = new ArrayList<>();
                 for (String partName : partitionNames) {
                     List<String> values = toPartitionValues(partName);
-                    PartitionKey partitionKey = createPartitionKey(values, partitionColumns, table.getType());
+                    PartitionKey partitionKey = createPartitionKey(values, partitionColumns, table);
                     keys.add(partitionKey);
                     ids.add(context.getNextUniquePartitionId());
                 }
@@ -355,7 +358,7 @@ public class OptExternalPartitionPruner {
                 for (int i = 0; i < literals.size(); i++) {
                     ColumnRefOperator columnRefOperator = partitionColumnRefOperators.get(i);
                     LiteralExpr literal = literals.get(i);
-                    if (Expr.IS_NULL_LITERAL.apply(literal)) {
+                    if (ExprUtils.IS_NULL_LITERAL.apply(literal)) {
                         columnToNullPartitions.get(columnRefOperator).add(partitionId);
                         continue;
                     }
@@ -405,56 +408,34 @@ public class OptExternalPartitionPruner {
                                              Map<ColumnRefOperator, Set<Long>> columnToNullPartitions) throws AnalysisException {
         Table table = operator.getTable();
         ScanOperatorPredicates scanOperatorPredicates = operator.getScanOperatorPredicates();
-        if (table instanceof HiveMetaStoreTable) {
+        if (table.isHMSTable()) {
             ListPartitionPruner partitionPruner =
                     new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions,
                             scanOperatorPredicates.getPartitionConjuncts(), null);
+            partitionPruner.setScanOperator(operator);
             Collection<Long> selectedPartitionIds = partitionPruner.prune();
             if (selectedPartitionIds == null) {
                 selectedPartitionIds = scanOperatorPredicates.getIdToPartitionKey().keySet();
             }
 
-            int scanHivePartitionNumLimit = context.getSessionVariable().getScanHivePartitionNumLimit();
-            if (scanHivePartitionNumLimit > 0 && !table.isUnPartitioned()
-                    && selectedPartitionIds.size() > scanHivePartitionNumLimit) {
-                String msg = "Exceeded the limit of " + scanHivePartitionNumLimit + " max scan hive external partitions";
+            int scanLakePartitionNumLimit = context.getSessionVariable().getScanLakePartitionNumLimit();
+            if (scanLakePartitionNumLimit > 0 && !table.isUnPartitioned()
+                    && selectedPartitionIds.size() > scanLakePartitionNumLimit) {
+                String msg = "Exceeded the limit of " + scanLakePartitionNumLimit + " max scan hive external partitions";
                 LOG.warn("{} queryId: {}", msg, DebugUtil.printId(context.getQueryId()));
                 throw new AnalysisException(msg);
             }
 
             scanOperatorPredicates.setSelectedPartitionIds(selectedPartitionIds);
             scanOperatorPredicates.getNoEvalPartitionConjuncts().addAll(partitionPruner.getNoEvalConjuncts());
-        } else if (table instanceof IcebergTable) {
-            IcebergTable icebergTable = (IcebergTable) table;
-            if (operator.getTableVersionRange().end().isEmpty()) {
-                // TODO: for iceberg table, it cannot decide whether it's pruned or not when `selectedPartitionIds`
-                //  is empty. It's expensive to set all partitions here.
-                return;
-            }
-
-            // Use mutable map instead of immutable map so can be re-partition-prune, see ScanOperatorPredicates#clear().
-            Map<Long, PartitionKey> partitionKeyMap = Maps.newHashMap();
-            if (table.isUnPartitioned()) {
-                partitionKeyMap.put(0L, new PartitionKey());
-            } else {
-                String catalogName = icebergTable.getCatalogName();
-                List<PartitionKey> partitionKeys = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                        .getPrunedPartitions(catalogName, icebergTable, operator.getPredicate(),
-                                operator.getLimit(), operator.getTableVersionRange());
-                for (PartitionKey partitionKey : partitionKeys) {
-                    partitionKeyMap.put(context.getNextUniquePartitionId(), partitionKey);
-                }
-            }
-
-            scanOperatorPredicates.getIdToPartitionKey().putAll(partitionKeyMap);
-            scanOperatorPredicates.setSelectedPartitionIds(partitionKeyMap.keySet());
         } else if (table instanceof PaimonTable) {
             PaimonTable paimonTable = (PaimonTable) table;
             List<String> fieldNames = operator.getColRefToColumnMetaMap().keySet().stream()
                     .map(ColumnRefOperator::getName)
                     .collect(Collectors.toList());
             GetRemoteFilesParams params =
-                    GetRemoteFilesParams.newBuilder().setPredicate(operator.getPredicate()).setFieldNames(fieldNames).build();
+                    GetRemoteFilesParams.newBuilder().setPredicate(operator.getPredicate()).setFieldNames(fieldNames)
+                            .setTableVersionRange(operator.getTvrVersionRange()).build();
             List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(table, params);
             if (fileInfos.isEmpty()) {
                 return;
@@ -471,6 +452,24 @@ public class OptExternalPartitionPruner {
             long rowCount = getRowCount(splits);
             if (rowCount > 0) {
                 scanOperatorPredicates.getSelectedPartitionIds().add(1L);
+            }
+
+            //check scan partition num
+            Set<BinaryRow> selectedPartitions = new HashSet<>();
+            for (Split split : splits) {
+                if (split instanceof DataSplit) {
+                    DataSplit dataSplit = (DataSplit) split;
+                    selectedPartitions.add(dataSplit.partition());
+                }
+            }
+            int scanLakePartitionNumLimit = context.getSessionVariable().getScanLakePartitionNumLimit();
+            if (scanLakePartitionNumLimit > 0 && selectedPartitions.size() > scanLakePartitionNumLimit) {
+                String msg = "Exceeded the limit of number of paimon table partitions to be scanned. " +
+                        "Number of partitions allowed: " + scanLakePartitionNumLimit +
+                        ", number of partitions to be scanned: " + selectedPartitions.size() +
+                        ". Please adjust the SQL or change the limit by set variable scan_lake_partition_num_limit.";
+                LOG.warn("{} queryId: {}", msg, DebugUtil.printId(context.getQueryId()));
+                throw new AnalysisException(msg);
             }
         }
     }

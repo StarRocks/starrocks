@@ -15,22 +15,28 @@
 package com.starrocks.connector;
 
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 public class GetRemoteFilesParams {
     private List<PartitionKey> partitionKeys;
     private List<String> partitionNames;
     private List<Object> partitionAttachments;
-    private TableVersionRange tableVersionRange;
+    private TvrVersionRange tableVersionRange;
     private ScalarOperator predicate;
     private List<String> fieldNames;
     private long limit = -1;
     private boolean useCache = true;
     private boolean checkPartitionExistence = true;
+    private boolean enableColumnStats = false;
+    private Optional<Boolean> isRecursive = Optional.empty();
+    private boolean usedForDelete = false;
 
-    private GetRemoteFilesParams(Builder builder) {
+    protected GetRemoteFilesParams(Builder builder) {
         this.partitionKeys = builder.partitionKeys;
         this.partitionNames = builder.partitionNames;
         this.partitionAttachments = builder.partitionAttachments;
@@ -40,10 +46,23 @@ public class GetRemoteFilesParams {
         this.limit = builder.limit;
         this.useCache = builder.useCache;
         this.checkPartitionExistence = builder.checkPartitionExistence;
+        this.enableColumnStats = builder.enableColumnStats;
+        this.isRecursive = builder.isRecursive;
+        this.usedForDelete = builder.usedForDelete;
+    }
+
+    public int getPartitionSize() {
+        if (partitionKeys != null) {
+            return partitionKeys.size();
+        }
+        if (partitionNames != null) {
+            return partitionNames.size();
+        }
+        return 0;
     }
 
     public GetRemoteFilesParams copy() {
-        return GetRemoteFilesParams.newBuilder()
+        Builder paramsBuilder = GetRemoteFilesParams.newBuilder()
                 .setPartitionKeys(partitionKeys)
                 .setPartitionNames(partitionNames)
                 .setPartitionAttachments(partitionAttachments)
@@ -53,7 +72,31 @@ public class GetRemoteFilesParams {
                 .setLimit(limit)
                 .setUseCache(useCache)
                 .setCheckPartitionExistence(checkPartitionExistence)
-                .build();
+                .setEnableColumnStats(enableColumnStats)
+                .setUsedForDelete(usedForDelete);
+        if (isRecursive.isPresent()) {
+            paramsBuilder.setIsRecursive(isRecursive.get());
+        }
+        return paramsBuilder.build();
+    }
+
+    public GetRemoteFilesParams sub(int start, int end) {
+        GetRemoteFilesParams p = copy();
+        if (p.partitionKeys != null) {
+            p.partitionKeys = p.partitionKeys.subList(start, end);
+        }
+        if (p.partitionNames != null) {
+            p.partitionNames = p.partitionNames.subList(start, end);
+        }
+        if (p.partitionAttachments != null) {
+            p.partitionAttachments = p.partitionAttachments.subList(start, end);
+        }
+        return p;
+    }
+
+    @SuppressWarnings("unchecked")
+    public <T extends GetRemoteFilesParams> T cast() {
+        return (T) this;
     }
 
     // Getters
@@ -69,7 +112,7 @@ public class GetRemoteFilesParams {
         return partitionAttachments;
     }
 
-    public TableVersionRange getTableVersionRange() {
+    public TvrVersionRange getTableVersionRange() {
         return tableVersionRange;
     }
 
@@ -93,20 +136,43 @@ public class GetRemoteFilesParams {
         this.useCache = useCache;
     }
 
+    public void setPredicate(ScalarOperator predicate) {
+        this.predicate = predicate;
+    }
+
+    public void setTableVersionRange(TvrVersionRange tableVersionRange) {
+        this.tableVersionRange = tableVersionRange;
+    }
+
     public boolean isCheckPartitionExistence() {
         return checkPartitionExistence;
+    }
+
+    public boolean isEnableColumnStats() {
+        return enableColumnStats;
+    }
+
+    public Optional<Boolean> getIsRecursive() {
+        return isRecursive;
+    }
+
+    public boolean usedForDelete() {
+        return usedForDelete;
     }
 
     public static class Builder {
         private List<PartitionKey> partitionKeys;
         private List<String> partitionNames;
         private List<Object> partitionAttachments;
-        private TableVersionRange tableVersionRange;
+        private TvrVersionRange tableVersionRange;
         private ScalarOperator predicate;
         private List<String> fieldNames;
         private long limit = -1;
         private boolean useCache = true;
         private boolean checkPartitionExistence = true;
+        private boolean enableColumnStats = false;
+        private Optional<Boolean> isRecursive = Optional.empty();
+        private boolean usedForDelete = false;
 
         public Builder setPartitionKeys(List<PartitionKey> partitionKeys) {
             this.partitionKeys = partitionKeys;
@@ -123,7 +189,7 @@ public class GetRemoteFilesParams {
             return this;
         }
 
-        public Builder setTableVersionRange(TableVersionRange tableVersionRange) {
+        public Builder setTableVersionRange(TvrVersionRange tableVersionRange) {
             this.tableVersionRange = tableVersionRange;
             return this;
         }
@@ -153,6 +219,21 @@ public class GetRemoteFilesParams {
             return this;
         }
 
+        public Builder setEnableColumnStats(boolean enableColumnStats) {
+            this.enableColumnStats = enableColumnStats;
+            return this;
+        }
+
+        public Builder setIsRecursive(boolean isRecursive) {
+            this.isRecursive = Optional.of(isRecursive);
+            return this;
+        }
+
+        public Builder setUsedForDelete(boolean usedForDelete) {
+            this.usedForDelete = usedForDelete;
+            return this;
+        }
+
         public GetRemoteFilesParams build() {
             return new GetRemoteFilesParams(this);
         }
@@ -160,5 +241,19 @@ public class GetRemoteFilesParams {
 
     public static Builder newBuilder() {
         return new Builder();
+    }
+
+    public List<GetRemoteFilesParams> partitionExponentially(int minSize, int maxSize) {
+        List<GetRemoteFilesParams> result = new ArrayList<>();
+        int currentSize = minSize;
+        int start = 0;
+        int partitionSize = getPartitionSize();
+        while (start < partitionSize) {
+            int end = Math.min(start + currentSize, partitionSize);
+            result.add(sub(start, end));
+            start = end;
+            currentSize = Math.min(currentSize * 2, maxSize);
+        }
+        return result;
     }
 }

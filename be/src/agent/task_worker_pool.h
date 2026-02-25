@@ -44,10 +44,10 @@
 #include "agent/agent_common.h"
 #include "agent/status.h"
 #include "agent/utils.h"
+#include "common/system/cpu_usage_info.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "storage/storage_engine.h"
-#include "util/cpu_usage_info.h"
 
 namespace starrocks {
 
@@ -194,7 +194,13 @@ public:
         _callback_function = _worker_thread_callback;
     }
 
+    static void set_regular_report_stopped(bool stop) { _regular_report_stopped.store(stop); }
+
+    static bool is_regular_report_stopped() { return _regular_report_stopped.load(); }
+
 private:
+    static std::atomic<bool> _regular_report_stopped;
+
     static void* _worker_thread_callback(void* arg_this);
 
     AgentTaskRequestPtr _convert_task(const TAgentTaskRequest& task, time_t recv_time) override {

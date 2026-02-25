@@ -14,26 +14,24 @@
 package com.starrocks.catalog.system.information;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.starrocks.authentication.UserIdentityUtils;
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.util.DateUtils;
-import com.starrocks.privilege.AccessDeniedException;
+import com.starrocks.common.Config;
+import com.starrocks.common.util.SqlCredentialRedactor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -44,29 +42,29 @@ import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.thrift.TTaskRunInfo;
 import com.starrocks.thrift.TUserIdentity;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.apache.commons.lang3.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.util.Strings;
 import org.apache.thrift.meta_data.FieldValueMetaData;
-import org.apache.thrift.protocol.TType;
 
+import java.util.Collections;
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
-public class TaskRunsSystemTable extends SystemTable {
+import static com.starrocks.type.DateType.DATETIME;
+import static com.starrocks.type.IntegerType.BIGINT;
 
+public class TaskRunsSystemTable extends SystemTable {
     private static final Logger LOG = LogManager.getLogger(SystemTable.class);
 
     private static final SystemTable TABLE = new TaskRunsSystemTable();
 
-    private static final ImmutableMap<Byte, Type> THRIFT_TO_SCALAR_TYPE_MAPPING =
-            ImmutableMap.<Byte, Type>builder()
-                    .put(TType.I16, Type.SMALLINT)
-                    .put(TType.I32, Type.INT)
-                    .put(TType.I64, Type.BIGINT)
-                    .put(TType.STRING, Type.STRING)
-                    .put(TType.BOOL, Type.BOOLEAN)
-                    .build();
+    public static final String NAME = "task_runs";
 
     public static SystemTable getInstance() {
         return TABLE;
@@ -74,29 +72,47 @@ public class TaskRunsSystemTable extends SystemTable {
 
     public TaskRunsSystemTable() {
         super(SystemId.TASK_RUNS_ID,
-                "task_runs",
+                NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("QUERY_ID", ScalarType.createVarchar(64))
-                        .column("TASK_NAME", ScalarType.createVarchar(64))
-                        .column("CREATE_TIME", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("FINISH_TIME", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("STATE", ScalarType.createVarchar(16))
-                        .column("CATALOG", ScalarType.createVarchar(64))
-                        .column("DATABASE", ScalarType.createVarchar(64))
-                        .column("DEFINITION", ScalarType.createVarchar(MAX_FIELD_VARCHAR_LENGTH))
-                        .column("EXPIRE_TIME", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("ERROR_CODE", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("ERROR_MESSAGE", ScalarType.createVarchar(MAX_FIELD_VARCHAR_LENGTH))
-                        .column("PROGRESS", ScalarType.createVarchar(64))
-                        .column("EXTRA_MESSAGE", ScalarType.createVarchar(8192))
-                        .column("PROPERTIES", ScalarType.createVarcharType(512))
+                        .column("QUERY_ID", TypeFactory.createVarcharType(64))
+                        .column("TASK_NAME", TypeFactory.createVarcharType(64))
+                        .column("CREATE_TIME", DATETIME)
+                        .column("FINISH_TIME", DATETIME)
+                        .column("STATE", TypeFactory.createVarcharType(16))
+                        .column("CATALOG", TypeFactory.createVarcharType(64))
+                        .column("DATABASE", TypeFactory.createVarcharType(64))
+                        .column("DEFINITION", TypeFactory.createVarcharType(MAX_FIELD_VARCHAR_LENGTH))
+                        .column("EXPIRE_TIME", DATETIME)
+                        .column("ERROR_CODE", BIGINT)
+                        .column("ERROR_MESSAGE", TypeFactory.createVarcharType(MAX_FIELD_VARCHAR_LENGTH))
+                        .column("PROGRESS", TypeFactory.createVarcharType(64))
+                        .column("EXTRA_MESSAGE", TypeFactory.createVarcharType(8192))
+                        .column("PROPERTIES", TypeFactory.createVarcharType(512))
+                        .column("JOB_ID", TypeFactory.createVarcharType(64))
+                        .column("PROCESS_TIME", DATETIME)
                         .build(), TSchemaTableType.SCH_TASK_RUNS);
     }
 
+    private static final Set<String> SUPPORTED_EQUAL_COLUMNS =
+            Collections.unmodifiableSet(new TreeSet<>(String.CASE_INSENSITIVE_ORDER) {
+                {
+                    add("QUERY_ID");
+                    add("TASK_NAME");
+                }
+            });
+
     @Override
-    public boolean supportFeEvaluation() {
-        return true;
+    public boolean supportFeEvaluation(ScalarOperator predicate) {
+        if (!Config.enable_task_run_fe_evaluation) {
+            return false;
+        }
+        final List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
+        if (!isOnlyEqualConstantOps(conjuncts)) {
+            return false;
+        }
+        // only support QUERY_ID and TASK_NAME
+        return isSupportedEqualPredicateColumn(conjuncts, SUPPORTED_EQUAL_COLUMNS);
     }
 
     @Override
@@ -125,7 +141,7 @@ public class TaskRunsSystemTable extends SystemTable {
         }
 
         ConnectContext context = Preconditions.checkNotNull(ConnectContext.get(), "not a valid connection");
-        TUserIdentity userIdentity = context.getCurrentUserIdentity().toThrift();
+        TUserIdentity userIdentity = UserIdentityUtils.toThrift(context.getCurrentUserIdentity());
         params.setCurrent_user_ident(userIdentity);
         // Evaluate result
         TGetTaskRunInfoResult info = query(params);
@@ -134,7 +150,7 @@ public class TaskRunsSystemTable extends SystemTable {
 
     private static List<ScalarOperator> infoToScalar(TTaskRunInfo info) {
         List<ScalarOperator> result = Lists.newArrayList();
-        for (Column column : TABLE.getColumns()) {
+        for (Column column : TABLE.getBaseSchema()) {
             String name = column.getName().toLowerCase();
             TTaskRunInfo._Fields field = TTaskRunInfo._Fields.findByName(name);
             FieldValueMetaData meta = TTaskRunInfo.metaDataMap.get(field).valueMetaData;
@@ -147,34 +163,6 @@ public class TaskRunsSystemTable extends SystemTable {
         return result;
     }
 
-    /**
-     * The thrift type may differ from schema-type, for example user a LONG timestamp in thrift, but return a
-     * DATETIME in the schema table.
-     */
-    private static ConstantOperator mayCast(ConstantOperator value, Type schemaType) {
-        if (value.getType().equals(schemaType)) {
-            return value;
-        }
-        if (value.getType().isStringType() && schemaType.isStringType()) {
-            return value;
-        }
-        // From timestamp to DATETIME
-        if (value.getType().isBigint() && schemaType.isDatetime()) {
-            return ConstantOperator.createDatetime(DateUtils.fromEpochMillis(value.getBigint() * 1000));
-        }
-        return value.castTo(schemaType)
-                .orElseThrow(() -> new NotImplementedException(String.format("unsupported type cast from %s to %s",
-                        value.getType(), schemaType)));
-    }
-
-    private static Type thriftToScalarType(byte type) {
-        Type valueType = THRIFT_TO_SCALAR_TYPE_MAPPING.get(type);
-        if (valueType == null) {
-            throw new NotImplementedException("not supported type: " + type);
-        }
-        return valueType;
-    }
-
     public static TGetTaskRunInfoResult query(TGetTasksParams params) {
         TGetTaskRunInfoResult result = new TGetTaskRunInfoResult();
         List<TTaskRunInfo> tasksResult = Lists.newArrayList();
@@ -182,7 +170,7 @@ public class TaskRunsSystemTable extends SystemTable {
 
         UserIdentity currentUser = null;
         if (params.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(params.current_user_ident);
+            currentUser = UserIdentityUtils.fromThrift(params.current_user_ident);
         }
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         TaskManager taskManager = globalStateMgr.getTaskManager();
@@ -195,7 +183,10 @@ public class TaskRunsSystemTable extends SystemTable {
             }
 
             try {
-                Authorizer.checkAnyActionOnOrInDb(currentUser, null, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                ConnectContext context = new ConnectContext();
+                context.setCurrentUserIdentity(currentUser);
+                context.setCurrentRoleIds(currentUser);
+                Authorizer.checkAnyActionOnOrInDb(context, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                         status.getDbName());
             } catch (AccessDeniedException e) {
                 continue;
@@ -210,14 +201,26 @@ public class TaskRunsSystemTable extends SystemTable {
             info.setState(status.getState().toString());
             info.setCatalog(status.getCatalogName());
             info.setDatabase(ClusterNamespace.getNameFromFullName(status.getDbName()));
-            try {
-                // NOTE: use task's definition to display task-run's definition here
-                Task task = taskManager.getTaskWithoutLock(taskName);
-                if (task != null) {
-                    info.setDefinition(task.getDefinition());
+            if (!Strings.isEmpty(status.getDefinition())) {
+                if (Config.enable_task_info_mask_credential) {
+                    info.setDefinition(SqlCredentialRedactor.redact(status.getDefinition()));
+                } else {
+                    info.setDefinition(status.getDefinition());
                 }
-            } catch (Exception e) {
-                LOG.warn("Get taskName {} definition failed: {}", taskName, e);
+            } else {
+                try {
+                    // NOTE: use task's definition to display task-run's definition here
+                    Task task = taskManager.getTaskWithoutLock(taskName);
+                    if (task != null) {
+                        if (Config.enable_task_info_mask_credential) {
+                            info.setDefinition(SqlCredentialRedactor.redact(task.getDefinition()));
+                        } else {
+                            info.setDefinition(task.getDefinition());
+                        }
+                    }
+                } catch (Exception e) {
+                    LOG.warn("Get taskName {} definition failed: {}", taskName, e);
+                }
             }
             info.setError_code(status.getErrorCode());
             info.setError_message(status.getErrorMessage());
@@ -225,6 +228,8 @@ public class TaskRunsSystemTable extends SystemTable {
             info.setProgress(status.getProgress() + "%");
             info.setExtra_message(status.getExtraMessage());
             info.setProperties(status.getPropertiesJson());
+            info.setProcess_time(status.getProcessStartTime() / 1000);
+            info.setJob_id(status.getStartTaskRunId());
             tasksResult.add(info);
         }
         return result;

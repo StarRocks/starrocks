@@ -17,9 +17,11 @@
 #include "column/schema.h"
 #include "fs/fs.h"
 #include "gen_cpp/lake_types.pb.h"
+#include "gen_cpp/tablet_schema.pb.h"
 #include "runtime/exec_env.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/general_tablet_writer.h"
+#include "storage/lake/location_provider.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/metadata_iterator.h"
 #include "storage/lake/pk_tablet_writer.h"
@@ -104,7 +106,13 @@ const std::shared_ptr<const TabletSchema> Tablet::tablet_schema() const {
 }
 
 StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema() {
-    return _mgr->get_tablet_schema(_id, &_version_hint);
+    if (_tablet_schema) {
+        return _tablet_schema;
+    } else if (_tablet_metadata) {
+        return std::make_shared<TabletSchema>(_tablet_metadata->schema());
+    } else {
+        return _mgr->get_tablet_schema(_id, &_version_hint);
+    }
 }
 
 StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema_by_id(int64_t schema_id) {
@@ -121,15 +129,15 @@ std::vector<RowsetPtr> Tablet::get_rowsets(const TabletMetadataPtr& metadata) {
 }
 
 std::string Tablet::metadata_location(int64_t version) const {
-    return _mgr->tablet_metadata_location(_id, version);
+    return _location_provider->tablet_metadata_location(_id, version);
 }
 
 std::string Tablet::metadata_root_location() const {
-    return _mgr->tablet_metadata_root_location(_id);
+    return _location_provider->metadata_root_location(_id);
 }
 
 std::string Tablet::txn_log_location(int64_t txn_id) const {
-    return _mgr->txn_log_location(_id, txn_id);
+    return _location_provider->txn_log_location(_id, txn_id);
 }
 
 std::string Tablet::txn_slog_location(int64_t txn_id) const {
@@ -137,19 +145,19 @@ std::string Tablet::txn_slog_location(int64_t txn_id) const {
 }
 
 std::string Tablet::txn_vlog_location(int64_t version) const {
-    return _mgr->txn_vlog_location(_id, version);
+    return _location_provider->txn_vlog_location(_id, version);
 }
 
 std::string Tablet::segment_location(std::string_view segment_name) const {
-    return _mgr->segment_location(_id, segment_name);
+    return _location_provider->segment_location(_id, segment_name);
 }
 
 std::string Tablet::del_location(std::string_view del_name) const {
-    return _mgr->del_location(_id, del_name);
+    return _location_provider->del_location(_id, del_name);
 }
 
 std::string Tablet::delvec_location(std::string_view delvec_name) const {
-    return _mgr->delvec_location(_id, delvec_name);
+    return _location_provider->delvec_location(_id, delvec_name);
 }
 
 std::string Tablet::sst_location(std::string_view sst_name) const {
@@ -157,14 +165,18 @@ std::string Tablet::sst_location(std::string_view sst_name) const {
 }
 
 std::string Tablet::root_location() const {
-    return _mgr->tablet_root_location(_id);
+    return _location_provider->root_location(_id);
 }
 
-Status Tablet::delete_data(int64_t txn_id, const DeletePredicatePB& delete_predicate) {
+Status Tablet::delete_data(int64_t txn_id, const DeletePredicatePB& delete_predicate,
+                           const TableSchemaKeyPB* schema_key) {
     auto txn_log = std::make_shared<TxnLog>();
     txn_log->set_tablet_id(_id);
     txn_log->set_txn_id(txn_id);
     auto op_write = txn_log->mutable_op_write();
+    if (schema_key != nullptr) {
+        op_write->mutable_schema_key()->CopyFrom(*schema_key);
+    }
     auto rowset = op_write->mutable_rowset();
     rowset->set_overlapped(false);
     rowset->set_num_rows(0);

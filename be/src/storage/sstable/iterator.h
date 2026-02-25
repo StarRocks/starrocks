@@ -4,8 +4,9 @@
 
 #pragma once
 
+#include "base/string/slice.h"
 #include "common/status.h"
-#include "util/slice.h"
+#include "storage/del_vector.h"
 
 namespace starrocks::sstable {
 
@@ -62,6 +63,12 @@ public:
 
     // Return the max rss_rowid the iterator contains.
     virtual uint64_t max_rss_rowid() const { return 0; };
+
+    // Return the shared rssid & version the iterator contains.
+    virtual uint32_t shared_rssid() const { return 0; };
+    virtual int64_t shared_version() const { return 0; };
+    virtual int32_t rssid_offset() const { return 0; };
+    virtual DelVectorPtr delvec() const { return nullptr; };
 
     // Clients are allowed to register function/arg1/arg2 triples that
     // will be invoked when this iterator is destroyed.

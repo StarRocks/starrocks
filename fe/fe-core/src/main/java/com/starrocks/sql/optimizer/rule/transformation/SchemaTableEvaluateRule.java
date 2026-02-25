@@ -20,7 +20,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
-import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalSchemaScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
@@ -28,7 +27,6 @@ import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
-import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.NotImplementedException;
 
 import java.util.List;
@@ -62,28 +60,17 @@ public class SchemaTableEvaluateRule extends TransformationRule {
             return false;
         }
         LogicalSchemaScanOperator operator = input.getOp().cast();
-        if (!checkConjuncts(operator.getPredicate())) {
-            return false;
-        }
-        if (!checkTable(operator.getTable())) {
-            return false;
-        }
-        return true;
-    }
-
-    // Only support the pattern: c1=v1 AND c2=v2
-    private static boolean checkConjuncts(ScalarOperator predicate) {
-        List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
-        return CollectionUtils.isNotEmpty(conjuncts) &&
-                conjuncts.stream().allMatch(ScalarOperator::isColumnEqualConstant);
-    }
-
-    private static boolean checkTable(Table table) {
+        Table table = operator.getTable();
+        // check if the table is a system table
         if (!(table instanceof SystemTable)) {
             return false;
         }
-        SystemTable systemTable = ((SystemTable) table);
-        return systemTable.supportFeEvaluation();
+        SystemTable systemTable = (SystemTable) table;
+        // check if the predicate is supported for the evaluation
+        if (!systemTable.supportFeEvaluation(operator.getPredicate())) {
+            return false;
+        }
+        return true;
     }
 
     @Override
@@ -99,8 +86,8 @@ public class SchemaTableEvaluateRule extends TransformationRule {
             return Lists.newArrayList();
         }
 
-        // Compute the column index
-        List<Column> columns = systemTable.getColumns();
+        // Compute the column index, use getBaseSchema rather getColumns to ensure the order of columns
+        List<Column> columns = systemTable.getBaseSchema();
         Map<Column, Integer> columnIndex = IntStream.range(0, columns.size())
                 .boxed()
                 .collect(Collectors.toMap(columns::get, Function.identity()));

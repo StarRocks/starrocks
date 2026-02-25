@@ -15,14 +15,14 @@
 package com.starrocks.connector.delta;
 
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.type.CharType;
 import io.delta.kernel.types.IntegerType;
 import io.delta.kernel.types.StringType;
 import io.delta.kernel.types.StructType;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -33,12 +33,12 @@ public class DeltaLakeFileStatsTest {
     private StructType schema;
 
     private static void checkColumnStatisticsEqual(ColumnStatistic left, ColumnStatistic right) {
-        Assert.assertEquals(left.toString(), right.toString());
-        Assert.assertEquals(left.getMinString(), right.getMinString());
-        Assert.assertEquals(left.getMaxString(), right.getMaxString());
+        Assertions.assertEquals(left.toString(), right.toString());
+        Assertions.assertEquals(left.getMinString(), right.getMinString());
+        Assertions.assertEquals(left.getMaxString(), right.getMaxString());
     }
 
-    @Before
+    @BeforeEach
     public void setUp() throws Exception {
         schema = new StructType()
                 .add("c_int", IntegerType.INTEGER)
@@ -81,14 +81,14 @@ public class DeltaLakeFileStatsTest {
         DeltaLakeFileStats stats = new DeltaLakeFileStats(schema, nonPartitionPrimitiveColumns,
                 null, stat, null, 10, 4096);
 
-        ColumnStatistic columnStatistic = stats.fillColumnStats(new Column("c_char", Type.CHAR));
+        ColumnStatistic columnStatistic = stats.fillColumnStats(new Column("c_char", CharType.CHAR));
         ColumnStatistic checkStatistic = new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY,
                 0, 16, 1, null, ColumnStatistic.StatisticType.UNKNOWN);
         checkStatistic.setMinString("char_111");
         checkStatistic.setMaxString("char_999");
         checkColumnStatisticsEqual(checkStatistic, columnStatistic);
 
-        columnStatistic = stats.fillColumnStats(new Column("c_string", Type.STRING));
+        columnStatistic = stats.fillColumnStats(new Column("c_string", com.starrocks.type.StringType.STRING));
         checkStatistic = new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY,
                 0, 16, 1, null, ColumnStatistic.StatisticType.UNKNOWN);
         checkStatistic.setMinString("string_111");
@@ -166,6 +166,7 @@ public class DeltaLakeFileStatsTest {
                 0, 16, 1, null, ColumnStatistic.StatisticType.UNKNOWN);
         checkStatistic.setMinString("string_000");
         checkStatistic.setMaxString("string_666");
-        checkColumnStatisticsEqual(checkStatistic, stats.fillColumnStats(new Column("c_string", Type.STRING)));
+        checkColumnStatisticsEqual(checkStatistic,
+                stats.fillColumnStats(new Column("c_string", com.starrocks.type.StringType.STRING)));
     }
 }

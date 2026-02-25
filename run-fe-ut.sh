@@ -36,6 +36,8 @@ Usage: $0 <options>
      --dry-run                  dry-run unit tests
      --coverage                 run coverage statistic tasks
      --dumpcase [PATH]          run dump case and save to path
+     --enable-profiler [0|1]    enable/disable async-profiler for performance profiling
+     -j [N]                     build parallel, default is ${FE_UT_PARALLEL:-4}
 
   Eg.
     $0                                            run all unit tests
@@ -44,28 +46,12 @@ Usage: $0 <options>
     $0 --dry-run                                  dry-run unit tests
     $0 --coverage                                 run coverage statistic tasks
     $0 --dumpcase /home/disk1/                    run dump case and save to path
+    $0 --enable-profiler 1                        run tests with async-profiler enabled
+    $0 --enable-profiler 0                        run tests with async-profiler disabled
+    $0 -j16 --test com.starrocks.utframe.Demo     run demo test with 16 parallel threads
   "
   exit 1
 }
-
-# -l run only used for compatibility
-OPTS=$(getopt \
-  -n $0 \
-  -o '' \
-  -l 'test:' \
-  -l 'filter:' \
-  -l 'dry-run' \
-  -l 'coverage' \
-  -l 'dumpcase' \
-  -l 'help' \
-  -l 'run' \
-  -- "$@")
-
-if [ $? != 0 ] ; then
-    usage
-fi
-
-eval set -- "$OPTS"
 
 HELP=0
 DRY_RUN=0
@@ -74,19 +60,78 @@ TEST_NAME=*
 FILTER_TEST=""
 COVERAGE=0
 DUMPCASE=0
-while true; do
-    case "$1" in
-        --coverage) COVERAGE=1 ; shift ;;
-        --test) RUN_SPECIFIED_TEST=1; TEST_NAME=$2; shift 2;;
-        --filter) FILTER_TEST=$2; shift 2;;
-        --run) shift ;; # only used for compatibility
-        --dumpcase) DUMPCASE=1; shift ;;
-        --dry-run) DRY_RUN=1 ; shift ;;
-        --help) HELP=1 ; shift ;;
-        --) shift ;  break ;;
-        *) echo "Internal error" ; exit 1 ;;
-    esac
-done
+ENABLE_PROFILER=0
+PARALLEL=${FE_UT_PARALLEL:-4}
+
+# Prefer GNU getopt when available. Fall back to a manual parser on macOS/BSD.
+USE_GNU_GETOPT=0
+if getopt --version >/dev/null 2>&1; then
+    if getopt --version 2>/dev/null | grep -qiE 'gnu|util-linux'; then
+        USE_GNU_GETOPT=1
+    fi
+fi
+
+if [ ${USE_GNU_GETOPT} -eq 1 ]; then
+    # -l run only used for compatibility
+    OPTS=$(getopt \
+      -n $0 \
+      -o 'j:' \
+      -l 'test:' \
+      -l 'filter:' \
+      -l 'dry-run' \
+      -l 'coverage' \
+      -l 'dumpcase' \
+      -l 'enable-profiler:' \
+      -l 'help' \
+      -l 'run' \
+      -- "$@")
+
+    if [ $? != 0 ] ; then
+        usage
+    fi
+
+    eval set -- "$OPTS"
+    while true; do
+        case "$1" in
+            --coverage) COVERAGE=1 ; shift ;;
+            --test) RUN_SPECIFIED_TEST=1; TEST_NAME=$2; shift 2;;
+            --filter) FILTER_TEST=$2; shift 2;;
+            --run) shift ;; # only used for compatibility
+            --dumpcase) DUMPCASE=1; shift ;;
+            --dry-run) DRY_RUN=1 ; shift ;;
+            --enable-profiler) ENABLE_PROFILER=$2; shift 2;;
+            --help) HELP=1 ; shift ;;
+            -j) PARALLEL=$2; shift 2 ;;
+            --) shift ;  break ;;
+            *) echo "Internal error" ; exit 1 ;;
+        esac
+    done
+else
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --coverage) COVERAGE=1 ; shift ;;
+            --test)
+                if [ -z "$2" ]; then usage; fi
+                RUN_SPECIFIED_TEST=1; TEST_NAME=$2; shift 2;;
+            --filter)
+                if [ -z "$2" ]; then usage; fi
+                FILTER_TEST=$2; shift 2;;
+            --run) shift ;; # only used for compatibility
+            --dumpcase) DUMPCASE=1; shift ;;
+            --dry-run) DRY_RUN=1 ; shift ;;
+            --enable-profiler)
+                if [ -z "$2" ]; then usage; fi
+                ENABLE_PROFILER=$2; shift 2;;
+            --help) HELP=1 ; shift ;;
+            -j)
+                if [ -z "$2" ]; then usage; fi
+                PARALLEL=$2; shift 2 ;;
+            --) shift ; break ;;
+            -*) usage ;;
+            *) break ;;
+        esac
+    done
+fi
 
 if [ ${HELP} -eq 1 ]; then
     usage
@@ -100,11 +145,31 @@ echo "*********************************"
 cd ${STARROCKS_HOME}/fe/
 mkdir -p build/compile
 
-if [ -z "${FE_UT_PARALLEL}" ]; then
-    # the default fe unit test parallel is 1
-    export FE_UT_PARALLEL=4
-fi
+# Set FE_UT_PARALLEL if -j parameter is provided
+export FE_UT_PARALLEL=$PARALLEL
 echo "Unit test parallel is: $FE_UT_PARALLEL"
+
+# Set ASYNC_PROFILER_ENABLED based on --enable-profiler parameter and platform detection
+if [ "${ENABLE_PROFILER}" = "1" ]; then
+    # Check if we're on Linux platform
+    if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        # Check if async profiler library exists
+        ASYNC_PROFILER_LIB="${STARROCKS_HOME}/build-support/libasyncProfiler.so"
+        if [ -f "$ASYNC_PROFILER_LIB" ]; then
+            export ASYNC_PROFILER_ENABLED=true
+            echo "Async-profiler is enabled (Linux platform, library found)"
+        else
+            export ASYNC_PROFILER_ENABLED=false
+            echo "Async-profiler is disabled (Linux platform, but library not found: $ASYNC_PROFILER_LIB)"
+        fi
+    else
+        export ASYNC_PROFILER_ENABLED=false
+        echo "Async-profiler is disabled (non-Linux platform: $OSTYPE)"
+    fi
+else
+    export ASYNC_PROFILER_ENABLED=false
+    echo "Async-profiler is disabled (explicitly disabled)"
+fi
 
 if [ -d "./mocked" ]; then
     rm -r ./mocked
@@ -143,6 +208,6 @@ else
         fi
 
         # set trimStackTrace to false to show full stack when debugging specified class or case
-        ${MVN_CMD} test -DfailIfNoTests=false -DtrimStackTrace=false -D test="$TEST_NAME"
+        ${MVN_CMD} verify -DfailIfNoTests=false -Dsurefire.failIfNoSpecifiedTests=false -DtrimStackTrace=false -D test="$TEST_NAME" -T $PARALLEL
     fi
 fi

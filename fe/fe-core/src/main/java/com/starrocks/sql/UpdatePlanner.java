@@ -16,30 +16,34 @@ package com.starrocks.sql;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.planner.DataSink;
+import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.SchemaTableSink;
+import com.starrocks.planner.SlotDescriptor;
+import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.UpdateStmt;
+import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
@@ -95,15 +99,14 @@ public class UpdatePlanner {
             session.getSessionVariable().setEnableLocalShuffleAgg(false);
 
             long tableId = targetTable.getId();
-            Optimizer optimizer = new Optimizer();
-            optimizer.setUpdateTableId(tableId);
+            OptimizerContext optimizerContext = OptimizerFactory.initContext(session, columnRefFactory);
+            optimizerContext.setUpdateTableId(tableId);
 
+            Optimizer optimizer = OptimizerFactory.create(optimizerContext);
             OptExpression optimizedPlan = optimizer.optimize(
-                    session,
                     optExprBuilder.getRoot(),
                     new PhysicalPropertySet(),
-                    new ColumnRefSet(outputColumns),
-                    columnRefFactory);
+                    new ColumnRefSet(outputColumns));
             ExecPlan execPlan = PlanFragmentBuilder.createPhysicalPlan(optimizedPlan, session,
                     outputColumns, columnRefFactory, colNames, TResultSinkType.MYSQL_PROTOCAL, false);
             DescriptorTable descriptorTable = execPlan.getDescTbl();
@@ -139,11 +142,15 @@ public class UpdatePlanner {
                 OlapTable olapTable = (OlapTable) targetTable;
                 DataSink dataSink = new OlapTableSink(olapTable, olapTuple, partitionIds, olapTable.writeQuorum(),
                         olapTable.enableReplicatedStorage(), false,
-                        olapTable.supportedAutomaticPartition(), session.getCurrentWarehouseId());
+                        olapTable.supportedAutomaticPartition(), session.getCurrentComputeResource());
                 if (updateStmt.usePartialUpdate()) {
                     // using column mode partial update in UPDATE stmt
                     ((OlapTableSink) dataSink).setPartialUpdateMode(TPartialUpdateMode.COLUMN_UPDATE_MODE);
                 }
+                if (session.getTxnId() != 0) {
+                    ((OlapTableSink) dataSink).setIsMultiStatementsTxn(true);
+                }
+
                 execPlan.getFragments().get(0).setSink(dataSink);
                 execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);
 
@@ -151,29 +158,31 @@ public class UpdatePlanner {
                 session.getSessionVariable().setPreferComputeNode(false);
                 session.getSessionVariable().setUseComputeNodes(0);
                 OlapTableSink olapTableSink = (OlapTableSink) dataSink;
-                TableName catalogDbTable = updateStmt.getTableName();
-                Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogDbTable.getCatalog(),
+                TableRef tableRef = updateStmt.getTableRef();
+                TableName catalogDbTable = TableName.fromTableRef(tableRef);
+                Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(session, catalogDbTable.getCatalog(),
                         catalogDbTable.getDb());
                 try {
-                    olapTableSink.init(session.getExecutionId(), updateStmt.getTxnId(), db.getId(),
-                            ConnectContext.get().getSessionVariable().getQueryTimeoutS());
+                    olapTableSink.init(session.getExecutionId(), updateStmt.getTxnId(), db.getId(), session.getExecTimeout());
                     olapTableSink.complete();
-                } catch (UserException e) {
+                } catch (StarRocksException e) {
                     throw new SemanticException(e.getMessage());
                 }
             } else if (targetTable instanceof SystemTable) {
-                DataSink dataSink = new SchemaTableSink((SystemTable) targetTable, ConnectContext.get().getCurrentWarehouseId());
+                DataSink dataSink = new SchemaTableSink((SystemTable) targetTable,
+                        ConnectContext.get().getCurrentComputeResource());
                 execPlan.getFragments().get(0).setSink(dataSink);
             } else {
                 throw new SemanticException("Unsupported table type: " + targetTable.getClass().getName());
             }
             if (canUsePipeline) {
                 PlanFragment sinkFragment = execPlan.getFragments().get(0);
-                if (ConnectContext.get().getSessionVariable().getEnableAdaptiveSinkDop()) {
-                    sinkFragment.setPipelineDop(ConnectContext.get().getSessionVariable().getSinkDegreeOfParallelism());
+                SessionVariable sv = session.getSessionVariable();
+                if (sv.getEnableAdaptiveSinkDop()) {
+                    long warehouseId = session.getCurrentComputeResource().getWarehouseId();
+                    sinkFragment.setPipelineDop(sv.getSinkDegreeOfParallelism(warehouseId));
                 } else {
-                    sinkFragment
-                            .setPipelineDop(ConnectContext.get().getSessionVariable().getParallelExecInstanceNum());
+                    sinkFragment.setPipelineDop(sv.getParallelExecInstanceNum());
                 }
                 if (targetTable instanceof OlapTable) {
                     sinkFragment.setHasOlapTableSink();
@@ -222,7 +231,7 @@ public class UpdatePlanner {
                     targetTable.getName());
             if (!column.getType().matchesType(outputColumn.getType())) {
                 // This should be always true but add a check here to avoid updating the wrong column type.
-                if (!Type.canCastTo(outputColumn.getType(), column.getType())) {
+                if (!TypeManager.canCastTo(outputColumn.getType(), column.getType())) {
                     throw new SemanticException(String.format("Output column type %s is not compatible table column type: %s",
                             outputColumn.getType(), column.getType()));
                 }

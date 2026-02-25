@@ -16,9 +16,9 @@ package com.starrocks.sql.analyzer;
 import com.google.api.client.util.Lists;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -26,10 +26,14 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.ast.AlterMaterializedViewStmt;
+import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.ViewRelation;
@@ -39,6 +43,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -51,9 +56,11 @@ import java.util.stream.Collectors;
  * it will be consistent with the original db-lock logic
  * and obtain the db-read-lock of all dbs involved in the query.
  */
-public class PlannerMetaLocker {
+public class PlannerMetaLocker implements AutoCloseable {
     // Map database id -> database
     private Map<Long, Database> dbs = Maps.newTreeMap(Long::compareTo);
+
+    private UUID queryId;
 
     /**
      * Map database id -> table id set, Use db id as sort key to avoid deadlock,
@@ -65,20 +72,21 @@ public class PlannerMetaLocker {
     public PlannerMetaLocker(ConnectContext session, StatementBase statementBase) {
         new TableCollector(session, dbs, tables).visit(statementBase);
         session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
+        this.queryId = session.getQueryId();
     }
 
     /**
      * Try to acquire the lock, return false if the lock cannot be obtained.
      */
     public boolean tryLock(long timeout, TimeUnit unit) {
-        Locker locker = new Locker();
+        Locker locker = new Locker(queryId);
 
         boolean isLockSuccess = false;
         List<Database> lockedDbs = Lists.newArrayList();
         try {
             for (Map.Entry<Long, Set<Long>> entry : tables.entrySet()) {
                 Database database = dbs.get(entry.getKey());
-                if (!locker.tryLockTablesWithIntensiveDbLock(database, new ArrayList<>(entry.getValue()),
+                if (!locker.tryLockTablesWithIntensiveDbLock(database.getId(), new ArrayList<>(entry.getValue()),
                         LockType.READ, timeout, unit)) {
                     return false;
                 }
@@ -88,7 +96,7 @@ public class PlannerMetaLocker {
         } finally {
             if (!isLockSuccess) {
                 for (Database database : lockedDbs) {
-                    locker.unLockTablesWithIntensiveDbLock(database, new ArrayList<>(tables.get(database.getId())),
+                    locker.unLockTablesWithIntensiveDbLock(database.getId(), new ArrayList<>(tables.get(database.getId())),
                             LockType.READ);
                 }
             }
@@ -97,11 +105,11 @@ public class PlannerMetaLocker {
     }
 
     public void lock() {
-        Locker locker = new Locker();
+        Locker locker = new Locker(queryId);
         for (Map.Entry<Long, Set<Long>> entry : tables.entrySet()) {
             Database database = dbs.get(entry.getKey());
             List<Long> tableIds = new ArrayList<>(entry.getValue());
-            locker.lockTablesWithIntensiveDbLock(database, tableIds, LockType.READ);
+            locker.lockTablesWithIntensiveDbLock(database.getId(), tableIds, LockType.READ);
         }
     }
 
@@ -110,10 +118,14 @@ public class PlannerMetaLocker {
         for (Map.Entry<Long, Set<Long>> entry : tables.entrySet()) {
             Database database = dbs.get(entry.getKey());
             List<Long> tableIds = new ArrayList<>(entry.getValue());
-            locker.unLockTablesWithIntensiveDbLock(database, tableIds, LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(database.getId(), tableIds, LockType.READ);
         }
     }
 
+    @Override
+    public void close() {
+        unlock();
+    }
     /**
      * Collect tables that need to be protected by the PlannerMetaLock
      */
@@ -155,12 +167,12 @@ public class PlannerMetaLocker {
             return null;
         }
 
-        Database db = metadataMgr.getDb(catalogName, dbName);
+        Database db = metadataMgr.getDb(session, catalogName, dbName);
         if (db == null) {
             return null;
         }
 
-        Table table = metadataMgr.getTable(catalogName, dbName, tbName);
+        Table table = metadataMgr.getTable(session, catalogName, dbName, tbName);
         if (table == null) {
             return null;
         }
@@ -182,23 +194,53 @@ public class PlannerMetaLocker {
 
         @Override
         public Void visitInsertStatement(InsertStmt node, Void context) {
-            Pair<Database, Table> dbAndTable = resolveTable(session, node.getTableName());
+            TableRef tableRef = node.getTableRef();
+            TableName tableName = TableName.fromTableRef(tableRef);
+            Pair<Database, Table> dbAndTable = resolveTable(session, tableName);
             put(dbAndTable);
             return super.visitInsertStatement(node, context);
         }
 
         @Override
         public Void visitUpdateStatement(UpdateStmt node, Void context) {
-            Pair<Database, Table> dbAndTable = resolveTable(session, node.getTableName());
+            TableRef tableRef = node.getTableRef();
+            TableName tableName = TableName.fromTableRef(tableRef);
+            Pair<Database, Table> dbAndTable = resolveTable(session, tableName);
             put(dbAndTable);
             return super.visitUpdateStatement(node, context);
         }
 
         @Override
         public Void visitDeleteStatement(DeleteStmt node, Void context) {
-            Pair<Database, Table> dbAndTable = resolveTable(session, node.getTableName());
+            TableRef tableRef = node.getTableRef();
+            TableName tableName = TableName.fromTableRef(tableRef);
+            Pair<Database, Table> dbAndTable = resolveTable(session, tableName);
             put(dbAndTable);
             return super.visitDeleteStatement(node, context);
+        }
+
+        @Override
+        public Void visitAlterTableStatement(AlterTableStmt statement, Void context) {
+            Pair<Database, Table> dbAndTable = resolveTable(session, 
+                    com.starrocks.catalog.TableName.fromTableRef(statement.getTableRef()));
+            put(dbAndTable);
+            return super.visitAlterTableStatement(statement, context);
+        }
+
+        @Override
+        public Void visitAlterViewStatement(AlterViewStmt statement, Void context) {
+            Pair<Database, Table> dbAndTable = resolveTable(session, 
+                    com.starrocks.catalog.TableName.fromTableRef(statement.getTableRef()));
+            put(dbAndTable);
+            return super.visitAlterViewStatement(statement, context);
+        }
+
+        @Override
+        public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStmt statement, Void context) {
+            Pair<Database, Table> dbAndTable = resolveTable(session, 
+                    com.starrocks.catalog.TableName.fromTableRef(statement.getMvTableRef()));
+            put(dbAndTable);
+            return super.visitAlterMaterializedViewStatement(statement, context);
         }
 
         @Override

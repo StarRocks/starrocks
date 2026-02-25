@@ -17,7 +17,6 @@
 #include "column/vectorized_fwd.h"
 #include "exec/chunks_sorter.h"
 #include "exec/sorting/merge.h"
-#include "gtest/gtest_prod.h"
 
 namespace starrocks {
 class ExprContext;
@@ -34,6 +33,11 @@ struct ChunksSorterFullSortProfiler {
 };
 class ChunksSorterFullSort : public ChunksSorter {
 public:
+    static constexpr size_t kDefaultMaxBufferRows =
+            1 << 30; // 1 billion rows, the number of rows has little impact on performance
+    static constexpr size_t kDefaultMaxBufferBytes =
+            256 << 20; // 256MB, a larger limit may improve performance but is not memory allocator friendly
+
     /**
      * Constructor.
      * @param sort_exprs     The order-by columns or columns with expression. This sorter will use but not own the object.
@@ -73,12 +77,11 @@ private:
     void _assign_ordinals_tmpl();
     template <typename T>
     ChunkPtr _late_materialize_tmpl(const ChunkPtr& chunk);
-
-protected:
     ChunkPtr _late_materialize(const ChunkPtr& chunk);
 
-    size_t _total_rows = 0;        // Total rows of sorting data
-    Permutation _sort_permutation; // Temp permutation for sorting
+    void _reset();
+
+    size_t _total_rows = 0; // Total rows of sorting data
     size_t _staging_unsorted_rows = 0;
     size_t _staging_unsorted_bytes = 0;
     std::vector<ChunkPtr> _staging_unsorted_chunks;
@@ -90,9 +93,9 @@ protected:
     std::unique_ptr<ObjectPool> _object_pool = nullptr;
     ChunksSorterFullSortProfiler* _profiler = nullptr;
 
-    // TODO: further tunning the buffer parameter
-    const size_t max_buffered_rows;  // Max buffer 1024000 rows
-    const size_t max_buffered_bytes; // Max buffer 16MB bytes
+    // Parameters to control the Merge-Sort behavior
+    const size_t max_buffered_rows;
+    const size_t max_buffered_bytes;
 
     // only when order-by columns(_sort_exprs) are all ColumnRefs and the cost of eager-materialization of
     // other columns is large than ordinal column, then we materialize order-by columns and ordinal columns eagerly,
@@ -104,6 +107,20 @@ protected:
     std::vector<SlotId> _column_id_to_slot_id;
     std::vector<ChunkUniquePtr> _early_materialized_chunks;
     std::vector<ChunkUniquePtr> _late_materialized_chunks;
+
+protected:
+    size_t _reserved_bytes(const ChunkPtr& chunk);
+    size_t _get_revocable_mem_bytes();
+    std::function<StatusOr<ChunkPtr>()> _get_chunk_iterator();
+    bool _have_no_staging_data() const;
+
+    // used in spill
+    // index for _staging_unsorted_chunk_idx
+    size_t _process_staging_unsorted_chunk_idx = 0;
+    // index for _sorted_chunk_idx
+    size_t _process_sorted_chunk_idx = 0;
+    // index for _early_materialized_chunks
+    size_t _process_early_materialized_chunks_idx = 0;
 };
 
 } // namespace starrocks

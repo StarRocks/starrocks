@@ -28,6 +28,7 @@ public:
     MetaScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
     ~MetaScanNode() override;
 
+    Status init(const TPlanNode& tnode, RuntimeState* state) override;
     Status prepare(RuntimeState* state) override;
 
     void close(RuntimeState* state) override;

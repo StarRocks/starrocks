@@ -44,6 +44,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "base/phmap/phmap.h"
 #include "common/statusor.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/MasterService_types.h"
@@ -51,9 +52,9 @@
 #include "storage/base_tablet.h"
 #include "storage/data_dir.h"
 #include "storage/olap_define.h"
+#include "storage/olap_tuple.h"
 #include "storage/rowset/rowset.h"
 #include "storage/tablet_meta.h"
-#include "storage/tuple.h"
 #include "storage/utils.h"
 #include "storage/version_graph.h"
 #include "util/once.h"
@@ -66,11 +67,13 @@ class Tablet;
 class TabletMeta;
 class TabletUpdates;
 class CompactionTask;
+class BaseRowset;
 struct CompactionCandidate;
 struct CompactionContext;
 struct TabletBasicInfo;
 
 using TabletSharedPtr = std::shared_ptr<Tablet>;
+using BaseRowsetSharedPtr = std::shared_ptr<BaseRowset>;
 
 class ChunkIterator;
 
@@ -82,11 +85,12 @@ public:
 
     Tablet(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir);
 
+    Tablet() = delete;
     Tablet(const Tablet&) = delete;
     const Tablet& operator=(const Tablet&) = delete;
 
     // for ut
-    Tablet();
+    Tablet(KeysType keys_type);
 
     ~Tablet() override;
 
@@ -99,7 +103,7 @@ public:
     void register_tablet_into_dir();
     void deregister_tablet_from_dir();
 
-    void save_meta();
+    void save_meta(bool skip_tablet_schema = false);
     // Used in clone task, to update local meta when finishing a clone job
     Status revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowsets_to_clone,
                               const std::vector<Version>& versions_to_delete);
@@ -112,8 +116,10 @@ public:
     size_t version_count() const;
     Version max_version() const;
 
-    // propreties encapsulated in TabletSchema
-    KeysType keys_type() const;
+    bool belonged_to_cloud_native() const override { return false; }
+
+    // properties encapsulated in TabletSchema
+    KeysType keys_type() const { return _keys_type; }
     size_t num_columns_with_max_version() const;
     size_t num_key_columns_with_max_version() const;
     size_t num_rows_per_row_block_with_max_version() const;
@@ -130,8 +136,8 @@ public:
 
     // operation in rowsets
     Status add_rowset(const RowsetSharedPtr& rowset, bool need_persist = true);
-    void modify_rowsets(const vector<RowsetSharedPtr>& to_add, const vector<RowsetSharedPtr>& to_delete,
-                        std::vector<RowsetSharedPtr>* to_replace);
+    void modify_rowsets_without_lock(const vector<RowsetSharedPtr>& to_add, const vector<RowsetSharedPtr>& to_delete,
+                                     std::vector<RowsetSharedPtr>* to_replace);
 
     // _rs_version_map and _inc_rs_version_map should be protected by _meta_lock
     // The caller must call hold _meta_lock when call this two function.
@@ -141,6 +147,7 @@ public:
     RowsetSharedPtr rowset_with_max_version() const;
 
     Status add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version);
+    void overwrite_rowset(const RowsetSharedPtr& rowset, int64_t version);
     void delete_expired_inc_rowsets();
 
     /// Delete stale rowset by timing. This delete policy uses now() munis
@@ -161,7 +168,7 @@ public:
     const DelPredicateArray& delete_predicates() const { return _tablet_meta->delete_predicates(); }
     [[nodiscard]] bool version_for_delete_predicate(const Version& version);
     [[nodiscard]] bool version_for_delete_predicate_unlocked(const Version& version);
-    [[nodiscard]] bool has_delete_predicates(const Version& version);
+    [[nodiscard]] StatusOr<bool> has_delete_predicates(const Version& version) override;
 
     // meta lock
     void obtain_header_rdlock() { _meta_lock.lock_shared(); }
@@ -208,6 +215,7 @@ public:
     // Same as max_continuous_version_from_beginning, only return end version, using a more efficient implementation
     int64_t max_continuous_version() const;
     int64_t max_readable_version() const;
+    int64_t min_readable_version() const;
 
     int64_t last_cumu_compaction_failure_time() { return _last_cumu_compaction_failure_millis; }
     void set_last_cumu_compaction_failure_time(int64_t millis) { _last_cumu_compaction_failure_millis = millis; }
@@ -237,7 +245,6 @@ public:
     void pick_candicate_rowsets_to_cumulative_compaction(std::vector<RowsetSharedPtr>* candidate_rowsets);
     void pick_candicate_rowsets_to_base_compaction(std::vector<RowsetSharedPtr>* candidate_rowsets);
     void pick_all_candicate_rowsets(std::vector<RowsetSharedPtr>* candidate_rowsets);
-    void pick_candicate_rowset_before_specify_version(vector<RowsetSharedPtr>* candidcate_rowsets, int64_t version);
 
     void calculate_cumulative_point();
 
@@ -270,7 +277,11 @@ public:
 
     void set_compaction_context(std::unique_ptr<CompactionContext>& context);
 
+#ifdef BE_TEST
+    virtual std::shared_ptr<CompactionTask> create_compaction_task();
+#else
     std::shared_ptr<CompactionTask> create_compaction_task();
+#endif
 
     bool has_compaction_task();
 
@@ -334,8 +345,17 @@ public:
     // set true when start to drop tablet. only set in `TabletManager::drop_tablet` right now
     void set_is_dropping(bool is_dropping) { _is_dropping = is_dropping; }
 
-protected:
+    [[nodiscard]] bool is_update_schema_running() const { return _update_schema_running.load(); }
+    void set_update_schema_running(bool is_running) { _update_schema_running.store(is_running); }
+    std::shared_mutex& get_schema_lock() { return _schema_lock; }
+    bool add_committed_rowset(const RowsetSharedPtr& rowset);
+    void erase_committed_rowset(const RowsetSharedPtr& rowset);
+    int64_t committed_rowset_size() { return _committed_rs_map.size(); }
+
     void on_shutdown() override;
+
+    // get average row size
+    int64_t get_average_row_size();
 
 private:
     int64_t _mem_usage() { return sizeof(Tablet); }
@@ -371,6 +391,8 @@ private:
     // check whether there is useless binlog, and update the in-memory TabletMeta to the state after
     // those binlog is deleted. Return true the meta has been changed, and needs to be persisted
     bool _check_useless_binlog_and_update_meta(int64_t current_second);
+    void _pick_candicate_rowset_before_specify_version(vector<RowsetSharedPtr>* candidcate_rowsets, int64_t version);
+    void _get_rewrite_meta_rs(std::vector<RowsetSharedPtr>& rewrite_meta_rs);
 
     friend class TabletUpdates;
     static const int64_t kInvalidCumulativePoint = -1;
@@ -414,6 +436,12 @@ private:
     // this policy is judged and computed by TimestampedVersionTracker.
     std::unordered_map<Version, RowsetSharedPtr, HashOfVersion> _stale_rs_version_map;
 
+    // Keep the rowsets committed but not publish which rowset meta without schema
+    phmap::parallel_flat_hash_map<RowsetId, std::shared_ptr<Rowset>, HashOfRowsetId, std::equal_to<RowsetId>,
+                                  std::allocator<std::pair<const RowsetId, std::shared_ptr<Rowset>>>, 5, std::mutex,
+                                  true>
+            _committed_rs_map;
+
     // gtid -> version
     std::map<int64_t, int64_t> _gtid_to_version_map;
 
@@ -455,6 +483,10 @@ private:
     bool _will_be_force_replaced = false;
 
     std::atomic<bool> _is_dropping{false};
+    std::atomic<bool> _update_schema_running{false};
+    // The KeysType of a Tablet cannot be changed after creation. It is retrieved from the TabletSchema,
+    // and the redundant storage is designed to avoid unnecessary locking and reduce performance overhead.
+    KeysType _keys_type;
 };
 
 inline bool Tablet::init_succeeded() {
@@ -479,10 +511,6 @@ inline const int64_t Tablet::cumulative_layer_point() const {
 
 inline void Tablet::set_cumulative_layer_point(int64_t new_point) {
     _cumulative_point = new_point;
-}
-
-inline KeysType Tablet::keys_type() const {
-    return tablet_schema()->keys_type();
 }
 
 inline size_t Tablet::num_columns_with_max_version() const {

@@ -40,15 +40,18 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.persist.DropBackendInfo;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.UpdateBackendInfo;
+import com.starrocks.persist.WALApplier;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
@@ -61,17 +64,17 @@ public class BackendProcNodeTest {
     @Mocked
     private TabletInvertedIndex tabletInvertedIndex;
 
-    @Before
+    @BeforeEach
     public void setUp() {
         new Expectations() {
             {
-                editLog.logAddBackend((Backend) any);
+                editLog.logAddBackend((Backend) any, (WALApplier) any);
                 minTimes = 0;
 
-                editLog.logDropBackend((Backend) any);
+                editLog.logDropBackend((DropBackendInfo) any, (WALApplier) any);
                 minTimes = 0;
 
-                editLog.logBackendStateChange((Backend) any);
+                editLog.logBackendStateChange((UpdateBackendInfo) any, (WALApplier) any);
                 minTimes = 0;
 
                 globalStateMgr.getNextId();
@@ -85,10 +88,6 @@ public class BackendProcNodeTest {
                 GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
                 minTimes = 0;
                 result = tabletInvertedIndex;
-
-                tabletInvertedIndex.getTabletNumByBackendIdAndPathHash(anyLong, anyLong);
-                minTimes = 0;
-                result = 1;
             }
         };
 
@@ -108,7 +107,7 @@ public class BackendProcNodeTest {
         b1.setDisks(immutableMap);
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
     }
 
@@ -119,11 +118,11 @@ public class BackendProcNodeTest {
 
         // fetch result
         result = node.fetchResult();
-        Assert.assertNotNull(result);
-        Assert.assertTrue(result instanceof BaseProcResult);
+        Assertions.assertNotNull(result);
+        Assertions.assertTrue(result instanceof BaseProcResult);
 
-        Assert.assertTrue(result.getRows().size() >= 1);
-        Assert.assertEquals(
+        Assertions.assertTrue(result.getRows().size() >= 1);
+        Assertions.assertEquals(
                 Lists.newArrayList("RootPath", "DataUsedCapacity", "OtherUsedCapacity", "AvailCapacity",
                         "TotalCapacity", "TotalUsedPct", "State", "PathHash", "StorageMedium", "TabletNum",
                         "DataTotalCapacity", "DataUsedPct"),

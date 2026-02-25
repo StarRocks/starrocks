@@ -30,7 +30,6 @@ import java.util.Collections;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class IndexParams {
@@ -62,9 +61,11 @@ public class IndexParams {
         register(builder, IndexType.VECTOR, IndexParamType.INDEX, VectorIndexParams.IndexParamsKey.M, false, true, "16", null);
         register(builder, IndexType.VECTOR, IndexParamType.INDEX, VectorIndexParams.IndexParamsKey.EFCONSTRUCTION, false, true,
                 "40", null);
-        register(builder, IndexType.VECTOR, IndexParamType.INDEX, VectorIndexParams.IndexParamsKey.NBITS, false, false, "8",
+        register(builder, IndexType.VECTOR, IndexParamType.INDEX, VectorIndexParams.IndexParamsKey.NBITS, false, true, "8",
                 null);
-        register(builder, IndexType.VECTOR, IndexParamType.INDEX, VectorIndexParams.IndexParamsKey.NLIST, false, false, null,
+        register(builder, IndexType.VECTOR, IndexParamType.INDEX, VectorIndexParams.IndexParamsKey.NLIST, false, true, "16",
+                null);
+        register(builder, IndexType.VECTOR, IndexParamType.INDEX, VectorIndexParams.IndexParamsKey.M_IVFPQ, false, false, null,
                 null);
 
         // search
@@ -89,6 +90,8 @@ public class IndexParams {
         // index
         register(builder, IndexType.GIN, IndexParamType.INDEX, InvertedIndexParams.IndexParamsKey.PARSER, true, true, "none",
                 null);
+        register(builder, IndexType.GIN, IndexParamType.INDEX, InvertedIndexParams.IndexParamsKey.DICT_GRAM_NUM,
+                false, false, null, null);
         register(builder, IndexType.GIN, IndexParamType.INDEX, InvertedIndexParams.IndexParamsKey.OMIT_TERM_FREQ_AND_POSITION,
                 false, false, null, null);
 
@@ -168,7 +171,11 @@ public class IndexParams {
     }
 
     public void checkParams(String key, String value) throws SemanticException {
-        Optional.ofNullable(paramsHolder.get(key)).ifPresent(p -> p.checkValue(value));
+        IndexParamItem item = paramsHolder.get(key);
+        if (item == null) {
+            throw new SemanticException("Unknown index param: `" + key + "`");
+        }
+        item.checkValue(value);
     }
 
     public enum IndexParamType {

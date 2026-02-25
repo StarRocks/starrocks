@@ -14,15 +14,25 @@
 
 package com.starrocks.qe.scheduler.slot;
 
+import com.starrocks.common.Config;
+import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.scheduler.SchedulerTestBase;
 import com.starrocks.sql.optimizer.statistics.Statistics;
-import org.junit.Test;
+import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class SlotEstimatorTest extends SchedulerTestBase {
+    @BeforeAll
+    public static void beforeClass() throws Exception {
+        SchedulerTestBase.beforeClass();
+        ConnectorPlanTestBase.mockCatalog(connectContext, MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME);
+    }
+
     @Test
     public void testDefaultSlotEstimator() {
         SlotEstimatorFactory.DefaultSlotEstimator estimator = new SlotEstimatorFactory.DefaultSlotEstimator();
@@ -40,13 +50,13 @@ public class SlotEstimatorTest extends SchedulerTestBase {
         DefaultCoordinator coordinator = getScheduler("SELECT * FROM lineitem");
 
         connectContext.getAuditEventBuilder().setPlanMemCosts(-1L);
-        assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(1);
+        assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(3);
 
         connectContext.getAuditEventBuilder().setPlanMemCosts(memLimitBytesPerWorker * numWorkers);
         assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(opts.v2().getTotalSlots());
 
         connectContext.getAuditEventBuilder().setPlanMemCosts(memLimitBytesPerWorker * numWorkers - 10);
-        assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(opts.v2().getTotalSlots() / 2);
+        assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(opts.v2().getTotalSlots());
 
         connectContext.getAuditEventBuilder().setPlanMemCosts(memLimitBytesPerWorker * numWorkers + 10);
         assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(opts.v2().getTotalSlots());
@@ -64,7 +74,6 @@ public class SlotEstimatorTest extends SchedulerTestBase {
         final int dop = numCoresPerWorker / 2;
         QueryQueueOptions opts = new QueryQueueOptions(true,
                 new QueryQueueOptions.V2(4, numWorkers, numCoresPerWorker, 64L * 1024 * 1024 * 1024, numRowsPerWorker, 100));
-
 
         {
             DefaultCoordinator coordinator = getScheduler("SELECT * FROM lineitem");
@@ -153,6 +162,33 @@ public class SlotEstimatorTest extends SchedulerTestBase {
     }
 
     @Test
+    public void testParallelismBasedSlotsEstimatorForConnectorScan() throws Exception {
+        SlotEstimatorFactory.ParallelismBasedSlotsEstimator estimator = new SlotEstimatorFactory.ParallelismBasedSlotsEstimator();
+        final int numWorkers = 3;
+        final int numCoresPerWorker = 16;
+        final int numRowsPerWorker = 4096;
+        final int dop = numCoresPerWorker / 2;
+        QueryQueueOptions opts = new QueryQueueOptions(true,
+                new QueryQueueOptions.V2(4, numWorkers, numCoresPerWorker, 64L * 1024 * 1024 * 1024, numRowsPerWorker, 100));
+
+        String sql = "SELECT /*+SET_VAR(pipeline_dop=8)*/ " +
+                "count(1) FROM hive0.tpch.lineitem t1 join [shuffle] hive0.tpch.lineitem t2 on t1.l_orderkey = t2.l_orderkey";
+
+        {
+            DefaultCoordinator coordinator = getScheduler(sql);
+            setNodeCardinality(coordinator, 1, numWorkers * numRowsPerWorker * dop);
+            connectContext.getAuditEventBuilder().setPlanCpuCosts(100 * 10000);
+            assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(dop * numWorkers);
+        }
+        {
+            DefaultCoordinator coordinator = getScheduler(sql);
+            setNodeCardinality(coordinator, 1, numWorkers * numRowsPerWorker * dop * 10);
+            connectContext.getAuditEventBuilder().setPlanCpuCosts(100 * 10000);
+            assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(dop * numWorkers);
+        }
+    }
+
+    @Test
     public void testMaxSlotsEstimator() {
         SlotEstimator estimator1 = (opts, context, coord) -> 1;
         SlotEstimator estimator2 = (opts, context, coord) -> 2;
@@ -204,5 +240,34 @@ public class SlotEstimatorTest extends SchedulerTestBase {
         }
 
         return null;
+    }
+
+    @Test
+    public void testCreateWithPolicy() {
+        {
+            Config.query_queue_slots_estimator_strategy = "MBE";
+            QueryQueueOptions opts = new QueryQueueOptions(true, new QueryQueueOptions.V2());
+            assertThat(SlotEstimatorFactory.create(opts)).isInstanceOf(SlotEstimatorFactory.MemoryBasedSlotsEstimator.class);
+        }
+        {
+            Config.query_queue_slots_estimator_strategy = "PBE";
+            QueryQueueOptions opts = new QueryQueueOptions(true, new QueryQueueOptions.V2());
+            assertThat(SlotEstimatorFactory.create(opts)).isInstanceOf(SlotEstimatorFactory.ParallelismBasedSlotsEstimator.class);
+        }
+        {
+            Config.query_queue_slots_estimator_strategy = "MAX";
+            QueryQueueOptions opts = new QueryQueueOptions(true, new QueryQueueOptions.V2());
+            assertThat(SlotEstimatorFactory.create(opts)).isInstanceOf(SlotEstimatorFactory.MaxSlotsEstimator.class);
+        }
+        {
+            Config.query_queue_slots_estimator_strategy = "MIN";
+            QueryQueueOptions opts = new QueryQueueOptions(true, new QueryQueueOptions.V2());
+            assertThat(SlotEstimatorFactory.create(opts)).isInstanceOf(SlotEstimatorFactory.MinSlotsEstimator.class);
+        }
+        {
+            Config.query_queue_slots_estimator_strategy = "BAD_SET";
+            QueryQueueOptions opts = new QueryQueueOptions(true, new QueryQueueOptions.V2());
+            assertThat(SlotEstimatorFactory.create(opts)).isInstanceOf(SlotEstimatorFactory.MaxSlotsEstimator.class);
+        }
     }
 }

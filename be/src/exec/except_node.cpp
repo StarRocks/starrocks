@@ -22,6 +22,8 @@
 #include "exec/pipeline/set/except_output_source_operator.h"
 #include "exec/pipeline/set/except_probe_sink_operator.h"
 #include "exprs/expr.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 
@@ -39,8 +41,17 @@ Status ExceptNode::init(const TPlanNode& tnode, RuntimeState* state) {
     auto& result_texpr_lists = tnode.except_node.result_expr_lists;
     for (auto& texprs : result_texpr_lists) {
         std::vector<ExprContext*> ctxs;
-        RETURN_IF_ERROR(Expr::create_expr_trees(_pool, texprs, &ctxs, state));
+        RETURN_IF_ERROR(ExprFactory::create_expr_trees(_pool, texprs, &ctxs, state));
         _child_expr_lists.push_back(ctxs);
+    }
+
+    if (tnode.except_node.__isset.local_partition_by_exprs) {
+        auto& local_partition_by_exprs = tnode.except_node.local_partition_by_exprs;
+        for (auto& texprs : local_partition_by_exprs) {
+            std::vector<ExprContext*> ctxs;
+            RETURN_IF_ERROR(ExprFactory::create_expr_trees(_pool, texprs, &ctxs, state));
+            _local_partition_by_exprs.push_back(ctxs);
+        }
     }
     return Status::OK();
 }
@@ -57,7 +68,7 @@ Status ExceptNode::prepare(RuntimeState* state) {
     _get_result_timer = ADD_TIMER(runtime_profile(), "GetResultTime");
 
     for (auto& _child_expr_list : _child_expr_lists) {
-        RETURN_IF_ERROR(Expr::prepare(_child_expr_list, state));
+        RETURN_IF_ERROR(ExprExecutor::prepare(_child_expr_list, state));
         DCHECK_EQ(_child_expr_list.size(), _tuple_desc->slots().size());
     }
 
@@ -90,7 +101,7 @@ Status ExceptNode::open(RuntimeState* state) {
 
     // open result expr lists.
     for (const vector<ExprContext*>& exprs : _child_expr_lists) {
-        RETURN_IF_ERROR(Expr::open(exprs, state));
+        RETURN_IF_ERROR(ExprExecutor::open(exprs, state));
     }
 
     // initial build hash table used for remove duplicted
@@ -178,7 +189,7 @@ Status ExceptNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
 
     ChunkPtr result_chunk = std::make_shared<Chunk>();
     if (read_index > 0) {
-        Columns result_columns(_types.size());
+        MutableColumns result_columns(_types.size());
         for (size_t i = 0; i < _types.size(); ++i) {
             result_columns[i] = // default NullableColumn
                     ColumnHelper::create_column(_types[i].result_type, _types[i].is_nullable);
@@ -187,7 +198,7 @@ Status ExceptNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
 
         {
             SCOPED_TIMER(_get_result_timer);
-            _hash_set->deserialize_to_columns(_remained_keys, result_columns, read_index);
+            RETURN_IF_ERROR(_hash_set->deserialize_to_columns(_remained_keys, result_columns, read_index));
         }
 
         for (size_t i = 0; i < result_columns.size(); i++) {
@@ -218,7 +229,7 @@ void ExceptNode::close(RuntimeState* state) {
     }
 
     for (auto& exprs : _child_expr_lists) {
-        Expr::close(exprs, state);
+        ExprExecutor::close(exprs, state);
     }
 
     if (_build_pool != nullptr) {
@@ -247,8 +258,15 @@ pipeline::OpFactories ExceptNode::decompose_to_pipeline(pipeline::PipelineBuilde
 
     // Use the first child to build the hast table by ExceptBuildSinkOperator.
     OpFactories ops_with_except_build_sink = child(0)->decompose_to_pipeline(context);
-    ops_with_except_build_sink = context->maybe_interpolate_local_shuffle_exchange(
-            runtime_state(), id(), ops_with_except_build_sink, _child_expr_lists[0]);
+
+    if (_local_partition_by_exprs.empty()) {
+        ops_with_except_build_sink = context->maybe_interpolate_local_shuffle_exchange(
+                runtime_state(), id(), ops_with_except_build_sink, _child_expr_lists[0]);
+    } else {
+        ops_with_except_build_sink = context->maybe_interpolate_local_bucket_shuffle_exchange(
+                runtime_state(), id(), ops_with_except_build_sink, _local_partition_by_exprs[0]);
+    }
+
     ops_with_except_build_sink.emplace_back(std::make_shared<ExceptBuildSinkOperatorFactory>(
             context->next_operator_id(), id(), except_partition_ctx_factory, _child_expr_lists[0]));
     // Initialize OperatorFactory's fields involving runtime filters.
@@ -260,8 +278,13 @@ pipeline::OpFactories ExceptNode::decompose_to_pipeline(pipeline::PipelineBuilde
     // Use the rest children to erase keys from the hash table by ExceptProbeSinkOperator.
     for (size_t i = 1; i < _children.size(); i++) {
         OpFactories ops_with_except_probe_sink = child(i)->decompose_to_pipeline(context);
-        ops_with_except_probe_sink = context->maybe_interpolate_local_shuffle_exchange(
-                runtime_state(), id(), ops_with_except_probe_sink, _child_expr_lists[i]);
+        if (_local_partition_by_exprs.empty()) {
+            ops_with_except_probe_sink = context->maybe_interpolate_local_shuffle_exchange(
+                    runtime_state(), id(), ops_with_except_probe_sink, _child_expr_lists[i]);
+        } else {
+            ops_with_except_probe_sink = context->maybe_interpolate_local_bucket_shuffle_exchange(
+                    runtime_state(), id(), ops_with_except_probe_sink, _local_partition_by_exprs[i]);
+        }
         ops_with_except_probe_sink.emplace_back(std::make_shared<ExceptProbeSinkOperatorFactory>(
                 context->next_operator_id(), id(), except_partition_ctx_factory, _child_expr_lists[i], i - 1));
         // Initialize OperatorFactory's fields involving runtime filters.

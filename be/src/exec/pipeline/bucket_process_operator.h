@@ -17,12 +17,13 @@
 #include <memory>
 #include <unordered_map>
 
+#include "base/concurrency/race_detect.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/schedule/observer.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/pipeline/spill_process_channel.h"
 #include "runtime/runtime_state.h"
-#include "util/race_detect.h"
 
 namespace starrocks::pipeline {
 // similar with query_cache::MultilaneOperator but it only proxy one operator.
@@ -43,11 +44,24 @@ struct BucketProcessContext {
 
     OperatorPtr source;
     OperatorPtr sink;
-    SpillProcessChannelPtr spill_channel;
 
     Status reset_operator_state(RuntimeState* state);
 
     Status finish_current_sink(RuntimeState* state);
+
+    void attach_sink_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
+        _pip_observable.attach_sink_observer(state, observer);
+    }
+
+    void attach_source_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
+        _pip_observable.attach_source_observer(state, observer);
+    }
+
+    auto defer_notify_source() { return _pip_observable.defer_notify_source(); }
+    auto defer_notify_sink() { return _pip_observable.defer_notify_sink(); }
+
+private:
+    PipeObservable _pip_observable;
 };
 using BucketProcessContextPtr = std::shared_ptr<BucketProcessContext>;
 
@@ -59,6 +73,7 @@ public:
     ~BucketProcessSinkOperator() override = default;
 
     Status prepare(RuntimeState* state) override;
+    Status prepare_local_state(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
@@ -91,6 +106,7 @@ public:
     ~BucketProcessSourceOperator() override = default;
 
     Status prepare(RuntimeState* state) override;
+    Status prepare_local_state(RuntimeState* state) override;
     bool has_output() const override;
     bool is_finished() const override;
     Status set_finished(RuntimeState* state) override;
@@ -122,6 +138,8 @@ class BucketProcessSinkOperatorFactory final : public OperatorFactory {
 public:
     BucketProcessSinkOperatorFactory(int32_t id, int32_t plan_node_id, BucketProcessContextFactoryPtr context_factory,
                                      OperatorFactoryPtr factory);
+    bool support_event_scheduler() const override { return true; }
+
     pipeline::OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
@@ -135,6 +153,8 @@ class BucketProcessSourceOperatorFactory final : public SourceOperatorFactory {
 public:
     BucketProcessSourceOperatorFactory(int32_t id, int32_t plan_node_id, BucketProcessContextFactoryPtr context_factory,
                                        OperatorFactoryPtr factory);
+    bool support_event_scheduler() const override { return true; }
+
     pipeline::OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
