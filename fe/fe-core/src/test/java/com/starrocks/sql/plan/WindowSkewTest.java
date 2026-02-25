@@ -84,8 +84,8 @@ class WindowSkewTest extends PlanTestBase {
         assertContains(plan, "Output Exprs:1: p | 2: s | 4: sum(3: x)");
         assertContains(plan, "UNION");
         // Validate that data is split into NULL and NOT NULL paths
-        assertContains(plan, "Predicates: [5: p, INT, true] IS NOT NULL");
-        assertContains(plan, "Predicates: [1: p, INT, true] IS NULL");
+        assertContains(plan, "Predicates: 5: p IS NOT NULL");
+        assertContains(plan, "Predicates: 1: p IS NULL");
         // Validate Union child expressions match the expected columns from both branches
         assertContains(plan,
                 "ANALYTIC\n" +
@@ -178,8 +178,7 @@ class WindowSkewTest extends PlanTestBase {
         assertContains(plan, "UNION");
         assertContains(plan, "Predicates: [1: p, INT, true] = 1");
         // Ensure that unskewed partition preserves NULLs
-        assertContains(plan, "Predicates: (cast([5: p, INT, true] as VARCHAR(1048576)) != '1') " +
-                "OR ([5: p, INT, true] IS NULL)");
+        assertContains(plan, "Predicates: (CAST(5: p AS VARCHAR(1048576)) != '1') OR (5: p IS NULL)");
 
         assertContains(plan,
                 "ANALYTIC\n" +
@@ -224,8 +223,8 @@ class WindowSkewTest extends PlanTestBase {
 
         assertContains(plan, "Output Exprs:1: p | 2: s | 4: avg(3: x) | 5: rank()");
         assertContains(plan, "UNION");
-        assertContains(plan, "Predicates: [6: p, INT, true] IS NOT NULL");
-        assertContains(plan, "Predicates: [1: p, INT, true] IS NULL");
+        assertContains(plan, "Predicates: 6: p IS NOT NULL");
+        assertContains(plan, "Predicates: 1: p IS NULL");
     }
 
     @Test
