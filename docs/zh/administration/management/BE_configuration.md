@@ -9,6 +9,8 @@ import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.mdx'
 
 import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.mdx'
 
+import EditionSpecificBEItem from '../../_assets/commonMarkdown/Edition_Specific_BE_Item.mdx'
+
 # BE 配置项
 
 <BEConfigMethod />
@@ -3461,3 +3463,5 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 状态：已移除
 - 描述：该参数已移除。Bit-unpack 的 SIMD 路径现在在编译期根据 AVX2/BMI2 自动选择，并在不支持时回退到默认实现。
 - 移除版本：-
+
+<EditionSpecificBEItem />
