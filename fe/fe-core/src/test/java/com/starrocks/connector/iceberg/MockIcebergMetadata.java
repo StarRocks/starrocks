@@ -21,6 +21,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.IcebergView;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.tvr.TvrDeltaStats;
 import com.starrocks.common.tvr.TvrTableDelta;
@@ -661,5 +662,21 @@ public class MockIcebergMetadata implements ConnectorMetadata {
 
     private void readUnlock() {
         lock.readLock().unlock();
+    }
+
+    @Override
+    public com.starrocks.catalog.Table getView(ConnectContext context, String dbName, String viewName) {
+        // Return a mock IcebergView for testing
+        if (dbName.equalsIgnoreCase("view_db") && viewName.equalsIgnoreCase("iceberg_view")) {
+            List<Column> schema = Lists.newArrayList(
+                    new Column("id", IntegerType.INT),
+                    new Column("data", VarcharType.createDefaultVarchar()),
+                    new Column("date", DateType.DEFAULT)
+            );
+            return new IcebergView(1, MOCKED_ICEBERG_CATALOG_NAME, dbName, viewName, schema,
+                    "SELECT id, data, date FROM t1", MOCKED_ICEBERG_CATALOG_NAME, dbName,
+                    "view_location", Maps.newHashMap());
+        }
+        return null;
     }
 }

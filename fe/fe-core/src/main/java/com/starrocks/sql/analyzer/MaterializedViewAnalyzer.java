@@ -217,6 +217,15 @@ public class MaterializedViewAnalyzer {
                 continue;
             }
 
+            // Check if the table is an Iceberg table with partition evolution
+            if (table instanceof IcebergTable) {
+                IcebergTable icebergTable = (IcebergTable) table;
+                if (icebergTable.getNativeTable().specs().size() > 1) {
+                    throw new SemanticException("Do not support create materialized view when base iceberg table " +
+                            table.getName() + " has done partition evolution", tableNameInfo.getPos());
+                }
+            }
+
             if (!FeConstants.isReplayFromQueryDump && !isSupportedExternalTables(table)) {
                 throw new SemanticException(
                         "Only supports creating materialized views based on the external table " +
