@@ -1959,17 +1959,6 @@ public class SchemaChangeHandler extends AlterHandler {
         getAlterJobV2Infos(db, type, ImmutableList.copyOf(alterJobsV2.values()), schemaChangeJobInfos);
     }
 
-    public Optional<Long> getActiveTxnIdOfTable(long tableId) {
-        Map<Long, AlterJobV2> alterJobV2Map = getAlterJobsV2();
-        for (AlterJobV2 job : alterJobV2Map.values()) {
-            AlterJobV2.JobState state = job.getJobState();
-            if (job.getTableId() == tableId && state != AlterJobV2.JobState.FINISHED && state != AlterJobV2.JobState.CANCELLED) {
-                return job.getTransactionId();
-            }
-        }
-        return Optional.empty();
-    }
-
     @VisibleForTesting
     @Nullable
     public AlterJobV2 analyzeAndCreateJob(List<AlterClause> alterClauses, Database db, OlapTable olapTable) throws
