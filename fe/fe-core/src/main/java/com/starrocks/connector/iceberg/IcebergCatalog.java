@@ -354,6 +354,11 @@ public interface IcebergCatalog extends MemoryTrackable {
                             int specId = row.get(1, Integer.class);
                             PartitionSpec spec = nativeTable.specs().get(specId);
 
+                            // Old partition specs may be referenced in metadata even if they have been deleted. Skip them.
+                            if (spec == null) {
+                                continue;
+                            }
+
                             String partitionName =
                                     PartitionUtil.convertIcebergPartitionToPartitionName(nativeTable, spec, partitionData);
                             long lastUpdated =
