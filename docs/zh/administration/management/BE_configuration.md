@@ -9,6 +9,8 @@ import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.mdx'
 
 import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.mdx'
 
+import EditionSpecificBEItem from '../../_assets/commonMarkdown/Edition_Specific_BE_Item.mdx'
+
 # BE 配置项
 
 <BEConfigMethod />
@@ -5396,3 +5398,5 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型: -
 - 是否动态: 否
 - 描述: table metrics中表的最大数量, metrics/接口最多返回max_table_metrics_num个表的metrics。
+
+<EditionSpecificBEItem />
