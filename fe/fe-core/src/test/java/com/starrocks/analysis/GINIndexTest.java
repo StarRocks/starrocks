@@ -26,10 +26,26 @@ import com.starrocks.common.InvertedIndexParams.InvertedIndexImpType;
 import com.starrocks.common.InvertedIndexParams.SearchParamsKey;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.IndexDef.IndexType;
+<<<<<<< HEAD
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TIndexType;
 import com.starrocks.thrift.TOlapTableIndex;
+=======
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.expression.MatchExpr;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.thrift.TIndexType;
+import com.starrocks.thrift.TOlapTableIndex;
+import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.StringType;
+>>>>>>> c68e6523f3 ([BugFix] Fix MV index properties lost during materialized view creation (#69187))
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -177,4 +193,111 @@ public class GINIndexTest extends PlanTestBase {
         MatchExpr expr = new MatchExpr(slot, stringExpr);
         MatchExpr newMatch = (MatchExpr) expr.clone();
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testGINWithAutoIncrement() throws Exception {
+        // Test builtin GIN with AUTO_INCREMENT and replicated_storage = true (Should succeed)
+        ExceptionChecker.expectThrowsNoException(() -> starRocksAssert.withTable(
+                "CREATE TABLE `t_builtin` (" +
+                        "  `k` BIGINT AUTO_INCREMENT," +
+                        "  `msg_all` varchar(100)," +
+                        "  INDEX idx_msg_all (`msg_all`) USING GIN(\"imp_lib\" = \"builtin\", \"parser\" = \"standard\")" +
+                        ") ENGINE=OLAP " +
+                        "DUPLICATE KEY(`k`) " +
+                        "DISTRIBUTED BY HASH(`k`) BUCKETS 1 " +
+                        "PROPERTIES ( \"replication_num\" = \"1\", \"replicated_storage\" = \"true\" );"));
+        starRocksAssert.dropTable("t_builtin");
+
+        // Test clucene GIN with AUTO_INCREMENT and replicated_storage = true (Should fail)
+        // because OlapTableFactory will force replicated_storage to false for clucene GIN
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Table with AUTO_INCREMENT column must use Replicated Storage",
+                () -> starRocksAssert.withTable(
+                        "CREATE TABLE `t_clucene` (" +
+                                "  `k` BIGINT AUTO_INCREMENT," +
+                                "  `msg_all` varchar(100)," +
+                                "  INDEX idx_msg_all (`msg_all`) USING GIN(\"imp_lib\" = \"clucene\", \"parser\" = \"standard\")" +
+                                ") ENGINE=OLAP " +
+                                "DUPLICATE KEY(`k`) " +
+                                "DISTRIBUTED BY HASH(`k`) BUCKETS 1 " +
+                                "PROPERTIES ( \"replication_num\" = \"1\", \"replicated_storage\" = \"true\" );"));
+
+        // Test builtin GIN with AUTO_INCREMENT and replicated_storage = false (Should fail)
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Table with AUTO_INCREMENT column must use Replicated Storage",
+                () -> starRocksAssert.withTable(
+                        "CREATE TABLE `t_builtin_no_rs` (" +
+                                "  `k` BIGINT AUTO_INCREMENT," +
+                                "  `msg_all` varchar(100)," +
+                                "  INDEX idx_msg_all (`msg_all`) USING GIN(\"imp_lib\" = \"builtin\", \"parser\" = \"standard\")" +
+                                ") ENGINE=OLAP " +
+                                "DUPLICATE KEY(`k`) " +
+                                "DISTRIBUTED BY HASH(`k`) BUCKETS 1 " +
+                                "PROPERTIES ( \"replication_num\" = \"1\", \"replicated_storage\" = \"false\" );"));
+    }
+
+    @Test
+    public void testMaterializedViewGINIndexProperties() throws Exception {
+        // Create a MV with GIN index on the DUP_KEYS table
+        String mvSql = "create materialized view test_mv_gin_index " +
+                "(f1, f2, " +
+                "INDEX gin_idx1 (`f2`) USING GIN" +
+                ") " +
+                "DISTRIBUTED BY HASH(`f1`) BUCKETS 3 \n" +
+                "REFRESH MANUAL\n" +
+                "PROPERTIES " +
+                "(" +
+                "\"replication_num\" = \"1\"" +
+                ") " +
+                "as select f1, f2 from test_index_tbl;";
+
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(mvSql, connectContext);
+        Assertions.assertInstanceOf(CreateMaterializedViewStatement.class, stmt);
+        CreateMaterializedViewStatement createMVStmt = (CreateMaterializedViewStatement) stmt;
+
+        // Verify that the MV indexes have properties (not empty)
+        List<Index> mvIndexes = createMVStmt.getMvIndexes();
+        Assertions.assertEquals(1, mvIndexes.size());
+
+        Index ginIndex = mvIndexes.get(0);
+        Assertions.assertEquals("gin_idx1", ginIndex.getIndexName());
+        Assertions.assertEquals(IndexType.GIN, ginIndex.getIndexType());
+
+        // Key assertion: properties should NOT be empty
+        java.util.Map<String, String> properties = ginIndex.getProperties();
+        Assertions.assertNotNull(properties, "Index properties should not be null");
+        Assertions.assertFalse(properties.isEmpty(), "Index properties should not be empty");
+
+        // Verify imp_lib default property is present
+        Assertions.assertTrue(
+                properties.containsKey(IMP_LIB.name().toLowerCase(Locale.ROOT)),
+                "Index properties should contain imp_lib");
+        Assertions.assertEquals(
+                InvertedIndexImpType.CLUCENE.toString().toLowerCase(),
+                properties.get(IMP_LIB.name().toLowerCase(Locale.ROOT)),
+                "imp_lib should default to clucene");
+
+        // Verify parser default property is present
+        Assertions.assertTrue(
+                properties.containsKey(IndexAnalyzer.INVERTED_INDEX_PARSER_KEY),
+                "Index properties should contain parser");
+        Assertions.assertEquals(
+                IndexAnalyzer.INVERTED_INDEX_PARSER_NONE,
+                properties.get(IndexAnalyzer.INVERTED_INDEX_PARSER_KEY),
+                "parser should default to none");
+
+        // Verify properties are correctly passed to Thrift object
+        TOlapTableIndex olapIndex = ginIndex.toThrift();
+        Assertions.assertEquals(
+                InvertedIndexImpType.CLUCENE.toString().toLowerCase(),
+                olapIndex.getCommon_properties().get(IMP_LIB.name().toLowerCase(Locale.ROOT)),
+                "Thrift common_properties should contain imp_lib with default value");
+        Assertions.assertEquals(
+                IndexAnalyzer.INVERTED_INDEX_PARSER_NONE,
+                olapIndex.getIndex_properties().get(IndexAnalyzer.INVERTED_INDEX_PARSER_KEY),
+                "Thrift index_properties should contain parser with default value");
+    }
+>>>>>>> c68e6523f3 ([BugFix] Fix MV index properties lost during materialized view creation (#69187))
 }
