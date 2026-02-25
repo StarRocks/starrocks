@@ -16,23 +16,23 @@ import EditionSpecificFEItem from '../../_assets/commonMarkdown/Edition_Specific
 
 ## FE 設定項目の表示
 
-FE の起動後、MySQL クライアントで ADMIN SHOW FRONTEND CONFIG コマンドを実行して、パラメーター設定を確認できます。特定のパラメーターの設定をクエリするには、次のコマンドを実行します。
+FEが起動した後、MySQLクライアントでADMIN SHOW FRONTEND CONFIGコマンドを実行して、パラメータ設定を確認できます。特定のパラメータの設定をクエリしたい場合は、以下のコマンドを実行します。
 
 ```SQL
 ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"];
 ```
 
-返されるフィールドの詳細な説明については、[`ADMIN SHOW CONFIG`](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SHOW_CONFIG.md) を参照してください。
+返されるフィールドの詳細については、[`ADMIN SHOW CONFIG`](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SHOW_CONFIG.md)を参照してください。
 
 :::note
-クラスター管理関連コマンドを実行するには、管理者権限が必要です。
+クラスター管理関連のコマンドを実行するには、管理者権限が必要です。
 :::
 
-## FE パラメーターの設定
+## FE パラメータの設定
 
-### FE 動的パラメーターの設定
+### FE動的パラメータの設定
 
-[`ADMIN SET FRONTEND CONFIG`](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) を使用して、FE 動的パラメーターの設定を構成または変更できます。
+FE動的パラメータの設定は、[`ADMIN SET FRONTEND CONFIG`](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md)を使用して構成または変更できます。
 
 ```SQL
 ADMIN SET FRONTEND CONFIG ("key" = "value");
@@ -40,212 +40,21 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 <AdminSetFrontendNote />
 
-### FE 静的パラメーターの設定
+### FE静的パラメータを設定する
 
 <StaticFEConfigNote />
 
-## FE パラメーターについて
+## FEパラメータを理解する
 
-### ロギング
+### ログ
 
-<<<<<<< HEAD
-##### log_roll_size_mb
-
-- デフォルト: 1024
-- タイプ: Int
-- 単位: MB
-- 変更可能: いいえ
-- 説明: システムログファイルまたは監査ログファイルの最大サイズ。
-- 導入バージョン: -
-
-##### sys_log_dir
-
-- デフォルト: StarRocksFE.STARROCKS_HOME_DIR + "/log"
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: システムログファイルを保存するディレクトリ。
-- 導入バージョン: -
-
-##### sys_log_level
-
-- デフォルト: INFO
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: システムログエントリが分類される重大度レベル。 有効な値: `INFO`, `WARN`, `ERROR`, `FATAL`。
-- 導入バージョン: -
-
-##### sys_log_roll_num
-
-- デフォルト: 10
-- タイプ: Int
-- 単位: -
-- 変更可能: いいえ
-- 説明: `sys_log_roll_interval` パラメータで指定された保持期間内に保持できるシステムログファイルの最大数。
-- 導入バージョン: -
-
-##### sys_log_verbose_modules
-
-- デフォルト: 空の文字列
-- タイプ: String[]
-- 単位: -
-- 変更可能: いいえ
-- 説明: StarRocks がシステムログを生成するモジュール。このパラメータが `org.apache.starrocks.catalog` に設定されている場合、StarRocks は catalog モジュールのシステムログのみを生成します。モジュール名はカンマ (,) とスペースで区切ります。
-- 導入バージョン: -
-
-##### sys_log_roll_interval
-
-- デフォルト: DAY
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: StarRocks がシステムログエントリをローテーションする時間間隔。有効な値: `DAY` と `HOUR`。
-  - このパラメータが `DAY` に設定されている場合、システムログファイルの名前に `yyyyMMdd` 形式のサフィックスが追加されます。
-  - このパラメータが `HOUR` に設定されている場合、システムログファイルの名前に `yyyyMMddHH` 形式のサフィックスが追加されます。
-- 導入バージョン: -
-
-##### sys_log_delete_age
-
-- デフォルト: 7d
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: システムログファイルの保持期間。デフォルト値 `7d` は、各システムログファイルが 7 日間保持されることを指定します。StarRocks は各システムログファイルをチェックし、7 日前に生成されたものを削除します。
-- 導入バージョン: -
-
-
-
-
-
-
-
-##### audit_log_dir
-
-- デフォルト: StarRocksFE.STARROCKS_HOME_DIR + "/log"
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: 監査ログファイルを保存するディレクトリ。
-- 導入バージョン: -
-
-##### audit_log_roll_num
-
-- デフォルト: 90
-- タイプ: Int
-- 単位: -
-- 変更可能: いいえ
-- 説明: `audit_log_roll_interval` パラメータで指定された保持期間内に保持できる監査ログファイルの最大数。
-- 導入バージョン: -
-
-##### audit_log_modules
-
-- デフォルト: slow_query, query
-- タイプ: String[]
-- 単位: -
-- 変更可能: いいえ
-- 説明: StarRocks が監査ログエントリを生成するモジュール。デフォルトでは、StarRocks は `slow_query` モジュールと `query` モジュールの監査ログを生成します。`connection` モジュールは v3.0 からサポートされています。モジュール名はカンマ (,) とスペースで区切ります。
-- 導入バージョン: -
-
-##### qe_slow_log_ms
-
-- デフォルト: 5000
-- タイプ: Long
-- 単位: ミリ秒
-- 変更可能: はい
-- 説明: クエリがスロークエリであるかどうかを判断するために使用されるしきい値。クエリの応答時間がこのしきい値を超える場合、**fe.audit.log** にスロークエリとして記録されます。
-- 導入バージョン: -
-
-##### audit_log_roll_interval
-
-- デフォルト: DAY
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: StarRocks が監査ログエントリをローテーションする時間間隔。有効な値: `DAY` と `HOUR`。
-  - このパラメータが `DAY` に設定されている場合、監査ログファイルの名前に `yyyyMMdd` 形式のサフィックスが追加されます。
-  - このパラメータが `HOUR` に設定されている場合、監査ログファイルの名前に `yyyyMMddHH` 形式のサフィックスが追加されます。
-- 導入バージョン: -
-
-##### audit_log_delete_age
-
-- デフォルト: 30d
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: 監査ログファイルの保持期間。デフォルト値 `30d` は、各監査ログファイルが 30 日間保持されることを指定します。StarRocks は各監査ログファイルをチェックし、30 日前に生成されたものを削除します。
-- 導入バージョン: -
-
-
-
-
-
-
-
-##### dump_log_dir
-
-- デフォルト: StarRocksFE.STARROCKS_HOME_DIR + "/log"
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: ダンプログファイルを保存するディレクトリ。
-- 導入バージョン: -
-
-##### dump_log_roll_num
-
-- デフォルト: 10
-- タイプ: Int
-- 単位: -
-- 変更可能: いいえ
-- 説明: `dump_log_roll_interval` パラメータで指定された保持期間内に保持できるダンプログファイルの最大数。
-- 導入バージョン: -
-
-##### dump_log_modules
-
-- デフォルト: query
-- タイプ: String[]
-- 単位: -
-- 変更可能: いいえ
-- 説明: StarRocks がダンプログエントリを生成するモジュール。デフォルトでは、StarRocks は query モジュールのダンプログを生成します。モジュール名はカンマ (,) とスペースで区切ります。
-- 導入バージョン: -
-
-##### dump_log_roll_interval
-
-- デフォルト: DAY
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: StarRocks がダンプログエントリをローテーションする時間間隔。有効な値: `DAY` と `HOUR`。
-  - このパラメータが `DAY` に設定されている場合、ダンプログファイルの名前に `yyyyMMdd` 形式のサフィックスが追加されます。
-  - このパラメータが `HOUR` に設定されている場合、ダンプログファイルの名前に `yyyyMMddHH` 形式のサフィックスが追加されます。
-- 導入バージョン: -
-
-##### dump_log_delete_age
-
-- デフォルト: 7d
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: ダンプログファイルの保持期間。デフォルト値 `7d` は、各ダンプログファイルが 7 日間保持されることを指定します。StarRocks は各ダンプログファイルをチェックし、7 日前に生成されたものを削除します。
-- 導入バージョン: -
-
-
-
-
-
-
-
-### サーバー
-
-##### frontend_address
-=======
 ##### `audit_log_delete_age`
 
 - Default: 30d
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: 監査ログファイルの保持期間。デフォルト値 `30d` は、各監査ログファイルが 30 日間保持できることを指定します。StarRocks は各監査ログファイルをチェックし、30 日以上前に生成されたファイルを削除します。
+- Description: 監査ログファイルの保持期間。デフォルト値 `30d` は、各監査ログファイルが30日間保持されることを指定します。StarRocks は各監査ログファイルをチェックし、30日前に生成されたファイルを削除します。
 - Introduced in: -
 
 ##### `audit_log_dir`
@@ -254,7 +63,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: 監査ログファイルを格納するディレクトリ。
+- Description: 監査ログファイルを保存するディレクトリ。
 - Introduced in: -
 
 ##### `audit_log_enable_compress`
@@ -263,7 +72,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: N/A
 - Is mutable: No
-- Description: true の場合、生成された Log4j2 設定は、ローテーションされた監査ログファイル名 (fe.audit.log.*) に ".gz" 接尾辞を追加し、Log4j2 がロールオーバー時に圧縮された (.gz) アーカイブ監査ログファイルを生成するようにします。この設定は、FE 起動時に Log4jConfig.initLogging で読み込まれ、監査ログの RollingFile アペンダーに適用されます。アクティブな監査ログではなく、ローテーション/アーカイブされたファイルにのみ影響します。値は起動時に初期化されるため、変更を有効にするには FE の再起動が必要です。監査ログのローテーション設定 (`audit_log_dir`、`audit_log_roll_interval`、`audit_roll_maxsize`、`audit_log_roll_num`) とともに使用します。
+- Description: true の場合、生成された Log4j2 設定は、ローテーションされた監査ログファイル名 (fe.audit.log.*) に ".gz" 接尾辞を追加し、Log4j2 がロールオーバー時に圧縮された (.gz) アーカイブ監査ログファイルを生成するようにします。この設定は、FE 起動時に Log4jConfig.initLogging で読み取られ、監査ログの RollingFile アペンダーに適用されます。これは、アクティブな監査ログではなく、ローテーション/アーカイブされたファイルのみに影響します。値は起動時に初期化されるため、変更を有効にするには FE の再起動が必要です。監査ログのローテーション設定 (`audit_log_dir`、`audit_log_roll_interval`、`audit_roll_maxsize`、`audit_log_roll_num`) と併用してください。
 - Introduced in: 3.2.12
 
 ##### `audit_log_json_format`
@@ -272,7 +81,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: N/A
 - Is mutable: Yes
-- Description: true の場合、FE 監査イベントは、デフォルトのパイプ区切り "key=value" 文字列ではなく、構造化された JSON (Jackson ObjectMapper が注釈付き AuditEvent フィールドの Map をシリアル化) として出力されます。この設定は、AuditLogBuilder が処理するすべての組み込み監査シンクに影響します。接続監査、クエリ監査、大容量クエリ監査 (イベントが条件を満たす場合、大容量クエリしきい値フィールドが JSON に追加されます)、および低速監査出力です。大容量クエリしきい値および "features" フィールドに注釈が付けられたフィールドは特別に扱われます (通常の監査エントリから除外され、該当する場合、大容量クエリまたは機能ログに含まれます)。これを有効にすると、ログコレクターまたは SIEM のログが機械で解析可能になります。ログ形式が変更されるため、従来のパイプ区切り形式を期待する既存のパーサーを更新する必要がある場合があります。
+- Description: true の場合、FE 監査イベントは、デフォルトのパイプ区切り "key=value" 文字列ではなく、構造化された JSON (Jackson ObjectMapper が注釈付き AuditEvent フィールドの Map をシリアル化) として出力されます。この設定は、AuditLogBuilder が処理するすべての組み込み監査シンクに影響します。接続監査、クエリ監査、ビッグクエリ監査 (イベントが条件を満たす場合、ビッグクエリしきい値フィールドが JSON に追加されます)、およびスロー監査出力です。ビッグクエリしきい値と "features" フィールドに注釈が付けられたフィールドは特別に扱われます (通常の監査エントリから除外され、該当する場合にビッグクエリまたは機能ログに含まれます)。ログコレクターまたは SIEMs がログを機械で解析できるようにするには、これを有効にしてください。ログ形式が変更され、従来のパイプ区切り形式を期待する既存のパーサーの更新が必要になる場合があることに注意してください。
 - Introduced in: 3.2.7
 
 ##### `audit_log_modules`
@@ -281,7 +90,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String[]
 - Unit: -
 - Is mutable: No
-- Description: StarRocks が監査ログエントリを生成するモジュール。デフォルトでは、StarRocks は `slow_query` モジュールと `query` モジュールの監査ログを生成します。`connection` モジュールは v3.0 以降でサポートされています。モジュール名をコンマ (,) とスペースで区切ります。
+- Description: StarRocks が監査ログエントリを生成するモジュール。デフォルトでは、StarRocks は `slow_query` モジュールと `query` モジュールに対して監査ログを生成します。`connection` モジュールは v3.0 からサポートされています。モジュール名をコンマ (,) とスペースで区切ってください。
 - Introduced in: -
 
 ##### `audit_log_roll_interval`
@@ -291,8 +100,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Unit: -
 - Is mutable: No
 - Description: StarRocks が監査ログエントリをローテーションする時間間隔。有効な値: `DAY` と `HOUR`。
-  - このパラメーターが `DAY` に設定されている場合、監査ログファイル名に `yyyyMMdd` 形式のサフィックスが追加されます。
-  - このパラメーターが `HOUR` に設定されている場合、監査ログファイル名に `yyyyMMddHH` 形式のサフィックスが追加されます。
+  - このパラメータが `DAY` に設定されている場合、監査ログファイル名に `yyyyMMdd` 形式のサフィックスが追加されます。
+  - このパラメータが `HOUR` に設定されている場合、監査ログファイル名に `yyyyMMddHH` 形式のサフィックスが追加されます。
 - Introduced in: -
 
 ##### `audit_log_roll_num`
@@ -301,7 +110,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: `audit_log_roll_interval` パラメーターで指定された各保持期間内に保持できる監査ログファイルの最大数。
+- Description: `audit_log_roll_interval` パラメータで指定された各保持期間内に保持できる監査ログファイルの最大数。
 - Introduced in: -
 
 ##### `bdbje_log_level`
@@ -310,7 +119,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: StarRocks で Berkeley DB Java Edition (BDB JE) が使用するロギングレベルを制御します。BDB 環境の初期化中に BDBEnvironment.initConfigs() は、この値を `com.sleepycat.je` パッケージの Java ロガーと BDB JE 環境ファイルロギングレベル (`EnvironmentConfig.FILE_LOGGING_LEVEL`) に適用します。SEVERE、WARNING、INFO、CONFIG、FINE、FINER、FINEST、ALL、OFF などの標準的な java.util.logging.Level 名を受け入れます。ALL に設定すると、すべてのログメッセージが有効になります。詳細度を上げると、ログのボリュームが増加し、ディスク I/O とパフォーマンスに影響を与える可能性があります。この値は BDB 環境が初期化されるときに読み込まれるため、環境の (再) 初期化後にのみ有効になります。
+- Description: StarRocks で Berkeley DB Java Edition (BDB JE) が使用するロギングレベルを制御します。BDB 環境の初期化中に BDBEnvironment.initConfigs() はこの値を `com.sleepycat.je` パッケージの Java ロガーと BDB JE 環境ファイルロギングレベル (`EnvironmentConfig.FILE_LOGGING_LEVEL`) に適用します。SEVERE、WARNING、INFO、CONFIG、FINE、FINER、FINEST、ALL、OFF などの標準的な java.util.logging.Level 名を受け入れます。ALL に設定すると、すべてのログメッセージが有効になります。詳細度を上げるとログ量が増加し、ディスク I/O とパフォーマンスに影響を与える可能性があります。この値は BDB 環境が初期化されるときに読み取られるため、環境の (再) 初期化後にのみ有効になります。
 - Introduced in: v3.2.0
 
 ##### `big_query_log_delete_age`
@@ -319,7 +128,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: FE の大容量クエリログファイル (`fe.big_query.log.*`) が自動削除されるまでの保持期間を制御します。この値は、Log4j の削除ポリシーに IfLastModified age として渡されます。最終更新時刻がこの値よりも古いローテーションされた大容量クエリログは削除されます。`d` (日)、`h` (時間)、`m` (分)、`s` (秒) などの接尾辞をサポートしています。例: `7d` (7 日間)、`10h` (10 時間)、`60m` (60 分)、`120s` (120 秒)。この項目は `big_query_log_roll_interval` および `big_query_log_roll_num` と連携して、どのファイルを保持またはパージするかを決定します。
+- Description: FE ビッグクエリログファイル (`fe.big_query.log.*`) が自動削除されるまでの保持期間を制御します。この値は Log4j の削除ポリシーに IfLastModified age として渡されます。最終変更時刻がこの値よりも古いローテーションされたビッグクエリログは削除されます。`d` (日)、`h` (時間)、`m` (分)、`s` (秒) のサフィックスをサポートします。例: `7d` (7日間)、`10h` (10時間)、`60m` (60分)、`120s` (120秒)。この項目は `big_query_log_roll_interval` および `big_query_log_roll_num` と連携して、どのファイルを保持またはパージするかを決定します。
 - Introduced in: v3.2.0
 
 ##### `big_query_log_dir`
@@ -328,7 +137,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: FE が大容量クエリダンプログ (`fe.big_query.log.*`) を書き込むディレクトリ。Log4j 設定はこのパスを使用して、`fe.big_query.log` とそのローテーションされたファイル用の RollingFile アペンダーを作成します。ローテーションと保持は、`big_query_log_roll_interval` (時刻ベースのサフィックス)、`log_roll_size_mb` (サイズトリガー)、`big_query_log_roll_num` (最大ファイル数)、および `big_query_log_delete_age` (年齢ベースの削除) によって管理されます。大容量クエリレコードは、`big_query_log_cpu_second_threshold`、`big_query_log_scan_rows_threshold`、または `big_query_log_scan_bytes_threshold` などのユーザー定義のしきい値を超えるクエリに対してログに記録されます。このファイルにログを記録するモジュールを制御するには、`big_query_log_modules` を使用します。
+- Description: FE がビッグクエリダンプログ (`fe.big_query.log.*`) を書き込むディレクトリ。Log4j 設定はこのパスを使用して `fe.big_query.log` とそのローテーションされたファイル用の RollingFile アペンダーを作成します。ローテーションと保持は、`big_query_log_roll_interval` (時間ベースのサフィックス)、`log_roll_size_mb` (サイズトリガー)、`big_query_log_roll_num` (最大ファイル数)、および `big_query_log_delete_age` (年齢ベースの削除) によって管理されます。ビッグクエリレコードは、`big_query_log_cpu_second_threshold`、`big_query_log_scan_rows_threshold`、または `big_query_log_scan_bytes_threshold` などのユーザー定義のしきい値を超えるクエリに対してログに記録されます。`big_query_log_modules` を使用して、どのモジュールがこのファイルにログを記録するかを制御します。
 - Introduced in: v3.2.0
 
 ##### `big_query_log_modules`
@@ -337,7 +146,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String[]
 - Unit: -
 - Is mutable: No
-- Description: モジュールごとの大容量クエリロギングを有効にするモジュール名サフィックスのリスト。一般的な値は論理コンポーネント名です。たとえば、デフォルトの `query` は `big_query.query` を生成します。
+- Description: モジュールごとのビッグクエリロギングを有効にするモジュール名サフィックスのリスト。一般的な値は論理コンポーネント名です。たとえば、デフォルトの `query` は `big_query.query` を生成します。
 - Introduced in: v3.2.0
 
 ##### `big_query_log_roll_interval`
@@ -346,7 +155,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: `big_query` ログアペンダーのローリングファイル名の日付コンポーネントを構築するために使用される時間間隔を指定します。有効な値 (大文字と小文字を区別しない) は `DAY` (デフォルト) と `HOUR` です。`DAY` は日次パターン (`"%d{yyyyMMdd}"`) を生成し、`HOUR` は時間別パターン (`"%d{yyyyMMddHH}"`) を生成します。この値は、サイズベースのロールオーバー (`big_query_roll_maxsize`) およびインデックスベースのロールオーバー (`big_query_log_roll_num`) と組み合わせて、RollingFile の filePattern を形成します。無効な値は、ログ設定の生成が失敗し (IOException)、ログの初期化または再構成を妨げる可能性があります。`big_query_log_dir`、`big_query_roll_maxsize`、`big_query_log_roll_num`、および `big_query_log_delete_age` とともに使用します。
+- Description: `big_query` ログアペンダーのローリングファイル名の日付コンポーネントを構築するために使用される時間間隔を指定します。有効な値 (大文字と小文字を区別しない) は `DAY` (デフォルト) と `HOUR` です。`DAY` は日次パターン (`"%d{yyyyMMdd}"`) を生成し、`HOUR` は時間パターン (`"%d{yyyyMMddHH}"`) を生成します。この値は、サイズベースのロールオーバー (`big_query_roll_maxsize`) およびインデックスベースのロールオーバー (`big_query_log_roll_num`) と組み合わされて RollingFile の filePattern を形成します。無効な値はログ設定の生成を失敗させ (IOException)、ログの初期化または再設定を妨げる可能性があります。`big_query_log_dir`、`big_query_roll_maxsize`、`big_query_log_roll_num`、および `big_query_log_delete_age` と併用してください。
 - Introduced in: v3.2.0
 
 ##### `big_query_log_roll_num`
@@ -355,7 +164,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: `big_query_log_roll_interval` ごとに保持するローテーションされた FE 大容量クエリログファイルの最大数。この値は、`fe.big_query.log` の RollingFile アペンダーの DefaultRolloverStrategy `max` 属性にバインドされます。ログが (時間または `log_roll_size_mb` によって) ロールオーバーすると、StarRocks は `big_query_log_roll_num` 個のインデックス付きファイル (filePattern は時刻サフィックスとインデックスを使用) を保持します。この数よりも古いファイルはロールオーバーによって削除される可能性があり、`big_query_log_delete_age` は最終更新時刻によってさらにファイルを削除できます。
+- Description: `big_query_log_roll_interval` ごとに保持するローテーションされた FE ビッグクエリログファイルの最大数。この値は、`fe.big_query.log` の RollingFile アペンダーの DefaultRolloverStrategy `max` 属性にバインドされます。ログがロール (時間または `log_roll_size_mb` によって) されると、StarRocks は最大 `big_query_log_roll_num` 個のインデックス付きファイル (filePattern は時間サフィックスとインデックスを使用) を保持します。この数よりも古いファイルはロールオーバーによって削除される可能性があり、`big_query_log_delete_age` は最終変更時刻によってファイルをさらに削除できます。
 - Introduced in: v3.2.0
 
 ##### `dump_log_delete_age`
@@ -364,7 +173,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: ダンプログファイルの保持期間。デフォルト値 `7d` は、各ダンプログファイルが 7 日間保持できることを指定します。StarRocks は各ダンプログファイルをチェックし、7 日以上前に生成されたファイルを削除します。
+- Description: ダンプログファイルの保持期間。デフォルト値 `7d` は、各ダンプログファイルが7日間保持されることを指定します。StarRocks は各ダンプログファイルをチェックし、7日前に生成されたファイルを削除します。
 - Introduced in: -
 
 ##### `dump_log_dir`
@@ -373,7 +182,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: ダンプログファイルを格納するディレクトリ。
+- Description: ダンプログファイルを保存するディレクトリ。
 - Introduced in: -
 
 ##### `dump_log_modules`
@@ -382,7 +191,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String[]
 - Unit: -
 - Is mutable: No
-- Description: StarRocks がダンプログエントリを生成するモジュール。デフォルトでは、StarRocks はクエリモジュールのダンプログを生成します。モジュール名をコンマ (,) とスペースで区切ります。
+- Description: StarRocks がダンプログエントリを生成するモジュール。デフォルトでは、StarRocks はクエリモジュールに対してダンプログを生成します。モジュール名をコンマ (,) とスペースで区切ってください。
 - Introduced in: -
 
 ##### `dump_log_roll_interval`
@@ -392,8 +201,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Unit: -
 - Is mutable: No
 - Description: StarRocks がダンプログエントリをローテーションする時間間隔。有効な値: `DAY` と `HOUR`。
-  - このパラメーターが `DAY` に設定されている場合、ダンプログファイル名に `yyyyMMdd` 形式のサフィックスが追加されます。
-  - このパラメーターが `HOUR` に設定されている場合、ダンプログファイル名に `yyyyMMddHH` 形式のサフィックスが追加されます。
+  - このパラメータが `DAY` に設定されている場合、ダンプログファイル名に `yyyyMMdd` 形式のサフィックスが追加されます。
+  - このパラメータが `HOUR` に設定されている場合、ダンプログファイル名に `yyyyMMddHH` 形式のサフィックスが追加されます。
 - Introduced in: -
 
 ##### `dump_log_roll_num`
@@ -402,7 +211,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: `dump_log_roll_interval` パラメーターで指定された各保持期間内に保持できるダンプログファイルの最大数。
+- Description: `dump_log_roll_interval` パラメータで指定された各保持期間内に保持できるダンプログファイルの最大数。
 - Introduced in: -
 
 ##### `edit_log_write_slow_log_threshold_ms`
@@ -411,7 +220,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: Yes
-- Description: JournalWriter が低速な編集ログバッチ書き込みを検出してログに記録するために使用するしきい値 (ミリ秒)。バッチコミット後、バッチ期間がこの値を超えると、JournalWriter はバッチサイズ、期間、現在のジャーナルキューサイズを伴う WARN を出力します (約 2 秒に 1 回にレート制限)。この設定は、FE リーダーでの潜在的な I/O またはレプリケーションの遅延に対するロギング/アラートのみを制御します。コミットまたはロールの動作は変更しません (`edit_log_roll_num` およびコミット関連の設定を参照)。このしきい値に関係なく、メトリック更新は引き続き発生します。
+- Description: JournalWriter が遅い編集ログバッチ書き込みを検出してログに記録するために使用するしきい値 (ミリ秒単位)。バッチコミット後、バッチ期間がこの値を超えると、JournalWriter はバッチサイズ、期間、および現在のジャーナルキューサイズを含む WARN を出力します (約2秒に1回にレート制限されます)。この設定は、FE リーダーでの潜在的な IO またはレプリケーションの遅延に関するロギング/アラートのみを制御します。コミットまたはロールの動作は変更しません (`edit_log_roll_num` およびコミット関連の設定を参照)。このしきい値に関係なく、メトリックの更新は引き続き行われます。
 - Introduced in: v3.2.3
 
 ##### `enable_audit_sql`
@@ -420,7 +229,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description: この項目が `true` に設定されている場合、FE 監査サブシステムは、ConnectProcessor によって処理されたステートメントの SQL テキストを FE 監査ログ (`fe.audit.log`) に記録します。格納されたステートメントは、他の制御に従います。暗号化されたステートメントは編集され (`AuditEncryptionChecker`)、`enable_sql_desensitize_in_log` が設定されている場合、機密性の高い資格情報は編集または非機密化される可能性があり、ダイジェストレコーディングは `enable_sql_digest` によって制御されます。`false` に設定されている場合、ConnectProcessor は監査イベントのステートメントテキストを "?" に置き換えます。他の監査フィールド (ユーザー、ホスト、期間、ステータス、`qe_slow_log_ms` を介した低速クエリ検出、およびメトリック) は引き続き記録されます。SQL 監査を有効にすると、フォレンジックとトラブルシューティングの可視性が向上しますが、機密性の高い SQL コンテンツが公開され、ログのボリュームと I/O が増加する可能性があります。無効にすると、監査ログでの完全なステートメントの可視性を失う代わりにプライバシーが向上します。
+- Description: この項目が `true` に設定されている場合、FE 監査サブシステムは、ConnectProcessor によって処理される FE 監査ログ (`fe.audit.log`) にステートメントの SQL テキストを記録します。保存されるステートメントは他の制御を尊重します。暗号化されたステートメントは編集され (`AuditEncryptionChecker`)、`enable_sql_desensitize_in_log` が設定されている場合、機密性の高い資格情報は編集または非機密化され、ダイジェスト記録は `enable_sql_digest` によって制御されます。`false` に設定されている場合、ConnectProcessor は監査イベントのステートメントテキストを "?" に置き換えます。他の監査フィールド (ユーザー、ホスト、期間、ステータス、`qe_slow_log_ms` を介したスロークエリ検出、およびメトリック) は引き続き記録されます。SQL 監査を有効にすると、フォレンジックおよびトラブルシューティングの可視性が向上しますが、機密性の高い SQL コンテンツが公開され、ログ量と I/O が増加する可能性があります。無効にすると、監査ログでの完全なステートメントの可視性が失われる代わりにプライバシーが向上します。
 - Introduced in: -
 
 ##### `enable_profile_log`
@@ -429,7 +238,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description: プロファイルロギングを有効にするかどうか。この機能が有効になっている場合、FE はクエリごとのプロファイルログ (ProfileManager によって生成されたシリアル化された `queryDetail` JSON) をプロファイルログシンクに書き込みます。このロギングは `enable_collect_query_detail_info` も有効になっている場合にのみ実行されます。`enable_profile_log_compress` が有効になっている場合、JSON はロギング前に gzipped されることがあります。プロファイルログファイルは `profile_log_dir`、`profile_log_roll_num`、`profile_log_roll_interval` によって管理され、`profile_log_delete_age` ( `7d`、`10h`、`60m`、`120s` などの形式をサポート) に従ってローテーション/削除されます。この機能を無効にすると、プロファイルログの書き込みが停止します (ディスク I/O、圧縮 CPU、ストレージ使用量の削減)。
+- Description: プロファイルロギングを有効にするかどうか。この機能が有効になっている場合、FE はクエリごとのプロファイルログ (ProfileManager によって生成されるシリアル化された `queryDetail` JSON) をプロファイルログシンクに書き込みます。このロギングは、`enable_collect_query_detail_info` も有効になっている場合にのみ実行されます。`enable_profile_log_compress` が有効になっている場合、JSON はロギング前に gzip 圧縮される場合があります。プロファイルログファイルは、`profile_log_dir`、`profile_log_roll_num`、`profile_log_roll_interval` によって管理され、`profile_log_delete_age` ( `7d`、`10h`、`60m`、`120s` などの形式をサポート) に従ってローテーション/削除されます。この機能を無効にすると、プロファイルログの書き込みが停止します (ディスク I/O、圧縮 CPU、ストレージ使用量が削減されます)。
 - Introduced in: v3.2.5
 
 ##### `enable_qe_slow_log`
@@ -438,7 +247,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: N/A
 - Is mutable: Yes
-- Description: 有効にすると、FE 組み込み監査プラグイン (AuditLogBuilder) は、測定された実行時間 ("Time" フィールド) が `qe_slow_log_ms` で設定されたしきい値を超えるクエリイベントを低速クエリ監査ログ (AuditLog.getSlowAudit) に書き込みます。無効にすると、これらの低速クエリエントリは抑制されます (通常のクエリおよび接続監査ログは影響を受けません)。低速監査エントリは、グローバルな `audit_log_json_format` 設定 (JSON とプレーン文字列) に従います。このフラグを使用して、通常の監査ロギングとは独立して低速クエリ監査ボリュームの生成を制御します。無効にすると、`qe_slow_log_ms` が低い場合やワークロードが多くの長時間実行クエリを生成する場合にログ I/O を削減できます。
+- Description: 有効にすると、FE 組み込み監査プラグイン (AuditLogBuilder) は、測定された実行時間 ("Time" フィールド) が `qe_slow_log_ms` で設定されたしきい値を超えるクエリイベントをスロークエリ監査ログ (AuditLog.getSlowAudit) に書き込みます。無効にすると、これらのスロークエリエントリは抑制されます (通常のクエリおよび接続監査ログは影響を受けません)。スロー監査エントリは、グローバルな `audit_log_json_format` 設定 (JSON vs. プレーン文字列) に従います。このフラグを使用して、通常の監査ロギングとは独立してスロークエリ監査量を制御します。`qe_slow_log_ms` が低い場合や、ワークロードが多くの長時間実行クエリを生成する場合に、これをオフにするとログ I/O を削減できます。
 - Introduced in: 3.2.11
 
 ##### `enable_sql_desensitize_in_log`
@@ -447,7 +256,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description: この項目が `true` に設定されている場合、システムはログとクエリ詳細レコードに書き込まれる前に機密性の高い SQL コンテンツを置き換えるか隠します。この設定を尊重するコードパスには、ConnectProcessor.formatStmt (監査ログ)、StmtExecutor.addRunningQueryDetail (クエリ詳細)、および SimpleExecutor.formatSQL (内部エクゼキュータログ) が含まれます。この機能が有効になっている場合、無効な SQL は固定の非機密化メッセージに置き換えられる可能性があり、資格情報 (ユーザー/パスワード) は隠され、SQL フォーマッターはサニタイズされた表現を生成する必要があります (ダイジェスト形式の出力を有効にすることもできます)。これにより、監査/内部ログでの機密リテラルや資格情報の漏洩が減少しますが、ログとクエリ詳細に元の完全な SQL テキストが含まれなくなることになります (これは再生やデバッグに影響する可能性があります)。
+- Description: この項目が `true` に設定されている場合、システムは機密性の高い SQL コンテンツをログおよびクエリ詳細レコードに書き込む前に置き換えたり非表示にしたりします。この設定を尊重するコードパスには、ConnectProcessor.formatStmt (監査ログ)、StmtExecutor.addRunningQueryDetail (クエリ詳細)、および SimpleExecutor.formatSQL (内部エグゼキュータログ) が含まれます。この機能が有効になっている場合、無効な SQL は固定の非機密化メッセージに置き換えられる可能性があり、資格情報 (ユーザー/パスワード) は非表示になり、SQL フォーマッターはサニタイズされた表現を生成する必要があります (ダイジェスト形式の出力を有効にすることもできます)。これにより、監査/内部ログでの機密リテラルや資格情報の漏洩が減少しますが、ログやクエリ詳細に元の完全な SQL テキストが含まれなくなることも意味します (これはリプレイやデバッグに影響を与える可能性があります)。
 - Introduced in: -
 
 ##### `internal_log_delete_age`
@@ -456,7 +265,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: FE 内部ログファイル (`internal_log_dir` に書き込まれます) の保持期間を指定します。値は期間文字列です。サポートされている接尾辞: `d` (日)、`h` (時間)、`m` (分)、`s` (秒)。例: `7d` (7 日間)、`10h` (10 時間)、`60m` (60 分)、`120s` (120 秒)。この項目は、RollingFile Delete ポリシーで使用される `<IfLastModified age="..."/>` 述語として log4j 設定に代入されます。最終変更時刻がこの期間よりも古いファイルは、ログのロールオーバー中に削除されます。この値を増やすとディスク領域をより早く解放できます。減らすと内部マテリアライズドビューまたは統計ログをより長く保持できます。
+- Description: FE 内部ログファイル (`internal_log_dir` に書き込まれる) の保持期間を指定します。値は期間文字列です。サポートされるサフィックス: `d` (日)、`h` (時間)、`m` (分)、`s` (秒)。例: `7d` (7日間)、`10h` (10時間)、`60m` (60分)、`120s` (120秒)。この項目は、Log4j 設定に RollingFile Delete ポリシーで使用される `<IfLastModified age="..."/>` 述語として代入されます。最終変更時刻がこの期間よりも古いファイルは、ログロールオーバー中に削除されます。この値を増やすとディスクスペースが早く解放され、減らすと内部マテリアライズドビューまたは統計ログをより長く保持できます。
 - Introduced in: v3.2.4
 
 ##### `internal_log_dir`
@@ -465,7 +274,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: FE ロギングサブシステムが内部ログ (`fe.internal.log`) を保存するために使用するディレクトリ。この設定は Log4j 設定に代入され、InternalFile アペンダーが内部/マテリアライズドビュー/統計ログを書き込む場所、および `internal.<module>` の下にあるモジュールごとのロガーがファイルを配置する場所を決定します。ディレクトリが存在し、書き込み可能であり、十分なディスク容量があることを確認してください。このディレクトリ内のファイルのログローテーションと保持は、`log_roll_size_mb`、`internal_log_roll_num`、`internal_log_delete_age`、および `internal_log_roll_interval` によって制御されます。`sys_log_to_console` が有効になっている場合、内部ログはこのディレクトリではなくコンソールに書き込まれることがあります。
+- Description: FE ロギングサブシステムが内部ログ (`fe.internal.log`) を保存するために使用するディレクトリ。この設定は Log4j 設定に代入され、InternalFile アペンダーが内部/マテリアライズドビュー/統計ログを書き込む場所、および `internal.<module>` の下のモジュールごとのロガーがファイルを配置する場所を決定します。ディレクトリが存在し、書き込み可能であり、十分なディスクスペースがあることを確認してください。このディレクトリ内のファイルのログローテーションと保持は、`log_roll_size_mb`、`internal_log_roll_num`、`internal_log_delete_age`、および `internal_log_roll_interval` によって制御されます。`sys_log_to_console` が有効になっている場合、内部ログはこのディレクトリではなくコンソールに書き込まれる場合があります。
 - Introduced in: v3.2.4
 
 ##### `internal_log_json_format`
@@ -474,7 +283,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: この項目が `true` に設定されている場合、内部統計/監査エントリはコンパクトな JSON オブジェクトとして統計監査ロガーに書き込まれます。JSON には、"executeType" (InternalType: QUERY または DML)、"queryId"、"sql"、および "time" (経過ミリ秒) のキーが含まれます。`false` に設定されている場合、同じ情報は単一のフォーマットされたテキスト行 ("statistic execute: ... | QueryId: [...] | SQL: ...") としてログに記録されます。JSON を有効にすると、機械解析とログプロセッサとの統合が向上しますが、生の SQL テキストがログに含まれるため、機密情報が公開され、ログサイズが増加する可能性があります。
+- Description: この項目が `true` に設定されている場合、内部統計/監査エントリはコンパクトな JSON オブジェクトとして統計監査ロガーに書き込まれます。JSON には、キー "executeType" (InternalType: QUERY または DML)、"queryId"、"sql"、および "time" (経過ミリ秒) が含まれます。`false` に設定されている場合、同じ情報は単一のフォーマットされたテキスト行 ("statistic execute: ... | QueryId: [...] | SQL: ...") としてログに記録されます。JSON を有効にすると、機械解析とログプロセッサとの統合が向上しますが、生の SQL テキストがログに含まれるため、機密情報が公開され、ログサイズが増加する可能性があります。
 - Introduced in: -
 
 ##### `internal_log_modules`
@@ -483,7 +292,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String[]
 - Unit: -
 - Is mutable: No
-- Description: 専用の内部ロギングを受け取るモジュール識別子のリスト。各エントリ X について、Log4j はレベル INFO と additivity="false" の `internal.<X>` という名前のロガーを作成します。これらのロガーは、内部アペンダー ( `fe.internal.log` に書き込まれます) または `sys_log_to_console` が有効になっている場合はコンソールにルーティングされます。必要に応じて短い名前またはパッケージフラグメントを使用します。正確なロガー名は `internal.` + 構成された文字列になります。内部ログファイルのローテーションと保持は、`internal_log_dir`、`internal_log_roll_num`、`internal_log_delete_age`、`internal_log_roll_interval`、および `log_roll_size_mb` に従います。モジュールを追加すると、実行時メッセージが内部ロガーストリームに分離され、デバッグと監査が容易になります。
+- Description: 専用の内部ロギングを受け取るモジュール識別子のリスト。各エントリ X について、Log4j はレベル INFO および additivity="false" の `internal.<X>` という名前のロガーを作成します。これらのロガーは、内部アペンダー (`fe.internal.log` に書き込まれる) または `sys_log_to_console` が有効になっている場合はコンソールにルーティングされます。必要に応じて短い名前またはパッケージフラグメントを使用してください。正確なロガー名は `internal.` + 設定された文字列になります。内部ログファイルのローテーションと保持は、`internal_log_dir`、`internal_log_roll_num`、`internal_log_delete_age`、`internal_log_roll_interval`、および `log_roll_size_mb` に従います。モジュールを追加すると、そのランタイムメッセージが内部ロガーストリームに分離され、デバッグと監査が容易になります。
 - Introduced in: v3.2.4
 
 ##### `internal_log_roll_interval`
@@ -492,7 +301,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: FE 内部ログアペンダーの時刻ベースのロール間隔を制御します。受け入れられる値 (大文字と小文字を区別しない) は `HOUR` と `DAY` です。`HOUR` は時間別ファイルパターン (`"%d{yyyyMMddHH}"`) を生成し、`DAY` は日別ファイルパターン (`"%d{yyyyMMdd}"`) を生成します。これらは RollingFile TimeBasedTriggeringPolicy によってローテーションされた `fe.internal.log` ファイルに名前を付けるために使用されます。無効な値は、初期化の失敗 (アクティブな Log4j 設定の構築時に IOException がスローされます) を引き起こします。ロール動作は、`internal_log_dir`、`internal_roll_maxsize` (ソースにタイプミス、おそらく `log_roll_size_mb`)、`internal_log_roll_num`、および `internal_log_delete_age` などの関連設定にも依存します。
+- Description: FE 内部ログアペンダーの時間ベースのロール間隔を制御します。受け入れられる値 (大文字と小文字を区別しない) は `HOUR` と `DAY` です。`HOUR` は時間ごとのファイルパターン (`"%d{yyyyMMddHH}"`) を生成し、`DAY` は日ごとのファイルパターン (`"%d{yyyyMMdd}"`) を生成します。これらは RollingFile TimeBasedTriggeringPolicy によってローテーションされた `fe.internal.log` ファイルの名前付けに使用されます。無効な値は初期化を失敗させます (アクティブな Log4j 設定を構築するときに IOException がスローされます)。ロール動作は、`internal_log_dir`、`internal_roll_maxsize`、`internal_log_roll_num`、および `internal_log_delete_age` などの関連設定にも依存します。
 - Introduced in: v3.2.4
 
 ##### `internal_log_roll_num`
@@ -501,7 +310,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: 内部アペンダー (`fe.internal.log`) に対して保持するローテーションされた内部 FE ログファイルの最大数。この値は Log4j DefaultRolloverStrategy の `max` 属性として使用されます。ロールオーバーが発生すると、StarRocks は最大で `internal_log_roll_num` 個のアーカイブファイルを保持し、古いファイルを削除します (`internal_log_delete_age` によって管理されます)。値を小さくするとディスク使用量が減りますが、ログ履歴が短くなります。値を大きくすると、より多くの履歴内部ログが保持されます。この項目は、`internal_log_dir`、`internal_log_roll_interval`、および `internal_roll_maxsize` (ソースにタイプミス、おそらく `log_roll_size_mb`) と連携して機能します。
+- Description: 内部アペンダー (`fe.internal.log`) のために保持するローテーションされた内部 FE ログファイルの最大数。この値は Log4j DefaultRolloverStrategy の `max` 属性として使用されます。ロールオーバーが発生すると、StarRocks は最大 `internal_log_roll_num` 個のアーカイブファイルを保持し、古いファイルを削除します (`internal_log_delete_age` によっても管理されます)。値が低いとディスク使用量が削減されますが、ログ履歴が短くなります。値が高いと、より多くの履歴内部ログが保持されます。この項目は `internal_log_dir`、`internal_log_roll_interval`、および `internal_roll_maxsize` と連携して機能します。
 - Introduced in: v3.2.4
 
 ##### `log_cleaner_audit_log_min_retention_days`
@@ -510,7 +319,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: Days
 - Is mutable: Yes
-- Description: 監査ログファイルの最小保持日数。これよりも新しい監査ログファイルは、ディスク使用量が高くても削除されません。これにより、監査ログがコンプライアンスとトラブルシューティングの目的で保持されます。
+- Description: 監査ログファイルの最小保持日数。これより新しい監査ログファイルは、ディスク使用量が高くても削除されません。これにより、監査ログがコンプライアンスおよびトラブルシューティングの目的で保持されることが保証されます。
 - Introduced in: -
 
 ##### `log_cleaner_check_interval_second`
@@ -519,7 +328,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
-- Description: ディスク使用量をチェックし、ログをクリーンアップする間隔 (秒単位)。クリーナーは、各ログディレクトリのディスク使用量を定期的にチェックし、必要に応じてクリーンアップをトリガーします。デフォルトは 300 秒 (5 分) です。
+- Description: ディスク使用量をチェックし、ログをクリーンアップする間隔 (秒単位)。クリーナーは定期的に各ログディレクトリのディスク使用量をチェックし、必要に応じてクリーンアップをトリガーします。デフォルトは300秒 (5分) です。
 - Introduced in: -
 
 ##### `log_cleaner_disk_usage_target`
@@ -528,7 +337,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: Percentage
 - Is mutable: Yes
-- Description: ログクリーンアップ後の目標ディスク使用量 (パーセンテージ)。ディスク使用量がこのしきい値を下回るまでログクリーンアップが続行されます。クリーナーは、目標に達するまで最も古いログファイルを 1 つずつ削除します。
+- Description: ログクリーンアップ後の目標ディスク使用量 (パーセンテージ)。ログクリーンアップは、ディスク使用量がこのしきい値を下回るまで続行されます。クリーナーは、目標に達するまで最も古いログファイルを1つずつ削除します。
 - Introduced in: -
 
 ##### `log_cleaner_disk_usage_threshold`
@@ -537,7 +346,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: Percentage
 - Is mutable: Yes
-- Description: ログクリーンアップをトリガーするディスク使用量しきい値 (パーセンテージ)。ディスク使用量がこのしきい値を超えると、ログクリーンアップが開始されます。クリーナーは、設定された各ログディレクトリを独立してチェックし、このしきい値を超えるディレクトリを処理します。
+- Description: ログクリーンアップをトリガーするディスク使用量しきい値 (パーセンテージ)。ディスク使用量がこのしきい値を超えると、ログクリーンアップが開始されます。クリーナーは、設定された各ログディレクトリを個別にチェックし、このしきい値を超えるディレクトリを処理します。
 - Introduced in: -
 
 ##### `log_cleaner_disk_util_based_enable`
@@ -546,7 +355,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: ディスク使用量に基づく自動ログクリーンアップを有効にします。有効にすると、ディスク使用量がしきい値を超えたときにログがクリーンアップされます。ログクリーナーは FE ノードのバックグラウンドデーモンとして実行され、ログファイルの蓄積によるディスク領域の枯渇を防ぐのに役立ちます。
+- Description: ディスク使用量に基づく自動ログクリーンアップを有効にします。有効にすると、ディスク使用量がしきい値を超えたときにログがクリーンアップされます。ログクリーナーは FE ノードでバックグラウンドデーモンとして実行され、ログファイルの蓄積によるディスクスペースの枯渇を防ぐのに役立ちます。
 - Introduced in: -
 
 ##### `log_plan_cancelled_by_crash_be`
@@ -555,7 +364,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: boolean
 - Unit: -
 - Is mutable: Yes
-- Description: BE クラッシュまたは RPC 例外によりクエリがキャンセルされた場合に、クエリ実行計画のロギングを有効にするかどうか。この機能が有効になっている場合、BE クラッシュまたは `RpcException` によりクエリがキャンセルされたときに、StarRocks はクエリ実行計画 ( `TExplainLevel.COSTS` レベル) を WARN エントリとしてログに記録します。ログエントリには QueryId、SQL、および COSTS 計画が含まれ、ExecuteExceptionHandler パスでは例外スタックトレースもログに記録されます。ロギングは `enable_collect_query_detail_info` が有効になっている場合はスキップされます (その場合、計画はクエリ詳細に格納されます)。コードパスでは、クエリ詳細が null であることを検証することでチェックが実行されます。ExecuteExceptionHandler では、計画は最初のリトライ (`retryTime == 0`) のみでログに記録されることに注意してください。これを有効にすると、完全な COSTS 計画が大きくなる可能性があるため、ログのボリュームが増加する可能性があります。
+- Description: BE クラッシュまたは RPC 例外によりクエリがキャンセルされたときに、クエリ実行計画のロギングを有効にするかどうか。この機能が有効になっている場合、StarRocks は、BE クラッシュまたは `RpcException` によりクエリがキャンセルされたときに、クエリ実行計画 (`TExplainLevel.COSTS` レベル) を WARN エントリとしてログに記録します。ログエントリには QueryId、SQL、および COSTS プランが含まれます。ExecuteExceptionHandler パスでは、例外スタックトレースもログに記録されます。`enable_collect_query_detail_info` が有効になっている場合 (プランはクエリ詳細に保存される)、ロギングはスキップされます。コードパスでは、クエリ詳細が null であることを確認することでチェックが実行されます。ExecuteExceptionHandler では、プランは最初の再試行 (`retryTime == 0`) でのみログに記録されることに注意してください。これを有効にすると、完全な COSTS プランが大きくなる可能性があるため、ログ量が増加する可能性があります。
 - Introduced in: v3.2.0
 
 ##### `log_register_and_unregister_query_id`
@@ -564,7 +373,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: FE が QeProcessorImpl からのクエリ登録および登録解除メッセージ (例: `"register query id = {}"` および `"deregister query id = {}"`) をログに記録することを許可するかどうか。ログは、クエリに null 以外の ConnectContext があり、コマンドが `COM_STMT_EXECUTE` でないか、セッション変数 `isAuditExecuteStmt()` が true の場合にのみ出力されます。これらのメッセージはすべてのクエリライフサイクルイベントに対して書き込まれるため、この機能を有効にすると、ログのボリュームが大きくなり、高並行環境ではスループットのボトルネックになる可能性があります。デバッグまたは監査のために有効にし、ロギングのオーバーヘッドを減らしてパフォーマンスを向上させるために無効にします。
+- Description: FE が QeProcessorImpl からクエリ登録および登録解除メッセージ (例: `"register query id = {}"` および `"deregister query id = {}"`) をログに記録することを許可するかどうか。ログは、クエリが null ではない ConnectContext を持ち、コマンドが `COM_STMT_EXECUTE` ではないか、セッション変数 `isAuditExecuteStmt()` が true の場合にのみ出力されます。これらのメッセージはすべてのクエリライフサイクルイベントに対して書き込まれるため、この機能を有効にすると、高並行環境で高いログ量が発生し、スループットのボトルネックになる可能性があります。デバッグまたは監査のために有効にし、ロギングオーバーヘッドを削減し、パフォーマンスを向上させるために無効にしてください。
 - Introduced in: v3.3.0, v3.4.0, v3.5.0
 
 ##### `log_roll_size_mb`
@@ -582,7 +391,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: Days
 - Is mutable: Yes
-- Description: `sys_log_dir/proc_profile` 以下に生成されたプロセスプロファイリングファイル (CPU およびメモリ) の保持日数。ProcProfileCollector は、現在時刻から `proc_profile_file_retained_days` 日を差し引いて (yyyyMMdd-HHmmss 形式で) カットオフを計算し、タイムスタンプ部分がそのカットオフよりも辞書順で早いプロファイルファイル (`timePart.compareTo(timeToDelete) < 0` の場合) を削除します。ファイル削除は、`proc_profile_file_retained_size_bytes` によって制御されるサイズベースのカットオフも尊重します。プロファイルファイルは `cpu-profile-` と `mem-profile-` というプレフィックスを使用し、収集後に圧縮されます。
+- Description: `sys_log_dir/proc_profile` の下に生成されたプロセスプロファイリングファイル (CPU およびメモリ) を保持する日数。ProcProfileCollector は、現在時刻から `proc_profile_file_retained_days` 日を引いたカットオフ (yyyyMMdd-HHmmss 形式) を計算し、タイムスタンプ部分がそのカットオフよりも辞書順で早いプロファイルファイル (つまり、`timePart.compareTo(timeToDelete) < 0`) を削除します。ファイルの削除は、`proc_profile_file_retained_size_bytes` によって制御されるサイズベースのカットオフも尊重します。プロファイルファイルは `cpu-profile-` および `mem-profile-` のプレフィックスを使用し、収集後に圧縮されます。
 - Introduced in: v3.2.12
 
 ##### `proc_profile_file_retained_size_bytes`
@@ -591,7 +400,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Long
 - Unit: Bytes
 - Is mutable: Yes
-- Description: プロファイルディレクトリ下に保持される、収集された CPU およびメモリプロファイルファイル (`cpu-profile-` および `mem-profile-` というプレフィックスを持つファイル) の合計バイト数の最大値。有効なプロファイルファイルの合計が `proc_profile_file_retained_size_bytes` を超えると、コレクターは、残りの合計サイズが `proc_profile_file_retained_size_bytes` 以下になるまで、最も古いプロファイルファイルを削除します。`proc_profile_file_retained_days` よりも古いファイルもサイズに関係なく削除されます。この設定はプロファイルアーカイブのディスク使用量を制御し、`proc_profile_file_retained_days` と相互作用して削除順序と保持を決定します。
+- Description: プロファイルディレクトリの下に保持する収集された CPU およびメモリプロファイルファイル (`cpu-profile-` および `mem-profile-` のプレフィックスを持つファイル) の最大合計バイト数。有効なプロファイルファイルの合計が `proc_profile_file_retained_size_bytes` を超えると、コレクターは残りの合計サイズが `proc_profile_file_retained_size_bytes` 以下になるまで最も古いプロファイルファイルを削除します。`proc_profile_file_retained_days` よりも古いファイルもサイズに関係なく削除されます。この設定はプロファイルアーカイブのディスク使用量を制御し、`proc_profile_file_retained_days` と連携して削除順序と保持を決定します。
 - Introduced in: v3.2.12
 
 ##### `profile_log_delete_age`
@@ -600,7 +409,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: FE プロファイルログファイルが削除対象となるまでの保持期間を制御します。この値は Log4j の `<IfLastModified age="..."/>` ポリシー (`Log4jConfig` 経由) に注入され、`profile_log_roll_interval` や `profile_log_roll_num` などのローテーション設定と組み合わせて適用されます。サポートされる接尾辞: `d` (日)、`h` (時間)、`m` (分)、`s` (秒)。例: `7d` (7 日間)、`10h` (10 時間)、`60m` (60 分)、`120s` (120 秒)。
+- Description: FE プロファイルログファイルが削除の対象となるまでの保持期間を制御します。この値は Log4j の `<IfLastModified age="..."/>` ポリシー ( `Log4jConfig` 経由) に挿入され、`profile_log_roll_interval` や `profile_log_roll_num` などのローテーション設定と併せて適用されます。サポートされるサフィックス: `d` (日)、`h` (時間)、`m` (分)、`s` (秒)。例: `7d` (7日間)、`10h` (10時間)、`60m` (60分)、`120s` (120秒)。
 - Introduced in: v3.2.5
 
 ##### `profile_log_dir`
@@ -609,7 +418,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: FE プロファイルログが書き込まれるディレクトリ。Log4jConfig はこの値を使用して、プロファイル関連のアペンダーを配置します (このディレクトリの下に `fe.profile.log` や `fe.features.log` のようなファイルを作成します)。これらのファイルのローテーションと保持は、`profile_log_roll_size_mb`、`profile_log_roll_num`、`profile_log_delete_age` によって管理されます。タイムスタンプのサフィックス形式は `profile_log_roll_interval` (DAY または HOUR をサポート) によって制御されます。デフォルトのディレクトリは `STARROCKS_HOME_DIR` の下にあるため、FE プロセスがこのディレクトリへの書き込みおよびローテーション/削除の権限を持っていることを確認してください。
+- Description: FE プロファイルログが書き込まれるディレクトリ。Log4jConfig はこの値を使用してプロファイル関連のアペンダーを配置します (このディレクトリの下に `fe.profile.log` や `fe.features.log` などのファイルを作成します)。これらのファイルのローテーションと保持は、`profile_log_roll_size_mb`、`profile_log_roll_num`、および `profile_log_delete_age` によって管理されます。タイムスタンプサフィックス形式は `profile_log_roll_interval` (DAY または HOUR をサポート) によって制御されます。デフォルトのディレクトリは `STARROCKS_HOME_DIR` の下にあるため、FE プロセスがこのディレクトリに対する書き込みおよびローテーション/削除権限を持っていることを確認してください。
 - Introduced in: v3.2.5
 
 ##### `profile_log_roll_interval`
@@ -618,7 +427,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: プロファイルログファイル名の日付部分を生成するために使用される時間粒度を制御します。有効な値 (大文字と小文字を区別しない) は `HOUR` と `DAY` です。`HOUR` は `"%d{yyyyMMddHH}"` (時間ごとの時間バケット) のパターンを生成し、`DAY` は `"%d{yyyyMMdd}"` (日ごとの時間バケット) を生成します。この値は Log4j 設定で `profile_file_pattern` を計算する際に使用され、ロールオーバーファイル名の時間ベースのコンポーネントのみに影響します。サイズベースのロールオーバーは `profile_log_roll_size_mb` によって引き続き制御され、保持は `profile_log_roll_num` / `profile_log_delete_age` によって制御されます。無効な値は、ロギング初期化中に IOException を引き起こします (エラーメッセージ: `"profile_log_roll_interval config error: <value>"` )。高ボリュームプロファイリングの場合は `HOUR` を選択して 1 時間あたりのファイルサイズを制限するか、日次集計の場合は `DAY` を選択します。
+- Description: プロファイルログファイル名の日付部分を生成するために使用される時間粒度を制御します。有効な値 (大文字と小文字を区別しない) は `HOUR` と `DAY` です。`HOUR` は `"%d{yyyyMMddHH}"` (時間ごとのタイムバケット) のパターンを生成し、`DAY` は `"%d{yyyyMMdd}"` (日ごとのタイムバケット) を生成します。この値は Log4j 設定で `profile_file_pattern` を計算するときに使用され、ロールオーバーファイル名の時間ベースのコンポーネントのみに影響します。サイズベースのロールオーバーは `profile_log_roll_size_mb` によって、保持は `profile_log_roll_num` / `profile_log_delete_age` によって引き続き制御されます。無効な値はロギング初期化中に IOException を引き起こします (エラーメッセージ: `"profile_log_roll_interval config error: <value>"`)。大量のプロファイリングを行う場合は、ファイルごとのサイズを時間ごとに制限するために `HOUR` を選択し、日ごとの集計には `DAY` を選択してください。
 - Introduced in: v3.2.5
 
 ##### `profile_log_roll_num`
@@ -627,7 +436,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: プロファイルロガーの Log4j DefaultRolloverStrategy が保持するローテーションされたプロファイルログファイルの最大数を指定します。この値は、ロギング XML に `${profile_log_roll_num}` として注入されます (例: `<DefaultRolloverStrategy max="${profile_log_roll_num}" fileIndex="min">`)。ローテーションは `profile_log_roll_size_mb` または `profile_log_roll_interval` によってトリガーされます。ローテーションが発生すると、Log4j は最大でこれらのインデックス付きファイルを保持し、古いインデックスファイルは削除対象となります。ディスク上での実際の保持は、`profile_log_delete_age` と `profile_log_dir` の場所にも影響されます。値が小さいとディスク使用量が減りますが、保持される履歴が制限されます。値が大きいと、より多くの履歴プロファイルログが保持されます。
+- Description: プロファイルロガーの Log4j の DefaultRolloverStrategy によって保持されるローテーションされたプロファイルログファイルの最大数を指定します。この値は、ロギング XML に `${profile_log_roll_num}` として挿入されます (例: `<DefaultRolloverStrategy max="${profile_log_roll_num}" fileIndex="min">`)。ローテーションは `profile_log_roll_size_mb` または `profile_log_roll_interval` によってトリガーされます。ローテーションが発生すると、Log4j は最大でこれらのインデックス付きファイルを保持し、古いインデックスファイルは削除の対象となります。ディスク上の実際の保持は、`profile_log_delete_age` および `profile_log_dir` の場所にも影響されます。値が低いとディスク使用量が削減されますが、保持される履歴が制限されます。値が高いと、より多くの履歴プロファイルログが保持されます。
 - Introduced in: v3.2.5
 
 ##### `profile_log_roll_size_mb`
@@ -636,7 +445,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: MB
 - Is mutable: No
-- Description: FE プロファイルログファイルのサイズベースのロールオーバーをトリガーするサイズしきい値 (メガバイト単位) を設定します。この値は、`ProfileFile` アペンダーの Log4j RollingFile SizeBasedTriggeringPolicy によって使用されます。プロファイルログが `profile_log_roll_size_mb` を超えると、ローテーションされます。ローテーションは、`profile_log_roll_interval` に達したときに時間によっても発生する可能性があります。いずれかの条件がロールオーバーをトリガーします。`profile_log_roll_num` と `profile_log_delete_age` と組み合わせることで、この項目は保持される履歴プロファイルファイルの数と古いファイルの削除時期を制御します。ローテーションされたファイルの圧縮は `enable_profile_log_compress` によって制御されます。
+- Description: FE プロファイルログファイルのサイズベースのロールオーバーをトリガーするサイズしきい値 (メガバイト単位) を設定します。この値は、`ProfileFile` アペンダーの Log4j RollingFile SizeBasedTriggeringPolicy によって使用されます。プロファイルログが `profile_log_roll_size_mb` を超えると、ローテーションされます。`profile_log_roll_interval` に達すると、時間によってもローテーションが発生する可能性があります。どちらの条件もロールオーバーをトリガーします。`profile_log_roll_num` および `profile_log_delete_age` と組み合わせて、この項目は保持される履歴プロファイルファイルの数と古いファイルが削除される時期を制御します。ローテーションされたファイルの圧縮は `enable_profile_log_compress` によって制御されます。
 - Introduced in: v3.2.5
 
 ##### `qe_slow_log_ms`
@@ -645,7 +454,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Long
 - Unit: Milliseconds
 - Is mutable: Yes
-- Description: クエリが遅いクエリかどうかを判断するために使用されるしきい値。クエリの応答時間がこのしきい値を超えると、**fe.audit.log** に遅いクエリとして記録されます。
+- Description: クエリがスロークエリであるかどうかを判断するために使用されるしきい値。クエリの応答時間がこのしきい値を超えると、**fe.audit.log** にスロークエリとして記録されます。
 - Introduced in: -
 
 ##### `slow_lock_log_every_ms`
@@ -654,7 +463,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Long
 - Unit: Milliseconds
 - Is mutable: Yes
-- Description: 同じ SlowLockLogStats インスタンスに対して別の「低速ロック」警告を発行するまでに待機する最小間隔 (ミリ秒)。LockUtils は、ロック待機が `slow_lock_threshold_ms` を超えた後にこの値をチェックし、最後のログに記録された低速ロックイベントから `slow_lock_log_every_ms` ミリ秒が経過するまで追加の警告を抑制します。長期的な競合中にログのボリュームを減らすには値を大きくし、より頻繁な診断を得るには値を小さくします。変更は、その後のチェックに対して実行時に有効になります。
+- Description: 同じ SlowLockLogStats インスタンスに対して別の「スローロック」警告を出力するまでに待機する最小間隔 (ミリ秒単位)。LockUtils は、ロック待機が `slow_lock_threshold_ms` を超えた後にこの値をチェックし、最後にログに記録されたスローロックイベントから `slow_lock_log_every_ms` ミリ秒が経過するまで追加の警告を抑制します。長時間の競合中にログ量を減らすには大きな値を、より頻繁な診断を得るには小さな値を使用してください。変更は、その後のチェックに対して実行時に有効になります。
 - Introduced in: v3.2.0
 
 ##### `slow_lock_print_stack`
@@ -663,7 +472,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: LockManager が `logSlowLockTrace` によって出力される低速ロック警告の JSON ペイロードに、所有スレッドの完全なスタックトレースを含めることを許可するかどうか ("stack" 配列は `LogUtil.getStackTraceToJsonArray` を使用して `start=0` および `max=Short.MAX_VALUE` で設定されます)。この設定は、ロック取得が `slow_lock_threshold_ms` で設定されたしきい値を超えたときに表示されるロック所有者に関する追加のスタック情報のみを制御します。この機能を有効にすると、ロックを保持している正確なスレッドスタックを提供することでデバッグに役立ちます。無効にすると、高並行環境でスタックトレースをキャプチャしてシリアル化することによるログのボリュームと CPU/メモリのオーバーヘッドが減少します。
+- Description: LockManager が `logSlowLockTrace` によって出力されるスローロック警告の JSON ペイロードに、所有スレッドの完全なスタックトレースを含めることを許可するかどうか ("stack" 配列は `LogUtil.getStackTraceToJsonArray` を使用して `start=0` および `max=Short.MAX_VALUE` で設定されます)。この設定は、ロック取得が `slow_lock_threshold_ms` で設定されたしきい値を超えたときに表示されるロック所有者の追加のスタック情報のみを制御します。この機能を有効にすると、ロックを保持している正確なスレッドスタックが提供されるため、デバッグに役立ちます。無効にすると、高並行環境でスタックトレースをキャプチャしてシリアル化することによって発生するログ量と CPU/メモリオーバーヘッドが削減されます。
 - Introduced in: v3.3.16, v3.4.5, v3.5.1
 
 ##### `slow_lock_threshold_ms`
@@ -672,7 +481,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: long
 - Unit: Milliseconds
 - Is mutable: Yes
-- Description: ロック操作または保持されているロックを「遅い」と分類するために使用されるしきい値 (ミリ秒)。ロックの経過待機時間または保持時間がこの値を超えると、StarRocks は (コンテキストに応じて) 診断ログを出力し、スタックトレースまたは待機者/所有者情報を含め、LockManager ではこの遅延後にデッドロック検出を開始します。これは LockUtils (低速ロックロギング)、QueryableReentrantReadWriteLock (低速リーダーのフィルタリング)、LockManager (デッドロック検出遅延と低速ロックトレース)、LockChecker (定期的な低速ロック検出)、およびその他の呼び出し元 (例: DiskAndTabletLoadReBalancer ロギング) によって使用されます。値を下げると感度とロギング/診断のオーバーヘッドが増加します。0 または負の数に設定すると、初期の待機ベースのデッドロック検出遅延動作が無効になります。`slow_lock_log_every_ms`、`slow_lock_print_stack`、および `slow_lock_stack_trace_reserve_levels` と一緒に調整します。
+- Description: ロック操作または保持されているロックを「スロー」として分類するために使用されるしきい値 (ミリ秒単位)。ロックの経過待機時間または保持時間がこの値を超えると、StarRocks は (コンテキストに応じて) 診断ログを出力し、スタックトレースまたは待機者/所有者情報を含め、LockManager ではこの遅延後にデッドロック検出を開始します。これは LockUtils (スローロックロギング)、QueryableReentrantReadWriteLock (スローリーダーのフィルタリング)、LockManager (デッドロック検出遅延とスローロックトレース)、LockChecker (定期的なスローロック検出)、およびその他の呼び出し元 (例: DiskAndTabletLoadReBalancer ロギング) によって使用されます。値を下げると感度とロギング/診断オーバーヘッドが増加します。0 または負の値を設定すると、初期の待機ベースのデッドロック検出遅延動作が無効になります。`slow_lock_log_every_ms`、`slow_lock_print_stack`、および `slow_lock_stack_trace_reserve_levels` と組み合わせて調整してください。
 - Introduced in: 3.2.0
 
 ##### `sys_log_delete_age`
@@ -681,7 +490,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: システムログファイルの保持期間。デフォルト値 `7d` は、各システムログファイルが 7 日間保持できることを指定します。StarRocks は各システムログファイルをチェックし、7 日以上前に生成されたファイルを削除します。
+- Description: システムログファイルの保持期間。デフォルト値 `7d` は、各システムログファイルが7日間保持されることを指定します。StarRocks は各システムログファイルをチェックし、7日前に生成されたファイルを削除します。
 - Introduced in: -
 
 ##### `sys_log_dir`
@@ -690,7 +499,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: システムログファイルを格納するディレクトリ。
+- Description: システムログファイルを保存するディレクトリ。
 - Introduced in: -
 
 ##### `sys_log_enable_compress`
@@ -699,7 +508,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: boolean
 - Unit: -
 - Is mutable: No
-- Description: この項目が `true` に設定されている場合、システムはローテーションされたシステムログファイル名に ".gz" 接尾辞を追加し、Log4j が gzip 圧縮されたローテーションされた FE システムログ (例: fe.log.*) を生成するようにします。この値は Log4j 設定生成時 (Log4jConfig.initLogging / generateActiveLog4jXmlConfig) に読み取られ、RollingFile の filePattern で使用される `sys_file_postfix` プロパティを制御します。この機能を有効にすると、保持されるログのディスク使用量は減少しますが、ロールオーバー時の CPU と I/O が増加し、ログファイル名が変更されるため、ログを読み取るツールやスクリプトは .gz ファイルを処理できる必要があります。監査ログは圧縮に別の設定 (`audit_log_enable_compress`) を使用することに注意してください。
+- Description: この項目が `true` に設定されている場合、システムはローテーションされたシステムログファイル名に ".gz" 接尾辞を追加し、Log4j が gzip 圧縮されたローテーションされた FE システムログ (例: fe.log.*) を生成するようにします。この値は Log4j 設定生成中 (Log4jConfig.initLogging / generateActiveLog4jXmlConfig) に読み取られ、RollingFile の filePattern で使用される `sys_file_postfix` プロパティを制御します。この機能を有効にすると、保持されるログのディスク使用量が削減されますが、ロールオーバー中の CPU と I/O が増加し、ログファイル名が変更されるため、ログを読み取るツールやスクリプトは .gz ファイルを処理できる必要があります。監査ログは圧縮に別の設定 (`audit_log_enable_compress`) を使用することに注意してください。
 - Introduced in: v3.2.12
 
 ##### `sys_log_format`
@@ -708,7 +517,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: FE ログに使用される Log4j レイアウトを選択します。有効な値: `"plaintext"` (デフォルト) と `"json"`。値は大文字と小文字を区別しません。`"plaintext"` は、人間が読めるタイムスタンプ、レベル、スレッド、class.method:line、および WARN/ERROR のスタックトレースを持つ PatternLayout を構成します。`"json"` は JsonTemplateLayout を構成し、ログアグリゲーター (ELK、Splunk) に適した構造化 JSON イベント (UTC タイムスタンプ、レベル、スレッド ID/名、ソースファイル/メソッド/行、メッセージ、例外スタックトレース) を出力します。JSON 出力は、`sys_log_json_max_string_length` および `sys_log_json_profile_max_string_length` の最大文字列長に準拠します。
+- Description: FE ログに使用される Log4j レイアウトを選択します。有効な値: `"plaintext"` (デフォルト) と `"json"`。値は大文字と小文字を区別しません。`"plaintext"` は、人間が読めるタイムスタンプ、レベル、スレッド、クラス.メソッド:行、および WARN/ERROR のスタックトレースを含む PatternLayout を設定します。`"json"` は JsonTemplateLayout を設定し、ログアグリゲーター (ELK、Splunk) に適した構造化 JSON イベント (UTC タイムスタンプ、レベル、スレッド ID/名前、ソースファイル/メソッド/行、メッセージ、例外スタックトレース) を出力します。JSON 出力は、最大文字列長について `sys_log_json_max_string_length` および `sys_log_json_profile_max_string_length` に従います。
 - Introduced in: v3.2.10
 
 ##### `sys_log_json_max_string_length`
@@ -717,7 +526,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: Bytes
 - Is mutable: No
-- Description: JSON 形式のシステムログに使用される JsonTemplateLayout の "maxStringLength" 値を設定します。`sys_log_format` が `"json"` に設定されている場合、文字列値のフィールド (たとえば "message" や文字列化された例外スタックトレース) は、長さがこの制限を超えると切り捨てられます。この値は、生成された Log4j XML ( `Log4jConfig.generateActiveLog4jXmlConfig()` 内) に注入され、デフォルト、警告、監査、ダンプ、および大容量クエリレイアウトに適用されます。プロファイルレイアウトは別の設定 (`sys_log_json_profile_max_string_length`) を使用します。この値を小さくするとログサイズは減りますが、有用な情報が切り捨てられる可能性があります。
+- Description: JSON 形式のシステムログに使用される JsonTemplateLayout の "maxStringLength" 値を設定します。`sys_log_format` が `"json"` に設定されている場合、文字列値フィールド (例: "message" および文字列化された例外スタックトレース) は、その長さがこの制限を超えると切り捨てられます。この値は、生成された Log4j XML の `Log4jConfig.generateActiveLog4jXmlConfig()` に挿入され、デフォルト、警告、監査、ダンプ、およびビッグクエリのレイアウトに適用されます。プロファイルレイアウトは別の設定 (`sys_log_json_profile_max_string_length`) を使用します。この値を下げるとログサイズは削減されますが、有用な情報が切り捨てられる可能性があります。
 - Introduced in: 3.2.11
 
 ##### `sys_log_json_profile_max_string_length`
@@ -726,7 +535,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: Bytes
 - Is mutable: No
-- Description: `sys_log_format` が "json" の場合、プロファイル (および関連機能) ログアペンダーの JsonTemplateLayout の maxStringLength を設定します。JSON 形式のプロファイルログ内の文字列フィールド値は、このバイト長に切り捨てられます。非文字列フィールドは影響を受けません。この項目は Log4jConfig の `JsonTemplateLayout maxStringLength` に適用され、プレーンテキストロギングが使用されている場合は無視されます。必要な完全なメッセージに対して十分な大きさに保ちますが、値が大きいとログサイズと I/O が増加することに注意してください。
+- Description: `sys_log_format` が "json" の場合、プロファイル (および関連機能) ログアペンダーの JsonTemplateLayout の maxStringLength を設定します。JSON 形式のプロファイルログの文字列フィールド値は、このバイト長に切り捨てられます。非文字列フィールドは影響を受けません。この項目は Log4jConfig の `JsonTemplateLayout maxStringLength` に適用され、`plaintext` ロギングが使用されている場合は無視されます。必要な完全なメッセージに対して十分な大きさの値を保持しますが、値が大きいほどログサイズと I/O が増加することに注意してください。
 - Introduced in: v3.2.11
 
 ##### `sys_log_level`
@@ -745,8 +554,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Unit: -
 - Is mutable: No
 - Description: StarRocks がシステムログエントリをローテーションする時間間隔。有効な値: `DAY` と `HOUR`。
-  - このパラメーターが `DAY` に設定されている場合、システムログファイル名に `yyyyMMdd` 形式のサフィックスが追加されます。
-  - このパラメーターが `HOUR` に設定されている場合、システムログファイル名に `yyyyMMddHH` 形式のサフィックスが追加されます。
+  - このパラメータが `DAY` に設定されている場合、システムログファイル名に `yyyyMMdd` 形式のサフィックスが追加されます。
+  - このパラメータが `HOUR` に設定されている場合、システムログファイル名に `yyyyMMddHH` 形式のサフィックスが追加されます。
 - Introduced in: -
 
 ##### `sys_log_roll_num`
@@ -755,7 +564,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: `sys_log_roll_interval` パラメーターで指定された各保持期間内に保持できるシステムログファイルの最大数。
+- Description: `sys_log_roll_interval` パラメータで指定された各保持期間内に保持できるシステムログファイルの最大数。
 - Introduced in: -
 
 ##### `sys_log_to_console`
@@ -764,7 +573,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description: この項目が `true` に設定されている場合、システムは Log4j を設定して、すべてのログをファイルベースのアペンダーではなくコンソール (ConsoleErr アペンダー) に送信します。この値はアクティブな Log4j XML 設定を生成する際に読み取られ (ルートロガーおよびモジュールごとのロガーアペンダーの選択に影響します)、プロセス起動時に `SYS_LOG_TO_CONSOLE` 環境変数から取得されます。実行時に変更しても効果はありません。この設定は、stdout/stderr ログ収集がログファイルの書き込みよりも優先されるコンテナ化された環境や CI 環境で一般的に使用されます。
+- Description: この項目が `true` に設定されている場合、システムは Log4j を設定して、すべてのログをファイルベースのアペンダーではなくコンソール (ConsoleErr アペンダー) に送信します。この値は、アクティブな Log4j XML 設定を生成するときに読み取られ (ルートロガーとモジュールごとのロガーアペンダーの選択に影響します)、プロセス起動時に `SYS_LOG_TO_CONSOLE` 環境変数から取得されます。実行時に変更しても効果はありません。この設定は、stdout/stderr ログ収集がログファイルの書き込みよりも優先されるコンテナ化された環境や CI 環境で一般的に使用されます。
 - Introduced in: v3.2.0
 
 ##### `sys_log_verbose_modules`
@@ -773,7 +582,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String[]
 - Unit: -
 - Is mutable: No
-- Description: StarRocks がシステムログを生成するモジュール。このパラメーターが `org.apache.starrocks.catalog` に設定されている場合、StarRocks はカタログモジュールのみのシステムログを生成します。モジュール名をコンマ (,) とスペースで区切ります。
+- Description: StarRocks がシステムログを生成するモジュール。このパラメータが `org.apache.starrocks.catalog` に設定されている場合、StarRocks はカタログモジュールに対してのみシステムログを生成します。モジュール名をコンマ (,) とスペースで区切ってください。
 - Introduced in: -
 
 ##### `sys_log_warn_modules`
@@ -782,7 +591,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String[]
 - Unit: -
 - Is mutable: No
-- Description: システムが起動時に WARN レベルのロガーとして設定し、警告アペンダー (SysWF) (`fe.warn.log` ファイル) にルーティングするロガー名またはパッケージプレフィックスのリスト。エントリは生成された Log4j 設定 (org.apache.kafka、org.apache.hudi、org.apache.hadoop.io.compress などの組み込み警告モジュールとともに) に挿入され、`<Logger name="... " level="WARN"><AppenderRef ref="SysWF"/></Logger>` のようなロガー要素を生成します。完全修飾パッケージおよびクラスプレフィックス (例: "com.example.lib") は、通常のログへのノイズの多い INFO/DEBUG 出力を抑制し、警告を個別にキャプチャできるようにするために推奨されます。
+- Description: システムが起動時に WARN レベルのロガーとして設定し、警告アペンダー (SysWF) — `fe.warn.log` ファイルにルーティングするロガー名またはパッケージプレフィックスのリスト。エントリは生成された Log4j 設定 (org.apache.kafka、org.apache.hudi、org.apache.hadoop.io.compress などの組み込み警告モジュールと共に) に挿入され、`<Logger name="... " level="WARN"><AppenderRef ref="SysWF"/></Logger>` のようなロガー要素を生成します。完全修飾パッケージおよびクラスプレフィックス (例: "com.example.lib") は、通常のログへのノイズの多い INFO/DEBUG 出力を抑制し、警告を個別にキャプチャできるようにするために推奨されます。
 - Introduced in: v3.2.13
 
 ### サーバー
@@ -793,7 +602,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: ms
 - Is mutable: No
-- Description: bRPC クライアントがアイドル状態で待機する最大時間。
+- Description: bRPCクライアントがアイドル状態で待機する最大時間。
 - Introduced in: -
 
 ##### `brpc_inner_reuse_pool`
@@ -802,7 +611,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: boolean
 - Unit: -
 - Is mutable: No
-- Description: 下層の BRPC クライアントが接続/チャネルに内部共有再利用プールを使用するかどうかを制御します。StarRocks は BrpcProxy で RpcClientOptions を構築するときに `brpc_inner_reuse_pool` を読み取ります ( `rpcOptions.setInnerResuePool(...)` 経由)。有効な場合 (true)、RPC クライアントは内部プールを再利用して、呼び出しごとの接続作成を減らし、FE-to-BE / LakeService RPC の接続チャーン、メモリ、ファイルディスクリプタの使用量を削減します。無効な場合 (false)、クライアントはより多くの分離されたプールを作成する可能性があります (リソース使用量が増える代わりに並行性分離を向上させます)。この値を変更するには、プロセスを再起動して有効にする必要があります。
+- Description: 基盤となるBRPCクライアントが接続/チャネルに内部共有再利用プールを使用するかどうかを制御します。StarRocksは、RpcClientOptionsを構築する際にBrpcProxyで`brpc_inner_reuse_pool`を読み取ります ( `rpcOptions.setInnerResuePool(...)`経由)。有効 (true) にすると、RPCクライアントは内部プールを再利用して、呼び出しごとの接続作成を減らし、FE-to-BE / LakeService RPCの接続チャーン、メモリ、ファイルディスクリプタの使用量を削減します。無効 (false) にすると、クライアントはより分離されたプールを作成する可能性があります (リソース使用量が増加する代わりに並行性分離が向上します)。この値を変更するには、プロセスを再起動して適用する必要があります。
 - Introduced in: v3.3.11, v3.4.1, v3.5.0
 
 ##### `brpc_min_evictable_idle_time_ms`
@@ -811,7 +620,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: No
-- Description: アイドル状態の BRPC 接続が、接続プールで立ち退きの対象になるまでに残っている必要のある時間 (ミリ秒単位)。`BrpcProxy` が使用する RpcClientOptions に適用されます (RpcClientOptions.setMinEvictableIdleTime 経由)。この値を上げるとアイドル接続を長く保持でき (再接続のチャーンを減らす)、下げると未使用のソケットをより速く解放できます (リソース使用量を減らす)。接続の再利用、プールの成長、立ち退きの動作のバランスを取るために、`brpc_connection_pool_size` および `brpc_idle_wait_max_time` とともに調整します。
+- Description: アイドル状態のBRPC接続が接続プールに留まり、削除の対象となるまでのミリ秒単位の時間。`BrpcProxy`が使用するRpcClientOptionsに適用されます (RpcClientOptions.setMinEvictableIdleTime経由)。この値を上げるとアイドル接続を長く保持し (再接続のチャーンを減らす)、下げると未使用のソケットをより速く解放します (リソース使用量を減らす)。`brpc_connection_pool_size`および`brpc_idle_wait_max_time`と合わせて調整し、接続の再利用、プール拡張、および削除動作のバランスを取ります。
 - Introduced in: v3.3.11, v3.4.1, v3.5.0
 
 ##### `brpc_reuse_addr`
@@ -820,46 +629,17 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description: true の場合、StarRocks は、brpc RpcClient によって作成されたクライアントソケットにローカルアドレスの再利用を許可するソケットオプションを設定します (RpcClientOptions.setReuseAddress 経由)。これを有効にすると、バインドの失敗が減り、ソケットが閉じられた後にローカルポートの再バインドが高速化され、高レートの接続チャーンや迅速な再起動に役立ちます。false の場合、アドレス/ポートの再利用は無効になり、意図しないポート共有の可能性を減らすことができますが、一時的なバインドエラーが増加する可能性があります。このオプションは、`brpc_connection_pool_size` および `brpc_short_connection` によって設定される接続動作と相互作用します。これは、クライアントソケットを再バインドして再利用できる速度に影響するためです。
+- Description: trueの場合、StarRocksはbrpc RpcClientによって作成されたクライアントソケットのローカルアドレス再利用を許可するようにソケットオプションを設定します (RpcClientOptions.setReuseAddress経由)。これを有効にすると、バインドの失敗が減り、ソケットが閉じられた後のローカルポートの再バインドが速くなるため、高頻度の接続チャーンや迅速な再起動に役立ちます。falseの場合、アドレス/ポートの再利用は無効になり、意図しないポート共有の可能性を減らすことができますが、一時的なバインドエラーが増加する可能性があります。このオプションは、クライアントソケットがどれだけ迅速に再バインドおよび再利用できるかに影響するため、`brpc_connection_pool_size`および`brpc_short_connection`によって構成される接続動作と相互作用します。
 - Introduced in: v3.3.11, v3.4.1, v3.5.0
 
 ##### `cluster_name`
->>>>>>> 7c14cbc6a8 ([Doc] add backticks to config names (#69369))
 
 - Default: StarRocks Cluster
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: FE が属する StarRocks クラスターの名前。クラスター名は Web ページの `Title` に表示されます。
+- Description: FEが属するStarRocksクラスターの名前。クラスター名はウェブページの`Title`に表示されます。
 - Introduced in: -
-
-<<<<<<< HEAD
-##### priority_networks
-
-- デフォルト: 空の文字列
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: 複数の IP アドレスを持つサーバーの選択戦略を宣言します。このパラメータで指定されたリストと一致する IP アドレスは最大で 1 つでなければなりません。このパラメータの値は、CIDR 表記でセミコロン (;) で区切られたエントリからなるリストです。たとえば、10.10.10.0/24 です。このリストのエントリと一致する IP アドレスがない場合、サーバーの利用可能な IP アドレスがランダムに選択されます。v3.3.0 から、StarRocks は IPv6 に基づくデプロイメントをサポートしています。サーバーが IPv4 と IPv6 の両方のアドレスを持っている場合、このパラメータが指定されていない場合、システムはデフォルトで IPv4 アドレスを使用します。この動作を変更するには、`net_use_ipv6_when_priority_networks_empty` を `true` に設定します。
-- 導入バージョン: -
-
-##### net_use_ipv6_when_priority_networks_empty
-
-- デフォルト: false
-- タイプ: Boolean
-- 単位: -
-- 変更可能: いいえ
-- 説明: `priority_networks` が指定されていない場合に IPv6 アドレスを優先的に使用するかどうかを制御するブール値。`true` は、ノードをホストするサーバーが IPv4 と IPv6 の両方のアドレスを持っており、`priority_networks` が指定されていない場合に、システムが IPv6 アドレスを優先的に使用することを示します。
-- 導入バージョン: v3.3.0
-=======
-##### `dns_cache_ttl_seconds`
-
-- Default: 60
-- Type: Int
-- Unit: Seconds
-- Is mutable: No
-- Description: 成功した DNS ルックアップの DNS キャッシュ TTL (Time-To-Live) (秒単位)。これにより、JVM が成功した DNS ルックアップをキャッシュする期間を制御する Java セキュリティプロパティ `networkaddress.cache.ttl` が設定されます。システムが常に情報をキャッシュできるようにするにはこの項目を `-1` に設定し、キャッシュを無効にするには `0` に設定します。これは、Kubernetes デプロイメントや動的 DNS が使用されている場合など、IP アドレスが頻繁に変更される環境で特に役立ちます。
-- Introduced in: v3.5.11, v4.0.4
 
 ##### `enable_http_async_handler`
 
@@ -867,7 +647,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: システムが HTTP リクエストを非同期で処理することを許可するかどうか。この機能が有効になっている場合、Netty ワーカー スレッドによって受信された HTTP リクエストは、HTTP サーバーのブロックを避けるために、サービスロジック処理のために別のスレッドプールに送信されます。無効になっている場合、Netty ワーカーがサービスロジックを処理します。
+- Description: システムがHTTPリクエストを非同期で処理することを許可するかどうか。この機能が有効になっている場合、Nettyワーカー スレッドによって受信されたHTTPリクエストは、HTTPサーバーのブロックを避けるために、サービスロジック処理用の別のスレッドプールに送信されます。無効になっている場合、Nettyワーカーがサービスロジックを処理します。
 - Introduced in: 4.0.0
 
 ##### `enable_http_validate_headers`
@@ -876,9 +656,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description: Netty の HttpServerCodec が厳密な HTTP ヘッダー検証を実行するかどうかを制御します。この値は、HttpServer の HTTP パイプラインが初期化されるときに HttpServerCodec に渡されます (UseLocations を参照)。新しい Netty バージョンではより厳密なヘッダー規則が適用されるため (https://github.com/netty/netty/pull/12760)、下位互換性のためにデフォルトは false です。RFC 準拠のヘッダーチェックを強制するには true に設定します。そうすると、レガシークライアントやプロキシからの不正な形式の要求や非準拠の要求が拒否される可能性があります。変更を有効にするには HTTP サーバーの再起動が必要です。
+- Description: NettyのHttpServerCodecが厳密なHTTPヘッダー検証を実行するかどうかを制御します。この値は、`HttpServer`でHTTPパイプラインが初期化されるときにHttpServerCodecに渡されます (UseLocationsを参照)。新しいNettyバージョンではより厳密なヘッダー規則が適用されるため (https://github.com/netty/netty/pull/12760)、後方互換性のためにデフォルトはfalseです。RFC準拠のヘッダーチェックを強制するにはtrueに設定します。これにより、レガシーなクライアントやプロキシからの不正な形式または非準拠のリクエストが拒否される可能性があります。変更を有効にするにはHTTPサーバーの再起動が必要です。
 - Introduced in: v3.3.0, v3.4.0, v3.5.0
->>>>>>> 7c14cbc6a8 ([Doc] add backticks to config names (#69369))
 
 ##### `enable_https`
 
@@ -886,7 +665,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description: FE ノードで HTTP サーバーと HTTPS サーバーを同時に有効にするかどうか。
+- Description: FEノードでHTTPサーバーと並行してHTTPSサーバーを有効にするかどうか。
 - Introduced in: v4.0
 
 ##### `frontend_address`
@@ -895,508 +674,16 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: FE ノードの IP アドレス。
+- Description: FEノードのIPアドレス。
 - Introduced in: -
 
-<<<<<<< HEAD
-##### http_backlog_num
-
-- デフォルト: 1024
-- タイプ: Int
-- 単位: -
-- 変更可能: いいえ
-- 説明: FE ノード内の HTTP サーバーが保持するバックログキューの長さ。
-- 導入バージョン: -
-
-
-
-
-
-
-
-##### cluster_name
-
-- デフォルト: StarRocks Cluster
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: FE が属する StarRocks クラスタの名前。クラスタ名は、Web ページの `Title` に表示されます。
-- 導入バージョン: -
-
-##### rpc_port
-
-- デフォルト: 9020
-- タイプ: Int
-- 単位: -
-- 変更可能: いいえ
-- 説明: FE ノード内の Thrift サーバーがリッスンするポート。
-- 導入バージョン: -
-
-##### thrift_server_max_worker_threads
-
-- デフォルト: 4096
-- タイプ: Int
-- 単位: -
-- 変更可能: はい
-- 説明: FE ノード内の Thrift サーバーがサポートする最大ワーカースレッド数。
-- 導入バージョン: -
-
-##### thrift_server_queue_size
-
-- デフォルト: 4096
-- タイプ: Int
-- 単位: -
-- 変更可能: いいえ
-- 説明: リクエストが保留中のキューの長さ。Thrift サーバーで処理中のスレッド数が `thrift_server_max_worker_threads` で指定された値を超える場合、新しいリクエストは保留キューに追加されます。
-- 導入バージョン: -
-
-##### thrift_client_timeout_ms
-
-- デフォルト: 5000
-- タイプ: Int
-- 単位: ミリ秒
-- 変更可能: いいえ
-- 説明: アイドル状態のクライアント接続がタイムアウトするまでの時間。
-- 導入バージョン: -
-
-##### thrift_backlog_num
-
-- デフォルト: 1024
-- タイプ: Int
-- 単位: -
-- 変更可能: いいえ
-- 説明: FE ノード内の Thrift サーバーが保持するバックログキューの長さ。
-- 導入バージョン: -
-
-##### brpc_idle_wait_max_time
-
-- デフォルト: 10000
-- タイプ: Int
-- 単位: ms
-- 変更可能: いいえ
-- 説明: bRPC クライアントがアイドル状態で待機する最大時間。
-- 導入バージョン: -
-
-##### query_port
-
-- デフォルト: 9030
-- タイプ: Int
-- 単位: -
-- 変更可能: いいえ
-- 説明: FE ノード内の MySQL サーバーがリッスンするポート。
-- 導入バージョン: -
-
-##### mysql_nio_backlog_num
-
-- デフォルト: 1024
-- タイプ: Int
-- 単位: -
-- 変更可能: いいえ
-- 説明: FE ノード内の MySQL サーバーが保持するバックログキューの長さ。
-- 導入バージョン: -
-
-##### mysql_service_nio_enable_keep_alive
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 変更可能: いいえ
-- 説明: MySQL 接続の TCP Keep-Alive を有効にします。ロードバランサーの背後で長時間アイドル状態の接続に役立ちます。
-- 導入バージョン: -
-
-##### mysql_service_io_threads_num
-
-- デフォルト: 4
-- タイプ: Int
-- 単位: -
-- 変更可能: いいえ
-- 説明: FE ノード内の MySQL サーバーが I/O イベントを処理するために実行できる最大スレッド数。
-- 導入バージョン: -
-
-##### max_mysql_service_task_threads_num
-
-- デフォルト: 4096
-- タイプ: Int
-- 単位: -
-- 変更可能: いいえ
-- 説明: FE ノード内の MySQL サーバーがタスクを処理するために実行できる最大スレッド数。
-- 導入バージョン: -
-
-
-
-
-##### mysql_server_version
-
-- デフォルト: 8.0.33
-- タイプ: String
-- 単位: -
-- 変更可能: はい
-- 説明: クライアントに返される MySQL サーバーバージョン。このパラメータを変更すると、次の状況でバージョン情報に影響を与えます:
-  1. `select version();`
-  2. ハンドシェイクパケットバージョン
-  3. グローバル変数 `version` の値 (`show variables like 'version';`)
-- 導入バージョン: -
-
-##### qe_max_connection
-
-- デフォルト: 4096
-- タイプ: Int
-- 単位: -
-- 変更可能: いいえ
-- 説明: すべてのユーザーが FE ノードに確立できる最大接続数。v3.1.12 および v3.2.7 以降、デフォルト値は `1024` から `4096` に変更されました。
-- 導入バージョン: -
-
-### メタデータとクラスタ管理
-
-##### cluster_id
-
-- デフォルト: -1
-- タイプ: Int
-- 単位: -
-- 変更可能: いいえ
-- 説明: FE が属する StarRocks クラスタの ID。同じクラスタ ID を持つ FEs または BEs は同じ StarRocks クラスタに属します。有効な値: 任意の正の整数。デフォルト値 `-1` は、クラスタの Leader FE が初めて起動されたときに StarRocks が StarRocks クラスタのランダムなクラスタ ID を生成することを指定します。
-- 導入バージョン: -
-
-##### meta_dir
-
-- デフォルト: StarRocksFE.STARROCKS_HOME_DIR + "/meta"
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: メタデータを保存するディレクトリ。
-- 導入バージョン: -
-
-##### edit_log_type
-
-- デフォルト: BDB
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: 生成できる編集ログのタイプ。値を `BDB` に設定します。
-- 導入バージョン: -
-
-##### edit_log_port
-
-- デフォルト: 9010
-- タイプ: Int
-- 単位: -
-- 変更可能: いいえ
-- 説明: クラスタ内の Leader、Follower、および Observer FEs 間の通信に使用されるポート。
-- 導入バージョン: -
-
-##### edit_log_roll_num
-
-- デフォルト: 50000
-- タイプ: Int
-- 単位: -
-- 変更可能: はい
-- 説明: ログファイルがこれらのログエントリのために作成される前に書き込むことができるメタデータログエントリの最大数。このパラメータはログファイルのサイズを制御するために使用されます。新しいログファイルは BDBJE データベースに書き込まれます。
-- 導入バージョン: -
-
-##### metadata_ignore_unknown_operation_type
-
-- デフォルト: false
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: 不明なログ ID を無視するかどうか。FE がロールバックされると、以前のバージョンの FEs は一部のログ ID を認識できない場合があります。値が `TRUE` の場合、FE は不明なログ ID を無視します。値が `FALSE` の場合、FE は終了します。
-- 導入バージョン: -
-
-
-
-
-
-
-
-##### meta_delay_toleration_second
-
-- デフォルト: 300
-- タイプ: Int
-- 単位: 秒
-- 変更可能: はい
-- 説明: フォロワーおよびオブザーバー FEs のメタデータがリーダー FE のメタデータに遅れることができる最大期間。単位: 秒。この期間を超えると、非リーダー FEs はサービスの提供を停止します。
-- 導入バージョン: -
-
-##### master_sync_policy
-
-- デフォルト: SYNC
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: リーダー FE がログをディスクにフラッシュするポリシー。このパラメータは、現在の FE がリーダー FE の場合にのみ有効です。有効な値:
-  - `SYNC`: トランザクションがコミットされると、ログエントリが生成され、同時にディスクにフラッシュされます。
-  - `NO_SYNC`: トランザクションがコミットされるときにログエントリの生成とフラッシュは同時に行われません。
-  - `WRITE_NO_SYNC`: トランザクションがコミットされると、ログエントリが同時に生成されますが、ディスクにフラッシュされません。
-
-  フォロワー FE を 1 つだけデプロイした場合、このパラメータを `SYNC` に設定することをお勧めします。フォロワー FE を 3 つ以上デプロイした場合、このパラメータと `replica_sync_policy` の両方を `WRITE_NO_SYNC` に設定することをお勧めします。
-
-- 導入バージョン: -
-
-##### replica_sync_policy
-
-- デフォルト: SYNC
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: フォロワー FE がログをディスクにフラッシュするポリシー。このパラメータは、現在の FE がフォロワー FE の場合にのみ有効です。有効な値:
-  - `SYNC`: トランザクションがコミットされると、ログエントリが生成され、同時にディスクにフラッシュされます。
-  - `NO_SYNC`: トランザクションがコミットされるときにログエントリの生成とフラッシュは同時に行われません。
-  - `WRITE_NO_SYNC`: トランザクションがコミットされると、ログエントリが同時に生成されますが、ディスクにフラッシュされません。
-- 導入バージョン: -
-
-##### replica_ack_policy
-
-- デフォルト: SIMPLE_MAJORITY
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: ログエントリが有効と見なされるポリシー。デフォルト値 `SIMPLE_MAJORITY` は、フォロワー FEs の過半数が ACK メッセージを返すとログエントリが有効と見なされることを指定します。
-- 導入バージョン: -
-
-##### bdbje_heartbeat_timeout_second
-
-- デフォルト: 30
-- タイプ: Int
-- 単位: 秒
-- 変更可能: いいえ
-- 説明: StarRocks クラスタ内のリーダー、フォロワー、およびオブザーバー FEs 間のハートビートがタイムアウトするまでの時間。
-- 導入バージョン: -
-
-##### bdbje_replica_ack_timeout_second
-
-- デフォルト: 10
-- タイプ: Int
-- 単位: 秒
-- 変更可能: いいえ
-- 説明: メタデータがリーダー FE からフォロワー FEs に書き込まれるときに、リーダー FE が指定された数のフォロワー FEs からの ACK メッセージを待つことができる最大時間。単位: 秒。大量のメタデータが書き込まれている場合、フォロワー FEs はリーダー FE に ACK メッセージを返すまでに長い時間がかかり、ACK タイムアウトが発生します。この状況を防ぐために、このパラメータの値を増やすことをお勧めします。
-- 導入バージョン: -
-
-##### bdbje_lock_timeout_second
-
-- デフォルト: 1
-- タイプ: Int
-- 単位: 秒
-- 変更可能: いいえ
-- 説明: BDB JE ベースの FE 内のロックがタイムアウトするまでの時間。
-- 導入バージョン: -
-
-##### bdbje_reset_election_group
-
-- デフォルト: false
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: BDBJE レプリケーショングループをリセットするかどうか。このパラメータが `TRUE` に設定されている場合、FE は BDBJE レプリケーショングループをリセットし（つまり、すべての選出可能な FE ノードの情報を削除し）、リーダー FE として開始します。リセット後、この FE はクラスタ内の唯一のメンバーとなり、他の FEs は `ALTER SYSTEM ADD/DROP FOLLOWER/OBSERVER 'xxx'` を使用してこのクラスタに再参加できます。フォロワー FEs のデータがほとんど破損しているためにリーダー FE を選出できない場合にのみこの設定を使用してください。`reset_election_group` は `metadata_failure_recovery` を置き換えるために使用されます。
-- 導入バージョン: -
-
-##### max_bdbje_clock_delta_ms
-
-- デフォルト: 5000
-- タイプ: Long
-- 単位: ミリ秒
-- 変更可能: いいえ
-- 説明: StarRocks クラスタ内のリーダー FE とフォロワーまたはオブザーバー FEs 間で許可される最大クロックオフセット。
-- 導入バージョン: -
-
-
-
-
-
-
-
-##### txn_rollback_limit
-
-- デフォルト: 100
-- タイプ: Int
-- 単位: -
-- 変更可能: いいえ
-- 説明: ロールバックできるトランザクションの最大数。
-- 導入バージョン: -
-
-##### heartbeat_mgr_threads_num
-
-- デフォルト: 8
-- タイプ: Int
-- 単位: -
-- 変更可能: いいえ
-- 説明: ハートビートタスクを実行するためにハートビートマネージャーが実行できるスレッドの数。
-- 導入バージョン: -
-
-##### heartbeat_mgr_blocking_queue_size
-
-- デフォルト: 1024
-- タイプ: Int
-- 単位: -
-- 変更可能: いいえ
-- 説明: ハートビートマネージャーが実行するハートビートタスクを保存するブロッキングキューのサイズ。
-- 導入バージョン: -
-
-##### catalog_try_lock_timeout_ms
-
-- デフォルト: 5000
-- タイプ: Long
-- 単位: ミリ秒
-- 変更可能: はい
-- 説明: グローバルロックを取得するためのタイムアウト期間。
-- 導入バージョン: -
-
-##### ignore_materialized_view_error
-
-- デフォルト: false
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: FE がマテリアライズドビューエラーによって引き起こされたメタデータ例外を無視するかどうか。FE がマテリアライズドビューエラーによって引き起こされたメタデータ例外のために起動に失敗した場合、このパラメータを `true` に設定して FE が例外を無視することを許可できます。
-- 導入バージョン: v2.5.10
-
-##### ignore_meta_check
-
-- デフォルト: false
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: 非リーダー FEs がリーダー FE からのメタデータギャップを無視するかどうか。値が TRUE の場合、非リーダー FEs はリーダー FE からのメタデータギャップを無視し、データ読み取りサービスの提供を続けます。このパラメータは、リーダー FE を長時間停止している場合でも、継続的なデータ読み取りサービスを保証します。値が FALSE の場合、非リーダー FEs はリーダー FE からのメタデータギャップを無視せず、データ読み取りサービスの提供を停止します。
-- 導入バージョン: -
-
-##### drop_backend_after_decommission
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: BE を廃止した後に削除するかどうか。`TRUE` は、BE が廃止された直後に削除されることを示します。`FALSE` は、BE が廃止された後に削除されないことを示します。
-- 導入バージョン: -
-
-##### enable_collect_query_detail_info
-
-- デフォルト: false
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: クエリのプロファイルを収集するかどうか。このパラメータが `TRUE` に設定されている場合、システムはクエリのプロファイルを収集します。このパラメータが `FALSE` に設定されている場合、システムはクエリのプロファイルを収集しません。
-- 導入バージョン: -
-
-##### profile_info_format
-
-- デフォルト: default
-- タイプ: String
-- 単位: -
-- 変更可能: はい
-- 説明: システムが出力する Profile のフォーマット。有効な値：`default` と `json`. `default` に設定すると、Profile はデフォルトのフォーマットで出力される。`json` に設定すると、システムは JSON フォーマットで Profile を出力する。
-- 導入バージョン: -
-
-##### enable_background_refresh_connector_metadata
-
-- デフォルト: v3.0 以降では true、v2.5 では false
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: 定期的な Hive メタデータキャッシュの更新を有効にするかどうか。有効にすると、StarRocks は Hive クラスタのメタストア (Hive Metastore または AWS Glue) をポーリングし、頻繁にアクセスされる Hive catalogs のキャッシュされたメタデータを更新してデータの変更を認識します。`true` は Hive メタデータキャッシュの更新を有効にし、`false` は無効にします。
-- 導入バージョン: v2.5.5
-
-
-
-
-
-
-
-##### background_refresh_metadata_interval_millis
-
-- デフォルト: 600000
-- タイプ: Int
-- 単位: ミリ秒
-- 変更可能: はい
-- 説明: 2 回の連続した Hive メタデータキャッシュ更新の間隔。
-- 導入バージョン: v2.5.5
-
-##### background_refresh_metadata_time_secs_since_last_access_secs
-
-- デフォルト: 3600 * 24
-- タイプ: Long
-- 単位: 秒
-- 変更可能: はい
-- 説明: Hive メタデータキャッシュ更新タスクの有効期限。アクセスされた Hive catalog に対して、指定された時間を超えてアクセスされていない場合、StarRocks はそのキャッシュされたメタデータの更新を停止します。アクセスされていない Hive catalog に対して、StarRocks はそのキャッシュされたメタデータを更新しません。
-- 導入バージョン: v2.5.5
-
-##### enable_statistics_collect_profile
-
-- デフォルト: false
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: 統計クエリのプロファイルを生成するかどうか。この項目を `true` に設定すると、StarRocks はシステム統計に関するクエリのプロファイルを生成します。
-- 導入バージョン: v3.1.5
-
-#### metadata_enable_recovery_mode
-
-- デフォルト: false
-- タイプ: Boolean
-- 単位: -
-- 変更可能: いいえ
-- 説明: メタデータリカバリモードを有効にするかどうか。このモードが有効になっている場合、クラスタメタデータの一部が失われた場合、BE の情報に基づいて復元できます。現在、パーティションのバージョン情報のみが復元できます。
-- 導入バージョン: v3.3.0
-
-##### black_host_history_sec
-
-- デフォルト: 2 * 60
-- タイプ: Int
-- 単位: 秒
-- 変更可能: はい
-- 説明: BE ブラックリスト内の BE ノードの過去の接続失敗を保持する時間。BE ノードが自動的に BE ブラックリストに追加されると、StarRocks はその接続性を評価し、BE ブラックリストから削除できるかどうかを判断します。`black_host_history_sec` 内で、ブラックリストに登録された BE ノードが `black_host_connect_failures_within_time` に設定されたしきい値よりも少ない接続失敗を持っている場合にのみ、BE ブラックリストから削除できます。
-- 導入バージョン: v3.3.0
-
-##### black_host_connect_failures_within_time
-
-- デフォルト: 5
-- タイプ: Int
-- 単位: -
-- 変更可能: はい
-- 説明: ブラックリストに登録された BE ノードに許可される接続失敗のしきい値。BE ノードが自動的に BE ブラックリストに追加されると、StarRocks はその接続性を評価し、BE ブラックリストから削除できるかどうかを判断します。`black_host_history_sec` 内で、ブラックリストに登録された BE ノードが `black_host_connect_failures_within_time` に設定されたしきい値よりも少ない接続失敗を持っている場合にのみ、BE ブラックリストから削除できます。
-- 導入バージョン: v3.3.0
-
-#### lock_manager_enabled
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 変更可能: いいえ
-- 説明: ロックマネージャーを有効にするかどうか。ロックマネージャーはロックの集中管理を行います。たとえば、メタデータロックの粒度をデータベースレベルからテーブルレベルに細分化するかどうかを制御できます。
-- 導入バージョン: v3.3.0
-
-##### lock_manager_enable_using_fine_granularity_lock
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 変更可能: いいえ
-- 説明: メタデータロックの粒度をデータベースレベルからテーブルレベルに細分化するかどうか。メタデータロックがテーブルレベルに細分化されると、ロックの競合と競争が減少し、ロードとクエリの同時実行性が向上します。このパラメータは `lock_manager_enabled` が有効な場合にのみ有効です。
-- 導入バージョン: v3.3.0
-
-##### enable_legacy_compatibility_for_replication
-
-- デフォルト: false
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: レプリケーションのレガシー互換性を有効にするかどうか。StarRocks は古いバージョンと新しいバージョンの間で異なる動作をする可能性があり、クロスクラスタデータ移行中に問題が発生する可能性があります。したがって、データ移行の前にターゲットクラスタでレガシー互換性を有効にし、データ移行が完了した後に無効にする必要があります。`true` はこのモードを有効にすることを示します。
-- 導入バージョン: v3.1.10, v3.2.6
-
-##### automated_cluster_snapshot_interval_seconds
-
-- デフォルト: 600
-- タイプ: Int
-- 単位: 秒
-- 変更可能: はい
-- 説明: 自動クラスタスナップショットのタスクがトリガされる間隔。
-- 導入バージョン: v3.4.2
-=======
 ##### `http_async_threads_num`
 
 - Default: 4096
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: 非同期 HTTP リクエスト処理用のスレッドプールのサイズ。エイリアスは `max_http_sql_service_task_threads_num` です。
+- Description: 非同期HTTPリクエスト処理用のスレッドプールのサイズ。エイリアスは`max_http_sql_service_task_threads_num`です。
 - Introduced in: 4.0.0
 
 ##### `http_backlog_num`
@@ -1405,7 +692,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: FE ノードの HTTP サーバーが保持するバックログキューの長さ。
+- Description: FEノードのHTTPサーバーが保持するバックログキューの長さ。
 - Introduced in: -
 
 ##### `http_max_chunk_size`
@@ -1414,7 +701,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: Bytes
 - Is mutable: No
-- Description: FE HTTP サーバーの Netty の HttpServerCodec によって処理される単一の HTTP チャンクの最大許容サイズ (バイト単位) を設定します。これは HttpServerCodec に 3 番目の引数として渡され、チャンク転送またはストリーミング要求/応答中のチャンクの長さを制限します。受信チャンクがこの値を超えると、Netty はフレームが大きすぎるエラー (TooLongFrameException など) を発生させ、要求が拒否される可能性があります。正当な大規模チャンクアップロードの場合はこれを増やし、メモリ圧力を減らしたり、DoS 攻撃の攻撃対象領域を減らしたりするために小さく保ちます。この設定は、`http_max_initial_line_length`、`http_max_header_size`、および `enable_http_validate_headers` とともに使用されます。
+- Description: FE HTTPサーバーのNettyのHttpServerCodecによって処理される単一のHTTPチャンクの最大許容サイズ (バイト単位) を設定します。これはHttpServerCodecの3番目の引数として渡され、チャンク転送またはストリーミングリクエスト/レスポンス中のチャンクの長さを制限します。受信チャンクがこの値を超えると、Nettyはフレームが大きすぎるエラー (例: TooLongFrameException) を発生させ、リクエストが拒否される可能性があります。正当な大きなチャンクアップロードの場合はこれを増やし、メモリ負荷とDoS攻撃の表面積を減らすために小さく保ちます。この設定は、`http_max_initial_line_length`、`http_max_header_size`、および`enable_http_validate_headers`と併用されます。
 - Introduced in: v3.2.0
 
 ##### `http_max_header_size`
@@ -1423,7 +710,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: Bytes
 - Is mutable: No
-- Description: Netty の `HttpServerCodec` によって解析される HTTP 要求ヘッダーブロックの最大許容サイズ (バイト単位)。StarRocks はこの値を `HttpServerCodec` に渡します ( `Config.http_max_header_size` 経由)。受信要求のヘッダー (名前と値の組み合わせ) がこの制限を超えると、コーデックは要求を拒否し (デコーダー例外)、接続/要求は失敗します。クライアントが非常に大きなヘッダー (大きな Cookie または多くのカスタムヘッダー) を正当に送信する場合にのみ増やしてください。値が大きいほど、接続ごとのメモリ使用量が増加します。`http_max_initial_line_length` および `http_max_chunk_size` と合わせて調整してください。変更には FE の再起動が必要です。
+- Description: Nettyの`HttpServerCodec`によって解析されるHTTPリクエストヘッダーブロックの最大許容サイズ (バイト単位)。StarRocksはこの値を`HttpServerCodec`に渡します (`Config.http_max_header_size`として)。受信リクエストのヘッダー (名前と値の組み合わせ) がこの制限を超えると、コーデックはリクエストを拒否し (デコーダー例外)、接続/リクエストは失敗します。クライアントが正当に非常に大きなヘッダー (大きなCookieまたは多数のカスタムヘッダー) を送信する場合にのみ増やしてください。値が大きいほど、接続ごとのメモリ使用量が増加します。`http_max_initial_line_length`および`http_max_chunk_size`と組み合わせて調整してください。変更にはFEの再起動が必要です。
 - Introduced in: v3.2.0
 
 ##### `http_max_initial_line_length`
@@ -1432,7 +719,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: Bytes
 - Is mutable: No
-- Description: HttpServer で使用される Netty `HttpServerCodec` が受け入れる HTTP 初期リクエスト行 (メソッド + リクエストターゲット + HTTP バージョン) の最大許容長 (バイト単位) を設定します。この値は Netty のデコーダーに渡され、この長さよりも長い初期行を持つリクエストは拒否されます (TooLongFrameException)。非常に長いリクエスト URI をサポートする必要がある場合にのみ、これを増やしてください。値が大きいほどメモリ使用量が増加し、不正な形式の/リクエスト乱用のリスクが高まる可能性があります。`http_max_header_size` および `http_max_chunk_size` と合わせて調整してください。
+- Description: HttpServerで使用されるNetty `HttpServerCodec`によって受け入れられるHTTP初期リクエストライン (メソッド + リクエストターゲット + HTTPバージョン) の最大許容長 (バイト単位) を設定します。この値はNettyのデコーダーに渡され、これより長い初期ラインを持つリクエストは拒否されます (TooLongFrameException)。非常に長いリクエストURIをサポートする必要がある場合にのみこれを増やしてください。値が大きいほどメモリ使用量が増加し、不正な形式/リクエスト乱用への露出が高まる可能性があります。`http_max_header_size`および`http_max_chunk_size`と合わせて調整してください。
 - Introduced in: v3.2.0
 
 ##### `http_port`
@@ -1441,7 +728,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: FE ノードの HTTP サーバーがリッスンするポート。
+- Description: FEノードのHTTPサーバーがリッスンするポート。
 - Introduced in: -
 
 ##### `http_web_page_display_hardware`
@@ -1450,7 +737,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: true の場合、HTTP インデックスページ (/index) に oshi ライブラリ (CPU、メモリ、プロセス、ディスク、ファイルシステム、ネットワークなど) を介して入力されたハードウェア情報セクションが含まれます。oshi は、システムユーティリティを呼び出したり、間接的にシステムファイルを読み取ったりする場合があります (たとえば、`getent passwd` などのコマンドを実行する可能性があります)。これにより、機密性の高いシステムデータが表面化する可能性があります。より厳格なセキュリティが必要な場合、またはホストでこれらの間接コマンドの実行を回避したい場合は、この設定を false にして、Web UI でのハードウェア詳細の収集と表示を無効にします。
+- Description: trueの場合、HTTPインデックスページ (/index) には、oshiライブラリ (CPU、メモリ、プロセス、ディスク、ファイルシステム、ネットワークなど) を介して入力されたハードウェア情報セクションが含まれます。oshiはシステムユーティリティを呼び出したり、システムファイルを間接的に読み取ったりする可能性があり (たとえば、`getent passwd`などのコマンドを実行できます)、これにより機密性の高いシステムデータが表面化する可能性があります。より厳格なセキュリティが必要な場合、またはホストでこれらの間接コマンドの実行を避けたい場合は、この設定をfalseにして、Web UIでのハードウェア詳細の収集と表示を無効にしてください。
 - Introduced in: v3.2.0
 
 ##### `http_worker_threads_num`
@@ -1459,7 +746,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: HTTP リクエストを処理する HTTP サーバーのワーカー スレッドの数。負の値または 0 の場合、スレッド数は CPU コア数の 2 倍になります。
+- Description: HTTPリクエストを処理するためのHTTPサーバーのワーカー スレッド数。負の値または0の場合、スレッド数はCPUコア数の2倍になります。
 - Introduced in: v2.5.18, v3.0.10, v3.1.7, v3.2.2
 
 ##### `https_port`
@@ -1468,7 +755,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: FE ノードの HTTPS サーバーがリッスンするポート。
+- Description: FEノードのHTTPSサーバーがリッスンするポート。
 - Introduced in: v4.0
 
 ##### `max_mysql_service_task_threads_num`
@@ -1477,7 +764,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: FE ノードの MySQL サーバーがタスクを処理するために実行できる最大スレッド数。
+- Description: FEノードのMySQLサーバーがタスクを処理するために実行できるスレッドの最大数。
 - Introduced in: -
 
 ##### `max_task_runs_threads_num`
@@ -1486,7 +773,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: Threads
 - Is mutable: No
-- Description: タスク実行エグゼキュータースレッドプールの最大スレッド数を制御します。この値は同時タスク実行の上限であり、増やすと並行性が高まりますが、CPU、メモリ、ネットワーク使用量も増加し、減らすとタスク実行のバックログと待ち時間が長くなる可能性があります。この値は、予想される同時スケジュールジョブと利用可能なシステムリソースに応じて調整してください。
+- Description: タスク実行エグゼキュータースレッドプール内の最大スレッド数を制御します。この値は、同時タスク実行の上限です。これを増やすと並列性が向上しますが、CPU、メモリ、ネットワークの使用量も増加します。一方、これを減らすとタスク実行のバックログとレイテンシの増加を引き起こす可能性があります。予想される同時スケジュール済みジョブと利用可能なシステムリソースに応じてこの値を調整してください。
 - Introduced in: v3.2.0
 
 ##### `memory_tracker_enable`
@@ -1495,7 +782,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: FE メモリートラッカーサブシステムを有効にします。`memory_tracker_enable` が `true` に設定されている場合、`MemoryUsageTracker` は定期的に登録されたメタデータモジュールをスキャンし、メモリ内の `MemoryUsageTracker.MEMORY_USAGE` マップを更新し、合計をログに記録し、`MetricRepo` がメモリー使用量とオブジェクト数ゲージをメトリック出力に公開するようにします。サンプリング間隔を制御するには `memory_tracker_interval_seconds` を使用します。この機能を有効にすると、メモリー消費の監視とデバッグに役立ちますが、CPU と I/O のオーバーヘッド、および追加のメトリックカーディナリティが発生します。
+- Description: FEメモリトラッカーサブシステムを有効にします。`memory_tracker_enable`が`true`に設定されている場合、`MemoryUsageTracker`は登録されたメタデータモジュールを定期的にスキャンし、インメモリの`MemoryUsageTracker.MEMORY_USAGE`マップを更新し、合計をログに記録し、`MetricRepo`がメトリクス出力でメモリ使用量とオブジェクト数ゲージを公開するようにします。サンプリング間隔を制御するには`memory_tracker_interval_seconds`を使用します。この機能を有効にすると、メモリ消費量の監視とデバッグに役立ちますが、CPUとI/Oのオーバーヘッド、および追加のメトリクスカーディナリティが発生します。
 - Introduced in: v3.2.4
 
 ##### `memory_tracker_interval_seconds`
@@ -1504,7 +791,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
-- Description: FE の `MemoryUsageTracker` デーモンが FE プロセスと登録された `MemoryTrackable` モジュールのメモリ使用量をポーリングして記録する間隔 (秒単位)。`memory_tracker_enable` が `true` に設定されている場合、トラッカーはこの周期で実行され、`MEMORY_USAGE` を更新し、集計された JVM および追跡対象モジュールの使用状況をログに記録します。
+- Description: FE `MemoryUsageTracker`デーモンがFEプロセスおよび登録された`MemoryTrackable`モジュールのメモリ使用量をポーリングおよび記録する間隔 (秒単位)。`memory_tracker_enable`が`true`に設定されている場合、トラッカーはこの周期で実行され、`MEMORY_USAGE`を更新し、集計されたJVMおよび追跡対象モジュールの使用量をログに記録します。
 - Introduced in: v3.2.4
 
 ##### `mysql_nio_backlog_num`
@@ -1513,7 +800,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: FE ノードの MySQL サーバーが保持するバックログキューの長さ。
+- Description: FEノードのMySQLサーバーが保持するバックログキューの長さ。
 - Introduced in: -
 
 ##### `mysql_server_version`
@@ -1522,10 +809,10 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String
 - Unit: -
 - Is mutable: Yes
-- Description: クライアントに返される MySQL サーバーバージョン。このパラメーターを変更すると、以下の状況でバージョン情報に影響します。
+- Description: クライアントに返されるMySQLサーバーバージョン。このパラメータを変更すると、以下の状況でバージョン情報に影響します。
   1. `select version();`
-  2. ハンドシェイクパケットバージョン
-  3. グローバル変数 `version` の値 (`show variables like 'version';`)
+  2. Handshake packet version
+  3. グローバル変数`version`の値 (`show variables like 'version';`)
 - Introduced in: -
 
 ##### `mysql_service_io_threads_num`
@@ -1534,7 +821,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: FE ノードの MySQL サーバーが I/O イベントを処理するために実行できる最大スレッド数。
+- Description: FEノードのMySQLサーバーがI/Oイベントを処理するために実行できるスレッドの最大数。
 - Introduced in: -
 
 ##### `mysql_service_kill_after_disconnect`
@@ -1543,20 +830,16 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description: MySQL TCP 接続が閉じられたと検出された場合 (読み取りで EOF) のサーバーによるセッションの処理方法を制御します。`true` に設定されている場合、サーバーはその接続で実行中のクエリを直ちに停止し、即座にクリーンアップを実行します。`false` の場合、サーバーは切断時に実行中のクエリを停止せず、保留中の要求タスクがない場合にのみクリーンアップを実行し、クライアントが切断された後も長時間実行中のクエリを続行できるようにします。注: TCP キープアライブを示唆する簡単なコメントにもかかわらず、このパラメーターは特に切断後の停止動作を管理し、孤立したクエリを終了させるか (信頼性の低い/負荷分散されたクライアントの背後で推奨)、完了させるかを希望するかどうかに応じて設定する必要があります。
+- Description: MySQL TCP接続が閉じられたと検出された場合 (読み取り時のEOF)、サーバーがセッションをどのように処理するかを制御します。`true`に設定されている場合、サーバーはその接続の実行中のクエリを直ちに終了し、即座にクリーンアップを実行します。`false`の場合、サーバーは切断時に実行中のクエリを終了せず、保留中のリクエストタスクがない場合にのみクリーンアップを実行し、クライアントが切断した後も長時間実行されるクエリを続行できるようにします。注: TCPキープアライブを示唆する短いコメントにもかかわらず、このパラメータは切断後の終了動作を具体的に管理し、孤立したクエリを終了させるか (信頼性の低い/ロードバランスされたクライアントの背後で推奨)、完了させるかを希望に応じて設定する必要があります。
 - Introduced in: -
->>>>>>> 7c14cbc6a8 ([Doc] add backticks to config names (#69369))
 
 ##### `mysql_service_nio_enable_keep_alive`
 
-<<<<<<< HEAD
-##### privilege_max_total_roles_per_user
-=======
 - Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description: MySQL 接続で TCP Keep-Alive を有効にします。ロードバランサーの背後にある長時間アイドル状態の接続に役立ちます。
+- Description: MySQL接続のTCP Keep-Aliveを有効にします。ロードバランサーの背後にある長時間アイドル状態の接続に役立ちます。
 - Introduced in: -
 
 ##### `net_use_ipv6_when_priority_networks_empty`
@@ -1565,9 +848,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description: `priority_networks` が指定されていない場合に IPv6 アドレスを優先的に使用するかどうかを制御するブール値。`true` は、ノードをホストするサーバーに IPv4 と IPv6 アドレスの両方があり、`priority_networks` が指定されていない場合に、システムが IPv6 アドレスを優先的に使用することを許可することを示します。
+- Description: `priority_networks`が指定されていない場合にIPv6アドレスを優先的に使用するかどうかを制御するブール値。`true`は、ノードをホストするサーバーがIPv4とIPv6の両方のアドレスを持ち、`priority_networks`が指定されていない場合に、システムがIPv6アドレスを優先的に使用することを許可することを示します。
 - Introduced in: v3.3.0
->>>>>>> 7c14cbc6a8 ([Doc] add backticks to config names (#69369))
 
 ##### `priority_networks`
 
@@ -1575,7 +857,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: 複数の IP アドレスを持つサーバーの選択戦略を宣言します。このパラメーターで指定されたリストと一致する IP アドレスは最大 1 つである必要があることに注意してください。このパラメーターの値は、CIDR 表記でセミコロン (;) で区切られたエントリ (例: 10.10.10.0/24) で構成されるリストです。このリストのエントリに一致する IP アドレスがない場合、サーバーの使用可能な IP アドレスがランダムに選択されます。v3.3.0 から、StarRocks は IPv6 に基づくデプロイメントをサポートしています。サーバーに IPv4 と IPv6 アドレスの両方があり、このパラメーターが指定されていない場合、システムはデフォルトで IPv4 アドレスを使用します。`net_use_ipv6_when_priority_networks_empty` を `true` に設定することで、この動作を変更できます。
+- Description: 複数のIPアドレスを持つサーバーの選択戦略を宣言します。このパラメータで指定されたリストに一致するIPアドレスは最大1つである必要があります。このパラメータの値は、CIDR表記でセミコロン (;) で区切られたエントリ (例: 10.10.10.0/24) で構成されるリストです。このリストのエントリに一致するIPアドレスがない場合、サーバーの利用可能なIPアドレスがランダムに選択されます。v3.3.0以降、StarRocksはIPv6ベースのデプロイメントをサポートしています。サーバーがIPv4とIPv6の両方のアドレスを持ち、このパラメータが指定されていない場合、システムはデフォルトでIPv4アドレスを使用します。この動作は、`net_use_ipv6_when_priority_networks_empty`を`true`に設定することで変更できます。
 - Introduced in: -
 
 ##### `proc_profile_cpu_enable`
@@ -1584,7 +866,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: この項目が `true` に設定されている場合、バックグラウンドの `ProcProfileCollector` は `AsyncProfiler` を使用して CPU プロファイルを収集し、HTML レポートを `sys_log_dir/proc_profile` に書き込みます。各収集実行では、`proc_profile_collect_time_s` で設定された期間 CPU スタックを記録し、Java スタック深度に `proc_profile_jstack_depth` を使用します。生成されたプロファイルは圧縮され、古いファイルは `proc_profile_file_retained_days` および `proc_profile_file_retained_size_bytes` に従ってパージされます。`AsyncProfiler` にはネイティブライブラリ (`libasyncProfiler.so`) が必要です。`/tmp` の noexec 問題を回避するために `one.profiler.extractPath` は `STARROCKS_HOME_DIR/bin` に設定されています。
+- Description: この項目が`true`に設定されている場合、バックグラウンドの`ProcProfileCollector`は`AsyncProfiler`を使用してCPUプロファイルを収集し、`sys_log_dir/proc_profile`の下にHTMLレポートを書き込みます。各収集実行は、`proc_profile_collect_time_s`で設定された期間のCPUスタックを記録し、Javaスタック深度には`proc_profile_jstack_depth`を使用します。生成されたプロファイルは圧縮され、古いファイルは`proc_profile_file_retained_days`および`proc_profile_file_retained_size_bytes`に従って削除されます。`AsyncProfiler`にはネイティブライブラリ (`libasyncProfiler.so`) が必要です。`/tmp`でのnoexec問題を回避するために、`one.profiler.extractPath`は`STARROCKS_HOME_DIR/bin`に設定されています。
 - Introduced in: v3.2.12
 
 ##### `qe_max_connection`
@@ -1593,7 +875,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: FE ノードへのすべてのユーザーが確立できる最大接続数。v3.1.12 および v3.2.7 以降、デフォルト値が `1024` から `4096` に変更されました。
+- Description: すべてのユーザーがFEノードに確立できる接続の最大数。v3.1.12およびv3.2.7以降、デフォルト値は`1024`から`4096`に変更されました。
 - Introduced in: -
 
 ##### `query_port`
@@ -1602,7 +884,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: FE ノードの MySQL サーバーがリッスンするポート。
+- Description: FEノードのMySQLサーバーがリッスンするポート。
 - Introduced in: -
 
 ##### `rpc_port`
@@ -1611,7 +893,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: FE ノードの Thrift サーバーがリッスンするポート。
+- Description: FEノードのThriftサーバーがリッスンするポート。
 - Introduced in: -
 
 ##### `slow_lock_stack_trace_reserve_levels`
@@ -1620,7 +902,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: StarRocks が遅いロックまたは保持されているロックのロックデバッグ情報をダンプする際に、いくつのスタックトレースフレームをキャプチャして出力するかを制御します。この値は、排他ロック所有者、現在のスレッド、および最古/共有リーダーの JSON を生成する際に `QueryableReentrantReadWriteLock` によって `LogUtil.getStackTraceToJsonArray` に渡されます。この値を増やすと、遅いロックまたはデッドロックの問題の診断に役立つより多くのコンテキストが得られますが、JSON ペイロードが大きくなり、スタックキャプチャの CPU/メモリがわずかに増加します。減らすとオーバーヘッドが減少します。注: リーダーエントリは、低速ロックのみをログに記録する場合、`slow_lock_threshold_ms` によってフィルタリングできます。
+- Description: StarRocksが遅いロックまたは保持されているロックのロックデバッグ情報をダンプする際に、いくつのスタックトレースフレームがキャプチャされ出力されるかを制御します。この値は、排他ロック所有者、現在のスレッド、および最も古い/共有リーダーのJSONを生成する際に、`QueryableReentrantReadWriteLock`によって`LogUtil.getStackTraceToJsonArray`に渡されます。この値を増やすと、遅いロックまたはデッドロックの問題を診断するためのより多くのコンテキストが提供されますが、JSONペイロードが大きくなり、スタックキャプチャのためのCPU/メモリがわずかに高くなります。減らすとオーバーヘッドが削減されます。注: 遅いロックのみをログに記録する場合、リーダーエントリは`slow_lock_threshold_ms`によってフィルタリングできます。
 - Introduced in: v3.4.0, v3.5.0
 
 ##### `ssl_cipher_blacklist`
@@ -1629,7 +911,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: IANA 名で SSL 暗号スイートをブラックリストに登録するための、正規表現をサポートするコンマ区切りリスト。ホワイトリストとブラックリストの両方が設定されている場合、ブラックリストが優先されます。
+- Description: IANA名でSSL暗号スイートをブラックリスト化するための、正規表現をサポートするカンマ区切りのリスト。ホワイトリストとブラックリストの両方が設定されている場合、ブラックリストが優先されます。
 - Introduced in: v4.0
 
 ##### `ssl_cipher_whitelist`
@@ -1638,7 +920,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: IANA 名で SSL 暗号スイートをホワイトリストに登録するための、正規表現をサポートするコンマ区切りリスト。ホワイトリストとブラックリストの両方が設定されている場合、ブラックリストが優先されます。
+- Description: IANA名でSSL暗号スイートをホワイトリスト化するための、正規表現をサポートするカンマ区切りのリスト。ホワイトリストとブラックリストの両方が設定されている場合、ブラックリストが優先されます。
 - Introduced in: v4.0
 
 ##### `task_runs_concurrency`
@@ -1647,7 +929,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: 同時に実行される TaskRun インスタンスのグローバル制限。`TaskRunScheduler` は、現在の実行数が `task_runs_concurrency` 以上の場合、新しい実行のスケジュールを停止するため、この値はスケジューラー全体で並行 TaskRun 実行を制限します。これは `MVPCTRefreshPartitioner` によって TaskRun ごとのパーティション更新粒度を計算するためにも使用されます。値を増やすと並行性とリソース使用量が増加し、減らすと並行性が減少し、実行ごとのパーティション更新が大きくなります。意図的にスケジューリングを無効にする場合を除き、0 または負の値に設定しないでください。0 (または負の値) は、`TaskRunScheduler` による新しい TaskRun のスケジューリングを事実上妨げます。
+- Description: 同時に実行されるTaskRunインスタンスのグローバル制限。現在の実行数が`task_runs_concurrency`以上の場合、`TaskRunScheduler`は新しい実行のスケジュールを停止するため、この値はスケジューラー全体での並列TaskRun実行を制限します。また、`MVPCTRefreshPartitioner`によって、TaskRunごとのパーティション更新粒度を計算するためにも使用されます。値を増やすと並列性とリソース使用量が増加し、減らすと並行性が低下し、実行ごとのパーティション更新が大きくなります。意図的にスケジューリングを無効にする場合を除き、0または負の値に設定しないでください。0 (または負の値) は、`TaskRunScheduler`による新しいTaskRunのスケジュールを事実上防止します。
 - Introduced in: v3.2.0
 
 ##### `task_runs_queue_length`
@@ -1656,7 +938,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: 保留中のキューに保持される保留中の TaskRun 項目の最大数を制限します。`TaskRunManager` は現在の保留中の数をチェックし、有効な保留中の TaskRun の数が `task_runs_queue_length` 以上の場合、新しい送信を拒否します。マージ/承認された TaskRun が追加される前に同じ制限が再チェックされます。メモリとスケジューリングのバックログのバランスをとるためにこの値を調整します。拒否を回避するために、大規模でバースト性の高いワークロードの場合は高く設定し、メモリを制限して保留中のバックログを減らす場合は低く設定します。
+- Description: 保留中のキューに保持される保留中のTaskRunアイテムの最大数を制限します。`TaskRunManager`は現在の保留中の数をチェックし、有効な保留中のTaskRun数が`task_runs_queue_length`以上の場合、新しい送信を拒否します。マージ/承認されたTaskRunが追加される前に、同じ制限が再チェックされます。メモリとスケジューリングのバックログのバランスを取るためにこの値を調整してください。大量のバースト的なワークロードの場合は拒否を避けるために高く設定し、メモリを制限し保留中のバックログを減らすために低く設定します。
 - Introduced in: v3.2.0
 
 ##### `thrift_backlog_num`
@@ -1665,7 +947,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: FE ノードの Thrift サーバーが保持するバックログキューの長さ。
+- Description: FEノードのThriftサーバーが保持するバックログキューの長さ。
 - Introduced in: -
 
 ##### `thrift_client_timeout_ms`
@@ -1683,7 +965,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: Bytes
 - Is mutable: No
-- Description: サーバーの Thrift プロトコルを構築するときに使用される Thrift RPC メッセージ本文の最大許容サイズ (バイト単位) を制御します ( `ThriftServer` の TBinaryProtocol.Factory に渡されます)。値が `-1` の場合、制限が無効になります (無制限)。正の値を設定すると、上限が適用され、これより大きいメッセージは Thrift レイヤーによって拒否され、メモリ使用量を制限し、サイズ超過の要求や DoS のリスクを軽減するのに役立ちます。正当な要求の拒否を避けるために、予想されるペイロード (大きな構造体やバッチデータ) に十分な大きさに設定してください。
+- Description: サーバーのThriftプロトコルを構築する際に使用されるThrift RPCメッセージボディの最大許容サイズ (バイト単位) を制御します (`ThriftServer`のTBinaryProtocol.Factoryに渡されます)。`-1`の値は制限を無効にします (無制限)。正の値を設定すると上限が強制され、これより大きいメッセージはThriftレイヤーによって拒否されます。これにより、メモリ使用量を制限し、過大なリクエストやDoSのリスクを軽減するのに役立ちます。正当なリクエストが拒否されないように、予想されるペイロード (大きな構造体やバッチデータ) に十分な大きさに設定してください。
 - Introduced in: v3.2.0
 
 ##### `thrift_server_max_worker_threads`
@@ -1692,7 +974,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: FE ノードの Thrift サーバーがサポートするワーカー スレッドの最大数。
+- Description: FEノードのThriftサーバーがサポートするワーカー スレッドの最大数。
 - Introduced in: -
 
 ##### `thrift_server_queue_size`
@@ -1701,7 +983,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: 要求が保留されているキューの長さ。Thrift サーバーで処理されているスレッドの数が `thrift_server_max_worker_threads` で指定された値を超えると、新しい要求が保留中のキューに追加されます。
+- Description: リクエストが保留されているキューの長さ。Thriftサーバーで処理されているスレッドの数が`thrift_server_max_worker_threads`で指定された値を超えると、新しいリクエストは保留キューに追加されます。
 - Introduced in: -
 
 ### メタデータとクラスター管理
@@ -1712,7 +994,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: Tasks
 - Is mutable: No
-- Description: alter サブシステムで使用される内部ワーカー スレッド プール キューの容量を制御します。これは `AlterHandler` で `ThreadPoolManager.newDaemonCacheThreadPool` に `alter_max_worker_threads` とともに渡されます。保留中の alter タスクの数が `alter_max_worker_queue_size` を超えると、新しい送信は拒否され、`RejectedExecutionException` がスローされる可能性があります ( `AlterHandler.handleFinishAlterTask` を参照)。この値を調整して、メモリ使用量と、同時 alter タスクに対して許可するバックログの量のバランスを取ります。
+- Description: alterサブシステムが使用する内部ワーカー スレッド プール キューの容量を制御します。`AlterHandler`の`ThreadPoolManager.newDaemonCacheThreadPool`に`alter_max_worker_threads`とともに渡されます。保留中のalterタスクの数が`alter_max_worker_queue_size`を超えると、新しい送信は拒否され、`RejectedExecutionException`がスローされる可能性があります（`AlterHandler.handleFinishAlterTask`を参照）。この値を調整して、メモリ使用量と同時alterタスクに許可するバックログの量のバランスを取ります。
 - Introduced in: v3.2.0
 
 ##### `alter_max_worker_threads`
@@ -1721,7 +1003,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: Threads
 - Is mutable: No
-- Description: AlterHandler のスレッドプールの最大ワーカー スレッド数を設定します。AlterHandler はこの値を使用してエクゼキューターを構築し、alter 関連のタスクを実行および完了します (例: handleFinishAlterTask 経由で `AlterReplicaTask` を送信)。この値は alter 操作の同時実行を制限します。値を上げると並行性とリソース使用量が増加し、下げると同時 alter が制限され、ボトルネックになる可能性があります。エクゼキューターは `alter_max_worker_queue_size` とともに作成され、ハンドラーのスケジューリングは `alter_scheduler_interval_millisecond` を使用します。
+- Description: AlterHandlerのスレッドプールにおけるワーカー スレッドの最大数を設定します。AlterHandlerはこの値を使用してエグゼキュータを構築し、alter関連タスク（例: `handleFinishAlterTask`を介した`AlterReplicaTask`の送信）を実行および完了します。この値はalter操作の同時実行を制限します。値を上げると並列処理とリソース使用量が増加し、値を下げると同時alterが制限され、ボトルネックになる可能性があります。エグゼキュータは`alter_max_worker_queue_size`とともに作成され、ハンドラ スケジューリングは`alter_scheduler_interval_millisecond`を使用します。
 - Introduced in: v3.2.0
 
 ##### `automated_cluster_snapshot_interval_seconds`
@@ -1739,7 +1021,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: Yes
-- Description: 連続する 2 回の Hive メタデータ キャッシュ更新の間隔。
+- Description: 2つの連続するHiveメタデータ キャッシュ更新の間隔。
 - Introduced in: v2.5.5
 
 ##### `background_refresh_metadata_time_secs_since_last_access_secs`
@@ -1748,7 +1030,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-- Description: Hive メタデータキャッシュ更新タスクの有効期限。アクセスされた Hive カタログの場合、指定された時間以上アクセスされていない場合、StarRocks はそのキャッシュされたメタデータの更新を停止します。アクセスされていない Hive カタログの場合、StarRocks はそのキャッシュされたメタデータを更新しません。
+- Description: Hiveメタデータ キャッシュ更新タスクの有効期限。アクセスされたHiveカタログの場合、指定された時間以上アクセスされていない場合、StarRocksはそのキャッシュされたメタデータの更新を停止します。アクセスされていないHiveカタログの場合、StarRocksはそのキャッシュされたメタデータを更新しません。
 - Introduced in: v2.5.5
 
 ##### `bdbje_cleaner_threads`
@@ -1757,7 +1039,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: StarRocks ジャーナルで使用される Berkeley DB Java Edition (JE) 環境のバックグラウンドクリーナースレッドの数。この値は `BDBEnvironment.initConfigs` で環境初期化中に読み取られ、`Config.bdbje_cleaner_threads` を使用して `EnvironmentConfig.CLEANER_THREADS` に適用されます。これは JE ログクリーニングとスペース再利用の並行性を制御します。値を増やすとクリーニングが高速化される可能性がありますが、追加の CPU とフォアグラウンド操作との I/O 干渉が発生する可能性があります。変更は BDB 環境が (再) 初期化された場合にのみ有効になるため、新しい値を適用するにはフロントエンドの再起動が必要です。
+- Description: StarRocksジャーナルが使用するBerkeley DB Java Edition (JE) 環境のバックグラウンド クリーナー スレッド数。この値は`BDBEnvironment.initConfigs`での環境初期化中に読み取られ、`Config.bdbje_cleaner_threads`を使用して`EnvironmentConfig.CLEANER_THREADS`に適用されます。JEログのクリーンアップとスペース再利用の並列処理を制御します。値を増やすと、フォアグラウンド操作との追加のCPUおよびI/O干渉を犠牲にして、クリーンアップを高速化できます。変更はBDB環境が(再)初期化されたときにのみ有効になるため、新しい値を適用するにはフロントエンドの再起動が必要です。
 - Introduced in: v3.2.0
 
 ##### `bdbje_heartbeat_timeout_second`
@@ -1766,7 +1048,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: Seconds
 - Is mutable: No
-- Description: StarRocks クラスター内のリーダー、フォロワー、オブザーバー FE 間でハートビートがタイムアウトするまでの時間。
+- Description: StarRocksクラスター内のリーダー、フォロワー、オブザーバーFE間のハートビートがタイムアウトするまでの時間。
 - Introduced in: -
 
 ##### `bdbje_lock_timeout_second`
@@ -1775,7 +1057,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: Seconds
 - Is mutable: No
-- Description: BDB JE ベースの FE のロックがタイムアウトするまでの時間。
+- Description: BDB JEベースのFEにおけるロックがタイムアウトするまでの時間。
 - Introduced in: -
 
 ##### `bdbje_replay_cost_percent`
@@ -1784,7 +1066,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: Percent
 - Is mutable: No
-- Description: BDB JE ログからのトランザクションのリプレイとネットワーク復元による同じデータの取得の相対コスト (パーセンテージ) を設定します。この値は基盤となる JE レプリケーションパラメーター `REPLAY_COST_PERCENT` に提供され、通常 `>100` であり、リプレイが通常ネットワーク復元よりも高価であることを示します。システムは、潜在的なリプレイのためにクリーンアップされたログファイルを保持するかどうかを決定する際に、リプレイコストにログサイズを掛けたものとネットワーク復元のコストを比較します。ネットワーク復元の方が効率的であると判断された場合、ファイルは削除されます。値が 0 の場合、このコスト比較に基づく保持は無効になります。`REP_STREAM_TIMEOUT` 内のレプリカまたはアクティブなレプリケーションに必要なログファイルは常に保持されます。
+- Description: BDB JEログからトランザクションをリプレイする相対コスト（パーセンテージ）と、ネットワーク リストアを介して同じデータを取得するコストを設定します。この値は、基盤となるJEレプリケーション パラメータ`REPLAY_COST_PERCENT`に供給され、通常は`>100`であり、リプレイがネットワーク リストアよりも高価であることを示します。潜在的なリプレイのためにクリーンアップされたログファイルを保持するかどうかを決定する際、システムはリプレイ コストにログ サイズを乗じたものをネットワーク リストアのコストと比較します。ネットワーク リストアの方が効率的と判断された場合、ファイルは削除されます。値が0の場合、このコスト比較に基づく保持は無効になります。`REP_STREAM_TIMEOUT`内のレプリカ、またはアクティブなレプリケーションに必要なログファイルは常に保持されます。
 - Introduced in: v3.2.0
 
 ##### `bdbje_replica_ack_timeout_second`
@@ -1793,7 +1075,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: Seconds
 - Is mutable: No
-- Description: メタデータがリーダー FE からフォロワー FE に書き込まれるときに、リーダー FE が指定された数のフォロワー FE から ACK メッセージを待機できる最大時間。単位: 秒。大量のメタデータが書き込まれている場合、フォロワー FE がリーダー FE に ACK メッセージを返すまでに長い時間がかかり、ACK タイムアウトが発生する可能性があります。この状況では、メタデータ書き込みが失敗し、FE プロセスが終了します。この状況を防ぐために、このパラメーターの値を増やすことをお勧めします。
+- Description: リーダーFEからフォロワーFEにメタデータが書き込まれる際に、リーダーFEが指定された数のフォロワーFEからのACKメッセージを待機できる最大時間。単位: 秒。大量のメタデータが書き込まれている場合、フォロワーFEがリーダーFEにACKメッセージを返すまでに時間がかかり、ACKタイムアウトが発生する可能性があります。この状況では、メタデータの書き込みが失敗し、FEプロセスが終了します。この状況を防ぐために、このパラメータの値を増やすことをお勧めします。
 - Introduced in: -
 
 ##### `bdbje_reserved_disk_size`
@@ -1802,7 +1084,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Long
 - Unit: Bytes
 - Is mutable: No
-- Description: Berkeley DB JE が「保護されていない」(削除可能) ログ/データファイルとして予約するバイト数を制限します。StarRocks はこの値を BDBEnvironment の `EnvironmentConfig.RESERVED_DISK` 経由で JE に渡します。JE の組み込みデフォルトは 0 (無制限) です。StarRocks のデフォルト (512 MiB) は、JE が保護されていないファイルに過剰なディスクスペースを予約するのを防ぎつつ、古いファイルを安全にクリーンアップできるようにします。ディスクが制限されているシステムでこの値を調整します。値を減らすと JE はより多くのファイルをより早く解放でき、増やすと JE はより多くの予約スペースを保持できます。変更を有効にするにはプロセスを再起動する必要があります。
+- Description: Berkeley DB JEが「保護されていない」（削除可能な）ログ/データファイルとして予約するバイト数を制限します。StarRocksはこの値をBDBEnvironmentの`EnvironmentConfig.RESERVED_DISK`を介してJEに渡します。JEの組み込みデフォルトは0（無制限）です。StarRocksのデフォルト（512 MiB）は、JEが保護されていないファイルのために過剰なディスクスペースを予約するのを防ぎつつ、古いファイルを安全にクリーンアップできるようにします。ディスク容量が制約されているシステムではこの値を調整してください。値を減らすとJEはより早くファイルを解放でき、値を増やすとJEはより多くの予約スペースを保持できます。変更を有効にするにはプロセスの再起動が必要です。
 - Introduced in: v3.2.0
 
 ##### `bdbje_reset_election_group`
@@ -1811,7 +1093,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: BDBJE レプリケーショングループをリセットするかどうか。このパラメーターが `TRUE` に設定されている場合、FE は BDBJE レプリケーショングループをリセットし (つまり、すべての選挙可能な FE ノードの情報を削除し)、リーダー FE として起動します。リセット後、この FE はクラスター内の唯一のメンバーとなり、他の FE は `ALTER SYSTEM ADD/DROP FOLLOWER/OBSERVER 'xxx'` を使用してこのクラスターに再参加できます。ほとんどのフォロワー FE のデータが破損しているためにリーダー FE を選出できない場合にのみこの設定を使用してください。`reset_election_group` は `metadata_failure_recovery` の代替として使用されます。
+- Description: BDBJEレプリケーション グループをリセットするかどうか。このパラメータが`TRUE`に設定されている場合、FEはBDBJEレプリケーション グループをリセットし（つまり、すべての選出可能なFEノードの情報を削除し）、リーダーFEとして起動します。リセット後、このFEはクラスター内の唯一のメンバーとなり、他のFEは`ALTER SYSTEM ADD/DROP FOLLOWER/OBSERVER 'xxx'`を使用してこのクラスターに再参加できます。この設定は、ほとんどのフォロワーFEのデータが破損しているためにリーダーFEを選出できない場合にのみ使用してください。`reset_election_group`は`metadata_failure_recovery`を置き換えるために使用されます。
 - Introduced in: -
 
 ##### `black_host_connect_failures_within_time`
@@ -1820,7 +1102,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: ブラックリストに登録された BE ノードに許可される接続失敗のしきい値。BE ノードが自動的に BE ブラックリストに追加された場合、StarRocks はその接続性を評価し、BE ブラックリストから削除できるかどうかを判断します。`black_host_history_sec` 内で、ブラックリストに登録された BE ノードが `black_host_connect_failures_within_time` で設定されたしきい値よりも少ない接続失敗である場合にのみ、BE ブラックリストから削除できます。
+- Description: ブラックリストに登録されたBEノードに許可される接続失敗のしきい値。BEノードが自動的にBEブラックリストに追加された場合、StarRocksはその接続性を評価し、BEブラックリストから削除できるかどうかを判断します。`black_host_history_sec`内で、ブラックリストに登録されたBEノードの接続失敗が`black_host_connect_failures_within_time`で設定されたしきい値よりも少ない場合にのみ、BEブラックリストから削除できます。
 - Introduced in: v3.3.0
 
 ##### `black_host_history_sec`
@@ -1829,7 +1111,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
-- Description: BE ブラックリストに登録された BE ノードの過去の接続失敗を保持する期間。BE ノードが自動的に BE ブラックリストに追加された場合、StarRocks はその接続性を評価し、BE ブラックリストから削除できるかどうかを判断します。`black_host_history_sec` 内で、ブラックリストに登録された BE ノードが `black_host_connect_failures_within_time` で設定されたしきい値よりも少ない接続失敗である場合にのみ、BE ブラックリストから削除できます。
+- Description: BEブラックリスト内のBEノードの過去の接続失敗を保持する期間。BEノードが自動的にBEブラックリストに追加された場合、StarRocksはその接続性を評価し、BEブラックリストから削除できるかどうかを判断します。`black_host_history_sec`内で、ブラックリストに登録されたBEノードの接続失敗が`black_host_connect_failures_within_time`で設定されたしきい値よりも少ない場合にのみ、BEブラックリストから削除できます。
 - Introduced in: v3.3.0
 
 ##### `brpc_connection_pool_size`
@@ -1838,7 +1120,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: Connections
 - Is mutable: No
-- Description: FE の BrpcProxy がエンドポイントごとに使用する BRPC 接続プールの最大数。この値は `setMaxTotoal` および `setMaxIdleSize` を介して RpcClientOptions に適用されるため、各要求はプールから接続を借りる必要があるため、同時発信 BRPC 要求を直接制限します。高並行シナリオでは、要求キューイングを回避するためにこれを増やしてください。増やすとソケットとメモリの使用量が増加し、リモートサーバーの負荷が増加する可能性があります。調整する際には、`brpc_idle_wait_max_time`、`brpc_short_connection`、`brpc_inner_reuse_pool`、`brpc_reuse_addr`、および `brpc_min_evictable_idle_time_ms` などの関連設定を考慮してください。この値を変更することはホットリロード可能ではなく、再起動が必要です。
+- Description: FEのBrpcProxyが使用するエンドポイントごとのプールされたBRPC接続の最大数。この値は`setMaxTotoal`と`setMaxIdleSize`を介してRpcClientOptionsに適用されるため、各リクエストがプールから接続を借りる必要があるため、同時発信BRPCリクエストを直接制限します。高並列シナリオでは、リクエストのキューイングを避けるためにこれを増やしてください。増やすとソケットとメモリの使用量が増加し、リモートサーバーの負荷が増加する可能性があります。調整する際は、`brpc_idle_wait_max_time`、`brpc_short_connection`、`brpc_inner_reuse_pool`、`brpc_reuse_addr`、`brpc_min_evictable_idle_time_ms`などの関連設定を考慮してください。この値の変更はホットリロード可能ではなく、再起動が必要です。
 - Introduced in: v3.2.0
 
 ##### `brpc_short_connection`
@@ -1847,7 +1129,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: boolean
 - Unit: -
 - Is mutable: No
-- Description: 下層の brpc RpcClient が短命の接続を使用するかどうかを制御します。有効な場合 (`true`)、RpcClientOptions.setShortConnection が設定され、要求完了後に接続が閉じられ、接続設定のオーバーヘッドが増加し、レイテンシーが増加する代わりに、長命のソケットの数が減少します。無効な場合 (`false`、デフォルト)、永続的な接続と接続プールが使用されます。このオプションを有効にすると、接続プール動作に影響するため、`brpc_connection_pool_size`、`brpc_idle_wait_max_time`、`brpc_min_evictable_idle_time_ms`、`brpc_reuse_addr`、および `brpc_inner_reuse_pool` と合わせて検討する必要があります。一般的な高スループットデプロイメントでは無効のままにし、ソケットのライフタイムを制限する必要がある場合や、ネットワークポリシーによって短命の接続が要求される場合にのみ有効にします。
+- Description: 基盤となるbrpc RpcClientが短命の接続を使用するかどうかを制御します。有効（`true`）にすると、RpcClientOptions.setShortConnectionが設定され、リクエスト完了後に接続が閉じられ、接続設定のオーバーヘッド増加とレイテンシ増加を犠牲にして、長寿命ソケットの数を減らします。無効（`false`、デフォルト）にすると、永続接続と接続プールが使用されます。このオプションを有効にすると接続プールの動作に影響するため、`brpc_connection_pool_size`、`brpc_idle_wait_max_time`、`brpc_min_evictable_idle_time_ms`、`brpc_reuse_addr`、`brpc_inner_reuse_pool`と合わせて考慮する必要があります。一般的な高スループット展開では無効のままにしてください。ソケットの寿命を制限する場合、またはネットワークポリシーによって短命接続が必要な場合にのみ有効にしてください。
 - Introduced in: v3.3.11, v3.4.1, v3.5.0
 
 ##### `catalog_try_lock_timeout_ms`
@@ -1865,7 +1147,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: `true` の場合、CheckpointController はリーダー FE のみをチェックポイントワーカーとして選択します。`false` の場合、コントローラーは任意のフロントエンドを選択し、ヒープ使用量が少ないノードを優先します。`false` の場合、ワーカーは最近の失敗時間と `heapUsedPercent` でソートされます (リーダーは無限のヒープ使用量を持つものとして扱われ、選択されないようにします)。クラスターのスナップショットメタデータを必要とする操作の場合、コントローラーはこのフラグに関係なくリーダーの選択を強制します。`true` を有効にすると、チェックポイント作業がリーダーに集中します (単純ですが、リーダーの CPU/メモリとネットワーク負荷が増加します)。`false` のままにすると、負荷の少ない FE にチェックポイント負荷が分散されます。この設定は、ワーカーの選択と、`checkpoint_timeout_seconds` などのタイムアウトや `thrift_rpc_timeout_ms` などの RPC 設定との相互作用に影響します。
+- Description: `true`の場合、CheckpointControllerはリーダーFEのみをチェックポイントワーカーとして選択します。`false`の場合、コントローラーは任意のフロントエンドを選択でき、ヒープ使用量が少ないノードを優先します。`false`の場合、ワーカーは最近の失敗時間と`heapUsedPercent`でソートされます（リーダーは選択を避けるために無限の使用量を持つものとして扱われます）。クラスター スナップショット メタデータを必要とする操作の場合、コントローラーはこのフラグに関係なくリーダー選択を強制します。`true`を有効にすると、チェックポイント作業がリーダーに集中します（より単純ですが、リーダーのCPU/メモリとネットワーク負荷が増加します）。`false`のままにすると、チェックポイント負荷が負荷の少ないFEに分散されます。この設定は、ワーカーの選択と、`checkpoint_timeout_seconds`などのタイムアウトや`thrift_rpc_timeout_ms`などのRPC設定との相互作用に影響します。
 - Introduced in: v3.4.0, v3.5.0
 
 ##### `checkpoint_timeout_seconds`
@@ -1874,7 +1156,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-- Description: リーダーの CheckpointController がチェックポイントワーカーがチェックポイントを完了するのを待つ最大時間 (秒単位)。コントローラーはこの値をナノ秒に変換し、ワーカーの結果キューをポーリングします。このタイムアウト内に成功した完了が受信されない場合、チェックポイントは失敗と見なされ、createImage は失敗を返します。この値を増やすと、長時間実行されるチェックポイントに対応できますが、失敗検出と後続のイメージ伝播が遅れます。値を減らすと、より高速なフェイルオーバー/再試行が発生しますが、低速なワーカーに対して誤ったタイムアウトが発生する可能性があります。この設定は、チェックポイント作成中の `CheckpointController` での待機期間のみを制御し、ワーカーの内部チェックポイント動作は変更しません。
+- Description: リーダーのCheckpointControllerがチェックポイントワーカーがチェックポイントを完了するのを待機する最大時間（秒単位）。コントローラーはこの値をナノ秒に変換し、ワーカーの結果キューをポーリングします。このタイムアウト内に正常な完了が受信されない場合、チェックポイントは失敗と見なされ、`createImage`は失敗を返します。この値を増やすと、実行時間の長いチェックポイントに対応できますが、障害検出とそれに続くイメージ伝播が遅れます。値を減らすと、より高速なフェイルオーバー/再試行が発生しますが、遅いワーカーに対して誤ったタイムアウトを生成する可能性があります。この設定は、チェックポイント作成中の`CheckpointController`での待機期間のみを制御し、ワーカーの内部チェックポイント動作は変更しません。
 - Introduced in: v3.4.0, v3.5.0
 
 ##### `db_used_data_quota_update_interval_secs`
@@ -1883,7 +1165,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
-- Description: データベース使用データクォータが更新される間隔。StarRocks は、ストレージ消費量を追跡するために、すべてのデータベースの使用データクォータを定期的に更新します。この値はクォータ強制とメトリック収集に使用されます。過剰なシステム負荷を防ぐため、許容される最小間隔は 30 秒です。30 未満の値は拒否されます。
+- Description: データベースの使用済みデータクォータが更新される間隔。StarRocksは、ストレージ消費を追跡するために、すべてのデータベースの使用済みデータクォータを定期的に更新します。この値は、クォータの適用とメトリクスの収集に使用されます。過剰なシステム負荷を防ぐため、許可される最小間隔は30秒です。30未満の値は拒否されます。
 - Introduced in: -
 
 ##### `drop_backend_after_decommission`
@@ -1892,7 +1174,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: BE が停止解除された後に BE を削除するかどうか。`TRUE` は、BE が停止解除された直後に削除されることを示します。`FALSE` は、BE が停止解除された後も削除されないことを示します。
+- Description: BEが廃止された後にBEを削除するかどうか。`TRUE`は、BEが廃止された直後に削除されることを示します。`FALSE`は、BEが廃止された後に削除されないことを示します。
 - Introduced in: -
 
 ##### `edit_log_port`
@@ -1901,7 +1183,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: クラスター内のリーダー、フォロワー、オブザーバー FE 間で通信に使用されるポート。
+- Description: クラスター内のリーダー、フォロワー、オブザーバーFE間の通信に使用されるポート。
 - Introduced in: -
 
 ##### `edit_log_roll_num`
@@ -1910,7 +1192,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: メタデータログエントリの最大数。この数に達すると、これらのログエントリ用のログファイルが作成されます。このパラメーターは、ログファイルのサイズを制御するために使用されます。新しいログファイルは BDBJE データベースに書き込まれます。
+- Description: メタデータログエントリのログファイルが作成されるまでに書き込むことができるメタデータログエントリの最大数。このパラメータはログファイルのサイズを制御するために使用されます。新しいログファイルはBDBJEデータベースに書き込まれます。
 - Introduced in: -
 
 ##### `edit_log_type`
@@ -1919,7 +1201,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: 生成できる編集ログの種類。値を `BDB` に設定します。
+- Description: 生成できる編集ログのタイプ。値を`BDB`に設定します。
 - Introduced in: -
 
 ##### `enable_background_refresh_connector_metadata`
@@ -1928,7 +1210,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: 定期的な Hive メタデータキャッシュ更新を有効にするかどうか。有効にすると、StarRocks は Hive クラスターのメタストア (Hive Metastore または AWS Glue) をポーリングし、頻繁にアクセスされる Hive カタログのキャッシュされたメタデータを更新してデータ変更を認識します。`true` は Hive メタデータキャッシュ更新を有効にすることを示し、`false` は無効にすることを示します。
+- Description: 定期的なHiveメタデータ キャッシュ更新を有効にするかどうか。有効にすると、StarRocksはHiveクラスターのメタストア（Hive MetastoreまたはAWS Glue）をポーリングし、頻繁にアクセスされるHiveカタログのキャッシュされたメタデータを更新してデータ変更を認識します。`true`はHiveメタデータ キャッシュ更新を有効にすることを示し、`false`は無効にすることを示します。
 - Introduced in: v2.5.5
 
 ##### `enable_collect_query_detail_info`
@@ -1937,7 +1219,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: クエリのプロファイルを収集するかどうか。このパラメーターが `TRUE` に設定されている場合、システムはクエリのプロファイルを収集します。このパラメーターが `FALSE` に設定されている場合、システムはクエリのプロファイルを収集しません。
+- Description: クエリのプロファイルを収集するかどうか。このパラメータが`TRUE`に設定されている場合、システムはクエリのプロファイルを収集します。このパラメータが`FALSE`に設定されている場合、システムはクエリのプロファイルを収集しません。
 - Introduced in: -
 
 ##### `enable_create_partial_partition_in_batch`
@@ -1946,7 +1228,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: boolean
 - Unit: -
 - Is mutable: Yes
-- Description: この項目が `false` (デフォルト) に設定されている場合、StarRocks は、バッチ作成された範囲パーティションが標準の時刻単位境界に揃うことを強制します。穴の作成を避けるために、非整列の範囲は拒否されます。この項目を `true` に設定すると、そのアラインメントチェックが無効になり、バッチで部分的な (非標準の) パーティションを作成できるようになります。これにより、ギャップや誤ったパーティション範囲が生成される可能性があります。意図的に部分的なバッチパーティションが必要であり、関連するリスクを受け入れる場合にのみ `true` に設定する必要があります。
+- Description: この項目が`false`（デフォルト）に設定されている場合、StarRocksはバッチ作成された範囲パーティションが標準の時間単位境界に揃うように強制します。穴の作成を避けるために、非アラインメント範囲は拒否されます。この項目を`true`に設定すると、そのアラインメントチェックが無効になり、バッチで部分的な（非標準の）パーティションを作成できるようになります。これにより、ギャップやアラインメントされていないパーティション範囲が生成される可能性があります。部分的なバッチパーティションが意図的に必要であり、関連するリスクを受け入れる場合にのみ、これを`true`に設定してください。
 - Introduced in: v3.2.0
 
 ##### `enable_internal_sql`
@@ -1955,7 +1237,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description: この項目が `true` に設定されている場合、内部コンポーネント (例: SimpleExecutor) によって実行される内部 SQL ステートメントは、内部監査またはログメッセージに保持および書き込まれます ( `enable_sql_desensitize_in_log` が設定されている場合、さらに非機密化できます)。`false` に設定されている場合、内部 SQL テキストは抑制されます。フォーマットコード (SimpleExecutor.formatSQL) は "?" を返し、実際のステートメントは内部監査またはログメッセージに出力されません。この設定は、内部ステートメントの実行セマンティクスを変更しません。プライバシーまたはセキュリティのために内部 SQL のロギングと可視性のみを制御します。
+- Description: この項目が`true`に設定されている場合、内部コンポーネント（例: SimpleExecutor）によって実行される内部SQLステートメントは保持され、内部監査またはログメッセージに書き込まれます（`enable_sql_desensitize_in_log`が設定されている場合はさらに非機密化できます）。`false`に設定されている場合、内部SQLテキストは抑制されます。フォーマットコード（SimpleExecutor.formatSQL）は「?」を返し、実際のステートメントは内部監査またはログメッセージに出力されません。この設定は内部ステートメントの実行セマンティクスを変更しません。プライバシーまたはセキュリティのために内部SQLのログ記録と可視性を制御するだけです。
 - Introduced in: -
 
 ##### `enable_legacy_compatibility_for_replication`
@@ -1964,7 +1246,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: レプリケーションのレガシー互換性を有効にするかどうか。StarRocks は、以前のバージョンと新しいバージョンで異なる動作をする可能性があり、クロスクラスターデータ移行中に問題を引き起こすことがあります。したがって、データ移行前にターゲットクラスターでレガシー互換性を有効にし、データ移行完了後に無効にする必要があります。`true` はこのモードを有効にすることを示します。
+- Description: レプリケーションのレガシー互換性を有効にするかどうか。StarRocksは旧バージョンと新バージョンで動作が異なる場合があり、クラスター間のデータ移行中に問題を引き起こす可能性があります。そのため、データ移行前にターゲットクラスターのレガシー互換性を有効にし、データ移行完了後に無効にする必要があります。`true`はこのモードを有効にすることを示します。
 - Introduced in: v3.1.10, v3.2.6
 
 ##### `enable_show_materialized_views_include_all_task_runs`
@@ -1973,7 +1255,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: SHOW MATERIALIZED VIEWS コマンドに TaskRuns が返される方法を制御します。この項目が `false` に設定されている場合、StarRocks はタスクごとに最新の TaskRun のみを返します (互換性のためのレガシー動作)。`true` (デフォルト) に設定されている場合、`TaskManager` は、同じ開始 TaskRun ID を共有する場合 (たとえば、同じジョブに属する場合) にのみ、同じタスクの追加の TaskRun を含めることができ、無関係な重複実行が表示されるのを防ぎながら、1 つのジョブに紐付けられた複数のステータスを表示できます。単一実行の出力を復元したり、デバッグと監視のために複数実行ジョブの履歴を表示したりするには、この項目を `false` に設定します。
+- Description: `SHOW MATERIALIZED VIEWS`コマンドにTaskRunsがどのように返されるかを制御します。この項目が`false`に設定されている場合、StarRocksはタスクごとに最新のTaskRunのみを返します（互換性のためのレガシー動作）。`true`（デフォルト）に設定されている場合、`TaskManager`は、同じ開始TaskRun IDを共有する場合にのみ（たとえば、同じジョブに属する場合）、同じタスクの追加のTaskRunを含めることができ、無関係な重複実行が表示されるのを防ぎながら、1つのジョブに関連付けられた複数のステータスを表示できます。単一実行の出力を復元するため、またはデバッグと監視のために複数実行のジョブ履歴を表示するには、この項目を`false`に設定します。
 - Introduced in: v3.3.0, v3.4.0, v3.5.0
 
 ##### `enable_statistics_collect_profile`
@@ -1982,7 +1264,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: 統計クエリのプロファイルを生成するかどうか。この項目を `true` に設定すると、StarRocks がシステム統計に関するクエリのクエリプロファイルを生成できるようになります。
+- Description: 統計クエリのプロファイルを生成するかどうか。この項目を`true`に設定すると、StarRocksがシステム統計に関するクエリのクエリプロファイルを生成できるようになります。
 - Introduced in: v3.1.5
 
 ##### `enable_table_name_case_insensitive`
@@ -1991,10 +1273,10 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description: カタログ名、データベース名、テーブル名、ビュー名、マテリアライズドビュー名の大文字小文字を区別しない処理を有効にするかどうか。現在、テーブル名は大文字小文字を区別します。
-  - この機能を有効にすると、関連するすべての名前は小文字で格納され、これらの名前を含むすべての SQL コマンドは自動的に小文字に変換されます。
-  - この機能は、クラスター作成時にのみ有効にできます。**クラスター起動後、この設定の値をいかなる方法でも変更することはできません**。変更しようとするとエラーが発生します。FE は、この設定アイテムの値がクラスターが最初に起動されたときと一致しないことを検出すると、起動に失敗します。
-  - 現在、この機能は JDBC カタログおよびテーブル名をサポートしていません。JDBC または ODBC データソースで大文字小文字を区別しない処理を実行する場合は、この機能を有効にしないでください。
+- Description: カタログ名、データベース名、テーブル名、ビュー名、マテリアライズドビュー名の大文字と小文字を区別しない処理を有効にするかどうか。現在、テーブル名は大文字と小文字を区別します（デフォルト）。
+  - この機能を有効にすると、関連するすべての名前は小文字で保存され、これらの名前を含むすべてのSQLコマンドは自動的に小文字に変換されます。
+  - この機能は、クラスターの作成時にのみ有効にできます。**クラスターが起動した後、この設定の値をいかなる方法でも変更することはできません**。変更しようとするとエラーが発生します。FEは、この設定項目の値がクラスターが最初に起動したときと矛盾していることを検出すると、起動に失敗します。
+  - 現在、この機能はJDBCカタログおよびテーブル名をサポートしていません。JDBCまたはODBCデータソースに対して大文字と小文字を区別しない処理を実行したい場合は、この機能を有効にしないでください。
 - Introduced in: v4.0
 
 ##### `enable_task_history_archive`
@@ -2003,7 +1285,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: 有効にすると、完了したタスク実行レコードは永続的なタスク実行履歴テーブルにアーカイブされ、編集ログに記録されるため、ルックアップ (例: `lookupHistory`、`lookupHistoryByTaskNames`、`lookupLastJobOfTasks`) にアーカイブされた結果が含まれます。アーカイブは FE リーダーによって実行され、単体テスト中 (`FeConstants.runningUnitTest`) はスキップされます。有効にすると、インメモリの有効期限と強制 GC パスはバイパスされ (コードは `removeExpiredRuns` と `forceGC` から早期にリターンします)、保持/削除は `task_runs_ttl_second` と `task_runs_max_history_number` ではなく永続アーカイブによって処理されます。無効にすると、履歴はメモリ内に残り、これらの設定によってプルーニングされます。
+- Description: 有効にすると、完了したタスク実行レコードは永続的なタスク実行履歴テーブルにアーカイブされ、編集ログに記録されるため、ルックアップ（例: `lookupHistory`、`lookupHistoryByTaskNames`、`lookupLastJobOfTasks`）にはアーカイブされた結果が含まれます。アーカイブはFEリーダーによって実行され、単体テスト（`FeConstants.runningUnitTest`）中はスキップされます。有効にすると、インメモリの有効期限と強制GCパスはバイパスされ（コードは`removeExpiredRuns`と`forceGC`から早期にリターンします）、保持/削除は`task_runs_ttl_second`と`task_runs_max_history_number`ではなく永続アーカイブによって処理されます。無効にすると、履歴はメモリに残り、これらの設定によって剪定されます。
 - Introduced in: v3.3.1, v3.4.0, v3.5.0
 
 ##### `enable_task_run_fe_evaluation`
@@ -2012,7 +1294,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: 有効にすると、FE は `TaskRunsSystemTable.supportFeEvaluation` でシステムテーブル `task_runs` のローカル評価を実行します。FE 側の評価は、列と定数を比較する結合等価述語にのみ許可され、列 `QUERY_ID` と `TASK_NAME` に制限されます。これを有効にすると、対象を絞ったルックアップのパフォーマンスが向上し、より広範なスキャンや追加のリモート処理が回避されます。無効にすると、プランナーは `task_runs` の FE 評価をスキップするため、述語のプルーニングが減少し、これらのフィルターのクエリレイテンシーに影響する可能性があります。
+- Description: 有効にすると、FEは`TaskRunsSystemTable.supportFeEvaluation`内のシステムテーブル`task_runs`に対してローカル評価を実行します。FE側の評価は、列を定数と比較する結合等価述語にのみ許可され、`QUERY_ID`と`TASK_NAME`列に限定されます。これを有効にすると、より広範なスキャンや追加のリモート処理を回避することで、ターゲットを絞ったルックアップのパフォーマンスが向上します。無効にすると、プランナーは`task_runs`のFE評価をスキップせざるを得なくなり、述語の剪定が減少し、これらのフィルターのクエリレイテンシに影響を与える可能性があります。
 - Introduced in: v3.3.13, v3.4.3, v3.5.0
 
 ##### `heartbeat_mgr_blocking_queue_size`
@@ -2021,7 +1303,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: Heartbeat Manager によって実行されるハートビートタスクを格納するブロッキングキューのサイズ。
+- Description: ハートビートマネージャーによって実行されるハートビートタスクを格納するブロッキングキューのサイズ。
 - Introduced in: -
 
 ##### `heartbeat_mgr_threads_num`
@@ -2030,7 +1312,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: Heartbeat Manager がハートビートタスクを実行するために実行できるスレッド数。
+- Description: ハートビートマネージャーがハートビートタスクを実行できるスレッド数。
 - Introduced in: -
 
 ##### `ignore_materialized_view_error`
@@ -2039,7 +1321,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: FE がマテリアライズドビューエラーによって引き起こされたメタデータ例外を無視するかどうか。マテリアライズドビューエラーによって引き起こされたメタデータ例外のために FE の起動に失敗した場合、このパラメーターを `true` に設定して FE が例外を無視できるようにすることができます。
+- Description: FEがマテリアライズドビューエラーによって引き起こされるメタデータ例外を無視するかどうか。マテリアライズドビューエラーによって引き起こされるメタデータ例外のためにFEが起動に失敗した場合、このパラメータを`true`に設定してFEが例外を無視できるようにすることができます。
 - Introduced in: v2.5.10
 
 ##### `ignore_meta_check`
@@ -2048,7 +1330,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: 非リーダー FE がリーダー FE からのメタデータギャップを無視するかどうか。値が TRUE の場合、非リーダー FE はリーダー FE からのメタデータギャップを無視し、データ読み取りサービスを継続して提供します。このパラメーターは、リーダー FE を長期間停止した場合でも継続的なデータ読み取りサービスを保証します。値が FALSE の場合、非リーダー FE はリーダー FE からのメタデータギャップを無視せず、データ読み取りサービスの提供を停止します。
+- Description: 非リーダーFEがリーダーFEからのメタデータギャップを無視するかどうか。値が`TRUE`の場合、非リーダーFEはリーダーFEからのメタデータギャップを無視し、データ読み取りサービスを提供し続けます。このパラメータは、リーダーFEを長期間停止した場合でも、継続的なデータ読み取りサービスを保証します。値が`FALSE`の場合、非リーダーFEはリーダーFEからのメタデータギャップを無視せず、データ読み取りサービスを停止します。
 - Introduced in: -
 
 ##### `ignore_task_run_history_replay_error`
@@ -2057,7 +1339,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: StarRocks が `information_schema.task_runs` の TaskRun 履歴行を逆シリアル化する際、破損または無効な JSON 行は通常、逆シリアル化が警告をログに記録し、RuntimeException をスローします。この項目が `true` に設定されている場合、システムは逆シリアル化エラーをキャッチし、不正な形式のレコードをスキップし、クエリを失敗させるのではなく、残りの行の処理を続行します。これにより、`information_schema.task_runs` クエリは `_statistics_.task_run_history` テーブル内の不正なエントリに対して寛容になります。ただし、これを有効にすると、破損した履歴レコードが明示的なエラーを表面化する代わりにサイレントにドロップされることになります (潜在的なデータ損失)。
+- Description: StarRocksが`information_schema.task_runs`のTaskRun履歴行を逆シリアル化する際、破損または無効なJSON行は通常、逆シリアル化が警告をログに記録し、RuntimeExceptionをスローする原因となります。この項目が`true`に設定されている場合、システムは逆シリアル化エラーをキャッチし、不正な形式のレコードをスキップして、クエリを失敗させる代わりに残りの行の処理を続行します。これにより、`information_schema.task_runs`クエリは`_statistics_.task_run_history`テーブル内の不正なエントリに対して耐性を持つようになります。ただし、これを有効にすると、明示的なエラーを表示する代わりに、破損した履歴レコードがサイレントに破棄される可能性があることに注意してください（潜在的なデータ損失）。
 - Introduced in: v3.3.3, v3.4.0, v3.5.0
 
 ##### `lock_checker_interval_second`
@@ -2066,7 +1348,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: long
 - Unit: Seconds
 - Is mutable: Yes
-- Description: LockChecker フロントエンドデーモン ("deadlock-checker" という名前) の実行間の間隔 (秒単位)。デーモンはデッドロック検出と低速ロックのスキャンを実行します。設定値はミリ秒でタイマーを設定するために 1000 倍されます。この値を減らすと検出レイテンシーが短くなりますが、スケジューリングと CPU オーバーヘッドが増加します。増やすとオーバーヘッドが減少しますが、検出と低速ロックレポートが遅れます。変更は、デーモンが実行ごとに間隔をリセットするため、実行時に有効になります。この設定は、`lock_checker_enable_deadlock_check` (デッドロックチェックを有効にする) と `slow_lock_threshold_ms` (低速ロックを構成するものを定義する) と相互作用します。
+- Description: LockCheckerフロントエンドデーモン（「deadlock-checker」という名前）の実行間隔（秒単位）。デーモンはデッドロック検出とスローロック スキャンを実行します。設定された値は1000倍されてタイマーがミリ秒単位で設定されます。この値を減らすと検出レイテンシは減少しますが、スケジューリングとCPUオーバーヘッドが増加します。値を増やすとオーバーヘッドは減少しますが、検出とスローロックの報告が遅れます。デーモンは実行ごとに間隔をリセットするため、変更は実行時に有効になります。この設定は`lock_checker_enable_deadlock_check`（デッドロックチェックを有効にする）および`slow_lock_threshold_ms`（スローロックを構成するものを定義する）と相互作用します。
 - Introduced in: v3.2.0
 
 ##### `master_sync_policy`
@@ -2075,12 +1357,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: リーダー FE がログをディスクにフラッシュするポリシー。このパラメーターは、現在の FE がリーダー FE の場合にのみ有効です。有効な値:
+- Description: リーダーFEがログをディスクにフラッシュするポリシー。このパラメータは、現在のFEがリーダーFEである場合にのみ有効です。有効な値:
   - `SYNC`: トランザクションがコミットされると、ログエントリが生成され、同時にディスクにフラッシュされます。
-  - `NO_SYNC`: トランザクションがコミットされると、ログエントリの生成とフラッシュは同時に発生しません。
+  - `NO_SYNC`: トランザクションがコミットされるときに、ログエントリの生成とフラッシュが同時に行われません。
   - `WRITE_NO_SYNC`: トランザクションがコミットされると、ログエントリが同時に生成されますが、ディスクにはフラッシュされません。
 
-  フォロワー FE を 1 つだけデプロイしている場合、このパラメーターを `SYNC` に設定することをお勧めします。フォロワー FE を 3 つ以上デプロイしている場合、このパラメーターと `replica_sync_policy` の両方を `WRITE_NO_SYNC` に設定することをお勧めします。
+  フォロワーFEを1つだけデプロイしている場合は、このパラメータを`SYNC`に設定することをお勧めします。フォロワーFEを3つ以上デプロイしている場合は、このパラメータと`replica_sync_policy`の両方を`WRITE_NO_SYNC`に設定することをお勧めします。
 
 - Introduced in: -
 
@@ -2090,7 +1372,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Long
 - Unit: Milliseconds
 - Is mutable: No
-- Description: StarRocks クラスター内のリーダー FE とフォロワーまたはオブザーバー FE 間で許可される最大クロックオフセット。
+- Description: StarRocksクラスター内のリーダーFEとフォロワーまたはオブザーバーFE間で許容される最大クロックオフセット。
 - Introduced in: -
 
 ##### `meta_delay_toleration_second`
@@ -2099,7 +1381,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
-- Description: フォロワー FE およびオブザーバー FE のメタデータがリーダー FE のメタデータよりも遅延できる最大期間。単位: 秒。この期間を超えると、非リーダー FE はサービスの提供を停止します。
+- Description: フォロワーFEおよびオブザーバーFE上のメタデータがリーダーFE上のメタデータから遅延できる最大期間。単位: 秒。この期間を超えると、非リーダーFEはサービスの提供を停止します。
 - Introduced in: -
 
 ##### `meta_dir`
@@ -2117,7 +1399,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: 未知のログ ID を無視するかどうか。FE がロールバックされた場合、以前のバージョンの FE は一部のログ ID を認識できない可能性があります。値が `TRUE` の場合、FE は未知のログ ID を無視します。値が `FALSE` の場合、FE は終了します。
+- Description: 不明なログIDを無視するかどうか。FEがロールバックされると、以前のバージョンのFEは一部のログIDを認識できない場合があります。値が`TRUE`の場合、FEは不明なログIDを無視します。値が`FALSE`の場合、FEは終了します。
 - Introduced in: -
 
 ##### `profile_info_format`
@@ -2126,7 +1408,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String
 - Unit: -
 - Is mutable: Yes
-- Description: システムが出力するプロファイルの形式。有効な値: `default` と `json`。`default` に設定すると、プロファイルはデフォルトの形式になります。`json` に設定すると、システムはプロファイルを JSON 形式で出力します。
+- Description: システムが出力するプロファイルの形式。有効な値: `default`と`json`。`default`に設定すると、プロファイルはデフォルト形式になります。`json`に設定すると、システムはプロファイルをJSON形式で出力します。
 - Introduced in: v2.5
 
 ##### `replica_ack_policy`
@@ -2135,7 +1417,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: ログエントリが有効であると見なされるポリシー。デフォルト値 `SIMPLE_MAJORITY` は、ログエントリがフォロワー FE の過半数が ACK メッセージを返した場合に有効であると見なされることを指定します。
+- Description: ログエントリが有効と見なされるポリシー。デフォルト値`SIMPLE_MAJORITY`は、フォロワーFEの過半数がACKメッセージを返した場合にログエントリが有効と見なされることを指定します。
 - Introduced in: -
 
 ##### `replica_sync_policy`
@@ -2144,9 +1426,9 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: フォロワー FE がログをディスクにフラッシュするポリシー。このパラメーターは、現在の FE がフォロワー FE の場合にのみ有効です。有効な値:
+- Description: フォロワーFEがログをディスクにフラッシュするポリシー。このパラメータは、現在のFEがフォロワーFEである場合にのみ有効です。有効な値:
   - `SYNC`: トランザクションがコミットされると、ログエントリが生成され、同時にディスクにフラッシュされます。
-  - `NO_SYNC`: トランザクションがコミットされると、ログエントリの生成とフラッシュは同時に発生しません。
+  - `NO_SYNC`: トランザクションがコミットされるときに、ログエントリの生成とフラッシュが同時に行われません。
   - `WRITE_NO_SYNC`: トランザクションがコミットされると、ログエントリが同時に生成されますが、ディスクにはフラッシュされません。
 - Introduced in: -
 
@@ -2156,7 +1438,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: boolean
 - Unit: -
 - Is mutable: No
-- Description: true の場合、FE はイメージデータが存在するが Berkeley DB JE (BDB) ログファイルが欠落または破損している場合に起動を許可します。`MetaHelper.checkMetaDir()` はこのフラグを使用して、対応する BDB ログのないイメージからの起動を防ぐ安全チェックをバイパスします。この方法で起動すると、古いまたは矛盾したメタデータが生成される可能性があり、緊急復旧にのみ使用する必要があります。`RestoreClusterSnapshotMgr` はクラスターのスナップショットを復元する際に一時的にこのフラグを true に設定し、その後ロールバックします。このコンポーネントは復元中に `bdbje_reset_election_group` も切り替えます。通常の操作では有効にしないでください。破損した BDB データから復旧する場合、またはイメージベースのスナップショットを明示的に復元する場合にのみ有効にしてください。
+- Description: `true`の場合、イメージデータは存在するがBerkeley DB JE (BDB) ログファイルが欠落または破損している場合に、FEは起動を許可します。`MetaHelper.checkMetaDir()`はこのフラグを使用して、対応するBDBログなしでイメージから起動するのを防ぐ安全チェックをバイパスします。この方法で起動すると、古いまたは一貫性のないメタデータが生成される可能性があり、緊急復旧にのみ使用すべきです。`RestoreClusterSnapshotMgr`はクラスター スナップショットを復元する際に一時的にこのフラグを`true`に設定し、その後ロールバックします。このコンポーネントは復元中に`bdbje_reset_election_group`も切り替えます。通常の操作では有効にしないでください。破損したBDBデータから回復する場合、またはイメージベースのスナップショットを明示的に復元する場合にのみ有効にしてください。
 - Introduced in: v3.2.0
 
 ##### `table_keeper_interval_second`
@@ -2165,7 +1447,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
-- Description: TableKeeper デーモンの実行間の間隔 (秒単位)。TableKeeperDaemon はこの値 (1000 倍) を使用して内部タイマーを設定し、履歴テーブルが存在すること、正しいテーブルプロパティ (レプリケーション番号) があること、パーティション TTL を更新することを保証するキーパータスクを定期的に実行します。デーモンはリーダーノードでのみ作業を実行し、`table_keeper_interval_second` が変更されると `setInterval` を介して実行時間隔を更新します。スケジューリング頻度と負荷を減らすには値を増やし、欠落または古い履歴テーブルへの反応を速くするには値を減らします。
+- Description: TableKeeperデーモンの実行間隔（秒単位）。TableKeeperDaemonはこの値（1000倍）を使用して内部タイマーを設定し、履歴テーブルの存在確認、テーブルプロパティ（レプリケーション数）の修正、パーティションTTLの更新を行うキーパータスクを定期的に実行します。デーモンはリーダーノードでのみ作業を実行し、`table_keeper_interval_second`が変更されたときに`setInterval`を介して実行時間隔を更新します。スケジューリング頻度と負荷を減らすには値を増やし、欠落または古い履歴テーブルへのより迅速な反応のためには値を減らします。
 - Introduced in: v3.3.1, v3.4.0, v3.5.0
 
 ##### `task_runs_ttl_second`
@@ -2174,7 +1456,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
-- Description: タスク実行履歴の Time-To-Live (TTL) を制御します。この値を小さくすると履歴の保持期間が短くなり、メモリ/ディスク使用量が減ります。値を大きくすると履歴が長く保持されますが、リソース使用量が増加します。予測可能な保持とストレージ動作のために、`task_runs_max_history_number` と `enable_task_history_archive` と一緒に調整してください。
+- Description: タスク実行履歴の有効期間（TTL）を制御します。この値を下げると履歴の保持期間が短くなり、メモリ/ディスク使用量が減少します。値を上げると履歴が長く保持されますが、リソース使用量が増加します。予測可能な保持とストレージ動作のために、`task_runs_max_history_number`および`enable_task_history_archive`と合わせて調整してください。
 - Introduced in: v3.2.0
 
 ##### `task_ttl_second`
@@ -2183,7 +1465,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
-- Description: タスクの Time-to-live (TTL)。手動タスク (スケジュールが設定されていない場合)、TaskBuilder はこの値を使用してタスクの `expireTime` を計算します (`expireTime = now + task_ttl_second * 1000L`)。TaskRun も、実行のタイムアウトを計算する際にこの値を上限として使用します。実質的な実行タイムアウトは `min(task_runs_timeout_second, task_runs_ttl_second, task_ttl_second)` です。この値を調整すると、手動で作成されたタスクが有効な期間が変更され、タスク実行の最大許容実行時間を間接的に制限できます。
+- Description: タスクの有効期間（TTL）。手動タスク（スケジュールが設定されていない場合）の場合、TaskBuilderはこの値を使用してタスクの`expireTime`を計算します（`expireTime = now + task_ttl_second * 1000L`）。TaskRunも、実行の実行タイムアウトを計算する際の上限としてこの値を使用します。有効な実行タイムアウトは`min(task_runs_timeout_second, task_runs_ttl_second, task_ttl_second)`です。この値を調整すると、手動で作成されたタスクが有効なままである期間が変更され、タスク実行の最大許容実行時間を間接的に制限できます。
 - Introduced in: v3.2.0
 
 ##### `thrift_rpc_retry_times`
@@ -2192,7 +1474,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: Thrift RPC 呼び出しが行う合計試行回数を制御します。この値は `ThriftRPCRequestExecutor` (および `NodeMgr` や `VariableMgr` などの呼び出し元) によって再試行のループカウントとして使用されます。つまり、値 3 は初期試行を含めて最大 3 回の試行を許可します。`TTransportException` の場合、エグゼキューターは接続を再開してこの回数まで再試行します。原因が `SocketTimeoutException` の場合や再開が失敗した場合は再試行しません。各試行は `thrift_rpc_timeout_ms` で設定された試行ごとのタイムアウトの対象となります。この値を増やすと、一時的な接続障害に対する回復力は向上しますが、全体の RPC レイテンシーとリソース使用量が増加する可能性があります。
+- Description: Thrift RPC呼び出しが行う試行の合計回数を制御します。この値は`ThriftRPCRequestExecutor`（および`NodeMgr`や`VariableMgr`などの呼び出し元）によって再試行のループカウントとして使用されます。つまり、値が3の場合、最初の試行を含めて最大3回の試行が許可されます。`TTransportException`が発生した場合、エグゼキュータはこの回数まで接続を再オープンして再試行します。原因が`SocketTimeoutException`である場合、または再オープンが失敗した場合は再試行しません。各試行は`thrift_rpc_timeout_ms`で設定された試行ごとのタイムアウトの対象となります。この値を増やすと、一時的な接続障害に対する回復力が向上しますが、RPC全体のレイテンシとリソース使用量が増加する可能性があります。
 - Introduced in: v3.2.0
 
 ##### `thrift_rpc_strict_mode`
@@ -2201,7 +1483,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description: Thrift サーバーで使用される TBinaryProtocol の「厳密読み取り」モードを制御します。この値は Thrift サーバーのスタックにある org.apache.thrift.protocol.TBinaryProtocol.Factory に最初の引数として渡され、受信 Thrift メッセージの解析と検証方法に影響します。`true` (デフォルト) の場合、サーバーは厳密な Thrift エンコーディング/バージョンチェックを強制し、設定された `thrift_rpc_max_body_size` 制限を尊重します。`false` の場合、サーバーは非厳密な (レガシー/寛容な) メッセージ形式を受け入れます。これにより、古いクライアントとの互換性は向上する可能性がありますが、一部のプロトコル検証がバイパスされる可能性があります。これは変更不可能であり、相互運用性と解析の安全性に影響するため、稼働中のクラスターでこれを変更する場合は注意してください。
+- Description: Thriftサーバーが使用するTBinaryProtocolの「厳密読み取り」モードを制御します。この値はThriftサーバー スタックのorg.apache.thrift.protocol.TBinaryProtocol.Factoryの最初の引数として渡され、受信Thriftメッセージの解析と検証方法に影響します。`true`（デフォルト）の場合、サーバーは厳密なThriftエンコーディング/バージョンチェックを強制し、設定された`thrift_rpc_max_body_size`制限を尊重します。`false`の場合、サーバーは非厳密な（レガシー/寛容な）メッセージ形式を受け入れます。これは古いクライアントとの互換性を向上させる可能性がありますが、一部のプロトコル検証をバイパスする可能性があります。実行中のクラスターでこれを変更する際は注意が必要です。これは変更不可であり、相互運用性と解析の安全性に影響するためです。
 - Introduced in: v3.2.0
 
 ##### `thrift_rpc_timeout_ms`
@@ -2210,7 +1492,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: Yes
-- Description: Thrift RPC 呼び出しのデフォルトのネットワーク/ソケットタイムアウトとして使用されるタイムアウト (ミリ秒単位)。`ThriftConnectionPool` (フロントエンドおよびバックエンドプールで使用) で Thrift クライアントを作成するときに TSocket に渡され、また `ConfigBase`、`LeaderOpExecutor`、`GlobalStateMgr`、`NodeMgr`、`VariableMgr`、`CheckpointWorker` などの場所で RPC 呼び出しのタイムアウトを計算するときに操作の実行タイムアウトに追加されます (例: ExecTimeout*1000 + `thrift_rpc_timeout_ms`)。この値を増やすと、RPC 呼び出しは長いネットワークまたはリモート処理の遅延を許容できます。減らすと、低速なネットワークでのフェイルオーバーが高速化されます。この値を変更すると、Thrift RPC を実行する FE コードパス全体で接続作成と要求の期限に影響します。
+- Description: Thrift RPC呼び出しのデフォルトのネットワーク/ソケットタイムアウトとして使用されるタイムアウト（ミリ秒単位）。`ThriftConnectionPool`（フロントエンドおよびバックエンドプールで使用）でThriftクライアントを作成する際にTSocketに渡され、`ConfigBase`、`LeaderOpExecutor`、`GlobalStateMgr`、`NodeMgr`、`VariableMgr`、`CheckpointWorker`などの場所でRPC呼び出しタイムアウトを計算する際に、操作の実行タイムアウト（例: ExecTimeout*1000 + `thrift_rpc_timeout_ms`）にも追加されます。この値を増やすと、RPC呼び出しがより長いネットワークまたはリモート処理の遅延を許容できるようになります。値を減らすと、低速ネットワークでのフェイルオーバーが高速化されます。この値を変更すると、Thrift RPCを実行するFEコードパス全体で接続作成とリクエストの期限に影響します。
 - Introduced in: v3.2.0
 
 ##### `txn_latency_metric_report_groups`
@@ -2219,7 +1501,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String
 - Unit: -
 - Is mutable: Yes
-- Description: レポートするトランザクションレイテンシーメトリックグループのコンマ区切りリスト。ロードタイプは監視のために論理グループに分類されます。グループが有効になっている場合、その名前はトランザクションメトリックに「type」ラベルとして追加されます。有効な値: `stream_load`、`routine_load`、`broker_load`、`insert`、および `compaction` (共有データクラスターでのみ利用可能)。例: `"stream_load,routine_load"`。
+- Description: 報告するトランザクションレイテンシメトリックグループのコンマ区切りリスト。ロードタイプは監視のために論理グループに分類されます。グループが有効になっている場合、その名前はトランザクションメトリックに「type」ラベルとして追加されます。有効な値: `stream_load`、`routine_load`、`broker_load`、`insert`、および`compaction`（共有データクラスターでのみ利用可能）。例: `"stream_load,routine_load"`。
 - Introduced in: v4.0
 
 ##### `txn_rollback_limit`
@@ -2231,165 +1513,138 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: ロールバックできるトランザクションの最大数。
 - Introduced in: -
 
-### ユーザー、ロール、権限
-
-##### `enable_task_info_mask_credential`
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: true の場合、StarRocks は `information_schema.tasks` および `information_schema.task_runs` で返される前に、タスク SQL 定義から資格情報を編集します。これは、DEFINITION 列に SqlCredentialRedactor.redact を適用することで行われます。`information_schema.task_runs` では、定義がタスク実行ステータスから来るか、空の場合にタスク定義ルックアップから来るかに関係なく、同じ編集が適用されます。false の場合、生のタスク定義が返されます (資格情報が公開される可能性があります)。マスキングは CPU/文字列処理作業であり、タスクまたは `task_runs` の数が大きい場合は時間がかかる場合があります。非編集定義が必要であり、セキュリティリスクを受け入れる場合にのみ無効にしてください。
-- Introduced in: v3.5.6
+### ユーザー、ロール、および権限
 
 ##### `privilege_max_role_depth`
 
-- Default: 16
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description: ロールの最大ロール深度 (継承レベル)。
-- Introduced in: v3.0.0
-
-##### `privilege_max_total_roles_per_user`
-
-- Default: 64
-- Type: Int
-- Unit:
-- Is mutable: Yes
-- Description: ユーザーが持つことができるロールの最大数。
-- Introduced in: v3.0.0
-
-##### privilege_max_role_depth
-
 - デフォルト: 16
 - タイプ: Int
-- 単位: -
+- 単位:
 - 変更可能: はい
 - 説明: ロールの最大ロール深度（継承レベル）。
 - 導入バージョン: v3.0.0
 
+##### `privilege_max_total_roles_per_user`
+
+- デフォルト: 64
+- タイプ: Int
+- 単位:
+- 変更可能: はい
+- 説明: ユーザーが持つことができるロールの最大数。
+- 導入バージョン: v3.0.0
+
 ### クエリエンジン
 
-<<<<<<< HEAD
-##### publish_version_interval_ms
+##### `brpc_send_plan_fragment_timeout_ms`
 
-- デフォルト: 10
+- デフォルト: 60000
 - タイプ: Int
 - 単位: ミリ秒
-- 変更可能: いいえ
-- 説明: リリース検証タスクが発行される時間間隔。
-- 導入バージョン: -
+- 変更可能: はい
+- 説明: プランフラグメントを送信する前にBRPC TalkTimeoutControllerに適用されるミリ秒単位のタイムアウト。`BackendServiceClient.sendPlanFragmentAsync` は、バックエンドの `execPlanFragmentAsync` を呼び出す前にこの値を設定します。これは、BRPCが接続プールからアイドル状態の接続を借りる際、および送信を実行する際に待機する時間を制御します。この時間を超えると、RPCは失敗し、メソッドのリトライロジックがトリガーされる可能性があります。競合下で迅速に失敗させるにはこの値を低く設定し、一時的なプール枯渇や低速ネットワークを許容するには高く設定してください。注意: 非常に大きな値は、障害検出を遅らせ、リクエストスレッドをブロックする可能性があります。
+- 導入バージョン: v3.3.11, v3.4.1, v3.5.0
 
-##### statistic_cache_columns
+##### `connector_table_query_trigger_analyze_large_table_interval`
 
-- デフォルト: 100000
-- タイプ: Long
-- 単位: -
-- 変更可能: いいえ
-- 説明: 統計テーブルにキャッシュできる行数。
-- 導入バージョン: -
-
-##### statistic_cache_thread_pool_size
-
-- デフォルト: 10
+- デフォルト: 12 * 3600
 - タイプ: Int
-- 単位: -
-- 変更可能: いいえ
-- 説明: 統計キャッシュを更新するために使用されるスレッドプールのサイズ。
-- 導入バージョン: -
+- 単位: 秒
+- 変更可能: はい
+- 説明: 大規模テーブルのクエリトリガーANALYZEタスクの間隔。
+- 導入バージョン: v3.4.0
 
-##### max_allowed_in_element_num_of_delete
+##### `connector_table_query_trigger_analyze_max_pending_task_num`
 
-- デフォルト: 10000
+- デフォルト: 100
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
-- 説明: DELETE ステートメントの IN 述語に許可される要素の最大数。
+- 説明: FE上でPending状態にあるクエリトリガーANALYZEタスクの最大数。
+- 導入バージョン: v3.4.0
+
+##### `connector_table_query_trigger_analyze_max_running_task_num`
+
+- デフォルト: 2
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: FE上でRunning状態にあるクエリトリガーANALYZEタスクの最大数。
+- 導入バージョン: v3.4.0
+
+##### `connector_table_query_trigger_analyze_small_table_interval`
+
+- デフォルト: 2 * 3600
+- タイプ: Int
+- 単位: 秒
+- 変更可能: はい
+- 説明: 小規模テーブルのクエリトリガーANALYZEタスクの間隔。
+- 導入バージョン: v3.4.0
+
+##### `connector_table_query_trigger_analyze_small_table_rows`
+
+- デフォルト: 10000000
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: クエリトリガーANALYZEタスクにおいて、テーブルが小規模テーブルであるかどうかを判断するためのしきい値。
+- 導入バージョン: v3.4.0
+
+##### `connector_table_query_trigger_task_schedule_interval`
+
+- デフォルト: 30
+- タイプ: Int
+- 単位: 秒
+- 変更可能: はい
+- 説明: スケジューラスレッドがクエリトリガーバックグラウンドタスクをスケジュールする間隔。この項目は、v3.4.0で導入された `connector_table_query_trigger_analyze_schedule_interval` を置き換えるものです。ここで、バックグラウンドタスクとは、v3.4の `ANALYZE` タスク、およびv3.4以降のバージョンにおける低カーディナリティ列の辞書収集タスクを指します。
+- 導入バージョン: v3.4.2
+
+##### `create_table_max_serial_replicas`
+
+- デフォルト: 128
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: シリアルに作成されるレプリカの最大数。実際のレプリカ数がこの値を超えると、レプリカは並行して作成されます。テーブル作成に時間がかかっている場合は、この値を減らしてみてください。
 - 導入バージョン: -
 
-##### enable_materialized_view
+##### `default_mv_partition_refresh_number`
+
+- デフォルト: 1
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: マテリアライズドビューの更新が複数のパーティションに関わる場合、このパラメータはデフォルトで単一バッチで更新されるパーティションの数を制御します。
+バージョン3.3.0以降、システムは潜在的なメモリ不足 (OOM) の問題を避けるため、一度に1つのパーティションを更新することをデフォルトとしています。以前のバージョンでは、デフォルトですべてのパーティションが一度に更新され、メモリ枯渇やタスク失敗につながる可能性がありました。ただし、マテリアライズドビューの更新が多数のパーティションに関わる場合、一度に1つのパーティションのみを更新すると、過剰なスケジューリングオーバーヘッド、全体の更新時間の延長、および多数の更新レコードが発生する可能性があります。このような場合、更新効率を向上させ、スケジューリングコストを削減するために、このパラメータを適切に調整することをお勧めします。
+- 導入バージョン: v3.3.0
+
+##### `default_mv_refresh_immediate`
 
 - デフォルト: true
 - タイプ: Boolean
 - 単位: -
 - 変更可能: はい
-- 説明: マテリアライズドビューの作成を有効にするかどうか。
-- 導入バージョン: -
-
-##### enable_materialized_view_spill
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: マテリアライズドビューの更新タスクに対する中間結果のスピリングを有効にするかどうか。
-- 導入バージョン: v3.1.1
-
-##### enable_backup_materialized_view
-
-- デフォルト: false
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: 特定のデータベースをバックアップまたは復元する際に、非同期マテリアライズドビューのバックアップと復元を有効にするかどうか。この項目が `false` に設定されている場合、StarRocks は非同期マテリアライズドビューのバックアップをスキップします。
-- 導入バージョン: v3.2.0
-
-##### enable_experimental_mv
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: 非同期マテリアライズドビュー機能を有効にするかどうか。TRUE はこの機能が有効であることを示します。v2.5.2 以降、この機能はデフォルトで有効になっています。v2.5.2 より前のバージョンでは、この機能はデフォルトで無効です。
-- 導入バージョン: v2.4
-
-##### enable_colocate_mv_index
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: 同期マテリアライズドビューを作成する際に、ベーステーブルと同期マテリアライズドビューインデックスをコロケートすることをサポートするかどうか。この項目が `true` に設定されている場合、tablet sink は同期マテリアライズドビューの書き込みパフォーマンスを向上させます。
-- 導入バージョン: v3.2.0
-
-##### default_mv_refresh_immediate
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: 非同期マテリアライズドビューを作成直後に即座に更新するかどうか。この項目が `true` に設定されている場合、新しく作成されたマテリアライズドビューは即座に更新されます。
+- 説明: 非同期マテリアライズドビューを作成後すぐに更新するかどうか。この項目が `true` に設定されている場合、新しく作成されたマテリアライズドビューはすぐに更新されます。
 - 導入バージョン: v3.2.3
 
-##### enable_materialized_view_metrics_collect
+##### `dynamic_partition_check_interval_seconds`
+
+- デフォルト: 600
+- タイプ: Long
+- 単位: 秒
+- 変更可能: はい
+- 説明: 新しいデータがチェックされる間隔。新しいデータが検出されると、StarRocksは自動的にそのデータのパーティションを作成します。
+- 導入バージョン: -
+
+##### `dynamic_partition_enable`
 
 - デフォルト: true
 - タイプ: Boolean
 - 単位: -
 - 変更可能: はい
-- 説明: 非同期マテリアライズドビューの監視メトリクスをデフォルトで収集するかどうか。
-- 導入バージョン: v3.1.11, v3.2.5
+- 説明: 動的パーティショニング機能を有効にするかどうか。この機能が有効になっている場合、StarRocksは新しいデータのパーティションを動的に作成し、期限切れのパーティションを自動的に削除して、データの鮮度を確保します。
+- 導入バージョン: -
 
-##### enable_materialized_view_text_based_rewrite
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: テキストベースのクエリ書き換えをデフォルトで有効にするかどうか。この項目が `true` に設定されている場合、システムは非同期マテリアライズドビューを作成する際に抽象構文ツリーを構築します。
-- 導入バージョン: v3.2.5
-
-##### enable_mv_automatic_active_check
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: スキーマ変更が行われたか、削除され再作成されたベーステーブル（ビュー）のために非アクティブに設定された非同期マテリアライズドビューをシステムが自動的にチェックし、再アクティブ化するかどうか。この機能は、ユーザーによって手動で非アクティブに設定されたマテリアライズドビューを再アクティブ化することはありません。
-- 導入バージョン: v3.1.6
-
-##### enable_active_materialized_view_schema_strict_check
+##### `enable_active_materialized_view_schema_strict_check`
 
 - デフォルト: true
 - タイプ: Boolean
@@ -2398,286 +1653,239 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: 非アクティブなマテリアライズドビューをアクティブ化する際に、データ型の長さの一貫性を厳密にチェックするかどうか。この項目が `false` に設定されている場合、ベーステーブルでデータ型の長さが変更されても、マテリアライズドビューのアクティブ化には影響しません。
 - 導入バージョン: v3.3.4
 
-##### enable_udf
+##### `enable_auto_collect_array_ndv`
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: ARRAY型のNDV情報を自動収集するかどうか。
+- 導入バージョン: v4.0
+
+##### `enable_backup_materialized_view`
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 特定のデータベースをバックアップまたは復元する際に、非同期マテリアライズドビューのBACKUPとRESTOREを有効にするかどうか。この項目が `false` に設定されている場合、StarRocksは非同期マテリアライズドビューのバックアップをスキップします。
+- 導入バージョン: v3.2.0
+
+##### `enable_collect_full_statistic`
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 自動的な完全統計収集を有効にするかどうか。この機能はデフォルトで有効になっています。
+- 導入バージョン: -
+
+##### `enable_colocate_mv_index`
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 同期マテリアライズドビューを作成する際に、同期マテリアライズドビューインデックスをベーステーブルとコロケートすることをサポートするかどうか。この項目が `true` に設定されている場合、タブレットシンクは同期マテリアライズドビューの書き込みパフォーマンスを高速化します。
+- 導入バージョン: v3.2.0
+
+##### `enable_decimal_v3`
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: DECIMAL V3データ型をサポートするかどうか。
+- 導入バージョン: -
+
+##### `enable_experimental_mv`
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 非同期マテリアライズドビュー機能を有効にするかどうか。TRUEはこの機能が有効であることを示します。v2.5.2以降、この機能はデフォルトで有効になっています。v2.5.2より前のバージョンでは、この機能はデフォルトで無効になっています。
+- 導入バージョン: v2.4
+
+##### `enable_local_replica_selection`
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: クエリに対してローカルレプリカを選択するかどうか。ローカルレプリカはネットワーク転送コストを削減します。このパラメータがTRUEに設定されている場合、CBOは現在のFEと同じIPアドレスを持つBE上のタブレットレプリカを優先的に選択します。このパラメータが `FALSE` に設定されている場合、ローカルレプリカと非ローカルレプリカの両方を選択できます。
+- 導入バージョン: -
+
+##### `enable_manual_collect_array_ndv`
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: ARRAY型のNDV情報を手動で収集することを有効にするかどうか。
+- 導入バージョン: v4.0
+
+##### `enable_materialized_view`
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: マテリアライズドビューの作成を有効にするかどうか。
+- 導入バージョン: -
+
+##### `enable_materialized_view_external_table_precise_refresh`
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: ベーステーブルが外部（クラウドネイティブではない）テーブルである場合に、マテリアライズドビューの更新に対する内部最適化を有効にするには、この項目を `true` に設定します。有効にすると、マテリアライズドビューの更新プロセッサは候補パーティションを計算し、すべてのパーティションではなく、影響を受けるベーステーブルパーティションのみを更新するため、I/Oと更新コストが削減されます。外部テーブルの全パーティション更新を強制するには、`false` に設定します。
+- 導入バージョン: v3.2.9
+
+##### `enable_materialized_view_metrics_collect`
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: デフォルトで非同期マテリアライズドビューの監視メトリクスを収集するかどうか。
+- 導入バージョン: v3.1.11, v3.2.5
+
+##### `enable_materialized_view_spill`
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: マテリアライズドビューの更新タスクに対して中間結果のスピルを有効にするかどうか。
+- 導入バージョン: v3.1.1
+
+##### `enable_materialized_view_text_based_rewrite`
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: デフォルトでテキストベースのクエリ書き換えを有効にするかどうか。この項目が `true` に設定されている場合、システムは非同期マテリアライズドビューの作成中に抽象構文木を構築します。
+- 導入バージョン: v3.2.5
+
+##### `enable_mv_automatic_active_check`
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: ベーステーブル（ビュー）がスキーマ変更された、または削除されて再作成されたために非アクティブに設定された非同期マテリアライズドビューを、システムが自動的にチェックして再アクティブ化することを有効にするかどうか。この機能は、ユーザーによって手動で非アクティブに設定されたマテリアライズドビューを再アクティブ化しないことに注意してください。
+- 導入バージョン: v3.1.6
+
+##### `enable_mv_automatic_repairing_for_broken_base_tables`
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: この項目が `true` に設定されている場合、ベースの外部テーブルが削除されて再作成されたり、そのテーブル識別子が変更されたりしたときに、StarRocksはマテリアライズドビューのベーステーブルメタデータを自動的に修復しようとします。修復フローは、マテリアライズドビューのベーステーブル情報を更新し、外部テーブルパーティションのパーティションレベルの修復情報を収集し、`autoRefreshPartitionsLimit` を尊重しながら、非同期自動更新マテリアライズドビューのパーティション更新決定を駆動できます。現在、自動修復はHive外部テーブルをサポートしています。サポートされていないテーブルタイプは、マテリアライズドビューが非アクティブに設定され、修復例外が発生します。パーティション情報収集は非ブロッキングであり、失敗はログに記録されます。
+- 導入バージョン: v3.3.19, v3.4.8, v3.5.6
+
+##### `enable_predicate_columns_collection`
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 述語列の収集を有効にするかどうか。無効にすると、クエリ最適化中に述語列は記録されません。
+- 導入バージョン: -
+
+##### `enable_query_queue_v2`
+
+- デフォルト: true
+- タイプ: boolean
+- 単位: -
+- 変更可能: いいえ
+- 説明: trueの場合、FEのスロットベースのクエリスケジューラをQuery Queue V2に切り替えます。このフラグは、スロットマネージャーとトラッカー（例: `BaseSlotManager.isEnableQueryQueueV2` および `SlotTracker#createSlotSelectionStrategy`）によって読み取られ、従来の戦略ではなく `SlotSelectionStrategyV2` を選択します。`query_queue_v2_xxx` 設定オプションと `QueryQueueOptions` は、このフラグが有効な場合にのみ有効になります。v4.1以降、デフォルト値は `false` から `true` に変更されました。
+- 導入バージョン: v3.3.4, v3.4.0, v3.5.0
+
+##### `enable_sql_blacklist`
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: SQLクエリのブラックリストチェックを有効にするかどうか。この機能が有効になっている場合、ブラックリスト内のクエリは実行できません。
+- 導入バージョン: -
+
+##### `enable_statistic_collect`
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: CBOのために統計を収集するかどうか。この機能はデフォルトで有効になっています。
+- 導入バージョン: -
+
+##### `enable_statistic_collect_on_first_load`
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: データロード操作によってトリガーされる自動統計収集とメンテナンスを制御します。これには以下が含まれます。
+  - データがパーティションに初めてロードされたとき（パーティションバージョンが2の場合）の統計収集。
+  - マルチパーティションテーブルの空のパーティションにデータがロードされたときの統計収集。
+  - INSERT OVERWRITE操作のための統計のコピーと更新。
+
+  **統計収集タイプの決定ポリシー:**
+  
+  - INSERT OVERWRITEの場合: `deltaRatio = |targetRows - sourceRows| / (sourceRows + 1)`
+    - `deltaRatio < statistic_sample_collect_ratio_threshold_of_first_load` (デフォルト: 0.1) の場合、統計収集は実行されません。既存の統計のみがコピーされます。
+    - それ以外の場合、`targetRows > statistic_sample_collect_rows` (デフォルト: 200000) の場合、SAMPLE統計収集が使用されます。
+    - それ以外の場合、FULL統計収集が使用されます。
+  
+  - 初回ロードの場合: `deltaRatio = loadRows / (totalRows + 1)`
+    - `deltaRatio < statistic_sample_collect_ratio_threshold_of_first_load` (デフォルト: 0.1) の場合、統計収集は実行されません。
+    - それ以外の場合、`loadRows > statistic_sample_collect_rows` (デフォルト: 200000) の場合、SAMPLE統計収集が使用されます。
+    - それ以外の場合、FULL統計収集が使用されます。
+  
+  **同期動作:**
+  
+  - DMLステートメント (INSERT INTO/INSERT OVERWRITE) の場合: テーブルロックを伴う同期モード。ロード操作は統計収集が完了するまで待機します (`semi_sync_collect_statistic_await_seconds` まで)。
+  - Stream LoadおよびBroker Loadの場合: ロックなしの非同期モード。統計収集はロード操作をブロックせずにバックグラウンドで実行されます。
+  
+  :::note
+  この設定を無効にすると、INSERT OVERWRITEの統計メンテナンスを含む、ロードによってトリガーされるすべての統計操作が防止され、テーブルに統計が不足する可能性があります。新しいテーブルが頻繁に作成され、データが頻繁にロードされる場合、この機能を有効にするとメモリとCPUのオーバーヘッドが増加します。
+  :::
+
+- 導入バージョン: v3.1
+
+##### `enable_udf`
 
 - デフォルト: false
 - タイプ: Boolean
 - 単位: -
 - 変更可能: いいえ
-- 説明: UDF を有効にするかどうか。
+- 説明: UDFを有効にするかどうか。
 - 導入バージョン: -
 
-##### enable_decimal_v3
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: DECIMAL V3 データ型をサポートするかどうか。
-- 導入バージョン: -
-
-##### enable_sql_blacklist
-
-- デフォルト: false
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: SQL クエリのブラックリストチェックを有効にするかどうか。この機能が有効になっている場合、ブラックリストにあるクエリは実行できません。
-- 導入バージョン: -
-
-##### dynamic_partition_enable
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: 動的パーティション化機能を有効にするかどうか。この機能が有効になっている場合、StarRocks は新しいデータのために動的にパーティションを作成し、データの新鮮さを確保するために期限切れのパーティションを自動的に削除します。
-- 導入バージョン: -
-
-##### dynamic_partition_check_interval_seconds
-
-- デフォルト: 600
-- タイプ: Long
-- 単位: 秒
-- 変更可能: はい
-- 説明: 新しいデータがチェックされる間隔。新しいデータが検出されると、StarRocks は自動的にデータのためにパーティションを作成します。
-- 導入バージョン: -
-
-##### max_query_retry_time
-
-- デフォルト: 2
-- タイプ: Int
-- 単位: -
-- 変更可能: はい
-- 説明: FE でのクエリの最大再試行回数。
-- 導入バージョン: -
-
-##### max_create_table_timeout_second
-
-- デフォルト: 600
-- タイプ: Int
-- 単位: 秒
-- 変更可能: はい
-- 説明: テーブル作成の最大タイムアウト期間。
-- 導入バージョン: -
-
-##### create_table_max_serial_replicas
-
-- デフォルト: 128
-- タイプ: Int
-- 単位: -
-- 変更可能: はい
-- 説明: 直列に作成されるレプリカの最大数。実際のレプリカ数がこの値を超える場合、レプリカは並行して作成されます。テーブル作成に時間がかかる場合は、この値を減らすことを検討してください。
-- 導入バージョン: -
-
-##### http_slow_request_threshold_ms
-
-- デフォルト: 5000
-- タイプ: Int
-- 単位: ミリ秒
-- 変更可能: はい
-- 説明: HTTP リクエストの応答時間がこのパラメータで指定された値を超える場合、このリクエストを追跡するためのログが生成されます。
-- 導入バージョン: v2.5.15, v3.1.5
-
-##### max_partitions_in_one_batch
-
-- デフォルト: 4096
-- タイプ: Long
-- 単位: -
-- 変更可能: はい
-- 説明: パーティションを一括作成する際に作成できる最大パーティション数。
-- 導入バージョン: -
-
-##### max_running_rollup_job_num_per_table
-
-- デフォルト: 1
-- タイプ: Int
-- 単位: -
-- 変更可能: はい
-- 説明: テーブルに対して並行して実行できるロールアップジョブの最大数。
-- 導入バージョン: -
-
-##### expr_children_limit
+##### `expr_children_limit`
 
 - デフォルト: 10000
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
-- 説明: 式内で許可される子式の最大数。
+- 説明: 式で許可される子式の最大数。
 - 導入バージョン: -
 
-##### max_planner_scalar_rewrite_num
-
-- デフォルト: 100000
-- タイプ: Long
-- 単位: -
-- 変更可能: はい
-- 説明: オプティマイザがスカラーオペレーターを書き換える最大回数。
-- 導入バージョン: -
-
-##### max_scalar_operator_optimize_depth
-
-- デフォルト: 256
-- タイプ: Int
-- 単位: -
-- 変更可能: はい
-- 説明: ScalarOperator 最適化を適用できる最大深度。
-- 導入バージョン: -
-
-##### max_scalar_operator_flat_children
-
-- デフォルト: 256
-- タイプ: Int
-- 単位: -
-- 変更可能: はい
-- 説明: ScalarOperator のフラットチルドレンの最大数。この上限を設定することで、オプティマイザがメモリを使いすぎるのを防ぐことができます。
-- 導入バージョン: -
-
-##### enable_statistic_collect
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: CBO のために統計を収集するかどうか。この機能はデフォルトで有効です。
-- 導入バージョン: -
-
-##### enable_statistic_collect_on_first_load
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: データが初めてテーブルにロードされるときに自動的に統計を収集するかどうか。テーブルに複数のパーティションがある場合、このテーブルの空のパーティションにデータがロードされると、自動統計収集がトリガーされます。新しいテーブルが頻繁に作成され、データが頻繁にロードされる場合、メモリと CPU のオーバーヘッドが増加します。
-- 導入バージョン: v3.1
-
-##### statistic_auto_analyze_start_time
-
-- デフォルト: 00:00:00
-- タイプ: String
-- 単位: -
-- 変更可能: はい
-- 説明: 自動収集の開始時間。値の範囲: `00:00:00` - `23:59:59`。
-- 導入バージョン: -
-
-##### statistic_auto_analyze_end_time
-
-- デフォルト: 23:59:59
-- タイプ: String
-- 単位: -
-- 変更可能: はい
-- 説明: 自動収集の終了時間。値の範囲: `00:00:00` - `23:59:59`。
-- 導入バージョン: -
-
-##### statistic_analyze_status_keep_second
-
-- デフォルト: 3 * 24 * 3600
-- タイプ: Long
-- 単位: 秒
-- 変更可能: はい
-- 説明: 収集タスクの履歴を保持する期間。デフォルト値は 3 日です。
-- 導入バージョン: -
-
-##### statistic_collect_interval_sec
-
-- デフォルト: 5 * 60
-- タイプ: Long
-- 単位: 秒
-- 変更可能: はい
-- 説明: 自動収集中にデータの更新をチェックする間隔。
-- 導入バージョン: -
-
-##### statistic_update_interval_sec
-
-- デフォルト: 24 * 60 * 60
-- タイプ: Long
-- 単位: 秒
-- 変更可能: はい
-- 説明: 統計情報のキャッシュが更新される間隔。
-- 導入バージョン: -
-
-##### enable_collect_full_statistic
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: 自動フル統計収集を有効にするかどうか。この機能はデフォルトで有効です。
-- 導入バージョン: -
-
-##### statistic_auto_collect_ratio
-
-- デフォルト: 0.8
-- タイプ: Double
-- 単位: -
-- 変更可能: はい
-- 説明: 自動収集の統計が健全かどうかを判断するためのしきい値。統計の健全性がこのしきい値を下回る場合、自動収集がトリガーされます。
-- 導入バージョン: -
-
-##### statistic_auto_collect_small_table_rows
-
-- デフォルト: 10000000
-- タイプ: Long
-- 単位: -
-- 変更可能: はい
-- 説明: 自動収集中に外部データソース (Hive, Iceberg, Hudi) のテーブルが小さなテーブルであるかどうかを判断するためのしきい値。テーブルの行数がこの値未満の場合、テーブルは小さなテーブルと見なされます。
-- 導入バージョン: v3.2
-
-##### statistic_max_full_collect_data_size
-
-- デフォルト: 100 * 1024 * 1024 * 1024
-- タイプ: Long
-- 単位: バイト
-- 変更可能: はい
-- 説明: 統計の自動収集のデータサイズしきい値。合計サイズがこの値を超える場合、フル収集の代わりにサンプリング収集が実行されます。
-- 導入バージョン: -
-
-##### statistic_collect_max_row_count_per_query
-
-- デフォルト: 5000000000
-- タイプ: Long
-- 単位: -
-- 変更可能: はい
-- 説明: 単一の分析タスクでクエリできる最大行数。この値を超えると、分析タスクは複数のクエリに分割されます。
-- 導入バージョン: -
-
-##### statistic_sample_collect_rows
-
-- デフォルト: 200000
-- タイプ: Long
-- 単位: -
-- 変更可能: はい
-- 説明: サンプリング収集のために収集する最小行数。パラメータ値がテーブルの実際の行数を超える場合、フル収集が実行されます。
-- 導入バージョン: -
-
-##### histogram_buckets_size
+##### `histogram_buckets_size`
 
 - デフォルト: 64
 - タイプ: Long
 - 単位: -
 - 変更可能: はい
-- 説明: ヒストグラムのデフォルトバケット数。
+- 説明: ヒストグラムのデフォルトのバケット数。
 - 導入バージョン: -
 
-##### histogram_mcv_size
-
-- デフォルト: 100
-- タイプ: Long
-- 単位: -
-- 変更可能: はい
-- 説明: ヒストグラムの最も一般的な値 (MCV) の数。
-- 導入バージョン: -
-
-##### histogram_sample_ratio
-
-- デフォルト: 0.1
-- タイプ: Double
-- 単位: -
-- 変更可能: はい
-- 説明: ヒストグラムのサンプリング比率。
-- 導入バージョン: -
-
-##### histogram_max_sample_row_count
+##### `histogram_max_sample_row_count`
 
 - デフォルト: 10000000
 - タイプ: Long
@@ -2686,568 +1894,422 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: ヒストグラムのために収集する最大行数。
 - 導入バージョン: -
 
-##### connector_table_query_trigger_task_schedule_interval
-
-- デフォルト: 30
-- タイプ: Int
-- 単位: 秒
-- 変更可能: はい
-- 説明: Scheduler スレッドがクエリトリガーのバックグラウンドタスクをスケジュールする間隔。この項目は v3.4.0 で導入された `connector_table_query_trigger_analyze_schedule_interval` を置き換えるものである。ここで、バックグラウンドタスクとは、v3.4 では `ANALYZE` タスク、v3.4 より後のバージョンでは低カーディナリティ列の辞書のコレクションタスクを指す。
-- 導入バージョン: v3.4.2
-
-##### connector_table_query_trigger_analyze_small_table_rows
-
-- デフォルト: 10000000
-- タイプ: Int
-- 単位: -
-- 変更可能: はい
-- 説明: クエリトリガー分析タスクのためにテーブルが小さなテーブルであるかどうかを判断するためのしきい値。
-- 導入バージョン: v3.4.0
-
-##### connector_table_query_trigger_analyze_small_table_interval
-
-- デフォルト: 2 * 3600
-- タイプ: Int
-- 単位: 秒
-- 変更可能: はい
-- 説明: 小さなテーブルのクエリトリガー分析タスクの間隔。
-- 導入バージョン: v3.4.0
-
-##### connector_table_query_trigger_analyze_large_table_interval
-=======
-##### `brpc_send_plan_fragment_timeout_ms`
->>>>>>> 7c14cbc6a8 ([Doc] add backticks to config names (#69369))
-
-- Default: 60000
-- Type: Int
-- Unit: Milliseconds
-- Is mutable: Yes
-- Description: プランフラグメントを送信する前に BRPC TalkTimeoutController に適用されるタイムアウト (ミリ秒単位)。`BackendServiceClient.sendPlanFragmentAsync` は、バックエンド `execPlanFragmentAsync` を呼び出す前にこの値を設定します。これは、BRPC がアイドル接続を接続プールから借りる際や送信を実行する際に待機する期間を管理します。超過した場合、RPC は失敗し、メソッドの再試行ロジックをトリガーする可能性があります。競合時に迅速に失敗させるにはこれを低く設定し、一時的なプール枯渇や低速ネットワークを許容するには高く設定します。注意: 非常に大きな値は、失敗検出を遅延させ、要求スレッドをブロックする可能性があります。
-- Introduced in: v3.3.11, v3.4.1, v3.5.0
-
-##### `connector_table_query_trigger_analyze_large_table_interval`
-
-- Default: 12 * 3600
-- Type: Int
-- Unit: Second
-- Is mutable: Yes
-- Description: 大規模テーブルのクエリトリガー ANALYZE タスクの間隔。
-- Introduced in: v3.4.0
-
-##### `connector_table_query_trigger_analyze_max_pending_task_num`
-
-- Default: 100
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: FE で保留状態にあるクエリトリガー ANALYZE タスクの最大数。
-- Introduced in: v3.4.0
-
-<<<<<<< HEAD
-##### enable_local_replica_selection
-=======
-##### `connector_table_query_trigger_analyze_max_running_task_num`
-
-- Default: 2
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: FE で実行状態にあるクエリトリガー ANALYZE タスクの最大数。
-- Introduced in: v3.4.0
-
-##### `connector_table_query_trigger_analyze_small_table_interval`
-
-- Default: 2 * 3600
-- Type: Int
-- Unit: Second
-- Is mutable: Yes
-- Description: 小規模テーブルのクエリトリガー ANALYZE タスクの間隔。
-- Introduced in: v3.4.0
-
-##### `connector_table_query_trigger_analyze_small_table_rows`
-
-- Default: 10000000
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: クエリトリガー ANALYZE タスクのテーブルが小規模テーブルであるかどうかを判断するためのしきい値。
-- Introduced in: v3.4.0
-
-##### `connector_table_query_trigger_task_schedule_interval`
-
-- Default: 30
-- Type: Int
-- Unit: Second
-- Is mutable: Yes
-- Description: スケジューラースレッドがクエリトリガーバックグラウンドタスクをスケジュールする間隔。この項目は v3.4.0 で導入された `connector_table_query_trigger_analyze_schedule_interval` を置き換えるものです。ここで、バックグラウンドタスクとは v3.4 の `ANALYZE` タスクと、v3.4 以降の低カーディナリティ列の辞書収集タスクを指します。
-- Introduced in: v3.4.2
-
-##### `create_table_max_serial_replicas`
-
-- Default: 128
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: シリアルに作成するレプリカの最大数。実際のレプリカ数がこの値を超えると、レプリカは並行して作成されます。テーブル作成に時間がかかりすぎる場合は、この値を減らしてみてください。
-- Introduced in: -
-
-##### `default_mv_partition_refresh_number`
-
-- Default: 1
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: マテリアライズドビューの更新が複数のパーティションを伴う場合、このパラメーターは、デフォルトで 1 つのバッチで更新されるパーティションの数を制御します。
-バージョン 3.3.0 以降、システムはデフォルトで一度に 1 つのパーティションを更新して、潜在的なメモリ不足 (OOM) の問題を回避します。以前のバージョンでは、デフォルトですべてのパーティションが一度に更新され、メモリ枯渇やタスク障害につながる可能性がありました。ただし、マテリアライズドビューの更新が多数のパーティションを伴う場合、一度に 1 つのパーティションのみを更新すると、スケジューリングのオーバーヘッドが過剰になり、全体の更新時間が長くなり、大量の更新レコードが生成される可能性があることに注意してください。そのような場合は、更新効率を向上させ、スケジューリングコストを削減するために、このパラメーターを適切に調整することをお勧めします。
-- Introduced in: v3.3.0
-
-##### `default_mv_refresh_immediate`
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: 非同期マテリアライズドビューの作成後すぐに更新するかどうか。この項目が `true` に設定されている場合、新しく作成されたマテリアライズドビューはすぐに更新されます。
-- Introduced in: v3.2.3
-
-##### `dynamic_partition_check_interval_seconds`
-
-- Default: 600
-- Type: Long
-- Unit: Seconds
-- Is mutable: Yes
-- Description: 新しいデータがチェックされる間隔。新しいデータが検出された場合、StarRocks は自動的にデータ用のパーティションを作成します。
-- Introduced in: -
-
-##### `dynamic_partition_enable`
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: 動的パーティショニング機能を有効にするかどうか。この機能が有効になっている場合、StarRocks は新しいデータ用のパーティションを動的に作成し、期限切れのパーティションを自動的に削除してデータの鮮度を保証します。
-- Introduced in: -
-
-##### `enable_active_materialized_view_schema_strict_check`
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: 非アクティブなマテリアライズドビューをアクティブ化するときに、データ型の長さの一貫性を厳密にチェックするかどうか。この項目が `false` に設定されている場合、基底テーブルでデータ型の長さが変更されても、マテリアライズドビューのアクティブ化は影響を受けません。
-- Introduced in: v3.3.4
-
-##### `enable_auto_collect_array_ndv`
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: ARRAY 型の NDV 情報の自動収集を有効にするかどうか。
-- Introduced in: v4.0
-
-##### `enable_backup_materialized_view`
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: 特定のデータベースをバックアップまたは復元する際に、非同期マテリアライズドビューの BACKUP と RESTORE を有効にするかどうか。この項目が `false` に設定されている場合、StarRocks は非同期マテリアライズドビューのバックアップをスキップします。
-- Introduced in: v3.2.0
-
-##### `enable_collect_full_statistic`
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: 自動完全統計収集を有効にするかどうか。この機能はデフォルトで有効になっています。
-- Introduced in: -
-
-##### `enable_colocate_mv_index`
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: 同期マテリアライズドビューを作成するときに、同期マテリアライズドビューインデックスを基底テーブルとコロケートすることをサポートするかどうか。この項目が `true` に設定されている場合、タブレットシンクは同期マテリアライズドビューの書き込みパフォーマンスを高速化します。
-- Introduced in: v3.2.0
-
-##### `enable_decimal_v3`
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: DECIMAL V3 データ型をサポートするかどうか。
-- Introduced in: -
-
-##### `enable_experimental_mv`
->>>>>>> 7c14cbc6a8 ([Doc] add backticks to config names (#69369))
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: 非同期マテリアライズドビュー機能を有効にするかどうか。TRUE はこの機能が有効であることを示します。v2.5.2 以降、この機能はデフォルトで有効になっています。v2.5.2 以前のバージョンでは、この機能はデフォルトで無効になっています。
-- Introduced in: v2.4
-
-<<<<<<< HEAD
-##### max_distribution_pruner_recursion_depth
+##### `histogram_mcv_size`
 
 - デフォルト: 100
-- タイプ: Int
-- 単位: -
-- 変更可能: はい
-- 説明: パーティションプルーニングで許可される最大再帰深度。再帰深度を増やすことで、より多くの要素をプルーニングできますが、CPU 消費も増加します。
-- 導入バージョン: -
-
-##### slow_query_analyze_threshold
-
-- デフォルト: 5
-- タイプ: Int
-- 単位: 秒
-- 変更可能: はい
-- 説明: クエリフィードバックの分析をトリガーするクエリの実行時間しきい値。
-- 導入バージョン: v3.4.0
-
-### ロードとアンロード
-
-##### load_straggler_wait_second
-
-- デフォルト: 300
-- タイプ: Int
-- 単位: 秒
-- 変更可能: はい
-- 説明: BE レプリカによって許容される最大ロード遅延。この値を超えると、他のレプリカからデータをクローンするためにクローンが実行されます。
-- 導入バージョン: -
-
-##### load_checker_interval_second
-
-- デフォルト: 5
-- タイプ: Int
-- 単位: 秒
-- 変更可能: いいえ
-- 説明: ロードジョブがローリングベースで処理される時間間隔。
-- 導入バージョン: -
-
-##### broker_load_default_timeout_second
-
-- デフォルト: 14400
-- タイプ: Int
-- 単位: 秒
-- 変更可能: はい
-- 説明: Broker Load ジョブのタイムアウト期間。
-- 導入バージョン: -
-
-##### min_bytes_per_broker_scanner
-
-- デフォルト: 67108864
 - タイプ: Long
-- 単位: バイト
-- 変更可能: はい
-- 説明: Broker Load インスタンスによって処理されることができる最小許容データ量。
-- 導入バージョン: -
-
-##### insert_load_default_timeout_second
-
-- デフォルト: 3600
-- タイプ: Int
-- 単位: 秒
-- 変更可能: はい
-- 説明: データをロードするために使用される INSERT INTO ステートメントのタイムアウト期間。
-- 導入バージョン: -
-
-##### stream_load_default_timeout_second
-
-- デフォルト: 600
-- タイプ: Int
-- 単位: 秒
-- 変更可能: はい
-- 説明: 各 Stream Load ジョブのデフォルトタイムアウト期間。
-- 導入バージョン: -
-
-##### max_stream_load_timeout_second
-
-- デフォルト: 259200
-- タイプ: Int
-- 単位: 秒
-- 変更可能: はい
-- 説明: Stream Load ジョブの最大許容タイムアウト期間。
-- 導入バージョン: -
-
-##### max_load_timeout_second
-
-- デフォルト: 259200
-- タイプ: Int
-- 単位: 秒
-- 変更可能: はい
-- 説明: ロードジョブに許可される最大タイムアウト期間。この制限を超えると、ロードジョブは失敗します。この制限はすべてのタイプのロードジョブに適用されます。
-- 導入バージョン: -
-
-##### min_load_timeout_second
-
-- デフォルト: 1
-- タイプ: Int
-- 単位: 秒
-- 変更可能: はい
-- 説明: ロードジョブに許可される最小タイムアウト期間。この制限はすべてのタイプのロードジョブに適用されます。
-- 導入バージョン: -
-
-##### spark_dpp_version
-
-- デフォルト: 1.0.0
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: 使用される Spark Dynamic Partition Pruning (DPP) のバージョン。
-- 導入バージョン: -
-
-##### spark_load_default_timeout_second
-
-- デフォルト: 86400
-- タイプ: Int
-- 単位: 秒
-- 変更可能: はい
-- 説明: 各 Spark Load ジョブのタイムアウト期間。
-- 導入バージョン: -
-
-##### spark_home_default_dir
-
-- デフォルト: StarRocksFE.STARROCKS_HOME_DIR + "/lib/spark2x"
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: Spark クライアントのルートディレクトリ。
-- 導入バージョン: -
-
-##### spark_resource_path
-
-- デフォルト: 空の文字列
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: Spark 依存パッケージのルートディレクトリ。
-- 導入バージョン: -
-
-##### spark_launcher_log_dir
-
-- デフォルト: sys_log_dir + "/spark_launcher_log"
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: Spark ログファイルを保存するディレクトリ。
-- 導入バージョン: -
-
-##### yarn_client_path
-
-- デフォルト: StarRocksFE.STARROCKS_HOME_DIR + "/lib/yarn-client/hadoop/bin/yarn"
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: Yarn クライアントパッケージのルートディレクトリ。
-- 導入バージョン: -
-
-##### yarn_config_dir
-
-- デフォルト: StarRocksFE.STARROCKS_HOME_DIR + "/lib/yarn-config"
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: Yarn 設定ファイルを保存するディレクトリ。
-- 導入バージョン: -
-
-##### desired_max_waiting_jobs
-
-- デフォルト: 1024
-- タイプ: Int
 - 単位: -
 - 変更可能: はい
-- 説明: FE における保留中ジョブの最大数。この数は、テーブル作成、ロード、スキーマ変更ジョブなど、すべてのジョブを指します。FE の保留中ジョブの数がこの値に達すると、FE は新しいロードリクエストを拒否します。このパラメータは非同期ロードにのみ有効です。v2.5 以降、デフォルト値は 100 から 1024 に変更されました。
+- 説明: ヒストグラムの最頻値 (MCV) の数。
 - 導入バージョン: -
 
-##### max_running_txn_num_per_db
+##### `histogram_sample_ratio`
 
-- デフォルト: 1000
-- タイプ: Int
+- デフォルト: 0.1
+- タイプ: Double
 - 単位: -
 - 変更可能: はい
-- 説明: StarRocks クラスタ内の各データベースで実行中のロードトランザクションの最大数。デフォルト値は `1000` です。v3.1 以降、デフォルト値は `100` から `1000` に変更されました。データベースで実行中のロードトランザクションの実際の数がこのパラメータの値を超える場合、新しいロードリクエストは処理されません。同期ロードジョブの新しいリクエストは拒否され、非同期ロードジョブの新しいリクエストはキューに入れられます。このパラメータの値を増やすことはお勧めしません。システム負荷が増加する可能性があります。
+- 説明: ヒストグラムのサンプリング比率。
 - 導入バージョン: -
 
-##### max_broker_load_job_concurrency
+##### `http_slow_request_threshold_ms`
 
-- デフォルト: 5
-- 別名: async_load_task_pool_size
+- デフォルト: 5000
 - タイプ: Int
-- 単位: -
+- 単位: ミリ秒
 - 変更可能: はい
-- 説明: StarRocks クラスタ内で許可される最大同時 Broker Load ジョブ数。このパラメータは Broker Load にのみ有効です。このパラメータの値は `max_running_txn_num_per_db` の値より小さくなければなりません。v2.5 以降、デフォルト値は `10` から `5` に変更されました。
-- 導入バージョン: -
+- 説明: HTTPリクエストの応答時間がこのパラメータで指定された値を超えると、このリクエストを追跡するためのログが生成されます。
+- 導入バージョン: v2.5.15, v3.1.5
 
-##### load_parallel_instance_num (廃止予定)
-
-- デフォルト: 1
-- タイプ: Int
-- 単位: -
-- 変更可能: はい
-- 説明: BE 上の各ロードジョブに対する同時ロードインスタンスの最大数。この項目は v3.1 以降廃止されます。
-- 導入バージョン: -
-
-##### disable_load_job
+##### `lock_checker_enable_deadlock_check`
 
 - デフォルト: false
 - タイプ: Boolean
 - 単位: -
 - 変更可能: はい
-- 説明: クラスタがエラーに遭遇したときにロードを無効にするかどうか。これにより、クラスタエラーによる損失を防ぎます。デフォルト値は `FALSE` で、ロードが無効になっていないことを示します。`TRUE` はロードが無効になり、クラスタが読み取り専用状態であることを示します。
-- 導入バージョン: -
+- 説明: 有効にすると、LockCheckerスレッドはThreadMXBean.findDeadlockedThreads()を使用してJVMレベルのデッドロック検出を実行し、問題のあるスレッドのスタックトレースをログに記録します。このチェックはLockCheckerデーモン（その頻度は `lock_checker_interval_second` によって制御されます）内で実行され、詳細なスタック情報をログに書き込みますが、これはCPUおよびI/O負荷が高い可能性があります。このオプションは、ライブまたは再現可能なデッドロック問題のトラブルシューティングのためにのみ有効にしてください。通常の操作で有効にしたままにすると、オーバーヘッドとログ量が増加する可能性があります。
+- 導入バージョン: v3.2.0
 
-##### history_job_keep_max_second
-
-- デフォルト: 7 * 24 * 3600
-- タイプ: Int
-- 単位: 秒
-- 変更可能: はい
-- 説明: スキーマ変更ジョブなどの履歴ジョブを保持できる最大期間。
-- 導入バージョン: -
-
-##### label_keep_max_second
-
-- デフォルト: 3 * 24 * 3600
-- タイプ: Int
-- 単位: 秒
-- 変更可能: はい
-- 説明: 完了したロードジョブのラベルを保持する最大期間（FINISHED または CANCELLED 状態）。デフォルト値は 3 日です。この期間が経過すると、ラベルは削除されます。このパラメータはすべてのタイプのロードジョブに適用されます。値が大きすぎると、多くのメモリを消費します。
-- 導入バージョン: -
-
-##### label_keep_max_num
-
-- デフォルト: 1000
-- タイプ: Int
-- 単位: -
-- 変更可能: はい
-- 説明: 一定期間内に保持できるロードジョブの最大数。この数を超えると、履歴ジョブの情報が削除されます。
-- 導入バージョン: -
-
-##### max_routine_load_task_concurrent_num
-
-- デフォルト: 5
-- タイプ: Int
-- 単位: -
-- 変更可能: はい
-- 説明: 各 Routine Load ジョブの最大同時タスク数。
-- 導入バージョン: -
-
-##### max_routine_load_task_num_per_be
-
-- デフォルト: 16
-- タイプ: Int
-- 単位: -
-- 変更可能: はい
-- 説明: 各 BE 上の最大同時 Routine Load タスク数。v3.1.0 以降、このパラメータのデフォルト値は 5 から 16 に増加し、BE 静的パラメータ `routine_load_thread_pool_size` (廃止予定) の値以下である必要がなくなりました。
-- 導入バージョン: -
-
-##### max_routine_load_batch_size
-
-- デフォルト: 4294967296
-- タイプ: Long
-- 単位: バイト
-- 変更可能: はい
-- 説明: Routine Load タスクによってロードされる最大データ量。
-- 導入バージョン: -
-
-##### routine_load_task_consume_second
-
-- デフォルト: 15
-- タイプ: Long
-- 単位: 秒
-- 変更可能: はい
-- 説明: クラスタ内の各 Routine Load タスクがデータを消費する最大時間。v3.1.0 以降、Routine Load ジョブは [job_properties](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md#job_properties) に新しいパラメータ `task_consume_second` をサポートしています。このパラメータは Routine Load ジョブ内の個々のロードタスクに適用され、より柔軟です。
-- 導入バージョン: -
-
-##### routine_load_task_timeout_second
+##### `materialized_view_min_refresh_interval`
 
 - デフォルト: 60
-- タイプ: Long
+- タイプ: Int
 - 単位: 秒
 - 変更可能: はい
-- 説明: クラスタ内の各 Routine Load タスクのタイムアウト期間。v3.1.0 以降、Routine Load ジョブは [job_properties](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md#job_properties) に新しいパラメータ `task_timeout_second` をサポートしています。このパラメータは Routine Load ジョブ内の個々のロードタスクに適用され、より柔軟です。
-- 導入バージョン: -
+- 説明: ASYNCマテリアライズドビュースケジュールの最小許容更新間隔（秒単位）。時間ベースの間隔でマテリアライズドビューが作成される場合、その間隔は秒に変換され、この値より小さくてはなりません。そうでない場合、CREATE/ALTER操作はDDLエラーで失敗します。この値が0より大きい場合、チェックが強制されます。制限を無効にするには0または負の値を設定します。これにより、過度なTaskManagerのスケジューリングや、頻繁すぎる更新によるFEのメモリ/CPU使用量の増加を防ぎます。この項目は `EVENT_TRIGGERED` 更新には適用されません。
+- 導入バージョン: v3.3.0, v3.4.0, v3.5.0
 
-##### routine_load_unstable_threshold_second
-
-- デフォルト: 3600
-- タイプ: Long
-- 単位: 秒
-- 変更可能: はい
-- 説明: Routine Load ジョブ内のタスクが遅延すると、Routine Load ジョブは UNSTABLE 状態に設定されます。具体的には、消費されているメッセージのタイムスタンプと現在の時間の差がこのしきい値を超え、データソースに未消費のメッセージが存在する場合です。
-- 導入バージョン: -
-
-##### enable_routine_load_lag_metrics
+##### `materialized_view_refresh_ascending`
 
 - デフォルト: false
 - タイプ: Boolean
 - 単位: -
 - 変更可能: はい
-- 説明: Routine Load パーティションのオフセットラグをメトリクスで収集するかどうか。この項目を `true` に設定すると、Kafka API を呼び出してパーティションの最新のオフセットを取得することに注意。
-- 導入バージョン: -
+- 説明: この項目が `true` に設定されている場合、マテリアライズドビューのパーティション更新は、パーティションキーの昇順（最も古いものから最も新しいものへ）でパーティションを反復処理します。`false`（デフォルト）に設定されている場合、システムは降順（最も新しいものから最も古いものへ）で反復処理します。StarRocksは、パーティション更新制限が適用される場合に処理するパーティションを選択し、後続のTaskRun実行のための次の開始/終了パーティション境界を計算するために、リストおよび範囲パーティション化されたマテリアライズドビューの更新ロジックの両方でこの項目を使用します。この項目を変更すると、どのパーティションが最初に更新されるか、および次のパーティション範囲がどのように導出されるかが変わります。範囲パーティション化されたマテリアライズドビューの場合、スケジューラは新しい開始/終了を検証し、変更が繰り返される境界（デッドループ）を作成する場合にエラーを発生させるため、この項目は注意して設定してください。
+- 導入バージョン: v3.3.1, v3.4.0, v3.5.0
 
-##### min_routine_load_lag_for_metrics
+##### `max_allowed_in_element_num_of_delete`
 
 - デフォルト: 10000
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
-- 説明: 監視メトリクスに表示される Routine Load ジョブの最小オフセットラグ。オフセットラグがこの値より大きい Routine Load ジョブは、メトリクスに表示されます。
+- 説明: DELETEステートメントのIN述語で許可される要素の最大数。
 - 導入バージョン: -
 
-##### max_tolerable_backend_down_num
+##### `max_create_table_timeout_second`
 
-- デフォルト: 0
-- タイプ: Int
-- 単位: -
-- 変更可能: はい
-- 説明: 許容される故障 BE ノードの最大数。この数を超えると、Routine Load ジョブは自動的に回復できません。
-- 導入バージョン: -
-
-##### period_of_auto_resume_min
-
-- デフォルト: 5
-- タイプ: Int
-- 単位: 分
-- 変更可能: はい
-- 説明: Routine Load ジョブが自動的に回復される間隔。
-- 導入バージョン: -
-
-##### export_task_default_timeout_second
-
-- デフォルト: 2 * 3600
+- デフォルト: 600
 - タイプ: Int
 - 単位: 秒
 - 変更可能: はい
-- 説明: データエクスポートタスクのタイムアウト期間。
+- 説明: テーブル作成の最大タイムアウト期間。
 - 導入バージョン: -
 
-##### export_max_bytes_per_be_per_task
+##### `max_distribution_pruner_recursion_depth`
 
-- デフォルト: 268435456
-- タイプ: Long
-- 単位: バイト
+- デフォルト: 100
+- タイプ: Int
+- 単位: -
 - 変更可能: はい
-- 説明: 単一の BE から単一のデータアンロードタスクによってエクスポートされる最大データ量。
+- 説明: パーティションプルーナーによって許可される最大再帰深度。再帰深度を増やすと、より多くの要素をプルーニングできますが、CPU消費も増加します。
 - 導入バージョン: -
 
-##### export_task_pool_size
+##### `max_partitions_in_one_batch`
+
+- デフォルト: 4096
+- タイプ: Long
+- 単位: -
+- 変更可能: はい
+- 説明: パーティションを一括作成する際に作成できるパーティションの最大数。
+- 導入バージョン: -
+
+##### `max_planner_scalar_rewrite_num`
+
+- デフォルト: 100000
+- タイプ: Long
+- 単位: -
+- 変更可能: はい
+- 説明: オプティマイザがスカラー演算子を書き換えられる最大回数。
+- 導入バージョン: -
+
+##### `max_query_retry_time`
+
+- デフォルト: 2
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: FEでのクエリ再試行の最大回数。
+- 導入バージョン: -
+
+##### `max_running_rollup_job_num_per_table`
+
+- デフォルト: 1
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: テーブルに対して並行して実行できるロールアップジョブの最大数。
+- 導入バージョン: -
+
+##### `max_scalar_operator_flat_children`
+
+- デフォルト: 10000
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: ScalarOperatorのフラットな子要素の最大数。この制限を設定することで、オプティマイザが過剰なメモリを使用するのを防ぐことができます。
+- 導入バージョン: -
+
+##### `max_scalar_operator_optimize_depth`
+
+- デフォルト: 256
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: ScalarOperator最適化が適用できる最大深度。
+- 導入バージョン: -
+
+##### `mv_active_checker_interval_seconds`
+
+- デフォルト: 60
+- タイプ: Long
+- 単位: 秒
+- 変更可能: はい
+- 説明: バックグラウンドの `active_checker` スレッドが有効になっている場合、システムはスキーマ変更またはベーステーブル（またはビュー）の再構築により非アクティブになったマテリアライズドビューを定期的に検出し、自動的に再アクティブ化します。このパラメータは、チェッカースレッドのスケジューリング間隔を秒単位で制御します。デフォルト値はシステム定義です。
+- 導入バージョン: v3.1.6
+
+##### `mv_rewrite_consider_data_layout_mode`
+
+- デフォルト: `enable`
+- タイプ: String
+- 単位: -
+- 変更可能: はい
+- 説明: 最適なマテリアライズドビューを選択する際に、マテリアライズドビューの書き換えがベーステーブルのデータレイアウトを考慮すべきかどうかを制御します。有効な値:
+  - `disable`: 候補となるマテリアライズドビューを選択する際に、データレイアウト基準を一切使用しません。
+  - `enable`: クエリがレイアウトに依存すると認識された場合にのみ、データレイアウト基準を使用します。
+  - `force`: 最適なマテリアライズドビューを選択する際に、常にデータレイアウト基準を適用します。
+  この項目を変更すると、`BestMvSelector` の動作に影響を与え、物理レイアウトがプランの正確性やパフォーマンスに影響するかどうかに応じて、書き換えの適用性を改善または拡大できます。
+- 導入バージョン: -
+
+##### `publish_version_interval_ms`
+
+- デフォルト: 10
+- タイプ: Int
+- 単位: ミリ秒
+- 変更可能: いいえ
+- 説明: リリース検証タスクが発行される時間間隔。
+- 導入バージョン: -
+
+##### `query_queue_v2_concurrency_level`
+
+- デフォルト: 4
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: システムの総クエリスロットを計算する際に、いくつの論理的な並行性「レイヤー」を使用するかを制御します。共有なしモードでは、総スロット数 = `query_queue_v2_concurrency_level` * BEの数 * BEあたりのコア数 (BackendResourceStatから導出されます)。マルチウェアハウスモードでは、実効並行性はmax(1, `query_queue_v2_concurrency_level` / 4)に縮小されます。設定値が非正の場合、`4` として扱われます。この値を変更すると、totalSlots（したがって同時クエリ容量）が増減し、スロットあたりのリソースに影響します。memBytesPerSlotは、ワーカーあたりのメモリを(ワーカーあたりのコア数 * 並行性)で割ることによって導出され、CPUアカウンティングは `query_queue_v2_cpu_costs_per_slot` を使用します。クラスターサイズに比例して設定してください。非常に大きな値は、スロットあたりのメモリを減らし、リソースの断片化を引き起こす可能性があります。
+- 導入バージョン: v3.3.4, v3.4.0, v3.5.0
+
+##### `query_queue_v2_cpu_costs_per_slot`
+
+- デフォルト: 1000000000
+- タイプ: Long
+- 単位: プランナーCPUコスト単位
+- 変更可能: はい
+- 説明: クエリのプランナーCPUコストから、そのクエリが必要とするスロット数を推定するために使用されるスロットあたりのCPUコストしきい値。スケジューラは、スロットを整数(`plan_cpu_costs` / `query_queue_v2_cpu_costs_per_slot`)として計算し、その結果を[1, totalSlots]の範囲にクランプします（totalSlotsはクエリキューV2の `V2` パラメータから導出されます）。V2コードは非正の設定を1に正規化するため（Math.max(1, value)）、非正の値は実質的に `1` になります。この値を増やすと、クエリごとに割り当てられるスロットが減少し（より少ない、より大きなスロットのクエリを優先）、減らすとクエリごとのスロットが増加します。`query_queue_v2_num_rows_per_slot` および並行性設定と合わせて調整し、並列処理とリソース粒度を制御してください。
+- 導入バージョン: v3.3.4, v3.4.0, v3.5.0
+
+##### `query_queue_v2_num_rows_per_slot`
+
+- デフォルト: 4096
+- タイプ: Int
+- 単位: 行
+- 変更可能: はい
+- 説明: クエリごとのスロット数を推定する際に、単一のスケジューリングスロットに割り当てられるソース行レコードの目標数。StarRocksは `estimated_slots` = (ソースノードのカーディナリティ) / `query_queue_v2_num_rows_per_slot` を計算し、その結果を[1, totalSlots]の範囲にクランプし、計算値が非正の場合は最小値1を強制します。totalSlotsは利用可能なリソース（おおよそDOP * `query_queue_v2_concurrency_level` * ワーカー/BEの数）から導出されるため、クラスター/コア数に依存します。この値を増やすと、スロット数が減少し（各スロットがより多くの行を処理）、スケジューリングオーバーヘッドが低減されます。減らすと、リソース制限まで並列処理が増加します（より多くの、より小さなスロット）。
+- 導入バージョン: v3.3.4, v3.4.0, v3.5.0
+
+##### `query_queue_v2_schedule_strategy`
+
+- デフォルト: SWRR
+- タイプ: String
+- 単位: -
+- 変更可能: はい
+- 説明: Query Queue V2が保留中のクエリを順序付けるために使用するスケジューリングポリシーを選択します。サポートされる値（大文字と小文字を区別しない）は、`SWRR` (Smooth Weighted Round Robin) — デフォルトであり、公平な重み付き共有が必要な混合/ハイブリッドワークロードに適しています — と `SJF` (Short Job First + Aging) — 短いジョブを優先し、エージングを使用して飢餓状態を回避します — です。値は大文字と小文字を区別しない列挙型ルックアップで解析されます。認識されない値はエラーとしてログに記録され、デフォルトポリシーが使用されます。この設定は、Query Queue V2が有効な場合にのみ動作に影響し、`query_queue_v2_concurrency_level` などのV2サイジング設定と相互作用します。
+- 導入バージョン: v3.3.12, v3.4.2, v3.5.0
+
+##### `semi_sync_collect_statistic_await_seconds`
+
+- デフォルト: 30
+- タイプ: Int
+- 単位: 秒
+- 変更可能: はい
+- 説明: DML操作（INSERT INTOおよびINSERT OVERWRITEステートメント）中の半同期統計収集の最大待機時間。Stream LoadおよびBroker Loadは非同期モードを使用するため、この設定の影響を受けません。統計収集時間がこの値を超えると、ロード操作は収集の完了を待たずに続行されます。この設定は `enable_statistic_collect_on_first_load` と連携して機能します。
+- 導入バージョン: v3.1
+
+##### `slow_query_analyze_threshold`
 
 - デフォルト: 5
 - タイプ: Int
-- 単位: -
-- 変更可能: いいえ
-- 説明: アンロードタスクスレッドプールのサイズ。
+- 単位: 秒
+- 変更可能: はい
+- 説明: クエリフィードバックの分析をトリガーするためのクエリの実行時間しきい値。
+- 導入バージョン: v3.4.0
+
+##### `statistic_analyze_status_keep_second`
+
+- デフォルト: 3 * 24 * 3600
+- タイプ: Long
+- 単位: 秒
+- 変更可能: はい
+- 説明: 収集タスクの履歴を保持する期間。デフォルト値は3日間です。
 - 導入バージョン: -
 
-##### export_checker_interval_second
+##### `statistic_auto_analyze_end_time`
+
+- デフォルト: 23:59:59
+- タイプ: String
+- 単位: -
+- 変更可能: はい
+- 説明: 自動収集の終了時刻。値の範囲: `00:00:00` - `23:59:59`。
+- 導入バージョン: -
+
+##### `statistic_auto_analyze_start_time`
+
+- デフォルト: 00:00:00
+- タイプ: String
+- 単位: -
+- 変更可能: はい
+- 説明: 自動収集の開始時刻。値の範囲: `00:00:00` - `23:59:59`。
+- 導入バージョン: -
+
+##### `statistic_auto_collect_ratio`
+
+- デフォルト: 0.8
+- タイプ: Double
+- 単位: -
+- 変更可能: はい
+- 説明: 自動収集の統計が健全であるかどうかを判断するためのしきい値。統計の健全性がこのしきい値を下回ると、自動収集がトリガーされます。
+- 導入バージョン: -
+
+##### `statistic_auto_collect_small_table_rows`
+
+- デフォルト: 10000000
+- タイプ: Long
+- 単位: -
+- 変更可能: はい
+- 説明: 自動収集中に、外部データソース（Hive、Iceberg、Hudi）内のテーブルが小規模テーブルであるかどうかを判断するためのしきい値。テーブルの行数がこの値より少ない場合、そのテーブルは小規模テーブルと見なされます。
+- 導入バージョン: v3.2
+
+##### `statistic_cache_columns`
+
+- デフォルト: 100000
+- タイプ: Long
+- 単位: -
+- 変更可能: いいえ
+- 説明: 統計テーブルのためにキャッシュできる行数。
+- 導入バージョン: -
+
+##### `statistic_cache_thread_pool_size`
+
+- デフォルト: 10
+- タイプ: Int
+- 単位: -
+- 変更可能: いいえ
+- 説明: 統計キャッシュを更新するために使用されるスレッドプールのサイズ。
+- 導入バージョン: -
+
+##### `statistic_collect_interval_sec`
+
+- デフォルト: 5 * 60
+- タイプ: Long
+- 単位: 秒
+- 変更可能: はい
+- 説明: 自動収集中にデータ更新をチェックする間隔。
+- 導入バージョン: -
+
+##### `statistic_max_full_collect_data_size`
+
+- デフォルト: 100 * 1024 * 1024 * 1024
+- タイプ: Long
+- 単位: バイト
+- 変更可能: はい
+- 説明: 統計の自動収集におけるデータサイズしきい値。合計サイズがこの値を超えると、完全収集ではなくサンプリング収集が実行されます。
+- 導入バージョン: -
+
+##### `statistic_sample_collect_rows`
+
+- デフォルト: 200000
+- タイプ: Long
+- 単位: -
+- 変更可能: はい
+- 説明: ロードによってトリガーされる統計操作中に、SAMPLE統計収集とFULL統計収集のどちらを選択するかを決定するための行数しきい値。ロードまたは変更された行数がこのしきい値（デフォルト200,000）を超えると、SAMPLE統計収集が使用されます。それ以外の場合は、FULL統計収集が使用されます。この設定は `enable_statistic_collect_on_first_load` および `statistic_sample_collect_ratio_threshold_of_first_load` と連携して機能します。
+- 導入バージョン: -
+
+##### `statistic_update_interval_sec`
+
+- デフォルト: 24 * 60 * 60
+- タイプ: Long
+- 単位: 秒
+- 変更可能: はい
+- 説明: 統計情報のキャッシュが更新される間隔。
+- 導入バージョン: -
+
+##### `task_check_interval_second`
+
+- デフォルト: 60
+- タイプ: Int
+- 単位: 秒
+- 変更可能: はい
+- 説明: タスクバックグラウンドジョブの実行間隔。GlobalStateMgrは、この値を使用して `doTaskBackgroundJob()` を呼び出すTaskCleaner FrontendDaemonをスケジュールします。この値は1000倍されて、デーモン間隔がミリ秒単位で設定されます。値を減らすと、バックグラウンドメンテナンス（タスクのクリーンアップ、チェック）がより頻繁に実行され、反応が速くなりますが、CPU/IOオーバーヘッドが増加します。値を増やすと、オーバーヘッドは減少しますが、クリーンアップと古いタスクの検出が遅れます。この値を調整して、メンテナンスの応答性とリソース使用量のバランスを取ってください。
+- 導入バージョン: v3.2.0
+
+##### `task_min_schedule_interval_s`
+
+- デフォルト: 10
+- タイプ: Int
+- 単位: 秒
+- 変更可能: はい
+- 説明: SQLレイヤーによってチェックされるタスクスケジュールの最小許容スケジュール間隔（秒単位）。タスクが送信されると、TaskAnalyzerはスケジュール期間を秒に変換し、期間が `task_min_schedule_interval_s` より小さい場合、`ERR_INVALID_PARAMETER` で送信を拒否します。これにより、頻繁すぎるタスクの作成を防ぎ、スケジューラを高頻度タスクから保護します。スケジュールに明示的な開始時刻がない場合、TaskAnalyzerは開始時刻を現在のエポック秒に設定します。
+- 導入バージョン: v3.3.0, v3.4.0, v3.5.0
+
+##### `task_runs_timeout_second`
+
+- デフォルト: 4 * 3600
+- タイプ: Int
+- 単位: 秒
+- 変更可能: はい
+- 説明: TaskRunのデフォルト実行タイムアウト（秒単位）。この項目は、TaskRunの実行においてベースラインのタイムアウトとして使用されます。タスク実行のプロパティに、正の整数値を持つセッション変数 `query_timeout` または `insert_timeout` が含まれている場合、ランタイムはそのセッションタイムアウトと `task_runs_timeout_second` のうち大きい方の値を使用します。実効タイムアウトは、設定された `task_runs_ttl_second` および `task_ttl_second` を超えないように制限されます。この項目を設定して、タスク実行が実行できる時間を制限します。非常に大きな値は、タスク/タスク実行のTTL設定によって切り詰められる場合があります。
+- 導入バージョン: -
+
+### ロードとアンロード
+
+##### `broker_load_default_timeout_second`
+
+- デフォルト: 14400
+- タイプ: Int
+- 単位: 秒
+- 変更可能: はい
+- 説明: Broker Loadジョブのタイムアウト期間。
+- 導入バージョン: -
+
+##### `desired_max_waiting_jobs`
+
+- デフォルト: 1024
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: FE内の保留中のジョブの最大数。この数は、テーブル作成、ロード、スキーマ変更ジョブなど、すべてのジョブを指します。FE内の保留中のジョブの数がこの値に達すると、FEは新しいロードリクエストを拒否します。このパラメーターは、非同期ロードにのみ有効です。v2.5以降、デフォルト値は100から1024に変更されました。
+- 導入バージョン: -
+
+##### `disable_load_job`
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: クラスターがエラーに遭遇したときにロードを無効にするかどうか。これにより、クラスターエラーによって引き起こされる損失を防ぎます。デフォルト値は`FALSE`で、ロードが無効になっていないことを示します。`TRUE`はロードが無効になり、クラスターが読み取り専用状態であることを示します。
+- 導入バージョン: -
+
+##### `empty_load_as_error`
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: データがロードされなかった場合に、「all partitions have no load data」というエラーメッセージを返すかどうか。有効な値:
+  - `true`: データがロードされなかった場合、システムは失敗メッセージを表示し、「all partitions have no load data」というエラーを返します。
+  - `false`: データがロードされなかった場合、システムは成功メッセージを表示し、エラーではなくOKを返します。
+- 導入バージョン: -
+
+##### `enable_file_bundling`
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: クラウドネイティブテーブルのFile Bundling最適化を有効にするかどうか。この機能が有効になっている場合（`true`に設定されている場合）、システムはロード、Compaction、またはPublish操作によって生成されたデータファイルを自動的にバンドルし、外部ストレージシステムへの高頻度アクセスによって発生するAPIコストを削減します。この動作は、CREATE TABLEプロパティ`file_bundling`を使用してテーブルレベルで制御することもできます。詳細な手順については、[CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md)を参照してください。
+- 導入バージョン: v4.0
+
+##### `enable_routine_load_lag_metrics`
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: Routine Load Kafkaパーティションオフセットラグメトリクスを収集するかどうか。この項目を`true`に設定すると、Kafka APIを呼び出してパーティションの最新オフセットを取得することに注意してください。
+- 導入バージョン: -
+
+##### `enable_sync_publish`
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: ロードトランザクションのpublishフェーズでapplyタスクを同期的に実行するかどうか。このパラメーターはPrimary Keyテーブルにのみ適用されます。有効な値:
+  - `TRUE` (デフォルト): ロードトランザクションのpublishフェーズでapplyタスクが同期的に実行されます。これは、applyタスクが完了した後にのみロードトランザクションが成功として報告され、ロードされたデータが実際にクエリ可能になることを意味します。一度に大量のデータをロードしたり、頻繁にデータをロードしたりするタスクの場合、このパラメーターを`true`に設定すると、クエリのパフォーマンスと安定性が向上しますが、ロードのレイテンシーが増加する可能性があります。
+  - `FALSE`: ロードトランザクションのpublishフェーズでapplyタスクが非同期的に実行されます。これは、applyタスクが送信された後にロードトランザクションが成功として報告されますが、ロードされたデータはすぐにクエリできないことを意味します。この場合、同時クエリはapplyタスクが完了するかタイムアウトするまで待機してから続行する必要があります。一度に大量のデータをロードしたり、頻繁にデータをロードしたりするタスクの場合、このパラメーターを`false`に設定すると、クエリのパフォーマンスと安定性に影響を与える可能性があります。
+- 導入バージョン: v3.2.0
+
+##### `export_checker_interval_second`
 
 - デフォルト: 5
 - タイプ: Int
@@ -3256,7 +2318,16 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: ロードジョブがスケジュールされる時間間隔。
 - 導入バージョン: -
 
-##### export_running_job_num_limit
+##### `export_max_bytes_per_be_per_task`
+
+- デフォルト: 268435456
+- タイプ: Long
+- 単位: バイト
+- 変更可能: はい
+- 説明: 単一のデータアンロードタスクによって、単一のBEからエクスポートできるデータの最大量。
+- 導入バージョン: -
+
+##### `export_running_job_num_limit`
 
 - デフォルト: 5
 - タイプ: Int
@@ -3265,38 +2336,52 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: 並行して実行できるデータエクスポートタスクの最大数。
 - 導入バージョン: -
 
-##### empty_load_as_error
+##### `export_task_default_timeout_second`
 
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
+- デフォルト: 2 * 3600
+- タイプ: Int
+- 単位: 秒
 - 変更可能: はい
-- 説明: データがロードされていない場合に「すべてのパーティションにロードデータがありません」というエラーメッセージを返すかどうか。有効な値:
-  - `true`: データがロードされていない場合、システムは失敗メッセージを表示し、「すべてのパーティションにロードデータがありません」というエラーを返します。
-  - `false`: データがロードされていない場合、システムは成功メッセージを表示し、エラーの代わりに OK を返します。
+- 説明: データエクスポートタスクのタイムアウト期間。
 - 導入バージョン: -
 
-##### external_table_commit_timeout_ms
+##### `export_task_pool_size`
+
+- デフォルト: 5
+- タイプ: Int
+- 単位: -
+- 変更可能: いいえ
+- 説明: アンロードタスクスレッドプールのサイズ。
+- 導入バージョン: -
+
+##### `external_table_commit_timeout_ms`
 
 - デフォルト: 10000
 - タイプ: Int
 - 単位: ミリ秒
 - 変更可能: はい
-- 説明: StarRocks 外部テーブルへの書き込みトランザクションをコミット（公開）するためのタイムアウト期間。デフォルト値 `10000` は 10 秒のタイムアウト期間を示します。
+- 説明: StarRocks外部テーブルへの書き込みトランザクションをコミット（publish）するためのタイムアウト期間。デフォルト値`10000`は10秒のタイムアウト期間を示します。
 - 導入バージョン: -
 
-##### enable_sync_publish
+##### `history_job_keep_max_second`
 
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
+- デフォルト: 7 * 24 * 3600
+- タイプ: Int
+- 単位: 秒
 - 変更可能: はい
-- 説明: ロードトランザクションの公開フェーズで適用タスクを同期的に実行するかどうか。このパラメータは主キーテーブルにのみ適用されます。有効な値:
-  - `TRUE` (デフォルト): ロードトランザクションの公開フェーズで適用タスクが同期的に実行されます。これは、適用タスクが完了した後にロードトランザクションが成功として報告され、ロードされたデータが実際にクエリ可能であることを意味します。タスクが一度に大量のデータをロードするか、頻繁にデータをロードする場合、このパラメータを `true` に設定すると、クエリパフォーマンスと安定性が向上しますが、ロードの遅延が増加する可能性があります。
-  - `FALSE`: ロードトランザクションの公開フェーズで適用タスクが非同期的に実行されます。これは、適用タスクが送信された後にロードトランザクションが成功として報告されますが、ロードされたデータはすぐにはクエリできないことを意味します。この場合、同時クエリは適用タスクが完了するかタイムアウトするまで待機する必要があります。タスクが一度に大量のデータをロードするか、頻繁にデータをロードする場合、このパラメータを `false` に設定すると、クエリパフォーマンスと安定性に影響を与える可能性があります。
-- 導入バージョン: v3.2.0
+- 説明: スキーマ変更ジョブなど、履歴ジョブを保持できる最大期間。
+- 導入バージョン: -
 
-##### label_clean_interval_second
+##### `insert_load_default_timeout_second`
+
+- デフォルト: 3600
+- タイプ: Int
+- 単位: 秒
+- 変更可能: はい
+- 説明: データをロードするために使用されるINSERT INTOステートメントのタイムアウト期間。
+- 導入バージョン: -
+
+##### `label_clean_interval_second`
 
 - デフォルト: 4 * 3600
 - タイプ: Int
@@ -3305,7 +2390,305 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: ラベルがクリーンアップされる時間間隔。単位: 秒。履歴ラベルがタイムリーにクリーンアップされるように、短い時間間隔を指定することをお勧めします。
 - 導入バージョン: -
 
-##### transaction_clean_interval_second
+##### `label_keep_max_num`
+
+- デフォルト: 1000
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: ある期間内に保持できるロードジョブの最大数。この数を超えると、履歴ジョブの情報は削除されます。
+- 導入バージョン: -
+
+##### `label_keep_max_second`
+
+- デフォルト: 3 * 24 * 3600
+- タイプ: Int
+- 単位: 秒
+- 変更可能: はい
+- 説明: 完了し、FINISHEDまたはCANCELLED状態にあるロードジョブのラベルを保持する最大期間（秒単位）。デフォルト値は3日です。この期間が経過すると、ラベルは削除されます。このパラメーターは、すべての種類のロードジョブに適用されます。値が大きすぎると、多くのメモリを消費します。
+- 導入バージョン: -
+
+##### `load_checker_interval_second`
+
+- デフォルト: 5
+- タイプ: Int
+- 単位: 秒
+- 変更可能: いいえ
+- 説明: ロードジョブがローリングベースで処理される時間間隔。
+- 導入バージョン: -
+
+##### `load_parallel_instance_num`
+
+- デフォルト: 1
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: BrokerおよびStream Loadに対して、単一ホスト上に作成される並列ロードフラグメントインスタンスの数を制御します。セッションが適応型シンクDOPを有効にしない限り、LoadPlannerはこの値をホストごとの並列度として使用します。セッション変数`enable_adaptive_sink_dop`がtrueの場合、セッションの`sink_degree_of_parallelism`がこの設定を上書きします。シャッフルが必要な場合、この値はフラグメントの並列実行（スキャンフラグメントとシンクフラグメントの並列実行インスタンス）に適用されます。シャッフルが不要な場合、シンクパイプラインDOPとして使用されます。注: ローカルファイルからのロードは、ローカルディスクの競合を避けるために単一インスタンス（パイプラインDOP = 1、並列実行 = 1）に強制されます。この数を増やすと、ホストごとの同時実行性とスループットが向上しますが、CPU、メモリ、I/Oの競合が増加する可能性があります。
+- 導入バージョン: v3.2.0
+
+##### `load_straggler_wait_second`
+
+- デフォルト: 300
+- タイプ: Int
+- 単位: 秒
+- 変更可能: はい
+- 説明: BEレプリカが許容できる最大ロード遅延。この値を超えると、他のレプリカからデータをクローンするためにクローニングが実行されます。
+- 導入バージョン: -
+
+##### `loads_history_retained_days`
+
+- デフォルト: 30
+- タイプ: Int
+- 単位: 日
+- 変更可能: はい
+- 説明: 内部`_statistics_.loads_history`テーブルにロード履歴を保持する日数。この値は、テーブル作成時にテーブルプロパティ`partition_live_number`を設定するために使用され、`TableKeeper`に渡されて（最小1にクランプされて）保持する日次パーティションの数を決定します。この値を増減すると、完了したロードジョブが日次パーティションに保持される期間が調整されます。これは新しいテーブル作成とキーパーのプルーニング動作に影響しますが、過去のパーティションを自動的に再作成することはありません。`LoadsHistorySyncer`は、ロード履歴のライフサイクルを管理する際にこの保持に依存します。その同期頻度は`loads_history_sync_interval_second`によって制御されます。
+- 導入バージョン: v3.3.6, v3.4.0, v3.5.0
+
+##### `loads_history_sync_interval_second`
+
+- デフォルト: 60
+- タイプ: Int
+- 単位: 秒
+- 変更可能: はい
+- 説明: LoadsHistorySyncerが`information_schema.loads`から内部`_statistics_.loads_history`テーブルへ完了したロードジョブの定期的な同期をスケジュールするために使用する間隔（秒単位）。この値はコンストラクタで1000倍され、FrontendDaemonの間隔を設定します。シンクロナイザーは最初の実行をスキップし（テーブル作成を許可するため）、1分以上前に完了したロードのみをインポートします。小さい値はDMLとエグゼキュータの負荷を増加させ、大きい値は履歴ロードレコードの可用性を遅らせます。ターゲットテーブルの保持/パーティショニング動作については、`loads_history_retained_days`を参照してください。
+- 導入バージョン: v3.3.6, v3.4.0, v3.5.0
+
+##### `max_broker_load_job_concurrency`
+
+- デフォルト: 5
+- エイリアス: `async_load_task_pool_size`
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: StarRocksクラスター内で許可されるBroker Loadジョブの最大同時実行数。このパラメーターはBroker Loadにのみ有効です。このパラメーターの値は、`max_running_txn_num_per_db`の値よりも小さくなければなりません。v2.5以降、デフォルト値は`10`から`5`に変更されました。
+- 導入バージョン: -
+
+##### `max_load_timeout_second`
+
+- デフォルト: 259200
+- タイプ: Int
+- 単位: 秒
+- 変更可能: はい
+- 説明: ロードジョブに許可される最大タイムアウト期間。この制限を超えると、ロードジョブは失敗します。この制限は、すべての種類のロードジョブに適用されます。
+- 導入バージョン: -
+
+##### `max_routine_load_batch_size`
+
+- デフォルト: 4294967296
+- タイプ: Long
+- 単位: バイト
+- 変更可能: はい
+- 説明: Routine Loadタスクによってロードできるデータの最大量。
+- 導入バージョン: -
+
+##### `max_routine_load_task_concurrent_num`
+
+- デフォルト: 5
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: 各Routine Loadジョブの最大同時タスク数。
+- 導入バージョン: -
+
+##### `max_routine_load_task_num_per_be`
+
+- デフォルト: 16
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: 各BEでのRoutine Loadタスクの最大同時実行数。v3.1.0以降、このパラメーターのデフォルト値は5から16に増加し、BE静的パラメーター`routine_load_thread_pool_size`（非推奨）の値以下である必要はなくなりました。
+- 導入バージョン: -
+
+##### `max_running_txn_num_per_db`
+
+- デフォルト: 1000
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: StarRocksクラスター内の各データベースで実行が許可されるロードトランザクションの最大数。デフォルト値は`1000`です。v3.1以降、デフォルト値は`100`から`1000`に変更されました。データベースで実行中のロードトランザクションの実際の数がこのパラメーターの値を超えると、新しいロードリクエストは処理されません。同期ロードジョブの新しいリクエストは拒否され、非同期ロードジョブの新しいリクエストはキューに入れられます。このパラメーターの値を増やすとシステム負荷が増加するため、増やすことは推奨しません。
+- 導入バージョン: -
+
+##### `max_stream_load_timeout_second`
+
+- デフォルト: 259200
+- タイプ: Int
+- 単位: 秒
+- 変更可能: はい
+- 説明: Stream Loadジョブに許可される最大タイムアウト期間。
+- 導入バージョン: -
+
+##### `max_tolerable_backend_down_num`
+
+- デフォルト: 0
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: 許可される障害のあるBEノードの最大数。この数を超えると、Routine Loadジョブは自動的に回復できません。
+- 導入バージョン: -
+
+##### `min_bytes_per_broker_scanner`
+
+- デフォルト: 67108864
+- タイプ: Long
+- 単位: バイト
+- 変更可能: はい
+- 説明: Broker Loadインスタンスによって処理できるデータの最小許容量。
+- 導入バージョン: -
+
+##### `min_load_timeout_second`
+
+- デフォルト: 1
+- タイプ: Int
+- 単位: 秒
+- 変更可能: はい
+- 説明: ロードジョブに許可される最小タイムアウト期間。この制限は、すべての種類のロードジョブに適用されます。
+- 導入バージョン: -
+
+##### `min_routine_load_lag_for_metrics`
+
+- デフォルト: 10000
+- タイプ: INT
+- 単位: -
+- 変更可能: はい
+- 説明: モニタリングメトリクスに表示されるRoutine Loadジョブの最小オフセットラグ。オフセットラグがこの値よりも大きいRoutine Loadジョブは、メトリクスに表示されます。
+- 導入バージョン: -
+
+##### `period_of_auto_resume_min`
+
+- デフォルト: 5
+- タイプ: Int
+- 単位: 分
+- 変更可能: はい
+- 説明: Routine Loadジョブが自動的に回復される間隔。
+- 導入バージョン: -
+
+##### `prepared_transaction_default_timeout_second`
+
+- デフォルト: 86400
+- タイプ: Int
+- 単位: 秒
+- 変更可能: はい
+- 説明: 準備済みトランザクションのデフォルトのタイムアウト期間。
+- 導入バージョン: -
+
+##### `routine_load_task_consume_second`
+
+- デフォルト: 15
+- タイプ: Long
+- 単位: 秒
+- 変更可能: はい
+- 説明: クラスター内の各Routine Loadタスクがデータを消費する最大時間。v3.1.0以降、Routine Loadジョブは[`job_properties`](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md#job_properties)に新しいパラメーター`task_consume_second`をサポートしています。このパラメーターは、Routine Loadジョブ内の個々のロードタスクに適用され、より柔軟です。
+- 導入バージョン: -
+
+##### `routine_load_task_timeout_second`
+
+- デフォルト: 60
+- タイプ: Long
+- 単位: 秒
+- 変更可能: はい
+- 説明: クラスター内の各Routine Loadタスクのタイムアウト期間。v3.1.0以降、Routine Loadジョブは[`job_properties`](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md#job_properties)に新しいパラメーター`task_timeout_second`をサポートしています。このパラメーターは、Routine Loadジョブ内の個々のロードタスクに適用され、より柔軟です。
+- 導入バージョン: -
+
+##### `routine_load_unstable_threshold_second`
+
+- デフォルト: 3600
+- タイプ: Long
+- 単位: 秒
+- 変更可能: はい
+- 説明: Routine Loadジョブ内のいずれかのタスクが遅延した場合、Routine LoadジョブはUNSTABLE状態に設定されます。具体的には、消費されているメッセージのタイムスタンプと現在の時刻との差がこのしきい値を超え、データソースに未消費のメッセージが存在する場合です。
+- 導入バージョン: -
+
+##### `spark_dpp_version`
+
+- デフォルト: 1.0.0
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: 使用されるSpark Dynamic Partition Pruning (DPP) のバージョン。
+- 導入バージョン: -
+
+##### `spark_home_default_dir`
+
+- デフォルト: `StarRocksFE.STARROCKS_HOME_DIR` + "/lib/spark2x"
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: Sparkクライアントのルートディレクトリ。
+- 導入バージョン: -
+
+##### `spark_launcher_log_dir`
+
+- デフォルト: `sys_log_dir` + "/spark_launcher_log"
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: Sparkログファイルを保存するディレクトリ。
+- 導入バージョン: -
+
+##### `spark_load_default_timeout_second`
+
+- デフォルト: 86400
+- タイプ: Int
+- 単位: 秒
+- 変更可能: はい
+- 説明: 各Spark Loadジョブのタイムアウト期間。
+- 導入バージョン: -
+
+##### `spark_load_submit_timeout_second`
+
+- デフォルト: 300
+- タイプ: long
+- 単位: 秒
+- 変更可能: いいえ
+- 説明: Sparkアプリケーションを送信した後、YARN応答を待機する最大時間（秒単位）。`SparkLauncherMonitor.LogMonitor`はこの値をミリ秒に変換し、ジョブがこのタイムアウトよりも長くUNKNOWN/CONNECTED/SUBMITTED状態のままである場合、監視を停止し、Sparkランチャープロセスを強制終了します。`SparkLoadJob`はこの設定をデフォルトとして読み取り、`LoadStmt.SPARK_LOAD_SUBMIT_TIMEOUT`プロパティを介してロードごとの上書きを許可します。YARNのキューイング遅延に対応できる十分な高さに設定してください。低すぎると正当にキューに入れられたジョブが中断される可能性があり、高すぎると障害処理とリソースクリーンアップが遅れる可能性があります。
+- 導入バージョン: v3.2.0
+
+##### `spark_resource_path`
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: Spark依存関係パッケージのルートディレクトリ。
+- 導入バージョン: -
+
+##### `stream_load_default_timeout_second`
+
+- デフォルト: 600
+- タイプ: Int
+- 単位: 秒
+- 変更可能: はい
+- 説明: 各Stream Loadジョブのデフォルトのタイムアウト期間。
+- 導入バージョン: -
+
+##### `stream_load_max_txn_num_per_be`
+
+- デフォルト: -1
+- タイプ: Int
+- 単位: トランザクション
+- 変更可能: はい
+- 説明: 単一のBE（バックエンド）ホストから受け入れられる同時Stream Loadトランザクションの数を制限します。非負の整数に設定すると、FrontendServiceImplはBE（クライアントIP別）の現在のトランザクション数をチェックし、その数がこの制限`>=`を超えた場合、新しいStream Load開始リクエストを拒否します。`< 0`の値は制限を無効にします（無制限）。このチェックはStream Load開始時に行われ、超過すると`streamload txn num per be exceeds limit`エラーが発生する可能性があります。関連するランタイム動作では、リクエストタイムアウトのフォールバックに`stream_load_default_timeout_second`を使用します。
+- 導入バージョン: v3.3.0, v3.4.0, v3.5.0
+
+##### `stream_load_task_keep_max_num`
+
+- デフォルト: 1000
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: StreamLoadMgrがメモリに保持するStream Loadタスクの最大数（すべてのデータベースでグローバル）。追跡されているタスク（`idToStreamLoadTask`）の数がこのしきい値を超えると、StreamLoadMgrはまず`cleanSyncStreamLoadTasks()`を呼び出して完了した同期Stream Loadタスクを削除します。サイズがまだこのしきい値の半分よりも大きいままである場合、`cleanOldStreamLoadTasks(true)`を呼び出して古いタスクまたは完了したタスクを強制的に削除します。この値を増やすと、より多くのタスク履歴をメモリに保持できます。減らすと、メモリ使用量を削減し、クリーンアップをより積極的に行えます。この値はメモリ内の保持のみを制御し、永続化/リプレイされたタスクには影響しません。
+- 導入バージョン: v3.2.0
+
+##### `stream_load_task_keep_max_second`
+
+- デフォルト: 3 * 24 * 3600
+- タイプ: Int
+- 単位: 秒
+- 変更可能: はい
+- 説明: 完了またはキャンセルされたStream Loadタスクの保持期間。タスクが最終状態に達し、その終了タイムスタンプがこのしきい値（`currentMs - endTimeMs > stream_load_task_keep_max_second * 1000`）よりも早い場合、`StreamLoadMgr.cleanOldStreamLoadTasks`による削除の対象となり、永続化された状態をロードする際に破棄されます。`StreamLoadTask`と`StreamLoadMultiStmtTask`の両方に適用されます。合計タスク数が`stream_load_task_keep_max_num`を超えると、クリーンアップが早期にトリガーされる可能性があります（同期タスクは`cleanSyncStreamLoadTasks`によって優先されます）。履歴/デバッグ可能性とメモリ使用量のバランスを取るためにこれを設定してください。
+- 導入バージョン: v3.2.0
+
+##### `transaction_clean_interval_second`
 
 - デフォルト: 30
 - タイプ: Int
@@ -3314,1125 +2697,61 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: 完了したトランザクションがクリーンアップされる時間間隔。単位: 秒。完了したトランザクションがタイムリーにクリーンアップされるように、短い時間間隔を指定することをお勧めします。
 - 導入バージョン: -
 
-### ストレージ
-
-##### default_replication_num
-
-- デフォルト: 3
-- タイプ: Short
-- 単位: -
-- 変更可能: はい
-- 説明: StarRocks でテーブルを作成する際に各データパーティションのデフォルトのレプリカ数を設定します。この設定は、CREATE TABLE DDL で `replication_num=x` を指定することでオーバーライドできます。
-- 導入バージョン: -
-
-##### enable_strict_storage_medium_check
-
-- デフォルト: false
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: ユーザーがテーブルを作成する際に、FE が BEs の記憶媒体を厳密にチェックするかどうか。このパラメータが `TRUE` に設定されている場合、ユーザーがテーブルを作成する際に FE は BEs の記憶媒体をチェックし、CREATE TABLE ステートメントで指定された `storage_medium` パラメータと異なる場合はエラーを返します。たとえば、CREATE TABLE ステートメントで指定された記憶媒体が SSD であるが、BEs の実際の記憶媒体が HDD である場合、テーブル作成は失敗します。このパラメータが `FALSE` の場合、ユーザーがテーブルを作成する際に FE は BEs の記憶媒体をチェックしません。
-- 導入バージョン: -
-=======
-##### `enable_local_replica_selection`
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: クエリのためにローカルレプリカを選択するかどうか。ローカルレプリカはネットワーク転送コストを削減します。このパラメーターが TRUE に設定されている場合、CBO は現在の FE と同じ IP アドレスを持つ BE 上のタブレットレプリカを優先的に選択します。このパラメーターが `FALSE` に設定されている場合、ローカルレプリカと非ローカルレプリカの両方を選択できます。
-- Introduced in: -
-
-##### `enable_manual_collect_array_ndv`
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: ARRAY 型の NDV 情報の手動収集を有効にするかどうか。
-- Introduced in: v4.0
-
-##### `enable_materialized_view`
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: マテリアライズドビューの作成を有効にするかどうか。
-- Introduced in: -
-
-##### `enable_materialized_view_external_table_precise_refresh`
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: 基底テーブルが外部 (クラウドネイティブではない) テーブルである場合に、マテリアライズドビューの更新のための内部最適化を有効にするには、この項目を `true` に設定します。有効にすると、マテリアライズドビューの更新プロセッサは候補パーティションを計算し、すべてのパーティションではなく影響を受ける基底テーブルパーティションのみを更新し、I/O と更新コストを削減します。外部テーブルの完全パーティション更新を強制するには `false` に設定します。
-- Introduced in: v3.2.9
-
-##### `enable_materialized_view_metrics_collect`
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: 非同期マテリアライズドビューの監視メトリックをデフォルトで収集するかどうか。
-- Introduced in: v3.1.11, v3.2.5
-
-##### `enable_materialized_view_spill`
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: マテリアライズドビュー更新タスクの途中結果スピルを有効にするかどうか。
-- Introduced in: v3.1.1
-
-##### `enable_materialized_view_text_based_rewrite`
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: デフォルトでテキストベースのクエリ書き換えを有効にするかどうか。この項目が `true` に設定されている場合、システムは非同期マテリアライズドビューの作成中に抽象構文ツリーを構築します。
-- Introduced in: v3.2.5
-
-##### `enable_mv_automatic_active_check`
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: スキーマ変更または基底テーブル (ビュー) の削除と再作成によって非アクティブになった非同期マテリアライズドビューを、システムが自動的にチェックして再アクティブ化する機能を有効にするかどうか。この機能は、ユーザーが手動で非アクティブに設定したマテリアライズドビューを再アクティブ化しないことに注意してください。
-- Introduced in: v3.1.6
-
-##### `enable_mv_automatic_repairing_for_broken_base_tables`
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: この項目が `true` に設定されている場合、StarRocks は、基底外部テーブルが削除され再作成されたり、テーブル識別子が変更されたりした場合に、マテリアライズドビューの基底テーブルメタデータを自動的に修復しようとします。修復フローは、マテリアライズドビューの基底テーブル情報を更新し、外部テーブルパーティションのパーティションレベルの修復情報を収集し、`autoRefreshPartitionsLimit` を尊重しながら非同期自動更新マテリアライズドビューのパーティション更新決定を駆動することができます。現在、自動修復は Hive 外部テーブルをサポートしています。サポートされていないテーブルタイプでは、マテリアライズドビューが非アクティブに設定され、修復例外が発生します。パーティション情報収集は非ブロッキングであり、失敗はログに記録されます。
-- Introduced in: v3.3.19, v3.4.8, v3.5.6
-
-##### `enable_predicate_columns_collection`
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: 述語列収集を有効にするかどうか。無効にすると、クエリオプティマイゼーション中に述語列は記録されません。
-- Introduced in: -
-
-##### `enable_query_queue_v2`
-
-- Default: true
-- Type: boolean
-- Unit: -
-- Is mutable: No
-- Description: true の場合、FE のスロットベースクエリスケジューラを Query Queue V2 に切り替えます。このフラグはスロットマネージャーとトラッカー (例: `BaseSlotManager.isEnableQueryQueueV2` と `SlotTracker#createSlotSelectionStrategy`) によって読み取られ、レガシー戦略ではなく `SlotSelectionStrategyV2` を選択します。`query_queue_v2_xxx` 構成オプションと `QueryQueueOptions` は、このフラグが有効な場合にのみ有効になります。v4.1 以降、デフォルト値は `false` から `true` に変更されました。
-- Introduced in: v3.3.4, v3.4.0, v3.5.0
-
-##### `enable_sql_blacklist`
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: SQL クエリのブラックリストチェックを有効にするかどうか。この機能が有効になっている場合、ブラックリスト内のクエリは実行できません。
-- Introduced in: -
-
-##### `enable_statistic_collect`
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: CBO の統計情報を収集するかどうか。この機能はデフォルトで有効になっています。
-- Introduced in: -
-
-##### `enable_statistic_collect_on_first_load`
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: データロード操作によってトリガーされる自動統計収集とメンテナンスを制御します。これには以下が含まれます。
-  - データがパーティションに最初にロードされたとき (パーティションバージョンが 2 のとき) の統計収集。
-  - マルチパーティションテーブルの空のパーティションにデータがロードされたときの統計収集。
-  - INSERT OVERWRITE 操作の統計コピーと更新。
-
-  **統計収集タイプの決定ポリシー:**
-  
-  - INSERT OVERWRITE の場合: `deltaRatio = |targetRows - sourceRows| / (sourceRows + 1)`
-    - `deltaRatio < statistic_sample_collect_ratio_threshold_of_first_load` (デフォルト: 0.1) の場合、統計収集は実行されません。既存の統計のみがコピーされます。
-    - それ以外の場合、`targetRows > statistic_sample_collect_rows` (デフォルト: 200000) の場合、SAMPLE 統計収集が使用されます。
-    - それ以外の場合、FULL 統計収集が使用されます。
-  
-  - 最初のロードの場合: `deltaRatio = loadRows / (totalRows + 1)`
-    - `deltaRatio < statistic_sample_collect_ratio_threshold_of_first_load` (デフォルト: 0.1) の場合、統計収集は実行されません。
-    - それ以外の場合、`loadRows > statistic_sample_collect_rows` (デフォルト: 200000) の場合、SAMPLE 統計収集が使用されます。
-    - それ以外の場合、FULL 統計収集が使用されます。
-  
-  **同期動作:**
-  
-  - DML ステートメント (INSERT INTO/INSERT OVERWRITE) の場合: テーブルロックを使用した同期モード。ロード操作は統計収集が完了するまで待機します (最大 `semi_sync_collect_statistic_await_seconds` まで)。
-  - ストリームロードとブローカーロードの場合: ロックなしの非同期モード。統計収集はバックグラウンドで実行され、ロード操作をブロックしません。
-  
-  :::note
-  この設定を無効にすると、ロードトリガー統計操作がすべて防止されます。これには INSERT OVERWRITE の統計メンテナンスも含まれ、テーブルに統計が不足する可能性があります。新しいテーブルが頻繁に作成され、データが頻繁にロードされる場合、この機能を有効にするとメモリと CPU のオーバーヘッドが増加します。
-  :::
-
-- Introduced in: v3.1
-
-##### `enable_statistic_collect_on_update`
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: UPDATE ステートメントが自動統計収集をトリガーできるかどうかを制御します。有効にすると、テーブルデータを変更する UPDATE 操作は、`enable_statistic_collect_on_first_load` によって制御される同じインジェストベースの統計フレームワークを通じて統計収集をスケジュールする可能性があります。この設定を無効にすると、UPDATE ステートメントの統計収集はスキップされますが、ロードトリガー統計収集の動作は変更されません。
-- Introduced in: v3.5.11, v4.0.4
-
-##### `enable_udf`
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- Description: UDF を有効にするかどうか。
-- Introduced in: -
-
-##### `expr_children_limit`
-
-- Default: 10000
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: 式で許可される子式の最大数。
-- Introduced in: -
-
-##### `histogram_buckets_size`
-
-- Default: 64
-- Type: Long
-- Unit: -
-- Is mutable: Yes
-- Description: ヒストグラムのデフォルトのバケット数。
-- Introduced in: -
-
-##### `histogram_max_sample_row_count`
-
-- Default: 10000000
-- Type: Long
-- Unit: -
-- Is mutable: Yes
-- Description: ヒストグラムで収集する最大行数。
-- Introduced in: -
-
-##### `histogram_mcv_size`
-
-- Default: 100
-- Type: Long
-- Unit: -
-- Is mutable: Yes
-- Description: ヒストグラムの最頻値 (MCV) の数。
-- Introduced in: -
-
-##### `histogram_sample_ratio`
-
-- Default: 0.1
-- Type: Double
-- Unit: -
-- Is mutable: Yes
-- Description: ヒストグラムのサンプリング比率。
-- Introduced in: -
-
-##### `http_slow_request_threshold_ms`
-
-- Default: 5000
-- Type: Int
-- Unit: Milliseconds
-- Is mutable: Yes
-- Description: HTTP リクエストの応答時間がこのパラメーターで指定された値を超えると、そのリクエストを追跡するためのログが生成されます。
-- Introduced in: v2.5.15, v3.1.5
-
-##### `lock_checker_enable_deadlock_check`
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: 有効にすると、LockChecker スレッドは ThreadMXBean.findDeadlockedThreads() を使用して JVM レベルのデッドロック検出を実行し、問題のあるスレッドのスタックトレースをログに記録します。このチェックは LockChecker デーモン内で実行され (その頻度は `lock_checker_interval_second` で制御されます)、詳細なスタック情報をログに書き込みます。これは CPU および I/O を集中的に行う可能性があります。このオプションは、ライブまたは再現可能なデッドロック問題のトラブルシューティングにのみ有効にしてください。通常の操作で有効のままにすると、オーバーヘッドとログのボリュームが増加する可能性があります。
-- Introduced in: v3.2.0
-
-##### `low_cardinality_threshold`
-
-- Default: 255
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description: 低カーディナリティ辞書のしきい値。
-- Introduced in: v3.5.0
-
-##### `materialized_view_min_refresh_interval`
-
-- Default: 60
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description: 非同期マテリアライズドビューのスケジュールで許可される最小更新間隔 (秒単位)。マテリアライズドビューが時間ベースの間隔で作成された場合、その間隔は秒に変換され、この値以上でなければなりません。そうでない場合、CREATE/ALTER 操作は DDL エラーで失敗します。この値が 0 より大きい場合、チェックが強制されます。TaskManager の過剰なスケジューリングと、頻繁すぎる更新による FE のメモリ/CPU 使用率の高さを防ぐため、制限を無効にするには 0 または負の値に設定します。この項目は `EVENT_TRIGGERED` の更新には適用されません。
-- Introduced in: v3.3.0, v3.4.0, v3.5.0
-
-##### `materialized_view_refresh_ascending`
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: この項目が `true` に設定されている場合、マテリアライズドビューのパーティション更新は昇順のパーティションキー順 (最も古いものから最も新しいものへ) でパーティションを反復処理します。`false` (デフォルト) に設定されている場合、システムは降順 (最も新しいものから最も古いものへ) で反復処理します。StarRocks は、パーティション更新制限が適用される場合に処理するパーティションを選択し、後続の TaskRun 実行の次の開始/終了パーティション境界を計算するために、リストパーティションおよび範囲パーティションのマテリアライズドビュー更新ロジックの両方でこの項目を使用します。この項目を変更すると、最初に更新されるパーティションと、次のパーティション範囲がどのように導出されるかが変わります。範囲パーティションのマテリアライズドビューの場合、スケジューラは新しい開始/終了を検証し、変更によって繰り返される境界 (デッドループ) が作成される場合はエラーを発生させるため、この項目は注意して設定してください。
-- Introduced in: v3.3.1, v3.4.0, v3.5.0
-
-##### `max_allowed_in_element_num_of_delete`
-
-- Default: 10000
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: DELETE ステートメントの IN 述語で許可される要素の最大数。
-- Introduced in: -
-
-##### `max_create_table_timeout_second`
-
-- Default: 600
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description: テーブル作成の最大タイムアウト期間。
-- Introduced in: -
-
-##### `max_distribution_pruner_recursion_depth`
-
-- Default: 100
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: パーティションプルーナーによって許可される最大再帰深度。再帰深度を増やすと、より多くの要素をプルーニングできますが、CPU 消費量も増加します。
-- Introduced in: -
-
-##### `max_partitions_in_one_batch`
-
-- Default: 4096
-- Type: Long
-- Unit: -
-- Is mutable: Yes
-- Description: 複数のパーティションを一括作成する際に作成できる最大パーティション数。
-- Introduced in: -
-
-##### `max_planner_scalar_rewrite_num`
-
-- Default: 100000
-- Type: Long
-- Unit: -
-- Is mutable: Yes
-- Description: オプティマイザがスカラー演算子を書き換えできる最大回数。
-- Introduced in: -
-
-##### `max_query_queue_history_slots_number`
-
-- Default: 0
-- Type: Int
-- Unit: Slots
-- Is mutable: Yes
-- Description: 監視および可観測性のために、クエリキューごとに保持される最近解放された (履歴) 割り当てスロットの数を制御します。`max_query_queue_history_slots_number` が `> 0` の値に設定されている場合、BaseSlotTracker は、その数の最も最近解放された LogicalSlot エントリをメモリ内キューに保持し、制限を超えると最も古いエントリを削除します。これを有効にすると、getSlots() にこれらの履歴エントリ (最新のものが最初) が含まれるようになり、BaseSlotTracker はより豊富な ExtraMessage データのために ConnectContext にスロットを登録しようとすることができ、LogicalSlot.ConnectContextListener はクエリ完了メタデータを履歴スロットにアタッチできます。`max_query_queue_history_slots_number` が `<= 0` の場合、履歴メカニズムは無効になります (余分なメモリは使用されません)。可観測性とメモリオーバーヘッドのバランスを取るために、適切な値を使用してください。
-- Introduced in: v3.5.0
-
-##### `max_query_retry_time`
-
-- Default: 2
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: FE でのクエリ再試行の最大数。
-- Introduced in: -
-
-##### `max_running_rollup_job_num_per_table`
-
-- Default: 1
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: テーブルに対して並行して実行できるロールアップジョブの最大数。
-- Introduced in: -
-
-##### `max_scalar_operator_flat_children`
-
-- Default：10000
-- Type：Int
-- Unit：-
-- Is mutable: Yes
-- Description：ScalarOperator のフラットな子の最大数。オプティマイザが過剰なメモリを使用するのを防ぐために、この制限を設定できます。
-- Introduced in: -
-
-##### `max_scalar_operator_optimize_depth`
-
-- Default：256
-- Type：Int
-- Unit：-
-- Is mutable: Yes
-- Description: ScalarOperator 最適化が適用できる最大深度。
-- Introduced in: -
-
-##### `mv_active_checker_interval_seconds`
-
-- Default: 60
-- Type: Long
-- Unit: Seconds
-- Is mutable: Yes
-- Description: バックグラウンドの `active_checker` スレッドが有効な場合、システムは定期的に、スキーマ変更または基底テーブル (ビュー) の再構築によって非アクティブになったマテリアライズドビューを検出して自動的に再アクティブ化します。このパラメーターは、チェッカー スレッドのスケジューリング間隔を秒単位で制御します。デフォルト値はシステム定義です。
-- Introduced in: v3.1.6
-
-##### `mv_rewrite_consider_data_layout_mode`
-
-- Default: `enable`
-- Type: String
-- Unit: -
-- Is mutable: Yes
-- Description: 最適なマテリアライズドビューを選択する際に、マテリアライズドビューの書き換えで基底テーブルのデータレイアウトを考慮するかどうかを制御します。有効な値:
-  - `disable`: 候補マテリアライズドビューを選択する際に、データレイアウト基準を使用しない。
-  - `enable`: クエリがレイアウトを意識していると認識された場合にのみ、データレイアウト基準を使用する。
-  - `force`: 最適なマテリアライズドビューを選択する際に、常にデータレイアウト基準を適用する。
-  この項目を変更すると、`BestMvSelector` の動作に影響し、物理的なレイアウトが計画の正確性やパフォーマンスに影響するかどうかに応じて、書き換えの適用範囲を改善または拡大することができます。
-- Introduced in: -
-
-##### `publish_version_interval_ms`
-
-- Default: 10
-- Type: Int
-- Unit: Milliseconds
-- Is mutable: No
-- Description: リリース検証タスクが発行される時間間隔。
-- Introduced in: -
-
-##### `query_queue_slots_estimator_strategy`
-
-- Default: MAX
-- Type: String
-- Unit: -
-- Is mutable: Yes
-- Description: `enable_query_queue_v2` が true の場合に、キューベースクエリに使用されるスロット推定戦略を選択します。有効な値は、MBE (メモリベース)、PBE (並行性ベース)、MAX (MBE と PBE の最大値を取る)、MIN (MBE と PBE の最小値を取る) です。MBE は、予測されたメモリまたは計画コストをスロットあたりのメモリターゲットで割ってスロットを推定し、`totalSlots` で上限が設定されます。PBE は、フラグメントの並行性 (スキャン範囲のカウントまたはカーディナリティ / スロットあたりの行数) と CPU コストベースの計算 (スロットあたりの CPU コストを使用) からスロットを導出し、結果を [numSlots/2, numSlots] の範囲内に制限します。MAX と MIN は、MBE と PBE の最大値または最小値を取ることによってそれらを結合します。設定された値が無効な場合、デフォルト (`MAX`) が使用されます。
-- Introduced in: v3.5.0
-
-##### `query_queue_v2_concurrency_level`
-
-- Default: 4
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: システムの総クエリスロットを計算する際に使用される論理的な並行性「レイヤー」の数を制御します。Shared-nothing モードでは、総スロット = `query_queue_v2_concurrency_level` * BE の数 * BE ごとのコア数 (BackendResourceStat から派生)。マルチウェアハウスモードでは、実効並行性は max(1, `query_queue_v2_concurrency_level` / 4) にスケーリングされます。設定値が非正の場合、`4` として扱われます。この値を変更すると、totalSlots (したがって同時クエリ容量) が増減し、スロットごとのリソースに影響します。memBytesPerSlot はワーカーごとのメモリを (ワーカーごとのコア数 * 並行性) で割って導出され、CPU アカウンティングは `query_queue_v2_cpu_costs_per_slot` を使用します。クラスターサイズに比例して設定してください。非常に大きな値はスロットごとのメモリを減らし、リソースの断片化を引き起こす可能性があります。
-- Introduced in: v3.3.4, v3.4.0, v3.5.0
-
-##### `query_queue_v2_cpu_costs_per_slot`
-
-- Default: 1000000000
-- Type: Long
-- Unit: planner CPU cost units
-- Is mutable: Yes
-- Description: プランナー CPU コストからクエリが必要とするスロット数を推定するために使用されるスロットごとの CPU コストしきい値。スケジューラーは、スロットを整数 (`plan_cpu_costs` / `query_queue_v2_cpu_costs_per_slot`) として計算し、結果を [1, totalSlots] の範囲にクランプします (totalSlots はクエリキュー V2 `V2` パラメーターから派生)。V2 コードは非正の設定を 1 に正規化するため (Math.max(1, value))、非正の値は事実上 `1` になります。この値を増やすと、クエリごとに割り当てられるスロットが減少し (より少ない、より大きなスロットのクエリを優先)、減らすとクエリごとのスロットが増加します。並行性対リソースの粒度を制御するために、`query_queue_v2_num_rows_per_slot` および並行性設定と合わせて調整してください。
-- Introduced in: v3.3.4, v3.4.0, v3.5.0
-
-##### `query_queue_v2_num_rows_per_slot`
-
-- Default: 4096
-- Type: Int
-- Unit: Rows
-- Is mutable: Yes
-- Description: クエリごとのスロット数を推定する際に、単一のスケジューリングスロットに割り当てられるターゲットのソース行レコード数。StarRocks は、`estimated_slots` = (ソースノードのカーディナリティ) / `query_queue_v2_num_rows_per_slot` を計算し、その結果を [1, totalSlots] の範囲にクランプし、計算された値が非正の場合は最低 1 を強制します。totalSlots は利用可能なリソース (おおよそ DOP * `query_queue_v2_concurrency_level` * ワーカー/BE の数) から導出され、したがってクラスター/コア数に依存します。この値を増やすと、スロット数が減少し (各スロットがより多くの行を処理)、スケジューリングオーバーヘッドが減少します。減らすと、並行性が増加し (より多くの、より小さいスロット)、リソース制限まで増加します。
-- Introduced in: v3.3.4, v3.4.0, v3.5.0
-
-##### `query_queue_v2_schedule_strategy`
-
-- Default: SWRR
-- Type: String
-- Unit: -
-- Is mutable: Yes
-- Description: Query Queue V2 が保留中のクエリを並べ替えるために使用するスケジューリングポリシーを選択します。サポートされている値 (大文字と小文字を区別しない) は `SWRR` (Smooth Weighted Round Robin) - デフォルトで、公平な重み付き共有が必要な混合/ハイブリッドワークロードに適しています - と `SJF` (Short Job First + Aging) - 短いジョブを優先し、エージングを使用してスタベーションを回避します。値は大文字と小文字を区別しない enum ルックアップで解析されます。認識されない値はエラーとしてログに記録され、デフォルトポリシーが使用されます。この設定は Query Queue V2 が有効な場合にのみ動作に影響し、`query_queue_v2_concurrency_level` などの V2 サイジング設定と相互作用します。
-- Introduced in: v3.3.12, v3.4.2, v3.5.0
-
-##### `semi_sync_collect_statistic_await_seconds`
-
-- Default: 30
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description: DML 操作 (INSERT INTO および INSERT OVERWRITE ステートメント) 中の半同期統計収集の最大待機時間。ストリームロードおよびブローカーロードは非同期モードを使用するため、この設定の影響を受けません。統計収集時間がこの値を超えると、ロード操作は収集完了を待たずに続行します。この設定は `enable_statistic_collect_on_first_load` と連携して機能します。
-- Introduced in: v3.1
-
-##### `slow_query_analyze_threshold`
-
-- Default: 5
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description: クエリフィードバックの分析をトリガーするクエリの実行時間しきい値。
-- Introduced in: v3.4.0
-
-##### `statistic_analyze_status_keep_second`
-
-- Default: 3 * 24 * 3600
-- Type: Long
-- Unit: Seconds
-- Is mutable: Yes
-- Description: 収集タスクの履歴を保持する期間。デフォルト値は 3 日間です。
-- Introduced in: -
-
-##### `statistic_auto_analyze_end_time`
-
-- Default: 23:59:59
-- Type: String
-- Unit: -
-- Is mutable: Yes
-- Description: 自動収集の終了時刻。値の範囲: `00:00:00` - `23:59:59`。
-- Introduced in: -
-
-##### `statistic_auto_analyze_start_time`
-
-- Default: 00:00:00
-- Type: String
-- Unit: -
-- Is mutable: Yes
-- Description: 自動収集の開始時刻。値の範囲: `00:00:00` - `23:59:59`。
-- Introduced in: -
-
-##### `statistic_auto_collect_ratio`
-
-- Default: 0.8
-- Type: Double
-- Unit: -
-- Is mutable: Yes
-- Description: 自動収集の統計が健全であるかどうかを判断するためのしきい値。統計の健全性がこのしきい値よりも低い場合、自動収集がトリガーされます。
-- Introduced in: -
-
-##### `statistic_auto_collect_small_table_rows`
-
-- Default: 10000000
-- Type: Long
-- Unit: -
-- Is mutable: Yes
-- Description: 自動収集中に、外部データソース (Hive、Iceberg、Hudi) のテーブルが小さいテーブルであるかどうかを判断するためのしきい値。テーブルの行数がこの値より少ない場合、そのテーブルは小さいテーブルと見なされます。
-- Introduced in: v3.2
-
-##### `statistic_cache_columns`
-
-- Default: 100000
-- Type: Long
-- Unit: -
-- Is mutable: No
-- Description: 統計テーブルにキャッシュできる行数。
-- Introduced in: -
-
-##### `statistic_cache_thread_pool_size`
-
-- Default: 10
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description: 統計キャッシュを更新するために使用されるスレッドプールのサイズ。
-- Introduced in: -
-
-##### `statistic_collect_interval_sec`
-
-- Default: 5 * 60
-- Type: Long
-- Unit: Seconds
-- Is mutable: Yes
-- Description: 自動収集中にデータ更新をチェックする間隔。
-- Introduced in: -
-
-##### `statistic_max_full_collect_data_size`
-
-- Default: 100 * 1024 * 1024 * 1024
-- Type: Long
-- Unit: bytes
-- Is mutable: Yes
-- Description: 統計の自動収集のデータサイズしきい値。合計サイズがこの値を超えると、完全収集ではなくサンプリング収集が実行されます。
-- Introduced in: -
-
-##### `statistic_sample_collect_rows`
-
-- Default: 200000
-- Type: Long
-- Unit: -
-- Is mutable: Yes
-- Description: ロードトリガー統計操作中に SAMPLE 統計収集と FULL 統計収集のどちらかを決定するための行数しきい値。ロードまたは変更された行数がこのしきい値 (デフォルト 200,000) を超える場合、SAMPLE 統計収集が使用されます。そうでない場合、FULL 統計収集が使用されます。この設定は、`enable_statistic_collect_on_first_load` および `statistic_sample_collect_ratio_threshold_of_first_load` と連携して機能します。
-- Introduced in: -
-
-##### `statistic_update_interval_sec`
-
-- Default: 24 * 60 * 60
-- Type: Long
-- Unit: Seconds
-- Is mutable: Yes
-- Description: 統計情報のキャッシュが更新される間隔。
-- Introduced in: -
-
-##### `task_check_interval_second`
-
-- Default: 60
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description: タスクバックグラウンドジョブの実行間隔。GlobalStateMgr はこの値を使用して `doTaskBackgroundJob()` を呼び出す TaskCleaner FrontendDaemon をスケジュールします。この値はデーモン間隔をミリ秒単位で設定するために 1000 倍されます。値を減らすとバックグラウンドメンテナンス (タスククリーンアップ、チェック) の実行頻度が高まり、反応が速くなりますが、CPU/IO オーバーヘッドが増加します。値を増やすとオーバーヘッドが減少しますが、クリーンアップと古いタスクの検出が遅れます。この値を調整して、メンテナンスの応答性とリソース使用量のバランスを取ります。
-- Introduced in: v3.2.0
-
-##### `task_min_schedule_interval_s`
-
-- Default: 10
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description: SQL レイヤーによってチェックされるタスクスケジュールの最小許容スケジュール間隔 (秒単位)。タスクが送信されると、TaskAnalyzer はスケジュール期間を秒に変換し、期間が `task_min_schedule_interval_s` より小さい場合、`ERR_INVALID_PARAMETER` で送信を拒否します。これにより、頻繁すぎる実行タスクの作成が防止され、スケジューラーが高頻度タスクから保護されます。スケジュールに明示的な開始時間がない場合、TaskAnalyzer は開始時間を現在のエポック秒に設定します。
-- Introduced in: v3.3.0, v3.4.0, v3.5.0
-
-##### `task_runs_timeout_second`
-
-- Default: 4 * 3600
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description: TaskRun のデフォルトの実行タイムアウト (秒単位)。この項目は TaskRun 実行の基準タイムアウトとして使用されます。タスク実行のプロパティに、正の整数値を持つセッション変数 `query_timeout` または `insert_timeout` が含まれている場合、実行時はそのセッションタイムアウトと `task_runs_timeout_second` のうち大きい方の値を使用します。その後、実質的なタイムアウトは、設定された `task_runs_ttl_second` および `task_ttl_second` を超えないように制限されます。タスク実行の最大実行時間を制限するには、この項目を設定します。非常に大きな値は、タスク/タスク実行の TTL 設定によって切り捨てられる可能性があります。
-- Introduced in: -
-
-### ロードとアンロード
-
-##### `broker_load_default_timeout_second`
-
-- Default: 14400
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description: Broker Load ジョブのタイムアウト期間。
-- Introduced in: -
-
-##### `desired_max_waiting_jobs`
-
-- Default: 1024
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: FE での保留中のジョブの最大数。この数は、テーブル作成、ロード、スキーマ変更ジョブなど、すべてのジョブを指します。FE での保留中のジョブの数がこの値に達すると、FE は新しいロード要求を拒否します。このパラメーターは、非同期ロードにのみ有効です。v2.5 以降、デフォルト値は 100 から 1024 に変更されました。
-- Introduced in: -
-
-##### `disable_load_job`
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: クラスターでエラーが発生した場合にロードを無効にするかどうか。これにより、クラスターエラーによる損失を防ぎます。デフォルト値は `FALSE` で、ロードが無効になっていないことを示します。`TRUE` はロードが無効になっており、クラスターが読み取り専用状態であることを示します。
-- Introduced in: -
-
-##### `empty_load_as_error`
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: データがロードされない場合にエラーメッセージ「すべてのパーティションにロードデータがありません」を返すかどうか。有効な値:
-  - `true`: データがロードされない場合、システムは失敗メッセージを表示し、エラー「すべてのパーティションにロードデータがありません」を返します。
-  - `false`: データがロードされない場合、システムは成功メッセージを表示し、エラーではなく OK を返します。
-- Introduced in: -
-
-##### `enable_file_bundling`
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: クラウドネイティブテーブルのファイルバンドル最適化を有効にするかどうか。この機能が有効 ( `true` に設定) の場合、システムはロード、コンパクション、または公開操作によって生成されたデータファイルを自動的にバンドルし、それによって外部ストレージシステムへの高頻度アクセスによって発生する API コストを削減します。この動作は、CREATE TABLE プロパティ `file_bundling` を使用してテーブルレベルで制御することもできます。詳細な手順については、[CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) を参照してください。
-- Introduced in: v4.0
-
-##### `enable_routine_load_lag_metrics`
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: ルーチンロード Kafka パーティションオフセットラグメトリックを収集するかどうか。この項目を `true` に設定すると、Kafka API が呼び出されてパーティションの最新オフセットが取得されることに注意してください。
-- Introduced in: -
-
-##### `enable_sync_publish`
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: ロードトランザクションの公開フェーズで適用タスクを同期的に実行するかどうか。このパラメーターは主キーテーブルにのみ適用されます。有効な値:
-  - `TRUE` (デフォルト): 適用タスクはロードトランザクションの公開フェーズで同期的に実行されます。これは、適用タスクが完了し、ロードされたデータが実際にクエリ可能になった後にのみ、ロードトランザクションが成功として報告されることを意味します。タスクが一度に大量のデータをロードしたり、頻繁にデータをロードしたりする場合、このパラメーターを `true` に設定するとクエリパフォーマンスと安定性が向上しますが、ロードレイテンシーが増加する可能性があります。
-  - `FALSE`: 適用タスクはロードトランザクションの公開フェーズで非同期的に実行されます。これは、適用タスクが送信された後にロードトランザクションが成功として報告されますが、ロードされたデータはすぐにクエリできないことを意味します。この場合、同時クエリは適用タスクが完了するかタイムアウトするまで待機してから続行する必要があります。タスクが一度に大量のデータをロードしたり、頻繁にデータをロードしたりしたりする場合、このパラメーターを `false` に設定すると、クエリパフォーマンスと安定性に影響する可能性があります。
-- Introduced in: v3.2.0
-
-##### `export_checker_interval_second`
-
-- Default: 5
-- Type: Int
-- Unit: Seconds
-- Is mutable: No
-- Description: ロードジョブがスケジュールされる時間間隔。
-- Introduced in: -
-
-##### `export_max_bytes_per_be_per_task`
-
-- Default: 268435456
-- Type: Long
-- Unit: Bytes
-- Is mutable: Yes
-- Description: 単一の BE から単一のデータアンロードタスクによってエクスポートできる最大データ量。
-- Introduced in: -
-
-##### `export_running_job_num_limit`
-
-- Default: 5
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: 並行して実行できるデータエクスポートタスクの最大数。
-- Introduced in: -
-
-##### `export_task_default_timeout_second`
-
-- Default: 2 * 3600
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description: データエクスポートタスクのタイムアウト期間。
-- Introduced in: -
-
-##### `export_task_pool_size`
-
-- Default: 5
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description: アンロードタスクのスレッドプールのサイズ。
-- Introduced in: -
-
-##### `external_table_commit_timeout_ms`
-
-- Default: 10000
-- Type: Int
-- Unit: Milliseconds
-- Is mutable: Yes
-- Description: StarRocks 外部テーブルへの書き込みトランザクションをコミット (公開) するためのタイムアウト期間。デフォルト値 `10000` は 10 秒のタイムアウト期間を示します。
-- Introduced in: -
-
-##### `finish_transaction_default_lock_timeout_ms`
-
-- Default: 1000
-- Type: Int
-- Unit: MilliSeconds
-- Is mutable: Yes
-- Description: トランザクション完了中の db およびテーブルロック取得のデフォルトタイムアウト。
-- Introduced in: v4.0.0, v3.5.8
-
-##### `history_job_keep_max_second`
-
-- Default: 7 * 24 * 3600
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description: スキーマ変更ジョブなど、履歴ジョブが保持できる最大期間。
-- Introduced in: -
-
-##### `insert_load_default_timeout_second`
-
-- Default: 3600
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description: データをロードするために使用される INSERT INTO ステートメントのタイムアウト期間。
-- Introduced in: -
-
-##### `label_clean_interval_second`
-
-- Default: 4 * 3600
-- Type: Int
-- Unit: Seconds
-- Is mutable: No
-- Description: ラベルがクリーンアップされる時間間隔。単位: 秒。履歴ラベルがタイムリーにクリーンアップされるように、短い時間間隔を指定することをお勧めします。
-- Introduced in: -
-
-##### `label_keep_max_num`
-
-- Default: 1000
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: 一定期間内に保持できるロードジョブの最大数。この数を超えると、履歴ジョブの情報は削除されます。
-- Introduced in: -
-
-##### `label_keep_max_second`
-
-- Default: 3 * 24 * 3600
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description: 完了し、FINISHED または CANCELLED 状態にあるロードジョブのラベルを保持する最大期間 (秒単位)。デフォルト値は 3 日間です。この期間が経過すると、ラベルは削除されます。このパラメーターはすべてのタイプのロードジョブに適用されます。値が大きすぎると大量のメモリを消費します。
-- Introduced in: -
-
-##### `load_checker_interval_second`
-
-- Default: 5
-- Type: Int
-- Unit: Seconds
-- Is mutable: No
-- Description: ロードジョブがローリングベースで処理される時間間隔。
-- Introduced in: -
-
-##### `load_parallel_instance_num`
-
-- Default: 1
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: ブローカーおよびストリームロードの単一ホストで作成される並行ロードフラグメントインスタンスの数を制御します。LoadPlanner は、セッションがアダプティブシンク DOP を有効にしない限り、この値をホストごとの並行度として使用します。セッション変数 `enable_adaptive_sink_dop` が true の場合、セッションの `sink_degree_of_parallelism` がこの設定を上書きします。シャッフルが必要な場合、この値はフラグメント並行実行 (スキャンフラグメントおよびシンクフラグメント並行実行インスタンス) に適用されます。シャッフルが不要な場合、シンクパイプライン DOP として使用されます。注: ローカルファイルからのロードは、ローカルディスク競合を避けるため、単一インスタンスに強制されます (パイプライン DOP = 1、並行実行 = 1)。この数を増やすと、ホストごとの並行性とスループットが向上しますが、CPU、メモリ、I/O 競合が増加する可能性があります。
-- Introduced in: v3.2.0
-
-##### `load_straggler_wait_second`
-
-- Default: 300
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description: BE レプリカが許容できる最大ロード遅延。この値を超えると、他のレプリカからデータをクローンするクローニングが実行されます。
-- Introduced in: -
-
-##### `loads_history_retained_days`
-
-- Default: 30
-- Type: Int
-- Unit: Days
-- Is mutable: Yes
-- Description: 内部 `_statistics_.loads_history` テーブルにロード履歴を保持する日数。この値はテーブル作成時にテーブルプロパティ `partition_live_number` を設定するために使用され、`TableKeeper` (最小値 1 にクランプ) に渡されて、保持する日次パーティションの数を決定します。この値を増減すると、完了したロードジョブが日次パーティションに保持される期間が調整されます。新しいテーブルの作成とキーパーのプルーニング動作に影響しますが、過去のパーティションを自動的に再作成することはありません。`LoadsHistorySyncer` は、ロード履歴のライフサイクルを管理する際にこの保持に依存します。その同期頻度は `loads_history_sync_interval_second` によって制御されます。
-- Introduced in: v3.3.6, v3.4.0, v3.5.0
-
-##### `loads_history_sync_interval_second`
-
-- Default: 60
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description: LoadsHistorySyncer が `information_schema.loads` から内部 `_statistics_.loads_history` テーブルに完了したロードジョブを定期的に同期する間隔 (秒単位)。この値は、FrontendDaemon の間隔を設定するためにコンストラクターで 1000 倍されます。シンカーは最初の実行をスキップし (テーブル作成を許可するため)、1 分以上前に完了したロードのみをインポートします。値が小さいと DML とエクゼキュータの負荷が増加し、値が大きいと履歴ロードレコードの可用性が遅延します。ターゲットテーブルの保持/パーティショニング動作については `loads_history_retained_days` を参照してください。
-- Introduced in: v3.3.6, v3.4.0, v3.5.0
-
-##### `max_broker_load_job_concurrency`
-
-- Default: 5
-- Alias: `async_load_task_pool_size`
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: StarRocks クラスター内で許可される同時 Broker Load ジョブの最大数。このパラメーターは Broker Load にのみ有効です。このパラメーターの値は、`max_running_txn_num_per_db` の値よりも小さくなければなりません。v2.5 以降、デフォルト値は `10` から `5` に変更されました。
-- Introduced in: -
-
-##### `max_load_timeout_second`
-
-- Default: 259200
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description: ロードジョブに許可される最大タイムアウト期間。この制限を超えると、ロードジョブは失敗します。この制限はすべての種類のロードジョブに適用されます。
-- Introduced in: -
-
-##### `max_routine_load_batch_size`
-
-- Default: 4294967296
-- Type: Long
-- Unit: Bytes
-- Is mutable: Yes
-- Description: ルーチンロードタスクでロードできる最大データ量。
-- Introduced in: -
-
-##### `max_routine_load_task_concurrent_num`
-
-- Default: 5
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: 各ルーチンロードジョブの同時実行タスクの最大数。
-- Introduced in: -
-
-##### `max_routine_load_task_num_per_be`
-
-- Default: 16
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: 各 BE での同時ルーチンロードタスクの最大数。v3.1.0 以降、このパラメーターのデフォルト値は 5 から 16 に増加され、BE 静的パラメーター `routine_load_thread_pool_size` (非推奨) の値以下である必要はなくなりました。
-- Introduced in: -
-
-##### `max_running_txn_num_per_db`
-
-- Default: 1000
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: StarRocks クラスター内の各データベースで実行できるロードトランザクションの最大数。デフォルト値は `1000` です。v3.1 以降、デフォルト値は `100` から `1000` に変更されました。データベースで実行されているロードトランザクションの実際の数がこのパラメーターの値を超えると、新しいロード要求は処理されません。同期ロードジョブの新しい要求は拒否され、非同期ロードジョブの新しい要求はキューに配置されます。この値を増やすことはシステム負荷を増加させるため、お勧めしません。
-- Introduced in: -
-
-##### `max_stream_load_timeout_second`
-
-- Default: 259200
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description: Stream Load ジョブに許可される最大タイムアウト期間。
-- Introduced in: -
-
-##### `max_tolerable_backend_down_num`
-
-- Default: 0
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: 許可される BE ノードの最大障害数。この数を超えると、ルーチンロードジョブは自動的に回復できません。
-- Introduced in: -
-
-##### `min_bytes_per_broker_scanner`
-
-- Default: 67108864
-- Type: Long
-- Unit: Bytes
-- Is mutable: Yes
-- Description: Broker Load インスタンスによって処理できる最小データ量。
-- Introduced in: -
-
-##### `min_load_timeout_second`
-
-- Default: 1
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description: ロードジョブに許可される最小タイムアウト期間。この制限はすべての種類のロードジョブに適用されます。
-- Introduced in: -
-
-##### `min_routine_load_lag_for_metrics`
-
-- Default: 10000
-- Type: INT
-- Unit: -
-- Is mutable: Yes
-- Description: 監視メトリックに表示されるルーチンロードジョブの最小オフセットラグ。オフセットラグがこの値よりも大きいルーチンロードジョブがメトリックに表示されます。
-- Introduced in: -
-
-##### `period_of_auto_resume_min`
-
-- Default: 5
-- Type: Int
-- Unit: Minutes
-- Is mutable: Yes
-- Description: ルーチンロードジョブが自動的に回復される間隔。
-- Introduced in: -
-
-##### `prepared_transaction_default_timeout_second`
-
-- Default: 86400
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description: 準備されたトランザクションのデフォルトのタイムアウト期間。
-- Introduced in: -
-
-##### `routine_load_task_consume_second`
-
-- Default: 15
-- Type: Long
-- Unit: Seconds
-- Is mutable: Yes
-- Description: クラスター内の各ルーチンロードタスクがデータを消費する最大時間。v3.1.0 以降、ルーチンロードジョブは [`job_properties`](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md#job_properties) に新しいパラメーター `task_consume_second` をサポートしています。このパラメーターはルーチンロードジョブ内の個々のロードタスクに適用され、より柔軟です。
-- Introduced in: -
-
-##### `routine_load_task_timeout_second`
-
-- Default: 60
-- Type: Long
-- Unit: Seconds
-- Is mutable: Yes
-- Description: クラスター内の各ルーチンロードタスクのタイムアウト期間。v3.1.0 以降、ルーチンロードジョブは [`job_properties`](../../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md#job_properties) に新しいパラメーター `task_timeout_second` をサポートしています。このパラメーターはルーチンロードジョブ内の個々のロードタスクに適用され、より柔軟です。
-- Introduced in: -
-
-##### `routine_load_unstable_threshold_second`
-
-- Default: 3600
-- Type: Long
-- Unit: Seconds
-- Is mutable: Yes
-- Description: ルーチンロードジョブ内のいずれかのタスクが遅延した場合に、ルーチンロードジョブが UNSTABLE 状態に設定されます。具体的には、消費されているメッセージのタイムスタンプと現在時刻の差がこのしきい値を超え、データソースに未消費のメッセージが存在する場合です。
-- Introduced in: -
-
-##### `spark_dpp_version`
-
-- Default: 1.0.0
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: 使用される Spark Dynamic Partition Pruning (DPP) のバージョン。
-- Introduced in: -
-
-##### `spark_home_default_dir`
-
-- Default: `StarRocksFE.STARROCKS_HOME_DIR` + "/lib/spark2x"
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: Spark クライアントのルートディレクトリ。
-- Introduced in: -
-
-##### `spark_launcher_log_dir`
-
-- Default: `sys_log_dir` + "/spark_launcher_log"
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: Spark ログファイルを格納するディレクトリ。
-- Introduced in: -
-
-##### `spark_load_default_timeout_second`
-
-- Default: 86400
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description: 各 Spark Load ジョブのタイムアウト期間。
-- Introduced in: -
-
-##### `spark_load_submit_timeout_second`
-
-- Default: 300
-- Type: long
-- Unit: Seconds
-- Is mutable: No
-- Description: Spark アプリケーションの送信後、YARN 応答を待機する最大時間 (秒単位)。`SparkLauncherMonitor.LogMonitor` はこの値をミリ秒に変換し、ジョブが UNKNOWN/CONNECTED/SUBMITTED 状態のままこのタイムアウトを超えると、監視を停止し、Spark ランチャープロセスを強制終了します。`SparkLoadJob` はこの設定をデフォルトとして読み取り、`LoadStmt.SPARK_LOAD_SUBMIT_TIMEOUT` プロパティを使用してロードごとのオーバーライドを許可します。YARN キューイングの遅延に対応するのに十分な大きさに設定してください。低く設定しすぎると、正当にキューに入れられたジョブが中止される可能性があり、高く設定しすぎると、障害処理とリソースクリーンアップが遅れる可能性があります。
-- Introduced in: v3.2.0
-
-##### `spark_resource_path`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: Spark 依存関係パッケージのルートディレクトリ。
-- Introduced in: -
-
-##### `stream_load_default_timeout_second`
-
-- Default: 600
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description: 各 Stream Load ジョブのデフォルトのタイムアウト期間。
-- Introduced in: -
-
-##### `stream_load_max_txn_num_per_be`
-
-- Default: -1
-- Type: Int
-- Unit: Transactions
-- Is mutable: Yes
-- Description: 単一の BE (バックエンド) ホストから受け入れられる同時ストリームロードトランザクションの数を制限します。非負の整数に設定されている場合、FrontendServiceImpl は BE (クライアント IP 別) の現在のトランザクション数をチェックし、数がこの制限を `>=` 超える場合、新しいストリームロード開始要求を拒否します。値が `< 0` の場合、制限は無効になります (無制限)。このチェックはストリームロード開始時に発生し、超過すると `streamload txn num per be exceeds limit` エラーが発生する可能性があります。関連する実行時動作では、`stream_load_default_timeout_second` を使用して要求タイムアウトのフォールバックが行われます。
-- Introduced in: v3.3.0, v3.4.0, v3.5.0
-
-##### `stream_load_task_keep_max_num`
-
-- Default: 1000
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: StreamLoadMgr がメモリに保持する Stream Load タスクの最大数 (すべてのデータベースにわたるグローバル)。追跡されたタスク (`idToStreamLoadTask`) の数がこのしきい値を超えると、StreamLoadMgr はまず `cleanSyncStreamLoadTasks()` を呼び出して完了した同期ストリームロードタスクを削除します。サイズがまだこのしきい値の半分より大きい場合、`cleanOldStreamLoadTasks(true)` を呼び出して古いまたは完了したタスクを強制的に削除します。メモリにさらにタスク履歴を保持するにはこの値を増やし、メモリ使用量を減らしてクリーンアップをより積極的するには減らします。この値はインメモリ保持のみを制御し、永続化/再生されたタスクには影響しません。
-- Introduced in: v3.2.0
-
-##### `stream_load_task_keep_max_second`
-
-- Default: 3 * 24 * 3600
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description: 完了またはキャンセルされた Stream Load タスクの保持ウィンドウ。タスクが最終状態に達し、その終了タイムスタンプがこのしきい値 (`currentMs - endTimeMs > stream_load_task_keep_max_second * 1000`) より古い場合、`StreamLoadMgr.cleanOldStreamLoadTasks` による削除の対象となり、永続化された状態のロード時に破棄されます。`StreamLoadTask` と `StreamLoadMultiStmtTask` の両方に適用されます。合計タスク数が `stream_load_task_keep_max_num` を超える場合、クリーンアップが早期にトリガーされる可能性があります (同期タスクは `cleanSyncStreamLoadTasks` によって優先されます)。履歴/デバッグ可能性とメモリ使用量のバランスを取るためにこれを設定します。
-- Introduced in: v3.2.0
-
-##### `transaction_clean_interval_second`
-
-- Default: 30
-- Type: Int
-- Unit: Seconds
-- Is mutable: No
-- Description: 完了したトランザクションがクリーンアップされる時間間隔。単位: 秒。完了したトランザクションがタイムリーにクリーンアップされるように、短い時間間隔を指定することをお勧めします。
-- Introduced in: -
-
 ##### `transaction_stream_load_coordinator_cache_capacity`
 
-- Default: 4096
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: トランザクションラベルからコーディネーターノードへのマッピングを格納するキャッシュの容量。
-- Introduced in: -
+- デフォルト: 4096
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: トランザクションラベルからコーディネーターノードへのマッピングを保存するキャッシュの容量。
+- 導入バージョン: -
 
 ##### `transaction_stream_load_coordinator_cache_expire_seconds`
 
-- Default: 900
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description: キャッシュ内のコーディネーターマッピングを削除するまでの時間 (TTL)。
-- Introduced in: -
+- デフォルト: 900
+- タイプ: Int
+- 単位: 秒
+- 変更可能: はい
+- 説明: コーディネーターマッピングがキャッシュから削除されるまでの保持時間（TTL）。
+- 導入バージョン: -
 
 ##### `yarn_client_path`
 
-- Default: `StarRocksFE.STARROCKS_HOME_DIR` + "/lib/yarn-client/hadoop/bin/yarn"
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: Yarn クライアントパッケージのルートディレクトリ。
-- Introduced in: -
+- デフォルト: `StarRocksFE.STARROCKS_HOME_DIR` + "/lib/yarn-client/hadoop/bin/yarn"
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: Yarnクライアントパッケージのルートディレクトリ。
+- 導入バージョン: -
 
 ##### `yarn_config_dir`
 
-- Default: `StarRocksFE.STARROCKS_HOME_DIR` + "/lib/yarn-config"
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: Yarn 設定ファイルを格納するディレクトリ。
-- Introduced in: -
+- デフォルト: `StarRocksFE.STARROCKS_HOME_DIR` + "/lib/yarn-config"
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: Yarn設定ファイルを保存するディレクトリ。
+- 導入バージョン: -
 
 ### 統計レポート
 
-##### `enable_collect_warehouse_metrics`
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: この項目が `true` に設定されている場合、システムはウェアハウスごとのメトリックを収集してエクスポートします。これを有効にすると、ウェアハウスレベルのメトリック (スロット/使用量/可用性) がメトリック出力に追加され、メトリックのカーディナリティと収集オーバーヘッドが増加します。ウェアハウス固有のメトリックを省略し、CPU/ネットワークと監視ストレージコストを削減するには無効にします。
-- Introduced in: v3.5.0
-
 ##### `enable_http_detail_metrics`
 
-- Default: false
-- Type: boolean
-- Unit: -
-- Is mutable: Yes
-- Description: true の場合、HTTP サーバーは詳細な HTTP ワーカーメトリック (特に `HTTP_WORKER_PENDING_TASKS_NUM` ゲージ) を計算して公開します。これを有効にすると、サーバーは Netty ワーカーエクゼキューターを反復処理し、各 `NioEventLoop` で `pendingTasks()` を呼び出して保留中のタスクカウントを合計します。無効の場合、ゲージはコストを回避するために 0 を返します。この追加の収集は CPU およびレイテンシーに敏感である可能性があるため、デバッグまたは詳細な調査のためにのみ有効にしてください。
-- Introduced in: v3.2.3
+- デフォルト: false
+- タイプ: boolean
+- 単位: -
+- 変更可能: はい
+- 説明: trueの場合、HTTPサーバーは詳細なHTTPワーカーメトリクス（特に`HTTP_WORKER_PENDING_TASKS_NUM`ゲージ）を計算し、公開します。これを有効にすると、サーバーはNettyワーカーエグゼキュータを反復処理し、各`NioEventLoop`で`pendingTasks()`を呼び出して保留中のタスク数を合計します。無効の場合、このコストを避けるためにゲージは0を返します。この追加の収集はCPUおよびレイテンシに影響を与える可能性があるため、デバッグまたは詳細な調査のためにのみ有効にしてください。
+- 導入バージョン: v3.2.3
 
 ##### `proc_profile_collect_time_s`
 
-- Default: 120
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description: 単一プロセスプロファイル収集の期間 (秒単位)。`proc_profile_cpu_enable` または `proc_profile_mem_enable` が `true` に設定されている場合、AsyncProfiler が起動し、コレクタースレッドはこの期間だけスリープし、その後プロファイラーが停止してプロファイルが書き込まれます。値が大きいほどサンプルカバレッジとファイルサイズは増加しますが、プロファイラーの実行時間が長くなり、その後の収集が遅れます。値が小さいほどオーバーヘッドは減少しますが、不十分なサンプルが生成される可能性があります。`proc_profile_file_retained_days` や `proc_profile_file_retained_size_bytes` などの保持設定とこの値が一致していることを確認してください。
-- Introduced in: v3.2.12
+- デフォルト: 120
+- タイプ: Int
+- 単位: 秒
+- 変更可能: はい
+- 説明: 単一のプロセスプロファイル収集の期間（秒単位）。`proc_profile_cpu_enable`または`proc_profile_mem_enable`が`true`に設定されている場合、AsyncProfilerが開始され、コレクタースレッドはこの期間スリープし、その後プロファイラーが停止されてプロファイルが書き込まれます。値が大きいほどサンプルカバレッジとファイルサイズは増加しますが、プロファイラーの実行時間が長くなり、後続の収集が遅れます。値が小さいほどオーバーヘッドは減少しますが、不十分なサンプルしか生成されない可能性があります。この値が`proc_profile_file_retained_days`や`proc_profile_file_retained_size_bytes`などの保持設定と一致していることを確認してください。
+- 導入バージョン: v3.2.12
 
 ### ストレージ
 
@@ -4440,107 +2759,63 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - Default: 86400
 - Type: Int
-- Unit: Seconds
+- Unit: 秒
 - Is mutable: Yes
 - Description: スキーマ変更操作 (ALTER TABLE) のタイムアウト期間。
 - Introduced in: -
->>>>>>> 7c14cbc6a8 ([Doc] add backticks to config names (#69369))
 
 ##### `capacity_used_percent_high_water`
 
 - Default: 0.75
 - Type: double
-- Unit: Fraction (0.0–1.0)
+- Unit: 割合 (0.0–1.0)
 - Is mutable: Yes
-- Description: バックエンド負荷スコアを計算する際に使用されるディスク容量使用率 (総容量に対する割合) の高水位しきい値。`BackendLoadStatistic.calcSore` は `capacity_used_percent_high_water` を使用して `LoadScore.capacityCoefficient` を設定します。バックエンドの使用率が 0.5 未満の場合、係数は 0.5 になります。使用率が `capacity_used_percent_high_water` を超える場合、係数は 1.0 になります。それ以外の場合、係数は使用率に応じて線形に推移します (2 * usedPercent - 0.5)。係数が 1.0 の場合、負荷スコアは完全に容量比率によって決定されます。値が低いほどレプリカ数の重みが増加します。この値を調整すると、バランサーがディスク使用率の高いバックエンドにペナルティを課す積極性が変わります。
+- Description: バックエンドの負荷スコアを計算する際に使用される、ディスク容量使用率（総容量の割合）のハイウォーターしきい値。`BackendLoadStatistic.calcSore` は `capacity_used_percent_high_water` を使用して `LoadScore.capacityCoefficient` を設定します。バックエンドの使用率が 0.5 未満の場合、係数は 0.5 になります。使用率が `capacity_used_percent_high_water` を超える場合、係数は 1.0 になります。それ以外の場合、係数は (2 * usedPercent - 0.5) を介して使用率と線形に推移します。係数が 1.0 の場合、負荷スコアは完全に容量の割合によって決定されます。値が低いほど、レプリカ数の重みが増加します。この値を調整すると、バランサーが高ディスク使用率のバックエンドにペナルティを課す積極性が変化します。
 - Introduced in: v3.2.0
 
-<<<<<<< HEAD
-##### enable_auto_tablet_distribution
-=======
 ##### `catalog_trash_expire_second`
 
 - Default: 86400
 - Type: Long
-- Unit: Seconds
+- Unit: 秒
 - Is mutable: Yes
-- Description: データベース、テーブル、またはパーティションが削除された後にメタデータが保持される最長期間。この期間が経過すると、データは削除され、[RECOVER](../../sql-reference/sql-statements/backup_restore/RECOVER.md) コマンドで回復することはできません。
+- Description: データベース、テーブル、またはパーティションが削除された後、メタデータを保持できる最長期間。この期間が経過すると、データは削除され、[RECOVER](../../sql-reference/sql-statements/backup_restore/RECOVER.md) コマンドで復元することはできません。
 - Introduced in: -
 
 ##### `check_consistency_default_timeout_second`
 
 - Default: 600
 - Type: Long
-- Unit: Seconds
+- Unit: 秒
 - Is mutable: Yes
-- Description: レプリカの一貫性チェックのタイムアウト期間。タブレットのサイズに基づいてこのパラメーターを設定できます。
+- Description: レプリカの一貫性チェックのタイムアウト期間。このパラメータは、タブレットのサイズに基づいて設定できます。
 - Introduced in: -
-
-##### `consistency_check_cooldown_time_second`
->>>>>>> 7c14cbc6a8 ([Doc] add backticks to config names (#69369))
-
-- Default: 24 * 3600
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description: 同じタブレットの一貫性チェック間で必要な最小間隔 (秒単位) を制御します。タブレット選択中、タブレットは `tablet.getLastCheckTime()` が `(currentTimeMillis - consistency_check_cooldown_time_second * 1000)` 未満の場合にのみ適格と見なされます。デフォルト値 (24 * 3600) は、バックエンドのディスク I/O を減らすために、タブレットごとに約 1 日に 1 回のチェックを強制します。この値を減らすとチェック頻度とリソース使用量が増加し、増やすと不整合の検出が遅れる代わりに I/O が減少します。この値は、インデックスのタブレットリストからクールダウンしたタブレットをフィルタリングする際にグローバルに適用されます。
-- Introduced in: v3.5.5
 
 ##### `consistency_check_end_time`
 
 - Default: "4"
 - Type: String
-- Unit: Hour of day (0-23)
+- Unit: 時刻 (0-23)
 - Is mutable: No
-- Description: ConsistencyChecker の作業ウィンドウの終了時間 (時、0-23) を指定します。値はシステムタイムゾーンの SimpleDateFormat("HH") で解析され、0-23 (1 桁または 2 桁) として受け入れられます。StarRocks はこれを `consistency_check_start_time` とともに使用して、一貫性チェックジョブをスケジュールして追加する時期を決定します。`consistency_check_start_time` が `consistency_check_end_time` より大きい場合、ウィンドウは深夜をまたぎます (たとえば、デフォルトは `consistency_check_start_time` = "23" から `consistency_check_end_time` = "4")。`consistency_check_start_time` が `consistency_check_end_time` と等しい場合、チェッカーは実行されません。解析に失敗すると FE の起動がエラーをログに記録して終了するため、有効な時刻文字列を指定してください。
+- Description: ConsistencyChecker の作業ウィンドウの終了時刻（時）を指定します。値はシステムタイムゾーンで SimpleDateFormat("HH") を使用して解析され、0～23（1桁または2桁）として受け入れられます。StarRocks は `consistency_check_start_time` とともにこれを使用して、一貫性チェックジョブをいつスケジュールし、追加するかを決定します。`consistency_check_start_time` が `consistency_check_end_time` より大きい場合、ウィンドウは深夜をまたぎます（例：デフォルトは `consistency_check_start_time` = "23" から `consistency_check_end_time` = "4"）。`consistency_check_start_time` が `consistency_check_end_time` と等しい場合、チェッカーは実行されません。解析に失敗すると、FE の起動時にエラーがログに記録され、終了するため、有効な時間文字列を指定してください。
 - Introduced in: v3.2.0
 
-<<<<<<< HEAD
-#### enable_experimental_gin
-
-- デフォルト: false
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: [全文逆インデックス](../../table_design/indexes/inverted_index.md) 機能を有効にするかどうか。
-- 導入バージョン: v3.3.0
-
-##### storage_usage_soft_limit_percent
-
-- デフォルト: 90
-- 別名: storage_high_watermark_usage_percent
-- タイプ: Int
-- 単位: -
-- 変更可能: はい
-- 説明: BE ディレクトリ内のストレージ使用率のソフトリミット。BE ストレージディレクトリのストレージ使用率（パーセンテージ）がこの値を超え、残りのストレージスペースが `storage_usage_soft_limit_reserve_bytes` より少ない場合、tablets はこのディレクトリにクローンできません。
-- 導入バージョン: -
-
-##### storage_usage_soft_limit_reserve_bytes
-
-- デフォルト: 200 * 1024 * 1024 * 1024
-- 別名: storage_min_left_capacity_bytes
-- タイプ: Long
-- 単位: バイト
-- 変更可能: はい
-- 説明: BE ディレクトリ内の残りストレージスペースのソフトリミット。BE ストレージディレクトリの残りストレージスペースがこの値より少なく、ストレージ使用率（パーセンテージ）が `storage_usage_soft_limit_percent` を超える場合、tablets はこのディレクトリにクローンできません。
-- 導入バージョン: -
-=======
 ##### `consistency_check_start_time`
 
 - Default: "23"
 - Type: String
-- Unit: Hour of day (00-23)
+- Unit: 時刻 (00-23)
 - Is mutable: No
-- Description: ConsistencyChecker の作業ウィンドウの開始時間 (時、00-23) を指定します。値はシステムタイムゾーンの SimpleDateFormat("HH") で解析され、0-23 (1 桁または 2 桁) として受け入れられます。StarRocks はこれを `consistency_check_end_time` とともに使用して、一貫性チェックジョブをスケジュールして追加する時期を決定します。`consistency_check_start_time` が `consistency_check_end_time` より大きい場合、ウィンドウは深夜をまたぎます (たとえば、デフォルトは `consistency_check_start_time` = "23" から `consistency_check_end_time` = "4")。`consistency_check_start_time` が `consistency_check_end_time` と等しい場合、チェッカーは実行されません。解析に失敗すると FE の起動がエラーをログに記録して終了するため、有効な時刻文字列を指定してください。
+- Description: ConsistencyChecker の作業ウィンドウの開始時刻（時）を指定します。値はシステムタイムゾーンで SimpleDateFormat("HH") を使用して解析され、0～23（1桁または2桁）として受け入れられます。StarRocks は `consistency_check_end_time` とともにこれを使用して、一貫性チェックジョブをいつスケジュールし、追加するかを決定します。`consistency_check_start_time` が `consistency_check_end_time` より大きい場合、ウィンドウは深夜をまたぎます（例：デフォルトは `consistency_check_start_time` = "23" から `consistency_check_end_time` = "4"）。`consistency_check_start_time` が `consistency_check_end_time` と等しい場合、チェッカーは実行されません。解析に失敗すると、FE の起動時にエラーがログに記録され、終了するため、有効な時間文字列を指定してください。
 - Introduced in: v3.2.0
 
 ##### `consistency_tablet_meta_check_interval_ms`
 
 - Default: 2 * 3600 * 1000
 - Type: Int
-- Unit: Milliseconds
+- Unit: ミリ秒
 - Is mutable: Yes
-- Description: ConsistencyChecker が `TabletInvertedIndex` と `LocalMetastore` の間の完全なタブレットメタの一貫性スキャンを実行するために使用する間隔 (ミリ秒)。`runAfterCatalogReady` のデーモンは、`現在の時間 - lastTabletMetaCheckTime` がこの値を超えたときに checkTabletMetaConsistency をトリガーします。無効なタブレットが最初に検出された場合、その `toBeCleanedTime` は `now + (consistency_tablet_meta_check_interval_ms / 2)` に設定されるため、実際の削除は後続のスキャンまで遅延されます。この値を増やすとスキャン頻度と負荷が減少し (クリーンアップが遅くなる)、減らすと古いタブレットの検出と削除が高速化されます (オーバーヘッドが増加する)。
+- Description: ConsistencyChecker が `TabletInvertedIndex` と `LocalMetastore` の間で完全なタブレットメタの一貫性スキャンを実行するために使用する間隔。`runAfterCatalogReady` のデーモンは、`current time - lastTabletMetaCheckTime` がこの値を超えると `checkTabletMetaConsistency` をトリガーします。無効なタブレットが最初に検出されたとき、その `toBeCleanedTime` は `now + (consistency_tablet_meta_check_interval_ms / 2)` に設定され、実際の削除は後続のスキャンまで遅延されます。この値を増やすと、スキャン頻度と負荷が軽減され（クリーンアップが遅くなる）、減らすと、古いタブレットをより速く検出して削除できます（オーバーヘッドが増加する）。
 - Introduced in: v3.2.0
 
 ##### `default_replication_num`
@@ -4549,7 +2824,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Short
 - Unit: -
 - Is mutable: Yes
-- Description: StarRocks でテーブルを作成する際に、各データパーティションのレプリカのデフォルト数を設定します。この設定は、CREATE TABLE DDL で `replication_num=x` を指定することで、テーブル作成時に上書きできます。
+- Description: StarRocks でテーブルを作成する際に、各データパーティションのデフォルトのレプリカ数を設定します。この設定は、CREATE TABLE DDL で `replication_num=x` を指定することで、テーブル作成時に上書きできます。
 - Introduced in: -
 
 ##### `enable_auto_tablet_distribution`
@@ -4559,8 +2834,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Unit: -
 - Is mutable: Yes
 - Description: バケット数を自動的に設定するかどうか。
-  - このパラメーターが `TRUE` に設定されている場合、テーブルを作成したりパーティションを追加したりする際にバケット数を指定する必要はありません。StarRocks は自動的にバケット数を決定します。
-  - このパラメーターが `FALSE` に設定されている場合、テーブルを作成したりパーティションを追加したりする際にバケット数を手動で指定する必要があります。テーブルに新しいパーティションを追加する際にバケット数を指定しない場合、新しいパーティションはテーブル作成時に設定されたバケット数を継承します。ただし、新しいパーティションにバケット数を手動で指定することもできます。
+  - このパラメータが `TRUE` に設定されている場合、テーブルを作成したりパーティションを追加したりする際に、バケット数を指定する必要はありません。StarRocks が自動的にバケット数を決定します。
+  - このパラメータが `FALSE` に設定されている場合、テーブルを作成したりパーティションを追加したりする際に、バケット数を手動で指定する必要があります。テーブルに新しいパーティションを追加する際にバケット数を指定しない場合、新しいパーティションはテーブル作成時に設定されたバケット数を継承します。ただし、新しいパーティションのバケット数を手動で指定することもできます。
 - Introduced in: v2.5.7
 
 ##### `enable_experimental_rowstore`
@@ -4569,7 +2844,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: [ハイブリッド行指向・列指向ストレージ](../../table_design/hybrid_table.md) 機能を有効にするかどうか。
+- Description: [ハイブリッド行・列ストレージ](../../table_design/hybrid_table.md) 機能を有効にするかどうか。
 - Introduced in: v3.2.3
 
 ##### `enable_fast_schema_evolution`
@@ -4578,13 +2853,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: StarRocks クラスター内のすべてのテーブルで高速スキーマ進化を有効にするかどうか。有効な値は `TRUE` と `FALSE` (デフォルト) です。高速スキーマ進化を有効にすると、スキーマ変更の速度が向上し、列の追加または削除時のリソース使用量が削減されます。
+- Description: StarRocks クラスター内のすべてのテーブルで高速スキーマ進化を有効にするかどうか。有効な値は `TRUE` と `FALSE`（デフォルト）です。高速スキーマ進化を有効にすると、スキーマ変更の速度が向上し、列の追加または削除時のリソース使用量を削減できます。
 - Introduced in: v3.2.0
 
 > **NOTE**
 >
-> - StarRocks Shared-data クラスターは v3.3.0 以降でこのパラメーターをサポートしています。
-> - 特定のテーブルの高速スキーマ進化を設定する必要がある場合 (特定のテーブルの高速スキーマ進化を無効にするなど) は、テーブル作成時にテーブルプロパティ [`fast_schema_evolution`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#set-fast-schema-evolution) を設定できます。
+> - StarRocks 共有データクラスターは、v3.3.0 からこのパラメータをサポートしています。
+> - 特定のテーブルの高速スキーマ進化を構成する必要がある場合（例：特定のテーブルの高速スキーマ進化を無効にする場合）、テーブル作成時にテーブルプロパティ [`fast_schema_evolution`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#set-fast-schema-evolution) を設定できます。
 
 ##### `enable_online_optimize_table`
 
@@ -4592,7 +2867,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: 最適化ジョブ作成時に StarRocks が非ブロッキングのオンライン最適化パスを使用するかどうかを制御します。`enable_online_optimize_table` が true で、ターゲットテーブルが互換性チェックを満たす場合 (パーティション/キー/ソート指定なし、分散が `RandomDistributionDesc` でない、ストレージタイプが `COLUMN_WITH_ROW` でない、レプリケートストレージが有効、テーブルがクラウドネイティブテーブルまたはマテリアライズドビューでない)、プランナーは書き込みをブロックせずに最適化を実行するために `OnlineOptimizeJobV2` を作成します。false の場合、または互換性条件が失敗した場合、StarRocks は `OptimizeJobV2` にフォールバックします。これは、最適化中に書き込み操作をブロックする可能性があります。
+- Description: 最適化ジョブを作成する際に、StarRocks が非ブロッキングのオンライン最適化パスを使用するかどうかを制御します。`enable_online_optimize_table` が true で、ターゲットテーブルが互換性チェック（パーティション/キー/ソート指定なし、ディストリビューションが `RandomDistributionDesc` ではない、ストレージタイプが `COLUMN_WITH_ROW` ではない、レプリケートストレージが有効、かつテーブルがクラウドネイティブテーブルまたはマテリアライズドビューではない）を満たす場合、プランナーは書き込みをブロックせずに最適化を実行するために `OnlineOptimizeJobV2` を作成します。false の場合、または互換性条件のいずれかが失敗した場合、StarRocks は `OptimizeJobV2` にフォールバックし、最適化中に書き込み操作をブロックする可能性があります。
 - Introduced in: v3.3.3, v3.4.0, v3.5.0
 
 ##### `enable_strict_storage_medium_check`
@@ -4601,7 +2876,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: ユーザーがテーブルを作成する際に、FE が BE のストレージメディアを厳密にチェックするかどうか。このパラメーターが `TRUE` に設定されている場合、FE はユーザーがテーブルを作成する際に BE のストレージメディアをチェックし、BE のストレージメディアが CREATE TABLE ステートメントで指定された `storage_medium` パラメーターと異なる場合、エラーを返します。例えば、CREATE TABLE ステートメントで指定されたストレージメディアが SSD であるのに、BE の実際のストレージメディアが HDD である場合、テーブル作成は失敗します。このパラメーターが `FALSE` の場合、FE はユーザーがテーブルを作成する際に BE のストレージメディアをチェックしません。
+- Description: ユーザーがテーブルを作成する際に、FE が BE のストレージメディアを厳密にチェックするかどうか。このパラメータが `TRUE` に設定されている場合、FE はユーザーがテーブルを作成する際に BE のストレージメディアをチェックし、BE のストレージメディアが CREATE TABLE ステートメントで指定された `storage_medium` パラメータと異なる場合、エラーを返します。例えば、CREATE TABLE ステートメントで指定されたストレージメディアが SSD であるにもかかわらず、BE の実際のストレージメディアが HDD である場合、テーブル作成は失敗します。このパラメータが `FALSE` の場合、FE はユーザーがテーブルを作成する際に BE のストレージメディアをチェックしません。
 - Introduced in: -
 
 ##### `max_bucket_number_per_partition`
@@ -4610,7 +2885,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: パーティション内に作成できるバケットの最大数。
+- Description: 1つのパーティションで作成できるバケットの最大数。
 - Introduced in: v3.3.2
 
 ##### `max_column_number_per_table`
@@ -4619,7 +2894,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: テーブル内に作成できる列の最大数。
+- Description: 1つのテーブルで作成できる列の最大数。
 - Introduced in: v3.3.2
 
 ##### `max_dynamic_partition_num`
@@ -4628,7 +2903,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: 動的パーティションテーブルの分析または作成時に一度に作成できる最大パーティション数を制限します。動的パーティションプロパティ検証中、`systemtask_runs_max_history_number` は予想されるパーティション (終了オフセット + 履歴パーティション番号) を計算し、合計が `max_dynamic_partition_num` を超える場合、DDL エラーをスローします。正当に大きなパーティション範囲を予想する場合にのみこの値を増やしてください。増やすとより多くのパーティションを作成できますが、メタデータサイズ、スケジューリング作業、および運用上の複雑さが増加する可能性があります。
+- Description: 動的パーティションテーブルを分析または作成する際に、一度に作成できるパーティションの最大数を制限します。動的パーティションプロパティの検証中、`systemtask_runs_max_history_number` は予想されるパーティション（終了オフセット + 履歴パーティション数）を計算し、その合計が `max_dynamic_partition_num` を超える場合、DDL エラーをスローします。この値は、正当に大きなパーティション範囲を期待する場合にのみ引き上げてください。これを増やすと、より多くのパーティションを作成できますが、メタデータサイズ、スケジューリング作業、および運用上の複雑さが増加する可能性があります。
 - Introduced in: v3.2.0
 
 ##### `max_partition_number_per_table`
@@ -4637,7 +2912,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: テーブル内に作成できるパーティションの最大数。
+- Description: 1つのテーブルで作成できるパーティションの最大数。
 - Introduced in: v3.3.2
 
 ##### `max_task_consecutive_fail_count`
@@ -4646,18 +2921,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: タスクが自動的に停止されるまでに発生する可能性のある連続失敗の最大数。`TaskSource.MV.equals(task.getSource())` が `true` で `max_task_consecutive_fail_count` が 0 より大きい場合、タスクの連続失敗カウンターが `max_task_consecutive_fail_count` に達するか超えると、タスクは TaskManager を介して停止され、マテリアライズドビュータスクの場合はマテリアライズドビューが非アクティブ化されます。停止と再アクティブ化の方法を示す例外がスローされます (例: `ALTER MATERIALIZED VIEW <mv_name> ACTIVE`)。自動停止を無効にするには、この項目を 0 または負の値に設定します。
+- Description: スケジューラがタスクを自動的に中断するまでに、タスクが連続して失敗する可能性のある最大回数。`TaskSource.MV.equals(task.getSource())` で `max_task_consecutive_fail_count` が 0 より大きい場合、タスクの連続失敗カウンターが `max_task_consecutive_fail_count` に達するか超えると、タスクは TaskManager を介して中断され、マテリアライズドビュータスクの場合、マテリアライズドビューは非アクティブ化されます。中断と再アクティブ化の方法を示す例外がスローされます（例：`ALTER MATERIALIZED VIEW <mv_name> ACTIVE`）。自動中断を無効にするには、この項目を 0 または負の値に設定します。
 - Introduced in: -
->>>>>>> 7c14cbc6a8 ([Doc] add backticks to config names (#69369))
-
-##### `partition_recycle_retention_period_secs`
-
-- Default: 1800
-- Type: Long
-- Unit: Seconds
-- Is mutable: Yes
-- Description: INSERT OVERWRITE またはマテリアライズドビュー更新操作によって削除されたパーティションのメタデータ保持時間。このようなメタデータは、[RECOVER](../../sql-reference/sql-statements/backup_restore/RECOVER.md) の実行によって回復できないことに注意してください。
-- Introduced in: v3.5.9
 
 ##### `recover_with_empty_tablet`
 
@@ -4665,44 +2930,9 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: 失われたまたは破損したタブレットレプリカを空のレプリカに置き換えるかどうか。タブレットレプリカが失われたり破損したりした場合、このタブレットまたは他の健全なタブレットのデータクエリは失敗する可能性があります。失われたまたは破損したタブレットレプリカを空のタブレットに置き換えることで、クエリは引き続き実行できます。ただし、データが失われているため、結果が正しくない可能性があります。デフォルト値は `FALSE` で、失われたまたは破損したタブレットレプリカは空のレプリカに置き換えられず、クエリは失敗します。
+- Description: 紛失または破損したタブレットレプリカを空のレプリカに置き換えるかどうか。タブレットレプリカが紛失または破損した場合、このタブレットまたは他の正常なタブレットに対するデータクエリが失敗する可能性があります。紛失または破損したタブレットレプリカを空のタブレットに置き換えることで、クエリは引き続き実行できます。ただし、データが失われるため、結果が正しくない可能性があります。デフォルト値は `FALSE` であり、紛失または破損したタブレットレプリカは空のレプリカに置き換えられず、クエリは失敗します。
 - Introduced in: -
 
-<<<<<<< HEAD
-##### alter_table_timeout_second
-
-- デフォルト: 86400
-- タイプ: Int
-- 単位: 秒
-- 変更可能: はい
-- 説明: スキーマ変更操作 (ALTER TABLE) のタイムアウト期間。
-- 導入バージョン: -
-
-##### enable_fast_schema_evolution
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: StarRocks クラスタ内のすべてのテーブルに対して高速スキーマ進化を有効にするかどうか。有効な値は `TRUE` と `FALSE` (デフォルト) です。高速スキーマ進化を有効にすると、スキーマ変更の速度が向上し、列の追加や削除時のリソース使用量が減少します。
-- 導入バージョン: v3.2.0
-
-> **NOTE**
->
-> - StarRocks 共有データクラスタは v3.3.0 からこのパラメータをサポートしています。
-> - 特定のテーブルに対して高速スキーマ進化を設定する必要がある場合、たとえば特定のテーブルに対して高速スキーマ進化を無効にする場合、テーブル作成時にテーブルプロパティ [`fast_schema_evolution`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#set-fast-schema-evolution) を設定できます。
-
-##### recover_with_empty_tablet
-
-- デフォルト: false
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: 失われたまたは破損した tablet レプリカを空のものに置き換えるかどうか。tablet レプリカが失われたり破損したりすると、この tablet または他の正常な tablets に対するデータクエリが失敗する可能性があります。失われたまたは破損した tablet レプリカを空の tablet に置き換えることで、クエリを実行し続けることができます。ただし、データが失われているため、結果が正しくない可能性があります。デフォルト値は `FALSE` で、失われたまたは破損した tablet レプリカは空のものに置き換えられず、クエリは失敗します。
-- 導入バージョン: -
-
-##### tablet_create_timeout_second
-=======
 ##### `storage_usage_hard_limit_percent`
 
 - Default: 95
@@ -4710,7 +2940,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: BE ディレクトリのストレージ使用率のハードリミット。BE ストレージディレクトリのストレージ使用率 (パーセンテージ) がこの値を超え、残りのストレージスペースが `storage_usage_hard_limit_reserve_bytes` 未満の場合、ロードおよび復元ジョブは拒否されます。この設定を有効にするには、BE 設定項目 `storage_flood_stage_usage_percent` と合わせてこの項目を設定する必要があります。
+- Description: BE ディレクトリ内のストレージ使用率のハードリミット。BE ストレージディレクトリのストレージ使用率（パーセンテージ）がこの値を超え、かつ残りのストレージスペースが `storage_usage_hard_limit_reserve_bytes` 未満の場合、ロードジョブとリストアジョブは拒否されます。この項目は、BE 設定項目 `storage_flood_stage_usage_percent` とともに設定して、設定が有効になるようにする必要があります。
 - Introduced in: -
 
 ##### `storage_usage_hard_limit_reserve_bytes`
@@ -4718,9 +2948,9 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Default: 100 * 1024 * 1024 * 1024
 - Alias: `storage_flood_stage_left_capacity_bytes`
 - Type: Long
-- Unit: Bytes
+- Unit: バイト
 - Is mutable: Yes
-- Description: BE ディレクトリの残りストレージスペースのハードリミット。BE ストレージディレクトリの残りストレージスペースがこの値未満で、ストレージ使用率 (パーセンテージ) が `storage_usage_hard_limit_percent` を超える場合、ロードおよび復元ジョブは拒否されます。この設定を有効にするには、BE 設定項目 `storage_flood_stage_left_capacity_bytes` と合わせてこの項目を設定する必要があります。
+- Description: BE ディレクトリ内の残りのストレージスペースのハードリミット。BE ストレージディレクトリ内の残りのストレージスペースがこの値未満で、かつストレージ使用率（パーセンテージ）が `storage_usage_hard_limit_percent` を超える場合、ロードジョブとリストアジョブは拒否されます。この項目は、BE 設定項目 `storage_flood_stage_left_capacity_bytes` とともに設定して、設定が有効になるようにする必要があります。
 - Introduced in: -
 
 ##### `storage_usage_soft_limit_percent`
@@ -4730,73 +2960,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: BE ディレクトリのストレージ使用率のソフトリミット。BE ストレージディレクトリのストレージ使用率 (パーセンテージ) がこの値を超え、残りのストレージスペースが `storage_usage_soft_limit_reserve_bytes` 未満の場合、タブレットは このディレクトリにクローンできません。
+- Description: BE ディレクトリ内のストレージ使用率のソフトリミット。BE ストレージディレクトリのストレージ使用率（パーセンテージ）がこの値を超え、かつ残りのストレージスペースが `storage_usage_soft_limit_reserve_bytes` 未満の場合、タブレットはこのディレクトリにクローンできません。
 - Introduced in: -
 
 ##### `storage_usage_soft_limit_reserve_bytes`
->>>>>>> 7c14cbc6a8 ([Doc] add backticks to config names (#69369))
 
 - Default: 200 * 1024 * 1024 * 1024
 - Alias: `storage_min_left_capacity_bytes`
 - Type: Long
-- Unit: Bytes
+- Unit: バイト
 - Is mutable: Yes
-- Description: BE ディレクトリの残りストレージスペースのソフトリミット。BE ストレージディレクトリの残りストレージスペースがこの値未満で、ストレージ使用率 (パーセンテージ) が `storage_usage_soft_limit_percent` を超える場合、タブレットはこのディレクトリにクローンできません。
+- Description: BE ディレクトリ内の残りのストレージスペースのソフトリミット。BE ストレージディレクトリ内の残りのストレージスペースがこの値未満で、かつストレージ使用率（パーセンテージ）が `storage_usage_soft_limit_percent` を超える場合、タブレットはこのディレクトリにクローンできません。
 - Introduced in: -
 
-##### `tablet_checker_lock_time_per_cycle_ms`
-
-- Default: 1000
-- Type: Int
-- Unit: Milliseconds
-- Is mutable: Yes
-- Description: テーブルロックを解放して再取得するまでの、タブレットチェッカーがサイクルごとにロックを保持する最大時間。100 未満の値は 100 として扱われます。
-- Introduced in: v3.5.9, v4.0.2
-
-<<<<<<< HEAD
-##### check_consistency_default_timeout_second
-
-- デフォルト: 600
-- タイプ: Long
-- 単位: 秒
-- 変更可能: はい
-- 説明: レプリカの整合性チェックのタイムアウト期間。tablet のサイズに基づいてこのパラメータを設定できます。
-- 導入バージョン: -
-
-##### tablet_sched_slot_num_per_path
-
-- デフォルト: 8
-- 別名: schedule_slot_num_per_path
-- タイプ: Int
-- 単位: -
-- 変更可能: はい
-- 説明: BE ストレージディレクトリ内で同時に実行できる tablet 関連タスクの最大数。v2.5 以降、このパラメータのデフォルト値は `4` から `8` に変更されました。
-- 導入バージョン: -
-
-##### tablet_sched_max_scheduling_tablets
-
-- デフォルト: 10000
-- 別名: max_scheduling_tablets
-- タイプ: Int
-- 単位: -
-- 変更可能: はい
-- 説明: 同時にスケジュールできる tablet の最大数。この値を超えると、tablet のバランスと修復チェックがスキップされます。
-- 導入バージョン: -
-=======
 ##### `tablet_create_timeout_second`
 
 - Default: 10
 - Type: Int
-- Unit: Seconds
+- Unit: 秒
 - Is mutable: Yes
-- Description: タブレット作成のタイムアウト期間。v3.1 以降、デフォルト値は 1 から 10 に変更されました。
+- Description: タブレット作成のタイムアウト期間。デフォルト値は v3.1 以降、1 から 10 に変更されました。
 - Introduced in: -
 
 ##### `tablet_delete_timeout_second`
 
 - Default: 2
 - Type: Int
-- Unit: Seconds
+- Unit: 秒
 - Is mutable: Yes
 - Description: タブレット削除のタイムアウト期間。
 - Introduced in: -
@@ -4808,9 +2998,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Double
 - Unit: -
 - Is mutable: Yes
-- Description: BE のディスク使用量がバランスしているかどうかを判断するためのパーセンテージしきい値。すべての BE のディスク使用量がこの値よりも低い場合、バランスしていると見なされます。ディスク使用量がこの値よりも大きく、最高と最低の BE ディスク使用量の差が 10% を超える場合、ディスク使用量はバランスしていないと見なされ、タブレットの再バランシングがトリガーされます。
+- Description: BE のディスク使用率がバランスしているかどうかを判断するためのパーセンテージしきい値。すべての BE のディスク使用率がこの値より低い場合、バランスしていると見なされます。ディスク使用率がこの値より大きく、かつ最高と最低の BE ディスク使用率の差が 10% を超える場合、ディスク使用率はアンバランスであると見なされ、タブレットの再バランスがトリガーされます。
 - Introduced in: -
->>>>>>> 7c14cbc6a8 ([Doc] add backticks to config names (#69369))
 
 ##### `tablet_sched_balance_load_score_threshold`
 
@@ -4819,44 +3008,28 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Double
 - Unit: -
 - Is mutable: Yes
-- Description: BE の負荷がバランスしているかどうかを判断するためのパーセンテージしきい値。BE の負荷がすべての BE の平均負荷よりも低く、その差がこの値よりも大きい場合、その BE は低負荷状態にあります。逆に、BE の負荷が平均負荷よりも高く、その差がこの値よりも大きい場合、その BE は高負荷状態にあります。
+- Description: BE の負荷がバランスしているかどうかを判断するためのパーセンテージしきい値。BE の負荷がすべての BE の平均負荷より低く、その差がこの値より大きい場合、この BE は低負荷状態にあります。逆に、BE の負荷が平均負荷より高く、その差がこの値より大きい場合、この BE は高負荷状態にあります。
 - Introduced in: -
 
 ##### `tablet_sched_be_down_tolerate_time_s`
 
 - Default: 900
 - Type: Long
-- Unit: Seconds
+- Unit: 秒
 - Is mutable: Yes
-- Description: スケジューラが BE ノードを非アクティブのままにする最大期間。この時間しきい値に達すると、その BE ノード上のタブレットは他のアクティブな BE ノードに移行されます。
+- Description: スケジューラが BE ノードが非アクティブ状態を維持することを許容する最大期間。この時間しきい値に達すると、その BE ノード上のタブレットは他のアクティブな BE ノードに移行されます。
 - Introduced in: v2.5.7
 
-<<<<<<< HEAD
-##### tablet_sched_be_down_tolerate_time_s
-
-- デフォルト: 900
-- タイプ: Long
-- 単位: 秒
-- 変更可能: はい
-- 説明: スケジューラが BE ノードの非アクティブ状態を許容する最大期間。この時間のしきい値に達すると、その BE ノード上の tablets は他のアクティブな BE ノードに移行されます。
-- 導入バージョン: v2.5.7
-
-##### tablet_sched_max_balancing_tablets
-=======
 ##### `tablet_sched_disable_balance`
->>>>>>> 7c14cbc6a8 ([Doc] add backticks to config names (#69369))
 
 - Default: false
 - Alias: `disable_balance`
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: タブレットバランシングを無効にするかどうか。`TRUE` はタブレットバランシングが無効になっていることを示します。`FALSE` はタブレットバランシングが有効になっていることを示します。
+- Description: タブレットのバランス調整を無効にするかどうか。`TRUE` はタブレットのバランス調整が無効であることを示します。`FALSE` はタブレットのバランス調整が有効であることを示します。
 - Introduced in: -
 
-<<<<<<< HEAD
-##### tablet_sched_storage_cooldown_second
-=======
 ##### `tablet_sched_disable_colocate_balance`
 
 - Default: false
@@ -4864,7 +3037,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: コロケーションテーブルのレプリカバランシングを無効にするかどうか。`TRUE` はレプリカバランシングが無効になっていることを示します。`FALSE` はレプリカバランシングが有効になっていることを示します。
+- Description: Colocate Table のレプリカバランス調整を無効にするかどうか。`TRUE` はレプリカバランス調整が無効であることを示します。`FALSE` はレプリカバランス調整が有効であることを示します。
 - Introduced in: -
 
 ##### `tablet_sched_max_balancing_tablets`
@@ -4874,7 +3047,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: 同時にバランスできるタブレットの最大数。この値を超えると、タブレットの再バランシングはスキップされます。
+- Description: 同時にバランス調整できるタブレットの最大数。この値を超えると、タブレットの再バランス調整はスキップされます。
 - Introduced in: -
 
 ##### `tablet_sched_max_clone_task_timeout_sec`
@@ -4882,7 +3055,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Default: 2 * 60 * 60
 - Alias: `max_clone_task_timeout_sec`
 - Type: Long
-- Unit: Seconds
+- Unit: 秒
 - Is mutable: Yes
 - Description: タブレットのクローン作成の最大タイムアウト期間。
 - Introduced in: -
@@ -4891,9 +3064,9 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - Default: 15 * 60 * 1000
 - Type: Long
-- Unit: Milliseconds
+- Unit: ミリ秒
 - Is mutable: Yes
-- Description: タブレットクローンタスクがスケジュールされている場合、このパラメーターで指定された時間の間タブレットがスケジュールされていない場合、StarRocks はそのタブレットに高い優先度を与え、できるだけ早くスケジュールします。
+- Description: タブレットのクローンタスクがスケジュールされているときに、このパラメータで指定された時間、タブレットがスケジュールされていない場合、StarRocks はそれをできるだけ早くスケジュールするために高い優先度を与えます。
 - Introduced in: -
 
 ##### `tablet_sched_max_scheduling_tablets`
@@ -4903,7 +3076,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: 同時にスケジュールできるタブレットの最大数。この値を超えると、タブレットのバランシングと修復チェックはスキップされます。
+- Description: 同時にスケジュールできるタブレットの最大数。この値を超えると、タブレットのバランス調整と修復チェックはスキップされます。
 - Introduced in: -
 
 ##### `tablet_sched_min_clone_task_timeout_sec`
@@ -4911,7 +3084,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Default: 3 * 60
 - Alias: `min_clone_task_timeout_sec`
 - Type: Long
-- Unit: Seconds
+- Unit: 秒
 - Is mutable: Yes
 - Description: タブレットのクローン作成の最小タイムアウト期間。
 - Introduced in: -
@@ -4923,101 +3096,27 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Double
 - Unit: -
 - Is mutable: Yes
-- Description: 数ベースのバランシングはディスクサイズバランスを損なう可能性がありますが、ディスク間の最大ギャップは `tablet_sched_num_based_balance_threshold_ratio` * `tablet_sched_balance_load_score_threshold` を超えることはできません。クラスター内に A から B へ、そして B から A へと常にバランシングしているタブレットがある場合、この値を減らしてください。タブレットの分散をよりバランスさせたい場合、この値を増やしてください。
+- Description: 数値ベースのバランス調整を行うとディスクサイズのバランスが崩れる可能性がありますが、ディスク間の最大ギャップは `tablet_sched_num_based_balance_threshold_ratio` * `tablet_sched_balance_load_score_threshold` を超えることはできません。クラスター内に A から B、B から A へと常にバランス調整されているタブレットがある場合、この値を減らしてください。タブレットの分散をよりバランスの取れたものにしたい場合は、この値を増やしてください。
 - Introduced in: - 3.1
 
 ##### `tablet_sched_repair_delay_factor_second`
->>>>>>> 7c14cbc6a8 ([Doc] add backticks to config names (#69369))
 
 - Default: 60
 - Alias: `tablet_repair_delay_factor_second`
 - Type: Long
-- Unit: Seconds
+- Unit: 秒
 - Is mutable: Yes
-- Description: レプリカが修復される間隔 (秒単位)。
+- Description: レプリカが修復される間隔（秒単位）。
 - Introduced in: -
 
-<<<<<<< HEAD
-##### tablet_sched_max_not_being_scheduled_interval_ms
-
-- デフォルト: 15 * 60 * 1000
-- タイプ: Long
-- 単位: ミリ秒
-- 変更可能: はい
-- 説明: tablet クローンタスクがスケジュールされている場合、このパラメータで指定された時間内に tablet がスケジュールされていない場合、StarRocks はできるだけ早くスケジュールする優先順位を与えます。
-- 導入バージョン: -
-
-##### tablet_sched_balance_load_score_threshold
-
-- デフォルト: 0.1
-- 別名: balance_load_score_threshold
-- タイプ: Double
-- 単位: -
-- 変更可能: はい
-- 説明: BE の負荷がバランスされているかどうかを判断するためのパーセンテージしきい値。BE の負荷がすべての BEs の平均負荷より低く、その差がこの値を超える場合、この BE は低負荷状態にあります。逆に、BE の負荷が平均負荷より高く、その差がこの値を超える場合、この BE は高負荷状態にあります。
-- 導入バージョン: -
-
-##### tablet_sched_num_based_balance_threshold_ratio
-
-- デフォルト: 0.5
-- 別名: -
-- タイプ: Double
-- 単位: -
-- 変更可能: はい
-- 説明: 数に基づくバランスを行うと、ディスクサイズのバランスが崩れる可能性がありますが、ディスク間の最大ギャップは tablet_sched_num_based_balance_threshold_ratio * tablet_sched_balance_load_score_threshold を超えることはできません。クラスタ内の tablets が A から B に、B から A に絶えずバランスを取っている場合、この値を減らしてください。tablet の分布をよりバランスさせたい場合、この値を増やしてください。
-- 導入バージョン: - 3.1
-
-##### tablet_sched_balance_load_disk_safe_threshold
-
-- デフォルト: 0.5
-- 別名: balance_load_disk_safe_threshold
-- タイプ: Double
-- 単位: -
-- 変更可能: はい
-- 説明: BEs のディスク使用率がバランスされているかどうかを判断するためのパーセンテージしきい値。すべての BEs のディスク使用率がこの値より低い場合、バランスされていると見なされます。ディスク使用率がこの値を超え、最高と最低の BE ディスク使用率の差が 10% を超える場合、ディスク使用率はバランスされていないと見なされ、tablet の再バランスがトリガーされます。
-- 導入バージョン: -
-
-##### tablet_sched_repair_delay_factor_second
-
-- デフォルト: 60
-- 別名: tablet_repair_delay_factor_second
-- タイプ: Long
-- 単位: 秒
-- 変更可能: はい
-- 説明: レプリカが修復される間隔（秒単位）。
-- 導入バージョン: -
-
-##### tablet_sched_min_clone_task_timeout_sec
-
-- デフォルト: 3 * 60
-- 別名: min_clone_task_timeout_sec
-- タイプ: Long
-- 単位: 秒
-- 変更可能: はい
-- 説明: tablet をクローンするための最小タイムアウト期間。
-- 導入バージョン: -
-
-##### tablet_sched_max_clone_task_timeout_sec
-
-- デフォルト: 2 * 60 * 60
-- 別名: max_clone_task_timeout_sec
-- タイプ: Long
-- 単位: 秒
-- 変更可能: はい
-- 説明: tablet をクローンするための最大タイムアウト期間。
-- 導入バージョン: -
-
-##### tablet_stat_update_interval_second
-=======
 ##### `tablet_sched_slot_num_per_path`
->>>>>>> 7c14cbc6a8 ([Doc] add backticks to config names (#69369))
 
 - Default: 8
 - Alias: `schedule_slot_num_per_path`
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: BE ストレージディレクトリで同時に実行できるタブレット関連タスクの最大数。v2.5 以降、このパラメーターのデフォルト値は `4` から `8` に変更されました。
+- Description: BE ストレージディレクトリで同時に実行できるタブレット関連タスクの最大数。v2.5 以降、このパラメータのデフォルト値は `4` から `8` に変更されました。
 - Introduced in: -
 
 ##### `tablet_sched_storage_cooldown_second`
@@ -5025,2161 +3124,1035 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Default: -1
 - Alias: `storage_cooldown_second`
 - Type: Long
-- Unit: Seconds
+- Unit: 秒
 - Is mutable: Yes
-- Description: テーブル作成時からの自動冷却の遅延時間。デフォルト値 `-1` は自動冷却が無効になっていることを指定します。自動冷却を有効にするには、このパラメーターを `-1` より大きい値に設定します。
+- Description: テーブル作成時から始まる自動冷却の遅延時間。デフォルト値 `-1` は、自動冷却が無効であることを指定します。自動冷却を有効にする場合は、このパラメータを `-1` より大きい値に設定してください。
 - Introduced in: -
 
 ##### `tablet_stat_update_interval_second`
 
 - Default: 300
 - Type: Int
-- Unit: Seconds
+- Unit: 秒
 - Is mutable: No
 - Description: FE が各 BE からタブレット統計を取得する時間間隔。
 - Introduced in: -
 
-##### max_automatic_partition_number
-
-- デフォルト: 4096
-- タイプ: Int
-- 単位: -
-- 変更可能: はい
-- 説明: 自動的に作成されるパーティションの最大数。
-- 導入バージョン: v3.1
-
-##### auto_partition_max_creation_number_per_load
-
-- デフォルト: 4096
-- タイプ: Int
-- 単位: -
-- 変更可能: はい
-- 説明: ロードタスクによってテーブル（式に基づくパーティション化戦略）に作成できる最大パーティション数。
-- 導入バージョン: v3.3.2
-
-##### max_partition_number_per_table
-
-- デフォルト: 100000
-- タイプ: Int
-- 単位: -
-- 変更可能: はい
-- 説明: テーブルに作成できる最大パーティション数。
-- 導入バージョン: v3.3.2
-
-##### max_bucket_number_per_partition
-
-- デフォルト: 1024
-- タイプ: Int
-- 単位: -
-- 変更可能: はい
-- 説明: パーティションに作成できる最大バケット数。
-- 導入バージョン: v3.3.2
-
-##### max_column_number_per_table
-
-- デフォルト: 10000
-- タイプ: Int
-- 単位: -
-- 変更可能: はい
-- 説明: テーブルに作成できる最大列数。
-- 導入バージョン: v3.3.2
-
 ### 共有データ
 
-<<<<<<< HEAD
-##### run_mode
+##### `aws_s3_access_key`
 
-- デフォルト: shared_nothing
+- デフォルト: 空の文字列
 - タイプ: String
 - 単位: -
 - 変更可能: いいえ
-- 説明: StarRocks クラスタの実行モード。有効な値: `shared_data` と `shared_nothing` (デフォルト)。
-  - `shared_data` は StarRocks を共有データモードで実行することを示します。
-  - `shared_nothing` は StarRocks を共有なしモードで実行することを示します。
+- 説明: S3バケットにアクセスするために使用されるAccess Key ID。
+- 導入バージョン: v3.0
 
-  > **CAUTION**
-  >
-  > - StarRocks クラスタに対して `shared_data` と `shared_nothing` モードを同時に採用することはできません。混合デプロイメントはサポートされていません。
-  > - クラスタがデプロイされた後に `run_mode` を変更しないでください。そうしないと、クラスタが再起動に失敗します。共有なしクラスタから共有データクラスタへの変換、またはその逆はサポートされていません。
+##### `aws_s3_endpoint`
 
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: S3バケットにアクセスするために使用されるエンドポイント。例: `https://s3.us-west-2.amazonaws.com`。
+- 導入バージョン: v3.0
+
+##### `aws_s3_external_id`
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: S3バケットへのクロスアカウントアクセスに使用されるAWSアカウントの外部ID。
+- 導入バージョン: v3.0
+
+##### `aws_s3_iam_role_arn`
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: データファイルが保存されているS3バケットに対する権限を持つIAMロールのARN。
+- 導入バージョン: v3.0
+
+##### `aws_s3_path`
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: データを保存するために使用されるS3パス。S3バケットの名前と、その下のサブパス（存在する場合）で構成されます。例: `testbucket/subpath`。
+- 導入バージョン: v3.0
+
+##### `aws_s3_region`
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: S3バケットが存在するリージョン。例: `us-west-2`。
+- 導入バージョン: v3.0
+
+##### `aws_s3_secret_key`
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: S3バケットにアクセスするために使用されるSecret Access Key。
+- 導入バージョン: v3.0
+
+##### `aws_s3_use_aws_sdk_default_behavior`
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: いいえ
+- 説明: AWS SDKのデフォルト認証情報を使用するかどうか。有効な値: trueおよびfalse（デフォルト）。
+- 導入バージョン: v3.0
+
+##### `aws_s3_use_instance_profile`
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: いいえ
+- 説明: S3にアクセスするための認証方法としてInstance ProfileとAssumed Roleを使用するかどうか。有効な値: trueおよびfalse（デフォルト）。
+  - IAMユーザーベースの認証情報（Access KeyとSecret Key）を使用してS3にアクセスする場合、この項目を`false`に設定し、`aws_s3_access_key`と`aws_s3_secret_key`を指定する必要があります。
+  - Instance Profileを使用してS3にアクセスする場合、この項目を`true`に設定する必要があります。
+  - Assumed Roleを使用してS3にアクセスする場合、この項目を`true`に設定し、`aws_s3_iam_role_arn`を指定する必要があります。
+  - 外部AWSアカウントを使用する場合、`aws_s3_external_id`も指定する必要があります。
+- 導入バージョン: v3.0
+
+##### `azure_adls2_endpoint`
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: Azure Data Lake Storage Gen2アカウントのエンドポイント。例: `https://test.dfs.core.windows.net`。
+- 導入バージョン: v3.4.1
+
+##### `azure_adls2_oauth2_client_id`
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: Azure Data Lake Storage Gen2へのリクエストを認証するために使用されるManaged IdentityのClient ID。
+- 導入バージョン: v3.4.4
+
+##### `azure_adls2_oauth2_tenant_id`
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: Azure Data Lake Storage Gen2へのリクエストを認証するために使用されるManaged IdentityのTenant ID。
+- 導入バージョン: v3.4.4
+
+##### `azure_adls2_oauth2_use_managed_identity`
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: いいえ
+- 説明: Azure Data Lake Storage Gen2へのリクエストを認証するためにManaged Identityを使用するかどうか。
+- 導入バージョン: v3.4.4
+
+##### `azure_adls2_path`
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: データを保存するために使用されるAzure Data Lake Storage Gen2パス。ファイルシステム名とディレクトリ名で構成されます。例: `testfilesystem/starrocks`。
+- 導入バージョン: v3.4.1
+
+##### `azure_adls2_sas_token`
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: Azure Data Lake Storage Gen2へのリクエストを認証するために使用されるShared Access Signatures (SAS)。
+- 導入バージョン: v3.4.1
+
+##### `azure_adls2_shared_key`
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: Azure Data Lake Storage Gen2へのリクエストを認証するために使用されるShared Key。
+- 導入バージョン: v3.4.1
+
+##### `azure_blob_endpoint`
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: Azure Blob Storageアカウントのエンドポイント。例: `https://test.blob.core.windows.net`。
+- 導入バージョン: v3.1
+
+##### `azure_blob_path`
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: データを保存するために使用されるAzure Blob Storageパス。ストレージアカウント内のコンテナ名と、そのコンテナの下のサブパス（存在する場合）で構成されます。例: `testcontainer/subpath`。
+- 導入バージョン: v3.1
+
+##### `azure_blob_sas_token`
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: Azure Blob Storageへのリクエストを認証するために使用されるShared Access Signatures (SAS)。
+- 導入バージョン: v3.1
+
+##### `azure_blob_shared_key`
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: Azure Blob Storageへのリクエストを認証するために使用されるShared Key。
+- 導入バージョン: v3.1
+
+##### `azure_use_native_sdk`
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: Azure Blob StorageにアクセスするためにネイティブSDKを使用するかどうか。これにより、Managed IdentitiesとService Principalsによる認証が可能になります。この項目が`false`に設定されている場合、Shared KeyとSAS Tokenによる認証のみが許可されます。
+- 導入バージョン: v3.4.4
+
+##### `cloud_native_hdfs_url`
+
+- デフォルト: 空の文字列
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: HDFSストレージのURL。例: `hdfs://127.0.0.1:9000/user/xxx/starrocks/`。
 - 導入バージョン: -
 
-##### cloud_native_meta_port
+##### `cloud_native_meta_port`
 
 - デフォルト: 6090
 - タイプ: Int
 - 単位: -
 - 変更可能: いいえ
-- 説明: FE クラウドネイティブメタデータサーバー RPC リッスンポート。
+- 説明: FEクラウドネイティブメタデータサーバーのRPCリスニングポート。
 - 導入バージョン: -
 
-##### enable_load_volume_from_conf
-
-- デフォルト: false
-- タイプ: Boolean
-- 単位: -
-- 変更可能: いいえ
-- 説明: StarRocks が FE 設定ファイルに指定されたオブジェクトストレージ関連のプロパティを使用して組み込みストレージボリュームを作成できるかどうか。デフォルト値は v3.4.1 以降、`true` から `false` に変更されました。
-- 導入バージョン: v3.1.0
-
-##### cloud_native_storage_type
+##### `cloud_native_storage_type`
 
 - デフォルト: S3
 - タイプ: String
 - 単位: -
 - 変更可能: いいえ
-- 説明: 使用するオブジェクトストレージのタイプ。共有データモードでは、StarRocks は Azure Blob（v3.1.1 以降でサポート）および S3 プロトコルと互換性のあるオブジェクトストレージ（AWS S3、Google GCP、MinIO など）にデータを保存することをサポートしています。有効な値: `S3` (デフォルト) 、`HDFS`、`AZBLOB`、`ADLS2`。このパラメータを `S3` に指定する場合、`aws_s3` で始まるパラメータを追加する必要があります。このパラメータを `AZBLOB` に指定する場合、`azure_blob` で始まるパラメータを追加する必要があります。このパラメータを `ADLS2` に指定する場合、`azure_adls2` で始まるパラメータを追加する必要があります。このパラメータを `HDFS` に指定する場合、`cloud_native_hdfs_url` を追加する必要があります。
+- 説明: 使用するオブジェクトストレージのタイプ。`shared-data`モードでは、StarRocksはHDFS、Azure Blob（v3.1.1以降でサポート）、Azure Data Lake Storage Gen2（v3.4.1以降でサポート）、Google Storage（ネイティブSDKを使用、v3.5.1以降でサポート）、およびS3プロトコルと互換性のあるオブジェクトストレージシステム（AWS S3、MinIOなど）にデータを保存することをサポートしています。有効な値: `S3`（デフォルト）、`HDFS`、`AZBLOB`、`ADLS2`、および`GS`。このパラメータを`S3`として指定する場合、`aws_s3`で始まるパラメータを追加する必要があります。このパラメータを`AZBLOB`として指定する場合、`azure_blob`で始まるパラメータを追加する必要があります。このパラメータを`ADLS2`として指定する場合、`azure_adls2`で始まるパラメータを追加する必要があります。このパラメータを`GS`として指定する場合、`gcp_gcs`で始まるパラメータを追加する必要があります。このパラメータを`HDFS`として指定する場合、`cloud_native_hdfs_url`のみを指定する必要があります。
 - 導入バージョン: -
 
-##### cloud_native_hdfs_url
-
-- デフォルト: 空の文字列
-- タイプ: String
-- 単位: -
-- 変更可能か：いいえ
-- 説明: HDFS ストレージの URL。例: `hdfs://127.0.0.1:9000/user/xxx/starrocks/`。
-- 導入バージョン: -
-=======
-##### `aws_s3_access_key`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: S3 バケットにアクセスするために使用するアクセスキー ID。
-- Introduced in: v3.0
-
-##### `aws_s3_endpoint`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: S3 バケットにアクセスするために使用するエンドポイント。例: `https://s3.us-west-2.amazonaws.com`。
-- Introduced in: v3.0
-
-##### `aws_s3_external_id`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: S3 バケットへのクロスアカウントアクセスに使用される AWS アカウントの外部 ID。
-- Introduced in: v3.0
-
-##### `aws_s3_iam_role_arn`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: データファイルが格納されている S3 バケットに対する権限を持つ IAM ロールの ARN。
-- Introduced in: v3.0
->>>>>>> 7c14cbc6a8 ([Doc] add backticks to config names (#69369))
-
-##### `aws_s3_path`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: データを格納するために使用される S3 パス。S3 バケットの名前とその下のサブパス (存在する場合) で構成されます。例: `testbucket/subpath`。
-- Introduced in: v3.0
-
-##### `aws_s3_region`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: S3 バケットが存在するリージョン。例: `us-west-2`。
-- Introduced in: v3.0
-
-<<<<<<< HEAD
-##### aws_s3_endpoint
-
-- デフォルト: 空の文字列
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: S3 バケットにアクセスするために使用されるエンドポイント。例: `https://s3.us-west-2.amazonaws.com`。
-- 導入バージョン: v3.0
-=======
-##### `aws_s3_secret_key`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: S3 バケットにアクセスするために使用するシークレットアクセスキー。
-- Introduced in: v3.0
->>>>>>> 7c14cbc6a8 ([Doc] add backticks to config names (#69369))
-
-##### `aws_s3_use_aws_sdk_default_behavior`
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- Description: AWS SDK のデフォルトの認証資格情報を使用するかどうか。有効な値: true および false (デフォルト)。
-- Introduced in: v3.0
-
-##### `aws_s3_use_instance_profile`
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- Description: S3 にアクセスするための認証方法としてインスタンスプロファイルと引き受けロールを使用するかどうか。有効な値: true および false (デフォルト)。
-  - IAM ユーザーベースの認証情報 (アクセスキーとシークレットキー) を使用して S3 にアクセスする場合、この項目を `false` に指定し、`aws_s3_access_key` と `aws_s3_secret_key` を指定する必要があります。
-  - インスタンスプロファイルを使用して S3 にアクセスする場合、この項目を `true` に指定する必要があります。
-  - 引き受けロールを使用して S3 にアクセスする場合、この項目を `true` に指定し、`aws_s3_iam_role_arn` を指定する必要があります。
-  - 外部 AWS アカウントを使用する場合、`aws_s3_external_id` も指定する必要があります。
-<<<<<<< HEAD
-- 導入バージョン: v3.0
-
-##### aws_s3_access_key
-
-- デフォルト: 空の文字列
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: S3 バケットにアクセスするために使用されるアクセスキー ID。
-- 導入バージョン: v3.0
-
-##### aws_s3_secret_key
-
-- デフォルト: 空の文字列
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: S3 バケットにアクセスするために使用されるシークレットアクセスキー。
-- 導入バージョン: v3.0
-
-##### aws_s3_iam_role_arn
-
-- デフォルト: 空の文字列
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: データファイルが保存されている S3 バケットに対する権限を持つ IAM ロールの ARN。
-- 導入バージョン: v3.0
-
-##### aws_s3_external_id
-
-- デフォルト: 空の文字列
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: S3 バケットへのクロスアカウントアクセスに使用される AWS アカウントの外部 ID。
-- 導入バージョン: v3.0
-
-##### azure_blob_endpoint
-
-- デフォルト: 空の文字列
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: Azure Blob Storage アカウントのエンドポイント。例: `https://test.blob.core.windows.net`。
-- 導入バージョン: v3.1
-
-##### azure_blob_path
-
-- デフォルト: 空の文字列
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: データを保存するために使用される Azure Blob Storage パス。ストレージアカウント内のコンテナの名前と、その下のサブパス（存在する場合）で構成されます。例: `testcontainer/subpath`。
-- 導入バージョン: v3.1
-
-##### azure_blob_shared_key
-
-- デフォルト: 空の文字列
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: Azure Blob Storage のリクエストを承認するために使用される共有キー。
-- 導入バージョン: v3.1
-
-##### azure_blob_sas_token
-
-- デフォルト: 空の文字列
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: Azure Blob Storage のリクエストを承認するために使用される共有アクセス署名 (SAS)。
-- 導入バージョン: v3.1
-
-##### azure_adls2_endpoint
-
-- デフォルト: 空の文字列
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: Azure Data Lake Storage Gen2 アカウントのエンドポイント、例えば `https://test.dfs.core.windows.net`。
-- 導入バージョン: v3.4.1
-
-##### azure_adls2_path
-
-- デフォルト: 空の文字列
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: Azure Data Lake Storage Gen2 のデータ保存に使用するパス。ファイルシステム名とディレクトリ名で構成され、例えば `testfilesystem/starrocks` のようになる。
-- 導入バージョン: v3.4.1
-
-##### azure_adls2_shared_key
-
-- デフォルト: 空の文字列
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: Azure Data Lake Storage Gen2 へのリクエストを承認するために使用される Shared Key。
-- 導入バージョン: v3.4.1
-
-##### azure_adls2_sas_token
-
-- デフォルト: 空の文字列
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: Azure Data Lake Storage Gen2 へのリクエストを承認するために使用される共有アクセス署名（SAS）。
-- 導入バージョン: v3.4.1
-
-##### azure_adls2_oauth2_use_managed_identity
+##### `enable_load_volume_from_conf`
 
 - デフォルト: false
 - タイプ: Boolean
 - 単位: -
 - 変更可能: いいえ
-- 説明: Azure Data Lake Storage Gen2 へのリクエストを認証するために Managed Identity を使用するかどうか。
-- 導入バージョン: v3.4.4
-
-##### azure_adls2_oauth2_tenant_id
-
-- デフォルト: 空の文字列
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: Azure Data Lake Storage Gen2 へのリクエストを認証するために使用される Managed Identity の Tenant ID。
-- 導入バージョン: v3.4.4
-
-##### azure_adls2_oauth2_client_id
-
-- デフォルト: 空の文字列
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: Azure Data Lake Storage Gen2 へのリクエストを認証するために使用される Managed Identity の Client ID。
-- 導入バージョン: v3.4.4
-
-##### azure_use_native_sdk
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: Azure Blob Storage へのアクセスにネイティブ SDK を使用し、Managed Identity と Service Principal による認証を許可するかどうか。この項目を `false` に設定すると、Shared Key と SAS Token による認証のみが許可される。
-- 導入バージョン: v3.4.4
-
-##### lake_compaction_score_selector_min_score
-
-- デフォルト: 10.0
-- タイプ: Double
-- 単位: -
-- 変更可能: はい
-- 説明: 共有データクラスタで Compaction 操作をトリガーする Compaction Score のしきい値。パーティションの Compaction Score がこの値以上の場合、システムはそのパーティションで Compaction を実行します。
+- 説明: StarRocksがFE設定ファイルで指定されたオブジェクトストレージ関連のプロパティを使用して、組み込みストレージボリュームを作成することを許可するかどうか。デフォルト値はv3.4.1以降、`true`から`false`に変更されました。
 - 導入バージョン: v3.1.0
 
-##### lake_compaction_max_tasks
+##### `hdfs_file_system_expire_seconds`
 
-- デフォルト: -1
+- デフォルト: 300
 - タイプ: Int
-- 単位: -
-- 変更可能: はい
-- 説明: 共有データクラスタで許可される最大同時 Compaction タスク数。この項目を `-1` に設定すると、同時タスク数が適応的に計算されます。この値を `0` に設定すると、Compaction が無効になります。
-- 導入バージョン: v3.1.0
-
-##### lake_compaction_history_size
-
-- デフォルト: 20
-- タイプ: Int
-- 単位: -
-- 変更可能: はい
-- 説明: 共有データクラスタの Leader FE ノードのメモリに保持される最近の成功した Compaction タスク記録の数。`SHOW PROC '/compactions'` コマンドを使用して、最近の成功した Compaction タスク記録を表示できます。Compaction の履歴は FE プロセスメモリに保存され、FE プロセスが再起動されると失われます。
-- 導入バージョン: v3.1.0
-
-##### lake_publish_version_max_threads
-
-- デフォルト: 512
-- タイプ: Int
-- 単位: -
-- 変更可能: はい
-- 説明: 共有データクラスタでのバージョン公開タスクの最大スレッド数。
-- 導入バージョン: v3.2.0
-
-##### lake_autovacuum_parallel_partitions
-
-- デフォルト: 8
-- タイプ: Int
-- 単位: -
-- 変更可能: いいえ
-- 説明: 共有データクラスタで同時に AutoVacuum を受けることができるパーティションの最大数。AutoVacuum は Compactions 後のガーベジコレクションです。
-- 導入バージョン: v3.1.0
-
-##### lake_autovacuum_partition_naptime_seconds
-
-- デフォルト: 180
-- タイプ: Long
 - 単位: 秒
 - 変更可能: はい
-- 説明: 共有データクラスタで同じパーティションに対して AutoVacuum 操作が行われる最小間隔。
-- 導入バージョン: v3.1.0
+- 説明: HdfsFsManagerによって管理される未使用のキャッシュされたHDFS/ObjectStore FileSystemの生存期間（秒単位）。FileSystemExpirationChecker（60秒ごとに実行）は、この値を使用して各HdfsFs.isExpired(...)を呼び出します。期限切れになると、マネージャーは基になるFileSystemを閉じ、キャッシュから削除します。アクセサーメソッド（例: `HdfsFs.getDFSFileSystem`、`getUserName`、`getConfiguration`）は最終アクセス時刻を更新するため、有効期限は非アクティブ状態に基づいています。値が低いとアイドルリソースの保持は減りますが、再オープンオーバーヘッドが増加します。値が高いとハンドルを長く保持し、より多くのリソースを消費する可能性があります。
+- 導入バージョン: v3.2.0
 
-##### lake_autovacuum_grace_period_minutes
+##### `lake_autovacuum_grace_period_minutes`
 
 - デフォルト: 30
 - タイプ: Long
 - 単位: 分
 - 変更可能: はい
-- 説明: 共有データクラスタで履歴データバージョンを保持する時間範囲。この時間範囲内の履歴データバージョンは、Compactions 後に AutoVacuum によって自動的にクリーンアップされません。実行中のクエリによってアクセスされるデータがクエリの終了前に削除されないようにするために、この値を最大クエリ時間より大きく設定する必要があります。デフォルト値は v3.3.0、v3.2.5、および v3.1.10 以降、`5` から `30` に変更されました。
+- 説明: `shared-data`クラスターで履歴データバージョンを保持する時間範囲。この時間範囲内の履歴データバージョンは、Compaction後にAutoVacuumによって自動的にクリーンアップされません。実行中のクエリによってアクセスされるデータがクエリ完了前に削除されるのを避けるため、この値を最大クエリ時間よりも大きく設定する必要があります。デフォルト値はv3.3.0、v3.2.5、およびv3.1.10以降、`5`から`30`に変更されました。
 - 導入バージョン: v3.1.0
-
-##### lake_autovacuum_stale_partition_threshold
-
-- デフォルト: 12
-- タイプ: Long
-- 単位: 時間
-- 変更可能: はい
-- 説明: パーティションがこの時間範囲内で更新（ロード、DELETE、または Compactions）がない場合、システムはこのパーティションに対して AutoVacuum を実行しません。
-- 導入バージョン: v3.1.0
-
-##### lake_enable_ingest_slowdown
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: 共有データクラスタでデータ取り込みのスローダウンを有効にするかどうか。データ取り込みのスローダウンが有効になっている場合、パーティションの Compaction Score が `lake_ingest_slowdown_threshold` を超えると、そのパーティションのロードタスクがスローダウンされます。この設定は `run_mode` が `shared_data` に設定されている場合にのみ有効です。v3.3.6 以降、デフォルト値は `false` から `true` に変更されました。
-- 導入バージョン: v3.2.0
-
-##### lake_ingest_slowdown_threshold
-
-- デフォルト: 100
-- タイプ: Long
-- 単位: -
-- 変更可能: はい
-- 説明: 共有データクラスタでデータ取り込みのスローダウンをトリガーする Compaction Score のしきい値。この設定は `lake_enable_ingest_slowdown` が `true` に設定されている場合にのみ有効です。
-- 導入バージョン: v3.2.0
-
-##### lake_ingest_slowdown_ratio
-
-- デフォルト: 0.1
-- タイプ: Double
-- 単位: -
-- 変更可能: はい
-- 説明: データ取り込みのスローダウンがトリガーされたときのロード速度の遅延比率。
-
-  データロードタスクはデータ書き込みフェーズとデータコミット（COMMIT）フェーズの 2 つのフェーズで構成されます。データ取り込みのスローダウンはデータコミットの遅延によって達成されます。遅延比率は次の式で計算されます: `(compaction_score - lake_ingest_slowdown_threshold) * lake_ingest_slowdown_ratio`。たとえば、データ書き込みフェーズが 5 分かかり、`lake_ingest_slowdown_ratio` が 0.1 で、Compaction Score が `lake_ingest_slowdown_threshold` より 10 高い場合、データコミット時間の遅延は `5 * 10 * 0.1 = 5` 分であり、平均ロード速度が半分になります。
-
-- 導入バージョン: v3.2.0
-
-> **NOTE**
->
-> - ロードタスクが複数のパーティションに同時に書き込む場合、すべてのパーティションの中で最大の Compaction Score がコミット時間の遅延を計算するために使用されます。
-> - コミット時間の遅延は最初のコミット試行時に計算されます。一度設定されると、変更されません。遅延時間が経過すると、Compaction Score が `lake_compaction_score_upper_bound` を超えない限り、システムはデータコミット操作を実行します。
-> - コミット時間の遅延がロードタスクのタイムアウトを超える場合、タスクは直接失敗します。
-
-##### lake_compaction_score_upper_bound
-
-- デフォルト: 2000
-- タイプ: Long
-- 単位: -
-- 変更可能: はい
-- 説明: 共有データクラスタでのパーティションの Compaction Score の上限。`0` は上限がないことを示します。この項目は `lake_enable_ingest_slowdown` が `true` に設定されている場合にのみ有効です。パーティションの Compaction Score がこの上限に達するか超えると、受信するロードタスクは拒否されます。v3.3.6 以降、デフォルト値は `0` から `2000` に変更されました。
-- 導入バージョン: v3.2.0
-
-##### lake_compaction_disable_ids
-
-- デフォルト: ""
-- タイプ: String
-- 単位: -
-- 変更可能: はい
-- 説明: 共有データモードでCompactionが無効になっているテーブルまたはパーティションのリスト。形式は `tableId1;partitionId2` で、セミコロンで区切ります。例: `12345;98765`。
-- 導入バージョン: v3.4.4
-
-##### lake_enable_balance_tablets_between_workers
-
-- デフォルト: false
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: 共有データクラスタでクラウドネイティブテーブルの tablet 移行中に Compute Nodes 間で tablet の数をバランスさせるかどうか。`true` は Compute Nodes 間で tablet をバランスさせることを示し、`false` はこの機能を無効にすることを示します。
-- 導入バージョン: v3.3.4
-
-##### lake_balance_tablets_threshold
-
-- デフォルト: 0.15
-- タイプ: Double
-- 単位: -
-- 変更可能: はい
-- 説明: 共有データクラスタでのワーカー間の tablet バランスを判断するためにシステムが使用するしきい値。アンバランスファクターは次のように計算されます: `f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets)`。ファクターが `lake_balance_tablets_threshold` を超える場合、tablet バランスがトリガーされます。この項目は `lake_enable_balance_tablets_between_workers` が `true` に設定されている場合にのみ有効です。
-- 導入バージョン: v3.3.4
-=======
-- Introduced in: v3.0
-
-##### `azure_adls2_endpoint`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: Azure Data Lake Storage Gen2 アカウントのエンドポイント。例: `https://test.dfs.core.windows.net`。
-- Introduced in: v3.4.1
-
-##### `azure_adls2_oauth2_client_id`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: Azure Data Lake Storage Gen2 の要求を承認するために使用されるマネージド ID のクライアント ID。
-- Introduced in: v3.4.4
-
-##### `azure_adls2_oauth2_tenant_id`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: Azure Data Lake Storage Gen2 の要求を承認するために使用されるマネージド ID のテナント ID。
-- Introduced in: v3.4.4
-
-##### `azure_adls2_oauth2_use_managed_identity`
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- Description: Azure Data Lake Storage Gen2 の要求を承認するためにマネージド ID を使用するかどうか。
-- Introduced in: v3.4.4
-
-##### `azure_adls2_path`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: データを格納するために使用される Azure Data Lake Storage Gen2 パス。ファイルシステム名とディレクトリ名で構成されます。例: `testfilesystem/starrocks`。
-- Introduced in: v3.4.1
-
-##### `azure_adls2_sas_token`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: Azure Data Lake Storage Gen2 の要求を承認するために使用される共有アクセスシグネチャ (SAS)。
-- Introduced in: v3.4.1
-
-##### `azure_adls2_shared_key`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: Azure Data Lake Storage Gen2 の要求を承認するために使用される共有キー。
-- Introduced in: v3.4.1
-
-##### `azure_blob_endpoint`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: Azure Blob Storage アカウントのエンドポイント。例: `https://test.blob.core.windows.net`。
-- Introduced in: v3.1
-
-##### `azure_blob_path`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: データを格納するために使用される Azure Blob Storage パス。ストレージアカウント内のコンテナーの名前とコンテナー内のサブパス (存在する場合) で構成されます。例: `testcontainer/subpath`。
-- Introduced in: v3.1
-
-##### `azure_blob_sas_token`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: Azure Blob Storage の要求を承認するために使用される共有アクセスシグネチャ (SAS)。
-- Introduced in: v3.1
-
-##### `azure_blob_shared_key`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: Azure Blob Storage の要求を承認するために使用される共有キー。
-- Introduced in: v3.1
-
-##### `azure_use_native_sdk`
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Azure Blob Storage にアクセスするためにネイティブ SDK を使用するかどうか。これにより、マネージド ID およびサービスプリンシパルでの認証が可能になります。この項目が `false` に設定されている場合、共有キーと SAS トークンでの認証のみが許可されます。
-- Introduced in: v3.4.4
-
-##### `cloud_native_hdfs_url`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: HDFS ストレージの URL。例: `hdfs://127.0.0.1:9000/user/xxx/starrocks/`。
-- Introduced in: -
-
-##### `cloud_native_meta_port`
-
-- Default: 6090
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description: FE クラウドネイティブメタデータサーバー RPC リッスンポート。
-- Introduced in: -
-
-##### `cloud_native_storage_type`
-
-- Default: S3
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: 使用するオブジェクトストレージのタイプ。共有データモードでは、StarRocks は HDFS、Azure Blob (v3.1.1 以降でサポート)、Azure Data Lake Storage Gen2 (v3.4.1 以降でサポート)、Google Storage (ネイティブ SDK、v3.5.1 以降でサポート)、および S3 プロトコルと互換性のあるオブジェクトストレージシステム (AWS S3、MinIO など) にデータを格納することをサポートしています。有効な値: `S3` (デフォルト)、`HDFS`、`AZBLOB`、`ADLS2`、および `GS`。このパラメーターを `S3` に指定した場合、`aws_s3` で始まるパラメーターを追加する必要があります。`AZBLOB` に指定した場合、`azure_blob` で始まるパラメーターを追加する必要があります。`ADLS2` に指定した場合、`azure_adls2` で始まるパラメーターを追加する必要があります。`GS` に指定した場合、`gcp_gcs` で始まるパラメーターを追加する必要があります。`HDFS` に指定した場合、`cloud_native_hdfs_url` のみを指定する必要があります。
-- Introduced in: -
-
-##### `enable_load_volume_from_conf`
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- Description: StarRocks が FE 設定ファイルで指定されたオブジェクトストレージ関連プロパティを使用して、組み込みストレージボリュームを作成することを許可するかどうか。デフォルト値は v3.4.1 以降 `true` から `false` に変更されました。
-- Introduced in: v3.1.0
-
-##### `gcp_gcs_impersonation_service_account`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: Google Storage にアクセスするために、偽装ベースの認証を使用する場合に偽装するサービスアカウント。
-- Introduced in: v3.5.1
-
-##### `gcp_gcs_path`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: データを格納するために使用される Google Cloud パス。Google Cloud バケットの名前とその下のサブパス (存在する場合) で構成されます。例: `testbucket/subpath`。
-- Introduced in: v3.5.1
-
-##### `gcp_gcs_service_account_email`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: サービスアカウント作成時に生成された JSON ファイル内のメールアドレス。例: `user@hello.iam.gserviceaccount.com`。
-- Introduced in: v3.5.1
-
-##### `gcp_gcs_service_account_private_key`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: サービスアカウント作成時に生成された JSON ファイル内の秘密鍵。例: `-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n`。
-- Introduced in: v3.5.1
-
-##### `gcp_gcs_service_account_private_key_id`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: サービスアカウント作成時に生成された JSON ファイル内の秘密鍵 ID。
-- Introduced in: v3.5.1
-
-##### `gcp_gcs_use_compute_engine_service_account`
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- Description: Compute Engine にバインドされているサービスアカウントを使用するかどうか。
-- Introduced in: v3.5.1
-
-##### `hdfs_file_system_expire_seconds`
-
-- Default: 300
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description: HdfsFsManager が管理する未使用のキャッシュ HDFS/ObjectStore FileSystem の Time-to-live (秒単位)。FileSystemExpirationChecker (60 秒ごとに実行) はこの値を使用して各 HdfsFs.isExpired(...) を呼び出します。期限切れになるとマネージャーは基盤となる FileSystem を閉じ、キャッシュから削除します。アクセサーメソッド (例: `HdfsFs.getDFSFileSystem`、`getUserName`、`getConfiguration`) は最終アクセス時刻を更新するため、有効期限は非アクティブに基づいています。値が小さいとアイドルリソースの保持は減りますが、再オープンオーバーヘッドが増加します。値が大きいとハンドルが長く保持され、より多くのリソースを消費する可能性があります。
-- Introduced in: v3.2.0
-
-##### `lake_autovacuum_grace_period_minutes`
-
-- Default: 30
-- Type: Long
-- Unit: Minutes
-- Is mutable: Yes
-- Description: 共有データクラスターで履歴データバージョンを保持する時間範囲。この時間範囲内の履歴データバージョンは、コンパクション後に AutoVacuum によって自動的にクリーンアップされません。実行中のクエリによってアクセスされるデータがクエリ完了前に削除されることを避けるため、この値を最大クエリ時間よりも大きく設定する必要があります。v3.3.0、v3.2.5、および v3.1.10 以降、デフォルト値は `5` から `30` に変更されました。
-- Introduced in: v3.1.0
 
 ##### `lake_autovacuum_parallel_partitions`
-
-- Default: 8
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description: 共有データクラスターで同時に AutoVacuum を実行できるパーティションの最大数。AutoVacuum はコンパクション後のガベージコレクションです。
-- Introduced in: v3.1.0
-
-##### `lake_autovacuum_partition_naptime_seconds`
-
-- Default: 180
-- Type: Long
-- Unit: Seconds
-- Is mutable: Yes
-- Description: 共有データクラスターで同じパーティションに対する AutoVacuum 操作間の最小間隔。
-- Introduced in: v3.1.0
-
-##### `lake_autovacuum_stale_partition_threshold`
-
-- Default: 12
-- Type: Long
-- Unit: Hours
-- Is mutable: Yes
-- Description: この時間範囲内にパーティションが更新されていない場合 (ロード、DELETE、またはコンパクション)、システムはこのパーティションに対して AutoVacuum を実行しません。
-- Introduced in: v3.1.0
-
-##### `lake_compaction_allow_partial_success`
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: この項目が `true` に設定されている場合、サブタスクの 1 つが成功した場合、システムは共有データクラスターでのコンパクション操作を成功と見なします。
-- Introduced in: v3.5.2
-
-##### `lake_compaction_disable_ids`
-
-- Default: ""
-- Type: String
-- Unit: -
-- Is mutable: Yes
-- Description: 共有データモードでコンパクションが無効になっているテーブルまたはパーティションのリスト。形式はセミコロンで区切られた `tableId1;partitionId2` です。例: `12345;98765`。
-- Introduced in: v3.4.4
-
-##### `lake_compaction_history_size`
-
-- Default: 20
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: 共有データクラスターのリーダー FE ノードのメモリに保持される最近の成功したコンパクションタスクレコードの数。`SHOW PROC '/compactions'` コマンドを使用して、最近の成功したコンパクションタスクレコードを表示できます。コンパクション履歴は FE プロセスメモリに格納され、FE プロセスが再起動されると失われることに注意してください。
-- Introduced in: v3.1.0
-
-##### `lake_compaction_max_tasks`
-
-- Default: -1
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: 共有データクラスターで許可される同時コンパクションタスクの最大数。この項目を `-1` に設定すると、同時タスク数が適応的に計算されることを示します。この値を `0` に設定すると、コンパクションが無効になります。
-- Introduced in: v3.1.0
-
-##### `lake_compaction_score_selector_min_score`
-
-- Default: 10.0
-- Type: Double
-- Unit: -
-- Is mutable: Yes
-- Description: 共有データクラスターでコンパクション操作をトリガーするコンパクションスコアのしきい値。パーティションのコンパクションスコアがこの値以上の場合、システムはそのパーティションでコンパクションを実行します。
-- Introduced in: v3.1.0
-
-##### `lake_compaction_score_upper_bound`
-
-- Default: 2000
-- Type: Long
-- Unit: -
-- Is mutable: Yes
-- Description: 共有データクラスターのパーティションのコンパクションスコアの上限。`0` は上限がないことを示します。この項目は `lake_enable_ingest_slowdown` が `true` に設定されている場合にのみ有効になります。パーティションのコンパクションスコアがこの上限に達するか超えると、受信ロードタスクは拒否されます。v3.3.6 以降、デフォルト値は `0` から `2000` に変更されました。
-- Introduced in: v3.2.0
-
-##### `lake_enable_balance_tablets_between_workers`
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: 共有データクラスターでクラウドネイティブテーブルのタブレット移行中に、Compute ノード間でタブレットの数をバランスさせるかどうか。`true` は Compute ノード間でタブレットをバランスさせることを示し、`false` はこの機能を無効にすることを示します。
-- Introduced in: v3.3.4
-
-##### `lake_enable_ingest_slowdown`
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: 共有データクラスターでデータ取り込みの減速を有効にするかどうか。データ取り込みの減速が有効になっている場合、パーティションのコンパクションスコアが `lake_ingest_slowdown_threshold` を超えると、そのパーティションでのロードタスクがスロットルダウンされます。この設定は `run_mode` が `shared_data` に設定されている場合にのみ有効になります。v3.3.6 以降、デフォルト値は `false` から `true` に変更されました。
-- Introduced in: v3.2.0
-
-##### `lake_ingest_slowdown_threshold`
-
-- Default: 100
-- Type: Long
-- Unit: -
-- Is mutable: Yes
-- Description: 共有データクラスターでデータ取り込みの減速をトリガーするコンパクションスコアのしきい値。この設定は `lake_enable_ingest_slowdown` が `true` に設定されている場合にのみ有効になります。
-- Introduced in: v3.2.0
-
-##### `lake_publish_version_max_threads`
-
-- Default: 512
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: 共有データクラスターでのバージョン公開タスクの最大スレッド数。
-- Introduced in: v3.2.0
-
-##### `meta_sync_force_delete_shard_meta`
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: 共有データクラスターのメタデータを直接削除し、リモートストレージファイルのクリーンアップをバイパスすることを許可するかどうか。クリーンアップするシャードが過剰に多く、FE JVM のメモリ圧力が極端に高くなる場合にのみ、この項目を `true` に設定することをお勧めします。この機能を有効にすると、シャードまたはタブレットに属するデータファイルが自動的にクリーンアップされないことに注意してください。
-- Introduced in: v3.2.10, v3.3.3
-
-##### `run_mode`
-
-- Default: `shared_nothing`
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: StarRocks クラスターの実行モード。有効な値: `shared_data` および `shared_nothing` (デフォルト)。
-  - `shared_data` は StarRocks を共有データモードで実行することを示します。
-  - `shared_nothing` は StarRocks を共有なしモードで実行することを示します。
-
-  > **CAUTION**
-  >
-  > - StarRocks クラスターで `shared_data` と `shared_nothing` モードを同時に採用することはできません。混合デプロイメントはサポートされていません。
-  > - クラスターのデプロイ後に `run_mode` を変更しないでください。そうしないと、クラスターの再起動に失敗します。共有なしクラスターから共有データクラスターへの変換、またはその逆の変換はサポートされていません。
-
-- Introduced in: -
->>>>>>> 7c14cbc6a8 ([Doc] add backticks to config names (#69369))
-
-##### `shard_group_clean_threshold_sec`
-
-- Default: 3600
-- Type: Long
-- Unit: Seconds
-- Is mutable: Yes
-- Description: FE が共有データクラスターで未使用のタブレットおよびシャードグループをクリーンアップするまでの時間。このしきい値内に作成されたタブレットおよびシャードグループはクリーンアップされません。
-- Introduced in: -
-
-##### `star_mgr_meta_sync_interval_sec`
-
-- Default: 600
-- Type: Long
-- Unit: Seconds
-- Is mutable: No
-- Description: FE が共有データクラスターで StarMgr と定期的なメタデータ同期を実行する間隔。
-- Introduced in: -
-
-<<<<<<< HEAD
-##### meta_sync_force_delete_shard_meta
-
-- デフォルト: false
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: リモートストレージ内のファイルのクリーニングをバイパスして、共有データクラスタのメタデータを直接削除できるかどうか。この項目を `true` に設定するのは、クリーニングする Shard の数が多すぎて FE JVM のメモリが極端に圧迫される場合のみにすることを推奨します。この機能を有効にすると、Shard や Tablet に属するデータファイルは自動的にクリーニングできなくなることに注意してください。
-- 導入バージョン: v3.2.10, v3.3.3
-
-### その他
-
-##### tmp_dir
-
-- デフォルト: StarRocksFE.STARROCKS_HOME_DIR + "/temp_dir"
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: バックアップおよび復元手順中に生成されたファイルなどの一時ファイルを保存するディレクトリ。これらの手順が終了すると、生成された一時ファイルは削除されます。
-- 導入バージョン: -
-
-##### plugin_dir
-
-- デフォルト: System.getenv("STARROCKS_HOME") + "/plugins"
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: プラグインインストールパッケージを保存するディレクトリ。
-- 導入バージョン: -
-
-##### plugin_enable
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: FEs にプラグインをインストールできるかどうか。プラグインは Leader FE のみでインストールまたはアンインストールできます。
-- 導入バージョン: -
-
-##### max_agent_task_threads_num
-
-- デフォルト: 4096
-- タイプ: Int
-- 単位: -
-- 変更可能: いいえ
-- 説明: エージェントタスクスレッドプールで許可される最大スレッド数。
-- 導入バージョン: -
-
-##### agent_task_resend_wait_time_ms
-
-- デフォルト: 5000
-- タイプ: Long
-- 単位: ミリ秒
-- 変更可能: はい
-- 説明: エージェントタスクを再送信する前に FE が待機する必要がある期間。エージェントタスクは、タスク作成時間と現在の時間のギャップがこのパラメータの値を超える場合にのみ再送信できます。このパラメータはエージェントタスクの繰り返し送信を防ぐために使用されます。
-- 導入バージョン: -
-
-##### backup_job_default_timeout_ms
-
-- デフォルト: 86400 * 1000
-- タイプ: Int
-- 単位: ミリ秒
-- 変更可能: はい
-- 説明: バックアップジョブのタイムアウト期間。この値を超えると、バックアップジョブは失敗します。
-- 導入バージョン: -
-
-##### locale
-
-- デフォルト: zh_CN.UTF-8
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: FE が使用する文字セット。
-- 導入バージョン: -
-
-##### report_queue_size (廃止予定)
-
-- デフォルト: 100
-- タイプ: Int
-- 単位: -
-- 変更可能: はい
-- 説明: レポートキューで待機できるジョブの最大数。レポートは BE のディスク、タスク、および tablet 情報に関するものです。キューにレポートジョブが多すぎると、OOM が発生します。
-- 導入バージョン: -
-
-##### enable_metric_calculator
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 変更可能: いいえ
-- 説明: メトリクスを定期的に収集するための機能を有効にするかどうかを指定します。有効な値: `TRUE` および `FALSE`。`TRUE` はこの機能を有効にすることを指定し、`FALSE` はこの機能を無効にすることを指定します。
-- 導入バージョン: -
-
-##### max_small_file_number
-
-- デフォルト: 100
-- タイプ: Int
-- 単位: -
-- 変更可能: はい
-- 説明: FE ディレクトリに保存できる小さなファイルの最大数。
-- 導入バージョン: -
-
-##### max_small_file_size_bytes
-
-- デフォルト: 1024 * 1024
-- タイプ: Int
-- 単位: バイト
-- 変更可能: はい
-- 説明: 小さなファイルの最大サイズ。
-- 導入バージョン: -
-
-##### small_file_dir
-
-- デフォルト: StarRocksFE.STARROCKS_HOME_DIR + "/small_files"
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: 小さなファイルのルートディレクトリ。
-- 導入バージョン: -
-
-##### authentication_ldap_simple_server_host
-
-- デフォルト: 空の文字列
-- タイプ: String
-- 単位: -
-- 変更可能: はい
-- 説明: LDAP サーバーが実行されているホスト。
-- 導入バージョン: -
-
-##### authentication_ldap_simple_server_port
-
-- デフォルト: 389
-- タイプ: Int
-- 単位: -
-- 変更可能: はい
-- 説明: LDAP サーバーのポート。
-- 導入バージョン: -
-
-##### authentication_ldap_simple_bind_base_dn
-
-- デフォルト: 空の文字列
-- タイプ: String
-- 単位: -
-- 変更可能: はい
-- 説明: LDAP サーバーがユーザーの認証情報を検索する開始点であるベース DN。
-- 導入バージョン: -
-
-##### authentication_ldap_simple_user_search_attr
-
-- デフォルト: uid
-- タイプ: String
-- 単位: -
-- 変更可能: はい
-- 説明: LDAP オブジェクト内でユーザーを識別する属性の名前。
-- 導入バージョン: -
-
-##### authentication_ldap_simple_bind_root_dn
-
-- デフォルト: 空の文字列
-- タイプ: String
-- 単位: -
-- 変更可能: はい
-- 説明: ユーザーの認証情報を検索するために使用される管理者 DN。
-- 導入バージョン: -
-
-##### authentication_ldap_simple_bind_root_pwd
-
-- デフォルト: 空の文字列
-- タイプ: String
-- 単位: -
-- 変更可能: はい
-- 説明: ユーザーの認証情報を検索するために使用される管理者のパスワード。
-- 導入バージョン: -
-
-##### auth_token
-
-- デフォルト: 空の文字列
-- タイプ: String
-- 単位: -
-- 変更可能: いいえ
-- 説明: FE が属する StarRocks クラスタ内での ID 認証に使用されるトークン。このパラメータが指定されていない場合、StarRocks はクラスタの Leader FE が初めて起動されたときにクラスタのランダムなトークンを生成します。
-- 導入バージョン: -
-
-##### hive_meta_load_concurrency
-
-- デフォルト: 4
-- タイプ: Int
-- 単位: -
-- 変更可能: いいえ
-- 説明: Hive メタデータに対してサポートされる最大同時スレッド数。
-- 導入バージョン: -
-
-##### hive_meta_cache_refresh_interval_s
-
-- デフォルト: 3600 * 2
-- タイプ: Long
-- 単位: 秒
-- 変更可能: いいえ
-- 説明: Hive 外部テーブルのキャッシュされたメタデータが更新される時間間隔。
-- 導入バージョン: -
-
-##### hive_meta_cache_ttl_s
-
-- デフォルト: 3600 * 24
-- タイプ: Long
-- 単位: 秒
-- 変更可能: いいえ
-- 説明: Hive 外部テーブルのキャッシュされたメタデータが期限切れになるまでの時間。
-- 導入バージョン: -
-
-##### hive_meta_store_timeout_s
-
-- デフォルト: 10
-- タイプ: Long
-- 単位: 秒
-- 変更可能: いいえ
-- 説明: Hive メタストアへの接続がタイムアウトするまでの時間。
-- 導入バージョン: -
-
-##### es_state_sync_interval_second
-
-- デフォルト: 10
-- タイプ: Long
-- 単位: 秒
-- 変更可能: いいえ
-- 説明: FE が Elasticsearch インデックスを取得し、StarRocks 外部テーブルのメタデータを同期する時間間隔。
-- 導入バージョン: -
-
-##### max_upload_task_per_be
-
-- デフォルト: 0
-- タイプ: Int
-- 単位: -
-- 変更可能: はい
-- 説明: 各 BACKUP 操作で、StarRocks が BE ノードに割り当てる最大アップロードタスク数。この項目が 0 以下に設定されている場合、タスク数に制限はありません。
-- 導入バージョン: v3.1.0
-
-##### max_download_task_per_be
-
-- デフォルト: 0
-- タイプ: Int
-- 単位: -
-- 変更可能: はい
-- 説明: 各 RESTORE 操作で、StarRocks が BE ノードに割り当てる最大ダウンロードタスク数。この項目が 0 以下に設定されている場合、タスク数に制限はありません。
-- 導入バージョン: v3.1.0
-
-##### enable_colocate_restore
-
-- デフォルト: false
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: Colocate Tables のバックアップと復元を有効にするかどうか。`true` は Colocate Tables のバックアップと復元を有効にし、`false` は無効にすることを示します。
-- 導入バージョン: v3.2.10, v3.3.3
-
-##### allow_system_reserved_names
-
-- デフォルト: false
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: ユーザーが `__op` および `__row` で始まる名前の列を作成できるかどうか。この機能を有効にするには、このパラメータを `TRUE` に設定します。これらの名前形式は StarRocks で特別な目的のために予約されており、そのような列を作成すると未定義の動作が発生する可能性があるため、この機能はデフォルトで無効になっています。
-- 導入バージョン: v3.2.0
-
-##### replication_interval_ms
-
-- デフォルト: 100
-- タイプ: Int
-- 単位: -
-- 変更可能: いいえ
-- 説明: レプリケーションタスクがスケジュールされる最小時間間隔。
-- 導入バージョン: v3.3.5
-
-##### replication_max_parallel_table_count
-
-- デフォルト: 100
-- タイプ: Int
-- 単位: -
-- 変更可能: はい
-- 説明: 許可される最大同時データ同期タスク数。StarRocks は各テーブルに対して 1 つの同期タスクを作成します。
-- 導入バージョン: v3.3.5
-
-##### replication_max_parallel_replica_count
-
-- デフォルト: 10240
-- タイプ: Int
-- 単位: -
-- 変更可能: はい
-- 説明: 許可される最大同時同期タブレットレプリカ数。
-- 導入バージョン: v3.3.5
-
-##### replication_max_parallel_data_size_mb
-
-- デフォルト: 1048576
-- タイプ: Int
-- 単位: MB
-- 変更可能: はい
-- 説明: 許可される最大同時同期データサイズ。
-- 導入バージョン: v3.3.5
-
-##### replication_transaction_timeout_sec
-
-- デフォルト: 86400
-- タイプ: Int
-- 単位: 秒
-- 変更可能: はい
-- 説明: 同期タスクのタイムアウト期間。
-- 導入バージョン: v3.3.5
-
-##### jdbc_meta_default_cache_enable
-
-- デフォルト: false
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: JDBC Catalog メタデータキャッシュが有効かどうかのデフォルト値。`True` に設定すると、新しく作成された JDBC Catalogs はデフォルトでメタデータキャッシュが有効になります。
-- 導入バージョン: -
-
-##### jdbc_meta_default_cache_expire_sec
-
-- デフォルト: 600
-- タイプ: Long
-- 単位: 秒
-- 変更可能: はい
-- 説明: JDBC Catalog メタデータキャッシュのデフォルトの有効期限。`jdbc_meta_default_cache_enable` が true に設定されている場合、新しく作成された JDBC Catalogs はデフォルトでメタデータキャッシュの有効期限を設定します。
-- 導入バージョン: -
-
-##### jdbc_connection_pool_size
 
 - デフォルト: 8
 - タイプ: Int
 - 単位: -
 - 変更可能: いいえ
-- 説明: JDBC catalogs にアクセスするための JDBC 接続プールの最大容量。
-- 導入バージョン: -
+- 説明: `shared-data`クラスターでAutoVacuumを同時に実行できるパーティションの最大数。AutoVacuumはCompaction後のガベージコレクションです。
+- 導入バージョン: v3.1.0
 
-##### jdbc_minimum_idle_connections
+##### `lake_autovacuum_partition_naptime_seconds`
 
-- デフォルト: 1
-- タイプ: Int
-- 単位: -
-- 変更可能: いいえ
-- 説明: JDBC catalogs にアクセスするための JDBC 接続プールの最小アイドル接続数。
-- 導入バージョン: -
+- デフォルト: 180
+- タイプ: Long
+- 単位: 秒
+- 変更可能: はい
+- 説明: `shared-data`クラスターで同じパーティションに対するAutoVacuum操作間の最小間隔。
+- 導入バージョン: v3.1.0
 
-##### jdbc_connection_idle_timeout_ms
+##### `lake_autovacuum_stale_partition_threshold`
 
-- デフォルト: 600000
-- タイプ: Int
-- 単位: ミリ秒
-- 変更可能: いいえ
-- 説明: JDBC catalog にアクセスするための接続がタイムアウトするまでの最大時間。タイムアウトした接続はアイドルと見なされます。
-- 導入バージョン: -
+- デフォルト: 12
+- タイプ: Long
+- 単位: 時間
+- 変更可能: はい
+- 説明: この時間範囲内にパーティションに更新（ロード、DELETE、またはCompaction）がない場合、システムはこのパーティションに対してAutoVacuumを実行しません。
+- 導入バージョン: v3.1.0
 
-##### query_detail_explain_level
+##### `lake_compaction_disable_ids`
 
-- デフォルト: COSTS
+- デフォルト: ""
 - タイプ: String
 - 単位: -
 - 変更可能: はい
-- 説明: EXPLAIN ステートメントによって返されるクエリプランの詳細レベル。有効な値: COSTS, NORMAL, VERBOSE。
-- 導入バージョン: v3.2.12, v3.3.5
-
-##### mv_plan_cache_expire_interval_sec
-
-- デフォルト: 24 * 60 * 60
-- タイプ: Long
-- 単位: Seconds
-- 変更可能: はい
-- 説明: マテリアライズドビューのプランキャッシュ（マテリアライズドビューの書き換えに使用される）の有効期限。デフォルト値は1日です。
-- 導入バージョン: v3.2
-
-##### mv_plan_cache_thread_pool_size
-
-- デフォルト: 3
-- タイプ: Int
-- 単位: -
-- 変更可能: はい
-- 説明: マテリアライズドビューのプランキャッシュ（マテリアライズドビューの書き換えに使用される）のデフォルトのスレッドプールのサイズ。
-- 導入バージョン: v3.2
-
-##### mv_plan_cache_max_size
-
-- デフォルト: 1000
-- タイプ: Long
-- 単位:
-- 変更可能: はい
-- 説明: 実体化されたビューの書き換えに使用されるプランキャッシュの最大サイズ。クエリ書き換えに使用される実体化ビューが多い場合は、この値を大きくすることができます。
-- 導入バージョン: v3.2
-
-##### enable_materialized_view_concurrent_prepare
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位:
-- 変更可能: はい
-- 説明: パフォーマンスを向上させるために、マテリアライズドビューを同時に準備するかどうか。
+- 説明: `shared-data`モードでCompactionが無効になっているテーブルまたはパーティションのリスト。フォーマットはセミコロンで区切られた`tableId1;partitionId2`です。例: `12345;98765`。
 - 導入バージョン: v3.4.4
 
-##### enable_mv_query_context_cache
+##### `lake_compaction_history_size`
+
+- デフォルト: 20
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: `shared-data`クラスターのLeader FEノードのメモリに保持する最近成功したCompactionタスクレコードの数。`SHOW PROC '/compactions'`コマンドを使用して、最近成功したCompactionタスクレコードを表示できます。Compaction履歴はFEプロセスメモリに保存されるため、FEプロセスが再起動されると失われることに注意してください。
+- 導入バージョン: v3.1.0
+
+##### `lake_compaction_max_tasks`
+
+- デフォルト: -1
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: `shared-data`クラスターで許可される同時Compactionタスクの最大数。この項目を`-1`に設定すると、同時タスク数が適応的に計算されることを示します。この値を`0`に設定すると、Compactionが無効になります。
+- 導入バージョン: v3.1.0
+
+##### `lake_compaction_score_selector_min_score`
+
+- デフォルト: 10.0
+- タイプ: Double
+- 単位: -
+- 変更可能: はい
+- 説明: `shared-data`クラスターでCompaction操作をトリガーするCompaction Scoreのしきい値。パーティションのCompaction Scoreがこの値以上の場合、システムはそのパーティションに対してCompactionを実行します。
+- 導入バージョン: v3.1.0
+
+##### `lake_compaction_score_upper_bound`
+
+- デフォルト: 2000
+- タイプ: Long
+- 単位: -
+- 変更可能: はい
+- 説明: `shared-data`クラスターにおけるパーティションのCompaction Scoreの上限。`0`は上限なしを示します。この項目は`lake_enable_ingest_slowdown`が`true`に設定されている場合にのみ有効です。パーティションのCompaction Scoreがこの上限に達するか超えると、受信するロードタスクは拒否されます。v3.3.6以降、デフォルト値は`0`から`2000`に変更されました。
+- 導入バージョン: v3.2.0
+
+##### `lake_enable_balance_tablets_between_workers`
 
 - デフォルト: true
 - タイプ: Boolean
 - 単位: -
 - 変更可能: はい
-- 説明: クエリ書き換えのパフォーマンスを向上させるために、クエリレベルのマテリアライズドビュー書き換えキャッシュを有効にするかどうか。
-- 導入バージョン: v3.3
+- 説明: `shared-data`クラスターにおけるクラウドネイティブテーブルのタブレット移行中に、Compute Nodes間でタブレットの数をバランスさせるかどうか。`true`はCompute Nodes間でタブレットをバランスさせることを示し、`false`はこの機能を無効にすることを示します。
+- 導入バージョン: v3.3.4
 
-##### mv_query_context_cache_max_size
-
-- デフォルト: 1000
-- タイプ: -
-- 単位: -
-- 変更可能: はい
-- 説明: 1つのクエリのライフサイクル中の最大マテリアライズドビュー書き換えキャッシュのサイズ。キャッシュを使用することで、オプティマイザによるマテリアライズドビューの書き換えにかかる時間を短縮するために計算の繰り返しを避けることができますが、余分な　FE　のメモリを占有する可能性があります。相対的なマテリアライズドビューが多い場合（10　個以上）や、クエリが複雑な場合（複数のテーブルへの　JOIN がある）には、より良いパフォーマンスをもたらす可能性があります。
-- 導入バージョン: v3.3
-
-##### mv_refresh_fail_on_filter_data
-
-- デフォルト値：true
-- タイプ: ブール値
-- 単位：-
-- 変更可能: はい
-- 説明：リフレッシュ中にフィルターされたデータが存在する場合、マテリアライズドビューのリフレッシュは失敗します（デフォルトは true）。false に設定すると、フィルターされたデータを無視して正常終了として扱います。
-- 導入バージョン：-
-
-##### mv_create_partition_batch_interval_ms
-
-- デフォルト: 1000
-- タイプ: Int
-- 単位: Milliseconds
-- 変更可能: はい
-- 説明: マテリアライズドビューの更新時に、複数のパーティションを一括作成する必要がある場合、システムはそれらを 64 個ずつのバッチに分割します。パーティションの頻繁な作成による障害のリスクを軽減するために、各バッチの間にデフォルトの間隔（ミリ秒単位）が設定され、作成頻度が制御されます。
-- 導入バージョン: v3.3
-
-##### max_mv_refresh_failure_retry_times
-
-- デフォルト: 1
-- タイプ: Int
-- 単位: -
-- 変更可能: はい
-- 説明: マテリアライズドビューの更新に失敗した場合の最大再試行回数。
-- 導入バージョン: v3.3.0
-
-##### max_mv_refresh_try_lock_failure_retry_times
-
-- デフォルト: 3
-- タイプ: Int
-- 単位: -
-- 変更可能: はい
-- 説明: マテリアライズドビューのリフレッシュに失敗した場合の、トライロックの最大再試行回数。
-- 導入バージョン: v3.3.0
-
-##### mv_refresh_try_lock_timeout_ms
-
-- デフォルト: 30000
-- タイプ: Int
-- 単位: Milliseconds
-- 変更可能: はい
-- 説明: マテリアライズドビューのリフレッシュの既定のロック試行タイムアウトは、ベーステーブル/マテリアライズドビューのDBロックを試行します。
-- 導入バージョン: v3.3.0
-
-##### enable_mv_refresh_collect_profile
-
-- デフォルト: false
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: すべてのマテリアライズドビューで、デフォルトでマテリアライズドビューの更新時にプロファイルを有効にするかどうかを指定します。
-- 導入バージョン: v3.3.0
-
-##### max_mv_task_run_meta_message_values_length
-
-- デフォルト: 16
-- タイプ: Int
-- 単位: -
-- 変更可能: はい
-- 説明: マテリアライズドビュー・タスク実行時の（セットまたはマップ内の）「extra message」値の最大長。この項目を設定することで、メタメモリの占有を避けることができます。
-- 導入バージョン: v3.3.0
-
-##### max_mv_check_base_table_change_retry_times
-
-- デフォルト: 10
-- タイプ: -
-- 単位: -
-- 変更可能: はい
-- 説明: マテリアライズドビューの更新時にベーステーブルの変更を検出するための最大再試行回数。
-- 導入バージョン: v3.3.0
-
-##### mv_refresh_default_planner_optimize_timeout
-
-- デフォルト: 30000
-- タイプ: -
-- 単位: -
-- 変更可能: はい
-- 説明: オプティマイザがマテリアライズドビューを更新する際の計画フェーズのデフォルトのタイムアウト。
-- 導入バージョン: v3.3.0
-
-##### enable_mv_refresh_query_rewrite
-
-- デフォルト: false
-- タイプ: Boolean
-- 単位: -
-- 変更可能: はい
-- 説明: クエリのパフォーマンスを向上させるために、ベーステーブルではなく書き換えられたマテリアライズドビューを直接使用できるように、マテリアライズドビューの更新時に書き換えクエリを有効にするかどうか。
-- 導入バージョン: v3.3
-
-##### enable_mv_refresh_extra_prefix_logging
+##### `lake_enable_ingest_slowdown`
 
 - デフォルト: true
 - タイプ: Boolean
 - 単位: -
 - 変更可能: はい
-- 説明: より良いデバッグのために、ログでマテリアライズドビュー名の接頭辞を有効にするかどうか。
-- 導入バージョン: v3.4.0
+- 説明: `shared-data`クラスターでData Ingestion Slowdownを有効にするかどうか。Data Ingestion Slowdownが有効になっている場合、パーティションのCompaction Scoreが`lake_ingest_slowdown_threshold`を超えると、そのパーティションでのロードタスクはスロットリングされます。この設定は、`run_mode`が`shared_data`に設定されている場合にのみ有効です。v3.3.6以降、デフォルト値は`false`から`true`に変更されました。
+- 導入バージョン: v3.2.0
 
-<EditionSpecificFEItem />
-=======
-##### `starmgr_grpc_server_max_worker_threads`
+##### `lake_ingest_slowdown_threshold`
 
-- Default: 1024
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: FE の starmgr モジュールの grpc サーバーが使用するワーカー スレッドの最大数。
-- Introduced in: v4.0.0, v3.5.8
+- デフォルト: 100
+- タイプ: Long
+- 単位: -
+- 変更可能: はい
+- 説明: `shared-data`クラスターでData Ingestion SlowdownをトリガーするCompaction Scoreのしきい値。この設定は、`lake_enable_ingest_slowdown`が`true`に設定されている場合にのみ有効です。
+- 導入バージョン: v3.2.0
+
+##### `lake_publish_version_max_threads`
+
+- デフォルト: 512
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: `shared-data`クラスターにおけるVersion Publishタスクの最大スレッド数。
+- 導入バージョン: v3.2.0
+
+##### `meta_sync_force_delete_shard_meta`
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: リモートストレージファイルのクリーンアップをバイパスして、`shared-data`クラスターのメタデータを直接削除することを許可するかどうか。この項目は、クリーンアップするシャードが過剰に多く、FE JVMに極端なメモリ負荷がかかる場合にのみ`true`に設定することをお勧めします。この機能が有効になった後、シャードまたはタブレットに属するデータファイルは自動的にクリーンアップされないことに注意してください。
+- 導入バージョン: v3.2.10, v3.3.3
+
+##### `run_mode`
+
+- デフォルト: `shared_nothing`
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: StarRocksクラスターの実行モード。有効な値: `shared_data`および`shared_nothing`（デフォルト）。
+  - `shared_data`は、StarRocksを`shared-data`モードで実行することを示します。
+  - `shared_nothing`は、StarRocksを`shared-nothing`モードで実行することを示します。
+
+  > **注意**
+  >
+  > - StarRocksクラスターで`shared_data`モードと`shared_nothing`モードを同時に採用することはできません。混合デプロイメントはサポートされていません。
+  > - クラスターがデプロイされた後、`run_mode`を変更しないでください。変更すると、クラスターの再起動に失敗します。`shared-nothing`クラスターから`shared-data`クラスターへの変換、またはその逆はサポートされていません。
+
+- 導入バージョン: -
+
+##### `shard_group_clean_threshold_sec`
+
+- デフォルト: 3600
+- タイプ: Long
+- 単位: 秒
+- 変更可能: はい
+- 説明: `shared-data`クラスターでFEが未使用のタブレットおよびシャードグループをクリーンアップするまでの時間。このしきい値内で作成されたタブレットおよびシャードグループはクリーンアップされません。
+- 導入バージョン: -
+
+##### `star_mgr_meta_sync_interval_sec`
+
+- デフォルト: 600
+- タイプ: Long
+- 単位: 秒
+- 変更可能: いいえ
+- 説明: `shared-data`クラスターでFEがStarMgrとの定期的なメタデータ同期を実行する間隔。
+- 導入バージョン: -
 
 ##### `starmgr_grpc_timeout_seconds`
 
-- Default: 5
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description:
-- Introduced in: -
+- デフォルト: 5
+- タイプ: Int
+- 単位: 秒
+- 変更可能: はい
+- 説明:
+- 導入バージョン: -
 
 ### データレイク
 
 ##### `files_enable_insert_push_down_schema`
 
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: 有効にすると、アナライザは INSERT ... FROM files() 操作のためにターゲットテーブルスキーマを `files()` テーブル関数にプッシュしようとします。これは、ソースが FileTableFunctionRelation であり、ターゲットがネイティブテーブルであり、SELECT リストにそれに対応するスロット参照列 (または *) が含まれている場合にのみ適用されます。アナライザは選択された列をターゲット列に一致させ (カウントが一致する必要があります)、ターゲットテーブルを一時的にロックし、ファイル列の型を非複合型 (Parquet JSON -> `array<varchar>` のような複合型はスキップされます) のディープコピーされたターゲット列型で置き換えます。元のファイルテーブルからの列名は保持されます。これにより、取り込み中のファイルベースの型推論による型ミスマッチと緩さが軽減されます。
-- Introduced in: v3.4.0, v3.5.0
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: Yes
+- 説明: 有効にすると、アナライザーは INSERT ... FROM files() 操作のために、ターゲットテーブルのスキーマを `files()` テーブル関数にプッシュしようとします。これは、ソースが FileTableFunctionRelation であり、ターゲットがネイティブテーブルであり、SELECT リストに対応するスロット参照カラム (または *) が含まれている場合にのみ適用されます。アナライザーは選択されたカラムをターゲットカラムに一致させ (カウントが一致する必要がある)、ターゲットテーブルを一時的にロックし、非複合型 (Parquet JSON `->` `array<varchar>` のような複合型はスキップされます) のファイルカラム型をディープコピーされたターゲットカラム型に置き換えます。元のファイルテーブルのカラム名は保持されます。これにより、取り込み時のファイルベースの型推論による型不一致と緩さが軽減されます。
+- 導入バージョン: v3.4.0, v3.5.0
 
 ##### `hdfs_read_buffer_size_kb`
 
-- Default: 8192
-- Type: Int
-- Unit: Kilobytes
-- Is mutable: Yes
-- Description: HDFS 読み取りバッファのサイズ (キロバイト単位)。StarRocks はこの値をバイト (`<< 10`) に変換し、`HdfsFsManager` で HDFS 読み取りバッファを初期化したり、ブローカーアクセスが使用されていない場合に BE タスク (例: `TBrokerScanRangeParams`、`TDownloadReq`) に送信される thrift フィールド `hdfs_read_buffer_size_kb` を設定したりするために使用します。`hdfs_read_buffer_size_kb` を増やすと、シーケンシャル読み取りスループットが向上し、システムコールオーバーヘッドが減少しますが、ストリームごとのメモリ使用量が増加します。減らすとメモリフットプリントが減少しますが、I/O 効率が低下する可能性があります。調整時にはワークロード (多くの小さなストリームと少数の大きなシーケンシャル読み取り) を考慮してください。
-- Introduced in: v3.2.0
+- デフォルト: 8192
+- タイプ: Int
+- 単位: キロバイト
+- 変更可能: Yes
+- 説明: HDFS読み取りバッファのサイズをキロバイトで指定します。StarRocksはこの値をバイトに変換し (`<< 10`)、ブローカーアクセスが使用されていない場合に `HdfsFsManager` でHDFS読み取りバッファを初期化し、BEタスク (例: `TBrokerScanRangeParams`、`TDownloadReq`) に送信されるThriftフィールド `hdfs_read_buffer_size_kb` を設定するために使用します。`hdfs_read_buffer_size_kb` を増やすと、ストリームあたりのメモリ使用量が増える代わりに、シーケンシャル読み取りスループットが向上し、システムコールオーバーヘッドが削減されます。減らすとメモリフットプリントは減少しますが、IO効率が低下する可能性があります。チューニング時にはワークロード (多数の小さなストリームか、少数の大きなシーケンシャル読み取りか) を考慮してください。
+- 導入バージョン: v3.2.0
 
 ##### `hdfs_write_buffer_size_kb`
 
-- Default: 1024
-- Type: Int
-- Unit: Kilobytes
-- Is mutable: Yes
-- Description: ブローカーを使用しない HDFS またはオブジェクトストレージへの直接書き込みに使用される HDFS 書き込みバッファサイズ (KB 単位) を設定します。FE はこの値をバイト (`<< 10`) に変換し、`HdfsFsManager` でローカル書き込みバッファを初期化します。また、Thrift リクエスト (例: TUploadReq、TExportSink、シンクオプション) に伝播され、バックエンド/エージェントが同じバッファサイズを使用するようにします。この値を増やすと、大きなシーケンシャル書き込みのスループットが向上しますが、ライターごとのメモリが増加します。減らすと、ストリームごとのメモリ使用量が減少し、小さな書き込みのレイテンシーが低下する可能性があります。`hdfs_read_buffer_size_kb` と並行して調整し、利用可能なメモリと同時ライターを考慮してください。
-- Introduced in: v3.2.0
+- デフォルト: 1024
+- タイプ: Int
+- 単位: キロバイト
+- 変更可能: Yes
+- 説明: ブローカーを使用しない場合に、HDFSまたはオブジェクトストレージへの直接書き込みに使用されるHDFS書き込みバッファサイズ (KB単位) を設定します。FEはこの値をバイトに変換し (`<< 10`)、HdfsFsManagerでローカル書き込みバッファを初期化し、Thriftリクエスト (例: TUploadReq、TExportSink、シンクオプション) で伝播されるため、バックエンド/エージェントは同じバッファサイズを使用します。この値を増やすと、ライターあたりのメモリが増える代わりに、大規模なシーケンシャル書き込みのスループットが向上します。減らすと、ストリームあたりのメモリ使用量が減少し、小さな書き込みのレイテンシが低下する可能性があります。`hdfs_read_buffer_size_kb` と合わせて、利用可能なメモリと同時ライター数を考慮してチューニングしてください。
+- 導入バージョン: v3.2.0
 
 ##### `lake_batch_publish_max_version_num`
 
-- Default: 10
-- Type: Int
-- Unit: Count
-- Is mutable: Yes
-- Description: レイク (クラウドネイティブ) テーブルの公開バッチを構築する際に、連続するトランザクションバージョンをいくつのグループにまとめるかの上限を設定します。この値はトランザクショングラフバッチ処理ルーチン (getReadyToPublishTxnListBatch を参照) に渡され、`lake_batch_publish_min_version_num` と連携して TransactionStateBatch の候補範囲サイズを決定します。値が大きいほど、より多くのコミットをバッチ処理することで公開スループットが向上しますが、アトミック公開の範囲が広がり (可視性レイテンシーが長く、ロールバック対象が大きくなる)、バージョンが連続していない場合、実行時に制限される可能性があります。ワークロードと可視性/レイテンシー要件に応じて調整してください。
-- Introduced in: v3.2.0
+- デフォルト: 10
+- タイプ: Int
+- 単位: カウント
+- 変更可能: Yes
+- 説明: レイク (クラウドネイティブ) テーブルのパブリッシュバッチを構築する際に、連続するトランザクションバージョンをいくつまでグループ化できるかの上限を設定します。この値はトランザクショングラフのバッチ処理ルーチン (getReadyToPublishTxnListBatch を参照) に渡され、`lake_batch_publish_min_version_num` と連携して TransactionStateBatch の候補範囲サイズを決定します。値が大きいほど、より多くのコミットをバッチ処理することでパブリッシュスループットを向上させることができますが、アトミックなパブリッシュの範囲が広がり (可視性レイテンシが長くなり、ロールバックの対象が大きくなる)、バージョンが連続していない場合は実行時に制限される可能性があります。ワークロードと可視性/レイテンシの要件に応じてチューニングしてください。
+- 導入バージョン: v3.2.0
 
 ##### `lake_batch_publish_min_version_num`
 
-- Default: 1
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: レイクテーブルの公開バッチを形成するために必要な連続するトランザクションバージョンの最小数を設定します。DatabaseTransactionMgr.getReadyToPublishTxnListBatch は、依存トランザクションを選択するためにこの値を `lake_batch_publish_max_version_num` とともに transactionGraph.getTxnsWithTxnDependencyBatch に渡します。値が `1` の場合、単一トランザクションの公開が許可されます (バッチ処理なし)。値が `>1` の場合、少なくともその数の連続したバージョンを持つ単一テーブル、非レプリケーショントランザクションが利用可能である必要があります。バージョンが連続していない場合、レプリケーショントランザクションが出現した場合、またはスキーマ変更がバージョンを消費した場合、バッチ処理は中止されます。この値を増やすと、コミットをグループ化することで公開スループットが向上する可能性がありますが、十分な連続トランザクションを待機している間に公開が遅延する可能性があります。
-- Introduced in: v3.2.0
+- デフォルト: 1
+- タイプ: Int
+- 単位: -
+- 変更可能: Yes
+- 説明: レイクテーブルのパブリッシュバッチを形成するために必要な連続するトランザクションバージョンの最小数を設定します。DatabaseTransactionMgr.getReadyToPublishTxnListBatch は、この値を `lake_batch_publish_max_version_num` とともに transactionGraph.getTxnsWithTxnDependencyBatch に渡し、依存するトランザクションを選択します。値が `1` の場合、単一トランザクションのパブリッシュ (バッチ処理なし) が可能です。値が `>1` の場合、少なくともその数の連続したバージョンを持つ、単一テーブルの非レプリケーショントランザクションが利用可能である必要があります。バージョンが連続していない場合、レプリケーショントランザクションが出現した場合、またはスキーマ変更がバージョンを消費した場合、バッチ処理は中止されます。この値を増やすと、コミットをグループ化することでパブリッシュスループットを向上させることができますが、十分な連続トランザクションを待つ間、パブリッシュが遅延する可能性があります。
+- 導入バージョン: v3.2.0
 
 ##### `lake_enable_batch_publish_version`
 
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: 有効にすると、PublishVersionDaemon は同じ Lake (共有データ) テーブル/パーティションの準備完了トランザクションをバッチ処理し、トランザクションごとの公開を発行するのではなく、まとめてバージョンを公開します。RunMode shared-data では、デーモンは getReadyPublishTransactionsBatch() を呼び出し、publishVersionForLakeTableBatch(...) を使用してグループ化された公開操作を実行します (RPC を削減し、スループットを向上させます)。無効の場合、デーモンは publishVersionForLakeTable(...) を介してトランザクションごとの公開にフォールバックします。実装は、スイッチが切り替えられたときに重複公開を避けるために内部セットを使用して進行中の作業を調整し、`lake_publish_version_max_threads` を介したスレッドプールサイズ設定の影響を受けます。
-- Introduced in: v3.2.0
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: Yes
+- 説明: 有効にすると、PublishVersionDaemon は同じレイク (共有データ) テーブル/パーティションの準備ができたトランザクションをバッチ処理し、トランザクションごとのパブリッシュではなく、それらのバージョンをまとめてパブリッシュします。RunMode shared-data では、デーモンは getReadyPublishTransactionsBatch() を呼び出し、publishVersionForLakeTableBatch(...) を使用してグループ化されたパブリッシュ操作を実行します (RPC を削減し、スループットを向上させます)。無効にすると、デーモンは publishVersionForLakeTable(...) を介したトランザクションごとのパブリッシュにフォールバックします。この実装は、スイッチが切り替えられたときに重複するパブリッシュを避けるために内部セットを使用して進行中の作業を調整し、`lake_publish_version_max_threads` を介したスレッドプールサイズの影響を受けます。
+- 導入バージョン: v3.2.0
 
 ##### `lake_enable_tablet_creation_optimization`
 
-- Default: false
-- Type: boolean
-- Unit: -
-- Is mutable: Yes
-- Description: 有効にすると、StarRocks は共有データモードのクラウドネイティブテーブルおよびマテリアライズドビューのタブレット作成を最適化し、タブレットごとに個別のメタデータではなく、物理パーティション下のすべてのタブレットに単一の共有タブレットメタデータを作成します。これにより、テーブル作成、ロールアップ、スキーマ変更ジョブ中に作成されるタブレット作成タスクとメタデータ/ファイルの数が削減されます。この最適化はクラウドネイティブテーブル/マテリアライズドビューにのみ適用され、`file_bundling` と組み合わせて使用されます (後者は同じ最適化ロジックを再利用します)。注: スキーマ変更およびロールアップジョブは、同じ名前のファイルが上書きされるのを避けるため、`file_bundling` を使用するテーブルでは明示的に最適化を無効にします。注意して有効にしてください。作成されるタブレットメタデータの粒度が変更され、レプリカ作成とファイル命名の動作に影響する可能性があります。
-- Introduced in: v3.3.1, v3.4.0, v3.5.0
+- デフォルト: false
+- タイプ: boolean
+- 単位: -
+- 変更可能: Yes
+- 説明: 有効にすると、StarRocks は共有データモードのクラウドネイティブテーブルおよびマテリアライズドビューのタブレット作成を最適化し、タブレットごとに異なるメタデータを作成する代わりに、物理パーティション下のすべてのタブレットに対して単一の共有タブレットメタデータを作成します。これにより、テーブル作成、ロールアップ、スキーマ変更ジョブ中に生成されるタブレット作成タスクとメタデータ/ファイルの数が削減されます。この最適化はクラウドネイティブテーブル/マテリアライズドビューにのみ適用され、`file_bundling` (後者は同じ最適化ロジックを再利用します) と組み合わされます。注: スキーマ変更およびロールアップジョブは、`file_bundling` を使用するテーブルに対して、同じ名前のファイルを上書きしないようにこの最適化を明示的に無効にします。慎重に有効にしてください — 作成されるタブレットメタデータの粒度が変更され、レプリカ作成とファイル命名の動作に影響を与える可能性があります。
+- 導入バージョン: v3.3.1, v3.4.0, v3.5.0
 
 ##### `lake_use_combined_txn_log`
 
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: この項目が `true` に設定されている場合、システムは Lake テーブルが関連トランザクションの結合トランザクションログパスを使用することを許可します。共有データクラスターでのみ利用可能です。
-- Introduced in: v3.3.7, v3.4.0, v3.5.0
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: Yes
+- 説明: この項目が `true` に設定されている場合、システムはレイクテーブルが関連するトランザクションに対して結合されたトランザクションログパスを使用することを許可します。共有データクラスターでのみ利用可能です。
+- 導入バージョン: v3.3.7, v3.4.0, v3.5.0
 
 ##### `enable_iceberg_commit_queue`
 
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Iceberg テーブルのコミットキューを有効にして、同時コミット競合を回避するかどうか。Iceberg は、メタデータコミットに楽観的並行性制御 (OCC) を使用します。複数のスレッドが同じテーブルに同時にコミットすると、「Cannot commit: Base metadata location is not same as the current table metadata location」のようなエラーで競合が発生する可能性があります。有効にすると、各 Iceberg テーブルにはコミット操作用の単一スレッドエクゼキューターがあり、同じテーブルへのコミットがシリアル化され、OCC 競合が防止されます。異なるテーブルは同時にコミットでき、全体のスループットを維持します。これは信頼性を向上させるためのシステムレベルの最適化であり、デフォルトで有効にする必要があります。無効にすると、楽観的ロック競合により同時コミットが失敗する可能性があります。
-- Introduced in: v4.1.0
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: Yes
+- 説明: Icebergテーブルのコミットキューを有効にして、同時コミットの競合を回避するかどうか。Icebergはメタデータコミットに楽観的並行性制御 (OCC) を使用します。複数のスレッドが同じテーブルに同時にコミットすると、「Cannot commit: Base metadata location is not same as the current table metadata location」のようなエラーで競合が発生する可能性があります。有効にすると、各Icebergテーブルはコミット操作用に独自のシングルスレッドエグゼキュータを持ち、同じテーブルへのコミットがシリアル化され、OCC競合が防止されます。異なるテーブルは同時にコミットでき、全体のスループットを維持します。これは信頼性を向上させるためのシステムレベルの最適化であり、デフォルトで有効にする必要があります。無効にすると、楽観的ロックの競合により同時コミットが失敗する可能性があります。
+- 導入バージョン: v4.1.0
 
 ##### `iceberg_commit_queue_timeout_seconds`
 
-- Default: 300
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description: Iceberg コミット操作が完了するまでの待機タイムアウト (秒単位)。コミットキュー (`enable_iceberg_commit_queue=true`) を使用する場合、各コミット操作はこのタイムアウト内で完了する必要があります。コミットがこのタイムアウトよりも長くかかる場合、キャンセルされ、エラーが発生します。コミット時間に影響する要因には、コミットされるデータファイルの数、テーブルのメタデータサイズ、基盤となるストレージ (S3、HDFS など) のパフォーマンスが含まれます。
-- Introduced in: v4.1.0
+- デフォルト: 300
+- タイプ: Int
+- 単位: 秒
+- 変更可能: Yes
+- 説明: Icebergコミット操作が完了するのを待つタイムアウトを秒単位で指定します。コミットキュー (`enable_iceberg_commit_queue=true`) を使用している場合、各コミット操作はこのタイムアウト内に完了する必要があります。コミットがこのタイムアウトよりも長くかかった場合、キャンセルされ、エラーが発生します。コミット時間に影響を与える要因には、コミットされるデータファイルの数、テーブルのメタデータサイズ、基盤となるストレージ (例: S3、HDFS) のパフォーマンスなどがあります。
+- 導入バージョン: v4.1.0
 
 ##### `iceberg_commit_queue_max_size`
 
-- Default: 1000
-- Type: Int
-- Unit: Count
-- Is mutable: No
-- Description: Iceberg テーブルごとの保留中のコミット操作の最大数。コミットキュー (`enable_iceberg_commit_queue=true`) を使用する場合、これは単一テーブルのキューに入れられるコミット操作の数を制限します。制限に達すると、追加のコミット操作は呼び出し元のスレッドで実行されます (容量が利用可能になるまでブロックします)。この設定は FE 起動時に読み取られ、新しく作成されたテーブルエクゼキューターに適用されます。有効にするには FE の再起動が必要です。同じテーブルへの同時コミットが多いと予想される場合は、この値を増やしてください。この値が低すぎると、高並行時に呼び出し元スレッドでコミットがブロックされる可能性があります。
-- Introduced in: v4.1.0
+- デフォルト: 1000
+- タイプ: Int
+- 単位: カウント
+- 変更可能: No
+- 説明: Icebergテーブルあたりの保留中のコミット操作の最大数。コミットキュー (`enable_iceberg_commit_queue=true`) を使用している場合、これは単一テーブルに対してキューに入れられるコミット操作の数を制限します。この制限に達すると、追加のコミット操作は呼び出し元のスレッドで実行されます (容量が利用可能になるまでブロック)。この設定はFE起動時に読み込まれ、新しく作成されるテーブルエグゼキュータに適用されます。FEの再起動が必要です。同じテーブルへの同時コミットが多数発生すると予想される場合は、この値を増やしてください。この値が低すぎると、高並行性時にコミットが呼び出し元のスレッドでブロックされる可能性があります。
+- 導入バージョン: v4.1.0
 
 ### その他
 
 ##### `agent_task_resend_wait_time_ms`
 
-- Default: 5000
-- Type: Long
-- Unit: Milliseconds
-- Is mutable: Yes
-- Description: FE がエージェントタスクを再送信するまでに待機する必要がある期間。エージェントタスクは、タスク作成時間と現在時刻の間のギャップがこのパラメーターの値を超えた場合にのみ再送信できます。このパラメーターは、エージェントタスクの繰り返し送信を防ぐために使用されます。
-- Introduced in: -
+- デフォルト: 5000
+- 型: Long
+- 単位: ミリ秒
+- 変更可能: はい
+- 説明: FEがエージェントタスクを再送信する前に待機しなければならない期間。エージェントタスクは、タスク作成時間と現在時間の間のギャップがこのパラメータの値を超えた場合にのみ再送信できます。このパラメータは、エージェントタスクの繰り返し送信を防ぐために使用されます。
+- 導入バージョン: -
 
 ##### `allow_system_reserved_names`
 
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: ユーザーが `__op` と `__row` で始まる名前の列を作成することを許可するかどうか。この機能を有効にするには、このパラメーターを `TRUE` に設定します。これらの名前形式は StarRocks の特殊な目的のために予約されており、そのような列を作成すると未定義の動作になる可能性があるため、この機能はデフォルトで無効になっています。
-- Introduced in: v3.2.0
+- デフォルト: false
+- 型: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: ユーザーが`__op`および`__row`で始まる名前の列を作成することを許可するかどうか。この機能を有効にするには、このパラメータを`TRUE`に設定します。これらの名前形式はStarRocksで特別な目的のために予約されており、そのような列を作成すると未定義の動作を引き起こす可能性があることに注意してください。そのため、この機能はデフォルトで無効になっています。
+- 導入バージョン: v3.2.0
 
 ##### `auth_token`
 
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: FE が属する StarRocks クラスター内で ID 認証に使用されるトークン。このパラメーターが指定されていない場合、StarRocks はクラスターのリーダー FE が最初に起動されたときに、クラスターのランダムなトークンを生成します。
-- Introduced in: -
+- デフォルト: 空の文字列
+- 型: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: FEが属するStarRocksクラスター内でID認証に使用されるトークン。このパラメータが指定されていない場合、StarRocksはクラスターのリーダーFEが初めて起動されたときに、クラスター用のランダムなトークンを生成します。
+- 導入バージョン: -
 
 ##### `authentication_ldap_simple_bind_base_dn`
 
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: Yes
-- Description: LDAP サーバーがユーザーの認証情報の検索を開始する基底 DN。
-- Introduced in: -
+- デフォルト: 空の文字列
+- 型: String
+- 単位: -
+- 変更可能: はい
+- 説明: LDAPサーバーがユーザーの認証情報の検索を開始する基点となるベースDN。
+- 導入バージョン: -
 
 ##### `authentication_ldap_simple_bind_root_dn`
 
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: Yes
-- Description: ユーザーの認証情報を検索するために使用される管理者 DN。
-- Introduced in: -
+- デフォルト: 空の文字列
+- 型: String
+- 単位: -
+- 変更可能: はい
+- 説明: ユーザーの認証情報を検索するために使用される管理者DN。
+- 導入バージョン: -
 
 ##### `authentication_ldap_simple_bind_root_pwd`
 
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: Yes
-- Description: ユーザーの認証情報を検索するために使用される管理者のパスワード。
-- Introduced in: -
+- デフォルト: 空の文字列
+- 型: String
+- 単位: -
+- 変更可能: はい
+- 説明: ユーザーの認証情報を検索するために使用される管理者のパスワード。
+- 導入バージョン: -
 
 ##### `authentication_ldap_simple_server_host`
 
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: Yes
-- Description: LDAP サーバーが実行されているホスト。
-- Introduced in: -
+- デフォルト: 空の文字列
+- 型: String
+- 単位: -
+- 変更可能: はい
+- 説明: LDAPサーバーが実行されているホスト。
+- 導入バージョン: -
 
 ##### `authentication_ldap_simple_server_port`
 
-- Default: 389
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: LDAP サーバーのポート。
-- Introduced in: -
+- デフォルト: 389
+- 型: Int
+- 単位: -
+- 変更可能: はい
+- 説明: LDAPサーバーのポート。
+- 導入バージョン: -
 
 ##### `authentication_ldap_simple_user_search_attr`
 
-- Default: uid
-- Type: String
-- Unit: -
-- Is mutable: Yes
-- Description: LDAP オブジェクトでユーザーを識別する属性の名前。
-- Introduced in: -
+- デフォルト: uid
+- 型: String
+- 単位: -
+- 変更可能: はい
+- 説明: LDAPオブジェクトでユーザーを識別する属性の名前。
+- 導入バージョン: -
 
 ##### `backup_job_default_timeout_ms`
 
-- Default: 86400 * 1000
-- Type: Int
-- Unit: Milliseconds
-- Is mutable: Yes
-- Description: バックアップジョブのタイムアウト期間。この値を超えると、バックアップジョブは失敗します。
-- Introduced in: -
-
-##### `enable_collect_tablet_num_in_show_proc_backend_disk_path`
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: `SHOW PROC /BACKENDS/{id}` コマンドで各ディスクのタブレット数を収集することを有効にするかどうか。
-- Introduced in: v4.0.1, v3.5.8
+- デフォルト: 86400 * 1000
+- 型: Int
+- 単位: ミリ秒
+- 変更可能: はい
+- 説明: バックアップジョブのタイムアウト期間。この値を超えると、バックアップジョブは失敗します。
+- 導入バージョン: -
 
 ##### `enable_colocate_restore`
 
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: コロケーションテーブルのバックアップと復元を有効にするかどうか。`true` はコロケーションテーブルのバックアップと復元を有効にすることを示し、`false` は無効にすることを示します。
-- Introduced in: v3.2.10, v3.3.3
+- デフォルト: false
+- 型: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: Colocate Tableのバックアップと復元を有効にするかどうか。`true`はColocate Tableのバックアップと復元を有効にすることを示し、`false`は無効にすることを示します。
+- 導入バージョン: v3.2.10, v3.3.3
 
 ##### `enable_materialized_view_concurrent_prepare`
 
-- Default: true
-- Type: Boolean
-- Unit:
-- Is mutable: Yes
-- Description: パフォーマンスを向上させるために、マテリアライズドビューを並行して準備するかどうか。
-- Introduced in: v3.4.4
+- デフォルト: true
+- 型: Boolean
+- 単位:
+- 変更可能: はい
+- 説明: パフォーマンスを向上させるために、マテリアライズドビューを並行して準備するかどうか。
+- 導入バージョン: v3.4.4
 
 ##### `enable_metric_calculator`
 
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- Description: メトリックを定期的に収集する機能を有効にするかどうかを指定します。有効な値: `TRUE` および `FALSE`。`TRUE` はこの機能を有効にすることを指定し、`FALSE` はこの機能を無効にすることを指定します。
-- Introduced in: -
+- デフォルト: true
+- 型: Boolean
+- 単位: -
+- 変更可能: いいえ
+- 説明: メトリクスを定期的に収集する機能を有効にするかどうかを指定します。有効な値: `TRUE`と`FALSE`。`TRUE`はこの機能を有効にすることを指定し、`FALSE`はこの機能を無効にすることを指定します。
+- 導入バージョン: -
 
 ##### `enable_table_metrics_collect`
 
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: FE でテーブルレベルのメトリックをエクスポートするかどうか。無効にすると、FE はテーブルメトリック (テーブルスキャン/ロードカウンターやテーブルサイズメトリックなど) のエクスポートをスキップしますが、カウンターはメモリに記録されます。
-- Introduced in: -
-
-##### `enable_mv_post_image_reload_cache`
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: FE がイメージをロードした後、リロードフラグチェックを実行するかどうか。ベースマテリアライズドビューに対してチェックが実行された場合、それに関連する他のマテリアライズドビューに対しては不要です。
-- Introduced in: v3.5.0
+- デフォルト: true
+- 型: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: FEでテーブルレベルのメトリクスをエクスポートするかどうか。無効にすると、FEはテーブルメトリクス（テーブルスキャン/ロードカウンターやテーブルサイズメトリクスなど）のエクスポートをスキップしますが、カウンターはメモリに記録し続けます。
+- 導入バージョン: -
 
 ##### `enable_mv_query_context_cache`
 
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: クエリ書き換えパフォーマンスを向上させるために、クエリレベルのマテリアライズドビュー書き換えキャッシュを有効にするかどうか。
-- Introduced in: v3.3
+- デフォルト: true
+- 型: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: クエリ書き換えのパフォーマンスを向上させるために、クエリレベルのマテリアライズドビュー書き換えキャッシュを有効にするかどうか。
+- 導入バージョン: v3.3
 
 ##### `enable_mv_refresh_collect_profile`
 
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: すべてのマテリアライズドビューに対して、デフォルトでマテリアライズドビューの更新時にプロファイルを有効にするかどうか。
-- Introduced in: v3.3.0
+- デフォルト: false
+- 型: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: すべてのマテリアライズドビューについて、デフォルトでマテリアライズドビューのリフレッシュ時にプロファイルを有効にするかどうか。
+- 導入バージョン: v3.3.0
 
 ##### `enable_mv_refresh_extra_prefix_logging`
 
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: デバッグを容易にするために、ログにマテリアライズドビュー名をプレフィックスとして含めることを有効にするかどうか。
-- Introduced in: v3.4.0
+- デフォルト: true
+- 型: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: デバッグを改善するために、ログにマテリアライズドビュー名を含むプレフィックスを有効にするかどうか。
+- 導入バージョン: v3.4.0
 
 ##### `enable_mv_refresh_query_rewrite`
 
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: マテリアライズドビューの更新中にクエリ書き換えを有効にして、クエリパフォーマンスを向上させるために基底テーブルではなく書き換えられた MV を直接使用できるようにするかどうか。
-- Introduced in: v3.3
-
-##### `enable_trace_historical_node`
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: システムが履歴ノードをトレースすることを許可するかどうか。この項目を `true` に設定することで、キャッシュ共有機能を有効にし、エラスティック スケーリング中にシステムが適切なキャッシュノードを選択できるようにすることができます。
-- Introduced in: v3.5.1
+- デフォルト: false
+- 型: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: マテリアライズドビューのリフレッシュ中にクエリ書き換えを有効にするかどうか。これにより、クエリはベーステーブルではなく書き換えられたMVを直接使用してクエリパフォーマンスを向上させることができます。
+- 導入バージョン: v3.3
 
 ##### `es_state_sync_interval_second`
 
-- Default: 10
-- Type: Long
-- Unit: Seconds
-- Is mutable: No
-- Description: FE が Elasticsearch インデックスを取得し、StarRocks 外部テーブルのメタデータを同期する時間間隔。
-- Introduced in: -
+- デフォルト: 10
+- 型: Long
+- 単位: 秒
+- 変更可能: いいえ
+- 説明: FEがElasticsearchインデックスを取得し、StarRocks外部テーブルのメタデータを同期する時間間隔。
+- 導入バージョン: -
 
 ##### `hive_meta_cache_refresh_interval_s`
 
-- Default: 3600 * 2
-- Type: Long
-- Unit: Seconds
-- Is mutable: No
-- Description: Hive 外部テーブルのキャッシュされたメタデータが更新される時間間隔。
-- Introduced in: -
+- デフォルト: 3600 * 2
+- 型: Long
+- 単位: 秒
+- 変更可能: いいえ
+- 説明: Hive外部テーブルのキャッシュされたメタデータが更新される時間間隔。
+- 導入バージョン: -
 
 ##### `hive_meta_store_timeout_s`
 
-- Default: 10
-- Type: Long
-- Unit: Seconds
-- Is mutable: No
-- Description: Hive メタストアへの接続がタイムアウトするまでの時間。
-- Introduced in: -
+- デフォルト: 10
+- 型: Long
+- 単位: 秒
+- 変更可能: いいえ
+- 説明: Hive metastoreへの接続がタイムアウトするまでの時間。
+- 導入バージョン: -
 
 ##### `jdbc_connection_idle_timeout_ms`
 
-- Default: 600000
-- Type: Int
-- Unit: Milliseconds
-- Is mutable: No
-- Description: JDBC カタログへのアクセス接続がタイムアウトするまでの最大時間。タイムアウトした接続はアイドル状態と見なされます。
-- Introduced in: -
-
-##### `jdbc_connection_timeout_ms`
-
-- Default: 10000
-- Type: Long
-- Unit: Milliseconds
-- Is mutable: No
-- Description: HikariCP コネクションプールが接続を取得するまでのタイムアウト (ミリ秒単位)。この時間内にプールから接続を取得できない場合、操作は失敗します。
-- Introduced in: v3.5.13
-
-##### `jdbc_query_timeout_ms`
-
-- Default: 30000
-- Type: Long
-- Unit: Milliseconds
-- Is mutable: Yes
-- Description: JDBC ステートメントのクエリ実行のタイムアウト (ミリ秒単位)。このタイムアウトは、JDBC カタログを通じて実行されるすべての SQL クエリ (パーティションメタデータクエリなど) に適用されます。この値は、JDBC ドライバーに渡されるときに秒に変換されます。
-- Introduced in: v3.5.13
-
-##### `jdbc_network_timeout_ms`
-
-- Default: 30000
-- Type: Long
-- Unit: Milliseconds
-- Is mutable: Yes
-- Description: JDBC ネットワーク操作 (ソケット読み取り) のタイムアウト (ミリ秒単位)。このタイムアウトは、外部データベースが応答しない場合に無期限のブロッキングを防ぐために、データベースメタデータ呼び出し (getSchemas()、getTables()、getColumns() など) に適用されます。
-- Introduced in: v3.5.13
+- デフォルト: 600000
+- 型: Int
+- 単位: ミリ秒
+- 変更可能: いいえ
+- 説明: JDBCカタログにアクセスするための接続がタイムアウトするまでの最大時間。タイムアウトした接続はアイドル状態と見なされます。
+- 導入バージョン: -
 
 ##### `jdbc_connection_pool_size`
 
-- Default: 8
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description: JDBC カタログにアクセスするための JDBC 接続プールの最大容量。
-- Introduced in: -
+- デフォルト: 8
+- 型: Int
+- 単位: -
+- 変更可能: いいえ
+- 説明: JDBCカタログにアクセスするためのJDBC接続プールの最大容量。
+- 導入バージョン: -
 
 ##### `jdbc_meta_default_cache_enable`
 
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: JDBC カタログのメタデータキャッシュが有効になっているかどうかのデフォルト値。true に設定すると、新しく作成された JDBC カタログはデフォルトでメタデータキャッシュが有効になります。
-- Introduced in: -
+- デフォルト: false
+- 型: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: JDBC Catalogメタデータキャッシュが有効になっているかどうかのデフォルト値。Trueに設定すると、新しく作成されたJDBC Catalogはデフォルトでメタデータキャッシュが有効になります。
+- 導入バージョン: -
 
 ##### `jdbc_meta_default_cache_expire_sec`
 
-- Default: 600
-- Type: Long
-- Unit: Seconds
-- Is mutable: Yes
-- Description: JDBC カタログのメタデータキャッシュのデフォルトの有効期限。`jdbc_meta_default_cache_enable` が true に設定されている場合、新しく作成された JDBC カタログはデフォルトでメタデータキャッシュの有効期限を設定します。
-- Introduced in: -
+- デフォルト: 600
+- 型: Long
+- 単位: 秒
+- 変更可能: はい
+- 説明: JDBC Catalogメタデータキャッシュのデフォルトの有効期限。`jdbc_meta_default_cache_enable`がtrueに設定されている場合、新しく作成されたJDBC Catalogはデフォルトでメタデータキャッシュの有効期限を設定します。
+- 導入バージョン: -
 
 ##### `jdbc_minimum_idle_connections`
 
-- Default: 1
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description: JDBC カタログにアクセスするための JDBC 接続プールのアイドル接続の最小数。
-- Introduced in: -
-
-##### `jwt_jwks_url`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: JSON Web Key Set (JWKS) サービスの URL、または `fe/conf` ディレクトリ下の公開鍵ローカルファイルへのパス。
-- Introduced in: v3.5.0
-
-##### `jwt_principal_field`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: JWT のサブジェクト (`sub`) を示すフィールドを識別するために使用される文字列。デフォルト値は `sub` です。このフィールドの値は StarRocks へのログインに使用するユーザー名と同一である必要があります。
-- Introduced in: v3.5.0
-
-##### `jwt_required_audience`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: JWT のオーディエンス (`aud`) を識別するために使用される文字列のリスト。JWT が有効であると見なされるのは、リスト内の値のいずれかが JWT のオーディエンスと一致する場合のみです。
-- Introduced in: v3.5.0
-
-##### `jwt_required_issuer`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: JWT の発行者 (`iss`) を識別するために使用される文字列のリスト。JWT が有効であると見なされるのは、リスト内の値のいずれかが JWT の発行者と一致する場合のみです。
-- Introduced in: v3.5.0
+- デフォルト: 1
+- 型: Int
+- 単位: -
+- 変更可能: いいえ
+- 説明: JDBCカタログにアクセスするためのJDBC接続プール内のアイドル接続の最小数。
+- 導入バージョン: -
 
 ##### locale
 
-- Default: `zh_CN.UTF-8`
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: FE が使用する文字セット。
-- Introduced in: -
+- デフォルト: `zh_CN.UTF-8`
+- 型: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: FEが使用する文字セット。
+- 導入バージョン: -
 
 ##### `max_agent_task_threads_num`
 
-- Default: 4096
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description: エージェントタスクスレッドプールで許可されるスレッドの最大数。
-- Introduced in: -
+- デフォルト: 4096
+- 型: Int
+- 単位: -
+- 変更可能: いいえ
+- 説明: エージェントタスクスレッドプールで許可されるスレッドの最大数。
+- 導入バージョン: -
 
 ##### `max_download_task_per_be`
 
-- Default: 0
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: 各 RESTORE 操作において、StarRocks が BE ノードに割り当てるダウンロードタスクの最大数。この項目が 0 以下に設定されている場合、タスク数に制限は課されません。
-- Introduced in: v3.1.0
+- デフォルト: 0
+- 型: Int
+- 単位: -
+- 変更可能: はい
+- 説明: 各RESTORE操作において、StarRocksがBEノードに割り当てるダウンロードタスクの最大数。この項目が0以下に設定されている場合、タスク数に制限は課されません。
+- 導入バージョン: v3.1.0
 
 ##### `max_mv_check_base_table_change_retry_times`
 
-- Default: 10
-- Type: -
-- Unit: -
-- Is mutable: Yes
-- Description: マテリアライズドビューの更新時に、基底テーブルの変更を検出するための最大再試行回数。
-- Introduced in: v3.3.0
+- デフォルト: 10
+- 型: -
+- 単位: -
+- 変更可能: はい
+- 説明: マテリアライズドビューのリフレッシュ時にベーステーブルの変更を検出するための最大リトライ回数。
+- 導入バージョン: v3.3.0
 
 ##### `max_mv_refresh_failure_retry_times`
 
-- Default: 1
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: マテリアライズドビューの更新が失敗した場合の最大再試行回数。
-- Introduced in: v3.3.0
+- デフォルト: 1
+- 型: Int
+- 単位: -
+- 変更可能: はい
+- 説明: マテリアライズドビューのリフレッシュが失敗した場合の最大リトライ回数。
+- 導入バージョン: v3.3.0
 
 ##### `max_mv_refresh_try_lock_failure_retry_times`
 
-- Default: 3
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: マテリアライズドビューの更新が失敗した場合の、ロック試行の最大再試行回数。
-- Introduced in: v3.3.0
+- デフォルト: 3
+- 型: Int
+- 単位: -
+- 変更可能: はい
+- 説明: マテリアライズドビューのリフレッシュが失敗した場合のロック試行の最大リトライ回数。
+- 導入バージョン: v3.3.0
 
 ##### `max_small_file_number`
 
-- Default: 100
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: FE ディレクトリに格納できる小型ファイルの最大数。
-- Introduced in: -
+- デフォルト: 100
+- 型: Int
+- 単位: -
+- 変更可能: はい
+- 説明: FEディレクトリに保存できる小さなファイルの最大数。
+- 導入バージョン: -
 
 ##### `max_small_file_size_bytes`
 
-- Default: 1024 * 1024
-- Type: Int
-- Unit: Bytes
-- Is mutable: Yes
-- Description: 小型ファイルの最大サイズ。
-- Introduced in: -
+- デフォルト: 1024 * 1024
+- 型: Int
+- 単位: バイト
+- 変更可能: はい
+- 説明: 小さなファイルの最大サイズ。
+- 導入バージョン: -
 
 ##### `max_upload_task_per_be`
 
-- Default: 0
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: 各 BACKUP 操作において、StarRocks が BE ノードに割り当てるアップロードタスクの最大数。この項目が 0 以下に設定されている場合、タスク数に制限は課されません。
-- Introduced in: v3.1.0
+- デフォルト: 0
+- 型: Int
+- 単位: -
+- 変更可能: はい
+- 説明: 各BACKUP操作において、StarRocksがBEノードに割り当てるアップロードタスクの最大数。この項目が0以下に設定されている場合、タスク数に制限は課されません。
+- 導入バージョン: v3.1.0
 
 ##### `mv_create_partition_batch_interval_ms`
 
-- Default: 1000
-- Type: Int
-- Unit: ms
-- Is mutable: Yes
-- Description: マテリアライズドビューの更新中、複数のパーティションを一括作成する必要がある場合、システムはそれらをそれぞれ 64 パーティションのバッチに分割します。頻繁なパーティション作成による障害のリスクを軽減するため、作成頻度を制御するために各バッチ間にデフォルトの間隔 (ミリ秒単位) が設定されます。
-- Introduced in: v3.3
+- デフォルト: 1000
+- 型: Int
+- 単位: ミリ秒
+- 変更可能: はい
+- 説明: マテリアライズドビューのリフレッシュ中に、複数のパーティションを一括で作成する必要がある場合、システムはそれらをそれぞれ64パーティションのバッチに分割します。頻繁なパーティション作成による障害のリスクを軽減するため、作成頻度を制御するために各バッチ間にデフォルトの間隔（ミリ秒単位）が設定されます。
+- 導入バージョン: v3.3
 
 ##### `mv_plan_cache_max_size`
 
-- Default: 1000
-- Type: Long
-- Unit:
-- Is mutable: Yes
-- Description: マテリアライズドビュー計画キャッシュの最大サイズ (マテリアライズドビューの書き換えに使用されます)。透過的クエリ書き換えに多くのマテリアライズドビューが使用されている場合、この値を増やすことができます。
-- Introduced in: v3.2
+- デフォルト: 1000
+- 型: Long
+- 単位:
+- 変更可能: はい
+- 説明: マテリアライズドビュープランキャッシュ（マテリアライズドビューの書き換えに使用されます）の最大サイズ。透過的なクエリ書き換えに使用されるマテリアライズドビューが多い場合、この値を増やすことができます。
+- 導入バージョン: v3.2
 
 ##### `mv_plan_cache_thread_pool_size`
 
-- Default: 3
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: マテリアライズドビュー計画キャッシュのデフォルトスレッドプールサイズ (マテリアライズドビュー書き換えに使用されます)。
-- Introduced in: v3.2
+- デフォルト: 3
+- 型: Int
+- 単位: -
+- 変更可能: はい
+- 説明: マテリアライズドビュープランキャッシュ（マテリアライズドビューの書き換えに使用されます）のデフォルトのスレッドプールサイズ。
+- 導入バージョン: v3.2
 
 ##### `mv_refresh_default_planner_optimize_timeout`
 
-- Default: 30000
-- Type: -
-- Unit: -
-- Is mutable: Yes
-- Description: マテリアライズドビュー更新時のオプティマイザの計画フェーズのデフォルトタイムアウト。
-- Introduced in: v3.3.0
+- デフォルト: 30000
+- 型: -
+- 単位: -
+- 変更可能: はい
+- 説明: マテリアライズドビューをリフレッシュする際のオプティマイザの計画フェーズのデフォルトのタイムアウト。
+- 導入バージョン: v3.3.0
 
 ##### `mv_refresh_fail_on_filter_data`
 
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: 更新時にフィルタリングされたデータがある場合、マテリアライズドビューの更新は失敗します (デフォルトは true)。そうでない場合、フィルタリングされたデータを無視して成功を返します。
-- Introduced in: -
+- デフォルト: true
+- 型: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: リフレッシュ中にフィルタリングされたデータがある場合、MVのリフレッシュは失敗します（デフォルトはtrue）。それ以外の場合は、フィルタリングされたデータを無視して成功を返します。
+- 導入バージョン: -
 
 ##### `mv_refresh_try_lock_timeout_ms`
 
-- Default: 30000
-- Type: Int
-- Unit: Milliseconds
-- Is mutable: Yes
-- Description: マテリアライズドビューの更新が、基底テーブル/マテリアライズドビューの DB ロックを試行するデフォルトの試行ロックタイムアウト。
-- Introduced in: v3.3.0
-
-##### `oauth2_auth_server_url`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: 認証 URL。OAuth 2.0 認証プロセスを開始するためにユーザーのブラウザがリダイレクトされる URL。
-- Introduced in: v3.5.0
-
-##### `oauth2_client_id`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: StarRocks クライアントの公開識別子。
-- Introduced in: v3.5.0
-
-##### `oauth2_client_secret`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: StarRocks クライアントを認証サーバーで認証するために使用されるシークレット。
-- Introduced in: v3.5.0
-
-##### `oauth2_jwks_url`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: JSON Web Key Set (JWKS) サービスの URL、または `conf` ディレクトリ下のローカルファイルへのパス。
-- Introduced in: v3.5.0
-
-##### `oauth2_principal_field`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: JWT のサブジェクト (`sub`) を示すフィールドを識別するために使用される文字列。デフォルト値は `sub` です。このフィールドの値は StarRocks へのログインに使用するユーザー名と同一である必要があります。
-- Introduced in: v3.5.0
-
-##### `oauth2_redirect_url`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: OAuth 2.0 認証が成功した後にユーザーのブラウザがリダイレクトされる URL。認証コードはこの URL に送信されます。ほとんどの場合、`http://<starrocks_fe_url>:<fe_http_port>/api/oauth2` として設定する必要があります。
-- Introduced in: v3.5.0
-
-##### `oauth2_required_audience`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: JWT のオーディエンス (`aud`) を識別するために使用される文字列のリスト。JWT が有効であると見なされるのは、リスト内の値のいずれかが JWT のオーディエンスと一致する場合のみです。
-- Introduced in: v3.5.0
-
-##### `oauth2_required_issuer`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: JWT の発行者 (`iss`) を識別するために使用される文字列のリスト。JWT が有効であると見なされるのは、リスト内の値のいずれかが JWT の発行者と一致する場合のみです。
-- Introduced in: v3.5.0
-
-##### `oauth2_token_server_url`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: StarRocks がアクセストークンを取得する認証サーバーのエンドポイントの URL。
-- Introduced in: v3.5.0
+- デフォルト: 30000
+- 型: Int
+- 単位: ミリ秒
+- 変更可能: はい
+- 説明: マテリアライズドビューのリフレッシュがそのベーステーブル/マテリアライズドビューのDBロックを試行する際のデフォルトのロック試行タイムアウト。
+- 導入バージョン: v3.3.0
 
 ##### `plugin_dir`
 
-- Default: `System.getenv("STARROCKS_HOME")` + "/plugins"
-- Type: String
-- Unit: -
-- Is mutable: No
-- Description: プラグインインストールパッケージを格納するディレクトリ。
-- Introduced in: -
+- デフォルト: `System.getenv("STARROCKS_HOME")` + "/plugins"
+- 型: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: プラグインインストールパッケージを保存するディレクトリ。
+- 導入バージョン: -
 
 ##### `plugin_enable`
 
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: プラグインを FE にインストールできるかどうか。プラグインはリーダー FE にのみインストールまたはアンインストールできます。
-- Introduced in: -
+- デフォルト: true
+- 型: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: FEにプラグインをインストールできるかどうか。プラグインはリーダーFEにのみインストールまたはアンインストールできます。
+- 導入バージョン: -
 
 ##### `proc_profile_jstack_depth`
 
-- Default: 128
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: システムが CPU およびメモリプロファイルを収集する際の最大 Java スタック深度。この値は、サンプリングされた各スタックについていくつの Java スタックフレームがキャプチャされるかを制御します。値が大きいほどトレースの詳細と出力サイズが増加し、プロファイリングのオーバーヘッドが追加される可能性があります。値が小さいほど詳細は減少します。この設定は CPU およびメモリプロファイリングの両方でプロファイラーが起動されるときに使用されるため、診断のニーズとパフォーマンスへの影響のバランスをとるように調整してください。
-- Introduced in: -
+- デフォルト: 128
+- 型: Int
+- 単位: -
+- 変更可能: はい
+- 説明: システムがCPUおよびメモリプロファイルを収集する際のJavaスタックの最大深度。この値は、サンプリングされた各スタックに対してキャプチャされるJavaスタックフレームの数を制御します。値が大きいほどトレースの詳細度と出力サイズが増加し、プロファイリングのオーバーヘッドが増える可能性がありますが、値が小さいほど詳細度が減少します。この設定は、CPUとメモリの両方のプロファイリングでプロファイラが開始されるときに使用されるため、診断の必要性とパフォーマンスへの影響のバランスを取るように調整してください。
+- 導入バージョン: -
 
 ##### `proc_profile_mem_enable`
 
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: プロセスメモリ割り当てプロファイルの収集を有効にするかどうか。この項目が `true` に設定されている場合、システムは `sys_log_dir/proc_profile` に `mem-profile-<timestamp>.html` という名前の HTML プロファイルを生成し、`proc_profile_collect_time_s` 秒間サンプリングしながらスリープし、Java スタック深度に `proc_profile_jstack_depth` を使用します。生成されたファイルは `proc_profile_file_retained_days` および `proc_profile_file_retained_size_bytes` に従って圧縮され、パージされます。ネイティブ抽出パスは `/tmp` の noexec 問題を回避するために `STARROCKS_HOME_DIR` を使用します。この項目はメモリ割り当てホットスポットのトラブルシューティングを目的としています。これを有効にすると CPU、I/O、ディスク使用量が増加し、大きなファイルが生成される可能性があります。
-- Introduced in: v3.2.12
+- デフォルト: true
+- 型: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: プロセスメモリ割り当てプロファイルの収集を有効にするかどうか。この項目が`true`に設定されている場合、システムは`sys_log_dir/proc_profile`の下に`mem-profile-<timestamp>.html`という名前のHTMLプロファイルを生成し、サンプリング中に`proc_profile_collect_time_s`秒間スリープし、Javaスタック深度には`proc_profile_jstack_depth`を使用します。生成されたファイルは`proc_profile_file_retained_days`と`proc_profile_file_retained_size_bytes`に従って圧縮およびパージされます。ネイティブ抽出パスは`/tmp`のnoexec問題を回避するために`STARROCKS_HOME_DIR`を使用します。この項目は、メモリ割り当てのホットスポットのトラブルシューティングを目的としています。これを有効にすると、CPU、I/O、ディスク使用量が増加し、大きなファイルが生成される可能性があります。
+- 導入バージョン: v3.2.12
 
 ##### `query_detail_explain_level`
 
-- Default: COSTS
-- Type: String
-- Unit: -
-- Is mutable: true
-- Description: EXPLAIN ステートメントによって返されるクエリ計画の詳細レベル。有効な値: COSTS, NORMAL, VERBOSE。
-- Introduced in: v3.2.12, v3.3.5
+- デフォルト: COSTS
+- 型: String
+- 単位: -
+- 変更可能: はい
+- 説明: EXPLAINステートメントによって返されるクエリプランの詳細レベル。有効な値: COSTS, NORMAL, VERBOSE。
+- 導入バージョン: v3.2.12, v3.3.5
 
 ##### `replication_interval_ms`
 
-- Default: 100
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description: レプリケーションタスクがスケジュールされる最小時間間隔。
-- Introduced in: v3.3.5
+- デフォルト: 100
+- 型: Int
+- 単位: -
+- 変更可能: いいえ
+- 説明: レプリケーションタスクがスケジュールされる最小時間間隔。
+- 導入バージョン: v3.3.5
 
 ##### `replication_max_parallel_data_size_mb`
 
-- Default: 1048576
-- Type: Int
-- Unit: MB
-- Is mutable: Yes
-- Description: 同時同期に許可されるデータの最大サイズ。
-- Introduced in: v3.3.5
+- デフォルト: 1048576
+- 型: Int
+- 単位: MB
+- 変更可能: はい
+- 説明: 同時同期に許可されるデータの最大サイズ。
+- 導入バージョン: v3.3.5
 
 ##### `replication_max_parallel_replica_count`
 
-- Default: 10240
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: 同時同期に許可されるタブレットレプリカの最大数。
-- Introduced in: v3.3.5
+- デフォルト: 10240
+- 型: Int
+- 単位: -
+- 変更可能: はい
+- 説明: 同時同期に許可されるタブレットレプリカの最大数。
+- 導入バージョン: v3.3.5
 
 ##### `replication_max_parallel_table_count`
 
-- Default: 100
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: 許可される同時データ同期タスクの最大数。StarRocks はテーブルごとに 1 つの同期タスクを作成します。
-- Introduced in: v3.3.5
+- デフォルト: 100
+- 型: Int
+- 単位: -
+- 変更可能: はい
+- 説明: 許可される同時データ同期タスクの最大数。StarRocksはテーブルごとに1つの同期タスクを作成します。
+- 導入バージョン: v3.3.5
 
 ##### `replication_transaction_timeout_sec`
 
-- Default: 86400
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description: 同期タスクのタイムアウト期間。
-- Introduced in: v3.3.5
+- デフォルト: 86400
+- 型: Int
+- 単位: 秒
+- 変更可能: はい
+- 説明: 同期タスクのタイムアウト期間。
+- 導入バージョン: v3.3.5
 
 ##### `skip_whole_phase_lock_mv_limit`
 
-- Default: 5
-- Type: Int
-- Unit: -
-- Is mutable: Yes
-- Description: 関連するマテリアライズドビューを持つテーブルに「非ロック」最適化を StarRocks がいつ適用するかを制御します。この項目
->>>>>>> 7c14cbc6a8 ([Doc] add backticks to config names (#69369))
+- デフォルト: 5
+- 型: Int
+- 単位: -
+- 変更可能: はい
+- 説明: StarRocksが関連するマテリアライズドビューを持つテーブルに「非ロック」最適化を適用するタイミングを制御します。この項目が0未満に設定されている場合、システムは常に非ロック最適化を適用し、クエリのために関連するマテリアライズドビューをコピーしません（FEのメモリ使用量とメタデータのコピー/ロック競合は減少しますが、メタデータの同時実行性の問題のリスクが増加する可能性があります）。0に設定されている場合、非ロック最適化は無効になります（システムは常に安全なコピーアンドロックパスを使用します）。0より大きい値に設定されている場合、非ロック最適化は、関連するマテリアライズドビューの数が設定されたしきい値以下であるテーブルにのみ適用されます。さらに、値が0以上の場合、プランナーはクエリOLAPテーブルをオプティマイザコンテキストに記録して、マテリアライズドビュー関連の書き換えパスを有効にします。0未満の場合、このステップはスキップされます。
+- 導入バージョン: v3.2.1
+
+##### `small_file_dir`
+
+- デフォルト: `StarRocksFE.STARROCKS_HOME_DIR` + "/small_files"
+- 型: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: 小さなファイルのルートディレクトリ。
+- 導入バージョン: -
+
+##### `task_runs_max_history_number`
+
+- デフォルト: 10000
+- 型: Int
+- 単位: -
+- 変更可能: はい
+- 説明: メモリに保持するタスク実行レコードの最大数、およびアーカイブされたタスク実行履歴をクエリする際のデフォルトのLIMITとして使用する値。`enable_task_history_archive`がfalseの場合、この値はメモリ内の履歴を制限します。強制GCは古いエントリを削除し、最新の`task_runs_max_history_number`のみが残ります。アーカイブ履歴がクエリされた場合（明示的なLIMITが提供されていない場合）、この値が0より大きい場合、`TaskRunHistoryTable.lookup`は`"ORDER BY create_time DESC LIMIT <value>"`を使用します。注意: これを0に設定すると、クエリ側のLIMITは無効になりますが（上限なし）、メモリ内の履歴はゼロに切り詰められます（アーカイブが有効になっていない限り）。
+- 導入バージョン: v3.2.0
+
+##### `tmp_dir`
+
+- デフォルト: `StarRocksFE.STARROCKS_HOME_DIR` + "/temp_dir"
+- 型: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: バックアップおよび復元手順中に生成されるファイルなどの一時ファイルを保存するディレクトリ。これらの手順が完了すると、生成された一時ファイルは削除されます。
+- 導入バージョン: -
+
+##### `transform_type_prefer_string_for_varchar`
+
+- デフォルト: true
+- 型: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: マテリアライズドビューの作成およびCTAS操作において、固定長varchar列にstring型を優先するかどうか。
+- 導入バージョン: v4.0.0
+
+<EditionSpecificFEItem />
