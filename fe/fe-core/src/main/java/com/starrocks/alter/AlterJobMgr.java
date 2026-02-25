@@ -209,16 +209,6 @@ public class AlterJobMgr {
         }
     }
 
-    /**
-     * NOTE: Inactive the specific mv and not inactive its relative mvs recursively.
-     * @param materializedView target mv to inactive
-     * @param status status to be set
-     * @param reason reason why to set inactive
-     * @param isReplay whehter this is called in replay
-     */
-    public void alterMaterializedViewStatus(MaterializedView materializedView, String status, String reason, boolean isReplay) {
-    }
-
     public AlterMaterializedViewStatusContext prepareAlterMaterializedViewStatus(
             MaterializedView materializedView, String status, String reason, boolean isReplay) {
         LOG.info("process change materialized view {} status to {}, isReplay: {}",
