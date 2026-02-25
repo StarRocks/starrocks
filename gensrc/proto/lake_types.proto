@@ -288,6 +288,12 @@ message TxnLogPB {
         // Subtask ID for parallel compaction. Only set when this OpCompaction is part of
         // OpParallelCompaction. For normal compaction, this field is not set.
         optional int32 subtask_id = 12;
+        // Segment range for large rowset split compaction.
+        // When a large rowset is split into multiple subtasks, each subtask processes
+        // a range of segments [segment_range_start, segment_range_end).
+        // Only set for LARGE_ROWSET_PART type subtasks.
+        optional int32 segment_range_start = 13;
+        optional int32 segment_range_end = 14;
     }
 
     // Parallel compaction operation: contains multiple subtask compaction results.
@@ -305,6 +311,10 @@ message TxnLogPB {
         optional PersistentIndexSstablePB output_sstable = 4;
         // Pk index compaction may generate multi sstables in latest impl.
         repeated PersistentIndexSstablePB output_sstables = 5;
+        // Orphan lcrm files to be cleaned up during publish.
+        // When large rowset split subtasks are merged, their individual lcrm_files
+        // are no longer valid (segment IDs change after merge) and must be cleaned.
+        repeated FileMetaPB orphan_lcrm_files = 6;
     }
 
     message OpSchemaChange {

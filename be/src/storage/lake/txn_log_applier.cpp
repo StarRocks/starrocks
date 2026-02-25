@@ -470,7 +470,6 @@ private:
 
             // Reuse publish_primary_compaction for each subtask
             // - Internal conflict check is performed per subtask
-            // - Light publish uses subtask's lcrm_file
             // - Primary index and metadata are updated
             RETURN_IF_ERROR(_tablet.update_mgr()->publish_primary_compaction(subtask_op, txn_id, *_metadata, _tablet,
                                                                              _index_entry, &_builder, _base_version));
@@ -495,10 +494,16 @@ private:
             _builder.remove_compacted_sst(sst_op);
         }
 
+        // Cleanup orphan lcrm files from merged large rowset split subtasks
+        // These files are no longer valid after merging (segment IDs changed)
+        for (const auto& lcrm_file : op_parallel.orphan_lcrm_files()) {
+            _metadata->add_orphan_files()->CopyFrom(lcrm_file);
+        }
+
         return Status::OK();
     }
 
-    // Helper function: check if all input rowsets exist in current metadata
+    // Helper function: check if all input rowsets exist in current metadata rowsets()
     bool _check_input_rowsets_exist(const TxnLogPB_OpCompaction& op) const {
         for (uint32_t input_id : op.input_rowsets()) {
             bool found = false;
