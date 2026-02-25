@@ -472,7 +472,7 @@ public class StarRocksAssert {
                 action.run();
             }
         } catch (Exception e) {
-            Assertions.fail("create table failed");
+            Assertions.fail("create table failed: " + e.getMessage());
         } finally {
             for (Pair<String, String> t : names) {
                 try {

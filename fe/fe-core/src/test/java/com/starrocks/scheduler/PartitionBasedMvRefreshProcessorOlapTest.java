@@ -2693,4 +2693,58 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                 }
         );
     }
+
+    /**
+     * Test that force refresh for non-partitioned MV clears the visible version map directly.
+     * Verifies the refresh succeeds without dropping partitions.
+     */
+    @Test
+    public void testForceRefreshNonPartitionedMVClearsVersionMap() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE test_non_partitioned_tbl\n" +
+                        "(\n" +
+                        "    k1 int,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');",
+                () -> {
+                    starRocksAssert.withRefreshedMaterializedView("create materialized view test_mv_non_partitioned \n" +
+                            "distributed by random \n" +
+                            "refresh deferred manual\n" +
+                            "as select * from test_non_partitioned_tbl;");
+                    MaterializedView mv = getMv("test_mv_non_partitioned");
+                    Assertions.assertFalse(mv.isPartitionedTable(),
+                            "MV should be non-partitioned");
+
+                    // Insert data
+                    executeInsertSql(connectContext, "insert into test_non_partitioned_tbl values(1,2,3);");
+
+                    // Perform force refresh
+                    starRocksAssert.refreshMV(String.format("REFRESH MATERIALIZED VIEW %s FORCE", "test_mv_non_partitioned"));
+
+                    // Wait for refresh to complete
+                    String mvTaskName = TaskBuilder.getMvTaskName(mv.getId());
+                    TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
+                    long taskId = tm.getTask(mvTaskName).getId();
+                    int waitCount = 0;
+                    while (waitCount++ < 120 && (tm.getTaskRunScheduler().getRunnableTaskRun(taskId) != null
+                            || tm.listMVRefreshedTaskRunStatus(DB_NAME, Set.of(mvTaskName)).isEmpty())) {
+                        Thread.sleep(1000);
+                    }
+
+                    // After waiting, ensure we have at least one TaskRunStatus entry
+                    Map<String, List<TaskRunStatus>> statusMap =
+                            tm.listMVRefreshedTaskRunStatus(DB_NAME, Set.of(mvTaskName));
+                    Assertions.assertNotNull(statusMap, "Status map should not be null");
+                    Assertions.assertFalse(statusMap.isEmpty() || statusMap.get(mvTaskName) == null
+                                    || statusMap.get(mvTaskName).isEmpty(),
+                            "Timed out waiting for MV refresh to produce a TaskRunStatus entry");
+
+                    // Verify refresh succeeded
+                    TaskRunStatus status = statusMap.get(mvTaskName).get(0);
+                    Assertions.assertEquals(Constants.TaskRunState.SUCCESS, status.getState(),
+                            "Force refresh for non-partitioned MV should succeed");
+                });
+    }
 }
