@@ -203,23 +203,6 @@ public class VacuumTest {
         Config.lake_autovacuum_detect_vaccumed_version = false;
         Assertions.assertTrue(autovacuumDaemon.shouldVacuum(partition));
     }
-<<<<<<< HEAD
-=======
-
-    @Test
-    public void testVacuumImmediatelyGraceTimestamp() throws Exception {
-        PhysicalPartition partition2 = olapTable7.getPhysicalPartitions().stream().findFirst().orElse(null);
-        AutovacuumDaemon autovacuumDaemon = new AutovacuumDaemon();
-        long current = System.currentTimeMillis();
-        partition2.setVisibleVersion(10L, current);
-        partition2.setMinRetainVersion(5L);
-        partition2.setLastSuccVacuumVersion(10L);
-        partition2.setLastVacuumTime(current);
-        Assertions.assertFalse(autovacuumDaemon.shouldVacuum(partition2));
-
-        Config.lake_vacuum_immediately_partition_ids = String.valueOf(partition2.getId());
-        Assertions.assertTrue(autovacuumDaemon.shouldVacuum(partition2));
-    }
 
     /**
      * Test LakeTableHelper.computeMinActiveTxnId which is used by both AutovacuumDaemon and FullVacuumDaemon.
@@ -278,18 +261,6 @@ public class VacuumTest {
             when(rollupHandler.getActiveTxnIdOfTable(tableId)).thenReturn(java.util.Optional.of(50L));
             result = LakeTableHelper.computeMinActiveTxnId(dbId, tableId);
             Assertions.assertEquals(50L, result);
-
-            // Verify that AutovacuumDaemon and FullVacuumDaemon delegate to LakeTableHelper correctly
-            // by calling their methods and checking results are consistent
-            java.lang.reflect.Method autovacuumMethod = AutovacuumDaemon.class.getDeclaredMethod(
-                    "computeMinActiveTxnId", Database.class, Table.class);
-            autovacuumMethod.setAccessible(true);
-            long autovacuumResult = (long) autovacuumMethod.invoke(null, db, olapTable);
-            Assertions.assertEquals(50L, autovacuumResult);
-
-            long fullVacuumResult = FullVacuumDaemon.computeMinActiveTxnId(db, olapTable);
-            Assertions.assertEquals(50L, fullVacuumResult);
         }
     }
->>>>>>> e43208390b ([BugFix] Consider rollup handler's active transaction ID in computeMinActiveTxnId (#69285))
 }

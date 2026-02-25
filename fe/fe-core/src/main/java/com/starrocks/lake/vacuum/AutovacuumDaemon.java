@@ -30,11 +30,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-<<<<<<< HEAD
-=======
-import com.starrocks.lake.LakeAggregator;
 import com.starrocks.lake.LakeTableHelper;
->>>>>>> e43208390b ([BugFix] Consider rollup handler's active transaction ID in computeMinActiveTxnId (#69285))
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.proto.TabletInfoPB;
