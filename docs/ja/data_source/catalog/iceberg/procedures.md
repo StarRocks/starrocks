@@ -35,6 +35,8 @@ ALTER TABLE iceberg.sales.order
 EXECUTE rollback_to_snapshot(98765);
 ```
 
+### スナップショットの Cherry Pick
+
 特定のsnapshotをcherry pickし、テーブルの現在の状態に適用します。この操作は、既存のsnapshotに基づいて新しいsnapshotを作成しますが、元のsnapshotは変更されません。
 
 #### `cherrypick_snapshot` の構文
@@ -55,11 +57,9 @@ ALTER TABLE iceberg.sales.order
 EXECUTE cherrypick_snapshot(54321);
 ```
 
-<chunk_translated>
 ## ブランチ管理
-</chunk_translated>
 
-別のブランチにブランチを高速で進める
+### 別のブランチにブランチを高速で進める
 
 あるブランチを別のブランチの最新スナップショットに高速で進めます。この操作は、ソースブランチのスナップショットを更新して、ターゲットブランチのスナップショットと一致させます。
 
