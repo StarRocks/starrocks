@@ -253,8 +253,28 @@ public interface IcebergCatalog extends MemoryTrackable {
                 srScanContext);
     }
 
+<<<<<<< HEAD
     default String defaultTableLocation(Namespace ns, String tableName) {
         Map<String, String> properties = loadNamespaceMetadata(ns);
+=======
+    default Map<String, String> getCatalogProperties() {
+        return new HashMap<>();
+    }
+
+    /**
+     * Check if this catalog uses vended credentials for table access.
+     * When vended credentials are used, caching tables may cause issues
+     * because credentials expire before the cache TTL.
+     *
+     * @return true if vended credentials are enabled
+     */
+    default boolean isVendedCredentialsEnabled() {
+        return false;
+    }
+
+    default String defaultTableLocation(ConnectContext context, Namespace ns, String tableName) {
+        Map<String, String> properties = loadNamespaceMetadata(context, ns);
+>>>>>>> be5b3de4d8 ([Enhancement] Bypass caching in CachingIcebergCatalog when vended credentials are enabled (#69434))
         String databaseLocation = properties.get(LOCATION_PROPERTY);
         checkArgument(databaseLocation != null, "location must be set for %s.%s", ns, tableName);
 
