@@ -10,6 +10,8 @@ import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.mdx'
 
 import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.mdx'
 
+import EditionSpecificBEItem from '../../_assets/commonMarkdown/Edition_Specific_BE_Item.mdx'
+
 # BE Configuration
 
 <BEConfigMethod />
@@ -3473,3 +3475,5 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: No
 - Description: Maximum number of bytes to read from the INFO logfile and show on the BE debug webserver's log page. The handler uses this value to compute a seek offset (showing the last N bytes) to avoid reading or serving very large log files. If the logfile is smaller than this value the whole file is shown. Note: in the current implementation the code that reads and serves the INFO log is commented out and the handler reports that the INFO log file couldn't be opened, so this parameter may have no effect unless the log-serving code is enabled.
 - Introduced in: v3.2.0
+
+<EditionSpecificBEItem />

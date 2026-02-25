@@ -9,6 +9,8 @@ import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.mdx'
 
 import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.mdx'
 
+import EditionSpecificBEItem from '../../_assets/commonMarkdown/Edition_Specific_BE_Item.mdx'
+
 # BE 配置项
 
 <BEConfigMethod />
@@ -3453,3 +3455,5 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：否
 - 描述: 从 INFO 日志文件读取并在 BE 调试 Web Server 的日志页面上显示的最大字节数。该处理器使用此值计算一个 seek 偏移量（显示最后 N 字节），以避免读取或提供非常大的日志文件。如果日志文件小于该值则显示整个文件。注意：在当前实现中，用于读取并服务 INFO 日志的代码被注释掉了，处理器会报告无法打开 INFO 日志文件，因此除非启用日志服务代码，否则此参数可能无效。
 - 引入版本: v3.2.0
+
+<EditionSpecificBEItem />
