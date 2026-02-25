@@ -17,10 +17,13 @@
 #include <memory>
 #include <mutex>
 
+#include "base/hash/xxh3.h"
+#include "base/types/int128.h"
 #include "common/tracer.h"
 #include "gutil/strings/substitute.h"
 #include "io/io_profiler.h"
 #include "runtime/current_thread.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/chunk_helper.h"
 #include "storage/persistent_index_parallel_publish_context.h"
 #include "storage/primary_key_dump.h"
@@ -30,10 +33,7 @@
 #include "storage/tablet.h"
 #include "storage/tablet_reader.h"
 #include "storage/tablet_updates.h"
-#include "types/large_int_value.h"
 #include "util/stack_util.h"
-#include "util/starrocks_metrics.h"
-#include "util/xxh3.h"
 
 namespace starrocks {
 
@@ -1067,8 +1067,11 @@ void PrimaryIndex::_set_schema(const Schema& pk_schema) {
     for (ColumnId i = 0; i < pk_schema.num_fields(); ++i) {
         sort_key_idxes[i] = i;
     }
-    _enc_pk_type = PrimaryKeyEncoder::encoded_primary_key_type(_pk_schema, sort_key_idxes);
-    _key_size = PrimaryKeyEncoder::get_encoded_fixed_size(_pk_schema);
+    // _enc_pk_type is only use for share nothing mode now and share nothing always
+    // use ORIGINAL encoding type to keep the original way
+    _enc_pk_type = PrimaryKeyEncoder::encoded_primary_key_type(_pk_schema, sort_key_idxes,
+                                                               PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
+    _key_size = PrimaryKeyEncoder::get_encoded_fixed_size(_pk_schema, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
     _pkey_to_rssid_rowid = create_hash_index(_enc_pk_type, _key_size);
 }
 
@@ -1228,7 +1231,8 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     OlapReaderStatistics stats;
     MutableColumnPtr pk_column;
     if (pk_columns.size() > 1) {
-        RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
+        RETURN_IF_ERROR(
+                PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1));
     }
     // only hold pkey, so can use larger chunk size
     vector<uint32_t> rowids;
@@ -1264,8 +1268,9 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
                     const Column* pkc = nullptr;
                     if (pk_column) {
                         pk_column->reset_column();
-                        TRY_CATCH_BAD_ALLOC(
-                                PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get()));
+                        TRY_CATCH_BAD_ALLOC(PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(),
+                                                                      pk_column.get(),
+                                                                      PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1));
                         pkc = pk_column.get();
                     } else {
                         pkc = chunk->columns()[0].get();

@@ -49,15 +49,16 @@
 #include <string>
 #include <vector>
 
+#include "base/string/string_parser.hpp"
+#include "base/system/errno.h"
 #include "common/logging.h"
 #include "common/status.h"
+#include "common/system/cpu_info.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/mem_tracker.h"
 #include "storage/olap_define.h"
-#include "util/errno.h"
-#include "util/string_parser.hpp"
 
 using std::string;
 using std::set;

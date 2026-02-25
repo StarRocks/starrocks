@@ -36,13 +36,13 @@
 
 #include <memory>
 
-#include "column/datum.h"
 #include "exprs/expr_context.h"
 #include "gen_cpp/Exprs_types.h"
 #include "types/bitmap_value.h"
+#include "types/datum.h"
 #include "types/hll.h"
-#include "util/json.h"
-#include "util/percentile_value.h"
+#include "types/json_value.h"
+#include "types/percentile_value.h"
 
 namespace starrocks {
 

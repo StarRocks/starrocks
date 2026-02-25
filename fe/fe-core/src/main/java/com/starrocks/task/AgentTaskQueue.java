@@ -40,6 +40,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Table;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.thrift.TPushType;
 import com.starrocks.thrift.TTaskType;
 import org.apache.logging.log4j.LogManager;
@@ -50,7 +51,6 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -265,6 +265,23 @@ public class AgentTaskQueue {
         return taskNum;
     }
 
+    public static synchronized long estimateSize() {
+        if (tasks.isEmpty()) {
+            return 0;
+        }
+
+        // Pick any one backend and estimate all its task types
+        Long anyBackendId = tasks.rowKeySet().iterator().next();
+        Map<TTaskType, Map<Long, AgentTask>> backendTasks = tasks.row(anyBackendId);
+
+        long singleBackendSize = 0;
+        for (Map<Long, AgentTask> signatureMap : backendTasks.values()) {
+            singleBackendSize += Estimator.estimate(signatureMap);
+        }
+
+        return singleBackendSize * tasks.rowKeySet().size();
+    }
+
     public static synchronized Multimap<Long, Long> getTabletIdsByType(TTaskType type) {
         Multimap<Long, Long> tabletIds = HashMultimap.create();
         Map<Long, Map<Long, AgentTask>> taskMap = tasks.column(type);
@@ -326,19 +343,5 @@ public class AgentTaskQueue {
             }
         }
         return tasks;
-    }
-
-    public static synchronized List<Object> getSamplesForMemoryTracker() {
-        List<Object> result = new ArrayList<>();
-        // Get one task of each type
-        for (TTaskType type : TTaskType.values()) {
-            Map<Long, Map<Long, AgentTask>> tasksForType = tasks.column(type);
-            Optional<Map<Long, AgentTask>> beTasks = tasksForType.values().stream().findAny();
-            if (beTasks.isPresent()) {
-                Optional<AgentTask> task = beTasks.get().values().stream().findAny();
-                task.ifPresent(result::add);
-            }
-        }
-        return result;
     }
 }

@@ -14,11 +14,11 @@
 
 #pragma once
 
+#include "base/phmap/phmap.h"
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
 #include "exec/exec_node.h"
 #include "exec/join/join_hash_table.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 

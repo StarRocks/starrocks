@@ -1968,3 +1968,36 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 - 単位: microsecond
 - タイプ: Summary
 - 説明: merge commit のロード操作が完了するまで待機する時間。
+
+### Iceberg delete FE メトリクス
+
+#### iceberg_delete_total
+
+- 単位: Count
+- タイプ: Cumulative
+- ラベル:
+  - `status` (`success` または `failed`)
+  - `reason` (`none`, `timeout`, `oom`, `access_denied`, `unknown`)
+  - `delete_type` (`position` または `metadata`)
+- 説明: Iceberg テーブルを対象とした `DELETE` タスクの総数。タスクが終了するたびに成功/失敗に関わらず 1 増加します。`delete_type` は 2 つの削除方式を区別します: `position` (position delete ファイルを生成) と `metadata` (メタデータレベルの削除)。
+
+#### iceberg_delete_duration_ms_total
+
+- 単位: Millisecond
+- タイプ: Cumulative
+- ラベル: `delete_type` (`position` または `metadata`)
+- 説明: Iceberg `DELETE` タスクの総実行時間 (ミリ秒)。タスクが終了するたびにそのタスクの実行時間が加算されます。`delete_type` は 2 つの削除方式を区別します。
+
+#### iceberg_delete_bytes
+
+- 単位: Bytes
+- タイプ: Cumulative
+- ラベル: `delete_type` (`position` または `metadata`)
+- 説明: Iceberg `DELETE` タスクによって削除された総バイト数。`metadata` 削除の場合、削除されたデータファイルのサイズを表します。`position` 削除の場合、作成された position delete ファイルのサイズを表します。
+
+#### iceberg_delete_rows
+
+- 単位: Rows
+- タイプ: Cumulative
+- ラベル: `delete_type` (`position` または `metadata`)
+- 説明: Iceberg `DELETE` タスクによって削除された総行数。`metadata` 削除の場合、削除されたデータファイル内の行数を表します。`position` 削除の場合、作成された position delete レコード数を表します。

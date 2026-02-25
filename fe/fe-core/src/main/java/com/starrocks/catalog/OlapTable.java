@@ -81,6 +81,7 @@ import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.StorageInfo;
+import com.starrocks.memory.estimate.IgnoreMemoryTrack;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.planner.DescriptorTable.ReferencedPartitionInfo;
@@ -125,6 +126,7 @@ import com.starrocks.thrift.TCompactionStrategy;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TOlapTable;
 import com.starrocks.thrift.TPersistentIndexType;
+import com.starrocks.thrift.TPrimaryKeyEncodingType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTableDescriptor;
@@ -206,6 +208,7 @@ public class OlapTable extends Table {
     @SerializedName(value = "indexIdToMeta")
     protected Map<Long, MaterializedIndexMeta> indexMetaIdToMeta = Maps.newHashMap();
     // index name -> index meta id, not change the SerializedName for compatibility
+    @IgnoreMemoryTrack
     @SerializedName(value = "indexNameToId")
     protected Map<String, Long> indexNameToMetaId = Maps.newHashMap();
 
@@ -217,6 +220,7 @@ public class OlapTable extends Table {
 
     @SerializedName(value = "idToPartition")
     protected Map<Long, Partition> idToPartition = new HashMap<>();
+    @IgnoreMemoryTrack
     protected Map<String, Partition> nameToPartition = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
 
     protected Map<Long, Long> physicalPartitionIdToPartitionId = new HashMap<>();
@@ -408,7 +412,7 @@ public class OlapTable extends Table {
             olapTable.defaultDistributionInfo = this.defaultDistributionInfo.copy();
         }
         Map<Long, Partition> idToPartitions = new HashMap<>(this.idToPartition.size());
-        Map<String, Partition> nameToPartitions = Maps.newLinkedHashMap();
+        Map<String, Partition> nameToPartitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         for (Map.Entry<Long, Partition> kv : this.idToPartition.entrySet()) {
             Partition copiedPartition = kv.getValue().shallowCopy();
             idToPartitions.put(kv.getKey(), copiedPartition);
@@ -799,6 +803,27 @@ public class OlapTable extends Table {
     @Override
     public Column getColumn(ColumnId id) {
         return idToColumn.get(id);
+    }
+
+    @Override
+    public Column getColumn(String name) {
+        // First check regular columns
+        Column column = super.getColumn(name);
+        if (column != null) {
+            return column;
+        }
+        
+        // Check if this is a virtual column using registry
+        return VirtualColumnRegistry.getColumn(name);
+    }
+
+    /**
+     * Get all virtual columns for this OLAP table.
+     * @return List of virtual columns from the registry
+     */
+    @Override
+    public List<Column> getVirtualColumns() {
+        return VirtualColumnRegistry.getAllColumns();
     }
 
     public Map<ColumnId, Column> getIdToColumn() {
@@ -2309,6 +2334,15 @@ public class OlapTable extends Table {
         tableProperty.buildFileBundling();
     }
 
+    public void setDataCacheEnable(boolean isEnable) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE,
+                Boolean.valueOf(isEnable).toString());
+        tableProperty.buildDataCacheEnable();
+    }
+
     public void setStorageCoolDownTTL(PeriodDuration duration) {
         tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL,
                 TimeUtils.toHumanReadableString(duration));
@@ -3345,5 +3379,17 @@ public class OlapTable extends Table {
 
     public boolean isRangeDistribution() {
         return defaultDistributionInfo instanceof RangeDistributionInfo;
+    }
+
+    public TPrimaryKeyEncodingType getPrimaryKeyEncodingType() {
+        if (getKeysType() != KeysType.PRIMARY_KEYS) {
+            return TPrimaryKeyEncodingType.PK_ENCODING_TYPE_NONE;
+        }
+
+        if (!isCloudNativeTableOrMaterializedView()) {
+            return TPrimaryKeyEncodingType.PK_ENCODING_TYPE_V1;
+        }
+
+        return isRangeDistribution() ? TPrimaryKeyEncodingType.PK_ENCODING_TYPE_V2 : TPrimaryKeyEncodingType.PK_ENCODING_TYPE_V1;
     }
 }

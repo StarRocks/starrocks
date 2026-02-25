@@ -14,6 +14,7 @@
 
 #include "storage/lake/lake_persistent_index.h"
 
+#include "base/debug/trace.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "serde/column_array_serde.h"
@@ -35,9 +36,7 @@
 #include "storage/sstable/iterator.h"
 #include "storage/sstable/merger.h"
 #include "storage/sstable/options.h"
-#include "storage/sstable/sstable_predicate.h"
 #include "storage/sstable/table_builder.h"
-#include "util/trace.h"
 
 namespace starrocks::lake {
 
@@ -511,12 +510,9 @@ Status LakePersistentIndex::prepare_merging_iterator(
         merging_sstables->push_back(merging_sstable);
         // Pass `max_rss_rowid` to iterator, will be used when compaction.
         read_options.max_rss_rowid = sstable_pb.max_rss_rowid();
-        if (sstable_pb.has_predicate()) {
-            ASSIGN_OR_RETURN(read_options.predicate,
-                             sstable::SstablePredicate::create(metadata->schema(), sstable_pb.predicate()));
-        }
         read_options.shared_rssid = sstable_pb.shared_rssid();
         read_options.shared_version = sstable_pb.shared_version();
+        read_options.rssid_offset = sstable_pb.rssid_offset();
         read_options.delvec = merging_sstable->delvec();
         sstable::Iterator* iter = merging_sstable->new_iterator(read_options);
         iters.emplace_back(iter);
@@ -585,9 +581,10 @@ StatusOr<AsyncCompactCBPtr> LakePersistentIndex::early_sst_compact(
     ASSIGN_OR_RETURN(auto result,
                      LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(sstable_meta));
     // 3. Do parallel compaction for each candidate set.
+    bool is_merge_base_level = fileset_start_idx == 0 ? result.merge_base_level : false;
     ASSIGN_OR_RETURN(auto cb,
                      compact_mgr->async_compact(
-                             result.candidate_filesets, metadata, fileset_start_idx == 0 /* merge_base_level */,
+                             result.candidate_filesets, metadata, is_merge_base_level,
                              [&, result](const std::vector<PersistentIndexSstablePB>& sstables) {
                                  // 4. Merge output sstables into current index.
                                  //    reuse `apply_opcompaction` to do this.
@@ -807,8 +804,9 @@ Status LakePersistentIndex::commit(MetaFileBuilder* builder) {
 Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pkey_schema, int64_t rowset_version) {
     TRACE_COUNTER_SCOPE_LATENCY_US("rebuild_index_del_cost_us");
     // Build pk column struct from schema
+    ASSIGN_OR_RETURN(auto pk_encoding_type, rowset->tablet_schema()->primary_key_encoding_type_or_error());
     MutableColumnPtr pk_column;
-    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, pk_encoding_type));
     // Iterate all del files and insert into index.
     for (int del_idx = 0; del_idx < rowset->metadata().del_files_size(); ++del_idx) {
         TRACE_COUNTER_INCREMENT("rebuild_index_del_cnt", 1);
@@ -844,7 +842,7 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
         // Rssid of delete files is equal to `rowset_id + op_offset`, and delete is always after upsert now,
         // so we use max segment id as `op_offset`.
         // TODO : support real order of mix upsert and delete in one transaction.
-        const uint32_t del_rebuild_rssid = rowset->id() + std::max(rowset->num_segments(), (int64_t)1) - 1;
+        const uint32_t del_rebuild_rssid = rowset->id() + get_max_segment_idx(rowset->metadata());
         if (pkc->is_binary()) {
             // When PK table have multi pk columns or one pk column with varchar type,
             // we treat it as binary column.
@@ -873,15 +871,25 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
     return Status::OK();
 }
 
+static size_t rebuild_segment_cnt(const RowsetMetadataPB& rowset, uint32_t rebuild_rss_id) {
+    size_t cnt = 0;
+    for (int i = 0; i < rowset.segments_size(); ++i) {
+        if (get_rssid(rowset, i) >= rebuild_rss_id) {
+            ++cnt;
+        }
+    }
+    return cnt;
+}
+
 // Check if this rowset need to rebuild, return `True` means need to rebuild this rowset.
 bool LakePersistentIndex::needs_rowset_rebuild(const RowsetMetadataPB& rowset, uint32_t rebuild_rss_id) {
-    if (rowset.segments_size() > 0 && (rowset.id() + rowset.segments_size() <= rebuild_rss_id)) {
+    if (rowset.segments_size() > 0 && rowset.id() + get_max_segment_idx(rowset) < rebuild_rss_id) {
         // All segments and del files under this rowset are not need to rebuild.
         // E.g.
         // If `rebuild_rss_id` is 12, and
-        // 1. `id` = 10, `segments_size` = 2, we can skip this rowset, because two segment's id is
+        // 1. `id` = 10, segment ids are [0, 1], we can skip this rowset, because two segment's rssid is
         //     10 and 11, both smaller than 12.
-        // 2. `id` = 10, `segments_size` = 3, we can't skip this rowset, because last segment's id
+        // 2. `id` = 10, segment ids are [0, 2], we can't skip this rowset, because last segment's rssid
         //     is 12 which is equal to 12, it may not dump to sst yet.
         return false;
     }
@@ -907,9 +915,7 @@ size_t LakePersistentIndex::need_rebuild_file_cnt(const TabletMetadataPB& metada
             continue; // skip rowset
         }
         cnt += rowset.del_files_size();
-        // rowset id + segment id < rebuild_rss_id can be skip.
-        // so only some segments in this rowset need to rebuild
-        cnt += std::min(rowset.id() + rowset.segments_size() - rebuild_rss_id, (uint32_t)rowset.segments_size());
+        cnt += rebuild_segment_cnt(rowset, rebuild_rss_id);
     }
     return cnt;
 }
@@ -925,9 +931,10 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
 
     _need_rebuild_file_cnt = need_rebuild_file_cnt(*metadata, metadata->sstable_meta());
+    ASSIGN_OR_RETURN(auto pk_encoding_type, tablet_schema->primary_key_encoding_type_or_error());
 
     // Init PersistentIndex
-    _key_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
+    _key_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema, pk_encoding_type);
 
     const auto& sstables = metadata->sstable_meta().sstables();
     // Rebuild persistent index from `rebuild_rss_rowid_point`
@@ -935,9 +942,9 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     const uint32_t rebuild_rss_id = rebuild_rss_rowid_point >> 32;
     OlapReaderStatistics stats;
     MutableColumnPtr pk_column;
-    if (pk_columns.size() > 1) {
-        // more than one key column
-        if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
+    if (pk_columns.size() > 1 || pk_encoding_type == PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2) {
+        // more than one key column or big endian encoding
+        if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, pk_encoding_type).ok()) {
             CHECK(false) << "create column for primary key encoder failed";
         }
     }
@@ -967,7 +974,8 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                 continue;
             }
             DeferOp close_iter([&] { itr->close(); });
-            if (rowset->id() + i < rebuild_rss_id) {
+            uint32_t rssid = rowset->id() + get_segment_idx(rowset->metadata(), static_cast<int32_t>(i));
+            if (rssid < rebuild_rss_id) {
                 // lower than rebuild point, skip
                 // Notice: segment id that equal `rebuild_rss_id` can't be skip because
                 // there are maybe some rows need to rebuild.
@@ -986,12 +994,12 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                     Column* pkc = nullptr;
                     if (pk_column) {
                         pk_column->reset_column();
-                        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get());
+                        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get(),
+                                                  pk_encoding_type);
                         pkc = pk_column.get();
                     } else {
                         pkc = const_cast<Column*>(chunk->columns()[0].get());
                     }
-                    uint32_t rssid = rowset->id() + i;
                     uint64_t base = ((uint64_t)rssid) << 32;
                     std::vector<IndexValue> values;
                     values.reserve(pkc->size());

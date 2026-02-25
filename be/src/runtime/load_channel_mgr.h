@@ -43,16 +43,16 @@
 #include <thread>
 #include <unordered_map>
 
+#include "base/concurrency/blocking_queue.hpp"
+#include "base/uid_util.h"
 #include "common/compiler_util.h"
 #include "common/statusor.h"
+#include "common/thread/threadpool.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/load_channel.h"
 #include "runtime/tablets_channel.h"
-#include "util/blocking_queue.hpp"
-#include "util/threadpool.h"
-#include "util/uid_util.h"
 
 namespace brpc {
 class Controller;

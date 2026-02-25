@@ -14,20 +14,19 @@
 
 #include "common/logging.h"
 #include "gutil/casts.h"
-#include "runtime/mem_pool.h"
-#include "types/map_type_info.h"
-#include "util/mem_util.hpp"
+#include "types/type_info.h"
 
 namespace starrocks {
 
 class StructTypeInfo final : public TypeInfo {
 public:
-    virtual ~StructTypeInfo() = default;
     explicit StructTypeInfo(std::vector<TypeInfoPtr> field_types) : _field_types(std::move(field_types)) {}
+
+    ~StructTypeInfo() override = default;
 
     void shallow_copy(void* dest, const void* src) const override { CHECK(false); }
 
-    void deep_copy(void* dest, const void* src, MemPool* mem_pool) const override { CHECK(false); }
+    void deep_copy(void* dest, const void* src, const TypeInfoAllocator* allocator) const override { CHECK(false); }
 
     void direct_copy(void* dest, const void* src) const override { CHECK(false); }
 

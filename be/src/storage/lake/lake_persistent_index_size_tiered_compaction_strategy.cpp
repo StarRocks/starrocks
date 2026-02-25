@@ -21,13 +21,13 @@
 #include <set>
 #include <vector>
 
+#include "base/utility/defer_op.h"
 #include "common/config.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "gutil/strings/substitute.h"
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/lake/tablet_manager.h"
-#include "util/defer_op.h"
 
 namespace starrocks::lake {
 
@@ -195,11 +195,10 @@ StatusOr<CompactionCandidateResult> LakePersistentIndexSizeTieredCompactionStrat
         }
 
         result.candidate_filesets.push_back(std::move(fileset_sstables));
-    }
-    // Limit max sstable filesets that can do merge, to avoid cost too much memory.
-    const int32_t max_limit = config::lake_pk_index_sst_max_compaction_versions;
-    if (result.candidate_filesets.size() > max_limit) {
-        result.candidate_filesets.resize(max_limit);
+        if (result.candidate_filesets.size() >= config::lake_pk_index_sst_max_compaction_versions) {
+            // Already reach max compaction versions, stop picking more filesets.
+            break;
+        }
     }
     result.merge_base_level = merge_base_level;
     result.max_max_rss_rowid = max_max_rss_rowid;

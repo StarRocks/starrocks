@@ -17,6 +17,9 @@
 #include <string>
 #include <unordered_map>
 
+#include "base/string/parse_util.h"
+#include "common/system/mem_info.h"
+#include "common/thread/threadpool.h"
 #include "runtime/exec_env.h"
 #include "storage/del_vector.h"
 #include "storage/lake/lake_primary_index.h"
@@ -25,9 +28,6 @@
 #include "storage/lake/types_fwd.h"
 #include "storage/lake/update_compaction_state.h"
 #include "util/dynamic_cache.h"
-#include "util/mem_info.h"
-#include "util/parse_util.h"
-#include "util/threadpool.h"
 
 namespace starrocks {
 
@@ -64,7 +64,7 @@ private:
 class RssidFileInfoContainer {
 public:
     void add_rssid_to_file(const TabletMetadata& metadata);
-    void add_rssid_to_file(const RowsetMetadataPB& meta, uint32_t rowset_id, uint32_t segment_id,
+    void add_rssid_to_file(const RowsetMetadataPB& meta, uint32_t rowset_id, uint32_t segment_idx,
                            const std::map<int, FileInfo>& replace_segments);
 
     const std::unordered_map<uint32_t, FileInfo>& rssid_to_file() const { return _rssid_to_file_info; }

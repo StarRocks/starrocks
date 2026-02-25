@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <utility>
 
+#include "base/orlp/pdqsort.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
@@ -30,7 +31,6 @@
 #include "exec/sorting/sort_helper.h"
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
-#include "util/orlp/pdqsort.h"
 
 namespace starrocks {
 

@@ -34,12 +34,12 @@
 
 #pragma once
 
+#include "runtime/starrocks_metrics.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/txn_manager.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 

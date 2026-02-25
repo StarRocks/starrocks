@@ -19,6 +19,7 @@
 #include <filesystem>
 #include <fstream>
 
+#include "base/testutil/assert.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
@@ -30,7 +31,6 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 

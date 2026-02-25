@@ -17,9 +17,11 @@
 #include <memory>
 #include <utility>
 
+#include "base/container/raw_container.h"
 #include "column/column.h"
 #include "common/global_types.h"
 #include "common/object_pool.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "exec/data_sink.h"
 #include "exec/pipeline/exchange/shuffler.h"
@@ -30,8 +32,6 @@
 #include "gen_cpp/internal_service.pb.h"
 #include "serde/compress_strategy.h"
 #include "serde/protobuf_serde.h"
-#include "util/raw_container.h"
-#include "util/runtime_profile.h"
 
 namespace butil {
 class IOBuf;

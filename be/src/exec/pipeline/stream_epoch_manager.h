@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include "base/hash/hash_std.hpp"
+#include "base/uid_util.h"
 #include "column/stream_chunk.h"
 #include "runtime/runtime_state.h"
 

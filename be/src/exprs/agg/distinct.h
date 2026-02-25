@@ -18,6 +18,8 @@
 #include <cstring>
 #include <string>
 
+#include "base/phmap/phmap_dump.h"
+#include "base/string/slice.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
@@ -35,8 +37,6 @@
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
 #include "thrift/protocol/TJSONProtocol.h"
-#include "util/phmap/phmap_dump.h"
-#include "util/slice.h"
 
 namespace starrocks {
 

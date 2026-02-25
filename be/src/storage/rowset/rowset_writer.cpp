@@ -41,13 +41,14 @@
 #include <ctime>
 #include <memory>
 
+#include "base/utility/pretty_printer.h"
 #include "column/chunk.h"
 #include "common/config.h"
 #include "common/logging.h"
 #include "common/tracer.h"
 #include "fs/fs.h"
 #include "fs/key_cache.h"
-#include "io/io_error.h"
+#include "io/core/io_error.h"
 #include "runtime/load_fail_point.h"
 #include "segment_options.h"
 #include "serde/column_array_serde.h"
@@ -65,7 +66,6 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/type_utils.h"
-#include "util/pretty_printer.h"
 
 namespace starrocks {
 

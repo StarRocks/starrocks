@@ -20,10 +20,9 @@
 #include <chrono>
 #include <string>
 
-#include "runtime/datetime_value.h"
-#include "runtime/time_types.h"
 #include "types/date_value.h"
-#include "util/hash_util.hpp"
+#include "types/datetime_value.h"
+#include "types/time_types.h"
 
 namespace starrocks {
 
@@ -181,6 +180,14 @@ std::chrono::sys_time<std::chrono::microseconds> TimestampValue::to_sys_time() c
                                            std::chrono::day{static_cast<unsigned>(day)}};
     return std::chrono::sys_days{ymd} + std::chrono::hours{hour} + std::chrono::minutes{minute} +
            std::chrono::seconds{second} + std::chrono::microseconds{microsecond};
+}
+
+inline DateValue::operator TimestampValue() const {
+    return TimestampValue{date::to_timestamp(_julian)};
+}
+
+inline TimestampValue::operator DateValue() const {
+    return DateValue{timestamp::to_julian(_timestamp)};
 }
 
 template <bool end>

@@ -1971,3 +1971,36 @@ Latency metrics expose percentile series such as `merge_commit_request_latency_9
 - Unit: microsecond
 - Type: Summary
 - Description: Time spent waiting for merge commit load operations to finish.
+
+### Iceberg delete FE metrics
+
+#### iceberg_delete_total
+
+- Unit: Count
+- Type: Cumulative
+- Labels:
+  - `status` (`success` or `failed`)
+  - `reason` (`none`, `timeout`, `oom`, `access_denied`, `unknown`)
+  - `delete_type` (`position` or `metadata`)
+- Description: Total number of `DELETE` tasks that target Iceberg tables. The metric is incremented by 1 after each task ends, regardless of success or failure. `delete_type` distinguishes between two delete methods: `position` (generates position delete files) and `metadata` (metadata-level delete).
+
+#### iceberg_delete_duration_ms_total
+
+- Unit: Millisecond
+- Type: Cumulative
+- Labels: `delete_type` (`position` or `metadata`)
+- Description: Total execution time of Iceberg `DELETE` tasks in milliseconds. The duration of each task is added after it ends. `delete_type` distinguishes between two delete methods.
+
+#### iceberg_delete_bytes
+
+- Unit: Bytes
+- Type: Cumulative
+- Labels: `delete_type` (`position` or `metadata`)
+- Description: Total deleted bytes from Iceberg `DELETE` tasks. For `metadata` delete, this represents the size of deleted data files. For `position` delete, this represents the size of position delete files created.
+
+#### iceberg_delete_rows
+
+- Unit: Rows
+- Type: Cumulative
+- Labels: `delete_type` (`position` or `metadata`)
+- Description: Total deleted rows from Iceberg `DELETE` tasks. For `metadata` delete, this represents the number of rows in deleted data files. For `position` delete, this represents the number of position deletes created.

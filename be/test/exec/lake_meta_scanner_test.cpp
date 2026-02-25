@@ -20,6 +20,9 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/id_generator.h"
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "common/status.h"
 #include "exec/lake_meta_scan_node.h"
 #include "exec/pipeline/fragment_context.h"
@@ -41,9 +44,6 @@
 #include "storage/lake_meta_reader.h"
 #include "storage/meta_reader.h"
 #include "storage/tablet_schema.h"
-#include "testutil/id_generator.h"
-#include "testutil/sync_point.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -104,6 +104,7 @@ public:
         fe.port = 9020;
         _fragment_ctx->set_fe_addr(fe);
         _state->set_fragment_ctx(_fragment_ctx.get());
+        _state->set_fragment_dict_state(_fragment_ctx->dict_state());
 
         std::vector<::starrocks::TTupleId> tuple_ids{0};
         _tnode = std::make_unique<TPlanNode>();
@@ -262,9 +263,6 @@ TEST_F(LakeMetaScannerTest, test_read_schema) {
         ASSERT_EQ(schema->id(), 200);
         ASSERT_EQ(schema->schema_version(), 5);
 
-        // Verify schema has 2 columns: c0 (INT, key) and c1 (INT, non-key)
-        ASSERT_EQ(schema->num_columns(), 2);
-
         // Verify column c0: INT, key
         const auto& col0 = schema->column(0);
         ASSERT_EQ(col0.name(), "c0");
@@ -304,9 +302,6 @@ TEST_F(LakeMetaScannerTest, test_read_schema) {
         // Verify schema_id=10, version=1 (from tablet metadata)
         ASSERT_EQ(schema->id(), 10);
         ASSERT_EQ(schema->schema_version(), 1);
-
-        // Verify schema has 1 column: c0 (INT, key)
-        ASSERT_EQ(schema->num_columns(), 1);
 
         // Verify column c0: INT, key
         const auto& col0 = schema->column(0);

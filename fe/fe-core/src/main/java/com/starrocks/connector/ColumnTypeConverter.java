@@ -23,6 +23,7 @@ import com.starrocks.type.ArrayType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.NullType;
 import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
@@ -48,6 +49,7 @@ import org.apache.paimon.types.BooleanType;
 import org.apache.paimon.types.CharType;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataTypeDefaultVisitor;
+import org.apache.paimon.types.DataTypes;
 import org.apache.paimon.types.DateType;
 import org.apache.paimon.types.DecimalType;
 import org.apache.paimon.types.DoubleType;
@@ -81,6 +83,7 @@ import static com.starrocks.type.IntegerType.BIGINT;
 import static com.starrocks.type.IntegerType.INT;
 import static com.starrocks.type.IntegerType.SMALLINT;
 import static com.starrocks.type.IntegerType.TINYINT;
+import static com.starrocks.type.TypeFactory.CATALOG_MAX_VARCHAR_LENGTH;
 import static com.starrocks.type.UnknownType.UNKNOWN_TYPE;
 import static com.starrocks.type.VarbinaryType.VARBINARY;
 import static java.util.Objects.requireNonNull;
@@ -591,6 +594,89 @@ public class ColumnTypeConverter {
         }
     }
 
+    public static List<Column> fromPaimonSchemas(List<DataField> fields) {
+        List<Column> columns = new ArrayList<>(fields.size());
+        for (DataField field : fields) {
+            String fieldName = field.name();
+            org.apache.paimon.types.DataType type = field.type();
+            Type fieldType = ColumnTypeConverter.fromPaimonType(type);
+            Column column = new Column(fieldName, fieldType, true, field.description());
+            columns.add(column);
+        }
+        return columns;
+    }
+
+    public static org.apache.paimon.types.RowType toPaimonRowType(List<Column> columns) {
+        org.apache.paimon.types.RowType.Builder rowTypeBuilder = org.apache.paimon.types.RowType.builder();
+        for (Column column : columns) {
+            org.apache.paimon.types.DataType dataType = toPaimonDataType(column.getType());
+            rowTypeBuilder.field(column.getName(), dataType, column.getComment());
+        }
+        return rowTypeBuilder.build();
+    }
+
+    public static org.apache.paimon.types.DataType toPaimonDataType(Type type) {
+        if (type.isScalarType()) {
+            PrimitiveType primitiveType = type.getPrimitiveType();
+
+            switch (primitiveType) {
+                case BOOLEAN:
+                    return DataTypes.BOOLEAN();
+                case TINYINT:
+                    return DataTypes.TINYINT();
+                case SMALLINT:
+                    return DataTypes.SMALLINT();
+                case INT:
+                    return DataTypes.INT();
+                case BIGINT:
+                    return DataTypes.BIGINT();
+                case FLOAT:
+                    return DataTypes.FLOAT();
+                case DOUBLE:
+                    return DataTypes.DOUBLE();
+                case DATE:
+                    return DataTypes.DATE();
+                case DATETIME:
+                    return DataTypes.TIMESTAMP_WITH_LOCAL_TIME_ZONE();
+                case VARCHAR:
+                    return DataTypes.VARCHAR(VarCharType.MAX_LENGTH);
+                case CHAR:
+                    return DataTypes.CHAR(CharType.MAX_LENGTH);
+                case VARBINARY:
+                    return DataTypes.VARBINARY(VarBinaryType.MAX_LENGTH);
+                case DECIMAL32:
+                case DECIMAL64:
+                case DECIMAL128:
+                    ScalarType scalarType = (ScalarType) type;
+                    return DataTypes.DECIMAL(scalarType.getScalarPrecision(), scalarType.getScalarScale());
+                default:
+                    throw new StarRocksConnectorException("Unsupported primitive column type %s", primitiveType);
+            }
+        }
+
+        if (type.isArrayType()) {
+            ArrayType arrayType = (ArrayType) type;
+            return DataTypes.ARRAY(toPaimonDataType(arrayType.getItemType()));
+        }
+
+        if (type.isMapType()) {
+            MapType mapType = (MapType) type;
+            return DataTypes.MAP(toPaimonDataType(mapType.getKeyType()), toPaimonDataType(mapType.getValueType()));
+        }
+
+        if (type.isStructType()) {
+            StructType structType = (StructType) type;
+            List<DataField> fieldList = new ArrayList<>();
+            for (StructField structField : structType.getFields()) {
+                fieldList.add(new DataField(structField.getPosition(), structField.getName(),
+                        toPaimonDataType(structField.getType())));
+            }
+            return DataTypes.ROW(fieldList.toArray(new DataField[0]));
+        }
+
+        throw new StarRocksConnectorException("Unsupported complex column type %s", type);
+    }
+
     public static Type fromKuduType(ColumnSchema columnSchema) {
         org.apache.kudu.Type kuduType = columnSchema.getType();
         if (kuduType == null) {
@@ -911,7 +997,16 @@ public class ColumnTypeConverter {
     public static int getVarcharLength(String typeStr) {
         Matcher matcher = Pattern.compile(VARCHAR_PATTERN).matcher(typeStr.toLowerCase(Locale.ROOT));
         if (matcher.find()) {
-            return Integer.parseInt(matcher.group(1));
+            // Notes:
+            // 1. In Hive, varchar(n) limits the number of characters.
+            // 2. In StarRocks, varchar(n) limits the number of bytes.
+            // 3. To be compatible with Hive character length, we assume that a single
+            //    character may occupy up to 4 bytes (maximum for UTF-8 encoding).
+            // 4. The final returned value is:
+            //        min(parsed character length * 4, CATALOG_MAX_VARCHAR_LENGTH)
+            //    i.e., it is capped at StarRocks' maximum varchar length.
+            int length = Integer.parseInt(matcher.group(1));
+            return length == -1 ? length : Math.min(length * 4, CATALOG_MAX_VARCHAR_LENGTH);
         }
         throw new StarRocksConnectorException("Failed to get varchar length at " + typeStr);
     }

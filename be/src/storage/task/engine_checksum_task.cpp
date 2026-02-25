@@ -36,11 +36,11 @@
 
 #include <memory>
 
+#include "base/utility/defer_op.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/tablet_reader.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 

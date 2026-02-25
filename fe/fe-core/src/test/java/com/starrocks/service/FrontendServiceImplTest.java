@@ -26,6 +26,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
@@ -1564,7 +1565,7 @@ public class FrontendServiceImplTest {
 
             @Mock
             public RequestLoadResult requestLoad(
-                    TableId tableId, StreamLoadKvParams params, String user, long backendId, String backendHost) {
+                    TableId tableId, StreamLoadKvParams params, UserIdentity userIdentity, long backendId, String backendHost) {
                 return new RequestLoadResult(new TStatus(TStatusCode.OK), "test_label");
             }
         };

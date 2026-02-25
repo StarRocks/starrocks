@@ -234,7 +234,6 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.LikePredicate;
 import com.starrocks.sql.ast.expression.LimitElement;
-import com.starrocks.sql.ast.expression.Predicate;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
@@ -248,7 +247,12 @@ import com.starrocks.sql.ast.spm.ShowBaselinePlanStmt;
 import com.starrocks.sql.ast.warehouse.ShowNodesStmt;
 import com.starrocks.sql.ast.warehouse.ShowWarehousesStmt;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.common.UnsupportedException;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.spm.SPMStmtExecutor;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
@@ -299,6 +303,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 // Execute one show statement.
 public class ShowExecutor {
@@ -312,7 +317,80 @@ public class ShowExecutor {
     }
 
     public static ShowResultSet execute(ShowStmt statement, ConnectContext context) {
-        return GlobalStateMgr.getCurrentState().getShowExecutor().showExecutorVisitor.visit(statement, context);
+        ShowResultSet result = GlobalStateMgr.getCurrentState().getShowExecutor().showExecutorVisitor.visit(statement, context);
+        List<List<String>> datas = doPredicate(statement, result);
+        datas = doOrderByLimit(statement, datas);
+        result.setResultRows(datas);
+        return result;
+    }
+
+    private static List<List<String>> doOrderByLimit(ShowStmt statement, List<List<String>> datas) {
+        if (!statement.isSelfOrderBy() && CollectionUtils.isNotEmpty(statement.getOrderByPairs())) {
+            OrderByPair[] orderByPairArr = statement.getOrderByPairs().toArray(new OrderByPair[0]);
+            datas.sort((row1, row2) -> {
+                for (OrderByPair pair : orderByPairArr) {
+                    int index = pair.getIndex();
+                    if (index >= row1.size() || index >= row2.size()) {
+                        continue;
+                    }
+                    String val1 = row1.get(index);
+                    String val2 = row2.get(index);
+
+                    int cmp;
+                    try {
+                        double d1 = Double.parseDouble(val1);
+                        double d2 = Double.parseDouble(val2);
+                        cmp = Double.compare(d1, d2);
+                    } catch (NumberFormatException e) {
+                        cmp = val1.compareTo(val2);
+                    }
+                    if (cmp != 0) {
+                        return pair.isDesc() ? -cmp : cmp;
+                    }
+                }
+                return 0;
+            });
+        }
+        if (!statement.isSelfLimit() && statement.getLimitElement() != null) {
+            LimitElement le = statement.getLimitElement();
+            Stream<List<String>> stream = datas.stream();
+            if (le.hasOffset()) {
+                stream = stream.skip(le.getOffset());
+            }
+            if (le.hasLimit()) {
+                stream = stream.limit(le.getLimit());
+            }
+            datas = stream.collect(Collectors.toList());
+        }
+        return datas;
+    }
+
+    private static List<List<String>> doPredicate(ShowStmt statement, ShowResultSet result) {
+        if (statement.isSelfPredicate() || statement.getPredicate() == null) {
+            return result.getResultRows();
+        }
+        // build columns
+        List<List<String>> datas = Lists.newArrayList();
+        Map<String, ScalarOperator> valuesMappings = Maps.newHashMap();
+        for (List<String> rows : result.getResultRows()) {
+            valuesMappings.clear();
+            for (int index = 0; index < result.getMetaData().getColumns().size(); index++) {
+                Column c = result.getMetaData().getColumn(index);
+                valuesMappings.put(c.getName().toLowerCase(), ConstantOperator.createVarchar(rows.get(index)));
+            }
+            ScalarOperator p = SqlToScalarOperatorTranslator.translateWithSlotRef(statement.getPredicate(),
+                    slotRef -> valuesMappings.get(slotRef.getColumnName().toLowerCase()));
+            ScalarOperatorRewriter re = new ScalarOperatorRewriter();
+            ScalarOperator r = re.rewrite(p, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
+
+            if (!r.isConstantRef()) {
+                throw UnsupportedException.unsupportedException(
+                        "doesn't support predicate: " + ExprToSql.toMySql(statement.getPredicate()));
+            } else if (r.isConstantTrue()) {
+                datas.add(rows);
+            }
+        }
+        return datas;
     }
 
     public static class ShowExecutorVisitor implements AstVisitorExtendInterface<ShowResultSet, ConnectContext> {
@@ -3090,7 +3168,7 @@ public class ShowExecutor {
         private List<List<String>> doPredicate(ShowStmt showStmt,
                                                ShowResultSetMetaData showResultSetMetaData,
                                                List<List<String>> rows) {
-            Predicate predicate = showStmt.getPredicate();
+            Expr predicate = showStmt.getPredicate();
             if (predicate == null) {
                 return rows;
             }

@@ -24,14 +24,14 @@
 #include <thread>
 #include <vector>
 
+#include "base/brpc/ref_count_closure.h"
+#include "base/concurrency/blocking_queue.hpp"
+#include "base/uid_util.h"
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "util/blocking_queue.hpp"
-#include "util/ref_count_closure.h"
-#include "util/uid_util.h"
 namespace starrocks {
 struct TypeDescriptor;
 

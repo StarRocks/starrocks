@@ -27,6 +27,7 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/json_column.h"
+#include "column/json_converter.h"
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
@@ -43,11 +44,10 @@
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/types.h"
 #include "storage/chunk_helper.h"
+#include "types/json_value.h"
 #include "types/logical_type.h"
-#include "util/json.h"
-#include "util/json_converter.h"
+#include "types/type_descriptor.h"
 #include "util/json_flattener.h"
 #include "velocypack/Builder.h"
 #include "velocypack/Iterator.h"
@@ -1447,6 +1447,30 @@ static StatusOr<JsonValue> _remove_json_paths_core(JsonValue* json_value,
     }
 
     return JsonValue(builder->slice());
+}
+
+StatusOr<ColumnPtr> JsonFunctions::is_json_scalar(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    size_t rows = columns[0]->size();
+    ColumnViewer<TYPE_JSON> json_viewer(columns[0]);
+    ColumnBuilder<TYPE_BOOLEAN> result(rows);
+
+    for (size_t row = 0; row < rows; row++) {
+        if (json_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        JsonValue* json = json_viewer.value(row);
+        vpack::Slice slice = json->to_vslice();
+
+        // A scalar is any value that is not an object, array
+        bool is_scalar = !slice.isObject() && !slice.isArray();
+        result.append(is_scalar);
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
 }
 
 StatusOr<ColumnPtr> JsonFunctions::to_json(FunctionContext* context, const Columns& columns) {

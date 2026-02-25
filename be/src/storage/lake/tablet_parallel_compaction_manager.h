@@ -43,6 +43,29 @@ class TabletManager;
 class CompactionTaskCallback;
 struct CompactionTaskInfo;
 
+// Subtask type for parallel compaction
+enum class SubtaskType {
+    NORMAL,           // Normal subtask containing multiple complete rowsets
+    LARGE_ROWSET_PART // Subtask that is part of a large rowset split
+};
+
+// Group of rowsets/segments for a single subtask
+struct SubtaskGroup {
+    SubtaskType type = SubtaskType::NORMAL;
+
+    // For NORMAL type: multiple complete rowsets
+    std::vector<RowsetPtr> rowsets;
+
+    // For LARGE_ROWSET_PART type: single rowset with segment range
+    RowsetPtr large_rowset;
+    uint32_t large_rowset_id = 0;
+    int32_t segment_start = 0;
+    int32_t segment_end = 0;
+
+    // Total data size of this group
+    int64_t total_bytes = 0;
+};
+
 // Subtask info for tracking parallel compaction progress
 struct SubtaskInfo {
     int32_t subtask_id = 0;
@@ -52,6 +75,13 @@ struct SubtaskInfo {
     // Pointer to the running context (valid only during execution)
     // Used to get real-time progress and status in list_tasks()
     CompactionTaskContext* context = nullptr;
+    // Subtask type
+    SubtaskType type = SubtaskType::NORMAL;
+    // For LARGE_ROWSET_PART type: the original large rowset ID
+    uint32_t large_rowset_id = 0;
+    // For LARGE_ROWSET_PART type: segment range [segment_start, segment_end)
+    int32_t segment_start = 0;
+    int32_t segment_end = 0;
 };
 
 // Single tablet's parallel compaction state
@@ -61,7 +91,11 @@ struct TabletParallelCompactionState {
     int64_t version = 0;
 
     // Rowsets currently being compacted (to avoid conflicts)
-    std::unordered_set<uint32_t> compacting_rowsets;
+    // Key: rowset_id, Value: reference count (number of subtasks using this rowset)
+    // For large rowset split, multiple subtasks share the same rowset_id, so we use
+    // reference counting instead of a simple set to ensure the rowset is only unmarked
+    // when ALL subtasks using it have completed.
+    std::unordered_map<uint32_t, int> compacting_rowsets;
 
     // Running subtasks
     std::unordered_map<int32_t, SubtaskInfo> running_subtasks;
@@ -85,14 +119,28 @@ struct TabletParallelCompactionState {
     // Callback to release limiter token when subtask completes
     ReleaseTokenFunc release_token;
 
+    // For large rowset split: map from original rowset_id to list of subtask_ids
+    // All subtasks in the same group must succeed for the large rowset compaction to be applied
+    std::unordered_map<uint32_t, std::vector<int32_t>> large_rowset_split_groups;
+
+    // Expected number of subtasks for each large rowset split.
+    // This is recorded BEFORE subtask creation to detect incomplete splits
+    // (when acquire_token() fails after some subtasks are created).
+    // If large_rowset_split_groups[rowset_id].size() != expected_large_rowset_split_counts[rowset_id],
+    // the split is incomplete and should be treated as failed.
+    std::unordered_map<uint32_t, int32_t> expected_large_rowset_split_counts;
+
     // Mutex for thread-safe access
     mutable std::mutex mutex;
 
     // Check if we can create a new subtask
     bool can_create_subtask() const { return running_subtasks.size() < static_cast<size_t>(max_parallel); }
 
-    // Check if a rowset is being compacted
-    bool is_rowset_compacting(uint32_t rowset_id) const { return compacting_rowsets.count(rowset_id) > 0; }
+    // Check if a rowset is being compacted (reference count > 0)
+    bool is_rowset_compacting(uint32_t rowset_id) const {
+        auto it = compacting_rowsets.find(rowset_id);
+        return it != compacting_rowsets.end() && it->second > 0;
+    }
 
     // Check if all subtasks are completed
     bool is_complete() const { return running_subtasks.empty() && total_subtasks_created > 0; }
@@ -189,6 +237,19 @@ private:
                                   ThreadPool* thread_pool, const AcquireTokenFunc& acquire_token,
                                   const ReleaseTokenFunc& release_token);
 
+    // Submit subtasks from SubtaskGroup to thread pool (new API for large rowset split)
+    // Returns the number of subtasks successfully submitted
+    StatusOr<int> submit_subtasks_from_groups(const std::shared_ptr<TabletParallelCompactionState>& state_ptr,
+                                              std::vector<SubtaskGroup> groups, bool force_base_compaction,
+                                              ThreadPool* thread_pool, const AcquireTokenFunc& acquire_token,
+                                              const ReleaseTokenFunc& release_token);
+
+    // Execute a single subtask for large rowset split (segment range mode)
+    void execute_subtask_segment_range(int64_t tablet_id, int64_t txn_id, int32_t subtask_id,
+                                       const RowsetPtr& input_rowset, uint32_t large_rowset_id, int32_t segment_start,
+                                       int32_t segment_end, int64_t version, bool force_base_compaction,
+                                       const ReleaseTokenFunc& release_token);
+
     // Generate state key from tablet_id and txn_id
     static std::string make_state_key(int64_t tablet_id, int64_t txn_id) {
         return std::to_string(tablet_id) + "_" + std::to_string(txn_id);
@@ -239,6 +300,42 @@ private:
     // Filter out invalid groups that cannot be compacted
     static std::vector<std::vector<RowsetPtr>> _filter_invalid_groups(int64_t tablet_id,
                                                                       std::vector<std::vector<RowsetPtr>> groups);
+
+    // ================================================================================
+    // Large rowset split related functions (all table types)
+    // ================================================================================
+
+    // Check if a rowset should be split into multiple subtasks
+    // Criteria: data_size >= 2 * lake_compaction_max_rowset_size AND
+    //           data_size > max_bytes_per_subtask AND
+    //           segments_size >= 4 AND is_overlapped
+    static bool _is_large_rowset_for_split(const RowsetPtr& rowset, int64_t max_bytes_per_subtask);
+
+    // Split a large rowset into multiple SubtaskGroups based on segment data size.
+    // Each group contains a segment range [start, end) with approximate target_bytes_per_subtask.
+    // If max_subtasks > 0 and the rowset would need more subtasks than max_subtasks,
+    // it caps the split to max_subtasks (allowing each subtask to exceed target_bytes_per_subtask).
+    // This ensures the large rowset split is always complete and avoids data loss.
+    // Note: max_subtasks should be >= 2 for meaningful splitting; the caller should skip
+    // splitting if only 1 slot is available.
+    static std::vector<SubtaskGroup> _split_large_rowset(const RowsetPtr& rowset, int64_t target_bytes_per_subtask,
+                                                         int32_t max_subtasks = 0);
+
+    // Group small rowsets into SubtaskGroups
+    // Each group contains multiple complete rowsets with total size <= target_bytes_per_subtask
+    static std::vector<SubtaskGroup> _group_small_rowsets(std::vector<RowsetPtr> rowsets,
+                                                          int64_t target_bytes_per_subtask);
+
+    // Create SubtaskGroups from selected rowsets (main entry for all table types)
+    // This handles both large rowset splitting and small rowset grouping
+    std::vector<SubtaskGroup> _create_subtask_groups(int64_t tablet_id, std::vector<RowsetPtr> rowsets,
+                                                     int32_t max_parallel, int64_t max_bytes_per_subtask);
+
+    // Merge multiple subtask LCRM files into a single LCRM file for the merged compaction.
+    // This enables the light publish path (SST ingestion) for large rowset split compaction.
+    Status _merge_subtask_lcrm_files(int64_t tablet_id, int64_t txn_id, const std::vector<FileMetaPB>& lcrm_files,
+                                     const std::vector<int64_t>& num_rows_per_subtask,
+                                     TxnLogPB_OpCompaction* merged_compaction);
 
     TabletManager* _tablet_mgr;
 

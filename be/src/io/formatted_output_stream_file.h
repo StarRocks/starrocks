@@ -17,12 +17,12 @@
 #include <limits>
 #include <memory>
 
+#include "base/container/raw_container.h"
 #include "fs/fs.h"
 #include "gen_cpp/segment.pb.h"
 #include "io/async_flush_output_stream.h"
 #include "io/formatted_output_stream.h"
 #include "util/compression/stream_compressor.h"
-#include "util/raw_container.h"
 
 namespace starrocks::io {
 

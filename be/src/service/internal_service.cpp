@@ -46,14 +46,20 @@
 #include "agent/agent_server.h"
 #include "agent/publish_version.h"
 #include "agent/task_worker_pool.h"
+#include "base/brpc/brpc.h"
+#include "base/concurrency/stopwatch.hpp"
+#include "base/failpoint/fail_point.h"
+#include "base/hash/hash_std.hpp"
+#include "base/time/time.h"
+#include "base/uid_util.h"
 #include "brpc/errno.pb.h"
 #include "cache/datacache.h"
 #include "column/stream_chunk.h"
-#include "common/closure_guard.h"
 #include "common/compiler_util.h"
 #include "common/config.h"
 #include "common/process_exit.h"
 #include "common/status.h"
+#include "common/util/thrift_util.h"
 #include "exec/file_scanner/file_scanner.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_executor.h"
@@ -70,6 +76,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/buffer_control_block.h"
+#include "runtime/closure_guard.h"
 #include "runtime/command_executor.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/descriptors.h"
@@ -79,19 +86,12 @@
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/routine_load/routine_load_task_executor.h"
 #include "runtime/runtime_filter_worker.h"
-#include "runtime/types.h"
-#include "service/brpc.h"
 #include "storage/dictionary_cache_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/txn_manager.h"
+#include "types/type_descriptor.h"
 #include "util/arrow/row_batch.h"
-#include "util/failpoint/fail_point.h"
-#include "util/hash_util.hpp"
-#include "util/stopwatch.hpp"
-#include "util/thrift_util.h"
-#include "util/time.h"
 #include "util/time_guard.h"
-#include "util/uid_util.h"
 
 namespace starrocks {
 
@@ -830,7 +830,7 @@ void PInternalServiceImplBase<T>::trigger_profile_report(google::protobuf::RpcCo
             return;
         }
         pipeline::DriverExecutor* driver_executor = fragment_ctx->workgroup()->executors()->driver_executor();
-        driver_executor->report_exec_state(query_ctx.get(), fragment_ctx.get(), Status::OK(), false, true);
+        driver_executor->report_exec_state(query_ctx.get(), fragment_ctx.get(), Status::OK(), false);
     }
 }
 

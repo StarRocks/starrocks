@@ -41,12 +41,14 @@
 #include <ctime>
 #include <memory>
 
+#include "base/path/path_util.h"
 #include "common/config.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/compaction_manager.h"
 #include "storage/data_dir.h"
 #include "storage/olap_common.h"
@@ -62,8 +64,6 @@
 #include "storage/txn_manager.h"
 #include "storage/update_manager.h"
 #include "storage/utils.h"
-#include "util/path_util.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -845,11 +845,8 @@ TabletSharedPtr TabletManager::find_best_tablet_to_do_update_compaction(DataDir*
     int64_t highest_score = 0;
     TabletSharedPtr best_tablet;
     for (const auto& tablets_shard : _tablets_shards) {
-        std::vector<TabletSharedPtr> all_tablets_by_shard = _get_all_tablets_from_shard(tablets_shard);
+        std::vector<TabletSharedPtr> all_tablets_by_shard = _get_all_tablets_from_shard(tablets_shard, PRIMARY_KEYS);
         for (const auto& tablet_ptr : all_tablets_by_shard) {
-            if (tablet_ptr->keys_type() != PRIMARY_KEYS) {
-                continue;
-            }
             // A not-ready tablet maybe a newly created tablet under schema-change, skip it
             if (tablet_ptr->tablet_state() == TABLET_NOTREADY) {
                 continue;
@@ -1707,6 +1704,17 @@ std::vector<TabletSharedPtr> TabletManager::_get_all_tablets_from_shard(const Ta
     std::shared_lock rlock(shard.lock);
     for (const auto& [_, tablet] : shard.tablet_map) {
         all_tablets_by_shard.push_back(tablet);
+    }
+    return all_tablets_by_shard;
+}
+
+std::vector<TabletSharedPtr> TabletManager::_get_all_tablets_from_shard(const TabletsShard& shard, KeysType keys_type) {
+    std::vector<TabletSharedPtr> all_tablets_by_shard;
+    std::shared_lock rlock(shard.lock);
+    for (const auto& [_, tablet] : shard.tablet_map) {
+        if (tablet->keys_type() == keys_type) {
+            all_tablets_by_shard.push_back(tablet);
+        }
     }
     return all_tablets_by_shard;
 }

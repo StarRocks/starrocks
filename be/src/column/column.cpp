@@ -34,6 +34,11 @@ size_t Column::serialize_batch_at_interval_with_null_masks(uint8_t* dst, size_t 
     return type_size();
 }
 
+void Column::append_selective_to(Column& dest, const uint32_t* indexes, uint32_t from, uint32_t size) const {
+    CHECK(false) << "append_selective_to is only supported by view-like columns, src=" << get_name()
+                 << ", dest=" << dest.get_name() << ", from=" << from << ", size=" << size;
+}
+
 void Column::serialize_batch_with_null_masks(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
                                              uint32_t max_one_row_size, const uint8_t* null_masks,
                                              bool has_null) const {

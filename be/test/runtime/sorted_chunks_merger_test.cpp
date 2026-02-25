@@ -16,13 +16,14 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/datum_tuple.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
+#include "exprs/expr_executor.h"
 #include "runtime/runtime_state.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -124,8 +125,8 @@ public:
 
         _runtime_state = _create_runtime_state();
 
-        ASSERT_OK(Expr::prepare(_sort_exprs, _runtime_state.get()));
-        ASSERT_OK(Expr::open(_sort_exprs, _runtime_state.get()));
+        ASSERT_OK(ExprExecutor::prepare(_sort_exprs, _runtime_state.get()));
+        ASSERT_OK(ExprExecutor::open(_sort_exprs, _runtime_state.get()));
     }
 
     void TearDown() override {

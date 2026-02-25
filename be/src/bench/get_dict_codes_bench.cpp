@@ -17,11 +17,11 @@
 #include <random>
 #include <vector>
 
+#include "base/simd/batch_run_counter.h"
+#include "base/simd/simd.h"
+#include "base/string/slice.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
-#include "simd/batch_run_counter.h"
-#include "simd/simd.h"
-#include "util/slice.h"
 
 namespace starrocks::parquet {
 

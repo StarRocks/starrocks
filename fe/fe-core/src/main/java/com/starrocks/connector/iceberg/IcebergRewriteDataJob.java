@@ -261,7 +261,7 @@ public class IcebergRewriteDataJob {
             try {
                 context.getGlobalStateMgr().getMetadataMgr().finishSink(
                         collected.peek().getCatalog(), collected.peek().getDb(), collected.peek().getTable(),
-                        faList, collected.peek().getBranch(), extra);
+                        faList, collected.peek().getBranch(), extra, context);
             } catch (Exception e) {
                 LOG.error("Failed to commit iceberg rewrite on [{}]", originAlterStmt.getTableName(), e);
                 throw new StarRocksConnectorException("Failed to commit iceberg rewrite", e);

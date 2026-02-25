@@ -1670,7 +1670,7 @@ void test_non_deterministic_agg_function(FunctionContext* ctx, const AggregateFu
     func->update_batch_single_state(ctx, row_column->size(), &row_column, state->state());
     func->finalize_to_column(ctx, state->state(), result_column1.get());
 
-    auto expected_column1 = down_cast<const ExpeactedResultColumnType&>(row_column[0]);
+    const auto& expected_column1 = down_cast<const ExpeactedResultColumnType&>(row_column[0]);
     ASSERT_EQ(expected_column1.get_data()[0], result_column1->get_data()[0]);
 
     // update input column 2
@@ -1681,7 +1681,7 @@ void test_non_deterministic_agg_function(FunctionContext* ctx, const AggregateFu
     func->update_batch_single_state(ctx, row_column->size(), &row_column, state2->state());
     func->finalize_to_column(ctx, state2->state(), result_column2.get());
 
-    auto expected_column2 = down_cast<const ExpeactedResultColumnType&>(row_column[0]);
+    const auto& expected_column2 = down_cast<const ExpeactedResultColumnType&>(row_column[0]);
     ASSERT_EQ(expected_column2.get_data()[0], result_column2->get_data()[0]);
 
     // merge column 1 and column 2

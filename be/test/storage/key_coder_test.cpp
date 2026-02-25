@@ -39,8 +39,8 @@
 #include <cstring>
 #include <limits>
 
+#include "common/util/debug_util.h"
 #include "runtime/mem_pool.h"
-#include "util/debug_util.h"
 
 namespace starrocks {
 

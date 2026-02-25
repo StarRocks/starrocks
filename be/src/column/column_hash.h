@@ -18,9 +18,9 @@
 #include <cstdint>
 #include <type_traits>
 
+#include "base/types/int256.h"
+#include "base/types/uint24.h"
 #include "column/vectorized_fwd.h"
-#include "storage/uint24.h"
-#include "types/int256.h"
 
 #ifdef __SSE4_2__
 #include <nmmintrin.h>
@@ -31,10 +31,10 @@
 #include <xmmintrin.h>
 #endif
 
+#include "base/hash/hash.h"
+#include "base/string/slice.h"
 #include "column/type_traits.h"
 #include "types/logical_type.h"
-#include "util/hash.h"
-#include "util/slice.h"
 
 namespace starrocks {
 

@@ -16,15 +16,18 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "column/datum_tuple.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
+#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_state.h"
+#include "runtime/starrocks_metrics.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_pipe.h"
-#include "testutil/assert.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
@@ -33,6 +36,7 @@ public:
     void SetUp() override {
         config::enable_system_metrics = false;
         config::enable_metric_calculator = false;
+        GlobalMetricsRegistry::instance()->metrics()->set_collect_hook_enabled(true);
 
         _mem_tracker = std::make_shared<MemTracker>(-1, "connector scan");
         _exec_env = ExecEnv::GetInstance();
@@ -70,6 +74,8 @@ std::shared_ptr<RuntimeState> ConnectorScanNodeTest::create_runtime_state(const 
     TQueryGlobals query_globals;
     std::shared_ptr<RuntimeState> runtime_state =
             std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, _exec_env);
+    auto* fragment_dict_state = runtime_state->obj_pool()->add(new FragmentDictState());
+    runtime_state->set_fragment_dict_state(fragment_dict_state);
     TUniqueId id;
     runtime_state->init_mem_trackers(id);
     return runtime_state;

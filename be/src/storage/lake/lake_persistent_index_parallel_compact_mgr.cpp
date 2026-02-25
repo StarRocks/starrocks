@@ -21,9 +21,14 @@
 #include <memory>
 #include <utility>
 
+#include "base/concurrency/countdown_latch.h"
+#include "base/debug/trace.h"
+#include "base/utility/defer_op.h"
+#include "common/system/cpu_info.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/persistent_index_sstable.h"
@@ -36,11 +41,7 @@
 #include "storage/sstable/merger.h"
 #include "storage/sstable/options.h"
 #include "storage/sstable/table_builder.h"
-#include "util/countdown_latch.h"
-#include "util/cpu_info.h"
-#include "util/defer_op.h"
-#include "util/starrocks_metrics.h"
-#include "util/trace.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks::lake {
 
@@ -133,6 +134,7 @@ Status LakePersistentIndexParallelCompactTask::do_run() {
             read_options.max_rss_rowid = sstable_pb.max_rss_rowid();
             read_options.shared_rssid = sstable_pb.shared_rssid();
             read_options.shared_version = sstable_pb.shared_version();
+            read_options.rssid_offset = sstable_pb.rssid_offset();
             read_options.delvec = sst->delvec();
 
             sstable::Iterator* iter = sst->new_iterator(read_options);
@@ -368,10 +370,12 @@ bool LakePersistentIndexParallelCompactMgr::key_ranges_overlap(const std::string
 Status LakePersistentIndexParallelCompactMgr::sample_keys_from_sstable(const PersistentIndexSstablePB& sstable_pb,
                                                                        const TabletMetadataPtr& metadata,
                                                                        std::vector<std::string>* sample_keys) {
-    if (sstable_pb.filesize() <= config::pk_index_sstable_sample_interval_bytes) {
-        // use start key as boundary key only for small sstables
-        sample_keys->push_back(sstable_pb.range().start_key());
-    } else {
+    // Always include start_key first, because sample_keys() samples from the
+    // index block where entries correspond to the last key of each data block
+    // (via FindShortestSeparator), not the first key. Without the start_key,
+    // the first segment's seek_key may skip keys at the beginning of the SST.
+    sample_keys->push_back(sstable_pb.range().start_key());
+    if (sstable_pb.filesize() > config::pk_index_sstable_sample_interval_bytes) {
         // get sample keys from large sstables
         auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
         ASSIGN_OR_RETURN(auto sstable,

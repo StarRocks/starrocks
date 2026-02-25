@@ -19,7 +19,9 @@
 #include <mutex>
 #include <numeric>
 
+#include "base/failpoint/fail_point.h"
 #include "common/config.h"
+#include "common/runtime_profile.h"
 #include "exec/hash_joiner.h"
 #include "exec/pipeline/hashjoin/hash_join_probe_operator.h"
 #include "exec/pipeline/hashjoin/hash_joiner_factory.h"
@@ -31,8 +33,7 @@
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
-#include "util/failpoint/fail_point.h"
-#include "util/runtime_profile.h"
+#include "runtime/runtime_state_helper.h"
 
 namespace starrocks::pipeline {
 
@@ -41,7 +42,8 @@ DEFINE_FAIL_POINT(spill_hash_join_throw_bad_alloc)
 Status SpillableHashJoinProbeOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(HashJoinProbeOperator::prepare(state));
     _need_post_probe = has_post_probe(_join_prober->join_type());
-    _probe_spiller->set_metrics(spill::SpillProcessMetrics(_unique_metrics.get(), state->mutable_total_spill_bytes()));
+    _probe_spiller->set_metrics(
+            spill::SpillProcessMetrics(_unique_metrics.get(), RuntimeStateHelper::mutable_total_spill_bytes(state)));
     metrics.hash_partitions = ADD_COUNTER(_unique_metrics.get(), "SpillPartitions", TUnit::UNIT);
     metrics.build_partition_peak_memory_usage = _unique_metrics->AddHighWaterMarkCounter(
             "SpillBuildPartitionPeakMemoryUsage", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));

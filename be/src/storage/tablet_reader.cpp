@@ -22,10 +22,10 @@
 #include "column/column_access_path.h"
 #include "column/datum_convert.h"
 #include "common/status.h"
+#include "common/system/backend_options.h"
 #include "gen_cpp/tablet_schema.pb.h"
 #include "gutil/stl_util.h"
 #include "primary_key_encoder.h"
-#include "service/backend_options.h"
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate.h"
@@ -245,8 +245,10 @@ Status TabletReader::_init_collector_for_pk_index_read() {
                                                         num_pk_eq_predicates, tablet_schema->num_key_columns()));
     }
     MutableColumnPtr pk_column;
-    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(*tablet_schema->schema(), &pk_column));
-    PrimaryKeyEncoder::encode(*tablet_schema->schema(), *keys, 0, keys->num_rows(), pk_column.get());
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(*tablet_schema->schema(), &pk_column,
+                                                     PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1));
+    PrimaryKeyEncoder::encode(*tablet_schema->schema(), *keys, 0, keys->num_rows(), pk_column.get(),
+                              PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
 
     // get rowid using pk index
     std::vector<uint64_t> rowids(1);

@@ -41,9 +41,12 @@
 
 #include <memory>
 
+#include "base/concurrency/blocking_queue.hpp"
+#include "base/uid_util.h"
 #include "common/config.h"
 #include "common/logging.h"
 #include "common/status.h"
+#include "common/util/thrift_server.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
@@ -56,9 +59,6 @@
 #include "service_be/backend_service.h"
 #include "storage/storage_engine.h"
 #include "util/arrow/row_batch.h"
-#include "util/blocking_queue.hpp"
-#include "util/thrift_server.h"
-#include "util/uid_util.h"
 
 namespace starrocks {
 

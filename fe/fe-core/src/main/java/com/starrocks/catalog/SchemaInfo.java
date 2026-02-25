@@ -21,6 +21,7 @@ import com.starrocks.sql.ast.KeysType;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TOlapTableIndex;
+import com.starrocks.thrift.TPrimaryKeyEncodingType;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletSchema;
 import org.apache.commons.collections.CollectionUtils;
@@ -61,6 +62,8 @@ public class SchemaInfo {
     private final TCompressionType compressionType;
     @SerializedName("compressionLevel")
     private final int compressionLevel;
+    @SerializedName("primaryKeyEncodingType")
+    private final TPrimaryKeyEncodingType primaryKeyEncodingType;
 
     private SchemaInfo(Builder builder) {
         this.id = builder.id;
@@ -77,6 +80,7 @@ public class SchemaInfo {
         this.schemaHash = builder.schemaHash;
         this.compressionType = builder.compressionType;
         this.compressionLevel = builder.compressionLevel;
+        this.primaryKeyEncodingType = builder.primaryKeyEncodingType;
     }
 
     public long getId() {
@@ -168,6 +172,9 @@ public class SchemaInfo {
             tSchema.setCompression_type(compressionType);
             tSchema.setCompression_level(compressionLevel);
         }
+        if (primaryKeyEncodingType != null) {
+            tSchema.setPrimary_key_encoding_type(primaryKeyEncodingType);
+        }
         return tSchema;
     }
 
@@ -186,13 +193,15 @@ public class SchemaInfo {
                 Objects.equals(sortKeyUniqueIds, that.sortKeyUniqueIds) &&
                 Objects.equals(indexes, that.indexes) &&
                 Objects.equals(bloomFilterColumnNames, that.bloomFilterColumnNames) &&
-                compressionType == that.compressionType;
+                compressionType == that.compressionType &&
+                primaryKeyEncodingType == that.primaryKeyEncodingType;
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(id, shortKeyColumnCount, keysType, storageType, version, schemaHash, columns, sortKeyIndexes,
-                sortKeyUniqueIds, indexes, bloomFilterColumnNames, bloomFilterFpp, compressionType, compressionLevel);
+                sortKeyUniqueIds, indexes, bloomFilterColumnNames, bloomFilterFpp, compressionType, compressionLevel,
+                primaryKeyEncodingType);
     }
 
     public static Builder newBuilder() {
@@ -214,6 +223,7 @@ public class SchemaInfo {
         private double bloomFilterFpp; // false positive probability
         private TCompressionType compressionType;
         private int compressionLevel = -1;
+        private TPrimaryKeyEncodingType primaryKeyEncodingType;
 
         private Builder() {
         }
@@ -307,6 +317,11 @@ public class SchemaInfo {
             return this;
         }
 
+        public Builder setPrimaryKeyEncodingType(TPrimaryKeyEncodingType primaryKeyEncodingType) {
+            this.primaryKeyEncodingType = primaryKeyEncodingType;
+            return this;
+        }
+
         public SchemaInfo build() {
             Preconditions.checkState(id > 0);
             Preconditions.checkState(keysType != null);
@@ -335,6 +350,7 @@ public class SchemaInfo {
                 .setBloomFilterFpp(table.getBfFpp())
                 .setCompressionType(table.getCompressionType())
                 .setCompressionLevel(table.getCompressionLevel())
+                .setPrimaryKeyEncodingType(table.getPrimaryKeyEncodingType())
                 .build();
     }
 }

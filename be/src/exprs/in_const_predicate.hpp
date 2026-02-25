@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "base/simd/simd.h"
 #include "column/chunk.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
@@ -25,8 +26,7 @@
 #include "exprs/literal.h"
 #include "exprs/predicate.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/types.h"
-#include "simd/simd.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 

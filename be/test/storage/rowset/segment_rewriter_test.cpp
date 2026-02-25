@@ -19,6 +19,7 @@
 #include <functional>
 #include <iostream>
 
+#include "base/testutil/assert.h"
 #include "column/datum_tuple.h"
 #include "common/logging.h"
 #include "fs/fs_util.h"
@@ -36,7 +37,6 @@
 #include "storage/rowset/segment_writer.h"
 #include "storage/tablet_schema.h"
 #include "storage/tablet_schema_helper.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 

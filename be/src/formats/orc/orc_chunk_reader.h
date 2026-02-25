@@ -26,7 +26,7 @@
 #include "formats/orc/orc_mapping.h"
 #include "formats/orc/utils.h"
 #include "runtime/descriptors.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 
 namespace orc::proto {
 class ColumnStatistics;

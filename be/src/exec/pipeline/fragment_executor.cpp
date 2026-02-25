@@ -18,10 +18,15 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "base/failpoint/fail_point.h"
+#include "base/time/time.h"
+#include "base/uid_util.h"
 #include "common/config.h"
+#include "common/runtime_profile.h"
 #include "exec/capture_version_node.h"
 #include "exec/cross_join_node.h"
 #include "exec/exchange_node.h"
+#include "exec/exec_factory.h"
 #include "exec/exec_node.h"
 #include "exec/hash_join_node.h"
 #include "exec/olap_scan_node.h"
@@ -42,15 +47,14 @@
 #include "runtime/data_stream_mgr.h"
 #include "runtime/data_stream_sender.h"
 #include "runtime/descriptors.h"
+#include "runtime/descriptors_ext.h"
 #include "runtime/exec_env.h"
+#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/result_sink.h"
+#include "runtime/runtime_state_helper.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "util/debug/query_trace.h"
-#include "util/failpoint/fail_point.h"
-#include "util/runtime_profile.h"
-#include "util/time.h"
-#include "util/uid_util.h"
 
 namespace starrocks::pipeline {
 
@@ -225,7 +229,9 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     auto* runtime_state = _fragment_ctx->runtime_state();
     runtime_state->set_enable_pipeline_engine(true);
     runtime_state->set_fragment_ctx(_fragment_ctx.get());
+    runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
     runtime_state->set_query_ctx(_query_ctx);
+    RuntimeStateHelper::init_runtime_filter_port(runtime_state);
 
     // Only consider the `query_mem_limit` variable
     // If query_mem_limit is <= 0, it would set to -1, which means no limit
@@ -459,8 +465,8 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
 
     // Set up plan
     _fragment_ctx->move_tplan(*const_cast<TPlan*>(&fragment.plan));
-    RETURN_IF_ERROR(
-            ExecNode::create_tree(runtime_state, obj_pool, _fragment_ctx->tplan(), desc_tbl, &_fragment_ctx->plan()));
+    RETURN_IF_ERROR(ExecFactory::create_tree(runtime_state, obj_pool, _fragment_ctx->tplan(), desc_tbl,
+                                             &_fragment_ctx->plan()));
     ExecNode* plan = _fragment_ctx->plan();
     std::unordered_set<int32_t> filter_ids;
     collect_non_broadcast_rf_ids(plan, filter_ids);
@@ -821,16 +827,19 @@ Status FragmentExecutor::_prepare_global_dict(const UnifiedExecPlanFragmentParam
     const auto& fragment = request.common().fragment;
     // Set up global dict
     auto* runtime_state = _fragment_ctx->runtime_state();
+    auto* fragment_dict_state = runtime_state->fragment_dict_state();
+    DCHECK(fragment_dict_state != nullptr);
     if (fragment.__isset.query_global_dicts) {
-        RETURN_IF_ERROR(runtime_state->init_query_global_dict(fragment.query_global_dicts));
+        RETURN_IF_ERROR(fragment_dict_state->init_query_global_dict(runtime_state, fragment.query_global_dicts));
     }
 
     if (fragment.__isset.query_global_dicts && fragment.__isset.query_global_dict_exprs) {
-        RETURN_IF_ERROR(runtime_state->init_query_global_dict_exprs(fragment.query_global_dict_exprs));
+        RETURN_IF_ERROR(
+                fragment_dict_state->init_query_global_dict_exprs(runtime_state, fragment.query_global_dict_exprs));
     }
 
     if (fragment.__isset.load_global_dicts) {
-        RETURN_IF_ERROR(runtime_state->init_load_global_dict(fragment.load_global_dicts));
+        RETURN_IF_ERROR(fragment_dict_state->init_load_global_dict(runtime_state, fragment.load_global_dicts));
     }
     return Status::OK();
 }

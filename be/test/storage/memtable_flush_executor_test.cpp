@@ -20,6 +20,7 @@
 #include <memory>
 #include <random>
 
+#include "base/testutil/assert.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/split.h"
 #include "runtime/descriptor_helper.h"
@@ -35,7 +36,6 @@
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -274,7 +274,7 @@ TEST_F(MemTableFlushExecutorTest, testMemtableFlush) {
     const string path = "./MemTableFlushExecutorTest_testDupKeysInsertFlushRead";
     MySetUp("pk int,name varchar,pv int", "pk int,name varchar,pv int", 1, KeysType::DUP_KEYS, path);
     auto mem_table = make_unique<MemTable>(1, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker.get());
-    ASSERT_TRUE(mem_table->prepare().ok());
+    ASSERT_TRUE(mem_table->prepare(PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1).ok());
     auto mem_table_flush_executor = make_unique<MemTableFlushExecutor>();
 
     std::vector<DataDir*> data_dirs = {nullptr, nullptr};
@@ -305,7 +305,7 @@ TEST_F(MemTableFlushExecutorTest, testMemtableFlushWithSeg) {
     const string path = "./MemTableFlushExecutorTest_testMemtableFlushWithSeg";
     MySetUp("pk int,name varchar,pv int", "pk int,name varchar,pv int", 1, KeysType::DUP_KEYS, path);
     auto mem_table = make_unique<MemTable>(1, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker.get());
-    ASSERT_TRUE(mem_table->prepare().ok());
+    ASSERT_TRUE(mem_table->prepare(PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1).ok());
     auto mem_table_flush_executor = make_unique<MemTableFlushExecutor>();
 
     std::vector<DataDir*> data_dirs = {nullptr, nullptr};
@@ -419,7 +419,7 @@ TEST_F(MemTableFlushExecutorTest, testMemtableFlushWithSlotIdx) {
     for (int i = 0; i < 3; i++) {
         auto mem_table =
                 make_unique<MemTable>(1, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker.get());
-        ASSERT_TRUE(mem_table->prepare().ok());
+        ASSERT_TRUE(mem_table->prepare(PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1).ok());
 
         auto pchunk = gen_chunk(*_slots, n);
         vector<uint32_t> indexes;
@@ -450,6 +450,156 @@ TEST_F(MemTableFlushExecutorTest, testMemtableFlushWithSlotIdx) {
     ASSERT_EQ(3, segment_count);
 
     checkResult(n * 3);
+}
+
+// Test FlushToken::wait_for() method with timeout
+TEST_F(MemTableFlushExecutorTest, testWaitForTimeout) {
+    const string path = "./MemTableFlushExecutorTest_testWaitForTimeout";
+    MySetUp("pk int,name varchar,pv int", "pk int,name varchar,pv int", 1, KeysType::DUP_KEYS, path);
+
+    auto mem_table_flush_executor = make_unique<MemTableFlushExecutor>();
+    std::vector<DataDir*> data_dirs = {nullptr, nullptr};
+    ASSERT_TRUE(mem_table_flush_executor->init(data_dirs).ok());
+
+    auto flush_token = mem_table_flush_executor->create_flush_token();
+    ASSERT_NE(nullptr, flush_token);
+
+    const size_t n = 2000;
+    auto mem_table = make_unique<MemTable>(1, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker.get());
+    ASSERT_TRUE(mem_table->prepare(PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1).ok());
+
+    auto pchunk = gen_chunk(*_slots, n);
+    vector<uint32_t> indexes;
+    indexes.reserve(n);
+    for (int i = 0; i < n; i++) {
+        indexes.emplace_back(i);
+    }
+
+    auto res = mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
+    ASSERT_TRUE(res.ok());
+    ASSERT_TRUE(mem_table->finalize().ok());
+
+    ASSERT_TRUE(flush_token->submit(std::move(mem_table)).ok());
+
+    // Test wait_for with sufficient timeout - should complete
+    auto wait_result = flush_token->wait_for(10000 /* 10 seconds */);
+    ASSERT_TRUE(wait_result.ok());
+    ASSERT_TRUE(wait_result.value()); // Should be completed
+
+    checkResult(n);
+}
+
+// Test FlushToken::wait_for() returns false on timeout
+TEST_F(MemTableFlushExecutorTest, testWaitForCompletedImmediately) {
+    const string path = "./MemTableFlushExecutorTest_testWaitForCompletedImmediately";
+    MySetUp("pk int,name varchar,pv int", "pk int,name varchar,pv int", 1, KeysType::DUP_KEYS, path);
+
+    auto mem_table_flush_executor = make_unique<MemTableFlushExecutor>();
+    std::vector<DataDir*> data_dirs = {nullptr, nullptr};
+    ASSERT_TRUE(mem_table_flush_executor->init(data_dirs).ok());
+
+    auto flush_token = mem_table_flush_executor->create_flush_token();
+    ASSERT_NE(nullptr, flush_token);
+
+    // No tasks submitted, wait_for should return true immediately
+    auto wait_result = flush_token->wait_for(100);
+    ASSERT_TRUE(wait_result.ok());
+    ASSERT_TRUE(wait_result.value()); // No pending tasks, should be completed
+}
+
+// Test parallel memtable finalize - finalize is called in flush thread instead of submit thread
+// This simulates the behavior when config::enable_parallel_memtable_finalize is true
+TEST_F(MemTableFlushExecutorTest, testParallelMemtableFinalize) {
+    const string path = "./MemTableFlushExecutorTest_testParallelMemtableFinalize";
+    MySetUp("pk int,name varchar,pv int", "pk int,name varchar,pv int", 1, KeysType::DUP_KEYS, path);
+
+    auto mem_table_flush_executor = make_unique<MemTableFlushExecutor>();
+    std::vector<DataDir*> data_dirs = {nullptr, nullptr};
+    ASSERT_TRUE(mem_table_flush_executor->init(data_dirs).ok());
+
+    auto flush_token = mem_table_flush_executor->create_flush_token();
+    ASSERT_NE(nullptr, flush_token);
+
+    const size_t n = 2000;
+    auto mem_table = make_unique<MemTable>(1, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker.get());
+    ASSERT_TRUE(mem_table->prepare(PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1).ok());
+
+    auto pchunk = gen_chunk(*_slots, n);
+    vector<uint32_t> indexes;
+    indexes.reserve(n);
+    for (int i = 0; i < n; i++) {
+        indexes.emplace_back(i);
+    }
+    std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
+
+    auto res = mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
+    ASSERT_TRUE(res.ok());
+
+    // DO NOT call finalize() here - it will be called in flush thread
+    // This simulates parallel finalize behavior
+
+    ASSERT_TRUE(flush_token->submit(std::move(mem_table)).ok());
+    ASSERT_TRUE(flush_token->wait().ok());
+
+    // Verify data was correctly finalized and flushed
+    checkResult(n);
+}
+
+// Test that finalize is idempotent - can be called multiple times safely
+TEST_F(MemTableFlushExecutorTest, testFinalizeIdempotent) {
+    const string path = "./MemTableFlushExecutorTest_testFinalizeIdempotent";
+    MySetUp("pk int,name varchar,pv int", "pk int,name varchar,pv int", 1, KeysType::DUP_KEYS, path);
+
+    auto mem_table_flush_executor = make_unique<MemTableFlushExecutor>();
+    std::vector<DataDir*> data_dirs = {nullptr, nullptr};
+    ASSERT_TRUE(mem_table_flush_executor->init(data_dirs).ok());
+
+    auto flush_token = mem_table_flush_executor->create_flush_token();
+    ASSERT_NE(nullptr, flush_token);
+
+    const size_t n = 1000;
+    auto mem_table = make_unique<MemTable>(1, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker.get());
+    ASSERT_TRUE(mem_table->prepare(PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1).ok());
+
+    auto pchunk = gen_chunk(*_slots, n);
+    vector<uint32_t> indexes;
+    indexes.reserve(n);
+    for (int i = 0; i < n; i++) {
+        indexes.emplace_back(i);
+    }
+
+    auto res = mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
+    ASSERT_TRUE(res.ok());
+
+    // Call finalize() in submit thread (simulates enable_parallel_memtable_finalize=false)
+    ASSERT_TRUE(mem_table->finalize().ok());
+
+    // Submit to flush thread - finalize will be called again but should be idempotent
+    ASSERT_TRUE(flush_token->submit(std::move(mem_table)).ok());
+    ASSERT_TRUE(flush_token->wait().ok());
+
+    checkResult(n);
+}
+
+// Test wait_for returns error status when flush fails
+TEST_F(MemTableFlushExecutorTest, testWaitForWithError) {
+    const string path = "./MemTableFlushExecutorTest_testWaitForWithError";
+    MySetUp("pk int,name varchar,pv int", "pk int,name varchar,pv int", 1, KeysType::DUP_KEYS, path);
+
+    auto mem_table_flush_executor = make_unique<MemTableFlushExecutor>();
+    std::vector<DataDir*> data_dirs = {nullptr, nullptr};
+    ASSERT_TRUE(mem_table_flush_executor->init(data_dirs).ok());
+
+    auto flush_token = mem_table_flush_executor->create_flush_token();
+    ASSERT_NE(nullptr, flush_token);
+
+    // Set error status
+    flush_token->set_status(Status::InternalError("test error"));
+
+    // wait_for should return error status
+    auto wait_result = flush_token->wait_for(100);
+    ASSERT_FALSE(wait_result.ok());
+    ASSERT_TRUE(wait_result.status().is_internal_error());
 }
 
 } // namespace starrocks

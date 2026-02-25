@@ -20,8 +20,8 @@
 #include <random>
 #include <vector>
 
+#include "base/string/memcmp.h"
 #include "column/column_hash.h"
-#include "util/memcmp.h"
 
 namespace starrocks {
 

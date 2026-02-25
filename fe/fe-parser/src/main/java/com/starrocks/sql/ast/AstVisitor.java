@@ -170,6 +170,10 @@ public interface AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    default R visitAlterTaskStatement(AlterTaskStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     default R visitAdminShowConfigStatement(AdminShowConfigStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
@@ -868,6 +872,14 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitReorderColumnsClause(ReorderColumnsClause clause, C context) {
+        return visitAlterTableColumnClause(clause, context);
+    }
+
+    default R visitAddMVColumnClause(AddMVColumnClause clause, C context) {
+        return visitAlterTableColumnClause(clause, context);
+    }
+
+    default R visitDropMVColumnClause(DropMVColumnClause clause, C context) {
         return visitAlterTableColumnClause(clause, context);
     }
 

@@ -16,19 +16,19 @@
 #include <immintrin.h>
 #endif
 
-#include <runtime/decimalv3.h>
+#include <base/decimal_types.h>
+#include <types/decimalv3.h>
 #include <types/logical_type.h>
-#include <util/decimal_types.h>
 
 #include <cmath>
 #include <random>
 
+#include "base/hash/murmur_hash3.h"
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "exprs/expr.h"
 #include "exprs/function_helper.h"
 #include "exprs/math_functions.h"
-#include "util/murmur_hash3.h"
 
 namespace starrocks {
 

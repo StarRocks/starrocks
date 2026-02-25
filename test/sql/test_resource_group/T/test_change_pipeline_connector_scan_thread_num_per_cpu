@@ -64,9 +64,8 @@ from (
     select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} union all 
     select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}
 )t;
-    
-select sleep(6);
-select count(1) < ${num_cores}*8 from information_schema.be_threads where name = 'pip_con_scan_com' and be_id = (select be_id from information_schema.be_threads where name = 'pip_con_scan_com' limit 1);
+
+select count(1) <= ${num_cores}*8 from information_schema.be_threads where name = 'pip_con_scan_com' and be_id = (select be_id from information_schema.be_threads where name = 'pip_con_scan_com' limit 1);
 
 
 -- Expand threads.

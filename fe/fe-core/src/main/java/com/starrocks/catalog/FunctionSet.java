@@ -277,6 +277,7 @@ public class FunctionSet {
     public static final String JSON_REMOVE = "json_remove";
     public static final String JSON_SET = "json_set";
     public static final String JSON_PRETTY = "json_pretty";
+    public static final String IS_JSON_SCALAR = "is_json_scalar";
 
     // Variant functions:
     public static final String VARIANT_QUERY = "variant_query";

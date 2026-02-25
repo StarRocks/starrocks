@@ -36,6 +36,7 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTabletFailInfo;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.transaction.TxnStateCallbackFactory;
+import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.jetbrains.annotations.NotNull;
@@ -85,7 +86,8 @@ public class MergeCommitJobTest extends BatchWriteTestBase {
         map.put(StreamLoadHttpHeader.HTTP_BATCH_WRITE_ASYNC, "false");
         StreamLoadKvParams params = new StreamLoadKvParams(map);
         StreamLoadInfo streamLoadInfo =
-                StreamLoadInfo.fromHttpStreamLoadRequest(null, -1, Optional.empty(), params);
+                StreamLoadInfo.fromHttpStreamLoadRequest(null, -1, Optional.empty(), params,
+                        CRAcquireContext.of(WarehouseManager.DEFAULT_WAREHOUSE_NAME));
         load = new MergeCommitJob(
                 1,
                 new TableId(DB_NAME_1, TABLE_NAME_1_1),
@@ -297,7 +299,8 @@ public class MergeCommitJobTest extends BatchWriteTestBase {
         map.put(StreamLoadHttpHeader.HTTP_BATCH_WRITE_ASYNC, "false");
         StreamLoadKvParams params = new StreamLoadKvParams(map);
         StreamLoadInfo streamLoadInfo =
-                StreamLoadInfo.fromHttpStreamLoadRequest(null, -1, Optional.empty(), params);
+                StreamLoadInfo.fromHttpStreamLoadRequest(null, -1, Optional.empty(), params,
+                        CRAcquireContext.of(WarehouseManager.DEFAULT_WAREHOUSE_NAME));
 
         MergeCommitJob mergeCommitJob = new MergeCommitJob(
                 1,

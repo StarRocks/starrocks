@@ -17,16 +17,18 @@
 #include <memory>
 #include <mutex>
 
+#include "base/phmap/phmap.h"
 #include "column/chunk.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
+#include "common/constexpr.h"
+#include "exprs/expr_context.h"
 #include "exprs/function_context.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/user_function_cache.h"
 #include "udf/python/callstub.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 

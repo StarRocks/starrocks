@@ -18,16 +18,16 @@
 #include <memory>
 #include <random>
 
+#include "base/testutil/assert.h"
+#include "base/testutil/parallel_test.h"
+#include "base/types/int128.h"
 #include "column/array_column.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/function_helper.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "exprs/string_functions.h"
 #include "runtime/runtime_state.h"
-#include "runtime/types.h"
-#include "testutil/assert.h"
-#include "testutil/parallel_test.h"
-#include "types/large_int_value.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 
@@ -3502,9 +3502,10 @@ PARALLEL_TEST(VecStringFunctionsTest, strposInstanceTest) {
         instance->append(1);
         nulls->append(1);
 
-        auto haystack_nullable = NullableColumn::create(haystack, NullColumn::create(*nulls));
-        auto needle_nullable = NullableColumn::create(needle->clone(), NullColumn::create(*nulls));
-        auto instance_nullable = NullableColumn::create(instance->clone(), NullColumn::create(*nulls));
+        auto haystack_nullable = NullableColumn::create(haystack, NullColumn::static_pointer_cast(nulls->clone()));
+        auto needle_nullable = NullableColumn::create(needle->clone(), NullColumn::static_pointer_cast(nulls->clone()));
+        auto instance_nullable =
+                NullableColumn::create(instance->clone(), NullColumn::static_pointer_cast(nulls->clone()));
 
         columns.emplace_back(haystack_nullable);
         columns.emplace_back(needle_nullable);

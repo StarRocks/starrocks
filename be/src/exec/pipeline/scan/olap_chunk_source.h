@@ -16,6 +16,7 @@
 
 #include <utility>
 
+#include "common/runtime_profile.h"
 #include "exec/olap_common.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/olap_utils.h"
@@ -29,7 +30,6 @@
 #include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/tablet.h"
 #include "storage/tablet_reader.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 
@@ -141,6 +141,10 @@ private:
     RuntimeProfile::Counter* _zone_map_filter_timer = nullptr;
     RuntimeProfile::Counter* _zm_filtered_counter = nullptr;
     RuntimeProfile::Counter* _seg_zm_filtered_counter = nullptr;
+
+    // Segment metadata filter (sort key range filtering for lake tables)
+    RuntimeProfile::Counter* _seg_metadata_filtered_counter = nullptr;
+    RuntimeProfile::Counter* _segs_metadata_filtered_counter = nullptr;
 
     // Bloom filter
     RuntimeProfile::Counter* _bf_filter_timer = nullptr;

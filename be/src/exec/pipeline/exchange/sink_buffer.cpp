@@ -20,13 +20,14 @@
 #include <mutex>
 #include <string_view>
 
+#include "base/time/time.h"
+#include "base/uid_util.h"
+#include "base/utility/defer_op.h"
+#include "common/brpc_helper.h"
 #include "common/config.h"
 #include "fmt/core.h"
 #include "runtime/exec_env.h"
 #include "util/brpc_stub_cache.h"
-#include "util/defer_op.h"
-#include "util/time.h"
-#include "util/uid_util.h"
 
 namespace starrocks::pipeline {
 

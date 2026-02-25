@@ -20,13 +20,13 @@
 #include <set>
 #include <variant>
 
+#include "base/simd/simd.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
+#include "common/runtime_profile.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
-#include "simd/simd.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 

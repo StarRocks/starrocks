@@ -16,6 +16,7 @@
 
 #include <cmath>
 
+#include "base/string/utf8.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
@@ -24,9 +25,9 @@
 #include "exec/sorting/sorting.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/function_context.h"
+#include "exprs/function_helper.h"
 #include "gutil/casts.h"
 #include "runtime/runtime_state.h"
-#include "util/utf8.h"
 
 namespace starrocks {
 template <LogicalType LT, typename = guard::Guard>
@@ -340,6 +341,8 @@ class GroupConcatAggregateFunctionV2 final
         : public AggregateFunctionBatchHelper<GroupConcatAggregateStateV2, GroupConcatAggregateFunctionV2> {
 public:
     // group_concat(a, b order by c, d), the arguments are a,b,',',c,d
+    bool support_nullable_immediate_input() const override { return true; }
+
     void create_impl(FunctionContext* ctx, GroupConcatAggregateStateV2& state) const {
         auto num = ctx->get_num_args();
         state.data_columns = std::make_unique<MutableColumns>();
@@ -359,7 +362,7 @@ public:
             }
         }
         for (auto i = 0; i < num; ++i) {
-            state.data_columns->emplace_back(ctx->create_column(*ctx->get_arg_type(i), true));
+            state.data_columns->emplace_back(FunctionHelper::create_column(*ctx->get_arg_type(i), true));
         }
         DCHECK(ctx->get_is_asc_order().size() == ctx->get_nulls_first().size());
     }

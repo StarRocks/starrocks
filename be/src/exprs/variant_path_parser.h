@@ -19,9 +19,9 @@
 #include <variant>
 #include <vector>
 
+#include "base/string/slice.h"
 #include "common/statusor.h"
 #include "types/variant_value.h"
-#include "util/slice.h"
 
 namespace starrocks {
 

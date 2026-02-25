@@ -184,6 +184,13 @@ public:
     DEFINE_VECTORIZED_FN(json_set);
 
     /**
+     * Determine if a JSON value is a scalar value
+     * @param JSON
+     * @return true if the JSON value is a scalar (not an object or array), false otherwise
+     */
+    DEFINE_VECTORIZED_FN(is_json_scalar);
+
+    /**
      * Return json built from struct/map
      */
     DEFINE_VECTORIZED_FN(to_json);

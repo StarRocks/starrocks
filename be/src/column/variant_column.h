@@ -33,7 +33,7 @@ public:
 
     VariantColumn() = default;
     explicit VariantColumn(size_t size) : SuperClass(size) {}
-    VariantColumn(const VariantColumn& rhs) : SuperClass(rhs) {}
+    DISALLOW_COPY(VariantColumn);
 
     VariantColumn(VariantColumn&& rhs) noexcept : SuperClass(std::move(rhs)) {}
 

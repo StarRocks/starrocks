@@ -16,8 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "fs/credential/cloud_configuration_factory.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 

@@ -14,14 +14,15 @@
 
 #include "exec/pipeline/nljoin/nljoin_probe_operator.h"
 
+#include "base/simd/simd.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
+#include "exprs/expr_executor.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "simd/simd.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::pipeline {
@@ -831,20 +832,20 @@ Status NLJoinProbeOperatorFactory::prepare(RuntimeState* state) {
 
     _init_row_desc();
 
-    RETURN_IF_ERROR(Expr::prepare(_common_expr_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(_common_expr_ctxs, state));
-    RETURN_IF_ERROR(Expr::prepare(_join_conjuncts, state));
-    RETURN_IF_ERROR(Expr::open(_join_conjuncts, state));
-    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_common_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_common_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_join_conjuncts, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_join_conjuncts, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_conjunct_ctxs, state));
 
     return Status::OK();
 }
 
 void NLJoinProbeOperatorFactory::close(RuntimeState* state) {
-    Expr::close(_common_expr_ctxs, state);
-    Expr::close(_join_conjuncts, state);
-    Expr::close(_conjunct_ctxs, state);
+    ExprExecutor::close(_common_expr_ctxs, state);
+    ExprExecutor::close(_join_conjuncts, state);
+    ExprExecutor::close(_conjunct_ctxs, state);
 
     OperatorWithDependencyFactory::close(state);
 }

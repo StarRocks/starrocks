@@ -21,20 +21,19 @@
 
 #include "agent/heartbeat_server.h"
 #include "backend_service.h"
+#include "base/brpc/brpc.h"
 #include "cache/datacache.h"
 #include "cache/disk_cache/block_cache.h"
 #include "common/config.h"
-#include "common/daemon.h"
 #include "common/process_exit.h"
 #include "common/status.h"
+#include "common/system/backend_options.h"
 #include "fs/s3/poco_common.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
-#include "runtime/global_variables.h"
 #include "runtime/jdbc_driver_manager.h"
-#include "service/backend_options.h"
-#include "service/brpc.h"
+#include "service/daemon.h"
 #include "service/service.h"
 #include "service/service_be/arrow_flight_sql_service.h"
 #include "service/service_be/http_service.h"
@@ -44,12 +43,12 @@
 #include "storage/lake/tablet_manager.h"
 #endif
 #include "cache/datacache_metrics.h"
+#include "common/system/mem_info.h"
+#include "common/util/thrift_server.h"
 #include "service/staros_worker.h"
 #include "storage/storage_engine.h"
 #include "util/logging.h"
-#include "util/mem_info.h"
 #include "util/thrift_rpc_helper.h"
-#include "util/thrift_server.h"
 
 #ifdef WITH_STARCACHE
 #include "cache/disk_cache/starcache_engine.h"
@@ -107,11 +106,6 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     auto* global_env = GlobalEnv::GetInstance();
     EXIT_IF_ERROR(global_env->init());
     LOG(INFO) << process_name << " start step " << start_step++ << ": global env init successfully";
-
-    // make sure global variables are initialized
-    auto* global_vars = GlobalVariables::GetInstance();
-    CHECK(global_vars->is_init()) << "global variables not initialized";
-    LOG(INFO) << process_name << " start step " << start_step++ << ": global variables init successfully";
 
     // cache env should be initialized before init_storage_engine,
     // because apply task is triggered in init_storage_engine and needs cache env.

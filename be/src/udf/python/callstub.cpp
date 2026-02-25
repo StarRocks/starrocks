@@ -21,6 +21,8 @@
 #include "arrow/buffer.h"
 #include "arrow/flight/client.h"
 #include "arrow/type.h"
+#include "base/utility/arrow_utils.h"
+#include "base/utility/defer_op.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/base64.h"
@@ -28,11 +30,9 @@
 #include "rapidjson/rapidjson.h"
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 #include "udf/python/env.h"
 #include "util/arrow/row_batch.h"
-#include "util/arrow/utils.h"
-#include "util/defer_op.h"
 
 #define RETURN_IF_ARROW_ERROR(expr)    \
     do {                               \

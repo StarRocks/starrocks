@@ -49,6 +49,7 @@ import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ResourceGroup;
@@ -56,6 +57,7 @@ import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.system.SystemTable;
+import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -85,6 +87,8 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergMetadata;
 import com.starrocks.failpoint.FailPointExecutor;
 import com.starrocks.http.HttpConnectContext;
@@ -112,6 +116,7 @@ import com.starrocks.planner.DataSink;
 import com.starrocks.planner.FileScanNode;
 import com.starrocks.planner.HiveTableSink;
 import com.starrocks.planner.IcebergDeleteSink;
+import com.starrocks.planner.IcebergMetadataDeleteNode;
 import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.IcebergTableSink;
 import com.starrocks.planner.OlapScanNode;
@@ -1092,11 +1097,26 @@ public class StmtExecutor {
             } else if (parsedStmt instanceof TranslateStmt) {
                 handleTranslateStmt();
             } else if (parsedStmt instanceof BeginStmt) {
-                TransactionStmtExecutor.beginStmt(context, (BeginStmt) parsedStmt);
+                if (context.getSessionVariable().isEnableSqlTransaction()) {
+                    TransactionStmtExecutor.beginStmt(context, (BeginStmt) parsedStmt);
+                } else {
+                    // transaction disabled: keep syntax only, do nothing and return OK
+                    context.getState().setOk(0, 0, "");
+                }
             } else if (parsedStmt instanceof CommitStmt) {
-                TransactionStmtExecutor.commitStmt(context, (CommitStmt) parsedStmt);
+                if (context.getSessionVariable().isEnableSqlTransaction() || context.getTxnId() != 0) {
+                    TransactionStmtExecutor.commitStmt(context, (CommitStmt) parsedStmt);
+                } else {
+                    // transaction disabled: keep syntax only, do nothing and return OK
+                    context.getState().setOk(0, 0, "");
+                }
             } else if (parsedStmt instanceof RollbackStmt) {
-                TransactionStmtExecutor.rollbackStmt(context, (RollbackStmt) parsedStmt);
+                if (context.getSessionVariable().isEnableSqlTransaction() || context.getTxnId() != 0) {
+                    TransactionStmtExecutor.rollbackStmt(context, (RollbackStmt) parsedStmt);
+                } else {
+                    // transaction disabled: keep syntax only, do nothing and return OK
+                    context.getState().setOk(0, 0, "");
+                }
             } else {
                 context.getState().setError("Do not support this query.");
             }
@@ -1140,6 +1160,10 @@ public class StmtExecutor {
             GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
             if (context.getState().isError() && coord != null) {
                 coord.cancel(PPlanFragmentCancelReason.INTERNAL_ERROR, context.getState().getErrorMessage());
+            }
+
+            if (coord != null) {
+                coord.clearExternalResources();
             }
 
             if (parsedStmt != null && parsedStmt.isExistQueryScopeHint()) {
@@ -2883,6 +2907,25 @@ public class StmtExecutor {
             return;
         }
 
+        // Handle metadata-level delete for Iceberg
+        if (stmt instanceof DeleteStmt && execPlan != null && execPlan.isIcebergMetadataDelete()) {
+            // Execute metadata-level delete
+            IcebergMetadataDeleteNode node = (IcebergMetadataDeleteNode) execPlan.getTopFragment().getPlanRoot();
+            IcebergTable table = node.getTable();
+            ScalarOperator predicate = node.getPredicate();
+
+            Optional<ConnectorMetadata> connectorMetadata = GlobalStateMgr.getCurrentState()
+                    .getMetadataMgr().getOptionalMetadata(table.getCatalogName());
+            if (connectorMetadata.isPresent()) {
+                connectorMetadata.get().executeMetadataDelete(table, predicate, context);
+            } else {
+                throw new StarRocksConnectorException("Can not find {} connector metadata for table: {}",
+                        table.getCatalogName(), table.getName());
+            }
+            context.getState().setOk();
+            return;
+        }
+
         DmlType dmlType = DmlType.fromStmt(stmt);
         TableRef tableRef = stmt.getTableRef();
         if (tableRef == null) {
@@ -3149,7 +3192,7 @@ public class StmtExecutor {
                     // This is a DELETE operation, use IcebergDeleteSink
                     IcebergMetadata.IcebergSinkExtra extra = deleteSink.getSinkExtraInfo();
                     context.getGlobalStateMgr().getMetadataMgr().finishSink(
-                            catalogName, dbName, tableName, commitInfos, null, extra);
+                            catalogName, dbName, tableName, commitInfos, null, extra, context);
                 } else if (dataSink instanceof IcebergTableSink) {
                     // This is an INSERT/OVERWRITE operation, use IcebergTableSink
                     IcebergTableSink sink = (IcebergTableSink) dataSink;
@@ -3166,7 +3209,7 @@ public class StmtExecutor {
                                 .finish(catalogName, dbName, tableName, commitInfos, sink.getTargetBranch(), (Object) extra);
                     } else {
                         context.getGlobalStateMgr().getMetadataMgr().finishSink(
-                                catalogName, dbName, tableName, commitInfos, sink.getTargetBranch(), (Object) extra);
+                                catalogName, dbName, tableName, commitInfos, sink.getTargetBranch(), (Object) extra, context);
                     }
                 } else {
                     throw new RuntimeException("Unsupported sink type for Iceberg table: " + dataSink.getClass().getName());
@@ -3533,6 +3576,7 @@ public class StmtExecutor {
                     getPreparedStmtId());
             // Set query source from context
             queryDetail.setQuerySource(context.getQuerySource());
+            queryDetail.setImpersonatedUser(resolveImpersonatedUser());
             context.setQueryDetail(queryDetail);
             // copy queryDetail, cause some properties can be changed in future
             QueryDetailQueue.addQueryDetail(queryDetail.copy());
@@ -3612,6 +3656,16 @@ public class StmtExecutor {
                 && !isInformationQuery
                 && !(parsedStmt instanceof ShowStmt)
                 && !(parsedStmt instanceof AdminSetConfigStmt);
+    }
+
+    private String resolveImpersonatedUser() {
+        String qualifiedUser = ClusterNamespace.getNameFromFullName(context.getQualifiedUser());
+        String currentUser = context.getCurrentUserIdentity() == null ? null :
+                ClusterNamespace.getNameFromFullName(context.getCurrentUserIdentity().getUser());
+        if (currentUser == null || qualifiedUser == null || currentUser.equals(qualifiedUser)) {
+            return null;
+        }
+        return currentUser;
     }
 
     public double getMaxFilterRatio(DmlStmt dmlStmt) {

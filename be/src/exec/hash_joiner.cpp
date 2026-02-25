@@ -18,23 +18,24 @@
 
 #include <memory>
 
+#include "base/simd/simd.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exec/hash_join_components.h"
 #include "exec/join/join_hash_table.h"
 #include "exec/spill/spiller.hpp"
+#include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
 #include "exprs/runtime_filter.h"
 #include "gen_cpp/Metrics_types.h"
 #include "pipeline/hashjoin/hash_joiner_fwd.h"
 #include "runtime/current_thread.h"
-#include "simd/simd.h"
 #include "storage/chunk_helper.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 
@@ -545,7 +546,7 @@ Status HashJoiner::_process_other_conjunct(ChunkPtr* chunk, JoinHashTable& hash_
     default:
         // the other join conjunct for inner join will be convert to other predicate
         // so can't reach here
-        RETURN_IF_ERROR(ExecNode::eval_conjuncts(_other_join_conjunct_ctxs, (*chunk).get()));
+        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_other_join_conjunct_ctxs, (*chunk).get()));
     }
     return Status::OK();
 }
@@ -554,7 +555,7 @@ Status HashJoiner::_process_where_conjunct(ChunkPtr* chunk) {
     SCOPED_TIMER(probe_metrics().where_conjunct_evaluate_timer);
     CommonExprEvalScopeGuard guard(*chunk, _common_expr_ctxs);
     RETURN_IF_ERROR(guard.evaluate());
-    return ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get());
+    return ChunkPredicateEvaluator::eval_conjuncts(_conjunct_ctxs, (*chunk).get());
 }
 
 Status HashJoiner::_create_runtime_in_filters(RuntimeState* state) {

@@ -17,6 +17,7 @@
 #include <numeric>
 #include <utility>
 
+#include "base/concurrency/race_detect.h"
 #include "exec/hash_joiner.h"
 #include "exec/pipeline/hashjoin/hash_joiner_factory.h"
 #include "exec/pipeline/query_context.h"
@@ -24,7 +25,6 @@
 #include "exprs/runtime_filter_bank.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_filter_worker.h"
-#include "util/race_detect.h"
 
 namespace starrocks::pipeline {
 

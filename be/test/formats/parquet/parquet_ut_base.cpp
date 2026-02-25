@@ -16,10 +16,13 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Types_types.h"
+#include "runtime/global_dict/parser.h"
 #include "storage/predicate_parser.h"
-#include "testutil/assert.h"
 #include "testutil/exprs_test_helper.h"
 #include "types/logical_type.h"
 
@@ -27,10 +30,10 @@ namespace starrocks::parquet {
 
 void ParquetUTBase::create_conjunct_ctxs(ObjectPool* pool, RuntimeState* runtime_state, std::vector<TExpr>* tExprs,
                                          std::vector<ExprContext*>* conjunct_ctxs) {
-    ASSERT_OK(Expr::create_expr_trees(pool, *tExprs, conjunct_ctxs, nullptr));
-    ASSERT_OK(Expr::prepare(*conjunct_ctxs, runtime_state));
+    ASSERT_OK(ExprFactory::create_expr_trees(pool, *tExprs, conjunct_ctxs, nullptr));
+    ASSERT_OK(ExprExecutor::prepare(*conjunct_ctxs, runtime_state));
     DictOptimizeParser::disable_open_rewrite(conjunct_ctxs);
-    ASSERT_OK(Expr::open(*conjunct_ctxs, runtime_state));
+    ASSERT_OK(ExprExecutor::open(*conjunct_ctxs, runtime_state));
 }
 
 void ParquetUTBase::append_decimal_conjunct(TExprOpcode::type opcode, SlotId slot_id, const std::string& value,

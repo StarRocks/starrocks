@@ -38,12 +38,12 @@
 #include <bthread/mutex.h>
 #include <google/protobuf/service.h>
 
+#include "base/concurrency/countdown_latch.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "gen_cpp/MVMaintenance_types.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "util/countdown_latch.h"
 #include "util/priority_thread_pool.hpp"
 
 namespace brpc {

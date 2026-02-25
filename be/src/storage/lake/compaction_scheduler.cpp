@@ -23,7 +23,10 @@
 #include <thread>
 
 #include "agent/master_info.h"
+#include "base/testutil/sync_point.h"
 #include "common/status.h"
+#include "common/thread/threadpool.h"
+#include "common/util/misc.h"
 #include "fs/fs.h"
 #include "fs/key_cache.h"
 #include "gen_cpp/FrontendService.h"
@@ -37,9 +40,6 @@
 #include "storage/lake/tablet_parallel_compaction_manager.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/storage_engine.h"
-#include "testutil/sync_point.h"
-#include "util/misc.h"
-#include "util/threadpool.h"
 #include "util/thrift_rpc_helper.h"
 
 namespace starrocks::lake {
@@ -126,7 +126,7 @@ void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&
     compact_stat->set_write_segment_bytes(context->stats->write_segment_bytes);
     compact_stat->set_write_time_remote(context->stats->io_ns_write_remote);
     compact_stat->set_in_queue_time_sec(context->stats->in_queue_time_sec);
-    compact_stat->set_sub_task_count(1); // each tablet will have 1 task
+    compact_stat->set_sub_task_count(context->subtask_count);
     compact_stat->set_total_compact_input_file_size(context->stats->input_file_size);
     if (context->skip_write_txnlog && context->txn_log != nullptr) {
         // context->txn_log could be nullptr if the task is failed before writing txn log.
@@ -359,8 +359,8 @@ void CompactionScheduler::process_parallel_compaction(const CompactRequest* requ
             // 1. create_parallel_tasks failed (result.status() is not OK)
             // 2. create_parallel_tasks returned 0 (indicates fallback, e.g., data size too small)
             if (!result.ok()) {
-                LOG(WARNING) << "Failed to create parallel tasks for tablet " << tablet_id << ": " << result.status()
-                             << ", falling back to normal compaction";
+                VLOG(1) << "Failed to create parallel tasks for tablet " << tablet_id << ": " << result.status()
+                        << ", falling back to normal compaction";
             } else {
                 VLOG(1) << "Parallel compaction not applicable for tablet " << tablet_id
                         << ", falling back to normal compaction";

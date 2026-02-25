@@ -187,6 +187,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String TX_READ_ONLY = "tx_read_only";
     public static final String TRANSACTION_ISOLATION = "transaction_isolation";
     public static final String TRANSACTION_READ_ONLY = "transaction_read_only";
+    // Enable SQL transaction capability. If false, only keep syntax without enabling transaction behavior.
+    public static final String ENABLE_SQL_TRANSACTION = "enable_sql_transaction";
     public static final String DEFAULT_STORAGE_ENGINE = "default_storage_engine";
     public static final String DEFAULT_TMP_STORAGE_ENGINE = "default_tmp_storage_engine";
     public static final String DEFAULT_AUTHENTICATION_PLUGIN = "default_authentication_plugin"; 
@@ -420,6 +422,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String STRUCT_LOW_CARDINALITY_OPTIMIZE = "struct_low_cardinality_optimize";
     public static final String ENABLE_LOW_CARDINALITY_OPTIMIZE_FOR_UNION_ALL =
                     "enable_low_cardinality_optimize_for_union_all";
+    public static final String ARRAY_AGG_LOW_CARDINALITY_OPTIMIZE = "array_agg_low_cardinality_optimize";
     public static final String CBO_USE_NTH_EXEC_PLAN = "cbo_use_nth_exec_plan";
     public static final String CBO_CTE_REUSE = "cbo_cte_reuse";
     public static final String CBO_CTE_REUSE_RATE = "cbo_cte_reuse_rate";
@@ -741,6 +744,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String OPTIMIZE_DISTINCT_AGG_OVER_FRAMED_WINDOW =
             "optimize_distinct_agg_over_framed_window";
 
+    public static final String CUSTOM_SESSION_NAME = "custom_session_name";
+    public static final int CUSTOM_SESSION_NAME_MAX_LENGTH = 64;
+
     // Flag to control whether to proxy follower's query statement to leader/follower.
     public enum FollowerQueryForwardMode {
         DEFAULT,    // proxy queries by the follower's replay progress (default)
@@ -949,6 +955,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String SCAN_OLAP_PARTITION_NUM_LIMIT = "scan_olap_partition_num_limit";
 
+    public static final String SCAN_LAKE_PARTITION_NUM_LIMIT = "scan_lake_partition_num_limit";
+
     public static final String ENABLE_CROSS_JOIN = "enable_cross_join";
 
     public static final String ENABLE_NESTED_LOOP_JOIN = "enable_nested_loop_join";
@@ -1060,6 +1068,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_MULTI_CAST_LIMIT_PUSH_DOWN = "enable_multi_cast_limit_push_down";
     public static final String ENABLE_GLOBAL_LATE_MATERIALIZATION = "enable_global_late_materialization";
+    public static final String GLOBAL_LATE_MATERIALIZE_MAX_FETCH_OPS = "global_late_materialization_max_fetch_ops";
+    public static final String GLOBAL_LATE_MATERIALIZE_MAX_LIMIT = "global_late_materialization_max_limit";
 
     public static final String ENABLE_DROP_TABLE_CHECK_MV_DEPENDENCY = "enable_drop_table_check_mv_dependency";
 
@@ -1071,9 +1081,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_PREDICATE_COL_LATE_MATERIALIZE = "enable_predicate_col_late_materialize";
 
     public static final String PUSH_DOWN_HEAVY_EXPRS = "push_down_heavy_exprs";
-
-    public static final String ARROW_FLIGHT_PROXY = "arrow_flight_proxy";
-    public static final String ARROW_FLIGHT_PROXY_ENABLED = "arrow_flight_proxy_enabled";
 
     public static final String TOPN_PUSH_DOWN_AGG_MODE = "topn_push_down_agg_mode";
 
@@ -1275,6 +1282,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // this is used to make mysql client happy
     @VariableMgr.VarAttr(name = AUTO_COMMIT)
     private boolean autoCommit = true;
+
+    @VariableMgr.VarAttr(name = ENABLE_SQL_TRANSACTION)
+    private boolean enableSqlTransaction = true;
+
+    public boolean isEnableSqlTransaction() {
+        return enableSqlTransaction;
+    }
+
+    public void setEnableSqlTransaction(boolean enableSqlTransaction) {
+        this.enableSqlTransaction = enableSqlTransaction;
+    }
 
     // this is used to make c3p0 library happy
     @VariableMgr.VarAttr(name = TX_ISOLATION)
@@ -1760,6 +1778,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = STRUCT_LOW_CARDINALITY_OPTIMIZE)
     private boolean enableStructLowCardinalityOptimize = true;
 
+    @VarAttr(name = ARRAY_AGG_LOW_CARDINALITY_OPTIMIZE)
+    private boolean enableArrayAggLowCardinalityOptimize = true;
+
     @VariableMgr.VarAttr(name = ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL)
     private boolean enableRewriteGroupingSetsToUnionAll = false;
 
@@ -2177,6 +2198,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_GLOBAL_LATE_MATERIALIZATION)
     private boolean enableGlobalLateMaterialization = false;
 
+    @VarAttr(name = GLOBAL_LATE_MATERIALIZE_MAX_FETCH_OPS)
+    private int globalLateMaterializeMaxFetchOps = 4;
+    @VarAttr(name = GLOBAL_LATE_MATERIALIZE_MAX_LIMIT)
+    private int globalLateMaterializeMaxLimit = 4096;
+
     @VarAttr(name = ENABLE_DROP_TABLE_CHECK_MV_DEPENDENCY)
     public boolean enableDropTableCheckMvDependency = false;
 
@@ -2260,11 +2286,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = PUSH_DOWN_HEAVY_EXPRS)
     private boolean pushDownHeavyExprs = true;
 
-    @VarAttr(name = ARROW_FLIGHT_PROXY)
-    private String arrowFlightProxy = "";
-    @VarAttr(name = ARROW_FLIGHT_PROXY_ENABLED)
-    private boolean arrowFlightProxyEnabled = true;
-
     @VarAttr(name = TOPN_PUSH_DOWN_AGG_MODE, flag = VariableMgr.INVISIBLE)
     private int topNPushDownAggMode = 1;
 
@@ -2315,6 +2336,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableStructLowCardinalityOptimize;
     }
 
+    public boolean isEnableArrayAggLowCardinalityOptimize() {
+        return enableArrayAggLowCardinalityOptimize;
+    }
+
+    public void setEnableArrayAggLowCardinalityOptimize(boolean enableArrayAggLowCardinalityOptimize) {
+        this.enableArrayAggLowCardinalityOptimize = enableArrayAggLowCardinalityOptimize;
+    }
 
     @VarAttr(name = ENABLE_REWRITE_BITMAP_UNION_TO_BITMAP_AGG)
     private boolean enableRewriteBitmapUnionToBitmapAgg = true;
@@ -2880,13 +2908,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ALLOW_HIVE_WITHOUT_PARTITION_FILTER)
     private boolean allowHiveWithoutPartitionFilter = true;
 
-    // For the maximum number of partitions allowed to be scanned in a single hive table, 0 means no limit.
-    @VarAttr(name = SCAN_HIVE_PARTITION_NUM_LIMIT)
-    private int scanHivePartitionNumLimit = 0;
-
     // For the maximum number of partitions allowed to be scanned in a single olap table, 0 means no limit.
     @VarAttr(name = SCAN_OLAP_PARTITION_NUM_LIMIT)
     private int scanOlapPartitionNumLimit = 0;
+
+    // For the maximum number of partitions allowed to be scanned in a single lake table, 0 means no limit.
+    @VarAttr(name = SCAN_LAKE_PARTITION_NUM_LIMIT, alias = SCAN_HIVE_PARTITION_NUM_LIMIT)
+    private int scanLakePartitionNumLimit = 0;
 
     @VarAttr(name = ENABLE_CROSS_JOIN)
     private boolean enableCrossJoin = true;
@@ -3296,6 +3324,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CUSTOM_QUERY_ID, flag = VariableMgr.SESSION_ONLY)
     private String customQueryId = "";
+
+    @VarAttr(name = CUSTOM_SESSION_NAME, flag = VariableMgr.SESSION_ONLY)
+    private String customSessionName = "";
 
     @VarAttr(name = ENABLE_REWRITE_UNNEST_BITMAP_TO_ARRAY)
     private boolean enableRewriteUnnestBitmapToArray = true;
@@ -5361,20 +5392,20 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.allowHiveWithoutPartitionFilter = allowHiveWithoutPartitionFilter;
     }
 
-    public int getScanHivePartitionNumLimit() {
-        return scanHivePartitionNumLimit;
-    }
-
-    public void setScanHivePartitionNumLimit(int scanHivePartitionNumLimit) {
-        this.scanHivePartitionNumLimit = scanHivePartitionNumLimit;
-    }
-
     public int getScanOlapPartitionNumLimit() {
         return scanOlapPartitionNumLimit;
     }
 
     public void setScanOlapPartitionNumLimit(int scanOlapPartitionNumLimit) {
         this.scanOlapPartitionNumLimit = scanOlapPartitionNumLimit;
+    }
+
+    public int getScanLakePartitionNumLimit() {
+        return scanLakePartitionNumLimit;
+    }
+
+    public void setScanLakePartitionNumLimit(int scanLakePartitionNumLimit) {
+        this.scanLakePartitionNumLimit = scanLakePartitionNumLimit;
     }
 
     public boolean isEnableCrossJoin() {
@@ -5602,6 +5633,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setCustomQueryId(String customQueryId) {
         this.customQueryId = customQueryId;
+    }
+
+    public String getCustomSessionName() {
+        return customSessionName;
+    }
+
+    public void setCustomSessionName(String customSessionName) {
+        this.customSessionName = customSessionName;
     }
 
     public int getConnectorRemoteFileAsyncQueueSize() {
@@ -5859,6 +5898,20 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableGlobalLateMaterialization = enableGlobalLateMaterialization;
     }
 
+    public void setGlobalLateMaterializeMaxFetchOps(int maxOpts) {
+        this.globalLateMaterializeMaxFetchOps = maxOpts;
+    }
+    public int getGlobalLateMaterializeMaxFetchOps() {
+        return globalLateMaterializeMaxFetchOps;
+    }
+
+    public void setGlobalLateMaterializeMaxLimit(int limit) {
+        globalLateMaterializeMaxLimit = limit;
+    }
+    public int getGlobalLateMaterializeMaxLimit() {
+        return globalLateMaterializeMaxLimit;
+    }
+
     public boolean isEnableJSONV2Rewrite() {
         return cboJSONV2Rewrite;
     }
@@ -5913,22 +5966,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isPushDownHeavyExprs() {
         return this.pushDownHeavyExprs;
-    }
-
-    public void setArrowFlightProxy(String proxy) {
-        this.arrowFlightProxy = proxy;
-    }
-
-    public String getArrowFlightProxy() {
-        return this.arrowFlightProxy;
-    }
-
-    public void setArrowFlightProxyEnabled(boolean flag) {
-        this.arrowFlightProxyEnabled = flag;
-    }
-
-    public boolean isArrowFlightProxyEnabled() {
-        return this.arrowFlightProxyEnabled;
     }
 
     public void setEnablePreAggTopNPushDown(int  topNPushDownAggMode) {

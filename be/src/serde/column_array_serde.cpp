@@ -18,6 +18,7 @@
 #include <streamvbyte.h>
 #include <streamvbytedelta.h>
 
+#include "base/coding.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_visitor_adapter.h"
@@ -35,11 +36,10 @@
 #include "runtime/descriptors.h"
 #include "serde/protobuf_serde.h"
 #include "types/hll.h"
+#include "types/json_value.h"
+#include "types/percentile_value.h"
 #include "types/variant_value.h"
-#include "util/coding.h"
 #include "util/compression/compression_headers.h"
-#include "util/json.h"
-#include "util/percentile_value.h"
 
 namespace starrocks::serde {
 namespace {

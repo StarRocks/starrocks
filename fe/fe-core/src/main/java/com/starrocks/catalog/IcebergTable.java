@@ -38,6 +38,7 @@ import com.starrocks.connector.iceberg.procedure.FastForwardProcedure;
 import com.starrocks.connector.iceberg.procedure.IcebergTableProcedure;
 import com.starrocks.connector.iceberg.procedure.RemoveOrphanFilesProcedure;
 import com.starrocks.connector.iceberg.procedure.RewriteDataFilesProcedure;
+import com.starrocks.connector.iceberg.procedure.RewriteManifestsProcedure;
 import com.starrocks.connector.iceberg.procedure.RollbackToSnapshotProcedure;
 import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.planner.DescriptorTable;
@@ -186,6 +187,10 @@ public class IcebergTable extends Table {
                     getColumn(getPartitionSourceName(schema, partitionField))).collect(Collectors.toList());
         }
         return partitionColumns;
+    }
+
+    public void clearMetadata() {
+        this.nativeTable = null;
     }
 
     public List<Column> getPartitionColumnsIncludeTransformed() {
@@ -622,6 +627,7 @@ public class IcebergTable extends Table {
             case REMOVE_ORPHAN_FILES -> RemoveOrphanFilesProcedure.getInstance();
             case ROLLBACK_TO_SNAPSHOT -> RollbackToSnapshotProcedure.getInstance();
             case REWRITE_DATA_FILES -> RewriteDataFilesProcedure.getInstance();
+            case REWRITE_MANIFESTS -> RewriteManifestsProcedure.getInstance();
             case ADD_FILES -> AddFilesProcedure.getInstance();
             default -> throw new StarRocksConnectorException("Unsupported table operation %s", op);
         };

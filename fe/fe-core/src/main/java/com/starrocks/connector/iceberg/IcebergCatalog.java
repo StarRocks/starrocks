@@ -19,7 +19,6 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.Pair;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.PartitionUtil;
@@ -248,6 +247,17 @@ public interface IcebergCatalog extends MemoryTrackable {
         return new HashMap<>();
     }
 
+    /**
+     * Check if this catalog uses vended credentials for table access.
+     * When vended credentials are used, caching tables may cause issues
+     * because credentials expire before the cache TTL.
+     *
+     * @return true if vended credentials are enabled
+     */
+    default boolean isVendedCredentialsEnabled() {
+        return false;
+    }
+
     default String defaultTableLocation(ConnectContext context, Namespace ns, String tableName) {
         Map<String, String> properties = loadNamespaceMetadata(context, ns);
         String databaseLocation = properties.get(LOCATION_PROPERTY);
@@ -266,10 +276,6 @@ public interface IcebergCatalog extends MemoryTrackable {
 
     default Map<String, Long> estimateCount() {
         return new HashMap<>();
-    }
-
-    default List<Pair<List<Object>, Long>> getSamples() {
-        return new ArrayList<>();
     }
 
     // --------------- partition APIs ---------------
@@ -348,6 +354,11 @@ public interface IcebergCatalog extends MemoryTrackable {
                             int specId = row.get(1, Integer.class);
                             PartitionSpec spec = nativeTable.specs().get(specId);
 
+                            // Old partition specs may be referenced in metadata even if they have been deleted. Skip them.
+                            if (spec == null) {
+                                continue;
+                            }
+
                             String partitionName =
                                     PartitionUtil.convertIcebergPartitionToPartitionName(nativeTable, spec, partitionData);
                             long lastUpdated =
@@ -374,7 +385,10 @@ public interface IcebergCatalog extends MemoryTrackable {
         long lastUpdated = -1;
         if (row != null) {
             try {
-                lastUpdated = row.get(columnIndex, Long.class);
+                Long lastUpdatedWrapper = row.get(columnIndex, Long.class);
+                if (lastUpdatedWrapper != null) {
+                    lastUpdated = lastUpdatedWrapper;
+                }
             } catch (Exception e) {
                 logger.error("Failed to get last_updated_at for partition [{}] of table [{}] " +
                                 "under snapshot [{}]", partitionName, nativeTable.name(), snapshotId, e);

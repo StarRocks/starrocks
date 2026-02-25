@@ -20,33 +20,34 @@
 #include <unordered_map>
 #include <vector>
 
+#include "base/concurrency/bthread_shared_mutex.h"
+#include "base/concurrency/countdown_latch.h"
 #include "column/chunk.h"
-#include "common/closure_guard.h"
 #include "common/compiler_util.h"
+#include "common/runtime_profile.h"
 #include "common/statusor.h"
+#include "common/system/backend_options.h"
+#include "common/util/stack_trace_mutex.h"
 #include "exec/tablet_info.h"
 #include "fs/bundle_file.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "gutil/macros.h"
+#include "runtime/closure_guard.h"
 #include "runtime/descriptors.h"
 #include "runtime/load_channel.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/starrocks_metrics.h"
 #include "runtime/tablets_channel.h"
 #include "serde/protobuf_serde.h"
-#include "service/backend_options.h"
 #include "storage/lake/async_delta_writer.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/delta_writer_finish_mode.h"
 #include "storage/memtable.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/storage_engine.h"
-#include "util/bthreads/bthread_shared_mutex.h"
 #include "util/compression/block_compression.h"
-#include "util/countdown_latch.h"
-#include "util/runtime_profile.h"
-#include "util/stack_trace_mutex.h"
-#include "util/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
@@ -78,7 +79,7 @@ public:
     Status incremental_open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                             std::shared_ptr<OlapTableSchemaParam> schema) override;
 
-    void cancel() override;
+    void cancel(const std::string& reason) override;
 
     void abort() override;
 
@@ -348,7 +349,7 @@ Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, PTabletW
     _index_id = params.index_id();
     _schema = schema;
 #ifndef BE_TEST
-    _table_metrics = StarRocksMetrics::instance()->table_metrics(_schema->table_id());
+    _table_metrics = GlobalMetricsRegistry::instance()->table_metrics(_schema->table_id());
 #endif
     _is_incremental_channel = is_incremental;
     if (params.has_lake_tablet_params() && params.lake_tablet_params().has_write_txn_log()) {
@@ -850,8 +851,12 @@ void LakeTabletsChannel::abort() {
     }
 }
 
-void LakeTabletsChannel::cancel() {
-    //TODO: Current LakeDeltaWriter don't support fast cancel
+void LakeTabletsChannel::cancel(const std::string& reason) {
+    std::shared_lock<bthreads::BThreadSharedMutex> l(_rw_mtx);
+    auto cancel_status = Status::Cancelled(reason.empty() ? "tablet channel cancelled" : reason);
+    for (auto& it : _delta_writers) {
+        it.second->cancel(cancel_status);
+    }
 }
 
 StatusOr<std::unique_ptr<LakeTabletsChannel::WriteContext>> LakeTabletsChannel::_create_write_context(

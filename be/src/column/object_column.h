@@ -17,15 +17,15 @@
 #include <memory>
 
 #include "column/column.h"
-#include "column/datum.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "gutil/strings/substitute.h"
 #include "types/bitmap_value.h"
+#include "types/datum.h"
 #include "types/hll.h"
+#include "types/json_value.h"
+#include "types/percentile_value.h"
 #include "types/variant_value.h"
-#include "util/json.h"
-#include "util/percentile_value.h"
 
 namespace starrocks {
 

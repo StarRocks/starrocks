@@ -17,16 +17,126 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "gen_cpp/AgentService_types.h"
-#include "runtime/types.h"
+#include "storage/tablet_range.h"
 #include "storage/tablet_schema.h"
-#include "testutil/assert.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::lake {
+
+namespace {
+
+static VariantTuple make_int_tuple(int32_t value) {
+    VariantTuple tuple;
+    tuple.append(DatumVariant(get_type_info(LogicalType::TYPE_INT), Datum(value)));
+    return tuple;
+}
+
+static TuplePB make_int_tuple_pb(int32_t value) {
+    TuplePB tuple_pb;
+    make_int_tuple(value).to_proto(&tuple_pb);
+    return tuple_pb;
+}
+
+} // namespace
+
+TEST(TabletRangeHelperTest, test_tablet_range_intersect) {
+    TabletRange lhs(make_int_tuple(1), make_int_tuple(10), true, false);
+    TabletRange rhs(make_int_tuple(5), make_int_tuple(12), true, false);
+    ASSIGN_OR_ABORT(auto r1, lhs.intersect(rhs));
+    EXPECT_TRUE(r1.lower_bound_included());
+    EXPECT_FALSE(r1.upper_bound_included());
+    EXPECT_EQ(0, r1.lower_bound().compare(make_int_tuple(5)));
+    EXPECT_EQ(0, r1.upper_bound().compare(make_int_tuple(10)));
+
+    TabletRange rhs2(make_int_tuple(10), make_int_tuple(12), true, false);
+    ASSIGN_OR_ABORT(auto r2, lhs.intersect(rhs2));
+    EXPECT_TRUE(r2.is_empty());
+    EXPECT_EQ(0, r2.lower_bound().compare(make_int_tuple(10)));
+    EXPECT_EQ(0, r2.upper_bound().compare(make_int_tuple(10)));
+    EXPECT_TRUE(r2.lower_bound_included());
+    EXPECT_FALSE(r2.upper_bound_included());
+
+    TabletRange lhs_all;
+    TabletRange rhs3(make_int_tuple(3), make_int_tuple(4), true, false);
+    ASSIGN_OR_ABORT(auto r3, lhs_all.intersect(rhs3));
+    EXPECT_EQ(0, r3.lower_bound().compare(make_int_tuple(3)));
+    EXPECT_EQ(0, r3.upper_bound().compare(make_int_tuple(4)));
+}
+
+TEST(TabletRangeHelperTest, test_tablet_range_intersect_branch_coverage) {
+    // rhs has minimum lower bound.
+    TabletRange rhs_min;
+    TabletRangePB rhs_min_pb;
+    rhs_min_pb.mutable_upper_bound()->CopyFrom(make_int_tuple_pb(8));
+    rhs_min_pb.set_upper_bound_included(false);
+    ASSERT_OK(rhs_min.from_proto(rhs_min_pb));
+    TabletRange lhs1(make_int_tuple(3), make_int_tuple(10), true, false);
+    ASSIGN_OR_ABORT(auto r1, lhs1.intersect(rhs_min));
+    EXPECT_EQ(0, r1.lower_bound().compare(make_int_tuple(3)));
+    EXPECT_EQ(0, r1.upper_bound().compare(make_int_tuple(8)));
+    EXPECT_TRUE(r1.lower_bound_included());
+    EXPECT_FALSE(r1.upper_bound_included());
+
+    // lower cmp > 0, upper cmp > 0.
+    TabletRange lhs2(make_int_tuple(5), make_int_tuple(12), true, false);
+    TabletRange rhs2(make_int_tuple(3), make_int_tuple(8), true, true);
+    ASSIGN_OR_ABORT(auto r2, lhs2.intersect(rhs2));
+    EXPECT_EQ(0, r2.lower_bound().compare(make_int_tuple(5)));
+    EXPECT_EQ(0, r2.upper_bound().compare(make_int_tuple(8)));
+    EXPECT_TRUE(r2.lower_bound_included());
+    EXPECT_TRUE(r2.upper_bound_included());
+
+    // lower cmp < 0, upper cmp < 0.
+    TabletRange lhs3(make_int_tuple(1), make_int_tuple(7), true, false);
+    TabletRange rhs3(make_int_tuple(3), make_int_tuple(9), false, true);
+    ASSIGN_OR_ABORT(auto r3, lhs3.intersect(rhs3));
+    EXPECT_EQ(0, r3.lower_bound().compare(make_int_tuple(3)));
+    EXPECT_EQ(0, r3.upper_bound().compare(make_int_tuple(7)));
+    EXPECT_FALSE(r3.lower_bound_included());
+    EXPECT_FALSE(r3.upper_bound_included());
+
+    // lower cmp == 0.
+    TabletRange lhs4(make_int_tuple(5), make_int_tuple(10), true, false);
+    TabletRange rhs4(make_int_tuple(5), make_int_tuple(12), false, true);
+    ASSIGN_OR_ABORT(auto r4, lhs4.intersect(rhs4));
+    EXPECT_EQ(0, r4.lower_bound().compare(make_int_tuple(5)));
+    EXPECT_FALSE(r4.lower_bound_included());
+
+    // rhs has maximum upper bound.
+    TabletRange rhs_max;
+    TabletRangePB rhs_max_pb;
+    rhs_max_pb.mutable_lower_bound()->CopyFrom(make_int_tuple_pb(6));
+    rhs_max_pb.set_lower_bound_included(true);
+    ASSERT_OK(rhs_max.from_proto(rhs_max_pb));
+    TabletRange lhs5(make_int_tuple(4), make_int_tuple(9), true, true);
+    ASSIGN_OR_ABORT(auto r5, lhs5.intersect(rhs_max));
+    EXPECT_EQ(0, r5.upper_bound().compare(make_int_tuple(9)));
+    EXPECT_TRUE(r5.upper_bound_included());
+
+    // upper cmp == 0.
+    TabletRange lhs6(make_int_tuple(1), make_int_tuple(10), true, true);
+    TabletRange rhs6(make_int_tuple(2), make_int_tuple(10), true, false);
+    ASSIGN_OR_ABORT(auto r6, lhs6.intersect(rhs6));
+    EXPECT_EQ(0, r6.upper_bound().compare(make_int_tuple(10)));
+    EXPECT_FALSE(r6.upper_bound_included());
+
+    // Canonicalize empty range.
+    TabletRange lhs7(make_int_tuple(10), make_int_tuple(20), true, false);
+    TabletRange rhs7(make_int_tuple(1), make_int_tuple(5), true, false);
+    ASSIGN_OR_ABORT(auto r7, lhs7.intersect(rhs7));
+    EXPECT_TRUE(r7.is_empty());
+    EXPECT_EQ(0, r7.lower_bound().compare(make_int_tuple(10)));
+    EXPECT_EQ(0, r7.upper_bound().compare(make_int_tuple(10)));
+    EXPECT_TRUE(r7.lower_bound_included());
+    EXPECT_FALSE(r7.upper_bound_included());
+}
 
 TEST(TabletRangeHelperTest, test_create_sst_seek_range_from) {
     TabletSchemaPB schema_pb;
     schema_pb.set_keys_type(PRIMARY_KEYS);
+    schema_pb.set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
 
     // c0, c1 are keys
     auto c0 = schema_pb.add_column();
@@ -83,6 +193,7 @@ TEST(TabletRangeHelperTest, test_create_sst_seek_range_from) {
 TEST(TabletRangeHelperTest, test_non_nullable_key_rejects_null_range) {
     TabletSchemaPB schema_pb;
     schema_pb.set_keys_type(PRIMARY_KEYS);
+    schema_pb.set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
 
     auto c0 = schema_pb.add_column();
     c0->set_name("c0");
@@ -106,6 +217,36 @@ TEST(TabletRangeHelperTest, test_non_nullable_key_rejects_null_range) {
     ASSERT_FALSE(res.ok());
     ASSERT_TRUE(res.status().is_invalid_argument());
     ASSERT_EQ("Non-nullable primary key contains NULL in tablet range", res.status().message());
+}
+
+TEST(TabletRangeHelperTest, test_create_sst_seek_range_requires_v2_encoding) {
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(PRIMARY_KEYS);
+    schema_pb.set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V1);
+
+    auto c0 = schema_pb.add_column();
+    c0->set_name("c0");
+    c0->set_type("INT");
+    c0->set_is_key(true);
+    c0->set_is_nullable(false);
+
+    schema_pb.clear_sort_key_idxes();
+    schema_pb.add_sort_key_idxes(0);
+    auto tablet_schema = TabletSchema::create(schema_pb);
+
+    TabletRangePB range_pb;
+    auto lower = range_pb.mutable_lower_bound();
+    auto v0 = lower->add_values();
+    TypeDescriptor type_int(TYPE_INT);
+    v0->mutable_type()->CopyFrom(type_int.to_protobuf());
+    v0->set_value("1");
+    range_pb.set_lower_bound_included(true);
+
+    auto res = TabletRangeHelper::create_sst_seek_range_from(range_pb, tablet_schema);
+    ASSERT_FALSE(res.ok());
+    ASSERT_TRUE(res.status().is_invalid_argument());
+    ASSERT_THAT(res.status().to_string(),
+                testing::HasSubstr("Big-endian encoding is required for range-distribution table in share data mode"));
 }
 
 TEST(TabletRangeHelperTest, test_convert_t_range_to_pb_range_full_range) {

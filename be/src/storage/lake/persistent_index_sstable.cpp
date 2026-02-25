@@ -16,13 +16,13 @@
 
 #include <butil/time.h> // NOLINT
 
+#include "base/debug/trace.h"
 #include "fs/fs.h"
 #include "fs/key_cache.h"
 #include "gen_cpp/types.pb.h"
 #include "storage/lake/lake_delvec_loader.h"
 #include "storage/lake/utils.h"
 #include "storage/sstable/table_builder.h"
-#include "util/trace.h"
 
 namespace starrocks::lake {
 
@@ -139,6 +139,13 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
             for (size_t j = 0; j < index_value_with_ver_pb.values_size(); ++j) {
                 index_value_with_ver_pb.mutable_values(j)->set_rssid(_sstable_pb.shared_rssid());
                 index_value_with_ver_pb.mutable_values(j)->set_version(_sstable_pb.shared_version());
+            }
+        }
+        if (_sstable_pb.rssid_offset() != 0) {
+            for (size_t j = 0; j < index_value_with_ver_pb.values_size(); ++j) {
+                const int64_t rssid =
+                        static_cast<int64_t>(index_value_with_ver_pb.values(j).rssid()) + _sstable_pb.rssid_offset();
+                index_value_with_ver_pb.mutable_values(j)->set_rssid(static_cast<uint32_t>(rssid));
             }
         }
 

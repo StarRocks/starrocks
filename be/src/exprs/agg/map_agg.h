@@ -16,6 +16,7 @@
 
 #include <fmt/format.h>
 
+#include "base/phmap/phmap.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
@@ -24,9 +25,9 @@
 #include "column/type_traits.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/function_context.h"
+#include "exprs/function_helper.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 
@@ -75,7 +76,7 @@ public:
 
     void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const override {
         auto* state = new (ptr) MapAggAggregateFunctionState<KT, MyHashMap>;
-        state->value_column = ctx->create_column(*ctx->get_arg_type(1), true);
+        state->value_column = FunctionHelper::create_column(*ctx->get_arg_type(1), true);
     }
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,

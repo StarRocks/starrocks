@@ -17,9 +17,9 @@
 #include "column/column.h"
 #include "column/column_builder.h"
 #include "common/statusor.h"
-#include "runtime/types.h"
+#include "types/json_value.h"
+#include "types/type_descriptor.h"
 #include "types/variant_value.h"
-#include "util/json.h"
 #include "velocypack/Slice.h"
 
 namespace starrocks {

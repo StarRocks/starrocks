@@ -35,12 +35,12 @@
 #include "common/status.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/casts.h"
-#include "runtime/types.h"
 #include "storage/rowset/column_writer.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/json_column_compactor.h"
 #include "types/constexpr.h"
 #include "types/logical_type.h"
+#include "types/type_descriptor.h"
 #include "util/json_flattener.h"
 #include "velocypack/vpack.h"
 

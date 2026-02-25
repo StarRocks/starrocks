@@ -14,9 +14,11 @@
 
 #include "hive_table_sink.h"
 
+#include "common/runtime_profile.h"
 #include "exprs/expr.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 #include "runtime/runtime_state.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 
@@ -34,7 +36,7 @@ Status HiveTableSink::init(const TDataSink& thrift_sink, RuntimeState* state) {
 
 Status HiveTableSink::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(DataSink::prepare(state));
-    RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_output_expr_ctxs, state));
     std::stringstream title;
     title << "IcebergTableSink (frag_id=" << state->fragment_instance_id() << ")";
     _profile = _pool->add(new RuntimeProfile(title.str()));
@@ -42,7 +44,7 @@ Status HiveTableSink::prepare(RuntimeState* state) {
 }
 
 Status HiveTableSink::open(RuntimeState* state) {
-    RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_output_expr_ctxs, state));
     return Status::OK();
 }
 
@@ -51,7 +53,7 @@ Status HiveTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
 }
 
 Status HiveTableSink::close(RuntimeState* state, Status exec_status) {
-    Expr::close(_output_expr_ctxs, state);
+    ExprExecutor::close(_output_expr_ctxs, state);
     return Status::OK();
 }
 
@@ -116,8 +118,8 @@ Status HiveTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operators
         context->add_pipeline(std::move(ops));
     } else {
         std::vector<ExprContext*> partition_expr_ctxs;
-        RETURN_IF_ERROR(Expr::create_expr_trees(runtime_state->obj_pool(), partition_exprs, &partition_expr_ctxs,
-                                                runtime_state));
+        RETURN_IF_ERROR(ExprFactory::create_expr_trees(runtime_state->obj_pool(), partition_exprs, &partition_expr_ctxs,
+                                                       runtime_state));
         auto ops = context->interpolate_local_key_partition_exchange(
                 runtime_state, pipeline::Operator::s_pseudo_plan_node_id_for_final_sink, prev_operators,
                 partition_expr_ctxs, sink_dop);

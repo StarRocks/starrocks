@@ -38,8 +38,8 @@
 
 #include <string>
 
+#include "base/metrics.h"
 #include "http/http_handler.h"
-#include "util/metrics.h"
 
 namespace starrocks {
 

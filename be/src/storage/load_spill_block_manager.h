@@ -14,10 +14,10 @@
 
 #pragma once
 
+#include "common/thread/threadpool.h"
 #include "exec/spill/block_manager.h"
 #include "exec/spill/dir_manager.h"
 #include "exec/spill/input_stream.h"
-#include "util/threadpool.h"
 
 namespace starrocks {
 
@@ -98,6 +98,11 @@ public:
     Status init();
 
     bool is_initialized() const { return _initialized; }
+
+    // Delete the remote spill parent directory (e.g. <remote_spill_path>/<load_id>).
+    // Called in destructor after all spill blocks have been released, so that individual
+    // container destructors only delete their own files and this method cleans up the directory.
+    Status clear_parent_path();
 
     // acquire Block from BlockManager
     StatusOr<spill::BlockPtr> acquire_block(size_t block_size, bool force_remote = false);

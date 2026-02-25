@@ -14,10 +14,12 @@
 
 #include "agent/resource_group_usage_recorder.h"
 
+#include "base/testutil/assert.h"
+#include "common/system/cpu_info.h"
 #include "exec/workgroup/work_group.h"
 #include "gtest/gtest.h"
 #include "runtime/exec_env.h"
-#include "testutil/assert.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
@@ -27,7 +29,8 @@ TEST(ResourceGroupUsageRecorderTest, test_get_resource_group_usages) {
     auto& exec_env = *ExecEnv::GetInstance();
     workgroup::PipelineExecutorSetConfig executors_manager_opts(
             CpuInfo::num_cores(), num_cores, num_cores, num_cores, CpuInfo::get_core_ids(), true,
-            config::enable_resource_group_cpu_borrowing, StarRocksMetrics::instance()->get_pipeline_executor_metrics());
+            config::enable_resource_group_cpu_borrowing,
+            GlobalMetricsRegistry::instance()->pipeline_executor_metrics());
     exec_env._workgroup_manager = std::make_unique<workgroup::WorkGroupManager>(std::move(executors_manager_opts));
     ASSERT_OK(exec_env._workgroup_manager->start());
 

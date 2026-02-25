@@ -14,12 +14,20 @@
 
 #include "storage/load_spill_pipeline_merge_context.h"
 
+#include "common/thread/threadpool.h"
 #include "storage/lake/tablet_internal_parallel_merge_task.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/load_spill_block_manager.h"
 #include "storage/storage_engine.h"
 
 namespace starrocks {
+
+LoadSpillPipelineMergeContext::~LoadSpillPipelineMergeContext() {
+    _quit_flag.store(true);
+    if (_token != nullptr) {
+        _token->shutdown();
+    }
+}
 
 void LoadSpillPipelineMergeContext::create_thread_pool_token() {
     std::lock_guard<std::mutex> lg(_merge_tasks_mutex);

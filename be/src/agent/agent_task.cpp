@@ -19,13 +19,14 @@
 #include "agent/agent_common.h"
 #include "agent/finish_task.h"
 #include "agent/task_signatures_manager.h"
+#include "base/testutil/sync_point.h"
 #include "boost/lexical_cast.hpp"
 #include "common/status.h"
+#include "common/system/backend_options.h"
 #include "gutil/strings/join.h"
 #include "io/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "runtime/snapshot_loader.h"
-#include "service/backend_options.h"
 #include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/schema_change.h"
 #include "storage/lake/tablet_manager.h"
@@ -41,7 +42,6 @@
 #include "storage/task/engine_storage_migration_task.h"
 #include "storage/txn_manager.h"
 #include "storage/update_manager.h"
-#include "testutil/sync_point.h"
 
 namespace starrocks {
 

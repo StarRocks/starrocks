@@ -20,10 +20,15 @@
 #include <memory>
 #include <thread>
 
+#include "base/failpoint/fail_point.h"
+#include "base/simd/simd.h"
+#include "base/time/time.h"
 #include "column/column.h"
+#include "common/system/cpu_info.h"
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exprs/agg_in_runtime_filter.h"
 #include "exprs/dictmapping_expr.h"
+#include "exprs/expr_factory.h"
 #include "exprs/in_const_predicate.hpp"
 #include "exprs/literal.h"
 #include "exprs/min_max_predicate.h"
@@ -35,11 +40,8 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_state.h"
-#include "simd/simd.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
-#include "util/failpoint/fail_point.h"
-#include "util/time.h"
 
 namespace starrocks {
 DEFINE_FAIL_POINT(global_runtime_filter_sync_B);
@@ -558,7 +560,7 @@ Status RuntimeFilterBuildDescriptor::init(ObjectPool* pool, const TRuntimeFilter
     }
 
     WithLayoutMixin::init(desc);
-    RETURN_IF_ERROR(Expr::create_expr_tree(pool, desc.build_expr, &_build_expr_ctx, state));
+    RETURN_IF_ERROR(ExprFactory::create_expr_tree(pool, desc.build_expr, &_build_expr_ctx, state));
     return Status::OK();
 }
 
@@ -579,7 +581,7 @@ Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilter
         const auto& it = const_cast<TRuntimeFilterDescription&>(desc).plan_node_id_to_target_expr.find(node_id);
         if (it != desc.plan_node_id_to_target_expr.end()) {
             not_found = false;
-            RETURN_IF_ERROR(Expr::create_expr_tree(pool, it->second, &_probe_expr_ctx, state));
+            RETURN_IF_ERROR(ExprFactory::create_expr_tree(pool, it->second, &_probe_expr_ctx, state));
         }
     }
 
@@ -590,7 +592,7 @@ Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilter
         // TODO(lishuming): maybe reuse probe exprs because partition_by_exprs and probe_expr
         // must be overlapped.
         if (it != desc.plan_node_id_to_partition_by_exprs.end()) {
-            RETURN_IF_ERROR(Expr::create_expr_trees(pool, it->second, &_partition_by_exprs_contexts, state));
+            RETURN_IF_ERROR(ExprFactory::create_expr_trees(pool, it->second, &_partition_by_exprs_contexts, state));
         }
     }
 

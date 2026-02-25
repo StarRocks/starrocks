@@ -182,7 +182,8 @@ public class MaterializedViewAnalyzer {
                     Table.TableType.DELTALAKE,
                     Table.TableType.VIEW,
                     Table.TableType.HIVE_VIEW,
-                    Table.TableType.ICEBERG_VIEW);
+                    Table.TableType.ICEBERG_VIEW,
+                    Table.TableType.PAIMON_VIEW);
 
     public static void analyze(StatementBase stmt, ConnectContext session) {
         new MaterializedViewAnalyzerVisitor().visit(stmt, session);
@@ -749,7 +750,7 @@ public class MaterializedViewAnalyzer {
                         }
                     }
                     indexes.add(new Index(indexDef.getIndexName(), columnIds, indexDef.getIndexType(),
-                            indexDef.getComment()));
+                            indexDef.getComment(), indexDef.getProperties()));
                     indexMultiMap.put(indexDef.getIndexName().toLowerCase(), 1);
                     colMultiMap.put(String.join(",", indexDef.getColumns()), 1);
                 }
