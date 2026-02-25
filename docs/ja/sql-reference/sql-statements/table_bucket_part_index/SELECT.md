@@ -7,7 +7,7 @@ displayed_sidebar: docs
 SELECT は、1 つ以上のテーブル、ビュー、またはマテリアライズドビューからデータをクエリします。SELECT ステートメントは、通常、次の句で構成されます。
 
 - [WITH](#with)
-- [ジョイン](#join)
+- [Join](#join)
 - [ORDER BY](#order-by)
 - [GROUP BY](#group-by)
 - [HAVING](#having)
@@ -99,9 +99,9 @@ table_or_subquery1 CROSS JOIN table_or_subquery2
 
 ### Self Join
 
-StarRocks は、自己ジョイン、つまり自己結合と自己結合をサポートしています。たとえば、同じテーブルの異なるカラムがジョインされます。
+StarRocks は、Self Join をサポートしています。たとえば、同じテーブルの異なるカラムが Join されます。
 
-実際には、自己ジョインを識別するための特別な構文はありません。自己ジョインにおけるジョインの両側の条件は、同じテーブルから来ています。
+実際には、Self Join を識別するための特別な構文はありません。Self Join における Join の両側の条件は、同じテーブルから来ています。
 
 異なるエイリアスを割り当てる必要があります。
 
@@ -113,9 +113,9 @@ SELECT lhs.id, rhs.parent, lhs.c1, rhs.c2 FROM tree_data lhs, tree_data rhs WHER
 
 ### Cross Join
 
-cross join は大量の結果を生成する可能性があるため、使用には注意が必要です。
+Cross Join は大量の結果を生成する可能性があるため、使用には注意が必要です。
 
-どうしても cross join を使用する必要がある場合でも、フィルタ条件を使用し、返される結果が少なくなるようにする必要があります。例：
+どうしても Cross Join を使用する必要がある場合でも、フィルタ条件を使用し、返される結果が少なくなるようにする必要があります。例：
 
 ```sql
 SELECT * FROM t1, t2;
@@ -125,7 +125,7 @@ SELECT * FROM t1 CROSS JOIN t2;
 
 ### Inner Join
 
-Inner join は、最もよく知られ、一般的に使用されるジョインです。2 つの類似したテーブルから要求された列の結果を返し、両方のテーブルの列に同じ値が含まれている場合にジョインされます。
+Inner Join は、最もよく知られ、一般的に使用される Join です。2 つの類似したテーブルから要求された列の結果を返し、両方のテーブルの列に同じ値が含まれている場合に Join されます。
 
 両方のテーブルの列名が同じ場合は、完全名 (table_name.column_name の形式) を使用するか、列名にエイリアスを付ける必要があります。
 
@@ -143,7 +143,7 @@ SELECT t1.id, c1, c2 FROM t1 INNER JOIN t2 ON t1.id = t2.id;
 
 ### Outer Join
 
-アウタージョインは、左または右のテーブル、または両方のテーブルのすべての行を返します。別のテーブルに一致するデータがない場合は、NULL に設定します。例：
+Outer Join は、左または右のテーブル、または両方のテーブルのすべての行を返します。別のテーブルに一致するデータがない場合は、NULL に設定します。例：
 
 ```sql
 SELECT * FROM t1 LEFT OUTER JOIN t2 ON t1.id = t2.id;
@@ -153,13 +153,13 @@ SELECT * FROM t1 RIGHT OUTER JOIN t2 ON t1.id = t2.id;
 SELECT * FROM t1 FULL OUTER JOIN t2 ON t1.id = t2.id;
 ```
 
-### Equi-join と Non-equi-join
+### 等価 Join と不等 Join
 
-通常、ユーザーは同値結合を最もよく使用します。同値結合では、結合条件の演算子に等号を使用する必要があります。
+通常、等価 Join が最も一般的に使用される結合です。結合条件の演算子として等号が必要です。
 
-非同値結合は、結合条件 `!=` 、等号で使用できます。非同値結合は大量の結果を生成し、計算中にメモリ制限を超える可能性があります。
+不等 Join は結合条件として `!=` を使用します。不等 Join は大量の結果を生成し、計算中にメモリ制限を超える可能性があります。
 
-使用には注意が必要です。非同値結合は inner join のみをサポートします。例：
+使用には注意が必要です。不等 Join は Inner Join のみをサポートします。例：
 
 ```sql
 SELECT t1.id, c1, c2 FROM t1 INNER JOIN t2 ON t1.id = t2.id;
@@ -169,9 +169,9 @@ SELECT t1.id, c1, c2 FROM t1 INNER JOIN t2 ON t1.id > t2.id;
 
 ### Semi Join
 
-Left semi join（左セミジョイン）は、右テーブルのデータと一致する左テーブルの行のみを返します。右テーブルの行がいくつ一致するかは関係ありません。
+Left Semi Join は、右テーブルのデータと一致する左テーブルの行のみを返します。右テーブルの行がいくつ一致するかは関係ありません。
 
-左テーブルのこの行は、最大で1回返されます。Right semi join（右セミジョイン）も同様に機能しますが、返されるデータは右テーブルになります。
+左テーブルのこの行は、最大で1回返されます。Right Semi Join も同様に機能しますが、返されるデータは右テーブルになります。
 
 例：
 
@@ -181,9 +181,9 @@ SELECT t1.c1, t1.c2, t1.c2 FROM t1 LEFT SEMI JOIN t2 ON t1.id = t2.id;
 
 ### Anti Join
 
-Left anti join は、右側のテーブルに一致しない左側のテーブルの行のみを返します。
+Left Anti Join は、右側のテーブルに一致しない左側のテーブルの行のみを返します。
 
-Right anti join はこの比較を逆にして、左側のテーブルに一致しない右側のテーブルの行のみを返します。例：
+Right Anti Join はこの比較を逆にして、左側のテーブルに一致しない右側のテーブルの行のみを返します。例：
 
 ```sql
 SELECT t1.c1, t1.c2, t1.c2 FROM t1 LEFT ANTI JOIN t2 ON t1.id = t2.id;
@@ -193,7 +193,7 @@ SELECT t1.c1, t1.c2, t1.c2 FROM t1 LEFT ANTI JOIN t2 ON t1.id = t2.id;
 
 StarRocks がサポートするさまざまなジョインは、ジョインで指定されたジョイン条件に応じて、Equi-join と Non-equi-join に分類できます。
 
-| **Join タイプ** | **説明**                                                           |
+| **Join タイプ** | **バリアント**                                                      |
 | -------------- | ----------------------------------------------------------------- |
 | Equi-join      | Self join、cross join、inner join、outer join、semi join、anti join |
 | Non-equi-join  | cross join、inner join、left semi join、left anti join、outer join  |

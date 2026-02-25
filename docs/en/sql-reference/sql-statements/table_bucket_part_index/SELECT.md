@@ -99,7 +99,7 @@ table_or_subquery1 CROSS JOIN table_or_subquery2
 
 ### Self Join
 
-StarRocks supports self-joins, which are self-joins and self-joins. For example, different columns of the same table are joined.
+StarRocks supports self-joins. For example, different columns of the same table are joined.
 
 There is actually no special syntax to identify self-join. The conditions on both sides of a join in a self-join come from the same table.
 
@@ -153,13 +153,13 @@ SELECT * FROM t1 RIGHT OUTER JOIN t2 ON t1.id = t2.id;
 SELECT * FROM t1 FULL OUTER JOIN t2 ON t1.id = t2.id;
 ```
 
-### Equivalent and unequal join
+### Equal and unequal join
 
-Usually, users use the most equal join, which requires the operator of the join condition to be an equal sign.
+Usually, equal joins are the most commonly used joins. It requires the operator of the join condition to be an equal sign.
 
-Unequal join can be used on join conditions!=, Equal sign. Unequal joins produce a large number of results and may exceed the memory limit during calculation.
+Unequal join can be used on join conditions `!=`. Unequal joins produce a large number of results and may exceed the memory limit during calculation.
 
-Use with caution. Unequal join only supports inner join. Example:
+Use with caution. Unequal join only supports Inner Join. Example:
 
 ```sql
 SELECT t1.id, c1, c2 FROM t1 INNER JOIN t2 ON t1.id = t2.id;
@@ -193,7 +193,7 @@ SELECT t1.c1, t1.c2, t1.c2 FROM t1 LEFT ANTI JOIN t2 ON t1.id = t2.id;
 
 The various joins supported by StarRocks can be classified as equi-joins and non-equi-joins depending on the join conditions specified in the joins.
 
-| **Join Type**  | **Description**                                                               |
+| **Join Type**  | **Variants**                                                                  |
 | -------------- | ----------------------------------------------------------------------------- |
 | Equi-joins     | Self joins, cross joins, inner joins, outer joins, semi joins, and anti joins |
 | Non-equi-joins | cross joins, inner joins, left semi joins, left anti joins, and outer joins   |

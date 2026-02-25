@@ -99,9 +99,9 @@ table_or_subquery1 CROSS JOIN table_or_subquery2
 
 ### Self Join
 
-StarRocks 支持自连接，包括自连接和自身连接。例如，同一张表的不同列进行连接。
+StarRocks 支持 Self Join。例如，同一张表的不同列进行连接。
 
-实际上，没有特殊的语法来标识自连接。自连接中，连接两侧的条件都来自同一张表。
+实际上，没有特殊的语法来标识 Self Join。 Self Join 中，连接两侧的条件都来自同一张表。
 
 我们需要为它们分配不同的别名。
 
@@ -125,7 +125,7 @@ SELECT * FROM t1 CROSS JOIN t2;
 
 ### Inner Join
 
-Inner join 是最广为人知和常用的 join。如果两个相似表的列包含相同的值，则返回两个相似表中请求的列的结果。
+Inner Join 是最广为人知和常用的 Join。如果两个相似表的列包含相同的值，则返回两个相似表中请求的列的结果。
 
 如果两个表的列名相同，我们需要使用全名（格式为 table_name.column_name）或为列名设置别名。
 
@@ -143,7 +143,7 @@ SELECT t1.id, c1, c2 FROM t1 INNER JOIN t2 ON t1.id = t2.id;
 
 ### Outer Join
 
-Outer join 返回左表或右表的所有行，或者两表的所有行。如果另一张表中没有匹配的数据，则设置为 NULL。例如：
+Outer Join 返回左表或右表的所有行，或者两表的所有行。如果另一张表中没有匹配的数据，则设置为 NULL。例如：
 
 ```sql
 SELECT * FROM t1 LEFT OUTER JOIN t2 ON t1.id = t2.id;
@@ -153,13 +153,13 @@ SELECT * FROM t1 RIGHT OUTER JOIN t2 ON t1.id = t2.id;
 SELECT * FROM t1 FULL OUTER JOIN t2 ON t1.id = t2.id;
 ```
 
-### 等值 JOIN 和非等值 JOIN
+### 等值 Join 和非等值 Join
 
-通常，用户最常用的是等值 JOIN，它要求 JOIN 条件的操作符为等号。
+通常，等值 Join 是最常用的 Join 方式。它要求 Join 条件的运算符为等号。
 
-非等值 JOIN 可以用于 JOIN 条件 `!=`，等号。非等值 JOIN 会产生大量的计算结果，并可能在计算期间超出内存限制。
+非等值 JOIN 使用 `!=` 作为 Join 条件。非等值 Join 会产生大量的计算结果，并可能在计算期间超出内存限制。
 
-请谨慎使用。非等值 JOIN 仅支持 inner join。例如：
+请谨慎使用。非等值 Join 仅支持 Inner Join。例如：
 
 ```sql
 SELECT t1.id, c1, c2 FROM t1 INNER JOIN t2 ON t1.id = t2.id;
@@ -169,9 +169,9 @@ SELECT t1.id, c1, c2 FROM t1 INNER JOIN t2 ON t1.id > t2.id;
 
 ### Semi Join
 
-Left semi join（左半连接）仅返回左表中与右表中的数据匹配的行，而不管右表中有多少行与该数据匹配。
+Left Semi Join 仅返回左表中与右表中的数据匹配的行，而不管右表中有多少行与该数据匹配。
 
-左表的这一行最多返回一次。Right semi join（右半连接）的工作方式类似，只不过返回的数据是右表。
+左表的这一行最多返回一次。Right Semi Join 的工作方式类似，只不过返回的数据是右表。
 
 例如：
 
@@ -181,9 +181,9 @@ SELECT t1.c1, t1.c2, t1.c2 FROM t1 LEFT SEMI JOIN t2 ON t1.id = t2.id;
 
 ### Anti Join
 
-Left anti join（左反连接）仅返回左表中与右表不匹配的行。
+Left Anti Join（左反连接）仅返回左表中与右表不匹配的行。
 
-Right anti join（右反连接）反转此比较，仅返回右表中与左表不匹配的行。例如：
+Right Anti Join（右反连接）反转此比较，仅返回右表中与左表不匹配的行。例如：
 
 ```sql
 SELECT t1.c1, t1.c2, t1.c2 FROM t1 LEFT ANTI JOIN t2 ON t1.id = t2.id;
@@ -191,22 +191,22 @@ SELECT t1.c1, t1.c2, t1.c2 FROM t1 LEFT ANTI JOIN t2 ON t1.id = t2.id;
 
 ### Equi-join 和 Non-equi-join
 
-根据 JOIN 中指定的 JOIN 条件，StarRocks 支持的各种 JOIN 可以分为等值 JOIN 和非等值 JOIN。
+根据 JOIN 中指定的 JOIN 条件，StarRocks 支持的各种 JOIN 可以分为 Equi-join 和 Non-equi-join。
 
-| **Join 类型**   | **描述**                                                          |
+| **Join 类型**   | **种类**                                                          |
 | -------------- | ----------------------------------------------------------------- |
 | Equi-join      | Self join、cross join、inner join、outer join、semi join、anti join |
 | Non-equi-join  | cross join、inner join、left semi join、left anti join、outer join  |
 
-- 等值 JOIN
+- Equi-join
 
-  等值 JOIN 使用的 JOIN 条件中，两个 JOIN 项通过 `=` 运算符组合。例如：`a JOIN b ON a.id = b.id`。
+  Equi-join 使用的 JOIN 条件中，两个 JOIN 项通过 `=` 运算符组合。例如：`a JOIN b ON a.id = b.id`。
 
-- 非等值 JOIN
+- Non-equi-join
 
-  非等值 JOIN 使用的 JOIN 条件中，两个 JOIN 项通过 `<`、`<=`、`>`、`>=` 或 `<>` 等比较运算符组合。例如：`a JOIN b ON a.id < b.id`。非等值 JOIN 的运行速度比等值 JOIN 慢。建议您在使用非等值 JOIN 时要谨慎。
+  Non-equi-join 使用的 JOIN 条件中，两个 JOIN 项通过 `<`、`<=`、`>`、`>=` 或 `<>` 等比较运算符组合。例如：`a JOIN b ON a.id < b.id`。Non-equi-join 的运行速度比 Equi-join 慢。建议您在使用 Non-equi-join 时要谨慎。
 
-  以下两个示例展示了如何运行非等值 JOIN：
+  以下两个示例展示了如何运行 Non-equi-join：
 
   ```SQL
   SELECT t1.id, c1, c2 
