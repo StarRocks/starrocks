@@ -85,7 +85,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: StarRocks/markdown-translator
-          ref: 'v1.0.4'
+          ref: 'v1.0.5'
           path: trusted_tools
 
       - name: Get Changed Files
