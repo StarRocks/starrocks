@@ -28,6 +28,7 @@
 #include "common/statusor.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "exprs/expr_factory.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
@@ -44,7 +45,7 @@ Status ColumnAccessPath::init(const std::string& parent_path, const TColumnAcces
 
     ExprContext* expr_ctx = nullptr;
     // Todo: may support late materialization? to compute path by other column predicate
-    RETURN_IF_ERROR(Expr::create_expr_tree(pool, column_path.path, &expr_ctx, state));
+    RETURN_IF_ERROR(ExprFactory::create_expr_tree(pool, column_path.path, &expr_ctx, state));
     if (!expr_ctx->root()->is_constant()) {
         return Status::InternalError("error column access constant path.");
     }

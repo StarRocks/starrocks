@@ -99,6 +99,7 @@ set(EXEC_FILES
         ./exec/chunks_sorter_heap_sort_test.cpp
         ./exec/chunks_sorter_test.cpp
         ./exec/connector_scan_node_test.cpp
+        ./exec/exec_factory_test.cpp
         ./exec/file_scan_node_test.cpp
         ./exec/hdfs_scan_node_test.cpp
         ./exec/join_hash_map_test.cpp
@@ -131,17 +132,13 @@ set(EXEC_FILES
         ./exprs/agg/agg_compressed_key_test.cpp
         ./exprs/agg/agg_state_functions_test.cpp
         ./exprs/ai_functions_test.cpp
-        ./exprs/arithmetic_expr_test.cpp
         ./exprs/arithmetic_operation_test.cpp
-        ./exprs/array_element_expr_test.cpp
         ./exprs/decimal_binary_function_test.cpp
-        ./exprs/array_expr_test.cpp
         ./exprs/array_functions_test.cpp
         ./exprs/binary_function_test.cpp
         ./exprs/binary_functions_test.cpp
         ./exprs/binary_predicate_test.cpp
         ./exprs/bitmap_functions_test.cpp
-        ./exprs/case_expr_test.cpp
         ./exprs/cast_expr_test.cpp
         ./exprs/decimal_cast_expr_decimal_test.cpp
         ./exprs/decimal_cast_expr_integer_test.cpp
@@ -154,22 +151,13 @@ set(EXEC_FILES
         ./exprs/encryption_functions_test.cpp
         ./exprs/function_call_expr_test.cpp
         ./exprs/geography_functions_test.cpp
-        ./exprs/gin_functions_test.cpp
-        ./exprs/hash_functions_test.cpp
-        ./exprs/hyperloglog_functions_test.cpp
         ./exprs/if_expr_test.cpp
-        ./exprs/function_helper_test.cpp
-        ./exprs/in_predicate_test.cpp
-        ./exprs/is_null_predicate_test.cpp
         ./exprs/jit_cache_test.cpp
         ./exprs/json_functions_test.cpp
         ./exprs/flat_json_functions_test.cpp
         ./exprs/lambda_array_expr_test.cpp
         ./exprs/lambda_map_expr_test.cpp
         ./exprs/like_test.cpp
-        ./exprs/map_element_expr_test.cpp
-        ./exprs/map_expr_test.cpp
-        ./exprs/map_functions_test.cpp
         ./exprs/math_functions_test.cpp
         ./exprs/null_if_expr_test.cpp
         ./exprs/percentile_functions_test.cpp
@@ -188,17 +176,11 @@ set(EXEC_FILES
         ./exprs/string_fn_trim_test.cpp
         ./exprs/string_fn_money_format_decimal_test.cpp
         ./exprs/string_fn_url_extract_parameter_test.cpp
-        ./exprs/struct_functions_test.cpp
         ./exprs/time_functions_test.cpp
-        ./exprs/es_functions_test.cpp
         ./exprs/utility_functions_test.cpp
         ./exprs/runtime_filter_test.cpp
-        ./exprs/subfield_expr_test.cpp
-        ./exprs/variant_path_parser_test.cpp
         ./exprs/variant_functions_test.cpp
-        ./exprs/vectorized_literal_test.cpp
         ./exprs/min_max_predicate_test.cpp
-        ./exprs/in_const_predicate_test.cpp
         ./exprs/table_function/test_list_rowsets.cpp
         ./exprs/dict_expr_test.cpp
         ./formats/csv/array_converter_test.cpp
@@ -340,7 +322,6 @@ set(EXEC_FILES
         ./util/system_metrics_test.cpp
         ./util/download_util_test.cpp
         ./util/stack_util_test.cpp
-        ./util/url_parser_test.cpp
         ./gutil/cpu_test.cc
         ./gutil/sysinfo-test.cc
         service/backend_base_test.cpp
@@ -372,6 +353,7 @@ add_subdirectory(common)
 add_subdirectory(column)
 add_subdirectory(types)
 add_subdirectory(runtime)
+add_subdirectory(exprs)
 add_subdirectory(io)
 
 add_library(starrocks_test_objs OBJECT ${EXEC_FILES})

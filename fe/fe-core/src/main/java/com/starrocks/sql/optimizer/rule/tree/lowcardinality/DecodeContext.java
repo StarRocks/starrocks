@@ -174,16 +174,16 @@ class DecodeContext {
             ColumnRefOperator stringRef = factory.getColumnRef(stringId);
             ColumnRefOperator dictRef = createNewDictColumn(stringRef);
             stringRefToDictRefMap.put(stringRef, dictRef);
-            stringExprToDictExprMap.put(stringRef, exprRewriter.decode(dictRef, stringRef, stringRef));
         }
 
-        // rewrite string column define expression
+        // rewrite dict column define and decode expressions
         for (Integer stringId : stringRefToDefineExprMap.keySet()) {
             ScalarOperator stringDefineExpr = stringRefToDefineExprMap.get(stringId);
             ColumnRefOperator stringRef = factory.getColumnRef(stringId);
             ColumnRefOperator dictRef = stringRefToDictRefMap.get(stringRef);
             ColumnRefOperator useStringRef = stringRef.getType().isStructType() ? stringRef
                     : getUseStringRef(stringDefineExpr);
+            stringExprToDictExprMap.put(stringRef, exprRewriter.decode(dictRef, stringRef, stringRef));
             // return type is dict
             ScalarOperator dictExpr = exprRewriter.define(dictRef.getType(), useStringRef, stringDefineExpr);
             dictRefToDefineExprMap.put(dictRef, dictExpr);

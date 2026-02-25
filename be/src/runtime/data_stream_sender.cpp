@@ -50,6 +50,8 @@
 #include "common/system/backend_options.h"
 #include "common/util/thrift_client.h"
 #include "exprs/expr.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/client_cache.h"
@@ -408,8 +410,8 @@ Status DataStreamSender::init(const TDataSink& tsink, RuntimeState* state) {
     const TDataStreamSink& t_stream_sink = tsink.stream_sink;
     if (_part_type == TPartitionType::HASH_PARTITIONED ||
         _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
-        RETURN_IF_ERROR(Expr::create_expr_trees(_pool, t_stream_sink.output_partition.partition_exprs,
-                                                &_partition_expr_ctxs, state));
+        RETURN_IF_ERROR(ExprFactory::create_expr_trees(_pool, t_stream_sink.output_partition.partition_exprs,
+                                                       &_partition_expr_ctxs, state));
     } else if (_part_type == TPartitionType::RANGE_PARTITIONED) {
         // NOTE: should never go here
         return Status::NotSupported("Range partition is not supported anymore.");
@@ -452,7 +454,7 @@ Status DataStreamSender::prepare(RuntimeState* state) {
 
     if (_part_type == TPartitionType::HASH_PARTITIONED ||
         _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
-        RETURN_IF_ERROR(Expr::prepare(_partition_expr_ctxs, state));
+        RETURN_IF_ERROR(ExprExecutor::prepare(_partition_expr_ctxs, state));
     }
 
     // Randomize the order we open/transmit to channels to avoid thundering herd problems.
@@ -498,7 +500,7 @@ DataStreamSender::~DataStreamSender() {
 Status DataStreamSender::open(RuntimeState* state) {
     // RETURN_IF_ERROR(DataSink::open(state));
     DCHECK(state != nullptr);
-    RETURN_IF_ERROR(Expr::open(_partition_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_partition_expr_ctxs, state));
     return Status::OK();
 }
 
@@ -629,7 +631,7 @@ Status DataStreamSender::close(RuntimeState* state, Status exec_status) {
     for (auto& _channel : _channels) {
         _channel->close_wait(state);
     }
-    Expr::close(_partition_expr_ctxs, state);
+    ExprExecutor::close(_partition_expr_ctxs, state);
 
     return _close_status;
 }

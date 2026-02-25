@@ -21,6 +21,7 @@
 #include "exec/tablet_info.h"
 #include "exec/tablet_sink.h"
 #include "runtime/descriptor_helper.h"
+#include "runtime/global_dict/fragment_dict_state.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks {
@@ -46,7 +47,10 @@ protected:
     std::unique_ptr<RuntimeState> _build_runtime_state(TQueryOptions& query_options) {
         TUniqueId fragment_id;
         TQueryGlobals query_globals;
-        return std::make_unique<RuntimeState>(fragment_id, query_options, query_globals, _exec_env);
+        auto runtime_state = std::make_unique<RuntimeState>(fragment_id, query_options, query_globals, _exec_env);
+        _fragment_dict_states.emplace_back(std::make_unique<FragmentDictState>());
+        runtime_state->set_fragment_dict_state(_fragment_dict_states.back().get());
+        return runtime_state;
     }
 
     TDescriptorTable _build_descriptor_table() {
@@ -139,6 +143,7 @@ protected:
 
     ExecEnv* _exec_env;
     std::unique_ptr<ObjectPool> _object_pool;
+    std::vector<std::unique_ptr<FragmentDictState>> _fragment_dict_states;
     TDescriptorTable _desc_tbl;
     TDataSink _data_sink;
 };

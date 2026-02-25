@@ -27,6 +27,7 @@ ADD_BE_LIB(ColumnCore
         german_string.cpp
         object_column.cpp
         variant_column.cpp
+        variant_converter.cpp
         fixed_length_column_base.cpp
         fixed_length_column.cpp
         binary_column.cpp
@@ -37,6 +38,7 @@ ADD_BE_LIB(ColumnCore
         adaptive_nullable_column.cpp
         column_helper.cpp
         type_traits.cpp
+        column_viewer.cpp
         column_view/column_view_base.cpp
         column_view/column_view_helper.cpp
         column_hash/column_hash.cpp
@@ -54,7 +56,6 @@ ADD_BE_LIB(Column
         chunk_slice.cpp
         column_helper_time.cpp
         append_with_mask.cpp
-        column_viewer.cpp
         datum_convert.cpp
         datum_tuple.cpp
         stream_chunk.cpp

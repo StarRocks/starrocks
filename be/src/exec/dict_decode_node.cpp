@@ -23,8 +23,11 @@
 #include "exec/pipeline/dict_decode_operator.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 #include "fmt/format.h"
 #include "glog/logging.h"
+#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -39,7 +42,7 @@ Status DictDecodeNode::init(const TPlanNode& tnode, RuntimeState* state) {
     std::vector<SlotId> slots;
     for (const auto& [slot_id, texpr] : tnode.decode_node.string_functions) {
         ExprContext* context;
-        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, texpr, &context, state));
+        RETURN_IF_ERROR(ExprFactory::create_expr_tree(_pool, texpr, &context, state));
         _string_functions[slot_id] = std::make_pair(context, DictOptimizeContext{});
         _expr_ctxs.push_back(context);
         slots.emplace_back(slot_id);
@@ -73,19 +76,21 @@ void DictDecodeNode::_init_counter() {
 Status DictDecodeNode::prepare(RuntimeState* state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(ExecNode::prepare(state));
-    RETURN_IF_ERROR(Expr::prepare(_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_expr_ctxs, state));
     return Status::OK();
 }
 
 Status DictDecodeNode::open(RuntimeState* state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(ExecNode::open(state));
-    RETURN_IF_ERROR(Expr::open(_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_expr_ctxs, state));
     RETURN_IF_CANCELLED(state);
     RETURN_IF_ERROR(_children[0]->open(state));
 
-    const auto& global_dict = state->get_query_global_dict_map();
-    auto* dict_optimize_parser = state->mutable_dict_optimize_parser();
+    auto* fragment_dict_state = state->fragment_dict_state();
+    DCHECK(fragment_dict_state != nullptr);
+    const auto& global_dict = fragment_dict_state->query_global_dicts();
+    auto* dict_optimize_parser = fragment_dict_state->mutable_dict_optimize_parser();
 
     for (auto& [slot_id, v] : _string_functions) {
         auto dict_iter = global_dict.find(slot_id);
@@ -177,7 +182,7 @@ void DictDecodeNode::close(RuntimeState* state) {
         return;
     }
     ExecNode::close(state);
-    Expr::close(_expr_ctxs, state);
+    ExprExecutor::close(_expr_ctxs, state);
 }
 
 pipeline::OpFactories DictDecodeNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {

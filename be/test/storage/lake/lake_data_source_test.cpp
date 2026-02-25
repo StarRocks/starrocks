@@ -265,6 +265,7 @@ TEST_F(LakeDataSourceTest, get_tablet_schema) {
     fe.port = 9020;
     fragment_ctx.set_fe_addr(fe);
     runtime_state->set_fragment_ctx(&fragment_ctx);
+    runtime_state->set_fragment_dict_state(fragment_ctx.dict_state());
 
     // Build a minimal descriptor table with required column names.
     TDescriptorTableBuilder desc_tbl_builder;

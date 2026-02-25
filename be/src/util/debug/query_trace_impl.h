@@ -24,11 +24,11 @@
 #include <unordered_set>
 
 #include "base/concurrency/spinlock.h"
+#include "base/hash/hash_std.hpp"
 #include "base/uid_util.h"
 #include "common/status.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "gen_cpp/Types_types.h"
-#include "util/hash_util.hpp"
 
 namespace starrocks::debug {
 

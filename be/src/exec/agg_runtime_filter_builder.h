@@ -25,9 +25,9 @@
 #include "column/type_traits.h"
 #include "common/status.h"
 #include "exec/chunks_sorter_heap_sort.h"
-#include "exprs/runtime_filter.h"
 #include "exprs/runtime_filter_bank.h"
 #include "runtime/mem_pool.h"
+#include "runtime/runtime_filter.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 

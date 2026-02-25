@@ -32,7 +32,6 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
-#include "runtime/global_variables.h"
 #include "runtime/jdbc_driver_manager.h"
 #include "service/daemon.h"
 #include "service/service.h"
@@ -107,11 +106,6 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     auto* global_env = GlobalEnv::GetInstance();
     EXIT_IF_ERROR(global_env->init());
     LOG(INFO) << process_name << " start step " << start_step++ << ": global env init successfully";
-
-    // make sure global variables are initialized
-    auto* global_vars = GlobalVariables::GetInstance();
-    CHECK(global_vars->is_init()) << "global variables not initialized";
-    LOG(INFO) << process_name << " start step " << start_step++ << ": global variables init successfully";
 
     // cache env should be initialized before init_storage_engine,
     // because apply task is triggered in init_storage_engine and needs cache env.

@@ -20,8 +20,12 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/runtime")
 set(RUNTIME_CORE_FILES
     current_thread.cpp
     descriptors.cpp
+    runtime_state.cpp
     mem_tracker.cpp
     mem_pool.cpp
+    runtime_filter.cpp
+    runtime_filter_layout.cpp
+    bucket_aware_partition.cpp
     starrocks_metrics.cpp
     memory/roaring_hook.cpp
     memory/system_allocator.cpp
@@ -55,13 +59,11 @@ set(RUNTIME_FILES
     multi_cast_data_stream_sink.cpp
     descriptors_ext.cpp
     exec_env.cpp
-    global_variables.cpp
     user_function_cache.cpp
     jdbc_driver_manager.cpp
     plan_fragment_executor.cpp
     result_sink.cpp
     result_buffer_mgr.cpp
-    runtime_state.cpp
     runtime_state_helper.cpp
     fragment_mgr.cpp
     load_path_mgr.cpp
@@ -105,7 +107,7 @@ set(RUNTIME_FILES
     tablets_channel.cpp
     runtime_filter_worker.cpp
     global_dict/decoder.cpp
-    global_dict/context.cpp
+    global_dict/fragment_dict_state.cpp
     global_dict/parser.cpp
     global_dict/miscs.cpp
     global_dict/types.cpp

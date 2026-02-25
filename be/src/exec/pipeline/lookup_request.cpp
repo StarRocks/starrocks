@@ -25,6 +25,8 @@
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
 #include "exec/sorting/sorting.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 #include "runtime/descriptors.h"
 #include "serde/column_array_serde.h"
 #include "storage/range.h"
@@ -530,11 +532,11 @@ StatusOr<ChunkPtr> IcebergV3LookUpTask::_get_data_from_storage(
         TExpr expr = create_row_id_filter_expr(_ctx->lookup_ref_slot_ids[1], *row_id_range);
 
         ExprContext* expr_ctx = nullptr;
-        RETURN_IF_ERROR(Expr::create_expr_tree(&obj_pool, expr, &expr_ctx, state, false));
+        RETURN_IF_ERROR(ExprFactory::create_expr_tree(&obj_pool, expr, &expr_ctx, state, false));
         std::vector<ExprContext*> conjunct_ctxs{expr_ctx};
 
-        RETURN_IF_ERROR(Expr::prepare(conjunct_ctxs, state));
-        RETURN_IF_ERROR(Expr::open(conjunct_ctxs, state));
+        RETURN_IF_ERROR(ExprExecutor::prepare(conjunct_ctxs, state));
+        RETURN_IF_ERROR(ExprExecutor::open(conjunct_ctxs, state));
 
         // Build HiveDataSource for this scan range
         auto glm_ctx = down_cast<pipeline::IcebergGlobalLateMaterilizationContext*>(
