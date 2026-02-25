@@ -6,7 +6,6 @@ Architecture: amd64
 Depends: bash, procps, libssl1.0.0 | libssl1.1 | libssl3, libibverbs1
 Conflicts: starrocks-cn
 Provides: starrocks-storage-node
-Replaces: starrocks-cn
 Maintainer: StarRocks Team <dev@starrocks.io>
 Description: StarRocks Backend (BE)
  StarRocks is a next-generation real-time analytical warehouse.
