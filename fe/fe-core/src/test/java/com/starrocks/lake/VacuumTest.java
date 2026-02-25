@@ -14,6 +14,8 @@
 
 package com.starrocks.lake;
 
+import com.starrocks.alter.MaterializedViewHandler;
+import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
 import com.starrocks.catalog.OlapTable;
@@ -31,6 +33,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.Warehouse;
@@ -38,6 +41,7 @@ import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
 import org.mockito.MockedStatic;
 
 import java.util.ArrayList;
@@ -199,5 +203,65 @@ public class VacuumTest {
         // disable
         Config.lake_autovacuum_detect_vaccumed_version = false;
         Assert.assertTrue(autovacuumDaemon.shouldVacuum(partition));
+    }
+
+    /**
+     * Test LakeTableHelper.computeMinActiveTxnId which is used by both AutovacuumDaemon and FullVacuumDaemon.
+     * This method computes the minimum active transaction ID across:
+     * 1. Database-level minimum active transaction ID
+     * 2. Schema change handler's active transaction ID
+     * 3. Rollup handler's active transaction ID
+     */
+    @Test
+    public void testLakeTableHelperComputeMinActiveTxnId() throws Exception {
+        long dbId = db.getId();
+        long tableId = olapTable.getId();
+        long minTxnId = 100L;
+        long schemaChangeTxnId = 150L;
+        long rollupTxnId = 200L;
+
+        GlobalTransactionMgr globalTransactionMgr = mock(GlobalTransactionMgr.class);
+        when(globalTransactionMgr.getMinActiveTxnIdOfDatabase(dbId)).thenReturn(minTxnId);
+
+        SchemaChangeHandler schemaChangeHandler = mock(SchemaChangeHandler.class);
+        when(schemaChangeHandler.getActiveTxnIdOfTable(tableId)).thenReturn(java.util.Optional.of(schemaChangeTxnId));
+
+        MaterializedViewHandler rollupHandler = mock(MaterializedViewHandler.class);
+        when(rollupHandler.getActiveTxnIdOfTable(tableId)).thenReturn(java.util.Optional.of(rollupTxnId));
+
+        GlobalStateMgr globalStateMgr = mock(GlobalStateMgr.class);
+        when(globalStateMgr.getGlobalTransactionMgr()).thenReturn(globalTransactionMgr);
+        when(globalStateMgr.getSchemaChangeHandler()).thenReturn(schemaChangeHandler);
+        when(globalStateMgr.getRollupHandler()).thenReturn(rollupHandler);
+
+        try (MockedStatic<GlobalStateMgr> mockGlobalStateMgr = mockStatic(GlobalStateMgr.class)) {
+            mockGlobalStateMgr.when(GlobalStateMgr::getCurrentState).thenReturn(globalStateMgr);
+
+            // Case 1: Database minTxnId is the smallest
+            long result = LakeTableHelper.computeMinActiveTxnId(dbId, tableId);
+            Assertions.assertEquals(minTxnId, result);
+
+            // Case 2: schemaChangeTxnId is the smallest
+            when(globalTransactionMgr.getMinActiveTxnIdOfDatabase(dbId)).thenReturn(300L);
+            result = LakeTableHelper.computeMinActiveTxnId(dbId, tableId);
+            Assertions.assertEquals(schemaChangeTxnId, result);
+
+            // Case 3: rollupTxnId is the smallest
+            when(schemaChangeHandler.getActiveTxnIdOfTable(tableId)).thenReturn(java.util.Optional.empty());
+            result = LakeTableHelper.computeMinActiveTxnId(dbId, tableId);
+            Assertions.assertEquals(rollupTxnId, result);
+
+            // Case 4: All handlers return empty, use database min txn
+            when(rollupHandler.getActiveTxnIdOfTable(tableId)).thenReturn(java.util.Optional.empty());
+            result = LakeTableHelper.computeMinActiveTxnId(dbId, tableId);
+            Assertions.assertEquals(300L, result);
+
+            // Case 5: rollupTxnId is smallest (verifies rollup handler is actually checked)
+            when(globalTransactionMgr.getMinActiveTxnIdOfDatabase(dbId)).thenReturn(500L);
+            when(schemaChangeHandler.getActiveTxnIdOfTable(tableId)).thenReturn(java.util.Optional.of(400L));
+            when(rollupHandler.getActiveTxnIdOfTable(tableId)).thenReturn(java.util.Optional.of(50L));
+            result = LakeTableHelper.computeMinActiveTxnId(dbId, tableId);
+            Assertions.assertEquals(50L, result);
+        }
     }
 }
