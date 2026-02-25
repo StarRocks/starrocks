@@ -664,14 +664,13 @@ public class MockIcebergMetadata implements ConnectorMetadata {
         lock.readLock().unlock();
     }
 
-    @Override
     public com.starrocks.catalog.Table getView(ConnectContext context, String dbName, String viewName) {
         // Return a mock IcebergView for testing
         if (dbName.equalsIgnoreCase("view_db") && viewName.equalsIgnoreCase("iceberg_view")) {
             List<Column> schema = Lists.newArrayList(
                     new Column("id", IntegerType.INT),
-                    new Column("data", VarcharType.createDefaultVarchar()),
-                    new Column("date", DateType.DEFAULT)
+                    new Column("data", VarcharType.VARCHAR),
+                    new Column("date", DateType.DATE)
             );
             return new IcebergView(1, MOCKED_ICEBERG_CATALOG_NAME, dbName, viewName, schema,
                     "SELECT id, data, date FROM t1", MOCKED_ICEBERG_CATALOG_NAME, dbName,
