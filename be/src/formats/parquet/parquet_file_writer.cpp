@@ -28,6 +28,7 @@
 #include <ostream>
 #include <utility>
 
+#include "base/failpoint/fail_point.h"
 #include "column/column_helper.h"
 #include "common/http/content_type.h"
 #include "common/util/debug_util.h"
@@ -39,7 +40,6 @@
 #include "formats/utils.h"
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
-#include "types/logical_type.h"
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks {
@@ -48,6 +48,8 @@ class ColumnHelper;
 } // namespace starrocks
 
 namespace starrocks::formats {
+
+DEFINE_FAIL_POINT(parquet_writer_close_failed);
 
 Status ParquetFileWriter::write(Chunk* chunk) {
     if (_rowgroup_writer == nullptr) {
@@ -66,7 +68,7 @@ Status ParquetFileWriter::write(Chunk* chunk) {
 }
 
 FileWriter::CommitResult ParquetFileWriter::commit() {
-    FileWriter::CommitResult result{
+    CommitResult result{
             .io_status = Status::OK(), .format = PARQUET, .location = _location, .rollback_action = _rollback_action};
     try {
         if (_writer != nullptr) {
@@ -75,6 +77,9 @@ FileWriter::CommitResult ParquetFileWriter::commit() {
     } catch (const ::parquet::ParquetStatusException& e) {
         result.io_status.update(Status::IOError(fmt::format("{}: {}", "close file error", e.what())));
     }
+
+    FAIL_POINT_TRIGGER_EXECUTE(parquet_writer_close_failed,
+                               { result.io_status.update(Status::IOError("writer close failed by fail point")); });
 
     if (auto status = _output_stream->Close(); !status.ok()) {
         result.io_status.update(Status::IOError(fmt::format("{}: {}", "close output stream error", status.message())));
