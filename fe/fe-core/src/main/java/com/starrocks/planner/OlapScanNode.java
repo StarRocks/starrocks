@@ -1581,16 +1581,12 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                         partitionId, olapTable.getName()));
             }
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-<<<<<<< HEAD
-                MaterializedIndex materializedIndex = physicalPartition.getIndex(index.indexId);
-=======
-                MaterializedIndex materializedIndex = physicalPartition.getLatestIndex(index.indexMetaId);
+                MaterializedIndex materializedIndex = physicalPartition.getIndex(index.indexMetaId);
                 if (materializedIndex == null) {
                     throw new RuntimeException(String.format("Materialized index with meta id %d " +
                                     "not found in partition %s (physical partition id: %d) of table %s. ",
                             index.indexMetaId, partition.getName(), physicalPartition.getId(), olapTable.getName()));
                 }
->>>>>>> 1edc29a32d ([BugFix] Fix mv tablet meta inconsistent between FE leader and follower (#69428))
                 for (long tabletId : materializedIndex.getTabletIdsInOrder()) {
                     tabletToPartitionMap.put(tabletId, physicalPartition.getId());
                 }
