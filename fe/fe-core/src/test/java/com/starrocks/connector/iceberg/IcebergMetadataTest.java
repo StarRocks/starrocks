@@ -132,6 +132,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
+import org.apache.iceberg.DataOperations;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.MetricsModes;
@@ -2146,6 +2147,56 @@ public class IcebergMetadataTest extends TableTestBase {
                 TvrTableSnapshot.of(TvrVersion.of(0)), tvrTableSnapshot);
         Assertions.assertNotNull(deltas);
         Assertions.assertTrue(deltas.isEmpty());
+    }
+
+    @Test
+    public void testListTableDeltaTraitsSkipReplaceSnapshot(@Mocked Snapshot appendSnapshot,
+                                                            @Mocked Snapshot replaceSnapshot) {
+        new Expectations() {
+            {
+                appendSnapshot.snapshotId();
+                result = 2L;
+                minTimes = 0;
+
+                appendSnapshot.operation();
+                result = DataOperations.APPEND;
+                minTimes = 0;
+
+                replaceSnapshot.snapshotId();
+                result = 1L;
+                minTimes = 0;
+
+                replaceSnapshot.operation();
+                result = DataOperations.REPLACE;
+                minTimes = 0;
+            }
+        };
+
+        new MockUp<org.apache.iceberg.util.SnapshotUtil>() {
+            @Mock
+            public Iterable<Snapshot> ancestorsBetween(long latestSnapshotId,
+                                                       long oldestSnapshotId,
+                                                       java.util.function.Function<Long, Snapshot> lookup) {
+                return Lists.newArrayList(appendSnapshot, replaceSnapshot);
+            }
+
+            @Mock
+            public Iterable<Snapshot> ancestorsBetween(long latestSnapshotId,
+                                                       Long oldestSnapshotId,
+                                                       java.util.function.Function<Long, Snapshot> lookup) {
+                return Lists.newArrayList(appendSnapshot, replaceSnapshot);
+            }
+        };
+
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, null,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "db_name",
+                "table_name", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+        List<TvrTableDeltaTrait> deltas = metadata.listTableDeltaTraits("db", icebergTable,
+                TvrTableSnapshot.of(TvrVersion.of(0)), TvrTableSnapshot.of(TvrVersion.of(2)));
+
+        Assertions.assertEquals(1, deltas.size());
+        Assertions.assertTrue(deltas.stream().allMatch(TvrTableDeltaTrait::isAppendOnly));
     }
 
     @Test
