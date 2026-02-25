@@ -645,8 +645,20 @@ public class GlobalTransactionMgr implements MemoryTrackable {
 
     public boolean canTxnFinished(TransactionState txn, Set<Long> errReplicas,
                                   Set<Long> unfinishedBackends) throws StarRocksException {
+        try {
+            return canTxnFinished(txn, errReplicas, unfinishedBackends, 0L);
+        } catch (LockTimeoutException exception) {
+            // Should not happen, since lockTimeoutMs=0
+            LOG.warn("canTxnFinished failed due to lock timeout, but lock timeout is set to 0, so just return false",
+                    exception);
+            return false;
+        }
+    }
+
+    public boolean canTxnFinished(TransactionState txn, Set<Long> errReplicas, Set<Long> unfinishedBackends,
+                                  long lockTimeoutMs) throws StarRocksException, LockTimeoutException {
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(txn.getDbId());
-        return dbTransactionMgr.canTxnFinished(txn, errReplicas, unfinishedBackends);
+        return dbTransactionMgr.canTxnFinished(txn, errReplicas, unfinishedBackends, lockTimeoutMs);
     }
 
     /**
