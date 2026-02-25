@@ -3455,16 +3455,5 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 是否动态：否
 - 描述: 从 INFO 日志文件读取并在 BE 调试 Web Server 的日志页面上显示的最大字节数。该处理器使用此值计算一个 seek 偏移量（显示最后 N 字节），以避免读取或提供非常大的日志文件。如果日志文件小于该值则显示整个文件。注意：在当前实现中，用于读取并服务 INFO 日志的代码被注释掉了，处理器会报告无法打开 INFO 日志文件，因此除非启用日志服务代码，否则此参数可能无效。
 - 引入版本: v3.2.0
-<<<<<<< HEAD
-=======
-
-### 已移除的参数
-
-##### enable_bit_unpack_simd
-
-- 状态：已移除
-- 描述：该参数已移除。Bit-unpack 的 SIMD 路径现在在编译期根据 AVX2/BMI2 自动选择，并在不支持时回退到默认实现。
-- 移除版本：-
 
 <EditionSpecificBEItem />
->>>>>>> 9b5229bd39 ([Doc] Add Edition-specific BE Config Items (#69435))
