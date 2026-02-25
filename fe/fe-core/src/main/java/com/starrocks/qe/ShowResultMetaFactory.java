@@ -37,6 +37,7 @@ import com.starrocks.sql.ast.AdminShowAutomatedSnapshotStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
+import com.starrocks.sql.ast.AdminShowTabletStatusStmt;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.DescStorageVolumeStmt;
 import com.starrocks.sql.ast.DescribeStmt;
@@ -393,6 +394,18 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
                 .addColumn(new Column("IsSetBadForce", TypeFactory.createVarcharType(30)))
                 .addColumn(new Column("State", TypeFactory.createVarcharType(30)))
                 .addColumn(new Column("Status", TypeFactory.createVarcharType(30)))
+                .build();
+    }
+
+    @Override
+    public ShowResultSetMetaData visitAdminShowTabletStatusStatement(AdminShowTabletStatusStmt statement, Void context) {
+        return ShowResultSetMetaData.builder()
+                .addColumn(new Column("TabletId", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("PartitionId", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("Version", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("Status", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("MissingDataFileCount", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("MissingDataFiles", TypeFactory.createVarcharType(65535)))
                 .build();
     }
 
