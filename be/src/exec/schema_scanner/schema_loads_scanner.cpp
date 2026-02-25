@@ -24,6 +24,7 @@
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
+
 namespace {
 bool _extract_literal_datetime_value(Expr* expr, std::string& result) {
     auto* literal = dynamic_cast<VectorizedLiteral*>(expr);
@@ -63,6 +64,10 @@ bool _try_parse_datetime_range_predicate(const SchemaScannerParam* param, Expr* 
         is_lower_bound = (op_type == TExprOpcode::LE || op_type == TExprOpcode::LT);
     } else {
         is_lower_bound = (op_type == TExprOpcode::GE || op_type == TExprOpcode::GT);
+    }
+
+    if (slot_child->node_type() != TExprNodeType::SLOT_REF) {
+        return false;
     }
 
     const SlotId slot_id = down_cast<const ColumnRef*>(slot_child)->slot_id();
@@ -160,6 +165,8 @@ Status SchemaLoadsScanner::start(RuntimeState* state) {
     TGetLoadsParams load_params;
     if (nullptr != _param->db) {
         load_params.__set_db(*(_param->db));
+    } else if (std::string db_name; _parse_expr_predicate("DB_NAME", db_name)) {
+        load_params.__set_db(db_name);
     }
 
     if (std::string table_name; _parse_expr_predicate("TABLE_NAME", table_name)) {

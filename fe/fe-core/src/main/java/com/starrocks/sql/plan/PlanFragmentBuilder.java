@@ -1808,7 +1808,6 @@ public class PlanFragmentBuilder {
                         switch (columnRefOperator.getName()) {
                             case "TABLE_SCHEMA":
                             case "DATABASE_NAME":
-                            case "DB_NAME":
                                 scanNode.setSchemaDb(constantOperator.getVarchar());
                                 break;
                             case "TABLE_NAME":
