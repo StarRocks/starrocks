@@ -6941,33 +6941,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: この項目が `true` に設定されている場合、システムは Lake テーブルが関連トランザクションの結合トランザクションログパスを使用することを許可します。共有データクラスターでのみ利用可能です。
 - Introduced in: v3.3.7, v3.4.0, v3.5.0
 
-##### `enable_iceberg_commit_queue`
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Iceberg テーブルのコミットキューを有効にして、同時コミット競合を回避するかどうか。Iceberg は、メタデータコミットに楽観的並行性制御 (OCC) を使用します。複数のスレッドが同じテーブルに同時にコミットすると、「Cannot commit: Base metadata location is not same as the current table metadata location」のようなエラーで競合が発生する可能性があります。有効にすると、各 Iceberg テーブルにはコミット操作用の単一スレッドエクゼキューターがあり、同じテーブルへのコミットがシリアル化され、OCC 競合が防止されます。異なるテーブルは同時にコミットでき、全体のスループットを維持します。これは信頼性を向上させるためのシステムレベルの最適化であり、デフォルトで有効にする必要があります。無効にすると、楽観的ロック競合により同時コミットが失敗する可能性があります。
-- Introduced in: v4.1.0
-
-##### `iceberg_commit_queue_timeout_seconds`
-
-- Default: 300
-- Type: Int
-- Unit: Seconds
-- Is mutable: Yes
-- Description: Iceberg コミット操作が完了するまでの待機タイムアウト (秒単位)。コミットキュー (`enable_iceberg_commit_queue=true`) を使用する場合、各コミット操作はこのタイムアウト内で完了する必要があります。コミットがこのタイムアウトよりも長くかかる場合、キャンセルされ、エラーが発生します。コミット時間に影響する要因には、コミットされるデータファイルの数、テーブルのメタデータサイズ、基盤となるストレージ (S3、HDFS など) のパフォーマンスが含まれます。
-- Introduced in: v4.1.0
-
-##### `iceberg_commit_queue_max_size`
-
-- Default: 1000
-- Type: Int
-- Unit: Count
-- Is mutable: No
-- Description: Iceberg テーブルごとの保留中のコミット操作の最大数。コミットキュー (`enable_iceberg_commit_queue=true`) を使用する場合、これは単一テーブルのキューに入れられるコミット操作の数を制限します。制限に達すると、追加のコミット操作は呼び出し元のスレッドで実行されます (容量が利用可能になるまでブロックします)。この設定は FE 起動時に読み取られ、新しく作成されたテーブルエクゼキューターに適用されます。有効にするには FE の再起動が必要です。同じテーブルへの同時コミットが多いと予想される場合は、この値を増やしてください。この値が低すぎると、高並行時に呼び出し元スレッドでコミットがブロックされる可能性があります。
-- Introduced in: v4.1.0
-
 ### その他
 
 ##### `agent_task_resend_wait_time_ms`
