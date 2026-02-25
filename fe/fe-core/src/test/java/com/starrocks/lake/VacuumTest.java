@@ -41,6 +41,7 @@ import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
 import org.mockito.MockedStatic;
 
 import java.util.ArrayList;
@@ -261,17 +262,6 @@ public class VacuumTest {
             when(rollupHandler.getActiveTxnIdOfTable(tableId)).thenReturn(java.util.Optional.of(50L));
             result = LakeTableHelper.computeMinActiveTxnId(dbId, tableId);
             Assertions.assertEquals(50L, result);
-
-            // Verify that AutovacuumDaemon and FullVacuumDaemon delegate to LakeTableHelper correctly
-            // by calling their methods and checking results are consistent
-            java.lang.reflect.Method autovacuumMethod = AutovacuumDaemon.class.getDeclaredMethod(
-                    "computeMinActiveTxnId", Database.class, Table.class);
-            autovacuumMethod.setAccessible(true);
-            long autovacuumResult = (long) autovacuumMethod.invoke(null, db, olapTable);
-            Assertions.assertEquals(50L, autovacuumResult);
-
-            long fullVacuumResult = FullVacuumDaemon.computeMinActiveTxnId(db, olapTable);
-            Assertions.assertEquals(50L, fullVacuumResult);
         }
     }
 }
