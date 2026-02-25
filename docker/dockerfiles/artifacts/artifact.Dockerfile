@@ -21,7 +21,7 @@ ARG BUILD_ROOT
 COPY . ${BUILD_ROOT}
 WORKDIR ${BUILD_ROOT}
 # clean and build Frontend and Spark Dpp application
-RUN --mount=type=cache,target=/root/.m2/ STARROCKS_VERSION=${RELEASE_VERSION} BUILD_TYPE=${BUILD_TYPE} MAVEN_OPTS=${MAVEN_OPTS} ./build.sh --fe --with-maven-batch-mode ON --clean --disable-license && mkdir -p output-nolicense && mv output/fe/lib/starrocks-fe.jar output-nolicense/starrocks-fe-nolicense.jar && rm -rf output/
+RUN --mount=type=cache,target=/root/.m2/ STARROCKS_VERSION=${RELEASE_VERSION} BUILD_TYPE=${BUILD_TYPE} MAVEN_OPTS=${MAVEN_OPTS} ./build.sh --fe --with-maven-batch-mode ON --clean --disable-license && mkdir -p output-nolicense && mv output/fe/lib/fe-core-*.jar output-nolicense/fe-core-*.jar && rm -rf output/
 RUN --mount=type=cache,target=/root/.m2/ STARROCKS_VERSION=${RELEASE_VERSION} BUILD_TYPE=${BUILD_TYPE} MAVEN_OPTS=${MAVEN_OPTS} ./build.sh --fe --with-maven-batch-mode ON --clean
 
 
