@@ -211,8 +211,13 @@ public final class MVIVMBasedRefreshProcessor extends BaseMVRefreshProcessor {
         if (CollectionUtils.isEmpty(tableDeltaTraits)) {
             logger.warn("No tvr delta traits found for base table: {}, db: {}", baseTableInfo.getTableName(),
                     baseTableInfo.getDbName());
-            throw new SemanticException("No tvr delta traits found for base table: %s.%s",
-                    baseTableInfo.getDbName(), baseTableInfo.getTableName());
+            if (refreshMode.isIncremental()) {
+                throw new SemanticException("No tvr delta traits found for base table: %s.%s",
+                        baseTableInfo.getDbName(), baseTableInfo.getTableName());
+            }
+            logger.info("No tvr delta traits found for base table: {}, db: {}, use max tvr delta: {}",
+                    baseTableInfo.getTableName(), baseTableInfo.getDbName(), maxTvrDelta);
+            return maxTvrDelta;
         }
         // check whether the last delta trait is equal to the max delta
         TvrTableDeltaTrait lastTvrDeltaTrait = tableDeltaTraits.get(tableDeltaTraits.size() - 1);
@@ -235,7 +240,8 @@ public final class MVIVMBasedRefreshProcessor extends BaseMVRefreshProcessor {
                 }
             }
         }
-        if (isGenerateNextTaskRun()) {
+        boolean hasNonAppendOnlyDelta = tableDeltaTraits.stream().anyMatch(deltaTrait -> !deltaTrait.isAppendOnly());
+        if (isGenerateNextTaskRun() && !hasNonAppendOnlyDelta) {
             return getBaseTableChangedDeltaAdaptive(baseTableInfo, tableDeltaTraits, maxTvrDelta);
         } else {
             logger.info("Base table: {}, db: {}, use the max tvr delta: {} for sync refresh",
@@ -284,9 +290,23 @@ public final class MVIVMBasedRefreshProcessor extends BaseMVRefreshProcessor {
         TvrVersionRange beforeTvrVersionRange = mvTvrVersionRangeMap.get(baseTableInfo);
         logger.info("Base table: {}, before tvr version range: {}, current tvr snapshot: {}",
                 baseTableInfo.getTableName(), beforeTvrVersionRange, currentTvrSnapshot);
-        if (beforeTvrVersionRange == null || !(beforeTvrVersionRange instanceof TvrTableSnapshot)) {
-            throw new SemanticException("Materialized view " + mv.getName()
-                    + " does not have a valid tvr version range for base table: " + baseTableInfo.getTableName());
+        if (beforeTvrVersionRange == null) {
+            logger.warn("Materialized view {} has null tvr version range for base table {}, reset to MIN->current",
+                    mv.getName(), baseTableInfo.getTableName());
+            return TvrTableDelta.of(TvrVersion.MIN, currentVersion);
+        }
+        if (!(beforeTvrVersionRange instanceof TvrTableSnapshot)) {
+            if (beforeTvrVersionRange.to().isMinOrMax()) {
+                logger.warn("Materialized view {} has invalid non-snapshot tvr version range {} for base table {}, " +
+                                "reset to MIN->current", mv.getName(), beforeTvrVersionRange,
+                        baseTableInfo.getTableName());
+                return TvrTableDelta.of(TvrVersion.MIN, currentVersion);
+            }
+            // Backward compatibility: recover legacy/non-snapshot range by pinning to its latest version.
+            TvrTableSnapshot recoveredSnapshot = TvrTableSnapshot.of(beforeTvrVersionRange.to());
+            beforeTvrVersionRange = recoveredSnapshot;
+            logger.warn("Materialized view {} recovered invalid tvr version range for base table {} to {}",
+                    mv.getName(), baseTableInfo.getTableName(), recoveredSnapshot);
         }
         TvrVersion beforeVersion = beforeTvrVersionRange.to;
         if (beforeVersion.equals(currentVersion)) {

@@ -20,6 +20,7 @@ import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.metric.IMaterializedViewMetricsEntity;
@@ -31,7 +32,6 @@ import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
 import com.starrocks.scheduler.mv.MVRefreshExecutor;
 import com.starrocks.scheduler.mv.MVRefreshParams;
 import com.starrocks.scheduler.mv.ivm.MVIVMBasedRefreshProcessor;
-import com.starrocks.scheduler.mv.ivm.TvrTableSnapshotInfo;
 import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.plan.ExecPlan;
@@ -104,22 +104,32 @@ public final class MVHybridBasedRefreshProcessor extends BaseMVRefreshProcessor 
         // and cannot generate multi-task-runs.
         pctProcessor.getMvRefreshParams().setCanGenerateNextTaskRun(false);
 
+        ProcessExecPlan processExecPlan = pctProcessor.getProcessExecPlan(taskRunContext);
+
+        MaterializedView.AsyncRefreshContext asyncRefreshContext = mv.getRefreshScheme().getAsyncRefreshContext();
+        tempMvTvrVersionRangeMap.clear();
+
         // try get the tvr version range map from ivm processor
         final Map<BaseTableInfo, TvrVersionRange> mvTvrVersionRangeMap =
-                mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableInfoTvrVersionRangeMap();
-        for (BaseTableSnapshotInfo snapshotInfo : snapshotBaseTables.values()) {
+                asyncRefreshContext.getBaseTableInfoTvrVersionRangeMap();
+        // Use PCT processor's snapshot set because it reflects the actual fallback run context.
+        for (BaseTableSnapshotInfo snapshotInfo : pctProcessor.getSnapshotBaseTables().values()) {
             TvrVersionRange changedVersionRange = ivmProcessor.getBaseTableChangedVersionRange(snapshotInfo,
                     mvTvrVersionRangeMap, this.currentRefreshMode);
             logger.info("Base table: {}, changed version range: {}",
                     snapshotInfo.getBaseTableInfo().getTableName(), changedVersionRange);
-            // collect changed version range
-            TvrTableSnapshotInfo tvrTableSnapshotInfo = new TvrTableSnapshotInfo(snapshotInfo.getBaseTableInfo(),
-                    snapshotInfo.getBaseTable());
-            tempMvTvrVersionRangeMap.put(snapshotInfo.getBaseTableInfo(), changedVersionRange);
-            // update the snapshot info with the changed version range
-            tvrTableSnapshotInfo.setTvrSnapshot(changedVersionRange);
+            // Persist snapshot watermark for fallback path to keep
+            // baseTableInfoTvrVersionRangeMap type-consistent with IVM reads.
+            tempMvTvrVersionRangeMap.put(snapshotInfo.getBaseTableInfo(), TvrTableSnapshot.of(changedVersionRange.to()));
         }
-        return pctProcessor.getProcessExecPlan(taskRunContext);
+        asyncRefreshContext.clearTempBaseTableInfoTvrDeltaMap();
+        asyncRefreshContext.getTempBaseTableInfoTvrDeltaMap().putAll(tempMvTvrVersionRangeMap);
+        if (processExecPlan.state() == Constants.TaskRunState.SKIPPED) {
+            // No meta update path is executed for SKIPPED runs, so clear temp map eagerly.
+            asyncRefreshContext.clearTempBaseTableInfoTvrDeltaMap();
+        }
+
+        return processExecPlan;
     }
 
     @VisibleForTesting
