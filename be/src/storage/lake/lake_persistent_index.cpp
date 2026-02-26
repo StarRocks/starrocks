@@ -818,10 +818,12 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
         ASSIGN_OR_RETURN(auto read_file,
                          fs::new_random_access_file(ropts, _tablet_mgr->del_location(_tablet_id, del.name())));
         ASSIGN_OR_RETURN(auto read_buffer, read_file->read_all());
+        const auto* data = reinterpret_cast<const uint8_t*>(read_buffer.data());
+        const auto* end = data + read_buffer.size();
         // serialize to column
         auto pkc = pk_column->clone();
         using Serd = serde::ColumnArraySerde;
-        RETURN_IF_ERROR(Serd::deserialize(reinterpret_cast<const uint8_t*>(read_buffer.data()), pkc.get()));
+        RETURN_IF_ERROR(Serd::deserialize(data, end, pkc.get()));
         // We can't insert delete operation to index directly, because some delete operation is
         // older than current item, and we need to igore these delete operations.
         std::vector<IndexValue> found_values(pkc->size(), IndexValue(NullIndexValue));

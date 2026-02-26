@@ -175,7 +175,8 @@ StatusOr<Chunk> ProtobufChunkSerde::deserialize(const RowDescriptor& row_desc, c
 }
 
 StatusOr<Chunk> deserialize_chunk_pb_with_schema(const Schema& schema, std::string_view buff) {
-    auto* cur = reinterpret_cast<const uint8_t*>(buff.data());
+    const auto* cur = reinterpret_cast<const uint8_t*>(buff.data());
+    const auto* end = cur + buff.size();
 
     uint32_t version = decode_fixed32_le(cur);
     if (version != 1) {
@@ -188,7 +189,7 @@ StatusOr<Chunk> deserialize_chunk_pb_with_schema(const Schema& schema, std::stri
 
     ASSIGN_OR_RETURN(auto chunk, ChunkHelper::new_chunk_checked(schema, rows));
     for (auto& column : chunk->columns()) {
-        ASSIGN_OR_RETURN(cur, ColumnArraySerde::deserialize(cur, column->as_mutable_raw_ptr()));
+        ASSIGN_OR_RETURN(cur, ColumnArraySerde::deserialize(cur, end, column->as_mutable_raw_ptr()));
     }
     return Chunk(std::move(*chunk));
 }
@@ -203,7 +204,8 @@ static SlotId get_slot_id_by_index(const Chunk::SlotHashMap& slot_id_to_index, i
 }
 
 StatusOr<Chunk> ProtobufChunkDeserializer::deserialize(std::string_view buff, int64_t* deserialized_bytes) {
-    auto* cur = reinterpret_cast<const uint8_t*>(buff.data());
+    const auto* cur = reinterpret_cast<const uint8_t*>(buff.data());
+    const auto* end = cur + buff.size();
 
     uint32_t version = decode_fixed32_le(cur);
     if (version != 1) {
@@ -222,13 +224,13 @@ StatusOr<Chunk> ProtobufChunkDeserializer::deserialize(std::string_view buff, in
 
     if (_encode_level.empty()) {
         for (auto& column : columns) {
-            ASSIGN_OR_RETURN(cur, ColumnArraySerde::deserialize(cur, column->as_mutable_raw_ptr()));
+            ASSIGN_OR_RETURN(cur, ColumnArraySerde::deserialize(cur, end, column->as_mutable_raw_ptr()));
         }
     } else {
         DCHECK(_encode_level.size() == columns.size());
         for (auto i = 0; i < columns.size(); ++i) {
-            ASSIGN_OR_RETURN(
-                    cur, ColumnArraySerde::deserialize(cur, columns[i]->as_mutable_raw_ptr(), false, _encode_level[i]));
+            ASSIGN_OR_RETURN(cur, ColumnArraySerde::deserialize(cur, end, columns[i]->as_mutable_raw_ptr(), false,
+                                                                _encode_level[i]));
         }
     }
 
@@ -254,7 +256,7 @@ StatusOr<Chunk> ProtobufChunkDeserializer::deserialize(std::string_view buff, in
                     ColumnHelper::create_column(extra_meta.type, extra_meta.is_null, extra_meta.is_const, rows);
         }
         for (auto& column : extra_columns) {
-            ASSIGN_OR_RETURN(cur, ColumnArraySerde::deserialize(cur, column->as_mutable_raw_ptr()));
+            ASSIGN_OR_RETURN(cur, ColumnArraySerde::deserialize(cur, end, column->as_mutable_raw_ptr()));
         }
         for (int i = 0; i < extra_columns.size(); ++i) {
             size_t col_num_rows = extra_columns[i]->size();
