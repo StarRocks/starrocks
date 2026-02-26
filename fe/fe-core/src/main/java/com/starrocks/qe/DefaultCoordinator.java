@@ -749,9 +749,6 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     private boolean isInternalCancelError(String errMsg) {
-        if (errMsg == null) {
-            return false;
-        }
         return errMsg.startsWith(FeConstants.LIMIT_REACH_ERROR) || errMsg.startsWith(FeConstants.QUERY_FINISHED_ERROR);
     }
 
