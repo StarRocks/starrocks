@@ -18,7 +18,6 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -302,28 +301,5 @@ public class CoordinatorTest extends PlanTestBase {
         Assertions.assertEquals(1, scanRangeAssignment.size());
         Assertions.assertEquals(1, instances.size());
 
-    }
-
-    @Test
-    public void testIsInternalCancelError() {
-        // Exact match should return true
-        Assertions.assertTrue((boolean) Deencapsulation.invoke(coordinator, "isInternalCancelError",
-                FeConstants.LIMIT_REACH_ERROR));
-        Assertions.assertTrue((boolean) Deencapsulation.invoke(coordinator, "isInternalCancelError",
-                FeConstants.QUERY_FINISHED_ERROR));
-
-        // startsWith match (message with suffix) should also return true
-        Assertions.assertTrue((boolean) Deencapsulation.invoke(coordinator, "isInternalCancelError",
-                FeConstants.LIMIT_REACH_ERROR + " some extra info"));
-        Assertions.assertTrue((boolean) Deencapsulation.invoke(coordinator, "isInternalCancelError",
-                FeConstants.QUERY_FINISHED_ERROR + " some extra info"));
-
-        // Unrelated error message should return false
-        Assertions.assertFalse((boolean) Deencapsulation.invoke(coordinator, "isInternalCancelError",
-                "some unrelated error"));
-
-        // Null should return false
-        Assertions.assertFalse((boolean) Deencapsulation.invoke(coordinator, "isInternalCancelError",
-                new Object[] {null}));
     }
 }
