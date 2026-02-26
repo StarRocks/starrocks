@@ -181,6 +181,7 @@ StatusOr<ChunkUniquePtr> ColumnarSerde::deserialize(SerdeContext& ctx, BlockRead
     serialize_buffer.resize(attachment_size);
 
     auto buf = reinterpret_cast<uint8_t*>(serialize_buffer.data());
+    const auto* end = buf + serialize_buffer.size();
     {
         auto st = reader->read_fully(buf, attachment_size);
         RETURN_IF(st.is_end_of_file(), Status::InternalError("not found enough data in block"));
@@ -195,7 +196,12 @@ StatusOr<ChunkUniquePtr> ColumnarSerde::deserialize(SerdeContext& ctx, BlockRead
     SCOPED_TIMER(_parent->metrics().deserialize_timer);
     for (size_t i = 0; i < columns.size(); i++) {
         ASSIGN_OR_RETURN(read_cursor,
+<<<<<<< HEAD
                          serde::ColumnArraySerde::deserialize(read_cursor, columns[i].get(), false, encode_levels[i]));
+=======
+                         serde::ColumnArraySerde::deserialize(read_cursor, end, columns[i]->as_mutable_raw_ptr(), false,
+                                                              encode_levels[i]));
+>>>>>>> 29c7511dfc ([Enhancement] Prevent crashes when deserialization mismatches occur (#69481))
     }
 
     TRACE_SPILL_LOG << "deserialize chunk from block: " << reader->debug_string()

@@ -518,13 +518,20 @@ Status MemLimitedChunkQueue::_load(Block* block) {
 
     // 2. deserialize data
     uint8_t* buf = reinterpret_cast<uint8_t*>(buffer.data());
+    const auto* end = buf + buffer.size();
     const uint8_t* read_cursor = buf;
     std::vector<ChunkPtr> chunks(flush_chunks);
     for (auto& chunk : chunks) {
         chunk = _chunk_builder->clone_empty();
         for (auto& column : chunk->columns()) {
+<<<<<<< HEAD
             ASSIGN_OR_RETURN(read_cursor, serde::ColumnArraySerde::deserialize(read_cursor, column.get(), false,
                                                                                _opts.encode_level));
+=======
+            ASSIGN_OR_RETURN(read_cursor,
+                             serde::ColumnArraySerde::deserialize(read_cursor, end, column->as_mutable_raw_ptr(), false,
+                                                                  _opts.encode_level));
+>>>>>>> 29c7511dfc ([Enhancement] Prevent crashes when deserialization mismatches occur (#69481))
         }
     }
     {

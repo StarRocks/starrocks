@@ -89,10 +89,18 @@ StatusOr<uint8_t*> ChunkExtraColumnsData::serialize(uint8_t* buff, bool sorted, 
     return buff;
 }
 
-StatusOr<const uint8_t*> ChunkExtraColumnsData::deserialize(const uint8_t* buff, bool sorted, const int encode_level) {
+StatusOr<const uint8_t*> ChunkExtraColumnsData::deserialize(const uint8_t* buff, const uint8_t* end, bool sorted,
+                                                            const int encode_level) {
     DCHECK_EQ(encode_level, 0);
     for (auto& column : _columns) {
+<<<<<<< HEAD
         ASSIGN_OR_RETURN(buff, serde::ColumnArraySerde::deserialize(buff, column.get(), sorted, encode_level));
+=======
+        auto mutable_col = column->as_mutable_ptr();
+        using Serd = serde::ColumnArraySerde;
+        ASSIGN_OR_RETURN(buff, Serd::deserialize(buff, end, mutable_col.get(), sorted, encode_level));
+        column = std::move(mutable_col);
+>>>>>>> 29c7511dfc ([Enhancement] Prevent crashes when deserialization mismatches occur (#69481))
     }
     return buff;
 }
