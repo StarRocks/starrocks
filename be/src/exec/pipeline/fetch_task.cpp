@@ -114,7 +114,7 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
                 const SlotDescriptor* slot_desc = ctx->processor->_slot_id_to_desc.at(slot_id);
                 auto column = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
                 const uint8_t* buff = reinterpret_cast<const uint8_t*>(buffer.data());
-                auto ret = serde::ColumnArraySerde::deserialize(buff, column.get());
+                auto ret = serde::ColumnArraySerde::deserialize(buff, buff + buffer.size(), column.get());
                 if (!ret.ok()) {
                     auto msg = fmt::format("deserialize column error, slot_id: {}", slot_id);
                     LOG(WARNING) << msg;

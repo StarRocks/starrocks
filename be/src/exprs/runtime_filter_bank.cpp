@@ -379,7 +379,8 @@ StatusOr<int> RuntimeFilterHelper::deserialize_runtime_filter_for_skew_broadcast
     auto columnPtr = ColumnHelper::create_column(type_descriptor, is_null, is_const, num_rows);
 
     const uint8_t* cur = data + offset;
-    ASSIGN_OR_RETURN(cur, serde::ColumnArraySerde::deserialize(cur, columnPtr.get()));
+    const uint8_t* end = data + size;
+    ASSIGN_OR_RETURN(cur, serde::ColumnArraySerde::deserialize(cur, end, columnPtr.get()));
     offset += (cur - (data + offset));
 
     DCHECK(offset == size);
