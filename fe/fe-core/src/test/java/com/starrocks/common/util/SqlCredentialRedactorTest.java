@@ -107,7 +107,7 @@ public class SqlCredentialRedactorTest {
                 "    \"path\" = \"abfs://container@adls1account.dfs.core.windows.net/path\",\n" +
                 "    \"format\" = \"parquet\",\n" +
                 "    \"azure.adls1.oauth2_client_id\" = \"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\",\n" +
-                "    \"azure.adls1.oauth2_client_secret\" = \"Adls1Secret456!\",\n" +
+                "    \"azure.adls1.oauth2_credential\" = \"Adls1Secret456!\",\n" +
                 "    \"azure.adls1.oauth2_client_endpoint\" = " +
                 "        \"https://login.microsoftonline.com/adls1-tenant/oauth2/token\"\n" +
                 ")";
@@ -116,7 +116,7 @@ public class SqlCredentialRedactorTest {
         Assertions.assertFalse(redacted.contains("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"),
                 "Azure ADLS1 OAuth2 client_id should be redacted");
         Assertions.assertFalse(redacted.contains("Adls1Secret456!"),
-                "Azure ADLS1 OAuth2 client_secret should be redacted");
+                "Azure ADLS1 OAuth2 credential should be redacted");
         Assertions.assertTrue(redacted.contains("oauth2_client_endpoint"),
                 "Azure ADLS1 oauth2_client_endpoint key should remain");
         Assertions.assertTrue(redacted.contains("https://login.microsoftonline.com"),
