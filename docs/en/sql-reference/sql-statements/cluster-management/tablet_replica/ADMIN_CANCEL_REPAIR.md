@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # ADMIN CANCEL REPAIR
 
-ADMIN CANCEL REPAIR is used to cancel repairing specified tables or partitions with high priority.
+Cancels the prioritized schedule of repairing operations on specified tables or partitions. This statement only indicates that the system will no longer repair sharding replicas of specified tables or partitions with high priority. It still repairs these copies by default scheduling.
+
+ADMIN CANCEL REPAIR applies only to native tables in shared-nothing clusters.
+
+For detailed instructions, see [Manage Replica](../../../../administration/management/resource_management/Replica.md).
 
 :::tip
 
@@ -18,13 +22,9 @@ This operation requires the SYSTEM-level OPERATE privilege. You can follow the i
 ADMIN CANCEL REPAIR TABLE table_name[ PARTITION (p1,...)]
 ```
 
-Note
->
-> This statement only indicates that the system will no longer repair sharding replicas of specified tables or partitions with high priority. It still repairs these copies by default scheduling.
-
 ## Examples
 
-1. Cancel high priority repair
+1. Cancel the high-priority repairing schedule for the partition `p1` in the native table `tbl1`.
 
     ```sql
     ADMIN CANCEL REPAIR TABLE tbl PARTITION(p1);

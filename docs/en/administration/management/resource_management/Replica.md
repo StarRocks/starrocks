@@ -5,11 +5,15 @@ sidebar_position: 70
 
 # Manage replica
 
-This topic describes how to manage data replicas in your StarRocks cluster.
+Manage data replicas in your StarRocks cluster.
 
-## Overview
+This topic includes two sections - [shared-nothing](#shared-nothing) and [shared-data](#shared-data).
 
-StarRocks adopts a multi-replica strategy to guarantee the high availability of data. When you create a table, you must specify the replica count of the table using the table property `replication_num` (Default value: `3`). When a loading transaction starts, data is simultaneously loaded into the specified number of replicas. The transaction is returned with success only after the data is stored in the majority of replicas. For detailed information, see [Write quorum](#write-quorum). Nonetheless, StarRocks allows you to specify a lower write quorum for a table to achieve better loading performance.
+## Shared-nothing
+
+### Overview
+
+For native tables in shared-nothing clusters, StarRocks adopts a multi-replica strategy to guarantee the high availability of data. When you create a table, you must specify the replica count of the table using the table property `replication_num` (Default value: `3`). When a loading transaction starts, data is simultaneously loaded into the specified number of replicas. The transaction is returned with success only after the data is stored in the majority of replicas. For detailed information, see [Write quorum](#write-quorum). Nonetheless, StarRocks allows you to specify a lower write quorum for a table to achieve better loading performance.
 
 StarRocks stores multiple replicas across different BE nodes. For example, if you want to store three replicas for a table, you must deploy at least three BE nodes in your StarRocks cluster. If any of the replicas fail, StarRocks clones a healthy replica, partially or wholly, from another BE node to repair the failed replica. By using the Multi-Version Concurrency Control (MVCC) technique, StarRocks accelerates the repairing of the replica by duplicating the physical copies of these multi-version data.
 
@@ -47,7 +51,7 @@ Loading data into a multi-replica table can be very time-consuming. If you want 
 - `ONE`: When one of the data replicas returns loading success, StarRocks returns loading task success. Otherwise, StarRocks returns loading task failed.
 - `ALL`: When all of the data replicas return loading success, StarRocks returns loading task success. Otherwise, StarRocks returns loading task failed.
 
-## Automatic replica repair
+### Automatic replica repair
 
 Replicas can fail because certain BE nodes crash or some loading tasks fail. StarRocks automatically repairs these failed replicas.
 
@@ -63,14 +67,14 @@ For each clone task, regardless of its type, the executor BE node duplicates the
 
 During tablet repair, StarRocks can still execute queries. StarRocks can load data into the table as long as the number of healthy replicas satisfies `write_quorum`.
 
-## Repair replica manually
+### Repair replica manually
 
 The manual replica repair consists of two steps:
 
 1. Check the replica status.
 2. Set the replica priority level.
 
-### Check replica status
+#### Check replica status
 
 Follow these steps to check the replica status of tablets to identify the unhealthy (failed) tablets.
 
@@ -234,7 +238,7 @@ Follow these steps to check the replica status of tablets to identify the unheal
 
    The returned results show all the replicas of the tablet.
 
-### Set replica priority level
+#### Set replica priority level
 
 Tablet Scheduler automatically assigns a different priority level to each different type of clone task.
 
@@ -258,13 +262,13 @@ ADMIN CANCEL REPAIR TABLE <table_name>
 [PARTITION (<partition_name_1>[, <partition_name_2>, ...])]
 ```
 
-## Replica balancing
+### Replica balancing
 
 StarRocks automatically balances the tablets across BE nodes.
 
 To move a tablet from a high-load node to a low-load node, StarRocks first creates a replica of the tablet in the low-load node, and then drops the corresponding replica on the high-load node. If different types of storage mediums are used in the cluster, StarRocks categorizes all the BE nodes in accordance with the storage medium types. StarRocks moves the tablet across the BE nodes of the same storage medium type whenever possible. Replicas of the same tablet are stored on different BE nodes.
 
-### BE load
+#### BE load
 
 StarRocks shows the load statistics of each BE node in the cluster using `ClusterLoadStatistics` (CLS). Tablet Scheduler triggers the replica balancing based on `ClusterLoadStatistics`. StarRocks evaluates the **disk utilization** and the **replica count** of each BE node and calculates a `loadScore` accordingly. The higher the `loadScore` of a BE node, the higher the load the node has. Tablet Scheduler updates `ClusterLoadStatistics` every one minute.
 
@@ -276,11 +280,11 @@ capacityCoefficient= 2 * Disk utilization - 0.5
 
 `capacityCoefficient` ensures that when the disk usage is exceedingly high, the `loadScore` of this BE node gets higher, forcing the system to reduce the load on this BE node at the earliest opportunity.
 
-### Balancing policy
+#### Balancing policy
 
 Each time Tablet Scheduler schedules tablets, it selects a certain number of healthy tablets as the candidate tablets to be balanced through Load Balancer. Next time when scheduling tablets, Tablet Scheduler balances these healthy tablets.
 
-### View System Balance Status
+#### View System Balance Status
 
 You can view the current overall balance status of the system and the details of different balance types.
 
@@ -391,7 +395,7 @@ You can view the current overall balance status of the system and the details of
 
   - `TABLET_BALANCED`: whether the tablet distribution is balanced.
 
-### Check tablet scheduling tasks
+#### Check tablet scheduling tasks
 
 You can check tablet scheduling tasks that are pending, running, and finished.
 
@@ -449,9 +453,124 @@ You can check tablet scheduling tasks that are pending, running, and finished.
 
   The returned results are identical to those of the pending tasks. If the `State` of the task is `FINISHED`, the task is completed successfully. If not, please check the `ErrMsg` field for the cause of the task failure.
 
-## Resource control
+### Resource control
 
 Because StarRocks repairs and balances tablets by cloning tablets from one BE node to another, the I/O load of a BE node can increase dramatically if the node executes such tasks too frequently in a short time. To avoid this situation, StarRocks sets a concurrency limit on clone tasks for each BE node. The minimum unit of resource control is a disk, which is a data storage path (`storage_root_path`) you have specified in the BE configuration file. By default, StarRocks allocates two slots for each disk to process tablet repair tasks. A clone task occupies one slot on the source BE node and one on the destination BE node. If all the slots on a BE node are occupied, StarRocks stops scheduling tasks to the node. You can increase the number of slots on a BE node by increasing the value of the FE dynamic parameter `tablet_sched_slot_num_per_path`.
 
 StarRocks allocates two slots specifically for tablet balancing tasks to avoid the situation that a high-load BE node fails to release the disk space by balancing tablets because tablet repair tasks constantly occupy the slots.
 
+## Shared-data
+
+From v4.1 onwards, StarRocks supports repairing the data replica of cloud-native tables in shared-data clusters.
+
+### Overview
+
+In a shared-data architecture, data is stored in single-replica mode on remote storage systems such as object storage or HDFS in order to reduce storage costs. Unlike traditional shared-nothing architectures, this design cannot rely on multiple replicas to automatically recover data when files are lost.
+
+As a result, if the effective metadata version maintained by FE references metadata or data files that no longer exist in remote storage, data ingestion and query operations will fail with "File not found" errors, potentially rendering the service unavailable.
+
+Such file loss may occur under the following circumstances:
+
+- **Accidental deletion**: Object storage files are mistakenly removed due to operational errors.
+- **Consistency issues**: In extreme cases, the storage system experiences delayed consistency or metadata loss.
+- **Software defects**: System bugs cause files to be cleaned up prematurely.
+
+Traditional snapshot-based restore mechanisms are often time-consuming and costly, making them unsuitable for fast recovery in production environments.
+
+To address this issue, StarRocks provides a low-cost, second-level recovery mechanism. By scanning historical metadata versions, the system identifies the most recent healthy version in which all required files are present, and rolls back the Tablet metadata to that version. This approach sacrifices a small amount of recent data in exchange for rapid restoration of table availability.
+
+#### Mechanism
+
+This feature is an extension of the ADMIN REPAIR TABLE statement for cloud-native tables in shared-data clusters.
+
+It operates through the following mechanisms:
+
+1. **Automated Detection**
+
+   The FE coordinates Compute Nodes (CNs) to probe historical Tablet metadata versions in reverse chronological order and in batches.
+
+2. **Deterministic Path Derivation**
+
+   Metadata file paths are derived deterministically, allowing direct probing without performing expensive and inefficient object storage List Objects operations.
+
+3. **Multi-Strategy Recovery Decisions**
+
+   Two recovery strategies are supported—Strict Consistency and Maximum Availability—to accommodate different business requirements.
+
+4. **Metadata Reset Capability**
+
+   When metadata is completely unavailable, the system can create empty Tablets (Empty Tablet Recovery) to prevent a small number of corrupted Tablets from blocking the availability of the entire table.
+
+#### Key Benefits
+
+- **Ultra-fast recovery**
+
+  Only metadata (KB/MB scale) is modified. No data movement is required, enabling second-level recovery even for PB-scale tables.
+
+- **Low operational cost**
+
+  No additional replicas or expensive object storage API calls are needed.
+
+### Usage
+
+#### Syntax
+
+Use the ADMIN REPAIR TABLE statement with PROPERTIES to control recovery behavior.
+
+```SQL
+ADMIN REPAIR TABLE <table_name>
+[PARTITION (<partition_name>, ...)]
+PROPERTIES (
+    'enforce_consistent_version' = 'true',
+    'allow_empty_tablet_recovery' = 'false'
+);
+```
+
+**Properties**
+
+| Property                    | Type    | Default | Description                                                                           |
+| --------------------------- | ------- | ------- | ------------------------------------------------------------------------------------- |
+| enforce_consistent_version  | Boolean | True    | Whether to enforce all tablets in a partition to roll back to a consistent version. If this item is set to `true`, the system will search for a consistent version in the history that is valid for all tablets to perform the rollback, ensuring data version alignment across the partition. If it is set to `false`, each tablet in the partition is allowed to rollback to its latest available valid version. The versions of different tablets may be inconsistent, but this maximizes data preservation. |
+| allow_empty_tablet_recovery | Boolean | False   | Whether to allow recovery by creating empty tablets. This item takes effect only when `enforce_consistent_version` is `false`. If this item is set to `true`, when metadata is missing for all versions of some tablets but valid metadata exists for at least one tablet, the system attempts to create empty tablets to fill the missing versions. If metadata for all versions of all tablets is lost, recovery is impossible. |
+
+### Examples
+
+#### Example 1: Strict Consistency Recovery (Recommended for Strong Consistency)
+
+Restore all Tablets in partition `p20250101` to the most recent uniform and complete version.
+
+```SQL
+ADMIN REPAIR TABLE my_cloud_table PARTITION (p20250101);
+```
+
+#### Example 2: Maximum Availability Recovery
+
+Restore each Tablet in partition p20250101 to its own most recent valid version, allowing version divergence.
+
+```SQL
+ADMIN REPAIR TABLE my_cloud_table PARTITION (p20250101)
+PROPERTIES (
+    'enforce_consistent_version' = 'false'
+);
+```
+
+#### Example 3: Allow Empty Tablet Recovery
+
+Allow Tablets with completely missing metadata to be recovered as empty Tablets.
+
+```SQL
+ADMIN REPAIR TABLE my_cloud_table PARTITION (p20250101)
+PROPERTIES (
+    'enforce_consistent_version' = 'false',
+    'allow_empty_tablet_recovery' = 'true'
+);
+```
+
+### Limitations and Recommendations
+
+- Repairing replicas is supported for shared-data clusters from v4.1 onwards.
+- Currently, setting `PROPERTIES` is applicable only to shared-data tables.
+- Take the following points into consideration when performing materialized view recovery:
+  - Asynchronous materialized views require a manual refresh after recovery.
+  - Synchronous materialized views must use Strict Consistency Recovery to ensure consistency between base tables and rollup data.
+- Recovery is best-effort. A small amount of data loss is expected, depending on the available historical versions and the selected recovery strategy.
