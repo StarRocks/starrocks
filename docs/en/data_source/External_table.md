@@ -658,16 +658,16 @@ Description:
 
     |  Column type of Hive   |  Column type of StarRocks   | Description |
     | --- | --- | ---|
-    |   INT/INTEGER  | INT    |
-    |   BIGINT  | BIGINT    |
+    |   INT/INTEGER  | INT    | |
+    |   BIGINT  | BIGINT    | |
     |   TIMESTAMP  | DATETIME    | Precision and time zone information will be lost when you convert TIMESTAMP data into DATETIME data. You need to convert TIMESTAMP data into DATETIME data that does not have the time zone offset based on the time zone in sessionVariable. |
-    |  STRING  | VARCHAR   |
-    |  VARCHAR  | VARCHAR   |
-    |  CHAR  | CHAR   |
-    |  DOUBLE | DOUBLE |
-    | FLOAT | FLOAT|
-    | DECIMAL | DECIMAL|
-    | ARRAY | ARRAY |
+    |  STRING  | VARCHAR   | |
+    |  VARCHAR  | VARCHAR   | |
+    |  CHAR  | CHAR   | |
+    |  DOUBLE | DOUBLE | |
+    | FLOAT | FLOAT| |
+    | DECIMAL | DECIMAL| |
+    | ARRAY | ARRAY | |
 
 > Note:
 >
