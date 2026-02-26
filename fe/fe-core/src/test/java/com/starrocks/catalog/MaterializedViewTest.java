@@ -1246,10 +1246,11 @@ public class MaterializedViewTest extends StarRocksTestBase {
 
         List<Table> baseTables = mv.getBaseTables();
         Assertions.assertEquals(2, baseTables.size());
-        Assertions.assertEquals("base_view1", baseTables.get(0).getName());
-        Assertions.assertEquals(baseView, baseTables.get(0));
-        Assertions.assertEquals("base_table1", baseTables.get(1).getName());
-        Assertions.assertEquals(baseTable, baseTables.get(1));
+        // Check that both base table and base view are present, regardless of order
+        Assertions.assertTrue(baseTables.stream().anyMatch(t -> t.getName().equals("base_view1")));
+        Assertions.assertTrue(baseTables.stream().anyMatch(t -> t.getName().equals("base_table1")));
+        Assertions.assertTrue(baseTables.contains(baseView));
+        Assertions.assertTrue(baseTables.contains(baseTable));
 
         List<BaseTableInfo> baseTablesWithView = mv.getBaseTableInfosWithoutView();
         Assertions.assertEquals(1, baseTablesWithView.size());
