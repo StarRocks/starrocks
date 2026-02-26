@@ -22,3 +22,7 @@ insert into t0 SELECT generate_series, generate_series FROM TABLE(generate_serie
 admin enable failpoint 'fragment_prepare_sleep';
 [UC] select count(*) from t0;
 admin disable failpoint 'fragment_prepare_sleep';
+
+CLEANUP {
+  admin disable failpoint 'fragment_prepare_sleep';
+} END CLEANUP
