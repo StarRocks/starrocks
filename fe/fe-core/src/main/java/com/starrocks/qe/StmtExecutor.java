@@ -897,8 +897,23 @@ public class StmtExecutor {
                 return;
             }
 
-            // execPlan is the output of planner
-            ExecPlan execPlan = generateExecPlan();
+            // Register as a planning query so it is visible in current_queries during optimization.
+            // The planning entry is removed before handleQueryStmt/handleDMLStmt re-registers
+            // with the real Coordinator, avoiding AlreadyExistsException from putIfAbsent.
+            ExecPlan execPlan;
+            context.setPlanning(true);
+            try {
+                QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(),
+                        QeProcessorImpl.QueryInfo.fromPlanningQuery(context, originStmt.originStmt));
+            } catch (Exception e) {
+                LOG.warn("Failed to register planning query: {}", DebugUtil.printId(context.getExecutionId()), e);
+            }
+            try {
+                execPlan = generateExecPlan();
+            } finally {
+                context.setPlanning(false);
+                QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
+            }
 
             // no need to execute http query dump request in BE
             if (context.isHTTPQueryDump) {
