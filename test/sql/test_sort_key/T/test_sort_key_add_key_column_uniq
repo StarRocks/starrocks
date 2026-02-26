@@ -1,4 +1,4 @@
--- name: test_unique_add_key_column_sort_key;
+-- name: test_sort_key_add_key_column_uniq @cloud
 create database test_uniq_add_key_sort_${uuid0};
 use test_uniq_add_key_sort_${uuid0};
 
