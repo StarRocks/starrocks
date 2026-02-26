@@ -695,6 +695,10 @@ public class TaskManager implements MemoryTrackable {
         }
 
         if (hasChanged) {
+            // Apply the task change before logging to ensure the new schedule is
+            // used when registering the scheduler. The change is idempotent and safe
+            // to apply immediately. The WAL callback ensures followers apply the same change.
+            changeTask(currentTask, changedType, changedTask.getSchedule());
             GlobalStateMgr.getCurrentState().getEditLog().logAlterTask(
                     new AlterTaskInfo(currentTask.getName(), changedType, changedTask.getSchedule()),
                     wal -> {
