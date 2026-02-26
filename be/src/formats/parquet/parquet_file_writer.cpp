@@ -50,6 +50,7 @@ class Chunk;
 namespace starrocks::formats {
 
 DEFINE_FAIL_POINT(parquet_writer_close_failed);
+DEFINE_FAIL_POINT(parquet_writer_throw_exception);
 
 Status ParquetFileWriter::write(Chunk* chunk) {
     if (_rowgroup_writer == nullptr) {
@@ -71,8 +72,18 @@ FileWriter::CommitResult ParquetFileWriter::commit() {
     CommitResult result{
             .io_status = Status::OK(), .format = PARQUET, .location = _location, .rollback_action = _rollback_action};
     try {
+<<<<<<< HEAD
         _writer->Close();
     } catch (const ::parquet::ParquetStatusException& e) {
+=======
+        if (_writer != nullptr) {
+            _writer->Close();
+        }
+        FAIL_POINT_TRIGGER_EXECUTE(parquet_writer_throw_exception, {
+            throw ::parquet::ParquetException("Parquet writer throws exception by fail point");
+        });
+    } catch (const std::exception& e) {
+>>>>>>> 6f979b0856 ([BugFix] Catch all exceptions of the ParquetFileWriter::close (#69492))
         result.io_status.update(Status::IOError(fmt::format("{}: {}", "close file error", e.what())));
     }
 
