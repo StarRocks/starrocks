@@ -1079,20 +1079,32 @@ public class TaskManagerEditLogTest {
         followerTask.setSchedule(schedule);
         followerTaskManager.replayCreateTask(followerTask);
 
-        Task followerTaskBeforeResume = followerTaskManager.getTask(taskName);
-        Assertions.assertNotNull(followerTaskBeforeResume);
-        Assertions.assertEquals(Constants.TaskState.PAUSE, followerTaskBeforeResume.getState());
+        // The follower task is created with PAUSE state to simulate the state after suspend.
+        // In the master, the sequence is: create (ACTIVE) -> suspend (PAUSE) -> resume (ACTIVE).
+        // So there are two OP_ALTER_TASK journals to replay: suspend and resume.
+        Task followerTaskBeforeReplay = followerTaskManager.getTask(taskName);
+        Assertions.assertNotNull(followerTaskBeforeReplay);
+        Assertions.assertEquals(Constants.TaskState.PAUSE, followerTaskBeforeReplay.getState());
 
-        // Replay the resume operation
-        AlterTaskInfo alterTaskInfo = (AlterTaskInfo) UtFrameUtils
-                .PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_TASK);
-
-        followerTaskManager.replayAlterTask(alterTaskInfo);
-
-        // 5. Verify follower state is consistent with master
-        Task followerResumedTask = followerTaskManager.getTask(taskName);
-        Assertions.assertNotNull(followerResumedTask);
-        Assertions.assertEquals(Constants.TaskState.ACTIVE, followerResumedTask.getState());
+        // Replay both alter journals: first suspend, then resume
+        // 1. Replay the suspend operation (changes state from ACTIVE to PAUSE)
+        {
+            AlterTaskInfo alterTaskInfo = (AlterTaskInfo) UtFrameUtils
+                    .PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_TASK);
+            followerTaskManager.replayAlterTask(alterTaskInfo);
+            Task followerSuspendedTask = followerTaskManager.getTask(taskName);
+            Assertions.assertNotNull(followerSuspendedTask);
+            Assertions.assertEquals(Constants.TaskState.PAUSE, followerSuspendedTask.getState());
+        }
+        // 2. Replay the resume operation (changes state from PAUSE to ACTIVE)
+        {
+            AlterTaskInfo alterTaskInfo = (AlterTaskInfo) UtFrameUtils
+                    .PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_TASK);
+            followerTaskManager.replayAlterTask(alterTaskInfo);
+            Task followerResumedTask = followerTaskManager.getTask(taskName);
+            Assertions.assertNotNull(followerResumedTask);
+            Assertions.assertEquals(Constants.TaskState.ACTIVE, followerResumedTask.getState());
+        }
     }
 
     @Test
