@@ -33,6 +33,8 @@
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
@@ -66,7 +68,7 @@ Status ProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
     for (auto const& [key, val] : tnode.project_node.slot_map) {
         _slot_ids.emplace_back(key);
         ExprContext* context;
-        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, val, &context, state, true));
+        RETURN_IF_ERROR(ExprFactory::create_expr_tree(_pool, val, &context, state, true));
         _expr_ctxs.emplace_back(context);
         _type_is_nullable.emplace_back(slot_null_mapping[key]);
     }
@@ -77,7 +79,7 @@ Status ProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
     for (auto const& [key, val] : tnode.project_node.common_slot_map) {
         ExprContext* context;
-        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, val, &context, state, true));
+        RETURN_IF_ERROR(ExprFactory::create_expr_tree(_pool, val, &context, state, true));
         _common_sub_slot_ids.emplace_back(key);
         _common_sub_expr_ctxs.emplace_back(context);
     }
@@ -89,8 +91,8 @@ Status ProjectNode::prepare(RuntimeState* state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(ExecNode::prepare(state));
 
-    RETURN_IF_ERROR(Expr::prepare(_expr_ctxs, state));
-    RETURN_IF_ERROR(Expr::prepare(_common_sub_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_common_sub_expr_ctxs, state));
 
     _expr_compute_timer = ADD_TIMER(runtime_profile(), "ExprComputeTime");
     _common_sub_expr_compute_timer = ADD_TIMER(runtime_profile(), "CommonSubExprComputeTime");
@@ -107,8 +109,8 @@ Status ProjectNode::open(RuntimeState* state) {
     DictOptimizeParser::set_output_slot_id(&_common_sub_expr_ctxs, _common_sub_slot_ids);
     DictOptimizeParser::set_output_slot_id(&_expr_ctxs, _slot_ids);
 
-    RETURN_IF_ERROR(Expr::open(_common_sub_expr_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_common_sub_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_expr_ctxs, state));
     return Status::OK();
 }
 
@@ -191,8 +193,8 @@ void ProjectNode::close(RuntimeState* state) {
         return;
     }
 
-    Expr::close(_expr_ctxs, state);
-    Expr::close(_common_sub_expr_ctxs, state);
+    ExprExecutor::close(_expr_ctxs, state);
+    ExprExecutor::close(_common_sub_expr_ctxs, state);
 
     ExecNode::close(state);
 }

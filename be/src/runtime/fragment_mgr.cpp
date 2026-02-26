@@ -43,8 +43,15 @@
 
 #include "agent/master_info.h"
 #include "base/concurrency/stopwatch.hpp"
+#include "base/network/network_util.h"
+#include "base/uid_util.h"
 #include "base/url_coding.h"
 #include "common/object_pool.h"
+#include "common/system/backend_options.h"
+#include "common/thread/thread.h"
+#include "common/thread/threadpool.h"
+#include "common/util/misc.h"
+#include "common/util/thrift_util.h"
 #include "exec/pipeline/fragment_executor.h"
 #include "gen_cpp/DataSinks_types.h"
 #include "gen_cpp/FrontendService.h"
@@ -55,20 +62,16 @@
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
+#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/plan_fragment_executor.h"
 #include "runtime/profile_report_worker.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_filter_worker.h"
-#include "service/backend_options.h"
+#include "runtime/runtime_state_helper.h"
+#include "runtime/starrocks_metrics.h"
 #include "types/datetime_value.h"
-#include "util/misc.h"
-#include "util/network_util.h"
-#include "util/starrocks_metrics.h"
-#include "util/thread.h"
-#include "util/threadpool.h"
+#include "util/global_metrics_registry.h"
 #include "util/thrift_rpc_helper.h"
-#include "util/thrift_util.h"
-#include "util/uid_util.h"
 
 namespace starrocks {
 
@@ -142,6 +145,7 @@ public:
     std::shared_ptr<RuntimeState> runtime_state() { return _runtime_state; }
 
 private:
+    std::unique_ptr<FragmentDictState> _fragment_dict_state;
     void coordinator_callback(const Status& status, RuntimeProfile* profile, RuntimeProfile* load_channel_profile,
                               bool done);
 
@@ -167,7 +171,8 @@ private:
 
 FragmentExecState::FragmentExecState(const TUniqueId& query_id, const TUniqueId& fragment_instance_id, int backend_num,
                                      ExecEnv* exec_env, const TNetworkAddress& coord_addr)
-        : _query_id(query_id),
+        : _fragment_dict_state(std::make_unique<FragmentDictState>()),
+          _query_id(query_id),
           _fragment_instance_id(fragment_instance_id),
           _backend_num(backend_num),
           _exec_env(exec_env),
@@ -178,16 +183,22 @@ FragmentExecState::FragmentExecState(const TUniqueId& query_id, const TUniqueId&
     _start_time = DateTimeValue::local_time();
 }
 
-FragmentExecState::~FragmentExecState() = default;
+FragmentExecState::~FragmentExecState() {
+    if (_fragment_dict_state != nullptr && _runtime_state != nullptr) {
+        _fragment_dict_state->close(_runtime_state.get());
+    }
+}
 
 Status FragmentExecState::prepare(const TExecPlanFragmentParams& params) {
     _runtime_state = std::make_shared<RuntimeState>(params.params.query_id, params.params.fragment_instance_id,
                                                     params.query_options, params.query_globals, _exec_env);
+    _runtime_state->set_fragment_dict_state(_fragment_dict_state.get());
     int func_version = params.__isset.func_version ? params.func_version
                                                    : TFunctionVersion::type::RUNTIME_FILTER_SERIALIZE_VERSION_2;
     _runtime_state->set_func_version(func_version);
-    _runtime_state->init_mem_trackers(_query_id);
+    _runtime_state->init_mem_trackers(_query_id, _exec_env->query_pool_mem_tracker());
     _executor.set_runtime_state(_runtime_state.get());
+    RuntimeStateHelper::init_runtime_filter_port(_runtime_state.get());
 
     if (params.__isset.query_options) {
         _timeout_second = params.query_options.query_timeout;
@@ -251,11 +262,11 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
     DCHECK(runtime_state != nullptr);
     if (runtime_state->query_options().query_type == TQueryType::LOAD && !done && status.ok()) {
         // this is a load plan, and load is not finished, just make a brief report
-        runtime_state->update_report_load_status(&params);
+        RuntimeStateHelper::update_report_load_status(runtime_state, &params);
         params.__set_load_type(runtime_state->query_options().load_job_type);
     } else {
         if (runtime_state->query_options().query_type == TQueryType::LOAD) {
-            runtime_state->update_report_load_status(&params);
+            RuntimeStateHelper::update_report_load_status(runtime_state, &params);
             params.__set_load_type(runtime_state->query_options().load_job_type);
         }
         profile->to_thrift(&params.profile);
@@ -639,7 +650,7 @@ void FragmentMgr::report_fragments_with_same_host(
                 RuntimeState* runtime_state = executor->runtime_state();
                 DCHECK(runtime_state != nullptr);
                 if (runtime_state->query_options().query_type == TQueryType::LOAD) {
-                    runtime_state->update_report_load_status(&params);
+                    RuntimeStateHelper::update_report_load_status(runtime_state, &params);
                     params.__set_load_type(runtime_state->query_options().load_job_type);
                 }
 
@@ -704,7 +715,7 @@ void FragmentMgr::report_fragments(const std::vector<TUniqueId>& non_pipeline_ne
             RuntimeState* runtime_state = executor->runtime_state();
             DCHECK(runtime_state != nullptr);
             if (runtime_state->query_options().query_type == TQueryType::LOAD) {
-                runtime_state->update_report_load_status(&params);
+                RuntimeStateHelper::update_report_load_status(runtime_state, &params);
                 params.__set_load_type(runtime_state->query_options().load_job_type);
             }
 

@@ -23,6 +23,40 @@ displayed_sidebar: docs
 
 :::
 
+## 4.0.6
+
+Release Date: February 14, 2026
+
+### Improvements
+
+- Support Partition Transforms with parentheses when creating Iceberg tables (for example, `PARTITION BY (bucket(k1, 3))`). [#68945](https://github.com/StarRocks/starrocks/pull/68945)
+- Removed the restriction that partition columns in Iceberg tables must be at the end of the column list; they can now be defined at any position. [#68340](https://github.com/StarRocks/starrocks/pull/68340)
+- Introduced host-level sorting for Iceberg table sink, controlled by the system variable `connector_sink_sort_scope` (Default: FILE), to organize data layout for better read performance. [#68121](https://github.com/StarRocks/starrocks/pull/68121)
+- Improved error messages for Iceberg partition transform functions (for example, `bucket`, `truncate`) when the argument count is incorrect. [#68349](https://github.com/StarRocks/starrocks/pull/68349)
+- Refactored table property handling to improve support for different file formats (ORC/Parquet) and compression codecs in Iceberg tables. [#68588](https://github.com/StarRocks/starrocks/pull/68588)
+- Added table-level query timeout configuration `table_query_timeout` for fine-grained control (Priority: Session &gt; Table &gt; Cluster). [#67547](https://github.com/StarRocks/starrocks/pull/67547)
+- Supports the `ADMIN SHOW AUTOMATED CLUSTER SNAPSHOT` statement to view automated snapshot status and schedule. [#68455](https://github.com/StarRocks/starrocks/pull/68455)
+- Supports displaying the original user-defined SQL with comments in `SHOW CREATE VIEW`. [#68040](https://github.com/StarRocks/starrocks/pull/68040)
+- Exposed Merge Commit-enabled Stream Load tasks in `information_schema.loads` for better observability. [#67879](https://github.com/StarRocks/starrocks/pull/67879)
+- Introduced FE memory estimation utility API `/api/memory_usage`. [#68287](https://github.com/StarRocks/starrocks/pull/68287)
+- Reduced unnecessary logging in `CatalogRecycleBin` during partition recycling. [#68533](https://github.com/StarRocks/starrocks/pull/68533)
+- Triggered refresh of related asynchronous materialized views when the base table undergoes Swap/Drop/Replace Partition operations. [#68430](https://github.com/StarRocks/starrocks/pull/68430)
+- Supports `VARBINARY` type for `count distinct`-like aggregate functions. [#68442](https://github.com/StarRocks/starrocks/pull/68442)
+- Enhanced expression statistics to propagate histogram MCV for semantics-safe expressions (for example, `cast(k as bigint) + 10`) to improve skew detection. [#68292](https://github.com/StarRocks/starrocks/pull/68292)
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- Potential crashes in Skew Join V2 runtime filters. [#67611](https://github.com/StarRocks/starrocks/pull/67611)
+- Join predicate type mismatch (for example, INT = VARCHAR) caused by low-cardinality rewriting. [#68568](https://github.com/StarRocks/starrocks/pull/68568)
+- Issues in query queue allocation time and pending timeout logic. [#65802](https://github.com/StarRocks/starrocks/pull/65802)
+- `unique_id` conflict for Flat JSON extended columns after schema changes. [#68279](https://github.com/StarRocks/starrocks/pull/68279)
+- Concurrent partition access issues in `OlapTableSink.complete()`. [#68853](https://github.com/StarRocks/starrocks/pull/68853)
+- Incorrect metadata tracking when restoring manually downloaded cluster snapshots. [#68368](https://github.com/StarRocks/starrocks/pull/68368)
+- Double slashes in backup paths when the repository location ends with `/`. [#68764](https://github.com/StarRocks/starrocks/pull/68764)
+- OBS AK/SK credentials in the `SHOW CREATE CATALOG` output were not masked. [#65462](https://github.com/StarRocks/starrocks/pull/65462)
+
 ## 4.0.5
 
 Release Date: February 3, 2026

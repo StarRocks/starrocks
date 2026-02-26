@@ -23,6 +23,40 @@ displayed_sidebar: docs
 
 :::
 
+## 4.0.6
+
+发布日期：2026 年 2 月 14 日
+
+### 功能优化
+
+- 创建 Iceberg 表时支持使用带括号的分区转换（例如，`PARTITION BY (bucket(k1, 3))`）。[#68945](https://github.com/StarRocks/starrocks/pull/68945)
+- 移除了 Iceberg 表中分区列必须位于列列表末尾的限制，现在可以在任意位置定义。[#68340](https://github.com/StarRocks/starrocks/pull/68340)
+- 为 Iceberg 表的 Sink 引入主机级排序功能，通过系统变量 `connector_sink_sort_scope` 控制（默认值：FILE），以优化数据布局并提升读取性能。[#68121](https://github.com/StarRocks/starrocks/pull/68121)
+- 改进了 Iceberg 分区转换函数（例如 `bucket`、`truncate`）在参数数量错误时的错误提示信息。[#68349](https://github.com/StarRocks/starrocks/pull/68349)
+- 重构了表属性处理逻辑，以增强对 Iceberg 表不同文件格式（ORC/Parquet）和压缩编码的支持。[#68588](https://github.com/StarRocks/starrocks/pull/68588)
+- 新增表级查询超时配置 `table_query_timeout`，支持更细粒度的控制（优先级：Session &gt; Table &gt; Cluster）。[#67547](https://github.com/StarRocks/starrocks/pull/67547)
+- 支持使用 `ADMIN SHOW AUTOMATED CLUSTER SNAPSHOT` 语句查看自动快照的状态和调度信息。[#68455](https://github.com/StarRocks/starrocks/pull/68455)
+- 在 `SHOW CREATE VIEW` 中支持显示包含注释的原始用户自定义 SQL。[#68040](https://github.com/StarRocks/starrocks/pull/68040)
+- 在 `information_schema.loads` 中暴露启用 Merge Commit 的 Stream Load 任务，以增强可观测性。[#67879](https://github.com/StarRocks/starrocks/pull/67879)
+- 新增 FE 内存评估工具 API `/api/memory_usage`。[#68287](https://github.com/StarRocks/starrocks/pull/68287)
+- 减少了 `CatalogRecycleBin` 在分区回收过程中的不必要日志输出。[#68533](https://github.com/StarRocks/starrocks/pull/68533)
+- 当基表执行 Swap/Drop/Replace Partition 操作时，触发相关异步物化视图的刷新。[#68430](https://github.com/StarRocks/starrocks/pull/68430)
+- `count distinct` 类聚合函数支持 `VARBINARY` 类型。[#68442](https://github.com/StarRocks/starrocks/pull/68442)
+- 增强表达式统计信息，对语义安全表达式（例如 `cast(k as bigint) + 10`）传播直方图 MCV 信息，以提升数据倾斜检测能力。[#68292](https://github.com/StarRocks/starrocks/pull/68292)
+
+### 问题修复
+
+修复了以下问题：
+
+- Skew Join V2 Runtime Filter 可能导致的崩溃问题。[#67611](https://github.com/StarRocks/starrocks/pull/67611)
+- 低基数重写导致的 Join 谓词类型不匹配问题（例如 INT = VARCHAR）。[#68568](https://github.com/StarRocks/starrocks/pull/68568)
+- 查询队列分配时间和等待超时逻辑相关问题。[#65802](https://github.com/StarRocks/starrocks/pull/65802)
+- Schema Change 后 Flat JSON 扩展列的 `unique_id` 冲突问题。[#68279](https://github.com/StarRocks/starrocks/pull/68279)
+- `OlapTableSink.complete()` 中的分区并发访问问题。[#68853](https://github.com/StarRocks/starrocks/pull/68853)
+- 手动下载的集群快照恢复时元数据跟踪不正确的问题。[#68368](https://github.com/StarRocks/starrocks/pull/68368)
+- 当仓库路径以 `/` 结尾时，备份路径中出现双斜杠的问题。[#68764](https://github.com/StarRocks/starrocks/pull/68764)
+- `SHOW CREATE CATALOG` 输出中的 OBS AK/SK 凭证未进行脱敏处理的问题。[#65462](https://github.com/StarRocks/starrocks/pull/65462)
+
 ## 4.0.5
 
 发布日期：2026 年 2 月 3 日

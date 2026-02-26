@@ -36,11 +36,13 @@
 #include "base/phmap/phmap.h"
 #include "column/column_helper.h"
 #include "column/json_column.h"
+#include "column/json_converter.h"
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
 #include "common/config.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/cast_expr.h"
@@ -52,8 +54,6 @@
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
 #include "util/bloom_filter.h"
-#include "util/json_converter.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 

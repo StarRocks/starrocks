@@ -14,13 +14,13 @@
 
 #include "exec/hdfs_scanner/hdfs_scanner_parquet.h"
 
+#include "common/runtime_profile.h"
 #include "connector/deletion_vector/deletion_vector.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exec/iceberg/iceberg_delete_builder.h"
 #include "exec/paimon/paimon_delete_file_builder.h"
 #include "exec/pipeline/fragment_context.h"
 #include "formats/parquet/file_reader.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 

@@ -19,6 +19,7 @@
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/assert.h"
 #include "column/datum_convert.h"
+#include "exprs/expr_factory.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gtest/gtest.h"
@@ -714,8 +715,8 @@ TEST_F(SchemaChangeTest, schema_change_with_materialized_column_old_style) {
 
     ExprContext* ctx = nullptr;
 
-    Status st =
-            Expr::create_expr_tree(chunk_changer.get_object_pool(), t_expr, &ctx, chunk_changer.get_runtime_state());
+    Status st = ExprFactory::create_expr_tree(chunk_changer.get_object_pool(), t_expr, &ctx,
+                                              chunk_changer.get_runtime_state());
     DCHECK(st.ok()) << st.message();
     st = ctx->prepare(chunk_changer.get_runtime_state());
     DCHECK(st.ok()) << st.message();

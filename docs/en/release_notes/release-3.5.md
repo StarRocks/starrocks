@@ -26,6 +26,41 @@ displayed_sidebar: docs
 
 :::
 
+## 3.5.13
+
+Release Date: February 13, 2026
+
+### Improvements
+
+- Added an FE configuration `enable_table_metrics_collect` to control the collection of table-level metrics. [#68691](https://github.com/StarRocks/starrocks/pull/68691)
+- Supports setting the default Warehouse for Merge Commit at user level. [#68616](https://github.com/StarRocks/starrocks/pull/68616)
+
+### Bug fixes
+
+The following issues have been fixed:
+
+- Issue with source partition checking in replication transactions. [#68883](https://github.com/StarRocks/starrocks/pull/68883)
+- Used labels were not identified when labels were specified in BEGIN TRANSACTION. [#68660](https://github.com/StarRocks/starrocks/pull/68660)
+- JOIN ON clause bug with CTE scope. [#68809](https://github.com/StarRocks/starrocks/pull/68809)
+- Overlapping range partitions can be created when an explicit lower bound is provided. [#68255](https://github.com/StarRocks/starrocks/pull/68255)
+- Incorrect parser logic when SQL dialect downgrades from Trino to StarRocks. [#68725](https://github.com/StarRocks/starrocks/pull/68725)
+- Issue with pruning projection columns. [#68242](https://github.com/StarRocks/starrocks/pull/68242)
+- Issue with subquery scope check. [#68415](https://github.com/StarRocks/starrocks/pull/68415)
+- Unmatched type cast in the function analyzer. [#66749](https://github.com/StarRocks/starrocks/pull/66749)
+- Incorrect candidate materialized view selection logic. [#68571](https://github.com/StarRocks/starrocks/pull/68571)
+- The Thrift `accept` thread exits on exception. [#68644](https://github.com/StarRocks/starrocks/pull/68644)
+- Inaccurate Iceberg data file size estimation. [#68787](https://github.com/StarRocks/starrocks/pull/68787)
+- Lake table memory leak issue. [#68678](https://github.com/StarRocks/starrocks/pull/68678)
+- Deadlock when the HMS connection pool is full. [#68033](https://github.com/StarRocks/starrocks/pull/68033)
+- Iceberg delete column nullability issue. [#68649](https://github.com/StarRocks/starrocks/pull/68649)
+- Materialized views hold large external tables. [#68171](https://github.com/StarRocks/starrocks/pull/68171)
+- Iceberg table cache memory limit issue. [#67769](https://github.com/StarRocks/starrocks/pull/67769)
+- Wrong timeout parameter is used for PocoHttpClient. [#68765](https://github.com/StarRocks/starrocks/pull/68765)
+- BE compile failure with Clang. [#68805](https://github.com/StarRocks/starrocks/pull/68805)
+- Materialized view was reloaded multiple times during startup. [#62351](https://github.com/StarRocks/starrocks/pull/62351)
+- CVE-2025-27821. [#68529](https://github.com/StarRocks/starrocks/pull/68529)
+- Variadic functions return incorrect date values in certain scenarios. [#67947](https://github.com/StarRocks/starrocks/pull/67947)
+
 ## 3.5.12
 
 Release Date: January 22, 2026

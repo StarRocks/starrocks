@@ -15,12 +15,12 @@
 
 #include <utility>
 
+#include "common/thread/threadpool.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/pipeline_metrics.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/scan_task_queue.h"
-#include "util/threadpool.h"
 
 namespace starrocks::workgroup {
 

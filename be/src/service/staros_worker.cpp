@@ -20,20 +20,21 @@
 #include <worker.h>
 
 #include "base/concurrency/await.h"
+#include "base/container/lru_cache.h"
 #include "base/crypto/sha.h"
 #include "base/utility/defer_op.h"
 #include "common/config.h"
 #include "common/gflags_utils.h"
 #include "common/logging.h"
 #include "common/shutdown_hook.h"
+#include "common/util/debug_util.h"
 #include "file_store.pb.h"
 #include "fmt/format.h"
 #include "fslib/star_cache_configuration.h"
 #include "fslib/star_cache_handler.h"
 #include "gflags/gflags.h"
-#include "util/debug_util.h"
-#include "util/lru_cache.h"
-#include "util/starrocks_metrics.h"
+#include "runtime/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 
 // cachemgr thread pool size
 DECLARE_int32(cachemgr_threadpool_size);
@@ -108,7 +109,7 @@ absl::Status StarOSWorker::add_shard(const ShardInfo& shard) {
     l.unlock();
     if (ret.second) {
 #ifndef BE_TEST
-        StarRocksMetrics::instance()->table_metrics_mgr()->register_table(get_table_id(shard));
+        GlobalMetricsRegistry::instance()->table_metrics_mgr()->register_table(get_table_id(shard));
 #endif
         // it is an insert op to the map
         // NOTE:
@@ -141,7 +142,7 @@ absl::Status StarOSWorker::remove_shard(const ShardId id) {
     if (iter != _shards.end()) {
 #ifndef BE_TEST
         uint64_t table_id = get_table_id(iter->second.shard_info);
-        StarRocksMetrics::instance()->table_metrics_mgr()->unregister_table(table_id);
+        GlobalMetricsRegistry::instance()->table_metrics_mgr()->unregister_table(table_id);
 #endif
         _shards.erase(iter);
     }

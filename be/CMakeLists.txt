@@ -419,6 +419,10 @@ set(STARROCKS_LINK_LIBS
     Cache
     orc
     ${WL_END_GROUP}
+    -Wl,--whole-archive ExprCore -Wl,--no-whole-archive
+    IOCore
+    RuntimeCore
+    ChunkCore
     ColumnCore
     TypesCore
     Common

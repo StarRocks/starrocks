@@ -20,6 +20,7 @@
 
 #include <fstream>
 
+#include "base/path/filesystem_util.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "common/config.h"
@@ -44,7 +45,6 @@
 #include "storage/rowset/segment.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_schema.h"
-#include "util/filesystem_util.h"
 
 namespace starrocks {
 

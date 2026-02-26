@@ -34,6 +34,7 @@
 
 #pragma once
 
+#include "base/bit/rle_encoding.h"
 #include "base/coding.h"
 #include "base/string/slice.h"
 #include "column/column.h"
@@ -43,7 +44,6 @@
 #include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_decoder.h"
 #include "types/type_traits.h"
-#include "util/rle_encoding.h"
 
 namespace starrocks {
 

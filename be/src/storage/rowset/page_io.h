@@ -40,7 +40,7 @@
 #include "common/logging.h"
 #include "common/status.h"
 #include "gen_cpp/segment.pb.h"
-#include "io/seekable_input_stream.h"
+#include "io/core/seekable_input_stream.h"
 #include "storage/rowset/page_handle.h"
 #include "storage/rowset/page_pointer.h"
 namespace starrocks {

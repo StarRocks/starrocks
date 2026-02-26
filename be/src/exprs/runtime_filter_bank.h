@@ -21,6 +21,7 @@
 
 #include "base/concurrency/blocking_queue.hpp"
 #include "base/failpoint/fail_point.h"
+#include "base/uid_util.h"
 #include "column/column.h"
 #include "common/global_types.h"
 #include "common/object_pool.h"
@@ -28,13 +29,13 @@
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
-#include "exprs/runtime_filter.h"
-#include "exprs/runtime_filter_layout.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/RuntimeFilter_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
+#include "runtime/runtime_filter.h"
+#include "runtime/runtime_filter_layout.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 

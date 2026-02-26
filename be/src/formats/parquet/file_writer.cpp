@@ -32,13 +32,13 @@
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
+#include "common/runtime_profile.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "formats/parquet/utils.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #include "util/priority_thread_pool.hpp"
-#include "util/runtime_profile.h"
 
 namespace starrocks::parquet {
 

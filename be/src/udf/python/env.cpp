@@ -35,7 +35,7 @@
 #include "butil/fd_guard.h"
 #include "butil/fd_utility.h"
 #include "common/config.h"
-#include "util/misc.h"
+#include "common/util/misc.h"
 
 namespace starrocks {
 

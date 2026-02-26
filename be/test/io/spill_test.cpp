@@ -25,6 +25,7 @@
 #include <vector>
 
 #include "base/testutil/assert.h"
+#include "base/uid_util.h"
 #include "base/utility/defer_op.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
@@ -36,6 +37,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "common/object_pool.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exec/sorting/merge.h"
@@ -50,6 +52,7 @@
 #include "exec/workgroup/scan_task_queue.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
+#include "exprs/expr_factory.h"
 #include "fs/fs.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Types_types.h"
@@ -57,10 +60,25 @@
 #include "runtime/runtime_state.h"
 #include "storage/olap_define.h"
 #include "types/logical_type.h"
-#include "util/runtime_profile.h"
-#include "util/uid_util.h"
 
 namespace starrocks::vectorized {
+
+namespace {
+
+ColumnRef* find_first_column_ref(Expr* expr) {
+    if (expr->is_slotref()) {
+        return down_cast<ColumnRef*>(expr);
+    }
+    for (Expr* child : expr->children()) {
+        if (ColumnRef* ref = find_first_column_ref(child); ref != nullptr) {
+            return ref;
+        }
+    }
+    return nullptr;
+}
+
+} // namespace
+
 class TExprBuilder {
 public:
     TExprBuilder& operator<<(const LogicalType& slot_type) {
@@ -136,7 +154,7 @@ public:
         for (size_t i = 0; i < ctxs.size(); ++i) {
             auto ctx = ctxs[i];
             CHECK(ctx->root()->is_slotref());
-            auto ref = ctx->root()->get_column_ref();
+            auto ref = find_first_column_ref(ctx->root());
             auto col = ColumnHelper::create_column(ctx->root()->type(), nullable[i]);
             CHECK(col->accept_mutable(&filler).ok());
             chunk->append_column(std::move(col), ref->slot_id());
@@ -575,7 +593,7 @@ TEST_F(SpillTest, partition_process) {
     (void)ctx;
 
     std::vector<ExprContext*> tuple;
-    ASSERT_OK(Expr::create_expr_trees(&pool, tuple_slots, &tuple, &dummy_rt_st));
+    ASSERT_OK(ExprFactory::create_expr_trees(&pool, tuple_slots, &tuple, &dummy_rt_st));
 
     // create chunk
     RandomChunkBuilder chunk_builder;
@@ -658,7 +676,7 @@ TEST_F(SpillTest, partition_yield_with_failed) {
     (void)ctx;
 
     std::vector<ExprContext*> tuple;
-    ASSERT_OK(Expr::create_expr_trees(&pool, tuple_slots, &tuple, &dummy_rt_st));
+    ASSERT_OK(ExprFactory::create_expr_trees(&pool, tuple_slots, &tuple, &dummy_rt_st));
 
     // create chunk
     RandomChunkBuilder chunk_builder;

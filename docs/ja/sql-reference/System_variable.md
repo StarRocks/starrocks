@@ -719,6 +719,14 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 
 * **デフォルト**: false
 
+### profile_log_latency_threshold_ms
+
+* **スコープ**: Session
+* **説明**: FE が `fe.profile.log` にプロファイルを書き込むための最小クエリレイテンシ（ミリ秒）。実行時間がこの値以上の場合にのみプロファイルを記録します。`-1`（デフォルト）に設定すると、FE 設定の `profile_log_latency_threshold_ms` が使用されます。`0` に設定するとすべてのプロファイルを記録します。正の値（例: `1000`）に設定すると、レイテンシがその値（ミリ秒）以上のクエリのみを記録します。このセッション変数で接続ごとにクラスタ全体の設定を上書きできます。
+* **デフォルト**: -1
+* **データ型**: long
+* **単位**: ミリ秒
+
 ### enable_query_cache
 
 * **説明**: Query Cache 機能を有効にするかどうかを指定します。有効な値: true および false。`true` はこの機能を有効にし、`false` はこの機能を無効にします。この機能が有効な場合、[Query Cache](../using_starrocks/caching/query_cache.md#application-scenarios) の適用シナリオで指定された条件を満たすクエリに対してのみ機能します。

@@ -20,6 +20,9 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <atomic>
+
+#include "base/bthreads/util.h"
 #include "base/concurrency/await.h"
 #include "base/concurrency/countdown_latch.h"
 #include "base/testutil/assert.h"
@@ -45,7 +48,6 @@
 #include "storage/lake/test_util.h"
 #include "storage/lake/txn_log.h"
 #include "storage/variant_tuple.h"
-#include "util/bthreads/util.h"
 
 namespace starrocks {
 
@@ -1352,12 +1354,10 @@ TEST_F(LakeServiceTest, test_publish_merging_tablet) {
             ASSERT_EQ(3, old_metadata_1->version());
             ASSERT_EQ(old_metadata_1->rowsets(0).segments_size(), old_metadata_1->rowsets(0).shared_segments_size());
             EXPECT_TRUE(old_metadata_1->rowsets(0).shared_segments(0));
-
             ASSIGN_OR_ABORT(auto old_metadata_2, _tablet_mgr->get_tablet_metadata(old_tablet_id_2, 3));
             ASSERT_EQ(3, old_metadata_2->version());
             ASSERT_EQ(old_metadata_2->rowsets(0).segments_size(), old_metadata_2->rowsets(0).shared_segments_size());
             EXPECT_TRUE(old_metadata_2->rowsets(0).shared_segments(0));
-
             ASSIGN_OR_ABORT(auto new_metadata, _tablet_mgr->get_tablet_metadata(new_tablet_id, 3));
             ASSERT_EQ(new_tablet_id, new_metadata->id());
             ASSERT_EQ(2, new_metadata->rowsets_size());
@@ -1369,6 +1369,12 @@ TEST_F(LakeServiceTest, test_publish_merging_tablet) {
                       generate_sort_key(0).SerializeAsString());
             EXPECT_EQ(new_metadata->range().upper_bound().SerializeAsString(),
                       generate_sort_key(100).SerializeAsString());
+            ASSERT_TRUE(new_metadata->rowsets(0).has_range());
+            ASSERT_TRUE(new_metadata->rowsets(1).has_range());
+            EXPECT_EQ(new_metadata->rowsets(0).range().SerializeAsString(),
+                      old_metadata_1->range().SerializeAsString());
+            EXPECT_EQ(new_metadata->rowsets(1).range().SerializeAsString(),
+                      old_metadata_2->range().SerializeAsString());
         }
 
         {
@@ -1422,13 +1428,36 @@ TEST_F(LakeServiceTest, test_publish_merging_tablet) {
         ASSERT_OK(_tablet_mgr->put_txn_log(log2));
 
         publish_request.add_txn_ids(txn_id);
+        publish_request.add_rebuild_pindex_tablet_ids(old_tablet_id_1);
         publish_request.add_resharding_tablet_infos()->CopyFrom(resharding_tablet_info);
 
         {
+            std::atomic<bool> saw_rebuild_pindex{false};
+            std::atomic<int> inspected_txn_size{0};
+            SyncPoint::GetInstance()->SetCallBack("LakeServiceImpl::publish_version:before_publish", [&](void* arg) {
+                auto* txns = static_cast<std::vector<TxnInfoPB>*>(arg);
+                if (txns == nullptr || txns->empty()) {
+                    return;
+                }
+                inspected_txn_size.store(txns->size(), std::memory_order_relaxed);
+                saw_rebuild_pindex.store((*txns)[0].rebuild_pindex(), std::memory_order_relaxed);
+            });
+            SyncPoint::GetInstance()->EnableProcessing();
+            DeferOp defer([]() {
+                SyncPoint::GetInstance()->ClearCallBack("LakeServiceImpl::publish_version:before_publish");
+                SyncPoint::GetInstance()->DisableProcessing();
+            });
+
             PublishVersionResponse response;
             _lake_service.publish_version(nullptr, &publish_request, &response, nullptr);
             ASSERT_EQ(0, response.failed_tablets_size());
             EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+            ASSERT_EQ(1, inspected_txn_size.load(std::memory_order_relaxed));
+            EXPECT_TRUE(saw_rebuild_pindex.load(std::memory_order_relaxed));
+
+            ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+            EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(old_tablet_id_1, txn_id)));
+            EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(old_tablet_id_2, txn_id)));
         }
 
         {
@@ -1623,6 +1652,9 @@ TEST_F(LakeServiceTest, test_publish_identical_tablet) {
             EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
             ASSERT_EQ(0, response.tablet_metas_size());
             ASSERT_EQ(0, response.tablet_ranges_size());
+
+            ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+            EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, txn_log.txn_id())));
         }
 
         {

@@ -16,6 +16,7 @@
 #include "exec/pipeline/aggregate/spillable_partitionwise_distinct_operator.h"
 
 #include "base/failpoint/fail_point.h"
+#include "runtime/runtime_state_helper.h"
 
 namespace starrocks::pipeline {
 
@@ -87,7 +88,7 @@ Status SpillablePartitionWiseDistinctSinkOperator::prepare(RuntimeState* state) 
     RETURN_IF_ERROR(_distinct_op->prepare_local_state(state));
     DCHECK(!_distinct_op->aggregator()->is_none_group_by_exprs());
     _distinct_op->aggregator()->spiller()->set_metrics(
-            spill::SpillProcessMetrics(_unique_metrics.get(), state->mutable_total_spill_bytes()));
+            spill::SpillProcessMetrics(_unique_metrics.get(), RuntimeStateHelper::mutable_total_spill_bytes(state)));
 
     if (state->spill_mode() == TSpillMode::FORCE) {
         _spill_strategy = spill::SpillStrategy::SPILL_ALL;

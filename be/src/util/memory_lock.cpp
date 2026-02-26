@@ -27,7 +27,7 @@
 
 #include "common/config.h"
 #include "common/logging.h"
-#include "util/starrocks_metrics.h"
+#include "runtime/starrocks_metrics.h"
 
 static inline uintptr_t page_align_down(uintptr_t addr, size_t page) {
     return addr & ~(page - 1);

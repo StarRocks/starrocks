@@ -46,6 +46,7 @@
 #include "column/column_viewer.h"
 #include "column/const_column.h"
 #include "common/logging.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "exec/es/es_query_builder.h"
 #include "exprs/column_ref.h"
@@ -55,7 +56,6 @@
 #include "gutil/casts.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 

@@ -10,6 +10,8 @@ import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.mdx'
 
 import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.mdx'
 
+import EditionSpecificBEItem from '../../_assets/commonMarkdown/Edition_Specific_BE_Item.mdx'
+
 # BE 設定
 
 <BEConfigMethod />
@@ -112,7 +114,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - タイプ: Strings
 - 単位: -
 - 可変: いいえ
-- 説明: 印刷するログのモジュール。たとえば、この設定項目を OLAP に設定すると、StarRocks は OLAP モジュールのログのみを印刷します。有効な値は BE の名前空間であり、`starrocks`、`starrocks::debug`、`starrocks::fs`、`starrocks::io`、`starrocks::lake`、`starrocks::pipeline`、`starrocks::query_cache`、`starrocks::stream`、`starrocks::workgroup` などがあります。
+- 説明: VLOGログを出力するファイル名（拡張子を除く）またはファイル名のワイルドカードを指定します。複数のファイル名はカンマで区切ることができます。たとえば、この設定項目を `storage_engine,tablet_manager` に設定すると、StarRocks は storage_engine.cpp および tablet_manager.cpp ファイルの VLOG ログを出力します。ワイルドカードも使用可能で、`*` に設定するとすべてのファイルの VLOG ログを出力します。VLOG ログの出力レベルは `sys_log_verbose_level` パラメータで制御されます。
 - 導入バージョン: -
 
 ### サーバー
@@ -2908,3 +2910,5 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: いいえ
 - 説明: ユーザー定義関数 (UDF) を保存するために使用されるディレクトリ。
 - 導入バージョン: -
+
+<EditionSpecificBEItem />

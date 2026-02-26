@@ -14,13 +14,36 @@
 
 #include "runtime/current_thread.h"
 
-#include "runtime/exec_env.h"
-#include "storage/storage_engine.h"
+#include <atomic>
 
 namespace starrocks {
 
+namespace {
+
+bool default_is_env_initialized() {
+    return false;
+}
+
+MemTracker* default_process_mem_tracker() {
+    return nullptr;
+}
+
+std::atomic<CurrentThread::IsEnvInitializedFn> s_is_env_initialized{default_is_env_initialized};
+std::atomic<CurrentThread::ProcessMemTrackerFn> s_process_mem_tracker{default_process_mem_tracker};
+
+} // namespace
+
+void CurrentThread::set_mem_tracker_source(IsEnvInitializedFn is_env_initialized,
+                                           ProcessMemTrackerFn process_mem_tracker) {
+    s_is_env_initialized.store(is_env_initialized == nullptr ? default_is_env_initialized : is_env_initialized,
+                               std::memory_order_release);
+    s_process_mem_tracker.store(process_mem_tracker == nullptr ? default_process_mem_tracker : process_mem_tracker,
+                                std::memory_order_release);
+}
+
 CurrentThread::~CurrentThread() {
-    if (!GlobalEnv::is_init()) {
+    auto is_env_initialized = s_is_env_initialized.load(std::memory_order_acquire);
+    if (!is_env_initialized()) {
         tls_is_thread_status_init = false;
         return;
     }
@@ -29,9 +52,11 @@ CurrentThread::~CurrentThread() {
 }
 
 starrocks::MemTracker* CurrentThread::mem_tracker() {
-    if (LIKELY(GlobalEnv::is_init())) {
+    auto is_env_initialized = s_is_env_initialized.load(std::memory_order_acquire);
+    if (LIKELY(is_env_initialized())) {
         if (UNLIKELY(tls_mem_tracker == nullptr)) {
-            tls_mem_tracker = GlobalEnv::GetInstance()->process_mem_tracker();
+            auto process_mem_tracker = s_process_mem_tracker.load(std::memory_order_acquire);
+            tls_mem_tracker = process_mem_tracker();
         }
         return tls_mem_tracker;
     } else {

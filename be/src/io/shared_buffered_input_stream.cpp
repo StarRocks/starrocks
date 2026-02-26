@@ -17,9 +17,9 @@
 #include <gutil/strings/substitute.h>
 
 #include "common/config.h"
+#include "common/runtime_profile.h"
 #include "gutil/strings/fastmem.h"
 #include "runtime/current_thread.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks::io {
 

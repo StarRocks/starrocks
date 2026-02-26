@@ -20,9 +20,13 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TIcebergTableSink;
+
+import java.util.HashMap;
+import java.util.Map;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.AfterEach;
@@ -214,5 +218,124 @@ public class IcebergDeleteSinkTest {
         // Verify the extra info was set correctly
         assertNotNull(sink.getSinkExtraInfo());
         assertEquals(extraInfo, sink.getSinkExtraInfo());
+    }
+
+    @Test
+    public void testCompressionTypePriority() {
+        // Create a valid tuple descriptor
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0), "DeleteTuple");
+
+        Column fileColumn = new Column(IcebergTable.FILE_PATH, VarcharType.VARCHAR);
+        SlotDescriptor fileSlot = new SlotDescriptor(new SlotId(0), desc);
+        fileSlot.setColumn(fileColumn);
+        desc.addSlot(fileSlot);
+
+        Column posColumn = new Column(IcebergTable.ROW_POSITION, IntegerType.BIGINT);
+        SlotDescriptor posSlot = new SlotDescriptor(new SlotId(1), desc);
+        posSlot.setColumn(posColumn);
+        desc.addSlot(posSlot);
+
+        // Test 1: Only write.delete.parquet.compression is set
+        {
+            IcebergTable icebergTable = mock(IcebergTable.class);
+            org.apache.iceberg.Table nativeTable = mock(org.apache.iceberg.Table.class);
+            when(icebergTable.getNativeTable()).thenReturn(nativeTable);
+            when(nativeTable.location()).thenReturn("/tmp/iceberg");
+            when(icebergTable.getUUID()).thenReturn("iceberg_catalog.db.table");
+
+            Map<String, String> properties = new HashMap<>();
+            properties.put("write.delete.parquet.compression-codec", "zstd");
+            when(nativeTable.properties()).thenReturn(properties);
+
+            IcebergDeleteSink sink = new IcebergDeleteSink(icebergTable, desc, new SessionVariable());
+            sink.init();
+
+            TDataSink tDataSink = sink.toThrift();
+            TIcebergTableSink icebergSink = tDataSink.getIceberg_table_sink();
+            assertEquals(TCompressionType.ZSTD, icebergSink.getCompression_type());
+        }
+
+        // Test 2: Only write.parquet.compression is set (fallback)
+        {
+            IcebergTable icebergTable = mock(IcebergTable.class);
+            org.apache.iceberg.Table nativeTable = mock(org.apache.iceberg.Table.class);
+            when(icebergTable.getNativeTable()).thenReturn(nativeTable);
+            when(nativeTable.location()).thenReturn("/tmp/iceberg");
+            when(icebergTable.getUUID()).thenReturn("iceberg_catalog.db.table");
+
+            Map<String, String> properties = new HashMap<>();
+            properties.put("write.parquet.compression-codec", "snappy");
+            when(nativeTable.properties()).thenReturn(properties);
+
+            IcebergDeleteSink sink = new IcebergDeleteSink(icebergTable, desc, new SessionVariable());
+            sink.init();
+
+            TDataSink tDataSink = sink.toThrift();
+            TIcebergTableSink icebergSink = tDataSink.getIceberg_table_sink();
+            assertEquals(TCompressionType.SNAPPY, icebergSink.getCompression_type());
+        }
+
+        // Test 3: Both set, write.delete.parquet.compression has higher priority
+        {
+            IcebergTable icebergTable = mock(IcebergTable.class);
+            org.apache.iceberg.Table nativeTable = mock(org.apache.iceberg.Table.class);
+            when(icebergTable.getNativeTable()).thenReturn(nativeTable);
+            when(nativeTable.location()).thenReturn("/tmp/iceberg");
+            when(icebergTable.getUUID()).thenReturn("iceberg_catalog.db.table");
+
+            Map<String, String> properties = new HashMap<>();
+            properties.put("write.delete.parquet.compression-codec", "gzip");
+            properties.put("write.parquet.compression-codec", "snappy");
+            when(nativeTable.properties()).thenReturn(properties);
+
+            IcebergDeleteSink sink = new IcebergDeleteSink(icebergTable, desc, new SessionVariable());
+            sink.init();
+
+            TDataSink tDataSink = sink.toThrift();
+            TIcebergTableSink icebergSink = tDataSink.getIceberg_table_sink();
+            // Should use write.delete.parquet.compression (gzip), not write.parquet.compression (snappy)
+            assertEquals(TCompressionType.GZIP, icebergSink.getCompression_type());
+        }
+
+        // Test 4: Neither set, use session variable default (uncompressed)
+        {
+            IcebergTable icebergTable = mock(IcebergTable.class);
+            org.apache.iceberg.Table nativeTable = mock(org.apache.iceberg.Table.class);
+            when(icebergTable.getNativeTable()).thenReturn(nativeTable);
+            when(nativeTable.location()).thenReturn("/tmp/iceberg");
+            when(icebergTable.getUUID()).thenReturn("iceberg_catalog.db.table");
+
+            Map<String, String> properties = new HashMap<>();
+            when(nativeTable.properties()).thenReturn(properties);
+
+            IcebergDeleteSink sink = new IcebergDeleteSink(icebergTable, desc, new SessionVariable());
+            sink.init();
+
+            TDataSink tDataSink = sink.toThrift();
+            TIcebergTableSink icebergSink = tDataSink.getIceberg_table_sink();
+            assertEquals(TCompressionType.NO_COMPRESSION, icebergSink.getCompression_type());
+        }
+
+        // Test 5: Session variable with custom compression
+        {
+            IcebergTable icebergTable = mock(IcebergTable.class);
+            org.apache.iceberg.Table nativeTable = mock(org.apache.iceberg.Table.class);
+            when(icebergTable.getNativeTable()).thenReturn(nativeTable);
+            when(nativeTable.location()).thenReturn("/tmp/iceberg");
+            when(icebergTable.getUUID()).thenReturn("iceberg_catalog.db.table");
+
+            Map<String, String> properties = new HashMap<>();
+            when(nativeTable.properties()).thenReturn(properties);
+
+            SessionVariable sessionVariable = new SessionVariable();
+            sessionVariable.setConnectorSinkCompressionCodec("lz4");
+
+            IcebergDeleteSink sink = new IcebergDeleteSink(icebergTable, desc, sessionVariable);
+            sink.init();
+
+            TDataSink tDataSink = sink.toThrift();
+            TIcebergTableSink icebergSink = tDataSink.getIceberg_table_sink();
+            assertEquals(TCompressionType.LZ4, icebergSink.getCompression_type());
+        }
     }
 }

@@ -18,6 +18,7 @@
 #include "base/failpoint/fail_point.h"
 #include "base/time/time.h"
 #include "column/chunk.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exec/olap_scan_node.h"
@@ -27,10 +28,10 @@
 #include "exec/pipeline/schedule/common.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/work_group.h"
+#include "exprs/expr_executor.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "util/debug/query_trace.h"
-#include "util/runtime_profile.h"
 #include "util/time_guard.h"
 
 namespace starrocks::pipeline {
@@ -667,8 +668,8 @@ Status ScanOperatorFactory::prepare(RuntimeState* state) {
     TEST_SUCC_POINT("ScanOperatorFactory::prepare");
 
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
-    RETURN_IF_ERROR(Expr::prepare(_scan_node->get_heavy_expr_ctxs(), state));
-    RETURN_IF_ERROR(Expr::open(_scan_node->get_heavy_expr_ctxs(), state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_scan_node->get_heavy_expr_ctxs(), state));
+    RETURN_IF_ERROR(ExprExecutor::open(_scan_node->get_heavy_expr_ctxs(), state));
     RETURN_IF_ERROR(do_prepare(state));
 
     return Status::OK();
@@ -682,7 +683,7 @@ void ScanOperatorFactory::close(RuntimeState* state) {
     do_close(state);
     // Do not call Expr::close, since async io task would access heavy exprs after
     // they are closed; exprs in scan operators are auto-closed by ExprContext.
-    // Expr::close(_scan_node->get_heavy_expr_ctxs(), state);
+    // ExprExecutor::close(_scan_node->get_heavy_expr_ctxs(), state);
     OperatorFactory::close(state);
 }
 

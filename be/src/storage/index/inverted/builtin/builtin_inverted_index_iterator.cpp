@@ -18,10 +18,10 @@
 
 #include <memory>
 
+#include "common/runtime_profile.h"
 #include "exprs/function_context.h"
 #include "exprs/like_predicate.h"
 #include "storage/chunk_helper.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 std::string get_next_prefix(const Slice& prefix_s) {

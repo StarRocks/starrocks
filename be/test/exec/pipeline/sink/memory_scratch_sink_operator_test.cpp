@@ -84,6 +84,7 @@ TEST(MemoryScratchSinkOperatorTest, test_cancel) {
     RuntimeState* _runtime_state = _fragment_ctx->runtime_state();
     _runtime_state->set_query_ctx(_query_ctx);
     _runtime_state->set_fragment_ctx(_fragment_ctx);
+    _runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
 
     std::vector<TExpr> t_output_expr;
     RowDescriptor row_desc;

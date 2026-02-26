@@ -18,7 +18,7 @@
 #include "cache/datacache_utils.h"
 #include "common/config.h"
 #include "common/statusor.h"
-#include "util/thread.h"
+#include "common/thread/thread.h"
 
 namespace starrocks {
 

@@ -29,3 +29,6 @@ select sum(k1),sum(crc32(k2)),sum(rn) from (select k1,k2, row_number() over (PAR
 admin disable failpoint 'chunk_sorter_spill_on_set_finishing';
 -- result:
 -- !result
+CLEANUP {
+    admin disable failpoint 'chunk_sorter_spill_on_set_finishing';
+} END CLEANUP

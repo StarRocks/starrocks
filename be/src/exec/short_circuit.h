@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include "base/brpc/brpc.h"
 #include "base/concurrency/stopwatch.hpp"
 #include "common/object_pool.h"
 #include "common/status.h"
@@ -25,10 +26,10 @@
 #include "gen_cpp/ShortCircuit_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
-#include "service/brpc.h"
 #include "storage/table_reader.h"
 
 namespace starrocks {
+class FragmentDictState;
 
 class ShortCircuitExecutor {
 public:
@@ -62,6 +63,7 @@ private:
     // env
     ExecEnv* _exec_env;
     std::shared_ptr<RuntimeState> _runtime_state;
+    std::unique_ptr<FragmentDictState> _fragment_dict_state;
     RuntimeProfile* _runtime_profile;
     bool _enable_profile;
 

@@ -41,6 +41,7 @@ import com.google.common.collect.Sets;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.system.information.LoadsSystemTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -101,7 +102,8 @@ import java.util.TreeMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
-public abstract class LoadJob extends AbstractTxnStateChangeCallback implements LoadTaskCallback, Writable, LoadJobWithWarehouse {
+public abstract class LoadJob extends AbstractTxnStateChangeCallback
+        implements LoadTaskCallback, Writable, LoadJobWithWarehouse, LoadsSystemTable.Job {
 
     private static final Logger LOG = LogManager.getLogger(LoadJob.class);
 
@@ -277,6 +279,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         return db;
     }
 
+    @Override
     public long getDbId() {
         return dbId;
     }
@@ -334,6 +337,46 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
 
     public long getLoadStartTimestamp() {
         return loadStartTimestamp;
+    }
+
+    @Override
+    public String getUser() {
+        return user;
+    }
+
+    @Override
+    public String getStateName() {
+        if (state == JobState.COMMITTED) {
+            return "PREPARED";
+        }
+        if (state == JobState.LOADING) {
+            return null;
+        }
+        return state.name();
+    }
+
+    @Override
+    public boolean matchTableName(String tableName) {
+        try {
+            return getTableNames(true).contains(tableName);
+        } catch (MetaNotFoundException e) {
+            return false;
+        }
+    }
+
+    @Override
+    public Long getCreateTimeMs() {
+        return createTimestamp;
+    }
+
+    @Override
+    public Long getLoadStartTimeMs() {
+        return loadStartTimestamp;
+    }
+
+    @Override
+    public Long getLoadFinishTimeMs() {
+        return finishTimestamp;
     }
 
     public void initLoadProgress(TUniqueId loadId, Set<TUniqueId> fragmentIds, List<Long> relatedBackendIds) {

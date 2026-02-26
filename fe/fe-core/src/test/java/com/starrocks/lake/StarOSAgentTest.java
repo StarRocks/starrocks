@@ -34,11 +34,14 @@ import com.staros.proto.ShardGroupInfo;
 import com.staros.proto.ShardInfo;
 import com.staros.proto.StarStatus;
 import com.staros.proto.StatusCode;
+import com.staros.proto.UpdateShardGroupInfo;
 import com.staros.proto.WarmupLevel;
 import com.staros.proto.WorkerGroupDetailInfo;
 import com.staros.proto.WorkerGroupSpec;
 import com.staros.proto.WorkerInfo;
 import com.staros.proto.WorkerState;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.Partition;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
@@ -1022,6 +1025,93 @@ public class StarOSAgentTest {
                 "Failed to create virtual shard. error: INTERNAL:Mocked error",
                 () -> starosAgent.createShardWithVirtualTabletId(pathInfo, cacheInfo, groupId, properties, vTabletId,
                         WarehouseManager.DEFAULT_RESOURCE));
+    }
+
+    private Partition createPartitionWithShardGroupId(long id, String name, long shardGroupId) {
+        MaterializedIndex baseIndex = new MaterializedIndex(id, MaterializedIndex.IndexState.NORMAL, shardGroupId);
+        Partition partition = new Partition(id, id, name, baseIndex, null);
+        return partition;
+    }
+
+    @Test
+    public void testUpdateShardGroupEnableCache() throws StarClientException {
+        String serviceId = "1";
+        Deencapsulation.setField(starosAgent, "serviceId", serviceId);
+
+        Partition partition1 = createPartitionWithShardGroupId(10001L, "p1", 100L);
+        Partition partition2 = createPartitionWithShardGroupId(10002L, "p2", 200L);
+
+        List<Partition> partitions = Lists.newArrayList(partition1, partition2);
+
+        new Expectations(client) {
+            {
+                client.updateShardGroup(serviceId, (List<UpdateShardGroupInfo>) any);
+                times = 1;
+            }
+        };
+
+        // Test enableCache=true
+        ExceptionChecker.expectThrowsNoException(() -> starosAgent.updateShardGroup(partitions, true));
+    }
+
+    @Test
+    public void testUpdateShardGroupDisableCache() throws StarClientException {
+        String serviceId = "1";
+        Deencapsulation.setField(starosAgent, "serviceId", serviceId);
+
+        Partition partition1 = createPartitionWithShardGroupId(10003L, "p1", 300L);
+
+        List<Partition> partitions = Lists.newArrayList(partition1);
+
+        new Expectations(client) {
+            {
+                client.updateShardGroup(serviceId, (List<UpdateShardGroupInfo>) any);
+                times = 1;
+            }
+        };
+
+        // Test enableCache=false
+        ExceptionChecker.expectThrowsNoException(() -> starosAgent.updateShardGroup(partitions, false));
+    }
+
+    @Test
+    public void testUpdateShardGroupException() throws StarClientException {
+        String serviceId = "1";
+        Deencapsulation.setField(starosAgent, "serviceId", serviceId);
+
+        Partition partition1 = createPartitionWithShardGroupId(10004L, "part_a", 400L);
+        Partition partition2 = createPartitionWithShardGroupId(10005L, "part_b", 500L);
+
+        List<Partition> partitions = Lists.newArrayList(partition1, partition2);
+
+        new Expectations(client) {
+            {
+                client.updateShardGroup(serviceId, (List<UpdateShardGroupInfo>) any);
+                result = new StarClientException(StatusCode.INTERNAL, "mocked update error");
+            }
+        };
+
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Failed to alter partition shardGroups, PartitionNames: part_a part_b, error: INTERNAL:mocked update error",
+                () -> starosAgent.updateShardGroup(partitions, true));
+    }
+
+    @Test
+    public void testUpdateShardGroupEmptyList() throws StarClientException {
+        String serviceId = "1";
+        Deencapsulation.setField(starosAgent, "serviceId", serviceId);
+
+        List<Partition> partitions = Lists.newArrayList();
+
+        new Expectations(client) {
+            {
+                client.updateShardGroup(serviceId, (List<UpdateShardGroupInfo>) any);
+                times = 1;
+            }
+        };
+
+        // Empty list should still call updateShardGroup with empty list
+        ExceptionChecker.expectThrowsNoException(() -> starosAgent.updateShardGroup(partitions, true));
     }
 
 }

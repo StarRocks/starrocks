@@ -23,6 +23,7 @@
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "exec/spill/common.h"
 #include "exec/spill/executor.h"
@@ -33,7 +34,6 @@
 #include "exec/workgroup/work_group_fwd.h"
 #include "gen_cpp/InternalService_types.h"
 #include "storage/chunk_helper.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks::spill {
 DECLARE_FAIL_POINT(spill_restore_sleep);

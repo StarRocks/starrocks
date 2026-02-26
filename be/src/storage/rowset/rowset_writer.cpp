@@ -48,7 +48,7 @@
 #include "common/tracer.h"
 #include "fs/fs.h"
 #include "fs/key_cache.h"
-#include "io/io_error.h"
+#include "io/core/io_error.h"
 #include "runtime/load_fail_point.h"
 #include "segment_options.h"
 #include "serde/column_array_serde.h"

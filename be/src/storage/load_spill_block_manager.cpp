@@ -16,14 +16,15 @@
 
 #include <vector>
 
+#include "common/thread/threadpool.h"
 #include "exec/spill/file_block_manager.h"
 #include "exec/spill/hybird_block_manager.h"
 #include "exec/spill/log_block_manager.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "runtime/exec_env.h"
-#include "util/starrocks_metrics.h"
-#include "util/threadpool.h"
+#include "runtime/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 

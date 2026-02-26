@@ -343,6 +343,9 @@ message VacuumRequest {
     // All tablet metadata and their data files of these verisons should be retained and can not be
     // vaccummed.
     repeated int64 retain_versions = 9;
+    // Whether enable shared file cleanup in vacuum.
+    // This flag is used for both file-bundling tables and range-distribution tables.
+    optional bool enable_shared_file_cleanup = 10;
 }
 
 message VacuumResponse {
@@ -467,4 +470,3 @@ service LakeService {
     rpc get_tablet_metadatas(GetTabletMetadatasRequest) returns (GetTabletMetadatasResponse);
     rpc repair_tablet_metadata(RepairTabletMetadataRequest) returns (RepairTabletMetadataResponse);
 }
-

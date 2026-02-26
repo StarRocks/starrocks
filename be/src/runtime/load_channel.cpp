@@ -36,8 +36,11 @@
 
 #include <memory>
 
+#include "base/container/lru_cache.h"
 #include "base/string/faststring.h"
+#include "common/runtime_profile.h"
 #include "common/tracer.h"
+#include "common/util/thrift_util.h"
 #include "fmt/format.h"
 #include "runtime/closure_guard.h"
 #include "runtime/diagnose_daemon.h"
@@ -46,11 +49,8 @@
 #include "runtime/load_channel_mgr.h"
 #include "runtime/local_tablets_channel.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/starrocks_metrics.h"
 #include "util/compression/block_compression.h"
-#include "util/lru_cache.h"
-#include "util/runtime_profile.h"
-#include "util/starrocks_metrics.h"
-#include "util/thrift_util.h"
 
 #define RETURN_RESPONSE_IF_ERROR(stmt, response)                                      \
     do {                                                                              \
@@ -301,7 +301,7 @@ void LoadChannel::cancel(const std::string& reason) {
     });
     std::lock_guard l(_lock);
     for (auto& it : _tablets_channels) {
-        it.second->cancel();
+        it.second->cancel(reason);
     }
     print_cancel_msg = !_cancelled.load(std::memory_order_acquire);
     _cancelled.store(true, std::memory_order_release);

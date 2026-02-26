@@ -22,6 +22,7 @@
 #include "column/struct_column.h"
 #include "column/type_traits.h"
 #include "fmt/core.h"
+#include "runtime/descriptors_ext.h"
 #include "udf/java/java_udf.h"
 
 namespace starrocks {

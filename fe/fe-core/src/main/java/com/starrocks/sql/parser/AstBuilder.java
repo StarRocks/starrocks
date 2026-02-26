@@ -58,6 +58,7 @@ import com.starrocks.sql.ast.AddComputeNodeBlackListStmt;
 import com.starrocks.sql.ast.AddComputeNodeClause;
 import com.starrocks.sql.ast.AddFieldClause;
 import com.starrocks.sql.ast.AddFollowerClause;
+import com.starrocks.sql.ast.AddMVColumnClause;
 import com.starrocks.sql.ast.AddObserverClause;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AddPartitionColumnClause;
@@ -189,6 +190,7 @@ import com.starrocks.sql.ast.DropFollowerClause;
 import com.starrocks.sql.ast.DropFunctionStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropIndexClause;
+import com.starrocks.sql.ast.DropMVColumnClause;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropObserverClause;
 import com.starrocks.sql.ast.DropPartitionClause;
@@ -1134,6 +1136,35 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         return columnDesc.stream().map(context -> getColumnDef(context)).collect(toList());
     }
 
+    private ColumnDef.DefaultValueDef getDefaultValueDef(
+            com.starrocks.sql.parser.StarRocksParser.DefaultDescContext defaultDescContext) {
+        ColumnDef.DefaultValueDef defaultValueDef = ColumnDef.DefaultValueDef.NOT_SET;
+        if (defaultDescContext != null) {
+            if (defaultDescContext.string() != null) {
+                String value = ((StringLiteral) visit(defaultDescContext.string())).getStringValue();
+                defaultValueDef = new ColumnDef.DefaultValueDef(true, new StringLiteral(value));
+            } else if (defaultDescContext.NULL() != null) {
+                defaultValueDef = ColumnDef.DefaultValueDef.NULL_DEFAULT_VALUE;
+            } else if (defaultDescContext.CURRENT_TIMESTAMP() != null) {
+                List<Expr> expr = Lists.newArrayList();
+                if (defaultDescContext.INTEGER_VALUE() != null) {
+                    expr.add(new IntLiteral(Long.parseLong(defaultDescContext.INTEGER_VALUE().getText()),
+                            IntegerType.INT));
+                }
+                defaultValueDef = new ColumnDef.DefaultValueDef(true, (expr.size() == 1),
+                        new FunctionCallExpr("current_timestamp", expr));
+            } else if (defaultDescContext.qualifiedName() != null) {
+                String functionName = defaultDescContext.qualifiedName().getText().toLowerCase();
+                defaultValueDef = new ColumnDef.DefaultValueDef(true,
+                        new FunctionCallExpr(functionName, new ArrayList<>()));
+            } else if (defaultDescContext.expression() != null) {
+                Expr defaultExpr = (Expr) visit(defaultDescContext.expression());
+                defaultValueDef = new ColumnDef.DefaultValueDef(true, defaultExpr);
+            }
+        }
+        return defaultValueDef;
+    }
+
     private ColumnDef getColumnDef(com.starrocks.sql.parser.StarRocksParser.ColumnDescContext context) {
         Identifier colIdentifier = (Identifier) visit(context.identifier());
         String columnName = colIdentifier.getValue();
@@ -1202,30 +1233,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         if (isAutoIncrement != null) {
             isAllowNull = false;
         }
-        ColumnDef.DefaultValueDef defaultValueDef = ColumnDef.DefaultValueDef.NOT_SET;
         final com.starrocks.sql.parser.StarRocksParser.DefaultDescContext defaultDescContext = context.defaultDesc();
-        if (defaultDescContext != null) {
-            if (defaultDescContext.string() != null) {
-                String value = ((StringLiteral) visit(defaultDescContext.string())).getStringValue();
-                defaultValueDef = new ColumnDef.DefaultValueDef(true, new StringLiteral(value));
-            } else if (defaultDescContext.NULL() != null) {
-                defaultValueDef = ColumnDef.DefaultValueDef.NULL_DEFAULT_VALUE;
-            } else if (defaultDescContext.CURRENT_TIMESTAMP() != null) {
-                List<Expr> expr = Lists.newArrayList();
-                if (defaultDescContext.INTEGER_VALUE() != null) {
-                    expr.add(new IntLiteral(Long.parseLong(defaultDescContext.INTEGER_VALUE().getText()), IntegerType.INT));
-                }
-                defaultValueDef = new ColumnDef.DefaultValueDef(true, (expr.size() == 1),
-                        new FunctionCallExpr("current_timestamp", expr));
-            } else if (defaultDescContext.qualifiedName() != null) {
-                String functionName = defaultDescContext.qualifiedName().getText().toLowerCase();
-                defaultValueDef = new ColumnDef.DefaultValueDef(true,
-                        new FunctionCallExpr(functionName, new ArrayList<>()));
-            } else if (defaultDescContext.expression() != null) {
-                Expr defaultExpr = (Expr) visit(defaultDescContext.expression());
-                defaultValueDef = new ColumnDef.DefaultValueDef(true, defaultExpr);
-            }
-        }
+        final ColumnDef.DefaultValueDef defaultValueDef = getDefaultValueDef(defaultDescContext);
         final com.starrocks.sql.parser.StarRocksParser.GeneratedColumnDescContext generatedColumnDescContext =
                 context.generatedColumnDesc();
         Expr expr = null;
@@ -2415,6 +2424,17 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         if (context.swapTableClause() != null) {
             alterTableClause = (SwapTableClause) visit(context.swapTableClause());
         }
+        
+        // add column to materialized view
+        if (context.addMVColumnClause() != null) {
+            alterTableClause = (AddMVColumnClause) visit(context.addMVColumnClause());
+        }
+
+        // drop column from materialized view
+        if (context.dropMVColumnClause() != null) {
+            alterTableClause = (DropMVColumnClause) visit(context.dropMVColumnClause());
+        }
+        
         return new AlterMaterializedViewStmt(mvTableRef, alterTableClause, createPos(context));
     }
 
@@ -5123,6 +5143,24 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     public ParseNode visitSwapTableClause(com.starrocks.sql.parser.StarRocksParser.SwapTableClauseContext context) {
         Identifier identifier = (Identifier) visit(context.identifier());
         return new SwapTableClause(normalizeName(identifier.getValue()), createPos(context));
+    }
+
+    @Override
+    public ParseNode visitAddMVColumnClause(com.starrocks.sql.parser.StarRocksParser.AddMVColumnClauseContext context) {
+        String columnName = getIdentifierName(context.identifier());
+        Expr aggregateExpression = (Expr) visit(context.expression());
+        ColumnDef.DefaultValueDef defaultValueDef = getDefaultValueDef(context.defaultDesc());
+        String comment = null;
+        if (context.string() != null) {
+            comment = ((StringLiteral) visit(context.string())).getStringValue();
+        }
+        return new AddMVColumnClause(columnName, aggregateExpression, defaultValueDef, comment, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitDropMVColumnClause(com.starrocks.sql.parser.StarRocksParser.DropMVColumnClauseContext context) {
+        String columnName = getIdentifierName(context.identifier());
+        return new DropMVColumnClause(columnName, createPos(context));
     }
 
     @Override

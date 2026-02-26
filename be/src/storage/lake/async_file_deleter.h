@@ -90,14 +90,14 @@ private:
     DeleteCallback _cb;
 };
 
-// Used for delete files which are shared by multiple tablets, so we can't delete them at first.
-// We need to wait for all tablets to finish and decide whether to delete them.
-class AsyncBundleFileDeleter : public AsyncFileDeleter {
+// Used for deleting files that may be shared by multiple tablets. We first collect
+// deletion candidates, then delay-delete files still referenced by alive metadata.
+class AsyncSharedFileDeleter : public AsyncFileDeleter {
 public:
-    explicit AsyncBundleFileDeleter(int64_t batch_size) : AsyncFileDeleter(batch_size) {}
+    explicit AsyncSharedFileDeleter(int64_t batch_size) : AsyncFileDeleter(batch_size) {}
 
     Status delete_file(std::string path) override {
-        _pending_files[path]++;
+        _pending_files[std::move(path)]++;
         return Status::OK();
     }
 
@@ -110,7 +110,7 @@ public:
         for (auto& [path, count] : _pending_files) {
             if (_delay_delete_files.count(path) == 0) {
                 if (config::lake_print_delete_log) {
-                    LOG(INFO) << "Deleting bundle file: " << path << " ref count: " << count;
+                    LOG(INFO) << "Deleting shared file: " << path << " ref count: " << count;
                 }
                 RETURN_IF_ERROR(AsyncFileDeleter::delete_file(path));
             }

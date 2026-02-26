@@ -781,7 +781,37 @@ public class IcebergMetadataTest extends TableTestBase {
         tSinkCommitInfo.setIs_overwrite(false);
         tSinkCommitInfo.setIceberg_data_file(tIcebergDataFile);
 
-        metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(tSinkCommitInfo), null);
+        // Mock NodeMgr and Frontend for commit audit info
+        new MockUp<NodeMgr>() {
+            @Mock
+            public Frontend getMySelf() {
+                Frontend frontend = new Frontend(FrontendNodeType.LEADER, "test-fe", "127.0.0.1", 9010);
+                return frontend;
+            }
+        };
+
+        new MockUp<Frontend>() {
+            @Mock
+            public String getFeVersion() {
+                return "test-version-3.5.0";
+            }
+        };
+
+        // Set ConnectContext to ensure commit audit info can get the current user
+        metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(tSinkCommitInfo),
+                null, null, connectContext);
+
+        // Verify snapshot summary contains commit audit info
+        mockedNativeTableA.refresh();
+        Snapshot snapshot = mockedNativeTableA.currentSnapshot();
+        Assertions.assertNotNull(snapshot, "Current snapshot should exist");
+        Map<String, String> summary = snapshot.summary();
+        Assertions.assertEquals("StarRocks", summary.get("engine-name"),
+                "Snapshot summary should contain engine-name=StarRocks");
+        Assertions.assertEquals("test-version-3.5.0", summary.get("engine-version"),
+                "Snapshot summary should contain engine-version");
+        Assertions.assertEquals("root", summary.get("starrocks_user"),
+                "Snapshot summary should contain starrocks_user");
 
         List<FileScanTask> fileScanTasks = Lists.newArrayList(mockedNativeTableA.newScan().planFiles());
         Assertions.assertEquals(1, fileScanTasks.size());
@@ -812,8 +842,19 @@ public class IcebergMetadataTest extends TableTestBase {
 
         tSinkCommitInfo.setIceberg_data_file(tIcebergDataFile);
 
-        metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(tSinkCommitInfo), null);
+        metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(tSinkCommitInfo),
+                null, null, connectContext);
         mockedNativeTableA.refresh();
+
+        // Verify overwrite operation also has commit audit info
+        snapshot = mockedNativeTableA.currentSnapshot();
+        Assertions.assertNotNull(snapshot, "Current snapshot should exist after overwrite");
+        summary = snapshot.summary();
+        Assertions.assertEquals("StarRocks", summary.get("engine-name"),
+                "Snapshot summary should contain engine-name=StarRocks after overwrite");
+        Assertions.assertEquals("test-version-3.5.0", summary.get("engine-version"),
+                "Snapshot summary should contain engine-version after overwrite");
+
         TableScan scan = mockedNativeTableA.newScan().includeColumnStats();
         fileScanTasks = Lists.newArrayList(scan.planFiles());
 
@@ -2320,11 +2361,39 @@ public class IcebergMetadataTest extends TableTestBase {
         TSinkCommitInfo commitInfo = new TSinkCommitInfo();
         commitInfo.setIceberg_data_file(deleteFile);
 
+        // Mock NodeMgr and Frontend for commit audit info
+        new MockUp<NodeMgr>() {
+            @Mock
+            public Frontend getMySelf() {
+                Frontend frontend = new Frontend(FrontendNodeType.LEADER, "test-fe", "127.0.0.1", 9010);
+                return frontend;
+            }
+        };
+
+        new MockUp<Frontend>() {
+            @Mock
+            public String getFeVersion() {
+                return "test-version-delete-3.5.0";
+            }
+        };
+
         // Test commit with delete operation
-        metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(commitInfo), null);
+        metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(commitInfo),
+                null, null, connectContext);
 
         // Verify the delete file was committed
         mockedNativeTableA.refresh();
+
+        // Verify snapshot summary contains commit audit info for delete operation
+        Snapshot snapshot = mockedNativeTableA.currentSnapshot();
+        Assertions.assertNotNull(snapshot, "Current snapshot should exist");
+        Map<String, String> summary = snapshot.summary();
+        Assertions.assertEquals("StarRocks", summary.get("engine-name"),
+                "Snapshot summary should contain engine-name=StarRocks for delete operation");
+        Assertions.assertEquals("test-version-delete-3.5.0", summary.get("engine-version"),
+                "Snapshot summary should contain engine-version for delete operation");
+        Assertions.assertEquals("root", summary.get("starrocks_user"),
+                "Snapshot summary should contain starrocks_user for delete operation");
         List<FileScanTask> fileScanTasks = Lists.newArrayList(mockedNativeTableA.newScan().planFiles());
         // We should have delete files in the scan
         boolean foundDelete = false;
@@ -2528,6 +2597,22 @@ public class IcebergMetadataTest extends TableTestBase {
 
             TSinkCommitInfo commitInfo = new TSinkCommitInfo();
             commitInfo.setIceberg_data_file(dataFile);
+
+            // Mock NodeMgr and Frontend for commit audit info
+            new MockUp<NodeMgr>() {
+                @Mock
+                public Frontend getMySelf() {
+                    Frontend frontend = new Frontend(FrontendNodeType.LEADER, "test-fe", "127.0.0.1", 9010);
+                    return frontend;
+                }
+            };
+
+            new MockUp<Frontend>() {
+                @Mock
+                public String getFeVersion() {
+                    return "test-version";
+                }
+            };
 
             // Commit should succeed even when queue is disabled
             metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(commitInfo), null);
@@ -2809,5 +2894,94 @@ public class IcebergMetadataTest extends TableTestBase {
                 "EXPLAIN should contain 'ICEBERG METADATA DELETE'");
         Assertions.assertTrue(explainString.contains("predicate: ALL (delete all rows)"),
                 "EXPLAIN should indicate 'delete all rows' when predicate is null");
+    }
+
+    @Test
+    public void testExecuteMetadataDeleteMetrics() throws Exception {
+        // Test metadata delete execution with metrics recording
+        mockedNativeTableB.newFastAppend().appendFile(FILE_B_1).appendFile(FILE_B_2).commit();
+
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableB, Maps.newHashMap());
+
+        // Create predicate: k2 = 2 (delete entire partition)
+        ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.EQ,
+                new ColumnRefOperator(1, INT, "k2", true), ConstantOperator.createInt(2));
+
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+
+        new MockUp<NodeMgr>() {
+            @Mock
+            public Frontend getMySelf() {
+                Frontend frontend = new Frontend(FrontendNodeType.LEADER, "test-fe", "127.0.0.1", 9010);
+                return frontend;
+            }
+        };
+
+        new MockUp<Frontend>() {
+            @Mock
+            public String getFeVersion() {
+                return "test-version";
+            }
+        };
+
+        // Execute metadata delete
+        metadata.executeMetadataDelete(icebergTable, predicate, connectContext);
+
+        // Verify the delete was committed
+        mockedNativeTableB.refresh();
+        List<FileScanTask> fileScanTasks = Lists.newArrayList(mockedNativeTableB.newScan().planFiles());
+
+        // After deleting partition k2=2, only files with k2=3 should remain
+        Assertions.assertEquals(1, fileScanTasks.size(), "Only one file should remain after partition delete");
+
+        // Verify a new snapshot was created after metadata delete
+        org.apache.iceberg.Snapshot latestSnapshot = mockedNativeTableB.currentSnapshot();
+        Assertions.assertNotNull(latestSnapshot, "Latest snapshot should exist after metadata delete");
+    }
+
+    @Test
+    public void testExecuteMetadataDeleteWithNullPredicate() throws Exception {
+        // Test metadata delete with null predicate (delete all)
+        mockedNativeTableB.newFastAppend().appendFile(FILE_B_1).commit();
+
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableB, Maps.newHashMap());
+
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+
+        // Mock NodeMgr.getMySelf() to return a valid Frontend
+        new MockUp<NodeMgr>() {
+            @Mock
+            public Frontend getMySelf() {
+                return new Frontend(FrontendNodeType.LEADER, "test-fe", "127.0.0.1", 9010);
+            }
+        };
+
+        new MockUp<Frontend>() {
+            @Mock
+            public String getFeVersion() {
+                return "test-version";
+            }
+        };
+
+        // Test that null predicate is handled correctly (returns alwaysTrue expression)
+        // This should succeed, not throw exception
+        Assertions.assertDoesNotThrow(() -> {
+            metadata.executeMetadataDelete(icebergTable, null, connectContext);
+        }, "Null predicate should be handled as delete all");
+
+        // Verify all data was deleted
+        mockedNativeTableB.refresh();
+        List<FileScanTask> fileScanTasks = Lists.newArrayList(mockedNativeTableB.newScan().planFiles());
+        Assertions.assertEquals(0, fileScanTasks.size(), "All files should be deleted with null predicate");
+
+        // Verify a new snapshot was created after metadata delete
+        org.apache.iceberg.Snapshot latestSnapshot = mockedNativeTableB.currentSnapshot();
+        Assertions.assertNotNull(latestSnapshot, "Latest snapshot should exist after metadata delete");
     }
 }

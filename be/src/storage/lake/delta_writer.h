@@ -18,6 +18,7 @@
 #include <memory>
 #include <vector>
 
+#include "common/runtime_profile.h"
 #include "common/statusor.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/macros.h"
@@ -25,7 +26,6 @@
 #include "storage/lake/delta_writer_finish_mode.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/rowset/segment_file_info.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 class MemTracker;
@@ -126,6 +126,11 @@ public:
 
     // NOTE: Do NOT invoke this method in a bthread unless you are sure that `write()` has never been called.
     void close();
+
+    // Cancel the delta writer with the given status.
+    // This method can be called concurrently and it is thread-safe.
+    // After cancellation, subsequent write/flush operations will fail quickly.
+    void cancel(const Status& st);
 
     [[nodiscard]] int64_t partition_id() const;
 

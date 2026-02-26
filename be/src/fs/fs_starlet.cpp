@@ -28,22 +28,22 @@
 #include <worker.h>
 
 #include "base/concurrency/stopwatch.hpp"
+#include "base/container/lru_cache.h"
 #include "base/string/string_parser.hpp"
 #include "base/utility/defer_op.h"
 #include "common/config.h"
 #include "fs/encrypt_file.h"
 #include "fs/output_stream_adapter.h"
 #include "gutil/strings/util.h"
-#include "io/input_stream.h"
+#include "io/core/input_stream.h"
+#include "io/core/output_stream.h"
+#include "io/core/seekable_input_stream.h"
+#include "io/core/throttled_output_stream.h"
+#include "io/core/throttled_seekable_input_stream.h"
 #include "io/io_profiler.h"
-#include "io/output_stream.h"
-#include "io/seekable_input_stream.h"
-#include "io/throttled_output_stream.h"
-#include "io/throttled_seekable_input_stream.h"
 #include "service/staros_worker.h"
 #include "storage/lake/filenames.h"
 #include "storage/olap_common.h"
-#include "util/lru_cache.h"
 
 namespace starrocks {
 
