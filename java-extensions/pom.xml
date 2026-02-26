@@ -32,8 +32,8 @@
         <hikaricp.version>3.4.5</hikaricp.version>
         <compiler-plugin.version>3.13.0</compiler-plugin.version>
         <java-extensions.home>${basedir}</java-extensions.home>
-        <aws-v2-sdk.version>2.29.52</aws-v2-sdk.version>
-        <hadoop.version>3.4.2</hadoop.version>
+        <aws-v2-sdk.version>2.42.1</aws-v2-sdk.version>
+        <hadoop.version>3.4.3</hadoop.version>
         <iceberg.version>1.10.0</iceberg.version>
         <log4j2.version>2.23.1</log4j2.version>
         <junit.version>5.10.3</junit.version>
