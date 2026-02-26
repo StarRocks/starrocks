@@ -2925,7 +2925,7 @@ TEST_F(LakeServiceTest, test_repair_tablet_metadata) {
         ASSERT_TRUE(MatchPattern(response.status().error_msgs(0), "publish version thread pool is null"));
     }
 
-    // 3. successful repair of non-bundling tablet metadata
+    // 3. successful repair tablet metadata
     {
         brpc::Controller cntl;
         RepairTabletMetadataRequest request;
@@ -2941,7 +2941,6 @@ TEST_F(LakeServiceTest, test_repair_tablet_metadata) {
         metadata_to_repair.add_rowsets()->set_id(1);
 
         request.add_tablet_metadatas()->CopyFrom(metadata_to_repair);
-        request.set_enable_file_bundling(false);
 
         _lake_service.repair_tablet_metadata(&cntl, &request, &response, nullptr);
         ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
@@ -2960,68 +2959,8 @@ TEST_F(LakeServiceTest, test_repair_tablet_metadata) {
         ASSERT_EQ(1, retrieved_metadata->rowsets(0).id());
     }
 
-    // 4. successful repair of bundling tablet metadata
-    {
-        brpc::Controller cntl;
-        RepairTabletMetadataRequest request;
-        RepairTabletMetadataResponse response;
-
-        TabletMetadataPB metadata_to_repair_1;
-        int64_t tablet_id_1 = next_id();
-        int64_t version_1 = 200;
-        metadata_to_repair_1.set_id(tablet_id_1);
-        metadata_to_repair_1.set_version(version_1);
-        metadata_to_repair_1.mutable_schema()->set_id(300);
-        metadata_to_repair_1.mutable_schema()->set_keys_type(DUP_KEYS);
-        metadata_to_repair_1.mutable_schema()->set_num_short_key_columns(1);
-        metadata_to_repair_1.mutable_schema()->set_num_rows_per_row_block(65535);
-        metadata_to_repair_1.add_rowsets()->set_id(1);
-
-        TabletMetadataPB metadata_to_repair_2;
-        int64_t tablet_id_2 = next_id();
-        // same version for bundling
-        int64_t version_2 = 200;
-        metadata_to_repair_2.set_id(tablet_id_2);
-        metadata_to_repair_2.set_version(version_2);
-        metadata_to_repair_2.mutable_schema()->set_id(301);
-        metadata_to_repair_2.mutable_schema()->set_keys_type(DUP_KEYS);
-        metadata_to_repair_2.mutable_schema()->set_num_short_key_columns(1);
-        metadata_to_repair_2.mutable_schema()->set_num_rows_per_row_block(65535);
-        metadata_to_repair_2.add_rowsets()->set_id(2);
-
-        request.add_tablet_metadatas()->CopyFrom(metadata_to_repair_1);
-        request.add_tablet_metadatas()->CopyFrom(metadata_to_repair_2);
-        request.set_enable_file_bundling(true);
-        request.set_write_bundling_file(true);
-
-        _lake_service.repair_tablet_metadata(&cntl, &request, &response, nullptr);
-        ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
-        ASSERT_EQ(TStatusCode::OK, response.status().status_code()) << response.status().error_msgs(0);
-        ASSERT_EQ(1, response.tablet_repair_statuses_size());
-        ASSERT_EQ(0, response.tablet_repair_statuses(0).tablet_id());
-        ASSERT_EQ(TStatusCode::OK, response.tablet_repair_statuses(0).status().status_code());
-
-        // verify metadata 1 was put
-        ASSIGN_OR_ABORT(auto tablet_read_1, _tablet_mgr->get_tablet(tablet_id_1));
-        ASSIGN_OR_ABORT(auto retrieved_metadata_1, tablet_read_1.get_metadata(version_1));
-        ASSERT_EQ(metadata_to_repair_1.id(), retrieved_metadata_1->id());
-        ASSERT_EQ(metadata_to_repair_1.version(), retrieved_metadata_1->version());
-        ASSERT_EQ(metadata_to_repair_1.schema().id(), retrieved_metadata_1->schema().id());
-        ASSERT_EQ(1, retrieved_metadata_1->rowsets_size());
-        ASSERT_EQ(1, retrieved_metadata_1->rowsets(0).id());
-
-        // verify metadata 2 was put
-        ASSIGN_OR_ABORT(auto tablet_read_2, _tablet_mgr->get_tablet(tablet_id_2));
-        ASSIGN_OR_ABORT(auto retrieved_metadata_2, tablet_read_2.get_metadata(version_2));
-        ASSERT_EQ(metadata_to_repair_2.id(), retrieved_metadata_2->id());
-        ASSERT_EQ(metadata_to_repair_2.version(), retrieved_metadata_2->version());
-        ASSERT_EQ(metadata_to_repair_2.schema().id(), retrieved_metadata_2->schema().id());
-        ASSERT_EQ(1, retrieved_metadata_2->rowsets_size());
-        ASSERT_EQ(2, retrieved_metadata_2->rowsets(0).id());
-    }
-
-    // 7. failed case
-    // 7.1 put_tablet_metadata fail (non-bundling)
+    // 4. failed case
+    // 4.1 put_tablet_metadata fail
     {
         TEST_ENABLE_ERROR_POINT("TabletManager::put_tablet_metadata",
                                 Status::IOError("injected put tablet metadata error"));
@@ -3039,7 +2978,6 @@ TEST_F(LakeServiceTest, test_repair_tablet_metadata) {
         metadata_to_repair.set_id(next_id());
         metadata_to_repair.set_version(101);
         request.add_tablet_metadatas()->CopyFrom(metadata_to_repair);
-        request.set_enable_file_bundling(false);
 
         _lake_service.repair_tablet_metadata(&cntl, &request, &response, nullptr);
         ASSERT_FALSE(cntl.Failed());
@@ -3051,38 +2989,7 @@ TEST_F(LakeServiceTest, test_repair_tablet_metadata) {
                                  "injected put tablet metadata error"));
     }
 
-    // 7.2 put_bundle_tablet_metadata fail (bundling)
-    {
-        TEST_ENABLE_ERROR_POINT("TabletManager::put_bundle_tablet_metadata",
-                                Status::IOError("injected put bundle tablet metadata error"));
-        SyncPoint::GetInstance()->EnableProcessing();
-        DeferOp defer([]() {
-            TEST_DISABLE_ERROR_POINT("TabletManager::put_bundle_tablet_metadata");
-            SyncPoint::GetInstance()->DisableProcessing();
-        });
-
-        brpc::Controller cntl;
-        RepairTabletMetadataRequest request;
-        RepairTabletMetadataResponse response;
-
-        TabletMetadataPB metadata_to_repair;
-        metadata_to_repair.set_id(next_id());
-        metadata_to_repair.set_version(100);
-        request.add_tablet_metadatas()->CopyFrom(metadata_to_repair);
-        request.set_enable_file_bundling(true);
-        request.set_write_bundling_file(true);
-
-        _lake_service.repair_tablet_metadata(&cntl, &request, &response, nullptr);
-        ASSERT_FALSE(cntl.Failed());
-        ASSERT_EQ(TStatusCode::OK, response.status().status_code());
-        ASSERT_EQ(1, response.tablet_repair_statuses_size());
-        ASSERT_EQ(0, response.tablet_repair_statuses(0).tablet_id());
-        ASSERT_EQ(TStatusCode::IO_ERROR, response.tablet_repair_statuses(0).status().status_code());
-        ASSERT_TRUE(MatchPattern(response.tablet_repair_statuses(0).status().error_msgs(0),
-                                 "injected put bundle tablet metadata error"));
-    }
-
-    // 7.3 task cancelled
+    // 4.2 task cancelled
     {
         class MockRunnable : public Runnable {
         public:
@@ -3104,7 +3011,7 @@ TEST_F(LakeServiceTest, test_repair_tablet_metadata) {
         });
 
         {
-            // test bundling cancelled
+            // test cancelled
             brpc::Controller cntl;
             RepairTabletMetadataRequest request;
             RepairTabletMetadataResponse response;
@@ -3113,30 +3020,6 @@ TEST_F(LakeServiceTest, test_repair_tablet_metadata) {
             metadata_to_repair.set_id(next_id());
             metadata_to_repair.set_version(100);
             request.add_tablet_metadatas()->CopyFrom(metadata_to_repair);
-            request.set_enable_file_bundling(true);
-            request.set_write_bundling_file(true);
-
-            _lake_service.repair_tablet_metadata(&cntl, &request, &response, nullptr);
-            ASSERT_FALSE(cntl.Failed());
-            ASSERT_EQ(TStatusCode::OK, response.status().status_code());
-            ASSERT_EQ(1, response.tablet_repair_statuses_size());
-            ASSERT_EQ(0, response.tablet_repair_statuses(0).tablet_id());
-            ASSERT_EQ(TStatusCode::CANCELLED, response.tablet_repair_statuses(0).status().status_code());
-            ASSERT_TRUE(MatchPattern(response.tablet_repair_statuses(0).status().error_msgs(0),
-                                     "*repair bundling tablet metadata task has been cancelled*"));
-        }
-
-        {
-            // test non-bundling cancelled
-            brpc::Controller cntl;
-            RepairTabletMetadataRequest request;
-            RepairTabletMetadataResponse response;
-
-            TabletMetadataPB metadata_to_repair;
-            metadata_to_repair.set_id(next_id());
-            metadata_to_repair.set_version(100);
-            request.add_tablet_metadatas()->CopyFrom(metadata_to_repair);
-            request.set_enable_file_bundling(false);
 
             _lake_service.repair_tablet_metadata(&cntl, &request, &response, nullptr);
             ASSERT_FALSE(cntl.Failed());

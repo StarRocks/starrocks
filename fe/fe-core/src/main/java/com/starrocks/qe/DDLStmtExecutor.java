@@ -162,7 +162,6 @@ import com.starrocks.statistic.NativeAnalyzeJob;
 import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
-import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -799,14 +798,14 @@ public class DDLStmtExecutor {
                 if (table.isCloudNativeTable()) {
                     // cloud native table
                     List<String> partitionNames = stmt.getPartitions();
-                    ComputeResource computeResource = context.getCurrentComputeResource();
+                    long warehouseId = context.getCurrentWarehouseId();
 
                     if (isDryRun) {
                         List<List<String>> rows =
-                                TabletRepairHelper.dryRunRepair(stmt, db, (OlapTable) table, partitionNames, computeResource);
+                                TabletRepairHelper.dryRunRepair(stmt, db, (OlapTable) table, partitionNames, warehouseId);
                         result.addAll(rows);
                     } else {
-                        TabletRepairHelper.repair(stmt, db, (OlapTable) table, partitionNames, computeResource);
+                        TabletRepairHelper.repair(stmt, db, (OlapTable) table, partitionNames, warehouseId);
                     }
                 } else if (table.isCloudNativeMaterializedView()) {
                     // cloud native mv

@@ -55,7 +55,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TStatusCode;
-import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -140,7 +139,7 @@ public class TabletRepairHelper {
 
     private static PhysicalPartitionInfo getPhysicalPartitionInfo(Database db, OlapTable table, long physicalPartitionId,
                                                                   boolean enforceConsistentVersion,
-                                                                  ComputeResource computeResource) throws StarRocksException {
+                                                                  long warehouseId) throws StarRocksException {
         Locker locker = new Locker();
         locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
         try {
@@ -176,7 +175,7 @@ public class TabletRepairHelper {
                     unverifiedTablets.add(tabletId);
 
                     ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr().getComputeNodeAssignedToTablet(
-                            computeResource, tabletId);
+                            warehouseId, lakeTablet);
                     if (computeNode == null) {
                         throw new NoAliveBackendException("no alive backend");
                     }
@@ -460,8 +459,6 @@ public class TabletRepairHelper {
         metadata.enablePersistentIndex = otherValidMetadata.enablePersistentIndex;
         metadata.persistentIndexType = otherValidMetadata.persistentIndexType;
         metadata.gtid = GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid();
-        metadata.compactionStrategy = otherValidMetadata.compactionStrategy;
-        metadata.flatJsonConfig = otherValidMetadata.flatJsonConfig;
         return metadata;
     }
 
@@ -515,26 +512,17 @@ public class TabletRepairHelper {
     }
 
     private static Map<Long, String> repairTabletMetadata(PhysicalPartitionInfo info,
-                                                          Map<Long, TabletMetadataPB> tabletToValidMetadata,
-                                                          boolean isFileBundling) throws Exception {
+                                                          Map<Long, TabletMetadataPB> tabletToValidMetadata) throws Exception {
         long physicalPartitionId = info.physicalPartitionId;
         Map<ComputeNode, Set<Long>> nodeToTablets = info.nodeToTablets;
 
-        boolean writeBundlingFile = true;
         List<Future<RepairTabletMetadataResponse>> responses = Lists.newArrayList();
         List<ComputeNode> nodes = Lists.newArrayList();
         for (Map.Entry<ComputeNode, Set<Long>> entry : nodeToTablets.entrySet()) {
             RepairTabletMetadataRequest request = new RepairTabletMetadataRequest();
-            request.enableFileBundling = isFileBundling;
-            request.writeBundlingFile = isFileBundling && writeBundlingFile;
 
-            // if enable file bundling, we only need to send the write bundling metadata request to one node.
-            // other node requests are used for some cleanup work.
-            Set<Long> tabletIds = request.writeBundlingFile ? Sets.newHashSet(info.allTablets) : entry.getValue();
+            Set<Long> tabletIds = entry.getValue();
             Preconditions.checkState(!tabletIds.isEmpty());
-            if (request.writeBundlingFile) {
-                writeBundlingFile = false;
-            }
 
             List<TabletMetadataPB> newMetadatas = Lists.newArrayList();
             for (long tabletId : tabletIds) {
@@ -642,12 +630,11 @@ public class TabletRepairHelper {
      * @param info                     Information about the physical partition.
      * @param enforceConsistentVersion Whether to enforce consistent metadata version across all tablets.
      * @param allowEmptyTabletRecovery Whether to allow creating empty metadata for tablets without valid metadata.
-     * @param isFileBundling           Whether file bundling is enabled for the table.
      * @return A map of tablet IDs to error messages for any tablets that failed to repair.
      * @throws Exception If an error occurs during the repair process.
      */
     private static Map<Long, String> repairPhysicalPartition(PhysicalPartitionInfo info, boolean enforceConsistentVersion,
-                                                             boolean allowEmptyTabletRecovery, boolean isFileBundling)
+                                                             boolean allowEmptyTabletRecovery)
             throws Exception {
         Map<Long, TabletMetadataPB> tabletToValidMetadata = getValidTabletMetadatas(info, enforceConsistentVersion);
 
@@ -658,7 +645,7 @@ public class TabletRepairHelper {
                         Collectors.toMap(Map.Entry::getKey, e -> e.getValue().version)));
 
         // repair the valid tablet metadata through backends
-        return repairTabletMetadata(info, tabletToValidMetadata, isFileBundling);
+        return repairTabletMetadata(info, tabletToValidMetadata);
     }
 
     /**
@@ -673,14 +660,13 @@ public class TabletRepairHelper {
      * @param db The Database containing the table to be repaired.
      * @param table The OlapTable whose tablets are to be repaired.
      * @param partitionNames A list of partition names to repair. If empty, all partitions are repaired.
-     * @param computeResource The compute resource used for assigning compute nodes.
+     * @param warehouseId The warehouse id used for assigning compute nodes.
      * @throws StarRocksException If any tablet repair fails or if there are issues during the process.
      */
     public static void repair(AdminRepairTableStmt stmt, Database db, OlapTable table, @NotNull List<String> partitionNames,
-                              ComputeResource computeResource) throws StarRocksException {
+                              long warehouseId) throws StarRocksException {
         boolean enforceConsistentVersion = stmt.isEnforceConsistentVersion();
         boolean allowEmptyTabletRecovery = stmt.isAllowEmptyTabletRecovery();
-        boolean isFileBundling = table.isFileBundling();
 
         // get physical partition ids in db table read lock
         List<Long> physicalPartitionIds = getPhysicalPartitionIds(db, table, partitionNames);
@@ -690,10 +676,10 @@ public class TabletRepairHelper {
         for (Long physicalPartitionId : physicalPartitionIds) {
             try {
                 PhysicalPartitionInfo info =
-                        getPhysicalPartitionInfo(db, table, physicalPartitionId, enforceConsistentVersion, computeResource);
+                        getPhysicalPartitionInfo(db, table, physicalPartitionId, enforceConsistentVersion, warehouseId);
 
                 Map<Long, String> tabletErrors =
-                        repairPhysicalPartition(info, enforceConsistentVersion, allowEmptyTabletRecovery, isFileBundling);
+                        repairPhysicalPartition(info, enforceConsistentVersion, allowEmptyTabletRecovery);
                 if (!tabletErrors.isEmpty()) {
                     partitionErrors.put(physicalPartitionId, tabletErrors);
                 }
@@ -758,7 +744,7 @@ public class TabletRepairHelper {
      * Return the repair plan without executing it
      */
     public static List<List<String>> dryRunRepair(AdminRepairTableStmt stmt, Database db, OlapTable table,
-                                                  List<String> partitionNames, ComputeResource computeResource)
+                                                  List<String> partitionNames, long warehouseId)
             throws StarRocksException {
         boolean enforceConsistentVersion = stmt.isEnforceConsistentVersion();
         boolean allowEmptyTabletRecovery = stmt.isAllowEmptyTabletRecovery();
@@ -776,7 +762,7 @@ public class TabletRepairHelper {
 
             try {
                 PhysicalPartitionInfo info =
-                        getPhysicalPartitionInfo(db, table, physicalPartitionId, enforceConsistentVersion, computeResource);
+                        getPhysicalPartitionInfo(db, table, physicalPartitionId, enforceConsistentVersion, warehouseId);
                 visibleVersion = info.maxVersion;
 
                 Map<Long, TabletMetadataPB> validMetadatas = getValidTabletMetadatas(info, enforceConsistentVersion);

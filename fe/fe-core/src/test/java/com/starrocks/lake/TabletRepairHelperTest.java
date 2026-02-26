@@ -52,8 +52,6 @@ import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TStorageMedium;
-import com.starrocks.warehouse.cngroup.ComputeResource;
-import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -103,7 +101,7 @@ public class TabletRepairHelperTest {
         table.getIndexNameToId().put("index", indexId);
 
         MaterializedIndex index1 = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
-        TabletMeta tabletMeta1 = new TabletMeta(dbId, tableId, physicalPartitionId1, indexId, TStorageMedium.HDD);
+        TabletMeta tabletMeta1 = new TabletMeta(dbId, tableId, physicalPartitionId1, indexId, 0, TStorageMedium.HDD);
         LakeTablet tablet11 = new LakeTablet(tabletId11);
         tablet11.setMinVersion(minVersion);
         index1.addTablet(tablet11, tabletMeta1);
@@ -117,7 +115,7 @@ public class TabletRepairHelperTest {
         table.addPartition(partition1);
 
         MaterializedIndex index2 = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
-        TabletMeta tabletMeta2 = new TabletMeta(dbId, tableId, physicalPartitionId2, indexId, TStorageMedium.HDD);
+        TabletMeta tabletMeta2 = new TabletMeta(dbId, tableId, physicalPartitionId2, indexId, 0, TStorageMedium.HDD);
         LakeTablet tablet21 = new LakeTablet(tabletId21);
         tablet21.setMinVersion(minVersion);
         index2.addTablet(tablet21, tabletMeta2);
@@ -159,7 +157,7 @@ public class TabletRepairHelperTest {
         // mock warehouse manager
         new MockUp<WarehouseManager>() {
             @Mock
-            public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
+            public ComputeNode getComputeNodeAssignedToTablet(Long warehouseId, LakeTablet tablet) {
                 return node;
             }
         };
@@ -167,7 +165,7 @@ public class TabletRepairHelperTest {
         // case 1: test partition 1 with enforceConsistentVersion = true
         {
             PhysicalPartitionInfo info = Deencapsulation.invoke(TabletRepairHelper.class, "getPhysicalPartitionInfo",
-                    db, table, physicalPartitionId1, true, WarehouseComputeResource.DEFAULT);
+                    db, table, physicalPartitionId1, true, WarehouseManager.DEFAULT_WAREHOUSE_ID);
 
             Assertions.assertEquals(physicalPartitionId1, info.physicalPartitionId());
             Assertions.assertEquals(2, info.allTablets().size());
@@ -182,7 +180,7 @@ public class TabletRepairHelperTest {
         // case 2: test partition 1 with enforceConsistentVersion = false
         {
             PhysicalPartitionInfo info = Deencapsulation.invoke(TabletRepairHelper.class, "getPhysicalPartitionInfo",
-                    db, table, physicalPartitionId1, false, WarehouseComputeResource.DEFAULT);
+                    db, table, physicalPartitionId1, false, WarehouseManager.DEFAULT_WAREHOUSE_ID);
 
             Assertions.assertEquals(physicalPartitionId1, info.physicalPartitionId());
             Assertions.assertEquals(2, info.allTablets().size());
@@ -197,7 +195,7 @@ public class TabletRepairHelperTest {
         // case 3: test partition 2 with enforceConsistentVersion = true
         {
             PhysicalPartitionInfo info = Deencapsulation.invoke(TabletRepairHelper.class, "getPhysicalPartitionInfo",
-                    db, table, physicalPartitionId2, true, WarehouseComputeResource.DEFAULT);
+                    db, table, physicalPartitionId2, true, WarehouseManager.DEFAULT_WAREHOUSE_ID);
 
             Assertions.assertEquals(physicalPartitionId2, info.physicalPartitionId());
             Assertions.assertEquals(2, info.allTablets().size());
@@ -212,7 +210,7 @@ public class TabletRepairHelperTest {
         // case 4: test partition 2 with enforceConsistentVersion = false
         {
             PhysicalPartitionInfo info = Deencapsulation.invoke(TabletRepairHelper.class, "getPhysicalPartitionInfo",
-                    db, table, physicalPartitionId2, false, WarehouseComputeResource.DEFAULT);
+                    db, table, physicalPartitionId2, false, WarehouseManager.DEFAULT_WAREHOUSE_ID);
 
             Assertions.assertEquals(physicalPartitionId2, info.physicalPartitionId());
             Assertions.assertEquals(2, info.allTablets().size());
@@ -423,7 +421,7 @@ public class TabletRepairHelperTest {
             TabletMetadataPB metadata = Deencapsulation.invoke(TabletRepairHelper.class, "getValidTabletMetadata", entry);
             Assertions.assertNotNull(metadata);
             Assertions.assertEquals(tabletId11, metadata.id);
-            Assertions.assertEquals(maxVersion, metadata.version);
+            Assertions.assertEquals(-1 * maxVersion, metadata.version);
             Assertions.assertNull(metadata.sstableMeta); // sstableMeta should be cleared
         }
 
@@ -617,7 +615,7 @@ public class TabletRepairHelperTest {
             Assertions.assertEquals(2, tabletToValidMetadata.size());
             Assertions.assertTrue(tabletToValidMetadata.containsKey(tabletId11));
             // Should pick maxVersion - 1 because maxVersion has invalid missing files
-            Assertions.assertEquals(maxVersion - 1, tabletToValidMetadata.get(tabletId11).version);
+            Assertions.assertEquals(-1 * (maxVersion - 1), tabletToValidMetadata.get(tabletId11).version);
             Assertions.assertNull(tabletToValidMetadata.get(tabletId11).sstableMeta); // should be cleared
 
             Assertions.assertTrue(tabletToValidMetadata.containsKey(tabletId12));
@@ -636,7 +634,6 @@ public class TabletRepairHelperTest {
         new MockUp<LakeServiceWithMetrics>() {
             @Mock
             public Future<RepairTabletMetadataResponse> repairTabletMetadata(RepairTabletMetadataRequest request) {
-                Assertions.assertFalse(request.enableFileBundling);
                 Assertions.assertEquals(2, request.tabletMetadatas.size());
 
                 RepairTabletMetadataResponse response = new RepairTabletMetadataResponse();
@@ -657,41 +654,7 @@ public class TabletRepairHelperTest {
         };
 
         Map<Long, String> tabletErrors = Deencapsulation.invoke(TabletRepairHelper.class, "repairTabletMetadata",
-                info, tabletToValidMetadata, false);
-        Assertions.assertTrue(tabletErrors.isEmpty());
-    }
-
-    @Test
-    public void testRepairTabletMetadataWithFileBundling() {
-        Map<Long, TabletMetadataPB> tabletToValidMetadata = Maps.newHashMap();
-        tabletToValidMetadata.put(tabletId11, createTabletMetadataPB(tabletId11, maxVersion));
-        tabletToValidMetadata.put(tabletId12, createTabletMetadataPB(tabletId12, maxVersion));
-
-        new MockUp<LakeServiceWithMetrics>() {
-            @Mock
-            public Future<RepairTabletMetadataResponse> repairTabletMetadata(RepairTabletMetadataRequest request) {
-                Assertions.assertTrue(request.enableFileBundling);
-                Assertions.assertEquals(2, request.tabletMetadatas.size());
-
-                RepairTabletMetadataResponse response = new RepairTabletMetadataResponse();
-                response.status = new StatusPB();
-                response.status.statusCode = 0;
-                response.tabletRepairStatuses = Lists.newArrayList();
-
-                for (TabletMetadataPB metadata : request.tabletMetadatas) {
-                    TabletMetadataRepairStatus status = new TabletMetadataRepairStatus();
-                    status.tabletId = metadata.id;
-                    status.status = new StatusPB();
-                    status.status.statusCode = 0;
-                    response.tabletRepairStatuses.add(status);
-                }
-
-                return CompletableFuture.completedFuture(response);
-            }
-        };
-
-        Map<Long, String> tabletErrors = Deencapsulation.invoke(TabletRepairHelper.class, "repairTabletMetadata",
-                info, tabletToValidMetadata, true);
+                info, tabletToValidMetadata);
         Assertions.assertTrue(tabletErrors.isEmpty());
     }
 
@@ -711,7 +674,7 @@ public class TabletRepairHelperTest {
 
         ExceptionChecker.expectThrowsWithMsg(RpcException.class, "rpc exception",
                 () -> Deencapsulation.invoke(TabletRepairHelper.class, "repairTabletMetadata",
-                        info, tabletToValidMetadata, false));
+                        info, tabletToValidMetadata));
     }
 
     @Test
@@ -729,7 +692,7 @@ public class TabletRepairHelperTest {
 
         ExceptionChecker.expectThrowsWithMsg(StarRocksException.class, "response is null",
                 () -> Deencapsulation.invoke(TabletRepairHelper.class, "repairTabletMetadata",
-                        info, tabletToValidMetadata, false));
+                        info, tabletToValidMetadata));
     }
 
     @Test
@@ -751,7 +714,7 @@ public class TabletRepairHelperTest {
 
         ExceptionChecker.expectThrowsWithMsg(StarRocksException.class, "missing tablet_metadatas",
                 () -> Deencapsulation.invoke(TabletRepairHelper.class, "repairTabletMetadata",
-                        info, tabletToValidMetadata, false));
+                        info, tabletToValidMetadata));
     }
 
     @Test
@@ -786,7 +749,7 @@ public class TabletRepairHelperTest {
         };
 
         Map<Long, String> tabletErrors = Deencapsulation.invoke(TabletRepairHelper.class, "repairTabletMetadata",
-                info, tabletToValidMetadata, false);
+                info, tabletToValidMetadata);
 
         Assertions.assertEquals(1, tabletErrors.size());
         Assertions.assertTrue(tabletErrors.containsKey(tabletId12));
@@ -829,8 +792,6 @@ public class TabletRepairHelperTest {
 
             @Mock
             public Future<RepairTabletMetadataResponse> repairTabletMetadata(RepairTabletMetadataRequest request) {
-                Assertions.assertFalse(request.enableFileBundling);
-                Assertions.assertFalse(request.writeBundlingFile);
                 Assertions.assertEquals(2, request.tabletMetadatas.size());
                 Assertions.assertEquals(maxVersion, request.tabletMetadatas.get(0).version);
                 Assertions.assertEquals(maxVersion, request.tabletMetadatas.get(1).version);
@@ -854,13 +815,13 @@ public class TabletRepairHelperTest {
 
         // case 1: enforceConsistentVersion = true
         Map<Long, String> tabletErrors =
-                Deencapsulation.invoke(TabletRepairHelper.class, "repairPhysicalPartition", info, true, false, false);
+                Deencapsulation.invoke(TabletRepairHelper.class, "repairPhysicalPartition", info, true, false);
         Assertions.assertTrue(tabletErrors.isEmpty());
 
         // case 2: enforceConsistentVersion = false
         info = new PhysicalPartitionInfo(physicalPartitionId1, Lists.newArrayList(tabletId11, tabletId12),
                 Sets.newHashSet(tabletId11, tabletId12), nodeToTablets, maxVersion, minVersion);
-        tabletErrors = Deencapsulation.invoke(TabletRepairHelper.class, "repairPhysicalPartition", info, false, false, false);
+        tabletErrors = Deencapsulation.invoke(TabletRepairHelper.class, "repairPhysicalPartition", info, false, false);
         Assertions.assertTrue(tabletErrors.isEmpty());
     }
 
@@ -869,7 +830,7 @@ public class TabletRepairHelperTest {
         // mock warehouse manager
         new MockUp<WarehouseManager>() {
             @Mock
-            public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
+            public ComputeNode getComputeNodeAssignedToTablet(Long warehouseId, LakeTablet tablet) {
                 return node;
             }
         };
@@ -908,8 +869,6 @@ public class TabletRepairHelperTest {
 
             @Mock
             public Future<RepairTabletMetadataResponse> repairTabletMetadata(RepairTabletMetadataRequest request) {
-                Assertions.assertFalse(request.enableFileBundling);
-                Assertions.assertFalse(request.writeBundlingFile);
                 Assertions.assertEquals(2, request.tabletMetadatas.size());
                 Assertions.assertEquals(maxVersion, request.tabletMetadatas.get(0).version);
                 Assertions.assertEquals(maxVersion, request.tabletMetadatas.get(1).version);
@@ -942,13 +901,13 @@ public class TabletRepairHelperTest {
         stmt.setEnforceConsistentVersion(true);
         ExceptionChecker.expectThrowsNoException(
                 () -> Deencapsulation.invoke(TabletRepairHelper.class, "repair", stmt, db, table, Lists.newArrayList("p1"),
-                        WarehouseComputeResource.DEFAULT));
+                        WarehouseManager.DEFAULT_WAREHOUSE_ID));
 
         // case 2: enforceConsistentVersion = false
         stmt.setEnforceConsistentVersion(false);
         ExceptionChecker.expectThrowsNoException(
                 () -> Deencapsulation.invoke(TabletRepairHelper.class, "repair", stmt, db, table, Lists.newArrayList("p1"),
-                        WarehouseComputeResource.DEFAULT));
+                        WarehouseManager.DEFAULT_WAREHOUSE_ID));
     }
 
     @Test
@@ -956,7 +915,7 @@ public class TabletRepairHelperTest {
         // mock warehouse manager
         new MockUp<WarehouseManager>() {
             @Mock
-            public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
+            public ComputeNode getComputeNodeAssignedToTablet(Long warehouseId, LakeTablet tablet) {
                 return node;
             }
         };
@@ -978,14 +937,14 @@ public class TabletRepairHelperTest {
         ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
                 "Fail to repair tablet metadata for 1 partition, the first 1 partition: [{partition: 4, error: rpc exception}]",
                 () -> Deencapsulation.invoke(TabletRepairHelper.class, "repair", stmt, db, table, Lists.newArrayList("p1"),
-                        WarehouseComputeResource.DEFAULT));
+                        WarehouseManager.DEFAULT_WAREHOUSE_ID));
     }
 
     @Test
     public void testDryRunRepairRecoverable() throws Exception {
         new MockUp<WarehouseManager>() {
             @Mock
-            public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
+            public ComputeNode getComputeNodeAssignedToTablet(Long warehouseId, LakeTablet tablet) {
                 return node;
             }
         };
@@ -1028,7 +987,7 @@ public class TabletRepairHelperTest {
 
         stmt.setEnforceConsistentVersion(false);
         List<List<String>> result = TabletRepairHelper.dryRunRepair(stmt, db, table, Lists.newArrayList("p1"),
-                WarehouseComputeResource.DEFAULT);
+                WarehouseManager.DEFAULT_WAREHOUSE_ID);
 
         Assertions.assertEquals(1, result.size());
         
@@ -1051,7 +1010,7 @@ public class TabletRepairHelperTest {
     public void testDryRunRepairUnrecoverable() throws Exception {
         new MockUp<WarehouseManager>() {
             @Mock
-            public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
+            public ComputeNode getComputeNodeAssignedToTablet(Long warehouseId, LakeTablet tablet) {
                 return node;
             }
         };
@@ -1093,7 +1052,7 @@ public class TabletRepairHelperTest {
 
         stmt.setEnforceConsistentVersion(false);
         List<List<String>> result = TabletRepairHelper.dryRunRepair(stmt, db, table, Lists.newArrayList("p1"),
-                WarehouseComputeResource.DEFAULT);
+                WarehouseManager.DEFAULT_WAREHOUSE_ID);
 
         Assertions.assertEquals(1, result.size());
         
@@ -1112,7 +1071,7 @@ public class TabletRepairHelperTest {
     public void testDryRunRepairNormal() throws Exception {
         new MockUp<WarehouseManager>() {
             @Mock
-            public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
+            public ComputeNode getComputeNodeAssignedToTablet(Long warehouseId, LakeTablet tablet) {
                 return node;
             }
         };
@@ -1155,7 +1114,7 @@ public class TabletRepairHelperTest {
 
         stmt.setEnforceConsistentVersion(false);
         List<List<String>> result = TabletRepairHelper.dryRunRepair(stmt, db, table, Lists.newArrayList("p1"),
-                WarehouseComputeResource.DEFAULT);
+                WarehouseManager.DEFAULT_WAREHOUSE_ID);
 
         Assertions.assertEquals(1, result.size());
         
@@ -1174,7 +1133,7 @@ public class TabletRepairHelperTest {
     public void testDryRunRepairException() throws Exception {
         new MockUp<WarehouseManager>() {
             @Mock
-            public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
+            public ComputeNode getComputeNodeAssignedToTablet(Long warehouseId, LakeTablet tablet) {
                 return node;
             }
         };
@@ -1195,7 +1154,7 @@ public class TabletRepairHelperTest {
 
         stmt.setEnforceConsistentVersion(false);
         List<List<String>> result = TabletRepairHelper.dryRunRepair(stmt, db, table, Lists.newArrayList("p1"),
-                WarehouseComputeResource.DEFAULT);
+                WarehouseManager.DEFAULT_WAREHOUSE_ID);
 
         Assertions.assertEquals(1, result.size());
 
