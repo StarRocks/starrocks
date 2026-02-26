@@ -179,12 +179,13 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
         final Tracers.Module mvRefreshTraceModule = queryDebugOptions.getTraceModule();
         Tracers.init(mvRefreshTraceMode, mvRefreshTraceModule, true, false);
 
-        final ConnectContext connectContext = context.getCtx();
+        ConnectContext connectContext = context.getCtx();
         // Set query source to MV for materialized view refresh
         connectContext.setQuerySource(com.starrocks.qe.QueryDetail.QuerySource.MV);
         final QueryMaterializationContext queryMVContext = new QueryMaterializationContext();
         connectContext.setQueryMVContext(queryMVContext);
-        try {
+            
+        try (ConnectContext.ContextScope scope = ConnectContext.enterOnlyReadIcebergCacheScope(connectContext)) {
             // do refresh
             try (Timer ignored = Tracers.watchScope("MVRefreshDoWholeRefresh")) {
                 // refresh mv

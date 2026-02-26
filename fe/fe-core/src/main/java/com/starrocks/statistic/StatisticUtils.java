@@ -142,6 +142,7 @@ public class StatisticUtils {
         context.setCurrentWarehouse(warehouse.getName());
 
         context.setStatisticsContext(true);
+        context.setOnlyReadIcebergCache(true);
         context.setDatabase(StatsConstants.STATISTICS_DB_NAME);
         context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         context.setCurrentUserIdentity(UserIdentity.ROOT);
