@@ -84,11 +84,9 @@ jobs:
       - name: Checkout Trusted Tools
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository }}
-          ref: main
+          repository: StarRocks/markdown-translator
+          ref: 'v1.0.5'
           path: trusted_tools
-          sparse-checkout: |
-            docs/translation/
 
       - name: Get Changed Files
         id: changed-files
@@ -110,27 +108,35 @@ jobs:
             const report = comments.find(c => c.body.includes('### 🌎 Translation Required?'));
             return report ? report.body : '';
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Prerequisites for Translation
+        run: |
+          cd trusted_tools
+          npm install
+
       - name: Run Translations
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           BODY: ${{ steps.get_checks.outputs.result }}
           FILES_JSON: ${{ steps.changed-files.outputs.all_changed_files }}
-        run: |
-          pip install -r trusted_tools/docs/translation/requirements.txt
-          
-          for FILE in $(echo "$FILES_JSON" | sed 's/\\"/"/g' | jq -r '.[]'); do
-            if [[ "$FILE" =~ ^docs/(en|zh|ja)/ ]]; then
-              SRC=$(echo $FILE | cut -d'/' -f2)
+        run: |          
+          for SOURCE_FILE in $(echo "$FILES_JSON" | sed 's/\\"/"/g' | jq -r '.[]'); do
+            if [[ "$SOURCE_FILE" =~ ^docs/(en|zh|ja)/ ]]; then
+              SRC=$(echo $SOURCE_FILE | cut -d'/' -f2)
               for LANG in ja zh en; do
                 if [ "$SRC" == "$LANG" ]; then continue; fi
                 
                 FULL_LANG=$(echo $LANG | sed 's/ja/Japanese/;s/zh/Chinese/;s/en/English/')
-                GLOBAL_STR=" [x] **$FULL_LANG ($LANG)** for **ALL** missing/outdated files"
-                INDIVIDUAL_STR=" [x] **$LANG** for \`$FILE\`"
+                INDIVIDUAL_STR=" [x] **$LANG** for \`$SOURCE_FILE\`"
                 
-                if [[ "$BODY" == *"$GLOBAL_STR"* ]] || [[ "$BODY" == *"$INDIVIDUAL_STR"* ]]; then
-                  echo "🚀 Starting translation for $FILE to $LANG"
-                  python trusted_tools/docs/translation/translate.py -l $LANG --files "pr_code/$FILE"
+                if [[ "$BODY" == *"$INDIVIDUAL_STR"* ]]; then
+                  echo "🚀 Starting translation for $SOURCE_FILE to $LANG"
+                  DEST_FILE=$(echo "$SOURCE_FILE" | sed "s|docs/$SRC/|docs/$LANG/|")
+                  
+                  node trusted_tools/bin/cli.js translate --input "pr_code/$SOURCE_FILE" --language $LANG --source $SRC --output "pr_code/$DEST_FILE"
                 fi
               done
             fi
@@ -162,12 +168,12 @@ jobs:
       - name: Commit and Push
         run: |
           cd pr_code
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "docs-automation[bot]"
+          git config --global user.email "docs-automation[bot]@starrocks.io"
 
           if [[ -n $(git status --porcelain docs/) ]]; then
             git add docs/
-            git commit -m "docs: automated translation via Gemini [skip ci]"
+            git commit -m "docs: automated translation via Gemini"
 
             # ------------------------------------------------------------------
             # CRITICAL AUTH FIX: Use PAT to push to Fork

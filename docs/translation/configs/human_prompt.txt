@@ -1,5 +1,0 @@
-Translate the following content into ${target_language}.
-
-Return the translation only in markdown format, without adding anything else. Do not add the ```markdown``` tags or any backticks.
-
-### CONTENT TO TRANSLATE ###
