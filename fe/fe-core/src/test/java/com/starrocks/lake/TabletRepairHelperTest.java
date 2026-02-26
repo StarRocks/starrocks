@@ -423,7 +423,7 @@ public class TabletRepairHelperTest {
             TabletMetadataPB metadata = Deencapsulation.invoke(TabletRepairHelper.class, "getValidTabletMetadata", entry);
             Assertions.assertNotNull(metadata);
             Assertions.assertEquals(tabletId11, metadata.id);
-            Assertions.assertEquals(maxVersion, metadata.version);
+            Assertions.assertEquals(-1 * maxVersion, metadata.version);
             Assertions.assertNull(metadata.sstableMeta); // sstableMeta should be cleared
         }
 
@@ -617,7 +617,7 @@ public class TabletRepairHelperTest {
             Assertions.assertEquals(2, tabletToValidMetadata.size());
             Assertions.assertTrue(tabletToValidMetadata.containsKey(tabletId11));
             // Should pick maxVersion - 1 because maxVersion has invalid missing files
-            Assertions.assertEquals(maxVersion - 1, tabletToValidMetadata.get(tabletId11).version);
+            Assertions.assertEquals(-1 * (maxVersion - 1), tabletToValidMetadata.get(tabletId11).version);
             Assertions.assertNull(tabletToValidMetadata.get(tabletId11).sstableMeta); // should be cleared
 
             Assertions.assertTrue(tabletToValidMetadata.containsKey(tabletId12));
