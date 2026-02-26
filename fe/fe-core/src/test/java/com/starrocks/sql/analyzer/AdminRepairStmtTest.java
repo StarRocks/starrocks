@@ -29,7 +29,7 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 /**
- * AdminRepairTable: ADMIN REPAIR TABLE table_name[ PARTITION (p1,...)];
+ * AdminRepairTable: ADMIN REPAIR TABLE table_name[ PARTITION (p1,...)] PROPERTIES("key" = "value");
  * AdminCancelRepairTable: ADMIN CANCEL REPAIR TABLE table_name[ PARTITION (p1,...)];
  * AminCheckTablets: ADMIN CHECK TABLET (tablet_id1, tablet_id2, ...) PROPERTIES("type" = "...");
  */
@@ -44,13 +44,24 @@ public class AdminRepairStmtTest {
         AdminRepairTableStmt stmt = (AdminRepairTableStmt) analyzeSuccess("ADMIN REPAIR TABLE test;");
         Assertions.assertEquals("test", stmt.getDbName());
         Assertions.assertEquals("test", stmt.getTblName());
+
         stmt = (AdminRepairTableStmt) analyzeSuccess("ADMIN REPAIR TABLE test PARTITION(p1, p2, p3);");
         Assertions.assertEquals(Arrays.asList("p1", "p2", "p3"), stmt.getPartitions());
         Assertions.assertEquals(4 * 3600L, stmt.getTimeoutS());
+        Assertions.assertTrue(stmt.isEnforceConsistentVersion());
+        Assertions.assertFalse(stmt.isAllowEmptyTabletRecovery());
+
+        stmt = (AdminRepairTableStmt) analyzeSuccess("ADMIN REPAIR TABLE test PARTITION(p1) " +
+                "properties('enforce_consistent_version' = 'false', 'allow_empty_tablet_recovery' = 'true');");
+        Assertions.assertFalse(stmt.isEnforceConsistentVersion());
+        Assertions.assertTrue(stmt.isAllowEmptyTabletRecovery());
+
         analyzeSuccess("ADMIN REPAIR TABLE test PARTITIONs(p1, p2, p3)");
+
         // bad cases
         analyzeFail("ADMIN REPAIR TABLE");
         analyzeFail("ADMIN REPAIR TABLE test TEMPORARY PARTITION(p1, p2, p3);");
+        analyzeFail("ADMIN REPAIR TABLE test properties('xxx' = 'yyy');");
     }
 
     @Test
