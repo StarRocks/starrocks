@@ -14,3 +14,7 @@ insert into t0 SELECT generate_series, 4096 - generate_series FROM TABLE(generat
 admin enable failpoint 'spill_hash_join_throw_bad_alloc';
 [UC] select count(l.k1),count(l.k2),count(r.k1),count(r.k2) from t0 l join t0 r on l.k1=r.k1;
 admin disable failpoint 'spill_hash_join_throw_bad_alloc';
+
+CLEANUP {
+    admin disable failpoint 'spill_hash_join_throw_bad_alloc';
+} END CLEANUP

@@ -18,6 +18,7 @@
 
 #include <climits>
 
+#include "base/debug/trace.h"
 #include "base/phmap/phmap_fwd_decl.h"
 #include "base/testutil/sync_point.h"
 #include "gutil/strings/join.h"
@@ -30,7 +31,6 @@
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/update_manager.h"
 #include "util/dynamic_cache.h"
-#include "util/trace.h"
 
 namespace starrocks::lake {
 
@@ -470,7 +470,6 @@ private:
 
             // Reuse publish_primary_compaction for each subtask
             // - Internal conflict check is performed per subtask
-            // - Light publish uses subtask's lcrm_file
             // - Primary index and metadata are updated
             RETURN_IF_ERROR(_tablet.update_mgr()->publish_primary_compaction(subtask_op, txn_id, *_metadata, _tablet,
                                                                              _index_entry, &_builder, _base_version));
@@ -495,10 +494,16 @@ private:
             _builder.remove_compacted_sst(sst_op);
         }
 
+        // Cleanup orphan lcrm files from merged large rowset split subtasks
+        // These files are no longer valid after merging (segment IDs changed)
+        for (const auto& lcrm_file : op_parallel.orphan_lcrm_files()) {
+            _metadata->add_orphan_files()->CopyFrom(lcrm_file);
+        }
+
         return Status::OK();
     }
 
-    // Helper function: check if all input rowsets exist in current metadata
+    // Helper function: check if all input rowsets exist in current metadata rowsets()
     bool _check_input_rowsets_exist(const TxnLogPB_OpCompaction& op) const {
         for (uint32_t input_id : op.input_rowsets()) {
             bool found = false;
@@ -522,6 +527,7 @@ private:
             DCHECK(rowset.has_id());
             auto new_rowset = _metadata->add_rowsets();
             new_rowset->CopyFrom(rowset);
+            new_rowset->set_version(_new_version);
             _metadata->set_next_rowset_id(new_rowset->id() + get_rowset_id_step(*new_rowset));
         }
         if (op_schema_change.has_delvec_meta()) {
@@ -620,6 +626,7 @@ private:
                     rowset->CopyFrom(op_write.rowset());
                     const auto new_rowset_id = rowset->id() + _metadata->next_rowset_id();
                     rowset->set_id(new_rowset_id);
+                    rowset->set_version(_new_version);
                     new_next_rowset_id =
                             std::max<uint32_t>(new_next_rowset_id, new_rowset_id + get_rowset_id_step(*rowset));
                 }
@@ -859,6 +866,7 @@ public:
 
         // Set rowset ID and update next_rowset_id
         merged_rowset->set_id(_metadata->next_rowset_id());
+        merged_rowset->set_version(_new_version);
         _metadata->set_next_rowset_id(_metadata->next_rowset_id() + get_rowset_id_step(*merged_rowset));
         VLOG(2) << "Set rowset id to " << merged_rowset->id() << " and updated next_rowset_id to "
                 << _metadata->next_rowset_id() << " for tablet " << _tablet.id();
@@ -896,6 +904,7 @@ private:
             auto rowset = _metadata->add_rowsets();
             rowset->CopyFrom(op_write.rowset());
             rowset->set_id(_metadata->next_rowset_id());
+            rowset->set_version(_new_version);
             _metadata->set_next_rowset_id(_metadata->next_rowset_id() + get_rowset_id_step(*rowset));
             if (!_metadata->rowset_to_schema().empty()) {
                 auto schema_id = _metadata->schema().id();
@@ -1007,6 +1016,7 @@ private:
             auto output_rowset = _metadata->mutable_rowsets(first_idx);
             output_rowset->CopyFrom(op_compaction.output_rowset());
             output_rowset->set_id(_metadata->next_rowset_id());
+            output_rowset->set_version(_new_version);
             _metadata->set_next_rowset_id(_metadata->next_rowset_id() + get_rowset_id_step(*output_rowset));
             ++first_input_pos;
             has_output_rowset = true;
@@ -1084,6 +1094,7 @@ private:
             DCHECK(rowset.has_id());
             auto new_rowset = _metadata->add_rowsets();
             new_rowset->CopyFrom(rowset);
+            new_rowset->set_version(_new_version);
             _metadata->set_next_rowset_id(new_rowset->id() + get_rowset_id_step(*new_rowset));
         }
         DCHECK(!op_schema_change.has_delvec_meta());

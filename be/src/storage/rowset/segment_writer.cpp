@@ -37,6 +37,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/hash/crc32c.h"
 #include "base/string/faststring.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
@@ -56,7 +57,6 @@
 #include "storage/short_key_index.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"
-#include "util/crc32c.h"
 
 namespace starrocks {
 

@@ -14,6 +14,7 @@
 
 #include "storage/lake/lake_persistent_index.h"
 
+#include "base/debug/trace.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "serde/column_array_serde.h"
@@ -36,7 +37,6 @@
 #include "storage/sstable/merger.h"
 #include "storage/sstable/options.h"
 #include "storage/sstable/table_builder.h"
-#include "util/trace.h"
 
 namespace starrocks::lake {
 
@@ -804,8 +804,9 @@ Status LakePersistentIndex::commit(MetaFileBuilder* builder) {
 Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pkey_schema, int64_t rowset_version) {
     TRACE_COUNTER_SCOPE_LATENCY_US("rebuild_index_del_cost_us");
     // Build pk column struct from schema
+    ASSIGN_OR_RETURN(auto pk_encoding_type, rowset->tablet_schema()->primary_key_encoding_type_or_error());
     MutableColumnPtr pk_column;
-    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, pk_encoding_type));
     // Iterate all del files and insert into index.
     for (int del_idx = 0; del_idx < rowset->metadata().del_files_size(); ++del_idx) {
         TRACE_COUNTER_INCREMENT("rebuild_index_del_cnt", 1);
@@ -817,10 +818,12 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
         ASSIGN_OR_RETURN(auto read_file,
                          fs::new_random_access_file(ropts, _tablet_mgr->del_location(_tablet_id, del.name())));
         ASSIGN_OR_RETURN(auto read_buffer, read_file->read_all());
+        const auto* data = reinterpret_cast<const uint8_t*>(read_buffer.data());
+        const auto* end = data + read_buffer.size();
         // serialize to column
         auto pkc = pk_column->clone();
         using Serd = serde::ColumnArraySerde;
-        RETURN_IF_ERROR(Serd::deserialize(reinterpret_cast<const uint8_t*>(read_buffer.data()), pkc.get()));
+        RETURN_IF_ERROR(Serd::deserialize(data, end, pkc.get()));
         // We can't insert delete operation to index directly, because some delete operation is
         // older than current item, and we need to igore these delete operations.
         std::vector<IndexValue> found_values(pkc->size(), IndexValue(NullIndexValue));
@@ -930,9 +933,10 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
 
     _need_rebuild_file_cnt = need_rebuild_file_cnt(*metadata, metadata->sstable_meta());
+    ASSIGN_OR_RETURN(auto pk_encoding_type, tablet_schema->primary_key_encoding_type_or_error());
 
     // Init PersistentIndex
-    _key_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
+    _key_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema, pk_encoding_type);
 
     const auto& sstables = metadata->sstable_meta().sstables();
     // Rebuild persistent index from `rebuild_rss_rowid_point`
@@ -940,9 +944,9 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     const uint32_t rebuild_rss_id = rebuild_rss_rowid_point >> 32;
     OlapReaderStatistics stats;
     MutableColumnPtr pk_column;
-    if (pk_columns.size() > 1) {
-        // more than one key column
-        if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
+    if (pk_columns.size() > 1 || pk_encoding_type == PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2) {
+        // more than one key column or big endian encoding
+        if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, pk_encoding_type).ok()) {
             CHECK(false) << "create column for primary key encoder failed";
         }
     }
@@ -992,7 +996,8 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                     Column* pkc = nullptr;
                     if (pk_column) {
                         pk_column->reset_column();
-                        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get());
+                        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get(),
+                                                  pk_encoding_type);
                         pkc = pk_column.get();
                     } else {
                         pkc = const_cast<Column*>(chunk->columns()[0].get());

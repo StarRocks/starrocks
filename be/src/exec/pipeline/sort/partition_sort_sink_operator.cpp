@@ -22,6 +22,7 @@
 #include "exec/chunks_sorter_topn.h"
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exprs/expr.h"
+#include "exprs/expr_executor.h"
 #include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Types_types.h"
@@ -118,8 +119,8 @@ Status PartitionSortSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
     RETURN_IF_ERROR(_sort_exec_exprs.prepare(state, _parent_node_row_desc, _parent_node_child_row_desc));
     RETURN_IF_ERROR(_sort_exec_exprs.open(state));
-    RETURN_IF_ERROR(Expr::prepare(_analytic_partition_exprs, state));
-    RETURN_IF_ERROR(Expr::open(_analytic_partition_exprs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_analytic_partition_exprs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_analytic_partition_exprs, state));
     return Status::OK();
 }
 
@@ -152,7 +153,7 @@ OperatorPtr PartitionSortSinkOperatorFactory::create(int32_t dop, int32_t driver
 }
 
 void PartitionSortSinkOperatorFactory::close(RuntimeState* state) {
-    Expr::close(_analytic_partition_exprs, state);
+    ExprExecutor::close(_analytic_partition_exprs, state);
     _sort_exec_exprs.close(state);
     OperatorFactory::close(state);
 }

@@ -22,13 +22,13 @@
 #include <vector>
 
 #include "common/config.h"
+#include "common/thread/threadpool.h"
 #include "storage/compaction_candidate.h"
 #include "storage/compaction_task.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
-#include "util/threadpool.h"
 
 namespace starrocks {
 

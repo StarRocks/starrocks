@@ -118,6 +118,11 @@ public:
 protected:
     Status _create_slot_descs(ObjectPool* pool);
 
+    // Parse scan conjuncts and extract the literal value from an equality predicate
+    // in the form of `col_name = <literal>` (or `<literal> = col_name`).
+    // NOTE: currently only supports STRING literal predicates.
+    // Returns true and fills `result` when a matched predicate is found; otherwise false.
+    // Intended for schema scanners to push simple equality filters to FE RPC requests.
     bool _parse_expr_predicate(const std::string& col_name, std::string& result);
     bool _parse_expr_predicate(Expr* conjunct, const std::string& col_name, std::string& result);
 

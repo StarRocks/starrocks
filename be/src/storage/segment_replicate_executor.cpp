@@ -20,6 +20,7 @@
 #include <utility>
 
 #include "base/container/raw_container.h"
+#include "common/brpc_helper.h"
 #include "fs/fs_posix.h"
 #include "gen_cpp/data.pb.h"
 #include "runtime/current_thread.h"

@@ -248,7 +248,7 @@ public class AlterJobMgr {
             if (task == null) {
                 throw new SemanticException("Can not find running task for materialized view [%s]", materializedView.getName());
             }
-            taskManager.resumeTask(task);
+            taskManager.resumeTask(task, isReplay);
         } else if (AlterMaterializedViewStatusClause.INACTIVE.equalsIgnoreCase(status)) {
             materializedView.setInactiveAndReason(reason);
             // clear running & pending task runs since the mv has been inactive
@@ -267,7 +267,7 @@ public class AlterJobMgr {
                     taskRunManager.taskRunUnlock();
                 }
                 // suspend the task to avoid scheduling new task runs
-                taskManager.suspendTask(currentTask);
+                taskManager.suspendTask(currentTask, isReplay);
             }
         }
     }

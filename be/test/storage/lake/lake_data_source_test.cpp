@@ -35,6 +35,7 @@
 #include "fs/fs_util.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
+#include "runtime/descriptors_ext.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
@@ -264,6 +265,7 @@ TEST_F(LakeDataSourceTest, get_tablet_schema) {
     fe.port = 9020;
     fragment_ctx.set_fe_addr(fe);
     runtime_state->set_fragment_ctx(&fragment_ctx);
+    runtime_state->set_fragment_dict_state(fragment_ctx.dict_state());
 
     // Build a minimal descriptor table with required column names.
     TDescriptorTableBuilder desc_tbl_builder;

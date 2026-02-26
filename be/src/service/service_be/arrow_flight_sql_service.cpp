@@ -17,8 +17,8 @@
 #include <arrow/array/builder_binary.h>
 #include <arrow/flight/server.h>
 #include <arrow/flight/types.h>
+#include <base/utility/arrow_utils.h>
 #include <exec/pipeline/query_context.h>
-#include <util/arrow/utils.h>
 
 #include "base/uid_util.h"
 #include "common/status.h"

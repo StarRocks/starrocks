@@ -21,6 +21,7 @@
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
+#include "storage/primary_key_encoding_types.h"
 #include "storage/tablet_schema.h"
 
 namespace starrocks::lake {
@@ -86,7 +87,8 @@ class SegmentPKIterator {
 public:
     SegmentPKIterator() = default;
     ~SegmentPKIterator() { close(); }
-    Status init(const ChunkIteratorPtr& iter, const Schema& pkey_schema, bool load_whole);
+    Status init(const ChunkIteratorPtr& iter, const Schema& pkey_schema, bool lazy_load,
+                PrimaryKeyEncodingType encoding_type);
     void next();
     bool done();
     Status status();
@@ -128,6 +130,8 @@ private:
     ChunkUniquePtr _pk_column_chunk;
     // For no lazy load, we can load whole pk column and encode at once.
     MutableColumnPtr _standalone_pk_column;
+    // The encoding type of primary key.
+    PrimaryKeyEncodingType _encoding_type = PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
 };
 
 using SegmentPKIteratorPtr = std::unique_ptr<SegmentPKIterator>;

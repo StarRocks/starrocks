@@ -20,12 +20,16 @@
 #include <butil/time.h> // NOLINT
 
 #include "agent/agent_server.h"
+#include "base/brpc/brpc.h"
 #include "base/concurrency/countdown_latch.h"
+#include "base/debug/trace.h"
 #include "base/testutil/sync_point.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "common/config.h"
 #include "common/status.h"
+#include "common/thread/thread.h"
+#include "common/thread/threadpool.h"
 #include "exec/write_combined_txn_log.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/tablet_schema.pb.h"
@@ -33,7 +37,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/lake_snapshot_loader.h"
 #include "runtime/load_channel_mgr.h"
-#include "service/brpc.h"
 #include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/compaction_task.h"
@@ -47,9 +50,6 @@
 #include "storage/lake/vacuum.h"
 #include "storage/lake/vacuum_full.h"
 #include "util/brpc_stub_cache.h"
-#include "util/thread.h"
-#include "util/threadpool.h"
-#include "util/trace.h"
 
 namespace starrocks {
 

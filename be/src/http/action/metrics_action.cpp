@@ -32,7 +32,8 @@
 #include "http/http_channel.h"
 #include "http/http_headers.h"
 #include "http/http_request.h"
-#include "util/starrocks_metrics.h"
+#include "runtime/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 
 #ifdef USE_STAROS
 #include "metrics/metrics.h"
@@ -364,7 +365,7 @@ void MetricsAction::handle(HttpRequest* req) {
 
 void MetricsAction::_collect_table_metrics(starrocks::MetricsVisitor* visitor) {
     if (config::enable_collect_table_metrics) {
-        StarRocksMetrics::instance()->table_metrics_mgr()->metric_registry()->collect(visitor);
+        GlobalMetricsRegistry::instance()->table_metrics_mgr()->metric_registry()->collect(visitor);
     }
 }
 

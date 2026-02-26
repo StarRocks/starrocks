@@ -22,14 +22,17 @@
 #include "common/status.h"
 #include "common/system/backend_options.h"
 #include "exec/olap_scan_node.h"
+#include "exprs/chunk_predicate_evaluator.h"
+#include "exprs/expr_executor.h"
 #include "runtime/current_thread.h"
+#include "runtime/global_dict/fragment_dict_state.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/predicate_parser.h"
 #include "storage/projection_iterator.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -47,7 +50,7 @@ Status TabletScanner::init(RuntimeState* runtime_state, const TabletScannerParam
     _need_agg_finalize = params.need_agg_finalize;
     _update_num_scan_range = params.update_num_scan_range;
 
-    RETURN_IF_ERROR(Expr::clone_if_not_exists(runtime_state, &_pool, *params.conjunct_ctxs, &_conjunct_ctxs));
+    RETURN_IF_ERROR(ExprExecutor::clone_if_not_exists(runtime_state, &_pool, *params.conjunct_ctxs, &_conjunct_ctxs));
     RETURN_IF_ERROR(_get_tablet(params.scan_range));
 
     // if column_desc come from fe, reset tablet schema
@@ -118,7 +121,7 @@ void TabletScanner::close(RuntimeState* state) {
     update_counter();
     _reader.reset();
     _predicate_free_pool.clear();
-    Expr::close(_conjunct_ctxs, state);
+    ExprExecutor::close(_conjunct_ctxs, state);
     _is_closed = true;
 }
 
@@ -245,7 +248,9 @@ Status TabletScanner::_init_unused_output_columns(const std::vector<std::string>
 
 // mapping a slot-column-id to schema-columnid
 Status TabletScanner::_init_global_dicts() {
-    const auto& global_dict_map = _runtime_state->get_query_global_dict_map();
+    const auto* fragment_dict_state = _runtime_state->fragment_dict_state();
+    DCHECK(fragment_dict_state != nullptr);
+    const auto& global_dict_map = fragment_dict_state->query_global_dicts();
     auto global_dict = _pool.add(new ColumnIdToGlobalDictMap());
     // mapping column id to storage column ids
     for (auto slot : _parent->_tuple_desc->slots()) {
@@ -290,7 +295,7 @@ Status TabletScanner::get_chunk(RuntimeState* state, Chunk* chunk) {
         }
         if (!_conjunct_ctxs.empty()) {
             SCOPED_TIMER(_expr_filter_timer);
-            RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, chunk));
+            RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_conjunct_ctxs, chunk));
             DCHECK_CHUNK(chunk);
         }
         TRY_CATCH_ALLOC_SCOPE_END()

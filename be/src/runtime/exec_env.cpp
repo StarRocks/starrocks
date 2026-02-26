@@ -40,6 +40,7 @@
 
 #include "agent/agent_server.h"
 #include "agent/master_info.h"
+#include "base/string/parse_util.h"
 #include "base/time/time.h"
 #include "base/utility/pretty_printer.h"
 #include "common/config.h"
@@ -88,6 +89,7 @@
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/small_file_mgr.h"
+#include "runtime/starrocks_metrics.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
@@ -104,9 +106,8 @@
 #include "types/hll.h"
 #include "udf/python/env.h"
 #include "util/brpc_stub_cache.h"
-#include "util/parse_util.h"
+#include "util/global_metrics_registry.h"
 #include "util/priority_thread_pool.hpp"
-#include "util/starrocks_metrics.h"
 
 #ifdef STARROCKS_JIT_ENABLE
 #include "exprs/jit/jit_engine.h"
@@ -276,7 +277,7 @@ Status GlobalEnv::_init_mem_tracker() {
     _replication_mem_tracker = regist_tracker(MemTrackerType::REPLICATION, -1, process_mem_tracker());
 
     register_hll_registers_allocator();
-    MemChunkAllocator::init_metrics();
+    register_mem_chunk_allocator_metrics(GlobalMetricsRegistry::instance()->metrics());
 
     return Status::OK();
 }
@@ -349,7 +350,7 @@ ExecEnv::~ExecEnv() = default;
 Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _store_paths = store_paths;
     _external_scan_context_mgr = new ExternalScanContextMgr(this);
-    _metrics = StarRocksMetrics::instance()->metrics();
+    _metrics = GlobalMetricsRegistry::instance()->metrics();
     _stream_mgr = new DataStreamMgr();
     _lookup_dispatcher_mgr = new LookUpDispatcherMgr();
     _result_mgr = new ResultBufferMgr();
@@ -487,7 +488,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     workgroup::PipelineExecutorSetConfig executors_manager_opts(
             CpuInfo::num_cores(), _max_executor_threads, num_io_threads, connector_num_io_threads,
             CpuInfo::get_core_ids(), enable_bind_cpus, config::enable_resource_group_cpu_borrowing,
-            StarRocksMetrics::instance()->get_pipeline_executor_metrics());
+            GlobalMetricsRegistry::instance()->pipeline_executor_metrics());
     _workgroup_manager = std::make_unique<workgroup::WorkGroupManager>(std::move(executors_manager_opts));
     RETURN_IF_ERROR(_workgroup_manager->start());
     workgroup::DefaultWorkGroupInitialization default_workgroup_init;
@@ -566,9 +567,9 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     };
     REGISTER_GAUGE_STARROCKS_METRIC(runtime_filter_event_queue_len, runtime_filter_event_func);
 
-    _backend_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "backend");
-    _frontend_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "frontend");
-    _broker_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "broker");
+    _backend_client_cache->init_metrics(GlobalMetricsRegistry::instance()->metrics(), "backend");
+    _frontend_client_cache->init_metrics(GlobalMetricsRegistry::instance()->metrics(), "frontend");
+    _broker_client_cache->init_metrics(GlobalMetricsRegistry::instance()->metrics(), "broker");
     RETURN_IF_ERROR(_result_mgr->init());
 
     // it means acting as compute node while store_path is empty. some threads are not needed for that case.

@@ -21,6 +21,7 @@
 #include "arrow/buffer.h"
 #include "arrow/flight/client.h"
 #include "arrow/type.h"
+#include "base/utility/arrow_utils.h"
 #include "base/utility/defer_op.h"
 #include "common/status.h"
 #include "common/statusor.h"
@@ -32,7 +33,6 @@
 #include "types/type_descriptor.h"
 #include "udf/python/env.h"
 #include "util/arrow/row_batch.h"
-#include "util/arrow/utils.h"
 
 #define RETURN_IF_ARROW_ERROR(expr)    \
     do {                               \

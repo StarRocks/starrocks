@@ -24,6 +24,7 @@
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
+#include "common/util/thrift_util.h"
 #include "fs/fs_util.h"
 #include "runtime/lake_tablets_channel.h"
 #include "runtime/load_channel_mgr.h"
@@ -41,7 +42,6 @@
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/tablet_schema.h"
-#include "util/thrift_util.h"
 
 namespace starrocks {
 

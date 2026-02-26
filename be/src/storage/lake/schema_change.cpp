@@ -18,6 +18,7 @@
 
 #include <memory>
 
+#include "exprs/expr_factory.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
@@ -448,8 +449,8 @@ Status SchemaChangeHandler::do_process_alter_tablet(const TAlterTabletReqV2& req
 
         for (const auto& it : request.materialized_column_req.mc_exprs) {
             ExprContext* ctx = nullptr;
-            RETURN_IF_ERROR(Expr::create_expr_tree(chunk_changer->get_object_pool(), it.second, &ctx,
-                                                   chunk_changer->get_runtime_state()));
+            RETURN_IF_ERROR(ExprFactory::create_expr_tree(chunk_changer->get_object_pool(), it.second, &ctx,
+                                                          chunk_changer->get_runtime_state()));
             RETURN_IF_ERROR(ctx->prepare(chunk_changer->get_runtime_state()));
             RETURN_IF_ERROR(ctx->open(chunk_changer->get_runtime_state()));
 

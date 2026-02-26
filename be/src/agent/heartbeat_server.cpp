@@ -49,11 +49,11 @@
 #include "common/status.h"
 #include "common/system/backend_options.h"
 #include "common/system/cpu_info.h"
+#include "common/util/debug_util.h"
+#include "common/util/thrift_server.h"
 #include "gen_cpp/HeartbeatService.h"
 #include "runtime/heartbeat_flags.h"
 #include "storage/storage_engine.h"
-#include "util/debug_util.h"
-#include "util/thrift_server.h"
 
 using std::fstream;
 using std::nothrow;

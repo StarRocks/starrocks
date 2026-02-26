@@ -17,6 +17,8 @@ set(BASE_TEST_FILES
     bit/bit_mask_test.cpp
     bit/bit_packing_simd_test.cpp
     bit/bit_packing_test.cpp
+    bit/bitmap_test.cpp
+    bit/rle_encoding_test.cpp
     bit/bit_stream_utils_test.cpp
     bit/bit_util_test.cpp
     bthreads/future_test.cpp
@@ -24,6 +26,9 @@ set(BASE_TEST_FILES
     bthreads/semaphore_test.cpp
     bthreads/shared_future_test.cpp
     bthreads/single_flight_test.cpp
+    brpc/ref_count_closure_test.cpp
+    brpc/recoverable_closure_test.cpp
+    brpc/reusable_closure_test.cpp
     concurrency/await_test.cpp
     concurrency/blocking_queue_test.cpp
     concurrency/concurrent_limiter_test.cpp
@@ -32,6 +37,7 @@ set(BASE_TEST_FILES
     concurrency/shared_mutex_test.cpp
     concurrency/core_local_test.cpp
     container/heap_test.cpp
+    lru_cache_test.cpp
     container/priority_queue_test.cpp
     coding_test.cpp
     core_local_counter_test.cpp
@@ -42,29 +48,44 @@ set(BASE_TEST_FILES
     int256_test.cpp
     types/int96_test.cpp
     phmap_test.cpp
+    crypto/aes_util_test.cpp
     crypto/md5_test.cpp
     metrics_test.cpp
+    debug/trace_test.cpp
+    gc/gc_helper_test.cpp
+    hash/crc32c_test.cpp
     hash/hash_util_test.cpp
     json/easy_json-test.cpp
+    path/filesystem_util_test.cpp
     path/file_util_test.cpp
     path/path_builder_test.cpp
     path/path_util_test.cpp
     path/path_trie_test.cpp
+    process/lite_exec_test.cpp
     random/random_test.cpp
     simd/byte_stream_split_test.cpp
     simd/batch_run_counter_test.cpp
     simd/simd_expand_test.cpp
     simd/simd_test.cpp
     stats/ndv_estimator_test.cpp
+    string/base85_test.cpp
     string/c_string_test.cpp
     string/faststring_test.cpp
     string/memcmp_test.cpp
+    string/parse_util_test.cpp
+    string/string_search_test.cpp
+    string/string_searcher_test.cpp
+    string/string_util_test.cpp
     string/string_parser_test.cpp
     string/slice_test.cpp
+    string/url_parser_test.cpp
     string/utf8_check_test.cpp
+    string/volnitsky_test.cpp
     testutil/sync_point_test.cpp
+    time/ratelimit_test.cpp
     time/monotime_test.cpp
     time/timezone_utils_test.cpp
+    types/numeric_types_test.cpp
     utility/integer_util_test.cpp
     utility/pretty_printer_test.cpp
     utility/scoped_cleanup_test.cpp

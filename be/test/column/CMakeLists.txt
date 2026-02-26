@@ -21,6 +21,7 @@ set(COLUMN_TEST_FILES
     variant_column_test.cpp
     column_visitor_test.cpp
     column_filter_range_test.cpp
+    column_viewer_core_test.cpp
     fixed_length_column_core_test.cpp
     column_hash_core_test.cpp
     array_column_core_test.cpp
@@ -31,9 +32,11 @@ set(COLUMN_TEST_FILES
     const_nullable_core_test.cpp
     nullable_column_core_test.cpp
     decimalv3_json_core_test.cpp
+    json_converter_core_test.cpp
     adaptive_nullable_column_core_test.cpp
     column_view_base_core_test.cpp
     type_traits_core_test.cpp
+    variant_converter_core_test.cpp
 )
 
 set(COLUMN_TEST_LINK_LIBS

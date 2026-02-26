@@ -61,6 +61,8 @@
 #include "common/process_exit.h"
 #include "common/status.h"
 #include "common/system/backend_options.h"
+#include "common/util/debug_util.h"
+#include "common/util/thrift_server.h"
 #include "exec/pipeline/query_context.h"
 #include "runtime/exec_env.h"
 #include "runtime/heartbeat_flags.h"
@@ -71,10 +73,8 @@
 #include "service/staros_worker.h"
 #include "storage/options.h"
 #include "storage/storage_engine.h"
-#include "util/debug_util.h"
 #include "util/logging.h"
 #include "util/thrift_rpc_helper.h"
-#include "util/thrift_server.h"
 
 #if !defined(__clang__) && defined(__GNUC__) && !_GLIBCXX_USE_CXX11_ABI
 #error _GLIBCXX_USE_CXX11_ABI must be non-zero

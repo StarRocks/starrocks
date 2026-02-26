@@ -19,12 +19,13 @@
 #include "runtime/data_stream_recvr.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "runtime/runtime_state_helper.h"
 #include "runtime/sorted_chunks_merger.h"
 
 namespace starrocks::pipeline {
 Status ExchangeMergeSortSourceOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
-    auto query_statistic_recv = state->query_recv();
+    auto query_statistic_recv = RuntimeStateHelper::query_recv(state);
     _stream_recvr = state->exec_env()->stream_mgr()->create_recvr(
             state, _row_desc, state->fragment_instance_id(), _plan_node_id, _num_sender,
             config::exchg_node_buffer_size_bytes, true, query_statistic_recv, true, 1, true);

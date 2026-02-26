@@ -16,10 +16,10 @@
 
 #include <memory>
 
+#include "common/thread/threadpool.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "util/threadpool.h"
 
 namespace starrocks::pipeline {
 class AuditStatisticsReporter {

@@ -31,6 +31,7 @@ import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeAggregator;
+import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.metric.MetricRepo;
@@ -52,7 +53,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -111,7 +111,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
         if (partition.getVisibleVersionTime() <= staleTime && partition.getMetadataSwitchVersion() == 0) {
             return false;
         }
-        // empty parition
+        // empty partition
         if (partition.getVisibleVersion() <= 1) {
             return false;
         }
@@ -343,10 +343,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
     }
 
     private static long computeMinActiveTxnId(Database db, Table table) {
-        long a = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getMinActiveTxnIdOfDatabase(db.getId());
-        Optional<Long> b =
-                GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getActiveTxnIdOfTable(table.getId());
-        return Math.min(a, b.orElse(Long.MAX_VALUE));
+        return LakeTableHelper.computeMinActiveTxnId(db.getId(), table.getId());
     }
 
     private boolean vacuumImmediatelyPartition(PhysicalPartition partition) {

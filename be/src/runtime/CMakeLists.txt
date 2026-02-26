@@ -19,7 +19,17 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/runtime")
 
 set(RUNTIME_CORE_FILES
     current_thread.cpp
+    descriptors.cpp
+    runtime_state.cpp
     mem_tracker.cpp
+    mem_pool.cpp
+    runtime_filter.cpp
+    runtime_filter_layout.cpp
+    bucket_aware_partition.cpp
+    starrocks_metrics.cpp
+    memory/roaring_hook.cpp
+    memory/system_allocator.cpp
+    memory/mem_chunk_allocator.cpp
 )
 
 ADD_BE_LIB(RuntimeCore
@@ -47,17 +57,14 @@ set(RUNTIME_FILES
     sender_queue.cpp
     data_stream_sender.cpp
     multi_cast_data_stream_sink.cpp
-    descriptors.cpp
+    descriptors_ext.cpp
     exec_env.cpp
-    exec.cpp
-    global_variables.cpp
     user_function_cache.cpp
     jdbc_driver_manager.cpp
-    mem_pool.cpp
     plan_fragment_executor.cpp
     result_sink.cpp
     result_buffer_mgr.cpp
-    runtime_state.cpp
+    runtime_state_helper.cpp
     fragment_mgr.cpp
     load_path_mgr.cpp
     dummy_load_path_mgr.cpp
@@ -95,14 +102,12 @@ set(RUNTIME_FILES
     metadata_result_writer.cpp
     variable_result_writer.cpp
     arrow_result_writer.cpp
-    memory/roaring_hook.cpp
-    memory/system_allocator.cpp
-    memory/mem_chunk_allocator.cpp
     chunk_cursor.cpp
     sorted_chunks_merger.cpp
     tablets_channel.cpp
     runtime_filter_worker.cpp
     global_dict/decoder.cpp
+    global_dict/fragment_dict_state.cpp
     global_dict/parser.cpp
     global_dict/miscs.cpp
     global_dict/types.cpp

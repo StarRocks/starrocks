@@ -14,10 +14,10 @@
 
 #pragma once
 
+#include "common/thread/threadpool.h"
 #include "exec/spill/block_manager.h"
 #include "exec/spill/dir_manager.h"
 #include "exec/spill/input_stream.h"
-#include "util/threadpool.h"
 
 namespace starrocks {
 

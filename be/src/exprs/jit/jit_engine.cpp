@@ -64,6 +64,7 @@
 #include "common/status.h"
 #include "common/system/mem_info.h"
 #include "exprs/expr.h"
+#include "exprs/jit/expr_jit_codegen.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 
@@ -119,7 +120,7 @@ static inline Status generate_scalar_function_ir(ExprContext* context, llvm::Mod
     counter_phi->addIncoming(llvm::ConstantInt::get(size_type, 0), entry);
 
     JITContext jc = {counter_phi, columns, module, b, 0};
-    ASSIGN_OR_RETURN(auto result, expr->generate_ir(context, &jc))
+    ASSIGN_OR_RETURN(auto result, ExprJITCodegen::generate_ir(context, expr, &jc))
 
     // Pseudo code:
     // values_last[counter] = result_value;

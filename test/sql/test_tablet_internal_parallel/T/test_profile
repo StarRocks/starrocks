@@ -246,7 +246,10 @@ select * from result order by `key`, value;
 
 
 -- reset be config to default values.
-function: update_be_config("tablet_internal_parallel_min_splitted_scan_rows", "16384")
-function: update_be_config("tablet_internal_parallel_max_splitted_scan_rows", "1048576")
-function: update_be_config("tablet_internal_parallel_max_splitted_scan_bytes", "536870912")
-function: update_be_config("tablet_internal_parallel_min_scan_dop", "4")
+CLEANUP {
+    function: update_be_config("tablet_internal_parallel_min_splitted_scan_rows", "16384")
+    function: update_be_config("tablet_internal_parallel_max_splitted_scan_rows", "1048576")
+    function: update_be_config("tablet_internal_parallel_max_splitted_scan_bytes", "536870912")
+    function: update_be_config("tablet_internal_parallel_min_scan_dop", "4")
+} END CLEANUP
+

@@ -14,9 +14,10 @@
 
 #include "storage/persistent_index_load_executor.h"
 
+#include "runtime/starrocks_metrics.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
-#include "util/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 

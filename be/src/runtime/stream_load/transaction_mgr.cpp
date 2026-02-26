@@ -32,6 +32,8 @@
 #include "base/uid_util.h"
 #include "base/utility/defer_op.h"
 #include "common/logging.h"
+#include "common/util/debug_util.h"
+#include "common/util/misc.h"
 #include "common/utils.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
@@ -48,16 +50,15 @@
 #include "runtime/fragment_mgr.h"
 #include "runtime/load_path_mgr.h"
 #include "runtime/plan_fragment_executor.h"
+#include "runtime/starrocks_metrics.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/stream_load_pipe.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "util/byte_buffer.h"
-#include "util/debug_util.h"
+#include "util/global_metrics_registry.h"
 #include "util/json_util.h"
-#include "util/misc.h"
-#include "util/starrocks_metrics.h"
 #include "util/thrift_rpc_helper.h"
 
 namespace starrocks {
@@ -74,14 +75,14 @@ static uint32_t interval = 1;
 #endif
 
 TransactionMgr::TransactionMgr(ExecEnv* exec_env) : _exec_env(exec_env) {
-    StarRocksMetrics::instance()->metrics()->register_metric("transaction_streaming_load_requests_total",
-                                                             &transaction_streaming_load_requests_total);
-    StarRocksMetrics::instance()->metrics()->register_metric("transaction_streaming_load_bytes",
-                                                             &transaction_streaming_load_bytes);
-    StarRocksMetrics::instance()->metrics()->register_metric("transaction_streaming_load_duration_ms",
-                                                             &transaction_streaming_load_duration_ms);
-    StarRocksMetrics::instance()->metrics()->register_metric("transaction_streaming_load_current_processing",
-                                                             &transaction_streaming_load_current_processing);
+    GlobalMetricsRegistry::instance()->metrics()->register_metric("transaction_streaming_load_requests_total",
+                                                                  &transaction_streaming_load_requests_total);
+    GlobalMetricsRegistry::instance()->metrics()->register_metric("transaction_streaming_load_bytes",
+                                                                  &transaction_streaming_load_bytes);
+    GlobalMetricsRegistry::instance()->metrics()->register_metric("transaction_streaming_load_duration_ms",
+                                                                  &transaction_streaming_load_duration_ms);
+    GlobalMetricsRegistry::instance()->metrics()->register_metric("transaction_streaming_load_current_processing",
+                                                                  &transaction_streaming_load_current_processing);
     _transaction_clean_thread = std::thread([this] {
 #ifdef GOOGLE_PROFILER
         ProfilerRegisterThread();

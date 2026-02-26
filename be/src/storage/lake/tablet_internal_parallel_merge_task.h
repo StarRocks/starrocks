@@ -16,7 +16,7 @@
 
 #include "common/runtime_profile.h"
 #include "common/status.h"
-#include "util/threadpool.h"
+#include "common/thread/threadpool.h"
 
 namespace starrocks {
 

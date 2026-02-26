@@ -47,6 +47,7 @@
 #include "runtime/agg_state_desc.h"
 #include "storage/aggregate_type.h"
 #include "storage/olap_define.h"
+#include "storage/primary_key_encoding_types.h"
 #include "storage/tablet_index.h"
 #include "storage/types.h"
 #include "util/once.h"
@@ -329,10 +330,16 @@ public:
     CompressionTypePB compression_type() const { return _compression_type; }
     int compression_level() const { return _compression_level; }
 
-    bool has_primary_key_encoding_type() const {
-        return _primary_key_encoding_type != PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_NONE;
+    bool has_valid_primary_key_encoding_type() const {
+        return _primary_key_encoding_type != PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
     }
-    PrimaryKeyEncodingTypePB primary_key_encoding_type() const { return _primary_key_encoding_type; }
+    PrimaryKeyEncodingType primary_key_encoding_type() const { return _primary_key_encoding_type; }
+    StatusOr<PrimaryKeyEncodingType> primary_key_encoding_type_or_error() const {
+        if (!has_valid_primary_key_encoding_type()) {
+            return Status::InternalError("tablet schema has no available primary key encoding type");
+        }
+        return _primary_key_encoding_type;
+    }
     void append_column(TabletColumn column);
 
     int32_t schema_version() const { return _schema_version; }
@@ -425,7 +432,7 @@ private:
     mutable std::once_flag _init_schema_once_flag;
     int32_t _schema_version = -1;
 
-    PrimaryKeyEncodingTypePB _primary_key_encoding_type = PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_NONE;
+    PrimaryKeyEncodingType _primary_key_encoding_type = PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
 };
 
 bool operator==(const TabletSchema& a, const TabletSchema& b);

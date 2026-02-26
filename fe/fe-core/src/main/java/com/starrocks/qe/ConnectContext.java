@@ -231,6 +231,7 @@ public class ConnectContext {
     protected TWorkGroup resourceGroup;
 
     protected volatile boolean isPending = false;
+    protected volatile boolean isPlanning = false;
     protected volatile boolean isForward = false;
 
     private ConnectContext parent;
@@ -1475,6 +1476,14 @@ public class ConnectContext {
 
     public boolean isPending() {
         return isPending;
+    }
+
+    public void setPlanning(boolean planning) {
+        isPlanning = planning;
+    }
+
+    public boolean isPlanning() {
+        return isPlanning;
     }
 
     public void setIsForward(boolean forward) {

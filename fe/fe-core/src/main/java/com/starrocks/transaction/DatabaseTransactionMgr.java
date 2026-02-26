@@ -59,6 +59,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.TraceManager;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTableHelper;
@@ -946,17 +947,19 @@ public class DatabaseTransactionMgr {
                     TransactionState state = states.get(i);
                     TableCommitInfo tableInfo = state.getTableCommitInfo(tableId);
                     // TableCommitInfo could be null if the table has been dropped before this transaction is committed.
-                    if (tableInfo == null) {
-                        states = states.subList(0, Math.max(i, 1));
-                        break;
-                    }
-                    // Handle replication transaction separately
+                    // Handle special transaction types separately to prevent batching:
+                    // 1. Replication transactions: may have non-consecutive versions
+                    // 2. DELETE transactions: each delete predicate needs its own version
+                    //    to ensure proper ordering during tablet merge operations
                     // e.g. assume there are 4 txns in `states`: <txn_normal_0, txn_rep_0, txn_normal_1, txn_normal_2>
-                    // 3 txn batch will be generated as: <txn_normal_0>, <txn_rep>, <txn_normal_1, txn_normal_2>
-                    if (state.getTransactionType() == TransactionType.TXN_REPLICATION) {
+                    // 3 txn batch will be generated as: <txn_normal_0>, <txn_rep_0>, <txn_normal_1, txn_normal_2>
+                    if (tableInfo == null
+                            || state.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION
+                            || state.getSourceType() == TransactionState.LoadJobSourceType.DELETE) {
                         states = states.subList(0, Math.max(i, 1));
                         break;
                     }
+
                     Map<Long, PartitionCommitInfo> partitionInfoMap = tableInfo.getIdToPartitionCommitInfo();
                     for (Map.Entry<Long, PartitionCommitInfo> item : partitionInfoMap.entrySet()) {
                         PartitionCommitInfo currTxnInfo = item.getValue();
@@ -984,7 +987,8 @@ public class DatabaseTransactionMgr {
     // check whether transaction can be finished or not
     // for each tablet of load txn, if most replicas version publish successed
     // the trasaction can be treated as successful and can be finished
-    public boolean canTxnFinished(TransactionState txn, Set<Long> errReplicas, Set<Long> unfinishedBackends) {
+    public boolean canTxnFinished(TransactionState txn, Set<Long> errReplicas, Set<Long> unfinishedBackends,
+                                  long lockTimeoutMs) throws LockTimeoutException {
         Database db = globalStateMgr.getLocalMetastore().getDb(txn.getDbId());
         if (db == null) {
             return true;
@@ -992,7 +996,16 @@ public class DatabaseTransactionMgr {
 
         List<Long> tableIdList = txn.getTableIdList();
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.READ);
+        if (lockTimeoutMs > 0) {
+            if (!locker.tryLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.READ, lockTimeoutMs,
+                    TimeUnit.MILLISECONDS)) {
+                throw new LockTimeoutException(
+                        "Failed to acquire read lock on database " + db.getId() + ", tables: " + tableIdList
+                                + " within " + lockTimeoutMs + " ms");
+            }
+        } else {
+            locker.lockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.READ);
+        }
         long currentTs = System.currentTimeMillis();
         try {
             // check each table involved in transaction

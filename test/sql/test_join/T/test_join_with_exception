@@ -39,3 +39,8 @@ admin disable failpoint 'hash_join_append_bad_alloc';
 admin enable failpoint 'hash_join_build_bad_alloc';
 [UC]select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l join [colocate] t1 r on l.c0 = r.c0 and l.c1 = r.c1;
 admin disable failpoint 'hash_join_build_bad_alloc';
+
+CLEANUP {
+  admin disable failpoint 'hash_join_append_bad_alloc';
+  admin disable failpoint 'hash_join_build_bad_alloc';
+} END CLEANUP

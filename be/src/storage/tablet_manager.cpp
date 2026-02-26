@@ -48,6 +48,7 @@
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/compaction_manager.h"
 #include "storage/data_dir.h"
 #include "storage/olap_common.h"
@@ -63,7 +64,6 @@
 #include "storage/txn_manager.h"
 #include "storage/update_manager.h"
 #include "storage/utils.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 

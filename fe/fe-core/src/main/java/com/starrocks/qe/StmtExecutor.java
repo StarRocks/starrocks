@@ -891,8 +891,23 @@ public class StmtExecutor {
                 return;
             }
 
-            // execPlan is the output of planner
-            ExecPlan execPlan = generateExecPlan();
+            // Register as a planning query so it is visible in current_queries during optimization.
+            // The planning entry is removed before handleQueryStmt/handleDMLStmt re-registers
+            // with the real Coordinator, avoiding AlreadyExistsException from putIfAbsent.
+            ExecPlan execPlan;
+            context.setPlanning(true);
+            try {
+                QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(),
+                        QeProcessorImpl.QueryInfo.fromPlanningQuery(context, originStmt.originStmt));
+            } catch (Exception e) {
+                LOG.warn("Failed to register planning query: {}", DebugUtil.printId(context.getExecutionId()), e);
+            }
+            try {
+                execPlan = generateExecPlan();
+            } finally {
+                context.setPlanning(false);
+                QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
+            }
 
             // no need to execute http query dump request in BE
             if (context.isHTTPQueryDump) {
@@ -1460,8 +1475,14 @@ public class StmtExecutor {
             QeProcessorImpl.INSTANCE.unMonitorQuery(executionId);
             QeProcessorImpl.INSTANCE.unregisterQuery(executionId);
             if (Config.enable_collect_query_detail_info && Config.enable_profile_log) {
-                String jsonString = GSON.toJson(queryDetail);
-                PROFILE_LOG.info(jsonString);
+                long latencyThresholdMs = Config.profile_log_latency_threshold_ms;
+                if (context.getSessionVariable().getProfileLogLatencyThresholdMs() >= 0) {
+                    latencyThresholdMs = context.getSessionVariable().getProfileLogLatencyThresholdMs();
+                }
+                if (totalTimeMs >= latencyThresholdMs) {
+                    String jsonString = GSON.toJson(queryDetail);
+                    PROFILE_LOG.info(jsonString);
+                }
             }
         };
         return coord.tryProcessProfileAsync(task);
@@ -2908,7 +2929,6 @@ public class StmtExecutor {
         }
 
         // Handle metadata-level delete for Iceberg
-        // execute the delete operation here
         if (stmt instanceof DeleteStmt && execPlan != null && execPlan.isIcebergMetadataDelete()) {
             // Execute metadata-level delete
             IcebergMetadataDeleteNode node = (IcebergMetadataDeleteNode) execPlan.getTopFragment().getPlanRoot();

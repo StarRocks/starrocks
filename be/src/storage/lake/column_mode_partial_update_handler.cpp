@@ -14,6 +14,7 @@
 
 #include "storage/lake/column_mode_partial_update_handler.h"
 
+#include "base/debug/trace.h"
 #include "base/phmap/phmap.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
@@ -38,7 +39,6 @@
 #include "storage/rowset/segment_rewriter.h"
 #include "storage/tablet.h"
 #include "util/stack_util.h"
-#include "util/trace.h"
 
 namespace starrocks::lake {
 
@@ -99,10 +99,11 @@ Status ColumnModePartialUpdateHandler::_load_upserts(const RowsetUpdateStatePara
         *end_idx = _upserts[start_idx]->end_idx;
         return Status::OK();
     }
+    ASSIGN_OR_RETURN(auto pk_encoding_type, params.tablet_schema->primary_key_encoding_type_or_error());
 
     // 2. build schema.
     MutableColumnPtr pk_column;
-    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
+    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, pk_encoding_type).ok()) {
         std::string err_msg =
                 fmt::format("create column for primary key encoder failed, tablet_id: {}", params.tablet->id());
         DCHECK(false) << err_msg;
@@ -134,7 +135,7 @@ Status ColumnModePartialUpdateHandler::_load_upserts(const RowsetUpdateStatePara
                 } else if (!st.ok()) {
                     return st;
                 } else {
-                    PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get());
+                    PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get(), pk_encoding_type);
                 }
             }
         }

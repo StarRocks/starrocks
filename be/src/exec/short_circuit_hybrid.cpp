@@ -20,14 +20,17 @@
 #include "column/column_helper.h"
 #include "common/object_pool.h"
 #include "common/status.h"
+#include "common/util/thrift_util.h"
 #include "exec/scan_node.h"
+#include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 #include "runtime/exec_env.h"
 #include "runtime/memory_scratch_sink.h"
 #include "storage/chunk_helper.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
-#include "util/thrift_util.h"
 
 namespace starrocks {
 Status ShortCircuitHybridScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) {
@@ -60,7 +63,7 @@ Status ShortCircuitHybridScanNode::open(RuntimeState* state) {
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(_tuple_id);
     DCHECK(_tuple_desc != nullptr);
 
-    RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_conjunct_ctxs, state));
     return Status::OK();
 }
 
@@ -107,7 +110,7 @@ Status ShortCircuitHybridScanNode::get_next(RuntimeState* state, ChunkPtr* chunk
                         ->append(*(_value_chunk->get_column_by_name(field->name().data()).get()));
             }
         }
-        RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, result_chunk.get()));
+        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_conjunct_ctxs, result_chunk.get()));
         if (result_chunk->num_rows() == 0) {
             *eos = true;
         }
@@ -148,10 +151,10 @@ Status ShortCircuitHybridScanNode::_process_key_chunk() {
             std::vector<ExprContext*> expr_ctxs;
             std::vector<TExpr> key_literal_expr{keys_literal_expr[j]};
             // prepare
-            RETURN_IF_ERROR(Expr::create_expr_trees(runtime_state()->obj_pool(), key_literal_expr, &expr_ctxs,
-                                                    runtime_state()));
-            RETURN_IF_ERROR(Expr::prepare(expr_ctxs, runtime_state()));
-            RETURN_IF_ERROR(Expr::open(expr_ctxs, runtime_state()));
+            RETURN_IF_ERROR(ExprFactory::create_expr_trees(runtime_state()->obj_pool(), key_literal_expr, &expr_ctxs,
+                                                           runtime_state()));
+            RETURN_IF_ERROR(ExprExecutor::prepare(expr_ctxs, runtime_state()));
+            RETURN_IF_ERROR(ExprExecutor::open(expr_ctxs, runtime_state()));
             auto& iteral_expr_ctx = expr_ctxs[0];
             ASSIGN_OR_RETURN(ColumnPtr value, iteral_expr_ctx->root()->evaluate_const(iteral_expr_ctx));
             if (UNLIKELY(value == nullptr || value->only_null() || value->is_null(0))) {

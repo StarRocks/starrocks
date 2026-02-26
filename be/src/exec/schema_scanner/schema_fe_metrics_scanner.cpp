@@ -23,8 +23,8 @@
 #include "gutil/strings/substitute.h"
 #include "http/http_client.h"
 #include "runtime/runtime_state.h"
+#include "runtime/starrocks_metrics.h"
 #include "types/logical_type.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 

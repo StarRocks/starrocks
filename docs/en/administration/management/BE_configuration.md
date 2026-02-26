@@ -10,6 +10,8 @@ import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.mdx'
 
 import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.mdx'
 
+import EditionSpecificBEItem from '../../_assets/commonMarkdown/Edition_Specific_BE_Item.mdx'
+
 # BE Configuration
 
 <BEConfigMethod />
@@ -140,7 +142,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Type: Strings
 - Unit: -
 - Is mutable: No
-- Description: The module of the logs to be printed. For example, if you set this configuration item to OLAP, StarRocks only prints the logs of the OLAP module. Valid values are namespaces in BE, including `starrocks`, `starrocks::debug`, `starrocks::fs`, `starrocks::io`, `starrocks::lake`, `starrocks::pipeline`, `starrocks::query_cache`, `starrocks::stream`, and `starrocks::workgroup`.
+- Description: Specifies the file names (without extensions) or file name wildcards for which VLOG logs should be printed. Multiple file names can be separated by commas. For example, if you set this configuration item to `storage_engine,tablet_manager`, StarRocks prints VLOG logs from the storage_engine.cpp and tablet_manager.cpp files. You can also use wildcards, e.g., set to `*` to print VLOG logs from all files. The VLOG log printing level is controlled by the `sys_log_verbose_level` parameter.
 - Introduced in: -
 
 ### Server
@@ -3481,3 +3483,5 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Status: Removed
 - Description: This parameter has been removed. Bit-unpack SIMD selection is now handled at compile time (AVX2/BMI2) with automatic fallback to the default implementation.
 - Removed in: -
+
+<EditionSpecificBEItem />

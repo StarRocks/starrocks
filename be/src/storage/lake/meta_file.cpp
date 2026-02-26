@@ -19,9 +19,12 @@
 
 #include "base/coding.h"
 #include "base/container/raw_container.h"
+#include "base/debug/trace.h"
+#include "base/hash/crc32c.h"
 #include "base/utility/defer_op.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/del_vector.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/lake_persistent_index.h"
@@ -29,9 +32,6 @@
 #include "storage/lake/metacache.h"
 #include "storage/lake/update_manager.h"
 #include "storage/protobuf_file.h"
-#include "util/crc32c.h"
-#include "util/starrocks_metrics.h"
-#include "util/trace.h"
 
 namespace starrocks::lake {
 
