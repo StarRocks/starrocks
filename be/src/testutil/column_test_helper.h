@@ -22,36 +22,15 @@ namespace starrocks {
 class ColumnTestHelper {
 public:
     template <class T>
-<<<<<<< HEAD
     static ColumnPtr build_column(const std::vector<T>& values) {
-        if constexpr (std::is_same_v<T, uint8_t>) {
-            auto data = UInt8Column::create();
-            data->append_numbers(values.data(), values.size() * sizeof(T));
-            return data;
-        } else if constexpr (std::is_same_v<T, int32_t>) {
-            auto data = Int32Column::create();
-            data->append_numbers(values.data(), values.size() * sizeof(T));
-            return data;
-        } else if constexpr (std::is_same_v<T, int64_t>) {
-            auto data = Int64Column::create();
-=======
-    static MutableColumnPtr build_column(const std::vector<T>& values) {
         if constexpr (std::is_integral_v<T> || std::is_floating_point_v<T>) {
             auto data = ColumnTraits<T>::ColumnType::create();
->>>>>>> e7b438814a ([UT] Refactor test case: ParquetFileWriterTest (#69405))
             data->append_numbers(values.data(), values.size() * sizeof(T));
             return data;
         } else if constexpr (std::is_same_v<T, Slice>) {
             auto data = BinaryColumn::create();
             data->append_strings(values.data(), values.size());
             return data;
-<<<<<<< HEAD
-        } else if constexpr (std::is_same_v<T, double>) {
-            auto data = DoubleColumn ::create();
-            data->append_numbers(values.data(), values.size() * sizeof(T));
-            return data;
-=======
->>>>>>> e7b438814a ([UT] Refactor test case: ParquetFileWriterTest (#69405))
         } else {
             throw std::runtime_error("Type is not supported in build_column:%s" + std::string(typeid(T).name()));
         }
