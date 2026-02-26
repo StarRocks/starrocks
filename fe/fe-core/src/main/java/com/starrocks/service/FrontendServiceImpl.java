@@ -72,6 +72,11 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.system.information.AnalyzeStatusSystemTable;
 import com.starrocks.catalog.system.information.ColumnStatsUsageSystemTable;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.system.information.FeThreadsSystemTable;
+import com.starrocks.catalog.system.information.LoadsSystemTable;
+>>>>>>> 0e0629e3dd ([Enhancement] Push down loads table predicates to FE (#69472))
 import com.starrocks.catalog.system.information.MaterializedViewsSystemTable;
 import com.starrocks.catalog.system.information.TablesSystemTable;
 import com.starrocks.catalog.system.information.TaskRunsSystemTable;
@@ -2526,58 +2531,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TGetLoadsResult getLoads(TGetLoadsParams request) throws TException {
         LOG.debug("Recieve getLoads: {}", request);
-
-        TGetLoadsResult result = new TGetLoadsResult();
-        List<TLoadInfo> loads = Lists.newArrayList();
-        try {
-            if (request.isSetJob_id()) {
-                LoadJob job = GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJob(request.getJob_id());
-                if (job != null) {
-                    loads.add(job.toThrift());
-                }
-            } else if (request.isSetDb()) {
-                long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(request.getDb()).getId();
-                if (request.isSetLabel()) {
-                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJobsByDb(
-                                    dbId, request.getLabel(), true).stream()
-                            .map(LoadJob::toThrift).collect(Collectors.toList()));
-                } else {
-                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJobsByDb(
-                                    dbId, null, false).stream().map(LoadJob::toThrift)
-                            .collect(Collectors.toList()));
-                }
-            } else {
-                if (request.isSetLabel()) {
-                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJobs(request.getLabel())
-                            .stream().map(LoadJob::toThrift).collect(Collectors.toList()));
-                } else {
-                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJobs(null)
-                            .stream().map(LoadJob::toThrift).collect(Collectors.toList()));
-                }
-            }
-
-            if (request.isSetJob_id()) {
-                AbstractStreamLoadTask task = GlobalStateMgr.getCurrentState()
-                        .getStreamLoadMgr().getTaskById(request.getJob_id());
-                if (task != null) {
-                    loads.addAll(task.toThrift());
-                }
-            } else {
-                List<AbstractStreamLoadTask> streamLoadTaskList = GlobalStateMgr.getCurrentState().getStreamLoadMgr()
-                        .getTaskByName(request.getLabel());
-                if (streamLoadTaskList != null) {
-                    for (AbstractStreamLoadTask streamLoadTask : streamLoadTaskList) {
-                        loads.addAll(streamLoadTask.toThrift());
-                    }
-                }
-            }
-
-            result.setLoads(loads);
-        } catch (Exception e) {
-            LOG.warn("Failed to getLoads", e);
-            throw e;
-        }
-        return result;
+        return LoadsSystemTable.query(request);
     }
 
     @Override
