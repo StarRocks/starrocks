@@ -85,6 +85,7 @@ public class IcebergScanNode extends ScanNode {
                            PartitionIdGenerator partitionIdGenerator) {
         super(id, desc, planNodeName);
         this.icebergTable = (IcebergTable) desc.getTable();
+        this.icebergTable.checkSupportedFormat();
         this.tableFullMORParams = tableFullMORParams;
         this.morParams = morParams;
         this.icebergScanMetricsReporter = new IcebergMetricsReporter();
