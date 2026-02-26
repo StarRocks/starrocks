@@ -543,8 +543,8 @@ TEST_F(ParquetFileWriterTest, TestWriteMap) {
         auto offsets_col = ColumnTestHelper::build_column<uint32_t>({0, 1, 1, 1, 4});
         auto null_col = ColumnTestHelper::build_column<uint8_t>({0, 1, 0, 0});
 
-        auto map_col = MapColumn::create(std::move(key_col), std::move(value_col), std::move(offsets_col));
-        auto nullable_col = NullableColumn::create(std::move(map_col), std::move(null_col));
+        ColumnPtr map_col = MapColumn::create(std::move(key_col), std::move(value_col), std::move(offsets_col));
+        auto nullable_col = NullableColumn::create(map_col, null_col);
 
         chunk->append_column(std::move(nullable_col), 0);
     }

@@ -22,7 +22,7 @@ namespace starrocks {
 class ColumnTestHelper {
 public:
     template <class T>
-    static ColumnPtr build_column(const std::vector<T>& values) {
+    static std::shared_ptr<typename ColumnTraits<T>::ColumnType> build_column(const std::vector<T>& values) {
         if constexpr (std::is_integral_v<T> || std::is_floating_point_v<T>) {
             auto data = ColumnTraits<T>::ColumnType::create();
             data->append_numbers(values.data(), values.size() * sizeof(T));
