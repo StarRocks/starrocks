@@ -56,8 +56,10 @@ Status ConnectorChunkSink::add(Chunk* chunk) {
     if (it != _writer_stream_pairs.end()) {
         Writer* writer = it->second.first.get();
         if (writer->get_written_bytes() >= _max_file_size) {
-            callback_on_commit(writer->commit());
+            auto commit_result = writer->commit();
+            callback_on_commit(commit_result);
             _writer_stream_pairs.erase(it);
+            RETURN_IF_ERROR(commit_result.io_status);
             auto path = partitioned ? _location_provider->get(partition) : _location_provider->get();
             ASSIGN_OR_RETURN(auto new_writer_and_stream, _file_writer_factory->create(path));
             std::unique_ptr<Writer> new_writer = std::move(new_writer_and_stream.writer);
@@ -83,10 +85,15 @@ Status ConnectorChunkSink::add(Chunk* chunk) {
 }
 
 Status ConnectorChunkSink::finish() {
+    Status st = Status::OK();
     for (auto& [_, writer_and_stream] : _writer_stream_pairs) {
-        callback_on_commit(writer_and_stream.first->commit());
+        auto commit_result = writer_and_stream.first->commit();
+        callback_on_commit(commit_result);
+        if (st.ok() && !commit_result.io_status.ok()) {
+            st = commit_result.io_status;
+        }
     }
-    return Status::OK();
+    return st;
 }
 
 void ConnectorChunkSink::rollback() {
