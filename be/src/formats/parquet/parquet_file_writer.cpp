@@ -28,7 +28,6 @@
 #include <ostream>
 #include <utility>
 
-#include "base/failpoint/fail_point.h"
 #include "column/column_helper.h"
 #include "common/http/content_type.h"
 #include "formats/file_writer.h"
@@ -39,11 +38,9 @@
 #include "formats/utils.h"
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
-<<<<<<< HEAD
 #include "types/logical_type.h"
 #include "util/debug_util.h"
-=======
->>>>>>> 02bb88cf02 ([BugFix] Make the PartitionChunkWriter::commit_file function return a status value. (#69473))
+#include "util/failpoint/fail_point.h"
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks {

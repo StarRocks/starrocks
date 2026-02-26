@@ -14,14 +14,9 @@
 
 #pragma once
 
-<<<<<<< HEAD
 #include "column/chunk.h"
-#include "common/status.h"
-=======
-#include "base/uid_util.h"
 #include "column/vectorized_fwd.h"
-#include "common/thread/threadpool.h"
->>>>>>> 02bb88cf02 ([BugFix] Make the PartitionChunkWriter::commit_file function return a status value. (#69473))
+#include "common/status.h"
 #include "connector/connector_sink_profile.h"
 #include "connector/utils.h"
 #include "exec/sorting/sorting.h"
@@ -30,7 +25,6 @@
 #include "runtime/exec_env.h"
 #include "storage/load_chunk_spiller.h"
 #include "util/threadpool.h"
-#include "util/uid_util.h"
 
 namespace starrocks::connector {
 
