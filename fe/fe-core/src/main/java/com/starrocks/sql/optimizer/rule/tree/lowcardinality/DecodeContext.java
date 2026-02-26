@@ -47,6 +47,7 @@ import java.util.Set;
 
 import static com.starrocks.sql.optimizer.rule.tree.lowcardinality.DecodeCollector.LOW_CARD_ARRAY_FUNCTIONS;
 import static com.starrocks.sql.optimizer.rule.tree.lowcardinality.DecodeCollector.LOW_CARD_STRUCT_FUNCTIONS;
+import static com.starrocks.sql.optimizer.rule.tree.lowcardinality.DecodeCollector.supportLowCardinality;
 import static com.starrocks.sql.optimizer.rule.tree.lowcardinality.DecodeUtil.getDictifiedType;
 
 /*
@@ -353,9 +354,9 @@ class DecodeContext {
             if (result.isColumnRef() && anchorOp == null) {
                 // decode array-column-ref
                 return new DictMappingOperator(useDictRef, result, expression.getType());
-            } else if (result instanceof CallOperator &&
-                    (FunctionSet.ARRAY_LENGTH.equalsIgnoreCase(((CallOperator) result).getFnName()) ||
-                            FunctionSet.CARDINALITY.equalsIgnoreCase(((CallOperator) result).getFnName()))) {
+            } else if (result instanceof CallOperator
+                    && LOW_CARD_ARRAY_FUNCTIONS.contains(((CallOperator) result).getFnName())
+                    && !supportLowCardinality(expression.getType())) {
                 Preconditions.checkState(anchorOp == null);
                 return result;
             } else if (result instanceof SubfieldOperator) {
@@ -414,8 +415,7 @@ class DecodeContext {
             Function fn = buildFunction(call.getFnName(), newChildren);
             ScalarOperator result = new CallOperator(call.getFnName(), fn.getReturnType(), newChildren, fn);
 
-            if (FunctionSet.ARRAY_MAX.equalsIgnoreCase(call.getFnName()) ||
-                    FunctionSet.ARRAY_MIN.equalsIgnoreCase(call.getFnName())) {
+            if (call.getType().isStringType()) {
                 return processAnchor(result);
             }
             return result;
