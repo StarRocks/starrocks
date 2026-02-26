@@ -50,6 +50,7 @@ class ColumnHelper;
 namespace starrocks::formats {
 
 DEFINE_FAIL_POINT(parquet_writer_close_failed);
+DEFINE_FAIL_POINT(parquet_writer_throw_exception);
 
 Status ParquetFileWriter::write(Chunk* chunk) {
     if (_rowgroup_writer == nullptr) {
@@ -74,7 +75,10 @@ FileWriter::CommitResult ParquetFileWriter::commit() {
         if (_writer != nullptr) {
             _writer->Close();
         }
-    } catch (const ::parquet::ParquetStatusException& e) {
+        FAIL_POINT_TRIGGER_EXECUTE(parquet_writer_throw_exception, {
+            throw ::parquet::ParquetException("Parquet writer throws exception by fail point");
+        });
+    } catch (const std::exception& e) {
         result.io_status.update(Status::IOError(fmt::format("{}: {}", "close file error", e.what())));
     }
 
