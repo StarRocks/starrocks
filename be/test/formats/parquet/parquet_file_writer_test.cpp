@@ -29,11 +29,8 @@
 #include "formats/parquet/parquet_test_util/util.h"
 #include "fs/fs.h"
 #include "fs/fs_memory.h"
-<<<<<<< HEAD
 #include "testutil/assert.h"
-=======
 #include "testutil/column_test_helper.h"
->>>>>>> e7b438814a ([UT] Refactor test case: ParquetFileWriterTest (#69405))
 
 namespace starrocks::formats {
 
@@ -122,7 +119,7 @@ protected:
     std::unique_ptr<parquet::ParquetOutputStream> _output_stream;
     RuntimeState* _runtime_state = nullptr;
     ObjectPool _pool;
-    std::atomic<int> _lazy_column_coalesce_counter;
+    std::atomic<int> _lazy_column_coalesce_counter = 0;
     std::shared_ptr<ParquetWriterOptions> _writer_options;
     TCompressionType::type _compression_type = TCompressionType::NO_COMPRESSION;
 };
@@ -134,9 +131,9 @@ StatusOr<std::unique_ptr<ParquetFileWriter>> ParquetFileWriterTest::_create_writ
         column_names = _make_type_names(type_descs);
     }
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
-    auto writer = std::make_unique<ParquetFileWriter>(
-            _file_path, std::move(_output_stream), std::move(column_names), type_descs, std::move(column_evaluators),
-            _compression_type, _writer_options, [] {}, std::move(nullable));
+    auto writer = std::make_unique<ParquetFileWriter>(_file_path, std::move(_output_stream), std::move(column_names),
+                                                      type_descs, std::move(column_evaluators), _compression_type,
+                                                      _writer_options, [] {});
     if (Status st = writer->init(); st.ok()) {
         return writer;
     } else {
@@ -732,13 +729,8 @@ TEST_F(ParquetFileWriterTest, TestFactory) {
     auto column_names = _make_type_names(type_descs);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto fs = std::make_shared<MemoryFileSystem>();
-<<<<<<< HEAD
-    auto factory = formats::ParquetFileWriterFactory(fs, TCompressionType::NO_COMPRESSION, {}, column_names,
-                                                     std::move(column_evaluators), std::nullopt, nullptr, nullptr);
-=======
-    auto factory = ParquetFileWriterFactory(fs, TCompressionType::NO_COMPRESSION, {}, column_names, column_evaluators,
-                                            std::nullopt, nullptr, nullptr);
->>>>>>> e7b438814a ([UT] Refactor test case: ParquetFileWriterTest (#69405))
+    auto factory = ParquetFileWriterFactory(fs, TCompressionType::NO_COMPRESSION, {}, column_names,
+                                            std::move(column_evaluators), std::nullopt, nullptr, nullptr);
     ASSERT_OK(factory.init());
     auto maybe_writer = factory.create(_file_path);
     ASSERT_OK(maybe_writer.status());
@@ -771,179 +763,4 @@ TEST_F(ParquetFileWriterTest, TestWriteJson) {
 
     // _read_chunk does not support read json
 }
-
-<<<<<<< HEAD
-=======
-TEST_F(ParquetFileWriterTest, TestNullableColumnsAllRequired) {
-    std::vector type_descs{TYPE_VARCHAR_DESC, TYPE_BIGINT_DESC};
-    ASSIGN_OR_ASSERT_FAIL(auto writer, _create_writer(type_descs, {false, false}));
-
-    auto chunk = std::make_shared<Chunk>();
-    {
-        // file_path column (VARCHAR) - non-null
-        auto col0 = ColumnTestHelper::build_column<Slice>({"file1.parquet", "file2.parquet", "file3.parquet"});
-        chunk->append_column(std::move(col0), 0);
-
-        // pos column (BIGINT) - non-null
-        auto col1 = ColumnTestHelper::build_column<int64_t>({100, 200, 300});
-        chunk->append_column(std::move(col1), 1);
-    }
-
-    // write chunk
-    ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
-
-    ASSERT_OK(result.io_status);
-    ASSERT_EQ(result.file_statistics.record_count, 3);
-
-    // Verify Parquet schema has REQUIRED columns
-    ASSIGN_OR_ABORT(auto file, _fs.new_random_access_file(_file_path));
-    ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
-    auto file_reader = std::make_shared<parquet::FileReader>(config::vector_chunk_size, file.get(), file_size);
-    auto ctx = _create_scan_context(type_descs);
-    ASSERT_OK(file_reader->init(ctx));
-    auto file_metadata = file_reader->get_file_metadata();
-
-    // Check that both columns are REQUIRED
-    for (int i = 0; i < file_metadata->schema().get_fields_size(); i++) {
-        auto field = file_metadata->schema().get_stored_column_by_field_idx(i);
-        auto repetition = field->schema_element.repetition_type;
-        EXPECT_EQ(repetition, tparquet::FieldRepetitionType::REQUIRED)
-                << "Column " << i << " should be REQUIRED but is " << repetition;
-    }
-}
-
-TEST_F(ParquetFileWriterTest, TestNullableColumnsMixed) {
-    std::vector type_descs{TYPE_VARCHAR_DESC, TYPE_BIGINT_DESC};
-
-    ASSIGN_OR_ASSERT_FAIL(auto writer, _create_writer(type_descs, {true, false}));
-
-    auto chunk = std::make_shared<Chunk>();
-    {
-        // file_path column (VARCHAR) - nullable
-        auto nullable_col0 =
-                ColumnTestHelper::build_nullable_column<Slice>({"file1.parquet", "file2.parquet", ""}, {0, 0, 1});
-        chunk->append_column(std::move(nullable_col0), chunk->num_columns());
-
-        // pos column (BIGINT) - non-null
-        auto col1 = ColumnTestHelper::build_column<int64_t>({100, 200, 300});
-        chunk->append_column(std::move(col1), chunk->num_columns());
-    }
-
-    // write chunk
-    ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
-
-    ASSERT_OK(result.io_status);
-    ASSERT_EQ(result.file_statistics.record_count, 3);
-
-    // Verify Parquet schema has correct Repetition types
-    ASSIGN_OR_ABORT(auto file, _fs.new_random_access_file(_file_path));
-    ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
-    auto file_reader = std::make_shared<parquet::FileReader>(config::vector_chunk_size, file.get(), file_size);
-    auto ctx = _create_scan_context(type_descs);
-    ASSERT_OK(file_reader->init(ctx));
-    auto file_metadata = file_reader->get_file_metadata();
-
-    // Check first column is OPTIONAL
-    auto col0_field = file_metadata->schema().get_stored_column_by_field_idx(0);
-    auto repetition0 = col0_field->schema_element.repetition_type;
-    EXPECT_EQ(repetition0, tparquet::FieldRepetitionType::OPTIONAL)
-            << "Column 0 should be OPTIONAL but is " << repetition0;
-
-    // Check second column is REQUIRED
-    auto col1_field = file_metadata->schema().get_stored_column_by_field_idx(1);
-    auto repetition1 = col1_field->schema_element.repetition_type;
-    EXPECT_EQ(repetition1, tparquet::FieldRepetitionType::REQUIRED)
-            << "Column 1 should be REQUIRED but is " << repetition1;
-}
-
-TEST_F(ParquetFileWriterTest, TestNullableColumnsDefaultEmpty) {
-    std::vector type_descs{TYPE_VARCHAR_DESC, TYPE_BIGINT_DESC};
-    ASSIGN_OR_ASSERT_FAIL(auto writer, _create_writer(type_descs));
-
-    auto chunk = std::make_shared<Chunk>();
-    {
-        // file_path column (VARCHAR)
-        auto col0 = ColumnTestHelper::build_column<Slice>({"file1.parquet", "file2.parquet", "file3.parquet"});
-        chunk->append_column(std::move(col0), 0);
-
-        // pos column (BIGINT)
-        auto col1 = ColumnTestHelper::build_column<int64_t>({100, 200, 300});
-        chunk->append_column(std::move(col1), 1);
-    }
-
-    // write chunk
-    ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
-
-    ASSERT_OK(result.io_status);
-    ASSERT_EQ(result.file_statistics.record_count, 3);
-
-    // Verify Parquet schema has OPTIONAL columns (backward compatibility)
-    ASSIGN_OR_ABORT(auto file, _fs.new_random_access_file(_file_path));
-    ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
-    auto file_reader = std::make_shared<parquet::FileReader>(config::vector_chunk_size, file.get(), file_size);
-    auto ctx = _create_scan_context(type_descs);
-    ASSERT_OK(file_reader->init(ctx));
-    auto file_metadata = file_reader->get_file_metadata();
-
-    // Check that both columns are OPTIONAL (default behavior)
-    for (int i = 0; i < file_metadata->schema().get_fields_size(); i++) {
-        auto field = file_metadata->schema().get_stored_column_by_field_idx(i);
-        auto repetition = field->schema_element.repetition_type;
-        EXPECT_EQ(repetition, tparquet::FieldRepetitionType::OPTIONAL)
-                << "Column " << i << " should be OPTIONAL (default) but is " << repetition;
-    }
-}
-
-TEST_F(ParquetFileWriterTest, TestIcebergDeleteFileColumnsRequired) {
-    // Test specific use case: Iceberg position delete file with file_path and pos columns as REQUIRED
-    std::vector type_descs{TYPE_VARCHAR_DESC, TYPE_BIGINT_DESC};
-    std::vector nullable = {false, false};
-    std::vector<std::string> column_names = {"file_path", "pos"};
-    ASSIGN_OR_ASSERT_FAIL(auto writer, _create_writer(type_descs, nullable, column_names));
-
-    auto chunk = std::make_shared<Chunk>();
-    {
-        // file_path column (VARCHAR) - REQUIRED for Iceberg delete files
-        auto col0 = ColumnTestHelper::build_column<Slice>({"s3://bucket/table/data/file1.parquet",
-                                                           "s3://bucket/table/data/file1.parquet",
-                                                           "s3://bucket/table/data/file2.parquet"});
-        chunk->append_column(std::move(col0), 0);
-
-        // pos column (BIGINT) - REQUIRED for Iceberg delete files
-        auto col1 = ColumnTestHelper::build_column<int64_t>({100, 200, 50});
-        chunk->append_column(std::move(col1), 1);
-    }
-
-    // write chunk
-    ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
-
-    ASSERT_OK(result.io_status);
-    ASSERT_EQ(result.file_statistics.record_count, 3);
-
-    // Verify Parquet schema has REQUIRED columns for Iceberg delete file
-    ASSIGN_OR_ABORT(auto file, _fs.new_random_access_file(_file_path));
-    ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
-    auto file_reader = std::make_shared<parquet::FileReader>(config::vector_chunk_size, file.get(), file_size);
-    auto ctx = _create_scan_context(type_descs);
-    ASSERT_OK(file_reader->init(ctx));
-    auto file_metadata = file_reader->get_file_metadata();
-
-    // Verify column names
-    EXPECT_EQ(file_metadata->schema().get_stored_column_by_field_idx(0)->name, "file_path");
-    EXPECT_EQ(file_metadata->schema().get_stored_column_by_field_idx(1)->name, "pos");
-
-    // Verify both columns are REQUIRED (Iceberg spec requirement)
-    for (int i = 0; i < file_metadata->schema().get_fields_size(); i++) {
-        auto field = file_metadata->schema().get_stored_column_by_field_idx(i);
-        auto repetition = field->schema_element.repetition_type;
-        EXPECT_EQ(repetition, tparquet::FieldRepetitionType::REQUIRED)
-                << "Column " << field->name << " should be REQUIRED for Iceberg delete files but is " << repetition;
-    }
-}
-
->>>>>>> e7b438814a ([UT] Refactor test case: ParquetFileWriterTest (#69405))
 } // namespace starrocks::formats
