@@ -504,11 +504,11 @@ public class MockIcebergMetadata implements ConnectorMetadata {
         try {
             Map<String, IcebergTableInfo> dbTables = MOCK_TABLE_MAP.get(dbName);
             if (dbTables == null) {
-                return null;
+                return getView(context, dbName, tblName);
             }
             IcebergTableInfo tableInfo = dbTables.get(tblName);
             if (tableInfo == null) {
-                return null;
+                return getView(context, dbName, tblName);
             }
             MockIcebergTable t = tableInfo.icebergTable;
             MockIcebergTable t1 = new MockIcebergTable(t.getId(), t.getName(), t.getCatalogName(), t.getResourceName(),
@@ -681,7 +681,7 @@ public class MockIcebergMetadata implements ConnectorMetadata {
                     new Column("date", DateType.DATE)
             );
             return new IcebergView(1, MOCKED_ICEBERG_CATALOG_NAME, dbName, viewName, schema,
-                    "SELECT id, data, date FROM t1", MOCKED_ICEBERG_CATALOG_NAME, dbName,
+                    "SELECT 1 as id, 'data' as data, CAST('2024-01-01' as DATE) as date", MOCKED_ICEBERG_CATALOG_NAME, dbName,
                     "view_location", Maps.newHashMap());
         }
         return null;
