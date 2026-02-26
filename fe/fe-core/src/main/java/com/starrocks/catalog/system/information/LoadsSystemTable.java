@@ -13,14 +13,11 @@
 // limitations under the License.
 package com.starrocks.catalog.system.information;
 
-<<<<<<< HEAD
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
-=======
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
->>>>>>> 0e0629e3dd ([Enhancement] Push down loads table predicates to FE (#69472))
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
@@ -35,17 +32,10 @@ import com.starrocks.thrift.TGetLoadsParams;
 import com.starrocks.thrift.TGetLoadsResult;
 import com.starrocks.thrift.TLoadInfo;
 import com.starrocks.thrift.TSchemaTableType;
-<<<<<<< HEAD
-=======
-import com.starrocks.type.DateType;
-import com.starrocks.type.IntegerType;
-import com.starrocks.type.JsonType;
-import com.starrocks.type.TypeFactory;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
->>>>>>> 0e0629e3dd ([Enhancement] Push down loads table predicates to FE (#69472))
 
 import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;

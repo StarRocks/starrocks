@@ -72,11 +72,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.system.information.AnalyzeStatusSystemTable;
 import com.starrocks.catalog.system.information.ColumnStatsUsageSystemTable;
-<<<<<<< HEAD
-=======
-import com.starrocks.catalog.system.information.FeThreadsSystemTable;
 import com.starrocks.catalog.system.information.LoadsSystemTable;
->>>>>>> 0e0629e3dd ([Enhancement] Push down loads table predicates to FE (#69472))
 import com.starrocks.catalog.system.information.MaterializedViewsSystemTable;
 import com.starrocks.catalog.system.information.TablesSystemTable;
 import com.starrocks.catalog.system.information.TaskRunsSystemTable;
