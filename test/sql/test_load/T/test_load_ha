@@ -30,3 +30,8 @@ ADMIN DISABLE FAILPOINT 'load_segment_flush';
 sync;
 select state, error_msg from information_schema.loads where label='${uuid2}';
 select * from t;
+
+CLEANUP {
+    ADMIN DISABLE FAILPOINT 'load_memtable_flush';
+    ADMIN DISABLE FAILPOINT 'load_segment_flush';
+} END CLEANUP

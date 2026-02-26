@@ -46,3 +46,6 @@ shell: ossutil64 rm -rf oss://${oss_bucket}/test_sink/test_file_sink_commit_fail
 0
 
 -- !result
+CLEANUP {
+    admin disable failpoint 'parquet_writer_close_failed';
+} END CLEANUP

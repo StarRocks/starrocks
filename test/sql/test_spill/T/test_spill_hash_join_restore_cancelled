@@ -34,3 +34,7 @@ function: wait_util_no_queries()
 
 admin disable failpoint 'spill_restore_sleep';
 
+CLEANUP {
+  admin disable failpoint 'spill_restore_sleep';
+} END CLEANUP
+

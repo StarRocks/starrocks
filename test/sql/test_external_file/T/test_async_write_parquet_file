@@ -25,3 +25,7 @@ select count(*) from files(
 );
 
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_async_write_parquet_file/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
+
+CLEANUP {
+    admin disable failpoint 'async_flush_output_stream_sleep';
+} END CLEANUP

@@ -8,3 +8,6 @@ admin enable failpoint 'schema_scan_rpc_failed';
 admin disable failpoint 'schema_scan_rpc_failed';
 -- result:
 -- !result
+CLEANUP {
+	admin disable failpoint 'schema_scan_rpc_failed';
+} END CLEANUP
