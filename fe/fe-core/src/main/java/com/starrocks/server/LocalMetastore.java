@@ -1267,7 +1267,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             }
             Set<String> existPartitionNameSet = Sets.newHashSet();
             try {
-                olapTable = checkTable(db, tableName);
+                // Use ID-based lookup to ensure we get the same table we locked,
+                // avoiding lock leak when a concurrent SWAP changes the name-to-table mapping.
+                olapTable = checkTable(db, olapTable.getId());
                 existPartitionNameSet = CatalogUtils.checkPartitionNameExistForAddPartitions(olapTable,
                         partitionDescs);
                 if (existPartitionNameSet.size() > 0) {
