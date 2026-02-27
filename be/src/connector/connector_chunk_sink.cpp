@@ -56,7 +56,7 @@ Status ConnectorChunkSink::add(Chunk* chunk) {
     if (it != _writer_stream_pairs.end()) {
         Writer* writer = it->second.first.get();
         if (writer->get_written_bytes() >= _max_file_size) {
-            auto commit_result = writer->commit();
+            auto commit_result = writer->close();
             callback_on_commit(commit_result);
             _writer_stream_pairs.erase(it);
             RETURN_IF_ERROR(commit_result.io_status);
@@ -87,7 +87,7 @@ Status ConnectorChunkSink::add(Chunk* chunk) {
 Status ConnectorChunkSink::finish() {
     Status st = Status::OK();
     for (auto& [_, writer_and_stream] : _writer_stream_pairs) {
-        auto commit_result = writer_and_stream.first->commit();
+        auto commit_result = writer_and_stream.first->close();
         callback_on_commit(commit_result);
         if (st.ok() && !commit_result.io_status.ok()) {
             st = commit_result.io_status;
