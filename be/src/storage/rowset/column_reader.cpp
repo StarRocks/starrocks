@@ -120,6 +120,7 @@ ColumnReader::~ColumnReader() {
 
 Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
     _column_type = static_cast<LogicalType>(meta->type());
+    _column_length = meta->length();
     _dict_page_pointer = PagePointer(meta->dict_page());
     _total_mem_footprint = meta->total_mem_footprint();
     if (column == nullptr) {
