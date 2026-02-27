@@ -65,7 +65,7 @@ public:
 
     Status write(Chunk* chunk) override;
 
-    CommitResult commit() override;
+    CommitResult close() override;
 
 private:
     const std::string _location;
