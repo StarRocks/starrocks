@@ -394,7 +394,7 @@ public interface IcebergCatalog extends MemoryTrackable {
                                 "under snapshot [{}]", partitionName, nativeTable.name(), snapshotId, e);
             }
         }
-        if (lastUpdated ==  -1) {
+        if (lastUpdated == -1) {
             // Fallback to current snapshot's timestamp if last_updated_at is null due to snapshot expiration.
             lastUpdated = getTableLastestSnapshotTime(icebergTable, logger);
             logger.warn("The table [{}] last_updated_at is null (snapshot [{}] may have been expired), " +
