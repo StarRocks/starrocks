@@ -131,13 +131,9 @@ import org.apache.commons.collections4.CollectionUtils;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
-<<<<<<< HEAD
-=======
 import java.util.HashMap;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
->>>>>>> 17cdbea7b4 ([BugFix] Fix INSERT failure when auto-partition range is enclosed by existing merged partition (#69429))
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
