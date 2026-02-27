@@ -46,6 +46,12 @@
 #include "fs/key_cache.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
+<<<<<<< HEAD
+=======
+#include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
+#include "runtime/starrocks_metrics.h"
+>>>>>>> 07f3d6e885 ([Enhancement] add Prometheus counter for segment file not found errors (#69543))
 #include "segment_iterator.h"
 #include "segment_options.h"
 #include "storage/lake/tablet_manager.h"
@@ -249,6 +255,9 @@ Status Segment::open(size_t* footer_length_hint, const FooterPointerPB* partial_
     }
 
     auto res = success_once(_open_once, [&] { return _open(footer_length_hint, partial_rowset_footer, lake_io_opts); });
+    if (res.status().is_not_found()) {
+        StarRocksMetrics::instance()->segment_file_not_found_total.increment(1);
+    }
 
     // move the cache size update out of the `success_once`,
     // so that the onceflag `_open_once` can be set before the cache_size is updated.
