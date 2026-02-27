@@ -4291,4 +4291,53 @@ TEST_F(TabletUpdatesTest, test_compaction_commit_fail_release_rowset_id) {
     ASSERT_EQ(N, read_tablet(_tablet, 6));
 }
 
+TEST_F(TabletUpdatesTest, test_make_snapshot_on_tablet_meta_keep_rowsets) {
+    srand(GetCurrentTimeMicros());
+    _tablet = create_tablet(rand(), rand());
+
+    // write
+    const int N = 1000;
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.emplace_back(i);
+    }
+    auto rs0 = create_rowset(_tablet, keys);
+    ASSERT_TRUE(_tablet->rowset_commit(2, rs0).ok());
+    ASSERT_EQ(2, _tablet->updates()->max_version());
+
+    auto rs1 = create_rowset(_tablet, keys);
+    ASSERT_TRUE(_tablet->rowset_commit(3, rs1).ok());
+    ASSERT_EQ(3, _tablet->updates()->max_version());
+
+    std::string schema_hash_path = _tablet->schema_hash_path();
+
+    // Check that rowset files exist
+    bool has_rowset_files = false;
+    for (const auto& entry : std::filesystem::directory_iterator(schema_hash_path)) {
+        if (entry.path().extension() == ".dat") {
+            has_rowset_files = true;
+            break;
+        }
+    }
+    ASSERT_TRUE(has_rowset_files);
+
+    // make snapshot
+    ASSERT_TRUE(SnapshotManager::instance()->make_snapshot_on_tablet_meta(_tablet).ok());
+
+    // Check that the snapshot meta file was created (meta)
+    bool has_meta_file = false;
+    bool still_has_rowset_files = false;
+    for (const auto& entry : std::filesystem::directory_iterator(schema_hash_path)) {
+        if (entry.path().filename() == "meta") {
+            has_meta_file = true;
+        }
+        if (entry.path().extension() == ".dat") {
+            still_has_rowset_files = true;
+        }
+    }
+
+    ASSERT_TRUE(has_meta_file);
+    ASSERT_TRUE(still_has_rowset_files);
+}
+
 } // namespace starrocks
