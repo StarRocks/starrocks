@@ -485,4 +485,59 @@ public class MetricRepoTest extends PlanTestBase {
         Assertions.assertEquals("unknown", IcebergMetricsMgr.classifyFailReason(new RuntimeException("unknown error")));
         Assertions.assertEquals("unknown", IcebergMetricsMgr.classifyFailReason((Throwable) null));
     }
+
+    @Test
+    public void testIcebergCompactionMetrics() {
+        // manual compaction success
+        IcebergMetricsMgr.increaseIcebergCompactionTotalSuccess();
+        IcebergMetricsMgr.increaseIcebergCompactionDurationMs(200L, "manual");
+        IcebergMetricsMgr.increaseIcebergCompactionInputFiles(4L, "manual");
+        IcebergMetricsMgr.increaseIcebergCompactionOutputFiles(2L, "manual");
+        IcebergMetricsMgr.increaseIcebergCompactionRemovedDeleteFiles(1L, "manual");
+
+        // auto compaction failure
+        IcebergMetricsMgr.increaseIcebergCompactionTotal("failed", "timeout", "auto");
+        IcebergMetricsMgr.increaseIcebergCompactionDurationMs(50L, "auto");
+
+        PrometheusMetricVisitor visitor = new PrometheusMetricVisitor("ut");
+        MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
+        MetricRepo.getMetric(visitor, params);
+        String output = visitor.build();
+
+        Assertions.assertTrue(output.contains("ut_iceberg_compaction_total{"),
+                "iceberg_compaction_total should be exposed");
+        Assertions.assertTrue(output.contains("compaction_type=\"manual\""),
+                "iceberg_compaction_total should contain compaction_type=manual");
+        Assertions.assertTrue(output.contains("compaction_type=\"auto\""),
+                "iceberg_compaction_total should contain compaction_type=auto");
+        Assertions.assertTrue(output.contains("reason=\"timeout\""),
+                "iceberg_compaction_total should contain reason label");
+        Assertions.assertTrue(output.contains("ut_iceberg_compaction_duration_ms_total"),
+                "iceberg_compaction_duration_ms_total should be exposed");
+        Assertions.assertTrue(output.contains("ut_iceberg_compaction_input_files_total"),
+                "iceberg_compaction_input_files_total should be exposed");
+        Assertions.assertTrue(output.contains("ut_iceberg_compaction_output_files_total"),
+                "iceberg_compaction_output_files_total should be exposed");
+        Assertions.assertTrue(output.contains("ut_iceberg_compaction_removed_delete_files_total"),
+                "iceberg_compaction_removed_delete_files_total should be exposed");
+    }
+
+    @Test
+    public void testIcebergCompactionFailReasonNormalization() {
+        // normalizeStatus should cap to known values
+        Assertions.assertEquals("success", IcebergMetricsMgr.normalizeStatus("SUCCESS"));
+        Assertions.assertEquals("failed", IcebergMetricsMgr.normalizeStatus("FAILED"));
+        Assertions.assertEquals("unknown", IcebergMetricsMgr.normalizeStatus(null));
+        Assertions.assertEquals("custom", IcebergMetricsMgr.normalizeStatus("custom"));
+
+        // normalizeReason fallback
+        Assertions.assertEquals("unknown", IcebergMetricsMgr.normalizeReason(null));
+        Assertions.assertEquals("oom", IcebergMetricsMgr.normalizeReason("oom"));
+
+        // classifyFailReason reuses delete logic
+        Assertions.assertEquals("timeout", IcebergMetricsMgr.classifyFailReason("timeout when compaction"));
+        Assertions.assertEquals("oom", IcebergMetricsMgr.classifyFailReason(new OutOfMemoryError()));
+        Assertions.assertEquals("access_denied", IcebergMetricsMgr.classifyFailReason("permission denied by s3"));
+        Assertions.assertEquals("unknown", IcebergMetricsMgr.classifyFailReason("something else"));
+    }
 }
