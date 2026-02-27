@@ -989,6 +989,11 @@ displayed_sidebar: docs
 - 单位：个
 - 描述：Segment Flush 线程池中排队的任务数量。
 
+### starrocks_be_segment_file_not_found_total
+
+- 单位：个
+- 描述：打开 Segment 时发现文件缺失（NOT_FOUND）的累计次数。若该值持续增长，可能表示数据丢失或存储不一致。
+
 ### jemalloc_metadata_bytes
 
 - 单位：Byte
