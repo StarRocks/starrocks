@@ -144,8 +144,8 @@ Status CSVFileWriter::write(Chunk* chunk) {
     return Status::OK();
 }
 
-FileWriter::CommitResult CSVFileWriter::commit() {
-    FileWriter::CommitResult result{
+FileWriter::CommitResult CSVFileWriter::close() {
+    CommitResult result{
             .io_status = Status::OK(), .format = CSV, .location = _location, .rollback_action = _rollback_action};
 
     // Ensure header is written even if no data was written

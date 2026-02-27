@@ -65,9 +65,7 @@ public:
     virtual int64_t get_allocated_bytes() = 0;
     virtual int64_t get_flush_batch_size() = 0;
     virtual Status write(Chunk* chunk) = 0;
-    // TODO: It is better to rename this function to close()?
-    // This function should always be invoked, whether the write operation is successful or fails.
-    virtual CommitResult commit() = 0;
+    virtual CommitResult close() = 0;
 };
 
 struct WriterAndStream {
