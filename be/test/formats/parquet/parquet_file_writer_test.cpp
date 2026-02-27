@@ -160,7 +160,7 @@ TEST_F(ParquetFileWriterTest, TestWriteIntegralTypes) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
 
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
@@ -199,7 +199,7 @@ TEST_F(ParquetFileWriterTest, TestWriteDecimal) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
 
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
@@ -239,7 +239,7 @@ TEST_F(ParquetFileWriterTest, TestWriteDecimalCompatibleWithHiveReader) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
 
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
@@ -262,7 +262,7 @@ TEST_F(ParquetFileWriterTest, TestWriteBoolean) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
 
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
@@ -285,7 +285,7 @@ TEST_F(ParquetFileWriterTest, TestWriteFloat) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
 
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
@@ -308,7 +308,7 @@ TEST_F(ParquetFileWriterTest, TestWriteDouble) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
 
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
@@ -345,7 +345,7 @@ TEST_F(ParquetFileWriterTest, TestWriteDate) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
 
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
@@ -383,7 +383,7 @@ TEST_F(ParquetFileWriterTest, TestWriteDatetime) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
 
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
@@ -425,7 +425,7 @@ TEST_F(ParquetFileWriterTest, TestWriteDatetimeCompatibleWithHiveReader) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
 
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 5);
@@ -449,7 +449,7 @@ TEST_F(ParquetFileWriterTest, TestWriteVarchar) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
 
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
@@ -479,7 +479,7 @@ TEST_F(ParquetFileWriterTest, TestWriteArray) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
 
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
@@ -515,7 +515,7 @@ TEST_F(ParquetFileWriterTest, TestWriteStruct) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
 
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
@@ -551,7 +551,7 @@ TEST_F(ParquetFileWriterTest, TestWriteMap) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
 
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
@@ -617,7 +617,7 @@ TEST_F(ParquetFileWriterTest, TestWriteNestedArray) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
 
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 3);
@@ -640,7 +640,7 @@ TEST_F(ParquetFileWriterTest, TestWriteVarbinary) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
 
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
@@ -665,7 +665,7 @@ TEST_F(ParquetFileWriterTest, TestAllocatedBytes) {
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
     ASSERT_TRUE(writer->get_allocated_bytes() > 0);
-    auto result = writer->commit();
+    auto result = writer->close();
     ASSERT_TRUE(writer->get_allocated_bytes() == 0);
 
     ASSERT_OK(result.io_status);
@@ -691,7 +691,7 @@ TEST_F(ParquetFileWriterTest, TestFlushRowgroup) {
     // write chunk twice
     ASSERT_OK(writer->write(chunk.get()));
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
 
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 8);
@@ -711,7 +711,7 @@ TEST_F(ParquetFileWriterTest, TestWriteWithFieldID) {
     // write chunk twice
     ASSERT_OK(writer->write(chunk.get()));
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
 
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 8);
@@ -757,7 +757,7 @@ TEST_F(ParquetFileWriterTest, TestWriteJson) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
 
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 3);
@@ -782,7 +782,7 @@ TEST_F(ParquetFileWriterTest, TestNullableColumnsAllRequired) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
 
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 3);
@@ -823,7 +823,7 @@ TEST_F(ParquetFileWriterTest, TestNullableColumnsMixed) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
 
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 3);
@@ -866,7 +866,7 @@ TEST_F(ParquetFileWriterTest, TestNullableColumnsDefaultEmpty) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
 
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 3);
@@ -910,7 +910,7 @@ TEST_F(ParquetFileWriterTest, TestIcebergDeleteFileColumnsRequired) {
 
     // write chunk
     ASSERT_OK(writer->write(chunk.get()));
-    auto result = writer->commit();
+    auto result = writer->close();
 
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 3);

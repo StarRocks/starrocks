@@ -51,6 +51,7 @@ namespace starrocks::formats {
 
 DEFINE_FAIL_POINT(parquet_writer_close_failed);
 DEFINE_FAIL_POINT(parquet_writer_throw_exception);
+DEFINE_FAIL_POINT(parquet_writer_rowgroup_write_failed);
 
 Status ParquetFileWriter::write(Chunk* chunk) {
     if (_rowgroup_writer == nullptr) {
@@ -61,6 +62,7 @@ Status ParquetFileWriter::write(Chunk* chunk) {
 
     RETURN_IF_ERROR(_rowgroup_writer->write(chunk));
 
+    FAIL_POINT_TRIGGER_EXECUTE(parquet_writer_rowgroup_write_failed, { _writer_options->rowgroup_size = 0; });
     if (_rowgroup_writer->estimated_buffered_bytes() >= _writer_options->rowgroup_size) {
         return _flush_row_group();
     }
@@ -68,7 +70,7 @@ Status ParquetFileWriter::write(Chunk* chunk) {
     return Status::OK();
 }
 
-FileWriter::CommitResult ParquetFileWriter::commit() {
+FileWriter::CommitResult ParquetFileWriter::close() {
     CommitResult result{
             .io_status = Status::OK(), .format = PARQUET, .location = _location, .rollback_action = _rollback_action};
     try {
@@ -118,7 +120,10 @@ Status ParquetFileWriter::_flush_row_group() {
     DCHECK(_rowgroup_writer != nullptr);
     try {
         _rowgroup_writer->close();
-    } catch (const ::parquet::ParquetStatusException& e) {
+        FAIL_POINT_TRIGGER_EXECUTE(parquet_writer_rowgroup_write_failed, {
+            throw ::parquet::ParquetException("Parquet row group writer throws exception by fail point");
+        });
+    } catch (const std::exception& e) {
         Status exception = Status::IOError(fmt::format("{}: {}", "flush rowgroup error", e.what()));
         LOG(WARNING) << exception;
         return exception;

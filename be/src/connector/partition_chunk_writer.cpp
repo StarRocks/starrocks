@@ -15,7 +15,6 @@
 #include "connector/partition_chunk_writer.h"
 
 #include "column/chunk.h"
-#include "common/status.h"
 #include "connector/async_flush_stream_poller.h"
 #include "connector/connector_sink_executor.h"
 #include "connector/sink_memory_manager.h"
@@ -62,7 +61,7 @@ Status PartitionChunkWriter::commit_file() {
         return Status::OK();
     }
     SCOPED_TIMER(_sink_profile ? _sink_profile->commit_file_timer : nullptr);
-    auto result = _file_writer->commit();
+    auto result = _file_writer->close();
     _commit_callback(result.set_extra_data(_commit_extra_data));
     _file_writer = nullptr;
     VLOG(3) << "commit to remote file, filename: " << _out_stream->filename()
@@ -378,7 +377,7 @@ Status SpillPartitionChunkWriter::_merge_chunks() {
 }
 
 bool SpillPartitionChunkWriter::_mem_insufficent() {
-    // Return false because we will triger spill by sink memory manager.
+    // Return false because we will trigger spill by sink memory manager.
     return false;
 }
 
