@@ -14,9 +14,14 @@
 
 package com.starrocks.scheduler.mv.ivm;
 
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.tvr.TvrTableDelta;
+import com.starrocks.common.tvr.TvrVersion;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.scheduler.MVTaskRunProcessor;
+import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.mv.hybrid.MVHybridBasedRefreshProcessor;
 import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -26,6 +31,9 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.MethodOrderer.MethodName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
+
+import java.util.List;
+import java.util.Map;
 
 @TestMethodOrder(MethodName.class)
 public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase {
@@ -553,5 +561,82 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
             MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(mv);
             Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVPCTBasedRefreshProcessor);
         }
+    }
+
+    @Test
+    public void testAutoRefreshFallbackToPCTAdvancesTvrWatermark() throws Exception {
+        String query = "SELECT id, data, date  FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "auto");
+        Assertions.assertEquals(MaterializedView.RefreshMode.AUTO, mv.getCurrentRefreshMode());
+
+        // Initial refresh should advance watermark to snapshot 1.
+        advanceTableVersionTo(1);
+        getMVTaskRunProcessor(mv);
+        Map<BaseTableInfo, TvrVersionRange> tvrRangeMap =
+                mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableInfoTvrVersionRangeMap();
+        long beforeFallbackEnd = tvrRangeMap.values().stream()
+                .mapToLong(range -> range.end().orElse(-1L))
+                .max()
+                .orElse(-1L);
+
+        // Next refresh falls back to PCT because delta traits contain retractable changes.
+        advanceTableVersionTo(2);
+        mockListTableDeltaTraits();
+        TaskRun taskRun = buildMVTaskRun(mv, "test");
+        // Force this run to execute PCT refresh path rather than being skipped by partition checks.
+        taskRun.getProperties().put(TaskRun.FORCE, "true");
+        initAndExecuteTaskRun(taskRun);
+        MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(taskRun);
+        Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
+        MVHybridBasedRefreshProcessor hybridProcessor =
+                (MVHybridBasedRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
+        Assertions.assertTrue(hybridProcessor.getCurrentProcessor() instanceof MVPCTBasedRefreshProcessor);
+
+        // Watermark should still move forward to the latest processed snapshot after fallback.
+        Map<BaseTableInfo, TvrVersionRange> updatedRangeMap =
+                mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableInfoTvrVersionRangeMap();
+        long afterFallbackEnd = updatedRangeMap.values().stream()
+                .mapToLong(range -> range.end().orElse(-1L))
+                .max()
+                .orElse(-1L);
+        Assertions.assertEquals(2L, afterFallbackEnd);
+        Assertions.assertTrue(afterFallbackEnd > beforeFallbackEnd);
+    }
+
+    @Test
+    public void testAutoRefreshWithEmptyDeltaTraitsFallsBackToPCT() throws Exception {
+        String query = "SELECT id, data, date  FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "auto");
+        Assertions.assertEquals(MaterializedView.RefreshMode.AUTO, mv.getCurrentRefreshMode());
+
+        advanceTableVersionTo(2);
+        mockListTableDeltaTraits(List.of());
+
+        MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(mv);
+        Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
+        MVHybridBasedRefreshProcessor hybridProcessor =
+                (MVHybridBasedRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
+        Assertions.assertTrue(hybridProcessor.getCurrentProcessor() instanceof MVPCTBasedRefreshProcessor);
+    }
+
+    @Test
+    public void testRecoveryDoesNotMutateTvrMapDuringPlanning() throws Exception {
+        String query = "SELECT id, data, date  FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "auto");
+        Assertions.assertEquals(MaterializedView.RefreshMode.AUTO, mv.getCurrentRefreshMode());
+
+        BaseTableInfo baseTableInfo = mv.getBaseTableInfos().stream()
+                .filter(info -> "t0".equalsIgnoreCase(info.getTableName()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("Missing base table info for t0"));
+        Map<BaseTableInfo, TvrVersionRange> tvrRangeMap =
+                mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableInfoTvrVersionRangeMap();
+        tvrRangeMap.put(baseTableInfo, TvrTableDelta.of(TvrVersion.of(1L), TvrVersion.of(2L)));
+
+        advanceTableVersionTo(3);
+        getMVRefreshExecPlan(mv, "explain refresh materialized view test_mv1 with sync mode");
+
+        // Planning should not mutate persisted watermark map before refresh succeeds.
+        Assertions.assertTrue(tvrRangeMap.get(baseTableInfo) instanceof TvrTableDelta);
     }
 }

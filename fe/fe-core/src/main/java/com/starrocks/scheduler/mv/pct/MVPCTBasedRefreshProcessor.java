@@ -25,6 +25,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
@@ -293,6 +294,9 @@ public final class MVPCTBasedRefreshProcessor extends BaseMVRefreshProcessor {
     public void updateVersionMeta(ExecPlan execPlan,
                                   PCellSortedSet mvRefreshedPartitions,
                                   Map<BaseTableSnapshotInfo, PCellSortedSet> refTableAndPartitionNames) {
-        updatePCTMeta(execPlan, pctMVToRefreshedPartitions, pctRefTableRefreshPartitions, Maps.newHashMap());
+        MaterializedView.AsyncRefreshContext refreshContext = mv.getRefreshScheme().getAsyncRefreshContext();
+        Map<BaseTableInfo, TvrVersionRange> tempTvrVersionRangeMap = refreshContext.getTempBaseTableInfoTvrDeltaMap();
+        updatePCTMeta(execPlan, pctMVToRefreshedPartitions, pctRefTableRefreshPartitions, tempTvrVersionRangeMap);
+        refreshContext.clearTempBaseTableInfoTvrDeltaMap();
     }
 }
