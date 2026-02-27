@@ -261,6 +261,22 @@ TEST_F(HdfsScannerTest, TestParquetGetNext) {
     scanner->close();
 }
 
+TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithDefaultValue) {
+    SlotDesc descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+                        {"c2", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+                        {""}};
+    auto* tuple_desc = _create_tuple_desc(descs);
+    HdfsScannerContext ctx;
+    ctx.not_existed_slots.push_back(tuple_desc->slots()[0]);
+    ctx.not_existed_slots.push_back(tuple_desc->slots()[1]);
+    ctx.materialize_slot_default_values.emplace(tuple_desc->slots()[0]->id(), "42");
+
+    ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    ASSERT_OK(ctx.append_or_update_not_existed_columns_to_chunk(&chunk, 1));
+    ASSERT_EQ(1, chunk->num_rows());
+    EXPECT_EQ("[42, NULL]", chunk->debug_row(0));
+}
+
 // ========================= ORC SCANNER ============================
 
 static TTypeDesc create_primitive_type_desc(TPrimitiveType::type type) {

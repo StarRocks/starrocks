@@ -27,12 +27,27 @@
 #include "io/compressed_input_stream.h"
 #include "io/shared_buffered_input_stream.h"
 #include "storage/predicate_parser.h"
+#include "storage/rowset/default_value_column_iterator.h"
 #include "storage/runtime_range_pruner.hpp"
+#include "storage/types.h"
 #include "util/compression/compression_utils.h"
 #include "util/compression/stream_decompressor.h"
 namespace starrocks {
 
 static const std::string kCountOptColumnName = "___count___";
+
+static Status fill_default_value_for_not_existed_slot(SlotDescriptor* slot_desc, const std::string& default_value,
+                                                      size_t row_count, Column* column) {
+    auto type_info = get_type_info(slot_desc->type());
+    if (type_info == nullptr) {
+        return Status::InternalError(fmt::format("failed to get type info for slot {}", slot_desc->col_name()));
+    }
+    std::unique_ptr<DefaultValueColumnIterator> default_value_iter = std::make_unique<DefaultValueColumnIterator>(
+            true, default_value, slot_desc->is_nullable(), type_info, slot_desc->type().len, row_count);
+    ColumnIteratorOptions iter_opts;
+    RETURN_IF_ERROR(default_value_iter->init(iter_opts));
+    return default_value_iter->fetch_values_by_rowid(nullptr, row_count, column);
+}
 
 class CountedSeekableInputStream final : public io::SeekableInputStreamWrapper {
 public:
@@ -161,6 +176,7 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.slot_descs = _scanner_params.tuple_desc->slots();
     ctx.scan_range = _scanner_params.scan_range;
     ctx.scan_range_id = _scanner_params.scan_range_id;
+    ctx.materialize_slot_default_values = _scanner_params.materialize_slot_default_values;
     ctx.runtime_filter_collector = _scanner_params.runtime_filter_collector;
     ctx.min_max_conjunct_ctxs = _scanner_params.min_max_conjunct_ctxs;
     ctx.min_max_tuple_desc = _scanner_params.min_max_tuple_desc;
@@ -652,6 +668,9 @@ Status HdfsScannerContext::append_or_update_not_existed_columns_to_chunk(ChunkPt
                 col = ColumnHelper::create_column(desc, slot_desc->is_nullable());
                 col->append_datum(int64_t(1));
                 col->assign(row_count, 0);
+            } else if (auto it = materialize_slot_default_values.find(slot_desc->id());
+                       it != materialize_slot_default_values.end()) {
+                RETURN_IF_ERROR(fill_default_value_for_not_existed_slot(slot_desc, it->second, row_count, col.get()));
             } else {
                 col->append_default(row_count);
             }

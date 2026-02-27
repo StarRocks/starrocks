@@ -38,6 +38,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -311,13 +312,33 @@ public class InsertAnalyzer {
         }
 
         if (!insertStmt.usePartialUpdate()) {
+            IcebergTable icebergTable = table instanceof IcebergTable ? (IcebergTable) table : null;
             for (Column column : table.getBaseSchema()) {
-                Column.DefaultValueType defaultValueType = column.getDefaultValueType();
-                if (defaultValueType == Column.DefaultValueType.NULL &&
-                        !column.isAllowNull() &&
+                if (icebergTable != null &&
                         !column.isAutoIncrement() &&
                         !column.isGeneratedColumn() &&
                         !mentionedColumns.contains(column.getName())) {
+                    String writeDefault = IcebergApiConverter.getWriteDefaultValue(
+                            icebergTable.getNativeTable().schema(), column.getName());
+                    if (column.isAllowNull() || writeDefault != null) {
+                        continue;
+                    }
+                    StringBuilder msg = new StringBuilder();
+                    for (String s : mentionedColumns) {
+                        msg.append(" ").append(s).append(" ");
+                    }
+                    throw new SemanticException("'%s' must be explicitly mentioned in column permutation: %s",
+                            column.getName(), msg.toString());
+                }
+
+                Column.DefaultValueType defaultValueType = column.getDefaultValueType();
+                if (defaultValueType == Column.DefaultValueType.NULL &&
+                        !column.isAutoIncrement() &&
+                        !column.isGeneratedColumn() &&
+                        !mentionedColumns.contains(column.getName())) {
+                    if (column.isAllowNull()) {
+                        continue;
+                    }
                     StringBuilder msg = new StringBuilder();
                     for (String s : mentionedColumns) {
                         msg.append(" ").append(s).append(" ");
@@ -344,9 +365,20 @@ public class InsertAnalyzer {
         // check default value expr
         if (query instanceof ValuesRelation) {
             ValuesRelation valuesRelation = (ValuesRelation) query;
+            IcebergTable icebergTable = table instanceof IcebergTable ? (IcebergTable) table : null;
             for (List<Expr> row : valuesRelation.getRows()) {
                 for (int columnIdx = 0; columnIdx < row.size(); ++columnIdx) {
                     Column column = targetColumns.get(columnIdx);
+                    if (row.get(columnIdx) instanceof DefaultValueExpr &&
+                            icebergTable != null &&
+                            !column.isAutoIncrement()) {
+                        String writeDefault = IcebergApiConverter.getWriteDefaultValue(
+                                icebergTable.getNativeTable().schema(), column.getName());
+                        if (!column.isAllowNull() && writeDefault == null) {
+                            throw new SemanticException("Column has no default value, column=%s", column.getName());
+                        }
+                        continue;
+                    }
                     Column.DefaultValueType defaultValueType = column.getDefaultValueType();
                     if (row.get(columnIdx) instanceof DefaultValueExpr &&
                             defaultValueType == Column.DefaultValueType.NULL &&

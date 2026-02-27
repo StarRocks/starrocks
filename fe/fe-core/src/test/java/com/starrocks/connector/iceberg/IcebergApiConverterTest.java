@@ -52,6 +52,7 @@ import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.types.Types;
+import org.apache.iceberg.util.DateTimeUtil;
 import org.apache.iceberg.util.StructProjection;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -59,6 +60,7 @@ import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
 import java.nio.ByteBuffer;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -73,6 +75,7 @@ import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
 import static org.apache.iceberg.TableProperties.ORC_COMPRESSION;
 import static org.apache.iceberg.TableProperties.PARQUET_COMPRESSION;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
@@ -632,6 +635,68 @@ public class IcebergApiConverterTest {
             assertTrue(true);
         }
         assertEquals(sortOrder, null);
+    }
+
+    @Test
+    public void testToFullSchemasWithInitialDefaultValue() {
+        List<Types.NestedField> fields = Lists.newArrayList();
+        fields.add(Types.NestedField.optional("c_bool").withId(1)
+                .ofType(Types.BooleanType.get()).withInitialDefault(true).build());
+        fields.add(Types.NestedField.optional("c_int").withId(2)
+                .ofType(Types.IntegerType.get()).withInitialDefault(7).build());
+        fields.add(Types.NestedField.optional("c_date").withId(3)
+                .ofType(Types.DateType.get()).withInitialDefault(2).build());
+        long tsMicros = DateTimeUtil.microsFromTimestamp(LocalDateTime.of(2024, 1, 2, 3, 4, 5));
+        fields.add(Types.NestedField.optional("c_ts").withId(4)
+                .ofType(Types.TimestampType.withoutZone()).withInitialDefault(tsMicros).build());
+        fields.add(Types.NestedField.optional("c_no_default").withId(5)
+                .ofType(Types.StringType.get()).build());
+
+        Schema schema = new Schema(fields);
+        List<Column> columns = IcebergApiConverter.toFullSchemas(schema);
+
+        assertEquals("1", columns.get(0).getDefaultValue());
+        assertEquals("7", columns.get(1).getDefaultValue());
+        assertEquals("1970-01-03", columns.get(2).getDefaultValue());
+        assertEquals("2024-01-02 03:04:05", columns.get(3).getDefaultValue());
+        Assertions.assertNull(columns.get(4).getDefaultValue());
+    }
+
+    @Test
+    public void testToIcebergApiSchemaWithColumnDefaultValue() {
+        Column boolCol = new Column("c_bool", BooleanType.BOOLEAN, true);
+        boolCol.setDefaultValue("1");
+        Column intCol = new Column("c_int", IntegerType.INT, true);
+        intCol.setDefaultValue("7");
+        Column tsCol = new Column("c_ts", DateType.DATETIME, true);
+        tsCol.setDefaultValue("2024-01-02 03:04:05");
+
+        Schema schema = IcebergApiConverter.toIcebergApiSchema(List.of(boolCol, intCol, tsCol));
+        Types.NestedField boolField = schema.findField("c_bool");
+        Types.NestedField intField = schema.findField("c_int");
+        Types.NestedField tsField = schema.findField("c_ts");
+
+        assertTrue((Boolean) boolField.initialDefault());
+        assertTrue((Boolean) boolField.writeDefault());
+        assertEquals(7, intField.initialDefault());
+        assertEquals(7, intField.writeDefault());
+        long expectedMicros = DateTimeUtil.microsFromTimestamp(LocalDateTime.of(2024, 1, 2, 3, 4, 5));
+        assertEquals(expectedMicros, ((Number) tsField.initialDefault()).longValue());
+        assertEquals(expectedMicros, ((Number) tsField.writeDefault()).longValue());
+    }
+
+    @Test
+    public void testToFullSchemasUsesIcebergNullabilityAndWriteDefaultLookup() {
+        List<Types.NestedField> fields = Lists.newArrayList();
+        fields.add(Types.NestedField.required("c_required").withId(1).ofType(Types.IntegerType.get()).build());
+        fields.add(Types.NestedField.optional("c_optional").withId(2)
+                .ofType(Types.IntegerType.get()).withWriteDefault(9).build());
+        Schema schema = new Schema(fields);
+
+        List<Column> columns = IcebergApiConverter.toFullSchemas(schema);
+        assertFalse(columns.get(0).isAllowNull());
+        assertTrue(columns.get(1).isAllowNull());
+        assertEquals("9", IcebergApiConverter.getWriteDefaultValue(schema, "c_optional"));
     }
 
 }
