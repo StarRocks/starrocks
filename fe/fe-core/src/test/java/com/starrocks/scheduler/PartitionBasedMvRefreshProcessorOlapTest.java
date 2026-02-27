@@ -386,6 +386,8 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
 
     @Test
     public void testRangePartitionRefresh() throws Exception {
+        // Clean up tbl4 to ensure test isolation from previous tests
+        starRocksAssert.getCtx().executeSql("TRUNCATE TABLE tbl4");
         MaterializedView materializedView = refreshMaterializedView("mv2", "2022-01-03", "2022-02-05");
 
         String insertSql = "insert into tbl4 partition(p1) values('2022-01-02',2,10);";
@@ -400,7 +402,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                 .getDefaultPhysicalPartition().getVisibleVersion());
         Assertions.assertEquals(1, materializedView.getPartition("p202203_202204")
                 .getDefaultPhysicalPartition().getVisibleVersion());
-        Assertions.assertEquals(2, materializedView.getPartition("p202204_202205")
+        Assertions.assertEquals(1, materializedView.getPartition("p202204_202205")
                 .getDefaultPhysicalPartition().getVisibleVersion());
 
         refreshMVRange(materializedView.getName(), "2021-12-03", "2022-04-05", false);
@@ -412,7 +414,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                 .getDefaultPhysicalPartition().getVisibleVersion());
         Assertions.assertEquals(1, materializedView.getPartition("p202203_202204")
                 .getDefaultPhysicalPartition().getVisibleVersion());
-        Assertions.assertEquals(2, materializedView.getPartition("p202204_202205")
+        Assertions.assertEquals(1, materializedView.getPartition("p202204_202205")
                 .getDefaultPhysicalPartition().getVisibleVersion());
 
         insertSql = "insert into tbl4 partition(p3) values('2022-03-02',21,102);";
@@ -429,13 +431,13 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                 .getDefaultPhysicalPartition().getVisibleVersion());
         Assertions.assertEquals(1, materializedView.getPartition("p202203_202204")
                 .getDefaultPhysicalPartition().getVisibleVersion());
-        Assertions.assertEquals(2, materializedView.getPartition("p202204_202205")
+        Assertions.assertEquals(1, materializedView.getPartition("p202204_202205")
                 .getDefaultPhysicalPartition().getVisibleVersion());
 
         refreshMVRange(materializedView.getName(), "2021-12-03", "2022-05-06", true);
-        Assertions.assertEquals(2, materializedView.getPartition("p202112_202201")
+        Assertions.assertEquals(3, materializedView.getPartition("p202112_202201")
                 .getDefaultPhysicalPartition().getVisibleVersion());
-        Assertions.assertEquals(2, materializedView.getPartition("p202201_202202")
+        Assertions.assertEquals(3, materializedView.getPartition("p202201_202202")
                 .getDefaultPhysicalPartition().getVisibleVersion());
         Assertions.assertEquals(2, materializedView.getPartition("p202202_202203")
                 .getDefaultPhysicalPartition().getVisibleVersion());
