@@ -5281,7 +5281,6 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         return new DropPartitionColumnClause(partitionExprList, createPos(context));
     }
 
-
     @Override
     public ParseNode visitAddColumnsClause(com.starrocks.sql.parser.StarRocksParser.AddColumnsClauseContext context) {
         List<ColumnDef> columnDefs = getColumnDefs(context.columnDesc());
@@ -7724,7 +7723,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
         return new InPredicate(compareExpr, intList, isNotIn, createPos(context));
     }
-    
+
     /**
      * Parse integer literal with the exact same logic as visitIntegerValue
      */
@@ -8309,10 +8308,24 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             orderByElements = visit(context.sortItem(), OrderByElement.class);
         }
         List<Expr> partitionExprs = visit(context.partition, Expr.class);
+
+        Expr skewColumn = null;
+        List<Expr> skewValues = List.of();
+        // Handle skew hint with explicit column and value: [skew|t.column(value)]
+        if (context.bracketHint() != null) {
+            if (context.bracketHint().primaryExpression() != null) {
+                skewColumn = (Expr) visit(context.bracketHint().primaryExpression());
+            }
+            if (context.bracketHint().generalLiteralExpressionList() != null) {
+                skewValues = visit(
+                        context.bracketHint().generalLiteralExpressionList().generalLiteralExpression(),
+                        Expr.class);
+            }
+        }
         return new AnalyticExpr(functionCallExpr, partitionExprs, orderByElements,
                 (AnalyticWindow) visitIfPresent(context.windowFrame()),
                 context.bracketHint() == null ? null : context.bracketHint().identifier().stream()
-                        .map(RuleContext::getText).collect(toList()), pos);
+                        .map(RuleContext::getText).collect(toList()), pos, skewColumn, skewValues);
     }
 
     @Override
@@ -9650,7 +9663,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         Type intermediateType = aggFunc.getIntermediateTypeOrReturnType();
         Type finalType = AnalyzerUtils.transformTableColumnType(intermediateType, false);
         AggStateDesc aggStateDesc = new AggStateDesc(aggFunc.functionName(), aggFunc.getReturnType().clone(),
-                argTypes.stream().map(c -> c.clone()).collect(toList()), 
+                argTypes.stream().map(c -> c.clone()).collect(toList()),
                 AggStateDesc.isAggFuncResultNullable(aggFunc.functionName()));
         return Pair.create(finalType.clone(), aggStateDesc);
     }
