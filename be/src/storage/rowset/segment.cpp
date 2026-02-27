@@ -48,7 +48,6 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "runtime/starrocks_metrics.h"
 #include "segment_iterator.h"
 #include "segment_options.h"
 #include "storage/lake/tablet_manager.h"
@@ -66,6 +65,7 @@
 #include "util/failpoint/fail_point.h"
 #include "util/json_flattener.h"
 #include "util/slice.h"
+#include "util/starrocks_metrics.h"
 
 bvar::Adder<int> g_open_segments;    // NOLINT
 bvar::Adder<int> g_open_segments_io; // NOLINT
