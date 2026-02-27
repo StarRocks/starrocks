@@ -88,13 +88,17 @@ public class AnalyticExpr extends Expr {
     private boolean useHashBasedPartition;
     private boolean isSkewed;
 
+    // Skew hint with explicit column and values: [skew|t.column(value1, value2, ...)]
+    private Expr skewColumn;
+    private List<Expr> skewValues;
+
     // SQL string of this AnalyticExpr before standardization. Returned in toSqlImpl().
     private String sqlString;
 
     private static final String HINT_SORT = "sort";
     private static final String HINT_HASH = "hash";
     private static final String HINT_SKEW = "skewed";
-
+    public static final String HINT_ANALYTIC_SKEW_EXPLICIT = "skew";
     public static String LEAD = "LEAD";
     public static String LAG = "LAG";
     public static String FIRSTVALUE = "FIRST_VALUE";
@@ -117,11 +121,11 @@ public class AnalyticExpr extends Expr {
 
     public AnalyticExpr(FunctionCallExpr fnCall, List<Expr> partitionExprs, List<OrderByElement> orderByElements,
                         AnalyticWindow window, List<String> hints) {
-        this(fnCall, partitionExprs, orderByElements, window, hints, NodePosition.ZERO);
+        this(fnCall, partitionExprs, orderByElements, window, hints, NodePosition.ZERO, null, List.of());
     }
 
     public AnalyticExpr(FunctionCallExpr fnCall, List<Expr> partitionExprs, List<OrderByElement> orderByElements,
-                        AnalyticWindow window, List<String> hints, NodePosition pos) {
+                        AnalyticWindow window, List<String> hints, NodePosition pos, Expr skewColumn, List<Expr> skewValues) {
         super(pos);
         Preconditions.checkNotNull(fnCall);
         this.fnCall = fnCall;
@@ -132,7 +136,7 @@ public class AnalyticExpr extends Expr {
         }
 
         this.window = window;
-
+        this.skewValues = List.of();
         if (CollectionUtils.isNotEmpty(hints)) {
             for (String hint : hints) {
                 if (HINT_SORT.equalsIgnoreCase(hint) || HINT_HASH.equalsIgnoreCase(hint)) {
@@ -141,8 +145,12 @@ public class AnalyticExpr extends Expr {
                 } else if (HINT_SKEW.equalsIgnoreCase(hint)) {
                     this.skewHint = hint;
                     this.isSkewed = true;
+                } else if (HINT_ANALYTIC_SKEW_EXPLICIT.equalsIgnoreCase(hint)) {
+                    this.skewHint = hint;
+                    this.skewColumn = skewColumn;
+                    this.skewValues = skewValues;
                 } else {
-                    Preconditions.checkState(false, "partition by hint can only be 'sort' or 'hash' or 'skew'");
+                    Preconditions.checkState(false, "partition by hint can only be 'sort' or 'hash' or 'skew' or 'skewed'");
                 }
             }
         }
@@ -168,6 +176,8 @@ public class AnalyticExpr extends Expr {
         skewHint = other.skewHint;
         useHashBasedPartition = other.useHashBasedPartition;
         isSkewed = other.isSkewed;
+        skewColumn = (other.skewColumn != null ? other.skewColumn.clone() : null);
+        skewValues = Expr.cloneList(other.skewValues);
         sqlString = other.sqlString;
         setChildren();
     }
@@ -204,6 +214,14 @@ public class AnalyticExpr extends Expr {
         return isSkewed;
     }
 
+    public Expr getSkewColumn() {
+        return skewColumn;
+    }
+
+    public List<Expr> getSkewValues() {
+        return skewValues;
+    }
+
     @Override
     public boolean equalsWithoutChild(Object obj) {
         if (!super.equalsWithoutChild(obj)) {
@@ -220,6 +238,8 @@ public class AnalyticExpr extends Expr {
                 Objects.equals(skewHint, o.skewHint) &&
                 Objects.equals(useHashBasedPartition, o.useHashBasedPartition) &&
                 Objects.equals(isSkewed, o.isSkewed) &&
+                Objects.equals(skewColumn, o.skewColumn) &&
+                Objects.equals(skewValues, o.skewValues) &&
                 Objects.equals(fnCall.getIgnoreNulls(), o.fnCall.getIgnoreNulls());
     }
 
@@ -479,6 +499,6 @@ public class AnalyticExpr extends Expr {
         // so need to calculate super's hashCode.
         // field window is correlated with field resetWindow, so no need to add resetWindow when calculating hashCode.
         return Objects.hash(type, opcode, fnCall, partitionExprs, orderByElements, window, partitionHint, skewHint,
-                useHashBasedPartition, isSkewed);
+                useHashBasedPartition, isSkewed, skewColumn, skewValues);
     }
 }

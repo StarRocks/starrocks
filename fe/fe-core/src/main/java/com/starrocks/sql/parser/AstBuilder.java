@@ -4804,7 +4804,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitAddColumnsClause(StarRocksParser.AddColumnsClauseContext context) {
+    public ParseNode visitAddColumnsClause(com.starrocks.sql.parser.StarRocksParser.AddColumnsClauseContext context) {
         List<ColumnDef> columnDefs = getColumnDefs(context.columnDesc());
         Map<String, String> properties = new HashMap<>();
         properties = getProperties(context.properties());
@@ -5989,7 +5989,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             if (context.bracketHint().generalLiteralExpressionList() != null) {
                 joinRelation.setSkewValues(
                         visit(context.bracketHint().generalLiteralExpressionList().generalLiteralExpression(),
-                        Expr.class));
+                                Expr.class));
             }
         }
 
@@ -6906,7 +6906,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     private record LogicalBinaryNode(com.starrocks.sql.parser.StarRocksParser.LogicalBinaryContext context,
-                                     CompoundPredicate.Operator operator) {}
+                                     CompoundPredicate.Operator operator) {
+    }
 
     // Iteratively build a left-deep CompoundPredicate tree for LogicalBinaryContext,
     // allowing each node to have its own operator, using LogicalBinaryNode for clarity.
@@ -7024,7 +7025,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         Expr compareExpr = (Expr) visit(context.value);
 
         ConnectContext connectContext = ConnectContext.get();
-        
+
         List<com.starrocks.sql.parser.StarRocksParser.StringContext> stringNodes = context.stringList().string();
         int literalCount = stringNodes.size();
         List<Expr> stringExprList = visit(stringNodes, Expr.class);
@@ -7047,7 +7048,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         Expr compareExpr = (Expr) visit(context.value);
 
         com.starrocks.qe.ConnectContext connectContext = com.starrocks.qe.ConnectContext.get();
-        
+
         List<org.antlr.v4.runtime.tree.TerminalNode> integerNodes = context.integerList().INTEGER_VALUE();
         int literalCount = integerNodes.size();
 
@@ -7085,7 +7086,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         return new InPredicate(compareExpr, intList, isNotIn, createPos(context));
     }
-    
+
     /**
      * Parse integer literal with the exact same logic as visitIntegerValue
      */
@@ -7618,10 +7619,24 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             orderByElements = visit(context.sortItem(), OrderByElement.class);
         }
         List<Expr> partitionExprs = visit(context.partition, Expr.class);
+
+        Expr skewColumn = null;
+        List<Expr> skewValues = List.of();
+        // Handle skew hint with explicit column and value: [skew|t.column(value)]
+        if (context.bracketHint() != null) {
+            if (context.bracketHint().primaryExpression() != null) {
+                skewColumn = (Expr) visit(context.bracketHint().primaryExpression());
+            }
+            if (context.bracketHint().generalLiteralExpressionList() != null) {
+                skewValues = visit(
+                        context.bracketHint().generalLiteralExpressionList().generalLiteralExpression(),
+                        Expr.class);
+            }
+        }
         return new AnalyticExpr(functionCallExpr, partitionExprs, orderByElements,
                 (AnalyticWindow) visitIfPresent(context.windowFrame()),
                 context.bracketHint() == null ? null : context.bracketHint().identifier().stream()
-                        .map(RuleContext::getText).collect(toList()), pos);
+                        .map(RuleContext::getText).collect(toList()), pos, skewColumn, skewValues);
     }
 
     @Override
