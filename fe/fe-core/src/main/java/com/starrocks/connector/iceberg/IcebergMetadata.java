@@ -529,6 +529,7 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listPartitionNames(String dbName, String tblName, ConnectorMetadatRequestContext requestContext) {
+<<<<<<< HEAD
         IcebergCatalogType nativeType = icebergCatalog.getIcebergCatalogType();
 
         if (nativeType != HIVE_CATALOG && nativeType != REST_CATALOG && nativeType != GLUE_CATALOG) {
@@ -538,6 +539,12 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         Table table = getTable(new ConnectContext(), dbName, tblName);
         return icebergCatalog.listPartitionNames((IcebergTable) table, requestContext, jobPlanningExecutor);
+=======
+        try (ConnectContext.ContextScope scope = ConnectContext.enterOnlyReadIcebergCacheScope(ConnectContext.get())) {
+            Table table = getTable(scope.getContext(), dbName, tblName);
+            return icebergCatalog.listPartitionNames((IcebergTable) table, requestContext, jobPlanningExecutor);
+        }
+>>>>>>> bde71b0f61 ([Enhancement] only read iceberg cache when mv refresh and inesert select stmt (#68942))
     }
 
     @Override

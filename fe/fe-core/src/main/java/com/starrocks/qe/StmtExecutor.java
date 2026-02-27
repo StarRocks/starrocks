@@ -164,6 +164,7 @@ import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AnalyzeProfileStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AnalyzeTypeDesc;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTemporaryTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTemporaryTableStmt;
@@ -784,6 +785,18 @@ public class StmtExecutor {
             WarehouseIdleChecker.increaseRunningSQL(originWarehouseId);
         }
 
+<<<<<<< HEAD
+=======
+        final boolean originSkipIcebergCache = context.isOnlyReadIcebergCache();
+        if (parsedStmt instanceof InsertStmt || parsedStmt instanceof CreateTableAsSelectStmt) {
+            context.setOnlyReadIcebergCache(true);
+        } else if (parsedStmt instanceof RefreshMaterializedViewStatement 
+                || parsedStmt instanceof CreateMaterializedViewStatement) {
+            context.setOnlyReadIcebergCache(true);
+        }
+
+        RecursiveCTEExecutor cteExecutor = null;
+>>>>>>> bde71b0f61 ([Enhancement] only read iceberg cache when mv refresh and inesert select stmt (#68942))
         try {
             context.getState().setIsQuery(context.isQueryStmt(parsedStmt));
             if (parsedStmt.isExistQueryScopeHint()) {
@@ -1093,6 +1106,13 @@ public class StmtExecutor {
 
             // process post-action after query is finished
             context.onQueryFinished();
+<<<<<<< HEAD
+=======
+            context.setOnlyReadIcebergCache(originSkipIcebergCache);
+            if (cteExecutor != null) {
+                cteExecutor.finalizeRecursiveCTE();
+            }
+>>>>>>> bde71b0f61 ([Enhancement] only read iceberg cache when mv refresh and inesert select stmt (#68942))
         }
     }
 

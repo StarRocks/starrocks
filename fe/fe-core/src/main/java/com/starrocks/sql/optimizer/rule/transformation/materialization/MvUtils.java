@@ -1465,8 +1465,8 @@ public class MvUtils {
     }
 
     public static Optional<Table> getTable(BaseTableInfo baseTableInfo) {
-        try {
-            return GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(new ConnectContext(), baseTableInfo);
+        try (ConnectContext.ContextScope scope = ConnectContext.enterOnlyReadIcebergCacheScope(ConnectContext.get())) {
+            return GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(scope.getContext(), baseTableInfo);
         } catch (Exception e) {
             // For hive catalog, when meets NoSuchObjectException, we should return empty
             //  msg: NoSuchObjectException: hive_db_8b48cd2f_4bfe_11f0_bc1a_00163e09349d.t1 table not found
@@ -1482,9 +1482,9 @@ public class MvUtils {
     }
 
     public static Optional<Table> getTableWithIdentifier(BaseTableInfo baseTableInfo) {
-        try {
+        try (ConnectContext.ContextScope scope = ConnectContext.enterOnlyReadIcebergCacheScope(ConnectContext.get())) {
             return GlobalStateMgr.getCurrentState().getMetadataMgr()
-                    .getTableWithIdentifier(new ConnectContext(), baseTableInfo);
+                    .getTableWithIdentifier(scope.getContext(), baseTableInfo);
         } catch (Exception e) {
             // For hive catalog, when meets NoSuchObjectException, we should return empty
             //  msg: NoSuchObjectException: hive_db_8b48cd2f_4bfe_11f0_bc1a_00163e09349d.t1 table not found
@@ -1501,7 +1501,9 @@ public class MvUtils {
     }
 
     public static Table getTableChecked(BaseTableInfo baseTableInfo) {
-        return GlobalStateMgr.getCurrentState().getMetadataMgr().getTableChecked(new ConnectContext(), baseTableInfo);
+        try (ConnectContext.ContextScope scope = ConnectContext.enterOnlyReadIcebergCacheScope(ConnectContext.get())) {
+            return GlobalStateMgr.getCurrentState().getMetadataMgr().getTableChecked(scope.getContext(), baseTableInfo);
+        }
     }
 
     public static Optional<FunctionCallExpr> getStr2DateExpr(Expr partitionExpr) {

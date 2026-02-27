@@ -1443,6 +1443,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         // analyze expression, because it converts to sql for serialize
         ConnectContext connectContext = ConnectContext.buildInner();
+        connectContext.setOnlyReadIcebergCache(true);
         connectContext.setDatabase(db.getFullName());
         // set privilege
         connectContext.setQualifiedUser(AuthenticationMgr.ROOT_USER);
@@ -2195,6 +2196,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         // analyze partition exprs
         Map<Table, List<Expr>> refBaseTablePartitionExprs = getRefBaseTablePartitionExprs(false);
         ConnectContext connectContext = ConnectContext.buildInner();
+        connectContext.setOnlyReadIcebergCache(true);
         if (refBaseTablePartitionExprs != null) {
             for (BaseTableInfo baseTableInfo : baseTableInfos) {
                 Optional<Table> refBaseTableOpt = MvUtils.getTable(baseTableInfo);
@@ -2541,10 +2543,36 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 partitionInfoMap.putAll(e.getValue());
             }
         }
+<<<<<<< HEAD
         for (BaseTableInfo baseTableInfo : baseTableInfos) {
             Optional<Table> baseTableOpt = MvUtils.getTableWithIdentifier(baseTableInfo);
             if (baseTableOpt.isEmpty()) {
                 continue;
+=======
+    }
+
+    public synchronized void resetDefinedQueryParseNode() {
+        this.defineQueryParseNode = null;
+    }
+
+    public synchronized ParseNode initDefineQueryParseNode() {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (db == null) {
+            return null;
+        }
+        ParseNode defineQueryParseNode = null;
+        ConnectContext connectContext = ConnectContext.buildInner();
+        connectContext.setOnlyReadIcebergCache(true);
+        if (!Strings.isNullOrEmpty(originalViewDefineSql)) {
+            try {
+                String currentDBName = Strings.isNullOrEmpty(originalDBName) ? db.getOriginName() : originalDBName;
+                connectContext.setDatabase(currentDBName);
+                defineQueryParseNode = MvUtils.getQueryAst(originalViewDefineSql, connectContext);
+                clearHeavyObjectFromParseNode(defineQueryParseNode);
+            } catch (Exception e) {
+                // ignore
+                LOG.warn("parse original view define sql failed:", e);
+>>>>>>> bde71b0f61 ([Enhancement] only read iceberg cache when mv refresh and inesert select stmt (#68942))
             }
             Table baseTable = baseTableOpt.get();
             baseTable.getRelatedMaterializedViews().remove(log.getMvId());
