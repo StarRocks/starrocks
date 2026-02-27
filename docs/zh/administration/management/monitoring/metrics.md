@@ -1405,6 +1405,18 @@ displayed_sidebar: docs
 - 单位：个
 - 描述：主键索引 Compaction 线程池中排队的任务数量。
 
+### pk_index_sst_read_error_total
+
+- 类型：Counter
+- 单位：Requests
+- 描述：存算分离模式下主键索引 SST 文件读取失败的总次数。打开 SST 文件或执行 MultiGet 操作失败时递增。
+
+### pk_index_sst_write_error_total
+
+- 类型：Counter
+- 单位：Requests
+- 描述：存算分离模式下主键索引 SST 文件写入失败的总次数。构建（Flush）SST 文件失败时递增。
+
 ### disks_total_capacity
 
 - 描述：磁盘的总容量。
