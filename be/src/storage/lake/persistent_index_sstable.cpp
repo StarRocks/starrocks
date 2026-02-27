@@ -19,6 +19,8 @@
 #include "fs/fs.h"
 #include "storage/lake/utils.h"
 #include "storage/sstable/table_builder.h"
+#include "testutil/sync_point.h"
+#include "util/starrocks_metrics.h"
 #include "util/trace.h"
 
 namespace starrocks::lake {
@@ -32,7 +34,13 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
     }
     options.block_cache = cache;
     sstable::Table* table;
-    RETURN_IF_ERROR(sstable::Table::Open(options, rf.get(), sstable_pb.filesize(), &table));
+    auto open_st = sstable::Table::Open(options, rf.get(), sstable_pb.filesize(), &table);
+    TEST_SYNC_POINT_CALLBACK("PersistentIndexSstable::init:table_open_error", &open_st);
+    if (!open_st.ok()) {
+        StarRocksMetrics::instance()->pk_index_sst_read_error_total.increment(1);
+        LOG(WARNING) << "Failed to open PersistentIndex SST file: " << sstable_pb.filename() << ", error: " << open_st;
+        return open_st;
+    }
     _sst.reset(table);
     _rf = std::move(rf);
     _sstable_pb.CopyFrom(sstable_pb);
@@ -54,7 +62,11 @@ Status PersistentIndexSstable::build_sstable(const phmap::btree_map<std::string,
         value->set_rowid(v.second.get_rowid());
         builder.Add(Slice(k), Slice(index_value_pb.SerializeAsString()));
     }
-    RETURN_IF_ERROR(builder.Finish());
+    if (auto st = builder.Finish(); !st.ok()) {
+        StarRocksMetrics::instance()->pk_index_sst_write_error_total.increment(1);
+        LOG(WARNING) << "Failed to finish PersistentIndex SST, error: " << st;
+        return st;
+    }
     *filesz = builder.FileSize();
     return Status::OK();
 }
@@ -66,8 +78,15 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
     sstable::ReadOptions options;
     options.stat = &stat;
     auto start_ts = butil::gettimeofday_us();
-    RETURN_IF_ERROR(_sst->MultiGet(options, keys, key_indexes.begin(), key_indexes.end(), &index_value_with_vers));
+    auto multiget_st = _sst->MultiGet(options, keys, key_indexes.begin(), key_indexes.end(), &index_value_with_vers);
     auto end_ts = butil::gettimeofday_us();
+    TEST_SYNC_POINT_CALLBACK("PersistentIndexSstable::multi_get:error", &multiget_st);
+    if (!multiget_st.ok()) {
+        StarRocksMetrics::instance()->pk_index_sst_read_error_total.increment(1);
+        LOG(WARNING) << "Failed to multi_get from PersistentIndex SST file: " << _sstable_pb.filename()
+                     << ", error: " << multiget_st;
+        return multiget_st;
+    }
     TRACE_COUNTER_INCREMENT("multi_get_us", end_ts - start_ts);
     TRACE_COUNTER_INCREMENT("read_block_hit_cache_cnt", stat.block_cnt_from_cache);
     TRACE_COUNTER_INCREMENT("read_block_miss_cache_cnt", stat.block_cnt_from_file);
