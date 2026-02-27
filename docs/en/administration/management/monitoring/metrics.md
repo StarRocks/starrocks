@@ -1445,6 +1445,18 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Count
 - Description: Queued task count in the Primary Key index compaction thread pool.
 
+### pk_index_sst_read_error_total
+
+- Type: Counter
+- Unit: Requests
+- Description: Total number of SST file read failures for the Primary Key index in shared-data mode. Incremented when opening an SST file or executing a MultiGet operation fails.
+
+### pk_index_sst_write_error_total
+
+- Type: Counter
+- Unit: Requests
+- Description: Total number of SST file write failures for the Primary Key index in shared-data mode. Incremented when building (flushing) an SST file fails.
+
 ### disks_total_capacity
 
 - Description: Total capacity of the disk.
