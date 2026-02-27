@@ -1552,10 +1552,12 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 return !result.isConstant() ? call : result;
             }
 
-            if (LOW_CARD_STRING_FUNCTIONS.contains(call.getFnName()) ||
-                    LOW_CARD_ARRAY_FUNCTIONS.contains(call.getFnName()) ||
+            if (LOW_CARD_ARRAY_FUNCTIONS.contains(call.getFnName()) ||
                     LOW_CARD_AGGREGATE_FUNCTIONS.contains(call.getFnName())) {
                 return mergeWithArray(visitChildren(call, context), call);
+            }
+            if (LOW_CARD_STRING_FUNCTIONS.contains(call.getFnName())) {
+                return merge(visitChildren(call, context), call);
             }
             if (isEnableStructLowCardinalityOptimize && LOW_CARD_STRUCT_FUNCTIONS.contains(call.getFnName())
                     && call.getChildren().stream().allMatch(
