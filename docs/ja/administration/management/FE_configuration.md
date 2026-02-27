@@ -3631,6 +3631,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: 共有データクラスターのパーティションのコンパクションスコアの上限。`0` は上限がないことを示します。この項目は `lake_enable_ingest_slowdown` が `true` に設定されている場合にのみ有効になります。パーティションのコンパクションスコアがこの上限に達するか超えると、受信ロードタスクは拒否されます。v3.3.6 以降、デフォルト値は `0` から `2000` に変更されました。
 - Introduced in: v3.2.0
 
+##### `lake_compaction_interval_ms_on_success`
+
+- デフォルト: 10000
+- タイプ: Long
+- 単位: ミリ秒
+- 変更可能: はい
+- 説明: 共有データクラスタで、あるパーティションの Compaction が成功した後、そのパーティションで次の Compaction を開始するまでの間隔。エイリアスは `lake_min_compaction_interval_ms_on_success` です。
+- Introduced in: v3.2.0
+
 ##### `lake_enable_balance_tablets_between_workers`
 
 - Default: true

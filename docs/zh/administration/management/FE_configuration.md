@@ -3630,6 +3630,16 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 共享数据集群中分区的 Compaction Score 上限。`0` 表示无上限。此项仅在 `lake_enable_ingest_slowdown` 设置为 `true` 时生效。当分区的 Compaction Score 达到或超过此上限时，传入的加载任务将被拒绝。从 v3.3.6 开始，默认值从 `0` 更改为 `2000`。
 - 引入版本: v3.2.0
 
+
+##### `lake_compaction_interval_ms_on_success`
+
+- 默认值：10000
+- 类型：Long
+- 单位：毫秒
+- 是否动态：是
+- 描述：存算分离集群某个分区 Compaction 成功后，间隔多少时间，对这个分区发起下一次 Compaction。别名为 `lake_min_compaction_interval_ms_on_success`。
+- 引入版本：v3.2.0
+
 ##### `lake_enable_balance_tablets_between_workers`
 
 - 默认值: true
