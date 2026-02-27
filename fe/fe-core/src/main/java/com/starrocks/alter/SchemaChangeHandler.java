@@ -1669,6 +1669,117 @@ public class SchemaChangeHandler extends AlterHandler {
         return dataBuilder.build();
     }
 
+<<<<<<< HEAD
+=======
+    private void calculateShortKey(OlapTable olapTable, long alterIndexMetaId, List<Column> alterSchema,
+               Map<String, String> indexProperties, SchemaChangeData.Builder dataBuilder) throws DdlException {
+        List<Integer> sortKeyIdxes = new ArrayList<>();
+        List<Integer> sortKeyUniqueIds = new ArrayList<>();
+        MaterializedIndexMeta index = olapTable.getIndexMetaByMetaId(alterIndexMetaId);
+        List<Column> originSchema = index.getSchema();
+        // if sortKeyUniqueIds is empty, the table maybe create in old version and we should use sortKeyIdxes
+        // to determine which columns are sort key columns
+        boolean useSortKeyUniqueId = (index.getSortKeyUniqueIds() != null) &&
+                (!index.getSortKeyUniqueIds().isEmpty());
+        if (index.getSortKeyIdxes() != null && olapTable.getBaseIndexMetaId() == alterIndexMetaId) {
+            List<Integer> originSortKeyIdxes = index.getSortKeyIdxes();
+            for (Integer colIdx : originSortKeyIdxes) {
+                String columnName = originSchema.get(colIdx).getName();
+                Optional<Column> oneCol =
+                        alterSchema.stream().filter(c -> c.nameEquals(columnName, true)).findFirst();
+                if (oneCol.isEmpty()) {
+                    LOG.warn("Sort Key Column[" + columnName + "] not exists in new schema");
+                    throw new DdlException("Sort Key Column[" + columnName + "] not exists in new schema");
+                }
+                int sortKeyIdx = alterSchema.indexOf(oneCol.get());
+                sortKeyIdxes.add(sortKeyIdx);
+                if (useSortKeyUniqueId) {
+                    sortKeyUniqueIds.add(alterSchema.get(sortKeyIdx).getUniqueId());
+                }
+            }
+
+            appendNewKeyColumnsToSortKey(olapTable.getKeysType(), alterSchema,
+                    sortKeyIdxes, useSortKeyUniqueId ? sortKeyUniqueIds : null);
+        }
+
+        if (!sortKeyIdxes.isEmpty()) {
+            short newShortKeyCount = GlobalStateMgr.calcShortKeyColumnCount(alterSchema,
+                    indexProperties, sortKeyIdxes);
+            LOG.debug("alter index[{}] short key column count: {}", alterIndexMetaId, newShortKeyCount);
+
+            List<Integer> originSortKeyIdxes = index.getSortKeyIdxes();
+            List<Column> originShortKeyColumns = new ArrayList<>();
+            for (int i = 0; i < index.getShortKeyColumnCount(); i++) {
+                originShortKeyColumns.add(originSchema.get(originSortKeyIdxes.get(i)));
+            }
+            List<Column> newShortKeyColumns = new ArrayList<>();
+            for (int i = 0; i < newShortKeyCount; i++) {
+                newShortKeyColumns.add(alterSchema.get(sortKeyIdxes.get(i)));
+            }
+            boolean isShortKeyChanged = isShortKeyChanged(originShortKeyColumns, newShortKeyColumns);
+            dataBuilder.withNewIndexMetaIdToShortKeyCount(alterIndexMetaId,
+                    newShortKeyCount, isShortKeyChanged).withNewIndexMetaIdToSchema(alterIndexMetaId, alterSchema);
+            dataBuilder.withSortKeyIdxes(sortKeyIdxes);
+            dataBuilder.withSortKeyUniqueIds(sortKeyUniqueIds);
+        } else {
+            short newShortKeyCount = GlobalStateMgr.calcShortKeyColumnCount(alterSchema, indexProperties);
+            LOG.debug("alter index[{}] short key column count: {}", alterIndexMetaId, newShortKeyCount);
+            
+            List<Column> originShortKeyColumns = new ArrayList<>();
+            for (int i = 0; i < index.getShortKeyColumnCount(); i++) {
+                originShortKeyColumns.add(originSchema.get(i));
+            }
+            List<Column> newShortKeyColumns = new ArrayList<>();
+            for (int i = 0; i < newShortKeyCount; i++) {
+                newShortKeyColumns.add(alterSchema.get(i));
+            }
+            boolean isShortKeyChanged = isShortKeyChanged(originShortKeyColumns, newShortKeyColumns);
+            dataBuilder.withNewIndexMetaIdToShortKeyCount(alterIndexMetaId,
+                    newShortKeyCount, isShortKeyChanged).withNewIndexMetaIdToSchema(alterIndexMetaId, alterSchema);
+        }
+    }
+
+    /**
+     * For AGG_KEYS/UNIQUE_KEYS tables, sort key must include all key columns.
+     * This method appends newly added key columns to the end of the sort key lists,
+     * regardless of where the column was inserted in the schema (e.g. AFTER / FIRST).
+     *
+     * @param sortKeyUniqueIds if non-null, newly appended columns' unique IDs are also added to this list
+     */
+    private static void appendNewKeyColumnsToSortKey(
+            KeysType keysType, List<Column> schema,
+            List<Integer> sortKeyIdxes, @Nullable List<Integer> sortKeyUniqueIds) {
+        if (keysType != KeysType.AGG_KEYS && keysType != KeysType.UNIQUE_KEYS) {
+            return;
+        }
+        Set<Integer> existing = new HashSet<>(sortKeyIdxes);
+        for (int i = 0; i < schema.size(); i++) {
+            Column col = schema.get(i);
+            if (col.isKey() && !existing.contains(i)) {
+                sortKeyIdxes.add(i);
+                if (sortKeyUniqueIds != null) {
+                    sortKeyUniqueIds.add(col.getUniqueId());
+                }
+            }
+        }
+    }
+
+    private boolean isShortKeyChanged(List<Column> originShortKeyColumns, List<Column> newShortKeyColumns) {
+        if (originShortKeyColumns.size() != newShortKeyColumns.size()) {
+            return true;
+        }
+        for (int i = 0; i < originShortKeyColumns.size(); i++) {
+            Column originColumn = originShortKeyColumns.get(i);
+            Column newColumn = newShortKeyColumns.get(i);
+            if (!originColumn.getName().equalsIgnoreCase(newColumn.getName())
+                    || !originColumn.getType().equals(newColumn.getType())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+>>>>>>> 515ba001ab ([BugFix] Fix sort key not including newly added key columns after schema change on aggregate/unique tables (#69529))
     protected static Map<String, Column> buildSchemaMapFromList(List<Column> schema, boolean ignorePrefix,
                                                                 boolean caseSensibility) {
         Map<String, Column> schemaMap = Maps.newHashMap();
@@ -2848,6 +2959,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
                 List<Integer> sortKeyUniqueIds = currentIndexMeta.getSortKeyUniqueIds();
                 List<Integer> newSortKeyIdxes = new ArrayList<>();
+                List<Integer> newSortKeyUniqueIds = new ArrayList<>();
                 if (sortKeyUniqueIds != null) {
                     for (Integer uniqueId : sortKeyUniqueIds) {
                         Optional<Column> col = indexSchema.stream().filter(c -> c.getUniqueId() == uniqueId).findFirst();
@@ -2856,12 +2968,17 @@ public class SchemaChangeHandler extends AlterHandler {
                         }
                         int sortKeyIdx = indexSchema.indexOf(col.get());
                         newSortKeyIdxes.add(sortKeyIdx);
+                        newSortKeyUniqueIds.add(uniqueId);
                     }
+
+                    appendNewKeyColumnsToSortKey(olapTable.getKeysType(), indexSchema,
+                            newSortKeyIdxes, newSortKeyUniqueIds);
                 }
 
                 currentIndexMeta.setSchema(indexSchema);
                 if (!newSortKeyIdxes.isEmpty()) {
                     currentIndexMeta.setSortKeyIdxes(newSortKeyIdxes);
+                    currentIndexMeta.setSortKeyUniqueIds(newSortKeyUniqueIds);
                 }
 
                 int currentSchemaVersion = currentIndexMeta.getSchemaVersion();
