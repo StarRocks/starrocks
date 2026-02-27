@@ -891,6 +891,86 @@ public class TaskManagerEditLogTest {
     }
 
     @Test
+    public void testAlterTaskFromEventTriggeredToPeriodical() throws Exception {
+        // This test verifies the fix for the MV scheduler bug when changing from 
+        // REFRESH ASYNC (EVENT_TRIGGERED) to REFRESH ASYNC EVERY(interval) (PERIODICAL)
+        
+        // 1. Prepare test data - create an event triggered task first (simulating REFRESH ASYNC)
+        String taskName = "alter_event_triggered_to_periodical";
+        Task currentTask = new Task(taskName);
+        currentTask.setType(Constants.TaskType.EVENT_TRIGGERED);
+        currentTask.setDefinition("SELECT 1");
+        currentTask.setDbName("test_db");
+        currentTask.setCatalogName("test_catalog");
+        
+        masterTaskManager.createTask(currentTask);
+        Task createdTask = masterTaskManager.getTask(taskName);
+        Assertions.assertNotNull(createdTask);
+        Assertions.assertEquals(Constants.TaskType.EVENT_TRIGGERED, createdTask.getType());
+        // Event triggered tasks should not have a scheduler entry
+        Assertions.assertNull(masterTaskManager.getPeriodFutureMap().get(createdTask.getId()));
+
+        // 2. Prepare changed task - change from EVENT_TRIGGERED to PERIODICAL
+        // (simulating ALTER MV to REFRESH ASYNC EVERY(2 MINUTE))
+        Task changedTask = new Task(taskName);
+        changedTask.setType(Constants.TaskType.PERIODICAL);
+        changedTask.setDefinition("SELECT 1");
+        changedTask.setDbName("test_db");
+        changedTask.setCatalogName("test_catalog");
+        
+        // Set up schedule for periodical task
+        TaskSchedule schedule = new TaskSchedule();
+        schedule.setStartTime(System.currentTimeMillis() / 1000);
+        schedule.setPeriod(120); // 2 minutes
+        schedule.setTimeUnit(TimeUnit.SECONDS);
+        changedTask.setSchedule(schedule);
+
+        // 3. Execute alterTask operation (master side)
+        masterTaskManager.alterTask(createdTask, changedTask);
+
+        // 4. Verify master state after alteration
+        Task alteredTask = masterTaskManager.getTask(taskName);
+        Assertions.assertNotNull(alteredTask);
+        Assertions.assertEquals(Constants.TaskType.PERIODICAL, alteredTask.getType());
+        Assertions.assertEquals(Constants.TaskState.ACTIVE, alteredTask.getState());
+        Assertions.assertNotNull(alteredTask.getSchedule());
+        Assertions.assertEquals(120, alteredTask.getSchedule().getPeriod());
+        Assertions.assertEquals(TimeUnit.SECONDS, alteredTask.getSchedule().getTimeUnit());
+        // This is the key assertion: the scheduler should be registered
+        Assertions.assertNotNull(masterTaskManager.getPeriodFutureMap().get(alteredTask.getId()),
+                "Scheduler should be registered in periodFutureMap after altering from EVENT_TRIGGERED to PERIODICAL");
+
+        // 5. Test follower replay functionality
+        TaskManager followerTaskManager = new TaskManager();
+        
+        // First create the task in follower
+        Task followerTask = new Task(taskName);
+        followerTask.setId(createdTask.getId());
+        followerTask.setType(Constants.TaskType.EVENT_TRIGGERED);
+        followerTask.setDefinition("SELECT 1");
+        followerTask.setDbName("test_db");
+        followerTask.setCatalogName("test_catalog");
+        followerTask.setCreateTime(createdTask.getCreateTime());
+        followerTaskManager.replayCreateTask(followerTask);
+        
+        Assertions.assertEquals(Constants.TaskType.EVENT_TRIGGERED, followerTaskManager.getTask(taskName).getType());
+
+        // Replay the alter operation
+        AlterTaskInfo alterTaskInfo = (AlterTaskInfo) UtFrameUtils
+                .PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_TASK);
+        
+        followerTaskManager.replayAlterTask(alterTaskInfo);
+
+        // 6. Verify follower state is consistent with master
+        Task followerAlteredTask = followerTaskManager.getTask(taskName);
+        Assertions.assertNotNull(followerAlteredTask);
+        Assertions.assertEquals(Constants.TaskType.PERIODICAL, followerAlteredTask.getType());
+        Assertions.assertEquals(Constants.TaskState.ACTIVE, followerAlteredTask.getState());
+        Assertions.assertNotNull(followerAlteredTask.getSchedule());
+        Assertions.assertEquals(120, followerAlteredTask.getSchedule().getPeriod());
+    }
+
+    @Test
     public void testSuspendTaskNormalCase() throws Exception {
         // 1. Prepare test data - create a periodical task first
         String taskName = "suspend_task_test";
@@ -999,18 +1079,24 @@ public class TaskManagerEditLogTest {
         followerTask.setSchedule(schedule);
         followerTaskManager.replayCreateTask(followerTask);
 
-        Assertions.assertEquals(Constants.TaskState.PAUSE, followerTaskManager.getTask(taskName).getState());
+        // The follower task is created with PAUSE state to simulate the state after suspend.
+        // In the master, the sequence is: create (ACTIVE) -> suspend (PAUSE) -> resume (ACTIVE).
+        // So there are two OP_ALTER_TASK journals to replay: suspend and resume.
+        Task followerTaskBeforeReplay = followerTaskManager.getTask(taskName);
+        Assertions.assertNotNull(followerTaskBeforeReplay);
+        Assertions.assertEquals(Constants.TaskState.PAUSE, followerTaskBeforeReplay.getState());
 
-        // Replay the suspend operation
+        // Replay both alter journals: first suspend, then resume
+        // 1. Replay the suspend operation (changes state from ACTIVE to PAUSE)
         {
             AlterTaskInfo alterTaskInfo = (AlterTaskInfo) UtFrameUtils
                     .PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_TASK);
             followerTaskManager.replayAlterTask(alterTaskInfo);
-            Task followerResumedTask = followerTaskManager.getTask(taskName);
-            Assertions.assertNotNull(followerResumedTask);
-            Assertions.assertEquals(Constants.TaskState.PAUSE, followerResumedTask.getState());
+            Task followerSuspendedTask = followerTaskManager.getTask(taskName);
+            Assertions.assertNotNull(followerSuspendedTask);
+            Assertions.assertEquals(Constants.TaskState.PAUSE, followerSuspendedTask.getState());
         }
-        // Replay the resume operation
+        // 2. Replay the resume operation (changes state from PAUSE to ACTIVE)
         {
             AlterTaskInfo alterTaskInfo = (AlterTaskInfo) UtFrameUtils
                     .PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_TASK);
@@ -1023,8 +1109,8 @@ public class TaskManagerEditLogTest {
 
     @Test
     public void testUpdateTaskPropertiesNormalCase() throws Exception {
-        // 1. Prepare test data - create a manual task first
-        String taskName = "update_props_task_test";
+        // 1. Prepare test data - create a task first
+        String taskName = "update_properties_task";
         Task task = new Task(taskName);
         task.setType(Constants.TaskType.MANUAL);
         task.setDefinition("SELECT 1");
@@ -1036,20 +1122,22 @@ public class TaskManagerEditLogTest {
         Assertions.assertNotNull(createdTask);
         Assertions.assertNull(createdTask.getProperties());
 
-        // 2. Execute updateTaskProperties operation (master side)
+        // 2. Prepare properties to update
         Map<String, String> properties = Maps.newHashMap();
         properties.put("key1", "value1");
         properties.put("key2", "value2");
+
+        // 3. Execute updateTaskProperties operation (master side)
         masterTaskManager.updateTaskProperties(createdTask, properties);
 
-        // 3. Verify master state after update
+        // 4. Verify master state after update
         Task updatedTask = masterTaskManager.getTask(taskName);
         Assertions.assertNotNull(updatedTask);
         Assertions.assertNotNull(updatedTask.getProperties());
         Assertions.assertEquals("value1", updatedTask.getProperties().get("key1"));
         Assertions.assertEquals("value2", updatedTask.getProperties().get("key2"));
 
-        // 4. Test follower replay functionality
+        // 5. Test follower replay functionality
         TaskManager followerTaskManager = new TaskManager();
         
         // First create the task in follower
@@ -1070,12 +1158,52 @@ public class TaskManagerEditLogTest {
         
         followerTaskManager.replayAlterTask(alterTaskInfo);
 
-        // 5. Verify follower state is consistent with master
+        // 6. Verify follower state is consistent with master
         Task followerUpdatedTask = followerTaskManager.getTask(taskName);
         Assertions.assertNotNull(followerUpdatedTask);
         Assertions.assertNotNull(followerUpdatedTask.getProperties());
         Assertions.assertEquals("value1", followerUpdatedTask.getProperties().get("key1"));
         Assertions.assertEquals("value2", followerUpdatedTask.getProperties().get("key2"));
+    }
+
+    @Test
+    public void testUpdateTaskPropertiesEditLogException() throws Exception {
+        // 1. Prepare test data - create a task first
+        String taskName = "update_properties_exception_task";
+        Task task = new Task(taskName);
+        task.setType(Constants.TaskType.MANUAL);
+        task.setDefinition("SELECT 1");
+        task.setDbName("test_db");
+        task.setCatalogName("test_catalog");
+
+        // Create a separate TaskManager for exception testing
+        TaskManager exceptionTaskManager = new TaskManager();
+        exceptionTaskManager.createTask(task);
+        Task createdTask = exceptionTaskManager.getTask(taskName);
+        Assertions.assertNotNull(createdTask);
+        Map<String, String> initialProperties = createdTask.getProperties();
+
+        // 2. Mock EditLog.logAlterTask to throw exception
+        EditLog spyEditLog = spy(new EditLog(null));
+        doThrow(new RuntimeException("EditLog write failed"))
+            .when(spyEditLog).logAlterTask(any(AlterTaskInfo.class), any());
+        
+        // Temporarily set spy EditLog
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+
+        // 3. Execute updateTaskProperties operation and expect exception
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put("key1", "value1");
+        
+        RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
+            exceptionTaskManager.updateTaskProperties(createdTask, properties);
+        });
+        Assertions.assertEquals("EditLog write failed", exception.getMessage());
+
+        // 4. Verify leader memory state remains unchanged after exception
+        Task unchangedTask = exceptionTaskManager.getTask(taskName);
+        Assertions.assertNotNull(unchangedTask);
+        Assertions.assertEquals(initialProperties, unchangedTask.getProperties());
     }
 
     @Test
@@ -1123,47 +1251,5 @@ public class TaskManagerEditLogTest {
         Task unchangedTask = exceptionTaskManager.getTask(taskName);
         Assertions.assertNotNull(unchangedTask);
         Assertions.assertEquals(initialState, unchangedTask.getState());
-    }
-
-    @Test
-    public void testUpdateTaskPropertiesEditLogException() throws Exception {
-        // 1. Prepare test data - create a manual task
-        String taskName = "update_props_exception_task";
-        Task task = new Task(taskName);
-        task.setType(Constants.TaskType.MANUAL);
-        task.setDefinition("SELECT 1");
-        task.setDbName("test_db");
-        task.setCatalogName("test_catalog");
-        
-        // Create a separate TaskManager for exception testing
-        TaskManager exceptionTaskManager = new TaskManager();
-        exceptionTaskManager.createTask(task);
-        Task createdTask = exceptionTaskManager.getTask(taskName);
-        Assertions.assertNotNull(createdTask);
-
-        // 2. Mock EditLog.logAlterTask to throw exception
-        EditLog spyEditLog = spy(new EditLog(null));
-        doThrow(new RuntimeException("EditLog write failed"))
-            .when(spyEditLog).logAlterTask(any(AlterTaskInfo.class), any());
-        
-        // Temporarily set spy EditLog
-        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
-
-        // Save initial state snapshot
-        Map<String, String> initialProperties = createdTask.getProperties();
-
-        // 3. Execute updateTaskProperties operation and expect exception
-        Map<String, String> properties = Maps.newHashMap();
-        properties.put("key1", "value1");
-        
-        RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
-            exceptionTaskManager.updateTaskProperties(createdTask, properties);
-        });
-        Assertions.assertEquals("EditLog write failed", exception.getMessage());
-
-        // 4. Verify leader memory state remains unchanged after exception
-        Task unchangedTask = exceptionTaskManager.getTask(taskName);
-        Assertions.assertNotNull(unchangedTask);
-        Assertions.assertEquals(initialProperties, unchangedTask.getProperties());
     }
 }
