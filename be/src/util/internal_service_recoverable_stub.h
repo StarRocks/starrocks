@@ -20,13 +20,13 @@
 
 namespace starrocks {
 
-class PInternalService_RecoverableStub : public PInternalService,
+class PInternalService_RecoverableStub : public PInternalService_Stub,
                                          public std::enable_shared_from_this<PInternalService_RecoverableStub> {
 public:
     using RecoverableClosureType = RecoverableClosure<PInternalService_RecoverableStub>;
 
     PInternalService_RecoverableStub(const butil::EndPoint& endpoint, std::string protocol = "");
-    ~PInternalService_RecoverableStub();
+    ~PInternalService_RecoverableStub() override;
 
     Status reset_channel(int64_t next_connection_group = 0);
 
@@ -36,64 +36,6 @@ public:
     }
 
     int64_t connection_group() const { return _connection_group.load(); }
-
-    // implements PInternalService ------------------------------------------
-
-    void tablet_writer_open(::google::protobuf::RpcController* controller,
-                            const ::starrocks::PTabletWriterOpenRequest* request,
-                            ::starrocks::PTabletWriterOpenResult* response, ::google::protobuf::Closure* done);
-    void tablet_writer_cancel(::google::protobuf::RpcController* controller,
-                              const ::starrocks::PTabletWriterCancelRequest* request,
-                              ::starrocks::PTabletWriterCancelResult* response, ::google::protobuf::Closure* done);
-    void transmit_chunk(::google::protobuf::RpcController* controller, const ::starrocks::PTransmitChunkParams* request,
-                        ::starrocks::PTransmitChunkResult* response, ::google::protobuf::Closure* done);
-    void transmit_chunk_via_http(::google::protobuf::RpcController* controller,
-                                 const ::starrocks::PHttpRequest* request, ::starrocks::PTransmitChunkResult* response,
-                                 ::google::protobuf::Closure* done);
-    void tablet_writer_add_chunk(::google::protobuf::RpcController* controller,
-                                 const ::starrocks::PTabletWriterAddChunkRequest* request,
-                                 ::starrocks::PTabletWriterAddBatchResult* response, ::google::protobuf::Closure* done);
-    void tablet_writer_add_chunks(::google::protobuf::RpcController* controller,
-                                  const ::starrocks::PTabletWriterAddChunksRequest* request,
-                                  ::starrocks::PTabletWriterAddBatchResult* response,
-                                  ::google::protobuf::Closure* done);
-    void tablet_writer_add_chunk_via_http(::google::protobuf::RpcController* controller,
-                                          const ::starrocks::PHttpRequest* request,
-                                          ::starrocks::PTabletWriterAddBatchResult* response,
-                                          ::google::protobuf::Closure* done);
-    void tablet_writer_add_chunks_via_http(::google::protobuf::RpcController* controller,
-                                           const ::starrocks::PHttpRequest* request,
-                                           ::starrocks::PTabletWriterAddBatchResult* response,
-                                           ::google::protobuf::Closure* done);
-    void tablet_writer_add_segment(::google::protobuf::RpcController* controller,
-                                   const ::starrocks::PTabletWriterAddSegmentRequest* request,
-                                   ::starrocks::PTabletWriterAddSegmentResult* response,
-                                   ::google::protobuf::Closure* done);
-    void get_load_replica_status(google::protobuf::RpcController* controller, const PLoadReplicaStatusRequest* request,
-                                 PLoadReplicaStatusResult* response, google::protobuf::Closure* done) override;
-    void load_diagnose(::google::protobuf::RpcController* controller, const ::starrocks::PLoadDiagnoseRequest* request,
-                       ::starrocks::PLoadDiagnoseResult* response, ::google::protobuf::Closure* done) override;
-    void transmit_runtime_filter(::google::protobuf::RpcController* controller,
-                                 const ::starrocks::PTransmitRuntimeFilterParams* request,
-                                 ::starrocks::PTransmitRuntimeFilterResult* response,
-                                 ::google::protobuf::Closure* done);
-    void local_tablet_reader_multi_get(::google::protobuf::RpcController* controller,
-                                       const ::starrocks::PTabletReaderMultiGetRequest* request,
-                                       ::starrocks::PTabletReaderMultiGetResult* response,
-                                       ::google::protobuf::Closure* done);
-    void execute_command(::google::protobuf::RpcController* controller,
-                         const ::starrocks::ExecuteCommandRequestPB* request,
-                         ::starrocks::ExecuteCommandResultPB* response, ::google::protobuf::Closure* done);
-    void process_dictionary_cache(::google::protobuf::RpcController* controller,
-                                  const ::starrocks::PProcessDictionaryCacheRequest* request,
-                                  ::starrocks::PProcessDictionaryCacheResult* response,
-                                  ::google::protobuf::Closure* done);
-    void fetch_datacache(::google::protobuf::RpcController* controller,
-                         const ::starrocks::PFetchDataCacheRequest* request,
-                         ::starrocks::PFetchDataCacheResponse* response, ::google::protobuf::Closure* done);
-
-    void lookup(google::protobuf::RpcController* controller, const PLookUpRequest* request, PLookUpResponse* response,
-                google::protobuf::Closure* done) override;
 
 private:
     std::shared_ptr<starrocks::PInternalService_Stub> _stub;
