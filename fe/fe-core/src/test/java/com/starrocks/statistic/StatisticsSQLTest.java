@@ -52,6 +52,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.File;
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 public class StatisticsSQLTest extends PlanTestBase {
@@ -77,7 +78,8 @@ public class StatisticsSQLTest extends PlanTestBase {
                 "  `v4` date NULL,\n" +
                 "  `v5` datetime NULL,\n" +
                 "  `s1` String NULL,\n" +
-                "  `j1` JSON NULL" +
+                "  `j1` JSON NULL,\n" +
+                "  `a1` ARRAY<int> NULL" +
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`v1`, `v2`, v3)\n" +
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
@@ -144,7 +146,7 @@ public class StatisticsSQLTest extends PlanTestBase {
         SampleInfo sampleInfo = tabletSampleManager.generateSampleInfo();
 
         ColumnSampleManager columnSampleManager = ColumnSampleManager.init(columnNames, columnTypes, t0,
-                sampleInfo);
+                sampleInfo, Map.of());
 
         sampleInfo.generateComplexTypeColumnTask(t0.getId(), db.getId(), t0.getName(), db.getFullName(),
                 columnSampleManager.getComplexTypeStats());
@@ -441,6 +443,42 @@ public class StatisticsSQLTest extends PlanTestBase {
                 "`struct_a.c3.d3`.`struct_d.f4`.`struct_e`");
         assertContains(StatisticUtils.quoting(t0, "struct_a.c3.d3.struct_d.f4.struct_g.h"),
                 "`struct_a.c3.d3`.`struct_d.f4`.`struct_g.h`");
+    }
+
+    @Test
+    public void testVirtualStatisticWithFullStatistics() throws Exception {
+        // GIVEN
+        Table t0 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("stat0");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        List<Long> pids = t0.getPartitions().stream().map(Partition::getId).collect(Collectors.toList());
+
+        List<String> columnNames = Lists.newArrayList("a1");
+        FullStatisticsCollectJob job = new FullStatisticsCollectJob(db, t0, pids, columnNames,
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE,
+                Maps.newHashMap(Map.of(StatsConstants.UNNEST_VIRTUAL_STATISTICS, "true")));
+
+        // WHEN
+        final var batches = job.buildCollectSQLList(1);
+
+        // THEN
+        boolean containsArrayColumn = false;
+        boolean containsVirtualStat = false;
+        for (final var batch : batches) {
+            for (final var sql : batch) {
+                Assertions.assertNotNull(getFragmentPlan(sql));
+
+                if (sql.contains("`a1`")) {
+                    containsArrayColumn = true;
+                }
+
+                if (sql.contains("unnest(`a1`)") && sql.contains("VIRTUAL_STATISTIC_a1_UNNEST")) {
+                    containsVirtualStat = true;
+                }
+            }
+        }
+
+        Assertions.assertTrue(containsVirtualStat);
+        Assertions.assertTrue(containsArrayColumn);
     }
 
     private static File newFolder(File root, String... subDirs) throws IOException {

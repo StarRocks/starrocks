@@ -17,10 +17,12 @@ package com.starrocks.statistic.base;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
+import com.starrocks.statistic.virtual.VirtualStatistic;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 
 import java.util.List;
+import java.util.Map;
 
 /*
  * The classification for the statistics column is split
@@ -38,13 +40,15 @@ public class ColumnClassifier {
         this.isManualJob = isManualJob;
     }
 
-    public static ColumnClassifier of(List<String> columnNames, List<Type> columnTypes, Table table, boolean isManualJob) {
+    public static ColumnClassifier of(List<String> columnNames, List<Type> columnTypes, Table table, boolean isManualJob,
+                                      Map<String, String> analyzeProperties) {
         ColumnClassifier columnClassifier = new ColumnClassifier(isManualJob);
-        columnClassifier.classifyColumnStats(columnNames, columnTypes, table);
+        columnClassifier.classifyColumnStats(columnNames, columnTypes, table, analyzeProperties);
         return columnClassifier;
     }
 
-    private void classifyColumnStats(List<String> columnNames, List<Type> columnTypes, Table table) {
+    private void classifyColumnStats(List<String> columnNames, List<Type> columnTypes, Table table,
+                                     Map<String, String> analyzeProperties) {
         for (int i = 0; i < columnNames.size(); i++) {
             String columnName = columnNames.get(i);
             Type columnType = columnTypes.get(i);
@@ -58,6 +62,14 @@ public class ColumnClassifier {
                     }
                 } else {
                     unSupportStats.add(new ComplexTypeColumnStats(columnName, columnType));
+                }
+
+                // Add virtual statistics for applicable column types
+                for (VirtualStatistic virtualStatistic : VirtualStatistic.INSTANCES) {
+                    if (virtualStatistic.isEnabledInStatsJobProperties(analyzeProperties) &&
+                            virtualStatistic.appliesTo(columnType)) {
+                        columnStats.add(new VirtualColumnStats(columnName, columnType, virtualStatistic));
+                    }
                 }
             } else {
                 // to split & valid struct subfield column, like 'a.b.c.d'

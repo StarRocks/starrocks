@@ -94,11 +94,11 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
         if (statisticsTypes.isEmpty()) {
             if (analyzeType == StatsConstants.AnalyzeType.FULL) {
                 queryJobs = HyperQueryJob.createFullQueryJobs(context, db, table, columnNames, columnTypes,
-                            partitionIdList, splitSize, isManualJob);
+                        partitionIdList, splitSize, isManualJob, properties);
             } else {
                 PartitionSampler sampler = PartitionSampler.create(table, partitionIdList, properties, partitionTabletRowCounts);
                 queryJobs = HyperQueryJob.createSampleQueryJobs(context, db, table, columnNames, columnTypes,
-                        partitionIdList, splitSize, sampler, isManualJob);
+                        partitionIdList, splitSize, sampler, isManualJob, properties);
             }
         } else {
             queryJobs = HyperQueryJob.createMultiColumnQueryJobs(context, db, table, columnGroups, analyzeType,

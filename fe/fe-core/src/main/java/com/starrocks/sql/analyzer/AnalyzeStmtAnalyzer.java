@@ -93,6 +93,8 @@ public class AnalyzeStmtAnalyzer {
             StatsConstants.HISTOGRAM_COLLECT_BUCKET_NDV_MODE,
             StatsConstants.INIT_SAMPLE_STATS_JOB,
 
+            StatsConstants.UNNEST_VIRTUAL_STATISTICS,
+
             //Deprecated , just not throw exception
             StatsConstants.PRO_SAMPLE_RATIO,
             StatsConstants.PROP_UPDATE_INTERVAL_SEC_KEY,

@@ -46,4 +46,7 @@ public abstract class ColumnStats {
 
     public abstract String getDistinctCount(double rowSampleRatio);
 
+    public String getLateralJoin() {
+        return "";
+    }
 }
