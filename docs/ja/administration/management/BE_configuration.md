@@ -2309,6 +2309,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: タブレット統計キャッシュが更新される時間間隔。
 - 導入バージョン: -
 
+##### lake_enable_accurate_pk_row_count
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: Lake（共有データ）主キーテーブルの tablet 行数統計で正確な行数を使うかどうか。`true` の場合、各 rowset の delete vector をオブジェクトストレージから取得して削除行を差し引くため精度は上がりますが、`get_tablet_stats` RPC のオーバーヘッドが増える可能性があります。`false` の場合は rowset メタデータの近似 `num_dels` を使ってリモート I/O を回避しますが、未 compaction の削除行をわずかに過大計上する可能性があります。
+- 導入バージョン: -
+
+##### lake_tablet_stat_slow_log_ms
+
+- デフォルト: 300000
+- タイプ: Int64
+- 単位: Milliseconds
+- 可変: はい
+- 説明: Tablet 統計収集タスクの遅延ログしきい値（ミリ秒）。単一タスクの実行時間がこの値を超えると、`tablet_id`、バージョン、rowset 数、正確モード、経過時間などの診断情報を含む警告ログを出力します。
+- 導入バージョン: -
+
 ##### transaction_apply_worker_count
 
 - デフォルト: 0
