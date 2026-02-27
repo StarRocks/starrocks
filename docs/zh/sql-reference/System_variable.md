@@ -193,6 +193,13 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 类型：String
 * 引入版本：v3.1
 
+### profile_log_latency_threshold_ms
+
+* 描述：FE 将 profile 写入 `fe.profile.log` 的最小查询延迟（毫秒）。仅执行时间大于或等于该值的查询会被记录。设为 `-1`（默认）时使用 FE 配置项 `profile_log_latency_threshold_ms`。设为 `0` 时记录所有 profile。设为正值（如 `1000`）时仅记录延迟 ≥ 该值（毫秒）的查询。可通过该会话变量按连接覆盖集群级配置。
+* 默认值：-1
+* 类型：long
+* 单位：毫秒
+
 ### catalog（3.2.4 及以后）
 
 * 描述：用于指定当前会话所在的 Catalog。

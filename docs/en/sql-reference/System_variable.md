@@ -195,6 +195,14 @@ Used for MySQL client compatibility. No practical usage.
 * **Data type**: String
 * **Introduced in**: v3.1
 
+### profile_log_latency_threshold_ms
+
+* **Scope**: Session
+* **Description**: Minimum query latency (milliseconds) for the FE to write a profile to `fe.profile.log`. Only queries with execution time greater than or equal to this value are logged. When set to `-1` (default), the FE config `profile_log_latency_threshold_ms` is used. When set to `0`, all profiles are logged. When set to a positive value (e.g. `1000`), only queries with latency ≥ that value (in ms) are logged. Use this session variable to override the deployment-wide config per connection.
+* **Default**: -1
+* **Data type**: long
+* **Unit**: Milliseconds
+
 ### catalog
 
 * **Description**: Used to specify the catalog to which the session belongs.
