@@ -494,9 +494,26 @@ public class TaskManager implements MemoryTrackable {
         }
 
         if (hasChanged) {
+<<<<<<< HEAD
             currentTask.setType(changedTask.getType());
             if (!isReplay) {
                 GlobalStateMgr.getCurrentState().getEditLog().logAlterTask(changedTask);
+=======
+            // Log first to ensure durability, then apply in-memory changes.
+            // The WAL callback applies the same change on followers during replay.
+            // This ensures atomicity: if logging fails, no in-memory changes are made.
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterTask(
+                    new AlterTaskInfo(currentTask.getName(), changedType, changedTask.getSchedule()),
+                    wal -> {
+                        AlterTaskInfo alterTaskInfo = (AlterTaskInfo) wal;
+                        changeTask(currentTask, alterTaskInfo.getType(), alterTaskInfo.getSchedule());
+                    }
+            );
+            // Apply in-memory change after successful logging
+            changeTask(currentTask, changedType, changedTask.getSchedule());
+            if (changedType == Constants.TaskType.PERIODICAL) {
+                registerScheduler(currentTask);
+>>>>>>> 7dcbb7e6e1 ([BugFix] Fix TaskManager schedule bugs after ALTER MV (#69504))
             }
         }
     }
