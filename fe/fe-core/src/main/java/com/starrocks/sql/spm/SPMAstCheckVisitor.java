@@ -187,6 +187,8 @@ public class SPMAstCheckVisitor implements AstVisitorExtendInterface<Boolean, Pa
         check = check && Objects.equals(node.getSkewHint(), other.getSkewHint());
         check = check && Objects.equals(node.isUseHashBasedPartition(), other.isUseHashBasedPartition());
         check = check && Objects.equals(node.isSkewed(), other.isSkewed());
+        check = check && Objects.equals(node.getSkewColumn(), other.getSkewColumn());
+        check = check && Objects.equals(node.getSkewValues(), other.getSkewValues());
 
         check = check && check(node.getFnCall(), other.getFnCall());
         check = check && check(node.getPartitionExprs(), other.getPartitionExprs());

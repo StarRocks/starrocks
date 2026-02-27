@@ -28,6 +28,8 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
 class WindowSkewTest extends PlanTestBase {
 
     @BeforeAll
@@ -76,6 +78,9 @@ class WindowSkewTest extends PlanTestBase {
     public void setUp() {
         super.setUp();
         connectContext.getSessionVariable().setEnableSplitWindowSkewToUnion(true);
+
+        final var table = getOlapTable("window_skew_table");
+        setTableStatistics(table, 1000);
     }
 
     @Test
@@ -86,7 +91,6 @@ class WindowSkewTest extends PlanTestBase {
         final var statisticStorage = connectContext.getGlobalStateMgr().getStatisticStorage();
         final var skewedColumnStat = ColumnStatistic.builder().setNullsFraction(0.3).build();
 
-        setTableStatistics(table, 1000);
         statisticStorage.refreshColumnStatistics(table, List.of("p", "s", "x"), true);
         statisticStorage.addColumnStatistic(table, "p", skewedColumnStat);
         statisticStorage.getColumnStatistics(table, List.of("p", "s", "x"));
@@ -139,7 +143,6 @@ class WindowSkewTest extends PlanTestBase {
         final var statisticStorage = connectContext.getGlobalStateMgr().getStatisticStorage();
         statisticStorage.addColumnStatistic(table, "p", nonSkewedColumnStat);
         statisticStorage.getColumnStatistics(table, List.of("p", "s", "x"));
-        setTableStatistics(table, 10000);
 
         String plan = getFragmentPlan(sql);
 
@@ -155,7 +158,6 @@ class WindowSkewTest extends PlanTestBase {
         final var skewedP = ColumnStatistic.builder().setNullsFraction(0.4).build();
         final var skewedS = ColumnStatistic.builder().setNullsFraction(0.4).build();
 
-        setTableStatistics(table, 1000);
         statisticStorage.refreshColumnStatistics(table, List.of("p", "s", "x"), true);
         statisticStorage.addColumnStatistic(table, "p", skewedP);
         statisticStorage.addColumnStatistic(table, "s", skewedS);
@@ -181,14 +183,13 @@ class WindowSkewTest extends PlanTestBase {
 
         final var skewedMCV = ColumnStatistic.builder().setNullsFraction(0.0).setHistogram(histogram).build();
 
-        setTableStatistics(table, 1000);
         statisticStorage.refreshColumnStatistics(table, List.of("p", "s", "x"), true);
         statisticStorage.addColumnStatistic(table, "p", skewedMCV);
         statisticStorage.getColumnStatistics(table, List.of("p", "s", "x"));
 
         String sql = "select p, s, sum(x) over (partition by p order by s) from window_skew_table";
         String plan = getFragmentPlan(sql, TExplainLevel.COSTS, "");
-        System.out.println(plan);
+
         assertContains(plan, "UNION");
         assertContains(plan, "Predicates: [1: p, INT, true] = 1");
         // Ensure that unskewed partition preserves NULLs
@@ -228,7 +229,6 @@ class WindowSkewTest extends PlanTestBase {
         final var statisticStorage = connectContext.getGlobalStateMgr().getStatisticStorage();
         final var skewedColumnStat = ColumnStatistic.builder().setNullsFraction(0.5).build();
 
-        setTableStatistics(table, 1000);
         statisticStorage.addColumnStatistic(table, "p", skewedColumnStat);
 
         String sql = "select p, s, avg(x) over (partition by p order by s), " +
@@ -249,7 +249,6 @@ class WindowSkewTest extends PlanTestBase {
         final var statisticStorage = connectContext.getGlobalStateMgr().getStatisticStorage();
         final var skewedColumnStat = ColumnStatistic.builder().setNullsFraction(0.3).build();
 
-        setTableStatistics(table, 1000);
         statisticStorage.addColumnStatistic(table, "p", skewedColumnStat);
         statisticStorage.getColumnStatistics(table, List.of("p", "s", "x"));
 
@@ -268,7 +267,6 @@ class WindowSkewTest extends PlanTestBase {
         final var statisticStorage = connectContext.getGlobalStateMgr().getStatisticStorage();
         final var skewedColumnStat = ColumnStatistic.builder().setNullsFraction(0.3).build();
 
-        setTableStatistics(table, 1000);
         statisticStorage.addColumnStatistic(table, "p", skewedColumnStat);
         statisticStorage.getColumnStatistics(table, List.of("p", "s", "x"));
 
@@ -286,7 +284,6 @@ class WindowSkewTest extends PlanTestBase {
         final var statisticStorage = connectContext.getGlobalStateMgr().getStatisticStorage();
         final var skewedColumnStat = ColumnStatistic.builder().setNullsFraction(0.3).build();
 
-        setTableStatistics(table, 1000);
         statisticStorage.addColumnStatistic(table, "p", skewedColumnStat);
         statisticStorage.getColumnStatistics(table, List.of("p", "s", "x"));
 
@@ -299,6 +296,7 @@ class WindowSkewTest extends PlanTestBase {
         assertNotContains(plan, "UNION");
         assertContains(plan, "ANALYTIC");
     }
+
     @Test
     void testWindowSkewHintWithJoinBeforeWindow() throws Exception {
         // Test that the skew hint works correctly when there is a join before the window function
@@ -311,7 +309,6 @@ class WindowSkewTest extends PlanTestBase {
         setTableStatistics(joinTable, 500);
         statisticStorage.addColumnStatistic(table, "p", skewedColumnStat);
         statisticStorage.getColumnStatistics(table, List.of("p", "s", "x"));
-
 
         String sql = "select a.p, a.s, b.val, sum(a.x) over (partition by a.p order by a.s) " +
                 "from window_skew_table a " +
@@ -327,5 +324,229 @@ class WindowSkewTest extends PlanTestBase {
         assertContains(plan, "IS NOT NULL");
         // Verify ANALYTIC window function is present
         assertContains(plan, "ANALYTIC");
+    }
+
+    @Test
+    void testWindowSkewHintWithExplicitNullValue() throws Exception {
+        // Test that the skew hint syntax with explicit column and NULL value triggers the UNION rewrite
+        // The hint [skew|p(NULL)] should be parsed and used by SplitWindowSkewToUnionRule
+        String sql = "select p, s, sum(x) over ([skew|p(NULL)] partition by p order by s) from window_skew_table";
+        String plan = getFragmentPlan(sql, TExplainLevel.COSTS, "");
+
+        // Verify UNION rewrite is triggered
+        assertContains(plan, "UNION");
+
+        assertContains(plan, "Predicates: [1: p, INT, true] IS NULL");
+        assertContains(plan, "Predicates: [5: p, INT, true] IS NOT NULL");
+
+        assertContains(plan,
+                "ANALYTIC\n" +
+                        "  |  functions: [, sum[([3: x, INT, true]); args: INT; result: BIGINT; args nullable: true; " +
+                        "result nullable: true], ]\n" +
+                        "  |  order by: [2: s, INT, true] ASC");
+
+        assertContains(plan,
+                "ANALYTIC\n" +
+                        "  |  functions: [, sum[([7: x, INT, true]); args: INT; result: BIGINT; args nullable: true;" +
+                        " result nullable: true], ]\n" +
+                        "  |  partition by: [5: p, INT, true]");
+    }
+
+    @Test
+    void testWindowSkewHintWithNonNullValue() throws Exception {
+        // Test skew hint with a non-null integer value triggers the UNION rewrite
+        String sql = "select p, s, sum(x) over ([skew|p(1)] partition by p order by s) from window_skew_table";
+        String plan = getFragmentPlan(sql, TExplainLevel.COSTS, "");
+
+        // Verify UNION rewrite is triggered
+        assertContains(plan, "UNION");
+
+        assertContains(plan, "Predicates: [1: p, INT, true] = 1");
+        assertContains(plan, "Predicates: ([5: p, INT, true] != 1) OR ([5: p, INT, true] IS NULL)");
+
+        assertContains(plan,
+                "ANALYTIC\n" +
+                        "  |  functions: [, sum[([3: x, INT, true]); args: INT; result: BIGINT; args nullable: true; " +
+                        "result nullable: true], ]\n" +
+                        "  |  order by: [2: s, INT, true] ASC");
+
+        assertContains(plan,
+                "ANALYTIC\n" +
+                        "  |  functions: [, sum[([7: x, INT, true]); args: INT; result: BIGINT; args nullable: true;" +
+                        " result nullable: true], ]\n" +
+                        "  |  partition by: [5: p, INT, true]");
+    }
+
+    @Test
+    void testWindowSkewHintWithStringValue() throws Exception {
+        // Test skew hint with a string value triggers the UNION rewrite
+        starRocksAssert.withTable(
+                """
+                        CREATE TABLE IF NOT EXISTS `window_skew_table_str` (
+                          `p` varchar(100) NULL,
+                          `s` int NULL,
+                          `x` int NULL
+                        ) ENGINE=OLAP
+                        DUPLICATE KEY(`p`, `s`, `x`)
+                        DISTRIBUTED BY HASH(`p`) BUCKETS 3
+                        PROPERTIES (
+                          "replication_num" = "1",
+                          "in_memory" = "false"
+                        );
+                        """
+        );
+        final var table = getOlapTable("window_skew_table_str");
+        setTableStatistics(table, 1000);
+        String sql = "select p, s, sum(x) over ([skew|p('abc')] partition by p order by s) from window_skew_table_str";
+        String plan = getFragmentPlan(sql, TExplainLevel.COSTS, "");
+
+        assertContains(plan, "UNION");
+        assertContains(plan, "Predicates: [1: p, VARCHAR, true] = 'abc'");
+        assertContains(plan, "Predicates: ([5: p, VARCHAR, true] != 'abc') OR ([5: p, VARCHAR, true] IS NULL)");
+    }
+
+    @Test
+    void testWindowSkewHintIgnoredWhenFeatureDisabled() throws Exception {
+        // Disable the skew optimization feature
+        connectContext.getSessionVariable().setEnableSplitWindowSkewToUnion(false);
+
+        // Even with explicit skew hint, the optimization should NOT be applied
+        String sql = "select p, s, sum(x) over ([skew|p(NULL)] partition by p order by s) from window_skew_table";
+        String plan = getFragmentPlan(sql);
+
+        // Verify UNION rewrite is NOT triggered
+        assertNotContains(plan, "UNION");
+        // But the query should still work with normal ANALYTIC
+        assertContains(plan, "ANALYTIC");
+        assertContains(plan, "partition by: 1: p");
+    }
+
+    @Test
+    void testWindowSkewHintWithWrongColumn() throws Exception {
+        final var skewedColumnStat = ColumnStatistic.builder().setNullsFraction(0.0).build();
+
+        OlapTable table = getOlapTable("window_skew_table");
+        final var statisticStorage = connectContext.getGlobalStateMgr().getStatisticStorage();
+        statisticStorage.addColumnStatistic(table, "p", skewedColumnStat);
+        statisticStorage.getColumnStatistics(table, List.of("p", "s", "x"));
+
+        // Test providing a skew hint for a column that is not in the partition clause
+        // Skew hint on 's' but partitioned by 'p'
+        String sql = "select p, s, sum(x) over ([skew|s(1)] partition by p order by s) from window_skew_table";
+
+        assertThrows(Exception.class, () ->
+                getFragmentPlan(sql)
+        );
+
+    }
+
+    @Test
+    void testWindowSkewHintWithNonConstantValue() {
+        String sql = "select p, s, sum(x) over ([skew|p(s)] partition by p order by s) from window_skew_table";
+
+        assertThrows(Exception.class, () ->
+                getFragmentPlan(sql)
+        );
+    }
+
+    @Test
+    void testTwoWindowsOneWithSkewHint() throws Exception {
+        // Case 1: Skew hint on the first window function
+        String sql1 = "select p, s, " +
+                "sum(x) over ([skew|p(NULL)] partition by p order by s), " +
+                "avg(x) over (partition by p order by s) " +
+                "from window_skew_table";
+
+        String plan1 = getFragmentPlan(sql1, TExplainLevel.COSTS, "");
+        assertContains(plan1, "UNION");
+        assertContains(plan1, "Predicates: [1: p, INT, true] IS NULL");
+        assertContains(plan1, "Predicates: [6: p, INT, true] IS NOT NULL");
+
+        // Case 2: Skew hint on the second window function
+        String sql2 = "select p, s, " +
+                "sum(x) over (partition by p order by s), " +
+                "avg(x) over ([skew|p(NULL)] partition by p order by s) " +
+                "from window_skew_table";
+
+        String plan2 = getFragmentPlan(sql2, TExplainLevel.COSTS, "");
+
+        assertContains(plan2, "UNION");
+        assertContains(plan2, "Predicates: [1: p, INT, true] IS NULL");
+        assertContains(plan2, "Predicates: [6: p, INT, true] IS NOT NULL");
+    }
+
+    @Test
+    void testMixedWindowPartitionsWithSkewHint() throws Exception {
+        final var skewedColumnStat = ColumnStatistic.builder().setNullsFraction(0.0).build();
+
+        OlapTable table = getOlapTable("window_skew_table");
+        final var statisticStorage = connectContext.getGlobalStateMgr().getStatisticStorage();
+        statisticStorage.addColumnStatistic(table, "p", skewedColumnStat);
+        statisticStorage.getColumnStatistics(table, List.of("p", "s", "x"));
+        // Three analytical windows:
+        // 1. partition by p (with skew hint)
+        // 2. partition by p (no skew hint)
+        // 3. partition by s (different partition)
+        String sql = "select p, s, " +
+                "sum(x) over ([skew|p(NULL)] partition by p order by s), " +
+                "avg(x) over (partition by p order by s), " +
+                "count(x) over (partition by s order by p) " +
+                "from window_skew_table";
+
+        String plan = getFragmentPlan(sql, TExplainLevel.COSTS, "");
+        assertContains(plan, "UNION");
+        // Verify that the skew hint on 'p' triggered the split
+        assertContains(plan, "Predicates: [1: p, INT, true] IS NULL");
+        assertContains(plan, "Predicates: [7: p, INT, true] IS NOT NULL");
+    }
+
+    @Test
+    void testWindowSkewHintRejectsMultipleValues() {
+        // Window skew hint currently only supports a single value
+        String sql = "select p, s, sum(x) over ([skew|p(1, 2)] partition by p order by s) from window_skew_table";
+        Exception e = assertThrows(Exception.class, () -> getFragmentPlan(sql));
+        assertContains(e.getMessage(), "Window skew hint currently supports only a single value, but got 2 values");
+
+        String sql2 = "select p, s, sum(x) over ([skew|p(NULL, 2)] partition by p order by s) from window_skew_table";
+        Exception e2 = assertThrows(Exception.class, () -> getFragmentPlan(sql2));
+        assertContains(e2.getMessage(), "Window skew hint currently supports only a single value, but got 2 values");
+    }
+
+    @Test
+    void testWindowSkewHintWithWrongValueType() {
+        // Column 'p' is INT, but the skew hint provides a string value that cannot be cast to INT
+        String sql = "select p, s, sum(x) over ([skew|p('abc')] partition by p order by s) from window_skew_table";
+
+        Exception e = assertThrows(Exception.class, () -> getFragmentPlan(sql));
+        assertContains(e.getMessage(), "Window skew hint value type mismatch");
+    }
+
+    @Test
+    void testWindowSkewHintWithWrongValueTypeDate() throws Exception {
+        // Create a table with a DATE partition column
+        starRocksAssert.withTable(
+                """
+                        CREATE TABLE IF NOT EXISTS `window_skew_table_date` (
+                          `p` date NULL,
+                          `s` int NULL,
+                          `x` int NULL
+                        ) ENGINE=OLAP
+                        DUPLICATE KEY(`p`, `s`, `x`)
+                        DISTRIBUTED BY HASH(`p`) BUCKETS 3
+                        PROPERTIES (
+                          "replication_num" = "1",
+                          "in_memory" = "false"
+                        );
+                        """
+        );
+        final var table = getOlapTable("window_skew_table_date");
+        setTableStatistics(table, 1000);
+
+        // Column 'p' is DATE, but the skew hint provides a non-date string value
+        String sql = "select p, s, sum(x) over ([skew|p('not_a_date')] partition by p order by s) " +
+                "from window_skew_table_date";
+
+        Exception e = assertThrows(Exception.class, () -> getFragmentPlan(sql));
+        assertContains(e.getMessage(), "Window skew hint value type mismatch");
     }
 }
