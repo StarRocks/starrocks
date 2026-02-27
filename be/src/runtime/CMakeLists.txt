@@ -106,6 +106,9 @@ set(RUNTIME_FILES
     sorted_chunks_merger.cpp
     tablets_channel.cpp
     runtime_filter_worker.cpp
+    runtime_filter_factory.cpp
+    runtime_filter_builder.cpp
+    runtime_filter_serde.cpp
     global_dict/decoder.cpp
     global_dict/fragment_dict_state.cpp
     global_dict/parser.cpp

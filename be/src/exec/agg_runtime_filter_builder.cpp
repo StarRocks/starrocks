@@ -23,8 +23,8 @@
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "exec/aggregator.h"
-#include "exprs/agg_in_runtime_filter.h"
 #include "runtime/runtime_filter.h"
+#include "runtime/runtime_in_filter.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 

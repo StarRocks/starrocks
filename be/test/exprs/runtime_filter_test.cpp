@@ -22,7 +22,7 @@
 
 #include "base/simd/simd.h"
 #include "column/column_helper.h"
-#include "exprs/runtime_filter_bank.h"
+#include "runtime/runtime_filter_serde.h"
 #include "testutil/column_test_helper.h"
 #include "types/logical_type.h"
 
@@ -419,14 +419,14 @@ TEST_P(RuntimeFilterTestFixture, TestJoinRuntimeFilterSerialize) {
         bf0.insert(i);
     }
 
-    const size_t max_size = RuntimeFilterHelper::max_runtime_filter_serialized_size(rf_version, rf0);
+    const size_t max_size = RuntimeFilterSerde::max_size(rf_version, rf0);
     std::vector<uint8_t> buffer(max_size, 0);
-    const size_t actual_size = RuntimeFilterHelper::serialize_runtime_filter(rf_version, rf0, buffer.data());
+    const size_t actual_size = RuntimeFilterSerde::serialize(rf_version, rf0, buffer.data());
     buffer.resize(actual_size);
 
     RuntimeFilter* rf1 = nullptr;
     ObjectPool pool;
-    RuntimeFilterHelper::deserialize_runtime_filter(&pool, &rf1, buffer.data(), actual_size);
+    RuntimeFilterSerde::deserialize(&pool, &rf1, buffer.data(), actual_size);
     EXPECT_TRUE(check_equals(&bf0, down_cast<ComposedRuntimeBloomFilter<TYPE_INT>*>(rf1)));
 }
 
@@ -457,19 +457,19 @@ TEST_P(RuntimeMembershipFilterTestFixture, TestJoinRuntimeFilterSerialize2) {
     EXPECT_EQ(bf1.min_max_filter().max_value(&_pool), values[values.size() - 1]);
 
     ObjectPool pool;
-    size_t max_size = RuntimeFilterHelper::max_runtime_filter_serialized_size(rf_version, rf0);
+    size_t max_size = RuntimeFilterSerde::max_size(rf_version, rf0);
     std::vector<uint8_t> buffer0(max_size, 0);
-    size_t actual_size = RuntimeFilterHelper::serialize_runtime_filter(rf_version, rf0, buffer0.data());
+    size_t actual_size = RuntimeFilterSerde::serialize(rf_version, rf0, buffer0.data());
     buffer0.resize(actual_size);
     RuntimeFilter* rf2 = nullptr;
-    RuntimeFilterHelper::deserialize_runtime_filter(&pool, &rf2, buffer0.data(), actual_size);
+    RuntimeFilterSerde::deserialize(&pool, &rf2, buffer0.data(), actual_size);
 
-    max_size = RuntimeFilterHelper::max_runtime_filter_serialized_size(rf_version, rf1);
+    max_size = RuntimeFilterSerde::max_size(rf_version, rf1);
     buffer0.assign(max_size, 0);
-    actual_size = RuntimeFilterHelper::serialize_runtime_filter(rf_version, rf1, buffer0.data());
+    actual_size = RuntimeFilterSerde::serialize(rf_version, rf1, buffer0.data());
     buffer0.resize(actual_size);
     RuntimeFilter* rf3 = nullptr;
-    RuntimeFilterHelper::deserialize_runtime_filter(&pool, &rf3, buffer0.data(), actual_size);
+    RuntimeFilterSerde::deserialize(&pool, &rf3, buffer0.data(), actual_size);
 
     EXPECT_TRUE(check_equals(down_cast<ComposedRuntimeBloomFilter<TYPE_VARCHAR>*>(rf3),
                              down_cast<ComposedRuntimeBloomFilter<TYPE_VARCHAR>*>(rf1)));
@@ -568,12 +568,12 @@ TEST_P(RuntimeMembershipFilterTestFixture, TestJoinRuntimeFilterMerge3) {
             bf0.insert(s);
         }
 
-        size_t max_size = RuntimeFilterHelper::max_runtime_filter_serialized_size(rf_version, rf0);
+        size_t max_size = RuntimeFilterSerde::max_size(rf_version, rf0);
         std::string buf(max_size, 0);
-        size_t actual_size = RuntimeFilterHelper::serialize_runtime_filter(rf_version, rf0, (uint8_t*)buf.data());
+        size_t actual_size = RuntimeFilterSerde::serialize(rf_version, rf0, (uint8_t*)buf.data());
         buf.resize(actual_size);
 
-        RuntimeFilterHelper::deserialize_runtime_filter(&pool, &rf0, (const uint8_t*)buf.data(), actual_size);
+        RuntimeFilterSerde::deserialize(&pool, &rf0, (const uint8_t*)buf.data(), actual_size);
     }
 
     auto* pbf0 = static_cast<StringRF*>(rf0);
@@ -593,11 +593,11 @@ TEST_P(RuntimeMembershipFilterTestFixture, TestJoinRuntimeFilterMerge3) {
             bf1.insert(s);
         }
 
-        size_t max_size = RuntimeFilterHelper::max_runtime_filter_serialized_size(rf_version, rf1);
+        size_t max_size = RuntimeFilterSerde::max_size(rf_version, rf1);
         std::string buf(max_size, 0);
-        size_t actual_size = RuntimeFilterHelper::serialize_runtime_filter(rf_version, rf1, (uint8_t*)buf.data());
+        size_t actual_size = RuntimeFilterSerde::serialize(rf_version, rf1, (uint8_t*)buf.data());
         buf.resize(actual_size);
-        RuntimeFilterHelper::deserialize_runtime_filter(&pool, &rf1, (const uint8_t*)buf.data(), actual_size);
+        RuntimeFilterSerde::deserialize(&pool, &rf1, (const uint8_t*)buf.data(), actual_size);
     }
 
     auto* pbf1 = static_cast<StringRF*>(rf1);
@@ -646,18 +646,17 @@ void test_grf_helper_template(size_t num_rows, size_t num_partitions, const Part
 
     std::vector<std::string> serialized_rfs(num_partitions);
     for (auto p = 0; p < num_partitions; ++p) {
-        size_t max_size = RuntimeFilterHelper::max_runtime_filter_serialized_size(rf_version, rfs[p]);
+        size_t max_size = RuntimeFilterSerde::max_size(rf_version, rfs[p]);
         serialized_rfs[p].resize(max_size, 0);
-        size_t actual_size =
-                RuntimeFilterHelper::serialize_runtime_filter(rf_version, rfs[p], (uint8_t*)serialized_rfs[p].data());
+        size_t actual_size = RuntimeFilterSerde::serialize(rf_version, rfs[p], (uint8_t*)serialized_rfs[p].data());
         serialized_rfs[p].resize(actual_size);
     }
 
     ComposedRuntimeBloomFilter<TYPE_VARCHAR> grf;
     for (auto p = 0; p < num_partitions; ++p) {
         RuntimeFilter* grf_component;
-        RuntimeFilterHelper::deserialize_runtime_filter(&pool, &grf_component, (const uint8_t*)serialized_rfs[p].data(),
-                                                        serialized_rfs[p].size());
+        RuntimeFilterSerde::deserialize(&pool, &grf_component, (const uint8_t*)serialized_rfs[p].data(),
+                                        serialized_rfs[p].size());
         ASSERT_EQ(grf_component->get_membership_filter()->size(), num_rows_per_partitions[p]);
         grf.concat(grf_component);
     }
@@ -846,18 +845,17 @@ void test_pipeline_level_grf_helper_template(TRuntimeFilterBuildJoinMode::type j
             auto true_count = SIMD::count_nonzero(running_ctx.selection.data(), negative_num_rows);
             ASSERT_LE((double)true_count / negative_num_rows, 0.5);
         }
-        size_t max_size = RuntimeFilterHelper::max_runtime_filter_serialized_size(rf_version, merged_rf);
+        size_t max_size = RuntimeFilterSerde::max_size(rf_version, merged_rf);
         serialized_rfs[i].resize(max_size, 0);
-        size_t actual_size = RuntimeFilterHelper::serialize_runtime_filter(rf_version, merged_rf,
-                                                                           (uint8_t*)serialized_rfs[i].data());
+        size_t actual_size = RuntimeFilterSerde::serialize(rf_version, merged_rf, (uint8_t*)serialized_rfs[i].data());
         serialized_rfs[i].resize(actual_size);
     }
 
     ComposedRuntimeBloomFilter<TYPE_VARCHAR> grf;
     for (auto p = 0; p < serialized_rfs.size(); ++p) {
         RuntimeFilter* grf_component;
-        RuntimeFilterHelper::deserialize_runtime_filter(&pool, &grf_component, (const uint8_t*)serialized_rfs[p].data(),
-                                                        serialized_rfs[p].size());
+        RuntimeFilterSerde::deserialize(&pool, &grf_component, (const uint8_t*)serialized_rfs[p].data(),
+                                        serialized_rfs[p].size());
         grf.concat(grf_component);
     }
     ASSERT_EQ(grf.membership_filter().size(), num_rows - num_bucket_absent);
@@ -1324,14 +1322,14 @@ TEST_F(RuntimeFilterTest, TestSerializeEmptyFilter) {
         rf0.insert(i);
     }
 
-    const size_t max_size = RuntimeFilterHelper::max_runtime_filter_serialized_size(rf_version, &rf0);
+    const size_t max_size = RuntimeFilterSerde::max_size(rf_version, &rf0);
     std::vector<uint8_t> buffer(max_size, 0);
-    const size_t actual_size = RuntimeFilterHelper::serialize_runtime_filter(rf_version, &rf0, buffer.data());
+    const size_t actual_size = RuntimeFilterSerde::serialize(rf_version, &rf0, buffer.data());
     buffer.resize(actual_size);
 
     RuntimeFilter* rf1 = nullptr;
     ObjectPool pool;
-    RuntimeFilterHelper::deserialize_runtime_filter(&pool, &rf1, buffer.data(), actual_size);
+    RuntimeFilterSerde::deserialize(&pool, &rf1, buffer.data(), actual_size);
     EXPECT_TRUE(check_equals(&rf0, down_cast<ComposedRuntimeEmptyFilter<TYPE_INT>*>(rf1)));
 }
 
@@ -1394,14 +1392,14 @@ TEST_F(RuntimeFilterTest, TestSerializeBitsetFilter) {
         rf0.insert(i);
     }
 
-    const size_t max_size = RuntimeFilterHelper::max_runtime_filter_serialized_size(rf_version, &rf0);
+    const size_t max_size = RuntimeFilterSerde::max_size(rf_version, &rf0);
     std::vector<uint8_t> buffer(max_size, 0);
-    const size_t actual_size = RuntimeFilterHelper::serialize_runtime_filter(rf_version, &rf0, buffer.data());
+    const size_t actual_size = RuntimeFilterSerde::serialize(rf_version, &rf0, buffer.data());
     buffer.resize(actual_size);
 
     RuntimeFilter* rf1 = nullptr;
     ObjectPool pool;
-    RuntimeFilterHelper::deserialize_runtime_filter(&pool, &rf1, buffer.data(), actual_size);
+    RuntimeFilterSerde::deserialize(&pool, &rf1, buffer.data(), actual_size);
     EXPECT_TRUE(check_equals(&rf0, down_cast<ComposedRuntimeBitsetFilter<TYPE_INT>*>(rf1)));
 }
 

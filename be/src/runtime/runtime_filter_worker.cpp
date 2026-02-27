@@ -32,7 +32,10 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
+#include "runtime/runtime_filter_builder.h"
 #include "runtime/runtime_filter_cache.h"
+#include "runtime/runtime_filter_factory.h"
+#include "runtime/runtime_filter_serde.h"
 #include "runtime/runtime_state.h"
 #include "util/brpc_stub_cache.h"
 #include "util/internal_service_recoverable_stub.h"
@@ -196,10 +199,9 @@ void RuntimeFilterPort::publish_runtime_filters(const std::list<RuntimeFilterBui
                   << ", filter = " << filter->debug_string();
 
         std::string* rf_data = params.mutable_data();
-        size_t max_size = RuntimeFilterHelper::max_runtime_filter_serialized_size(state, filter);
+        size_t max_size = RuntimeFilterSerde::max_size(state, filter);
         rf_data->resize(max_size);
-        size_t actual_size = RuntimeFilterHelper::serialize_runtime_filter(state, filter,
-                                                                           reinterpret_cast<uint8_t*>(rf_data->data()));
+        size_t actual_size = RuntimeFilterSerde::serialize(state, filter, reinterpret_cast<uint8_t*>(rf_data->data()));
         rf_data->resize(actual_size);
 
         auto passthrough_delivery = actual_size <= config::deliver_broadcast_rf_passthrough_bytes_limit;
@@ -252,10 +254,10 @@ void RuntimeFilterPort::publish_skew_broadcast_join_key_columns(RuntimeFilterBui
               << ", be_number=" << params.build_be_number() << ", is_pipeline=" << params.is_pipeline();
 
     std::string* rf_data = params.mutable_data();
-    size_t max_size = RuntimeFilterHelper::max_runtime_filter_serialized_size_for_skew_broadcast_join(keyColumn);
+    size_t max_size = RuntimeFilterSerde::skew_max_size(keyColumn);
     rf_data->resize(max_size);
-    auto actual_size = RuntimeFilterHelper::serialize_runtime_filter_for_skew_broadcast_join(
-            keyColumn, null_safe, reinterpret_cast<uint8_t*>(rf_data->data()));
+    auto actual_size =
+            RuntimeFilterSerde::skew_serialize(keyColumn, null_safe, reinterpret_cast<uint8_t*>(rf_data->data()));
     RETURN_IF(!actual_size.status().ok(), (void)nullptr);
     rf_data->resize(actual_size.value());
     *(params.mutable_columntype()) = type_desc.to_protobuf();
@@ -326,9 +328,9 @@ Status RuntimeFilterMergerStatus::_merge_skew_broadcast_runtime_filter(RuntimeFi
     }
     // add broadcast's hash table's key column into out's _hash_partition_bf's every element(Instance and driver side)
     // because we can't know which element should be used when insert one row(need partition columns and partition exprs)
-    return RuntimeFilterHelper::fill_runtime_filter(
-            skew_broadcast_rf_material->key_column, skew_broadcast_rf_material->build_type, out,
-            kHashJoinKeyColumnOffset, skew_broadcast_rf_material->eq_null, true);
+    return RuntimeFilterBuilder::fill(out, skew_broadcast_rf_material->build_type,
+                                      skew_broadcast_rf_material->key_column, kHashJoinKeyColumnOffset,
+                                      skew_broadcast_rf_material->eq_null, true);
 }
 
 RuntimeFilterMerger::RuntimeFilterMerger(ExecEnv* env, const UniqueId& query_id, const TQueryOptions& query_options,
@@ -380,7 +382,7 @@ void finalize_membership_filters(RuntimeFilterMergerStatus* rf_state, const size
         VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter, clear bf in all filters";
         if (rf_version >= RF_VERSION_V3) {
             for (auto& [_, rf] : rf_state->filters) {
-                rf = RuntimeFilterHelper::transmit_to_runtime_empty_filter(&rf_state->pool, rf);
+                rf = RuntimeFilterFactory::to_empty_filter(&rf_state->pool, rf);
             }
         } else {
             for (auto& [_, rf] : rf_state->filters) {
@@ -436,8 +438,8 @@ void RuntimeFilterMerger::merge_runtime_filter(PTransmitRuntimeFilterParams& par
     // to merge runtime filters
     ObjectPool* pool = &(status->pool);
     RuntimeFilter* rf = nullptr;
-    int rf_version = RuntimeFilterHelper::deserialize_runtime_filter(
-            pool, &rf, reinterpret_cast<const uint8_t*>(params.data().data()), params.data().size());
+    int rf_version = RuntimeFilterSerde::deserialize(pool, &rf, reinterpret_cast<const uint8_t*>(params.data().data()),
+                                                     params.data().size());
     if (rf == nullptr) {
         // something wrong with deserialization.
         return;
@@ -504,9 +506,9 @@ void RuntimeFilterMerger::store_skew_broadcast_join_runtime_filter(PTransmitRunt
 
     // store material of broadcast join rf
     status->skew_broadcast_rf_material = nullptr;
-    auto rf_version = RuntimeFilterHelper::deserialize_runtime_filter_for_skew_broadcast_join(
-            &(status->pool), &(status->skew_broadcast_rf_material),
-            reinterpret_cast<const uint8_t*>(params.data().data()), params.data().size(), params.columntype());
+    auto rf_version = RuntimeFilterSerde::skew_deserialize(&(status->pool), &(status->skew_broadcast_rf_material),
+                                                           reinterpret_cast<const uint8_t*>(params.data().data()),
+                                                           params.data().size(), params.columntype());
     RETURN_IF(!rf_version.ok(), (void)nullptr);
     if (status->skew_broadcast_rf_material == nullptr) {
         // something wrong with deserialization.
@@ -578,7 +580,7 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int rf_version, int32_t fil
         auto* membership_filter = out->get_membership_filter();
         if (!status->exceeded) {
             if (rf_version >= RF_VERSION_V3) {
-                out = RuntimeFilterHelper::transmit_to_runtime_empty_filter(pool, out);
+                out = RuntimeFilterFactory::to_empty_filter(pool, out);
                 membership_filter = out->get_membership_filter();
             } else {
                 membership_filter->clear_bf();
@@ -617,11 +619,10 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int rf_version, int32_t fil
     query_id->set_lo(_query_id.lo);
 
     std::string* send_data = request.mutable_data();
-    size_t max_size = RuntimeFilterHelper::max_runtime_filter_serialized_size(rf_version, out);
+    size_t max_size = RuntimeFilterSerde::max_size(rf_version, out);
     send_data->resize(max_size);
 
-    size_t actual_size = RuntimeFilterHelper::serialize_runtime_filter(rf_version, out,
-                                                                       reinterpret_cast<uint8_t*>(send_data->data()));
+    size_t actual_size = RuntimeFilterSerde::serialize(rf_version, out, reinterpret_cast<uint8_t*>(send_data->data()));
     send_data->resize(actual_size);
     int timeout_ms = config::send_rpc_runtime_filter_timeout_ms;
     if (_query_options.__isset.runtime_filter_send_timeout_ms) {
@@ -961,8 +962,7 @@ void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterPa
     // deserialize once, and all fragment instance shared that runtime filter.
     RuntimeFilter* rf = nullptr;
     const std::string& data = request.data();
-    RuntimeFilterHelper::deserialize_runtime_filter(nullptr, &rf, reinterpret_cast<const uint8_t*>(data.data()),
-                                                    data.size());
+    RuntimeFilterSerde::deserialize(nullptr, &rf, reinterpret_cast<const uint8_t*>(data.data()), data.size());
     if (rf == nullptr) {
         return;
     }
