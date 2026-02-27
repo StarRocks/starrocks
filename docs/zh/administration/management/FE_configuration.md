@@ -3631,14 +3631,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 引入版本: v3.2.0
 
 
-##### lake_compaction_interval_ms_on_success
+##### `lake_compaction_interval_ms_on_success`
 
 - 默认值：10000
 - 类型：Long
 - 单位：毫秒
 - 是否动态：是
-- 别名: lake_min_compaction_interval_ms_on_success
-- 描述：存算分离集群某个分区 Compaction 成功后，间隔多少时间，对这个分区发起下一次 Compaction。
+- 描述：存算分离集群某个分区 Compaction 成功后，间隔多少时间，对这个分区发起下一次 Compaction。别名为 `lake_min_compaction_interval_ms_on_success`。
 - 引入版本：v3.2.0
 
 ##### `lake_enable_balance_tablets_between_workers`
