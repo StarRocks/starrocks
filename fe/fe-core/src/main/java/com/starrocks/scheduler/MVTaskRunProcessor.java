@@ -254,10 +254,13 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
         int maxRefreshMaterializedViewRetryNum = mvRefreshProcessor.getRetryTimes(taskRunContext.getCtx());
         logger.info("start to refresh mv with retry times:{}", maxRefreshMaterializedViewRetryNum);
 
-        // record mv refresh trace info for better debugging
-        // TODO: it may be too long, need to optimize it later.
-        String mvRefreshInfo = getMVRefreshTraceInfo();
-        Tracers.record("MVRefreshPartitionInfo", mvRefreshInfo);
+        // record mv refresh trace info for better debugging (only when profile is enabled to avoid expensive call)
+        ConnectContext ctx = taskRunContext.getCtx();
+        if (ctx != null && (ctx.getSessionVariable().isEnableProfile()
+                || ctx.getSessionVariable().isEnableBigQueryProfile())) {
+            String mvRefreshInfo = getMVRefreshTraceInfo();
+            Tracers.record("MVRefreshPartitionInfo", mvRefreshInfo);
+        }
 
         Throwable lastException = null;
         int lockFailedTimes = 0;

@@ -503,7 +503,14 @@ public abstract class BaseMVRefreshProcessor {
         if (this.mvContext == null || this.mvContext.getStatus() == null) {
             return;
         }
-        action.accept(this.mvContext.getStatus());
+
+        // ignore exception for update task run status
+        try {
+            action.accept(this.mvContext.getStatus());
+        } catch (Exception e) {
+            logger.warn("failed to update task run status for mv refresh, task run id: {}, error: {}",
+                    this.mvContext.getTaskRunId(), DebugUtil.getRootStackTrace(e));
+        }
     }
 
     /**
