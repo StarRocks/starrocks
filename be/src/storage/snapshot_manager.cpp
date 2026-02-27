@@ -678,26 +678,23 @@ StatusOr<std::string> SnapshotManager::snapshot_primary(const TabletSharedPtr& t
 }
 
 Status SnapshotManager::make_snapshot_on_tablet_meta(const TabletSharedPtr& tablet) {
+    int64_t snapshot_version = 0;
     std::vector<RowsetSharedPtr> snapshot_rowsets;
-    std::shared_lock rdlock(tablet->get_header_lock());
-    int64_t snapshot_version = tablet->max_version().second;
-    RETURN_IF_ERROR(tablet->capture_consistent_rowsets(Version(0, snapshot_version), &snapshot_rowsets));
-    rdlock.unlock();
+    {
+        std::shared_lock rdlock(tablet->get_header_lock());
+        snapshot_version = tablet->max_version().second;
+        RETURN_IF_ERROR(tablet->capture_consistent_rowsets(Version(0, snapshot_version), &snapshot_rowsets));
+    }
+
     std::vector<RowsetMetaSharedPtr> snapshot_rowset_metas;
     snapshot_rowset_metas.reserve(snapshot_rowsets.size());
     for (const auto& snapshot_rowset : snapshot_rowsets) {
         snapshot_rowset_metas.emplace_back(snapshot_rowset->rowset_meta());
     }
-    std::string meta_path = tablet->schema_hash_path();
-    (void)fs::remove_all(meta_path);
-    RETURN_IF_ERROR(fs::create_directories(meta_path));
-    auto st = make_snapshot_on_tablet_meta(SNAPSHOT_TYPE_FULL, meta_path, tablet, snapshot_rowset_metas,
-                                           snapshot_version, g_Types_constants.TSNAPSHOT_REQ_VERSION2);
-    if (!st.ok()) {
-        (void)fs::remove(meta_path);
-        return st;
-    }
-    return Status::OK();
+
+    std::string schema_hash_path = tablet->schema_hash_path();
+    return make_snapshot_on_tablet_meta(SNAPSHOT_TYPE_FULL, schema_hash_path, tablet, snapshot_rowset_metas,
+                                        snapshot_version, g_Types_constants.TSNAPSHOT_REQ_VERSION2);
 }
 
 Status SnapshotManager::make_snapshot_on_tablet_meta(SnapshotTypePB snapshot_type, const std::string& snapshot_dir,
