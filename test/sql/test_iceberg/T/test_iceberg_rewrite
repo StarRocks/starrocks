@@ -6,6 +6,11 @@ create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0} properties (
     "location" = "oss://${oss_bucket}/iceberg_db_${uuid0}/test_iceberg_rewrite/${uuid0}"
 );
 
+<<<<<<< HEAD
+=======
+set connector_sink_shuffle_mode = 'force';
+
+>>>>>>> afd5afb4e3 ([Enhancement] add iceberg compact metrics (#69501))
 CREATE TABLE iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.`test_table` (
     `name` VARCHAR(1048576),
     `tenant` VARCHAR(1048576),
@@ -22,14 +27,26 @@ INSERT INTO iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.test_table VALUES ('lo
 INSERT INTO iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.test_table VALUES ('log_entry_7', 'tenant_B', 2024);
 INSERT INTO iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.test_table VALUES ('log_entry_7', 'tenant_B', 2024);
 
+<<<<<<< HEAD
 ALTER TABLE iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.`test_table` EXECUTE rewrite_data_files("min_file_size_bytes"= 134217728) where p_year=2025;
 
 select count(*) from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.test_table$files;
 
 ALTER TABLE iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.`test_table` EXECUTE rewrite_data_files("min_file_size_bytes"= 134217728);
+=======
+[UC]ALTER TABLE iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.`test_table` EXECUTE rewrite_data_files("min_file_size_bytes"= "134217728") where p_year=2025;
+
+select count(*) from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.test_table$files;
+
+[UC]ALTER TABLE iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.`test_table` EXECUTE rewrite_data_files("min_file_size_bytes"= "134217728");
+>>>>>>> afd5afb4e3 ([Enhancement] add iceberg compact metrics (#69501))
 
 select count(*) from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.test_table$files;
 
 drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.test_table;
 drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+<<<<<<< HEAD
 drop catalog iceberg_sql_test_${uuid0};
+=======
+drop catalog iceberg_sql_test_${uuid0};
+>>>>>>> afd5afb4e3 ([Enhancement] add iceberg compact metrics (#69501))

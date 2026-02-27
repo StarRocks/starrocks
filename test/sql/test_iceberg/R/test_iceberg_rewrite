@@ -7,6 +7,12 @@ create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0} properties (
 );
 -- result:
 -- !result
+<<<<<<< HEAD
+=======
+set connector_sink_shuffle_mode = 'force';
+-- result:
+-- !result
+>>>>>>> afd5afb4e3 ([Enhancement] add iceberg compact metrics (#69501))
 CREATE TABLE iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.`test_table` (
     `name` VARCHAR(1048576),
     `tenant` VARCHAR(1048576),
@@ -39,15 +45,27 @@ INSERT INTO iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.test_table VALUES ('lo
 INSERT INTO iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.test_table VALUES ('log_entry_7', 'tenant_B', 2024);
 -- result:
 -- !result
+<<<<<<< HEAD
 ALTER TABLE iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.`test_table` EXECUTE rewrite_data_files("min_file_size_bytes"= 134217728) where p_year=2025;
 -- result:
+=======
+[UC]ALTER TABLE iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.`test_table` EXECUTE rewrite_data_files("min_file_size_bytes"= "134217728") where p_year=2025;
+-- result:
+iceberg_db_6ac612949bbf4ac7b0812f6a380a5fa1	test_table	4	2	0	22306	success
+>>>>>>> afd5afb4e3 ([Enhancement] add iceberg compact metrics (#69501))
 -- !result
 select count(*) from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.test_table$files;
 -- result:
 6
 -- !result
+<<<<<<< HEAD
 ALTER TABLE iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.`test_table` EXECUTE rewrite_data_files("min_file_size_bytes"= 134217728);
 -- result:
+=======
+[UC]ALTER TABLE iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.`test_table` EXECUTE rewrite_data_files("min_file_size_bytes"= "134217728");
+-- result:
+iceberg_db_6ac612949bbf4ac7b0812f6a380a5fa1	test_table	6	4	0	25140	success
+>>>>>>> afd5afb4e3 ([Enhancement] add iceberg compact metrics (#69501))
 -- !result
 select count(*) from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.test_table$files;
 -- result:

@@ -30,6 +30,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableCommentClause;
@@ -268,7 +269,7 @@ public interface ConnectorMetadata {
     default void abortSink(String dbName, String table, List<TSinkCommitInfo> commitInfos) {
     }
 
-    default void alterTable(ConnectContext context, AlterTableStmt stmt) throws StarRocksException {
+    default ShowResultSet alterTable(ConnectContext context, AlterTableStmt stmt) throws StarRocksException {
         throw new StarRocksConnectorException("This connector doesn't support alter table");
     }
 

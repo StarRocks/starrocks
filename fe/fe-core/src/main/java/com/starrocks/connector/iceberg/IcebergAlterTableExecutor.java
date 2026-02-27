@@ -509,7 +509,17 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
             default:
                 throw new StarRocksConnectorException("Unsupported table operation %s", op);
         }
+<<<<<<< HEAD
 
+=======
+        Map<String, ConstantOperator> args = clause.getAnalyzedArgs();
+        IcebergTableProcedureContext tableProcedureContext =
+                new IcebergTableProcedureContext(icebergCatalog, table, context != null ? context : ConnectContext.get(),
+                        transaction, hdfsEnvironment, stmt, clause);
+        actions.add(() -> {
+            super.resultSet = tableProcedure.execute(tableProcedureContext, args);
+        });
+>>>>>>> afd5afb4e3 ([Enhancement] add iceberg compact metrics (#69501))
         return null;
     }
 

@@ -61,6 +61,34 @@ public class IcebergRewriteDataJob {
     private long batchParallelism = 1;
     private StatementBase parsedStmt;
     private final ConcurrentLinkedQueue<FinishArgs> collected = new ConcurrentLinkedQueue<>();
+
+    public static class RewriteMetrics {
+        public static final RewriteMetrics EMPTY = new RewriteMetrics(0, 0, 0);
+
+        private final long rewrittenDataFilesCount;
+        private final long rewrittenDeleteFilesCount;
+        private final long addedDataFilesCount;
+
+        public RewriteMetrics(long rewrittenDataFilesCount, long rewrittenDeleteFilesCount,
+                              long addedDataFilesCount) {
+            this.rewrittenDataFilesCount = rewrittenDataFilesCount;
+            this.rewrittenDeleteFilesCount = rewrittenDeleteFilesCount;
+            this.addedDataFilesCount = addedDataFilesCount;
+        }
+
+        public long getRewrittenDataFilesCount() {
+            return rewrittenDataFilesCount;
+        }
+
+        public long getRewrittenDeleteFilesCount() {
+            return rewrittenDeleteFilesCount;
+        }
+
+        public long getAddedDataFilesCount() {
+            return addedDataFilesCount;
+        }
+    }
+
     public interface FinishSinkHandler {
         void finish(String catalog, String db, String table,
                 List<TSinkCommitInfo> commitInfos, String branch, Object extra) throws Exception;
@@ -186,10 +214,10 @@ public class IcebergRewriteDataJob {
         return context;
     }
 
-    public void execute() throws Exception {
+    public RewriteMetrics execute() throws Exception {
         if (scanNodes == null || scanNodes.isEmpty()) {
             LOG.info("No IcebergScanNode for empty table, rewrite data job execute skipped.");
-            return;
+            return RewriteMetrics.EMPTY;
         }
         if (rewriteStmt == null || execPlan == null || rewriteData == null) {
             throw new IllegalStateException("Must call prepare() before execute()");
@@ -206,6 +234,7 @@ public class IcebergRewriteDataJob {
                 }
                 futures.add(executorService.submit(() -> {
                     ConnectContext subCtx = buildSubConnectContext(context);
+<<<<<<< HEAD
     
                     IcebergRewriteStmt localStmt = new IcebergRewriteStmt((InsertStmt) parsedStmt, rewriteAll);
                     ExecPlan localPlan = StatementPlanner.plan(parsedStmt, subCtx);
@@ -218,6 +247,35 @@ public class IcebergRewriteDataJob {
     
                     if (localScanNodes.isEmpty()) {
                         LOG.info("No IcebergScanNode in sub plan. Skip one task group.");
+=======
+                    try (var scope = subCtx.bindScope()) {
+                        IcebergRewriteStmt localStmt = new IcebergRewriteStmt((InsertStmt) parsedStmt, rewriteAll);
+                        ExecPlan localPlan = StatementPlanner.plan(parsedStmt, subCtx);
+        
+                        List<IcebergScanNode> localScanNodes = localPlan.getFragments().stream()
+                                .flatMap(f -> f.collectScanNodes().values().stream())
+                                .filter(s -> s instanceof IcebergScanNode && "IcebergScanNode".equals(s.getPlanNodeName()))
+                                .map(s -> (IcebergScanNode) s)
+                                .collect(Collectors.toList());
+        
+                        if (localScanNodes.isEmpty()) {
+                            LOG.info("No IcebergScanNode in sub plan. Skip one task group.");
+                            return null;
+                        }
+                        for (IcebergScanNode sn : localScanNodes) {
+                            sn.rebuildScanRange(res);
+                        }
+        
+                        StmtExecutor exec = StmtExecutor.newInternalExecutor(subCtx, localStmt);
+                        if (context.getExecutor() != null) {
+                            context.getExecutor().registerSubStmtExecutor(exec);
+                        }
+                        try {
+                            exec.handleDMLStmt(localPlan, localStmt);
+                        } finally {
+                            exec.addFinishedQueryDetail();
+                        }
+>>>>>>> afd5afb4e3 ([Enhancement] add iceberg compact metrics (#69501))
                         return null;
                     }
                     for (IcebergScanNode sn : localScanNodes) {
@@ -247,7 +305,7 @@ public class IcebergRewriteDataJob {
             }
 
             if (collected.size() == 0) {
-                return;
+                return RewriteMetrics.EMPTY;
             }
             IcebergSinkExtra extra = new IcebergSinkExtra();
             List<TSinkCommitInfo> faList = Lists.newArrayList();
@@ -259,7 +317,12 @@ public class IcebergRewriteDataJob {
             try {
                 context.getGlobalStateMgr().getMetadataMgr().finishSink(
                         collected.peek().getCatalog(), collected.peek().getDb(), collected.peek().getTable(),
+<<<<<<< HEAD
                         faList, collected.peek().getBranch(), extra);
+=======
+                        faList, collected.peek().getBranch(), extra, context);
+                return buildMetrics(faList, extra);
+>>>>>>> afd5afb4e3 ([Enhancement] add iceberg compact metrics (#69501))
             } catch (Exception e) {
                 LOG.error("Failed to commit iceberg rewrite on [{}]", originAlterStmt.getTableName(), e);
                 throw new StarRocksConnectorException("Failed to commit iceberg rewrite", e);
@@ -273,5 +336,18 @@ public class IcebergRewriteDataJob {
         } finally {
             executorService.shutdownNow();
         }
+    }
+
+    private RewriteMetrics buildMetrics(List<TSinkCommitInfo> commitInfos, IcebergSinkExtra extra) {
+        long addedDataFilesCount = commitInfos.stream()
+                .map(TSinkCommitInfo::getIceberg_data_file)
+                .filter(Objects::nonNull)
+                .count();
+
+        long rewrittenDataFilesCount = extra.getScannedDataFiles().size();
+        long rewrittenDeleteFilesCount = extra.getAppliedDeleteFiles().size();
+
+        return new RewriteMetrics(rewrittenDataFilesCount, rewrittenDeleteFilesCount,
+                addedDataFilesCount);
     }
 }
