@@ -1445,6 +1445,18 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 - 単位: Count
 - 説明: 主キーインデックス Compaction スレッドプールにおけるキュータスクの数。
 
+### pk_index_sst_read_error_total
+
+- タイプ: Counter
+- 単位: Count
+- 説明: レイク主キー永続インデックスにおける SST ファイル読み取り失敗の合計回数。SST multi-get（読み取り）操作が失敗した場合にインクリメントされます。
+
+### pk_index_sst_write_error_total
+
+- タイプ: Counter
+- 単位: Count
+- 説明: レイク主キー永続インデックスにおける SST ファイル書き込み失敗の合計回数。SST ファイルのビルドが失敗した場合にインクリメントされます。
+
 ### disks_total_capacity
 
 - 説明: ディスクの総容量。
