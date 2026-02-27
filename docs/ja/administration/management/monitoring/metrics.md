@@ -2001,3 +2001,43 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 - タイプ: Cumulative
 - ラベル: `delete_type` (`position` または `metadata`)
 - 説明: Iceberg `DELETE` タスクによって削除された総行数。`metadata` 削除の場合、削除されたデータファイル内の行数を表します。`position` 削除の場合、作成された position delete レコード数を表します。
+
+### Iceberg write FE メトリクス
+
+#### iceberg_write_total
+
+- 単位: Count
+- タイプ: Cumulative
+- ラベル:
+  - `status` (`success` または `failed`)
+  - `reason` (`none`, `timeout`, `oom`, `access_denied`, `unknown`)
+  - `write_type` (`insert`, `overwrite`, または `ctas`)
+- 説明: Iceberg テーブルを対象とした `INSERT`、`INSERT OVERWRITE`、または `CTAS` タスクの総数。タスクが終了するたびに成功/失敗に関わらず 1 増加します。`write_type` は 3 つの操作タイプを区別します。
+
+#### iceberg_write_duration_ms_total
+
+- 単位: Millisecond
+- タイプ: Cumulative
+- ラベル: `write_type` (`insert`, `overwrite`, または `ctas`)
+- 説明: Iceberg 書き込みタスク（`INSERT`、`INSERT OVERWRITE`、`CTAS`）の総実行時間（ミリ秒）。タスクが終了するたびにそのタスクの実行時間が加算されます。`write_type` は 3 つの操作タイプを区別します。
+
+#### iceberg_write_bytes
+
+- 単位: Bytes
+- タイプ: Cumulative
+- ラベル: `write_type` (`insert`, `overwrite`, または `ctas`)
+- 説明: Iceberg 書き込みタスク（`INSERT`、`INSERT OVERWRITE`、`CTAS`）の書き込み総バイト数。Iceberg テーブルに書き込まれたデータファイルの総サイズを表します。`write_type` は 3 つの操作タイプを区別します。
+
+#### iceberg_write_rows
+
+- 単位: Rows
+- タイプ: Cumulative
+- ラベル: `write_type` (`insert`, `overwrite`, または `ctas`)
+- 説明: Iceberg 書き込みタスク（`INSERT`、`INSERT OVERWRITE`、`CTAS`）の書き込み総行数。Iceberg テーブルに書き込まれた行数を表します。`write_type` は 3 つの操作タイプを区別します。
+
+#### iceberg_write_files
+
+- 単位: Count
+- タイプ: Cumulative
+- ラベル: `write_type` (`insert`, `overwrite`, または `ctas`)
+- 説明: Iceberg 書き込みタスク（`INSERT`、`INSERT OVERWRITE`、`CTAS`）で書き込まれたデータファイルの総数。Iceberg テーブルに書き込まれたデータファイルの個数を表します。`write_type` は 3 つの操作タイプを区別します。

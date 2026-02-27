@@ -485,4 +485,135 @@ public class MetricRepoTest extends PlanTestBase {
         Assertions.assertEquals("unknown", IcebergMetricsMgr.classifyFailReason(new RuntimeException("unknown error")));
         Assertions.assertEquals("unknown", IcebergMetricsMgr.classifyFailReason((Throwable) null));
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testIcebergCompactionMetrics() {
+        // manual compaction success
+        IcebergMetricsMgr.increaseIcebergCompactionTotalSuccess();
+        IcebergMetricsMgr.increaseIcebergCompactionDurationMs(200L, "manual");
+        IcebergMetricsMgr.increaseIcebergCompactionInputFiles(4L, "manual");
+        IcebergMetricsMgr.increaseIcebergCompactionOutputFiles(2L, "manual");
+        IcebergMetricsMgr.increaseIcebergCompactionRemovedDeleteFiles(1L, "manual");
+
+        // auto compaction failure
+        IcebergMetricsMgr.increaseIcebergCompactionTotal("failed", "timeout", "auto");
+        IcebergMetricsMgr.increaseIcebergCompactionDurationMs(50L, "auto");
+
+        PrometheusMetricVisitor visitor = new PrometheusMetricVisitor("ut");
+        MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
+        MetricRepo.getMetric(visitor, params);
+        String output = visitor.build();
+
+        Assertions.assertTrue(output.contains("ut_iceberg_compaction_total{"),
+                "iceberg_compaction_total should be exposed");
+        Assertions.assertTrue(output.contains("compaction_type=\"manual\""),
+                "iceberg_compaction_total should contain compaction_type=manual");
+        Assertions.assertTrue(output.contains("compaction_type=\"auto\""),
+                "iceberg_compaction_total should contain compaction_type=auto");
+        Assertions.assertTrue(output.contains("reason=\"timeout\""),
+                "iceberg_compaction_total should contain reason label");
+        Assertions.assertTrue(output.contains("ut_iceberg_compaction_duration_ms_total"),
+                "iceberg_compaction_duration_ms_total should be exposed");
+        Assertions.assertTrue(output.contains("ut_iceberg_compaction_input_files_total"),
+                "iceberg_compaction_input_files_total should be exposed");
+        Assertions.assertTrue(output.contains("ut_iceberg_compaction_output_files_total"),
+                "iceberg_compaction_output_files_total should be exposed");
+        Assertions.assertTrue(output.contains("ut_iceberg_compaction_removed_delete_files_total"),
+                "iceberg_compaction_removed_delete_files_total should be exposed");
+    }
+
+    @Test
+    public void testIcebergCompactionFailReasonNormalization() {
+        // normalizeStatus should cap to known values
+        Assertions.assertEquals("success", IcebergMetricsMgr.normalizeStatus("SUCCESS"));
+        Assertions.assertEquals("failed", IcebergMetricsMgr.normalizeStatus("FAILED"));
+        Assertions.assertEquals("unknown", IcebergMetricsMgr.normalizeStatus(null));
+        Assertions.assertEquals("custom", IcebergMetricsMgr.normalizeStatus("custom"));
+
+        // normalizeReason fallback
+        Assertions.assertEquals("unknown", IcebergMetricsMgr.normalizeReason(null));
+        Assertions.assertEquals("oom", IcebergMetricsMgr.normalizeReason("oom"));
+
+        // classifyFailReason reuses delete logic
+        Assertions.assertEquals("timeout", IcebergMetricsMgr.classifyFailReason("timeout when compaction"));
+        Assertions.assertEquals("oom", IcebergMetricsMgr.classifyFailReason(new OutOfMemoryError()));
+        Assertions.assertEquals("access_denied", IcebergMetricsMgr.classifyFailReason("permission denied by s3"));
+        Assertions.assertEquals("unknown", IcebergMetricsMgr.classifyFailReason("something else"));
+    }
+
+    @Test
+    public void testIcebergWriteMetrics() {
+        // Test insert write metrics using basic method
+        IcebergMetricsMgr.increaseIcebergWriteTotal("success", "none", "insert");
+        IcebergMetricsMgr.increaseIcebergWriteTotal("failed", "timeout", "insert");
+        IcebergMetricsMgr.increaseIcebergWriteDurationMsTotal(123L, "insert");
+        IcebergMetricsMgr.increaseIcebergWriteRows(10L, "insert");
+        IcebergMetricsMgr.increaseIcebergWriteBytes(1000L, "insert");
+        IcebergMetricsMgr.increaseIcebergWriteFiles(1L, "insert");
+
+        // Test overwrite write metrics
+        IcebergMetricsMgr.increaseIcebergWriteTotal("success", "none", "overwrite");
+        IcebergMetricsMgr.increaseIcebergWriteDurationMsTotal(456L, "overwrite");
+        IcebergMetricsMgr.increaseIcebergWriteRows(20L, "overwrite");
+        IcebergMetricsMgr.increaseIcebergWriteBytes(2000L, "overwrite");
+        IcebergMetricsMgr.increaseIcebergWriteFiles(2L, "overwrite");
+
+        // Test ctas write metrics
+        IcebergMetricsMgr.increaseIcebergWriteTotal("success", "none", "ctas");
+        IcebergMetricsMgr.increaseIcebergWriteDurationMsTotal(789L, "ctas");
+        IcebergMetricsMgr.increaseIcebergWriteRows(30L, "ctas");
+        IcebergMetricsMgr.increaseIcebergWriteBytes(3000L, "ctas");
+        IcebergMetricsMgr.increaseIcebergWriteFiles(3L, "ctas");
+
+        // Test convenience methods for success/failure
+        IcebergMetricsMgr.increaseIcebergWriteTotalSuccess("insert");
+        IcebergMetricsMgr.increaseIcebergWriteTotalFail("out of memory", "overwrite");
+        IcebergMetricsMgr.increaseIcebergWriteTotalFail(new RuntimeException("timeout"), "ctas");
+
+        PrometheusMetricVisitor visitor = new PrometheusMetricVisitor("ut");
+        MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
+        MetricRepo.getMetric(visitor, params);
+        String output = visitor.build();
+
+        Assertions.assertTrue(output.contains("ut_iceberg_write_total{"),
+                "iceberg_write_total should be exposed");
+        Assertions.assertTrue(output.contains("status=\"success\""),
+                "iceberg_write_total should contain status=success");
+        Assertions.assertTrue(output.contains("status=\"failed\""),
+                "iceberg_write_total should contain status=failed");
+        Assertions.assertTrue(output.contains("reason=\"timeout\""),
+                "iceberg_write_total should contain reason=timeout");
+        Assertions.assertTrue(output.contains("reason=\"oom\""),
+                "iceberg_write_total should contain reason=oom");
+        Assertions.assertTrue(output.contains("write_type=\"insert\""),
+                "iceberg_write_total should contain write_type=insert");
+        Assertions.assertTrue(output.contains("write_type=\"overwrite\""),
+                "iceberg_write_total should contain write_type=overwrite");
+        Assertions.assertTrue(output.contains("write_type=\"ctas\""),
+                "iceberg_write_total should contain write_type=ctas");
+        Assertions.assertTrue(output.contains("ut_iceberg_write_duration_ms_total"),
+                "iceberg_write_duration_ms_total should be exposed");
+        Assertions.assertTrue(output.contains("ut_iceberg_write_rows"),
+                "iceberg_write_rows should be exposed");
+        Assertions.assertTrue(output.contains("ut_iceberg_write_bytes"),
+                "iceberg_write_bytes should be exposed");
+        Assertions.assertTrue(output.contains("ut_iceberg_write_files"),
+                "iceberg_write_files should be exposed");
+    }
+
+    @Test
+    public void testIcebergWriteTypeNormalization() {
+        // Test write type normalization
+        Assertions.assertEquals("insert", IcebergMetricsMgr.normalizeWriteType("insert"));
+        Assertions.assertEquals("insert", IcebergMetricsMgr.normalizeWriteType("INSERT"));
+        Assertions.assertEquals("insert", IcebergMetricsMgr.normalizeWriteType("Insert"));
+        Assertions.assertEquals("overwrite", IcebergMetricsMgr.normalizeWriteType("overwrite"));
+        Assertions.assertEquals("overwrite", IcebergMetricsMgr.normalizeWriteType("OVERWRITE"));
+        Assertions.assertEquals("ctas", IcebergMetricsMgr.normalizeWriteType("ctas"));
+        Assertions.assertEquals("ctas", IcebergMetricsMgr.normalizeWriteType("CTAS"));
+        Assertions.assertEquals("unknown", IcebergMetricsMgr.normalizeWriteType(null));
+    }
+>>>>>>> 4ab5a4e844 ([Enhancement] Add monitor metrics for iceberg table sink. (#69506))
 }
