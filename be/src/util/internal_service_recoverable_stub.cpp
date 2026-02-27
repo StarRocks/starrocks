@@ -32,8 +32,8 @@ public:
                     google::protobuf::Closure* done) override {
         google::protobuf::Closure* closure = done;
         if (done != nullptr) {
-            closure = new PInternalService_RecoverableStub::RecoverableClosureType(
-                    _owner->shared_from_this(), controller, done);
+            closure = new PInternalService_RecoverableStub::RecoverableClosureType(_owner->shared_from_this(),
+                                                                                   controller, done);
         }
         _owner->stub()->CallMethod(method, controller, request, response, closure);
     }
@@ -74,7 +74,8 @@ Status PInternalService_RecoverableStub::reset_channel(int64_t next_connection_g
         LOG(WARNING) << "Fail to init channel " << _endpoint;
         return Status::InternalError("Fail to init channel");
     }
-    auto stub = std::make_shared<PInternalService_Stub>(channel.release(), google::protobuf::Service::STUB_OWNS_CHANNEL);
+    auto stub =
+            std::make_shared<PInternalService_Stub>(channel.release(), google::protobuf::Service::STUB_OWNS_CHANNEL);
     std::unique_lock l(_mutex);
     if (next_connection_group == _connection_group.load() + 1) {
         // prevent the underlying _stub been reset again by the same epoch calls
