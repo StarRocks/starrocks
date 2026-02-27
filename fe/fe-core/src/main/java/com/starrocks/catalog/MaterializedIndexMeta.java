@@ -166,6 +166,10 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         return sortKeyUniqueIds;
     }
 
+    public void setSortKeyUniqueIds(List<Integer> sortKeyUniqueIds) {
+        this.sortKeyUniqueIds = sortKeyUniqueIds;
+    }
+
     public int getSchemaHash() {
         return schemaHash;
     }
