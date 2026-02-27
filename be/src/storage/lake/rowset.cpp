@@ -93,6 +93,33 @@ Rowset::Rowset(TabletManager* tablet_mgr, TabletMetadataPtr tablet_metadata, int
     }
 }
 
+Rowset::Rowset(TabletManager* tablet_mgr, TabletMetadataPtr tablet_metadata, int rowset_index, int32_t segment_start,
+               int32_t segment_end)
+        : _tablet_mgr(tablet_mgr),
+          _tablet_id(tablet_metadata->id()),
+          _metadata(&tablet_metadata->rowsets(rowset_index)),
+          _index(rowset_index),
+          _tablet_metadata(std::move(tablet_metadata)),
+          _parallel_load(false), // Disable parallel load to ensure segment order
+          _compaction_segment_limit(0),
+          _segment_range_start(segment_start),
+          _segment_range_end(segment_end) {
+    DCHECK(segment_start >= 0);
+    DCHECK(segment_end > segment_start);
+    DCHECK(segment_end <= _metadata->segments_size());
+
+    auto rowset_id = _tablet_metadata->rowsets(rowset_index).id();
+    if (_tablet_metadata->rowset_to_schema().empty() ||
+        _tablet_metadata->rowset_to_schema().find(rowset_id) == _tablet_metadata->rowset_to_schema().end()) {
+        _tablet_schema = GlobalTabletSchemaMap::Instance()->emplace(_tablet_metadata->schema()).first;
+    } else {
+        auto schema_id = _tablet_metadata->rowset_to_schema().at(rowset_id);
+        CHECK(_tablet_metadata->historical_schemas().count(schema_id) > 0);
+        _tablet_schema =
+                GlobalTabletSchemaMap::Instance()->emplace(_tablet_metadata->historical_schemas().at(schema_id)).first;
+    }
+}
+
 Rowset::~Rowset() {
     if (_tablet_metadata) {
         DCHECK_LT(_index, _tablet_metadata->rowsets_size())
@@ -556,6 +583,14 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptio
     const auto& files_to_offset = metadata().bundle_file_offsets();
     int index = 0;
 
+    // Determine segment range based on mode
+    int32_t seg_start = 0;
+    int32_t seg_end = metadata().segments_size();
+    if (is_segment_range_mode()) {
+        seg_start = _segment_range_start;
+        seg_end = _segment_range_end;
+    }
+
     // When parallel loading is enabled, we need to preserve the index mapping between
     // segments vector and metadata. We use a vector of (index, future) pairs to track
     // which index each loaded segment should be placed at.
@@ -592,9 +627,12 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptio
         return Status::OK();
     };
 
-    for (const auto& seg_name : metadata().segments()) {
+    // For segment range mode, seg_idx should match the original segment index
+    seg_idx = seg_start;
+    for (index = seg_start; index < seg_end; index++) {
+        const auto& seg_name = metadata().segments(index);
         int current_idx = base_idx + seg_idx;
-        uint32_t segment_id = get_segment_idx(metadata(), seg_idx);
+        uint32_t segment_id = get_segment_idx(metadata(), index);
 
         // Skip segments that are filtered by metadata filter
         if (skip_segment_idxs != nullptr && skip_segment_idxs->count(seg_idx) > 0) {
@@ -602,7 +640,6 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptio
                 segments->emplace_back(nullptr);
             }
             // When use_index_mapping is true, the slot is already nullptr from resize
-            index++;
             seg_idx++;
             continue;
         }
@@ -631,7 +668,6 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptio
             }
             segment_info.encryption_meta = metadata().segment_encryption_metas(index);
         }
-        index++;
 
         if (_parallel_load) {
             int captured_idx = current_idx;
@@ -669,6 +705,7 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptio
     for (auto& f : segment_futures) {
         auto result_pair = f.future.get();
         auto segment_or = result_pair.first;
+        // In segment range mode, target_idx - base_idx gives the actual segment ID
         if (auto status = check_status_at_index(segment_or, result_pair.second, f.segment_id, f.target_idx);
             !status.ok()) {
             return status;
