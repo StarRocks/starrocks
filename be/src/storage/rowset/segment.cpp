@@ -61,6 +61,7 @@
 #include "util/defer_op.h"
 #include "util/failpoint/fail_point.h"
 #include "util/slice.h"
+#include "util/starrocks_metrics.h"
 
 bvar::Adder<int> g_open_segments;    // NOLINT
 bvar::Adder<int> g_open_segments_io; // NOLINT
@@ -247,6 +248,9 @@ Status Segment::open(size_t* footer_length_hint, const FooterPointerPB* partial_
     }
 
     auto res = success_once(_open_once, [&] { return _open(footer_length_hint, partial_rowset_footer, lake_io_opts); });
+    if (res.status().is_not_found()) {
+        StarRocksMetrics::instance()->segment_file_not_found_total.increment(1);
+    }
 
     // move the cache size update out of the `success_once`,
     // so that the onceflag `_open_once` can be set before the cache_size is updated.
