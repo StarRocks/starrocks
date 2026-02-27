@@ -783,4 +783,76 @@ public class LakeTableAsyncFastSchemaChangeJobTest extends StarRocksTestBase {
         Assertions.assertEquals(originSchemaInfo, historySchema.getSchemaByIndexId(indexId).orElse(null));
         Assertions.assertEquals(originSchemaInfo, historySchema.getSchemaBySchemaId(originMeta.getSchemaId()).orElse(null));
     }
+
+    @Test
+    public void testAggTableAddKeyColumnSortKeyUpdated() throws Exception {
+        String createSql = """
+                CREATE TABLE t_agg_sort_key_add_key (
+                k0 INT,
+                k1 INT,
+                k2 INT,
+                k3 INT,
+                v0 INT SUM
+                ) AGGREGATE KEY(k0, k1, k2, k3)
+                DISTRIBUTED BY HASH(k0) BUCKETS 1
+                ORDER BY(k3, k2, k1, k0);""";
+        LakeTable table = createTable(connectContext, createSql);
+        doTestAddKeyColumnSortKeyUpdated(table, "t_agg_sort_key_add_key");
+    }
+
+    @Test
+    public void testUniqueTableAddKeyColumnSortKeyUpdated() throws Exception {
+        String createSql = """
+                CREATE TABLE t_uniq_sort_key_add_key (
+                k0 INT,
+                k1 INT,
+                k2 INT,
+                k3 INT,
+                v0 VARCHAR(1024)
+                ) UNIQUE KEY(k0, k1, k2, k3)
+                DISTRIBUTED BY HASH(k0) BUCKETS 1
+                ORDER BY(k3, k2, k1, k0);""";
+        LakeTable table = createTable(connectContext, createSql);
+        doTestAddKeyColumnSortKeyUpdated(table, "t_uniq_sort_key_add_key");
+    }
+
+    private void doTestAddKeyColumnSortKeyUpdated(LakeTable table, String tableName) throws Exception {
+        MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(table.getBaseIndexId());
+        List<Integer> expectedInitialSortKeyIdxes = Arrays.asList(3, 2, 1, 0);
+        Assertions.assertEquals(expectedInitialSortKeyIdxes, indexMeta.getSortKeyIdxes());
+
+        // Add a key column with positional clause (AFTER k2)
+        executeAlterAndWaitFinish(table,
+                "ALTER TABLE " + tableName + " ADD COLUMN k_new1 INT KEY AFTER k2", true);
+        Assertions.assertEquals("k0", table.getBaseSchema().get(0).getName());
+        Assertions.assertEquals("k1", table.getBaseSchema().get(1).getName());
+        Assertions.assertEquals("k2", table.getBaseSchema().get(2).getName());
+        Assertions.assertEquals("k_new1", table.getBaseSchema().get(3).getName());
+        Assertions.assertEquals("k3", table.getBaseSchema().get(4).getName());
+        assertSortKey(table, Arrays.asList(4, 2, 1, 0, 3));
+
+        // Add another key column at the default (last key) position
+        executeAlterAndWaitFinish(table,
+                "ALTER TABLE " + tableName + " ADD COLUMN k_new2 INT KEY DEFAULT '0'", true);
+        Assertions.assertEquals("k0", table.getBaseSchema().get(0).getName());
+        Assertions.assertEquals("k1", table.getBaseSchema().get(1).getName());
+        Assertions.assertEquals("k2", table.getBaseSchema().get(2).getName());
+        Assertions.assertEquals("k_new1", table.getBaseSchema().get(3).getName());
+        Assertions.assertEquals("k3", table.getBaseSchema().get(4).getName());
+        Assertions.assertEquals("k_new2", table.getBaseSchema().get(5).getName());
+        assertSortKey(table, Arrays.asList(4, 2, 1, 0, 3, 5));
+    }
+
+    private void assertSortKey(LakeTable table, List<Integer> expectedSortKeyIndexes) {
+        List<Column> columns = table.getBaseSchema();
+        MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(table.getBaseIndexId());
+        Assertions.assertEquals(expectedSortKeyIndexes, indexMeta.getSortKeyIdxes());
+        List<Integer> sortKeyUniqueIds = indexMeta.getSortKeyUniqueIds();
+        Assertions.assertNotNull(sortKeyUniqueIds);
+        Assertions.assertEquals(expectedSortKeyIndexes.size(), sortKeyUniqueIds.size());
+        for (int i = 0; i < expectedSortKeyIndexes.size(); i++) {
+            Assertions.assertEquals(columns.get(expectedSortKeyIndexes.get(i)).getUniqueId(),
+                    (int) sortKeyUniqueIds.get(i));
+        }
+    }
 }
