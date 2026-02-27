@@ -132,7 +132,9 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -1465,7 +1467,15 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             properties.putAll(clauseProperties);
         }
 
-        for (PartitionDesc partitionDesc : partitionDescs) {
+        List<String> rangePartitionColNames = null;
+        if (addPartitionClause.getPartitionDesc() instanceof RangePartitionDesc) {
+            rangePartitionColNames =
+                    ((RangePartitionDesc) addPartitionClause.getPartitionDesc()).getPartitionColNames();
+        }
+
+        Iterator<PartitionDesc> iterator = partitionDescs.iterator();
+        while (iterator.hasNext()) {
+            PartitionDesc partitionDesc = iterator.next();
             Map<String, String> cloneProperties = Maps.newHashMap(properties);
             Map<String, String> sourceProperties = partitionDesc.getProperties();
             if (sourceProperties != null && !sourceProperties.isEmpty()) {
@@ -1484,6 +1494,23 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                 PartitionDescAnalyzer.analyzeSingleRangePartitionDesc(singleRangePartitionDesc,
                         rangePartitionInfo.getPartitionColumnsSize(), cloneProperties);
                 if (!existPartitionNameSet.contains(singleRangePartitionDesc.getPartitionName())) {
+                    if (singleRangePartitionDesc.isSystem()) {
+                        long enclosingId = rangePartitionInfo.getEnclosingPartitionId(
+                                table.getIdToColumn(), singleRangePartitionDesc,
+                                addPartitionClause.isTempPartition());
+                        if (enclosingId >= 0) {
+                            Partition enclosingPartition = olapTable.getPartition(enclosingId);
+                            if (enclosingPartition != null && rangePartitionColNames != null) {
+                                int idx = rangePartitionColNames.indexOf(
+                                        singleRangePartitionDesc.getPartitionName());
+                                if (idx >= 0) {
+                                    rangePartitionColNames.set(idx, enclosingPartition.getName());
+                                }
+                            }
+                            iterator.remove();
+                            continue;
+                        }
+                    }
                     rangePartitionInfo.checkAndCreateRange(table.getIdToColumn(), singleRangePartitionDesc,
                             addPartitionClause.isTempPartition());
                 }
@@ -1511,6 +1538,12 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             } else {
                 throw new DdlException("Only support adding partition to range/list partitioned table");
             }
+        }
+
+        if (rangePartitionColNames != null) {
+            LinkedHashSet<String> deduped = new LinkedHashSet<>(rangePartitionColNames);
+            rangePartitionColNames.clear();
+            rangePartitionColNames.addAll(deduped);
         }
     }
 
