@@ -416,6 +416,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -2271,8 +2272,25 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         " already create partition failed");
             }
 
+            // Run analyzer first so that system partitions enclosed by existing partitions
+            // are removed from the resolved list before we decide whether new partitions
+            // will actually be created.
+            ConnectContext ctx = Util.getOrCreateInnerContext();
+            if (txnState.getWarehouseId() != WarehouseManager.DEFAULT_WAREHOUSE_ID) {
+                ctx.setCurrentWarehouseId(txnState.getWarehouseId());
+            }
+            try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(),
+                    Lists.newArrayList(table.getId()), LockType.READ)) {
+                AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(olapTable);
+                analyzer.analyze(ctx, addPartitionClause);
+            }
+
+            Set<String> resolvedPartitionNames = new TreeSet<>();
+            for (PartitionDesc desc : addPartitionClause.getResolvedPartitionDescList()) {
+                resolvedPartitionNames.add(desc.getPartitionName());
+            }
             boolean willCreateNewPartition =
-                    CatalogUtils.checkIfNewPartitionExists(olapTable, creatingPartitionNames);
+                    CatalogUtils.checkIfNewPartitionExists(olapTable, resolvedPartitionNames);
 
             // ingestion is top priority, if schema change or rollup is running, cancel it
             try {
@@ -2300,17 +2318,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 LOG.warn("cancel schema change or rollup failed. error: {}", e.getMessage());
             }
 
-            // If a create partition request is from BE or CN, the warehouse information may be lost, we can get it from txn state.
-            ConnectContext ctx = Util.getOrCreateInnerContext();
-            if (txnState.getWarehouseId() != WarehouseManager.DEFAULT_WAREHOUSE_ID) {
-                ctx.setCurrentWarehouseId(txnState.getWarehouseId());
+            if (willCreateNewPartition) {
+                state.getLocalMetastore().addPartitions(ctx, db, olapTable.getName(), addPartitionClause);
+            } else {
+                LOG.info("skip addPartitions for automatic create partition txn_id={}, no new partition after analyze",
+                        request.getTxn_id());
             }
-            try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()),
-                    LockType.READ)) {
-                AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(olapTable);
-                analyzer.analyze(ctx, addPartitionClause);
-            }
-            state.getLocalMetastore().addPartitions(ctx, db, olapTable.getName(), addPartitionClause);
         } catch (Exception e) {
             LOG.warn("failed to add partitions", e);
             errorStatus.setError_msgs(Lists.newArrayList(

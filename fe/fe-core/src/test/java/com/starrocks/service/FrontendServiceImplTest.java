@@ -519,7 +519,7 @@ public class FrontendServiceImplTest {
         request.setPartition_values(partitionValues);
         TCreatePartitionResult partition = impl.createPartition(request);
 
-        Assertions.assertEquals(TStatusCode.RUNTIME_ERROR, partition.getStatus().getStatus_code());
+        Assertions.assertEquals(TStatusCode.OK, partition.getStatus().getStatus_code());
         ((OlapTable) table).setState(OlapTable.OlapTableState.NORMAL);
     }
 
