@@ -22,9 +22,11 @@
 #include "base/container/lru_cache.h"
 #include "base/phmap/btree.h"
 #include "base/testutil/assert.h"
+#include "base/testutil/sync_point.h"
 #include "common/config.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/utils.h"
 #include "storage/persistent_index.h"
@@ -616,6 +618,98 @@ TEST_F(PersistentIndexSstableTest, test_table_builder_out_of_order_keys) {
 
     // Builder should still be able to finish properly after error
     builder.Abandon();
+}
+
+// Helper: build a small valid SST file and return its filesize
+static void build_test_sst(const std::string& path, uint64_t* filesize) {
+    phmap::btree_map<std::string, IndexValueWithVer, std::less<>> map;
+    for (int i = 0; i < 10; i++) {
+        map.emplace(fmt::format("key_{:04d}", i), std::make_pair(int64_t(1), IndexValue(i)));
+    }
+    ASSIGN_OR_ABORT(auto wf, fs::new_writable_file(path));
+    PersistentIndexSstableRangePB range_pb;
+    CHECK_OK(PersistentIndexSstable::build_sstable(map, wf.get(), filesize, &range_pb));
+    CHECK_OK(wf->close());
+}
+
+TEST_F(PersistentIndexSstableTest, test_metric_build_sstable_write_error) {
+    const std::string path = lake::join_path(kTestDir, "metric_write_error.sst");
+    ASSIGN_OR_ABORT(auto wf, fs::new_writable_file(path));
+
+    phmap::btree_map<std::string, IndexValueWithVer, std::less<>> map;
+    map.emplace("key_a", std::make_pair(int64_t(1), IndexValue(1)));
+
+    auto before = StarRocksMetrics::instance()->pk_index_sst_write_error_total.value();
+
+    SyncPoint::GetInstance()->SetCallBack("table_builder_footer_error",
+                                          [](void* arg) { *(Status*)arg = Status::IOError("inject_write_error"); });
+    SyncPoint::GetInstance()->EnableProcessing();
+    uint64_t filesize = 0;
+    PersistentIndexSstableRangePB range_pb;
+    auto st = PersistentIndexSstable::build_sstable(map, wf.get(), &filesize, &range_pb);
+    SyncPoint::GetInstance()->ClearCallBack("table_builder_footer_error");
+    SyncPoint::GetInstance()->DisableProcessing();
+
+    ASSERT_ERROR(st);
+    ASSERT_EQ(before + 1, StarRocksMetrics::instance()->pk_index_sst_write_error_total.value());
+}
+
+TEST_F(PersistentIndexSstableTest, test_metric_sst_open_read_error) {
+    const std::string path = lake::join_path(kTestDir, "metric_open_error.sst");
+    uint64_t filesize = 0;
+    build_test_sst(path, &filesize);
+
+    auto before = StarRocksMetrics::instance()->pk_index_sst_read_error_total.value();
+
+    SyncPoint::GetInstance()->SetCallBack("PersistentIndexSstable::init:table_open_error",
+                                          [](void* arg) { *(Status*)arg = Status::IOError("inject_open_error"); });
+    SyncPoint::GetInstance()->EnableProcessing();
+
+    auto sst = std::make_unique<PersistentIndexSstable>();
+    ASSIGN_OR_ABORT(auto rf, fs::new_random_access_file(path));
+    PersistentIndexSstablePB sstable_pb;
+    sstable_pb.set_filename("metric_open_error.sst");
+    sstable_pb.set_filesize(filesize);
+    auto st = sst->init(std::move(rf), sstable_pb, nullptr);
+
+    SyncPoint::GetInstance()->ClearCallBack("PersistentIndexSstable::init:table_open_error");
+    SyncPoint::GetInstance()->DisableProcessing();
+
+    ASSERT_ERROR(st);
+    ASSERT_EQ(before + 1, StarRocksMetrics::instance()->pk_index_sst_read_error_total.value());
+}
+
+TEST_F(PersistentIndexSstableTest, test_metric_sst_multiget_read_error) {
+    const std::string path = lake::join_path(kTestDir, "metric_multiget_error.sst");
+    uint64_t filesize = 0;
+    build_test_sst(path, &filesize);
+
+    auto sst = std::make_unique<PersistentIndexSstable>();
+    ASSIGN_OR_ABORT(auto rf, fs::new_random_access_file(path));
+    std::unique_ptr<Cache> cache(new_lru_cache(1024));
+    PersistentIndexSstablePB sstable_pb;
+    sstable_pb.set_filename("metric_multiget_error.sst");
+    sstable_pb.set_filesize(filesize);
+    ASSERT_OK(sst->init(std::move(rf), sstable_pb, cache.get()));
+
+    auto before = StarRocksMetrics::instance()->pk_index_sst_read_error_total.value();
+
+    SyncPoint::GetInstance()->SetCallBack("PersistentIndexSstable::multi_get:error",
+                                          [](void* arg) { *(Status*)arg = Status::IOError("inject_multiget_error"); });
+    SyncPoint::GetInstance()->EnableProcessing();
+
+    std::string key_str = fmt::format("key_{:04d}", 0);
+    Slice key(key_str);
+    KeyIndexSet key_indexes{0};
+    std::vector<IndexValue> values(1, IndexValue(NullIndexValue));
+    KeyIndexSet found;
+    auto st = sst->multi_get(&key, key_indexes, -1, values.data(), &found);
+
+    SyncPoint::GetInstance()->ClearCallBack("PersistentIndexSstable::multi_get:error");
+    SyncPoint::GetInstance()->DisableProcessing();
+
+    ASSERT_ERROR(st);
+    ASSERT_EQ(before + 1, StarRocksMetrics::instance()->pk_index_sst_read_error_total.value());
 }
 
 } // namespace starrocks::lake
