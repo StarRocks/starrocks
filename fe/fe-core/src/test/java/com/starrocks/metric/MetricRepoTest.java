@@ -421,4 +421,68 @@ public class MetricRepoTest extends PlanTestBase {
             starRocksAssert.dropDatabase("test_prometheus");
         }
     }
+
+    @Test
+    public void testIcebergDeleteMetrics() {
+        // Test position delete metrics using basic method
+        IcebergMetricsMgr.increaseIcebergDeleteTotal("success", "none", "position");
+        IcebergMetricsMgr.increaseIcebergDeleteTotal("failed", "timeout", "position");
+        IcebergMetricsMgr.increaseIcebergDeleteDurationMsTotal(123L, "position");
+        IcebergMetricsMgr.increaseIcebergDeleteRows(10L, "position");
+        IcebergMetricsMgr.increaseIcebergDeleteBytes(1000L, "position");
+
+        // Test metadata delete metrics using basic method
+        IcebergMetricsMgr.increaseIcebergDeleteTotal("success", "none", "metadata");
+        IcebergMetricsMgr.increaseIcebergDeleteDurationMsTotal(456L, "metadata");
+
+        // Test convenience methods for success/failure
+        IcebergMetricsMgr.increaseIcebergDeleteTotalSuccess("position");
+        IcebergMetricsMgr.increaseIcebergDeleteTotalFail("out of memory", "position");
+        IcebergMetricsMgr.increaseIcebergDeleteTotalFail(new RuntimeException("timeout"), "metadata");
+
+        PrometheusMetricVisitor visitor = new PrometheusMetricVisitor("ut");
+        MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
+        MetricRepo.getMetric(visitor, params);
+        String output = visitor.build();
+
+        Assertions.assertTrue(output.contains("ut_iceberg_delete_total{"),
+                "iceberg_delete_total should be exposed");
+        Assertions.assertTrue(output.contains("status=\"success\""),
+                "iceberg_delete_total should contain status=success");
+        Assertions.assertTrue(output.contains("status=\"failed\""),
+                "iceberg_delete_total should contain status=failed");
+        Assertions.assertTrue(output.contains("reason=\"timeout\""),
+                "iceberg_delete_total should contain reason=timeout");
+        Assertions.assertTrue(output.contains("reason=\"oom\""),
+                "iceberg_delete_total should contain reason=oom");
+        Assertions.assertTrue(output.contains("delete_type=\"position\""),
+                "iceberg_delete_total should contain delete_type=position");
+        Assertions.assertTrue(output.contains("delete_type=\"metadata\""),
+                "iceberg_delete_total should contain delete_type=metadata");
+        Assertions.assertTrue(output.contains("ut_iceberg_delete_duration_ms_total"),
+                "iceberg_delete_duration_ms_total should be exposed");
+        Assertions.assertTrue(output.contains("ut_iceberg_delete_rows"),
+                "iceberg_delete_rows should be exposed");
+        Assertions.assertTrue(output.contains("ut_iceberg_delete_bytes"),
+                "iceberg_delete_bytes should be exposed");
+    }
+
+    @Test
+    public void testIcebergDeleteFailReasonClassification() {
+        // Test error classification from error message
+        Assertions.assertEquals("timeout", IcebergMetricsMgr.classifyFailReason("connection timeout"));
+        Assertions.assertEquals("timeout", IcebergMetricsMgr.classifyFailReason("request timed out"));
+        Assertions.assertEquals("oom", IcebergMetricsMgr.classifyFailReason("java.lang.OutOfMemoryError"));
+        Assertions.assertEquals("oom", IcebergMetricsMgr.classifyFailReason("out of memory"));
+        Assertions.assertEquals("access_denied", IcebergMetricsMgr.classifyFailReason("access denied"));
+        Assertions.assertEquals("access_denied", IcebergMetricsMgr.classifyFailReason("permission denied"));
+        Assertions.assertEquals("unknown", IcebergMetricsMgr.classifyFailReason("some other error"));
+        Assertions.assertEquals("unknown", IcebergMetricsMgr.classifyFailReason((String) null));
+
+        // Test error classification from throwable
+        Assertions.assertEquals("oom", IcebergMetricsMgr.classifyFailReason(new OutOfMemoryError()));
+        Assertions.assertEquals("timeout", IcebergMetricsMgr.classifyFailReason(new java.util.concurrent.TimeoutException()));
+        Assertions.assertEquals("unknown", IcebergMetricsMgr.classifyFailReason(new RuntimeException("unknown error")));
+        Assertions.assertEquals("unknown", IcebergMetricsMgr.classifyFailReason((Throwable) null));
+    }
 }
