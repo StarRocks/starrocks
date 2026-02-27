@@ -58,6 +58,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.runners.MethodSorters;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -521,4 +522,425 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         }
         Config.allow_system_reserved_names = false;
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testUpdateFlatJsonConfigMeta() throws Exception {
+        // Create a test table
+        String createTableStmt = "CREATE TABLE test.flat_json_test (\n" +
+                "id INT NOT NULL,\n" +
+                "data JSON\n" +
+                ") DUPLICATE KEY(id)\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 1\n" +
+                "PROPERTIES ('replication_num' = '1');";
+        createTable(createTableStmt);
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("flat_json_test");
+        Assertions.assertNotNull(table);
+
+        SchemaChangeHandler handler = new SchemaChangeHandler();
+
+        // Test case 1: Enable flat JSON with all properties
+        Map<String, String> properties1 = new HashMap<>();
+        properties1.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, "true");
+        properties1.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, "0.1");
+        properties1.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, "0.8");
+        properties1.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, "50");
+
+        boolean result1 = handler.updateFlatJsonConfigMeta(db, table.getId(), properties1,
+                TTabletMetaType.FLAT_JSON_CONFIG);
+        Assertions.assertTrue(result1);
+
+        // Verify the configuration was applied
+        Assertions.assertTrue(table.containsFlatJsonConfig());
+        FlatJsonConfig config1 = table.getFlatJsonConfig();
+        Assertions.assertTrue(config1.getFlatJsonEnable());
+        Assertions.assertEquals(0.1, config1.getFlatJsonNullFactor(), 0.001);
+        Assertions.assertEquals(0.8, config1.getFlatJsonSparsityFactor(), 0.001);
+        Assertions.assertEquals(50, config1.getFlatJsonColumnMax());
+
+        // Test case 2: Try to set flat JSON properties when flat_json.enable is false - should throw exception
+        Map<String, String> properties2 = new HashMap<>();
+        properties2.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, "false");
+        properties2.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, "0.2");
+
+        try {
+            handler.updateFlatJsonConfigMeta(db, table.getId(), properties2,
+                    TTabletMetaType.FLAT_JSON_CONFIG);
+            Assertions.fail("Should throw exception when setting flat JSON properties with flat_json.enable=false");
+        } catch (RuntimeException e) {
+            Assertions.assertTrue(
+                    e.getMessage().contains("flat JSON configuration must be set after enabling flat JSON"));
+        }
+
+        // Test case 3: Update existing flat JSON configuration
+        Map<String, String> properties3 = new HashMap<>();
+        properties3.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, "0.3");
+        properties3.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, "0.9");
+
+        boolean result3 = handler.updateFlatJsonConfigMeta(db, table.getId(), properties3,
+                TTabletMetaType.FLAT_JSON_CONFIG);
+        Assertions.assertTrue(result3);
+
+        // Verify the configuration was updated
+        FlatJsonConfig config3 = table.getFlatJsonConfig();
+        Assertions.assertTrue(config3.getFlatJsonEnable());
+        Assertions.assertEquals(0.3, config3.getFlatJsonNullFactor(), 0.001);
+        Assertions.assertEquals(0.9, config3.getFlatJsonSparsityFactor(), 0.001);
+        Assertions.assertEquals(50, config3.getFlatJsonColumnMax()); // Should remain unchanged
+
+        // Test case 4: Disable flat JSON
+        Map<String, String> properties4 = new HashMap<>();
+        properties4.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, "false");
+
+        boolean result4 = handler.updateFlatJsonConfigMeta(db, table.getId(), properties4,
+                TTabletMetaType.FLAT_JSON_CONFIG);
+        Assertions.assertTrue(result4);
+
+        // Verify flat JSON is disabled
+        FlatJsonConfig config4 = table.getFlatJsonConfig();
+        Assertions.assertFalse(config4.getFlatJsonEnable());
+
+        // Test case 5: Try to set properties when flat JSON is disabled - should throw exception
+        Map<String, String> properties5 = new HashMap<>();
+        properties5.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, "100");
+
+        try {
+            handler.updateFlatJsonConfigMeta(db, table.getId(), properties5,
+                    TTabletMetaType.FLAT_JSON_CONFIG);
+            Assertions.fail("Should throw exception when setting flat JSON properties with flat_json.enable=false");
+        } catch (RuntimeException e) {
+            Assertions.assertTrue(
+                    e.getMessage().contains("flat JSON configuration must be set after enabling flat JSON"));
+        }
+    }
+
+    @Test
+    public void testUpdateFlatJsonConfigMetaWithNoChange() throws Exception {
+        // Create a test table
+        String createTableStmt = "CREATE TABLE test.flat_json_no_change (\n" +
+                "id INT NOT NULL,\n" +
+                "data JSON\n" +
+                ") DUPLICATE KEY(id)\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 1\n" +
+                "PROPERTIES ('replication_num' = '1');";
+        createTable(createTableStmt);
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("flat_json_no_change");
+        Assertions.assertNotNull(table);
+
+        SchemaChangeHandler handler = new SchemaChangeHandler();
+
+        // First, set up flat JSON configuration
+        Map<String, String> initialProperties = new HashMap<>();
+        initialProperties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, "true");
+        initialProperties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, "0.1");
+        initialProperties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, "0.8");
+        initialProperties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, "50");
+
+        boolean result1 = handler.updateFlatJsonConfigMeta(db, table.getId(), initialProperties,
+                TTabletMetaType.FLAT_JSON_CONFIG);
+        Assertions.assertTrue(result1);
+
+        // Now try to set the same values again - should return true but no actual change
+        Map<String, String> sameProperties = new HashMap<>();
+        sameProperties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, "0.1");
+        sameProperties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, "0.8");
+        sameProperties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, "50");
+
+        boolean result2 = handler.updateFlatJsonConfigMeta(db, table.getId(), sameProperties,
+                TTabletMetaType.FLAT_JSON_CONFIG);
+        Assertions.assertTrue(result2);
+
+        // Verify the configuration remains the same
+        FlatJsonConfig config = table.getFlatJsonConfig();
+        Assertions.assertTrue(config.getFlatJsonEnable());
+        Assertions.assertEquals(0.1, config.getFlatJsonNullFactor(), 0.001);
+        Assertions.assertEquals(0.8, config.getFlatJsonSparsityFactor(), 0.001);
+        Assertions.assertEquals(50, config.getFlatJsonColumnMax());
+    }
+
+    @Test
+    public void testUpdateFlatJsonConfigMetaWithInvalidTable() throws Exception {
+        SchemaChangeHandler handler = new SchemaChangeHandler();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+
+        // Test with non-existent table ID
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, "true");
+
+        boolean result = handler.updateFlatJsonConfigMeta(db, 99999L, properties,
+                TTabletMetaType.FLAT_JSON_CONFIG);
+        Assertions.assertFalse(result);
+    }
+
+    @Test
+    public void testAlterTableConflictClauses() throws Exception {
+        String createTableStmt =
+                "create table test.test_crash2(c1 varchar(255),c2 datetime, c3 bigint, c4 varchar(255)," +
+                        " c5 varchar(255)) " +
+                        " primary key(c1,c2) partition by date_trunc('day',c2) distributed by hash(c1) buckets 2" +
+                        " order by (c1,c3,c4,c5) PROPERTIES ('replication_num' = '1');";
+        createTable(createTableStmt);
+        { // reorder conflict
+            String alterTableSql = "ALTER TABLE test.test_crash2 ADD COLUMN c6 VARCHAR(255) " +
+                    "NULL COMMENT 'ccc', ORDER BY(c1, c3,c4,c6);";
+            AlterTableStmt alterTableStmt = (AlterTableStmt) parseAndAnalyzeStmt(alterTableSql);
+            Assertions.assertEquals(2L, alterTableStmt.getAlterClauseList().size());
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            OlapTable table = (OlapTable) db.getTable("test_crash2");
+            SchemaChangeHandler handler = new SchemaChangeHandler();
+            DdlException exception = Assertions.assertThrows(DdlException.class, () ->
+                    handler.process(alterTableStmt.getAlterClauseList(), db, table));
+            Assertions.assertTrue(exception.getMessage()
+                            .contains("MODIFY SORT KEY COLUMNS can not be combined with other alter operations"),
+                    exception.getMessage());
+        }
+        {
+            String alterTableSql = "ALTER TABLE test.test_crash2 ADD COLUMN c7 VARCHAR(255) " +
+                    "NULL COMMENT 'ccc', MODIFY COLUMN c1 COMMENT 'c1c1' ;";
+            AlterTableStmt alterTableStmt = (AlterTableStmt) parseAndAnalyzeStmt(alterTableSql);
+            Assertions.assertEquals(2L, alterTableStmt.getAlterClauseList().size());
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            OlapTable table = (OlapTable) db.getTable("test_crash2");
+            SchemaChangeHandler handler = new SchemaChangeHandler();
+            DdlException exception = Assertions.assertThrows(DdlException.class, () ->
+                    handler.process(alterTableStmt.getAlterClauseList(), db, table));
+            Assertions.assertTrue(exception.getMessage()
+                            .contains("MODIFY COLUMN COMMENT can not be combined with other alter operations"),
+                    exception.getMessage());
+        }
+        {
+            String alterTableSql = "ALTER TABLE test.test_crash2 ADD COLUMN c8 VARCHAR(255) " +
+                    "NULL COMMENT 'c8c8', DISTRIBUTED BY HASH(c2) BUCKETS 2;";
+            SemanticException exception = Assertions.assertThrows(SemanticException.class, () ->
+                    parseAndAnalyzeStmt(alterTableSql));
+            Assertions.assertTrue(
+                    exception.getMessage().contains("Alter operation OPTIMIZE conflicts with operation SCHEMA_CHANGE"),
+                    exception.getMessage());
+        }
+    }
+
+    @Test
+    public void testAlterTableAddComplexTypeDefaultValue() throws Exception {
+        String createTableStmt = "CREATE TABLE test.test_complex_default (\n" +
+                "id INT NOT NULL,\n" +
+                "name STRING\n" +
+                ") DUPLICATE KEY(id)\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "    'replication_num' = '1',\n" +
+                "    'fast_schema_evolution' = 'true'\n" +
+                ");";
+        createTable(createTableStmt);
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("test_complex_default");
+        Assertions.assertNotNull(table);
+        Assertions.assertEquals(2, table.getBaseSchema().size());
+
+        String alterSql1 = "ALTER TABLE test.test_complex_default ADD COLUMN arr ARRAY<INT> DEFAULT [1, 2, 3]";
+        AlterTableStmt alterStmt1 = (AlterTableStmt) parseAndAnalyzeStmt(alterSql1);
+        Assertions.assertDoesNotThrow(() -> {
+            SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+            handler.process(alterStmt1.getAlterClauseList(), db, table);
+        });
+
+        jobSize++;
+        Assertions.assertEquals(3, table.getBaseSchema().size());
+        Column arrCol = table.getColumn("arr");
+        Assertions.assertNotNull(arrCol);
+        Assertions.assertTrue(arrCol.getType().isArrayType());
+        Assertions.assertNotNull(arrCol.getDefaultExpr());
+
+        String alterSql2 = "ALTER TABLE test.test_complex_default ADD COLUMN mp MAP<STRING, INT> DEFAULT map{'k1': 1, 'k2': 2}";
+        AlterTableStmt alterStmt2 = (AlterTableStmt) parseAndAnalyzeStmt(alterSql2);
+        Assertions.assertDoesNotThrow(() -> {
+            SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+            handler.process(alterStmt2.getAlterClauseList(), db, table);
+        });
+
+        jobSize++;
+        Assertions.assertEquals(4, table.getBaseSchema().size());
+        Column mpCol = table.getColumn("mp");
+        Assertions.assertNotNull(mpCol);
+        Assertions.assertTrue(mpCol.getType().isMapType());
+        Assertions.assertNotNull(mpCol.getDefaultExpr());
+
+        String alterSql3 = "ALTER TABLE test.test_complex_default ADD COLUMN st STRUCT<id INT, name STRING> " +
+                "DEFAULT row(1, 'test')";
+        AlterTableStmt alterStmt3 = (AlterTableStmt) parseAndAnalyzeStmt(alterSql3);
+        Assertions.assertDoesNotThrow(() -> {
+            SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+            handler.process(alterStmt3.getAlterClauseList(), db, table);
+        });
+
+        jobSize++;
+        Assertions.assertEquals(5, table.getBaseSchema().size());
+        Column stCol = table.getColumn("st");
+        Assertions.assertNotNull(stCol);
+        Assertions.assertTrue(stCol.getType().isStructType());
+        Assertions.assertNotNull(stCol.getDefaultExpr());
+
+        String alterSql4 = "ALTER TABLE test.test_complex_default ADD COLUMN" +
+                " nested_arr ARRAY<STRUCT<id INT, tags ARRAY<STRING>>> DEFAULT [row(1, ['a', 'b']), row(2, ['c', 'd'])]";
+        AlterTableStmt alterStmt4 = (AlterTableStmt) parseAndAnalyzeStmt(alterSql4);
+        Assertions.assertDoesNotThrow(() -> {
+            SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+            handler.process(alterStmt4.getAlterClauseList(), db, table);
+        });
+
+        jobSize++;
+        Assertions.assertEquals(6, table.getBaseSchema().size());
+        Column nestedCol = table.getColumn("nested_arr");
+        Assertions.assertNotNull(nestedCol);
+        Assertions.assertTrue(nestedCol.getType().isArrayType());
+        Assertions.assertNotNull(nestedCol.getDefaultExpr());
+    }
+
+    @Test
+    public void testAlterTableComplexTypeRequiresFastSchemaEvolution() throws Exception {
+        String createTableStmt = "CREATE TABLE test.test_complex_no_fast (\n" +
+                "id INT NOT NULL,\n" +
+                "name STRING\n" +
+                ") DUPLICATE KEY(id)\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "    'replication_num' = '1',\n" +
+                "    'fast_schema_evolution' = 'false'\n" +
+                ");";
+        createTable(createTableStmt);
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("test_complex_no_fast");
+        Assertions.assertNotNull(table);
+
+        String alterSql = "ALTER TABLE test.test_complex_no_fast ADD COLUMN arr ARRAY<INT> DEFAULT [1, 2, 3]";
+        AlterTableStmt alterStmt = (AlterTableStmt) parseAndAnalyzeStmt(alterSql);
+
+        DdlException exception = Assertions.assertThrows(DdlException.class, () -> {
+            SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+            handler.process(alterStmt.getAlterClauseList(), db, table);
+        });
+
+        Assertions.assertTrue(exception.getMessage().contains("Complex type (ARRAY/MAP/STRUCT) " +
+                "default values require fast schema evolution"), exception.getMessage());
+    }
+
+    @Test
+    public void testAlterTableComplexTypeInvalidExpression() throws Exception {
+        String createTableStmt = "CREATE TABLE test.test_complex_invalid (\n" +
+                "id INT NOT NULL\n" +
+                ") DUPLICATE KEY(id)\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "    'replication_num' = '1',\n" +
+                "    'fast_schema_evolution' = 'true'\n" +
+                ");";
+        createTable(createTableStmt);
+
+        String alterSql1 = "ALTER TABLE test.test_complex_invalid ADD COLUMN arr ARRAY<DATETIME> DEFAULT [now()]";
+        SemanticException exception1 = Assertions.assertThrows(SemanticException.class, () ->
+                parseAndAnalyzeStmt(alterSql1));
+        Assertions.assertTrue(exception1.getMessage().contains("Function 'now' is not supported"),
+                exception1.getMessage());
+
+        String alterSql2 = "ALTER TABLE test.test_complex_invalid ADD COLUMN st STRUCT<id INT, name STRING> DEFAULT row(null, " +
+                "'test')";
+        SemanticException exception2 = Assertions.assertThrows(SemanticException.class, () ->
+                parseAndAnalyzeStmt(alterSql2));
+        Assertions.assertTrue(exception2.getMessage().contains("NULL literal is not supported"),
+                exception2.getMessage());
+
+        String alterSql3 = "ALTER TABLE test.test_complex_invalid ADD COLUMN arr2 ARRAY<INT> DEFAULT [1+2, 3*4]";
+        SemanticException exception3 = Assertions.assertThrows(SemanticException.class, () ->
+                parseAndAnalyzeStmt(alterSql3));
+        Assertions.assertTrue(exception3.getMessage().contains("ArithmeticExpr' is not supported"),
+                exception3.getMessage());
+    }
+
+    @Test
+    public void testSortKeyUpdatedAfterAddKeyColumnAgg() throws Exception {
+        createTable("CREATE TABLE test.sc_agg_sort_key (\n"
+                + "k0 INT,\n"
+                + "k1 INT,\n"
+                + "k2 INT,\n"
+                + "k3 INT,\n"
+                + "v0 INT SUM DEFAULT '0'\n"
+                + ") AGGREGATE KEY(k0, k1, k2, k3)\n"
+                + "DISTRIBUTED BY HASH(k0) BUCKETS 1\n"
+                + "ORDER BY(k3, k2, k1, k0)\n"
+                + "PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "sc_agg_sort_key");
+        doTestSortKeyUpdatedAfterAddKeyColumn(tbl, "test.sc_agg_sort_key");
+    }
+
+    @Test
+    public void testSortKeyUpdatedAfterAddKeyColumnUniq() throws Exception {
+        createTable("CREATE TABLE test.sc_uniq_sort_key (\n"
+                + "k0 INT,\n"
+                + "k1 INT,\n"
+                + "k2 INT,\n"
+                + "k3 INT,\n"
+                + "v0 VARCHAR(1024)\n"
+                + ") UNIQUE KEY(k0, k1, k2, k3)\n"
+                + "DISTRIBUTED BY HASH(k0) BUCKETS 1\n"
+                + "ORDER BY(k3, k2, k1, k0)\n"
+                + "PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "sc_uniq_sort_key");
+        doTestSortKeyUpdatedAfterAddKeyColumn(tbl, "test.sc_uniq_sort_key");
+    }
+
+    private void doTestSortKeyUpdatedAfterAddKeyColumn(OlapTable tbl, String qualifiedName) throws Exception {
+        Assertions.assertEquals(Arrays.asList(3, 2, 1, 0), tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId()).getSortKeyIdxes());
+
+        // Add a key column with positional clause (AFTER k2)
+        executeAlterAndWaitDone("alter table " + qualifiedName + " add column k_new1 int key after k2");
+        Assertions.assertEquals("k0", tbl.getBaseSchema().get(0).getName());
+        Assertions.assertEquals("k1", tbl.getBaseSchema().get(1).getName());
+        Assertions.assertEquals("k2", tbl.getBaseSchema().get(2).getName());
+        Assertions.assertEquals("k_new1", tbl.getBaseSchema().get(3).getName());
+        Assertions.assertEquals("k3", tbl.getBaseSchema().get(4).getName());
+        assertSortKey(tbl, Arrays.asList(4, 2, 1, 0, 3));
+
+        // Add another key column at the default (last key) position
+        executeAlterAndWaitDone("alter table " + qualifiedName + " add column k_new2 int key default '0'");
+        Assertions.assertEquals("k0", tbl.getBaseSchema().get(0).getName());
+        Assertions.assertEquals("k1", tbl.getBaseSchema().get(1).getName());
+        Assertions.assertEquals("k2", tbl.getBaseSchema().get(2).getName());
+        Assertions.assertEquals("k_new1", tbl.getBaseSchema().get(3).getName());
+        Assertions.assertEquals("k3", tbl.getBaseSchema().get(4).getName());
+        Assertions.assertEquals("k_new2", tbl.getBaseSchema().get(5).getName());
+        assertSortKey(tbl, Arrays.asList(4, 2, 1, 0, 3, 5));
+    }
+
+
+    private void assertSortKey(OlapTable tbl, List<Integer> expectedSortKeyIndexes) {
+        List<Column> columns = tbl.getBaseSchema();
+        MaterializedIndexMeta indexMeta = tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId());
+        Assertions.assertEquals(expectedSortKeyIndexes, indexMeta.getSortKeyIdxes());
+        List<Integer> sortKeyUniqueIds = indexMeta.getSortKeyUniqueIds();
+        Assertions.assertNotNull(sortKeyUniqueIds);
+        Assertions.assertEquals(expectedSortKeyIndexes.size(), sortKeyUniqueIds.size());
+        for (int i = 0; i < expectedSortKeyIndexes.size(); i++) {
+            Assertions.assertEquals(columns.get(expectedSortKeyIndexes.get(i)).getUniqueId(),
+                    (int) sortKeyUniqueIds.get(i));
+        }
+    }
+
+    private void executeAlterAndWaitDone(String sql) throws Exception {
+        AlterTableStmt alterStmt = (AlterTableStmt) parseAndAnalyzeStmt(sql);
+        DDLStmtExecutor.execute(alterStmt, connectContext);
+        jobSize++;
+        Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
+        waitAlterJobDone(alterJobs);
+    }
+>>>>>>> 515ba001ab ([BugFix] Fix sort key not including newly added key columns after schema change on aggregate/unique tables (#69529))
 }
