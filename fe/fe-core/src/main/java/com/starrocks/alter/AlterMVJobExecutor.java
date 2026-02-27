@@ -468,9 +468,10 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
             String taskName = TaskBuilder.getMvTaskName(materializedView.getId());
             Task task = taskManager.getTask(taskName);
-            if (task != null && task.getProperties() != null) {
-                // Remove the warehouse property from task so it will be fetched from MV at runtime
-                task.getProperties().remove(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
+            if (task != null) {
+                // Remove the warehouse property from task so it will be fetched from MV at runtime.
+                // Use removeTaskProperty to ensure thread-safe modification under task lock.
+                taskManager.removeTaskProperty(task, PropertyAnalyzer.PROPERTIES_WAREHOUSE);
             }
         } catch (Exception e) {
             LOG.warn("Failed to update task warehouse property for MV {}: {}",
