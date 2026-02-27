@@ -33,7 +33,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.TabletMetadataUpdateAgentTask;
 import com.starrocks.task.TabletMetadataUpdateAgentTaskFactory;
 import com.starrocks.warehouse.Warehouse;
-import org.apache.commons.collections4.ListUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -182,8 +181,6 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
             List<Column> oldColumns = indexMeta.getSchema();
 
             Preconditions.checkState(Objects.equals(indexMeta.getKeysType(), schemaInfo.getKeysType()));
-            Preconditions.checkState(Objects.equals(ListUtils.emptyIfNull(indexMeta.getSortKeyUniqueIds()),
-                    ListUtils.emptyIfNull(schemaInfo.getSortKeyUniqueIds())));
             Preconditions.checkState(schemaInfo.getVersion() > indexMeta.getSchemaVersion());
             Preconditions.checkState(Objects.equals(indexMeta.getShortKeyColumnCount(), schemaInfo.getShortKeyColumnCount()));
 
@@ -195,6 +192,7 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
             indexMeta.setSchemaVersion(schemaInfo.getVersion());
             indexMeta.setSchemaId(schemaInfo.getId());
             indexMeta.setSortKeyIdxes(schemaInfo.getSortKeyIndexes());
+            indexMeta.setSortKeyUniqueIds(schemaInfo.getSortKeyUniqueIds());
 
             // update the indexIdToMeta
             table.getIndexMetaIdToMeta().put(indexMetaId, indexMeta);

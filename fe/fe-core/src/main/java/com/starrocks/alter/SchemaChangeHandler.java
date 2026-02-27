@@ -1708,6 +1708,9 @@ public class SchemaChangeHandler extends AlterHandler {
                     sortKeyUniqueIds.add(alterSchema.get(sortKeyIdx).getUniqueId());
                 }
             }
+
+            appendNewKeyColumnsToSortKey(olapTable.getKeysType(), alterSchema,
+                    sortKeyIdxes, useSortKeyUniqueId ? sortKeyUniqueIds : null);
         }
 
         if (!sortKeyIdxes.isEmpty()) {
@@ -1744,6 +1747,31 @@ public class SchemaChangeHandler extends AlterHandler {
             boolean isShortKeyChanged = isShortKeyChanged(originShortKeyColumns, newShortKeyColumns);
             dataBuilder.withNewIndexMetaIdToShortKeyCount(alterIndexMetaId,
                     newShortKeyCount, isShortKeyChanged).withNewIndexMetaIdToSchema(alterIndexMetaId, alterSchema);
+        }
+    }
+
+    /**
+     * For AGG_KEYS/UNIQUE_KEYS tables, sort key must include all key columns.
+     * This method appends newly added key columns to the end of the sort key lists,
+     * regardless of where the column was inserted in the schema (e.g. AFTER / FIRST).
+     *
+     * @param sortKeyUniqueIds if non-null, newly appended columns' unique IDs are also added to this list
+     */
+    private static void appendNewKeyColumnsToSortKey(
+            KeysType keysType, List<Column> schema,
+            List<Integer> sortKeyIdxes, @Nullable List<Integer> sortKeyUniqueIds) {
+        if (keysType != KeysType.AGG_KEYS && keysType != KeysType.UNIQUE_KEYS) {
+            return;
+        }
+        Set<Integer> existing = new HashSet<>(sortKeyIdxes);
+        for (int i = 0; i < schema.size(); i++) {
+            Column col = schema.get(i);
+            if (col.isKey() && !existing.contains(i)) {
+                sortKeyIdxes.add(i);
+                if (sortKeyUniqueIds != null) {
+                    sortKeyUniqueIds.add(col.getUniqueId());
+                }
+            }
         }
     }
 
@@ -3030,6 +3058,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
                 List<Integer> sortKeyUniqueIds = currentIndexMeta.getSortKeyUniqueIds();
                 List<Integer> newSortKeyIdxes = new ArrayList<>();
+                List<Integer> newSortKeyUniqueIds = new ArrayList<>();
                 if (sortKeyUniqueIds != null) {
                     for (Integer uniqueId : sortKeyUniqueIds) {
                         Optional<Column> col = indexSchema.stream().filter(c -> c.getUniqueId() == uniqueId).findFirst();
@@ -3038,12 +3067,17 @@ public class SchemaChangeHandler extends AlterHandler {
                         }
                         int sortKeyIdx = indexSchema.indexOf(col.get());
                         newSortKeyIdxes.add(sortKeyIdx);
+                        newSortKeyUniqueIds.add(uniqueId);
                     }
+
+                    appendNewKeyColumnsToSortKey(olapTable.getKeysType(), indexSchema,
+                            newSortKeyIdxes, newSortKeyUniqueIds);
                 }
 
                 currentIndexMeta.setSchema(indexSchema);
                 if (!newSortKeyIdxes.isEmpty()) {
                     currentIndexMeta.setSortKeyIdxes(newSortKeyIdxes);
+                    currentIndexMeta.setSortKeyUniqueIds(newSortKeyUniqueIds);
                 }
 
                 int currentSchemaVersion = currentIndexMeta.getSchemaVersion();
