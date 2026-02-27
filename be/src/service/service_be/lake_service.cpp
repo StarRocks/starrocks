@@ -284,11 +284,11 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                             prealloc_metadata->CopyFrom(*metadata);
                         }
                     } else {
-                        g_publish_version_failed_tasks << 1;
                         if (res.status().is_resource_busy()) {
                             VLOG(2) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
                                     << " txns=" << JoinMapped(txns, txn_info_string, ",") << " version=" << new_version;
                         } else {
+                            g_publish_version_failed_tasks << 1;
                             LOG(WARNING) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
                                          << " txn_ids=" << JoinMapped(txns, txn_info_string, ",")
                                          << " version=" << new_version;
