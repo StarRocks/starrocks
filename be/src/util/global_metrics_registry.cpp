@@ -104,6 +104,8 @@ GlobalMetricsRegistry::GlobalMetricsRegistry(StarRocksMetrics* fast_metrics)
     REGISTER_STARROCKS_METRIC(primary_key_table_error_state_total);
     REGISTER_STARROCKS_METRIC(primary_key_wait_apply_done_duration_ms);
     REGISTER_STARROCKS_METRIC(primary_key_wait_apply_done_total);
+    REGISTER_STARROCKS_METRIC(pk_index_sst_read_error_total);
+    REGISTER_STARROCKS_METRIC(pk_index_sst_write_error_total);
 
     // clone
     _metrics.register_metric("clone_task_copy_bytes", MetricLabels().add("type", "INTER_NODE"),
