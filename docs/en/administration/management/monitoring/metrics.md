@@ -989,6 +989,11 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Count
 - Description: Number of queued tasks in the segment flush thread pool.
 
+### starrocks_be_segment_file_not_found_total
+
+- Unit: Count
+- Description: Total number of times a segment file was not found (file missing) during segment open. A continuously increasing value may indicate data loss or storage inconsistency.
+
 ### jemalloc_metadata_bytes
 
 - Unit: Bytes
