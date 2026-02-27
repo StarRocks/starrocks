@@ -1330,11 +1330,40 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 return !result.isConstant() ? call : result;
             }
 
-            if (LOW_CARD_STRING_FUNCTIONS.contains(call.getFnName()) ||
-                    LOW_CARD_ARRAY_FUNCTIONS.contains(call.getFnName()) ||
+            if (LOW_CARD_ARRAY_FUNCTIONS.contains(call.getFnName()) ||
                     LOW_CARD_AGGREGATE_FUNCTIONS.contains(call.getFnName())) {
                 return mergeWithArray(visitChildren(call, context), call);
             }
+<<<<<<< HEAD
+=======
+            if (LOW_CARD_STRING_FUNCTIONS.contains(call.getFnName())) {
+                return merge(visitChildren(call, context), call);
+            }
+            if (isEnableStructLowCardinalityOptimize && LOW_CARD_STRUCT_FUNCTIONS.contains(call.getFnName())
+                    && call.getChildren().stream().allMatch(
+                            c -> (c.isColumnRef() || c.isConstantRef()) && !c.getType().isStructType())) {
+                Map<String, ColumnRefOperator> fieldMap = Maps.newHashMap();
+                List<ScalarOperator> newChildren = visitChildren(call, context);
+                if (newChildren.stream().allMatch(CONSTANTS::equals)) {
+                    return CONSTANTS;
+                }
+                StructType structType = (StructType) call.getType();
+                for (int i = 0; i < newChildren.size(); ++i) {
+                    ScalarOperator newChild = newChildren.get(i);
+                    if (!newChild.isConstant()) {
+                        if (newChild.isColumnRef()) {
+                            int idx = FunctionSet.NAMED_STRUCT.equals(call.getFnName()) ? i / 2 : i;
+                            fieldMap.put(structType.getField(idx).getName(), (ColumnRefOperator) newChild);
+                        }
+                    }
+                }
+                if (!fieldMap.isEmpty()) {
+                    structOpToFieldUseStringRef.put(call, fieldMap);
+                    return call;
+                }
+                return VARIABLES;
+            }
+>>>>>>> 5856d96001 ([Refactor] using merge() for scalar functions instead of merge_with_array() (#69575))
             return forbidden(visitChildren(call, context), call);
         }
 
