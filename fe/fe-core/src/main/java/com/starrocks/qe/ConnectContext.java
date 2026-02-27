@@ -280,6 +280,9 @@ public class ConnectContext {
     private boolean skipFinishSink = false;
     private FinishSinkHandler handler = null;
 
+    // Track if current write is CTAS (Create Table As Select)
+    private boolean isCTAS = false;
+
     public void setTxnId(long txnId) {
         this.txnId = txnId;
     }
@@ -1779,6 +1782,14 @@ public class ConnectContext {
 
     public FinishSinkHandler getFinishSinkHandler() {
         return handler;
+    }
+
+    public void setCTAS(boolean isCTAS) {
+        this.isCTAS = isCTAS;
+    }
+
+    public boolean isCTAS() {
+        return isCTAS;
     }
 
     public interface Listener {
