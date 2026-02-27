@@ -486,7 +486,6 @@ public class AlterMaterializedViewTest extends MVTestBase  {
             MaterializedView mv = starRocksAssert.getMv("test", "mv1");
             Assertions.assertNull(mv.getTableProperty().getProperties().get(TaskRun.TASK_PRIORITY));
             Task task = currentState.getTaskManager().getTask(TaskBuilder.getMvTaskName(mv.getId()));
-            Assertions.assertNull(task.getProperties().get(TaskRun.TASK_PRIORITY));
             String alterMvSql = "alter materialized view mv1 set (\"task_priority\" = \"71\")";
             AlterMaterializedViewStmt stmt =
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);

@@ -358,7 +358,7 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
 - `colocate_with`: 非同期マテリアライズドビューの Colocation Group。詳細については、[Colocate Join](../../../using_starrocks/Colocate_join.md) を参照してください。このプロパティは v3.0 以降でサポートされています。
 - `unique_constraints` および `foreign_key_constraints`: View Delta Join シナリオでクエリを書き換えるために非同期マテリアライズドビューを作成する場合の、ユニークキー制約と外部キー制約。[非同期マテリアライズドビュー - View Delta Join シナリオでのクエリの書き換え](../../../using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views.md) を参照してください。このプロパティは v3.0 以降でサポートされています。
 - `excluded_refresh_tables`: このプロパティにリストされているベーステーブルは、データが変更されてもマテリアライズドビューへのデータリフレッシュをトリガーしません。このプロパティは通常、`excluded_trigger_tables` プロパティと一緒に使用されます。形式：`[db_name.]table_name`。デフォルト値は空の文字列です。値が空の文字列の場合、すべてのベーステーブルのデータ変更により、対応するマテリアライズドビューのリフレッシュがトリガーされます。
-- `task_priority`: リフレッシュタスクの優先度。このプロパティは通常、`refresh_scheme` `ASYNC` と一緒に使用されます。デフォルト値は null で、値は 0〜100 である必要があります。
+- `task_priority`: リフレッシュタスクの優先度。このプロパティは通常、`refresh_scheme` `ASYNC` と一緒に使用されます。デフォルト値は 90 で、値は 0〜100 である必要があります。
 
   > **注意**
   >

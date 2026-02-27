@@ -15,6 +15,7 @@
 package com.starrocks.scheduler;
 
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MaterializedViewRefreshType;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
@@ -31,7 +32,10 @@ public class TaskBuilderTest {
         mv.setName("aa.bb.cc");
         mv.setViewDefineSql("select * from table1");
         mv.setTableProperty(new TableProperty());
+        mv.setRefreshScheme(new MaterializedView.MvRefreshScheme(MaterializedViewRefreshType.ASYNC));
         Task task = TaskBuilder.buildMvTask(mv, "test");
+        Assertions.assertEquals(String.valueOf(Constants.TaskRunPriority.HIGHER.value()),
+                task.getProperties().get(TaskRun.TASK_PRIORITY));
         Assertions.assertEquals("insert overwrite `aa.bb.cc` select * from table1", task.getDefinition());
     }
 }

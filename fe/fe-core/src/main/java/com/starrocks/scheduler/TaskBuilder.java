@@ -149,6 +149,8 @@ public class TaskBuilder {
         if (materializedView.getTableProperty().getProperties().containsKey(TASK_PRIORITY)) {
             taskProperties.put(TASK_PRIORITY,
                     materializedView.getTableProperty().getProperties().get(TASK_PRIORITY));
+        } else if (materializedView.getRefreshScheme().getType() == MaterializedViewRefreshType.ASYNC) {
+            taskProperties.put(TaskRun.TASK_PRIORITY, String.valueOf(Constants.TaskRunPriority.HIGHER.value()));
         }
         // Don't put mv table properties into task properties since mv refresh doesn't need them, and the properties
         // will cause task run's meta-data too large.
@@ -180,6 +182,8 @@ public class TaskBuilder {
         if (materializedView.getTableProperty().getProperties().containsKey(TASK_PRIORITY)) {
             task.getProperties().put(TASK_PRIORITY,
                     materializedView.getTableProperty().getProperties().get(TASK_PRIORITY));
+        } else if (materializedView.getRefreshScheme().getType() == MaterializedViewRefreshType.ASYNC) {
+            task.getProperties().put(TaskRun.TASK_PRIORITY, String.valueOf(Constants.TaskRunPriority.HIGHER.value()));
         }
         task.setDefinition(materializedView.getTaskDefinition());
         task.setExpireTime(0L);
