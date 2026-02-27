@@ -15,6 +15,7 @@
 #pragma once
 
 #include <map>
+#include <optional>
 #include <shared_mutex>
 #include <string>
 #include <vector>
@@ -72,6 +73,7 @@ public:
 
     Status add_partition_value(RuntimeState* runtime_state, ObjectPool* pool, int64_t id,
                                const THdfsPartition& thrift_partition);
+    std::optional<std::string> get_column_default_value(const SlotDescriptor* slot) const;
 
 protected:
     std::string _hdfs_base_path;

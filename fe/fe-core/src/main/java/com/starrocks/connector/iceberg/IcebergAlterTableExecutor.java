@@ -14,6 +14,8 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnBuilder;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorAlterTableExecutor;
 import com.starrocks.connector.HdfsEnvironment;
@@ -61,6 +63,7 @@ import org.apache.iceberg.UpdatePartitionSpec;
 import org.apache.iceberg.UpdateProperties;
 import org.apache.iceberg.UpdateSchema;
 import org.apache.iceberg.expressions.Expressions;
+import org.apache.iceberg.expressions.Literal;
 import org.apache.iceberg.expressions.Term;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.slf4j.Logger;
@@ -117,10 +120,13 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
             if (!columnDef.isAllowNull()) {
                 throw new StarRocksConnectorException("column in iceberg table must be nullable.");
             }
-            updateSchema.addColumn(
-                    columnDef.getName(),
-                    toIcebergColumnType(columnDef.getType()),
-                    columnDef.getComment());
+            org.apache.iceberg.types.Type icebergType = toIcebergColumnType(columnDef.getType());
+            Literal<?> defaultLiteral = buildIcebergDefaultLiteral(columnDef, icebergType);
+            if (defaultLiteral != null) {
+                updateSchema.addColumn(columnDef.getName(), icebergType, columnDef.getComment(), defaultLiteral);
+            } else {
+                updateSchema.addColumn(columnDef.getName(), icebergType, columnDef.getComment());
+            }
 
             // AFTER column / FIRST
             if (pos != null) {
@@ -148,10 +154,13 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
                 if (!columnDef.isAllowNull()) {
                     throw new StarRocksConnectorException("column in iceberg table must be nullable.");
                 }
-                updateSchema.addColumn(
-                        columnDef.getName(),
-                        toIcebergColumnType(columnDef.getType()),
-                        columnDef.getComment());
+                org.apache.iceberg.types.Type icebergType = toIcebergColumnType(columnDef.getType());
+                Literal<?> defaultLiteral = buildIcebergDefaultLiteral(columnDef, icebergType);
+                if (defaultLiteral != null) {
+                    updateSchema.addColumn(columnDef.getName(), icebergType, columnDef.getComment(), defaultLiteral);
+                } else {
+                    updateSchema.addColumn(columnDef.getName(), icebergType, columnDef.getComment());
+                }
             }
             updateSchema.commit();
         });
@@ -204,6 +213,13 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
             } else {
                 throw new StarRocksConnectorException(
                         "column in iceberg table must be nullable.");
+            }
+
+            if (columnDef.getDefaultValueDef().isSet) {
+                Literal<?> defaultLiteral = buildIcebergDefaultLiteral(columnDef, colType);
+                if (defaultLiteral != null) {
+                    updateSchema.updateColumnDefault(columnDef.getName(), defaultLiteral);
+                }
             }
 
             // AFTER column / FIRST
@@ -488,6 +504,14 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
         } else {
             throw new SemanticException("Does not support partition clause: " + expr);
         }
+    }
+
+    private Literal<?> buildIcebergDefaultLiteral(ColumnDef columnDef, org.apache.iceberg.types.Type icebergType) {
+        if (!columnDef.getDefaultValueDef().isSet) {
+            return null;
+        }
+        Column column = ColumnBuilder.buildColumn(columnDef);
+        return IcebergApiConverter.toIcebergDefaultLiteral(column, icebergType);
     }
 
     @Override

@@ -417,6 +417,12 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
         } else {
             _materialize_slots.push_back(slots[i]);
             _materialize_index_in_chunk.push_back(i);
+            if (_hive_table != nullptr) {
+                auto default_value = _hive_table->get_column_default_value(slots[i]);
+                if (default_value.has_value()) {
+                    _materialize_slot_default_values.emplace(slots[i]->id(), *default_value);
+                }
+            }
         }
     }
 
@@ -748,6 +754,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.tuple_desc = _tuple_desc;
     scanner_params.materialize_slots = _materialize_slots;
     scanner_params.materialize_index_in_chunk = _materialize_index_in_chunk;
+    scanner_params.materialize_slot_default_values = _materialize_slot_default_values;
     scanner_params.partition_slots = _partition_slots;
     scanner_params.partition_index_in_chunk = _partition_index_in_chunk;
     scanner_params._partition_index_in_hdfs_partition_columns = _partition_index_in_hdfs_partition_columns;
