@@ -931,6 +931,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String SCAN_OLAP_PARTITION_NUM_LIMIT = "scan_olap_partition_num_limit";
 
+    public static final String SCAN_LAKE_PARTITION_NUM_LIMIT = "scan_lake_partition_num_limit";
+
     public static final String ENABLE_CROSS_JOIN = "enable_cross_join";
 
     public static final String ENABLE_NESTED_LOOP_JOIN = "enable_nested_loop_join";
@@ -2764,13 +2766,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ALLOW_HIVE_WITHOUT_PARTITION_FILTER)
     private boolean allowHiveWithoutPartitionFilter = true;
 
-    // For the maximum number of partitions allowed to be scanned in a single hive table, 0 means no limit.
-    @VarAttr(name = SCAN_HIVE_PARTITION_NUM_LIMIT)
-    private int scanHivePartitionNumLimit = 0;
-
     // For the maximum number of partitions allowed to be scanned in a single olap table, 0 means no limit.
     @VarAttr(name = SCAN_OLAP_PARTITION_NUM_LIMIT)
     private int scanOlapPartitionNumLimit = 0;
+
+    // For the maximum number of partitions allowed to be scanned in a single lake table, 0 means no limit.
+    @VarAttr(name = SCAN_LAKE_PARTITION_NUM_LIMIT, alias = SCAN_HIVE_PARTITION_NUM_LIMIT)
+    private int scanLakePartitionNumLimit = 0;
 
     @VarAttr(name = ENABLE_CROSS_JOIN)
     private boolean enableCrossJoin = true;
@@ -5179,20 +5181,20 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.allowHiveWithoutPartitionFilter = allowHiveWithoutPartitionFilter;
     }
 
-    public int getScanHivePartitionNumLimit() {
-        return scanHivePartitionNumLimit;
-    }
-
-    public void setScanHivePartitionNumLimit(int scanHivePartitionNumLimit) {
-        this.scanHivePartitionNumLimit = scanHivePartitionNumLimit;
-    }
-
     public int getScanOlapPartitionNumLimit() {
         return scanOlapPartitionNumLimit;
     }
 
     public void setScanOlapPartitionNumLimit(int scanOlapPartitionNumLimit) {
         this.scanOlapPartitionNumLimit = scanOlapPartitionNumLimit;
+    }
+
+    public int getScanLakePartitionNumLimit() {
+        return scanLakePartitionNumLimit;
+    }
+
+    public void setScanLakePartitionNumLimit(int scanLakePartitionNumLimit) {
+        this.scanLakePartitionNumLimit = scanLakePartitionNumLimit;
     }
 
     public boolean isEnableCrossJoin() {
