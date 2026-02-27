@@ -59,6 +59,36 @@ public:
     MOCK_METHOD(StatusOr<WriterAndStream>, create, (const std::string&), (const override));
 };
 
+<<<<<<< HEAD
+=======
+class MockWriter final : public formats::FileWriter {
+public:
+    MOCK_METHOD(Status, init, (), (override));
+    MOCK_METHOD(int64_t, get_written_bytes, (), (override));
+    MOCK_METHOD(int64_t, get_allocated_bytes, (), (override));
+    MOCK_METHOD(int64_t, get_flush_batch_size, (), (override));
+    MOCK_METHOD(Status, write, (Chunk * chunk), (override));
+    MOCK_METHOD(CommitResult, close, (), (override));
+};
+
+class MockFile final : public WritableFile {
+public:
+    MOCK_METHOD(Status, append, (const Slice& data), (override));
+    MOCK_METHOD(Status, appendv, (const Slice* data, size_t cnt), (override));
+    MOCK_METHOD(Status, pre_allocate, (uint64_t size), (override));
+    MOCK_METHOD(Status, close, (), (override));
+    MOCK_METHOD(Status, flush, (FlushMode mode), (override));
+    MOCK_METHOD(Status, sync, (), (override));
+    MOCK_METHOD(uint64_t, size, (), (const, override));
+    MOCK_METHOD(const std::string&, filename, (), (const, override));
+};
+
+class MockPoller : public AsyncFlushStreamPoller {
+public:
+    MOCK_METHOD(void, enqueue, (std::shared_ptr<Stream> stream), (override));
+};
+
+>>>>>>> 0669ee9aa7 ([BugFix] Catch all the exception of RowGroupWriter (#69568))
 TEST_F(IcebergChunkSinkTest, test_callback) {
     {
         std::vector<std::string> partition_column_names = {"k1"};

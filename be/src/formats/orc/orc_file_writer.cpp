@@ -151,8 +151,8 @@ Status ORCFileWriter::write(Chunk* chunk) {
     return Status::OK();
 }
 
-FileWriter::CommitResult ORCFileWriter::commit() {
-    FileWriter::CommitResult result{
+FileWriter::CommitResult ORCFileWriter::close() {
+    CommitResult result{
             .io_status = Status::OK(), .format = ORC, .location = _location, .rollback_action = _rollback_action};
     try {
         _writer->close();
@@ -171,8 +171,8 @@ FileWriter::CommitResult ORCFileWriter::commit() {
         result.file_statistics.file_size = _output_stream->getLength();
     }
 
-    auto promise = std::make_shared<std::promise<FileWriter::CommitResult>>();
-    std::future<FileWriter::CommitResult> future = promise->get_future();
+    auto promise = std::make_shared<std::promise<CommitResult>>();
+    std::future<CommitResult> future = promise->get_future();
 
     _writer = nullptr;
     return result;
