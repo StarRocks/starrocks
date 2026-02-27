@@ -261,13 +261,8 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                             VLOG(2) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
                                     << " txns=" << JoinMapped(txns, txn_info_string, ",") << " version=" << new_version;
                         } else {
-<<<<<<< HEAD
-                            LOG(WARNING) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
-=======
                             g_publish_version_failed_tasks << 1;
-                            LOG(WARNING) << "Fail to publish version: " << res.status()
-                                         << ". tablet_info=" << tablet_info
->>>>>>> 9aaa1e4440 ([BugFix] Skip g_publish_version_failed_tasks metric when resource is busy (#69526))
+                            LOG(WARNING) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
                                          << " txn_ids=" << JoinMapped(txns, txn_info_string, ",")
                                          << " version=" << new_version;
                         }
@@ -303,100 +298,6 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
         }
     }
 
-<<<<<<< HEAD
-=======
-    if (is_tablet_reshard_txn) {
-        for (const auto& resharding_tablet_info : request->resharding_tablet_infos()) {
-            auto task = std::make_shared<CancellableRunnable>(
-                    [&, resharding_tablet_info] {
-                        DeferOp defer([&latch] { latch.count_down(); });
-
-                        auto txn_info = request->txn_infos()[0];
-                        auto base_version = request->base_version();
-                        auto new_version = request->new_version();
-
-                        Status res;
-                        std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
-                        std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
-
-                        if (std::chrono::system_clock::now() < timeout_deadline) {
-                            res = lake::publish_resharding_tablet(_tablet_mgr, resharding_tablet_info, base_version,
-                                                                  new_version, txn_info, skip_write_tablet_metadata,
-                                                                  tablet_metadatas, tablet_ranges);
-                        } else {
-                            auto t = MilliSecondsSinceEpochFromTimePoint(timeout_deadline);
-                            res = Status::TimedOut(fmt::format("reached deadline={}/timeout={}", t, timeout_ms));
-                        }
-
-                        if (res.ok()) {
-                            if (skip_write_tablet_metadata) {
-                                // Copy metadata out of the lock(response_mtx), to let it execute in parallel.
-                                std::unordered_map<int64_t, TabletMetadataPB> copied_tablet_metas;
-                                for (auto& pair : tablet_metadatas) {
-                                    copied_tablet_metas[pair.first].CopyFrom(*pair.second);
-                                }
-
-                                std::lock_guard l(response_mtx);
-                                auto& response_tablet_metas = *response->mutable_tablet_metas();
-                                for (auto& pair : copied_tablet_metas) {
-                                    response_tablet_metas[pair.first].Swap(&pair.second);
-                                }
-                            }
-                            if (!tablet_ranges.empty()) {
-                                std::lock_guard l(response_mtx);
-                                auto& response_tablet_ranges = *response->mutable_tablet_ranges();
-                                for (auto& pair : tablet_ranges) {
-                                    response_tablet_ranges[pair.first].Swap(&pair.second);
-                                }
-                            }
-                        } else {
-                            if (res.is_resource_busy()) {
-                                VLOG(2) << "Failed to publish resharding tablet: " << res
-                                        << ". resharding_tablet_info=" << resharding_tablet_info.DebugString()
-                                        << " txn=" << txn_info.DebugString() << " version=" << new_version;
-                            } else {
-                                g_publish_version_failed_tasks << 1;
-                                LOG(WARNING) << "Failed to publish resharding tablet: " << res
-                                             << ". resharding_tablet_info=" << resharding_tablet_info.DebugString()
-                                             << " txn=" << txn_info.DebugString() << " version=" << new_version;
-                            }
-
-                            std::lock_guard l(response_mtx);
-                            add_failed_tablets(response, resharding_tablet_info);
-                            res.to_protobuf(response->mutable_status());
-                        }
-                    },
-                    [&, resharding_tablet_info] {
-                        g_publish_version_failed_tasks << 1;
-                        Status st = Status::Cancelled(fmt::format(
-                                "publish splitting tablet task has been cancelled, resharding_tablet_info={}",
-                                resharding_tablet_info.DebugString()));
-                        LOG(WARNING) << st;
-
-                        std::lock_guard l(response_mtx);
-                        add_failed_tablets(response, resharding_tablet_info);
-                        if (response->status().status_code() == 0) {
-                            st.to_protobuf(response->mutable_status());
-                        }
-                        latch.count_down();
-                    });
-
-            auto st = thread_pool_token.submit(std::move(task), timeout_deadline);
-            if (!st.ok()) {
-                g_publish_version_failed_tasks << 1;
-                LOG(WARNING) << "Failed to submit publish splitting tablet task: " << st
-                             << ". resharding_tablet_info=" << resharding_tablet_info.DebugString()
-                             << " txn_infos=" << JoinMapped(request->txn_infos(), txn_info_string, ",")
-                             << " version=" << request->new_version();
-                std::lock_guard l(response_mtx);
-                add_failed_tablets(response, resharding_tablet_info);
-                st.to_protobuf(response->mutable_status());
-                latch.count_down();
-            }
-        }
-    }
-
->>>>>>> 9aaa1e4440 ([BugFix] Skip g_publish_version_failed_tasks metric when resource is busy (#69526))
     latch.wait();
     auto cost = butil::gettimeofday_us() - start_ts;
     auto is_slow = cost >= config::lake_publish_version_slow_log_ms * 1000;
