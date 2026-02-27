@@ -451,8 +451,8 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         String warehouseName = properties.remove(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
         Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
         appliers.add(() -> {
-            materializedView.getTableProperty()
-                    .modifyTableProperties(PropertyAnalyzer.PROPERTIES_WAREHOUSE, warehouseName);
+            // Note: warehouse is stored as warehouseId and output in getMaterializedViewDdlStmt(),
+            // so we don't need to add it to TableProperty.properties to avoid duplication.
             materializedView.setWarehouseId(warehouse.getId());
         });
     }

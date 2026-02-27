@@ -1083,10 +1083,9 @@ public class AlterMVJobExecutorEditLogTest {
                         "Foreign key constraint does not match");
             }
         } else if (propertyName.equals(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
-            // Warehouse is stored in MaterializedView.warehouseId, verify through properties
-            String actualValue = tableProperty.getProperties().get(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
-            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(actualValue);
-            Assertions.assertEquals(mv.getWarehouseId(), warehouse.getId());
+            // Warehouse is stored in MaterializedView.warehouseId, verify directly
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(propertyValue);
+            Assertions.assertEquals(warehouse.getId(), mv.getWarehouseId());
         } else if (propertyName.equals(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)) {
             // Location is stored as Multimap in OlapTable (MaterializedView extends OlapTable)
             com.google.common.collect.Multimap<String, String> actualLocation = mv.getLocation();
