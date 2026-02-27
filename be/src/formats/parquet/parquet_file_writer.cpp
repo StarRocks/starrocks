@@ -62,9 +62,7 @@ Status ParquetFileWriter::write(Chunk* chunk) {
 
     RETURN_IF_ERROR(_rowgroup_writer->write(chunk));
 
-    FAIL_POINT_TRIGGER_EXECUTE(parquet_writer_rowgroup_write_failed, {
-        _writer_options->rowgroup_size = 0;
-    });
+    FAIL_POINT_TRIGGER_EXECUTE(parquet_writer_rowgroup_write_failed, { _writer_options->rowgroup_size = 0; });
     if (_rowgroup_writer->estimated_buffered_bytes() >= _writer_options->rowgroup_size) {
         return _flush_row_group();
     }
