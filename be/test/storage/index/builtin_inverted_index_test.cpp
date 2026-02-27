@@ -23,6 +23,7 @@
 #include "fs/fs_memory.h"
 #include "gen_cpp/segment.pb.h"
 #include "roaring/roaring.hh"
+#include "runtime/exec_env.h"
 #include "storage/index/inverted/builtin/builtin_inverted_index_iterator.h"
 #include "storage/index/inverted/builtin/builtin_inverted_reader.h"
 #include "storage/index/inverted/builtin/builtin_inverted_writer.h"
@@ -801,6 +802,91 @@ TEST_F(BuiltinInvertedIndexTest, test_complex_wildcard_query) {
     ASSERT_OK(iter->close());
 
     delete iter;
+}
+
+// Verify that BuiltinInvertedReader correctly tracks memory via the builtin_inverted_index_mem_tracker.
+// The tracker balance should be zero after the reader is destroyed.
+TEST_F(BuiltinInvertedIndexTest, test_mem_tracker_balance) {
+    auto* tracker = GlobalEnv::GetInstance()->builtin_inverted_index_mem_tracker();
+    int64_t baseline = tracker != nullptr ? tracker->consumption() : 0;
+
+    std::vector<std::string> values = {"alpha", "beta", "gamma"};
+    std::vector<Slice> slices;
+    slices.reserve(values.size());
+    for (auto& v : values) {
+        slices.emplace_back(v.data(), v.size());
+    }
+
+    TabletIndex tablet_index;
+    tablet_index.add_index_properties(INVERTED_INDEX_PARSER_KEY, INVERTED_INDEX_PARSER_NONE);
+
+    TypeInfoPtr type_info = get_type_info(TYPE_VARCHAR);
+
+    std::string file_name = kTestDir + "/mem_tracker_test";
+    ColumnMetaPB meta;
+    {
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+        std::unique_ptr<InvertedWriter> writer;
+        ASSERT_OK(BuiltinInvertedWriter::create(type_info, &tablet_index, &writer));
+        ASSERT_OK(writer->init());
+        writer->add_values(slices.data(), slices.size());
+        writer->add_nulls(0);
+        ASSERT_OK(writer->finish(wfile.get(), &meta));
+        ASSERT_TRUE(wfile->close().ok());
+    }
+
+    const auto& builtin_meta = meta.indexes(0).builtin_inverted_index();
+    ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
+    _opts.read_file = rfile.get();
+    _opts.segment_rows = slices.size();
+
+    {
+        auto tablet_index_sp = std::make_shared<TabletIndex>(tablet_index);
+        std::unique_ptr<InvertedReader> reader;
+        ASSERT_OK(BuiltinInvertedReader::create(tablet_index_sp, TYPE_VARCHAR, &reader));
+
+        // After construction, tracker should have consumed sizeof(BuiltinInvertedReader).
+        if (tracker != nullptr) {
+            ASSERT_GT(tracker->consumption() - baseline, 0);
+            ASSERT_EQ(tracker->consumption() - baseline, static_cast<int64_t>(sizeof(BuiltinInvertedReader)));
+        }
+
+        // Load the index – tracker should grow further.
+        BuiltinInvertedIndexPB builtin_meta_copy = builtin_meta;
+        ASSERT_OK(reader->load(_opts, &builtin_meta_copy));
+
+        auto* builtin_reader = dynamic_cast<BuiltinInvertedReader*>(reader.get());
+        ASSERT_NE(builtin_reader, nullptr);
+        if (tracker != nullptr) {
+            ASSERT_EQ(tracker->consumption() - baseline, static_cast<int64_t>(builtin_reader->mem_usage()));
+        }
+    }
+    // After reader is destroyed, tracker should return to baseline.
+    if (tracker != nullptr) {
+        ASSERT_EQ(tracker->consumption(), baseline);
+    }
+}
+
+// Verify that load failure does not cause a tracker imbalance.
+TEST_F(BuiltinInvertedIndexTest, test_mem_tracker_balance_on_load_failure) {
+    auto* tracker = GlobalEnv::GetInstance()->builtin_inverted_index_mem_tracker();
+    int64_t baseline = tracker != nullptr ? tracker->consumption() : 0;
+
+    {
+        TabletIndex tablet_index;
+        tablet_index.add_index_properties(INVERTED_INDEX_PARSER_KEY, INVERTED_INDEX_PARSER_NONE);
+
+        auto tablet_index_sp = std::make_shared<TabletIndex>(tablet_index);
+        std::unique_ptr<InvertedReader> reader;
+        ASSERT_OK(BuiltinInvertedReader::create(tablet_index_sp, TYPE_VARCHAR, &reader));
+
+        // Load with nullptr meta should fail.
+        ASSERT_FALSE(reader->load(_opts, nullptr).ok());
+    }
+    // Tracker should be back to baseline after failed load + destruction.
+    if (tracker != nullptr) {
+        ASSERT_EQ(tracker->consumption(), baseline);
+    }
 }
 
 TEST_F(BuiltinInvertedIndexTest, test_simple_analyzer) {
