@@ -18,10 +18,6 @@ This function is non-deterministic. Two calls to this function generate two diff
 uuid_v7_numeric()
 ```
 
-## Parameters
-
-None
-
 ## Return value
 
 Returns a value of the LARGEINT type (128-bit integer).
@@ -30,21 +26,21 @@ Returns a value of the LARGEINT type (128-bit integer).
 
 ```Plain Text
 mysql> SELECT uuid_v7_numeric();
-+--------------------------------------+
-| uuid_v7_numeric()                    |
-+--------------------------------------+
++---------------------------------------+
+| uuid_v7_numeric()                     |
++---------------------------------------+
 | 2088748395792837468371928374619283746 |
-+--------------------------------------+
++---------------------------------------+
 1 row in set (0.01 sec)
 ```
 
 ## Benefits
 
-1. **Time-ordered**: UUID values generated later will be larger than earlier ones
-2. **Improved Index Performance**: Better locality in B-tree indexes
-3. **Reduced Fragmentation**: Sequential inserts cause less page splits
-4. **Unique**: Random bits ensure uniqueness even within the same millisecond
-5. **Efficient Storage**: Numeric representation can be more compact than string format
+1. **Time-ordered**: UUID values generated later will be larger than earlier ones.
+2. **Improved Index Performance**: Better locality in B-tree indexes.
+3. **Reduced Fragmentation**: Sequential inserts cause fewer page splits.
+4. **Unique**: Random bits ensure uniqueness even within the same millisecond.
+5. **Efficient Storage**: Numeric representation can be more compact than string format.
 
 ## Comparison with uuid_numeric
 
