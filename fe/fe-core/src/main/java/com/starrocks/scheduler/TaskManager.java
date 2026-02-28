@@ -429,33 +429,20 @@ public class TaskManager implements MemoryTrackable {
             currentTask.setState(Constants.TaskState.ACTIVE);
             TaskSchedule schedule = changedTask.getSchedule();
             currentTask.setSchedule(schedule);
-            if (!isReplay) {
-                registerScheduler(currentTask);
-            }
             hasChanged = true;
         }
 
         if (hasChanged) {
-<<<<<<< HEAD
-            currentTask.setType(changedTask.getType());
+            // Log first to ensure durability, then apply in-memory changes.
+            // This ensures atomicity: if logging fails, no in-memory changes are made.
             if (!isReplay) {
                 GlobalStateMgr.getCurrentState().getEditLog().logAlterTask(changedTask);
-=======
-            // Log first to ensure durability, then apply in-memory changes.
-            // The WAL callback applies the same change on followers during replay.
-            // This ensures atomicity: if logging fails, no in-memory changes are made.
-            GlobalStateMgr.getCurrentState().getEditLog().logAlterTask(
-                    new AlterTaskInfo(currentTask.getName(), changedType, changedTask.getSchedule()),
-                    wal -> {
-                        AlterTaskInfo alterTaskInfo = (AlterTaskInfo) wal;
-                        changeTask(currentTask, alterTaskInfo.getType(), alterTaskInfo.getSchedule());
-                    }
-            );
+            }
             // Apply in-memory change after successful logging
-            changeTask(currentTask, changedType, changedTask.getSchedule());
-            if (changedType == Constants.TaskType.PERIODICAL) {
+            currentTask.setType(changedTask.getType());
+            // Register scheduler after type is set to ensure proper scheduling
+            if (changedType == Constants.TaskType.PERIODICAL && !isReplay) {
                 registerScheduler(currentTask);
->>>>>>> 7dcbb7e6e1 ([BugFix] Fix TaskManager schedule bugs after ALTER MV (#69504))
             }
         }
     }
