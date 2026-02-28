@@ -23,7 +23,11 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.CatalogUtils;
+<<<<<<< HEAD
 import com.starrocks.catalog.Replica;
+=======
+import com.starrocks.common.AnalysisException;
+>>>>>>> 40eca82c61 ([Enhancement] Support show cloud native tablet status (#69616))
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -37,8 +41,15 @@ import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AdminShowAutomatedSnapshotStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.PartitionNames;
+=======
+import com.starrocks.sql.ast.AdminShowTabletStatusStmt;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
+import com.starrocks.sql.ast.LakeTabletStatus;
+import com.starrocks.sql.ast.PartitionRef;
+>>>>>>> 40eca82c61 ([Enhancement] Support show cloud native tablet status (#69616))
 import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.NodePosition;
@@ -153,10 +164,52 @@ public class AdminStmtAnalyzer {
                 adminShowReplicaStatusStmt.setPartitions(partitions);
             }
 
-            if (!analyzeWhere(adminShowReplicaStatusStmt)) {
-                Expr where = adminShowReplicaStatusStmt.getWhere();
+            Expr where = adminShowReplicaStatusStmt.getWhere();
+            if (!analyzeWhere(where, ReplicaStatus.class)) {
                 throw new SemanticException(PARSER_ERROR_MSG.invalidWhereExpr("status =|!= " +
                         "'OK'|'DEAD'|'VERSION_ERROR'|'SCHEMA_ERROR'|'MISSING'"),
+                        where.getPos());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitAdminShowTabletStatusStatement(AdminShowTabletStatusStmt adminShowTabletStatusStmt,
+                                                        ConnectContext session) {
+            String dbName = adminShowTabletStatusStmt.getDbName();
+            NodePosition pos = adminShowTabletStatusStmt.getPos();
+            if (Strings.isNullOrEmpty(dbName)) {
+                if (Strings.isNullOrEmpty(session.getDatabase())) {
+                    throw new SemanticException(PARSER_ERROR_MSG.noDbSelected(), pos);
+                }
+            }
+
+            PartitionRef partitionRef = adminShowTabletStatusStmt.getPartitionRef();
+            if (partitionRef != null) {
+                if (partitionRef.isTemp()) {
+                    throw new SemanticException(PARSER_ERROR_MSG.unsupportedOpWithInfo("temporary partitions"), pos);
+                }
+            }
+
+            Map<String, String> properties = adminShowTabletStatusStmt.getProperties();
+            if (!properties.isEmpty()) {
+                try {
+                    int maxMissingDataFilesToShow = PropertyAnalyzer.analyzeIntProp(
+                            properties, PropertyAnalyzer.PROPERTIES_MAX_MISSING_DATA_FILES_TO_SHOW, 5);
+                    adminShowTabletStatusStmt.setMaxMissingDataFilesToShow(maxMissingDataFilesToShow);
+                } catch (AnalysisException e) {
+                    throw new SemanticException(e.getMessage());
+                }
+
+                if (!properties.isEmpty()) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_PROPERTY, properties);
+                }
+            }
+
+            Expr where = adminShowTabletStatusStmt.getWhere();
+            if (!analyzeWhere(where, LakeTabletStatus.class)) {
+                throw new SemanticException(PARSER_ERROR_MSG.invalidWhereExpr("status =|!= " +
+                        "'NORMAL'|'MISSING_META'|'MISSING_DATA'"),
                         where.getPos());
             }
             return null;
@@ -259,10 +312,14 @@ public class AdminStmtAnalyzer {
             return null;
         }
 
+<<<<<<< HEAD
         private boolean analyzeWhere(AdminShowReplicaStatusStmt adminShowReplicaStatusStmt) {
             Expr where = adminShowReplicaStatusStmt.getWhere();
             Replica.ReplicaStatus statusFilter = null;
 
+=======
+        private <T extends Enum<T>> boolean analyzeWhere(Expr where, Class<T> enumClass) {
+>>>>>>> 40eca82c61 ([Enhancement] Support show cloud native tablet status (#69616))
             // analyze where clause if not null
             if (where == null) {
                 return true;
@@ -285,12 +342,18 @@ public class AdminStmtAnalyzer {
             if (!(rightChild instanceof StringLiteral) || !leftKey.equalsIgnoreCase("status")) {
                 return false;
             }
+<<<<<<< HEAD
             statusFilter = Enums.getIfPresent(Replica.ReplicaStatus.class,
                             ((StringLiteral) rightChild).getStringValue().toUpperCase())
                     .orNull();
 
             adminShowReplicaStatusStmt.setStatusFilter(statusFilter);
             return statusFilter != null;
+=======
+
+            String name = ((StringLiteral) rightChild).getStringValue().toUpperCase();
+            return Enums.getIfPresent(enumClass, name).isPresent();
+>>>>>>> 40eca82c61 ([Enhancement] Support show cloud native tablet status (#69616))
         }
     }
 }

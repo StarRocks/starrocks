@@ -26,6 +26,12 @@ import com.starrocks.sql.ast.AdminShowAutomatedSnapshotStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.AdminShowTabletStatusStmt;
+import com.starrocks.sql.ast.LabelName;
+import com.starrocks.sql.ast.QualifiedName;
+>>>>>>> 40eca82c61 ([Enhancement] Support show cloud native tablet status (#69616))
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
@@ -984,6 +990,19 @@ public class ShowStmtMetaTest {
         Assertions.assertEquals("IsSetBadForce", metaData.getColumn(10).getName());
         Assertions.assertEquals("State", metaData.getColumn(11).getName());
         Assertions.assertEquals("Status", metaData.getColumn(12).getName());
+    }
+
+    @Test
+    public void testAdminShowTabletStatusStmt() {
+        AdminShowTabletStatusStmt stmt = new AdminShowTabletStatusStmt(null, null, null, NodePosition.ZERO);
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
+        Assertions.assertEquals(6, metaData.getColumnCount());
+        Assertions.assertEquals("TabletId", metaData.getColumn(0).getName());
+        Assertions.assertEquals("PartitionId", metaData.getColumn(1).getName());
+        Assertions.assertEquals("Version", metaData.getColumn(2).getName());
+        Assertions.assertEquals("Status", metaData.getColumn(3).getName());
+        Assertions.assertEquals("MissingDataFileCount", metaData.getColumn(4).getName());
+        Assertions.assertEquals("MissingDataFiles", metaData.getColumn(5).getName());
     }
 
     @Test

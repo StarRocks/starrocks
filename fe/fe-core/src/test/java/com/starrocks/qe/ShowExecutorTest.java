@@ -73,7 +73,13 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.ShowAlterStmt;
+=======
+import com.starrocks.sql.ast.AdminShowTabletStatusStmt;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.QualifiedName;
+>>>>>>> 40eca82c61 ([Enhancement] Support show cloud native tablet status (#69616))
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowIndexStmt;
@@ -651,5 +657,20 @@ public class ShowExecutorTest {
                 new TableName(null, "test_db", "test_table"));
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
         Assertions.assertEquals(0, resultSet.getResultRows().size());
+    }
+
+    @Test
+    public void testAdminShowTabletStatusStmt() throws Exception {
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("testDb", "testTbl")),
+                null, NodePosition.ZERO);
+        AdminShowTabletStatusStmt stmt = new AdminShowTabletStatusStmt(tableRef, null, Collections.emptyMap(), NodePosition.ZERO);
+
+        ctx.setGlobalStateMgr(globalStateMgr);
+        ctx.setQualifiedUser("testUser");
+
+        // Use assertThrows to check if it throws exception when table is not cloud native
+        assertThrows(SemanticException.class, () -> {
+            ShowExecutor.execute(stmt, ctx);
+        });
     }
 }

@@ -34,6 +34,7 @@
 
 package com.starrocks.qe;
 
+import com.google.common.base.Enums;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
@@ -126,6 +127,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.credential.CredentialUtil;
 import com.starrocks.datacache.DataCacheMgr;
+import com.starrocks.lake.TabletRepairHelper;
 import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.ExportMgr;
@@ -166,14 +168,26 @@ import com.starrocks.sql.ast.AdminShowAutomatedSnapshotStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.AstVisitor;
+=======
+import com.starrocks.sql.ast.AdminShowTabletStatusStmt;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
+>>>>>>> 40eca82c61 ([Enhancement] Support show cloud native tablet status (#69616))
 import com.starrocks.sql.ast.DescStorageVolumeStmt;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRevokeClause;
 import com.starrocks.sql.ast.HelpStmt;
 import com.starrocks.sql.ast.ImportColumnDesc;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.PartitionNames;
+=======
+import com.starrocks.sql.ast.LakeTabletStatus;
+import com.starrocks.sql.ast.OrderByElement;
+import com.starrocks.sql.ast.OrderByPair;
+import com.starrocks.sql.ast.PartitionRef;
+>>>>>>> 40eca82c61 ([Enhancement] Support show cloud native tablet status (#69616))
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
@@ -239,7 +253,20 @@ import com.starrocks.sql.ast.ShowTransactionStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.UserIdentity;
+=======
+import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.ast.UserRef;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.LikePredicate;
+import com.starrocks.sql.ast.expression.LimitElement;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+>>>>>>> 40eca82c61 ([Enhancement] Support show cloud native tablet status (#69616))
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowGroupProvidersStmt;
 import com.starrocks.sql.ast.integration.ShowCreateSecurityIntegrationStatement;
@@ -272,6 +299,7 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTableInfo;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -2288,6 +2316,57 @@ public class ShowExecutor {
             try {
                 results = MetadataViewer.getTabletStatus(statement);
             } catch (DdlException e) {
+                throw new SemanticException(e.getMessage());
+            }
+            return new ShowResultSet(showResultMetaFactory.getMetadata(statement), results);
+        }
+
+        @Override
+        public ShowResultSet visitAdminShowTabletStatusStatement(AdminShowTabletStatusStmt statement, ConnectContext context) {
+            // Check db table partition
+            String dbName = statement.getDbName() != null ? statement.getDbName() : context.getDatabase();
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+            if (db == null) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+            }
+
+            String tableName = statement.getTblName();
+            Table table = db.getTable(tableName);
+            if (table == null) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
+            }
+
+            if (!table.isCloudNativeTableOrMaterializedView()) {
+                throw new SemanticException("Only support show tablet status for cloud native table or materialized view");
+            }
+
+            PartitionRef partitionRef = statement.getPartitionRef();
+            List<String> partitionNames = partitionRef != null ? partitionRef.getPartitionNames() : Lists.newArrayList();
+
+            // Check status filter
+            LakeTabletStatus statusFilter = null;
+            BinaryType op = null;
+            Expr where = statement.getWhere();
+            if (where instanceof BinaryPredicate binaryPredicate) {
+                op = binaryPredicate.getOp();
+                Expr leftChild = binaryPredicate.getChild(0);
+                Expr rightChild = binaryPredicate.getChild(1);
+                String leftKey = ((SlotRef) leftChild).getColumnName();
+                if (rightChild instanceof StringLiteral && leftKey.equalsIgnoreCase("status")) {
+                    statusFilter = Enums.getIfPresent(
+                            LakeTabletStatus.class, ((StringLiteral) rightChild).getStringValue().toUpperCase()).orNull();
+                }
+            }
+
+            // Get tablet status
+            int maxMissingDataFilesToShow = statement.getMaxMissingDataFilesToShow();
+            ComputeResource computeResource = context.getCurrentComputeResource();
+            List<List<String>> results;
+            try {
+                results = TabletRepairHelper.getTabletStatus(
+                        db, (OlapTable) table, partitionNames, statusFilter, op, maxMissingDataFilesToShow, computeResource);
+            } catch (Exception e) {
+                LOG.warn("Failed to get tablet status", e);
                 throw new SemanticException(e.getMessage());
             }
             return new ShowResultSet(showResultMetaFactory.getMetadata(statement), results);
