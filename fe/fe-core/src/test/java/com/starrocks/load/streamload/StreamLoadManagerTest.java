@@ -83,15 +83,12 @@ public class StreamLoadManagerTest {
             }
 
             @Mock
-            public void logCreateStreamLoadJob(StreamLoadTask streamLoadTask,
-                                               WALApplier walApplier) {
-                walApplier.apply(streamLoadTask);
+            public void logCreateStreamLoadJob(StreamLoadTask streamLoadTask) {
             }
 
             @Mock
             public void logCreateMultiStmtStreamLoadJob(
-                    StreamLoadMultiStmtTask streamLoadTask, WALApplier walApplier) {
-                walApplier.apply(streamLoadTask);
+                    StreamLoadMultiStmtTask streamLoadTask) {
             }
         };
 
