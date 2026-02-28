@@ -28,6 +28,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MaterializedView.PartitionRefreshStrategy;
 import com.starrocks.catalog.OlapTable;
