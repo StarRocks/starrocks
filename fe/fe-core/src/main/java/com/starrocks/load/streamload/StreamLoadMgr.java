@@ -29,6 +29,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
+import com.starrocks.http.rest.ActionStatus;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.memory.estimate.Estimator;
@@ -42,6 +43,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.WarehouseLoadInfoBuilder;
 import com.starrocks.warehouse.WarehouseLoadStatusInfo;
@@ -138,6 +141,18 @@ public class StreamLoadMgr implements MemoryTrackable {
                 task.beginTxnFromFrontend(resp);
                 return;
             }
+
+            // Check if label already exists in transaction history (like basic transaction does)
+            TransactionState existingTxn = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                    .getLabelTransactionState(dbId, label);
+            if (existingTxn != null && existingTxn.getTransactionStatus() != TransactionStatus.ABORTED) {
+                resp.status = ActionStatus.LABEL_ALREADY_EXISTS;
+                resp.msg = String.format("Label [%s] has already been used.", label);
+                resp.addResultEntry("ExistingJobStatus", existingTxn.getTransactionStatus().name());
+                resp.addResultEntry("Db", dbName);
+                return;
+            }
+
             task = createMultiStatementLoadTask(db, label, user, clientIp, timeoutMillis, computeResource);
             task.beginTxnFromFrontend(resp);
             GlobalStateMgr.getCurrentState().getEditLog().logCreateMultiStmtStreamLoadJob(
@@ -353,11 +368,12 @@ public class StreamLoadMgr implements MemoryTrackable {
             throws StarRocksException {
         boolean needUnLock = true;
         readLock();
+        AbstractStreamLoadTask task = null;
         try {
             if (!idToStreamLoadTask.containsKey(label)) {
                 throw new StarRocksException("stream load task " + label + " does not exist");
             }
-            AbstractStreamLoadTask task = idToStreamLoadTask.get(label);
+            task = idToStreamLoadTask.get(label);
 
             // check whether the database is consistent with the transaction
             if (!task.getDBName().equals(dbName)) {
@@ -369,9 +385,27 @@ public class StreamLoadMgr implements MemoryTrackable {
             needUnLock = false;
             TNetworkAddress redirectAddress = task.tryLoad(channelId, tableName, resp);
             if (redirectAddress != null || !resp.stateOK() || resp.containMsg()) {
+                // Check if LOAD failed - for multi-statement, cancel the task
+                if (!resp.stateOK() && task instanceof StreamLoadMultiStmtTask) {
+                    ((StreamLoadMultiStmtTask) task).cancelOnException(resp.msg);
+                }
                 return redirectAddress;
             }
-            return task.executeTask(channelId, tableName, headers, resp);
+            TNetworkAddress result = task.executeTask(channelId, tableName, headers, resp);
+            // Check if LOAD failed after executeTask - for multi-statement, cancel the task
+            // Note: StreamLoadTask.executeTask() catches exceptions internally and sets error msg
+            if (!resp.stateOK() && task instanceof StreamLoadMultiStmtTask) {
+                ((StreamLoadMultiStmtTask) task).cancelOnException(resp.msg);
+            }
+            return result;
+        } catch (Exception e) {
+            // For multi-statement stream load, auto-abort the transaction on LOAD failure
+            // This is consistent with basic transaction behavior where LOAD failure
+            // auto-aborts the transaction.
+            if (task instanceof StreamLoadMultiStmtTask) {
+                ((StreamLoadMultiStmtTask) task).cancelOnException(e.getMessage());
+            }
+            throw e;
         } finally {
             if (needUnLock) {
                 readUnlock();
@@ -459,15 +493,28 @@ public class StreamLoadMgr implements MemoryTrackable {
 
     // Remove old stream load tasks from idToStreamLoadTask and dbToLabelToStreamLoadTask
     // This function is called periodically.
-    // Cancelled and Committed task will be removed after Config.stream_load_task_keep_max_second seconds
+    // Cancelled and Committed task will be removed after Config.stream_load_task_keep_max_second seconds.
+    // Also retries abort for MultiStmtTasks stuck in ABORTING state (background compensation).
     public void cleanOldStreamLoadTasks(boolean isForce) {
         LOG.debug("begin to clean old stream load tasks");
+
+        List<StreamLoadMultiStmtTask> abortingTasks = new ArrayList<>();
+
         writeLock();
         try {
             Iterator<Map.Entry<String, AbstractStreamLoadTask>> iterator = idToStreamLoadTask.entrySet().iterator();
             long currentMs = System.currentTimeMillis();
             while (iterator.hasNext()) {
                 AbstractStreamLoadTask streamLoadTask = iterator.next().getValue();
+
+                if (streamLoadTask instanceof StreamLoadMultiStmtTask) {
+                    StreamLoadMultiStmtTask multiTask = (StreamLoadMultiStmtTask) streamLoadTask;
+                    if (multiTask.isAborting()) {
+                        abortingTasks.add(multiTask);
+                        continue;
+                    }
+                }
+
                 if (streamLoadTask.checkNeedRemove(currentMs, isForce)) {
                     unprotectedRemoveTaskFromDb(streamLoadTask);
                     iterator.remove();
@@ -485,6 +532,13 @@ public class StreamLoadMgr implements MemoryTrackable {
             }
         } finally {
             writeUnlock();
+        }
+
+        if (!abortingTasks.isEmpty()) {
+            long currentMs = System.currentTimeMillis();
+            for (StreamLoadMultiStmtTask task : abortingTasks) {
+                task.retryAbortIfNeeded(currentMs);
+            }
         }
     }
 

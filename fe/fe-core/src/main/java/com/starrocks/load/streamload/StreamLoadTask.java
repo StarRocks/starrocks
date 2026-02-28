@@ -362,7 +362,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
                     break;
                 }
                 case CANCELLED: {
-                    resp.setOKMsg("stream load task " + label + " has already been cancelled: "
+                    resp.setErrorMsg("stream load task " + label + " has already been cancelled: "
                             + this.errorMsg);
                     break;
                 }
@@ -492,7 +492,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
                     break;
                 }
                 case CANCELLED: {
-                    resp.setOKMsg("stream load task " + label + " has already been cancelled: "
+                    resp.setErrorMsg("stream load task " + label + " has already been cancelled: "
                             + this.errorMsg);
                     break;
                 }
@@ -584,7 +584,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
                     break;
                 }
                 case CANCELLED: {
-                    resp.setOKMsg("stream load task " + label + " has already been cancelled: "
+                    resp.setErrorMsg("stream load task " + label + " has already been cancelled: "
                             + this.errorMsg);
                     break;
                 }
@@ -714,7 +714,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
                     break;
                 }
                 case CANCELLED: {
-                    resp.setOKMsg("stream load task " + label + " has already been cancelled: "
+                    resp.setErrorMsg("stream load task " + label + " has already been cancelled: "
                             + this.errorMsg);
                     break;
                 }
@@ -753,7 +753,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
         try {
             if (isUnreversibleState()) {
                 if (state == State.CANCELLED) {
-                    resp.setOKMsg("txn could not be prepared because task state is: " + state
+                    resp.setErrorMsg("txn could not be prepared because task state is: " + state
                             + ", error_msg: " + errorMsg);
 
                 } else {
@@ -837,7 +837,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
         try {
             if (isUnreversibleState()) {
                 if (state == State.CANCELLED) {
-                    resp.setOKMsg("txn could not be committed because task state is: " + state
+                    resp.setErrorMsg("txn could not be committed because task state is: " + state
                             + ", error_msg: " + errorMsg);
 
                 } else {
@@ -887,7 +887,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
         readLock();
         try {
             if (isCommitting) {
-                resp.setOKMsg("txn can not be cancelled because task state is committing");
+                resp.setErrorMsg("txn can not be cancelled because task state is committing");
                 return;
             }
         } finally {
@@ -896,8 +896,8 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
 
         String errorMsg = cancelTask("manual abort");
         if (errorMsg != null) {
-            resp.setOKMsg("stream load " + label + " abort fail");
-            resp.addResultEntry("Abort fail reason", errorMsg);
+            // Set error status when abort fails, not OK status
+            resp.setErrorMsg("stream load " + label + " abort fail: " + errorMsg);
         } else {
             resp.setOKMsg("stream load " + label + " abort");
             resp.addResultEntry("Cancelled time", endTimeMs - startTimeMs);
@@ -1404,6 +1404,33 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
         }
         endTimeMs = System.currentTimeMillis();
         state = State.CANCELLED;
+    }
+
+    /**
+     * Cancel the coordinator and set task state to CANCELLED without aborting the transaction.
+     * This is used for sub-tasks in multi-statement transactions where the parent task
+     * manages the transaction lifecycle.
+     */
+    public void cancelCoordinatorOnly(String reason) {
+        writeLock();
+        try {
+            if (isUnreversibleState()) {
+                return;
+            }
+            if (coord != null && !isSyncStreamLoad) {
+                coord.cancel(reason);
+                QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
+            }
+            for (int i = 0; i < channelNum; i++) {
+                this.channels.set(i, State.CANCELLED);
+            }
+            endTimeMs = System.currentTimeMillis();
+            state = State.CANCELLED;
+            errorMsg = reason;
+            gcObject();
+        } finally {
+            writeUnlock();
+        }
     }
 
     private void replayTxnAttachment(TransactionState txnState) {
