@@ -20,11 +20,13 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.RemoteFileInfoDefaultSource;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.planner.PartitionIdGenerator;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.planner.TupleId;
+import com.starrocks.thrift.THdfsScanRange;
 import org.apache.iceberg.FileScanTask;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,6 +36,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+import static com.starrocks.type.IntegerType.BIGINT;
 import static com.starrocks.type.IntegerType.INT;
 import static com.starrocks.type.VarcharType.VARCHAR;
 
@@ -152,6 +155,138 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
             long partitionId2 = scanRangeSource2.addPartition(fileScanTask);
             Assertions.assertEquals(partitionId1, partitionId2, "Partition IDs should " +
                     "be the same for the same partition keys and values");
+        }
+    }
+
+    @Test
+    public void testToFullSchemasContainsV3RowLineageColumns() {
+        TestTables.TestTable mockedNativeTableV3 = create(SCHEMA_A, SPEC_A, "tv3", 3);
+        List<Column> fullSchema = IcebergApiConverter.toFullSchemas(
+                mockedNativeTableV3.schema(), mockedNativeTableV3);
+
+        Assertions.assertTrue(fullSchema.stream().anyMatch(
+                column -> column.getName().equals(IcebergTable.ROW_ID) && column.isHidden()));
+        Assertions.assertTrue(fullSchema.stream().anyMatch(
+                column -> column.getName().equals(IcebergTable.LAST_UPDATED_SEQUENCE_NUMBER) && column.isHidden()));
+    }
+
+    @Test
+    public void testToFullSchemasV2NotContainsLastUpdatedSequenceNumber() {
+        List<Column> fullSchema = IcebergApiConverter.toFullSchemas(
+                mockedNativeTableA.schema(), mockedNativeTableA);
+
+        Assertions.assertFalse(fullSchema.stream().anyMatch(
+                column -> column.getName().equals(IcebergTable.LAST_UPDATED_SEQUENCE_NUMBER)));
+    }
+
+    @Test
+    public void testBuildScanRangeContainsLastUpdatedSequenceNumberExtendedColumn() throws Exception {
+        TupleDescriptor localTupleDescriptor = new TupleDescriptor(new TupleId(2));
+        SlotDescriptor idSlot = new SlotDescriptor(new SlotId(1), localTupleDescriptor);
+        idSlot.setType(INT);
+        idSlot.setColumn(new Column("id", INT));
+        localTupleDescriptor.addSlot(idSlot);
+
+        SlotDescriptor dataSlot = new SlotDescriptor(new SlotId(2), localTupleDescriptor);
+        dataSlot.setType(VARCHAR);
+        dataSlot.setColumn(new Column("data", VARCHAR));
+        localTupleDescriptor.addSlot(dataSlot);
+
+        SlotDescriptor lastUpdatedSequenceNumberSlot = new SlotDescriptor(new SlotId(3), localTupleDescriptor);
+        lastUpdatedSequenceNumberSlot.setType(BIGINT);
+        lastUpdatedSequenceNumberSlot.setColumn(new Column(IcebergTable.LAST_UPDATED_SEQUENCE_NUMBER, BIGINT));
+        localTupleDescriptor.addSlot(lastUpdatedSequenceNumberSlot);
+
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
+        List<Column> schema = Lists.newArrayList(new Column("id", INT), new Column("data", VARCHAR));
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog",
+                "resource", "db", "table", "", schema, mockedNativeTableA, Maps.newHashMap());
+
+        IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
+                RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, localTupleDescriptor, Optional.empty(),
+                PartitionIdGenerator.of(), false, false);
+
+        FileScanTask fileScanTask = Lists.newArrayList(mockedNativeTableA.newScan().planFiles()).get(0);
+        long partitionId = scanRangeSource.addPartition(fileScanTask);
+        THdfsScanRange hdfsScanRange = scanRangeSource.buildScanRange(fileScanTask, fileScanTask.file(), partitionId);
+
+        Assertions.assertTrue(
+                hdfsScanRange.getExtended_columns().containsKey(lastUpdatedSequenceNumberSlot.getId().asInt()));
+        Assertions.assertTrue(
+                scanRangeSource.getExtendedColumnSlotIds().contains(lastUpdatedSequenceNumberSlot.getId().asInt()));
+    }
+
+    @Test
+    public void testBuildScanRangeFailFastWhenRowIdWithoutFirstRowId() throws Exception {
+        TupleDescriptor localTupleDescriptor = new TupleDescriptor(new TupleId(3));
+        SlotDescriptor idSlot = new SlotDescriptor(new SlotId(1), localTupleDescriptor);
+        idSlot.setType(INT);
+        idSlot.setColumn(new Column("id", INT));
+        localTupleDescriptor.addSlot(idSlot);
+
+        SlotDescriptor dataSlot = new SlotDescriptor(new SlotId(2), localTupleDescriptor);
+        dataSlot.setType(VARCHAR);
+        dataSlot.setColumn(new Column("data", VARCHAR));
+        localTupleDescriptor.addSlot(dataSlot);
+
+        SlotDescriptor rowIdSlot = new SlotDescriptor(new SlotId(3), localTupleDescriptor);
+        rowIdSlot.setType(BIGINT);
+        rowIdSlot.setColumn(new Column(IcebergTable.ROW_ID, BIGINT));
+        localTupleDescriptor.addSlot(rowIdSlot);
+
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
+        List<Column> schema = Lists.newArrayList(new Column("id", INT), new Column("data", VARCHAR));
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog",
+                "resource", "db", "table", "", schema, mockedNativeTableA, Maps.newHashMap());
+
+        IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
+                RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, localTupleDescriptor, Optional.empty(),
+                PartitionIdGenerator.of(), false, false);
+
+        FileScanTask fileScanTask = Lists.newArrayList(mockedNativeTableA.newScan().planFiles()).get(0);
+        long partitionId = scanRangeSource.addPartition(fileScanTask);
+        Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> scanRangeSource.buildScanRange(fileScanTask, fileScanTask.file(), partitionId));
+    }
+
+    @Test
+    public void testBuildScanRangeWithRowIdWhenFirstRowIdPresent() throws Exception {
+        TestTables.TestTable mockedNativeTableV3 = create(SCHEMA_A, SPEC_A, "tv3_rowid", 3);
+
+        TupleDescriptor localTupleDescriptor = new TupleDescriptor(new TupleId(4));
+        SlotDescriptor idSlot = new SlotDescriptor(new SlotId(1), localTupleDescriptor);
+        idSlot.setType(INT);
+        idSlot.setColumn(new Column("id", INT));
+        localTupleDescriptor.addSlot(idSlot);
+
+        SlotDescriptor dataSlot = new SlotDescriptor(new SlotId(2), localTupleDescriptor);
+        dataSlot.setType(VARCHAR);
+        dataSlot.setColumn(new Column("data", VARCHAR));
+        localTupleDescriptor.addSlot(dataSlot);
+
+        SlotDescriptor rowIdSlot = new SlotDescriptor(new SlotId(3), localTupleDescriptor);
+        rowIdSlot.setType(BIGINT);
+        rowIdSlot.setColumn(new Column(IcebergTable.ROW_ID, BIGINT));
+        localTupleDescriptor.addSlot(rowIdSlot);
+
+        mockedNativeTableV3.newFastAppend().appendFile(FILE_A).commit();
+        List<Column> schema = Lists.newArrayList(new Column("id", INT), new Column("data", VARCHAR));
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table_v3", "iceberg_catalog",
+                "resource", "db", "table", "", schema, mockedNativeTableV3, Maps.newHashMap());
+
+        IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
+                RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, localTupleDescriptor, Optional.empty(),
+                PartitionIdGenerator.of(), false, false);
+
+        FileScanTask fileScanTask = Lists.newArrayList(mockedNativeTableV3.newScan().planFiles()).get(0);
+        long partitionId = scanRangeSource.addPartition(fileScanTask);
+
+        if (fileScanTask.file().firstRowId() != null) {
+            THdfsScanRange hdfsScanRange = scanRangeSource.buildScanRange(
+                    fileScanTask, fileScanTask.file(), partitionId);
+            Assertions.assertTrue(hdfsScanRange.isSetFirst_row_id());
+            Assertions.assertEquals(fileScanTask.file().firstRowId().longValue(),
+                    hdfsScanRange.getFirst_row_id());
         }
     }
 }

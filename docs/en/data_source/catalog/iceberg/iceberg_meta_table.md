@@ -22,6 +22,29 @@ Currently, StarRocks supports the following Iceberg metadata tables:
 | `files`                | Shows details about the data files and delete files in the current snapshot of the table. |
 | `refs`                 | Shows details about the Iceberg references, including branches and tags. |
 
+## Iceberg v3 Row Lineage Metadata Columns
+
+From v4.1 onwards, for Iceberg v3 tables (format-version = 3), StarRocks supports querying the following Row Lineage metadata columns:
+
+| Metadata Column                 | Description                                                                                    |
+| :------------------------------ | :--------------------------------------------------------------------------------------------- |
+| `_row_id`                       | Unique row identifier within the table (BIGINT). Format: `firstRowId + row_position`.          |
+| `_last_updated_sequence_number` | The commit sequence number when the row was last updated (BIGINT).                             |
+
+Usage:
+
+```SQL
+SELECT _row_id, _last_updated_sequence_number, * FROM [<catalog>.][<database>.]table;
+```
+
+:::note
+
+- The `_row_id` column requires data files to have `firstRowId` metadata. If a data file is missing `firstRowId`, the query will fail with an error.
+- The `_last_updated_sequence_number` column returns the data sequence number (`dataSequenceNumber`) of the data file.
+- These metadata columns are only available for Iceberg v3 tables (format-version = 3).
+
+:::
+
 ## `history` table
 
 Usage:
