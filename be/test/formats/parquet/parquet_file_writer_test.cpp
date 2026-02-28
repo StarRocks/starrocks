@@ -15,6 +15,8 @@
 #include "formats/parquet/parquet_file_writer.h"
 
 #include <gtest/gtest.h>
+#include <parquet/file_reader.h>
+#include <parquet/metadata.h>
 
 #include <filesystem>
 #include <memory>
@@ -934,6 +936,158 @@ TEST_F(ParquetFileWriterTest, TestIcebergDeleteFileColumnsRequired) {
         EXPECT_EQ(repetition, tparquet::FieldRepetitionType::REQUIRED)
                 << "Column " << field->name << " should be REQUIRED for Iceberg delete files but is " << repetition;
     }
+}
+
+TEST_F(ParquetFileWriterTest, TestColumnDictionaryEncodingDisabled) {
+    // Test that disabling dictionary encoding for specific column works correctly
+    // This test verifies the fix for Iceberg position delete file compression issue
+    std::vector type_descs{TYPE_VARCHAR_DESC, TYPE_BIGINT_DESC};
+    std::vector<std::string> column_names = {"file_path", "pos"};
+
+    auto column_evaluators = std::make_shared<std::vector<std::unique_ptr<ColumnEvaluator>>>(
+            ColumnSlotIdEvaluator::from_types(type_descs));
+    // Use a unique file path for this test to avoid conflicts with _file_path
+    std::string file_path = "/test_dict_disabled.parquet";
+    auto fs = std::shared_ptr<MemoryFileSystem>(&_fs, [](MemoryFileSystem*) {});
+    auto factory = ParquetFileWriterFactory(fs, TCompressionType::NO_COMPRESSION, {}, column_names, column_evaluators,
+                                            std::nullopt, nullptr, _runtime_state);
+
+    // Disable dictionary encoding for "pos" column (simulating Iceberg delete file optimization)
+    std::unordered_map<std::string, bool> column_dict_config;
+    column_dict_config["pos"] = false;
+    factory.set_column_dictionary_enabled(std::move(column_dict_config));
+
+    ASSERT_OK(factory.init());
+
+    auto maybe_writer = factory.create(file_path);
+    ASSERT_OK(maybe_writer.status());
+
+    auto writer = std::move(maybe_writer.value().writer);
+    ASSERT_OK(writer->init());
+
+    // Write monotonically increasing pos values (typical for position delete files)
+    auto chunk = std::make_shared<Chunk>();
+    {
+        // file_path column - repeated values (good for dictionary encoding)
+        auto col0 = ColumnTestHelper::build_column<Slice>({"s3://bucket/table/data/file1.parquet",
+                                                           "s3://bucket/table/data/file1.parquet",
+                                                           "s3://bucket/table/data/file1.parquet"});
+        chunk->append_column(std::move(col0), 0);
+
+        // pos column - monotonically increasing (poor for dictionary encoding, should use PLAIN)
+        auto col1 = ColumnTestHelper::build_column<int64_t>({100, 200, 300});
+        chunk->append_column(std::move(col1), 1);
+    }
+
+    ASSERT_OK(writer->write(chunk.get()));
+    auto result = writer->close();
+    ASSERT_OK(result.io_status);
+    ASSERT_EQ(result.file_statistics.record_count, 3);
+
+    // Verify encoding using StarRocks parquet FileReader
+    ASSIGN_OR_ABORT(auto file, _fs.new_random_access_file(file_path));
+    ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(file_path));
+    auto file_reader = std::make_shared<parquet::FileReader>(config::vector_chunk_size, file.get(), file_size);
+
+    auto ctx = _create_scan_context(type_descs);
+    ASSERT_OK(file_reader->init(ctx));
+    auto file_metadata = file_reader->get_file_metadata();
+
+    ASSERT_EQ(file_metadata->t_metadata().row_groups.size(), 1);
+
+    // Check row group 0
+    const auto& row_group = file_metadata->t_metadata().row_groups[0];
+
+    // file_path column (index 0) - should use dictionary encoding
+    const auto& file_path_col = row_group.columns[0];
+    const auto& file_path_encodings = file_path_col.meta_data.encodings;
+    bool has_dict_encoding_file_path = false;
+    for (const auto& enc : file_path_encodings) {
+        if (enc == tparquet::Encoding::RLE_DICTIONARY || enc == tparquet::Encoding::PLAIN_DICTIONARY) {
+            has_dict_encoding_file_path = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(has_dict_encoding_file_path) << "file_path column should use dictionary encoding (repeated values)";
+
+    // pos column (index 1) - should NOT use dictionary encoding (disabled)
+    const auto& pos_col = row_group.columns[1];
+    const auto& pos_encodings = pos_col.meta_data.encodings;
+    bool has_dict_encoding_pos = false;
+    for (const auto& enc : pos_encodings) {
+        if (enc == tparquet::Encoding::RLE_DICTIONARY || enc == tparquet::Encoding::PLAIN_DICTIONARY) {
+            has_dict_encoding_pos = true;
+            break;
+        }
+    }
+    EXPECT_FALSE(has_dict_encoding_pos) << "pos column should NOT use dictionary encoding (configured to disable)";
+
+    // Verify pos column uses PLAIN encoding
+    bool has_plain_encoding = false;
+    for (const auto& enc : pos_encodings) {
+        if (enc == tparquet::Encoding::PLAIN) {
+            has_plain_encoding = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(has_plain_encoding) << "pos column should use PLAIN encoding";
+}
+
+TEST_F(ParquetFileWriterTest, TestColumnDictionaryEncodingEnabledByDefault) {
+    // Test that dictionary encoding is enabled by default when not explicitly disabled
+    std::vector type_descs{TYPE_BIGINT_DESC};
+    std::vector<std::string> column_names = {"col1"};
+
+    auto column_evaluators = std::make_shared<std::vector<std::unique_ptr<ColumnEvaluator>>>(
+            ColumnSlotIdEvaluator::from_types(type_descs));
+    // Use a unique file path for this test to avoid conflicts with _file_path
+    std::string file_path = "/test_dict_default.parquet";
+    auto fs = std::shared_ptr<MemoryFileSystem>(&_fs, [](MemoryFileSystem*) {});
+    auto factory = ParquetFileWriterFactory(fs, TCompressionType::NO_COMPRESSION, {}, column_names, column_evaluators,
+                                            std::nullopt, nullptr, _runtime_state);
+
+    // Do NOT call set_column_dictionary_enabled - should use default (enabled)
+    ASSERT_OK(factory.init());
+
+    auto maybe_writer = factory.create(file_path);
+    ASSERT_OK(maybe_writer.status());
+
+    auto writer = std::move(maybe_writer.value().writer);
+    ASSERT_OK(writer->init());
+
+    // Write repeated values (good for dictionary encoding)
+    auto chunk = std::make_shared<Chunk>();
+    {
+        auto col = ColumnTestHelper::build_column<int64_t>({100, 100, 100, 100, 100});
+        chunk->append_column(std::move(col), 0);
+    }
+
+    ASSERT_OK(writer->write(chunk.get()));
+    auto result = writer->close();
+    ASSERT_OK(result.io_status);
+
+    // Verify encoding using StarRocks parquet FileReader
+    ASSIGN_OR_ABORT(auto file, _fs.new_random_access_file(file_path));
+    ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(file_path));
+    auto file_reader = std::make_shared<parquet::FileReader>(config::vector_chunk_size, file.get(), file_size);
+
+    auto ctx = _create_scan_context(type_descs);
+    ASSERT_OK(file_reader->init(ctx));
+    auto file_metadata = file_reader->get_file_metadata();
+
+    const auto& row_group = file_metadata->t_metadata().row_groups[0];
+    const auto& col_chunk = row_group.columns[0];
+    const auto& encodings = col_chunk.meta_data.encodings;
+
+    // Should have dictionary encoding (default behavior)
+    bool has_dict_encoding = false;
+    for (const auto& enc : encodings) {
+        if (enc == tparquet::Encoding::RLE_DICTIONARY || enc == tparquet::Encoding::PLAIN_DICTIONARY) {
+            has_dict_encoding = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(has_dict_encoding) << "Column should use dictionary encoding by default";
 }
 
 } // namespace starrocks::formats
