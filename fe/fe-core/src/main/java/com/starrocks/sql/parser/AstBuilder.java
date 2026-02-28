@@ -2820,8 +2820,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         Token start = context.qualifiedName().start;
         Token stop = context.qualifiedName().stop;
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-        StarRocksParser.ShowPredicateClausesContext showPredicateClauses = context.showPredicateClauses();
-        Expr where = getWhereFrom(context.showPredicateClauses());
+        Expr where = context.where != null ? (Expr) visit(context.where) : null;
 
         PartitionRef partitionRef = null;
         if (context.partitionNames() != null) {
