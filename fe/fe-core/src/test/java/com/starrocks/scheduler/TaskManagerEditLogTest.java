@@ -14,11 +14,10 @@
 
 package com.starrocks.scheduler;
 
-import com.starrocks.persist.AlterTaskInfo;
+
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;
 import com.starrocks.scheduler.persist.DropTasksLog;
-import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.UtFrameUtils;
@@ -67,7 +66,7 @@ public class TaskManagerEditLogTest {
         Assertions.assertEquals(0, masterTaskManager.filterTasks(null).size());
 
         // 3. Execute createTask operation (master side)
-        masterTaskManager.createTask(task);
+        masterTaskManager.createTask(task, false);
 
         // 4. Verify master state
         Assertions.assertNotNull(masterTaskManager.getTask(taskName));
@@ -126,7 +125,7 @@ public class TaskManagerEditLogTest {
         
         // 3. Mock EditLog.logCreateTask to throw exception
         doThrow(new RuntimeException("EditLog write failed"))
-            .when(spyEditLog).logCreateTask(any(Task.class), any());
+            .when(spyEditLog).logCreateTask(any(Task.class));
         
         // Temporarily set spy EditLog
         GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
@@ -140,7 +139,7 @@ public class TaskManagerEditLogTest {
 
         // 4. Execute createTask operation and expect exception
         RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
-            exceptionTaskManager.createTask(task);
+            exceptionTaskManager.createTask(task, false);
         });
         Assertions.assertEquals("EditLog write failed", exception.getMessage());
 
@@ -162,7 +161,7 @@ public class TaskManagerEditLogTest {
         task1.setDbName("test_db");
         task1.setCatalogName("test_catalog");
         
-        masterTaskManager.createTask(task1);
+        masterTaskManager.createTask(task1, false);
         Assertions.assertNotNull(masterTaskManager.getTask(taskName));
         Assertions.assertEquals(1, masterTaskManager.filterTasks(null).size());
 
@@ -175,7 +174,7 @@ public class TaskManagerEditLogTest {
 
         // 3. Expect DdlException to be thrown
         try {
-            masterTaskManager.createTask(task2);
+            masterTaskManager.createTask(task2, false);
             Assertions.fail("Expected DdlException to be thrown");
         } catch (Exception e) {
             Assertions.assertTrue(e.toString().contains("already exists"));
@@ -206,7 +205,7 @@ public class TaskManagerEditLogTest {
 
         // 3. Execute createTask operation and expect DdlException
         try {
-            masterTaskManager.createTask(task);
+            masterTaskManager.createTask(task, false);
             Assertions.fail("Expected DdlException to be thrown");
         } catch (Exception e) {
             Assertions.assertTrue(e.toString().contains("has no scheduling information"));
@@ -239,7 +238,7 @@ public class TaskManagerEditLogTest {
         Assertions.assertEquals(0, masterTaskManager.filterTasks(null).size());
 
         // 3. Execute createTask operation (master side)
-        masterTaskManager.createTask(task);
+        masterTaskManager.createTask(task, false);
 
         // 4. Verify master state
         Assertions.assertNotNull(masterTaskManager.getTask(taskName));
@@ -302,7 +301,7 @@ public class TaskManagerEditLogTest {
 
         // 3. Execute createTask operation and expect IllegalArgumentException
         IllegalArgumentException exception = Assertions.assertThrows(IllegalArgumentException.class, () -> {
-            masterTaskManager.createTask(task);
+            masterTaskManager.createTask(task, false);
         });
         Assertions.assertTrue(exception.getMessage().contains("TaskId should be assigned by the framework"));
 
@@ -337,9 +336,9 @@ public class TaskManagerEditLogTest {
         task3.setCatalogName("test_catalog");
 
         // 2. Create tasks
-        masterTaskManager.createTask(task1);
-        masterTaskManager.createTask(task2);
-        masterTaskManager.createTask(task3);
+        masterTaskManager.createTask(task1, false);
+        masterTaskManager.createTask(task2, false);
+        masterTaskManager.createTask(task3, false);
 
         // 3. Verify initial state
         Assertions.assertNotNull(masterTaskManager.getTask(taskName1));
@@ -353,7 +352,7 @@ public class TaskManagerEditLogTest {
         taskIdsToDrop.add(task3.getId());
 
         // 5. Execute dropTasks operation (master side)
-        masterTaskManager.dropTasks(taskIdsToDrop);
+        masterTaskManager.dropTasks(taskIdsToDrop, false);
 
         // 6. Verify master state after dropping
         Assertions.assertNull(masterTaskManager.getTask(taskName1));
@@ -429,8 +428,8 @@ public class TaskManagerEditLogTest {
         TaskManager exceptionTaskManager = new TaskManager();
         
         // Create tasks first
-        exceptionTaskManager.createTask(task1);
-        exceptionTaskManager.createTask(task2);
+        exceptionTaskManager.createTask(task1, false);
+        exceptionTaskManager.createTask(task2, false);
         Assertions.assertEquals(2, exceptionTaskManager.filterTasks(null).size());
 
         // 2. Prepare task IDs to drop
@@ -440,7 +439,7 @@ public class TaskManagerEditLogTest {
         // 3. Mock EditLog.logDropTasks to throw exception
         EditLog spyEditLog = spy(new EditLog(null));
         doThrow(new RuntimeException("EditLog write failed"))
-            .when(spyEditLog).logDropTasks(any(DropTasksLog.class), any());
+            .when(spyEditLog).logDropTasks(any(List.class));
         
         // Temporarily set spy EditLog
         GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
@@ -450,7 +449,7 @@ public class TaskManagerEditLogTest {
 
         // 4. Execute dropTasks operation and expect exception
         RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
-            exceptionTaskManager.dropTasks(taskIdsToDrop);
+            exceptionTaskManager.dropTasks(taskIdsToDrop, false);
         });
         Assertions.assertEquals("EditLog write failed", exception.getMessage());
 
@@ -484,7 +483,7 @@ public class TaskManagerEditLogTest {
         task.setSchedule(schedule);
 
         // 2. Create periodical task
-        masterTaskManager.createTask(task);
+        masterTaskManager.createTask(task, false);
 
         // 3. Verify initial state
         Assertions.assertNotNull(masterTaskManager.getTask(taskName));
@@ -496,7 +495,7 @@ public class TaskManagerEditLogTest {
         taskIdsToDrop.add(task.getId());
 
         // 5. Execute dropTasks operation
-        masterTaskManager.dropTasks(taskIdsToDrop);
+        masterTaskManager.dropTasks(taskIdsToDrop, false);
 
         // 6. Verify task is dropped and scheduler is stopped
         Assertions.assertNull(masterTaskManager.getTask(taskName));
@@ -514,7 +513,7 @@ public class TaskManagerEditLogTest {
         task.setDbName("test_db");
         task.setCatalogName("test_catalog");
         
-        masterTaskManager.createTask(task);
+        masterTaskManager.createTask(task, false);
         Assertions.assertEquals(1, masterTaskManager.filterTasks(null).size());
 
         // 2. Prepare task IDs to drop (including non-existent ID)
@@ -523,7 +522,7 @@ public class TaskManagerEditLogTest {
         taskIdsToDrop.add(99999L); // Non-existent task ID
 
         // 3. Execute dropTasks operation
-        masterTaskManager.dropTasks(taskIdsToDrop);
+        masterTaskManager.dropTasks(taskIdsToDrop, false);
 
         // 4. Verify existing task is dropped, non-existent ID is ignored
         Assertions.assertNull(masterTaskManager.getTask(taskName));
@@ -540,151 +539,19 @@ public class TaskManagerEditLogTest {
         task.setDbName("test_db");
         task.setCatalogName("test_catalog");
         
-        masterTaskManager.createTask(task);
+        masterTaskManager.createTask(task, false);
         Assertions.assertEquals(1, masterTaskManager.filterTasks(null).size());
 
         // 2. Prepare empty task ID list
         List<Long> taskIdsToDrop = new ArrayList<>();
 
         // 3. Execute dropTasks operation with empty list
-        masterTaskManager.dropTasks(taskIdsToDrop);
+        masterTaskManager.dropTasks(taskIdsToDrop, false);
 
         // 4. Verify no tasks are dropped
         Assertions.assertNotNull(masterTaskManager.getTask(taskName));
         Assertions.assertEquals(1, masterTaskManager.filterTasks(null).size());
     }
-
-    @Test
-    public void testClearUnfinishedTaskRunNormalCase() throws Exception {
-        // 1. Prepare test data - create a task first
-        String taskName = "clear_unfinished_task";
-        Task task = new Task(taskName);
-        task.setType(Constants.TaskType.MANUAL);
-        task.setDefinition("SELECT 1");
-        task.setDbName("test_db");
-        task.setCatalogName("test_catalog");
-        
-        masterTaskManager.createTask(task);
-        long taskId = task.getId();
-        Assertions.assertNotNull(masterTaskManager.getTask(taskName));
-
-        // 2. Create pending TaskRun
-        TaskRun pendingTaskRun = TaskRunBuilder.newBuilder(task).build();
-        pendingTaskRun.setTaskId(taskId);
-        pendingTaskRun.initStatus("pending_query_1", System.currentTimeMillis());
-        pendingTaskRun.getStatus().setState(Constants.TaskRunState.PENDING);
-        masterTaskManager.getTaskRunScheduler().addPendingTaskRun(pendingTaskRun);
-        Assertions.assertEquals(1, masterTaskManager.getTaskRunScheduler().getPendingQueueCount());
-
-        // 3. Create running TaskRun (simulate by adding to running map)
-        TaskRun runningTaskRun = TaskRunBuilder.newBuilder(task).build();
-        runningTaskRun.setTaskId(taskId);
-        runningTaskRun.initStatus("running_query_1", System.currentTimeMillis());
-        runningTaskRun.getStatus().setState(Constants.TaskRunState.RUNNING);
-        masterTaskManager.getTaskRunScheduler().addRunningTaskRun(runningTaskRun);
-        Assertions.assertEquals(1, masterTaskManager.getTaskRunScheduler().getRunningTaskCount());
-
-        // 4. Execute clearUnfinishedTaskRun operation
-        masterTaskManager.clearUnfinishedTaskRun();
-
-        // 5. Verify pending and running task runs are cleared
-        Assertions.assertEquals(0, masterTaskManager.getTaskRunScheduler().getPendingQueueCount());
-        Assertions.assertEquals(0, masterTaskManager.getTaskRunScheduler().getRunningTaskCount());
-
-        // 6. Test follower replay functionality
-        TaskManager followerTaskManager = new TaskManager();
-        
-        // First create the task in follower
-        Task followerTask = new Task(taskName);
-        followerTask.setId(taskId);
-        followerTask.setType(Constants.TaskType.MANUAL);
-        followerTask.setDefinition("SELECT 1");
-        followerTask.setDbName("test_db");
-        followerTask.setCatalogName("test_catalog");
-        followerTask.setCreateTime(task.getCreateTime());
-        followerTaskManager.replayCreateTask(followerTask);
-
-        // Create pending TaskRun in follower
-        TaskRun followerPendingTaskRun = TaskRunBuilder.newBuilder(followerTask).build();
-        followerPendingTaskRun.setTaskId(taskId);
-        followerPendingTaskRun.initStatus("pending_query_1", System.currentTimeMillis());
-        followerPendingTaskRun.getStatus().setState(Constants.TaskRunState.PENDING);
-        followerTaskManager.getTaskRunScheduler().addPendingTaskRun(followerPendingTaskRun);
-        
-        // Create running TaskRun in follower
-        TaskRun followerRunningTaskRun = TaskRunBuilder.newBuilder(followerTask).build();
-        followerRunningTaskRun.setTaskId(taskId);
-        followerRunningTaskRun.initStatus("running_query_1", System.currentTimeMillis());
-        followerRunningTaskRun.getStatus().setState(Constants.TaskRunState.RUNNING);
-        followerTaskManager.getTaskRunScheduler().addRunningTaskRun(followerRunningTaskRun);
-        
-        Assertions.assertEquals(1, followerTaskManager.getTaskRunScheduler().getPendingQueueCount());
-        Assertions.assertEquals(1, followerTaskManager.getTaskRunScheduler().getRunningTaskCount());
-
-        // Replay the first status change (for pending TaskRun)
-        TaskRunStatusChange statusChange1 = (TaskRunStatusChange) UtFrameUtils
-                .PseudoJournalReplayer.replayNextJournal(OperationType.OP_UPDATE_TASK_RUN);
-        followerTaskManager.replayUpdateTaskRun(statusChange1);
-
-        // Replay the second status change (for running TaskRun)
-        TaskRunStatusChange statusChange2 = (TaskRunStatusChange) UtFrameUtils
-                .PseudoJournalReplayer.replayNextJournal(OperationType.OP_UPDATE_TASK_RUN);
-        followerTaskManager.replayUpdateTaskRun(statusChange2);
-
-        // 7. Verify follower state is consistent with master
-        Assertions.assertEquals(0, followerTaskManager.getTaskRunScheduler().getPendingQueueCount());
-        Assertions.assertEquals(0, followerTaskManager.getTaskRunScheduler().getRunningTaskCount());
-    }
-
-    @Test
-    public void testClearUnfinishedTaskRunEditLogException() throws Exception {
-        // 1. Prepare test data - create a task first
-        String taskName = "clear_unfinished_exception_task";
-        Task task = new Task(taskName);
-        task.setType(Constants.TaskType.MANUAL);
-        task.setDefinition("SELECT 1");
-        task.setDbName("test_db");
-        task.setCatalogName("test_catalog");
-
-        // Create a separate TaskManager for exception testing
-        TaskManager exceptionTaskManager = new TaskManager();
-        
-        exceptionTaskManager.createTask(task);
-        long taskId = task.getId();
-        Assertions.assertNotNull(exceptionTaskManager.getTask(taskName));
-
-        // 2. Create pending TaskRun
-        TaskRun pendingTaskRun = TaskRunBuilder.newBuilder(task).build();
-        pendingTaskRun.setTaskId(taskId);
-        pendingTaskRun.initStatus("pending_query_1", System.currentTimeMillis());
-        pendingTaskRun.getStatus().setState(Constants.TaskRunState.PENDING);
-        exceptionTaskManager.getTaskRunScheduler().addPendingTaskRun(pendingTaskRun);
-        Assertions.assertEquals(1, exceptionTaskManager.getTaskRunScheduler().getPendingQueueCount());
-
-        // 3. Mock EditLog.logUpdateTaskRun to throw exception
-        EditLog spyEditLog = spy(new EditLog(null));
-        doThrow(new RuntimeException("EditLog write failed"))
-            .when(spyEditLog).logUpdateTaskRun(any(TaskRunStatusChange.class), any());
-        
-        // Temporarily set spy EditLog
-        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
-
-        // Save initial state snapshot
-        long initialPendingCount = exceptionTaskManager.getTaskRunScheduler().getPendingQueueCount();
-
-        // 4. Execute clearUnfinishedTaskRun operation and expect exception
-        RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
-            exceptionTaskManager.clearUnfinishedTaskRun();
-        });
-        Assertions.assertEquals("EditLog write failed", exception.getMessage());
-
-        // 5. Verify leader memory state remains unchanged after exception
-        Assertions.assertEquals(initialPendingCount, exceptionTaskManager.getTaskRunScheduler().getPendingQueueCount());
-        
-        // Verify pending task run still exists
-        Assertions.assertEquals(1, exceptionTaskManager.getTaskRunScheduler().getPendingQueueCount());
-    }
-
     @Test
     public void testAlterTaskNormalCase() throws Exception {
         // 1. Prepare test data - create a manual task first
@@ -695,7 +562,7 @@ public class TaskManagerEditLogTest {
         currentTask.setDbName("test_db");
         currentTask.setCatalogName("test_catalog");
         
-        masterTaskManager.createTask(currentTask);
+        masterTaskManager.createTask(currentTask, false);
         Task createdTask = masterTaskManager.getTask(taskName);
         Assertions.assertNotNull(createdTask);
         Assertions.assertEquals(Constants.TaskType.MANUAL, createdTask.getType());
@@ -715,7 +582,7 @@ public class TaskManagerEditLogTest {
         changedTask.setSchedule(schedule);
 
         // 3. Execute alterTask operation (master side)
-        masterTaskManager.alterTask(createdTask, changedTask);
+        masterTaskManager.alterTask(createdTask, changedTask, false);
 
         // 4. Verify master state after alteration
         Task alteredTask = masterTaskManager.getTask(taskName);
@@ -742,7 +609,7 @@ public class TaskManagerEditLogTest {
         Assertions.assertEquals(Constants.TaskType.MANUAL, followerTaskManager.getTask(taskName).getType());
 
         // Replay the alter operation
-        AlterTaskInfo alterTaskInfo = (AlterTaskInfo) UtFrameUtils
+        Task alterTaskInfo = (Task) UtFrameUtils
                 .PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_TASK);
         
         followerTaskManager.replayAlterTask(alterTaskInfo);
@@ -769,7 +636,7 @@ public class TaskManagerEditLogTest {
         // Create a separate TaskManager for exception testing
         TaskManager exceptionTaskManager = new TaskManager();
         
-        exceptionTaskManager.createTask(currentTask);
+        exceptionTaskManager.createTask(currentTask, false);
         Task createdTask = exceptionTaskManager.getTask(taskName);
         Assertions.assertNotNull(createdTask);
         Assertions.assertEquals(Constants.TaskType.MANUAL, createdTask.getType());
@@ -790,7 +657,7 @@ public class TaskManagerEditLogTest {
         // 3. Mock EditLog.logAlterTask to throw exception
         EditLog spyEditLog = spy(new EditLog(null));
         doThrow(new RuntimeException("EditLog write failed"))
-            .when(spyEditLog).logAlterTask(any(AlterTaskInfo.class), any());
+            .when(spyEditLog).logAlterTask(any(Task.class));
         
         // Temporarily set spy EditLog
         GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
@@ -800,7 +667,7 @@ public class TaskManagerEditLogTest {
 
         // 4. Execute alterTask operation and expect exception
         RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
-            exceptionTaskManager.alterTask(createdTask, changedTask);
+            exceptionTaskManager.alterTask(createdTask, changedTask, false);
         });
         Assertions.assertEquals("EditLog write failed", exception.getMessage());
 
@@ -827,7 +694,7 @@ public class TaskManagerEditLogTest {
         schedule.setTimeUnit(TimeUnit.SECONDS);
         currentTask.setSchedule(schedule);
         
-        masterTaskManager.createTask(currentTask);
+        masterTaskManager.createTask(currentTask, false);
         Task createdTask = masterTaskManager.getTask(taskName);
         Assertions.assertNotNull(createdTask);
         Assertions.assertEquals(Constants.TaskType.PERIODICAL, createdTask.getType());
@@ -845,7 +712,7 @@ public class TaskManagerEditLogTest {
         changedTask.setCatalogName("test_catalog");
 
         // 3. Execute alterTask operation
-        masterTaskManager.alterTask(createdTask, changedTask);
+        masterTaskManager.alterTask(createdTask, changedTask, false);
 
         // 4. Verify master state after alteration
         Task alteredTask = masterTaskManager.getTask(taskName);
@@ -875,7 +742,7 @@ public class TaskManagerEditLogTest {
         Assertions.assertEquals(Constants.TaskType.PERIODICAL, followerTaskAfterCreate.getType());
 
         // Replay the alter operation
-        AlterTaskInfo alterTaskInfo = (AlterTaskInfo) UtFrameUtils
+        Task alterTaskInfo = (Task) UtFrameUtils
                 .PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_TASK);
         
         followerTaskManager.replayAlterTask(alterTaskInfo);
@@ -901,7 +768,7 @@ public class TaskManagerEditLogTest {
         currentTask.setDbName("test_db");
         currentTask.setCatalogName("test_catalog");
         
-        masterTaskManager.createTask(currentTask);
+        masterTaskManager.createTask(currentTask, false);
         Task createdTask = masterTaskManager.getTask(taskName);
         Assertions.assertNotNull(createdTask);
         Assertions.assertEquals(Constants.TaskType.EVENT_TRIGGERED, createdTask.getType());
@@ -924,7 +791,7 @@ public class TaskManagerEditLogTest {
         changedTask.setSchedule(schedule);
 
         // 3. Execute alterTask operation (master side)
-        masterTaskManager.alterTask(createdTask, changedTask);
+        masterTaskManager.alterTask(createdTask, changedTask, false);
 
         // 4. Verify master state after alteration
         Task alteredTask = masterTaskManager.getTask(taskName);
@@ -954,7 +821,7 @@ public class TaskManagerEditLogTest {
         Assertions.assertEquals(Constants.TaskType.EVENT_TRIGGERED, followerTaskManager.getTask(taskName).getType());
 
         // Replay the alter operation
-        AlterTaskInfo alterTaskInfo = (AlterTaskInfo) UtFrameUtils
+        Task alterTaskInfo = (Task) UtFrameUtils
                 .PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_TASK);
         
         followerTaskManager.replayAlterTask(alterTaskInfo);
@@ -985,7 +852,7 @@ public class TaskManagerEditLogTest {
         schedule.setTimeUnit(TimeUnit.SECONDS);
         task.setSchedule(schedule);
         
-        masterTaskManager.createTask(task);
+        masterTaskManager.createTask(task, false);
         Task createdTask = masterTaskManager.getTask(taskName);
         Assertions.assertNotNull(createdTask);
         Assertions.assertEquals(Constants.TaskState.ACTIVE, createdTask.getState());
@@ -1017,7 +884,7 @@ public class TaskManagerEditLogTest {
         Assertions.assertEquals(Constants.TaskState.ACTIVE, followerTaskManager.getTask(taskName).getState());
 
         // Replay the suspend operation
-        AlterTaskInfo alterTaskInfo = (AlterTaskInfo) UtFrameUtils
+        Task alterTaskInfo = (Task) UtFrameUtils
                 .PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_TASK);
         
         followerTaskManager.replayAlterTask(alterTaskInfo);
@@ -1045,7 +912,7 @@ public class TaskManagerEditLogTest {
         schedule.setTimeUnit(TimeUnit.SECONDS);
         task.setSchedule(schedule);
 
-        masterTaskManager.createTask(task);
+        masterTaskManager.createTask(task, false);
         Task createdTask = masterTaskManager.getTask(taskName);
         Assertions.assertNotNull(createdTask);
         // Set state to PAUSE after creation
@@ -1087,7 +954,7 @@ public class TaskManagerEditLogTest {
         // Replay both alter journals: first suspend, then resume
         // 1. Replay the suspend operation (changes state from ACTIVE to PAUSE)
         {
-            AlterTaskInfo alterTaskInfo = (AlterTaskInfo) UtFrameUtils
+            Task alterTaskInfo = (Task) UtFrameUtils
                     .PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_TASK);
             followerTaskManager.replayAlterTask(alterTaskInfo);
             Task followerSuspendedTask = followerTaskManager.getTask(taskName);
@@ -1096,7 +963,7 @@ public class TaskManagerEditLogTest {
         }
         // 2. Replay the resume operation (changes state from PAUSE to ACTIVE)
         {
-            AlterTaskInfo alterTaskInfo = (AlterTaskInfo) UtFrameUtils
+            Task alterTaskInfo = (Task) UtFrameUtils
                     .PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_TASK);
             followerTaskManager.replayAlterTask(alterTaskInfo);
             Task followerResumedTask = followerTaskManager.getTask(taskName);
@@ -1124,7 +991,7 @@ public class TaskManagerEditLogTest {
         
         // Create a separate TaskManager for exception testing
         TaskManager exceptionTaskManager = new TaskManager();
-        exceptionTaskManager.createTask(task);
+        exceptionTaskManager.createTask(task, false);
         Task createdTask = exceptionTaskManager.getTask(taskName);
         Assertions.assertNotNull(createdTask);
         Assertions.assertEquals(Constants.TaskState.ACTIVE, createdTask.getState());
@@ -1132,7 +999,7 @@ public class TaskManagerEditLogTest {
         // 2. Mock EditLog.logAlterTask to throw exception
         EditLog spyEditLog = spy(new EditLog(null));
         doThrow(new RuntimeException("EditLog write failed"))
-            .when(spyEditLog).logAlterTask(any(AlterTaskInfo.class), any());
+            .when(spyEditLog).logAlterTask(any(Task.class));
         
         // Temporarily set spy EditLog
         GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
