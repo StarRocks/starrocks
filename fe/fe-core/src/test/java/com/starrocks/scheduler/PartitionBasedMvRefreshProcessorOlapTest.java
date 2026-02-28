@@ -2725,7 +2725,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                             "partition by k1 \n" +
                             "distributed by random \n" +
                             "refresh deferred manual\n" +
-                            "properties('partition_refresh_strategy' = 'force')\n" +
+                            "properties('replication_num' = '1')\n" +
                             "as select * from tt_complete_refresh;");
                     MaterializedView mv = getMv("test_mv_complete_refresh");
 
@@ -2816,7 +2816,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                             "partition by k1 \n" +
                             "distributed by random \n" +
                             "refresh deferred manual\n" +
-                            "properties('partition_refresh_strategy' = 'force')\n" +
+                            "properties('replication_num' = '1')\n" +
                             "as select * from tt_partial_force_refresh;");
                     MaterializedView mv = getMv("test_mv_partial_force_refresh");
 
