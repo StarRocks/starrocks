@@ -120,7 +120,7 @@ public:
 
     Status write(Chunk* chunk) override;
 
-    CommitResult commit() override;
+    CommitResult close() override;
 
 private:
     static StatusOr<::parquet::Compression::type> _convert_compression_type(TCompressionType::type type);

@@ -44,7 +44,7 @@ bool SinkOperatorMemoryManager::kill_victim() {
         return false;
     }
 
-    auto result = victim->first->commit();
+    auto result = victim->first->close();
     _commit_func(result);
     LOG(INFO) << "kill victim: " << victim->second->filename() << " size: " << result.file_statistics.file_size;
     _candidates->erase(partition);
