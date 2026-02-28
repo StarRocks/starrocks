@@ -48,12 +48,13 @@ public class SqlBlackList {
     private static final Logger LOG = LogManager.getLogger(SqlBlackList.class);
 
     public void verifying(String sql) throws AnalysisException {
-        String formatSql = sql.replace("\r", " ").replace("\n", " ").replaceAll("\\s+", " ");
+        String formatSql = sql.replace("", " ").replace("
+", " ").replaceAll("\s+", " ");
         try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
             for (BlackListSql patternAndId : sqlBlackListMap.values()) {
                 Matcher m = patternAndId.pattern.matcher(formatSql);
                 if (m.find()) {
-                    ErrorReport.reportAnalysisException(ErrorCode.ERR_SQL_IN_BLACKLIST_ERROR);
+                    ErrorReport.reportSqlBlackListException(ErrorCode.ERR_SQL_IN_BLACKLIST_ERROR);
                 }
             }
         }
@@ -141,4 +142,3 @@ public class SqlBlackList {
     // ids used in sql blacklist
     private final AtomicLong ids = new AtomicLong();
 }
-
