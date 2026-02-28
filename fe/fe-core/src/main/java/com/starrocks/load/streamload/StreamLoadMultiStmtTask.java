@@ -22,19 +22,24 @@ import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.http.rest.ActionStatus;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.txn.BeginStmt;
 import com.starrocks.sql.ast.txn.CommitStmt;
+import com.starrocks.sql.ast.txn.RollbackStmt;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TLoadInfo;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStreamLoadInfo;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.transaction.ExplicitTxnState;
+import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionException;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.transaction.TransactionStmtExecutor;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import io.netty.handler.codec.http.HttpHeaders;
@@ -48,8 +53,38 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+/**
+ * Multi-statement stream load task state transition diagram:
+ *
+ * <pre>
+ *   BEGIN
+ *     |
+ *     +--[commitTxn]-------------------------> COMMITING
+ *     |                                            |
+ *     |                                            +--[success]---------> COMMITED
+ *     |                                            +--[fail]------------> ABORTING
+ *     |
+ *     +--[manualCancel / timeout / exception]----> ABORTING
+ *     +--[cancelAfterRestart, txnId!=0]---------> ABORTING
+ *     +--[cancelAfterRestart, txnId==0]---------> CANCELLED
+ *
+ *   ABORTING
+ *     |
+ *     +--[tryRollbackNow / reconcile success]----> CANCELLED
+ *     +--[reconcile finds txn committed]---------> COMMITED
+ * </pre>
+ *
+ * Final states: CANCELLED, COMMITED, FINISHED.
+ * COMMITING and ABORTING are intermediate; cancel is rejected in COMMITING.
+ * BEFORE_LOAD, LOADING, PREPARING, PREPARED are defined for compatibility but not used in this class.
+ */
 public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
     private static final Logger LOG = LogManager.getLogger(StreamLoadMultiStmtTask.class);
+
+    /** Initial retry interval (ms) for stream load abort rollback. */
+    private static final long ABORT_RETRY_INTERVAL_MS = 5000;
+    /** Max retry interval (ms) for stream load abort rollback backoff. */
+    private static final long ABORT_RETRY_MAX_INTERVAL_MS = 60000;
 
     public enum State {
         BEGIN,
@@ -57,6 +92,8 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
         LOADING,
         PREPARING,
         PREPARED,
+        COMMITING,  // Intermediate state: commit in progress, reject cancel during this state
+        ABORTING,   // Intermediate state: rollback in progress or pending retry, non-final
         COMMITED,
         CANCELLED,
         FINISHED
@@ -102,10 +139,17 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
     @SerializedName(value = "endTimeMs")
     private long endTimeMs = -1;
 
-    // Add missing fields
     private String errorMsg = "";
     private int channelNum = 0;
     private List<Object> channels = Lists.newArrayList();
+
+    @SerializedName(value = "abortRetryCount")
+    private int abortRetryCount = 0;
+    @SerializedName(value = "nextAbortRetryTimeMs")
+    private long nextAbortRetryTimeMs = 0;
+    @SerializedName(value = "abortReason")
+    private String abortReason = "";
+    private String lastAbortErrorMsg = "";
 
     public StreamLoadMultiStmtTask(long id, Database db, String label, String user, String clientIp,
                           long timeoutMs, long createTimeMs, ComputeResource computeResource) {
@@ -137,6 +181,144 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
         this.lock = new ReentrantReadWriteLock(true);
     }
 
+    /**
+     * Transition state to ABORTING and record the reason.
+     * Caller MUST hold writeLock.
+     */
+    private void transitionToAborting(String reason) {
+        this.state = State.ABORTING;
+        this.abortReason = reason;
+        this.abortRetryCount = 0;
+        this.nextAbortRetryTimeMs = 0;
+        this.lastAbortErrorMsg = "";
+    }
+
+    /**
+     * Attempt to rollback the transaction right now.
+     * If rollback succeeds, transitions state from ABORTING to CANCELLED.
+     * If rollback fails, stays in ABORTING with retry info updated.
+     * Also cancels sub-task coordinators on success.
+     *
+     * @return true if transaction has reached final state (CANCELLED or COMMITED)
+     */
+    private boolean tryRollbackNow() {
+        if (txnId == 0 || context == null) {
+            writeLock();
+            try {
+                this.state = State.CANCELLED;
+                this.endTimeMs = System.currentTimeMillis();
+            } finally {
+                writeUnlock();
+            }
+            return true;
+        }
+
+        boolean rollbackSuccess = false;
+        try {
+            TransactionStmtExecutor.rollbackStmt(context, new RollbackStmt(NodePosition.ZERO));
+            rollbackSuccess = true;
+        } catch (Exception e) {
+            this.lastAbortErrorMsg = e.getMessage();
+            LOG.warn("Failed to rollback transaction, label: {}, txnId: {}, reason: {}, " +
+                    "retryCount: {}", label, txnId, abortReason, abortRetryCount, e);
+        }
+
+        if (!rollbackSuccess) {
+            rollbackSuccess = reconcileWithTxnManager();
+        }
+
+        if (rollbackSuccess) {
+            for (StreamLoadTask task : taskMaps.values()) {
+                task.cancelCoordinatorOnly(abortReason);
+            }
+            writeLock();
+            try {
+                if (this.state != State.COMMITED) {
+                    this.state = State.CANCELLED;
+                }
+                this.endTimeMs = System.currentTimeMillis();
+            } finally {
+                writeUnlock();
+            }
+            LOG.info("Transaction rollback succeeded, label: {}, txnId: {}, reason: {}, " +
+                    "retryCount: {}", label, txnId, abortReason, abortRetryCount);
+            return true;
+        }
+
+        writeLock();
+        try {
+            this.abortRetryCount++;
+            long backoffMs = Math.min(
+                    ABORT_RETRY_INTERVAL_MS * (1L << Math.min(abortRetryCount, 10)),
+                    ABORT_RETRY_MAX_INTERVAL_MS);
+            this.nextAbortRetryTimeMs = System.currentTimeMillis() + backoffMs;
+        } finally {
+            writeUnlock();
+        }
+        return false;
+    }
+
+    /**
+     * Check the actual transaction status in the transaction manager to handle cases
+     * where rollbackStmt fails but the transaction has already reached a final state.
+     *
+     * @return true if the transaction is confirmed to be in a final state
+     */
+    private boolean reconcileWithTxnManager() {
+        try {
+            GlobalTransactionMgr txnMgr =
+                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+            ExplicitTxnState explicitState = txnMgr.getExplicitTxnState(txnId);
+            if (explicitState == null) {
+                LOG.info("ExplicitTxnState already cleared for txnId: {}, label: {}, " +
+                        "treating as aborted", txnId, label);
+                return true;
+            }
+            TransactionState txnState = explicitState.getTransactionState();
+            if (txnState != null) {
+                TransactionStatus status = txnState.getTransactionStatus();
+                if (status == TransactionStatus.ABORTED || status == TransactionStatus.VISIBLE
+                        || status == TransactionStatus.COMMITTED) {
+                    LOG.info("Transaction already in final status {}, label: {}, txnId: {}",
+                            status, label, txnId);
+                    if (status == TransactionStatus.VISIBLE
+                            || status == TransactionStatus.COMMITTED) {
+                        writeLock();
+                        try {
+                            this.state = State.COMMITED;
+                            this.endTimeMs = System.currentTimeMillis();
+                        } finally {
+                            writeUnlock();
+                        }
+                    }
+                    return true;
+                }
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to reconcile transaction status, label: {}, txnId: {}",
+                    label, txnId, e);
+        }
+        return false;
+    }
+
+    /**
+     * Called by background cleanup thread to retry abort for tasks stuck in ABORTING state.
+     *
+     * @param currentMs current time in milliseconds
+     * @return true if task is no longer in ABORTING state (either CANCELLED or reconciled)
+     */
+    public boolean retryAbortIfNeeded(long currentMs) {
+        if (this.state != State.ABORTING) {
+            return true;
+        }
+        if (currentMs < this.nextAbortRetryTimeMs) {
+            return false;
+        }
+        LOG.info("Background retry abort for label: {}, txnId: {}, retryCount: {}, reason: {}",
+                label, txnId, abortRetryCount, abortReason);
+        return tryRollbackNow();
+    }
+
     @Override
     public void beginTxnFromFrontend(TransactionResult resp) {
         beginTxn(resp);
@@ -157,6 +339,23 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
     }
 
     public void beginTxn(TransactionResult resp) {
+        // Check if task already committed or finished - return LABEL_ALREADY_EXISTS like basic transaction
+        if (this.state == State.COMMITED || this.state == State.FINISHED) {
+            resp.status = ActionStatus.LABEL_ALREADY_EXISTS;
+            resp.msg = String.format("Label [%s] has already been used.", label);
+            resp.addResultEntry("ExistingJobStatus", state.name());
+            return;
+        }
+
+        // Check if transaction already started (Double Begin) - return LABEL_ALREADY_EXISTS like basic transaction
+        if (this.txnId != 0) {
+            resp.status = ActionStatus.LABEL_ALREADY_EXISTS;
+            resp.msg = String.format("Transaction already started with label [%s], txnId: %d", label, txnId);
+            resp.addResultEntry("ExistingJobStatus", state.name());
+            resp.addResultEntry("TxnId", txnId);
+            return;
+        }
+
         // Ensure a non-empty label is generated in TransactionStmtExecutor.beginStmt
         // by providing a valid executionId. Use the pre-generated loadId as executionId.
         if (context.getExecutionId() == null) {
@@ -186,44 +385,192 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
 
     @Override
     public void commitTxn(HttpHeaders headers, TransactionResult resp) throws StarRocksException {
-        // Commit all sub-tasks
-        LOG.info("commit {} sub tasks", taskMaps.size());
-        for (StreamLoadTask task : taskMaps.values()) {
-            task.prepareChannel(0, task.getTableName(), headers, resp);
-            if (!resp.stateOK()) {
+        // Phase 1: Check state and mark as COMMITING (with lock)
+        writeLock();
+        try {
+            if (this.state == State.COMMITED || this.state == State.FINISHED) {
+                resp.setOKMsg(String.format("Transaction %d has already committed, label is %s", txnId, label));
+                resp.addResultEntry("Label", label);
+                resp.addResultEntry("TxnId", txnId);
                 return;
             }
-            if (task.checkNeedPrepareTxn()) {
-                task.waitCoordFinish(resp);
-            }
-            if (!resp.stateOK()) {
+            if (this.state == State.CANCELLED) {
+                resp.setErrorMsg(String.format("Can not commit CANCELLED transaction %d, label is %s", txnId, label));
                 return;
             }
-            TransactionStmtExecutor.loadData(dbId, task.getTable().getId(), task.getTxnStateItem(), context);
+            if (this.state == State.ABORTING) {
+                resp.setErrorMsg(String.format("Transaction %d is aborting (reason: %s), label is %s",
+                        txnId, abortReason, label));
+                return;
+            }
+            if (this.state == State.COMMITING) {
+                resp.setErrorMsg(String.format("Transaction %d is already committing, label is %s", txnId, label));
+                return;
+            }
+            this.state = State.COMMITING;
+        } finally {
+            writeUnlock();
         }
-        TransactionStmtExecutor.commitStmt(context, new CommitStmt(NodePosition.ZERO));
-        this.state = State.COMMITED;
+
+        // Phase 2: Execute time-consuming operations (without lock)
+        boolean success = false;
+        String commitErrorMsg = null;
+        try {
+            LOG.info("commit {} sub tasks", taskMaps.size());
+            for (StreamLoadTask task : taskMaps.values()) {
+                task.prepareChannel(0, task.getTableName(), headers, resp);
+                if (!resp.stateOK()) {
+                    commitErrorMsg = "prepareChannel failed";
+                    return;
+                }
+                if (task.checkNeedPrepareTxn()) {
+                    task.waitCoordFinish(resp);
+                }
+                if (!resp.stateOK()) {
+                    commitErrorMsg = "waitCoordFinish failed";
+                    return;
+                }
+                TransactionStmtExecutor.loadData(dbId, task.getTable().getId(), task.getTxnStateItem(), context);
+            }
+            TransactionStmtExecutor.commitStmt(context, new CommitStmt(NodePosition.ZERO));
+            if (context.getState().isError()) {
+                commitErrorMsg = context.getState().getErrorMessage();
+            } else {
+                success = true;
+            }
+        } catch (Exception e) {
+            commitErrorMsg = e.getMessage();
+            throw e;
+        } finally {
+            if (success) {
+                writeLock();
+                try {
+                    this.state = State.COMMITED;
+                    this.endTimeMs = System.currentTimeMillis();
+                } finally {
+                    writeUnlock();
+                }
+            } else {
+                this.errorMsg = commitErrorMsg != null ? commitErrorMsg : "commit failed";
+                LOG.warn("Commit failed for transaction {}, label: {}, error: {}",
+                        txnId, label, this.errorMsg);
+                writeLock();
+                try {
+                    transitionToAborting("commit failed: " + this.errorMsg);
+                } finally {
+                    writeUnlock();
+                }
+                tryRollbackNow();
+            }
+        }
     }
 
     @Override
     public void manualCancelTask(TransactionResult resp) throws StarRocksException {
-        // Cancel all sub-tasks
-        for (StreamLoadTask task : taskMaps.values()) {
-            task.manualCancelTask(resp);
+        writeLock();
+        try {
+            if (this.state == State.COMMITED || this.state == State.FINISHED) {
+                resp.setErrorMsg(String.format("Can not abort VISIBLE transaction %d, label is %s", txnId, label));
+                return;
+            }
+            if (this.state == State.CANCELLED) {
+                resp.setOKMsg(String.format("Transaction %d has already aborted, label is %s", txnId, label));
+                resp.addResultEntry("Label", label);
+                resp.addResultEntry("TxnId", txnId);
+                return;
+            }
+            if (this.state == State.COMMITING) {
+                resp.setErrorMsg(String.format("Can not abort transaction %d during committing, label is %s",
+                        txnId, label));
+                return;
+            }
+            if (this.state == State.ABORTING) {
+                resp.setOKMsg(String.format("Transaction %d abort is already in progress, label is %s. " +
+                        "Background retry will continue.", txnId, label));
+                return;
+            }
+            transitionToAborting("manual abort");
+        } finally {
+            writeUnlock();
         }
-        this.state = State.CANCELLED;
-        this.endTimeMs = System.currentTimeMillis();
+
+        if (tryRollbackNow()) {
+            resp.setOKMsg("stream load " + label + " abort");
+        } else {
+            resp.setOKMsg(String.format("stream load %s abort initiated, rollback pending " +
+                    "(background retry will continue), label is %s, txnId is %d", label, label, txnId));
+        }
     }
 
     @Override
     public boolean checkNeedRemove(long currentMs, boolean isForce) {
-        if (!isFinalState()) {
+        if (this.state == State.ABORTING) {
             return false;
         }
-        if (endTimeMs == -1) {
+
+        if (isFinalState()) {
+            if (endTimeMs == -1) {
+                endTimeMs = currentMs;
+            }
+            return isForce || ((currentMs - endTimeMs) > Config.stream_load_task_keep_max_second * 1000L);
+        }
+
+        if (isTimeout(currentMs)) {
+            cancelOnTimeout();
             return false;
         }
-        return isForce || ((currentMs - endTimeMs) > Config.stream_load_task_keep_max_second * 1000L);
+
+        return false;
+    }
+
+    public boolean isAborting() {
+        return this.state == State.ABORTING;
+    }
+
+    /**
+     * Check if the task has exceeded its timeout period.
+     * Timeout is calculated from createTimeMs (when BEGIN was called).
+     */
+    public boolean isTimeout(long currentMs) {
+        if (isFinalState() || this.state == State.ABORTING) {
+            return false;
+        }
+        return currentMs - createTimeMs > timeoutMs;
+    }
+
+    public void cancelOnTimeout() {
+        writeLock();
+        try {
+            if (isFinalState() || this.state == State.COMMITING || this.state == State.ABORTING) {
+                return;
+            }
+            LOG.info("Cancel multi-statement stream load task due to timeout, label: {}, txnId: {}, " +
+                    "createTimeMs: {}, timeoutMs: {}", label, txnId, createTimeMs, timeoutMs);
+            this.errorMsg = "transaction timeout after " + timeoutMs + "ms";
+            transitionToAborting("timeout");
+        } finally {
+            writeUnlock();
+        }
+
+        tryRollbackNow();
+    }
+
+    public void cancelOnException(String errorMessage) {
+        writeLock();
+        try {
+            if (isFinalState() || this.state == State.COMMITING || this.state == State.ABORTING) {
+                return;
+            }
+            LOG.warn("Multi-statement stream load task cancelled due to exception, label: {}, txnId: {}, " +
+                    "error: {}. Transaction auto-aborted (consistent with basic transaction behavior).",
+                    label, txnId, errorMessage);
+            this.errorMsg = errorMessage;
+            transitionToAborting("LOAD exception: " + errorMessage);
+        } finally {
+            writeUnlock();
+        }
+
+        tryRollbackNow();
     }
 
     @Override
@@ -233,7 +580,8 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
 
     @Override
     public boolean isDurableLoadState() {
-        return state == State.PREPARED || state == State.CANCELLED || state == State.COMMITED || state == State.FINISHED;
+        return state == State.PREPARED || state == State.CANCELLED || state == State.COMMITED
+                || state == State.FINISHED || state == State.ABORTING;
     }
 
     @Override
@@ -312,12 +660,11 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
 
     @Override
     public boolean isFinalState() {
-        for (StreamLoadTask task : taskMaps.values()) {
-            if (!task.isFinalState()) {
-                return false;
-            }
+        if (this.state == State.CANCELLED || this.state == State.COMMITED || this.state == State.FINISHED) {
+            return true;
         }
-        return true;
+        // ABORTING is NOT a final state - rollback is pending
+        return false;
     }
 
     @Override
@@ -353,6 +700,19 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
 
     @Override
     public TNetworkAddress tryLoad(int channelId, String tableName, TransactionResult resp) throws StarRocksException {
+        if (this.state == State.CANCELLED) {
+            resp.setErrorMsg(String.format("stream load task %s has already been cancelled: %s", label, errorMsg));
+            return null;
+        }
+        if (this.state == State.ABORTING) {
+            resp.setErrorMsg(String.format("stream load task %s is aborting: %s", label, abortReason));
+            return null;
+        }
+        if (this.state == State.COMMITED || this.state == State.FINISHED) {
+            resp.setErrorMsg(String.format("stream load task %s has already been %s", label, state.name().toLowerCase()));
+            return null;
+        }
+
         // For multi-statement tasks, delegate to specific table task if exists
         StreamLoadTask task = taskMaps.get(tableName);
         if (task != null) {
@@ -377,6 +737,19 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
 
     @Override
     public TNetworkAddress executeTask(int channelId, String tableName, HttpHeaders headers, TransactionResult resp) {
+        if (this.state == State.CANCELLED) {
+            resp.setErrorMsg(String.format("stream load task %s has already been cancelled: %s", label, errorMsg));
+            return null;
+        }
+        if (this.state == State.ABORTING) {
+            resp.setErrorMsg(String.format("stream load task %s is aborting: %s", label, abortReason));
+            return null;
+        }
+        if (this.state == State.COMMITED || this.state == State.FINISHED) {
+            resp.setErrorMsg(String.format("stream load task %s has already been %s", label, state.name().toLowerCase()));
+            return null;
+        }
+
         // For multi-statement tasks, delegate to specific table task if exists
         StreamLoadTask task = taskMaps.get(tableName);
         if (task != null) {
@@ -403,11 +776,17 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
 
     @Override
     public void cancelAfterRestart() {
-        // loop taskMaps and execute cancelAfterRestart
         for (StreamLoadTask task : taskMaps.values()) {
             task.cancelAfterRestart();
         }
-        state = State.CANCELLED;
+        this.errorMsg = "cancelled after FE restart";
+        if (txnId != 0) {
+            transitionToAborting("recover after FE restart");
+            tryRollbackNow();
+        } else {
+            this.state = State.CANCELLED;
+            this.endTimeMs = System.currentTimeMillis();
+        }
     }
 
     @Override
