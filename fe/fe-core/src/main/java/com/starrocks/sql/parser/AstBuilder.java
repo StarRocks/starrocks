@@ -149,6 +149,7 @@ import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
+import com.starrocks.sql.ast.AdminShowTabletStatusStmt;
 import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
@@ -2606,6 +2607,26 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new AdminShowReplicaDistributionStmt(new TableRef(targetTableName, null,
                 partitionNames, createPos(start, stop)),
                 createPos(context));
+    }
+
+    @Override
+    public ParseNode visitAdminShowTabletStatusStatement(
+            com.starrocks.sql.parser.StarRocksParser.AdminShowTabletStatusStatementContext context) {
+        Token start = context.qualifiedName().start;
+        Token stop = context.qualifiedName().stop;
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        Expr where = context.where != null ? (Expr) visit(context.where) : null;
+
+        PartitionNames partitionNames = null;
+        if (context.partitionNames() != null) {
+            stop = context.partitionNames().stop;
+            partitionNames = (PartitionNames) visit(context.partitionNames());
+        }
+
+        TableRef tableRef = new TableRef(targetTableName, null, partitionNames, createPos(start, stop));
+        Map<String, String> properties = getProperties(context.properties());
+        return new AdminShowTabletStatusStmt(tableRef, where, properties, createPos(context));
     }
 
     @Override
