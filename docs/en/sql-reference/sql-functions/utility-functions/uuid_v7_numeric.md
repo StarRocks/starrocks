@@ -4,8 +4,6 @@ displayed_sidebar: docs
 
 # uuid_v7_numeric
 
-## Description
-
 Returns a time-ordered UUID v7 of the LARGEINT type. UUID v7 is defined in RFC 9562 and provides better database performance compared to random UUIDs (v4) because it maintains temporal ordering, which improves index locality and reduces fragmentation.
 
 This function returns the UUID v7 as a 128-bit integer instead of a string format, which can be more efficient for storage and comparison operations.
