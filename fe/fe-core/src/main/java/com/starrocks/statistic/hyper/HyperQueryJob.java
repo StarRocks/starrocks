@@ -29,16 +29,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
-<<<<<<< HEAD
-=======
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.StatisticsType;
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.ExprUtils;
-import com.starrocks.sql.ast.expression.FunctionCallExpr;
-import com.starrocks.sql.ast.expression.IntLiteral;
-import com.starrocks.sql.ast.expression.StringLiteral;
->>>>>>> 3c026a22c4 ([BugFix] Fix KILL ANALYZE sometimes not stopping ANALYZE TABLE (#69592))
 import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.statistic.base.ColumnClassifier;

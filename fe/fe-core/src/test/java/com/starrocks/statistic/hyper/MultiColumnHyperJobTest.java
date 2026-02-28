@@ -82,13 +82,8 @@ public class MultiColumnHyperJobTest extends DistributedEnvPlanTestBase {
     public void testFullMultiColumnHyperJob() {
         List<String> columnNames = List.of("c1", "c2", "c3");
 
-<<<<<<< HEAD
-        List<HyperQueryJob> jobs = HyperQueryJob.createMultiColumnQueryJobs(connectContext, db, table, List.of(columnNames),
-                StatsConstants.AnalyzeType.FULL, List.of(StatsConstants.StatisticsType.MCDISTINCT), null);
-=======
         List<HyperQueryJob> jobs = HyperQueryJob.createMultiColumnQueryJobs(1L, connectContext, db, table,
-                List.of(columnNames), StatsConstants.AnalyzeType.FULL, List.of(StatisticsType.MCDISTINCT), null);
->>>>>>> 3c026a22c4 ([BugFix] Fix KILL ANALYZE sometimes not stopping ANALYZE TABLE (#69592))
+                List.of(columnNames), StatsConstants.AnalyzeType.FULL, List.of(StatsConstants.StatisticsType.MCDISTINCT), null);
 
         Assertions.assertEquals(1, jobs.size());
 
@@ -102,13 +97,9 @@ public class MultiColumnHyperJobTest extends DistributedEnvPlanTestBase {
     public void testSampleMultiColumnHyperJob() {
         List<String> columnNames = List.of("c1", "c2", "c3");
 
-<<<<<<< HEAD
-        List<HyperQueryJob> jobs = HyperQueryJob.createMultiColumnQueryJobs(connectContext, db, table, List.of(columnNames),
-                StatsConstants.AnalyzeType.SAMPLE, List.of(StatsConstants.StatisticsType.MCDISTINCT), new HashMap<>());
-=======
         List<HyperQueryJob> jobs = HyperQueryJob.createMultiColumnQueryJobs(1L, connectContext, db, table,
-                List.of(columnNames), StatsConstants.AnalyzeType.SAMPLE, List.of(StatisticsType.MCDISTINCT), new HashMap<>());
->>>>>>> 3c026a22c4 ([BugFix] Fix KILL ANALYZE sometimes not stopping ANALYZE TABLE (#69592))
+                List.of(columnNames), StatsConstants.AnalyzeType.SAMPLE, List.of(StatsConstants.StatisticsType.MCDISTINCT),
+                new HashMap<>());
         Assertions.assertEquals(1, jobs.size());
         String sql = ((MultiColumnQueryJob) jobs.get(0)).buildStatisticsQuery();
         String expectedSql = "WITH base_cte_table as (SELECT murmur_hash3_32(coalesce(`c1`, ''), " +
