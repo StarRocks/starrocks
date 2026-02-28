@@ -1,4 +1,4 @@
--- name: test_alter_cooldown
+-- name: test_alter_cooldown @native
 CREATE TABLE t0 (
 `__d` date NOT NULL COMMENT "",
 `__time` bigint(20) NOT NULL COMMENT "",
