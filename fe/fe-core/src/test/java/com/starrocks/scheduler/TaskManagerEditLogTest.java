@@ -54,7 +54,7 @@ public class TaskManagerEditLogTest {
         currentTask.setDbName("test_db");
         currentTask.setCatalogName("test_catalog");
         
-        masterTaskManager.createTask(currentTask);
+        masterTaskManager.createTask(currentTask, false);
         Task createdTask = masterTaskManager.getTask(taskName);
         Assertions.assertNotNull(createdTask);
         Assertions.assertEquals(Constants.TaskType.EVENT_TRIGGERED, createdTask.getType());
@@ -77,7 +77,7 @@ public class TaskManagerEditLogTest {
         changedTask.setSchedule(schedule);
 
         // 3. Execute alterTask operation (master side)
-        masterTaskManager.alterTask(createdTask, changedTask);
+        masterTaskManager.alterTask(createdTask, changedTask, false);
 
         // 4. Verify master state after alteration
         Task alteredTask = masterTaskManager.getTask(taskName);
@@ -107,7 +107,7 @@ public class TaskManagerEditLogTest {
         Assertions.assertEquals(Constants.TaskType.EVENT_TRIGGERED, followerTaskManager.getTask(taskName).getType());
 
         // Replay the alter operation
-        AlterTaskInfo alterTaskInfo = (AlterTaskInfo) UtFrameUtils
+        Task alterTaskInfo = (Task) UtFrameUtils
                 .PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_TASK);
         
         followerTaskManager.replayAlterTask(alterTaskInfo);
