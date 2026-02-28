@@ -35,6 +35,8 @@
 #include "pipeline/hashjoin/hash_joiner_fwd.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_filter.h"
+#include "runtime/runtime_filter_builder.h"
+#include "runtime/runtime_filter_factory.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks {
@@ -643,14 +645,14 @@ Status HashJoiner::_create_runtime_bloom_filters(RuntimeState* state, int64_t li
         if (multi_partitioned) {
             LogicalType build_type = rf_desc->build_expr_type();
             filter = std::shared_ptr<RuntimeFilter>(
-                    RuntimeFilterHelper::create_runtime_bloom_filter(nullptr, build_type, rf_desc->join_mode()));
+                    RuntimeFilterFactory::create_bloom_filter(nullptr, build_type, rf_desc->join_mode()));
             if (filter == nullptr) {
                 _runtime_bloom_filter_build_params.emplace_back();
                 continue;
             }
             filter->get_membership_filter()->init(ht_row_count);
-            RETURN_IF_ERROR(RuntimeFilterHelper::fill_runtime_filter(columns, build_type, filter.get(),
-                                                                     kHashJoinKeyColumnOffset, eq_null));
+            RETURN_IF_ERROR(
+                    RuntimeFilterBuilder::fill(filter.get(), build_type, columns, kHashJoinKeyColumnOffset, eq_null));
         }
 
         _runtime_bloom_filter_build_params.emplace_back(pipeline::RuntimeMembershipFilterBuildParam(

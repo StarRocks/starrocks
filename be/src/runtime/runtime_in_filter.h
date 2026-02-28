@@ -37,8 +37,8 @@ struct SliceHashSet : SliceNormalHashSet {
     using Base::begin;
     using Base::cbegin;
     using Base::cend;
-    using Base::end;
     using Base::empty;
+    using Base::end;
     using Base::size;
 
     void emplace(const Slice& slice) {
@@ -60,12 +60,13 @@ template <LogicalType Type>
 struct LHashSet<Type, std::enable_if_t<isSliceLT<Type>>> {
     using LType = SliceHashSet;
 };
-
 } // namespace detail
 
 class AbstractInRuntimeFilter : public RuntimeFilter {
 public:
     AbstractInRuntimeFilter() = default;
+    ~AbstractInRuntimeFilter() override = default;
+
     virtual size_t size() const = 0;
     virtual void clear() = 0;
 };
@@ -80,18 +81,17 @@ public:
     using ScopedPtr = typename butil::DoublyBufferedData<HashSet>::ScopedPtr;
 
     RuntimeFilterSerializeType type() const override { return RuntimeFilterSerializeType::IN_FILTER; }
-
     ~InRuntimeFilter() override = default;
+
     const RuntimeFilter* get_in_filter() const override { return this; }
     const RuntimeFilter* get_min_max_filter() const override { return nullptr; }
-
     InRuntimeFilter* create_empty(ObjectPool* pool) override { return InRuntimeFilter::create(pool); }
 
     static InRuntimeFilter* create(ObjectPool* pool) {
-        auto rf = new InRuntimeFilter();
+        auto* rf = new InRuntimeFilter();
         rf->_always_true = true;
         if (pool != nullptr) {
-            return pool->add(std::move(rf));
+            return pool->add(rf);
         }
         return rf;
     }
@@ -99,7 +99,7 @@ public:
     void build(Column* column) {
         HashSet set;
         DCHECK(!column->is_constant());
-        size_t num_rows = column->size();
+        const size_t num_rows = column->size();
         if (column->is_nullable()) {
             auto* nullable = down_cast<NullableColumn*>(column);
             const auto& null_data = nullable->null_column_data();
@@ -133,7 +133,7 @@ public:
         }
         const HashSet& hash_set = *ptr;
         if constexpr (IsSlice<CppType>) {
-            auto mem_pool = pool->add(new MemPool());
+            auto* mem_pool = pool->add(new MemPool());
             for (auto slice : hash_set) {
                 uint8_t* pos = mem_pool->allocate_with_reserve(slice.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
                 memcpy(pos, slice.data, slice.size);
@@ -144,36 +144,33 @@ public:
                 set.insert(v);
             }
         }
-
         return set;
     }
 
     void insert_null() { _has_null = true; }
 
     void merge(const RuntimeFilter* rf) override {
-        {
-            ScopedPtr ptr;
-            if (_values.Read(&ptr) != 0) {
-            }
-            HashSet& set = const_cast<HashSet&>(*ptr);
-            auto* other = down_cast<const InRuntimeFilter*>(rf);
-            ScopedPtr other_ptr;
-            if (other->_values.Read(&other_ptr) != 0) {
-            }
-            for (auto& v : *other_ptr) {
-                set.emplace(v);
-            }
+        ScopedPtr ptr;
+        if (_values.Read(&ptr) != 0) {
+            CHECK(false) << "unreachable path";
+        }
+        HashSet& set = const_cast<HashSet&>(*ptr);
+        const auto* other = down_cast<const InRuntimeFilter*>(rf);
+        ScopedPtr other_ptr;
+        if (other->_values.Read(&other_ptr) != 0) {
+            CHECK(false) << "unreachable path";
+        }
+        for (const auto& v : *other_ptr) {
+            set.emplace(v);
         }
     }
 
     void intersect(const RuntimeFilter* rf) override { DCHECK(false) << "unsupported"; }
-
     void concat(RuntimeFilter* rf) override { merge(rf); }
 
     size_t size() const override {
         ScopedPtr ptr;
         if (_values.Read(&ptr) != 0) {
-            // unreachable path
             CHECK(false) << "unreachable path";
         }
         return ptr->size();
@@ -226,7 +223,7 @@ public:
 
         if constexpr (IsSlice<CppType>) {
             for (Slice slice : *ptr) {
-                size_t slice_size = slice.get_size();
+                const size_t slice_size = slice.get_size();
                 unaligned_store<int32_t>(data + offset, slice_size);
                 offset += sizeof(int32_t);
                 memcpy(data + offset, slice.get_data(), slice_size);
@@ -276,11 +273,13 @@ public:
                                  RunningContext* ctx) const override {
         throw std::runtime_error("not supported");
     }
+
     void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
                                  uint16_t* sel, uint16_t sel_size, std::vector<uint32_t>& hash_values,
                                  RunningContext* ctx) const override {
         throw std::runtime_error("not supported");
     }
+
     void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
                                  uint8_t* selection, uint16_t from, uint16_t to, std::vector<uint32_t>& hash_values,
                                  RunningContext* ctx) const override {
@@ -295,6 +294,7 @@ public:
                       uint16_t sel_size, uint16_t* dst_sel) const override {
         return sel_size;
     }
+
     void evaluate(const Column* input_column, const std::vector<uint32_t>& hash_values, uint8_t* selection,
                   uint16_t from, uint16_t to) const override {}
 

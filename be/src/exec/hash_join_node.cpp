@@ -50,6 +50,8 @@
 #include "gen_cpp/RuntimeFilter_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
+#include "runtime/runtime_filter_builder.h"
+#include "runtime/runtime_filter_factory.h"
 #include "runtime/runtime_filter_worker.h"
 
 namespace starrocks {
@@ -1027,16 +1029,14 @@ Status HashJoinNode::_do_publish_runtime_filters(RuntimeState* state, int64_t li
         // skip if ht.size() > limit and it's only for local.
         if (!rf_desc->has_remote_targets() && _ht.get_row_count() > limit) continue;
         LogicalType build_type = rf_desc->build_expr_type();
-        RuntimeFilter* filter =
-                RuntimeFilterHelper::create_runtime_bloom_filter(_pool, build_type, rf_desc->join_mode());
+        RuntimeFilter* filter = RuntimeFilterFactory::create_bloom_filter(_pool, build_type, rf_desc->join_mode());
         if (filter == nullptr) continue;
         filter->get_membership_filter()->init(_ht.get_row_count());
 
         int expr_order = rf_desc->build_expr_order();
         ColumnPtr column = _ht.get_key_columns()[expr_order];
         bool eq_null = _is_null_safes[expr_order];
-        RETURN_IF_ERROR(RuntimeFilterHelper::fill_runtime_filter(column, build_type, filter, kHashJoinKeyColumnOffset,
-                                                                 eq_null));
+        RETURN_IF_ERROR(RuntimeFilterBuilder::fill(filter, build_type, column, kHashJoinKeyColumnOffset, eq_null));
         rf_desc->set_runtime_filter(filter);
     }
 

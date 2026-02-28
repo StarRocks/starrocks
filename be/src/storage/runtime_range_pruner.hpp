@@ -19,9 +19,9 @@
 #include <utility>
 
 #include "exec/olap_common.h"
-#include "exprs/agg_in_runtime_filter.h"
 #include "exprs/runtime_filter_bank.h"
 #include "runtime/global_dict/config.h"
+#include "runtime/runtime_in_filter.h"
 #include "runtime/runtime_state.h"
 #include "storage/column_and_predicate.h"
 #include "storage/column_or_predicate.h"
