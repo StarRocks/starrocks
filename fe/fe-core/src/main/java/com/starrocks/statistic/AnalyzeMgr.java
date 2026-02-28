@@ -80,6 +80,8 @@ public class AnalyzeMgr implements Writable {
 
     // ConnectContext of all currently running analyze tasks
     private final Map<Long, ConnectContext> connectionMap = Maps.newConcurrentMap();
+    // Cancellation markers for analyze tasks. Used to make KILL ANALYZE deterministic even if it misses the SQL window.
+    private final Set<Long> cancelledAnalyzeIds = java.util.concurrent.ConcurrentHashMap.newKeySet();
     // only first load of table will trigger analyze, so we don't need limit thread pool queue size
     private static final ExecutorService ANALYZE_TASK_THREAD_POOL = ThreadPoolManager.newDaemonFixedThreadPool(
             Config.statistic_analyze_task_pool_size, Integer.MAX_VALUE,
@@ -876,6 +878,7 @@ public class AnalyzeMgr implements Writable {
 
     public void unregisterConnection(long analyzeID, boolean killExecutor) {
         ConnectContext context = connectionMap.remove(analyzeID);
+        cancelledAnalyzeIds.remove(analyzeID);
         if (killExecutor) {
             if (context != null) {
                 context.kill(false, "kill analyze unregisterConnection");
@@ -887,11 +890,15 @@ public class AnalyzeMgr implements Writable {
 
     public void killConnection(long analyzeID) {
         ConnectContext context = connectionMap.get(analyzeID);
-        if (context != null) {
-            context.kill(false, USER_CANCEL_MESSAGE);
-        } else {
+        if (context == null) {
             throw new SemanticException("There is no running task with analyzeId " + analyzeID);
         }
+        cancelledAnalyzeIds.add(analyzeID);
+        context.kill(false, USER_CANCEL_MESSAGE);
+    }
+
+    public boolean isAnalyzeCancelled(long analyzeID) {
+        return cancelledAnalyzeIds.contains(analyzeID);
     }
 
     public void killAllPendingTasks() {
