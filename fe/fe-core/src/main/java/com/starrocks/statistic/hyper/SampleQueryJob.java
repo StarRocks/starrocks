@@ -28,11 +28,11 @@ import java.util.List;
 public class SampleQueryJob extends HyperQueryJob {
     private final PartitionSampler sampler;
 
-    protected SampleQueryJob(ConnectContext context, Database db,
+    protected SampleQueryJob(ConnectContext context, long analyzeId, Database db,
                              Table table,
                              List<ColumnStats> columnStats,
                              List<Long> partitionIdList, PartitionSampler sampler) {
-        super(context, db, table, columnStats, partitionIdList);
+        super(context, analyzeId, db, table, columnStats, partitionIdList);
         this.sampler = sampler;
     }
 

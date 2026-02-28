@@ -24,6 +24,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatisticsType;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprUtils;
@@ -58,6 +59,7 @@ public abstract class HyperQueryJob {
     private static final Logger LOG = LogManager.getLogger(HyperQueryJob.class);
 
     protected final ConnectContext context;
+    protected final long analyzeId;
     protected final Database db;
     protected final Table table;
     protected final List<ColumnStats> columnStats;
@@ -73,9 +75,10 @@ public abstract class HyperQueryJob {
     protected int totals = 0;
     protected Throwable lastFailure;
 
-    protected HyperQueryJob(ConnectContext context, Database db, Table table, List<ColumnStats> columnStats,
+    protected HyperQueryJob(ConnectContext context, long analyzeId, Database db, Table table, List<ColumnStats> columnStats,
                             List<Long> partitionIdList) {
         this.context = context;
+        this.analyzeId = analyzeId;
         this.db = db;
         this.table = table;
         this.columnStats = columnStats;
@@ -83,14 +86,22 @@ public abstract class HyperQueryJob {
         this.pipelineDop = context.getSessionVariable().getStatisticCollectParallelism();
     }
 
+    protected void checkCancelled() {
+        if (GlobalStateMgr.getCurrentState().getAnalyzeMgr().isAnalyzeCancelled(analyzeId)) {
+            throw new RuntimeException("USER_CANCEL: kill analyze");
+        }
+    }
+
     public void queryStatistics() {
         String tableName = StringEscapeUtils.escapeSql(db.getOriginName() + "." + table.getName());
         List<String> sqlList = buildQuerySQL();
         for (String sql : sqlList) {
+            checkCancelled();
             // execute sql
             List<TStatisticData> dataList = executeStatisticsQuery(sql, context);
 
             for (TStatisticData data : dataList) {
+                checkCancelled();
                 Partition partition = table.getPartition(data.getPartitionId());
                 if (partition == null) {
                     continue;
@@ -132,6 +143,7 @@ public abstract class HyperQueryJob {
 
     protected List<TStatisticData> executeStatisticsQuery(String sql, ConnectContext context) {
         try {
+            checkCancelled();
             totals++;
             LOG.debug("statistics collect sql : " + sql);
             StatisticExecutor executor = new StatisticExecutor();
@@ -242,7 +254,7 @@ public abstract class HyperQueryJob {
                 "], pids: " + partitionIdList + '}';
     }
 
-    public static List<HyperQueryJob> createFullQueryJobs(ConnectContext context, Database db, Table table,
+    public static List<HyperQueryJob> createFullQueryJobs(long analyzeId, ConnectContext context, Database db, Table table,
                                                           List<String> columnNames, List<Type> columnTypes,
                                                           List<Long> partitionIdList, int batchLimit, boolean isManualJob) {
         ColumnClassifier classifier = ColumnClassifier.of(columnNames, columnTypes, table, isManualJob);
@@ -256,16 +268,16 @@ public abstract class HyperQueryJob {
         List<HyperQueryJob> jobs = Lists.newArrayList();
         for (List<Long> pid : pids) {
             if (!dataCollectColumns.isEmpty()) {
-                jobs.add(new FullQueryJob(context, db, table, dataCollectColumns, pid));
+                jobs.add(new FullQueryJob(context, analyzeId, db, table, dataCollectColumns, pid));
             }
             if (!unSupportedStats.isEmpty()) {
-                jobs.add(new ConstQueryJob(context, db, table, unSupportedStats, pid));
+                jobs.add(new ConstQueryJob(context, analyzeId, db, table, unSupportedStats, pid));
             }
         }
         return jobs;
     }
 
-    public static List<HyperQueryJob> createSampleQueryJobs(ConnectContext context, Database db, Table table,
+    public static List<HyperQueryJob> createSampleQueryJobs(long analyzeId, ConnectContext context, Database db, Table table,
                                                             List<String> columnNames, List<Type> columnTypes,
                                                             List<Long> partitionIdList, int batchLimit,
                                                             PartitionSampler sampler, boolean isManualJob) {
@@ -282,19 +294,19 @@ public abstract class HyperQueryJob {
         List<HyperQueryJob> jobs = Lists.newArrayList();
         for (List<Long> pid : pids) {
             if (!metaCollectColumns.isEmpty()) {
-                jobs.add(new MetaQueryJob(context, db, table, metaCollectColumns, pid, sampler));
+                jobs.add(new MetaQueryJob(context, analyzeId, db, table, metaCollectColumns, pid, sampler));
             }
             if (!dataCollectColumns.isEmpty()) {
-                jobs.add(new SampleQueryJob(context, db, table, dataCollectColumns, pid, sampler));
+                jobs.add(new SampleQueryJob(context, analyzeId, db, table, dataCollectColumns, pid, sampler));
             }
             if (!unSupportedStats.isEmpty()) {
-                jobs.add(new ConstQueryJob(context, db, table, unSupportedStats, pid));
+                jobs.add(new ConstQueryJob(context, analyzeId, db, table, unSupportedStats, pid));
             }
         }
         return jobs;
     }
 
-    public static List<HyperQueryJob> createMultiColumnQueryJobs(ConnectContext context, Database db, Table table,
+    public static List<HyperQueryJob> createMultiColumnQueryJobs(long analyzeId, ConnectContext context, Database db, Table table,
                                                                  List<List<String>> columnGroups,
                                                                  StatsConstants.AnalyzeType analyzeType,
                                                                  List<StatisticsType> statisticsTypes,
@@ -311,10 +323,10 @@ public abstract class HyperQueryJob {
                 .collect(Collectors.toList());
 
         if (analyzeType == StatsConstants.AnalyzeType.FULL) {
-            return List.of(new FullMultiColumnQueryJob(context, db, table, columnStats));
+            return List.of(new FullMultiColumnQueryJob(context, analyzeId, db, table, columnStats));
         } else {
             TabletSampleManager tabletSampleManager = TabletSampleManager.init(properties, table);
-            return List.of(new SampleMultiColumnQueryJob(context, db, table, columnStats, tabletSampleManager));
+            return List.of(new SampleMultiColumnQueryJob(context, analyzeId, db, table, columnStats, tabletSampleManager));
         }
     }
 }
