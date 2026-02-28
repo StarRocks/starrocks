@@ -111,6 +111,462 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         return null;
     }
 
+<<<<<<< HEAD
+=======
+    private void alterPartitionTTLNumber(Map<String, String> properties,
+                                         MaterializedView materializedView,
+                                         TableProperty tableProperty,
+                                         List<Runnable> appliers) {
+        int partitionTTL = PropertyAnalyzer.analyzePartitionTTLNumber(properties);
+        if (materializedView.getTableProperty().getPartitionTTLNumber() != partitionTTL) {
+            if (!materializedView.getPartitionInfo().isRangePartition()) {
+                throw new SemanticException(
+                        "partition_ttl_number is only supported for range partitioned materialized view");
+            }
+            appliers.add(() -> {
+                tableProperty.modifyTableProperties(
+                        PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER, String.valueOf(partitionTTL));
+                tableProperty.setPartitionTTLNumber(partitionTTL);
+            });
+        }
+    }
+
+    private void alterPartitionTTL(Map<String, String> properties,
+                                   MaterializedView materializedView,
+                                   TableProperty tableProperty,
+                                   List<Runnable> appliers) {
+        Pair<String, PeriodDuration> ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties, true);
+        if (!materializedView.getTableProperty().getPartitionTTL().equals(ttlDuration.second)) {
+            if (!materializedView.getPartitionInfo().isRangePartition()) {
+                throw new SemanticException(
+                        "partition_ttl is only supported for range partitioned materialized view");
+            }
+            appliers.add(() -> {
+                tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_PARTITION_TTL, ttlDuration.first);
+                tableProperty.setPartitionTTL(ttlDuration.second);
+            });
+        }
+    }
+
+    private void alterPartitionRetentionCondition(Map<String, String> properties,
+                                                  MaterializedView materializedView,
+                                                  TableProperty tableProperty,
+                                                  List<Runnable> appliers,
+                                                  ConnectContext context) {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(materializedView.getDbId());
+        TableName mvTableName = new TableName(db.getFullName(), materializedView.getName());
+        Map<Expr, Expr> mvPartitionByExprToAdjustMap =
+                MaterializedViewAnalyzer.getMVPartitionByExprToAdjustMap(mvTableName, materializedView);
+        String ttlRetentionCondition = PropertyAnalyzer.analyzePartitionRetentionCondition(
+                db, materializedView, properties, true, mvPartitionByExprToAdjustMap);
+        if (ttlRetentionCondition != null
+                && !ttlRetentionCondition.equalsIgnoreCase(tableProperty.getPartitionRetentionCondition())) {
+            Pair<Optional<Expr>, Optional<ScalarOperator>> condition
+                    = materializedView.analyzeMVRetentionCondition(context, ttlRetentionCondition);
+            if (condition != null) {
+                appliers.add(() -> {
+                    tableProperty.modifyTableProperties(
+                            PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, ttlRetentionCondition);
+                    tableProperty.setPartitionRetentionCondition(ttlRetentionCondition);
+                    materializedView.setMVRetentionCondition(condition.first, condition.second);
+                });
+            }
+        }
+    }
+
+    private void alterTimeDriftConstraint(Map<String, String> properties,
+                                          MaterializedView materializedView,
+                                          TableProperty tableProperty,
+                                          List<Runnable> appliers) {
+        String spec = properties.get(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT);
+        PropertyAnalyzer.analyzeTimeDriftConstraint(spec, materializedView, properties);
+        if (!spec.equalsIgnoreCase(tableProperty.getTimeDriftConstraintSpec())) {
+            appliers.add(() -> {
+                tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT, spec);
+                tableProperty.setTimeDriftConstraintSpec(spec);
+            });
+        }
+    }
+
+    private void alterPartitionRefreshNumber(Map<String, String> properties,
+                                             TableProperty tableProperty,
+                                             List<Runnable> appliers) {
+        int partitionRefreshNumber = PropertyAnalyzer.analyzePartitionRefreshNumber(properties);
+        if (tableProperty.getPartitionRefreshNumber() != partitionRefreshNumber) {
+            appliers.add(() -> {
+                tableProperty.modifyTableProperties(
+                        PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER, String.valueOf(partitionRefreshNumber));
+                tableProperty.setPartitionRefreshNumber(partitionRefreshNumber);
+            });
+        }
+    }
+
+    private void alterPartitionRefreshStrategy(Map<String, String> properties,
+                                             TableProperty tableProperty,
+                                             List<Runnable> appliers) {
+        String partitionRefreshStrategy = PropertyAnalyzer.analyzePartitionRefreshStrategy(properties);
+        if (!tableProperty.getPartitionRefreshStrategy().equals(partitionRefreshStrategy)) {
+            appliers.add(() -> {
+                tableProperty.modifyTableProperties(
+                        PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_STRATEGY, partitionRefreshStrategy);
+                tableProperty.setPartitionRefreshStrategy(partitionRefreshStrategy);
+            });
+        }
+    }
+
+    private void alterMVRefreshMode(Map<String, String> properties,
+                                    MaterializedView materializedView,
+                                    TableProperty tableProperty,
+                                    List<Runnable> appliers,
+                                    ConnectContext context) {
+        String mvRefreshMode = PropertyAnalyzer.analyzeRefreshMode(properties);
+        // cannot alter original pct based mv to incremental or auto, only support original ivm/pct based mv
+        MaterializedView.RefreshMode currentRefreshMode =
+                MaterializedView.RefreshMode.valueOf(mvRefreshMode.toUpperCase(Locale.ROOT));
+        if (currentRefreshMode.isIncrementalOrAuto()) {
+            ParseNode mvDefinedQueryParseNode = materializedView.getDefineQueryParseNode();
+            if ((mvDefinedQueryParseNode instanceof QueryStatement queryStatement)) {
+                IVMAnalyzer ivmAnalyzer = new IVMAnalyzer(context, null, queryStatement);
+
+                Optional<IVMAnalyzer.IVMAnalyzeResult> result;
+                try {
+                    result = ivmAnalyzer.rewrite(
+                            MaterializedView.RefreshMode.valueOf(mvRefreshMode.toUpperCase(Locale.ROOT)));
+                } catch (SemanticException e) {
+                    throw new SemanticException("Cannot alter materialized view refresh mode to %s: %s",
+                            mvRefreshMode, e.getMessage());
+                }
+                if (result.isEmpty()) {
+                    throw new SemanticException("Cannot alter materialized view refresh mode to %s," +
+                            " because the materialized view is not eligible for %s refresh mode",
+                            mvRefreshMode, mvRefreshMode);
+                }
+                // if materialized's original refresh mode is not auto or ivm, throw exception
+                if (!materializedView.getCurrentRefreshMode().isIncrementalOrAuto()) {
+                    throw new SemanticException("Cannot alter materialized view refresh mode to %s," +
+                            " only support alter original incremental/auto based materialized view",
+                            mvRefreshMode);
+                }
+                currentRefreshMode = result.get().currentRefreshMode();
+            } else {
+                throw new SemanticException("Cannot alter materialized view refresh mode to %s", mvRefreshMode);
+            }
+        }
+
+        MaterializedView.RefreshMode finalCurrentRefreshMode = currentRefreshMode;
+        if (!tableProperty.getMvRefreshMode().equals(mvRefreshMode)) {
+            appliers.add(() -> {
+                tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE, mvRefreshMode);
+                tableProperty.setMvRefreshMode(mvRefreshMode);
+                materializedView.setCurrentRefreshMode(finalCurrentRefreshMode);
+            });
+        }
+    }
+
+    private void alterResourceGroup(Map<String, String> properties,
+                                    TableProperty tableProperty,
+                                    List<Runnable> appliers) {
+        String resourceGroup = PropertyAnalyzer.analyzeResourceGroup(properties);
+        properties.remove(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP);
+        if (!StringUtils.equals(tableProperty.getResourceGroup(), resourceGroup)) {
+            if (resourceGroup != null && !resourceGroup.isEmpty() &&
+                    GlobalStateMgr.getCurrentState().getResourceGroupMgr().getResourceGroup(resourceGroup) ==
+                            null) {
+                throw new SemanticException(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP
+                        + " " + resourceGroup + " does not exist.");
+            }
+            appliers.add(() -> {
+                tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP, resourceGroup);
+                tableProperty.setResourceGroup(resourceGroup);
+            });
+        }
+    }
+
+    private void alterAutoRefreshPartitionsLimit(Map<String, String> properties,
+                                                 MaterializedView materializedView,
+                                                 TableProperty tableProperty,
+                                                 List<Runnable> appliers) {
+        int autoRefreshPartitionsLimit = PropertyAnalyzer.analyzeAutoRefreshPartitionsLimit(properties, materializedView);
+        if (tableProperty.getAutoRefreshPartitionsLimit() != autoRefreshPartitionsLimit) {
+            appliers.add(() -> {
+                tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT,
+                        String.valueOf(autoRefreshPartitionsLimit));
+                tableProperty.setAutoRefreshPartitionsLimit(autoRefreshPartitionsLimit);
+            });
+        }
+    }
+
+    private void alterExcludedTriggerTables(Map<String, String> properties,
+                                            MaterializedView materializedView,
+                                            TableProperty tableProperty,
+                                            List<Runnable> appliers) {
+        String excludedTriggerTablesStr = properties.get(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES);
+        List<TableName> excludedTriggerTables = PropertyAnalyzer.analyzeExcludedTables(properties,
+                PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES, materializedView);
+        appliers.add(() -> {
+            tableProperty.modifyTableProperties(
+                    PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES, excludedTriggerTablesStr);
+            tableProperty.setExcludedTriggerTables(excludedTriggerTables);
+        });
+    }
+
+    private void alterExcludedRefreshTables(Map<String, String> properties,
+                                            MaterializedView materializedView,
+                                            TableProperty tableProperty,
+                                            List<Runnable> appliers) {
+        String excludedRefreshTablesStr = properties.get(PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES);
+        List<TableName> excludedRefreshBaseTables = PropertyAnalyzer.analyzeExcludedTables(properties,
+                PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES, materializedView);
+        appliers.add(() -> {
+            tableProperty.modifyTableProperties(
+                    PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES, excludedRefreshTablesStr);
+            tableProperty.setExcludedRefreshTables(excludedRefreshBaseTables);
+        });
+    }
+
+    private void alterMvRewriteStalenessSecond(Map<String, String> properties,
+                                               MaterializedView materializedView,
+                                               TableProperty tableProperty,
+                                               List<Runnable> appliers) {
+        String rawValue = properties.get(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND);
+        int maxMVRewriteStaleness = PropertyAnalyzer.analyzeMVRewriteStaleness(properties);
+        appliers.add(() -> {
+            tableProperty.modifyTableProperties(
+                    PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND, rawValue);
+            materializedView.setMaxMVRewriteStaleness(maxMVRewriteStaleness);
+        });
+    }
+
+    private void alterUniqueConstraint(Map<String, String> properties,
+                                       MaterializedView materializedView,
+                                       List<Runnable> appliers) {
+        List<UniqueConstraint> uniqueConstraints = PropertyAnalyzer.analyzeUniqueConstraint(properties, db, materializedView);
+        appliers.add(() -> {
+            materializedView.setUniqueConstraints(uniqueConstraints);
+        });
+    }
+
+    private void alterForeignKeyConstraint(Map<String, String> properties,
+                                           Map<String, String> propClone,
+                                           MaterializedView materializedView,
+                                           List<Runnable> appliers) {
+        List<ForeignKeyConstraint> foreignKeyConstraints =
+                PropertyAnalyzer.analyzeForeignKeyConstraint(properties, db, materializedView);
+        // update properties using analyzed foreign key constraints
+        // for external table, create time is added into FOREIGN_KEY_CONSTRAINT
+        String newProperty = foreignKeyConstraints
+                .stream().map(ForeignKeyConstraint::toString).collect(Collectors.joining(";"));
+        propClone.put(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT, newProperty);
+        appliers.add(() -> {
+            materializedView.setForeignKeyConstraints(foreignKeyConstraints);
+        });
+    }
+
+    private void alterForceExternalTableQueryRewrite(Map<String, String> properties,
+                                                     TableProperty tableProperty,
+                                                     List<Runnable> appliers) {
+        String propertyValue = properties.get(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE);
+        TableProperty.QueryRewriteConsistencyMode mode = TableProperty.analyzeExternalTableQueryRewrite(propertyValue);
+        properties.remove(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE);
+        appliers.add(() -> {
+            tableProperty.modifyTableProperties(
+                    PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE, String.valueOf(mode));
+            tableProperty.setForceExternalTableQueryRewrite(mode);
+        });
+    }
+
+    private void alterQueryRewriteConsistency(Map<String, String> properties,
+                                              TableProperty tableProperty,
+                                              List<Runnable> appliers) {
+        String propertyValue = properties.get(PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY);
+        TableProperty.QueryRewriteConsistencyMode mode = TableProperty.analyzeQueryRewriteMode(propertyValue);
+        properties.remove(PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY);
+        appliers.add(() -> {
+            tableProperty.modifyTableProperties(
+                    PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY, String.valueOf(mode));
+            tableProperty.setQueryRewriteConsistencyMode(mode);
+        });
+    }
+
+    private void alterEnableQueryRewrite(Map<String, String> properties,
+                                         MaterializedView materializedView,
+                                         TableProperty tableProperty,
+                                         List<Runnable> appliers) {
+        String value = properties.get(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE);
+        TableProperty.MVQueryRewriteSwitch queryRewriteSwitch = TableProperty.analyzeQueryRewriteSwitch(value);
+        properties.remove(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE);
+        appliers.add(() -> {
+            tableProperty.modifyTableProperties(
+                    PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE, String.valueOf(queryRewriteSwitch));
+            tableProperty.setMvQueryRewriteSwitch(queryRewriteSwitch);
+            if (!materializedView.isEnableRewrite()) {
+                // invalidate caches for mv rewrite when disable mv rewrite.
+                CachingMvPlanContextBuilder.getInstance().evictMaterializedViewCache(materializedView);
+            } else {
+                CachingMvPlanContextBuilder.getInstance().cacheMaterializedView(materializedView);
+            }
+        });
+    }
+
+    private void alterTransparentMvRewriteMode(Map<String, String> properties,
+                                               TableProperty tableProperty,
+                                               List<Runnable> appliers) {
+        String value = properties.get(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE);
+        TableProperty.MVTransparentRewriteMode mode = TableProperty.analyzeMVTransparentRewrite(value);
+        properties.remove(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE);
+        appliers.add(() -> {
+            tableProperty.modifyTableProperties(
+                    PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE, String.valueOf(mode));
+            tableProperty.setMvTransparentRewriteMode(mode);
+        });
+    }
+
+    private void alterWarehouse(Map<String, String> properties,
+                                MaterializedView materializedView,
+                                List<Runnable> appliers) {
+        String warehouseName = properties.remove(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
+        appliers.add(() -> {
+            // Note: warehouse is stored as warehouseId and output in getMaterializedViewDdlStmt(),
+            // so we don't need to add it to TableProperty.properties to avoid duplication.
+            materializedView.setWarehouseId(warehouse.getId());
+            // Also update the associated task's properties to remove stale warehouse
+            updateTaskWarehouseProperty(materializedView);
+        });
+    }
+
+    /**
+     * Update the associated task's properties to remove stale warehouse property.
+     * The warehouse will be fetched from MV dynamically during task execution.
+     */
+    private void updateTaskWarehouseProperty(MaterializedView materializedView) {
+        try {
+            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+            String taskName = TaskBuilder.getMvTaskName(materializedView.getId());
+            Task task = taskManager.getTask(taskName);
+            if (task != null) {
+                // Remove the warehouse property from task so it will be fetched from MV at runtime.
+                // Use removeTaskProperty to ensure thread-safe modification under task lock.
+                taskManager.removeTaskProperty(task, PropertyAnalyzer.PROPERTIES_WAREHOUSE);
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to update task warehouse property for MV {}: {}",
+                    materializedView.getName(), e.getMessage());
+        }
+    }
+
+    private void alterLabelsLocation(Map<String, String> properties,
+                                     MaterializedView materializedView,
+                                     List<Runnable> appliers) {
+        if (materializedView.isCloudNativeMaterializedView()) {
+            throw new SemanticException(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION
+                    + " is not supported for cloud native materialized view.");
+        }
+        String location = PropertyAnalyzer.analyzeLocation(properties, true);
+        appliers.add(() -> {
+            materializedView.getTableProperty()
+                    .modifyTableProperties(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION, location);
+            materializedView.setLocation(location);
+        });
+        properties.remove(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION);
+    }
+
+    private void alterBFColumns(Map<String, String> properties,
+                                MaterializedView materializedView,
+                                List<Runnable> appliers) {
+        List<Column> baseSchema = materializedView.getColumns();
+
+        // analyze bloom filter columns
+        Set<String> bfColumns;
+        try {
+            bfColumns = PropertyAnalyzer.analyzeBloomFilterColumns(properties, baseSchema,
+                    materializedView.getKeysType() == KeysType.PRIMARY_KEYS);
+        } catch (AnalysisException e) {
+            throw new SemanticException("Failed to analyze bloom filter columns: " + e.getMessage());
+        }
+        if (bfColumns != null && bfColumns.isEmpty()) {
+            bfColumns = null;
+        }
+
+        // analyze bloom filter fpp
+        double bfFpp;
+        try {
+            bfFpp = PropertyAnalyzer.analyzeBloomFilterFpp(properties);
+        } catch (AnalysisException e) {
+            throw new SemanticException("Failed to analyze bloom filter fpp: " + e.getMessage());
+        }
+        if (bfColumns != null && bfFpp == 0) {
+            bfFpp = FeConstants.DEFAULT_BLOOM_FILTER_FPP;
+        } else if (bfColumns == null) {
+            bfFpp = 0;
+        }
+
+        Set<ColumnId> bfColumnIds = null;
+        if (bfColumns != null && !bfColumns.isEmpty()) {
+            bfColumnIds = Sets.newTreeSet(ColumnId.CASE_INSENSITIVE_ORDER);
+            for (String colName : bfColumns) {
+                bfColumnIds.add(materializedView.getColumn(colName).getColumnId());
+            }
+        }
+        Set<ColumnId> oldBfColumnIds = materializedView.getBfColumnIds();
+        if (bfColumnIds != null && bfColumnIds.equals(oldBfColumnIds) && materializedView.getBfFpp() == bfFpp) {
+            // do nothing
+        } else {
+            final Set<ColumnId> finalBfColumnIds = bfColumnIds;
+            final double finalBfFpp = bfFpp;
+            appliers.add(() -> {
+                materializedView.setBloomFilterInfo(finalBfColumnIds, finalBfFpp);
+            });
+        }
+        properties.remove(PropertyAnalyzer.PROPERTIES_BF_COLUMNS);
+    }
+
+    private void alterColocateWith(Map<String, String> properties,
+                                   MaterializedView materializedView) {
+        // TODO: when support shared-nothing mode, must check PROPERTIES_LABELS_LOCATION
+        if (RunMode.isSharedNothingMode()) {
+            throw new SemanticException("Modify failed because unsupported properties: " +
+                    "colocate_with is not supported for materialized view in shared-nothing cluster.");
+        }
+        try {
+            String colocateGroup = PropertyAnalyzer.analyzeColocate(properties);
+            GlobalStateMgr.getCurrentState().getColocateTableIndex()
+                    .modifyTableColocate(db, materializedView, colocateGroup, false, null);
+        } catch (DdlException e) {
+            throw new AlterJobException(e.getMessage(), e);
+        }
+    }
+
+    private void alterSessionVariables(Map<String, String> properties,
+                                       TableProperty tableProperty,
+                                       List<Runnable> appliers) {
+        // analyze properties
+        List<SetListItem> setListItems = Lists.newArrayList();
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            if (!entry.getKey().startsWith(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX)) {
+                throw new SemanticException("Modify failed because unknown properties: " + properties +
+                        ", please add `session.` prefix if you want add session variables for mv(" +
+                        "eg, \"session.insert_timeout\"=\"30000000\").");
+            }
+            String varKey = entry.getKey().substring(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX.length());
+            SystemVariable variable = new SystemVariable(varKey, new StringLiteral(entry.getValue()));
+            try {
+                GlobalStateMgr.getCurrentState().getVariableMgr().checkSystemVariableExist(variable);
+            } catch (DdlException e) {
+                throw new SemanticException(e.getMessage());
+            }
+            setListItems.add(variable);
+        }
+        SetStmtAnalyzer.analyze(new SetStmt(setListItems), null);
+        appliers.add(() -> {
+            // set properties if there are no exceptions
+            for (Map.Entry<String, String> entry : properties.entrySet()) {
+                tableProperty.modifyTableProperties(entry.getKey(), entry.getValue());
+            }
+        });
+    }
+
+>>>>>>> 596f6e1c51 ([BugFix] Fix task run warehouse display after changing mv warehouse (#69567))
     @Override
     public Void visitModifyTablePropertiesClause(ModifyTablePropertiesClause modifyTablePropertiesClause,
                                                  ConnectContext context) {
