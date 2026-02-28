@@ -3054,7 +3054,7 @@ void TabletUpdatesTest::test_get_column_values_with_invalid_rssid(bool enable_pe
     {
         std::vector<RowsetSharedPtr> rowsets;
         EditVersion version;
-        ASSERT_TRUE(tablet->updates()->get_applied_rowsets(5, &rowsets, &version).ok());
+        ASSERT_TRUE(tablet->updates()->get_applied_rowsets(4, &rowsets, &version).ok());
         ASSERT_EQ(rowsets.size(), 1);
         new_min_rssid = rowsets[0]->rowset_meta()->get_rowset_seg_id();
     }
