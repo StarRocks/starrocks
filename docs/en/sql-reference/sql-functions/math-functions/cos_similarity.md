@@ -2,7 +2,7 @@
 displayed_sidebar: docs
 ---
 
-# cos_similarity
+# cosine_similarity
 
 
 
