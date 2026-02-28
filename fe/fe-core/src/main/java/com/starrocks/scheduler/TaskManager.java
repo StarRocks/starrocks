@@ -487,16 +487,20 @@ public class TaskManager implements MemoryTrackable {
             currentTask.setState(Constants.TaskState.ACTIVE);
             TaskSchedule schedule = changedTask.getSchedule();
             currentTask.setSchedule(schedule);
-            if (!isReplay) {
-                registerScheduler(currentTask);
-            }
             hasChanged = true;
         }
 
         if (hasChanged) {
-            currentTask.setType(changedTask.getType());
+            // Log first to ensure durability, then apply in-memory changes.
+            // This ensures atomicity: if logging fails, no in-memory changes are made.
             if (!isReplay) {
                 GlobalStateMgr.getCurrentState().getEditLog().logAlterTask(changedTask);
+            }
+            // Apply in-memory change after successful logging
+            currentTask.setType(changedTask.getType());
+            // Register scheduler after type is set to ensure proper scheduling
+            if (changedType == Constants.TaskType.PERIODICAL && !isReplay) {
+                registerScheduler(currentTask);
             }
         }
     }
