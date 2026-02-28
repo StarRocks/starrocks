@@ -47,6 +47,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
@@ -75,6 +76,7 @@ import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.ast.InsertStmt;
@@ -424,10 +426,13 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         int maxRefreshMaterializedViewRetryNum = getMaxRefreshMaterializedViewRetryNum(taskRunContext.getCtx());
         logger.info("start to refresh mv with retry times:{}", maxRefreshMaterializedViewRetryNum);
 
-        // record mv refresh trace info for better debugging
-        // TODO: it may be too long, need to optimize it later.
-        String mvRefreshInfo = getMVRefreshTraceInfo();
-        Tracers.record("MVRefreshPartitionInfo", mvRefreshInfo);
+        // record mv refresh trace info for better debugging (only when profile is enabled to avoid expensive call)
+        ConnectContext ctx = taskRunContext.getCtx();
+        if (ctx != null && (ctx.getSessionVariable().isEnableProfile()
+                || ctx.getSessionVariable().isEnableBigQueryProfile())) {
+            String mvRefreshInfo = getMVRefreshTraceInfo();
+            Tracers.record("MVRefreshPartitionInfo", mvRefreshInfo);
+        }
 
         Throwable lastException = null;
         int lockFailedTimes = 0;
@@ -605,14 +610,29 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             locker.unlock();
         }
 
+        final InsertStmt finalInsertStmt = insertStmt;
         updateTaskRunStatus(status -> {
             MVTaskRunExtraMessage message = status.getMvTaskRunExtraMessage();
             if (message == null) {
                 return;
             }
+
+            // update plan builder message
             Map<String, String> planBuildMessage = planBuilder.getPlanBuilderMessage();
-            logger.info("MV Refresh PlanBuilderMessage: {}", planBuildMessage);
-            message.setPlanBuilderMessage(planBuildMessage);
+            if (planBuildMessage != null) {
+                logger.info("MV Refresh PlanBuilderMessage: {}", planBuildMessage);
+                message.setPlanBuilderMessage(planBuildMessage);
+                // record the plan builder message
+                Tracers.record("MVRefreshPlanBuilderInfo", planBuildMessage.toString());
+            }
+
+            final String refreshedSql = finalInsertStmt != null ? AstToSQLBuilder.buildSimple(finalInsertStmt) : "";
+            // update mv refresh definition
+            if (!Strings.isNullOrEmpty(refreshedSql)) {
+                // Remove line separator and shrink to MAX_FIELD_VARCHAR_LENGTH-1 which is defined in the TaskRunsSystemTable.java
+                String query = LogUtil.removeLineSeparator(refreshedSql);
+                status.setDefinition(MvUtils.shrinkToSize(query, MAX_FIELD_VARCHAR_LENGTH - 1));
+            }
         });
 
         QueryDebugOptions debugOptions = ctx.getSessionVariable().getQueryDebugOptions();
@@ -1092,8 +1112,16 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
      * @param action
      */
     private void updateTaskRunStatus(Consumer<TaskRunStatus> action) {
-        if (this.mvContext.status != null) {
+        if (this.mvContext == null || this.mvContext.status == null) {
+            return;
+        }
+
+        // ignore exception for update task run status
+        try {
             action.accept(this.mvContext.status);
+        } catch (Exception e) {
+            logger.warn("failed to update task run status for mv refresh, task run id: {}, error: {}",
+                    this.mvContext.getTaskRunId(), DebugUtil.getRootStackTrace(e));
         }
     }
 
