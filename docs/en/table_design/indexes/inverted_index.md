@@ -14,7 +14,7 @@ Since version 3.3.0, StarRocks supports full-text inverted indexes, which can br
 
 Primary Key tables support full-text inverted indexes from v4.0 onwards.
 
-Since v4.1, StarRocks supports a **builtin** inverted index implementation in addition to the default CLucene-based implementation. The builtin implementation supports both **shared-nothing** and **shared-data** clusters. For details, see [Builtin inverted index](#builtin-inverted-index).
+Since v4.1, StarRocks supports a **built-in** inverted index implementation in addition to the default CLucene-based implementation. The built-in implementation supports both **shared-nothing** and **shared-data** clusters. For details, see [built-in inverted index](#built-in-inverted-index).
 
 ## Overview
 
@@ -253,12 +253,12 @@ If the full-text inverted index does not tokenize the indexed column, that is, `
 
 After executing the query, you can view the detailed metrics `GinFilterRows` and `GinFilter` in the scan node of the Query Profile to see the number of rows filtered and the filtering time using the full-text inverted index.
 
-## Builtin inverted index
+## Built-in inverted index
 
-Since v4.1, StarRocks provides a **builtin** inverted index implementation in addition to the default CLucene-based implementation. The builtin implementation is StarRocks' native inverted index built on top of bitmap index, and supports both **shared-nothing** and **shared-data** clusters.
+Since v4.1, StarRocks provides a **built-in** inverted index implementation in addition to the default CLucene-based implementation. The built-in implementation is StarRocks' native inverted index built on top of bitmap index, and supports both **shared-nothing** and **shared-data** clusters.
 
 :::note
-The CLucene-based inverted index implementation is not supported in shared-data clusters. For shared-data clusters, you must use the builtin implementation.
+The CLucene-based inverted index implementation is not supported in shared-data clusters. For shared-data clusters, you must use the built-in implementation.
 :::
 
 ### Implementation comparison
@@ -266,18 +266,18 @@ The CLucene-based inverted index implementation is not supported in shared-data 
 | Implementation | Supported since | Shared-nothing | Shared-data | Description |
 |---------------|----------------|----------------|-------------|-------------|
 | **CLucene** (default) | v3.3.0 | Yes | No | Based on the CLucene full-text search library. This is the default implementation for shared-nothing clusters. |
-| **builtin** | v4.1.0 | Yes | Yes | StarRocks' native inverted index implementation. Supports both shared-nothing and shared-data clusters. |
+| **built-in** | v4.1.0 | Yes | Yes | StarRocks' native inverted index implementation. Supports both shared-nothing and shared-data clusters. |
 
 You can explicitly specify the implementation type using the `imp_lib` parameter when creating an index. If not specified, the system automatically selects the appropriate implementation based on the cluster mode:
 - In shared-nothing clusters, the default is CLucene.
-- In shared-data clusters, the default is builtin (CLucene is not supported).
+- In shared-data clusters, the default is built-in (CLucene is not supported).
 
-### Create builtin inverted index
+### Create built-in inverted index
 
 #### Create at table creation
 
 ```SQL
--- Create table with builtin inverted index
+-- Create table with built-in inverted index
 CREATE TABLE `t_builtin` (
     `id1` bigint(20) NOT NULL COMMENT "",
     `value` varchar(255) NOT NULL COMMENT "",
@@ -298,12 +298,12 @@ ALTER TABLE t ADD INDEX idx_builtin (v) USING GIN('parser' = 'english', 'imp_lib
 CREATE INDEX idx_builtin ON t (v) USING GIN('parser' = 'english', 'imp_lib' = 'builtin');
 ```
 
-### Builtin inverted index in shared-data clusters
+### Built-in inverted index in shared-data clusters
 
-In shared-data clusters, the builtin implementation is automatically selected even if `imp_lib` is not specified. You can create the index using the same syntax as for a regular inverted index:
+In shared-data clusters, the built-in implementation is automatically selected even if `imp_lib` is not specified. You can create the index using the same syntax as for a regular inverted index:
 
 ```SQL
--- In a shared-data cluster, this automatically uses the builtin implementation
+-- In a shared-data cluster, this automatically uses the built-in implementation
 CREATE TABLE `t_shared_data` (
     `id1` bigint(20) NOT NULL COMMENT "",
     `value` varchar(255) NOT NULL COMMENT "",
@@ -327,11 +327,11 @@ DISTRIBUTED BY HASH(`id1`);
 
 ### dict_gram_num
 
-The `dict_gram_num` parameter is available exclusively for the **builtin** inverted index implementation. It controls the n-gram size used to build an n-gram dictionary index on top of the inverted index dictionary, which can significantly accelerate wildcard and substring queries.
+The `dict_gram_num` parameter is available exclusively for the **built-in** inverted index implementation. It controls the n-gram size used to build an n-gram dictionary index on top of the inverted index dictionary, which can significantly accelerate wildcard and substring queries.
 
 #### How it works
 
-When `dict_gram_num` is set to a positive integer (e.g., `2`), the builtin inverted index splits each dictionary entry into n-grams (substrings of the specified character length) during index construction. For example, if `dict_gram_num` is set to `2` and a dictionary entry is `"starrocks"`, the following 2-grams are generated: `"st"`, `"ta"`, `"ar"`, `"rr"`, `"ro"`, `"oc"`, `"ck"`, `"ks"`.
+When `dict_gram_num` is set to a positive integer (e.g., `2`), the built-in inverted index splits each dictionary entry into n-grams (substrings of the specified character length) during index construction. For example, if `dict_gram_num` is set to `2` and a dictionary entry is `"starrocks"`, the following 2-grams are generated: `"st"`, `"ta"`, `"ar"`, `"rr"`, `"ro"`, `"oc"`, `"ck"`, `"ks"`.
 
 During a query like `MATCH '%rock%'`, the query string `"rock"` is also split into 2-grams (`"ro"`, `"oc"`, `"ck"`), and the n-gram index quickly narrows down candidate dictionary entries, avoiding a full dictionary scan. This greatly improves the performance of wildcard queries, especially on columns with a large number of distinct values.
 
@@ -350,9 +350,9 @@ During a query like `MATCH '%rock%'`, the query string `"rock"` is also split in
 
 #### Examples
 
-**Create builtin inverted index with `dict_gram_num`**
+**Create built-in inverted index with `dict_gram_num`**
 
-1. Create a table with a builtin inverted index and `dict_gram_num` set to `2`.
+1. Create a table with a built-in inverted index and `dict_gram_num` set to `2`.
 
     ```SQL
     CREATE TABLE `t_gram` (
@@ -396,7 +396,7 @@ During a query like `MATCH '%rock%'`, the query string `"rock"` is also split in
 
 **Add `dict_gram_num` to an existing table**
 
-You can also specify `dict_gram_num` when adding a builtin inverted index after table creation:
+You can also specify `dict_gram_num` when adding a built-in inverted index after table creation:
 
 ```SQL
 CREATE INDEX idx_gram ON t (v) USING GIN('parser' = 'english', 'imp_lib' = 'builtin', 'dict_gram_num' = '3');
