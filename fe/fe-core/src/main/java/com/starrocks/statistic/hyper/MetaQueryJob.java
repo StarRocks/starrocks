@@ -42,14 +42,15 @@ public class MetaQueryJob extends HyperQueryJob {
     private final List<TStatisticData> tempRowsBuffer = Lists.newArrayList();
     private final PartitionSampler sampler;
 
-    protected MetaQueryJob(ConnectContext context, Database db, Table table, List<ColumnStats> columnStats,
+    protected MetaQueryJob(ConnectContext context, long analyzeId, Database db, Table table, List<ColumnStats> columnStats,
                            List<Long> partitionIdList, PartitionSampler sampler) {
-        super(context, db, table, columnStats, partitionIdList);
+        super(context, analyzeId, db, table, columnStats, partitionIdList);
         this.sampler = sampler;
     }
 
     @Override
     public void queryStatistics() {
+        checkCancelled();
         tempRowsBuffer.clear();
 
         queryMetaMetric(columnStats);
@@ -61,9 +62,11 @@ public class MetaQueryJob extends HyperQueryJob {
     private void queryMetaMetric(List<ColumnStats> queryColumns) {
         List<String> metaSQL = buildBatchMetaQuerySQL(queryColumns);
         for (String sql : metaSQL) {
+            checkCancelled();
             // execute sql
             List<TStatisticData> dataList = executeStatisticsQuery(sql, context);
             for (TStatisticData data : dataList) {
+                checkCancelled();
                 Partition partition = table.getPartition(data.getPartitionId());
                 if (partition == null) {
                     continue;
@@ -104,9 +107,11 @@ public class MetaQueryJob extends HyperQueryJob {
 
         List<String> metaSQL = buildBatchNDVQuerySQL(queryColumns);
         for (String sql : metaSQL) {
+            checkCancelled();
             // execute sql
             List<TStatisticData> dataList = executeStatisticsQuery(sql, context);
             for (TStatisticData data : dataList) {
+                checkCancelled();
                 Partition partition = table.getPartition(data.getPartitionId());
                 if (partition == null) {
                     continue;
