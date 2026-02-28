@@ -3049,6 +3049,10 @@ void TabletUpdatesTest::test_get_column_values_with_invalid_rssid(bool enable_pe
     std::this_thread::sleep_for(std::chrono::seconds(1));
     ASSERT_EQ(tablet->updates()->num_rowsets(), 1);
 
+    // GC old rowsets from _rowsets map. Without this, _rowsets still contains old entries
+    // even though they are no longer part of any active version.
+    tablet->updates()->remove_expired_versions(INT64_MAX);
+
     // Verify the compacted rowset has a seg id greater than old_rssid.
     uint32_t new_min_rssid = 0;
     {
