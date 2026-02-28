@@ -161,8 +161,25 @@ public interface AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/ast/AstVisitor.java
     default R visitRecoverDbStatement(RecoverDbStmt statement, C context) {
         return visitDDLStatement(statement, context);
+=======
+    default R visitAdminShowConfigStatement(AdminShowConfigStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitAdminShowAutomatedSnapshotStatement(AdminShowAutomatedSnapshotStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitAdminShowTabletStatusStatement(AdminShowTabletStatusStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitAdminShowReplicaStatusStatement(AdminShowReplicaStatusStmt statement, C context) {
+        return visitShowStatement(statement, context);
+>>>>>>> 40eca82c61 ([Enhancement] Support show cloud native tablet status (#69616)):fe/fe-parser/src/main/java/com/starrocks/sql/ast/AstVisitor.java
     }
 
     default R visitShowDataStatement(ShowDataStmt statement, C context) {

@@ -90,7 +90,12 @@ import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.DescribeStmt;
+=======
+import com.starrocks.sql.ast.AdminShowTabletStatusStmt;
+import com.starrocks.sql.ast.KeysType;
+>>>>>>> 40eca82c61 ([Enhancement] Support show cloud native tablet status (#69616))
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.ShowAlterStmt;
@@ -1174,6 +1179,7 @@ public class ShowExecutorTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testShowCreateExternalCatalog() throws AnalysisException, DdlException {
         new MockUp<CatalogMgr>() {
             @Mock
@@ -1320,5 +1326,19 @@ public class ShowExecutorTest {
         Assertions.assertFalse(stmtExecutor.shouldMarkIdleCheck(
                 SqlParser.parseSingleStatement("admin set frontend config('proc_profile_cpu_enable' = 'true')",
                         SqlModeHelper.MODE_DEFAULT)));
+=======
+    public void testAdminShowTabletStatusStmt() throws Exception {
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("testDb", "testTbl")),
+                null, NodePosition.ZERO);
+        AdminShowTabletStatusStmt stmt = new AdminShowTabletStatusStmt(tableRef, null, Collections.emptyMap(), NodePosition.ZERO);
+
+        ctx.setGlobalStateMgr(globalStateMgr);
+        ctx.setQualifiedUser("testUser");
+
+        // Use assertThrows to check if it throws exception when table is not cloud native
+        assertThrows(SemanticException.class, () -> {
+            ShowExecutor.execute(stmt, ctx);
+        });
+>>>>>>> 40eca82c61 ([Enhancement] Support show cloud native tablet status (#69616))
     }
 }

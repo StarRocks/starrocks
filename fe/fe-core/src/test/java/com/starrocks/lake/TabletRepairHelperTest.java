@@ -48,7 +48,15 @@ import com.starrocks.rpc.LakeServiceWithMetrics;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.PartitionNames;
+=======
+import com.starrocks.sql.ast.LakeTabletStatus;
+import com.starrocks.sql.ast.PartitionRef;
+import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.ast.expression.BinaryType;
+>>>>>>> 40eca82c61 ([Enhancement] Support show cloud native tablet status (#69616))
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TStorageMedium;
@@ -1168,4 +1176,85 @@ public class TabletRepairHelperTest {
 
         Assertions.assertEquals("ERROR: rpc exception", row.get(4)); // ErrorMsg
     }
+    @Test
+    public void testGetTabletStatus() throws Exception {
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
+                return node;
+            }
+        };
+
+        new MockUp<LakeServiceWithMetrics>() {
+            @Mock
+            public Future<GetTabletMetadatasResponse> getTabletMetadatas(GetTabletMetadatasRequest request) {
+                GetTabletMetadatasResponse response = new GetTabletMetadatasResponse();
+                response.status = new StatusPB();
+                response.status.statusCode = 0;
+
+                // tablet1 with valid metadata
+                TabletResult tr1 = new TabletResult();
+                tr1.tabletId = tabletId11;
+                tr1.status = new StatusPB();
+                tr1.status.statusCode = 0;
+                tr1.metadataEntries = Lists.newArrayList();
+                tr1.metadataEntries.add(createTabletMetadataEntry(tabletId11, maxVersion, null));
+
+                // tablet2 with missing data files
+                TabletResult tr2 = new TabletResult();
+                tr2.tabletId = tabletId12;
+                tr2.status = new StatusPB();
+                tr2.status.statusCode = 0;
+                tr2.metadataEntries = Lists.newArrayList();
+                tr2.metadataEntries.add(createTabletMetadataEntry(
+                        tabletId12, maxVersion, Lists.newArrayList("file1.dat", "file2.dat", "file3.dat")));
+
+                response.tabletResults = Lists.newArrayList(tr1, tr2);
+
+                return CompletableFuture.completedFuture(response);
+            }
+        };
+
+        // case 1: no filter
+        List<List<String>> result = TabletRepairHelper.getTabletStatus(
+                db, table, Lists.newArrayList("p1"), null, null, 2, WarehouseComputeResource.DEFAULT);
+
+        Assertions.assertEquals(2, result.size());
+
+        List<String> row1 = result.get(0);
+        Assertions.assertEquals("11", row1.get(0)); // tabletId
+        Assertions.assertEquals("4", row1.get(1)); // partitionId
+        Assertions.assertEquals("8", row1.get(2)); // version
+        Assertions.assertEquals("NORMAL", row1.get(3)); // status
+        Assertions.assertEquals("0", row1.get(4)); // missingFileCount
+        Assertions.assertEquals("[]", row1.get(5)); // missingFiles
+
+        List<String> row2 = result.get(1);
+        Assertions.assertEquals("12", row2.get(0));
+        Assertions.assertEquals("4", row2.get(1));
+        Assertions.assertEquals("8", row2.get(2));
+        Assertions.assertEquals("MISSING_DATA", row2.get(3));
+        Assertions.assertEquals("3", row2.get(4));
+        Assertions.assertEquals("[file1.dat, file2.dat, ... 1 more]", row2.get(5));
+
+        // case 2: filter by NORMAL
+        result = TabletRepairHelper.getTabletStatus(
+                db, table, Lists.newArrayList("p1"), LakeTabletStatus.NORMAL, BinaryType.EQ, 5, WarehouseComputeResource.DEFAULT);
+        Assertions.assertEquals(1, result.size());
+        Assertions.assertEquals("11", result.get(0).get(0));
+
+        // case 3: filter by MISSING_DATA
+        result = TabletRepairHelper.getTabletStatus(db, table, Lists.newArrayList("p1"), LakeTabletStatus.MISSING_DATA,
+                BinaryType.EQ, 5, WarehouseComputeResource.DEFAULT);
+        Assertions.assertEquals(1, result.size());
+        Assertions.assertEquals("12", result.get(0).get(0));
+        Assertions.assertEquals("[file1.dat, file2.dat, file3.dat]", result.get(0).get(5)); // check limit=5 works
+        
+        // case 4: filter != NORMAL
+        result = TabletRepairHelper.getTabletStatus(
+                db, table, Lists.newArrayList("p1"), LakeTabletStatus.NORMAL, BinaryType.NE, 5, WarehouseComputeResource.DEFAULT);
+        Assertions.assertEquals(1, result.size());
+        Assertions.assertEquals("12", result.get(0).get(0));
+    }
+
 }

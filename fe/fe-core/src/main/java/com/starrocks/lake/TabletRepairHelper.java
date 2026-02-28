@@ -53,11 +53,14 @@ import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
+import com.starrocks.sql.ast.LakeTabletStatus;
+import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TStatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -656,11 +659,19 @@ public class TabletRepairHelper {
      * It handles different repair strategies based on `enforceConsistentVersion` and `allowEmptyTabletRecovery`
      * and aggregates errors from failed partition repairs.
      *
+<<<<<<< HEAD
      * @param stmt The AdminRepairTableStmt containing repair parameters.
      * @param db The Database containing the table to be repaired.
      * @param table The OlapTable whose tablets are to be repaired.
      * @param partitionNames A list of partition names to repair. If empty, all partitions are repaired.
      * @param warehouseId The warehouse id used for assigning compute nodes.
+=======
+     * @param stmt            The AdminRepairTableStmt containing repair parameters.
+     * @param db              The Database containing the table to be repaired.
+     * @param table           The OlapTable whose tablets are to be repaired.
+     * @param partitionNames  A list of partition names to repair. If empty, all partitions are repaired.
+     * @param computeResource The compute resource used for assigning compute nodes.
+>>>>>>> 40eca82c61 ([Enhancement] Support show cloud native tablet status (#69616))
      * @throws StarRocksException If any tablet repair fails or if there are issues during the process.
      */
     public static void repair(AdminRepairTableStmt stmt, Database db, OlapTable table, @NotNull List<String> partitionNames,
@@ -796,6 +807,95 @@ public class TabletRepairHelper {
 
             result.add(Lists.newArrayList(String.valueOf(physicalPartitionId), String.valueOf(visibleVersion),
                     repairStatus.name(), gson.toJson(tabletRecoverInfos), errorMsg));
+        }
+
+        return result;
+    }
+
+    private static boolean matchTablet(LakeTabletStatus status, BinaryType op, LakeTabletStatus statusFilter) {
+        boolean match = true;
+        if (statusFilter != null && op != null) {
+            if (op == BinaryType.EQ && status != statusFilter) {
+                match = false;
+            } else if (op == BinaryType.NE && status == statusFilter) {
+                match = false;
+            }
+        }
+        return match;
+    }
+
+    private static List<String> limitMissingFiles(List<String> missingFiles, int limit) {
+        if (missingFiles == null || missingFiles.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        int fileCount = missingFiles.size();
+        if (limit >= 0 && fileCount > limit) {
+            List<String> result = new ArrayList<>(limit + 1);
+            if (limit > 0) {
+                result.addAll(missingFiles.subList(0, limit));
+            }
+            result.add("... " + (fileCount - limit) + " more");
+            return result;
+        }
+
+        return Lists.newArrayList(missingFiles);
+    }
+
+    /**
+     * Return the tablet status for specified partitions of a table.
+     * Whether meta and data files are missing.
+     */
+    public static List<List<String>> getTabletStatus(Database db, OlapTable table, @NotNull List<String> partitionNames,
+                                                     LakeTabletStatus statusFilter, BinaryType op, int maxMissingDataFilesToShow,
+                                                     ComputeResource computeResource) throws Exception {
+        // get physical partition ids in db table read lock
+        List<Long> physicalPartitionIds = getPhysicalPartitionIds(db, table, partitionNames);
+
+        List<List<String>> result = Lists.newArrayList();
+        for (Long physicalPartitionId : physicalPartitionIds) {
+            PhysicalPartitionInfo info = getPhysicalPartitionInfo(db, table, physicalPartitionId, true, computeResource);
+
+            // get visible version metadata for all tablets in the partition
+            long version = info.maxVersion;
+            Map<Long, Map<Long, TabletMetadataEntry>> tabletToVersionMetadataEntry = getTabletMetadatas(info, version, version);
+
+            // check the tablet status for each tablet in the partition
+            for (long tabletId : info.allTablets) {
+                LakeTabletStatus status = LakeTabletStatus.NORMAL;
+                List<String> missingFiles = null;
+                int missingFileCount = 0;
+
+                Map<Long, TabletMetadataEntry> versionToMetadataEntry = tabletToVersionMetadataEntry.get(tabletId);
+                if (versionToMetadataEntry == null || versionToMetadataEntry.isEmpty() ||
+                        !versionToMetadataEntry.containsKey(version)) {
+                    status = LakeTabletStatus.MISSING_META;
+                } else {
+                    TabletMetadataEntry metadataEntry = versionToMetadataEntry.get(version);
+                    if (metadataEntry.missingFiles != null && !metadataEntry.missingFiles.isEmpty()) {
+                        status = LakeTabletStatus.MISSING_DATA;
+                        missingFiles = metadataEntry.missingFiles;
+                        missingFileCount = missingFiles.size();
+                    }
+                }
+
+                // filter by status
+                if (!matchTablet(status, op, statusFilter)) {
+                    continue;
+                }
+
+                // limit the number of missing data files to show
+                List<String> limitMissingFiles = limitMissingFiles(missingFiles, maxMissingDataFilesToShow);
+
+                List<String> row = Lists.newArrayList();
+                row.add(String.valueOf(tabletId));
+                row.add(String.valueOf(physicalPartitionId));
+                row.add(String.valueOf(version));
+                row.add(status.name());
+                row.add(String.valueOf(missingFileCount));
+                row.add(limitMissingFiles.toString());
+                result.add(row);
+            }
         }
 
         return result;
