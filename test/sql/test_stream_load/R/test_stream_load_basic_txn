@@ -1,0 +1,184 @@
+-- name: test_basic_txn_commit_operations @sequential
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `table1` (
+  `id` int,
+  `name` varchar(100)
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1;
+-- result:
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:commit_test_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -XPOST ${url}/api/transaction/begin | jq -r '.Status'
+-- result:
+0
+OK
+-- !result
+[UC]shell: curl -s --location-trusted -u root: -H "label:commit_test_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -H "column_separator:," -d '1,alice' -XPUT ${url}/api/transaction/load
+-- result:
+0
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:commit_test_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -XPOST ${url}/api/transaction/commit | jq -r '.Status'
+-- result:
+0
+OK
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:commit_test_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -XPOST ${url}/api/transaction/commit | jq -r '.Status'
+-- result:
+0
+OK
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:commit_test_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -H "column_separator:," -d '2,bob' -XPUT ${url}/api/transaction/load | jq -r '.Status'
+-- result:
+0
+TXN_NOT_EXISTS
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:commit_test_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -XPOST ${url}/api/transaction/rollback | jq -r '.Status'
+-- result:
+0
+FAILED
+-- !result
+select * from table1 order by id;
+-- result:
+1	alice
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:commit_test_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -XPOST ${url}/api/transaction/begin | jq -r '.Status'
+-- result:
+0
+LABEL_ALREADY_EXISTS
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
+-- name: test_basic_txn_rollback_operations @sequential
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `table1` (
+  `id` int,
+  `name` varchar(100)
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1;
+-- result:
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:rollback_test_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -XPOST ${url}/api/transaction/begin | jq -r '.Status'
+-- result:
+0
+OK
+-- !result
+[UC]shell: curl -s --location-trusted -u root: -H "label:rollback_test_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -H "column_separator:," -d '1,alice' -XPUT ${url}/api/transaction/load
+-- result:
+0
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:rollback_test_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -XPOST ${url}/api/transaction/rollback | jq -r '.Status'
+-- result:
+0
+OK
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:rollback_test_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -XPOST ${url}/api/transaction/rollback | jq -r '.Status'
+-- result:
+0
+OK
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:rollback_test_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -H "column_separator:," -d '2,bob' -XPUT ${url}/api/transaction/load | jq -r '.Status'
+-- result:
+0
+TXN_NOT_EXISTS
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:rollback_test_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -XPOST ${url}/api/transaction/commit | jq -r '.Status'
+-- result:
+0
+FAILED
+-- !result
+select count(*) from table1;
+-- result:
+0
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:rollback_test_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -XPOST ${url}/api/transaction/begin | jq -r '.Status'
+-- result:
+0
+OK
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
+-- name: test_basic_txn_edge_cases @sequential
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `table1` (
+  `id` int,
+  `name` varchar(100)
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1;
+-- result:
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:no_begin_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -H "column_separator:," -d '1,alice' -XPUT ${url}/api/transaction/load | jq -r '.Status'
+-- result:
+0
+FAILED
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:no_begin_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -XPOST ${url}/api/transaction/commit | jq -r '.Status'
+-- result:
+0
+FAILED
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:no_begin_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -XPOST ${url}/api/transaction/rollback | jq -r '.Status'
+-- result:
+0
+FAILED
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:empty_commit_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -XPOST ${url}/api/transaction/begin | jq -r '.Status'
+-- result:
+0
+OK
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:empty_commit_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -XPOST ${url}/api/transaction/commit | jq -r '.Status'
+-- result:
+0
+INTERNAL_ERROR
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:empty_rollback_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -XPOST ${url}/api/transaction/begin | jq -r '.Status'
+-- result:
+0
+OK
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:empty_rollback_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -XPOST ${url}/api/transaction/rollback | jq -r '.Status'
+-- result:
+0
+OK
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:double_begin_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -XPOST ${url}/api/transaction/begin | jq -r '.Status'
+-- result:
+0
+OK
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:double_begin_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -XPOST ${url}/api/transaction/begin | jq -r '.Status'
+-- result:
+0
+LABEL_ALREADY_EXISTS
+-- !result
+shell: curl -s --location-trusted -u root: -H "label:double_begin_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:table1" -XPOST ${url}/api/transaction/rollback | jq -r '.Status'
+-- result:
+0
+OK
+-- !result
+select count(*) from table1;
+-- result:
+0
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
