@@ -239,7 +239,7 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVTestBase {
                             .collect(Collectors.toList());
             Assertions.assertEquals(Arrays.asList("p000101_202308", "p202308_202309"), partitions);
             // mv partition p202308_202309 is force refreshed and visible version is increased
-            Assertions.assertEquals(partitionVersionMap.get("p202308_202309"),
+            Assertions.assertTrue(partitionVersionMap.get("p202308_202309") <
                     materializedView.getPartition("p202308_202309")
                             .getDefaultPhysicalPartition().getVisibleVersion());
         }
