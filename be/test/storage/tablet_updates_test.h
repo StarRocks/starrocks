@@ -855,6 +855,7 @@ public:
     void test_pk_dump(size_t rowset_cnt);
     void update_and_recover(bool enable_persistent_index);
     void test_recover_rowset_sorter();
+    void test_get_column_values_with_invalid_rssid(bool enable_persistent_index);
 
 protected:
     TabletSharedPtr _tablet;
