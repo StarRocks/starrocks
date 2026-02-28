@@ -32,6 +32,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.StatisticsType;
 import com.starrocks.sql.ast.expression.Expr;
@@ -121,6 +122,13 @@ public abstract class StatisticsCollectJob {
     }
 
     public abstract void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception;
+
+    protected void checkCancelled(AnalyzeStatus analyzeStatus) throws DdlException {
+        if (analyzeStatus != null && GlobalStateMgr.getCurrentState().getAnalyzeMgr()
+                .isAnalyzeCancelled(analyzeStatus.getId())) {
+            throw new DdlException("USER_CANCEL: kill analyze");
+        }
+    }
 
     public String getCatalogName() {
         return InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
@@ -234,6 +242,7 @@ public abstract class StatisticsCollectJob {
         int count = 0;
         int maxRetryTimes = 5;
         do {
+            checkCancelled(analyzeStatus);
             // Calculate and set remaining timeout for this SQL task
             calculateAndSetRemainingTimeout(context, analyzeStatus);
 
@@ -253,6 +262,7 @@ public abstract class StatisticsCollectJob {
             context.setStartTime();
             executor.execute();
 
+            checkCancelled(analyzeStatus);
             if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
                 LOG.warn("Statistics collect fail | Error Message [{}] | {} | SQL [{}]",
                         context.getState().getErrorMessage(), DebugUtil.printId(context.getQueryId()), sql);
