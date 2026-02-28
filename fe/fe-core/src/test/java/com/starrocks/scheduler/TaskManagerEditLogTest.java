@@ -887,8 +887,6 @@ public class TaskManagerEditLogTest {
         Assertions.assertEquals(Constants.TaskState.UNKNOWN, followerAlteredTask.getState());
         Assertions.assertNull(followerAlteredTask.getSchedule());
     }
-<<<<<<< HEAD
-=======
 
     @Test
     public void testAlterTaskFromEventTriggeredToPeriodical() throws Exception {
@@ -1252,5 +1250,4 @@ public class TaskManagerEditLogTest {
         Assertions.assertNotNull(unchangedTask);
         Assertions.assertEquals(initialState, unchangedTask.getState());
     }
->>>>>>> 7dcbb7e6e1 ([BugFix] Fix TaskManager schedule bugs after ALTER MV (#69504))
 }
