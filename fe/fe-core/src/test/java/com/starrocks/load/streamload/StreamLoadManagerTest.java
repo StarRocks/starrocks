@@ -81,8 +81,6 @@ public class StreamLoadManagerTest {
             @Mock
             public void logInsertTransactionState(TransactionState transactionState) {
             }
-<<<<<<< HEAD
-=======
 
             @Mock
             public void logCreateStreamLoadJob(StreamLoadTask streamLoadTask,
@@ -95,7 +93,6 @@ public class StreamLoadManagerTest {
                     StreamLoadMultiStmtTask streamLoadTask, WALApplier walApplier) {
                 walApplier.apply(streamLoadTask);
             }
->>>>>>> 380a8e694a ([BugFix] Fix multi-statement stream load transaction behavior inconsistencies (#68542))
         };
 
         new Expectations() {
