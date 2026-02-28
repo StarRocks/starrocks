@@ -5356,9 +5356,9 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
         auto iter = rssid_to_rowsets.upper_bound(rssid);
         if (iter == rssid_to_rowsets.begin()) {
             std::string msg = strings::Substitute(
-                    "rssid $0 is smaller than the minimum rowset seg id in tablet $1, "
+                    "rssid $0 is smaller than the minimum rowset seg id $1 in tablet $2, "
                     "which may be caused by stale primary index entries after compaction",
-                    rssid, _tablet.tablet_id());
+                    rssid, rssid_to_rowsets.begin()->first, _tablet.tablet_id());
             LOG(ERROR) << msg;
             return Status::InternalError(msg);
         }
