@@ -22,6 +22,29 @@ displayed_sidebar: docs
 | `files`                | 显示当前快照中数据文件（Data File）和删除文件（Delete File）的详细信息。 |
 | `refs`                 | 显示关于 Iceberg 引用（Reference）的详细信息，包括分支和标签。 |
 
+## Iceberg v3 Row Lineage 元数据列
+
+从 v4.1 开始，对于 Iceberg v3 表（format-version = 3），StarRocks 支持查询以下行血缘（Row Lineage）相关的元数据列：
+
+| 元数据列                     | 描述                                                                                       |
+| :--------------------------- | :----------------------------------------------------------------------------------------- |
+| `_row_id`                    | 表内唯一的行标识符（BIGINT）。格式：`firstRowId + row_position`。                          |
+| `_last_updated_sequence_number` | 该行最后更新时的提交序列号（BIGINT）。                                                  |
+
+使用方法：
+
+```SQL
+SELECT _row_id, _last_updated_sequence_number, * FROM [<catalog>.][<database>.]table;
+```
+
+:::note
+
+- `_row_id` 列需要数据文件具备 `firstRowId` 元信息。如果数据文件缺失 `firstRowId`，查询将失败并报错。
+- `_last_updated_sequence_number` 列返回该数据文件的数据序列号（`dataSequenceNumber`）。
+- 这些元数据列仅对 Iceberg v3 表（format-version = 3）可用。
+
+:::
+
 ## `history` 表
 
 用法：

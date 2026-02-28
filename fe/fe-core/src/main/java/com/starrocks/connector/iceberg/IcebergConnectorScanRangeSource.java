@@ -85,6 +85,8 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.IcebergTable.DATA_SEQUENCE_NUMBER;
 import static com.starrocks.catalog.IcebergTable.FILE_PATH;
+import static com.starrocks.catalog.IcebergTable.LAST_UPDATED_SEQUENCE_NUMBER;
+import static com.starrocks.catalog.IcebergTable.ROW_ID;
 import static com.starrocks.catalog.IcebergTable.SPEC_ID;
 import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 import static com.starrocks.connector.iceberg.IcebergUtil.checkFileFormatSupportedDelete;
@@ -356,10 +358,18 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         // fill extended column value
         List<SlotDescriptor> slots = desc.getSlots();
         Map<Integer, TExpr> extendedColumns = new HashMap<>();
+        boolean hasRowIdColumn = false;
         for (SlotDescriptor slot : slots) {
             String name = slot.getColumn().getName();
+            if (name.equalsIgnoreCase(ROW_ID)) {
+                hasRowIdColumn = true;
+                continue;
+            }
             LiteralExpr value;
             if (name.equalsIgnoreCase(DATA_SEQUENCE_NUMBER)) {
+                value = LiteralExprFactory.create(String.valueOf(file.dataSequenceNumber()), IntegerType.BIGINT);
+                setExtendedColumns(slot, extendedColumns, value);
+            } else if (name.equalsIgnoreCase(LAST_UPDATED_SEQUENCE_NUMBER)) {
                 value = LiteralExprFactory.create(String.valueOf(file.dataSequenceNumber()), IntegerType.BIGINT);
                 setExtendedColumns(slot, extendedColumns, value);
             } else if (name.equalsIgnoreCase(SPEC_ID)) {
@@ -387,7 +397,13 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             hdfsScanRange.setMin_max_values(tExprMinMaxValueMap);
         }
 
-        if (task.file() != null && task.file().firstRowId() != null) {
+        if (hasRowIdColumn) {
+            if (task.file() == null || task.file().firstRowId() == null) {
+                throw new StarRocksConnectorException(
+                        "Iceberg v3 row lineage requires first_row_id for _row_id, file: %s", filePath);
+            }
+            hdfsScanRange.setFirst_row_id(task.file().firstRowId());
+        } else if (task.file() != null && task.file().firstRowId() != null) {
             hdfsScanRange.setFirst_row_id(task.file().firstRowId());
         }
 
