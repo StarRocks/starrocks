@@ -416,15 +416,14 @@ public abstract class BaseMVRefreshProcessor {
                     if (!mv.isPartitionedTable() || mvRefreshParams.isCompleteRefresh()) {
                         mv.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
                     } else {
-                        for (PCellWithName partName : toRefreshPartitions.getPartitions()) {
-                            mvRefreshPartitioner.dropPartition(db, mv, partName.name());
-                        }
+                        mv.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMapByMVPartitions(
+                                toRefreshPartitions.getPartitionNames());
                     }
                 } catch (Exception e) {
-                    logger.warn("failed to drop partitions or clear version map {} for force refresh",
+                    logger.warn("failed to clear version map {} for force refresh",
                             Joiner.on(",").join(toRefreshPartitions.getPartitionNames()),
                             DebugUtil.getRootStackTrace(e));
-                    throw new AnalysisException("failed to drop partitions for force refresh: " + e.getMessage());
+                    throw new AnalysisException("failed to clear version map for force refresh: " + e.getMessage());
                 } finally {
                     locker.unLockTableWithIntensiveDbLock(db.getId(), this.mv.getId(), LockType.WRITE);
                 }
