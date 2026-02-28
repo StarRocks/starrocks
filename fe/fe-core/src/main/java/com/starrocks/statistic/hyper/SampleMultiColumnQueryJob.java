@@ -35,9 +35,9 @@ public class SampleMultiColumnQueryJob extends MultiColumnQueryJob {
     private final SampleInfo sampleInfo;
     private final TabletSampleManager manager;
 
-    public SampleMultiColumnQueryJob(ConnectContext context, Database db, Table table,
+    public SampleMultiColumnQueryJob(ConnectContext context, long analyzeId, Database db, Table table,
                                      List<ColumnStats> columnStats, TabletSampleManager sampleManager) {
-        super(context, db, table, columnStats);
+        super(context, analyzeId, db, table, columnStats);
         this.manager = sampleManager;
         this.sampleInfo = sampleManager.generateSampleInfo();
     }
