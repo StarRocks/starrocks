@@ -464,43 +464,6 @@ public class MaterializedViewAnalyzerTest {
         analyzeSuccess("create materialized view mv_hive_0 partition by str2date(L_SHIPDATE, '%Y%m%d') refresh manual as " +
                 "SELECT l_partkey, L_SHIPDATE  FROM hive0.partitioned_db.lineitem_mul_par3 as a");
     }
-<<<<<<< HEAD
-=======
-
-    @Test
-    public void testCreateMVForceRange() throws Exception {
-        boolean oldEnableRangeDistribution = Config.enable_range_distribution;
-        Config.enable_range_distribution = false;
-        try {
-            // set default config for async mvs
-            UtFrameUtils.setDefaultConfigForAsyncMVTest(starRocksAssert.getCtx());
-
-            String sql = "create materialized view test.force_range_mv\n" +
-                    "refresh async\n" +
-                    "as select k1, k2, sum(v1) as total from tbl1 group by k1, k2;";
-
-            // 1. Default: should NOT be range distribution if Config is false
-            CreateMaterializedViewStatement stmt1 = (CreateMaterializedViewStatement) analyzeSuccess(sql);
-            Assertions.assertFalse(stmt1.getDistributionDesc() instanceof RangeDistributionDesc);
-
-            // 2. Set session variable to true: should be range distribution
-            starRocksAssert.getCtx().getSessionVariable().setEnableRangeDistribution(true);
-            try {
-                CreateMaterializedViewStatement stmt2 = (CreateMaterializedViewStatement) analyzeSuccess(sql);
-                Assertions.assertTrue(stmt2.getDistributionDesc() instanceof RangeDistributionDesc);
-            } finally {
-                starRocksAssert.getCtx().getSessionVariable().setEnableRangeDistribution(false);
-            }
-
-            // 3. Set Config to true: should be range distribution even if session variable is false
-            Config.enable_range_distribution = true;
-            CreateMaterializedViewStatement stmt3 = (CreateMaterializedViewStatement) analyzeSuccess(sql);
-            Assertions.assertTrue(stmt3.getDistributionDesc() instanceof RangeDistributionDesc);
-
-        } finally {
-            Config.enable_range_distribution = oldEnableRangeDistribution;
-        }
-    }
 
     @Test
     public void testCreateMvOnIcebergTableWithPartitionEvolution() {
@@ -533,5 +496,4 @@ public class MaterializedViewAnalyzerTest {
                 "SELECT id, data, date FROM `iceberg0`.`view_db`.`iceberg_view` as a;";
         analyzeFail(sql, "Create/Rebuild materialized view do not support the table type: ICEBERG_VIEW");
     }
->>>>>>> d6d5badd03 ([BugFix] Disable creating mv with iceberg view (#69471))
 }

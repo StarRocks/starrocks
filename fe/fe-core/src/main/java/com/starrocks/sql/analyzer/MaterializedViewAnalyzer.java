@@ -165,12 +165,7 @@ public class MaterializedViewAnalyzer {
                     Table.TableType.KUDU,
                     Table.TableType.DELTALAKE,
                     Table.TableType.VIEW,
-                    Table.TableType.HIVE_VIEW,
-<<<<<<< HEAD
-                    Table.TableType.ICEBERG_VIEW);
-=======
-                    Table.TableType.PAIMON_VIEW);
->>>>>>> d6d5badd03 ([BugFix] Disable creating mv with iceberg view (#69471))
+                    Table.TableType.HIVE_VIEW);
 
     public static void analyze(StatementBase stmt, ConnectContext session) {
         new MaterializedViewAnalyzerVisitor().visit(stmt, session);
