@@ -345,7 +345,164 @@ public class TaskManager implements MemoryTrackable {
         return taskRunManager.submitTaskRun(taskRun, option);
     }
 
+<<<<<<< HEAD
     public void dropTasks(List<Long> taskIdList, boolean isReplay) {
+=======
+    /**
+     * Suspend a task, which will stop the task scheduler and kill the running task run.
+     * NOTE: this method will write edit log.
+     */
+    public void suspendTask(Task task, boolean isReplay) {
+        if (task == null) {
+            return;
+        }
+        if (!isReplay) {
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterTask(
+                    new AlterTaskInfo(task.getName(), Constants.TaskState.PAUSE),
+                    wal -> task.setState(Constants.TaskState.PAUSE)
+            );
+        }
+        suspendTaskInternal(task);
+    }
+
+    /**
+     * Internal method to suspend a task without writing edit log.
+     */
+    private void suspendTaskInternal(Task task) {
+        if (task == null) {
+            return;
+        }
+        if (!tryTaskLock()) {
+            throw new RuntimeException("Failed to get task lock when suspend Task sync[" + task.getName() + "]");
+        }
+        try {
+            task.setState(Constants.TaskState.PAUSE);
+            // stop task scheduler
+            if (task.getType() == Constants.TaskType.PERIODICAL) {
+                boolean isCancel = stopScheduler(task.getName());
+                if (!isCancel) {
+                    LOG.warn("stop scheduler failed for task [{}]", task.getName());
+                }
+            }
+
+            // kill running task run
+            if (!killTask(task.getName(), true)) {
+                LOG.warn("kill task failed: {}", task.getName());
+            }
+            // remove task from scheduler
+            periodFutureMap.remove(task.getId());
+        } finally {
+            taskUnlock();
+        }
+    }
+
+    /**
+     * Resume a task, which will restart the task scheduler if the task is periodical.
+     * NOTE: this method will write edit log.
+     */
+    public void resumeTask(Task task, boolean isReplay) {
+        if (task == null) {
+            return;
+        }
+        if (!isReplay) {
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterTask(
+                    new AlterTaskInfo(task.getName(), Constants.TaskState.ACTIVE),
+                    wal -> task.setState(Constants.TaskState.ACTIVE)
+            );
+        }
+        resumeTaskInternal(task);
+    }
+
+    /**
+     * Internal method to resume a task without writing edit log.
+     */
+    private void resumeTaskInternal(Task task) {
+        if (task == null) {
+            return;
+        }
+        if (!tryTaskLock()) {
+            throw new RuntimeException("Failed to get task lock when resume Task sync[" + task.getName() + "]");
+        }
+        try {
+            task.setState(Constants.TaskState.ACTIVE);
+            if (task.getType() == Constants.TaskType.PERIODICAL) {
+                TaskSchedule schedule = task.getSchedule();
+                if (schedule != null) {
+                    registerScheduler(task);
+                }
+            }
+            // reset consecutive failure number
+            task.resetConsecutiveFailCount();
+        } finally {
+            taskUnlock();
+        }
+    }
+
+    /**
+     * Update task properties for subsequent executions.
+     * NOTE: this method will write edit log.
+     */
+    public void updateTaskProperties(Task task, Map<String, String> properties) {
+        if (task == null || properties == null || properties.isEmpty()) {
+            return;
+        }
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterTask(
+                new AlterTaskInfo(task.getName(), properties),
+                wal -> {
+                    Map<String, String> current = task.getProperties();
+                    if (current == null) {
+                        current = Maps.newHashMap();
+                        task.setProperties(current);
+                    }
+                    current.putAll(properties);
+                }
+        );
+        updateTaskPropertiesInternal(task, properties);
+    }
+
+    /**
+     * Internal method to update task properties without writing edit log.
+     */
+    private void updateTaskPropertiesInternal(Task task, Map<String, String> properties) {
+        if (task == null || properties == null || properties.isEmpty()) {
+            return;
+        }
+        if (!tryTaskLock()) {
+            throw new RuntimeException("Failed to get task lock when update Task properties[" + task.getName() + "]");
+        }
+        try {
+            Map<String, String> current = task.getProperties();
+            if (current == null) {
+                current = Maps.newHashMap();
+                task.setProperties(current);
+            }
+            current.putAll(properties);
+        } finally {
+            taskUnlock();
+        }
+    }
+
+    /**
+     * Remove a property from the task's properties map.
+     * This method is thread-safe and acquires the task lock before modifying the properties.
+     */
+    public void removeTaskProperty(Task task, String propertyKey) {
+        if (task == null || propertyKey == null) {
+            return;
+        }
+        takeTaskLock();
+        try {
+            Map<String, String> current = task.getProperties();
+            if (current != null) {
+                current.remove(propertyKey);
+            }
+        } finally {
+            taskUnlock();
+        }
+    }
+
+    public void dropTasks(List<Long> taskIdList) {
+>>>>>>> 596f6e1c51 ([BugFix] Fix task run warehouse display after changing mv warehouse (#69567))
         takeTaskLock();
         try {
             for (long taskId : taskIdList) {

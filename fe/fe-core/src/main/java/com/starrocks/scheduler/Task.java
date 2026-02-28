@@ -17,13 +17,23 @@ package com.starrocks.scheduler;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.authentication.AuthenticationMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.UserIdentity;
+>>>>>>> 596f6e1c51 ([BugFix] Fix task run warehouse display after changing mv warehouse (#69567))
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.scheduler.persist.TaskSchedule;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.UserIdentity;
+=======
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
+>>>>>>> 596f6e1c51 ([BugFix] Fix task run warehouse display after changing mv warehouse (#69567))
 
 import java.io.DataInput;
 import java.io.IOException;
@@ -194,6 +204,24 @@ public class Task implements Writable {
 
     public Constants.TaskSource getSource() {
         return source;
+    }
+
+    public String getWarehouseName() {
+        // For MV tasks, fetch the warehouse from the MV directly to avoid stale data
+        // since MV's warehouse can be changed via ALTER MATERIALIZED VIEW SET WAREHOUSE
+        if (source == Constants.TaskSource.MV) {
+            MaterializedView mv = TaskBuilder.getMvFromTask(this);
+            if (mv != null) {
+                return GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                        .getWarehouse(mv.getWarehouseId()).getName();
+            }
+        }
+        if (properties != null) {
+            return properties.getOrDefault(PropertyAnalyzer.PROPERTIES_WAREHOUSE,
+                    WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+        } else {
+            return WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        }
     }
 
     public void setSource(Constants.TaskSource source) {
