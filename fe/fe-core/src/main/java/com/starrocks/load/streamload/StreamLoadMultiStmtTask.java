@@ -45,6 +45,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -283,6 +284,16 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
     }
 
     @Override
+    public String getUser() {
+        return user;
+    }
+
+    @Override
+    public Long getLoadStartTimeMs() {
+        return null;
+    }
+
+    @Override
     public String getDBName() {
         return dbName;
     }
@@ -497,5 +508,9 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
         for (StreamLoadTask task : taskMaps.values()) {
             task.replayOnVisible(txnState);
         }
+    }
+
+    public Collection<StreamLoadTask> getTasks() {
+        return taskMaps.values();
     }
 }
