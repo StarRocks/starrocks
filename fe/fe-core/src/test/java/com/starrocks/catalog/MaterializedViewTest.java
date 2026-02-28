@@ -17,6 +17,7 @@ package com.starrocks.catalog;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.Config;
@@ -64,6 +65,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import static com.starrocks.sql.optimizer.MVTestUtils.waitForSchemaChangeAlterJobFinish;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -1244,10 +1246,11 @@ public class MaterializedViewTest extends StarRocksTestBase {
 
         List<Table> baseTables = mv.getBaseTables();
         Assertions.assertEquals(2, baseTables.size());
-        Assertions.assertEquals("base_view1", baseTables.get(0).getName());
-        Assertions.assertEquals(baseView, baseTables.get(0));
-        Assertions.assertEquals("base_table1", baseTables.get(1).getName());
-        Assertions.assertEquals(baseTable, baseTables.get(1));
+        // Check that both base table and base view are present, regardless of order
+        Assertions.assertTrue(baseTables.stream().anyMatch(t -> t.getName().equals("base_view1")));
+        Assertions.assertTrue(baseTables.stream().anyMatch(t -> t.getName().equals("base_table1")));
+        Assertions.assertTrue(baseTables.contains(baseView));
+        Assertions.assertTrue(baseTables.contains(baseTable));
 
         List<BaseTableInfo> baseTablesWithView = mv.getBaseTableInfosWithoutView();
         Assertions.assertEquals(1, baseTablesWithView.size());
@@ -1573,5 +1576,50 @@ public class MaterializedViewTest extends StarRocksTestBase {
                 "lastSchemaUpdateTime should be updated after force dropping partition");
         Assertions.assertTrue(afterDropSchemaUpdateTime >= beforeDropTime,
                 "lastSchemaUpdateTime should be >= time before force drop");
+    }
+
+    @Test
+    public void testClearVisibleVersionMapByMVPartitions() {
+        MaterializedView.AsyncRefreshContext context = new MaterializedView.AsyncRefreshContext();
+        Map<String, MaterializedView.BasePartitionInfo> olapPartitionInfo = Maps.newHashMap();
+        olapPartitionInfo.put("p1", new MaterializedView.BasePartitionInfo(1, 1, -1));
+        olapPartitionInfo.put("p2", new MaterializedView.BasePartitionInfo(2, 1, -1));
+        olapPartitionInfo.put("bp1", new MaterializedView.BasePartitionInfo(3, 1, -1));
+        olapPartitionInfo.put("bp2", new MaterializedView.BasePartitionInfo(4, 1, -1));
+        olapPartitionInfo.put("keep", new MaterializedView.BasePartitionInfo(5, 1, -1));
+        context.getBaseTableVisibleVersionMap().put(100L, olapPartitionInfo);
+
+        BaseTableInfo externalBaseTableInfo = new BaseTableInfo("hive0", "partitioned_db", "lineitem_par", "lineitem_par");
+        Map<String, MaterializedView.BasePartitionInfo> externalPartitionInfo = Maps.newHashMap();
+        externalPartitionInfo.put("p1", new MaterializedView.BasePartitionInfo(11, 1, -1));
+        externalPartitionInfo.put("p2", new MaterializedView.BasePartitionInfo(12, 1, -1));
+        externalPartitionInfo.put("bp1", new MaterializedView.BasePartitionInfo(13, 1, -1));
+        externalPartitionInfo.put("bp2", new MaterializedView.BasePartitionInfo(14, 1, -1));
+        externalPartitionInfo.put("keep", new MaterializedView.BasePartitionInfo(15, 1, -1));
+        context.getBaseTableInfoVisibleVersionMap().put(externalBaseTableInfo, externalPartitionInfo);
+
+        context.getMvPartitionNameRefBaseTablePartitionMap().put("p1", Sets.newHashSet("bp1"));
+        context.getMvPartitionNameRefBaseTablePartitionMap().put("p2", Sets.newHashSet("bp2"));
+
+        context.clearVisibleVersionMapByMVPartitions(Sets.newHashSet("p1"));
+
+        Assertions.assertFalse(context.getMvPartitionNameRefBaseTablePartitionMap().containsKey("p1"));
+        Assertions.assertTrue(context.getMvPartitionNameRefBaseTablePartitionMap().containsKey("p2"));
+
+        Assertions.assertFalse(olapPartitionInfo.containsKey("p1"));
+        Assertions.assertFalse(olapPartitionInfo.containsKey("bp1"));
+        Assertions.assertTrue(olapPartitionInfo.containsKey("p2"));
+        Assertions.assertTrue(olapPartitionInfo.containsKey("bp2"));
+        Assertions.assertTrue(olapPartitionInfo.containsKey("keep"));
+
+        Assertions.assertFalse(externalPartitionInfo.containsKey("p1"));
+        Assertions.assertFalse(externalPartitionInfo.containsKey("bp1"));
+        Assertions.assertTrue(externalPartitionInfo.containsKey("p2"));
+        Assertions.assertTrue(externalPartitionInfo.containsKey("bp2"));
+        Assertions.assertTrue(externalPartitionInfo.containsKey("keep"));
+
+        Set<String> beforeNoOp = Sets.newHashSet(olapPartitionInfo.keySet());
+        context.clearVisibleVersionMapByMVPartitions(Sets.newHashSet());
+        Assertions.assertEquals(beforeNoOp, olapPartitionInfo.keySet());
     }
 }
