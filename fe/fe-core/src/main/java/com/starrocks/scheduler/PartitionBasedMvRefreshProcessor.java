@@ -1085,15 +1085,14 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     if (!mv.isPartitionedTable() || mvRefreshParams.isCompleteRefresh()) {
                         mv.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
                     } else {
-                        for (String partName : toRefreshPartitions) {
-                            mvRefreshPartitioner.dropPartition(db, mv, partName);
-                        }
+                        mv.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMapByMVPartitions(
+                                toRefreshPartitions);
                     }
                 } catch (Exception e) {
-                    logger.warn("failed to drop partitions {} for force refresh",
+                    logger.warn("failed to clear version map {} for force refresh",
                             Joiner.on(",").join(toRefreshPartitions),
                             DebugUtil.getRootStackTrace(e));
-                    throw new AnalysisException("failed to drop partitions for force refresh: " + e.getMessage());
+                    throw new AnalysisException("failed to clear version map for force refresh: " + e.getMessage());
                 } finally {
                     locker.unLockTableWithIntensiveDbLock(db.getId(), this.mv.getId(), LockType.WRITE);
                 }
