@@ -520,8 +520,6 @@ public class TaskManager implements MemoryTrackable {
         }
     }
 
-<<<<<<< HEAD
-=======
     /**
      * Update task properties for subsequent executions.
      * NOTE: this method will write edit log.
@@ -585,7 +583,6 @@ public class TaskManager implements MemoryTrackable {
         }
     }
 
->>>>>>> 596f6e1c51 ([BugFix] Fix task run warehouse display after changing mv warehouse (#69567))
     public void dropTasks(List<Long> taskIdList) {
         takeTaskLock();
         try {
