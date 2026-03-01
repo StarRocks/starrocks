@@ -22,6 +22,7 @@
 #include <unordered_map>
 
 #include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "column/column_helper.h"
 #include "common/config.h"
 #include "common/object_pool.h"

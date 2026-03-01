@@ -16,6 +16,7 @@
 
 #include "agent/master_info.h"
 #include "base/debug/trace.h"
+#include "base/utility/defer_op.h"
 #include "fs/fs_starlet.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
