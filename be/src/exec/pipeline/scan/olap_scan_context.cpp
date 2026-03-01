@@ -17,8 +17,8 @@
 #include "exec/olap_scan_node.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exprs/runtime_filter_bank.h"
 #include "runtime/global_dict/fragment_dict_state.h"
+#include "runtime/runtime_filter/runtime_filter_probe.h"
 #include "runtime/runtime_state_helper.h"
 #ifdef STARROCKS_JIT_ENABLE
 #include "exprs/jit/expr_jit_pass.h"

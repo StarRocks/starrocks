@@ -25,7 +25,7 @@
 #include "connector/jdbc_connector.h"
 #include "connector/lake_connector.h"
 #include "connector/mysql_connector.h"
-#include "exprs/runtime_filter_bank.h"
+#include "runtime/runtime_filter/runtime_filter_helper.h"
 
 namespace starrocks::connector {
 
