@@ -78,6 +78,7 @@ import com.starrocks.sql.ast.AdminShowAutomatedSnapshotStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
+import com.starrocks.sql.ast.AdminShowTabletStatusStmt;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterClause;
@@ -2811,6 +2812,26 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
         TableRef tableRef = new TableRef(normalizeName(qualifiedName), partitionRef, createPos(start, stop));
         return new AdminShowReplicaDistributionStmt(tableRef, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitAdminShowTabletStatusStatement(
+            com.starrocks.sql.parser.StarRocksParser.AdminShowTabletStatusStatementContext context) {
+        Token start = context.qualifiedName().start;
+        Token stop = context.qualifiedName().stop;
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        Expr where = context.where != null ? (Expr) visit(context.where) : null;
+
+        PartitionRef partitionRef = null;
+        if (context.partitionNames() != null) {
+            stop = context.partitionNames().stop;
+            PartitionRef partitionNames = (PartitionRef) visit(context.partitionNames());
+            partitionRef = new PartitionRef(partitionNames.getPartitionNames(), partitionNames.isTemp(), partitionNames.getPos());
+        }
+
+        TableRef tableRef = new TableRef(normalizeName(qualifiedName), partitionRef, createPos(start, stop));
+        Map<String, String> properties = getCaseSensitiveProperties(context.properties());
+        return new AdminShowTabletStatusStmt(tableRef, where, properties, createPos(context));
     }
 
     @Override
