@@ -18,6 +18,7 @@
 
 #include "base/failpoint/fail_point.h"
 #include "base/simd/simd.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
