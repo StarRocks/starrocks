@@ -2831,11 +2831,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
         TableRef tableRef = new TableRef(normalizeName(qualifiedName), partitionRef, createPos(start, stop));
         Map<String, String> properties = getCaseSensitiveProperties(context.properties());
-        AdminShowTabletStatusStmt adminShowTabletStatusStmt =
-                new AdminShowTabletStatusStmt(tableRef, where, properties, createPos(context));
-        adminShowTabletStatusStmt.markSelfPredicate();
-        visitShowPredicateClauses(showPredicateClauses, adminShowTabletStatusStmt);
-        return adminShowTabletStatusStmt;
+        return new AdminShowTabletStatusStmt(tableRef, where, properties, createPos(context));
     }
 
     @Override
