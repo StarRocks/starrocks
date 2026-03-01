@@ -18,8 +18,10 @@
 #include <unordered_set>
 #include <vector>
 
+#include "base/uid_util.h"
 #include "common/object_pool.h"
 #include "common/status.h"
+#include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/RuntimeFilter_types.h"
