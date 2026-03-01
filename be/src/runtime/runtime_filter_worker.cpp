@@ -24,7 +24,6 @@
 #include "common/config.h"
 #include "common/system/backend_options.h"
 #include "common/thread/thread.h"
-#include "exec/hash_join_node.h"
 #include "exec/pipeline/query_context.h"
 #include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId

@@ -29,7 +29,6 @@
 #include "common/statusor.h"
 #include "exprs/expr_context.h"
 #include "exprs/in_const_predicate.hpp"
-#include "exprs/runtime_filter_bank.h"
 #include "gutil/casts.h"
 #include "runtime/global_dict/config.h"
 #include "runtime/global_dict/miscs.h"

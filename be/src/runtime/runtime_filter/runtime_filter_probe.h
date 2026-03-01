@@ -1,0 +1,230 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#pragma once
+
+#include <algorithm>
+#include <atomic>
+#include <list>
+#include <map>
+#include <memory>
+#include <set>
+#include <vector>
+
+#include "base/failpoint/fail_point.h"
+#include "column/column.h"
+#include "common/global_types.h"
+#include "common/object_pool.h"
+#include "common/runtime_profile.h"
+#include "exprs/column_ref.h"
+#include "exprs/expr.h"
+#include "exprs/expr_context.h"
+#include "gen_cpp/PlanNodes_types.h"
+#include "gen_cpp/RuntimeFilter_types.h"
+#include "runtime/runtime_filter.h"
+#include "runtime/runtime_filter_layout.h"
+#include "runtime/runtime_state.h"
+#include "types/logical_type.h"
+
+namespace starrocks {
+
+class HashJoinNode;
+class RowDescriptor;
+class RuntimeProfile;
+
+namespace pipeline {
+class Observable;
+class PipelineObserver;
+} // namespace pipeline
+
+class RuntimeFilterProbeDescriptor : public WithLayoutMixin {
+public:
+    RuntimeFilterProbeDescriptor() = default;
+    ~RuntimeFilterProbeDescriptor();
+
+    Status init(ObjectPool* pool, const TRuntimeFilterDescription& desc, TPlanNodeId node_id, RuntimeState* state);
+    // for testing.
+    Status init(int32_t filter_id, ExprContext* probe_expr_ctx);
+    Status prepare(RuntimeState* state, RuntimeProfile* p);
+    Status open(RuntimeState* state);
+    void close(RuntimeState* state);
+    int32_t filter_id() const { return _filter_id; }
+    bool skip_wait() const { return _skip_wait; }
+    // RF is built by stream
+    bool is_stream_build_filter() const { return _is_stream_build_filter; }
+    ExprContext* probe_expr_ctx() { return _probe_expr_ctx; }
+    bool is_bound(const std::vector<TupleId>& tuple_ids) const { return _probe_expr_ctx->root()->is_bound(tuple_ids); }
+    // Disable pushing down runtime filters when:
+    //  - partition_by_exprs have multi columns;
+    //  - partition_by_exprs only one column but differ with probe_expr;
+    // When pushing down runtime filters(probe_exprs) but partition_by_exprs are not changed
+    // which may cause wrong results.
+    // colocate runtime filter should not be pushed down.
+    bool can_push_down_runtime_filter() { return _partition_by_exprs_contexts.empty() && !_is_group_colocate_rf; }
+    bool is_probe_slot_ref(SlotId* slot_id) const {
+        Expr* probe_expr = _probe_expr_ctx->root();
+        if (!probe_expr->is_slotref()) return false;
+        auto* slot_ref = down_cast<ColumnRef*>(probe_expr);
+        *slot_id = slot_ref->slot_id();
+        return true;
+    }
+    LogicalType probe_expr_type() const { return _probe_expr_ctx->root()->type().type; }
+    void replace_probe_expr_ctx(RuntimeState* state, const RowDescriptor& row_desc, ExprContext* new_probe_expr_ctx);
+    std::string debug_string() const;
+    bool is_local() const { return _is_local; }
+    TPlanNodeId build_plan_node_id() const { return _build_plan_node_id; }
+    TPlanNodeId probe_plan_node_id() const { return _probe_plan_node_id; }
+    void set_probe_plan_node_id(TPlanNodeId id) { _probe_plan_node_id = id; }
+    int8_t join_mode() const { return _join_mode; };
+    // runtime filter's partition-by-exprs's size
+    const size_t num_partition_by_exprs() const { return _partition_by_exprs_contexts.size(); }
+    const std::vector<ExprContext*>* partition_by_expr_contexts() const { return &_partition_by_exprs_contexts; }
+
+    const RuntimeFilter* runtime_filter(int32_t driver_sequence) const {
+        auto runtime_filter = _runtime_filter.load();
+        if (runtime_filter != nullptr && runtime_filter->is_group_colocate_filter()) {
+            DCHECK(_is_group_colocate_rf);
+            DCHECK_GE(driver_sequence, 0);
+            DCHECK_LT(driver_sequence, runtime_filter->group_colocate_filter().size());
+            return runtime_filter->group_colocate_filter()[driver_sequence];
+        }
+        return runtime_filter;
+    }
+    void set_runtime_filter(const RuntimeFilter* rf);
+    void set_shared_runtime_filter(const std::shared_ptr<const RuntimeFilter>& rf);
+    void add_observer(RuntimeState* state, pipeline::PipelineObserver* observer);
+
+    void set_has_push_down_to_storage(bool v) { _has_push_down_to_storage = v; }
+    bool has_push_down_to_storage() const { return _has_push_down_to_storage; }
+    int32_t exchange_hash_function_version() const { return _exchange_hash_function_version; }
+
+#ifdef FIU_ENABLE
+    failpoint::OneToAnyBarrier barrier;
+#endif
+
+private:
+    friend class HashJoinNode;
+    friend class hashJoiner;
+    friend class RuntimeFilterTest;
+    int32_t _filter_id;
+    ExprContext* _probe_expr_ctx = nullptr;
+    bool _is_local;
+    TPlanNodeId _build_plan_node_id;
+    TPlanNodeId _probe_plan_node_id;
+    // we want to measure when this runtime filter is applied since it's opened.
+    RuntimeProfile::Counter* _latency_timer = nullptr;
+    int64_t _open_timestamp = 0;
+    int64_t _ready_timestamp = 0;
+    int8_t _join_mode;
+    bool _is_stream_build_filter = false;
+
+    bool _skip_wait = false;
+    // Indicates that the runtime filter was built from the colocate group execution build side.
+    bool _is_group_colocate_rf = false;
+    std::vector<ExprContext*> _partition_by_exprs_contexts;
+
+    std::atomic<const RuntimeFilter*> _runtime_filter = nullptr;
+    std::shared_ptr<const RuntimeFilter> _shared_runtime_filter = nullptr;
+    RuntimeState* _runtime_state = nullptr;
+    std::unique_ptr<pipeline::Observable> _observable;
+    bool _has_push_down_to_storage = false;
+    // Exchange hash function version: 0 for FNV (for backward compatibility), 1 for XXH3
+    int32_t _exchange_hash_function_version = 0;
+};
+
+// RuntimeFilterProbeCollector::do_evaluate function apply runtime bloom filter to Operators to filter chunk.
+// this function is non-reentrant, variables inside RuntimeFilterProbeCollector that hinder reentrancy is moved
+// into RuntimeMembershipFilterEvalContext and make do_evaluate function can be called concurrently.
+struct RuntimeMembershipFilterEvalContext {
+    RuntimeMembershipFilterEvalContext() = default;
+    enum Mode {
+        M_ALL,
+        M_WITHOUT_TOPN,
+        M_ONLY_TOPN,
+    };
+    Mode mode = Mode::M_ALL;
+    std::map<double, RuntimeFilterProbeDescriptor*> selectivity;
+    size_t input_chunk_nums = 0;
+    int run_filter_nums = 0;
+    // driver sequence, used in colocate local runtime filter
+    // It represents the ith driver to call this runtime filter.
+    int32_t driver_sequence = -1;
+    RuntimeFilter::RunningContext running_context;
+    RuntimeProfile::Counter* join_runtime_filter_timer = nullptr;
+    RuntimeProfile::Counter* join_runtime_filter_hash_timer = nullptr;
+    RuntimeProfile::Counter* join_runtime_filter_input_counter = nullptr;
+    RuntimeProfile::Counter* join_runtime_filter_output_counter = nullptr;
+    RuntimeProfile::Counter* join_runtime_filter_eval_counter = nullptr;
+};
+
+// The collection of `RuntimeFilterProbeDescriptor`
+class RuntimeFilterProbeCollector {
+public:
+    RuntimeFilterProbeCollector();
+    RuntimeFilterProbeCollector(RuntimeFilterProbeCollector&& that) noexcept;
+    size_t size() const { return _descriptors.size(); }
+    Status prepare(RuntimeState* state, RuntimeProfile* p);
+    Status open(RuntimeState* state);
+    void close(RuntimeState* state);
+
+    void compute_hash_values(Chunk* chunk, const Column* column, RuntimeFilterProbeDescriptor* rf_desc,
+                             RuntimeMembershipFilterEvalContext& eval_context);
+    // only used in no-pipeline mode (deprecated)
+    void evaluate(Chunk* chunk);
+
+    void evaluate(Chunk* chunk, RuntimeMembershipFilterEvalContext& eval_context);
+    // evaluate partial chunk that may not contain slots referenced by runtime filter
+    void evaluate_partial_chunk(Chunk* partial_chunk, RuntimeMembershipFilterEvalContext& eval_context);
+    void add_descriptor(RuntimeFilterProbeDescriptor* desc);
+    // accept RuntimeFilterCollector from parent node
+    // which means parent node to push down runtime filter.
+    void push_down(const RuntimeState* state, TPlanNodeId target_plan_node_id, RuntimeFilterProbeCollector* parent,
+                   const std::vector<TupleId>& tuple_ids, std::set<TPlanNodeId>& rf_waiting_set);
+    std::map<int32_t, RuntimeFilterProbeDescriptor*>& descriptors() { return _descriptors; }
+    const std::map<int32_t, RuntimeFilterProbeDescriptor*>& descriptors() const { return _descriptors; }
+
+    void set_wait_timeout_ms(int v) { _wait_timeout_ms = v; }
+    int wait_timeout_ms() const { return _wait_timeout_ms; }
+    void set_scan_wait_timeout_ms(int v) { _scan_wait_timeout_ms = v; }
+    long scan_wait_timeout_ms() const { return _scan_wait_timeout_ms; }
+    // wait for all runtime filters are ready.
+    void wait(bool on_scan_node);
+
+    std::string debug_string() const;
+    bool empty() const { return _descriptors.empty(); }
+    void init_counter();
+    void set_plan_node_id(int id) { _plan_node_id = id; }
+    int plan_node_id() { return _plan_node_id; }
+    bool has_topn_filter() const {
+        return std::any_of(_descriptors.begin(), _descriptors.end(),
+                           [](const auto& entry) { return entry.second->is_stream_build_filter(); });
+    }
+
+private:
+    void update_selectivity(Chunk* chunk, RuntimeMembershipFilterEvalContext& eval_context);
+    // TODO: return a funcion call status
+    void do_evaluate(Chunk* chunk, RuntimeMembershipFilterEvalContext& eval_context);
+    void do_evaluate_partial_chunk(Chunk* partial_chunk, RuntimeMembershipFilterEvalContext& eval_context);
+    // mapping from filter id to runtime filter descriptor.
+    std::map<int32_t, RuntimeFilterProbeDescriptor*> _descriptors;
+    int _wait_timeout_ms = 0;
+    long _scan_wait_timeout_ms = 0L;
+    double _early_return_selectivity = 0.05;
+    RuntimeProfile* _runtime_profile = nullptr;
+    RuntimeMembershipFilterEvalContext _eval_context;
+    int _plan_node_id = -1;
+    RuntimeState* _runtime_state = nullptr;
+};
+
+} // namespace starrocks
