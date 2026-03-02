@@ -42,6 +42,7 @@
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
 #include "column/variant_converter.h"
+#include "column/variant_encoder.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "common/status.h"
@@ -59,7 +60,6 @@
 #include "types/json_value.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
-#include "util/variant_encoder.h"
 
 #ifdef STARROCKS_JIT_ENABLE
 #include "exprs/jit/expr_jit_codegen.h"

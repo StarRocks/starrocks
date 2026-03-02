@@ -38,6 +38,7 @@ ADD_BE_LIB(ColumnCore
         adaptive_nullable_column.cpp
         column_helper.cpp
         datum_convert.cpp
+        variant_encoder.cpp
         type_traits.cpp
         column_viewer.cpp
         column_view/column_view_base.cpp

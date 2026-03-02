@@ -38,6 +38,7 @@ set(COLUMN_TEST_FILES
     column_view_base_core_test.cpp
     type_traits_core_test.cpp
     variant_converter_core_test.cpp
+    variant_encoder_core_test.cpp
 )
 
 set(COLUMN_TEST_LINK_LIBS
