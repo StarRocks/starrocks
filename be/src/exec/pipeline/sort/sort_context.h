@@ -28,7 +28,8 @@
 #include "exec/pipeline/schedule/observer.h"
 #include "exec/sorting/merge.h"
 #include "exec/sorting/sorting.h"
-#include "exprs/runtime_filter_bank.h"
+#include "runtime/runtime_filter/runtime_filter_descriptor.h"
+#include "runtime/runtime_filter/runtime_filter_probe.h"
 
 namespace starrocks::pipeline {
 

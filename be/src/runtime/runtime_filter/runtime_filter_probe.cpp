@@ -12,116 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exprs/runtime_filter_bank.h"
+#include "runtime/runtime_filter/runtime_filter_probe.h"
 
-#include <memory>
+#include <algorithm>
+#include <chrono>
+#include <sstream>
 #include <thread>
 
-#include "base/failpoint/fail_point.h"
 #include "base/simd/simd.h"
 #include "base/time/time.h"
-#include "column/column.h"
-#include "exprs/dictmapping_expr.h"
+#include "base/utility/defer_op.h"
+#include "exec/pipeline/schedule/observer.h"
 #include "exprs/expr_factory.h"
-#include "exprs/in_const_predicate.hpp"
-#include "exprs/literal.h"
-#include "exprs/min_max_predicate.h"
-#include "gen_cpp/RuntimeFilter_types.h"
-#include "gen_cpp/Types_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
-#include "runtime/runtime_filter.h"
 #include "runtime/runtime_filter_cache.h"
-#include "runtime/runtime_filter_layout.h"
-#include "runtime/runtime_state.h"
-#include "types/logical_type.h"
-#include "types/logical_type_infra.h"
 
 namespace starrocks {
 DEFINE_FAIL_POINT(global_runtime_filter_sync_B);
-
-StatusOr<ExprContext*> RuntimeFilterHelper::rewrite_runtime_filter_in_cross_join_node(ObjectPool* pool,
-                                                                                      ExprContext* conjunct,
-                                                                                      Chunk* chunk) {
-    auto left_child = conjunct->root()->get_child(0);
-    auto right_child = conjunct->root()->get_child(1);
-    // all of the child(1) in expr is in build chunk
-    ASSIGN_OR_RETURN(auto res, conjunct->evaluate(right_child, chunk));
-    DCHECK_EQ(res->size(), 1);
-    ColumnPtr col;
-    if (res->is_constant()) {
-        col = res;
-    } else if (res->is_nullable()) {
-        if (res->is_null(0)) {
-            col = ColumnHelper::create_const_null_column(1);
-        } else {
-            auto data_col = down_cast<NullableColumn*>(res->as_mutable_raw_ptr())->data_column();
-            col = ConstColumn::create(std::move(data_col), 1);
-        }
-    } else {
-        col = ConstColumn::create(std::move(res), 1);
-    }
-
-    auto literal = pool->add(new VectorizedLiteral(std::move(col), right_child->type()));
-    auto new_expr = conjunct->root()->clone(pool);
-    auto new_left = left_child->clone(pool);
-    new_expr->clear_children();
-    new_expr->add_child(new_left);
-    new_expr->add_child(literal);
-    auto expr = pool->add(new ExprContext(new_expr));
-    expr->set_build_from_only_in_filter(true);
-    return expr;
-}
-
-Status RuntimeFilterBuildDescriptor::init(ObjectPool* pool, const TRuntimeFilterDescription& desc,
-                                          RuntimeState* state) {
-    _filter_id = desc.filter_id;
-    _build_expr_order = desc.expr_order;
-    _has_remote_targets = desc.has_remote_targets;
-
-    if (desc.__isset.runtime_filter_merge_nodes) {
-        _merge_nodes = desc.runtime_filter_merge_nodes;
-    }
-    _has_consumer = false;
-    _join_mode = desc.build_join_mode;
-    if (desc.__isset.plan_node_id_to_target_expr && desc.plan_node_id_to_target_expr.size() != 0) {
-        _has_consumer = true;
-    }
-    if (!desc.__isset.build_expr) {
-        return Status::NotFound("build_expr not found");
-    }
-    if (desc.__isset.sender_finst_id) {
-        _sender_finst_id = desc.sender_finst_id;
-    }
-    if (desc.__isset.broadcast_grf_senders) {
-        _broadcast_grf_senders.insert(desc.broadcast_grf_senders.begin(), desc.broadcast_grf_senders.end());
-    }
-    if (desc.__isset.broadcast_grf_destinations) {
-        _broadcast_grf_destinations = desc.broadcast_grf_destinations;
-    }
-    if (desc.__isset.is_broad_cast_join_in_skew) {
-        _is_broad_cast_in_skew = desc.is_broad_cast_join_in_skew;
-    }
-    if (desc.__isset.skew_shuffle_filter_id) {
-        _skew_shuffle_filter_id = desc.skew_shuffle_filter_id;
-    }
-    if (desc.__isset.is_asc) {
-        _is_asc = desc.is_asc;
-    }
-    if (desc.__isset.is_nulls_first) {
-        _is_nulls_first = desc.is_nulls_first;
-    }
-    if (desc.__isset.limit) {
-        _limit = desc.limit;
-    }
-    if (desc.__isset.filter_type) {
-        _runtime_filter_type = desc.filter_type;
-    }
-
-    WithLayoutMixin::init(desc);
-    RETURN_IF_ERROR(ExprFactory::create_expr_tree(pool, desc.build_expr, &_build_expr_ctx, state));
-    return Status::OK();
-}
 
 Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilterDescription& desc, TPlanNodeId node_id,
                                           RuntimeState* state) {
@@ -237,6 +145,15 @@ std::string RuntimeFilterProbeDescriptor::debug_string() const {
     }
     ss << ")";
     return ss.str();
+}
+
+RuntimeFilterProbeDescriptor::~RuntimeFilterProbeDescriptor() = default;
+
+void RuntimeFilterProbeDescriptor::add_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
+    if (_observable == nullptr) {
+        _observable = std::make_unique<pipeline::Observable>();
+    }
+    _observable->add_observer(state, observer);
 }
 
 static const int default_runtime_filter_wait_timeout_ms = 1000;
@@ -566,7 +483,7 @@ void RuntimeFilterProbeCollector::update_selectivity(Chunk* chunk, RuntimeMember
 }
 
 static bool contains_dict_mapping_expr(Expr* expr) {
-    if (typeid(*expr) == typeid(DictMappingExpr)) {
+    if (expr->is_dictmapping_expr()) {
         return true;
     }
 
@@ -687,8 +604,8 @@ void RuntimeFilterProbeCollector::wait(bool on_scan_node) {
 void RuntimeFilterProbeDescriptor::set_runtime_filter(const RuntimeFilter* rf) {
     auto notify = DeferOp([this]() {
         FAIL_POINT_TRIGGER_EXECUTE(global_runtime_filter_sync_B, { this->barrier.arrive_B(); });
-        if (_runtime_state && _runtime_state->fragment_prepared()) {
-            _observable.notify_source_observers();
+        if (_runtime_state && _runtime_state->fragment_prepared() && _observable != nullptr) {
+            _observable->notify_source_observers();
         }
     });
     const RuntimeFilter* expected = nullptr;
@@ -704,17 +621,6 @@ void RuntimeFilterProbeDescriptor::set_shared_runtime_filter(const std::shared_p
     if (std::atomic_compare_exchange_strong(&_shared_runtime_filter, &old_value, rf)) {
         set_runtime_filter(_shared_runtime_filter.get());
     }
-}
-
-void RuntimeFilterHelper::create_min_max_value_predicate(ObjectPool* pool, SlotId slot_id, LogicalType slot_type,
-                                                         const RuntimeFilter* filter, Expr** min_max_predicate) {
-    *min_max_predicate = nullptr;
-    if (filter == nullptr) return;
-    if (filter->get_min_max_filter() == nullptr) return;
-    // TODO, if you want to enable it for string, pls adapt for low-cardinality string
-    if (slot_type == TYPE_CHAR || slot_type == TYPE_VARCHAR) return;
-    auto res = type_dispatch_filter(slot_type, (Expr*)nullptr, MinMaxPredicateBuilder(pool, slot_id, filter));
-    *min_max_predicate = res;
 }
 
 } // namespace starrocks

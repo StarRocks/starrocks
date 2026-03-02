@@ -24,11 +24,11 @@
 #include "exec/pipeline/scan/morsel.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
-#include "exprs/runtime_filter_bank.h"
 #include "fs/fs.h"
 #include "io/cache_input_stream.h"
 #include "io/shared_buffered_input_stream.h"
 #include "runtime/descriptors.h"
+#include "runtime/runtime_filter/runtime_filter_probe.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {

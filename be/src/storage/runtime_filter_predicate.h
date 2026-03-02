@@ -16,7 +16,7 @@
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
-#include "exprs/runtime_filter_bank.h"
+#include "runtime/runtime_filter/runtime_filter_probe.h"
 
 namespace starrocks {
 class RuntimeFilterProbeDescriptor;

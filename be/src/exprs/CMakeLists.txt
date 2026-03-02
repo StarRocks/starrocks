@@ -109,7 +109,6 @@ set(EXPR_FILES
   variant_functions.cpp
   locate.cpp
   percentile_functions.cpp
-  runtime_filter_bank.cpp
   split.cpp
   split_part.cpp
   str_to_map.cpp

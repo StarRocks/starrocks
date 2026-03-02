@@ -37,6 +37,7 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "glog/logging.h"
 #include "runtime/current_thread.h"
+#include "runtime/runtime_filter/runtime_filter_helper.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {

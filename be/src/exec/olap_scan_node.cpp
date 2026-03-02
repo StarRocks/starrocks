@@ -34,7 +34,6 @@
 #include "exec/pipeline/scan/olap_scan_prepare_operator.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_factory.h"
-#include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/RuntimeProfile_types.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"

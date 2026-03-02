@@ -16,6 +16,7 @@
 
 #include "base/concurrency/await.h"
 #include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 
 namespace starrocks {
 

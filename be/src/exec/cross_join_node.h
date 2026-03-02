@@ -19,6 +19,7 @@
 #include "exprs/expr_context.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptors.h"
+#include "runtime/runtime_filter/runtime_filter_descriptor.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {

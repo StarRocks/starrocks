@@ -14,25 +14,26 @@
 
 #pragma once
 
-#include <boost/algorithm/string.hpp>
-#include <orc/OrcFile.hh>
-
-#include "column/column_helper.h"
+#include "common/global_types.h"
 #include "common/object_pool.h"
-#include "exprs/expr.h"
-#include "exprs/expr_context.h"
-#include "formats/orc/orc_mapping.h"
-#include "gen_cpp/orc_proto.pb.h"
-#include "runtime/descriptors.h"
-#include "types/type_descriptor.h"
+#include "common/statusor.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
-class OrcMinMaxDecoder {
+class Chunk;
+class Expr;
+class ExprContext;
+class RuntimeFilter;
+
+class RuntimeFilterHelper {
 public:
-    // to decode min and max value from column stats.
-    static Status decode(SlotDescriptor* slot, const orc::Type* type, const orc::proto::ColumnStatistics& stats,
-                         Column* min_col, Column* max_col, int64_t tz_offset_in_seconds);
+    static StatusOr<ExprContext*> rewrite_runtime_filter_in_cross_join_node(ObjectPool* pool, ExprContext* conjunct,
+                                                                            Chunk* chunk);
+
+    // create min/max predicate from filter.
+    static void create_min_max_value_predicate(ObjectPool* pool, SlotId slot_id, LogicalType slot_type,
+                                               const RuntimeFilter* filter, Expr** min_max_predicate);
 };
 
 } // namespace starrocks

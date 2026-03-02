@@ -109,6 +109,9 @@ set(RUNTIME_FILES
     runtime_filter_factory.cpp
     runtime_filter_builder.cpp
     runtime_filter_serde.cpp
+    runtime_filter/runtime_filter_descriptor.cpp
+    runtime_filter/runtime_filter_probe.cpp
+    runtime_filter/runtime_filter_helper.cpp
     global_dict/decoder.cpp
     global_dict/fragment_dict_state.cpp
     global_dict/parser.cpp
