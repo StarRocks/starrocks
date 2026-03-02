@@ -29,9 +29,12 @@ import com.starrocks.common.Status;
 import com.starrocks.common.TimeoutException;
 import com.starrocks.common.util.ThreadUtil;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+<<<<<<< HEAD
 import com.starrocks.journal.LeaderTransferException;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.qe.ConnectContext;
+=======
+>>>>>>> 9691ac85d1 ([BugFix] Fix the bug where graceful exit caused different transactions to publish the same version. (#69639))
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -352,15 +355,6 @@ public class TabletTaskExecutor {
             long timeLeft = timeout;
             final long waitInterval = 1;
             while (timeLeft > 0) {
-                // fast fail for leader transfer
-                if (GlobalStateMgr.getCurrentState().isLeaderTransferred()) {
-                    LOG.warn("leader transferred during creating tablets");
-                    if (ConnectContext.get() != null) {
-                        ConnectContext.get().setIsLeaderTransferred(true);
-                    }
-                    throw new LeaderTransferException();
-                }
-
                 if (countDownLatch.await(waitInterval, TimeUnit.SECONDS)) {
                     if (!countDownLatch.getStatus().ok()) {
                         String errMsg = "fail to create tablet: " + countDownLatch.getStatus().getErrorMsg();

@@ -132,8 +132,11 @@ import com.starrocks.qe.feedback.skeleton.SkeletonNode;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.FeExecuteCoordinator;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
 import com.starrocks.server.GracefulExitFlag;
 import com.starrocks.server.RunMode;
+=======
+>>>>>>> 9691ac85d1 ([BugFix] Fix the bug where graceful exit caused different transactions to publish the same version. (#69639))
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
@@ -546,7 +549,6 @@ public class StmtExecutor {
         long beginTimeInNanoSecond = TimeUtils.getStartTime();
         context.setStmtId(STMT_ID_GENERATOR.incrementAndGet());
         context.setIsForward(false);
-        context.setIsLeaderTransferred(false);
         context.setCurrentThreadId(Thread.currentThread().getId());
 
         // set execution id.
@@ -878,10 +880,18 @@ public class StmtExecutor {
 
             recordExecStatsIntoContext();
 
+<<<<<<< HEAD
             if (GracefulExitFlag.isGracefulExit() && context.isLeaderTransferred() && !isInternalStmt) {
                 LOG.info("leader is transferred during executing, forward to new leader");
                 isForwardToLeaderOpt = Optional.of(true);
                 forwardToLeader();
+=======
+            // process post-action after query is finished
+            context.onQueryFinished();
+            context.setOnlyReadIcebergCache(originSkipIcebergCache);
+            if (cteExecutor != null) {
+                cteExecutor.finalizeRecursiveCTE();
+>>>>>>> 9691ac85d1 ([BugFix] Fix the bug where graceful exit caused different transactions to publish the same version. (#69639))
             }
         }
     }
@@ -2701,9 +2711,6 @@ public class StmtExecutor {
                 txnStatus = TransactionStatus.COMMITTED;
                 final long waitInterval = 300;
                 while (publishWaitMs > 0) {
-                    if (GlobalStateMgr.getCurrentState().isLeaderTransferred()) {
-                        break;
-                    }
 
                     if (visibleWaiter.await(Math.min(publishWaitMs, waitInterval), TimeUnit.MILLISECONDS)) {
                         txnStatus = TransactionStatus.VISIBLE;
