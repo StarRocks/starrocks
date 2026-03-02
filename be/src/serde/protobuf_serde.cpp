@@ -189,7 +189,7 @@ StatusOr<Chunk> deserialize_chunk_pb_with_schema(const Schema& schema, std::stri
 
     ASSIGN_OR_RETURN(auto chunk, ChunkHelper::new_chunk_checked(schema, rows));
     for (auto& column : chunk->columns()) {
-        ASSIGN_OR_RETURN(cur, end, ColumnArraySerde::deserialize(cur, column.get()));
+        ASSIGN_OR_RETURN(cur, ColumnArraySerde::deserialize(cur, end, column.get()));
     }
     return Chunk(std::move(*chunk));
 }
@@ -224,21 +224,12 @@ StatusOr<Chunk> ProtobufChunkDeserializer::deserialize(std::string_view buff, in
 
     if (_encode_level.empty()) {
         for (auto& column : columns) {
-<<<<<<< HEAD
-            ASSIGN_OR_RETURN(cur, ColumnArraySerde::deserialize(cur, column.get()));
-=======
-            ASSIGN_OR_RETURN(cur, ColumnArraySerde::deserialize(cur, end, column->as_mutable_raw_ptr()));
->>>>>>> 29c7511dfc ([Enhancement] Prevent crashes when deserialization mismatches occur (#69481))
+            ASSIGN_OR_RETURN(cur, ColumnArraySerde::deserialize(cur, end, column.get()));
         }
     } else {
         DCHECK(_encode_level.size() == columns.size());
         for (auto i = 0; i < columns.size(); ++i) {
-<<<<<<< HEAD
-            ASSIGN_OR_RETURN(cur, ColumnArraySerde::deserialize(cur, columns[i].get(), false, _encode_level[i]));
-=======
-            ASSIGN_OR_RETURN(cur, ColumnArraySerde::deserialize(cur, end, columns[i]->as_mutable_raw_ptr(), false,
-                                                                _encode_level[i]));
->>>>>>> 29c7511dfc ([Enhancement] Prevent crashes when deserialization mismatches occur (#69481))
+            ASSIGN_OR_RETURN(cur, ColumnArraySerde::deserialize(cur, end, columns[i].get(), false, _encode_level[i]));
         }
     }
 
@@ -264,11 +255,7 @@ StatusOr<Chunk> ProtobufChunkDeserializer::deserialize(std::string_view buff, in
                     ColumnHelper::create_column(extra_meta.type, extra_meta.is_null, extra_meta.is_const, rows);
         }
         for (auto& column : extra_columns) {
-<<<<<<< HEAD
-            ASSIGN_OR_RETURN(cur, ColumnArraySerde::deserialize(cur, column.get()));
-=======
-            ASSIGN_OR_RETURN(cur, ColumnArraySerde::deserialize(cur, end, column->as_mutable_raw_ptr()));
->>>>>>> 29c7511dfc ([Enhancement] Prevent crashes when deserialization mismatches occur (#69481))
+            ASSIGN_OR_RETURN(cur, ColumnArraySerde::deserialize(cur, end, column.get()));
         }
         for (int i = 0; i < extra_columns.size(); ++i) {
             size_t col_num_rows = extra_columns[i]->size();
