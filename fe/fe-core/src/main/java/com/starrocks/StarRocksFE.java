@@ -41,12 +41,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Log4jConfig;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.Version;
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/StarRocksFE.java
-import com.starrocks.common.util.NetUtils;
-import com.starrocks.common.util.Util;
-=======
-import com.starrocks.extension.ExtensionManager;
->>>>>>> 9691ac85d1 ([BugFix] Fix the bug where graceful exit caused different transactions to publish the same version. (#69639)):fe/fe-core/src/main/java/com/starrocks/StarRocksFEServer.java
 import com.starrocks.failpoint.FailPoint;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.StateChangeExecutor;
@@ -269,81 +263,6 @@ public class StarRocksFE {
         });
     }
 
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/StarRocksFE.java
-    private static void transferLeader() throws InterruptedException {
-        if (GlobalStateMgr.getCurrentState().isLeader()) {
-            LOG.info("start to transfer leader");
-            JournalWriter journalWriter = GlobalStateMgr.getCurrentState().getJournalWriter();
-            // stop journal writer
-            journalWriter.stopAndWait();
-            Journal journal = GlobalStateMgr.getCurrentState().getJournal();
-
-            // stop star mgr journal writer before bdb env close, to avoid "Unclosed Database: starmgr_*" errors
-            if (RunMode.isSharedDataMode()) {
-                StarMgrServer starMgrServer = StarMgrServer.getCurrentState();
-                if (starMgrServer != null && starMgrServer.getJournalSystem() != null) {
-                    JournalWriter starMgrJournalWriter = starMgrServer.getJournalSystem().getJournalWriter();
-                    if (starMgrJournalWriter != null) {
-                        starMgrJournalWriter.stopAndWait();
-                    } else {
-                        LOG.warn("skip stopping StarMgr journal writer because getJournalWriter() returned null");
-                    }
-                } else {
-                    LOG.warn("skip stopping StarMgr journal writer because StarMgrServer or its journal system " +
-                            "is not initialized");
-                }
-            }
-
-            // transfer leader
-            if (journal instanceof BDBJEJournal) {
-                BDBEnvironment bdbEnvironment = ((BDBJEJournal) journal).getBdbEnvironment();
-                if (bdbEnvironment != null) {
-                    // close bdb env, leader election will be triggered
-                    bdbEnvironment.close();
-                    // wait for new leader
-                    while (true) {
-                        try {
-                            InetSocketAddress address = GlobalStateMgr.getCurrentState().getHaProtocol().getLeader();
-                            // wait for new leader to be ready
-                            if (isNewLeaderReady(address.getHostString())) {
-                                LOG.info("leader is transferred to {}", address);
-                                break;
-                            }
-                        } catch (Exception e) {
-                            Thread.sleep(300L);
-                        }
-                    }
-                }
-
-                GlobalStateMgr.getCurrentState().markLeaderTransferred();
-
-                if (RunMode.isSharedDataMode()) {
-                    StarMgrServer.getCurrentState().markLeaderTransferred();
-                }
-            }
-        }
-    }
-
-    private static boolean isNewLeaderReady(String leaderHost) {
-        String accessibleHostPort = NetUtils.getHostPortInAccessibleFormat(leaderHost, Config.http_port);
-        String url = "http://" + accessibleHostPort
-                + "/api/bootstrap"
-                + "?cluster_id=" + GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId()
-                + "&token=" +  GlobalStateMgr.getCurrentState().getNodeMgr().getToken();
-        try {
-            String resultStr = Util.getResultForUrl(url, null,
-                    Config.heartbeat_timeout_second * 1000,
-                    Config.heartbeat_timeout_second * 1000);
-            BootstrapFinishAction.BootstrapResult result = BootstrapFinishAction.BootstrapResult.fromJson(resultStr);
-            return result.getStatus() == ActionStatus.OK;
-        } catch (Exception e) {
-            LOG.warn("call leader bootstrap api failed", e);
-        }
-        return false;
-    }
-
-=======
->>>>>>> 9691ac85d1 ([BugFix] Fix the bug where graceful exit caused different transactions to publish the same version. (#69639)):fe/fe-core/src/main/java/com/starrocks/StarRocksFEServer.java
     private static void waitForDraining(long startTimeNano) throws InterruptedException {
         ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
         final long waitInterval = 1000L;
