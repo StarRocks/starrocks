@@ -49,6 +49,20 @@ static void ensure_directory_exists(const std::string& path) {
     std::filesystem::create_directories(dir);
 }
 
+static Status put_txn_log_with_dir(TabletManager* tablet_mgr, const TxnLogPtr& log, const std::string& path) {
+    ensure_directory_exists(path);
+    return tablet_mgr->put_txn_log(log, path);
+}
+
+static Status put_combined_txn_log_with_dir(TabletManager* tablet_mgr, const CombinedTxnLogPB& logs) {
+    if (logs.txn_logs_size() == 0) {
+        return Status::InvalidArgument("empty CombinedTxnLogPB");
+    }
+    ensure_directory_exists(
+            tablet_mgr->combined_txn_log_location(logs.txn_logs(0).tablet_id(), logs.txn_logs(0).txn_id()));
+    return tablet_mgr->put_combined_txn_log(logs);
+}
+
 TEST(TransactionsLoadIdsTest, AllLoadIdsPresent_RealApiWithMockMgr) {
     auto location_provider = std::make_shared<FixedLocationProvider>("/tmp/test_lake");
     TabletManager mgr(location_provider, 1);
@@ -64,8 +78,7 @@ TEST(TransactionsLoadIdsTest, AllLoadIdsPresent_RealApiWithMockMgr) {
         auto log = make_txn_log(tablet_id, txn_id);
         log->mutable_load_id()->CopyFrom(load_id);
         auto path = mgr.txn_log_location(tablet_id, txn_id, load_id);
-        ensure_directory_exists(path);
-        auto status = mgr.put_txn_log(log, path);
+        auto status = put_txn_log_with_dir(&mgr, log, path);
         ASSERT_TRUE(status.ok()) << "Failed to put txn log: " << status.to_string();
     }
 
@@ -94,8 +107,7 @@ TEST(TransactionsLoadIdsTest, SomeLoadIdsMissingAreSkipped_RealApiWithMockMgr) {
         auto log = make_txn_log(tablet_id, txn_id);
         log->mutable_load_id()->CopyFrom(load_id);
         auto path = mgr.txn_log_location(tablet_id, txn_id, load_id);
-        ensure_directory_exists(path);
-        auto status = mgr.put_txn_log(log, path);
+        auto status = put_txn_log_with_dir(&mgr, log, path);
         ASSERT_TRUE(status.ok()) << "Failed to put txn log: " << status.to_string();
     }
 
@@ -151,8 +163,7 @@ TEST(TransactionsLoadIdsTest, SingleTxnLogWithoutLoadIds_RealApiWithMockMgr) {
     // Create single transaction log file
     auto log = make_txn_log(tablet_id, txn_id);
     auto path = mgr.txn_log_location(tablet_id, txn_id);
-    ensure_directory_exists(path);
-    auto status = mgr.put_txn_log(log, path);
+    auto status = put_txn_log_with_dir(&mgr, log, path);
     ASSERT_TRUE(status.ok()) << "Failed to put txn log: " << status.to_string();
 
     TxnInfoPB info;
@@ -181,8 +192,7 @@ TEST(TransactionsLoadIdsTest, MultiTabletLoadIdsPresent_RealApiWithMockMgr) {
             auto log = make_txn_log(tablet_id, txn_id);
             log->mutable_load_id()->CopyFrom(load_id);
             auto path = mgr.txn_log_location(tablet_id, txn_id, load_id);
-            ensure_directory_exists(path);
-            auto st = mgr.put_txn_log(log, path);
+            auto st = put_txn_log_with_dir(&mgr, log, path);
             ASSERT_TRUE(st.ok()) << "Failed to put txn log: " << st.to_string();
         }
     }
@@ -214,7 +224,7 @@ TEST(TransactionsLoadIdsTest, CombinedTxnLogForMultipleTablets_RealApiWithMockMg
         log->set_tablet_id(tablet_id);
         log->set_txn_id(txn_id);
     }
-    auto put_st = mgr.put_combined_txn_log(combined_txn_log);
+    auto put_st = put_combined_txn_log_with_dir(&mgr, combined_txn_log);
     ASSERT_TRUE(put_st.ok()) << "Failed to put combined txn log: " << put_st.to_string();
 
     TxnInfoPB info;
@@ -251,7 +261,7 @@ TEST(TransactionsLoadIdsTest, PreserveInputTabletIdsOrder_RealApiWithMockMgr) {
         log->set_tablet_id(tablet_id);
         log->set_txn_id(txn_id);
     }
-    auto put_st = mgr.put_combined_txn_log(combined_txn_log);
+    auto put_st = put_combined_txn_log_with_dir(&mgr, combined_txn_log);
     ASSERT_TRUE(put_st.ok()) << "Failed to put combined txn log: " << put_st.to_string();
 
     TxnInfoPB info;
