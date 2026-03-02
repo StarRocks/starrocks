@@ -21,11 +21,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
-<<<<<<< HEAD
 import com.starrocks.analysis.BinaryType;
-import com.starrocks.catalog.Column;
-=======
->>>>>>> ad88c10cad ([Enhancement] Improve repair table and show tablet status (#69656))
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -79,7 +75,6 @@ public class TabletRepairHelper {
     private static final long BATCH_VERSION_NUM = 5L;
     private static final String SST_FILE_SUFFIX = ".sst";
 
-<<<<<<< HEAD
     private static ShowResultSetMetaData DRY_RUN_REPAIR_RESULT_META_DATA;
 
     static {
@@ -92,8 +87,6 @@ public class TabletRepairHelper {
         DRY_RUN_REPAIR_RESULT_META_DATA = builder.build();
     }
 
-=======
->>>>>>> ad88c10cad ([Enhancement] Improve repair table and show tablet status (#69656))
     // the version range [minVersion, maxVersion] is used to find valid tablet metadatas, both are included
     record PhysicalPartitionInfo(
             long physicalPartitionId,
@@ -362,11 +355,8 @@ public class TabletRepairHelper {
         // only missing pk index sst files, clear sstableMeta
         if (checkOnlySstFilesMissing(missingFiles)) {
             metadata.sstableMeta = null;
-<<<<<<< HEAD
-=======
             // set version to negative to indicate the metadata is missing some files but still can be repaired,
             // and the real version will be set in repairTabletMetadata()
->>>>>>> ad88c10cad ([Enhancement] Improve repair table and show tablet status (#69656))
             metadata.version = -1 * metadata.version;
             return metadata;
         }
@@ -742,6 +732,10 @@ public class TabletRepairHelper {
                             partitionErrorsSize, partitionErrorsSize > 1 ? "s" : "",
                             errorMsgsSize, errorMsgsSize > 1 ? "s" : "", Joiner.on(", ").join(errorMsgs)));
         }
+    }
+
+    public static ShowResultSetMetaData getDryRunRepairResultMetaData() {
+        return DRY_RUN_REPAIR_RESULT_META_DATA;
     }
 
     private static class TabletRecoverInfo {

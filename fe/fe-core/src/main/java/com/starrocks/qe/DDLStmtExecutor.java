@@ -838,7 +838,7 @@ public class DDLStmtExecutor {
             });
 
             if (isDryRun) {
-                return new ShowResultSet(new ShowResultMetaFactory().getMetadata(stmt), result);
+                return new ShowResultSet(TabletRepairHelper.getDryRunRepairResultMetaData(), result);
             } else {
                 return null;
             }
