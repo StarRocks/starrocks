@@ -431,11 +431,7 @@ PARALLEL_TEST(ColumnArraySerdeTest, array_column) {
     NullableColumn::Ptr elem2 = NullableColumn::create(Int32Column::create(), NullColumn ::create());
     ArrayColumn::Ptr c2 = ArrayColumn::create(elem1, off2);
 
-<<<<<<< HEAD
-    ASSIGN_OR_ABORT(auto p2, ColumnArraySerde::deserialize(buffer.data(), c2.get()));
-=======
-    ASSIGN_OR_ABORT(auto p2, ColumnArraySerde::deserialize(buffer.data(), end, c2->as_mutable_raw_ptr()));
->>>>>>> 29c7511dfc ([Enhancement] Prevent crashes when deserialization mismatches occur (#69481))
+    ASSIGN_OR_ABORT(auto p2, ColumnArraySerde::deserialize(buffer.data(), end, c2.get()));
     ASSERT_EQ(buffer.data() + buffer.size(), p2);
     ASSERT_EQ("[1,2,3]", c2->debug_item(0));
     ASSERT_EQ("[4,5,6]", c2->debug_item(1));
@@ -449,11 +445,7 @@ PARALLEL_TEST(ColumnArraySerdeTest, array_column) {
         elem2 = NullableColumn::create(Int32Column::create(), NullColumn ::create());
         c2 = ArrayColumn::create(elem1, off2);
 
-<<<<<<< HEAD
-        ASSERT_OK(ColumnArraySerde::deserialize(buffer.data(), c2.get(), false, level));
-=======
-        ASSERT_OK(ColumnArraySerde::deserialize(buffer.data(), end, c2->as_mutable_raw_ptr(), false, level));
->>>>>>> 29c7511dfc ([Enhancement] Prevent crashes when deserialization mismatches occur (#69481))
+        ASSERT_OK(ColumnArraySerde::deserialize(buffer.data(), end, c2.get(), false, level));
 
         ASSERT_EQ("[1,2,3]", c2->debug_item(0));
         ASSERT_EQ("[4,5,6]", c2->debug_item(1));
