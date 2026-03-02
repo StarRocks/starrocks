@@ -34,13 +34,11 @@ public:
     // 0 means does not support the type of column
     static int64_t max_serialized_size(const Column& column, const int encode_level = 0);
 
-    // Return nullptr on error.
     static StatusOr<uint8_t*> serialize(const Column& column, uint8_t* buff, bool sorted = false,
                                         const int encode_level = 0);
 
-    // Return nullptr on error.
-    static StatusOr<const uint8_t*> deserialize(const uint8_t* buff, Column* column, bool sorted = false,
-                                                const int encode_level = 0);
+    static StatusOr<const uint8_t*> deserialize(const uint8_t* buff, const uint8_t* end, Column* column,
+                                                bool sorted = false, const int encode_level = 0);
 };
 
 } //  namespace starrocks::serde
