@@ -12,10 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.RedirectStatus;
@@ -24,31 +22,24 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
+import java.util.Map;
 
-// ADMIN SHOW REPLICA STATUS FROM example_db.example_table;
-public class AdminShowReplicaStatusStmt extends ShowStmt {
-    public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("TabletId").add("ReplicaId").add("BackendId").add("Version").add("LastFailedVersion")
-            .add("LastSuccessVersion").add("CommittedVersion").add("SchemaHash").add("VersionNum")
-            .add("IsBad").add("IsSetBadForce").add("State").add("Status")
-            .build();
-
+// ADMIN SHOW TABLET STATUS FROM db.table PARTITION (p1) PROPERTIES ('key'='value') where status != "NORMAL";
+public class AdminShowTabletStatusStmt extends ShowStmt {
     private final TableRef tblRef;
     private final Expr where;
+    private final Map<String, String> properties;
+
     private List<String> partitions = Lists.newArrayList();
 
-    public AdminShowReplicaStatusStmt(TableRef tblRef, Expr where) {
-        this(tblRef, where, NodePosition.ZERO);
-    }
+    // default value is 5, means show at most 5 missing data files per tablet
+    private int maxMissingDataFilesToShow = 5;
 
-    public AdminShowReplicaStatusStmt(TableRef tblRef, Expr where, NodePosition pos) {
+    public AdminShowTabletStatusStmt(TableRef tblRef, Expr where, Map<String, String> properties, NodePosition pos) {
         super(pos);
         this.tblRef = tblRef;
         this.where = where;
-    }
-
-    public TableRef getTblRef() {
-        return tblRef;
+        this.properties = properties;
     }
 
     public String getDbName() {
@@ -63,6 +54,10 @@ public class AdminShowReplicaStatusStmt extends ShowStmt {
         return tblRef.getName().getTbl();
     }
 
+    public PartitionNames getPartitionNames() {
+        return tblRef.getPartitionNames();
+    }
+
     public List<String> getPartitions() {
         return partitions;
     }
@@ -73,6 +68,18 @@ public class AdminShowReplicaStatusStmt extends ShowStmt {
 
     public Expr getWhere() {
         return where;
+    }
+
+    public Map<String, String> getProperties() {
+        return properties;
+    }
+
+    public int getMaxMissingDataFilesToShow() {
+        return maxMissingDataFilesToShow;
+    }
+
+    public void setMaxMissingDataFilesToShow(int maxMissingDataFilesToShow) {
+        this.maxMissingDataFilesToShow = maxMissingDataFilesToShow;
     }
 
     @Override
@@ -86,6 +93,6 @@ public class AdminShowReplicaStatusStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAdminShowReplicaStatusStatement(this, context);
+        return visitor.visitAdminShowTabletStatusStatement(this, context);
     }
 }

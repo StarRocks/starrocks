@@ -39,6 +39,7 @@ import com.starrocks.sql.ast.AdminShowAutomatedSnapshotStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
+import com.starrocks.sql.ast.AdminShowTabletStatusStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DescStorageVolumeStmt;
 import com.starrocks.sql.ast.DescribeStmt;
@@ -363,6 +364,18 @@ public class ShowResultMetaFactory implements AstVisitor<ShowResultSetMetaData, 
             builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
         }
         return builder.build();
+    }
+
+    @Override
+    public ShowResultSetMetaData visitAdminShowTabletStatusStatement(AdminShowTabletStatusStmt statement, Void context) {
+        return ShowResultSetMetaData.builder()
+                .addColumn(new Column("TabletId", ScalarType.createVarcharType(30)))
+                .addColumn(new Column("PartitionId", ScalarType.createVarcharType(30)))
+                .addColumn(new Column("Version", ScalarType.createVarcharType(30)))
+                .addColumn(new Column("Status", ScalarType.createVarcharType(30)))
+                .addColumn(new Column("MissingDataFileCount", ScalarType.createVarcharType(30)))
+                .addColumn(new Column("MissingDataFiles", ScalarType.createVarcharType(65535)))
+                .build();
     }
 
     @Override
