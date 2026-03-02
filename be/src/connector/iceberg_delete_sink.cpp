@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <future>
+#include <unordered_map>
 
 #include "column/column_helper.h"
 #include "column/datum.h"
@@ -303,6 +304,13 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergDeleteSinkProvider::create_
     auto file_writer_factory = std::make_shared<formats::ParquetFileWriterFactory>(
             fs, ctx->compression_type, ctx->options, column_names, column_evaluators, file_column_ids, ctx->executor,
             runtime_state, nullable);
+
+    // Configure column-level dictionary encoding for position delete files
+    // Disable dictionary encoding for 'pos' column (monotonically increasing, poor dict compression)
+    // Keep dictionary encoding for 'file_path' column (high repetition, good dict compression)
+    std::unordered_map<std::string, bool> column_dict_config;
+    column_dict_config["pos"] = false;
+    file_writer_factory->set_column_dictionary_enabled(std::move(column_dict_config));
 
     // Initialize sort ordering for position delete files (required by Iceberg spec)
     // Sort by: file_path ASC, then pos ASC
