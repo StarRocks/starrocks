@@ -80,7 +80,7 @@ public class IcebergFileStats {
                             (!nullCounts.containsKey(id) || nullCounts.get(id) != recordCount))
                     .collect(toSet());
             this.nullCounts = new HashMap<>(nullCounts);
-            this.columnSizes = columnSizes != null ? new HashMap<>(columnSizes) : null;
+            this.columnSizes = columnSizes != null ? new HashMap<>(columnSizes) : new HashMap<>();
             this.columnSizeRecordCounts = new HashMap<>();
             if (columnSizes != null) {
                 for (Integer fieldId : columnSizes.keySet()) {

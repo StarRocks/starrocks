@@ -413,4 +413,83 @@ public class IcebergStatisticProviderTest extends TableTestBase {
         Assertions.assertEquals(2500L, fileStats.getColumnSizes().get(1).longValue());
     }
 
+    @Test
+    public void testAverageRowSizeFirstNullThenPresent() {
+        List<Types.NestedField> allColumns = Lists.newArrayList(
+                Types.NestedField.required(1, "k1", Types.IntegerType.get()),
+                Types.NestedField.required(2, "k2", Types.IntegerType.get())
+        );
+        Map<Integer, org.apache.iceberg.types.Type.PrimitiveType> idToTypeMapping = allColumns.stream()
+                .collect(Collectors.toMap(Types.NestedField::fieldId, c -> c.type().asPrimitiveType()));
+
+        // File 1: 100 rows, valid min/max/null stats but NO columnSizes
+        IcebergFileStats fileStats = buildFileStats(idToTypeMapping, allColumns,
+                100, 1000,
+                ImmutableMap.of(1, 1, 2, 1),
+                ImmutableMap.of(1, 100, 2, 100),
+                ImmutableMap.of(1, 0L, 2, 0L),
+                null);
+
+        Assertions.assertTrue(fileStats.getColumnSizes().isEmpty());
+        Assertions.assertTrue(fileStats.hasValidColumnMetrics());
+
+        IcebergStatisticProvider statisticProvider = new IcebergStatisticProvider();
+
+        // File 2: 200 rows WITH columnSizes
+        fileStats.incrementRecordCount(200);
+        fileStats.incrementSize(2000);
+        statisticProvider.updateColumnSizes(fileStats, ImmutableMap.of(1, 5000L, 2, 10000L), 200);
+
+        // columnSizes should now be lazy-initialized with File 2's data
+        Assertions.assertNotNull(fileStats.getColumnSizes());
+        Assertions.assertEquals(5000L, fileStats.getColumnSizes().get(1).longValue());
+        Assertions.assertEquals(10000L, fileStats.getColumnSizes().get(2).longValue());
+
+        // columnSizeRecordCount should be 200 (only File 2)
+        Assertions.assertEquals(200, fileStats.getColumnSizeRecordCount(1));
+        Assertions.assertEquals(200, fileStats.getColumnSizeRecordCount(2));
+
+        // File 3: 300 rows WITH columnSizes
+        fileStats.incrementRecordCount(300);
+        fileStats.incrementSize(3000);
+        statisticProvider.updateColumnSizes(fileStats, ImmutableMap.of(1, 7500L, 2, 15000L), 300);
+
+        // columnSizeRecordCount = 200 + 300 = 500
+        Assertions.assertEquals(500, fileStats.getColumnSizeRecordCount(1));
+        Assertions.assertEquals(500, fileStats.getColumnSizeRecordCount(2));
+
+        // Verify averageRowSize through getTableStatistics
+        mockedNativeTableG.newFastAppend().appendFile(FILE_B_5).commit();
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
+                "table_name", "", Lists.newArrayList(), mockedNativeTableG, Maps.newHashMap());
+
+        TvrVersionRange version = TvrTableSnapshot.of(Optional.of(
+                mockedNativeTableG.currentSnapshot().snapshotId()));
+        GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder()
+                .setTableVersionRange(version)
+                .build();
+
+        PredicateSearchKey key = PredicateSearchKey.of(icebergTable.getCatalogDBName(),
+                icebergTable.getCatalogTableName(), params);
+        statisticProvider.putIcebergFileStats(key, fileStats);
+
+        Map<ColumnRefOperator, Column> colRefToColumnMetaMap = new HashMap<>();
+        ColumnRefOperator k1Ref = new ColumnRefOperator(3, IntegerType.INT, "k1", true);
+        ColumnRefOperator k2Ref = new ColumnRefOperator(4, IntegerType.INT, "k2", true);
+        colRefToColumnMetaMap.put(k1Ref, new Column("k1", IntegerType.INT));
+        colRefToColumnMetaMap.put(k2Ref, new Column("k2", IntegerType.INT));
+
+        Statistics statistics = statisticProvider.getTableStatistics(icebergTable, colRefToColumnMetaMap, null, params);
+
+        // k1: columnSizes = 5000 + 7500 = 12500, recordCount = 500
+        //     averageRowSize = max(12500/500, 4) = max(25.0, 4) = 25.0
+        ColumnStatistic k1Stat = statistics.getColumnStatistic(k1Ref);
+        Assertions.assertEquals(25.0, k1Stat.getAverageRowSize(), 0.001);
+
+        // k2: columnSizes = 10000 + 15000 = 25000, recordCount = 500
+        //     averageRowSize = max(25000/500, 4) = max(50.0, 4) = 50.0
+        ColumnStatistic k2Stat = statistics.getColumnStatistic(k2Ref);
+        Assertions.assertEquals(50.0, k2Stat.getAverageRowSize(), 0.001);
+    }
+
 }
