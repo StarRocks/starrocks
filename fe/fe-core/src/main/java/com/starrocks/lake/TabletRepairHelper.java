@@ -22,7 +22,6 @@ import com.google.common.collect.Sets;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.BinaryType;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -30,7 +29,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.ErrorCode;
@@ -48,7 +46,6 @@ import com.starrocks.proto.TabletMetadataEntry;
 import com.starrocks.proto.TabletMetadataPB;
 import com.starrocks.proto.TabletMetadataRepairStatus;
 import com.starrocks.proto.TabletResult;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
@@ -76,18 +73,6 @@ public class TabletRepairHelper {
 
     private static final long BATCH_VERSION_NUM = 5L;
     private static final String SST_FILE_SUFFIX = ".sst";
-
-    private static ShowResultSetMetaData DRY_RUN_REPAIR_RESULT_META_DATA;
-
-    static {
-        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        builder.addColumn(new Column("PartitionId", ScalarType.createVarcharType(20)));
-        builder.addColumn(new Column("VisibleVersion", ScalarType.createVarcharType(20)));
-        builder.addColumn(new Column("RepairStatus", ScalarType.createVarcharType(60)));
-        builder.addColumn(new Column("TabletRecoverInfo", ScalarType.createVarcharType(65535)));
-        builder.addColumn(new Column("ErrorMsg", ScalarType.createVarcharType(65535)));
-        DRY_RUN_REPAIR_RESULT_META_DATA = builder.build();
-    }
 
     // the version range [minVersion, maxVersion] is used to find valid tablet metadatas, both are included
     record PhysicalPartitionInfo(
@@ -357,6 +342,8 @@ public class TabletRepairHelper {
         // only missing pk index sst files, clear sstableMeta
         if (checkOnlySstFilesMissing(missingFiles)) {
             metadata.sstableMeta = null;
+            // set version to negative to indicate the metadata is missing some files but still can be repaired,
+            // and the real version will be set in repairTabletMetadata()
             metadata.version = -1 * metadata.version;
             return metadata;
         }
@@ -732,10 +719,6 @@ public class TabletRepairHelper {
                             partitionErrorsSize, partitionErrorsSize > 1 ? "s" : "",
                             errorMsgsSize, errorMsgsSize > 1 ? "s" : "", Joiner.on(", ").join(errorMsgs)));
         }
-    }
-
-    public static ShowResultSetMetaData getDryRunRepairResultMetaData() {
-        return DRY_RUN_REPAIR_RESULT_META_DATA;
     }
 
     private static class TabletRecoverInfo {

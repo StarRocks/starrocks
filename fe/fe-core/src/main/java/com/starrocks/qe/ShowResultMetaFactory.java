@@ -35,6 +35,7 @@ import com.starrocks.common.proc.RollupProcDir;
 import com.starrocks.common.proc.SchemaChangeProcDir;
 import com.starrocks.common.proc.TransProcDir;
 import com.starrocks.sql.ShowTemporaryTableStmt;
+import com.starrocks.sql.ast.AdminRepairTableStmt;
 import com.starrocks.sql.ast.AdminShowAutomatedSnapshotStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
@@ -374,7 +375,18 @@ public class ShowResultMetaFactory implements AstVisitor<ShowResultSetMetaData, 
                 .addColumn(new Column("Version", ScalarType.createVarcharType(30)))
                 .addColumn(new Column("Status", ScalarType.createVarcharType(30)))
                 .addColumn(new Column("MissingDataFileCount", ScalarType.createVarcharType(30)))
-                .addColumn(new Column("MissingDataFiles", ScalarType.createVarcharType(65535)))
+                .addColumn(new Column("MissingDataFiles", ScalarType.createDefaultString()))
+                .build();
+    }
+
+    @Override
+    public ShowResultSetMetaData visitAdminRepairTableStatement(AdminRepairTableStmt statement, Void context) {
+        return ShowResultSetMetaData.builder()
+                .addColumn(new Column("PartitionId", ScalarType.createVarcharType(30)))
+                .addColumn(new Column("VisibleVersion", ScalarType.createVarcharType(30)))
+                .addColumn(new Column("RepairStatus", ScalarType.createVarcharType(30)))
+                .addColumn(new Column("TabletRecoverInfo", ScalarType.createDefaultString()))
+                .addColumn(new Column("ErrorMsg", ScalarType.createDefaultString()))
                 .build();
     }
 
