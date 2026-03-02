@@ -352,6 +352,11 @@ public class TaskRun implements Comparable<TaskRun> {
 
         Map<String, String> newProperties = refreshTaskProperties(runCtx);
         properties.putAll(newProperties);
+        // Update status properties with the refreshed values (especially warehouse)
+        // so system tables show the correct information
+        if (status != null) {
+            status.setProperties(properties);
+        }
         Map<String, String> taskRunContextProperties = Maps.newHashMap();
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             String key = entry.getKey();

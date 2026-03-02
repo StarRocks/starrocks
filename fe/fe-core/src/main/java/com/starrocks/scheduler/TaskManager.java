@@ -596,6 +596,25 @@ public class TaskManager implements MemoryTrackable {
         }
     }
 
+    /**
+     * Remove a property from the task's properties map.
+     * This method is thread-safe and acquires the task lock before modifying the properties.
+     */
+    public void removeTaskProperty(Task task, String propertyKey) {
+        if (task == null || propertyKey == null) {
+            return;
+        }
+        takeTaskLock();
+        try {
+            Map<String, String> current = task.getProperties();
+            if (current != null) {
+                current.remove(propertyKey);
+            }
+        } finally {
+            taskUnlock();
+        }
+    }
+
     public void dropTasks(List<Long> taskIdList) {
         takeTaskLock();
         try {
