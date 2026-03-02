@@ -155,7 +155,7 @@ public class RangePartitionInfo extends PartitionInfo {
         PartitionKeyDesc partitionKeyDesc = desc.getPartitionKeyDesc();
         // check range
         try {
-            newRange = createAndCheckNewRange(schema, partitionKeyDesc, isTemp);
+            newRange = createAndCheckNewRange(schema, partitionKeyDesc, getSortedRangeMap(isTemp));
         } catch (AnalysisException e) {
             throw new DdlException("Invalid range value format: " + e.getMessage());
         }
@@ -165,15 +165,14 @@ public class RangePartitionInfo extends PartitionInfo {
     }
 
     // create a new range and check it.
-    private Range<PartitionKey> createAndCheckNewRange(Map<ColumnId, Column> schema, PartitionKeyDesc partKeyDesc, boolean isTemp)
+    private Range<PartitionKey> createAndCheckNewRange(Map<ColumnId, Column> schema, PartitionKeyDesc partKeyDesc,
+                                                       List<Map.Entry<Long, Range<PartitionKey>>> sortedRanges)
             throws AnalysisException, DdlException {
         Range<PartitionKey> newRange = null;
-        // generate and sort the existing ranges
-        List<Map.Entry<Long, Range<PartitionKey>>> sortedRanges = getSortedRangeMap(isTemp);
 
         List<Column> partitionColumns = getPartitionColumns(schema);
         // create upper values for new range
-        PartitionKey newRangeUpper = null;
+        PartitionKey newRangeUpper;
         if (partKeyDesc.isMax()) {
             newRangeUpper = PartitionKey.createInfinityPartitionKey(partitionColumns, true);
         } else {
@@ -268,38 +267,41 @@ public class RangePartitionInfo extends PartitionInfo {
                 new DataCacheInfo(true, false));
     }
 
-    public void handleNewRangePartitionDescs(Map<ColumnId, Column> schema,
+    public Map<Long, Range<PartitionKey>> checkNewRangePartitionDescs(Map<ColumnId, Column> schema,
                                              List<Pair<Partition, PartitionDesc>> partitionList,
-                                             Set<String> existPartitionNameSet,
                                              boolean isTemp) throws DdlException {
-        try {
-            for (Pair<Partition, PartitionDesc> entry : partitionList) {
-                Partition partition = entry.first;
-                if (!existPartitionNameSet.contains(partition.getName())) {
-                    long partitionId = partition.getId();
-                    SingleRangePartitionDesc desc = (SingleRangePartitionDesc) entry.second;
-                    Range<PartitionKey> range;
-                    try {
-                        range = checkAndCreateRange(schema, (SingleRangePartitionDesc) entry.second, isTemp);
-                        setRangeInternal(partitionId, isTemp, range);
-                    } catch (IllegalArgumentException e) {
-                        // Range.closedOpen may throw this if (lower > upper)
-                        throw new DdlException("Invalid key range: " + e.getMessage());
-                    }
-                    super.addPartition(partitionId, desc.getPartitionDataProperty(), desc.getReplicationNum(),
-                            desc.getDataCacheInfo());
-                }
+        Map<Long, Range<PartitionKey>> newRanges = Maps.newHashMap();
+        Map<Long, Range<PartitionKey>> tmpRanges = Maps.newHashMap();
+        tmpRanges.putAll(isTemp ? idToTempRange : idToRange);
+        for (Pair<Partition, PartitionDesc> entry : partitionList) {
+            Partition partition = entry.first;
+            long partitionId = partition.getId();
+            try {
+                Range<PartitionKey> range =
+                        checkAndCreateRange(schema, (SingleRangePartitionDesc) entry.second, tmpRanges);
+                newRanges.put(partitionId, range);
+                tmpRanges.put(partitionId, range);
+            } catch (IllegalArgumentException e) {
+                // Range.closedOpen may throw this if (lower > upper)
+                throw new DdlException("Invalid key range: " + e.getMessage());
             }
-        } catch (Exception e) {
-            // cleanup
-            partitionList.forEach(entry -> {
-                long partitionId = entry.first.getId();
-                removeRangeInternal(partitionId, isTemp);
-                super.dropPartition(partitionId);
-            });
-            throw e;
+        }
+        return newRanges;
+    }
+
+    private Range<PartitionKey> checkAndCreateRange(Map<ColumnId, Column> schema, SingleRangePartitionDesc desc,
+                                                    Map<Long, Range<PartitionKey>> ranges)
+            throws DdlException {
+        PartitionKeyDesc partitionKeyDesc = desc.getPartitionKeyDesc();
+        try {
+            List<Map.Entry<Long, Range<PartitionKey>>> sortedRanges = Lists.newArrayList(ranges.entrySet());
+            sortedRanges.sort(RangeUtils.RANGE_MAP_ENTRY_COMPARATOR);
+            return createAndCheckNewRange(schema, partitionKeyDesc, sortedRanges);
+        } catch (AnalysisException e) {
+            throw new DdlException("Invalid range value format: " + e.getMessage());
         }
     }
+
 
     public void unprotectHandleNewSinglePartitionDesc(long partitionId, boolean isTemp, Range<PartitionKey> range,
                                                       DataProperty dataProperty, short replicationNum) {

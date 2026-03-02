@@ -688,27 +688,25 @@ public class MaterializedViewHandler extends AlterHandler {
     public void processBatchDropRollup(List<AlterClause> dropRollupClauses, Database db, OlapTable olapTable)
             throws DdlException, MetaNotFoundException {
         // check drop rollup index operation
-        for (AlterClause alterClause : dropRollupClauses) {
-            DropRollupClause dropRollupClause = (DropRollupClause) alterClause;
-            checkDropMaterializedView(dropRollupClause.getRollupName(), olapTable);
-        }
-
-        // drop data in memory
         Set<Long> indexMetaIdSet = new HashSet<>();
         Set<String> rollupNameSet = new HashSet<>();
         for (AlterClause alterClause : dropRollupClauses) {
             DropRollupClause dropRollupClause = (DropRollupClause) alterClause;
-            String rollupIndexName = dropRollupClause.getRollupName();
-            long rollupIndexMetaId = dropMaterializedView(rollupIndexName, olapTable);
-            indexMetaIdSet.add(rollupIndexMetaId);
-            rollupNameSet.add(rollupIndexName);
+            long indexMetaId = checkDropMaterializedView(dropRollupClause.getRollupName(), olapTable);
+            indexMetaIdSet.add(indexMetaId);
+            rollupNameSet.add(dropRollupClause.getRollupName());
         }
 
         // batch log drop rollup operation
         EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
         long dbId = db.getId();
         long tableId = olapTable.getId();
-        editLog.logBatchDropRollup(new BatchDropInfo(dbId, tableId, indexMetaIdSet));
+        editLog.logBatchDropRollup(new BatchDropInfo(dbId, tableId, indexMetaIdSet), wal -> {
+            // drop data in memory
+            for (String rollupName : rollupNameSet) {
+                dropMaterializedView(rollupName, olapTable);
+            }
+        });
         LOG.info("finished drop rollup index[{}] in table[{}]", String.join("", rollupNameSet),
                 olapTable.getName());
     }
@@ -719,13 +717,15 @@ public class MaterializedViewHandler extends AlterHandler {
         Preconditions.checkState(locker.isDbWriteLockHeldByCurrentThread(db));
         try {
             String mvName = dropMaterializedViewStmt.getMvName();
-            // Step1: check drop mv index operation
-            checkDropMaterializedView(mvName, olapTable);
-            // Step2; drop data in memory
-            long mvIndexMetaId = dropMaterializedView(mvName, olapTable);
-            // Step3: log drop mv operation
+            // check drop mv index operation
+            long mvIndexMetaId = checkDropMaterializedView(mvName, olapTable);
+            // log drop mv operation
             EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
-            editLog.logDropRollup(new DropInfo(db.getId(), olapTable.getId(), mvIndexMetaId, false));
+            editLog.logDropRollup(new DropInfo(db.getId(), olapTable.getId(), mvIndexMetaId, false),
+                    wal -> {
+                        // drop mv data in memory
+                        dropMaterializedView(mvName, olapTable);
+                    });
             LOG.info("finished drop materialized view [{}] in table [{}]", mvName, olapTable.getName());
         } catch (MetaNotFoundException e) {
             if (dropMaterializedViewStmt.isSetIfExists()) {
@@ -743,7 +743,7 @@ public class MaterializedViewHandler extends AlterHandler {
      * @param mvName
      * @param olapTable
      */
-    private void checkDropMaterializedView(String mvName, OlapTable olapTable)
+    private long checkDropMaterializedView(String mvName, OlapTable olapTable)
             throws DdlException, MetaNotFoundException {
         Preconditions.checkState(olapTable.getState() == OlapTableState.NORMAL, olapTable.getState().name());
         if (mvName.equals(olapTable.getName())) {
@@ -763,6 +763,8 @@ public class MaterializedViewHandler extends AlterHandler {
             MaterializedIndex materializedIndex = partition.getLatestIndex(mvIndexMetaId);
             Preconditions.checkNotNull(materializedIndex);
         }
+
+        return mvIndexMetaId;
     }
 
     /**
