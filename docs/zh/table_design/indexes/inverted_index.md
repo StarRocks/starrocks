@@ -14,7 +14,7 @@ import Beta from '../../_assets/commonMarkdown/_beta.mdx'
 
 主键表自 v4.0 起支持全文倒排索引。
 
-全文倒排索引尚不支持存算分离集群。
+自 v4.1 起，StarRocks 除了默认的 CLucene 实现外，还支持 **builtin**（内置）倒排索引实现。builtin 实现同时支持**存算一体**和**存算分离**集群。详情请参见 [Builtin 倒排索引](#builtin-倒排索引)。
 
 ## 概述
 
@@ -253,3 +253,152 @@ ALTER TABLE t DROP index idx;
 ## 如何验证全文倒排索引是否加速查询
 
 执行查询后，可以在 Query Profile 的扫描节点中查看详细指标 `GinFilterRows` 和 `GinFilter`，以查看使用全文倒排索引过滤的行数和过滤时间。
+
+## Builtin 倒排索引
+
+自 v4.1 起，StarRocks 提供了 **builtin**（内置）倒排索引实现，作为默认 CLucene 实现的补充。builtin 实现是 StarRocks 原生的倒排索引，基于 bitmap 索引构建，同时支持**存算一体**和**存算分离**集群。
+
+:::note
+CLucene 倒排索引实现不支持存算分离集群。在存算分离集群中，必须使用 builtin 实现。
+:::
+
+### 实现对比
+
+| 实现类型 | 支持版本 | 存算一体 | 存算分离 | 描述 |
+|---------|---------|---------|---------|------|
+| **CLucene**（默认） | v3.3.0 | 支持 | 不支持 | 基于 CLucene 全文搜索库。这是存算一体集群的默认实现。 |
+| **builtin** | v4.1.0 | 支持 | 支持 | StarRocks 原生的倒排索引实现。同时支持存算一体和存算分离集群。 |
+
+可以通过创建索引时设置 `imp_lib` 参数来显式指定实现类型。如果未指定，系统会根据集群模式自动选择合适的实现：
+- 在存算一体集群中，默认使用 CLucene。
+- 在存算分离集群中，默认使用 builtin（不支持 CLucene）。
+
+### 创建 builtin 倒排索引
+
+#### 在建表时创建
+
+```SQL
+-- 创建带有 builtin 倒排索引的表
+CREATE TABLE `t_builtin` (
+    `id1` bigint(20) NOT NULL COMMENT "",
+    `value` varchar(255) NOT NULL COMMENT "",
+    INDEX gin_english (`value`) USING GIN ("parser" = "english", "imp_lib" = "builtin") COMMENT 'builtin english index'
+)
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`)
+PROPERTIES (
+"replicated_storage" = "false"
+);
+```
+
+#### 在建表后添加
+
+```SQL
+ALTER TABLE t ADD INDEX idx_builtin (v) USING GIN('parser' = 'english', 'imp_lib' = 'builtin');
+-- 或者
+CREATE INDEX idx_builtin ON t (v) USING GIN('parser' = 'english', 'imp_lib' = 'builtin');
+```
+
+### 在存算分离集群中使用
+
+在存算分离集群中，即使未指定 `imp_lib`，系统也会自动选择 builtin 实现。可以使用与普通倒排索引相同的语法创建索引：
+
+```SQL
+-- 在存算分离集群中，这将自动使用 builtin 实现
+CREATE TABLE `t_shared_data` (
+    `id1` bigint(20) NOT NULL COMMENT "",
+    `value` varchar(255) NOT NULL COMMENT "",
+    INDEX gin_english (`value`) USING GIN ("parser" = "english") COMMENT 'english index'
+)
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`);
+```
+
+也可以显式指定 `"imp_lib" = "builtin"` 以提高可读性：
+
+```SQL
+CREATE TABLE `t_shared_data_explicit` (
+    `id1` bigint(20) NOT NULL COMMENT "",
+    `value` varchar(255) NOT NULL COMMENT "",
+    INDEX gin_english (`value`) USING GIN ("parser" = "english", "imp_lib" = "builtin") COMMENT 'builtin english index'
+)
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`);
+```
+
+### dict_gram_num
+
+`dict_gram_num` 参数仅适用于 **builtin** 倒排索引实现。该参数控制在倒排索引字典上构建 n-gram 字典索引的 n-gram 大小，可以显著加速通配符和子字符串查询。
+
+#### 工作原理
+
+当 `dict_gram_num` 设置为正整数（例如 `2`）时，builtin 倒排索引在构建索引时会将每个字典条目拆分为 n-gram（指定字符长度的子字符串）。例如，如果 `dict_gram_num` 设置为 `2`，字典条目为 `"starrocks"`，则会生成以下 2-gram：`"st"`、`"ta"`、`"ar"`、`"rr"`、`"ro"`、`"oc"`、`"ck"`、`"ks"`。
+
+在执行类似 `MATCH '%rock%'` 的查询时，查询字符串 `"rock"` 也会被拆分为 2-gram（`"ro"`、`"oc"`、`"ck"`），然后通过 n-gram 索引快速缩小候选字典条目范围，避免全字典扫描。这大大提高了通配符查询的性能，尤其是在具有大量不同值的列上。
+
+#### 参数详情
+
+| 参数 | 默认值 | 有效范围 | 描述 |
+|------|-------|---------|------|
+| `dict_gram_num` | `-1`（禁用） | 正整数（如 `1`、`2`、`3` 等） | 用于构建字典 n-gram 索引的 n-gram 大小。仅在 `imp_lib` = `builtin` 时有效。 |
+
+#### 选择 dict_gram_num 的建议
+
+- 较小的值（如 `2`）会为每个字典条目生成更多 n-gram，增加索引大小，但对较短的查询模式过滤效果更好。
+- 较大的值（如 `4`）会生成更少的 n-gram，索引更小，但对较短的查询模式过滤效果较差。
+- 如果查询主要使用较短的通配符模式（如 `%ab%`），建议使用较小的 `dict_gram_num` 值（如 `2`）。
+- 如果查询模式比 `dict_gram_num` 的值更短，则 n-gram 索引无法用于该查询，将退化为全字典扫描。
+
+#### 示例
+
+**创建带有 `dict_gram_num` 的 builtin 倒排索引**
+
+1. 创建一个带有 builtin 倒排索引且 `dict_gram_num` 设置为 `2` 的表。
+
+    ```SQL
+    CREATE TABLE `t_gram` (
+        `id1` bigint(20) NOT NULL COMMENT "",
+        `text_val` varchar(255) NOT NULL COMMENT "",
+        INDEX idx_gram (`text_val`) USING GIN (
+            "parser" = "english",
+            "imp_lib" = "builtin",
+            "dict_gram_num" = "2"
+        ) COMMENT 'builtin index with ngram'
+    )
+    DUPLICATE KEY(`id1`)
+    DISTRIBUTED BY HASH(`id1`)
+    PROPERTIES (
+    "replicated_storage" = "false"
+    );
+    ```
+
+2. 插入测试数据。
+
+    ```SQL
+    INSERT INTO t_gram VALUES
+        (1, "starrocks is a high performance database"),
+        (2, "apache spark is a data processing engine"),
+        (3, "rocksdb is an embedded key value store");
+    ```
+
+3. 使用通配符模式查询。n-gram 字典索引可以加速这些查询。
+
+    ```SQL
+    -- 查询文本中包含 "rock" 的行
+    MySQL [example_db]> SELECT * FROM t_gram WHERE text_val MATCH "%rock%";
+    +------+--------------------------------------------+
+    | id1  | text_val                                   |
+    +------+--------------------------------------------+
+    |    1 | starrocks is a high performance database   |
+    |    3 | rocksdb is an embedded key value store      |
+    +------+--------------------------------------------+
+    2 rows in set (0.01 sec)
+    ```
+
+**在已有表上添加带有 `dict_gram_num` 的 builtin 索引**
+
+也可以在建表后添加带有 `dict_gram_num` 的 builtin 倒排索引：
+
+```SQL
+CREATE INDEX idx_gram ON t (v) USING GIN('parser' = 'english', 'imp_lib' = 'builtin', 'dict_gram_num' = '3');
+```
