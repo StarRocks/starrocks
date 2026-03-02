@@ -1371,6 +1371,11 @@ CONF_mDouble(spill_max_dir_bytes_ratio, "0.8"); // 80%
 CONF_Int64(spill_read_buffer_min_bytes, "1048576");
 CONF_mInt64(mem_limited_chunk_queue_block_size, "8388608");
 
+// The max number of threads for exec_state_report thread pool.
+CONF_mInt32(exec_state_report_max_threads, "2");
+// The max number of threads for priority_exec_state_report thread pool.
+CONF_mInt32(priority_exec_state_report_max_threads, "2");
+
 CONF_Int32(internal_service_query_rpc_thread_num, "-1");
 CONF_Int32(internal_service_datacache_rpc_thread_num, "-1");
 // The retry times of rpc request to report exec rpc request to FE. The default value is 10,
