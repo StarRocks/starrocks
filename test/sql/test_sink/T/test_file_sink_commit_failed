@@ -39,4 +39,25 @@ insert into files(
 
 admin disable failpoint 'parquet_writer_rowgroup_write_failed';
 
+admin enable failpoint 'parquet_chunk_writer_init_failed';
+
+insert into files(
+    "path" = "s3://${oss_bucket}/test_sink/test_file_sink_commit_failed/${uuid0}/",
+    "format" = "parquet",
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}") select * from t1;
+
+admin disable failpoint 'parquet_chunk_writer_init_failed';
+
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_sink/test_file_sink_commit_failed/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+<<<<<<< HEAD
+=======
+
+CLEANUP {
+    admin disable failpoint 'parquet_writer_close_failed';
+    admin disable failpoint 'parquet_writer_throw_exception';
+    admin disable failpoint 'parquet_writer_rowgroup_write_failed';
+    admin disable failpoint 'parquet_chunk_writer_init_failed';
+} END CLEANUP
+>>>>>>> 014ff21df1 ([BugFix] Fix the AsyncFlushOutputStream use-after-free (#69688))
