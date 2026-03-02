@@ -768,8 +768,6 @@ public class StreamLoadMgr implements MemoryTrackable {
         long currentMs = System.currentTimeMillis();
         for (Class<? extends AbstractStreamLoadTask> clazz : PERSISTENT_TASK_TYPES) {
             reader.readCollection(clazz, loadTask -> {
-                loadTask.init();
-                // discard expired task right away
                 if (loadTask.checkNeedRemove(currentMs, false)) {
                     LOG.info("discard expired task, type: {}, label: {}", clazz.getSimpleName(), loadTask.getLabel());
                     return;
