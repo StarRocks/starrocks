@@ -19,6 +19,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergRewriteDataJob;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.QueryState;
 import com.starrocks.sql.ast.AlterTableOperationClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.expression.Expr;
@@ -65,13 +66,16 @@ public class RewriteDataFilesTest {
         Mockito.when(clause.getWhere()).thenReturn(where);
 
         ConnectContext ctx = Mockito.mock(ConnectContext.class);
+        QueryState queryState = new QueryState();
+        Mockito.when(ctx.getState()).thenReturn(queryState);
         new MockUp<IcebergRewriteDataJob>() {
             @Mock
             public void prepare() {
             }
 
             @Mock
-            public void execute() {
+            public IcebergRewriteDataJob.RewriteMetrics execute() {
+                return new IcebergRewriteDataJob.RewriteMetrics(1, 10, 2);
             }
         };
 
@@ -81,6 +85,9 @@ public class RewriteDataFilesTest {
         procedure.execute(procedureContext, Map.of("rewrite_all", ConstantOperator.createBoolean(true),
                 "min_file_size_bytes", ConstantOperator.createBigint(128L),
                 "batch_size", ConstantOperator.createBigint(10L)));
+
+        Assertions.assertNotNull(queryState.getInfoMessage());
+        Assertions.assertTrue(queryState.getInfoMessage().contains("input_data_files=1"));
     }
 
     @Test
@@ -110,13 +117,15 @@ public class RewriteDataFilesTest {
         Mockito.when(clause.getWhere()).thenReturn(where);
 
         ConnectContext ctx = Mockito.mock(ConnectContext.class);
+        QueryState queryState = new QueryState();
+        Mockito.when(ctx.getState()).thenReturn(queryState);
         new MockUp<IcebergRewriteDataJob>() {
             @Mock
             public void prepare() {
             }
 
             @Mock
-            public void execute() {
+            public IcebergRewriteDataJob.RewriteMetrics execute() {
                 throw new RuntimeException("boom");
             }
         };
