@@ -517,7 +517,7 @@ public:
 
     static StatusOr<const uint8_t*> deserialize(const uint8_t* buff, const uint8_t* end, StructColumn* column,
                                                 const int encode_level) {
-        for (auto& field : column->fields()) {
+        for (auto& field : column->fields_column()) {
             ASSIGN_OR_RETURN(buff, serde::ColumnArraySerde::deserialize(buff, end, field.get(), false, encode_level));
         }
         return buff;
