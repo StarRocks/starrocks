@@ -18,15 +18,9 @@
 #include <streamvbyte.h>
 #include <streamvbytedelta.h>
 
-<<<<<<< HEAD
-=======
 #include <cstdint>
 #include <limits>
 
-#include "base/coding.h"
-#include "base/status.h"
-#include "base/statusor.h"
->>>>>>> 29c7511dfc ([Enhancement] Prevent crashes when deserialization mismatches occur (#69481))
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_visitor_adapter.h"
