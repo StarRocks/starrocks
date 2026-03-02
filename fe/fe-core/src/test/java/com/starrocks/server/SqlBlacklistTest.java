@@ -14,10 +14,16 @@
 
 package com.starrocks.server;
 
+<<<<<<< HEAD:fe/fe-core/src/test/java/com/starrocks/server/SqlBlacklistTest.java
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.meta.BlackListSql;
 import com.starrocks.meta.SqlBlackList;
+=======
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.SqlBlacklistedException;
+import com.starrocks.common.util.UUIDUtil;
+>>>>>>> bd951a8a67 ([Enhancement]  Exclude Blacklisted Queries from Error Metrics (#69621)):fe/fe-core/src/test/java/com/starrocks/meta/SqlBlacklistTest.java
 import com.starrocks.persist.DeleteSqlBlackLists;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.SqlBlackListPersistInfo;
@@ -202,6 +208,7 @@ public class SqlBlacklistTest {
 
     }
 
+<<<<<<< HEAD:fe/fe-core/src/test/java/com/starrocks/server/SqlBlacklistTest.java
     private void mockupGlobalState() {
         MockUp<GlobalStateMgr> mockUp = new MockUp<GlobalStateMgr>() {
             @Mock
@@ -224,5 +231,14 @@ public class SqlBlacklistTest {
                 return editLog;
             }
         };
+=======
+    @Test
+    public void testVerifyingSQLExistsInBlackList() {
+        Pattern p = Pattern.compile("qwert");
+        sqlBlackList.put(p);
+        AnalysisException exception = assertThrows(SqlBlacklistedException.class, () -> sqlBlackList.verifying("qwert"));
+        Assertions.assertEquals("Access denied; This sql is in blacklist (id: 0), please contact your admin",
+                exception.getMessage());
+>>>>>>> bd951a8a67 ([Enhancement]  Exclude Blacklisted Queries from Error Metrics (#69621)):fe/fe-core/src/test/java/com/starrocks/meta/SqlBlacklistTest.java
     }
 }

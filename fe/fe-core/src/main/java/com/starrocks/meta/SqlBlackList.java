@@ -53,7 +53,12 @@ public class SqlBlackList {
             for (BlackListSql patternAndId : sqlBlackListMap.values()) {
                 Matcher m = patternAndId.pattern.matcher(formatSql);
                 if (m.find()) {
+<<<<<<< HEAD
                     ErrorReport.reportAnalysisException(ErrorCode.ERR_SQL_IN_BLACKLIST_ERROR);
+=======
+                    MetricRepo.COUNTER_SQL_BLOCK_HIT_COUNT.increase(1L);
+                    ErrorReport.reportSqlBlackListException(ErrorCode.ERR_SQL_IN_BLACKLIST_ERROR, patternAndId.id);
+>>>>>>> bd951a8a67 ([Enhancement]  Exclude Blacklisted Queries from Error Metrics (#69621))
                 }
             }
         }
@@ -141,4 +146,3 @@ public class SqlBlackList {
     // ids used in sql blacklist
     private final AtomicLong ids = new AtomicLong();
 }
-
