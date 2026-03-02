@@ -1988,3 +1988,40 @@ Latency metrics expose percentile series such as `merge_commit_request_latency_9
 - Unit: microsecond
 - Type: Summary
 - Description: Time spent waiting for merge commit load operations to finish.
+
+### Iceberg Compaction FE metrics
+
+#### iceberg_compaction_total
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `compaction_type` (`manual` or `auto`)
+- Description: Total number of Iceberg compaction (`rewrite_data_files`) tasks.
+
+#### iceberg_compaction_duration_ms_total
+
+- Unit: Millisecond
+- Type: Cumulative
+- Labels: `compaction_type` (`manual` or `auto`)
+- Description: Total time spent running Iceberg compaction tasks.
+
+#### iceberg_compaction_input_files_total
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `compaction_type` (`manual` or `auto`)
+- Description: Total number of data files read by Iceberg compaction tasks.
+
+#### iceberg_compaction_output_files_total
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `compaction_type` (`manual` or `auto`)
+- Description: Total number of data files produced by Iceberg compaction tasks.
+
+#### iceberg_compaction_removed_delete_files_total
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `compaction_type` (`manual` or `auto`)
+- Description: Total number of delete files removed by Iceberg manual compaction tasks.

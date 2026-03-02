@@ -65,6 +65,7 @@ import com.starrocks.connector.share.iceberg.SerializableTable;
 import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
@@ -343,7 +344,7 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void alterTable(ConnectContext context, AlterTableStmt stmt) throws StarRocksException {
+    public ShowResultSet alterTable(ConnectContext context, AlterTableStmt stmt) throws StarRocksException {
         String dbName = stmt.getDbName();
         String tableName = stmt.getTableName();
         org.apache.iceberg.Table table = icebergCatalog.getTable(context, dbName, tableName);
@@ -354,7 +355,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         IcebergAlterTableExecutor executor = new IcebergAlterTableExecutor(stmt, table, icebergCatalog, context, hdfsEnvironment);
-        executor.execute();
+        ShowResultSet resultSet = executor.execute();
 
         synchronized (this) {
             tables.remove(TableIdentifier.of(dbName, tableName));
@@ -366,6 +367,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             }
             asyncRefreshOthersFeMetadataCache(dbName, tableName);
         }
+        return resultSet;
     }
 
     @Override
