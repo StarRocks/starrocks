@@ -20,6 +20,7 @@
 #include <memory>
 
 #include "agent/master_info.h"
+#include "common/config.h"
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
 #include "service/backend_options.h"
@@ -251,9 +252,10 @@ Status ExecStateReporter::report_epoch(const TMVMaintenanceTasks& params, ExecEn
 }
 
 ExecStateReporter::ExecStateReporter(const CpuUtil::CpuIds& cpuids, ExecStateReporterMetrics* metrics) {
+    int exec_state_report_threads = std::max(1, config::exec_state_report_max_threads);
     auto status = ThreadPoolBuilder("exec_state_report") // exec state reporter
                           .set_min_threads(1)
-                          .set_max_threads(2)
+                          .set_max_threads(exec_state_report_threads)
                           .set_max_queue_size(1000)
                           .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                           .set_cpuids(cpuids)
@@ -262,9 +264,10 @@ ExecStateReporter::ExecStateReporter(const CpuUtil::CpuIds& cpuids, ExecStateRep
         LOG(FATAL) << "Cannot create thread pool for ExecStateReport: error=" << status.to_string();
     }
 
+    int priority_exec_state_report_threads = std::max(1, config::priority_exec_state_report_max_threads);
     status = ThreadPoolBuilder("priority_exec_state_report") // priority exec state reporter with infinite queue
                      .set_min_threads(1)
-                     .set_max_threads(2)
+                     .set_max_threads(priority_exec_state_report_threads)
                      .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                      .set_cpuids(cpuids)
                      .build(&_priority_thread_pool);
@@ -294,6 +297,14 @@ void ExecStateReporter::submit(std::function<void()>&& report_task, bool priorit
 void ExecStateReporter::bind_cpus(const CpuUtil::CpuIds& cpuids) const {
     _thread_pool->bind_cpus(cpuids, {});
     _priority_thread_pool->bind_cpus(cpuids, {});
+}
+
+Status ExecStateReporter::update_max_threads(int max_threads) {
+    return _thread_pool->update_max_threads(std::max(1, max_threads));
+}
+
+Status ExecStateReporter::update_priority_max_threads(int max_threads) {
+    return _priority_thread_pool->update_max_threads(std::max(1, max_threads));
 }
 
 } // namespace starrocks::pipeline
