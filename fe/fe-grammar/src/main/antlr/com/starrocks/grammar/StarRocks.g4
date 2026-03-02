@@ -794,7 +794,7 @@ adminShowReplicaStatusStatement
     ;
 
 adminShowTabletStatusStatement
-    : ADMIN SHOW TABLET STATUS FROM qualifiedName partitionNames? properties? showPredicateClauses
+    : ADMIN SHOW TABLET STATUS FROM qualifiedName partitionNames? showPredicateClauses properties?
     ;
 
 adminRepairTableStatement

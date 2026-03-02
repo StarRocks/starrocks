@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.journal;
+package com.starrocks.common;
 
-public class LeaderTransferException extends RuntimeException {
+public class SqlBlacklistedException extends AnalysisException {
+    public SqlBlacklistedException(String msg) {
+        super(msg);
+    }
 }

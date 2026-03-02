@@ -19,6 +19,9 @@
 
 namespace starrocks {
 
+class RuntimeFilterBuildDescriptor;
+class RuntimeFilterProbeCollector;
+
 class AggregateBaseNode : public ExecNode {
 public:
     AggregateBaseNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);

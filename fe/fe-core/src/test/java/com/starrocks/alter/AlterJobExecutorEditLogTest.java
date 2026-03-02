@@ -14,8 +14,10 @@
 
 package com.starrocks.alter;
 
+import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.LocalTablet;
@@ -26,7 +28,9 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.persist.BatchModifyPartitionsInfo;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.OperationType;
 import com.starrocks.qe.ConnectContext;
@@ -34,7 +38,9 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.AlterTableModifyDefaultBucketsClause;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.ModifyPartitionClause;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.system.Backend;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.type.IntegerType;
@@ -47,6 +53,7 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
@@ -75,6 +82,30 @@ public class AlterJobExecutorEditLogTest {
         metastore.unprotectCreateDb(db);
         OlapTable table = createHashOlapTable(TABLE_ID, TABLE_NAME, 3);
         db.registerTableUnlocked(table);
+
+        Backend backend1 = new Backend(110001L, "127.0.0.1", 9050);
+        backend1.setAlive(true);
+        backend1.setBePort(9060);
+        backend1.setHttpPort(8040);
+        backend1.setBrpcPort(8060);
+        DiskInfo diskInfo1 = new DiskInfo("/path1");
+        diskInfo1.setTotalCapacityB(1000000L);
+        diskInfo1.setAvailableCapacityB(900000L);
+        diskInfo1.setDataUsedCapacityB(1000L);
+        backend1.setDisks(ImmutableMap.of(diskInfo1.getRootPath(), diskInfo1));
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend1);
+
+        Backend backend2 = new Backend(110002L, "127.0.0.2", 9050);
+        backend2.setAlive(true);
+        backend2.setBePort(9061);
+        backend2.setHttpPort(8041);
+        backend2.setBrpcPort(8061);
+        DiskInfo diskInfo2 = new DiskInfo("/path2");
+        diskInfo2.setTotalCapacityB(1000000L);
+        diskInfo2.setAvailableCapacityB(900000L);
+        diskInfo2.setDataUsedCapacityB(1000L);
+        backend2.setDisks(ImmutableMap.of(diskInfo2.getRootPath(), diskInfo2));
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend2);
     }
 
     @AfterEach
@@ -208,6 +239,77 @@ public class AlterJobExecutorEditLogTest {
         Assertions.assertFalse(table.getDefaultDistributionInfo() instanceof HashDistributionInfo);
     }
 
+    @Test
+    public void testVisitModifyPartitionClauseNormalCase() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        OlapTable table = (OlapTable) db.getTable(TABLE_NAME);
+        Assertions.assertNotNull(table);
+        short originalReplicationNum = table.getPartitionInfo().getReplicationNum(PARTITION_ID);
+        Assertions.assertEquals(1, originalReplicationNum);
+
+        ModifyPartitionClause clause = ModifyPartitionClause.createStarClause(
+                new HashMap<>(Map.of("replication_num", "2")));
+        AlterJobExecutor executor = new AlterJobExecutor();
+        executor.db = db;
+        executor.table = table;
+        executor.visitModifyPartitionClause(clause, connectContext);
+
+        Assertions.assertEquals(2, table.getPartitionInfo().getReplicationNum(PARTITION_ID));
+
+        BatchModifyPartitionsInfo replayInfo = (BatchModifyPartitionsInfo) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_BATCH_MODIFY_PARTITION);
+        Assertions.assertNotNull(replayInfo);
+        Assertions.assertEquals(1, replayInfo.getModifyPartitionInfos().size());
+        Assertions.assertEquals(2, replayInfo.getModifyPartitionInfos().get(0).getReplicationNum());
+
+        LocalMetastore followerMetastore = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
+        Database followerDb = new Database(DB_ID, DB_NAME);
+        followerMetastore.unprotectCreateDb(followerDb);
+        OlapTable followerTable = createHashOlapTable(TABLE_ID, TABLE_NAME, 3);
+        followerDb.registerTableUnlocked(followerTable);
+
+        LocalMetastore originalMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        GlobalStateMgr.getCurrentState().setLocalMetastore(followerMetastore);
+        try {
+            for (ModifyPartitionInfo modifyPartitionInfo : replayInfo.getModifyPartitionInfos()) {
+                GlobalStateMgr.getCurrentState().getAlterJobMgr().replayModifyPartition(modifyPartitionInfo);
+            }
+        } finally {
+            GlobalStateMgr.getCurrentState().setLocalMetastore(originalMetastore);
+        }
+
+        Assertions.assertEquals(2, followerTable.getPartitionInfo().getReplicationNum(PARTITION_ID));
+    }
+
+    @Test
+    public void testVisitModifyPartitionClauseEditLogException() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        OlapTable table = (OlapTable) db.getTable(TABLE_NAME);
+        Assertions.assertNotNull(table);
+        short originalReplicationNum = table.getPartitionInfo().getReplicationNum(PARTITION_ID);
+
+        EditLog originalEditLog = GlobalStateMgr.getCurrentState().getEditLog();
+        EditLog spyEditLog = spy(originalEditLog);
+        doThrow(new RuntimeException("EditLog write failed"))
+                .when(spyEditLog).logBatchModifyPartition(any(BatchModifyPartitionsInfo.class), any());
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+
+        try {
+            ModifyPartitionClause clause = ModifyPartitionClause.createStarClause(
+                    new HashMap<>(Map.of("replication_num", "2")));
+            AlterJobExecutor executor = new AlterJobExecutor();
+            executor.db = db;
+            executor.table = table;
+
+            RuntimeException exception = Assertions.assertThrows(RuntimeException.class,
+                    () -> executor.visitModifyPartitionClause(clause, connectContext));
+            Assertions.assertEquals("EditLog write failed", exception.getMessage());
+            Assertions.assertEquals(originalReplicationNum, table.getPartitionInfo().getReplicationNum(PARTITION_ID));
+        } finally {
+            GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);
+        }
+    }
+
     private static OlapTable createHashOlapTable(long tableId, String tableName, int bucketNum) {
         List<Column> columns = new ArrayList<>();
         Column col1 = new Column("v1", IntegerType.BIGINT);
@@ -262,4 +364,3 @@ public class AlterJobExecutorEditLogTest {
         return olapTable;
     }
 }
-

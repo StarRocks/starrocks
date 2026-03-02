@@ -76,7 +76,6 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MaterializedViewExceptions;
-import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.ListComparator;
@@ -178,7 +177,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
         // If optimized olap table contains related mvs, set those mv state to inactive.
         AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(olapTable,
-                MaterializedViewExceptions.inactiveReasonForBaseTableOptimized(olapTable.getName()), false);
+                MaterializedViewExceptions.inactiveReasonForBaseTableOptimized(olapTable.getName()));
 
         long timeoutSecond = PropertyAnalyzer.analyzeTimeout(propertyMap, Config.alter_table_timeout_second);
 
@@ -2117,13 +2116,13 @@ public class SchemaChangeHandler extends AlterHandler {
                             sortKeyUniqueIds);
                     // If optimized olap table contains related mvs, set those mv state to inactive.
                     AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(olapTable,
-                            MaterializedViewExceptions.inactiveReasonForBaseTableReorderColumns(olapTable.getName()), false);
+                            MaterializedViewExceptions.inactiveReasonForBaseTableReorderColumns(olapTable.getName()));
                     return createJobForProcessModifySortKeyColumn(db.getId(), olapTable, sortKeyIdxes, sortKeyUniqueIds);
                 } else {
                     processReorderColumn((ReorderColumnsClause) alterClause, olapTable, indexMetaIdToSchema);
                     // If optimized olap table contains related mvs, set those mv state to inactive.
                     AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(olapTable,
-                            MaterializedViewExceptions.inactiveReasonForBaseTableReorderColumns(olapTable.getName()), false);
+                            MaterializedViewExceptions.inactiveReasonForBaseTableReorderColumns(olapTable.getName()));
                 }
             } else if (alterClause instanceof ModifyTablePropertiesClause) {
                 // modify table properties
@@ -3023,19 +3022,69 @@ public class SchemaChangeHandler extends AlterHandler {
     public void applyFastSchemaEvolutionMetaChange(Database db, OlapTable olapTable,
                                      Map<Long, List<Column>> indexMetaIdToSchema,
                                      List<Index> indexes, long jobId,
-                                     Map<Long, Long> indexMetaIdToNewSchemaId, boolean isReplay, long replayedTxnId)
-            throws DdlException, NotImplementedException {
+                                     Map<Long, Long> indexMetaIdToNewSchemaId) throws DdlException {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         try {
-            LOG.debug("indexSchemaMap:{}, indexes:{}", indexMetaIdToSchema, indexes);
-            if (olapTable.getState() == OlapTableState.ROLLUP) {
-                throw new DdlException("Table[" + olapTable.getName() + "] is doing ROLLUP job");
-            }
+            checkFastSchemaEvolutionMetaChange(olapTable, indexMetaIdToSchema, indexMetaIdToNewSchemaId);
+            long txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                    .getTransactionIDGenerator().getNextTransactionId();
+            TableColumnAlterInfo info = new TableColumnAlterInfo(db.getId(), olapTable.getId(),
+                    indexMetaIdToSchema, indexes, jobId, txnId, indexMetaIdToNewSchemaId);
+            LOG.debug("logModifyTableAddOrDrop info:{}", info);
+            GlobalStateMgr.getCurrentState().getEditLog().logModifyTableAddOrDrop(info, wal -> {
+                applyFastSchemaEvolutionMetaChangeInternal(db, olapTable, indexMetaIdToSchema, indexes, jobId,
+                        indexMetaIdToNewSchemaId, txnId);
+            });
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
+        }
+    }
 
-            // for now table's state can only be NORMAL
-            Preconditions.checkState(olapTable.getState() == OlapTableState.NORMAL, olapTable.getState().name());
-            olapTable.setState(OlapTableState.UPDATING_META);
+    private void checkFastSchemaEvolutionMetaChange(OlapTable olapTable,
+                                                    Map<Long, List<Column>> indexMetaIdToSchema,
+                                                    Map<Long, Long> indexMetaIdToNewSchemaId) throws DdlException {
+        if (olapTable.getState() == OlapTableState.ROLLUP) {
+            throw new DdlException("Table[" + olapTable.getName() + "] is doing ROLLUP job");
+        }
+
+        // for now table's state can only be NORMAL
+        Preconditions.checkState(olapTable.getState() == OlapTableState.NORMAL, olapTable.getState().name());
+        for (Map.Entry<Long, List<Column>> entry : indexMetaIdToSchema.entrySet()) {
+            Long idxMetaId = entry.getKey();
+            List<Column> indexSchema = entry.getValue();
+            MaterializedIndexMeta currentIndexMeta = olapTable.getIndexMetaByMetaId(idxMetaId);
+            if (currentIndexMeta == null) {
+                throw new DdlException("index meta " + idxMetaId + " does not exist");
+            }
+            if (indexMetaIdToNewSchemaId != null && !indexMetaIdToNewSchemaId.containsKey(idxMetaId)) {
+                throw new DdlException("schema id for index meta " + idxMetaId + " does not exist");
+            }
+            List<Integer> sortKeyUniqueIds = currentIndexMeta.getSortKeyUniqueIds();
+            if (sortKeyUniqueIds != null) {
+                for (Integer uniqueId : sortKeyUniqueIds) {
+                    boolean found = false;
+                    for (Column column : indexSchema) {
+                        if (column.getUniqueId() == uniqueId) {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        throw new DdlException("Sork key col with unique id: " + uniqueId + " not exists");
+                    }
+                }
+            }
+        }
+    }
+
+    private void applyFastSchemaEvolutionMetaChangeInternal(Database db, OlapTable olapTable,
+                                                            Map<Long, List<Column>> indexMetaIdToSchema,
+                                                            List<Index> indexes, long jobId,
+                                                            Map<Long, Long> indexMetaIdToNewSchemaId, long txnId) {
+        LOG.debug("indexSchemaMap:{}, indexes:{}", indexMetaIdToSchema, indexes);
+        olapTable.setState(OlapTableState.UPDATING_META);
+        try {
             SchemaChangeJobV2 schemaChangeJob = new SchemaChangeJobV2(jobId, db.getId(), olapTable.getId(),
                     olapTable.getName(), 1000);
             OlapTableHistorySchema.Builder historySchemaBuilder = OlapTableHistorySchema.newBuilder();
@@ -3061,11 +3110,11 @@ public class SchemaChangeHandler extends AlterHandler {
                 List<Integer> newSortKeyUniqueIds = new ArrayList<>();
                 if (sortKeyUniqueIds != null) {
                     for (Integer uniqueId : sortKeyUniqueIds) {
-                        Optional<Column> col = indexSchema.stream().filter(c -> c.getUniqueId() == uniqueId).findFirst();
-                        if (col.isEmpty()) {
-                            throw new DdlException("Sork key col with unique id: " + uniqueId + " not exists");
-                        }
-                        int sortKeyIdx = indexSchema.indexOf(col.get());
+                        Column col = indexSchema.stream()
+                                .filter(c -> c.getUniqueId() == uniqueId)
+                                .findFirst()
+                                .get();
+                        int sortKeyIdx = indexSchema.indexOf(col);
                         newSortKeyIdxes.add(sortKeyIdx);
                         newSortKeyUniqueIds.add(uniqueId);
                     }
@@ -3091,8 +3140,8 @@ public class SchemaChangeHandler extends AlterHandler {
                 }
                 olapTable.renameColumnNamePrefix(idxMetaId);
 
-                schemaChangeJob.addIndexSchema(idxMetaId, idxMetaId, olapTable.getIndexNameByMetaId(idxMetaId), newSchemaVersion,
-                        currentIndexMeta.getSchemaHash(), currentIndexMeta.getShortKeyColumnCount(),
+                schemaChangeJob.addIndexSchema(idxMetaId, idxMetaId, olapTable.getIndexNameByMetaId(idxMetaId),
+                        newSchemaVersion, currentIndexMeta.getSchemaHash(), currentIndexMeta.getShortKeyColumnCount(),
                         indexSchema);
             }
             olapTable.setIndexes(indexes);
@@ -3100,16 +3149,6 @@ public class SchemaChangeHandler extends AlterHandler {
 
             // If modified columns are already done, inactive related mv
             AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(olapTable, modifiedColumns);
-
-            long txnId = replayedTxnId;
-            if (!isReplay) {
-                txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                        .getTransactionIDGenerator().getNextTransactionId();
-                TableColumnAlterInfo info = new TableColumnAlterInfo(db.getId(), olapTable.getId(),
-                        indexMetaIdToSchema, indexes, jobId, txnId, indexMetaIdToNewSchemaId);
-                LOG.debug("logModifyTableAddOrDrop info:{}", info);
-                GlobalStateMgr.getCurrentState().getEditLog().logModifyTableAddOrDrop(info);
-            }
 
             historySchemaBuilder.setHistoryTxnIdThreshold(txnId);
             schemaChangeJob.setHistorySchema(historySchemaBuilder.build());
@@ -3119,16 +3158,13 @@ public class SchemaChangeHandler extends AlterHandler {
             this.addAlterJobV2(schemaChangeJob);
 
             olapTable.lastSchemaUpdateTime.set(System.nanoTime());
-            LOG.info("finished applying fast schema evolution meta change. table: {}, is replay: {}", olapTable.getName(),
-                    isReplay);
+            LOG.info("finished applying fast schema evolution meta change. table: {}", olapTable.getName());
         } finally {
             olapTable.setState(OlapTableState.NORMAL);
-            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         }
     }
 
-    public void replayFastSchemaEvolutionMetaChange(TableColumnAlterInfo info) throws
-            MetaNotFoundException {
+    public void replayFastSchemaEvolutionMetaChange(TableColumnAlterInfo info) {
         LOG.debug("info:{}", info);
         long dbId = info.getDbId();
         long tableId = info.getTableId();
@@ -3145,13 +3181,8 @@ public class SchemaChangeHandler extends AlterHandler {
         Locker locker = new Locker();
         try {
             locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
-            applyFastSchemaEvolutionMetaChange(
-                    db, olapTable, indexMetaIdToSchema, indexes, jobId, indexMetaIdToNewSchemaId, true, info.getTxnId());
-        } catch (DdlException e) {
-            // should not happen
-            LOG.warn("failed to replay fast schema evolution meta change", e);
-        } catch (NotImplementedException e) {
-            LOG.error("InternalError", e);
+            applyFastSchemaEvolutionMetaChangeInternal(db, olapTable, indexMetaIdToSchema, indexes, jobId,
+                    indexMetaIdToNewSchemaId, info.getTxnId());
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE);
         }
@@ -3179,8 +3210,8 @@ public class SchemaChangeHandler extends AlterHandler {
         // when modify this, please also pay attention to the OlapTable#copyOnlyForQuery() operation.
         // try to copy first before modifying, avoiding in-place changes.
         applyFastSchemaEvolutionMetaChange(schemaChangeData.getDatabase(), schemaChangeData.getTable(),
-                schemaChangeData.getNewIndexMetaIdToSchema(), schemaChangeData.getIndexes(), jobId,
-                indexMetaIdToNewSchemaId, false, -1);
+                schemaChangeData.getNewIndexMetaIdToSchema(),
+                schemaChangeData.getIndexes(), jobId, indexMetaIdToNewSchemaId);
     }
 
     private AlterJobV2 createFastSchemaEvolutionJobInSharedDataMode(SchemaChangeData schemaChangeData) {

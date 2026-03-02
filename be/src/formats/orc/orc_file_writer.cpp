@@ -27,6 +27,7 @@
 #include "formats/orc/orc_memory_pool.h"
 #include "formats/orc/utils.h"
 #include "formats/utils.h"
+#include "fs/fs.h"
 #include "io/async_flush_output_stream.h"
 #include "runtime/current_thread.h"
 
@@ -511,8 +512,8 @@ StatusOr<WriterAndStream> ORCFileWriterFactory::create(const string& path) const
             std::make_unique<ORCFileWriter>(path, orc_output_stream, _column_names, types, std::move(column_evaluators),
                                             _compression_type, _parsed_options, rollback_action);
     return WriterAndStream{
-            .writer = std::move(writer),
             .stream = std::move(async_output_stream),
+            .writer = std::move(writer),
     };
 }
 

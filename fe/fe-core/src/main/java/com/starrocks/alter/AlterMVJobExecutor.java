@@ -1053,7 +1053,6 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 taskManager.executeTask(task.getName(), ExecuteOption.makeMergeRedundantOption());
             }
 
-            final MaterializedView.MvRefreshScheme refreshScheme = materializedView.getRefreshScheme();
             Locker locker = new Locker();
             if (!locker.lockTableAndCheckDbExist(db, materializedView.getId(), LockType.WRITE)) {
                 throw new DmlException("update meta failed. database:" + db.getFullName() + " not exist");
@@ -1065,13 +1064,15 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                     throw new DmlException(
                             "update meta failed. materialized view:" + materializedView.getName() + " not exist");
                 }
-                refreshScheme.setType(newRefreshType);
+                MaterializedView.MvRefreshScheme copiedScheme = materializedView.getRefreshScheme().copy(); // copy on write
+                copiedScheme.setType(newRefreshType);
                 if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
                     AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
                     IntervalLiteral intervalLiteral = asyncRefreshSchemeDesc.getIntervalLiteral();
                     if (intervalLiteral != null) {
                         final IntLiteral step = (IntLiteral) intervalLiteral.getValue();
-                        final MaterializedView.AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
+                        final MaterializedView.AsyncRefreshContext asyncRefreshContext =
+                                copiedScheme.getAsyncRefreshContext();
                         asyncRefreshContext.setStartTime(
                                 Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime()));
                         asyncRefreshContext.setDefineStartTime(asyncRefreshSchemeDesc.isDefineStartTime());
@@ -1084,12 +1085,14 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                             throw new DdlException("Materialized view which type is ASYNC need to specify refresh interval for " +
                                     "external table");
                         }
-                        refreshScheme.setAsyncRefreshContext(new MaterializedView.AsyncRefreshContext());
+                        copiedScheme.setAsyncRefreshContext(new MaterializedView.AsyncRefreshContext());
                     }
                 }
 
-                final ChangeMaterializedViewRefreshSchemeLog log = new ChangeMaterializedViewRefreshSchemeLog(materializedView);
-                GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(log);
+                final ChangeMaterializedViewRefreshSchemeLog log =
+                        new ChangeMaterializedViewRefreshSchemeLog(materializedView, copiedScheme);
+                GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(log,
+                        wal -> materializedView.setRefreshScheme(copiedScheme));
             } finally {
                 locker.unLockTableWithIntensiveDbLock(db.getId(), materializedView.getId(), LockType.WRITE);
             }
@@ -1114,17 +1117,19 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                     return null;
                 }
 
-                GlobalStateMgr.getCurrentState().getAlterJobMgr().
-                        alterMaterializedViewStatus(materializedView, status, "", false);
+                AlterJobMgr alterJobMgr = GlobalStateMgr.getCurrentState().getAlterJobMgr();
+                AlterJobMgr.AlterMaterializedViewStatusContext statusContext =
+                        alterJobMgr.prepareAlterMaterializedViewStatus(materializedView, status, "", false);
+                AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(materializedView.getDbId(),
+                        materializedView.getId(), status, "");
+                GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log, wal ->
+                        alterJobMgr.applyAlterMaterializedViewStatus(materializedView, statusContext, false));
                 // for manual refresh type, do not refresh
                 if (materializedView.getRefreshScheme().getType() != MaterializedViewRefreshType.MANUAL) {
                     GlobalStateMgr.getCurrentState().getLocalMetastore()
                             .refreshMaterializedView(dbName, materializedView.getName(), false, null,
                                     Constants.TaskRunPriority.NORMAL.value(), true, false);
                 }
-                AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(materializedView.getDbId(),
-                        materializedView.getId(), status, "");
-                GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log);
             } else if (AlterMaterializedViewStatusClause.INACTIVE.equalsIgnoreCase(status)) {
                 if (!materializedView.isActive()) {
                     return null;
@@ -1214,11 +1219,13 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         if (mv.isActive()) {
             // log edit log
             String status = AlterMaterializedViewStatusClause.INACTIVE;
-            GlobalStateMgr.getCurrentState().getAlterJobMgr().
-                    alterMaterializedViewStatus(mv, status, reason, false);
+            AlterJobMgr alterJobMgr = GlobalStateMgr.getCurrentState().getAlterJobMgr();
+            AlterJobMgr.AlterMaterializedViewStatusContext statusContext =
+                    alterJobMgr.prepareAlterMaterializedViewStatus(mv, status, reason, false);
             AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(mv.getDbId(),
                     mv.getId(), status, reason);
-            GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log);
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log, wal ->
+                    alterJobMgr.applyAlterMaterializedViewStatus(mv, statusContext, false));
         } else {
             mv.setInactiveAndReason(reason);
         }
@@ -1234,7 +1241,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
      * NOTE: This method will clear the related mvs' version map by default since the base table
      *  has broken from mv existed refreshed data.
      */
-    public static void inactiveRelatedMaterializedViewsRecursive(Table olapTable, String reason, boolean isReplay) {
+    public static void inactiveRelatedMaterializedViewsRecursive(Table olapTable, String reason) {
         if (olapTable == null) {
             return;
         }
@@ -1243,11 +1250,10 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                     "table:{}, reason:{}", olapTable.getName(), reason);
             return;
         }
-        // Only check this in leader and not replay to avoid duplicate inactive
-        if (!GlobalStateMgr.getCurrentState().isLeader() || isReplay) {
+        // Only check this in leader to avoid duplicate inactive
+        if (!GlobalStateMgr.getCurrentState().isLeader()) {
             LOG.warn("Skip to inactive related materialized views because of base table/view {} is " +
-                            "changed or dropped in the leader backgroud, isLeader: {}, isReplay, reason:{}",
-                    olapTable.getName(), GlobalStateMgr.getCurrentState().isLeader(), isReplay, reason);
+                            "changed or dropped in the leader backgroud,  reason:{}", olapTable.getName(), reason);
             return;
         }
         Set<MvId> inactiveMVIds = Sets.newHashSet();
@@ -1406,11 +1412,12 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             return;
         }
         final String inactiveReason = MaterializedViewExceptions.inactiveReasonForConsecutiveFailures(mv.getName());
-        // inactive related mv
-        mv.setInactiveAndReason(inactiveReason);
         // write edit log
         AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(mv.getDbId(),
                 mv.getId(), AlterMaterializedViewStatusClause.INACTIVE, inactiveReason);
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log);
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log, wal -> {
+            // inactive related mv
+            mv.setInactiveAndReason(inactiveReason);
+        });
     }
 }

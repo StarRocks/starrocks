@@ -15,14 +15,11 @@
 package com.starrocks.service;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
@@ -47,11 +44,7 @@ import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.DropTableStmt;
-import com.starrocks.sql.ast.ListPartitionDesc;
-import com.starrocks.sql.ast.PartitionDesc;
-import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TBatchGetTableSchemaRequest;
 import com.starrocks.thrift.TBatchGetTableSchemaResponse;
@@ -129,7 +122,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import org.mockito.internal.util.collections.Sets;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -1595,55 +1587,6 @@ public class FrontendServiceImplTest {
         request.tbl = "mv";
         e = Assertions.assertThrows(StarRocksException.class, () -> impl.streamLoadPutImpl(context, request));
         Assertions.assertTrue(e.getMessage().contains("is a materialized view"));
-    }
-
-    @Test
-    public void testAddListPartitionConcurrency() throws StarRocksException, TException {
-        new MockUp<GlobalTransactionMgr>() {
-            @Mock
-            public TransactionState getTransactionState(long dbId, long transactionId) {
-                return new TransactionState();
-            }
-        };
-
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_list");
-        List<List<String>> partitionValues = Lists.newArrayList();
-        List<String> values = Lists.newArrayList();
-        values.add("1990-04-24");
-        partitionValues.add(values);
-        List<String> values2 = Lists.newArrayList();
-        values2.add("1990-04-25");
-        partitionValues.add(values2);
-        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
-        TCreatePartitionRequest request = new TCreatePartitionRequest();
-        request.setDb_id(db.getId());
-        request.setTable_id(table.getId());
-        request.setPartition_values(partitionValues);
-        TCreatePartitionResult partition = impl.createPartition(request);
-
-        GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
-        Database testDb = currentState.getLocalMetastore().getDb("test");
-        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(testDb.getFullName(), "site_access_list");
-        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-        DistributionInfo defaultDistributionInfo = olapTable.getDefaultDistributionInfo();
-        List<PartitionDesc> partitionDescs = Lists.newArrayList();
-        Partition p19910425 = olapTable.getPartition("p19900425");
-
-        partitionDescs.add(new ListPartitionDesc(Lists.newArrayList("p19900425"),
-                    Lists.newArrayList(new SingleItemListPartitionDesc(true, "p19900425",
-                                Lists.newArrayList("1990-04-25"), Maps.newHashMap()))));
-
-        AddPartitionClause addPartitionClause = new AddPartitionClause(partitionDescs.get(0),
-                    defaultDistributionInfo.toDistributionDesc(table.getIdToColumn()), Maps.newHashMap(), false);
-
-        List<Partition> partitionList = Lists.newArrayList();
-        partitionList.add(p19910425);
-
-        currentState.getLocalMetastore().addListPartitionLog(testDb, olapTable, partitionDescs,
-                    addPartitionClause.isTempPartition(), partitionInfo, partitionList, Sets.newSet("p19900425"));
-
     }
 
     @Test

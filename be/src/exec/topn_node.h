@@ -20,6 +20,7 @@
 namespace starrocks {
 
 class ChunksSorter;
+class RuntimeFilterBuildDescriptor;
 
 // Node for in-memory TopN (ORDER BY ... LIMIT).
 //
