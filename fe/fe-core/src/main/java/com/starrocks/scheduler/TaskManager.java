@@ -407,50 +407,6 @@ public class TaskManager implements MemoryTrackable {
     public void dropTasks(List<Long> taskIdList, boolean isReplay) {
 =======
     /**
-     * Update task properties for subsequent executions.
-     * NOTE: this method will write edit log.
-     */
-    public void updateTaskProperties(Task task, Map<String, String> properties) {
-        if (task == null || properties == null || properties.isEmpty()) {
-            return;
-        }
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterTask(
-                new AlterTaskInfo(task.getName(), properties),
-                wal -> {
-                    Map<String, String> current = task.getProperties();
-                    if (current == null) {
-                        current = Maps.newHashMap();
-                        task.setProperties(current);
-                    }
-                    current.putAll(properties);
-                }
-        );
-        updateTaskPropertiesInternal(task, properties);
-    }
-
-    /**
-     * Internal method to update task properties without writing edit log.
-     */
-    private void updateTaskPropertiesInternal(Task task, Map<String, String> properties) {
-        if (task == null || properties == null || properties.isEmpty()) {
-            return;
-        }
-        if (!tryTaskLock()) {
-            throw new RuntimeException("Failed to get task lock when update Task properties[" + task.getName() + "]");
-        }
-        try {
-            Map<String, String> current = task.getProperties();
-            if (current == null) {
-                current = Maps.newHashMap();
-                task.setProperties(current);
-            }
-            current.putAll(properties);
-        } finally {
-            taskUnlock();
-        }
-    }
-
-    /**
      * Remove a property from the task's properties map.
      * This method is thread-safe and acquires the task lock before modifying the properties.
      */
