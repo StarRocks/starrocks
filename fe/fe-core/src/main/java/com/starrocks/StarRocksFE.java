@@ -41,16 +41,17 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Log4jConfig;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.Version;
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/StarRocksFE.java
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.Util;
+=======
+import com.starrocks.extension.ExtensionManager;
+>>>>>>> 9691ac85d1 ([BugFix] Fix the bug where graceful exit caused different transactions to publish the same version. (#69639)):fe/fe-core/src/main/java/com/starrocks/StarRocksFEServer.java
 import com.starrocks.failpoint.FailPoint;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.StateChangeExecutor;
 import com.starrocks.http.HttpServer;
-import com.starrocks.http.rest.ActionStatus;
-import com.starrocks.http.rest.BootstrapFinishAction;
 import com.starrocks.journal.Journal;
-import com.starrocks.journal.JournalWriter;
 import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.journal.bdbje.BDBTool;
@@ -59,7 +60,6 @@ import com.starrocks.lake.snapshot.RestoreClusterSnapshotMgr;
 import com.starrocks.leader.MetaHelper;
 import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.qe.CoordinatorMonitor;
-import com.starrocks.qe.ProxyContextManager;
 import com.starrocks.qe.QeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.GracefulExitFlag;
@@ -84,7 +84,6 @@ import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.lang.management.ManagementFactory;
-import java.net.InetSocketAddress;
 import java.nio.channels.FileLock;
 import java.util.List;
 import java.util.Optional;
@@ -238,14 +237,6 @@ public class StarRocksFE {
                     LOG.info("start to handle graceful exit");
                     GracefulExitFlag.markGracefulExit();
 
-                    // transfer leader if current node is leader
-                    try {
-                        transferLeader();
-                    } catch (Exception e) {
-                        LOG.warn("handle graceful exit failed", e);
-                        System.exit(-1);
-                    }
-
                     // Wait for queries to complete
                     try {
                         waitForDraining(startTime);
@@ -278,6 +269,7 @@ public class StarRocksFE {
         });
     }
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/StarRocksFE.java
     private static void transferLeader() throws InterruptedException {
         if (GlobalStateMgr.getCurrentState().isLeader()) {
             LOG.info("start to transfer leader");
@@ -350,13 +342,14 @@ public class StarRocksFE {
         return false;
     }
 
+=======
+>>>>>>> 9691ac85d1 ([BugFix] Fix the bug where graceful exit caused different transactions to publish the same version. (#69639)):fe/fe-core/src/main/java/com/starrocks/StarRocksFEServer.java
     private static void waitForDraining(long startTimeNano) throws InterruptedException {
         ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
         final long waitInterval = 1000L;
         while (true) {
             connectScheduler.closeAllIdleConnection();
-            int totalConns = connectScheduler.getTotalConnCount()
-                    + ProxyContextManager.getInstance().getTotalConnCount();
+            int totalConns = connectScheduler.getTotalConnCount();
             if (totalConns > 0) {
                 LOG.info("waiting for {} connections to drain", totalConns);
             } else if (System.nanoTime() - startTimeNano

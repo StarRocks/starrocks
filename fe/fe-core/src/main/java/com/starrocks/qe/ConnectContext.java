@@ -305,9 +305,6 @@ public class ConnectContext {
     // session level SPM storage
     private SQLPlanStorage sqlPlanStorage = SQLPlanStorage.create(false);
 
-    // Whether leader is transferred during executing stmt
-    private boolean isLeaderTransferred = false;
-
     private AtomicLong currentThreadAllocatedMemory = new AtomicLong(0);
 
     // thread id is the thread who created this ConnectContext's id
@@ -1648,14 +1645,6 @@ public class ConnectContext {
             getState().setOk(0L, 0,
                     String.format("set session variables from user property failed: %s", e.getMessage()));
         }
-    }
-
-    public boolean isLeaderTransferred() {
-        return isLeaderTransferred;
-    }
-
-    public void setIsLeaderTransferred(boolean isLeaderTransferred) {
-        this.isLeaderTransferred = isLeaderTransferred;
     }
 
     /**
