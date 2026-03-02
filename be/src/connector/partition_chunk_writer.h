@@ -107,8 +107,8 @@ protected:
     bool _is_default_partition = false;
     AsyncFlushStreamPoller* _io_poller = nullptr;
 
-    // The destruction of _filter_writer triggers a flush of _out_stream.
-    // Therefore, we must ensure _filter_writer is destroyed first, followed by _out_stream.
+    // The destruction of _file_writer triggers a flush of _out_stream.
+    // Therefore, we must ensure _file_writer is destroyed first, followed by _out_stream.
     // Failing to do so will result in a use-after-free error for _out_stream.
     // TODO: Refactor the file writer and output stream to make them more robust and user-friendly.
     std::shared_ptr<io::AsyncFlushOutputStream> _out_stream;
