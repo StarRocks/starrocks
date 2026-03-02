@@ -868,7 +868,9 @@ Status RowsetUpdateState::load_delete(uint32_t del_id, const RowsetUpdateStatePa
     ASSIGN_OR_RETURN(auto read_buffer, read_file->read_all());
     auto col = pk_column->clone();
     using Serd = serde::ColumnArraySerde;
-    RETURN_IF_ERROR(Serd::deserialize(reinterpret_cast<const uint8_t*>(read_buffer.data()), col.get()));
+    const auto* begin = reinterpret_cast<const uint8_t*>(read_buffer.data());
+    const auto* end = begin + read_buffer.size();
+    RETURN_IF_ERROR(Serd::deserialize(begin, end, col.get()));
     col->raw_data();
     _memory_usage += col->memory_usage();
     _deletes[del_id] = std::move(col);

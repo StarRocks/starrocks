@@ -86,7 +86,8 @@ Status RowsetUpdateState::_load_deletes(Rowset* rowset, uint32_t idx, Column* pk
     TRY_CATCH_BAD_ALLOC(read_buffer.resize(file_size));
     RETURN_IF_ERROR(read_file->read_at_fully(0, read_buffer.data(), read_buffer.size()));
     auto col = pk_column->clone();
-    RETURN_IF_ERROR(serde::ColumnArraySerde::deserialize(read_buffer.data(), col.get()));
+    const auto* end = read_buffer.data() + read_buffer.size();
+    RETURN_IF_ERROR(serde::ColumnArraySerde::deserialize(read_buffer.data(), end, col.get()));
     TRY_CATCH_BAD_ALLOC(col->raw_data());
     _memory_usage += col != nullptr ? col->memory_usage() : 0;
     _deletes[idx] = std::move(col);
