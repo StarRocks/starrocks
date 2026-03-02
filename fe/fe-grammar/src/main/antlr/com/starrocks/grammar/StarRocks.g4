@@ -787,11 +787,7 @@ adminShowReplicaStatusStatement
     ;
 
 adminShowTabletStatusStatement
-<<<<<<< HEAD
-    : ADMIN SHOW TABLET STATUS FROM qualifiedName partitionNames? properties? (WHERE where=expression)?
-=======
-    : ADMIN SHOW TABLET STATUS FROM qualifiedName partitionNames? showPredicateClauses properties?
->>>>>>> ad88c10cad ([Enhancement] Improve repair table and show tablet status (#69656))
+    : ADMIN SHOW TABLET STATUS FROM qualifiedName partitionNames? (WHERE where=expression)? properties?
     ;
 
 adminRepairTableStatement
