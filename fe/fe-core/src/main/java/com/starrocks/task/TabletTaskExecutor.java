@@ -29,12 +29,7 @@ import com.starrocks.common.Status;
 import com.starrocks.common.TimeoutException;
 import com.starrocks.common.util.ThreadUtil;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
-<<<<<<< HEAD
-import com.starrocks.journal.LeaderTransferException;
 import com.starrocks.lake.LakeTablet;
-import com.starrocks.qe.ConnectContext;
-=======
->>>>>>> 9691ac85d1 ([BugFix] Fix the bug where graceful exit caused different transactions to publish the same version. (#69639))
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
