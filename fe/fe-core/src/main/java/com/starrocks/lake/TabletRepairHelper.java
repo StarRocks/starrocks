@@ -83,8 +83,8 @@ public class TabletRepairHelper {
         builder.addColumn(new Column("PartitionId", ScalarType.createVarcharType(20)));
         builder.addColumn(new Column("VisibleVersion", ScalarType.createVarcharType(20)));
         builder.addColumn(new Column("RepairStatus", ScalarType.createVarcharType(60)));
-        builder.addColumn(new Column("TabletRecoverInfo", ScalarType.createVarcharType(65535)));
-        builder.addColumn(new Column("ErrorMsg", ScalarType.createVarcharType(65535)));
+        builder.addColumn(new Column("TabletRecoverInfo", ScalarType.createDefaultString()));
+        builder.addColumn(new Column("ErrorMsg", ScalarType.createDefaultString()));
         DRY_RUN_REPAIR_RESULT_META_DATA = builder.build();
     }
 
@@ -356,6 +356,8 @@ public class TabletRepairHelper {
         // only missing pk index sst files, clear sstableMeta
         if (checkOnlySstFilesMissing(missingFiles)) {
             metadata.sstableMeta = null;
+            // set version to negative to indicate the metadata is missing some files but still can be repaired,
+            // and the real version will be set in repairTabletMetadata()
             metadata.version = -1 * metadata.version;
             return metadata;
         }
