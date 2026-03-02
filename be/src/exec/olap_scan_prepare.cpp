@@ -441,7 +441,7 @@ Status ChunkPredicateBuilder<E, Type>::_build_bitset_in_predicates(PredicateComp
             // - For rf with has_null, generate `is_null_pred OR bitset_in_pred`.
             // - Otherwise, generate `bitset_in_pred`.
             if (!rf->has_null()) {
-                tree_root.add_child(std::move(bitset_in_pred_node));
+                tree_root.add_child(bitset_in_pred_node);
             } else {
                 auto or_node = PredicateOrNode{};
 

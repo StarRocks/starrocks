@@ -40,9 +40,9 @@ namespace starrocks {
  */
 StatusOr<std::unique_ptr<ColumnIterator>> create_json_flat_iterator(
         ColumnReader* reader, std::unique_ptr<ColumnIterator> null_iter,
-        std::vector<std::unique_ptr<ColumnIterator>> iters, const std::vector<std::string>& target_paths,
-        const std::vector<LogicalType>& target_types, const std::vector<std::string>& source_paths,
-        const std::vector<LogicalType>& source_types, bool need_remain = false);
+        std::vector<std::unique_ptr<ColumnIterator>> iters, std::vector<std::string> target_paths,
+        std::vector<LogicalType> target_types, std::vector<std::string> source_paths,
+        std::vector<LogicalType> source_types, bool need_remain = false);
 
 /**
  * @brief Creates a ColumnIterator that dynamically flattens a JSON column at read time based on the specified target paths/types.
@@ -73,8 +73,8 @@ StatusOr<std::unique_ptr<ColumnIterator>> create_json_dynamic_flat_iterator(
  */
 StatusOr<std::unique_ptr<ColumnIterator>> create_json_merge_iterator(
         ColumnReader* reader, std::unique_ptr<ColumnIterator> null_iter,
-        std::vector<std::unique_ptr<ColumnIterator>> all_iters, const std::vector<std::string>& merge_paths,
-        const std::vector<LogicalType>& merge_types);
+        std::vector<std::unique_ptr<ColumnIterator>> all_iters, std::vector<std::string> merge_paths,
+        std::vector<LogicalType> merge_types);
 
 /**
  * @brief create a ColumnIterator that extract a field from the underlying json column

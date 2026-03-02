@@ -122,7 +122,7 @@ public:
 class JsonPathDeriver {
 public:
     JsonPathDeriver() = default;
-    JsonPathDeriver(const std::vector<std::string>& paths, const std::vector<LogicalType>& types, bool has_remain);
+    JsonPathDeriver(std::vector<std::string> paths, std::vector<LogicalType> types, bool has_remain);
     void init_flat_json_config(const FlatJsonConfig* flat_json_config);
 
     ~JsonPathDeriver() = default;
@@ -184,7 +184,7 @@ class JsonFlattener {
 public:
     JsonFlattener(JsonPathDeriver& deriver);
 
-    JsonFlattener(const std::vector<std::string>& paths, const std::vector<LogicalType>& types, bool has_remain);
+    JsonFlattener(std::vector<std::string> paths, std::vector<LogicalType> types, bool has_remain);
 
     ~JsonFlattener() = default;
 
@@ -216,7 +216,7 @@ class JsonMerger {
 public:
     ~JsonMerger() = default;
 
-    JsonMerger(const std::vector<std::string>& paths, const std::vector<LogicalType>& types, bool has_remain = false);
+    JsonMerger(std::vector<std::string> paths, std::vector<LogicalType> types, bool has_remain = false);
 
     // for read, only read some leaf node
     void set_root_path(const std::string& base_path);
@@ -279,7 +279,7 @@ private:
 // - D need extract from remain
 class HyperJsonTransformer {
 public:
-    HyperJsonTransformer(const std::vector<std::string>& paths, const std::vector<LogicalType>& types, bool has_remain);
+    HyperJsonTransformer(std::vector<std::string> paths, std::vector<LogicalType> types, bool has_remain);
 
     ~HyperJsonTransformer() = default;
 

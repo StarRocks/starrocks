@@ -519,7 +519,7 @@ ColumnPtr cast_int_from_string_fn(ColumnPtr& column) {
                 null_data[i] = (result != StringParser::PARSE_SUCCESS);
             }
         }
-        return NullableColumn::create(std::move(res_data_column), std::move(null_column));
+        return NullableColumn::create(std::move(res_data_column), std::move(null_column_ptr));
     } else {
         NullColumn::MutablePtr null_column = NullColumn::create(sz);
         auto& null_data = null_column->get_data();
@@ -998,7 +998,7 @@ static ColumnPtr cast_from_string_to_datetime_fn(ColumnPtr& column) {
                 null_data[i] = !success;
             }
         }
-        return NullableColumn::create(std::move(res_data_column), std::move(null_column));
+        return NullableColumn::create(std::move(res_data_column), std::move(null_column_ptr));
     } else {
         const auto* data_column = down_cast<const BinaryColumn*>(column.get());
         NullColumn::MutablePtr null_column = NullColumn::create(num_rows);

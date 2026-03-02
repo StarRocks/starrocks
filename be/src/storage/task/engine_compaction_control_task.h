@@ -26,7 +26,7 @@ class EngineCompactionControlTask : public EngineTask {
 public:
     Status execute() override;
 
-    EngineCompactionControlTask(const std::map<TTableId, int64_t>& table_to_disable_deadline);
+    explicit EngineCompactionControlTask(std::map<TTableId, int64_t> table_to_disable_deadline);
 
     ~EngineCompactionControlTask() override = default;
 

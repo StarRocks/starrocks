@@ -74,7 +74,9 @@ StatusOr<ColumnPtr> MapExpr::evaluate_checked(ExprContext* context, Chunk* chunk
             offsets->append(curr_offset);
         }
     } else if (num_pairs > 0) { // avoid copying for only one pair
+        // NOLINTNEXTLINE(performance-move-const-arg)
         key_col = std::move(*pairs_columns[0]).mutate();
+        // NOLINTNEXTLINE(performance-move-const-arg)
         value_col = std::move(*pairs_columns[1]).mutate();
         for (size_t i = 0; i < num_rows; ++i) {
             curr_offset++;

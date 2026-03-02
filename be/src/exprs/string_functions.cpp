@@ -531,6 +531,7 @@ ColumnPtr string_func_const(StringConstFuncType func, const Columns& columns, Ar
             }
             if (binary->is_constant()) {
                 auto* dst_const = down_cast<ConstColumn*>(binary->as_mutable_raw_ptr());
+                // NOLINTNEXTLINE(performance-move-const-arg)
                 auto data_mut = std::move(*(dst_const->data_column())).mutate();
                 data_mut->assign(dst_const->size(), 0);
                 return NullableColumn::create(std::move(data_mut), std::move(src_null));
@@ -3059,6 +3060,7 @@ static inline ColumnPtr concat_not_const(Columns const& columns) {
  */
 StatusOr<ColumnPtr> StringFunctions::concat(FunctionContext* context, const Columns& columns) {
     if (columns.size() == 1) {
+        // NOLINTNEXTLINE(performance-move-const-arg)
         return std::move(*columns[0]).mutate();
     }
 
@@ -3145,6 +3147,7 @@ StatusOr<ColumnPtr> StringFunctions::concat_ws(FunctionContext* context, const C
     }
 
     if (columns.size() == 2) {
+        // NOLINTNEXTLINE(performance-move-const-arg)
         return std::move(*columns[1]).mutate();
     }
 

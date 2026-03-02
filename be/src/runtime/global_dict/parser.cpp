@@ -139,6 +139,7 @@ private:
         }
 
         if (_always_const) {
+            // NOLINTNEXTLINE(performance-move-const-arg)
             auto res = std::move(*_dict_opt_ctx->convert_column).mutate();
             res->resize(num_rows);
             return res;

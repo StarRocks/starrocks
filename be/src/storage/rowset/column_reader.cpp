@@ -943,12 +943,13 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::_new_json_iterator(Colum
 
         if (path == nullptr || path->children().empty()) {
             // access whole json
-            return create_json_merge_iterator(this, std::move(null_iter), std::move(all_iters), source_paths,
-                                              source_types);
+            return create_json_merge_iterator(this, std::move(null_iter), std::move(all_iters), std::move(source_paths),
+                                              std::move(source_types));
         } else {
             DCHECK(path->is_from_compaction());
-            return create_json_flat_iterator(this, std::move(null_iter), std::move(all_iters), target_paths,
-                                             target_types, source_paths, source_types, true);
+            return create_json_flat_iterator(this, std::move(null_iter), std::move(all_iters), std::move(target_paths),
+                                             std::move(target_types), std::move(source_paths), std::move(source_types),
+                                             true);
         }
     }
 
@@ -1025,8 +1026,8 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::_new_json_iterator(Colum
         source_types.emplace_back(rd->column_type());
     }
 
-    return create_json_flat_iterator(this, std::move(null_iter), std::move(all_iters), target_paths, target_types,
-                                     source_paths, source_types);
+    return create_json_flat_iterator(this, std::move(null_iter), std::move(all_iters), std::move(target_paths),
+                                     std::move(target_types), std::move(source_paths), std::move(source_types));
 }
 
 size_t ColumnReader::mem_usage() const {

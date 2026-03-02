@@ -248,6 +248,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
                 tmp_col = ColumnHelper::align_return_type(std::move(tmp_col), type().children[0], tmp_chunk->num_rows(),
                                                           true);
                 if (column == nullptr) {
+                    // NOLINTNEXTLINE(performance-move-const-arg)
                     column = std::move(*tmp_col).mutate();
                 } else {
                     column->append(*tmp_col);
@@ -268,6 +269,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
         new_aligned_offsets->append(0);
         new_aligned_offsets->append(data_column->size());
         aligned_offsets = std::move(new_aligned_offsets);
+        // NOLINTNEXTLINE(performance-move-const-arg)
         auto array_column = ArrayColumn::create(std::move(*data_column).mutate(), aligned_offsets);
         array_column->check_or_die();
         ColumnPtr result_column = array_column;

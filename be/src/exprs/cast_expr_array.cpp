@@ -145,6 +145,7 @@ StatusOr<ColumnPtr> CastStringToArray::evaluate_checked(ExprContext* context, Ch
         if (input->only_null()) {
             return ColumnHelper::create_const_null_column(rows);
         } else {
+            // NOLINTNEXTLINE(performance-move-const-arg)
             return ConstColumn::create(std::move(*(input->data_column())).clone(), rows);
         }
     }
