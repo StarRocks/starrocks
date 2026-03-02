@@ -19,8 +19,11 @@
 #include "connector/sink_memory_manager.h"
 #include "formats/file_writer.h"
 #include "runtime/runtime_state.h"
+#include "util/failpoint/fail_point.h"
 
 namespace starrocks::connector {
+
+DEFINE_FAIL_POINT(parquet_chunk_writer_init_failed);
 
 ConnectorChunkSink::ConnectorChunkSink(std::vector<std::string> partition_columns,
                                        std::vector<std::unique_ptr<ColumnEvaluator>>&& partition_column_evaluators,
@@ -83,6 +86,10 @@ Status ConnectorChunkSink::add(Chunk* chunk) {
         std::unique_ptr<Stream> new_stream = std::move(new_writer_and_stream.stream);
         std::unique_ptr<Writer> new_writer = std::move(new_writer_and_stream.writer);
         RETURN_IF_ERROR(new_writer->init());
+
+        FAIL_POINT_TRIGGER_EXECUTE(parquet_chunk_writer_init_failed,
+                                   { return Status::InternalError("Create file writer failed due to fail point"); });
+
         RETURN_IF_ERROR(new_writer->write(chunk));
         _writer_stream_pairs[partition] = std::make_pair(std::move(new_writer), new_stream.get());
         _io_poller->enqueue(std::move(new_stream));
