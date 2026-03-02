@@ -22,10 +22,10 @@
 #include "column/column_access_path.h"
 #include "column/datum_convert.h"
 #include "common/status.h"
+#include "common/system/backend_options.h"
 #include "gen_cpp/tablet_schema.pb.h"
 #include "gutil/stl_util.h"
 #include "primary_key_encoder.h"
-#include "service/backend_options.h"
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate.h"
@@ -219,7 +219,7 @@ Status TabletReader::_init_collector_for_pk_index_read() {
                 const auto* col_pred = child_node.col_pred();
                 const auto cid = col_pred->column_id();
                 if (cid < tablet_schema->num_key_columns() && col_pred->type() == PredicateType::kEQ) {
-                    auto& column = keys->get_column_by_id(cid);
+                    auto* column = keys->get_column_raw_ptr_by_id(cid);
                     if (column->size() != 0) {
                         return Status::NotSupported(
                                 strings::Substitute("multiple eq predicates on same pk column columnId=$0", cid));
@@ -245,8 +245,10 @@ Status TabletReader::_init_collector_for_pk_index_read() {
                                                         num_pk_eq_predicates, tablet_schema->num_key_columns()));
     }
     MutableColumnPtr pk_column;
-    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(*tablet_schema->schema(), &pk_column));
-    PrimaryKeyEncoder::encode(*tablet_schema->schema(), *keys, 0, keys->num_rows(), pk_column.get());
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(*tablet_schema->schema(), &pk_column,
+                                                     PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1));
+    PrimaryKeyEncoder::encode(*tablet_schema->schema(), *keys, 0, keys->num_rows(), pk_column.get(),
+                              PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
 
     // get rowid using pk index
     std::vector<uint64_t> rowids(1);
@@ -368,6 +370,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.vector_search_option = params.vector_search_option;
     rs_opts.sample_options = params.sample_options;
     rs_opts.enable_join_runtime_filter_pushdown = params.enable_join_runtime_filter_pushdown;
+    rs_opts.enable_predicate_col_late_materialize = params.enable_predicate_col_late_materialize;
     if (keys_type == KeysType::PRIMARY_KEYS) {
         rs_opts.is_primary_keys = true;
         rs_opts.version = _version.second;

@@ -16,8 +16,10 @@ package com.starrocks.sql.optimizer.transformer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.SqlFunction;
 import com.starrocks.catalog.TableName;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -734,18 +736,44 @@ public final class SqlToScalarOperatorTranslator {
 
             // for nonDeterministicFunctions, we need add an argument as its unique id to distinguish
             // the reusing behavior in common exprs
-            if (FunctionSet.nonDeterministicFunctions.contains(node.getFnName().getFunction())) {
+            if (FunctionSet.nonDeterministicFunctions.contains(node.getFunctionName())) {
                 arguments.add(ConstantOperator.createInt(columnRefFactory.getNextUniqueId()));
             }
 
+            if (node.getFn() instanceof SqlFunction) {
+                return visitSqlFunctionCall(node, arguments);
+            }
+
             CallOperator callOperator = new CallOperator(
-                    node.getFnName().getFunction(),
+                    node.getFunctionName(),
                     node.getType(),
                     arguments,
                     node.getFn(),
                     node.getParams().isDistinct());
             callOperator.setHints(node.getHints());
             return callOperator;
+        }
+
+        public ScalarOperator visitSqlFunctionCall(FunctionCallExpr node, List<ScalarOperator> arguments) {
+            SqlFunction sqlFunction = (SqlFunction) node.getFn();
+            Expr expr = sqlFunction.getAnalyzeExpr();
+            if (expr == null) {
+                throw new StarRocksPlannerException("view function analyze expr is null",
+                        ErrorType.INTERNAL_ERROR);
+            }
+
+            Map<String, ScalarOperator> argMap = Maps.newHashMap();
+            for (int i = 0; i < sqlFunction.getArgNames().length; i++) {
+                argMap.put(sqlFunction.getArgNames()[i], arguments.get(i));
+            }
+
+            return SqlToScalarOperatorTranslator.translateWithSlotRef(expr, slotRef -> {
+                if (argMap.containsKey(slotRef.getColName())) {
+                    return argMap.get(slotRef.getColName());
+                }
+                Preconditions.checkState(false, "cannot find function argument: " + slotRef.getColName());
+                return null;
+            });
         }
 
         @Override
@@ -757,7 +785,7 @@ public final class SqlToScalarOperatorTranslator {
                     .map(child -> visit(child, context.clone(node)))
                     .collect(Collectors.toList());
             CallOperator callOperator =
-                    new CallOperator(functionCallExpr.getFnName().getFunction(), functionCallExpr.getType(), arguments,
+                    new CallOperator(functionCallExpr.getFunctionName(), functionCallExpr.getType(), arguments,
                             functionCallExpr.getFn(), functionCallExpr.getParams().isDistinct());
             callOperator.setIgnoreNulls(functionCallExpr.getIgnoreNulls());
             return callOperator;

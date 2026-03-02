@@ -19,9 +19,10 @@
 #ifndef __APPLE__
 #include "gen_cpp/lake_service.pb.h"
 #endif
+#include "base/failpoint/fail_point.h"
 #include "runtime/exec_env.h"
-#include "util/failpoint/fail_point.h"
-#include "util/starrocks_metrics.h"
+#include "runtime/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 

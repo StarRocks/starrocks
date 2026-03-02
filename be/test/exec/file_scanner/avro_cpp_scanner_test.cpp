@@ -16,12 +16,12 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "exec/file_scanner/file_scanner.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -109,7 +109,11 @@ public:
         broker_scan_range->params = *params;
         broker_scan_range->ranges = ranges;
 
-        return std::make_unique<AvroCppScanner>(_state.get(), _profile, *broker_scan_range, _counter);
+        auto scanner = std::make_unique<AvroCppScanner>(_state.get(), _profile, *broker_scan_range, _counter);
+        EXPECT_EQ("avro", scanner->file_format());
+        // scan_type is not set in TBrokerScanRangeParams, default to LOAD
+        EXPECT_EQ("load", scanner->scan_type());
+        return scanner;
     }
 
 private:
@@ -173,7 +177,7 @@ TEST_F(AvroCppScannerTest, test_read_primitive_types) {
 
     chunk_or = scanner->get_next();
     ASSERT_TRUE(chunk_or.status().is_end_of_file());
-
+    ASSERT_EQ(ranges.size(), scanner->TEST_scanner_counter()->num_files_read);
     scanner->close();
 }
 

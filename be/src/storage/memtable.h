@@ -17,12 +17,13 @@
 #include <atomic>
 #include <ostream>
 
-#include "column/chunk.h"
+#include "column/vectorized_fwd.h"
 #include "exec/sorting/sort_permute.h"
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "storage/chunk_aggregator.h"
 #include "storage/olap_define.h"
+#include "storage/primary_key_encoding_types.h"
 
 namespace starrocks {
 
@@ -84,8 +85,7 @@ public:
 
     ~MemTable();
 
-    // prepare the memtable for writing which must be called before writing any data
-    Status prepare();
+    Status prepare(PrimaryKeyEncodingType pk_encoding_type);
 
     int64_t tablet_id() const { return _tablet_id; }
 
@@ -100,7 +100,8 @@ public:
     // return true suggests caller should flush this memory table
     StatusOr<bool> insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size);
 
-    Status flush(SegmentPB* seg_info = nullptr, bool eos = false, int64_t* flush_data_size = nullptr);
+    Status flush(SegmentPB* seg_info = nullptr, bool eos = false, int64_t* flush_data_size = nullptr,
+                 int64_t slot_idx = -1);
 
     Status finalize();
 
@@ -170,6 +171,7 @@ private:
     size_t _aggregator_bytes_usage = 0;
 
     MemtableStats _stats;
+    PrimaryKeyEncodingType _pk_encoding_type = PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const MemTable& table) {

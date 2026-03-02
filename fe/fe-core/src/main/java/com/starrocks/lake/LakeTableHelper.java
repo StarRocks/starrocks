@@ -119,7 +119,7 @@ public class LakeTableHelper {
 
     static Optional<ShardInfo> getAssociatedShardInfo(PhysicalPartition partition,
                                                       ComputeResource computeResource) throws StarClientException {
-        List<MaterializedIndex> allIndices = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+        List<MaterializedIndex> allIndices = partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
         final long workerGroupId = computeResource.getWorkerGroupId();
         for (MaterializedIndex materializedIndex : allIndices) {
             List<Tablet> tablets = materializedIndex.getTablets();
@@ -174,7 +174,7 @@ public class LakeTableHelper {
         Collection<PhysicalPartition> subPartitions = partition.getSubPartitions();
         Set<Long> needRemoveShardGroupIdSet = new HashSet<>();
         for (PhysicalPartition subPartition : subPartitions) {
-            for (MaterializedIndex index : subPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+            for (MaterializedIndex index : subPartition.getAllMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                 needRemoveShardGroupIdSet.add(index.getShardGroupId());
             }
         }
@@ -214,12 +214,12 @@ public class LakeTableHelper {
      * @param table the table to restore column unique id
      */
     public static void restoreColumnUniqueIdIfNeeded(OlapTable table) {
-        for (MaterializedIndexMeta indexMeta : table.getIndexIdToMeta().values()) {
+        for (MaterializedIndexMeta indexMeta : table.getIndexMetaIdToMeta().values()) {
             List<Column> indexMetaSchema = indexMeta.getSchema();
             // check and restore column unique id for each schema
             if (restoreColumnUniqueId(indexMetaSchema)) {
-                LOG.info("Column unique ids in table {} with index {} have been restored, columns size: {}",
-                        table.getName(), indexMeta.getIndexId(), indexMetaSchema.size());
+                LOG.info("Column unique ids in table {} with index meta {} have been restored, columns size: {}",
+                        table.getName(), indexMeta.getIndexMetaId(), indexMetaSchema.size());
             }
         }
     }
@@ -300,5 +300,30 @@ public class LakeTableHelper {
         } catch (NumberFormatException e) {
             return Optional.empty();
         }
+    }
+
+    /**
+     * Computes the minimum active transaction ID that must be preserved for vacuum operations.
+     * This considers:
+     * 1. Database-level minimum active transaction ID from the global transaction manager
+     * 2. Active schema change jobs' transaction IDs
+     * 3. Active rollup (materialized view) jobs' transaction IDs
+     *
+     * The minimum across all these sources is returned to ensure vacuum does not delete
+     * data still needed by any active operation.
+     *
+     * @param dbId the database ID
+     * @param tableId the table ID
+     * @return the minimum active transaction ID that must be preserved
+     */
+    public static long computeMinActiveTxnId(long dbId, long tableId) {
+        long dbMinTxnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getMinActiveTxnIdOfDatabase(dbId);
+        Optional<Long> schemaChangeMinTxnId = GlobalStateMgr.getCurrentState().getSchemaChangeHandler()
+                .getActiveTxnIdOfTable(tableId);
+        Optional<Long> rollupMinTxnId = GlobalStateMgr.getCurrentState().getRollupHandler()
+                .getActiveTxnIdOfTable(tableId);
+        return Math.min(Math.min(dbMinTxnId, schemaChangeMinTxnId.orElse(Long.MAX_VALUE)),
+                rollupMinTxnId.orElse(Long.MAX_VALUE));
     }
 }

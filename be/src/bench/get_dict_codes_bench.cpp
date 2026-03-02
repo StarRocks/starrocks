@@ -17,11 +17,11 @@
 #include <random>
 #include <vector>
 
+#include "base/simd/batch_run_counter.h"
+#include "base/simd/simd.h"
+#include "base/string/slice.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
-#include "simd/batch_run_counter.h"
-#include "simd/simd.h"
-#include "util/slice.h"
 
 namespace starrocks::parquet {
 
@@ -86,7 +86,8 @@ static void BM_GetDictCodesWithMap(benchmark::State& state) {
         }
 
         auto* dict_nullable_column = down_cast<NullableColumn*>(column.get());
-        auto* dict_value_binary_column = down_cast<BinaryColumn*>(dict_nullable_column->data_column().get());
+        const auto* dict_value_binary_column =
+                down_cast<const BinaryColumn*>(dict_nullable_column->data_column().get());
         auto dict_values_filtered = dict_value_binary_column->get_data();
         if (!has_null) {
             dict_codes.reserve(dict_values_filtered.size());

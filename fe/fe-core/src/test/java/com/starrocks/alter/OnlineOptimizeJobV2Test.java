@@ -169,7 +169,7 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
         OnlineOptimizeJobV2 optimizeJob =
                 spyPreviousTxnFinished((OnlineOptimizeJobV2) alterJobsV2.values().stream().findAny().get());
 
-        MaterializedIndex baseIndex = testPartition.getDefaultPhysicalPartition().getBaseIndex();
+        MaterializedIndex baseIndex = testPartition.getDefaultPhysicalPartition().getLatestBaseIndex();
         LocalTablet baseTablet = (LocalTablet) baseIndex.getTablets().get(0);
         List<Replica> replicas = baseTablet.getImmutableReplicas();
         Replica replica1 = replicas.get(0);
@@ -283,6 +283,11 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
         // Detach the job from schema change handler to prevent background scheduler from changing state
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         schemaChangeHandler.getAlterJobsV2().remove(job.getJobId());
+
+        // Reset job state to PENDING if it has been changed by background scheduler before removal
+        if (job.getJobState() != JobState.PENDING) {
+            job.setJobState(JobState.PENDING);
+        }
 
         OnlineOptimizeJobV2 spy = Mockito.spy(job);
         Mockito.doReturn(true).when(spy).isPreviousLoadFinished();

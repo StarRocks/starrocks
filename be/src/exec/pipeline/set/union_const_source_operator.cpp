@@ -15,6 +15,7 @@
 #include "exec/pipeline/set/union_const_source_operator.h"
 
 #include "column/column_helper.h"
+#include "exprs/expr_executor.h"
 
 namespace starrocks::pipeline {
 
@@ -41,7 +42,7 @@ StatusOr<ChunkPtr> UnionConstSourceOperator::pull_chunk(starrocks::RuntimeState*
 
             RETURN_IF_HAS_ERROR(_const_expr_lists[_next_processed_row_index + row_i]);
             auto cur_row_dst_column =
-                    ColumnHelper::move_column(dst_slot->type(), dst_slot->is_nullable(), src_column, 1);
+                    ColumnHelper::move_column(dst_slot->type(), dst_slot->is_nullable(), std::move(src_column), 1);
             dst_column->append(*cur_row_dst_column, 0, 1);
         }
 
@@ -58,11 +59,11 @@ Status UnionConstSourceOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
 
     for (const vector<ExprContext*>& exprs : _const_expr_lists) {
-        RETURN_IF_ERROR(Expr::prepare(exprs, state));
+        RETURN_IF_ERROR(ExprExecutor::prepare(exprs, state));
     }
 
     for (const vector<ExprContext*>& exprs : _const_expr_lists) {
-        RETURN_IF_ERROR(Expr::open(exprs, state));
+        RETURN_IF_ERROR(ExprExecutor::open(exprs, state));
     }
 
     return Status::OK();
@@ -70,7 +71,7 @@ Status UnionConstSourceOperatorFactory::prepare(RuntimeState* state) {
 
 void UnionConstSourceOperatorFactory::close(RuntimeState* state) {
     for (const vector<ExprContext*>& exprs : _const_expr_lists) {
-        Expr::close(exprs, state);
+        ExprExecutor::close(exprs, state);
     }
 
     OperatorFactory::close(state);

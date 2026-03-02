@@ -14,6 +14,7 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/fragment_context.h"
 #include "gen_cpp/DataSinks_types.h"
@@ -23,7 +24,6 @@
 #include "runtime/data_stream_mgr.h"
 #include "runtime/data_stream_recvr.h"
 #include "runtime/runtime_state.h"
-#include "testutil/assert.h"
 
 namespace starrocks::pipeline {
 
@@ -65,6 +65,7 @@ public:
         _fragment_context->set_fragment_instance_id(_fragment_id);
         _fragment_context->set_runtime_state(std::shared_ptr<RuntimeState>{_runtime_state});
         _runtime_state->set_fragment_ctx(_fragment_context.get());
+        _runtime_state->set_fragment_dict_state(_fragment_context->dict_state());
 
         TNetworkAddress address;
         address.__set_hostname(BackendOptions::get_local_ip());
@@ -133,14 +134,14 @@ TEST_F(ExchangePassThroughTest, test_exchange_pass_through) {
     while (sent_bytes + chunk_bytes < config::max_transmit_batched_bytes) {
         sent_bytes += chunk_bytes;
         exchange_sink->push_chunk(_runtime_state.get(), _chunk_builder.get_next());
-        std::unique_ptr<Chunk> received_chunk = nullptr;
+        ChunkUniquePtr received_chunk = nullptr;
         std::ignore = _recvr->get_chunk_for_pipeline(&received_chunk, driver_sequence);
         EXPECT_TRUE(received_chunk == nullptr);
     }
 
     // once the sent bytes exceeds max_transmit_batched_bytes, the data is sent.
     exchange_sink->push_chunk(_runtime_state.get(), _chunk_builder.get_next());
-    std::unique_ptr<Chunk> received_chunk = nullptr;
+    ChunkUniquePtr received_chunk = nullptr;
     std::ignore = _recvr->get_chunk_for_pipeline(&received_chunk, driver_sequence);
     EXPECT_TRUE(received_chunk != nullptr);
 

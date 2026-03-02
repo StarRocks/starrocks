@@ -19,8 +19,10 @@ import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
 import com.starrocks.connector.iceberg.IcebergUtil;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.type.DateType;
+import com.starrocks.type.VarcharType;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocatedFileStatus;
@@ -44,6 +46,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 import static com.starrocks.connector.iceberg.IcebergUtil.fileName;
@@ -59,6 +62,7 @@ public class RemoveOrphanFilesProcedure extends IcebergTableProcedure {
     private static final String PROCEDURE_NAME = "remove_orphan_files";
 
     public static final String OLDER_THAN = "older_than";
+    public static final String LOCATION = "location";
 
     private static final RemoveOrphanFilesProcedure INSTANCE = new RemoveOrphanFilesProcedure();
 
@@ -70,17 +74,18 @@ public class RemoveOrphanFilesProcedure extends IcebergTableProcedure {
         super(
                 PROCEDURE_NAME,
                 List.of(
-                        new NamedArgument(OLDER_THAN, DateType.DATETIME, false)
+                        new NamedArgument(OLDER_THAN, DateType.DATETIME, false),
+                        new NamedArgument(LOCATION, VarcharType.VARCHAR, false)
                 ),
                 IcebergTableOperation.REMOVE_ORPHAN_FILES
         );
     }
 
     @Override
-    public void execute(IcebergTableProcedureContext context, Map<String, ConstantOperator> args) {
-        if (args.size() > 1) {
+    public ShowResultSet execute(IcebergTableProcedureContext context, Map<String, ConstantOperator> args) {
+        if (args.size() > 2) {
             throw new StarRocksConnectorException("invalid args. only support " +
-                    "`older_than` in the remove orphan files operation");
+                    "`older_than` and `location` in the remove orphan files operation");
         }
 
         long olderThanMillis;
@@ -97,7 +102,18 @@ public class RemoveOrphanFilesProcedure extends IcebergTableProcedure {
 
         Table table = context.table();
         if (table.currentSnapshot() == null) {
-            return;
+            return null;
+        }
+        if (table.location() == null || table.location().isEmpty()) {
+            throw new StarRocksConnectorException("table location is empty");
+        }
+
+        String location;
+        ConstantOperator locationArg = args.get(LOCATION);
+        if (locationArg != null) {
+            location = validateAndResolveScanLocation(locationArg.getVarchar(), table.location());
+        } else {
+            location = table.location();
         }
 
         Set<String> processedManifestFilePaths = new HashSet<>();
@@ -134,7 +150,44 @@ public class RemoveOrphanFilesProcedure extends IcebergTableProcedure {
 
         validFileNames.add("version-hint.text");
 
-        scanAndDeleteInvalidFiles(table.location(), olderThanMillis, validFileNames, context.hdfsEnvironment());
+        scanAndDeleteInvalidFiles(location, olderThanMillis, validFileNames, context.hdfsEnvironment());
+        return null;
+    }
+
+    /**
+     * Validates that the given location is non-empty and is the table root or a subdirectory of it
+     * Returns the normalized path for use in scanning.
+     */
+    private static String validateAndResolveScanLocation(String location, String tableLocation) {
+        if (location == null || location.isEmpty()) {
+            throw new StarRocksConnectorException("invalid argument value for %s, expected non-empty string",
+                    LOCATION);
+        }
+
+        if (tableLocation.equals(location)) {
+            return location;
+        }
+
+        URI tableUri = new Path(tableLocation).toUri();
+        URI locationUri = new Path(location).toUri();
+        String tablePath = stripTrailingSlash(tableUri.getPath());
+        String locationPath = stripTrailingSlash(locationUri.getPath());
+
+        if (!Objects.equals(tableUri.getScheme(), locationUri.getScheme()) ||
+                !Objects.equals(tableUri.getAuthority(), locationUri.getAuthority()) ||
+                !locationPath.startsWith(tablePath + Path.SEPARATOR)) {
+            throw new StarRocksConnectorException("invalid argument value for %s, location must be a subdirectory of " +
+                    "table location %s, got %s", LOCATION, tableLocation, location);
+        }
+
+        return locationUri.toString();
+    }
+
+    private static String stripTrailingSlash(String path) {
+        if (path == null || path.isEmpty()) {
+            return path;
+        }
+        return path.endsWith("/") ? path.substring(0, path.length() - 1) : path;
     }
 
     private ManifestReader<? extends ContentFile<?>> readerForManifest(Table table, ManifestFile manifest) {
@@ -167,7 +220,8 @@ public class RemoveOrphanFilesProcedure extends IcebergTableProcedure {
                 filesToDelete.clear();
             }
         } catch (IOException e) {
-            throw new StarRocksConnectorException("Failed accessing data: ", e);
+            String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getName();
+            throw new StarRocksConnectorException("Failed accessing data: " + msg, e);
         }
     }
 

@@ -22,8 +22,10 @@
 #include <mutex>
 #include <thread>
 
+#include "base/testutil/assert.h"
 #include "butil/time.h"
 #include "common/object_pool.h"
+#include "common/runtime_profile.h"
 #include "exec/pipeline/empty_set_operator.h"
 #include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/noop_sink_operator.h"
@@ -33,8 +35,6 @@
 #include "exec/pipeline/schedule/pipeline_timer.h"
 #include "exec/pipeline/schedule/utils.h"
 #include "gtest/gtest.h"
-#include "testutil/assert.h"
-#include "util/runtime_profile.h"
 
 #pragma GCC push_options
 #pragma GCC optimize("no-inline")
@@ -169,6 +169,7 @@ public:
         _runtime_state->_obj_pool = std::make_shared<ObjectPool>();
         _runtime_state->set_query_ctx(_dummy_query_ctx.get());
         _runtime_state->set_fragment_ctx(_dummy_fragment_ctx.get());
+        _runtime_state->set_fragment_dict_state(_dummy_fragment_ctx->dict_state());
         _runtime_state->_profile = std::make_shared<RuntimeProfile>("dummy");
         _dummy_fragment_ctx->set_runtime_state(std::move(_runtime_state));
         _runtime_state = _dummy_fragment_ctx->runtime_state_ptr();
@@ -209,6 +210,8 @@ TEST_F(PipelineObserverTest, basic_test) {
 
     SimpleTestContext tx(factories, _exec_group.get(), _dummy_fragment_ctx.get(), _dummy_query_ctx.get());
     ASSERT_OK(tx.driver->prepare(_runtime_state.get()));
+    ASSERT_OK(tx.driver->prepare_local_state(_runtime_state.get()));
+
     const auto& driver = tx.driver;
     const auto& driver_queue = tx.driver_queue;
 
@@ -231,6 +234,8 @@ TEST_F(PipelineObserverTest, test_obs) {
     factories.emplace_back(std::make_shared<NoopSinkOperatorFactory>(2, 3));
     SimpleTestContext tx(factories, _exec_group.get(), _dummy_fragment_ctx.get(), _dummy_query_ctx.get());
     ASSERT_OK(tx.driver->prepare(_runtime_state.get()));
+    ASSERT_OK(tx.driver->prepare_local_state(_runtime_state.get()));
+
     const auto& driver = tx.driver;
 
     driver->set_in_blocked(true);
@@ -250,6 +255,8 @@ TEST_F(PipelineObserverTest, test_cancel) {
 
     SimpleTestContext tx(factories, _exec_group.get(), _dummy_fragment_ctx.get(), _dummy_query_ctx.get());
     ASSERT_OK(tx.driver->prepare(_runtime_state.get()));
+    ASSERT_OK(tx.driver->prepare_local_state(_runtime_state.get()));
+
     const auto& driver = tx.driver;
 
     driver->set_driver_state(DriverState::INPUT_EMPTY);
@@ -268,6 +275,8 @@ TEST_F(PipelineObserverTest, test_add_blocked_driver) {
 
     SimpleTestContext tx(factories, _exec_group.get(), _dummy_fragment_ctx.get(), _dummy_query_ctx.get());
     ASSERT_OK(tx.driver->prepare(_runtime_state.get()));
+    ASSERT_OK(tx.driver->prepare_local_state(_runtime_state.get()));
+
     const auto& driver = tx.driver;
 
     driver->set_driver_state(DriverState::INPUT_EMPTY);
@@ -281,6 +290,8 @@ TEST_F(PipelineObserverTest, race_scheduler_observer) {
 
     SimpleTestContext tx(factories, _exec_group.get(), _dummy_fragment_ctx.get(), _dummy_query_ctx.get());
     ASSERT_OK(tx.driver->prepare(_runtime_state.get()));
+    ASSERT_OK(tx.driver->prepare_local_state(_runtime_state.get()));
+
     const auto& driver = tx.driver;
 
     driver->set_driver_state(DriverState::INPUT_EMPTY);

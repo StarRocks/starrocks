@@ -26,12 +26,13 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
+import com.starrocks.http.rest.ActionStatus;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -42,16 +43,20 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.WarehouseLoadInfoBuilder;
 import com.starrocks.warehouse.WarehouseLoadStatusInfo;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import io.netty.handler.codec.http.HttpHeaders;
+import org.apache.arrow.util.VisibleForTesting;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -63,7 +68,11 @@ import java.util.stream.Collectors;
 
 public class StreamLoadMgr implements MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(StreamLoadMgr.class);
-    private static final int MEMORY_JOB_SAMPLES = 10;
+
+    // Task types that need to be persisted to the image file.
+    // The order matters: it determines the serialization/deserialization order in save() and load().
+    private static final List<Class<? extends AbstractStreamLoadTask>> PERSISTENT_TASK_TYPES =
+            Arrays.asList(StreamLoadTask.class, StreamLoadMultiStmtTask.class);
 
     // label -> AbstractStreamLoadTask (unified management)
     private Map<String, AbstractStreamLoadTask> idToStreamLoadTask;
@@ -132,6 +141,18 @@ public class StreamLoadMgr implements MemoryTrackable {
                 task.beginTxnFromFrontend(resp);
                 return;
             }
+
+            // Check if label already exists in transaction history (like basic transaction does)
+            TransactionState existingTxn = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                    .getLabelTransactionState(dbId, label);
+            if (existingTxn != null && existingTxn.getTransactionStatus() != TransactionStatus.ABORTED) {
+                resp.status = ActionStatus.LABEL_ALREADY_EXISTS;
+                resp.msg = String.format("Label [%s] has already been used.", label);
+                resp.addResultEntry("ExistingJobStatus", existingTxn.getTransactionStatus().name());
+                resp.addResultEntry("Db", dbName);
+                return;
+            }
+
             task = createMultiStatementLoadTask(db, label, user, clientIp, timeoutMillis, computeResource);
             task.beginTxnFromFrontend(resp);
             GlobalStateMgr.getCurrentState().getEditLog().logCreateMultiStmtStreamLoadJob(
@@ -285,8 +306,31 @@ public class StreamLoadMgr implements MemoryTrackable {
         return db;
     }
 
-    // add load tasks and also add callback factory
+    /**
+     * Adds a stream load task to the manager and registers it for transaction state callbacks.
+     *
+     * <p>This is a convenience method that calls {@link #addLoadTask(AbstractStreamLoadTask, boolean)}
+     * with {@code addTxnCallback} set to {@code true}.</p>
+     *
+     * @param task the stream load task to add
+     */
     public void addLoadTask(AbstractStreamLoadTask task) {
+        addLoadTask(task, true);
+    }
+
+    /**
+     * Adds a stream load task to the manager with optional transaction callback registration.
+     *
+     * <p>This method registers the task for tracking and management. If {@code addTxnCallback} is
+     * {@code true}, the task is also registered as a transaction state change callback.
+     *
+     * <p>The method also performs automatic cleanup of old tasks if the task count exceeds the
+     * configured threshold.</p>
+     *
+     * @param task the stream load task to add
+     * @param addTxnCallback whether to register the task as a transaction state change callback
+     */
+    public void addLoadTask(AbstractStreamLoadTask task, boolean addTxnCallback) {
         if (task instanceof StreamLoadTask && ((StreamLoadTask) task).isSyncStreamLoad()) {
             txnIdToSyncStreamLoadTasks.put(task.getTxnId(), (StreamLoadTask) task);
         }
@@ -314,7 +358,9 @@ public class StreamLoadMgr implements MemoryTrackable {
         idToStreamLoadTask.put(label, task);
 
         // register txn state listener
-        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().addCallback(task);
+        if (addTxnCallback) {
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().addCallback(task);
+        }
     }
 
     public TNetworkAddress executeLoadTask(String label, int channelId, HttpHeaders headers,
@@ -322,11 +368,12 @@ public class StreamLoadMgr implements MemoryTrackable {
             throws StarRocksException {
         boolean needUnLock = true;
         readLock();
+        AbstractStreamLoadTask task = null;
         try {
             if (!idToStreamLoadTask.containsKey(label)) {
                 throw new StarRocksException("stream load task " + label + " does not exist");
             }
-            AbstractStreamLoadTask task = idToStreamLoadTask.get(label);
+            task = idToStreamLoadTask.get(label);
 
             // check whether the database is consistent with the transaction
             if (!task.getDBName().equals(dbName)) {
@@ -338,9 +385,27 @@ public class StreamLoadMgr implements MemoryTrackable {
             needUnLock = false;
             TNetworkAddress redirectAddress = task.tryLoad(channelId, tableName, resp);
             if (redirectAddress != null || !resp.stateOK() || resp.containMsg()) {
+                // Check if LOAD failed - for multi-statement, cancel the task
+                if (!resp.stateOK() && task instanceof StreamLoadMultiStmtTask) {
+                    ((StreamLoadMultiStmtTask) task).cancelOnException(resp.msg);
+                }
                 return redirectAddress;
             }
-            return task.executeTask(channelId, tableName, headers, resp);
+            TNetworkAddress result = task.executeTask(channelId, tableName, headers, resp);
+            // Check if LOAD failed after executeTask - for multi-statement, cancel the task
+            // Note: StreamLoadTask.executeTask() catches exceptions internally and sets error msg
+            if (!resp.stateOK() && task instanceof StreamLoadMultiStmtTask) {
+                ((StreamLoadMultiStmtTask) task).cancelOnException(resp.msg);
+            }
+            return result;
+        } catch (Exception e) {
+            // For multi-statement stream load, auto-abort the transaction on LOAD failure
+            // This is consistent with basic transaction behavior where LOAD failure
+            // auto-aborts the transaction.
+            if (task instanceof StreamLoadMultiStmtTask) {
+                ((StreamLoadMultiStmtTask) task).cancelOnException(e.getMessage());
+            }
+            throw e;
         } finally {
             if (needUnLock) {
                 readUnlock();
@@ -428,15 +493,28 @@ public class StreamLoadMgr implements MemoryTrackable {
 
     // Remove old stream load tasks from idToStreamLoadTask and dbToLabelToStreamLoadTask
     // This function is called periodically.
-    // Cancelled and Committed task will be removed after Config.stream_load_task_keep_max_second seconds
+    // Cancelled and Committed task will be removed after Config.stream_load_task_keep_max_second seconds.
+    // Also retries abort for MultiStmtTasks stuck in ABORTING state (background compensation).
     public void cleanOldStreamLoadTasks(boolean isForce) {
         LOG.debug("begin to clean old stream load tasks");
+
+        List<StreamLoadMultiStmtTask> abortingTasks = new ArrayList<>();
+
         writeLock();
         try {
             Iterator<Map.Entry<String, AbstractStreamLoadTask>> iterator = idToStreamLoadTask.entrySet().iterator();
             long currentMs = System.currentTimeMillis();
             while (iterator.hasNext()) {
                 AbstractStreamLoadTask streamLoadTask = iterator.next().getValue();
+
+                if (streamLoadTask instanceof StreamLoadMultiStmtTask) {
+                    StreamLoadMultiStmtTask multiTask = (StreamLoadMultiStmtTask) streamLoadTask;
+                    if (multiTask.isAborting()) {
+                        abortingTasks.add(multiTask);
+                        continue;
+                    }
+                }
+
                 if (streamLoadTask.checkNeedRemove(currentMs, isForce)) {
                     unprotectedRemoveTaskFromDb(streamLoadTask);
                     iterator.remove();
@@ -454,6 +532,13 @@ public class StreamLoadMgr implements MemoryTrackable {
             }
         } finally {
             writeUnlock();
+        }
+
+        if (!abortingTasks.isEmpty()) {
+            long currentMs = System.currentTimeMillis();
+            for (StreamLoadMultiStmtTask task : abortingTasks) {
+                task.retryAbortIfNeeded(currentMs);
+            }
         }
     }
 
@@ -598,13 +683,13 @@ public class StreamLoadMgr implements MemoryTrackable {
         return idToStreamLoadTask.get(label);
     }
 
-    public StreamLoadTask getTaskById(long id) {
+    public AbstractStreamLoadTask getTaskById(long id) {
         readLock();
         try {
             List<AbstractStreamLoadTask> taskList =
                     idToStreamLoadTask.values().stream().filter(streamLoadTask -> id == streamLoadTask.getId())
-                            .collect(Collectors.toList());
-            return taskList.isEmpty() ? null : (StreamLoadTask) taskList.get(0);
+                            .toList();
+            return taskList.isEmpty() ? null : taskList.get(0);
         } finally {
             readUnlock();
         }
@@ -647,29 +732,32 @@ public class StreamLoadMgr implements MemoryTrackable {
         return idToStreamLoadTask.size();
     }
 
-    public int numOfStreamLoadTask() {
-        int count = 0;
-        for (AbstractStreamLoadTask streamLoadTask : idToStreamLoadTask.values()) {
-            if (streamLoadTask instanceof StreamLoadTask) {
-                ++count;
-            }
-        }
-        return count;
+    @VisibleForTesting
+    public List<AbstractStreamLoadTask> getAllTasks() {
+        return new ArrayList<>(idToStreamLoadTask.values());
     }
 
     public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
-        int numJson = 2 + idToStreamLoadTask.size();
-        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.STREAM_LOAD_MGR, numJson);
-        writer.writeInt(numOfStreamLoadTask());
-        for (AbstractStreamLoadTask streamLoadTask : idToStreamLoadTask.values()) {
-            if (streamLoadTask instanceof StreamLoadTask) {
-                writer.writeJson(streamLoadTask);
+        int[] numTasksForEachType = new int[PERSISTENT_TASK_TYPES.size()];
+        for (AbstractStreamLoadTask task : idToStreamLoadTask.values()) {
+            for (int i = 0; i < PERSISTENT_TASK_TYPES.size(); i++) {
+                Class<? extends AbstractStreamLoadTask> clazz = PERSISTENT_TASK_TYPES.get(i);
+                if (clazz.isInstance(task)) {
+                    numTasksForEachType[i] += 1;
+                    break;
+                }
             }
         }
-        writer.writeInt(idToStreamLoadTask.size() - numOfStreamLoadTask());
-        for (AbstractStreamLoadTask streamLoadTask : idToStreamLoadTask.values()) {
-            if (!(streamLoadTask instanceof StreamLoadTask)) {
-                writer.writeJson(streamLoadTask);
+        int totalNumTasks = Arrays.stream(numTasksForEachType).sum();
+        int numJson = PERSISTENT_TASK_TYPES.size() + totalNumTasks;
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.STREAM_LOAD_MGR, numJson);
+        for (int i = 0; i < PERSISTENT_TASK_TYPES.size(); i++) {
+            writer.writeInt(numTasksForEachType[i]);
+            Class<? extends AbstractStreamLoadTask> clazz = PERSISTENT_TASK_TYPES.get(i);
+            for (AbstractStreamLoadTask task : idToStreamLoadTask.values()) {
+                if (clazz.isInstance(task)) {
+                    writer.writeJson(task);
+                }
             }
         }
 
@@ -678,26 +766,18 @@ public class StreamLoadMgr implements MemoryTrackable {
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         long currentMs = System.currentTimeMillis();
-        reader.readCollection(StreamLoadTask.class, loadTask -> {
-            loadTask.init();
-            // discard expired task right away
-            if (loadTask.checkNeedRemove(currentMs, false)) {
-                LOG.info("discard expired task: {}", loadTask.getLabel());
-                return;
-            }
+        for (Class<? extends AbstractStreamLoadTask> clazz : PERSISTENT_TASK_TYPES) {
+            reader.readCollection(clazz, loadTask -> {
+                loadTask.init();
+                // discard expired task right away
+                if (loadTask.checkNeedRemove(currentMs, false)) {
+                    LOG.info("discard expired task, type: {}, label: {}", clazz.getSimpleName(), loadTask.getLabel());
+                    return;
+                }
 
-            addLoadTask(loadTask);
-        });
-        reader.readCollection(StreamLoadMultiStmtTask.class, loadTask -> {
-            loadTask.init();
-            // discard expired task right away
-            if (loadTask.checkNeedRemove(currentMs, false)) {
-                LOG.info("discard expired task: {}", loadTask.getLabel());
-                return;
-            }
-
-            addLoadTask(loadTask);
-        });
+                addLoadTask(loadTask);
+            });
+        }
     }
 
     @Override
@@ -706,12 +786,8 @@ public class StreamLoadMgr implements MemoryTrackable {
     }
 
     @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
-        List<Object> samples = idToStreamLoadTask.values()
-                .stream()
-                .limit(MEMORY_JOB_SAMPLES)
-                .collect(Collectors.toList());
-        return Lists.newArrayList(Pair.create(samples, (long) idToStreamLoadTask.size()));
+    public long estimateSize() {
+        return Estimator.estimate(idToStreamLoadTask, 20);
     }
 
     public long getLatestFinishTime() {

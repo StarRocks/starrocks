@@ -20,9 +20,18 @@
 #include "agent/agent_common.h"
 #include "agent/agent_server.h"
 #include "agent/publish_version.h"
-#include "butil/file_util.h"
+#include "base/concurrency/await.h"
+#include "base/failpoint/fail_point.h"
+#include "base/path/file_util.h"
+#include "base/testutil/assert.h"
+#include "base/time/time.h"
+#include "base/time/timezone_utils.h"
 #include "column/column_helper.h"
 #include "common/config.h"
+#include "common/system/cpu_info.h"
+#include "common/system/disk_info.h"
+#include "common/system/mem_info.h"
+#include "common/thread/threadpool.h"
 #include "exec/pipeline/query_context.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/AgentService_types.h"
@@ -31,7 +40,6 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/time_types.h"
 #include "runtime/user_function_cache.h"
 #include "storage/chunk_helper.h"
 #include "storage/delta_writer.h"
@@ -45,16 +53,8 @@
 #include "storage/tablet_meta.h"
 #include "storage/txn_manager.h"
 #include "storage/update_manager.h"
-#include "testutil/assert.h"
-#include "util/await.h"
-#include "util/cpu_info.h"
-#include "util/disk_info.h"
-#include "util/failpoint/fail_point.h"
+#include "types/time_types.h"
 #include "util/logging.h"
-#include "util/mem_info.h"
-#include "util/threadpool.h"
-#include "util/time.h"
-#include "util/timezone_utils.h"
 
 namespace starrocks {
 
@@ -154,7 +154,7 @@ public:
         auto chunk = ChunkHelper::new_chunk(schema, 1024);
         for (size_t i = 0; i < 1024; ++i) {
             test_data.push_back("well" + std::to_string(i));
-            auto& cols = chunk->columns();
+            auto cols = chunk->mutable_columns();
             cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
             Slice field_1(test_data[i]);
             cols[1]->append_datum(Datum(field_1));
@@ -231,7 +231,7 @@ TEST_F(PublishVersionTaskTest, test_publish_version) {
         for (size_t i = 0; i < 1024; ++i) {
             indexes.push_back(i);
             test_data.push_back("well" + std::to_string(i));
-            auto& cols = chunk->columns();
+            auto cols = chunk->mutable_columns();
             cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
             Slice field_1(test_data[i]);
             cols[1]->append_datum(Datum(field_1));
@@ -334,7 +334,7 @@ TEST_F(PublishVersionTaskTest, test_publish_version2) {
         for (size_t i = 0; i < 1024; ++i) {
             indexes.push_back(i);
             test_data.push_back("well" + std::to_string(i));
-            auto& cols = chunk->columns();
+            auto cols = chunk->mutable_columns();
             cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
             Slice field_1(test_data[i]);
             cols[1]->append_datum(Datum(field_1));
@@ -422,7 +422,7 @@ TEST_F(PublishVersionTaskTest, test_publish_version_cancellation) {
         for (size_t i = 0; i < 128; ++i) {
             indexes.push_back(i);
             test_data.push_back("well" + std::to_string(i));
-            auto& cols = chunk->columns();
+            auto cols = chunk->mutable_columns();
             cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
             Slice field_1(test_data[i]);
             cols[1]->append_datum(Datum(field_1));
@@ -574,7 +574,7 @@ TEST_F(PublishVersionTaskTest, test_publish_version_overwrite_failed) {
         indexes.reserve(8);
         for (size_t i = 0; i < 8; ++i) {
             indexes.push_back(i);
-            auto& cols = chunk->columns();
+            auto cols = chunk->mutable_columns();
             cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
             std::string s_str = std::string("owf") + std::to_string(i);
             Slice s(s_str);
@@ -689,7 +689,7 @@ TEST_F(PublishVersionTaskTest, test_publish_version_tablet_dropped) {
         indexes.reserve(8);
         for (size_t i = 0; i < 8; ++i) {
             indexes.push_back(i);
-            auto& cols = chunk->columns();
+            auto cols = chunk->mutable_columns();
             cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
             std::string s_str = std::string("dropped") + std::to_string(i);
             Slice s(s_str);

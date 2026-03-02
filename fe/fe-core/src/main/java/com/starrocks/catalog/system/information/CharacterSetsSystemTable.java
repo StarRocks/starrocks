@@ -32,9 +32,9 @@ public class CharacterSetsSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("CHARACTER_SET_NAME", TypeFactory.createVarchar(512))
-                        .column("DEFAULT_COLLATE_NAME", TypeFactory.createVarchar(64))
-                        .column("DESCRIPTION", TypeFactory.createVarchar(64))
+                        .column("CHARACTER_SET_NAME", TypeFactory.createVarcharType(512))
+                        .column("DEFAULT_COLLATE_NAME", TypeFactory.createVarcharType(64))
+                        .column("DESCRIPTION", TypeFactory.createVarcharType(64))
                         .column("MAXLEN", IntegerType.BIGINT)
                         .build(), TSchemaTableType.SCH_CHARSETS);
     }

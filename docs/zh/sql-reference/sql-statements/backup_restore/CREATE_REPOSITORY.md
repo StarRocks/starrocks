@@ -135,3 +135,16 @@ PROPERTIES(
     "aws.s3.endpoint" = "http://minio:9000"
 );
 ```
+
+示例五：在启用了 Kerberos 的 Apache™ Hadoop® 集群中创建名为 `kerberos_repo` 的仓库。
+
+```SQL
+CREATE REPOSITORY kerberos_repo
+WITH BROKER 
+ON LOCATION "hdfs://nameservices1/user/hive/backup"
+PROPERTIES(
+ "hadoop.security.authentication" = "kerberos",
+ "kerberos_principal" = "sr/cs01.starrocks.com@STARROCKS.COM",
+ "kerberos_keytab" = "/home/disk1/user1/sr.keytab"
+);
+```

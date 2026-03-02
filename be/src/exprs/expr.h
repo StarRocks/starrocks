@@ -41,17 +41,18 @@
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
-#include "exprs/expr_context.h"
 #include "exprs/function_context.h"
+#include "exprs/jit/expr_jit_types.h"
 #include "gen_cpp/Opcodes_types.h"
 #include "runtime/descriptors.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 
 class BloomFilter;
 class Expr;
 class ObjectPool;
+struct NgramBloomFilterReaderOptions;
 class RuntimeState;
 class TColumnValue;
 class TExpr;
@@ -60,12 +61,8 @@ class Literal;
 struct UserFunctionCacheEntry;
 
 class Chunk;
-class ColumnRef;
+class ExprContext;
 class ColumnPredicateRewriter;
-class JITContext;
-class JITExpr;
-struct JitScore;
-struct LLVMDatum;
 class LambdaFunction;
 
 // This is the superclass of all expr evaluation nodes.
@@ -101,6 +98,7 @@ public:
 
     const TypeDescriptor& type() const { return _type; }
     const std::vector<Expr*>& children() const { return _children; }
+    std::vector<Expr*>& mutable_children() { return _children; }
 
     TExprOpcode::type op() const { return _opcode; }
 
@@ -146,56 +144,6 @@ public:
 
     virtual void for_each_slot_id(const std::function<void(SlotId)>& cb) const;
 
-    /// Create expression tree from the list of nodes contained in texpr within 'pool'.
-    /// Returns the root of expression tree in 'expr' and the corresponding ExprContext in
-    /// 'ctx'.
-    static Status create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext** ctx, RuntimeState* state,
-                                   bool can_jit = false);
-
-    /// Creates vector of ExprContexts containing exprs from the given vector of
-    /// TExprs within 'pool'.  Returns an error if any of the individual conversions caused
-    /// an error, otherwise OK.
-    static Status create_expr_trees(ObjectPool* pool, const std::vector<TExpr>& texprs, std::vector<ExprContext*>* ctxs,
-                                    RuntimeState* state, bool can_jit = false);
-
-    /// Creates an expr tree for the node rooted at 'node_idx' via depth-first traversal.
-    /// parameters
-    ///   nodes: vector of thrift expression nodes to be translated
-    ///   parent: parent of node at node_idx (or NULL for node_idx == 0)
-    ///   node_idx:
-    ///     in: root of TExprNode tree
-    ///     out: next node in 'nodes' that isn't part of tree
-    ///   root_expr: out: root of constructed expr tree
-    ///   ctx: out: context of constructed expr tree
-    /// return
-    ///   Status.ok() if successful
-    ///   !Status.ok() if tree is inconsistent or corrupt
-    static Status create_tree_from_thrift(ObjectPool* pool, const std::vector<TExprNode>& nodes, Expr* parent,
-                                          int* node_idx, Expr** root_expr, ExprContext** ctx, RuntimeState* state);
-
-    static Status create_tree_from_thrift_with_jit(ObjectPool* pool, const std::vector<TExprNode>& nodes, Expr* parent,
-                                                   int* node_idx, Expr** root_expr, ExprContext** ctx,
-                                                   RuntimeState* state);
-
-    /// Convenience function for preparing multiple expr trees.
-    static Status prepare(const std::vector<ExprContext*>& ctxs, RuntimeState* state);
-    static Status prepare(const std::map<SlotId, ExprContext*>& ctxs, RuntimeState* state);
-
-    /// Convenience function for opening multiple expr trees.
-    static Status open(const std::vector<ExprContext*>& ctxs, RuntimeState* state);
-    static Status open(const std::map<SlotId, ExprContext*>& ctxs, RuntimeState* state);
-
-    /// Clones each ExprContext for multiple expr trees. 'new_ctxs' must be non-NULL.
-    /// Idempotent: if '*new_ctxs' is empty, a clone of each context in 'ctxs' will be added
-    /// to it, and if non-empty, it is assumed CloneIfNotExists() was already called and the
-    /// call is a no-op. The new ExprContexts are created in provided object pool.
-    static Status clone_if_not_exists(RuntimeState* state, ObjectPool* pool, const std::vector<ExprContext*>& ctxs,
-                                      std::vector<ExprContext*>* new_ctxs);
-
-    /// Convenience function for closing multiple expr trees.
-    static void close(const std::vector<ExprContext*>& ctxs, RuntimeState* state);
-    static void close(const std::map<SlotId, ExprContext*>& ctxs, RuntimeState* state);
-
     /// Convenience functions for closing a list of ScalarExpr.
     static void close(const std::vector<Expr*>& exprs);
 
@@ -216,37 +164,9 @@ public:
     // TODO:(murphy) remove this unchecked evaluate
     ColumnPtr evaluate(ExprContext* context, Chunk* ptr) { return evaluate_checked(context, ptr).value(); }
 
-    // Get the first column ref in expr.
-    ColumnRef* get_column_ref();
-
 #ifdef STARROCKS_JIT_ENABLE
-    StatusOr<LLVMDatum> generate_ir(ExprContext* context, JITContext* jit_ctx);
-
-    virtual StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx);
-
     // Return true if this expression supports JIT compilation.
     virtual bool is_compilable(RuntimeState* state) const { return false; }
-
-    std::string jit_func_name(RuntimeState* state) const;
-
-    virtual std::string jit_func_name_impl(RuntimeState* state) const;
-
-    std::string jit_func_name() const;
-
-    // This function will collect all uncompiled expressions in this expression tree.
-    // The uncompiled expressions are those expressions which are not supported by JIT, it will become the input of JIT function.
-    void get_uncompilable_exprs(std::vector<Expr*>& exprs, RuntimeState* state);
-
-    // This method attempts to traverse the entire expression tree from the current expression downwards, seeking to replace expressions with JITExprs.
-    // This method searches from top to bottom for compilable expressions.
-    // Once a compilable expression is found, it skips over its compilable subexpressions and continues the search downwards.
-    // TODO(Yueyang): The algorithm is imperfect and may further be optimized in the future.
-    Status replace_compilable_exprs(Expr** expr, ObjectPool* pool, RuntimeState* state, bool& replaced);
-
-    // Establishes whether the current expression should undergo compilation.
-    // if adaptive, the valuable expressions should take the majority, i.e., `jit_score_ratio` of all expressions,
-    // but case_when expr is especial, refer to its `compute_jit_score()`.
-    bool should_compile(RuntimeState* state) const;
 
     // The valuable expressions get 1 score per expression, others get 0 score per expression, including
     // comparison expr, logical expr, branch expr, div and mod.
@@ -267,6 +187,16 @@ public:
 #endif
     SlotId max_used_slot_id() const;
 
+    // For each child of this expression, call the callback function.
+    // NOTE: This method only call the callback function for the children of this expression no recursively.
+    // If you want to call it recursively, you can do it like this:
+    // Status do_action(Expr* expr) {
+    //     RETURN_IF_ERROR(action_impl(expr));
+    //     RETURN_IF_ERROR(expr->do_for_each_child(do_action));
+    //     return Status::OK();
+    // }
+    virtual Status do_for_each_child(const std::function<Status(Expr*)>& callback);
+
 protected:
     friend class MathFunctions;
     friend class StringFunctions;
@@ -277,6 +207,7 @@ protected:
     friend class ColumnPredicateRewriter;
     friend class LambdaFunction;
     friend class ArrayMapExpr;
+    friend class ArraySortLambdaExpr;
 
     explicit Expr(TypeDescriptor type);
     explicit Expr(const TExprNode& node);
@@ -343,6 +274,8 @@ protected:
     // In storage engine, Is this expr only used for index filter(so expr filter phase will skip this expr). This info is passed from FE
     bool _is_index_only_filter = false;
 
+    bool _is_nondeterministic = false;
+
     // analysis is done, types are fixed at this point
     TypeDescriptor _type;
     std::vector<Expr*> _children = std::vector<Expr*>();
@@ -366,13 +299,7 @@ protected:
         return out.str();
     }
 #ifdef STARROCKS_JIT_ENABLE
-    Status prepare_jit_expr(RuntimeState* state, ExprContext* context);
 #endif
-
-private:
-    // Create a new vectorized expr
-    static Status create_vectorized_expr(ObjectPool* pool, const TExprNode& texpr_node, Expr** expr,
-                                         RuntimeState* state);
 };
 
 } // namespace starrocks

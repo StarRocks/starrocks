@@ -39,6 +39,7 @@
 #include <vector>
 
 #include "common/logging.h"
+#include "common/runtime_profile.h"
 #include "common/statusor.h"
 #include "gutil/strings/substitute.h"
 #include "rocksdb/convenience.h"
@@ -47,10 +48,9 @@
 #include "rocksdb/slice.h"
 #include "rocksdb/slice_transform.h"
 #include "runtime/exec_env.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/olap_define.h"
 #include "storage/rocksdb_status_adapter.h"
-#include "util/runtime_profile.h"
-#include "util/starrocks_metrics.h"
 
 using rocksdb::DB;
 using rocksdb::DBOptions;
@@ -115,9 +115,13 @@ int64_t KVStore::calc_rocksdb_write_buffer_size(MemTracker* mem_tracker) {
 Status KVStore::init(bool read_only) {
     DBOptions options;
     options.IncreaseParallelism();
-    std::string db_path = _root_path + META_POSTFIX;
-
+    // 256MB. default is 0, which means all logs will be written to one log file
+    options.max_log_file_size = 268435456;
+    // default is 1000
+    options.keep_log_file_num = 10;
     RETURN_IF_ERROR(rocksdb::GetDBOptionsFromString(options, config::rocksdb_db_options_string, &options));
+
+    std::string db_path = _root_path + META_POSTFIX;
 
     ColumnFamilyOptions meta_cf_options;
     RETURN_IF_ERROR(rocksdb::GetColumnFamilyOptionsFromString(meta_cf_options, config::rocksdb_cf_options_string,

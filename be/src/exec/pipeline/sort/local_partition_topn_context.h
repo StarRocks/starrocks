@@ -83,6 +83,8 @@ public:
                               std::vector<bool> is_null_first, std::string sort_keys, int64_t offset,
                               int64_t partition_limit, const TTopNType::type topn_type);
 
+    ~LocalPartitionTopnContext() = default;
+
     Status prepare(RuntimeState* state, RuntimeProfile* runtime_profile);
 
     // Add one chunk to partitioner
@@ -131,7 +133,7 @@ private:
 
     Status _evaluate_agg_input_columns(Chunk* chunk);
 
-    Columns _create_agg_result_columns(size_t num_rows);
+    MutableColumns _create_agg_result_columns(size_t num_rows);
     const std::vector<TExpr>& _t_partition_exprs;
     std::vector<ExprContext*> _partition_exprs;
     std::vector<PartitionColumnType> _partition_types;

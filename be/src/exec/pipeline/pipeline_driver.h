@@ -19,6 +19,7 @@
 #include <atomic>
 #include <chrono>
 
+#include "base/phmap/phmap.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exec/pipeline/fragment_context.h"
@@ -37,7 +38,6 @@
 #include "exprs/runtime_filter_bank.h"
 #include "fmt/printf.h"
 #include "runtime/mem_tracker.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 
@@ -259,6 +259,8 @@ public:
     void finalize(RuntimeState* runtime_state, DriverState state);
     DriverAcct& driver_acct() { return _driver_acct; }
     DriverState driver_state() const { return _state; }
+
+    Status prepare_local_state(RuntimeState* runtime_state);
 
     void increment_schedule_times();
 
@@ -504,6 +506,7 @@ public:
     void runtime_report_action();
 
     std::string to_readable_string() const;
+    std::string get_raw_string_name() const;
 
     workgroup::WorkGroup* workgroup();
     const workgroup::WorkGroup* workgroup() const;
@@ -554,6 +557,8 @@ public:
     void assign_observer();
     bool is_operator_cancelled() const { return _is_operator_cancelled; }
 
+    bool local_prepare_is_done() const { return _local_prepare_is_done; }
+
 protected:
     PipelineDriver()
             : _observer(this),
@@ -591,6 +596,9 @@ protected:
 
     // used in event scheduler
     void _update_global_rf_timer();
+
+    // Helper function to build readable string with option to use raw operator names
+    std::string _build_readable_string(bool use_raw_name) const;
 
     RuntimeState* _runtime_state = nullptr;
     PipelineObserver _observer;
@@ -643,6 +651,9 @@ protected:
 
     std::unique_ptr<PipelineTimerTask> _global_rf_timer;
 
+    std::atomic<bool> _local_prepare_is_done{false};
+
+protected:
     // metrics
     RuntimeProfile::Counter* _total_timer = nullptr;
     RuntimeProfile::Counter* _active_timer = nullptr;
@@ -675,6 +686,9 @@ protected:
     MonotonicStopWatch* _pending_finish_timer_sw = nullptr;
 
     RuntimeProfile::HighWaterMarkCounter* _peak_driver_queue_size_counter = nullptr;
+
+private:
+    void prepare_profile();
 };
 
 } // namespace pipeline

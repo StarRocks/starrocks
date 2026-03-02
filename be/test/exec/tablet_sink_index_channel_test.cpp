@@ -16,12 +16,13 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
+#include "common/util/thrift_util.h"
 #include "exec/tablet_info.h"
 #include "exec/tablet_sink.h"
 #include "runtime/descriptor_helper.h"
+#include "runtime/global_dict/fragment_dict_state.h"
 #include "storage/chunk_helper.h"
-#include "testutil/assert.h"
-#include "util/thrift_util.h"
 
 namespace starrocks {
 
@@ -46,7 +47,10 @@ protected:
     std::unique_ptr<RuntimeState> _build_runtime_state(TQueryOptions& query_options) {
         TUniqueId fragment_id;
         TQueryGlobals query_globals;
-        return std::make_unique<RuntimeState>(fragment_id, query_options, query_globals, _exec_env);
+        auto runtime_state = std::make_unique<RuntimeState>(fragment_id, query_options, query_globals, _exec_env);
+        _fragment_dict_states.emplace_back(std::make_unique<FragmentDictState>());
+        runtime_state->set_fragment_dict_state(_fragment_dict_states.back().get());
+        return runtime_state;
     }
 
     TDescriptorTable _build_descriptor_table() {
@@ -139,6 +143,7 @@ protected:
 
     ExecEnv* _exec_env;
     std::unique_ptr<ObjectPool> _object_pool;
+    std::vector<std::unique_ptr<FragmentDictState>> _fragment_dict_states;
     TDescriptorTable _desc_tbl;
     TDataSink _data_sink;
 };
@@ -314,8 +319,8 @@ void TabletSinkIndexChannelTest::test_load_diagnose_base(const std::string& erro
     ASSERT_OK(sink->open(runtime_state.get()));
     auto tuple_desc = runtime_state->desc_tbl().get_tuple_descriptor(_desc_tbl.tupleDescriptors[0].id);
     ChunkUniquePtr chunk = ChunkHelper::new_chunk(*tuple_desc, 1);
-    chunk->get_column_by_index(0)->append_datum(Datum(1));
-    chunk->get_column_by_index(1)->append_datum(Datum(1L));
+    chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(1));
+    chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(1L));
     ASSERT_OK(sink->send_chunk(runtime_state.get(), chunk.get()));
     ASSERT_FALSE(sink->close(runtime_state.get(), Status::OK()).ok());
     ASSERT_EQ(expected_num_stack_trace, num_stack_trace);
@@ -392,7 +397,7 @@ TEST_F(TabletSinkIndexChannelTest, primary_replica_node_not_connected) {
     ASSERT_OK(sink->open(runtime_state.get()));
     auto tuple_desc = runtime_state->desc_tbl().get_tuple_descriptor(_desc_tbl.tupleDescriptors[0].id);
     ChunkUniquePtr chunk = ChunkHelper::new_chunk(*tuple_desc, 1);
-    chunk->get_column_by_index(0)->append_datum(Datum(1));
+    chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(1));
     ASSERT_OK(sink->send_chunk(runtime_state.get(), chunk.get()));
     Status status = sink->close(runtime_state.get(), Status::OK());
     ASSERT_FALSE(status.ok());

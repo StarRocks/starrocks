@@ -17,10 +17,11 @@
 #include <chrono>
 #include <thread>
 
+#include "common/thread/thread.h"
 #include "compaction_manager.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/data_dir.h"
-#include "util/starrocks_metrics.h"
-#include "util/thread.h"
+#include "util/global_metrics_registry.h"
 
 using namespace std::chrono_literals;
 

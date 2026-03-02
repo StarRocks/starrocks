@@ -1,5 +1,6 @@
 position: 10 # float position is supported
 label: 'String'
+key: 'sql-fxn-string' # this differentiates the function from the data type when building the docs
 collapsible: true
 collapsed: true
 link:

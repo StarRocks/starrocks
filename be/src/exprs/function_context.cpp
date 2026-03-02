@@ -15,20 +15,10 @@
 #include "exprs/function_context.h"
 
 #include <iostream>
+#include <sstream>
 
-#include "column/array_column.h"
-#include "column/map_column.h"
-#include "column/struct_column.h"
-#include "column/type_traits.h"
-#ifndef __APPLE__
-#include "exprs/agg/java_udaf_function.h"
-#endif
+#include "common/ngram_bloom_filter_state.h"
 #include "runtime/runtime_state.h"
-#include "types/logical_type_infra.h"
-#ifndef __APPLE__
-#include "udf/java/java_udf.h"
-#endif
-#include "util/bloom_filter.h"
 
 namespace starrocks {
 
@@ -42,9 +32,6 @@ FunctionContext* FunctionContext::create_context(RuntimeState* state, MemPool* p
     ctx->_mem_pool = pool;
     ctx->_return_type = return_type;
     ctx->_arg_types = arg_types;
-#if !defined(__APPLE__) && !defined(BUILD_FORMAT_LIB)
-    ctx->_jvm_udaf_ctxs = std::make_unique<JavaUDAFContext>();
-#endif
     return ctx;
 }
 
@@ -58,9 +45,6 @@ FunctionContext* FunctionContext::create_context(RuntimeState* state, MemPool* p
     ctx->_mem_pool = pool;
     ctx->_return_type = return_type;
     ctx->_arg_types = arg_types;
-#if !defined(__APPLE__) && !defined(BUILD_FORMAT_LIB)
-    ctx->_jvm_udaf_ctxs = std::make_unique<JavaUDAFContext>();
-#endif
     ctx->_is_distinct = is_distinct;
     ctx->_is_asc_order = is_asc_order;
     ctx->_nulls_first = nulls_first;
@@ -140,15 +124,6 @@ void* FunctionContext::get_function_state(FunctionStateScope scope) const {
     }
 }
 
-void FunctionContext::release_mems() {
-#ifndef __APPLE__
-    if (_jvm_udaf_ctxs != nullptr && _jvm_udaf_ctxs->states) {
-        auto env = JVMFunctionHelper::getInstance().getEnv();
-        _jvm_udaf_ctxs->states->clear(this, env);
-    }
-#endif
-}
-
 void FunctionContext::set_error(const char* error_msg, const bool is_udf) {
     std::lock_guard<std::mutex> lock(_error_msg_mutex);
     if (_error_msg.empty()) {
@@ -215,69 +190,6 @@ const FunctionContext::TypeDesc* FunctionContext::get_arg_type(int arg_idx) cons
         return nullptr;
     }
     return &_arg_types[arg_idx];
-}
-
-struct ColumnBuilder {
-    template <LogicalType Type>
-    ColumnPtr operator()(const FunctionContext::TypeDesc& type_desc) {
-        if constexpr (lt_is_decimal<Type>) {
-            return RunTimeColumnType<Type>::create(type_desc.precision, type_desc.scale);
-        } else if constexpr (lt_is_collection<Type>) {
-            throw std::runtime_error(fmt::format("Unsupported collection type {}", Type));
-            return nullptr;
-        } else if constexpr (Type == TYPE_UNKNOWN || Type == TYPE_BINARY || Type == TYPE_DECIMAL) {
-            throw std::runtime_error(fmt::format("Unsupported column type {}", Type));
-            return nullptr;
-        } else {
-            return RunTimeColumnType<Type>::create();
-        }
-    }
-};
-
-ColumnPtr FunctionContext::create_column(const FunctionContext::TypeDesc& type_desc, bool nullable) {
-    const auto type = type_desc.type;
-    ColumnPtr p = nullptr;
-
-    if (type == TYPE_STRUCT) {
-        size_t field_size = type_desc.children.size();
-        DCHECK_EQ(field_size, type_desc.field_names.size());
-        Columns columns;
-        for (size_t i = 0; i < field_size; i++) {
-            ColumnPtr field_column = create_column(type_desc.children[i], true);
-            columns.emplace_back(field_column);
-        }
-        p = StructColumn::create(columns, type_desc.field_names);
-    } else if (type == TYPE_ARRAY) {
-        auto offsets = UInt32Column::create();
-        auto data = create_column(type_desc.children[0], true);
-        p = ArrayColumn::create(std::move(data), std::move(offsets));
-    } else if (type == TYPE_MAP) {
-        auto offsets = UInt32Column ::create();
-        ColumnPtr keys = nullptr;
-        ColumnPtr values = nullptr;
-        if (type_desc.children[0].type == TYPE_UNKNOWN) {
-            FunctionContext::TypeDesc desc;
-            desc.type = TYPE_NULL;
-            keys = create_column(desc, true);
-        } else {
-            keys = create_column(type_desc.children[0], true);
-        }
-        if (type_desc.children[1].type == TYPE_UNKNOWN) {
-            FunctionContext::TypeDesc desc;
-            desc.type = TYPE_NULL;
-            values = create_column(desc, true);
-        } else {
-            values = create_column(type_desc.children[1], true);
-        }
-        p = MapColumn::create(std::move(keys), std::move(values), std::move(offsets));
-    } else {
-        p = type_dispatch_column(type, ColumnBuilder(), type_desc);
-    }
-
-    if (nullable && p != nullptr) {
-        return NullableColumn::create(p, NullColumn::create());
-    }
-    return p;
 }
 
 } // namespace starrocks

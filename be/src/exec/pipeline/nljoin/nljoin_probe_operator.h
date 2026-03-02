@@ -100,6 +100,9 @@ private:
 
     Status _eval_nullaware_anti_conjuncts(const ChunkPtr& chunk, FilterPtr* filter);
 
+    // eval conjuncts for nest loop join
+    Status _eval_conjuncts(const ChunkPtr& chunk);
+
     // Join type check
     bool _is_left_join() const;
     bool _is_right_join() const;

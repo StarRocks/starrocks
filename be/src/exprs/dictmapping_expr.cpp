@@ -16,6 +16,7 @@
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -27,7 +28,12 @@ Status DictMappingExpr::open(RuntimeState* state, ExprContext* context, Function
         return Status::OK();
     }
 
-    return state->mutable_dict_optimize_parser()->rewrite_expr(context, this, _output_id);
+    auto* fragment_dict_state = state->fragment_dict_state();
+    DCHECK(fragment_dict_state != nullptr);
+    if (fragment_dict_state == nullptr) {
+        return Status::InternalError("fragment dict state is not set");
+    }
+    return fragment_dict_state->mutable_dict_optimize_parser()->rewrite_expr(state, context, this, _output_id);
 }
 
 StatusOr<ColumnPtr> DictMappingExpr::evaluate_checked(ExprContext* context, Chunk* ptr) {
@@ -48,7 +54,9 @@ StatusOr<ColumnPtr> DictMappingExpr::evaluate_checked(ExprContext* context, Chun
         } else if (dict_func_expr != nullptr) {
             return dict_func_expr->evaluate_checked(context, ptr);
         } else {
-            return Status::InternalError("unreachable path, dict_func_expr shouldn't be nullptr");
+            // This should never happen, only when DictOptimizeParser::rewrite_conjuncts or DictMappingExpr::open function is not called.
+            return Status::InternalError(
+                    fmt::format("unreachable path, dict_func_expr shouldn't be nullptr: {}", debug_string()));
         }
     } else if (_children.size() == 3) {
         // array -> string
@@ -58,7 +66,9 @@ StatusOr<ColumnPtr> DictMappingExpr::evaluate_checked(ExprContext* context, Chun
         if (dict_func_expr != nullptr) {
             return dict_func_expr->evaluate_checked(context, &cc);
         } else {
-            return Status::InternalError("unreachable path, array_dict_func_expr shouldn't be nullptr");
+            // This should never happen, only when DictOptimizeParser::rewrite_conjuncts or DictMappingExpr::open function is not called.
+            return Status::InternalError(
+                    fmt::format("unreachable path, array_dict_func_expr shouldn't be nullptr: {}", debug_string()));
         }
     }
 

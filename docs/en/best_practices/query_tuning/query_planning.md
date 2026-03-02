@@ -19,12 +19,12 @@ StarRocks provides several ways to inspect the query plan:
 1. **EXPLAIN statement**:  
    Use `EXPLAIN` to display the logical or physical execution plan for a query. You can add options to control the output:
    - `EXPLAIN LOGICAL <query>`: Shows the simplified plan.
-   - `EXPLAIN <query>`: Shows the basic phyical plan
+   - `EXPLAIN <query>`: Shows the basic physical plan
    - `EXPLAIN VERBOSE <query>`: Shows the physical plan with detailed information.
    - `EXPLAIN COSTS <query>`: Includes estimated costs for each operation, which is used to diagnose the statistics issue
 
 2. **EXPLAIN ANALYZE**:  
-   Use `EXPLAIN ANALYZE <query>` to execute the query and display the actual execution plan along with real runtime statistics. See the [Explain Anlayze](./query_profile_text_based_analysis.md) documentation for details.
+   Use `EXPLAIN ANALYZE <query>` to execute the query and display the actual execution plan along with real runtime statistics. See the [Explain Analyze](./query_profile_text_based_analysis.md) documentation for details.
 
    Example:
    ```sql
@@ -33,7 +33,7 @@ StarRocks provides several ways to inspect the query plan:
 
 3. **Query Profile**:  
    After running a query, you can view its detailed execution profile, which includes timing, resource usage, and operator-level statistics. See the [Query Profile](./query_profile_overview.md) documentation for how to access and interpret this information.
-   - **SQL commands**:  `SHOW PROFILELIST` and `ANALYZE PROFILE FOR <query_id>`: can be used to retrieval the execution profile for a specific query.
+   - **SQL commands**:  `SHOW PROFILELIST` and `ANALYZE PROFILE FOR <query_id>`: can be used to retrieve the execution profile for a specific query.
    - **FE HTTP Service**:  Access query profiles via the StarRocks FE web UI by navigating to the **Query** or **Profile** section, where you can search for and inspect query execution details.
    - **Managed Version**:  In cloud or managed deployments, use the provided web console or monitoring dashboard to view query plans and profiles, often with enhanced visualization and filtering options.
 
@@ -76,7 +76,7 @@ You can control this merging behavior through the session variable `pipeline_pro
 
 ## Example
 
-### How to eead a query plan and profile
+### How to read a query plan and profile
 
 1. **Understand the structure**: Query plans are split into fragments, each representing a stage of execution. Read from the bottom up: scan nodes first, then joins, aggregations, and finally the result.
 

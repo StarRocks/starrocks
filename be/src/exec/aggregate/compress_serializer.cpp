@@ -15,6 +15,7 @@
 #include <any>
 #include <optional>
 
+#include "base/hash/unaligned_access.h"
 #include "column/column_helper.h"
 #include "column/column_visitor_adapter.h"
 #include "column/decimalv3_column.h"
@@ -22,7 +23,6 @@
 #include "common/status.h"
 #include "exprs/literal.h"
 #include "types/logical_type_infra.h"
-#include "util/unaligned_access.h"
 
 namespace starrocks {
 
@@ -203,7 +203,7 @@ public:
         // TODO: opt me
         column->null_column_data().resize(_num_rows);
         _null_data = column->null_column_data().data();
-        RETURN_IF_ERROR(column->data_column()->accept_mutable(this));
+        RETURN_IF_ERROR(column->data_column_raw_ptr()->accept_mutable(this));
         column->update_has_null();
         return Status::OK();
     }
@@ -271,8 +271,9 @@ void bitcompress_serialize(const Columns& columns, const std::vector<std::any>& 
     }
 }
 
-void bitcompress_deserialize(Columns& columns, const std::vector<std::any>& bases, const std::vector<int>& offsets,
-                             const std::vector<int>& used_bits, size_t num_rows, size_t fixed_key_size, void* buffer) {
+void bitcompress_deserialize(MutableColumns& columns, const std::vector<std::any>& bases,
+                             const std::vector<int>& offsets, const std::vector<int>& used_bits, size_t num_rows,
+                             size_t fixed_key_size, void* buffer) {
     for (size_t i = 0; i < columns.size(); ++i) {
         if (fixed_key_size == 1) {
             CompressDeserializer<uint8_t> deserializer(num_rows, (uint8_t*)buffer, bases[i], offsets[i], used_bits[i]);

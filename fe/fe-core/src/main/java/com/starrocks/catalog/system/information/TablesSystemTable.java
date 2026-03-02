@@ -59,13 +59,13 @@ public class TablesSystemTable extends SystemTable {
 
     public TablesSystemTable(String catalogName) {
         super(catalogName, SystemId.TABLES_ID, NAME, Table.TableType.SCHEMA, builder()
-                .column("TABLE_CATALOG", TypeFactory.createVarchar(FN_REFLEN))
-                .column("TABLE_SCHEMA", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                .column("TABLE_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                .column("TABLE_TYPE", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                .column("ENGINE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                .column("TABLE_CATALOG", TypeFactory.createVarcharType(FN_REFLEN))
+                .column("TABLE_SCHEMA", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                .column("TABLE_NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                .column("TABLE_TYPE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                .column("ENGINE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                 .column("VERSION", BIGINT)
-                .column("ROW_FORMAT", TypeFactory.createVarchar(10))
+                .column("ROW_FORMAT", TypeFactory.createVarcharType(10))
                 .column("TABLE_ROWS", BIGINT)
                 .column("AVG_ROW_LENGTH", BIGINT)
                 .column("DATA_LENGTH", BIGINT)
@@ -76,10 +76,10 @@ public class TablesSystemTable extends SystemTable {
                 .column("CREATE_TIME", DATETIME)
                 .column("UPDATE_TIME", DATETIME)
                 .column("CHECK_TIME", DATETIME)
-                .column("TABLE_COLLATION", TypeFactory.createVarchar(MY_CS_NAME_SIZE))
+                .column("TABLE_COLLATION", TypeFactory.createVarcharType(MY_CS_NAME_SIZE))
                 .column("CHECKSUM", BIGINT)
-                .column("CREATE_OPTIONS", TypeFactory.createVarchar(255))
-                .column("TABLE_COMMENT", TypeFactory.createVarchar(2048))
+                .column("CREATE_OPTIONS", TypeFactory.createVarcharType(255))
+                .column("TABLE_COMMENT", TypeFactory.createVarcharType(2048))
                 .build(), TSchemaTableType.SCH_TABLES);
     }
 

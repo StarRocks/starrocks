@@ -43,6 +43,7 @@ public class IcebergCatalogProperties {
     public static final String ICEBERG_MANIFEST_CACHE_MAX_NUM = "iceberg_manifest_cache_max_num";
     public static final String ICEBERG_DATA_FILE_CACHE_MEMORY_SIZE_RATIO = "iceberg_data_file_cache_memory_usage_ratio";
     public static final String ICEBERG_DELETE_FILE_CACHE_MEMORY_SIZE_RATIO = "iceberg_delete_file_cache_memory_usage_ratio";
+    public static final String ICEBERG_TABLE_CACHE_MEMORY_SIZE_RATIO = "iceberg_table_cache_memory_usage_ratio";
 
     // internal config
     public static final String ICEBERG_TABLE_CACHE_TTL = "iceberg_table_cache_ttl_sec";
@@ -56,7 +57,6 @@ public class IcebergCatalogProperties {
     private final Map<String, String> properties;
     private IcebergCatalogType catalogType;
     private boolean enableIcebergMetadataCache;
-    private boolean enableIcebergTableCache;
     private long icebergMetaCacheTtlSec;
     private int icebergJobPlanningThreadNum;
     private int backgroundIcebergJobPlanningThreadNum;
@@ -68,6 +68,7 @@ public class IcebergCatalogProperties {
     private boolean enableCacheDataFileIdentifierColumnStatistics;
     private double icebergDataFileCacheMemoryUsageRatio;
     private double icebergDeleteFileCacheMemoryUsageRatio;
+    private double icebergTableCacheMemoryUsageRatio;
     private long icebergTableCacheRefreshIntervalSec;
 
     public IcebergCatalogProperties(Map<String, String> catalogProperties) {
@@ -96,7 +97,6 @@ public class IcebergCatalogProperties {
 
     private void initIcebergMetadataCache() {
         this.enableIcebergMetadataCache = PropertyUtil.propertyAsBoolean(properties, ENABLE_ICEBERG_METADATA_CACHE, true);
-        this.enableIcebergTableCache = PropertyUtil.propertyAsBoolean(properties, ENABLE_ICEBERG_TABLE_CACHE, true);
 
         // one day default, for all meta including tables.
         this.icebergMetaCacheTtlSec = PropertyUtil.propertyAsLong(properties, ICEBERG_META_CACHE_TTL, 24L * 60 * 60); 
@@ -107,6 +107,8 @@ public class IcebergCatalogProperties {
                     properties, ICEBERG_DATA_FILE_CACHE_MEMORY_SIZE_RATIO, 0.1);
         this.icebergDeleteFileCacheMemoryUsageRatio = PropertyUtil.propertyAsDouble(
                     properties, ICEBERG_DELETE_FILE_CACHE_MEMORY_SIZE_RATIO, 0.1);
+        this.icebergTableCacheMemoryUsageRatio = PropertyUtil.propertyAsDouble(
+                    properties, ICEBERG_TABLE_CACHE_MEMORY_SIZE_RATIO, 0.1);
         this.icebergManifestCacheWithColumnStatistics = PropertyUtil.propertyAsBoolean(
                 properties, ICEBERG_MANIFEST_CACHE_WITH_COLUMN_STATISTICS, true);
         this.refreshIcebergManifestMinLength = PropertyUtil.propertyAsLong(properties, REFRESH_ICEBERG_MANIFEST_MIN_LENGTH,
@@ -141,7 +143,7 @@ public class IcebergCatalogProperties {
     }
 
     public boolean enableIcebergTableCache() {
-        return enableIcebergTableCache;
+        return icebergTableCacheMemoryUsageRatio > 0;
     }
 
     public long getIcebergMetaCacheTtlSec() {
@@ -173,7 +175,7 @@ public class IcebergCatalogProperties {
     }
 
     public boolean isEnableIcebergTableCache() {
-        return enableIcebergTableCache;
+        return icebergTableCacheMemoryUsageRatio > 0;
     }
 
     public double getIcebergDataFileCacheMemoryUsageRatio() {
@@ -182,6 +184,10 @@ public class IcebergCatalogProperties {
 
     public double getIcebergDeleteFileCacheMemoryUsageRatio() {
         return icebergDeleteFileCacheMemoryUsageRatio;
+    }
+
+    public double getIcebergTableCacheMemoryUsageRatio() {
+        return icebergTableCacheMemoryUsageRatio;
     }
 
     public long getRefreshIcebergManifestMinLength() {

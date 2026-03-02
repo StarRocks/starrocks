@@ -1,4 +1,4 @@
--- name: test_lake_rollup @cloud
+-- name: test_lake_rollup @native
 CREATE TABLE tbl1 (
     k1 date,
     k2 int,
@@ -6,7 +6,7 @@ CREATE TABLE tbl1 (
 ) PARTITION BY RANGE(k1) (
     PARTITION p1 values [('2020-01-01'),('2020-02-01')),
     PARTITION p2 values [('2020-02-01'),('2020-03-01')))
-    DISTRIBUTED BY HASH(k2) BUCKETS 3
+    DISTRIBUTED BY HASH(k1) BUCKETS 3
     PROPERTIES('replication_num' = '1');
 
 INSERT INTO tbl1
@@ -16,7 +16,7 @@ VALUES
     ("2020-01-11",4,100);
 
 ALTER TABLE tbl1 ADD ROLLUP rollup1 (k1, v1) FROM tbl1;
-function: wait_alter_table_finish("ROLLUP")
+function: wait_alter_table_finish("ROLLUP", 8)
 
 INSERT INTO tbl1 VALUES("2020-01-11",6,100);
 
@@ -28,7 +28,7 @@ function: wait_alter_table_finish("COLUMN")
 SELECT v1 FROM rollup1 [_SYNC_MV_] ORDER BY v1;
 drop table tbl1;
 
--- name: test_lake_rollup_2 @cloud
+-- name: test_lake_rollup_2 @native
 CREATE TABLE tbl2 (
     k1 date,
     k2 int,
@@ -46,7 +46,7 @@ VALUES
     ("2020-01-11",4,100);
 
 ALTER TABLE tbl2 ADD ROLLUP rollup2 (k1, v1) FROM tbl2;
-function: wait_alter_table_finish("ROLLUP")
+function: wait_alter_table_finish("ROLLUP", 8)
 
 INSERT INTO tbl2 VALUES("2020-01-11",6,100);
 

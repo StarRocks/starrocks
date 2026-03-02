@@ -23,6 +23,9 @@
 #include <unordered_map>
 #include <utility>
 
+#include "base/container/raw_container.h"
+#include "base/uid_util.h"
+#include "base/utility/defer_op.h"
 #include "block_manager.h"
 #include "common/config.h"
 #include "common/status.h"
@@ -31,14 +34,11 @@
 #include "fmt/format.h"
 #include "fs/fs.h"
 #include "gutil/casts.h"
-#include "io/input_stream.h"
+#include "io/core/input_stream.h"
 #include "io/io_profiler.h"
 #include "runtime/exec_env.h"
 #include "storage/options.h"
-#include "util/defer_op.h"
-#include "util/raw_container.h"
 #include "util/stack_util.h"
-#include "util/uid_util.h"
 
 namespace starrocks::spill {
 class LogBlockContainer {

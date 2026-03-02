@@ -38,7 +38,7 @@
 #include "storage/rowset/options.h"      // for PageBuilderOptions/PageDecoderOptions
 #include "storage/rowset/page_builder.h" // for PageBuilder
 #include "storage/rowset/page_decoder.h" // for PageDecoder
-#include "storage/type_traits.h"
+#include "types/type_traits.h"
 #include "util/frame_of_reference_coding.h"
 
 namespace starrocks {

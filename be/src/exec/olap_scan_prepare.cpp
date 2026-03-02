@@ -14,8 +14,10 @@
 
 #include "exec/olap_scan_prepare.h"
 
+#include <boost/variant/static_visitor.hpp>
 #include <variant>
 
+#include "base/orlp/pdqsort.h"
 #include "column/type_traits.h"
 #include "exprs/binary_predicate.h"
 #include "exprs/compound_predicate.h"
@@ -24,9 +26,10 @@
 #include "exprs/expr_context.h"
 #include "exprs/in_const_predicate.hpp"
 #include "exprs/is_null_predicate.h"
-#include "exprs/runtime_filter.h"
 #include "gutil/map_util.h"
 #include "runtime/descriptors.h"
+#include "runtime/global_dict/fragment_dict_state.h"
+#include "runtime/runtime_filter.h"
 #include "storage/column_placeholder_predicate.h"
 #include "storage/column_predicate.h"
 #include "storage/predicate_parser.h"
@@ -34,10 +37,9 @@
 #include "storage/runtime_filter_predicate.h"
 #include "storage/runtime_range_pruner.h"
 #include "storage/runtime_range_pruner.hpp"
-#include "types/date_value.hpp"
+#include "types/date_value.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
-#include "util/orlp/pdqsort.h"
 
 namespace starrocks {
 
@@ -61,6 +63,12 @@ static Expr* get_root_expr(Expr* root) {
 
 static Expr* get_root_expr(ExprContext* ctx) {
     return get_root_expr(ctx->root());
+}
+
+static const GlobalDictMaps& get_query_global_dicts(const RuntimeState* runtime_state) {
+    const auto* fragment_dict_state = runtime_state->fragment_dict_state();
+    DCHECK(fragment_dict_state != nullptr);
+    return fragment_dict_state->query_global_dicts();
 }
 
 template <typename ValueType>
@@ -125,9 +133,9 @@ static bool get_predicate_value(ObjectPool* obj_pool, const SlotDescriptor& slot
     // check column type, as not all exprs return a const column.
     ColumnPtr data = column_ptr;
     if (column_ptr->is_nullable()) {
-        data = down_cast<NullableColumn*>(column_ptr.get())->data_column();
+        data = down_cast<const NullableColumn*>(column_ptr.get())->data_column();
     } else if (column_ptr->is_constant()) {
-        data = down_cast<ConstColumn*>(column_ptr.get())->data_column();
+        data = down_cast<const ConstColumn*>(column_ptr.get())->data_column();
     } else { // defensive check.
         DCHECK(false) << "unreachable path: unknown column type of expr evaluate result";
         return false;
@@ -141,7 +149,7 @@ static bool get_predicate_value(ObjectPool* obj_pool, const SlotDescriptor& slot
 
     if constexpr (std::is_same_v<ValueType, DateValue>) {
         if (data->is_timestamp()) {
-            TimestampValue ts = down_cast<TimestampColumn*>(data.get())->get(0).get_timestamp();
+            TimestampValue ts = down_cast<const TimestampColumn*>(data.get())->get(0).get_timestamp();
             *value = implicit_cast<DateValue>(ts);
             if (implicit_cast<TimestampValue>(*value) != ts) {
                 // |ts| has nonzero time, rewrite predicate.
@@ -169,7 +177,7 @@ static bool get_predicate_value(ObjectPool* obj_pool, const SlotDescriptor& slot
             }
         } else {
             DCHECK(data->is_date());
-            *value = down_cast<DateColumn*>(data.get())->get(0).get_date();
+            *value = down_cast<const DateColumn*>(data.get())->get(0).get_date();
         }
     } else if constexpr (std::is_same_v<ValueType, Slice>) {
         // |column_ptr| will be released after this method return, have to ensure that
@@ -384,7 +392,7 @@ template <BoxedExprType E, CompoundNodeType Type>
 Status ChunkPredicateBuilder<E, Type>::_build_bitset_in_predicates(PredicateCompoundNode<Type>& tree_root,
                                                                    PredicateParser* parser,
                                                                    ColumnPredicatePtrs& col_preds_owner) {
-    if (_opts.runtime_filters == nullptr) {
+    if (!_is_root_builder || _opts.runtime_filters == nullptr) {
         return Status::OK();
     }
 
@@ -411,7 +419,7 @@ Status ChunkPredicateBuilder<E, Type>::_build_bitset_in_predicates(PredicateComp
         // Low-cardinality dictionary columns can only use VARCHAR-type predicates during the index application phase.
         // Therefore, if the runtime bitset filter corresponds to a global low-cardinality dictionary column,
         // it cannot be pushed down to the storage layer for index application.
-        if (const auto& dict_map = _opts.runtime_state->get_query_global_dict_map(); dict_map.contains(slot_id)) {
+        if (const auto& dict_map = get_query_global_dicts(_opts.runtime_state); dict_map.contains(slot_id)) {
             continue;
         }
 
@@ -473,7 +481,7 @@ requires(!lt_is_date<SlotType>) Status ChunkPredicateBuilder<E, Type>::normalize
         const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range) {
     // clang-format on
 
-    const auto& global_dicts = _opts.runtime_state->get_query_global_dict_map();
+    const auto& global_dicts = get_query_global_dicts(_opts.runtime_state);
     const auto global_dict_iter = SlotType == TYPE_VARCHAR ? global_dicts.find(slot.id()) : global_dicts.end();
 
     auto is_in_values_dict_encoded = [&](const Expr* root_expr) -> bool {
@@ -773,7 +781,7 @@ Status ChunkPredicateBuilder<E, Type>::normalize_join_runtime_filter(const SlotD
     }
     DCHECK(!Negative);
 
-    const auto& global_dicts = _opts.runtime_state->get_query_global_dict_map();
+    const auto& global_dicts = get_query_global_dicts(_opts.runtime_state);
     const auto global_dict_iter = SlotType == TYPE_VARCHAR ? global_dicts.find(slot.id()) : global_dicts.end();
 
     auto process = [&]<LogicalType MappingType, template <typename> typename Decoder, typename... Args>(Args &&
@@ -905,7 +913,7 @@ Status ChunkPredicateBuilder<E, Type>::normalize_not_in_or_not_equal_predicate(
 
     using ValueType = typename RunTimeTypeTraits<SlotType>::CppType;
 
-    const auto& global_dicts = _opts.runtime_state->get_query_global_dict_map();
+    const auto& global_dicts = get_query_global_dicts(_opts.runtime_state);
     const auto global_dict_iter = SlotType == TYPE_VARCHAR ? global_dicts.find(slot.id()) : global_dicts.end();
 
     auto is_in_values_dict_encoded = [&](const Expr* root_expr) -> bool {
@@ -1270,7 +1278,7 @@ Status ChunkPredicateBuilder<E, Type>::_get_column_predicates(PredicateParser* p
 
             // When a pushed-down runtime filter is applied, VARCHAR columns use local dict IDs instead of global dict IDs.
             // Therefore, global low-cardinality dict columns cannot be pushed down.
-            if (const auto& dict_map = _opts.runtime_state->get_query_global_dict_map(); dict_map.contains(slot_id)) {
+            if (const auto& dict_map = get_query_global_dicts(_opts.runtime_state); dict_map.contains(slot_id)) {
                 continue;
             }
 
@@ -1488,7 +1496,7 @@ StatusOr<RuntimeFilterPredicates> ScanConjunctsManager::get_runtime_filter_predi
         }
         // When a pushed-down runtime filter is applied, VARCHAR columns use local dict IDs instead of global dict IDs.
         // Therefore, global low-cardinality dict columns cannot be pushed down.
-        if (const auto& dict_map = _opts.runtime_state->get_query_global_dict_map(); dict_map.contains(slot_id)) {
+        if (const auto& dict_map = get_query_global_dicts(_opts.runtime_state); dict_map.contains(slot_id)) {
             continue;
         }
         auto column_id = parser->column_id(*slot_desc);

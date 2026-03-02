@@ -32,12 +32,12 @@ public class TablePrivilegesSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("GRANTEE", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("TABLE_CATALOG", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("TABLE_SCHEMA", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("TABLE_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("PRIVILEGE_TYPE", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("IS_GRANTABLE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("GRANTEE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("TABLE_CATALOG", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("TABLE_SCHEMA", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("TABLE_NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("PRIVILEGE_TYPE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("IS_GRANTABLE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .build(), TSchemaTableType.SCH_TABLE_PRIVILEGES);
     }
 }

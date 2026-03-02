@@ -18,8 +18,11 @@ import com.google.gson.Gson;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.server.RunMode;
 import com.starrocks.thrift.TAuthInfo;
+import com.starrocks.thrift.TGetPartitionsMetaRequest;
+import com.starrocks.thrift.TGetPartitionsMetaResponse;
 import com.starrocks.thrift.TGetTablesConfigRequest;
 import com.starrocks.thrift.TGetTablesConfigResponse;
+import com.starrocks.thrift.TPartitionMetaInfo;
 import com.starrocks.thrift.TTableConfigInfo;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -100,5 +103,73 @@ public class LakeInformationSchemaDataSourceTest {
         Assertions.assertEquals("1", propsMap.get("replication_num"));
         Assertions.assertEquals("HDD", propsMap.get("storage_medium"));
         Assertions.assertEquals("builtin_storage_volume", propsMap.get("storage_volume"));
+    }
+
+    /**
+     * Test getPartitionsMeta for cloud native tables.
+     * This covers InformationSchemaDataSource.java lines 480-484:
+     * - setCompact_version
+     * - setEnable_datacache
+     */
+    @Test
+    public void testGetLakePartitionsMeta() throws Exception {
+        starRocksAssert.withEnableMV().withDatabase("db_partition_meta").useDatabase("db_partition_meta");
+
+        String createTblStmtStr = "CREATE TABLE db_partition_meta.lake_table " +
+                "(`k1` int,`k2` int,`v1` int) " +
+                "PRIMARY KEY(`k1`, `k2`) " +
+                "DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 2 " +
+                "PROPERTIES ('replication_num' = '1', 'datacache.enable' = 'true');";
+        starRocksAssert.withTable(createTblStmtStr);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetPartitionsMetaRequest req = new TGetPartitionsMetaRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("db_partition_meta");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+        TGetPartitionsMetaResponse response = impl.getPartitionsMeta(req);
+
+        TPartitionMetaInfo partitionMeta = response.getPartitions_meta_infos().stream()
+                .filter(t -> t.getTable_name().equals("lake_table")).findFirst().orElse(null);
+        Assertions.assertNotNull(partitionMeta);
+        Assertions.assertEquals("db_partition_meta", partitionMeta.getDb_name());
+        Assertions.assertEquals("lake_table", partitionMeta.getTable_name());
+        // Verify cloud-native specific fields are set (lines 480-484)
+        // compact_version is set (defaults to 0 if no compaction statistics)
+        Assertions.assertTrue(partitionMeta.getCompact_version() >= 0);
+        // enable_datacache should be true since we set 'datacache.enable' = 'true'
+        Assertions.assertTrue(partitionMeta.isEnable_datacache());
+    }
+
+    @Test
+    public void testGetLakePartitionsMetaWithoutDatacache() throws Exception {
+        starRocksAssert.withEnableMV().withDatabase("db_partition_meta2").useDatabase("db_partition_meta2");
+
+        String createTblStmtStr = "CREATE TABLE db_partition_meta2.lake_table_no_cache " +
+                "(`k1` int,`k2` int,`v1` int) " +
+                "PRIMARY KEY(`k1`, `k2`) " +
+                "DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 2 " +
+                "PROPERTIES ('replication_num' = '1', 'datacache.enable' = 'false');";
+        starRocksAssert.withTable(createTblStmtStr);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetPartitionsMetaRequest req = new TGetPartitionsMetaRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("db_partition_meta2");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+        TGetPartitionsMetaResponse response = impl.getPartitionsMeta(req);
+
+        TPartitionMetaInfo partitionMeta = response.getPartitions_meta_infos().stream()
+                .filter(t -> t.getTable_name().equals("lake_table_no_cache")).findFirst().orElse(null);
+        Assertions.assertNotNull(partitionMeta);
+        Assertions.assertEquals("db_partition_meta2", partitionMeta.getDb_name());
+        // compact_version is set (defaults to 0 if no compaction statistics)
+        Assertions.assertTrue(partitionMeta.getCompact_version() >= 0);
+        // enable_datacache should be false
+        Assertions.assertFalse(partitionMeta.isEnable_datacache());
     }
 }

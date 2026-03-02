@@ -14,7 +14,7 @@ pip install starrocks
 
 #### Supported Python Versions
 
-Python >= 3.10, <= 3.13
+Python >= 3.10, <= 3.14
 
 #### Using a Virtual Environment (Recommended)
 
@@ -40,10 +40,15 @@ virtualenv <your-env-name>
 
 ### Basic SQLAlchemy Usage
 
-To connect to StarRocks, use a standard SQLAlchemy connection string.
+To connect to StarRocks, use the SQLAlchemy connection string format:
 
 ```ini
 starrocks://<User>:<Password>@<Host>:<Port>/[<Catalog>.]<Database>
+```
+
+Or, for an asynchronous connection, use asyncmy driver:
+```ini
+starrocks+asyncmy://<User>:<Password>@<Host>:<Port>/[<Catalog>.]<Database>
 ```
 
 - **User**: User Name
@@ -65,12 +70,29 @@ from sqlalchemy import create_engine, text
 
 engine = create_engine('starrocks://root@localhost:9030/mydatabase')
 
-# make sure you have create a table `mytable` in `mydatabase`.
+# make sure you have created the table `mytable` in `mydatabase`.
 
 with engine.connect() as connection:
-    rows = connection.execute(text("SELECT * FROM mytable LIMIT 2")).fetchall()
     print("Connection successful!")
+    rows = connection.execute(text("SELECT * FROM mytable LIMIT 2")).fetchall()
     print(rows)
+
+# async version
+import asyncio
+from sqlalchemy.ext.asyncio import create_async_engine
+
+engine = create_async_engine('starrocks+asyncmy://root@localhost:9030/mydatabase')
+
+async def async_query():
+    async with engine.connect() as connection:
+        print("Connection successful!")
+        rows = await connection.execute(text("SELECT * FROM mytable LIMIT 2")).fetchall()
+        print(rows)
+
+    await engine.dispose()
+
+asyncio.run(async_query())
+
 ```
 
 ### Example: Defining a Table (ORM Style)
@@ -92,9 +114,9 @@ class MyTable(Base):
     __table_args__ = {
         'comment': 'table comment',
 
-        'starrocks_PRIMARY_KEY': 'id',
-        'starrocks_DISTRIBUTED_BY': 'HASH(id) BUCKETS 10',
-        'starrocks_PROPERTIES': {'replication_num': '1'}
+        'starrocks_primary_key': 'id',
+        'starrocks_distributed_by': 'HASH(id) BUCKETS 10',
+        'starrocks_properties': {'replication_num': '1'}
     }
 
 # Create the table in the database
@@ -106,7 +128,7 @@ Base.metadata.create_all(engine)
 Alternatively, you can use SQLAlchemy Core to define tables programmatically.
 
 ```python
-from sqlalchemy import Table, MetaData, Column
+from sqlalchemy import Column, MetaData, Table
 from starrocks import INTEGER, VARCHAR
 
 metadata = MetaData()
@@ -118,9 +140,9 @@ my_core_table = Table(
     Column('name', VARCHAR(50)),
 
     # StarRocks-specific arguments
-    starrocks_PRIMARY_KEY='id',
-    starrocks_DISTRIBUTED_BY='HASH(id) BUCKETS 10',
-    starrocks_PROPERTIES={"replication_num": "1"}
+    starrocks_primary_key='id',
+    starrocks_distributed_by='HASH(id) BUCKETS 10',
+    starrocks_properties={"replication_num": "1"}
 )
 
 # Create the table in the database
@@ -177,7 +199,7 @@ This dialect integrates with Alembic to support automated schema migrations. Her
 If you already have tables/views/materialized views in your StarRocks database, you can generate `models.py` (or a consolidated models file) using `sqlacodegen`.
 
 ```bash
-sqlacodegen --options include-dialect-options,keep-dialect-types \
+sqlacodegen --options include_dialect_options,keep_dialect_types \
   starrocks://root@localhost:9030 > models.py
 ```
 

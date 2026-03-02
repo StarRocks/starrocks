@@ -14,11 +14,12 @@
 
 #include "exec/hdfs_scanner/hdfs_scanner_json.h"
 
+#include "common/simdjson_util.h"
+#include "exprs/chunk_predicate_evaluator.h"
 #include "formats/avro/nullable_column.h"
 #include "formats/json/json_utils.h"
 #include "formats/json/nullable_column.h"
 #include "util/compression/compression_utils.h"
-#include "util/simdjson_util.h"
 
 namespace starrocks {
 
@@ -145,11 +146,11 @@ Status HdfsJsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* ch
             }
             _parsed_columns[column_index] = true;
 
-            auto& column = chunk->get_column_by_index(column_index);
+            auto* column = chunk->get_column_raw_ptr_by_index(column_index);
 
             auto value = field.value().value();
 
-            RETURN_IF_ERROR(_construct_column(value, column.get(), _prev_parsed_position[key_index].type,
+            RETURN_IF_ERROR(_construct_column(value, column, _prev_parsed_position[key_index].type,
                                               _prev_parsed_position[key_index].key));
             key_index++;
         }
@@ -162,7 +163,7 @@ Status HdfsJsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* ch
 
     for (int i = 0; i < chunk->num_columns(); i++) {
         if (!_parsed_columns[i]) {
-            auto& column = chunk->get_column_by_index(i);
+            auto* column = chunk->get_column_raw_ptr_by_index(i);
             column->append_nulls(1);
         }
     }
@@ -222,7 +223,7 @@ Status HdfsJsonScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk
 
         for (auto& [_, ctxs] : _scanner_ctx.conjunct_ctxs_by_slot) {
             SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
-            RETURN_IF_ERROR(ExecNode::eval_conjuncts(ctxs, chunk->get()));
+            RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(ctxs, chunk->get()));
             if ((*chunk)->num_rows() == 0) {
                 break;
             }

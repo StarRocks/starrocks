@@ -25,22 +25,6 @@
 
 namespace starrocks {
 
-TypeDescriptor array_type(const TypeDescriptor& child_type) {
-    TypeDescriptor t;
-    t.type = TYPE_ARRAY;
-    t.children.emplace_back(child_type);
-    return t;
-}
-
-TypeDescriptor array_type(const LogicalType& child_type) {
-    TypeDescriptor t;
-    t.type = TYPE_ARRAY;
-    t.children.resize(1);
-    t.children[0].type = child_type;
-    t.children[0].len = child_type == TYPE_VARCHAR ? 10 : child_type == TYPE_CHAR ? 10 : -1;
-    return t;
-}
-
 class ArrayFunctionsTest : public ::testing::Test {
 protected:
     void SetUp() override {}
@@ -152,7 +136,7 @@ TEST_F(ArrayFunctionsTest, array_length) {
     // [1]
     // [1, 2]
     {
-        ColumnPtr c = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+        MutableColumnPtr c = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
         c->append_datum(Datum(DatumArray{}));
         c->append_datum(Datum());
         c->append_datum(Datum(DatumArray{Datum()}));
@@ -175,7 +159,7 @@ TEST_F(ArrayFunctionsTest, array_length) {
     // ["a"]
     // ["a", "b"]
     {
-        ColumnPtr c = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+        MutableColumnPtr c = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
         c->append_datum(Datum(DatumArray{}));
         c->append_datum(Datum());
         c->append_datum(Datum(DatumArray{Datum()}));
@@ -205,7 +189,7 @@ TEST_F(ArrayFunctionsTest, array_length) {
     // [[],[]]
     // [[1], [2], [3]]
     {
-        ColumnPtr c = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, true);
+        MutableColumnPtr c = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, true);
         c->append_datum(Datum(DatumArray{}));
         c->append_datum(Datum());
         c->append_datum(Datum(DatumArray{Datum()}));
@@ -242,7 +226,7 @@ TEST_F(ArrayFunctionsTest, array_length) {
 
     // [] only null
     {
-        ColumnPtr c = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, true, true, 10);
+        MutableColumnPtr c = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, true, true, 10);
 
         auto result = ArrayFunctions::array_length(nullptr, {c}).value();
         EXPECT_EQ(10, result->size());
@@ -251,9 +235,9 @@ TEST_F(ArrayFunctionsTest, array_length) {
 
     // [] only const
     {
-        ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+        MutableColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
         src_column->append_datum(DatumArray{"5", "5", "33", "666"});
-        src_column = ConstColumn::create(src_column, 3);
+        src_column = ConstColumn::create(std::move(src_column), 3);
 
         auto result = ArrayFunctions::array_length(nullptr, {src_column}).value();
         EXPECT_EQ(3, result->size());
@@ -270,7 +254,7 @@ TEST_F(ArrayFunctionsTest, array_cum_sum) {
     // [1,2,3,4,5]
     // [null,null,1, null]
     {
-        ColumnPtr c = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, true);
+        MutableColumnPtr c = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, true);
         c->append_datum(Datum(DatumArray{}));
         c->append_datum(Datum());
         c->append_datum(Datum(DatumArray{Datum()}));
@@ -298,7 +282,7 @@ TEST_F(ArrayFunctionsTest, array_cum_sum) {
 
     // [] only null
     {
-        ColumnPtr c = ColumnHelper::create_const_null_column(3);
+        auto c = ColumnHelper::create_const_null_column(3);
 
         auto result = ArrayFunctions::array_cum_sum_bigint(nullptr, {c}).value();
         EXPECT_EQ(3, result->size());
@@ -309,10 +293,10 @@ TEST_F(ArrayFunctionsTest, array_cum_sum) {
 
     // [] only const
     {
-        ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, true);
+        MutableColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, true);
         src_column->append_datum(Datum(DatumArray{Datum((int64_t)1), Datum((int64_t)2), Datum((int64_t)3),
                                                   Datum((int64_t)4), Datum((int64_t)5)}));
-        auto c = ConstColumn::create(src_column, 3);
+        auto c = ConstColumn::create(std::move(src_column), 3);
         auto result = ArrayFunctions::array_cum_sum_bigint(nullptr, {std::move(c)}).value();
         EXPECT_EQ(3, result->size());
     }
@@ -322,10 +306,10 @@ TEST_F(ArrayFunctionsTest, array_cum_sum) {
 TEST_F(ArrayFunctionsTest, array_contains_empty_array) {
     // array_contains([], 1)
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
 
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 0);
         target->append_datum(Datum{(int32_t)1});
 
         auto result = ArrayFunctions::array_contains_specific<TYPE_INT>(nullptr, {array, target}).value();
@@ -334,10 +318,10 @@ TEST_F(ArrayFunctionsTest, array_contains_empty_array) {
     }
     // array_contains([], "abc")
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
         array->append_datum(Datum(DatumArray{}));
 
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 0);
         target->append_datum(Datum{"abc"});
 
         auto result = ArrayFunctions::array_contains_specific<TYPE_VARCHAR>(nullptr, {array, target}).value();
@@ -346,10 +330,10 @@ TEST_F(ArrayFunctionsTest, array_contains_empty_array) {
     }
     // array_contains(ARRAY<ARRAY<int>>[], [1])
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
 
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_INT), false);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_INT), false);
         target->append_datum(Datum(DatumArray{Datum{(int32_t)1}}));
 
         auto result = ArrayFunctions::array_contains_generic(nullptr, {array, target}).value();
@@ -358,10 +342,10 @@ TEST_F(ArrayFunctionsTest, array_contains_empty_array) {
     }
     // array_contains(ARRAY<ARRAY<int>>[], ARRAY<int>[])
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
 
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_INT), false);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_INT), false);
         target->append_datum(Datum(DatumArray{}));
 
         auto result = ArrayFunctions::array_contains_generic(nullptr, {array, target}).value();
@@ -374,13 +358,13 @@ TEST_F(ArrayFunctionsTest, array_contains_empty_array) {
     //  array_contains([], 1);
     //  array_contains([], 1);
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
 
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 0);
         DCHECK(target->is_constant());
         target->append_datum(Datum((int32_t)1));
         target->resize(4);
@@ -398,13 +382,13 @@ TEST_F(ArrayFunctionsTest, array_contains_empty_array) {
     //  array_contains([], NULL);
     //  array_contains([], 3);
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
 
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
         target->append_datum(Datum((int32_t)1));
         target->append_datum(Datum((int32_t)2));
         target->append_datum(Datum{});
@@ -423,14 +407,14 @@ TEST_F(ArrayFunctionsTest, array_contains_empty_array) {
     //  array_contains([], NULL);
     //  array_contains([], NULL);
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
 
-        ColumnPtr target = ColumnHelper::create_const_null_column(1);
-        target->resize(4);
+        auto target = ColumnHelper::create_const_null_column(1);
+        target->as_mutable_ptr()->resize(4);
 
         auto result = ArrayFunctions::array_contains_specific<TYPE_INT>(nullptr, {array, target}).value();
         EXPECT_EQ(4, result->size());
@@ -479,7 +463,7 @@ TEST_F(ArrayFunctionsTest, array_contains_no_null) {
     // array_contains(array<boolean>[1,0], 0) : 1
     // array_contains(array<boolean>[1,0], 1) : 1
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(DatumArray{(int8_t) false});
@@ -489,7 +473,7 @@ TEST_F(ArrayFunctionsTest, array_contains_no_null) {
         array->append_datum(DatumArray{(int8_t) true, (int8_t) false});
         array->append_datum(DatumArray{(int8_t) true, (int8_t) false});
 
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_BOOLEAN), false);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_BOOLEAN), false);
         target->append_datum(Datum{(int8_t)0});
         target->append_datum(Datum{(int8_t)1});
         target->append_datum(Datum{(int8_t)0});
@@ -516,14 +500,14 @@ TEST_F(ArrayFunctionsTest, array_contains_no_null) {
     // array_contains([3, 2, 1], 3) : 1
     // array_contains([2, 1, 3], 3) : 1
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(DatumArray{2});
         array->append_datum(DatumArray{1, 2, 3});
         array->append_datum(DatumArray{3, 2, 1});
         array->append_datum(DatumArray{2, 1, 3});
 
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 0);
         target->append_datum(Datum{3});
         target->resize(5);
 
@@ -546,7 +530,7 @@ TEST_F(ArrayFunctionsTest, array_contains_no_null) {
     // array_contains([["d", "o"], ["r"], ["i", "s"]], ["r", "i"]) : 0
     // array_contains([["d", "o"], ["r"], ["i", "s"]], ["i", "s"]) : 1
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(DatumArray{Datum(DatumArray{})});
         array->append_datum(DatumArray{DatumArray{"d", "o"}, DatumArray{"r"}, DatumArray{"i", "s"}});
@@ -558,7 +542,7 @@ TEST_F(ArrayFunctionsTest, array_contains_no_null) {
         array->append_datum(DatumArray{DatumArray{"d", "o"}, DatumArray{"r"}, DatumArray{"i", "s"}});
         array->append_datum(DatumArray{DatumArray{"d", "o"}, DatumArray{"r"}, DatumArray{"i", "s"}});
 
-        ColumnPtr target = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+        MutableColumnPtr target = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
         target->append_datum(Datum(DatumArray{}));
         target->append_datum(Datum(DatumArray{}));
         target->append_datum(Datum(DatumArray{}));
@@ -591,12 +575,12 @@ TEST_F(ArrayFunctionsTest, array_contains_has_null_element) {
     // array_contains(["abc", NULL], "abc")
     // array_contains([NULL, "abc"], "abc")
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
         array->append_datum(DatumArray{Datum{}});
         array->append_datum(DatumArray{"abc", Datum{}});
         array->append_datum(DatumArray{Datum{}, "abc"});
 
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 0);
         target->append_datum(Datum{"abc"});
         target->append_datum(Datum{"abc"});
         target->append_datum(Datum{"abc"});
@@ -613,11 +597,11 @@ TEST_F(ArrayFunctionsTest, array_contains_has_null_element) {
 TEST_F(ArrayFunctionsTest, array_contains_has_null_target) {
     // array_contains(["abc", "def"], NULL)
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
         array->append_datum(DatumArray{"abc", "def"});
 
         // const-null column.
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 0);
 
         auto result = ArrayFunctions::array_contains_specific<TYPE_VARCHAR>(nullptr, {array, target}).value();
         EXPECT_EQ(1, result->size());
@@ -627,12 +611,12 @@ TEST_F(ArrayFunctionsTest, array_contains_has_null_target) {
     // array_contains(ARRAY<TINYINT>[1, 2, 3], 4)
     // array_contains(ARRAY<TINYINT>[1, 2, 3], NULL)
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
         array->append_datum(DatumArray{(int8_t)1, (int8_t)2, (int8_t)3});
         array->append_datum(DatumArray{(int8_t)1, (int8_t)2, (int8_t)3});
         array->append_datum(DatumArray{(int8_t)1, (int8_t)2, (int8_t)3});
 
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_TINYINT), true);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_TINYINT), true);
         target->append_datum(Datum((int8_t)2));
         target->append_datum(Datum((int8_t)4));
         target->append_datum(Datum());
@@ -650,12 +634,12 @@ TEST_F(ArrayFunctionsTest, array_contains_has_null_element_and_target) {
     // array_contains([NULL], NULL)
     // array_contains([NULL, "abc"], NULL)
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
         array->append_datum(DatumArray{Datum()});
         array->append_datum(DatumArray{Datum(), "abc"});
 
         // const-null column.
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 0);
 
         auto result = ArrayFunctions::array_contains_specific<TYPE_VARCHAR>(nullptr, {array, target}).value();
         EXPECT_EQ(2, result->size());
@@ -668,14 +652,14 @@ TEST_F(ArrayFunctionsTest, array_contains_has_null_element_and_target) {
     // array_contains([[1,2], NULL], [1,2])
     // array_contains([[1,2], NULL], NULL)
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, false);
         array->append_datum(DatumArray{Datum()});
         array->append_datum(DatumArray{Datum(), DatumArray{1, 2}});
         array->append_datum(DatumArray{Datum(), DatumArray{1, 2}});
         array->append_datum(DatumArray{DatumArray{1, 2}, Datum()});
         array->append_datum(DatumArray{DatumArray{1, 2}, Datum()});
 
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_INT), true);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_INT), true);
         target->append_datum(Datum());
         target->append_datum(Datum());
         target->append_datum(DatumArray{1, 2});
@@ -698,12 +682,12 @@ TEST_F(ArrayFunctionsTest, array_contains_nullable_array) {
     // array_contains(NULL, "c")
     // array_contains(["a", "b", "c"], "c")
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
         array->append_datum(DatumArray{"a", "b"});
         array->append_datum(Datum());
         array->append_datum(DatumArray{"a", "b", "c"});
 
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 0);
         target->append_datum(Datum("c"));
         target->append_datum(Datum("c"));
         target->append_datum(Datum("c"));
@@ -718,12 +702,12 @@ TEST_F(ArrayFunctionsTest, array_contains_nullable_array) {
     // array_contains(NULL, ["c"])
     // array_contains([["a", "b"], ["c"]], ["c"])
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, true);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, true);
         array->append_datum(DatumArray{DatumArray{"a"}, DatumArray{"b"}});
         array->append_datum(Datum());
         array->append_datum(DatumArray{DatumArray{"a", "b"}, DatumArray{"c"}});
 
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_VARCHAR), false);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_VARCHAR), false);
         target->append_datum(DatumArray{"c"});
         target->append_datum(DatumArray{"c"});
         target->append_datum(DatumArray{"c"});
@@ -738,12 +722,12 @@ TEST_F(ArrayFunctionsTest, array_contains_nullable_array) {
     // array_contains(NULL, ["a"])
     // array_contains(NULL, [NULL])
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, true);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, true);
         array->append_datum(Datum());
         array->append_datum(Datum());
         array->append_datum(Datum());
 
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_VARCHAR), true);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_VARCHAR), true);
         target->append_datum(Datum());
         target->append_datum(DatumArray{"a"});
         target->append_datum(DatumArray{Datum()});
@@ -769,7 +753,7 @@ TEST_F(ArrayFunctionsTest, array_contains_all) {
     // array_contains_all(["a", "b", "c"], ["a", "d"])    -> 0
     // array_contains_all(["a", "b", "c"], ["a", "c"])    -> 1
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
         array->append_datum(DatumArray{"a", "b", "c"});
         array->append_datum(Datum());
         array->append_datum(DatumArray{"a", "b", "c"});
@@ -781,7 +765,7 @@ TEST_F(ArrayFunctionsTest, array_contains_all) {
         array->append_datum(DatumArray{"a", "b", "c"});
         array->append_datum(DatumArray{"a", "b", "c"});
 
-        ColumnPtr target = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+        MutableColumnPtr target = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
         target->append_datum(DatumArray{"c"});
         target->append_datum(DatumArray{"c"});
         target->append_datum(Datum());
@@ -810,12 +794,12 @@ TEST_F(ArrayFunctionsTest, array_contains_all) {
     // array_contains_all(NULL, [["c"]])
     // array_contains_all([["a", "b"], ["c"], NULL], [["a", "b"], NULL])
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, true);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, true);
         array->append_datum(DatumArray{Datum(DatumArray{"a"}), Datum(DatumArray{"b"})});
         array->append_datum(Datum());
         array->append_datum(DatumArray{Datum(DatumArray{"a", "b"}), Datum(DatumArray{"c"}), Datum()});
 
-        ColumnPtr target = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, false);
+        MutableColumnPtr target = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, false);
         target->append_datum(DatumArray{Datum(DatumArray{"c"})});
         target->append_datum(DatumArray{Datum(DatumArray{"c"})});
         target->append_datum(DatumArray{Datum(DatumArray{"a", "b"}), Datum()});
@@ -832,10 +816,10 @@ TEST_F(ArrayFunctionsTest, array_contains_all) {
 TEST_F(ArrayFunctionsTest, array_position_empty_array) {
     // array_position([], 1) : 0
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
 
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 0);
         target->append_datum(Datum{(int32_t)1});
 
         auto result = ArrayFunctions::array_position_specific<TYPE_INT>(nullptr, {array, target}).value();
@@ -844,10 +828,10 @@ TEST_F(ArrayFunctionsTest, array_position_empty_array) {
     }
     // array_position([], "abc"): 0
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
         array->append_datum(Datum(DatumArray{}));
 
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 0);
         target->append_datum(Datum{"abc"});
 
         auto result = ArrayFunctions::array_position_specific<TYPE_VARCHAR>(nullptr, {array, target}).value();
@@ -856,10 +840,10 @@ TEST_F(ArrayFunctionsTest, array_position_empty_array) {
     }
     // array_position(ARRAY<ARRAY<int>>[], [1]): 0
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
 
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_INT), false);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_INT), false);
         target->append_datum(Datum(DatumArray{Datum{(int32_t)1}}));
 
         auto result = ArrayFunctions::array_position_generic(nullptr, {array, target}).value();
@@ -868,10 +852,10 @@ TEST_F(ArrayFunctionsTest, array_position_empty_array) {
     }
     // array_position(ARRAY<ARRAY<int>>[], ARRAY<int>[]): 0
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
 
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_INT), false);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_INT), false);
         target->append_datum(Datum(DatumArray{}));
 
         auto result = ArrayFunctions::array_position_generic(nullptr, {array, target}).value();
@@ -884,13 +868,13 @@ TEST_F(ArrayFunctionsTest, array_position_empty_array) {
     //  array_position([], 1): 0;
     //  array_position([], 1): 0;
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
 
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 0);
         DCHECK(target->is_constant());
         target->append_datum(Datum((int32_t)1));
         target->resize(4);
@@ -908,13 +892,13 @@ TEST_F(ArrayFunctionsTest, array_position_empty_array) {
     //  array_position([], NULL): 0;
     //  array_position([], 3): 0;
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
 
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
         target->append_datum(Datum((int32_t)1));
         target->append_datum(Datum((int32_t)2));
         target->append_datum(Datum{});
@@ -933,14 +917,14 @@ TEST_F(ArrayFunctionsTest, array_position_empty_array) {
     //  array_position([], NULL): 0;
     //  array_position([], NULL): 0;
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
 
-        ColumnPtr target = ColumnHelper::create_const_null_column(1);
-        target->resize(4);
+        auto target = ColumnHelper::create_const_null_column(1);
+        target->as_mutable_ptr()->resize(4);
 
         auto result = ArrayFunctions::array_position_specific<TYPE_INT>(nullptr, {array, target}).value();
         EXPECT_EQ(4, result->size());
@@ -989,7 +973,7 @@ TEST_F(ArrayFunctionsTest, array_position_no_null) {
     // array_position(array<boolean>[1,0], 0) : 2
     // array_position(array<boolean>[1,0], 1) : 1
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(DatumArray{(int8_t) false});
@@ -999,7 +983,7 @@ TEST_F(ArrayFunctionsTest, array_position_no_null) {
         array->append_datum(DatumArray{(int8_t) true, (int8_t) false});
         array->append_datum(DatumArray{(int8_t) true, (int8_t) false});
 
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_BOOLEAN), false);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_BOOLEAN), false);
         target->append_datum(Datum{(int8_t)0});
         target->append_datum(Datum{(int8_t)1});
         target->append_datum(Datum{(int8_t)0});
@@ -1026,14 +1010,14 @@ TEST_F(ArrayFunctionsTest, array_position_no_null) {
     // array_position([3, 2, 1], 3) : 1
     // array_position([2, 1, 3], 3) : 3
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(DatumArray{2});
         array->append_datum(DatumArray{1, 2, 3});
         array->append_datum(DatumArray{3, 2, 1});
         array->append_datum(DatumArray{2, 1, 3});
 
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 0);
         target->append_datum(Datum{3});
         target->resize(5);
 
@@ -1056,7 +1040,7 @@ TEST_F(ArrayFunctionsTest, array_position_no_null) {
     // array_position([["d", "o"], ["r"], ["i", "s"]], ["r", "i"]) : 0
     // array_position([["d", "o"], ["r"], ["i", "s"]], ["i", "s"]) : 3
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(DatumArray{Datum(DatumArray{})});
         array->append_datum(DatumArray{DatumArray{"d", "o"}, DatumArray{"r"}, DatumArray{"i", "s"}});
@@ -1068,7 +1052,7 @@ TEST_F(ArrayFunctionsTest, array_position_no_null) {
         array->append_datum(DatumArray{DatumArray{"d", "o"}, DatumArray{"r"}, DatumArray{"i", "s"}});
         array->append_datum(DatumArray{DatumArray{"d", "o"}, DatumArray{"r"}, DatumArray{"i", "s"}});
 
-        ColumnPtr target = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+        MutableColumnPtr target = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
         target->append_datum(Datum(DatumArray{}));
         target->append_datum(Datum(DatumArray{}));
         target->append_datum(Datum(DatumArray{}));
@@ -1101,12 +1085,12 @@ TEST_F(ArrayFunctionsTest, array_position_has_null_element) {
     // array_position(["abc", NULL], "abc"): 1
     // array_position([NULL, "abc"], "abc"): 2
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
         array->append_datum(DatumArray{Datum{}});
         array->append_datum(DatumArray{"abc", Datum{}});
         array->append_datum(DatumArray{Datum{}, "abc"});
 
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 0);
         target->append_datum(Datum{"abc"});
         target->append_datum(Datum{"abc"});
         target->append_datum(Datum{"abc"});
@@ -1123,11 +1107,11 @@ TEST_F(ArrayFunctionsTest, array_position_has_null_element) {
 TEST_F(ArrayFunctionsTest, array_position_has_null_target) {
     // array_position(["abc", "def"], NULL): 0
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
         array->append_datum(DatumArray{"abc", "def"});
 
         // const-null column.
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 0);
 
         auto result = ArrayFunctions::array_position_specific<TYPE_VARCHAR>(nullptr, {array, target}).value();
         EXPECT_EQ(1, result->size());
@@ -1137,12 +1121,12 @@ TEST_F(ArrayFunctionsTest, array_position_has_null_target) {
     // array_position(ARRAY<TINYINT>[1, 2, 3], 4): 0
     // array_position(ARRAY<TINYINT>[1, 2, 3], NULL): 0
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
         array->append_datum(DatumArray{(int8_t)1, (int8_t)2, (int8_t)3});
         array->append_datum(DatumArray{(int8_t)1, (int8_t)2, (int8_t)3});
         array->append_datum(DatumArray{(int8_t)1, (int8_t)2, (int8_t)3});
 
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_TINYINT), true);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_TINYINT), true);
         target->append_datum(Datum((int8_t)2));
         target->append_datum(Datum((int8_t)4));
         target->append_datum(Datum());
@@ -1160,12 +1144,12 @@ TEST_F(ArrayFunctionsTest, array_position_has_null_element_and_target) {
     // array_position([NULL], NULL): 1
     // array_position([NULL, "abc"], NULL): 1
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
         array->append_datum(DatumArray{Datum()});
         array->append_datum(DatumArray{Datum(), "abc"});
 
         // const-null column.
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 1);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 1);
 
         auto result = ArrayFunctions::array_position_specific<TYPE_VARCHAR>(nullptr, {array, target}).value();
         EXPECT_EQ(2, result->size());
@@ -1178,14 +1162,14 @@ TEST_F(ArrayFunctionsTest, array_position_has_null_element_and_target) {
     // array_position([[1,2], NULL], [1,2]): 1
     // array_position([[1,2], NULL], NULL): 2
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, false);
         array->append_datum(DatumArray{Datum()});
         array->append_datum(DatumArray{Datum(), DatumArray{1, 2}});
         array->append_datum(DatumArray{Datum(), DatumArray{1, 2}});
         array->append_datum(DatumArray{DatumArray{1, 2}, Datum()});
         array->append_datum(DatumArray{DatumArray{1, 2}, Datum()});
 
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_INT), true);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_INT), true);
         target->append_datum(Datum());
         target->append_datum(Datum());
         target->append_datum(DatumArray{1, 2});
@@ -1206,12 +1190,12 @@ TEST_F(ArrayFunctionsTest, array_position_has_null_element_and_target_and_check_
     // array_position([NULL], NULL): 1
     // array_position([NULL, "abc"], NULL): 1
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
         array->append_datum(DatumArray{Datum()});
         array->append_datum(DatumArray{Datum(), "abc"});
 
         // const-null column.
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 0);
 
         auto result = ArrayFunctions::array_position_specific<TYPE_VARCHAR>(nullptr, {array, target}).value();
         EXPECT_EQ(2, result->size());
@@ -1224,14 +1208,14 @@ TEST_F(ArrayFunctionsTest, array_position_has_null_element_and_target_and_check_
     // array_position([[1,2], NULL], [1,2]): 1
     // array_position([[1,2], NULL], NULL): 2
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, false);
         array->append_datum(DatumArray{Datum()});
         array->append_datum(DatumArray{Datum(), DatumArray{1, 2}});
         array->append_datum(DatumArray{Datum(), DatumArray{1, 2}});
         array->append_datum(DatumArray{DatumArray{1, 2}, Datum()});
         array->append_datum(DatumArray{DatumArray{1, 2}, Datum()});
 
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_INT), true);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_INT), true);
         target->append_datum(Datum());
         target->append_datum(Datum());
         target->append_datum(DatumArray{1, 2});
@@ -1255,12 +1239,12 @@ TEST_F(ArrayFunctionsTest, array_position_nullable_array) {
     // array_position(NULL, "c"): null
     // array_position(["a", "b", "c"], "c"): 3
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
         array->append_datum(DatumArray{"a", "b"});
         array->append_datum(Datum());
         array->append_datum(DatumArray{"a", "b", "c"});
 
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 0);
         target->append_datum(Datum("c"));
         target->append_datum(Datum("c"));
         target->append_datum(Datum("c"));
@@ -1275,12 +1259,12 @@ TEST_F(ArrayFunctionsTest, array_position_nullable_array) {
     // array_position(NULL, ["c"]): null
     // array_position([["a", "b"], ["c"]], ["c"]): 2
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, true);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, true);
         array->append_datum(DatumArray{DatumArray{"a"}, DatumArray{"b"}});
         array->append_datum(Datum());
         array->append_datum(DatumArray{DatumArray{"a", "b"}, DatumArray{"c"}});
 
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_VARCHAR), false);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_VARCHAR), false);
         target->append_datum(DatumArray{"c"});
         target->append_datum(DatumArray{"c"});
         target->append_datum(DatumArray{"c"});
@@ -1295,12 +1279,12 @@ TEST_F(ArrayFunctionsTest, array_position_nullable_array) {
     // array_position(NULL, ["a"]): null
     // array_position(NULL, [NULL]): null
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, true);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, true);
         array->append_datum(Datum());
         array->append_datum(Datum());
         array->append_datum(Datum());
 
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_VARCHAR), true);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_VARCHAR), true);
         target->append_datum(Datum());
         target->append_datum(DatumArray{"a"});
         target->append_datum(DatumArray{Datum()});
@@ -1313,14 +1297,13 @@ TEST_F(ArrayFunctionsTest, array_position_nullable_array) {
     }
 }
 
-// NOLINTNEXTLINE
 TEST_F(ArrayFunctionsTest, array_remove_empty_array) {
     // array_remove([], 1) -> []
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
 
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 0);
         target->append_datum(Datum{(int32_t)1});
 
         auto result = ArrayFunctions::array_remove(nullptr, {array, target}).value();
@@ -1330,10 +1313,10 @@ TEST_F(ArrayFunctionsTest, array_remove_empty_array) {
 
     // array_remove([], "abc") -> []
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
         array->append_datum(Datum(DatumArray{}));
 
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 0);
         target->append_datum(Datum{"abc"});
 
         auto result = ArrayFunctions::array_remove(nullptr, {array, target}).value();
@@ -1343,10 +1326,10 @@ TEST_F(ArrayFunctionsTest, array_remove_empty_array) {
 
     // array_remove([[]], [1]) -> [[]]
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
 
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_INT), false);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_INT), false);
         target->append_datum(Datum(DatumArray{Datum{(int32_t)1}}));
 
         auto result = ArrayFunctions::array_remove(nullptr, {array, target}).value();
@@ -1358,10 +1341,10 @@ TEST_F(ArrayFunctionsTest, array_remove_empty_array) {
 
     // array_remove([[]], []) -> []
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
 
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_INT), false);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_INT), false);
         target->append_datum(Datum(DatumArray{}));
 
         auto result = ArrayFunctions::array_remove(nullptr, {array, target}).value();
@@ -1376,13 +1359,13 @@ TEST_F(ArrayFunctionsTest, array_remove_empty_array) {
     // array_remove([], 1) -> []
     // array_remove([], 1) -> []
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
 
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 0);
         DCHECK(target->is_constant());
         target->append_datum(Datum((int32_t)1));
         target->resize(4);
@@ -1412,13 +1395,13 @@ TEST_F(ArrayFunctionsTest, array_remove_empty_array) {
     // array_remove([], NULL) -> []
     // array_remove([], 3) -> []
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
 
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
         target->append_datum(Datum((int32_t)1));
         target->append_datum(Datum((int32_t)2));
         target->append_datum(Datum{});
@@ -1449,13 +1432,13 @@ TEST_F(ArrayFunctionsTest, array_remove_empty_array) {
     // array_remove([], NULL) -> []
     // array_remove([], NULL) -> []
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
 
-        ColumnPtr target = ColumnHelper::create_const_null_column(1);
+        auto target = ColumnHelper::create_const_null_column(1);
         target->resize(4);
 
         auto result = ArrayFunctions::array_remove(nullptr, {array, target}).value();
@@ -1502,7 +1485,7 @@ TEST_F(ArrayFunctionsTest, array_remove_no_null) {
     // array_remove([true, false], false) -> [true]
     // array_remove([true, false], true)  -> [false]
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(DatumArray{(int8_t) false});
@@ -1512,7 +1495,7 @@ TEST_F(ArrayFunctionsTest, array_remove_no_null) {
         array->append_datum(DatumArray{(int8_t) true, (int8_t) false});
         array->append_datum(DatumArray{(int8_t) true, (int8_t) false});
 
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_BOOLEAN), false);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_BOOLEAN), false);
         target->append_datum(Datum{(int8_t)0});
         target->append_datum(Datum{(int8_t)1});
         target->append_datum(Datum{(int8_t)0});
@@ -1568,14 +1551,14 @@ TEST_F(ArrayFunctionsTest, array_remove_no_null) {
     // array_remove([3, 2, 1], 3) -> [2, 1]
     // array_remove([2, 1, 3], 3) -> [2, 1]
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(DatumArray{2});
         array->append_datum(DatumArray{1, 2, 3});
         array->append_datum(DatumArray{3, 2, 1});
         array->append_datum(DatumArray{2, 1, 3});
 
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 0);
         target->append_datum(Datum{3});
         target->resize(5);
 
@@ -1621,7 +1604,7 @@ TEST_F(ArrayFunctionsTest, array_remove_no_null) {
     // array_remove([["d", "o"], ["r"], ["i", "s"]], ["r", "i"]) -> [["d", "o"], ["r"], ["i", "s"]]
     // array_remove([["d", "o"], ["r"], ["i", "s"]], ["i", "s"]) -> [["d", "o"], ["r"]]
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(DatumArray{Datum(DatumArray{})});
         array->append_datum(DatumArray{DatumArray{"d", "o"}, DatumArray{"r"}, DatumArray{"i", "s"}});
@@ -1633,7 +1616,7 @@ TEST_F(ArrayFunctionsTest, array_remove_no_null) {
         array->append_datum(DatumArray{DatumArray{"d", "o"}, DatumArray{"r"}, DatumArray{"i", "s"}});
         array->append_datum(DatumArray{DatumArray{"d", "o"}, DatumArray{"r"}, DatumArray{"i", "s"}});
 
-        ColumnPtr target = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+        MutableColumnPtr target = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
         target->append_datum(Datum(DatumArray{}));
         target->append_datum(Datum(DatumArray{}));
         target->append_datum(Datum(DatumArray{}));
@@ -1752,12 +1735,12 @@ TEST_F(ArrayFunctionsTest, array_remove_has_null_element) {
     // array_remove(["abc", NULL], "abc") -> [NULL]
     // array_remove([NULL, "abc"], "abc") -> [NULL]
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
         array->append_datum(DatumArray{Datum{}});
         array->append_datum(DatumArray{"abc", Datum{}});
         array->append_datum(DatumArray{Datum{}, "abc"});
 
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 0);
         target->append_datum(Datum{"abc"});
         target->append_datum(Datum{"abc"});
         target->append_datum(Datum{"abc"});
@@ -1785,11 +1768,11 @@ TEST_F(ArrayFunctionsTest, array_remove_has_null_element) {
 TEST_F(ArrayFunctionsTest, array_remove_has_null_target) {
     {
         // array_remove(["abc", "def"], NULL) -> ["abc", "def"]
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
         array->append_datum(DatumArray{"abc", "def"});
 
         // const-null column.
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 0);
         auto result = ArrayFunctions::array_remove(nullptr, {array, target}).value();
         EXPECT_EQ(1, result->size());
 
@@ -1803,12 +1786,12 @@ TEST_F(ArrayFunctionsTest, array_remove_has_null_target) {
     // array_remove([1, 2, 3], 4) -> [1, 2, 3]
     // array_remove([1, 2, 3], NULL) -> [1, 2, 3]
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
         array->append_datum(DatumArray{(int8_t)1, (int8_t)2, (int8_t)3});
         array->append_datum(DatumArray{(int8_t)1, (int8_t)2, (int8_t)3});
         array->append_datum(DatumArray{(int8_t)1, (int8_t)2, (int8_t)3});
 
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_TINYINT), true);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_TINYINT), true);
         target->append_datum(Datum((int8_t)2));
         target->append_datum(Datum((int8_t)4));
         target->append_datum(Datum());
@@ -1843,12 +1826,12 @@ TEST_F(ArrayFunctionsTest, array_remove_has_null_element_and_target) {
     // array_remove([NULL], NULL)  -> []
     // array_remove([NULL, "abc"], NULL) -> ["abc"]
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
         array->append_datum(DatumArray{Datum()});
         array->append_datum(DatumArray{Datum(), "abc"});
 
         // const-null column.
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 0);
 
         auto result = ArrayFunctions::array_remove(nullptr, {array, target}).value();
         EXPECT_EQ(2, result->size());
@@ -1869,14 +1852,14 @@ TEST_F(ArrayFunctionsTest, array_remove_has_null_element_and_target) {
     // array_remove([[1, 2], NULL], [1, 2]) -> [NULL]
     // array_remove([NULL, [1, 2]], NULL)   -> [[1, 2]]
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, false);
         array->append_datum(DatumArray{Datum()});
         array->append_datum(DatumArray{Datum(), DatumArray{1, 2}});
         array->append_datum(DatumArray{Datum(), DatumArray{1, 2}});
         array->append_datum(DatumArray{DatumArray{1, 2}, Datum()});
         array->append_datum(DatumArray{DatumArray{1, 2}, Datum()});
 
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_INT), true);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_INT), true);
         target->append_datum(Datum());
         target->append_datum(Datum());
         target->append_datum(DatumArray{1, 2});
@@ -1922,12 +1905,12 @@ TEST_F(ArrayFunctionsTest, array_remove_nullable_array) {
         // array_remove(["a", "b"], "c")      -> ["a", "b"]
         // array_remove(NULL, "c")            -> NULL
         // array_remove(["a", "b", "c"], "c") -> ["a", "b"]
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
         array->append_datum(DatumArray{"a", "b"});
         array->append_datum(Datum());
         array->append_datum(DatumArray{"a", "b", "c"});
 
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 0);
         target->append_datum(Datum("c"));
         target->append_datum(Datum("c"));
         target->append_datum(Datum("c"));
@@ -1955,12 +1938,12 @@ TEST_F(ArrayFunctionsTest, array_remove_nullable_array) {
     // array_remove(NULL, ["c"])           -> NULL
     // array_remove([["a", "b"], ["c"]])   -> [["a", "b"]]
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, true);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, true);
         array->append_datum(DatumArray{DatumArray{"a"}, DatumArray{"b"}});
         array->append_datum(Datum());
         array->append_datum(DatumArray{DatumArray{"a", "b"}, DatumArray{"c"}});
 
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_VARCHAR), false);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_VARCHAR), false);
         target->append_datum(DatumArray{"c"});
         target->append_datum(DatumArray{"c"});
         target->append_datum(DatumArray{"c"});
@@ -1988,12 +1971,12 @@ TEST_F(ArrayFunctionsTest, array_remove_nullable_array) {
     // array_remove(NULL, ["a"]) -> NULL
     // array_remove(NULL, [])    -> NULL
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, true);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, true);
         array->append_datum(Datum());
         array->append_datum(Datum());
         array->append_datum(Datum());
 
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_VARCHAR), true);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_ARRAY_VARCHAR), true);
         target->append_datum(Datum());
         target->append_datum(DatumArray{"a"});
         target->append_datum(DatumArray{Datum()});
@@ -2007,8 +1990,8 @@ TEST_F(ArrayFunctionsTest, array_remove_nullable_array) {
     }
     // array_remove(NULL,1)
     {
-        ColumnPtr array = ColumnHelper::create_const_null_column(3);
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_TINYINT), true);
+        auto array = ColumnHelper::create_const_null_column(3);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_TINYINT), true);
         target->append_datum(Datum((int8_t)2));
         target->append_datum(Datum((int8_t)4));
         target->append_datum(Datum());
@@ -2025,10 +2008,10 @@ TEST_F(ArrayFunctionsTest, array_remove_nullable_array) {
 // NOLINTNEXTLINE
 TEST_F(ArrayFunctionsTest, array_append) {
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
         array->append_datum(Datum(DatumArray{}));
 
-        ColumnPtr null = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 0);
+        MutableColumnPtr null = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 0);
 
         auto result = ArrayFunctions::array_append(nullptr, {array, null}).value();
         EXPECT_EQ(1, result->size());
@@ -2040,13 +2023,13 @@ TEST_F(ArrayFunctionsTest, array_append) {
     // array_append([], 'def')
     // array_append(NULL, 'def')
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
         array->append_datum(DatumArray{"abc"});
         array->append_datum(DatumArray{"xyz", "xxx"});
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum());
 
-        ColumnPtr data = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 0);
+        MutableColumnPtr data = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 0);
         data->append_datum("def");
 
         auto result = ArrayFunctions::array_append(nullptr, {array, data}).value();
@@ -2072,14 +2055,14 @@ TEST_F(ArrayFunctionsTest, array_append) {
     // array_append(NULL, NULL)                   -> NULL
     // array_append([[10, 11],[12,13]], [14,15])  -> [[10,11],[12,13],[14,15]]
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, true);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_INT, true);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(DatumArray{Datum(DatumArray{0, 1})});
         array->append_datum(DatumArray{Datum()});
         array->append_datum(Datum());
         array->append_datum(DatumArray{Datum(DatumArray{10, 11}), Datum(DatumArray{12, 13})});
 
-        ColumnPtr data = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+        MutableColumnPtr data = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
         data->append_datum(Datum(DatumArray{}));
         data->append_datum(DatumArray{2});
         data->append_datum(DatumArray{3, 4});
@@ -2129,8 +2112,8 @@ TEST_F(ArrayFunctionsTest, array_append) {
 
     // array_append(NULL,1)
     {
-        ColumnPtr array = ColumnHelper::create_const_null_column(3);
-        ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_TINYINT), true);
+        auto array = ColumnHelper::create_const_null_column(3);
+        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_TINYINT), true);
         target->append_datum(Datum((int8_t)2));
         target->append_datum(Datum((int8_t)4));
         target->append_datum(Datum());
@@ -2146,7 +2129,7 @@ TEST_F(ArrayFunctionsTest, array_append) {
 
 TEST_F(ArrayFunctionsTest, array_sum_empty_array) {
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
 
         auto result = ArrayFunctions::array_sum<TYPE_INT>(nullptr, {array}).value();
@@ -2154,7 +2137,7 @@ TEST_F(ArrayFunctionsTest, array_sum_empty_array) {
         EXPECT_TRUE(result->is_null(0));
     }
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
         array->append_datum(Datum(DatumArray{}));
 
         auto result = ArrayFunctions::array_sum<TYPE_BOOLEAN>(nullptr, {array}).value();
@@ -2163,7 +2146,7 @@ TEST_F(ArrayFunctionsTest, array_sum_empty_array) {
     }
 
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
@@ -2178,7 +2161,7 @@ TEST_F(ArrayFunctionsTest, array_sum_empty_array) {
     }
 
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
@@ -2193,7 +2176,7 @@ TEST_F(ArrayFunctionsTest, array_sum_empty_array) {
     }
 
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
@@ -2223,7 +2206,7 @@ TEST_F(ArrayFunctionsTest, array_sum_empty_array) {
 
 TEST_F(ArrayFunctionsTest, array_avg_empty_array) {
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
 
         auto result = ArrayFunctions::array_avg<TYPE_INT>(nullptr, {array}).value();
@@ -2231,7 +2214,7 @@ TEST_F(ArrayFunctionsTest, array_avg_empty_array) {
         EXPECT_TRUE(result->is_null(0));
     }
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
         array->append_datum(Datum(DatumArray{}));
 
         auto result = ArrayFunctions::array_avg<TYPE_BOOLEAN>(nullptr, {array}).value();
@@ -2240,7 +2223,7 @@ TEST_F(ArrayFunctionsTest, array_avg_empty_array) {
     }
 
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
@@ -2255,7 +2238,7 @@ TEST_F(ArrayFunctionsTest, array_avg_empty_array) {
     }
 
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
@@ -2270,7 +2253,7 @@ TEST_F(ArrayFunctionsTest, array_avg_empty_array) {
     }
 
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
@@ -2300,7 +2283,7 @@ TEST_F(ArrayFunctionsTest, array_avg_empty_array) {
 
 TEST_F(ArrayFunctionsTest, array_min_empty_array) {
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
 
         auto result = ArrayFunctions::array_min<TYPE_INT>(nullptr, {array}).value();
@@ -2308,7 +2291,7 @@ TEST_F(ArrayFunctionsTest, array_min_empty_array) {
         EXPECT_TRUE(result->is_null(0));
     }
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
         array->append_datum(Datum(DatumArray{}));
 
         auto result = ArrayFunctions::array_min<TYPE_BOOLEAN>(nullptr, {array}).value();
@@ -2317,7 +2300,7 @@ TEST_F(ArrayFunctionsTest, array_min_empty_array) {
     }
 
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
@@ -2332,7 +2315,7 @@ TEST_F(ArrayFunctionsTest, array_min_empty_array) {
     }
 
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
@@ -2347,7 +2330,7 @@ TEST_F(ArrayFunctionsTest, array_min_empty_array) {
     }
 
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
@@ -2377,7 +2360,7 @@ TEST_F(ArrayFunctionsTest, array_min_empty_array) {
 
 TEST_F(ArrayFunctionsTest, array_max_empty_array) {
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
 
         auto result = ArrayFunctions::array_max<TYPE_INT>(nullptr, {array}).value();
@@ -2385,7 +2368,7 @@ TEST_F(ArrayFunctionsTest, array_max_empty_array) {
         EXPECT_TRUE(result->is_null(0));
     }
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
         array->append_datum(Datum(DatumArray{}));
 
         auto result = ArrayFunctions::array_max<TYPE_BOOLEAN>(nullptr, {array}).value();
@@ -2394,7 +2377,7 @@ TEST_F(ArrayFunctionsTest, array_max_empty_array) {
     }
 
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
@@ -2409,7 +2392,7 @@ TEST_F(ArrayFunctionsTest, array_max_empty_array) {
     }
 
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
@@ -2424,7 +2407,7 @@ TEST_F(ArrayFunctionsTest, array_max_empty_array) {
     }
 
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
@@ -2454,7 +2437,7 @@ TEST_F(ArrayFunctionsTest, array_max_empty_array) {
 
 TEST_F(ArrayFunctionsTest, array_sum_no_null) {
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(DatumArray{(int8_t) false});
@@ -2477,7 +2460,7 @@ TEST_F(ArrayFunctionsTest, array_sum_no_null) {
     }
 
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(DatumArray{2});
         array->append_datum(DatumArray{1, 2, 3});
@@ -2496,7 +2479,7 @@ TEST_F(ArrayFunctionsTest, array_sum_no_null) {
     }
 
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(DatumArray{(int8_t)127, (int8_t)100, (int8_t)-1});
         array->append_datum(DatumArray{(int8_t)-128, (int8_t)-1, (int8_t)10});
@@ -2511,7 +2494,7 @@ TEST_F(ArrayFunctionsTest, array_sum_no_null) {
 
 TEST_F(ArrayFunctionsTest, array_avg_no_null) {
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(DatumArray{(int8_t) false});
@@ -2534,7 +2517,7 @@ TEST_F(ArrayFunctionsTest, array_avg_no_null) {
     }
 
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(DatumArray{2});
         array->append_datum(DatumArray{1, 2, 3});
@@ -2553,7 +2536,7 @@ TEST_F(ArrayFunctionsTest, array_avg_no_null) {
     }
 
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(DatumArray{(int8_t) true, Datum(), Datum(), (int8_t) false});
         array->append_datum(DatumArray{(int8_t) false, Datum()});
@@ -2568,7 +2551,7 @@ TEST_F(ArrayFunctionsTest, array_avg_no_null) {
     }
 
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(DatumArray{(int8_t)-128, (int8_t)127, (int8_t)0, Datum()});
         array->append_datum(DatumArray{(int8_t)127, (int8_t)10, (int8_t)100});
@@ -2581,7 +2564,7 @@ TEST_F(ArrayFunctionsTest, array_avg_no_null) {
     }
 
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_SMALLINT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_SMALLINT, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(DatumArray{(int16_t)30000, (int16_t)30000, Datum()});
         array->append_datum(DatumArray{(int16_t)-32768, (int16_t)32767, Datum(), (int16_t)0, (int16_t)1});
@@ -2597,7 +2580,7 @@ TEST_F(ArrayFunctionsTest, array_avg_no_null) {
 
 TEST_F(ArrayFunctionsTest, array_min_no_null) {
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(DatumArray{(int8_t) false});
@@ -2620,7 +2603,7 @@ TEST_F(ArrayFunctionsTest, array_min_no_null) {
     }
 
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(DatumArray{2});
         array->append_datum(DatumArray{1, 2, 3});
@@ -2639,7 +2622,7 @@ TEST_F(ArrayFunctionsTest, array_min_no_null) {
 
 TEST_F(ArrayFunctionsTest, array_max_no_null) {
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(DatumArray{(int8_t) false});
@@ -2662,7 +2645,7 @@ TEST_F(ArrayFunctionsTest, array_max_no_null) {
     }
 
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(DatumArray{2});
         array->append_datum(DatumArray{1, 2, 3});
@@ -2681,7 +2664,7 @@ TEST_F(ArrayFunctionsTest, array_max_no_null) {
 
 TEST_F(ArrayFunctionsTest, array_sum_has_null_element) {
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(DatumArray{(int64_t)2000});
         array->append_datum(DatumArray{(int64_t)1000, (int64_t)2, (int64_t)3});
@@ -2700,7 +2683,7 @@ TEST_F(ArrayFunctionsTest, array_sum_has_null_element) {
     }
 
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_LARGEINT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_LARGEINT, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(DatumArray{(int128_t)2000});
         array->append_datum(DatumArray{(int128_t)1000, (int128_t)2, (int128_t)3});
@@ -2721,7 +2704,7 @@ TEST_F(ArrayFunctionsTest, array_sum_has_null_element) {
 
 TEST_F(ArrayFunctionsTest, array_avg_has_null_element) {
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(DatumArray{(int64_t)2000});
         array->append_datum(DatumArray{(int64_t)1000, (int64_t)2, (int64_t)3});
@@ -2740,7 +2723,7 @@ TEST_F(ArrayFunctionsTest, array_avg_has_null_element) {
     }
 
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_LARGEINT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_LARGEINT, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(DatumArray{(int128_t)2000});
         array->append_datum(DatumArray{(int128_t)1000, (int128_t)2, (int128_t)3});
@@ -2761,7 +2744,7 @@ TEST_F(ArrayFunctionsTest, array_avg_has_null_element) {
 
 TEST_F(ArrayFunctionsTest, array_min_has_null_element) {
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(DatumArray{(int64_t)2000});
         array->append_datum(DatumArray{(int64_t)1000, (int64_t)2, (int64_t)3});
@@ -2780,7 +2763,7 @@ TEST_F(ArrayFunctionsTest, array_min_has_null_element) {
     }
 
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_LARGEINT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_LARGEINT, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(DatumArray{(int128_t)2000});
         array->append_datum(DatumArray{(int128_t)1000, (int128_t)2, (int128_t)3});
@@ -2799,7 +2782,7 @@ TEST_F(ArrayFunctionsTest, array_min_has_null_element) {
     }
 
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_DATE, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_DATE, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(DatumArray{DateValue::create(1990, 3, 22)});
         array->append_datum(DatumArray{DateValue::create(1990, 3, 22), DateValue::create(1990, 3, 24)});
@@ -2818,7 +2801,7 @@ TEST_F(ArrayFunctionsTest, array_min_has_null_element) {
     }
 
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_DATETIME, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_DATETIME, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(DatumArray{TimestampValue::create(1990, 3, 22, 5, 32, 32)});
         array->append_datum(DatumArray{TimestampValue::create(1990, 3, 22, 5, 32, 32),
@@ -2840,7 +2823,7 @@ TEST_F(ArrayFunctionsTest, array_min_has_null_element) {
     }
 
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(DatumArray{"varchar"});
         array->append_datum(DatumArray{"varchar1", "varchar2"});
@@ -2861,7 +2844,7 @@ TEST_F(ArrayFunctionsTest, array_min_has_null_element) {
 
 TEST_F(ArrayFunctionsTest, array_max_has_null_element) {
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(DatumArray{(int64_t)2000});
         array->append_datum(DatumArray{(int64_t)1000, (int64_t)2, (int64_t)3});
@@ -2878,7 +2861,7 @@ TEST_F(ArrayFunctionsTest, array_max_has_null_element) {
     }
 
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_LARGEINT, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_LARGEINT, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(DatumArray{(int128_t)2000});
         array->append_datum(DatumArray{(int128_t)1000, (int128_t)2, (int128_t)3});
@@ -2897,7 +2880,7 @@ TEST_F(ArrayFunctionsTest, array_max_has_null_element) {
     }
 
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_DATE, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_DATE, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(DatumArray{DateValue::create(1990, 3, 22)});
         array->append_datum(DatumArray{DateValue::create(1990, 3, 22), DateValue::create(1990, 3, 24)});
@@ -2916,7 +2899,7 @@ TEST_F(ArrayFunctionsTest, array_max_has_null_element) {
     }
 
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_DATETIME, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_DATETIME, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(DatumArray{TimestampValue::create(1990, 3, 22, 5, 32, 32)});
         array->append_datum(DatumArray{TimestampValue::create(1990, 3, 22, 5, 32, 32),
@@ -2938,7 +2921,7 @@ TEST_F(ArrayFunctionsTest, array_max_has_null_element) {
     }
 
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(DatumArray{"varchar"});
         array->append_datum(DatumArray{"varchar1", "varchar2"});
@@ -2959,7 +2942,7 @@ TEST_F(ArrayFunctionsTest, array_max_has_null_element) {
 
 TEST_F(ArrayFunctionsTest, array_sum_nullable_array) {
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
         array->append_datum(DatumArray{3, 5});
         array->append_datum(DatumArray{Datum(), 54});
         array->append_datum(DatumArray{5352, 121, 30});
@@ -2974,7 +2957,7 @@ TEST_F(ArrayFunctionsTest, array_sum_nullable_array) {
 
 TEST_F(ArrayFunctionsTest, array_avg_nullable_array) {
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
         array->append_datum(DatumArray{3, 5});
         array->append_datum(DatumArray{Datum(), 54});
         array->append_datum(DatumArray{5352, 121, 32});
@@ -2989,7 +2972,7 @@ TEST_F(ArrayFunctionsTest, array_avg_nullable_array) {
 
 TEST_F(ArrayFunctionsTest, array_min_nullable_array) {
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
         array->append_datum(DatumArray{3, 5});
         array->append_datum(DatumArray{Datum(), 54});
         array->append_datum(DatumArray{5352, 121, 32});
@@ -3004,7 +2987,7 @@ TEST_F(ArrayFunctionsTest, array_min_nullable_array) {
 
 TEST_F(ArrayFunctionsTest, array_max_nullable_array) {
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+        MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
         array->append_datum(DatumArray{3, 5});
         array->append_datum(DatumArray{Datum(), 54});
         array->append_datum(DatumArray{5352, 121, 32});
@@ -3019,7 +3002,7 @@ TEST_F(ArrayFunctionsTest, array_max_nullable_array) {
 
 TEST_F(ArrayFunctionsTest, array_all_null) {
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, false);
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(DatumArray{Datum()});
         array->append_datum(DatumArray{Datum(), Datum(), Datum()});
@@ -3034,7 +3017,7 @@ TEST_F(ArrayFunctionsTest, array_all_null) {
     }
 
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, false);
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(DatumArray{Datum()});
         array->append_datum(DatumArray{Datum(), Datum(), Datum()});
@@ -3049,7 +3032,7 @@ TEST_F(ArrayFunctionsTest, array_all_null) {
     }
 
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, false);
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(DatumArray{Datum()});
         array->append_datum(DatumArray{Datum(), Datum(), Datum()});
@@ -3064,7 +3047,7 @@ TEST_F(ArrayFunctionsTest, array_all_null) {
     }
 
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(DatumArray{Datum()});
         array->append_datum(DatumArray{Datum(), Datum(), Datum()});
@@ -3079,7 +3062,7 @@ TEST_F(ArrayFunctionsTest, array_all_null) {
     }
 
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, false);
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(DatumArray{Datum()});
         array->append_datum(DatumArray{Datum(), Datum(), Datum()});
@@ -3094,7 +3077,7 @@ TEST_F(ArrayFunctionsTest, array_all_null) {
     }
 
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(DatumArray{Datum()});
         array->append_datum(DatumArray{Datum(), Datum(), Datum()});
@@ -3110,7 +3093,7 @@ TEST_F(ArrayFunctionsTest, array_all_null) {
 }
 
 TEST_F(ArrayFunctionsTest, array_reverse_int) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
     src_column->append_datum(DatumArray{5, 3, 6});
     src_column->append_datum(DatumArray{2, 3, 7, 8});
     src_column->append_datum(DatumArray{4, 3, 2, 1});
@@ -3125,7 +3108,7 @@ TEST_F(ArrayFunctionsTest, array_reverse_int) {
 }
 
 TEST_F(ArrayFunctionsTest, array_reverse_string) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
     src_column->append_datum(DatumArray{"352", "66", "4325"});
     src_column->append_datum(DatumArray{"235", "99", "8", "43251"});
     src_column->append_datum(DatumArray{"44", "33", "22", "112"});
@@ -3140,7 +3123,7 @@ TEST_F(ArrayFunctionsTest, array_reverse_string) {
 }
 
 TEST_F(ArrayFunctionsTest, array_reverse_nullable_elements) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
     src_column->append_datum(DatumArray{5, Datum(), 3, 6});
     src_column->append_datum(DatumArray{2, 3, Datum(), Datum()});
     src_column->append_datum(DatumArray{Datum(), Datum(), Datum(), Datum()});
@@ -3155,7 +3138,7 @@ TEST_F(ArrayFunctionsTest, array_reverse_nullable_elements) {
 }
 
 TEST_F(ArrayFunctionsTest, array_reverse_nullable_array) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
     src_column->append_datum(DatumArray{5, Datum(), 3, 6});
     src_column->append_datum(Datum());
     src_column->append_datum(DatumArray{Datum(), Datum(), Datum(), Datum()});
@@ -3170,7 +3153,7 @@ TEST_F(ArrayFunctionsTest, array_reverse_nullable_array) {
 }
 
 TEST_F(ArrayFunctionsTest, array_reverse_only_null) {
-    ColumnPtr src_column = ColumnHelper::create_const_null_column(3);
+    auto src_column = ColumnHelper::create_const_null_column(3);
 
     ArrayReverse<LogicalType::TYPE_INT> reverse;
     auto dest_column = reverse.process(nullptr, {src_column});
@@ -3182,7 +3165,7 @@ TEST_F(ArrayFunctionsTest, array_reverse_only_null) {
 }
 
 TEST_F(ArrayFunctionsTest, array_difference_boolean) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, true);
     src_column->append_datum(DatumArray{(uint8_t)5, (uint8_t)3, (uint8_t)6});
     src_column->append_datum(DatumArray{(uint8_t)2, (uint8_t)3, (uint8_t)7, (uint8_t)8});
     src_column->append_datum(DatumArray{(uint8_t)4, (uint8_t)3, (uint8_t)2, (uint8_t)1});
@@ -3197,7 +3180,7 @@ TEST_F(ArrayFunctionsTest, array_difference_boolean) {
 }
 
 TEST_F(ArrayFunctionsTest, array_difference_boolean_with_entry_null) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, true);
     src_column->append_datum(DatumArray{(uint8_t)5, Datum(), (uint8_t)6});
     src_column->append_datum(DatumArray{Datum(), (uint8_t)3, (uint8_t)7, (uint8_t)8});
     src_column->append_datum(DatumArray{(uint8_t)4, (uint8_t)3, (uint8_t)2, Datum()});
@@ -3225,7 +3208,7 @@ TEST_F(ArrayFunctionsTest, array_difference_boolean_with_entry_null) {
 }
 
 TEST_F(ArrayFunctionsTest, array_difference_int) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
     src_column->append_datum(DatumArray{5, 3, 6});
     src_column->append_datum(DatumArray{2, 3, 7, 8});
     src_column->append_datum(DatumArray{4, 3, 2, 1});
@@ -3240,7 +3223,7 @@ TEST_F(ArrayFunctionsTest, array_difference_int) {
 }
 
 TEST_F(ArrayFunctionsTest, array_difference_int_with_entry_null) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
     src_column->append_datum(DatumArray{5, Datum(), 6});
     src_column->append_datum(DatumArray{Datum(), 3, 7, 8});
     src_column->append_datum(DatumArray{4, 3, 2, Datum()});
@@ -3268,7 +3251,7 @@ TEST_F(ArrayFunctionsTest, array_difference_int_with_entry_null) {
 }
 
 TEST_F(ArrayFunctionsTest, array_difference_bigint) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, true);
     src_column->append_datum(DatumArray{(int64_t)5, (int64_t)3, (int64_t)6});
     src_column->append_datum(DatumArray{(int64_t)2, (int64_t)3, (int64_t)7, (int64_t)8});
     src_column->append_datum(DatumArray{(int64_t)4, (int64_t)3, (int64_t)2, (int64_t)1});
@@ -3283,7 +3266,7 @@ TEST_F(ArrayFunctionsTest, array_difference_bigint) {
 }
 
 TEST_F(ArrayFunctionsTest, array_difference_bigint_with_entry_null) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, true);
     src_column->append_datum(DatumArray{(int64_t)5, Datum(), (int64_t)6});
     src_column->append_datum(DatumArray{Datum(), (int64_t)3, (int64_t)7, (int64_t)8});
     src_column->append_datum(DatumArray{(int64_t)4, (int64_t)3, (int64_t)2, Datum()});
@@ -3311,7 +3294,7 @@ TEST_F(ArrayFunctionsTest, array_difference_bigint_with_entry_null) {
 }
 
 TEST_F(ArrayFunctionsTest, array_difference_double) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_DOUBLE, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_DOUBLE, true);
     src_column->append_datum(DatumArray{(double)5, (double)3, (double)6});
     src_column->append_datum(DatumArray{(double)2, (double)3, (double)7, (double)8});
     src_column->append_datum(DatumArray{(double)4, (double)3, (double)2, (double)1});
@@ -3326,7 +3309,7 @@ TEST_F(ArrayFunctionsTest, array_difference_double) {
 }
 
 TEST_F(ArrayFunctionsTest, array_slice_int) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
     src_column->append_datum(DatumArray{(int32_t)5, (int32_t)3, (int32_t)6});
     src_column->append_datum(DatumArray{(int32_t)2, (int32_t)3, (int32_t)7, (int32_t)8});
     src_column->append_datum(DatumArray{(int32_t)4, (int32_t)3, (int32_t)2, (int32_t)1});
@@ -3336,7 +3319,7 @@ TEST_F(ArrayFunctionsTest, array_slice_int) {
     src_column->append_datum(DatumArray{(int32_t)1, (int32_t)2, Datum(), (int32_t)4, (int32_t)5});
     src_column->append_datum(DatumArray{(int32_t)1, (int32_t)2, Datum(), (int32_t)4, (int32_t)5});
 
-    Int64Column::Ptr offset_column = Int64Column::create();
+    auto offset_column = Int64Column::create();
     offset_column->append(1);
     offset_column->append(2);
     offset_column->append(3);
@@ -3346,7 +3329,7 @@ TEST_F(ArrayFunctionsTest, array_slice_int) {
     offset_column->append(-7);
     offset_column->append(-8);
 
-    Int64Column::Ptr length_column = Int64Column::create();
+    auto length_column = Int64Column::create();
     length_column->append(1);
     length_column->append(3);
     length_column->append(2);
@@ -3371,21 +3354,21 @@ TEST_F(ArrayFunctionsTest, array_slice_int) {
 }
 
 TEST_F(ArrayFunctionsTest, array_slice_bigint) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, true);
     src_column->append_datum(DatumArray{(int64_t)5, (int64_t)3, (int64_t)6});
     src_column->append_datum(DatumArray{(int64_t)2, (int64_t)3, (int64_t)7, (int64_t)8});
     src_column->append_datum(DatumArray{(int64_t)4, (int64_t)3, (int64_t)2, (int64_t)1});
     src_column->append_datum(Datum());
     src_column->append_datum(DatumArray{(int64_t)4, Datum(), (int64_t)2, (int64_t)1});
 
-    Int64Column::Ptr offset_column = Int64Column::create();
+    auto offset_column = Int64Column::create();
     offset_column->append(1);
     offset_column->append(2);
     offset_column->append(3);
     offset_column->append(1);
     offset_column->append(2);
 
-    Int64Column::Ptr length_column = Int64Column::create();
+    auto length_column = Int64Column::create();
     length_column->append(1);
     length_column->append(3);
     length_column->append(2);
@@ -3404,21 +3387,21 @@ TEST_F(ArrayFunctionsTest, array_slice_bigint) {
 }
 
 TEST_F(ArrayFunctionsTest, array_slice_float) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_FLOAT, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_FLOAT, true);
     src_column->append_datum(DatumArray{(float)5, (float)3, (float)6});
     src_column->append_datum(DatumArray{(float)2, (float)3, (float)7, (float)8});
     src_column->append_datum(DatumArray{(float)4, (float)3, (float)2, (float)1});
     src_column->append_datum(Datum());
     src_column->append_datum(DatumArray{(float)4, Datum(), (float)2, (float)1});
 
-    Int64Column::Ptr offset_column = Int64Column::create();
+    auto offset_column = Int64Column::create();
     offset_column->append(1);
     offset_column->append(2);
     offset_column->append(3);
     offset_column->append(1);
     offset_column->append(2);
 
-    Int64Column::Ptr length_column = Int64Column::create();
+    auto length_column = Int64Column::create();
     length_column->append(1);
     length_column->append(3);
     length_column->append(2);
@@ -3437,21 +3420,21 @@ TEST_F(ArrayFunctionsTest, array_slice_float) {
 }
 
 TEST_F(ArrayFunctionsTest, array_slice_double) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_DOUBLE, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_DOUBLE, true);
     src_column->append_datum(DatumArray{(double)5, (double)3, (double)6});
     src_column->append_datum(DatumArray{(double)2, (double)3, (double)7, (double)8});
     src_column->append_datum(DatumArray{(double)4, (double)3, (double)2, (double)1});
     src_column->append_datum(Datum());
     src_column->append_datum(DatumArray{(double)4, Datum(), (double)2, (double)1});
 
-    Int64Column::Ptr offset_column = Int64Column::create();
+    auto offset_column = Int64Column::create();
     offset_column->append(1);
     offset_column->append(2);
     offset_column->append(3);
     offset_column->append(1);
     offset_column->append(2);
 
-    Int64Column::Ptr length_column = Int64Column::create();
+    auto length_column = Int64Column::create();
     length_column->append(1);
     length_column->append(3);
     length_column->append(2);
@@ -3470,21 +3453,21 @@ TEST_F(ArrayFunctionsTest, array_slice_double) {
 }
 
 TEST_F(ArrayFunctionsTest, array_slice_varchar) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
     src_column->append_datum(DatumArray{Slice("5"), Slice("3"), Slice("6")});
     src_column->append_datum(DatumArray{Slice("2"), Slice("3"), Slice("7"), Slice("8")});
     src_column->append_datum(DatumArray{Slice("4"), Slice("3"), Slice("2"), Slice("1")});
     src_column->append_datum(Datum());
     src_column->append_datum(DatumArray{Slice("4"), Datum(), Slice("2"), Slice("1")});
 
-    Int64Column::Ptr offset_column = Int64Column::create();
+    auto offset_column = Int64Column::create();
     offset_column->append(1);
     offset_column->append(2);
     offset_column->append(3);
     offset_column->append(1);
     offset_column->append(2);
 
-    Int64Column::Ptr length_column = Int64Column::create();
+    auto length_column = Int64Column::create();
     length_column->append(1);
     length_column->append(3);
     length_column->append(2);
@@ -3503,14 +3486,14 @@ TEST_F(ArrayFunctionsTest, array_slice_varchar) {
 }
 
 TEST_F(ArrayFunctionsTest, array_slice_bigint_only_offset) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, true);
     src_column->append_datum(DatumArray{(int64_t)5, (int64_t)3, (int64_t)6});
     src_column->append_datum(DatumArray{(int64_t)2, (int64_t)3, (int64_t)7, (int64_t)8});
     src_column->append_datum(DatumArray{(int64_t)4, (int64_t)3, (int64_t)2, (int64_t)1});
     src_column->append_datum(Datum());
     src_column->append_datum(DatumArray{(int64_t)4, Datum(), (int64_t)2, (int64_t)1});
 
-    Int64Column::Ptr offset_column = Int64Column::create();
+    auto offset_column = Int64Column::create();
     offset_column->append(1);
     offset_column->append(2);
     offset_column->append(3);
@@ -3530,14 +3513,14 @@ TEST_F(ArrayFunctionsTest, array_slice_bigint_only_offset) {
 }
 
 TEST_F(ArrayFunctionsTest, array_slice_double_only_offset) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_DOUBLE, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_DOUBLE, true);
     src_column->append_datum(DatumArray{(double)5, (double)3, (double)6});
     src_column->append_datum(DatumArray{(double)2, (double)3, (double)7, (double)8});
     src_column->append_datum(DatumArray{(double)4, (double)3, (double)2, (double)1});
     src_column->append_datum(Datum());
     src_column->append_datum(DatumArray{(double)4, Datum(), (double)2, (double)1});
 
-    Int64Column::Ptr offset_column = Int64Column::create();
+    auto offset_column = Int64Column::create();
     offset_column->append(1);
     offset_column->append(2);
     offset_column->append(3);
@@ -3557,14 +3540,14 @@ TEST_F(ArrayFunctionsTest, array_slice_double_only_offset) {
 }
 
 TEST_F(ArrayFunctionsTest, array_slice_varchar_only_offset) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
     src_column->append_datum(DatumArray{Slice("5"), Slice("3"), Slice("6")});
     src_column->append_datum(DatumArray{Slice("2"), Slice("3"), Slice("7"), Slice("8")});
     src_column->append_datum(DatumArray{Slice("4"), Slice("3"), Slice("2"), Slice("1")});
     src_column->append_datum(Datum());
     src_column->append_datum(DatumArray{Slice("4"), Datum(), Slice("2"), Slice("1")});
 
-    Int64Column::Ptr offset_column = Int64Column::create();
+    auto offset_column = Int64Column::create();
     offset_column->append(1);
     offset_column->append(2);
     offset_column->append(3);
@@ -3584,21 +3567,21 @@ TEST_F(ArrayFunctionsTest, array_slice_varchar_only_offset) {
 }
 
 TEST_F(ArrayFunctionsTest, array_concat_tinyint) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, true);
     src_column->append_datum(DatumArray{(int8_t)5, (int8_t)3, (int8_t)6});
     src_column->append_datum(DatumArray{(int8_t)8});
     src_column->append_datum(DatumArray{(int8_t)4});
     src_column->append_datum(Datum());
     src_column->append_datum(DatumArray{(int8_t)4, (int8_t)1});
 
-    ColumnPtr src_column2 = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, true);
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, true);
     src_column2->append_datum(DatumArray{(int8_t)5, (int8_t)6});
     src_column2->append_datum(DatumArray{(int8_t)2});
     src_column2->append_datum(DatumArray{(int8_t)4, (int8_t)3, (int8_t)2, (int8_t)1});
     src_column2->append_datum(DatumArray{(int8_t)4, (int8_t)9});
     src_column2->append_datum(DatumArray{(int8_t)4, Datum()});
 
-    ColumnPtr src_column3 = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, true);
+    auto src_column3 = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, true);
     src_column3->append_datum(DatumArray{(int8_t)5});
     src_column3->append_datum(DatumArray{(int8_t)2, (int8_t)8});
     src_column3->append_datum(DatumArray{(int8_t)2, (int8_t)1});
@@ -3627,19 +3610,19 @@ TEST_F(ArrayFunctionsTest, array_concat_tinyint) {
 }
 
 TEST_F(ArrayFunctionsTest, array_concat_tinyint_not_nullable) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
     src_column->append_datum(DatumArray{(int8_t)5, (int8_t)3, (int8_t)6});
     src_column->append_datum(DatumArray{(int8_t)8});
     src_column->append_datum(DatumArray{(int8_t)4});
     src_column->append_datum(DatumArray{(int8_t)4, (int8_t)1});
 
-    ColumnPtr src_column2 = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
     src_column2->append_datum(DatumArray{(int8_t)5, (int8_t)6});
     src_column2->append_datum(DatumArray{(int8_t)2});
     src_column2->append_datum(DatumArray{(int8_t)4, (int8_t)3, (int8_t)2, (int8_t)1});
     src_column2->append_datum(DatumArray{(int8_t)4, Datum()});
 
-    ColumnPtr src_column3 = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
+    auto src_column3 = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
     src_column3->append_datum(DatumArray{(int8_t)5});
     src_column3->append_datum(DatumArray{(int8_t)2, (int8_t)8});
     src_column3->append_datum(DatumArray{(int8_t)2, (int8_t)1});
@@ -3665,21 +3648,21 @@ TEST_F(ArrayFunctionsTest, array_concat_tinyint_not_nullable) {
 }
 
 TEST_F(ArrayFunctionsTest, array_concat_bigint) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, true);
     src_column->append_datum(DatumArray{(int64_t)5, (int64_t)3, (int64_t)6});
     src_column->append_datum(DatumArray{(int64_t)8});
     src_column->append_datum(DatumArray{(int64_t)4});
     src_column->append_datum(Datum());
     src_column->append_datum(DatumArray{(int64_t)4, (int64_t)1});
 
-    ColumnPtr src_column2 = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, true);
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, true);
     src_column2->append_datum(DatumArray{(int64_t)5, (int64_t)6});
     src_column2->append_datum(DatumArray{(int64_t)2});
     src_column2->append_datum(DatumArray{(int64_t)4, (int64_t)3, (int64_t)2, (int64_t)1});
     src_column2->append_datum(DatumArray{(int64_t)4, (int64_t)9});
     src_column2->append_datum(DatumArray{(int64_t)4, Datum()});
 
-    ColumnPtr src_column3 = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, true);
+    auto src_column3 = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, true);
     src_column3->append_datum(DatumArray{(int64_t)5});
     src_column3->append_datum(DatumArray{(int64_t)2, (int64_t)8});
     src_column3->append_datum(DatumArray{(int64_t)2, (int64_t)1});
@@ -3708,19 +3691,19 @@ TEST_F(ArrayFunctionsTest, array_concat_bigint) {
 }
 
 TEST_F(ArrayFunctionsTest, array_concat_bigint_not_nullable) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, false);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, false);
     src_column->append_datum(DatumArray{(int64_t)5, (int64_t)3, (int64_t)6});
     src_column->append_datum(DatumArray{(int64_t)8});
     src_column->append_datum(DatumArray{(int64_t)4});
     src_column->append_datum(DatumArray{(int64_t)4, (int64_t)1});
 
-    ColumnPtr src_column2 = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, false);
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, false);
     src_column2->append_datum(DatumArray{(int64_t)5, (int64_t)6});
     src_column2->append_datum(DatumArray{(int64_t)2});
     src_column2->append_datum(DatumArray{(int64_t)4, (int64_t)3, (int64_t)2, (int64_t)1});
     src_column2->append_datum(DatumArray{(int64_t)4, Datum()});
 
-    ColumnPtr src_column3 = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, false);
+    auto src_column3 = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, false);
     src_column3->append_datum(DatumArray{(int64_t)5});
     src_column3->append_datum(DatumArray{(int64_t)2, (int64_t)8});
     src_column3->append_datum(DatumArray{(int64_t)2, (int64_t)1});
@@ -3746,21 +3729,21 @@ TEST_F(ArrayFunctionsTest, array_concat_bigint_not_nullable) {
 }
 
 TEST_F(ArrayFunctionsTest, array_concat_double) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_DOUBLE, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_DOUBLE, true);
     src_column->append_datum(DatumArray{(double)5, (double)3, (double)6});
     src_column->append_datum(DatumArray{(double)8});
     src_column->append_datum(DatumArray{(double)4});
     src_column->append_datum(Datum());
     src_column->append_datum(DatumArray{(double)4, (double)1});
 
-    ColumnPtr src_column2 = ColumnHelper::create_column(TYPE_ARRAY_DOUBLE, true);
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_DOUBLE, true);
     src_column2->append_datum(DatumArray{(double)5, (double)6});
     src_column2->append_datum(DatumArray{(double)2});
     src_column2->append_datum(DatumArray{(double)4, (double)3, (double)2, (double)1});
     src_column2->append_datum(DatumArray{(double)4, (double)9});
     src_column2->append_datum(DatumArray{(double)4, Datum()});
 
-    ColumnPtr src_column3 = ColumnHelper::create_column(TYPE_ARRAY_DOUBLE, true);
+    auto src_column3 = ColumnHelper::create_column(TYPE_ARRAY_DOUBLE, true);
     src_column3->append_datum(DatumArray{(double)5});
     src_column3->append_datum(DatumArray{(double)2, (double)8});
     src_column3->append_datum(DatumArray{(double)2, (double)1});
@@ -3789,19 +3772,19 @@ TEST_F(ArrayFunctionsTest, array_concat_double) {
 }
 
 TEST_F(ArrayFunctionsTest, array_concat_double_not_nullable) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_DOUBLE, false);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_DOUBLE, false);
     src_column->append_datum(DatumArray{(double)5, (double)3, (double)6});
     src_column->append_datum(DatumArray{(double)8});
     src_column->append_datum(DatumArray{(double)4});
     src_column->append_datum(DatumArray{(double)4, (double)1});
 
-    ColumnPtr src_column2 = ColumnHelper::create_column(TYPE_ARRAY_DOUBLE, false);
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_DOUBLE, false);
     src_column2->append_datum(DatumArray{(double)5, (double)6});
     src_column2->append_datum(DatumArray{(double)2});
     src_column2->append_datum(DatumArray{(double)4, (double)3, (double)2, (double)1});
     src_column2->append_datum(DatumArray{(double)4, Datum()});
 
-    ColumnPtr src_column3 = ColumnHelper::create_column(TYPE_ARRAY_DOUBLE, false);
+    auto src_column3 = ColumnHelper::create_column(TYPE_ARRAY_DOUBLE, false);
     src_column3->append_datum(DatumArray{(double)5});
     src_column3->append_datum(DatumArray{(double)2, (double)8});
     src_column3->append_datum(DatumArray{(double)2, (double)1});
@@ -3827,21 +3810,21 @@ TEST_F(ArrayFunctionsTest, array_concat_double_not_nullable) {
 }
 
 TEST_F(ArrayFunctionsTest, array_concat_varchar) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
     src_column->append_datum(DatumArray{Slice("5"), Slice("3"), Slice("6")});
     src_column->append_datum(DatumArray{Slice("8")});
     src_column->append_datum(DatumArray{Slice("4")});
     src_column->append_datum(Datum());
     src_column->append_datum(DatumArray{Slice("4"), Slice("1")});
 
-    ColumnPtr src_column2 = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
     src_column2->append_datum(DatumArray{Slice("5"), Slice("6")});
     src_column2->append_datum(DatumArray{Slice("2")});
     src_column2->append_datum(DatumArray{Slice("4"), Slice("3"), Slice("2"), Slice("1")});
     src_column2->append_datum(DatumArray{Slice("4"), Slice("9")});
     src_column2->append_datum(DatumArray{Slice("4"), Datum()});
 
-    ColumnPtr src_column3 = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+    auto src_column3 = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
     src_column3->append_datum(DatumArray{Slice("5")});
     src_column3->append_datum(DatumArray{Slice("2"), Slice("8")});
     src_column3->append_datum(DatumArray{Slice("2"), Slice("1")});
@@ -3870,19 +3853,19 @@ TEST_F(ArrayFunctionsTest, array_concat_varchar) {
 }
 
 TEST_F(ArrayFunctionsTest, array_concat_varchar_not_nullable) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
     src_column->append_datum(DatumArray{Slice("5"), Slice("3"), Slice("6")});
     src_column->append_datum(DatumArray{Slice("8")});
     src_column->append_datum(DatumArray{Slice("4")});
     src_column->append_datum(DatumArray{Slice("4"), Slice("1")});
 
-    ColumnPtr src_column2 = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
     src_column2->append_datum(DatumArray{Slice("5"), Slice("6")});
     src_column2->append_datum(DatumArray{Slice("2")});
     src_column2->append_datum(DatumArray{Slice("4"), Slice("3"), Slice("2"), Slice("1")});
     src_column2->append_datum(DatumArray{Slice("4"), Datum()});
 
-    ColumnPtr src_column3 = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+    auto src_column3 = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
     src_column3->append_datum(DatumArray{Slice("5")});
     src_column3->append_datum(DatumArray{Slice("2"), Slice("8")});
     src_column3->append_datum(DatumArray{Slice("2"), Slice("1")});
@@ -3908,14 +3891,14 @@ TEST_F(ArrayFunctionsTest, array_concat_varchar_not_nullable) {
 }
 
 TEST_F(ArrayFunctionsTest, array_overlap_tinyint_with_nullable) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, true);
     src_column->append_datum(DatumArray{(int8_t)5, (int8_t)3, (int8_t)6});
     src_column->append_datum(DatumArray{(int8_t)8});
     src_column->append_datum(DatumArray{(int8_t)4});
     src_column->append_datum(Datum());
     src_column->append_datum(DatumArray{(int8_t)4, (int8_t)1});
 
-    ColumnPtr src_column2 = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
     src_column2->append_datum(DatumArray{(int8_t)5, (int8_t)6});
     src_column2->append_datum(DatumArray{(int8_t)2});
     src_column2->append_datum(DatumArray{(int8_t)4, (int8_t)3, (int8_t)2, (int8_t)1});
@@ -3942,14 +3925,14 @@ TEST_F(ArrayFunctionsTest, array_overlap_tinyint_with_nullable) {
 }
 
 TEST_F(ArrayFunctionsTest, array_overlap_tinyint) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
     src_column->append_datum(DatumArray{(int8_t)5, (int8_t)3, (int8_t)6});
     src_column->append_datum(DatumArray{(int8_t)8});
     src_column->append_datum(DatumArray{(int8_t)4});
     src_column->append_datum(DatumArray{(int8_t)99});
     src_column->append_datum(DatumArray{(int8_t)4, (int8_t)1});
 
-    ColumnPtr src_column2 = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
     src_column2->append_datum(DatumArray{(int8_t)5, (int8_t)6});
     src_column2->append_datum(DatumArray{(int8_t)2});
     src_column2->append_datum(DatumArray{(int8_t)4, (int8_t)3, (int8_t)2, (int8_t)1});
@@ -3974,14 +3957,14 @@ TEST_F(ArrayFunctionsTest, array_overlap_tinyint) {
 }
 
 TEST_F(ArrayFunctionsTest, array_overlap_bigint_with_nullable) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, true);
     src_column->append_datum(DatumArray{(int64_t)5, (int64_t)3, (int64_t)6});
     src_column->append_datum(DatumArray{(int64_t)8});
     src_column->append_datum(DatumArray{(int64_t)4});
     src_column->append_datum(Datum());
     src_column->append_datum(DatumArray{(int64_t)4, (int64_t)1});
 
-    ColumnPtr src_column2 = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, false);
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, false);
     src_column2->append_datum(DatumArray{(int64_t)5, (int64_t)6});
     src_column2->append_datum(DatumArray{(int64_t)2});
     src_column2->append_datum(DatumArray{(int64_t)4, (int64_t)3, (int64_t)2, (int64_t)1});
@@ -4008,14 +3991,14 @@ TEST_F(ArrayFunctionsTest, array_overlap_bigint_with_nullable) {
 }
 
 TEST_F(ArrayFunctionsTest, array_overlap_bigint) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, false);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, false);
     src_column->append_datum(DatumArray{(int64_t)5, (int64_t)3, (int64_t)6});
     src_column->append_datum(DatumArray{(int64_t)8});
     src_column->append_datum(DatumArray{(int64_t)4});
     src_column->append_datum(DatumArray{(int64_t)99});
     src_column->append_datum(DatumArray{(int64_t)4, (int64_t)1});
 
-    ColumnPtr src_column2 = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, false);
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, false);
     src_column2->append_datum(DatumArray{(int64_t)5, (int64_t)6});
     src_column2->append_datum(DatumArray{(int64_t)2});
     src_column2->append_datum(DatumArray{(int64_t)4, (int64_t)3, (int64_t)2, (int64_t)1});
@@ -4040,14 +4023,14 @@ TEST_F(ArrayFunctionsTest, array_overlap_bigint) {
 }
 
 TEST_F(ArrayFunctionsTest, array_overlap_double_with_nullable) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_DOUBLE, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_DOUBLE, true);
     src_column->append_datum(DatumArray{(double)5, (double)3, (double)6});
     src_column->append_datum(DatumArray{(double)8});
     src_column->append_datum(DatumArray{(double)4});
     src_column->append_datum(Datum());
     src_column->append_datum(DatumArray{(double)4, (double)1});
 
-    ColumnPtr src_column2 = ColumnHelper::create_column(TYPE_ARRAY_DOUBLE, false);
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_DOUBLE, false);
     src_column2->append_datum(DatumArray{(double)5, (double)6});
     src_column2->append_datum(DatumArray{(double)2});
     src_column2->append_datum(DatumArray{(double)4, (double)3, (double)2, (double)1});
@@ -4074,14 +4057,14 @@ TEST_F(ArrayFunctionsTest, array_overlap_double_with_nullable) {
 }
 
 TEST_F(ArrayFunctionsTest, array_overlap_double) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_DOUBLE, false);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_DOUBLE, false);
     src_column->append_datum(DatumArray{(double)5, (double)3, (double)6});
     src_column->append_datum(DatumArray{(double)8});
     src_column->append_datum(DatumArray{(double)4});
     src_column->append_datum(DatumArray{(double)99});
     src_column->append_datum(DatumArray{(double)4, (double)1});
 
-    ColumnPtr src_column2 = ColumnHelper::create_column(TYPE_ARRAY_DOUBLE, false);
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_DOUBLE, false);
     src_column2->append_datum(DatumArray{(double)5, (double)6});
     src_column2->append_datum(DatumArray{(double)2});
     src_column2->append_datum(DatumArray{(double)4, (double)3, (double)2, (double)1});
@@ -4106,14 +4089,14 @@ TEST_F(ArrayFunctionsTest, array_overlap_double) {
 }
 
 TEST_F(ArrayFunctionsTest, array_overlap_varchar_with_nullable) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
     src_column->append_datum(DatumArray{Slice("5"), Slice("3"), Slice("6")});
     src_column->append_datum(DatumArray{Slice("8")});
     src_column->append_datum(DatumArray{Slice("4")});
     src_column->append_datum(Datum());
     src_column->append_datum(DatumArray{Slice("4"), Slice("1")});
 
-    ColumnPtr src_column2 = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
     src_column2->append_datum(DatumArray{Slice("5"), Slice("6")});
     src_column2->append_datum(DatumArray{Slice("2")});
     src_column2->append_datum(DatumArray{Slice("4"), Slice("3"), Slice("2"), Slice("1")});
@@ -4140,14 +4123,14 @@ TEST_F(ArrayFunctionsTest, array_overlap_varchar_with_nullable) {
 }
 
 TEST_F(ArrayFunctionsTest, array_overlap_varchar) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
     src_column->append_datum(DatumArray{Slice("5"), Slice("3"), Slice("6")});
     src_column->append_datum(DatumArray{Slice("8")});
     src_column->append_datum(DatumArray{Slice("4")});
     src_column->append_datum(DatumArray{Slice("99")});
     src_column->append_datum(DatumArray{Slice("4"), Slice("1")});
 
-    ColumnPtr src_column2 = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
     src_column2->append_datum(DatumArray{Slice("5"), Slice("6")});
     src_column2->append_datum(DatumArray{Slice("2")});
     src_column2->append_datum(DatumArray{Slice("4"), Slice("3"), Slice("2"), Slice("1")});
@@ -4172,10 +4155,10 @@ TEST_F(ArrayFunctionsTest, array_overlap_varchar) {
 }
 
 TEST_F(ArrayFunctionsTest, array_overlap_with_onlynull) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
     src_column->append_datum(DatumArray{(int8_t)5, (int8_t)3, (int8_t)6});
 
-    ColumnPtr src_column2 = ColumnHelper::create_const_null_column(1);
+    auto src_column2 = ColumnHelper::create_const_null_column(1);
 
     ArrayOverlap<LogicalType::TYPE_TINYINT> overlap;
     ASSERT_TRUE(overlap.prepare(&_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
@@ -4186,19 +4169,19 @@ TEST_F(ArrayFunctionsTest, array_overlap_with_onlynull) {
 }
 
 TEST_F(ArrayFunctionsTest, array_intersect_int) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
     src_column->append_datum(DatumArray{(int32_t)5, (int32_t)3, (int32_t)6});
     src_column->append_datum(DatumArray{(int32_t)8});
     src_column->append_datum(DatumArray{(int32_t)4, (int32_t)1});
     src_column->append_datum(Datum());
 
-    ColumnPtr src_column2 = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
     src_column2->append_datum(DatumArray{(int32_t)(5), (int32_t)(6)});
     src_column2->append_datum(DatumArray{(int32_t)(2)});
     src_column2->append_datum(DatumArray{(int32_t)(4), (int32_t)(3), (int32_t)(2), (int32_t)(1)});
     src_column2->append_datum(DatumArray{(int32_t)(4), (int32_t)(9)});
 
-    ColumnPtr src_column3 = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+    auto src_column3 = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
     src_column3->append_datum(DatumArray{(int32_t)(5)});
     src_column3->append_datum(DatumArray{(int32_t)(2), (int32_t)(8)});
     src_column3->append_datum(DatumArray{(int32_t)(4), (int32_t)(1)});
@@ -4215,19 +4198,19 @@ TEST_F(ArrayFunctionsTest, array_intersect_int) {
 }
 
 TEST_F(ArrayFunctionsTest, array_intersect_int_with_not_null) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
     src_column->append_datum(DatumArray{(int32_t)(5), (int32_t)(3), (int32_t)(6)});
     src_column->append_datum(DatumArray{(int32_t)(8)});
     src_column->append_datum(DatumArray{(int32_t)(4), (int32_t)(1)});
     src_column->append_datum(DatumArray{(int32_t)(4), (int32_t)(22), Datum()});
 
-    ColumnPtr src_column2 = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
     src_column2->append_datum(DatumArray{(int32_t)(5), (int32_t)(6)});
     src_column2->append_datum(DatumArray{(int32_t)(2)});
     src_column2->append_datum(DatumArray{(int32_t)(4), (int32_t)(3), (int32_t)(2), (int32_t)(1)});
     src_column2->append_datum(DatumArray{(int32_t)(4), Datum(), (int32_t)(22), (int32_t)(66)});
 
-    ColumnPtr src_column3 = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+    auto src_column3 = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
     src_column3->append_datum(DatumArray{(int32_t)(5)});
     src_column3->append_datum(DatumArray{(int32_t)(2), (int32_t)(8)});
     src_column3->append_datum(DatumArray{(int32_t)(4), (int32_t)(1)});
@@ -4268,19 +4251,19 @@ TEST_F(ArrayFunctionsTest, array_intersect_int_with_not_null) {
 }
 
 TEST_F(ArrayFunctionsTest, array_intersect_varchar) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
     src_column->append_datum(DatumArray{Slice("5"), Slice("3"), Slice("6")});
     src_column->append_datum(DatumArray{Slice("8")});
     src_column->append_datum(DatumArray{Slice("4"), Slice("1")});
     src_column->append_datum(Datum());
 
-    ColumnPtr src_column2 = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
     src_column2->append_datum(DatumArray{Slice("5"), Slice("6")});
     src_column2->append_datum(DatumArray{Slice("2")});
     src_column2->append_datum(DatumArray{Slice("4"), Slice("3"), Slice("2"), Slice("1")});
     src_column2->append_datum(DatumArray{Slice("4"), Slice("9")});
 
-    ColumnPtr src_column3 = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+    auto src_column3 = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
     src_column3->append_datum(DatumArray{Slice("5")});
     src_column3->append_datum(DatumArray{Slice("2"), Slice("8")});
     src_column3->append_datum(DatumArray{Slice("4"), Slice("1")});
@@ -4297,19 +4280,19 @@ TEST_F(ArrayFunctionsTest, array_intersect_varchar) {
 }
 
 TEST_F(ArrayFunctionsTest, array_intersect_varchar_with_not_null) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
     src_column->append_datum(DatumArray{Slice("5"), Slice("3"), Slice("6")});
     src_column->append_datum(DatumArray{Slice("8")});
     src_column->append_datum(DatumArray{Slice("4"), Slice("1")});
     src_column->append_datum(DatumArray{Slice("4"), Slice("22"), Datum()});
 
-    ColumnPtr src_column2 = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
     src_column2->append_datum(DatumArray{Slice("5"), Slice("6")});
     src_column2->append_datum(DatumArray{Slice("2")});
     src_column2->append_datum(DatumArray{Slice("4"), Slice("3"), Slice("2"), Slice("1")});
     src_column2->append_datum(DatumArray{Slice("4"), Datum(), Slice("22"), Slice("66")});
 
-    ColumnPtr src_column3 = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+    auto src_column3 = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
     src_column3->append_datum(DatumArray{Slice("5")});
     src_column3->append_datum(DatumArray{Slice("2"), Slice("8")});
     src_column3->append_datum(DatumArray{Slice("4"), Slice("1")});
@@ -4351,7 +4334,7 @@ TEST_F(ArrayFunctionsTest, array_intersect_varchar_with_not_null) {
 
 // NOLINTNEXTLINE
 TEST_F(ArrayFunctionsTest, array_join_string) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
     src_column->append_datum(DatumArray{"352", "66", "4325"});
     src_column->append_datum(DatumArray{"235", "99", "8", "43251"});
     src_column->append_datum(DatumArray{"44", "33", "22", "112"});
@@ -4376,7 +4359,7 @@ TEST_F(ArrayFunctionsTest, array_join_string) {
 }
 
 TEST_F(ArrayFunctionsTest, array_concat_ws) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
     src_column->append_datum(DatumArray{"352", "66", "4325"});
     src_column->append_datum(DatumArray{"235", "99", "8", "43251"});
     src_column->append_datum(DatumArray{"44", "33", "22", "112"});
@@ -4393,7 +4376,7 @@ TEST_F(ArrayFunctionsTest, array_concat_ws) {
 
 // NOLINTNEXTLINE
 TEST_F(ArrayFunctionsTest, array_join_nullable_elements) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
     src_column->append_datum(DatumArray{"55", Datum(), "333", "6666"});
     src_column->append_datum(DatumArray{"22", "333", Datum(), Datum()});
     src_column->append_datum(DatumArray{Datum(), Datum(), Datum(), Datum()});
@@ -4418,7 +4401,7 @@ TEST_F(ArrayFunctionsTest, array_join_nullable_elements) {
 }
 
 TEST_F(ArrayFunctionsTest, array_concat_ws_nullable_elements) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
     src_column->append_datum(DatumArray{"55", Datum(), "333", "6666"});
     src_column->append_datum(DatumArray{"22", "333", Datum(), Datum()});
     src_column->append_datum(DatumArray{Datum(), Datum(), Datum(), Datum()});
@@ -4435,7 +4418,7 @@ TEST_F(ArrayFunctionsTest, array_concat_ws_nullable_elements) {
 
 // NOLINTNEXTLINE
 TEST_F(ArrayFunctionsTest, array_join_nullable_array) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
     src_column->append_datum(DatumArray{"5", Datum(), "33", "666"});
     src_column->append_datum(Datum());
     src_column->append_datum(DatumArray{Datum(), Datum(), Datum(), Datum()});
@@ -4460,7 +4443,7 @@ TEST_F(ArrayFunctionsTest, array_join_nullable_array) {
 }
 
 TEST_F(ArrayFunctionsTest, array_concat_ws_nullable_array) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
     src_column->append_datum(DatumArray{"5", Datum(), "33", "666"});
     src_column->append_datum(Datum());
     src_column->append_datum(DatumArray{Datum(), Datum(), Datum(), Datum()});
@@ -4477,7 +4460,7 @@ TEST_F(ArrayFunctionsTest, array_concat_ws_nullable_array) {
 
 // NOLINTNEXTLINE
 TEST_F(ArrayFunctionsTest, array_join_only_null) {
-    ColumnPtr src_column = ColumnHelper::create_const_null_column(3);
+    auto src_column = ColumnHelper::create_const_null_column(3);
 
     Slice sep_str("__");
     auto sep_column = ColumnHelper::create_const_column<LogicalType::TYPE_VARCHAR>(sep_str, 3);
@@ -4499,7 +4482,7 @@ TEST_F(ArrayFunctionsTest, array_join_only_null) {
 }
 
 TEST_F(ArrayFunctionsTest, array_concat_ws_only_null) {
-    ColumnPtr src_column = ColumnHelper::create_const_null_column(3);
+    auto src_column = ColumnHelper::create_const_null_column(3);
 
     Slice sep_str("__");
     auto sep_column = ColumnHelper::create_const_column<LogicalType::TYPE_VARCHAR>(sep_str, 3);
@@ -4512,14 +4495,14 @@ TEST_F(ArrayFunctionsTest, array_concat_ws_only_null) {
 }
 
 TEST_F(ArrayFunctionsTest, array_filter_tinyint_with_nullable) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, true);
     src_column->append_datum(DatumArray{(int8_t)5, (int8_t)3, (int8_t)6});
     src_column->append_datum(DatumArray{(int8_t)8});
     src_column->append_datum(DatumArray{(int8_t)4});
     src_column->append_datum(Datum());
     src_column->append_datum(DatumArray{(int8_t)4, (int8_t)1});
 
-    ColumnPtr src_column2 = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, true);
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, true);
     src_column2->append_datum(DatumArray{true, false, true});
     src_column2->append_datum(Datum());
     src_column2->append_datum(DatumArray{});
@@ -4539,14 +4522,14 @@ TEST_F(ArrayFunctionsTest, array_filter_tinyint_with_nullable) {
 }
 
 TEST_F(ArrayFunctionsTest, array_filter_tinyint) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
     src_column->append_datum(DatumArray{(int8_t)5, (int8_t)3, (int8_t)6});
     src_column->append_datum(DatumArray{(int8_t)8});
     src_column->append_datum(DatumArray{(int8_t)4});
     src_column->append_datum(DatumArray{(int8_t)99});
     src_column->append_datum(DatumArray{(int8_t)4, (int8_t)1});
 
-    ColumnPtr src_column2 = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
     src_column2->append_datum(DatumArray{Datum(), true, false});
     src_column2->append_datum(DatumArray{true});
     src_column2->append_datum(DatumArray{false});
@@ -4567,14 +4550,14 @@ TEST_F(ArrayFunctionsTest, array_filter_tinyint) {
 }
 
 TEST_F(ArrayFunctionsTest, array_filter_tinyint_with_nullable_notnull) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, true);
     src_column->append_datum(DatumArray{(int8_t)5, (int8_t)3, (int8_t)6});
     src_column->append_datum(DatumArray{(int8_t)8});
     src_column->append_datum(DatumArray{(int8_t)4});
     src_column->append_datum(Datum());
     src_column->append_datum(DatumArray{(int8_t)4, (int8_t)1});
 
-    ColumnPtr src_column2 = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
     src_column2->append_datum(DatumArray{Datum(), true, false});
     src_column2->append_datum(DatumArray{true});
     src_column2->append_datum(DatumArray{false});
@@ -4594,14 +4577,14 @@ TEST_F(ArrayFunctionsTest, array_filter_tinyint_with_nullable_notnull) {
 }
 
 TEST_F(ArrayFunctionsTest, array_filter_tinyint_notnull_nullable) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
     src_column->append_datum(DatumArray{(int8_t)5, (int8_t)3, (int8_t)6});
     src_column->append_datum(DatumArray{(int8_t)8});
     src_column->append_datum(DatumArray{(int8_t)4});
     src_column->append_datum(DatumArray{(int8_t)99});
     src_column->append_datum(DatumArray{(int8_t)4, (int8_t)1});
 
-    ColumnPtr src_column2 = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, true);
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, true);
     src_column2->append_datum(DatumArray{true, false, true});
     src_column2->append_datum(Datum());
     src_column2->append_datum(DatumArray{});
@@ -4622,14 +4605,14 @@ TEST_F(ArrayFunctionsTest, array_filter_tinyint_notnull_nullable) {
 }
 
 TEST_F(ArrayFunctionsTest, array_filter_bigint_with_nullable) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, true);
     src_column->append_datum(DatumArray{(int64_t)5, (int64_t)3, (int64_t)6});
     src_column->append_datum(DatumArray{(int64_t)8});
     src_column->append_datum(DatumArray{(int64_t)4});
     src_column->append_datum(Datum());
     src_column->append_datum(DatumArray{(int64_t)4, (int64_t)1});
 
-    ColumnPtr src_column2 = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, true);
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, true);
     src_column2->append_datum(DatumArray{true, false, true});
     src_column2->append_datum(Datum());
     src_column2->append_datum(DatumArray{});
@@ -4649,14 +4632,14 @@ TEST_F(ArrayFunctionsTest, array_filter_bigint_with_nullable) {
 }
 
 TEST_F(ArrayFunctionsTest, array_filter_bigint) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, false);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, false);
     src_column->append_datum(DatumArray{(int64_t)5, (int64_t)3, (int64_t)6});
     src_column->append_datum(DatumArray{(int64_t)8});
     src_column->append_datum(DatumArray{(int64_t)4});
     src_column->append_datum(DatumArray{(int64_t)99});
     src_column->append_datum(DatumArray{(int64_t)4, (int64_t)1});
 
-    ColumnPtr src_column2 = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
     src_column2->append_datum(DatumArray{Datum(), true});
     src_column2->append_datum(DatumArray{true});
     src_column2->append_datum(DatumArray{false});
@@ -4677,14 +4660,14 @@ TEST_F(ArrayFunctionsTest, array_filter_bigint) {
 }
 
 TEST_F(ArrayFunctionsTest, array_filter_double_with_nullable) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_DOUBLE, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_DOUBLE, true);
     src_column->append_datum(DatumArray{(double)5, (double)3, (double)6});
     src_column->append_datum(DatumArray{(double)8});
     src_column->append_datum(DatumArray{(double)4});
     src_column->append_datum(Datum());
     src_column->append_datum(DatumArray{(double)4, (double)1});
 
-    ColumnPtr src_column2 = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, true);
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, true);
     src_column2->append_datum(DatumArray{true, false, true});
     src_column2->append_datum(Datum());
     src_column2->append_datum(DatumArray{});
@@ -4704,14 +4687,14 @@ TEST_F(ArrayFunctionsTest, array_filter_double_with_nullable) {
 }
 
 TEST_F(ArrayFunctionsTest, array_filter_double) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_DOUBLE, false);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_DOUBLE, false);
     src_column->append_datum(DatumArray{(double)5, (double)3, (double)6});
     src_column->append_datum(DatumArray{(double)8});
     src_column->append_datum(DatumArray{(double)4});
     src_column->append_datum(DatumArray{(double)99});
     src_column->append_datum(DatumArray{(double)4, (double)1});
 
-    ColumnPtr src_column2 = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
     src_column2->append_datum(DatumArray{Datum(), true, false, true}); //more one
     src_column2->append_datum(DatumArray{true});
     src_column2->append_datum(DatumArray{false});
@@ -4732,14 +4715,14 @@ TEST_F(ArrayFunctionsTest, array_filter_double) {
 }
 
 TEST_F(ArrayFunctionsTest, array_filter_varchar_with_nullable) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
     src_column->append_datum(DatumArray{Slice("5"), Slice("3"), Slice("6")});
     src_column->append_datum(DatumArray{Slice("8")});
     src_column->append_datum(DatumArray{Slice("4")});
     src_column->append_datum(Datum());
     src_column->append_datum(DatumArray{Slice("4"), Slice("1")});
 
-    ColumnPtr src_column2 = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, true);
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, true);
     src_column2->append_datum(DatumArray{true, false, true});
     src_column2->append_datum(Datum());
     src_column2->append_datum(DatumArray{});
@@ -4759,14 +4742,14 @@ TEST_F(ArrayFunctionsTest, array_filter_varchar_with_nullable) {
 }
 
 TEST_F(ArrayFunctionsTest, array_filter_varchar) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
     src_column->append_datum(DatumArray{Slice("5"), Slice("3"), Slice("6")});
     src_column->append_datum(DatumArray{Slice("8")});
     src_column->append_datum(DatumArray{Slice("4")});
     src_column->append_datum(DatumArray{Slice("99")});
     src_column->append_datum(DatumArray{Slice("4"), Slice("1")});
 
-    ColumnPtr src_column2 = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
     src_column2->append_datum(DatumArray{Datum(), true, false, true}); //more one
     src_column2->append_datum(DatumArray{true});
     src_column2->append_datum(DatumArray{false});
@@ -4787,10 +4770,10 @@ TEST_F(ArrayFunctionsTest, array_filter_varchar) {
 }
 
 TEST_F(ArrayFunctionsTest, array_filter_with_onlynull) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
     src_column->append_datum(DatumArray{(int8_t)5, (int8_t)3, (int8_t)6});
 
-    ColumnPtr src_column2 = ColumnHelper::create_const_null_column(1);
+    auto src_column2 = ColumnHelper::create_const_null_column(1);
 
     // bool_array is null
     ArrayFilter filter;
@@ -4806,7 +4789,7 @@ TEST_F(ArrayFunctionsTest, array_filter_with_onlynull) {
     ASSERT_TRUE(dest_column->only_null());
 
     // src is nullable & bool_array is null
-    ColumnPtr src_column_nullable = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, true);
+    auto src_column_nullable = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, true);
     src_column_nullable->append_datum(DatumArray{(int8_t)5, (int8_t)3, (int8_t)6});
     src_column_nullable->append_datum(Datum());
     dest_column = filter.process(nullptr, {src_column_nullable, src_column2});
@@ -4819,23 +4802,23 @@ TEST_F(ArrayFunctionsTest, array_filter_with_onlynull) {
 TEST_F(ArrayFunctionsTest, array_distinct_only_null) {
     // test only null
     {
-        ColumnPtr src_column = ColumnHelper::create_const_null_column(3);
+        auto src_column = ColumnHelper::create_const_null_column(3);
         auto dest_column = ArrayDistinct<TYPE_VARCHAR>::process(nullptr, {src_column});
         ASSERT_EQ(dest_column->size(), 3);
         ASSERT_TRUE(dest_column->only_null());
     }
     // test const
     {
-        ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+        auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
         src_column->append_datum(DatumArray{"5", "5", "33", "666"});
-        src_column = ConstColumn::create(src_column, 3);
+        src_column = ConstColumn::create(std::move(src_column), 3);
         auto dest_column = ArrayDistinct<TYPE_VARCHAR>::process(nullptr, {src_column});
         ASSERT_EQ(dest_column->size(), 3);
         ASSERT_STREQ(dest_column->debug_string().c_str(), "[['5','33','666'], ['5','33','666'], ['5','33','666']]");
     }
     // test normal
     {
-        ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+        auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
         src_column->append_datum(DatumArray{"5", "5", "33", "666"});
         auto dest_column = ArrayDistinct<TYPE_VARCHAR>::process(nullptr, {src_column});
         ASSERT_EQ(dest_column->size(), 1);
@@ -4844,7 +4827,7 @@ TEST_F(ArrayFunctionsTest, array_distinct_only_null) {
 }
 
 TEST_F(ArrayFunctionsTest, array_sortby_tinyint_with_nullable) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, true);
     src_column->append_datum(DatumArray{(int8_t)3, (int8_t)4, (int8_t)5});
     src_column->append_datum(Datum());
     src_column->append_datum(DatumArray{(int8_t)2, (int8_t)4});
@@ -4856,7 +4839,7 @@ TEST_F(ArrayFunctionsTest, array_sortby_tinyint_with_nullable) {
     src_column->append_datum(DatumArray{(int8_t)43, (int8_t)23});
     src_column->append_datum(DatumArray{(int8_t)43, (int8_t)23, Datum()});
 
-    ColumnPtr src_column2 = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, true);
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, true);
     src_column2->append_datum(DatumArray{(int8_t)82, (int8_t)1, (int8_t)4});
     src_column2->append_datum(DatumArray{(int8_t)23});
     src_column2->append_datum(Datum());
@@ -4911,7 +4894,7 @@ TEST_F(ArrayFunctionsTest, array_sortby_tinyint_with_nullable) {
 }
 
 TEST_F(ArrayFunctionsTest, array_sortby_tinyint) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
     src_column->append_datum(DatumArray{(int8_t)5, (int8_t)3, (int8_t)6});
     src_column->append_datum(DatumArray{(int8_t)5, (int8_t)3, (int8_t)6});
     src_column->append_datum(DatumArray{});
@@ -4919,7 +4902,7 @@ TEST_F(ArrayFunctionsTest, array_sortby_tinyint) {
     src_column->append_datum(DatumArray{Datum()});
     src_column->append_datum(DatumArray{(int8_t)4, Datum()});
 
-    ColumnPtr src_column2 = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
     src_column2->append_datum(DatumArray{(int8_t)3, (int8_t)73, (int8_t)30});
     src_column2->append_datum(DatumArray{(int8_t)3, (int8_t)2, (int8_t)1});
     src_column2->append_datum(DatumArray{});
@@ -4961,7 +4944,7 @@ TEST_F(ArrayFunctionsTest, array_sortby_tinyint) {
 }
 
 TEST_F(ArrayFunctionsTest, array_sortby_tinyint_with_nullable_notnull) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, true);
     src_column->append_datum(DatumArray{(int8_t)3, (int8_t)4, (int8_t)5});
     src_column->append_datum(Datum());
     src_column->append_datum(DatumArray{(int8_t)2, (int8_t)4});
@@ -4973,7 +4956,7 @@ TEST_F(ArrayFunctionsTest, array_sortby_tinyint_with_nullable_notnull) {
     src_column->append_datum(DatumArray{(int8_t)43, (int8_t)23});
     src_column->append_datum(DatumArray{(int8_t)43, (int8_t)23, Datum()});
 
-    ColumnPtr src_column2 = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
     src_column2->append_datum(DatumArray{(int8_t)82, (int8_t)1, (int8_t)4});
     src_column2->append_datum(DatumArray{(int8_t)23});
     src_column2->append_datum(DatumArray{(int8_t)3, Datum()});
@@ -5028,7 +5011,7 @@ TEST_F(ArrayFunctionsTest, array_sortby_tinyint_with_nullable_notnull) {
 }
 
 TEST_F(ArrayFunctionsTest, array_sortby_varchar_with_nullable) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
     src_column->append_datum(DatumArray{Slice("5"), Slice("3"), Slice("6")});
     src_column->append_datum(DatumArray{Slice("8")});
     src_column->append_datum(DatumArray{Slice("4")});
@@ -5036,7 +5019,7 @@ TEST_F(ArrayFunctionsTest, array_sortby_varchar_with_nullable) {
     src_column->append_datum(DatumArray{Slice("4"), Slice("1")});
     src_column->append_datum(DatumArray{Slice("4"), Slice("1")});
 
-    ColumnPtr src_column2 = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, true);
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, true);
     src_column2->append_datum(DatumArray{(int8_t)3, (int8_t)5, (int8_t)6});
     src_column2->append_datum(DatumArray{(int8_t)3});
     src_column2->append_datum(Datum());
@@ -5075,10 +5058,10 @@ TEST_F(ArrayFunctionsTest, array_sortby_varchar_with_nullable) {
 }
 
 TEST_F(ArrayFunctionsTest, array_sortby_with_only_null) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
     src_column->append_datum(DatumArray{(int8_t)5, (int8_t)3, (int8_t)6});
 
-    ColumnPtr src_column2 = ColumnHelper::create_const_null_column(1);
+    auto src_column2 = ColumnHelper::create_const_null_column(1);
 
     {
         ArraySortBy<LogicalType::TYPE_TINYINT> sort;
@@ -5099,9 +5082,9 @@ TEST_F(ArrayFunctionsTest, array_sortby_with_only_null) {
 }
 
 TEST_F(ArrayFunctionsTest, array_generate_with_integer_columns) {
-    ColumnPtr start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
-    ColumnPtr stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
-    ColumnPtr step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+    auto start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+    auto stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+    auto step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
 
     start_column->append_datum(Datum((int32_t)3));
     stop_column->append_datum(Datum((int32_t)9));
@@ -5142,9 +5125,9 @@ TEST_F(ArrayFunctionsTest, array_generate_with_integer_columns) {
 }
 
 TEST_F(ArrayFunctionsTest, array_generate_when_overflow) {
-    ColumnPtr start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_TINYINT), true);
-    ColumnPtr stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_TINYINT), true);
-    ColumnPtr step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_TINYINT), true);
+    auto start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_TINYINT), true);
+    auto stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_TINYINT), true);
+    auto step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_TINYINT), true);
 
     start_column->append_datum(Datum((int8_t)9));
     stop_column->append_datum(Datum((int8_t)100));
@@ -5166,14 +5149,14 @@ TEST_F(ArrayFunctionsTest, array_generate_when_overflow) {
 TEST_F(ArrayFunctionsTest, array_distinct_any_type_only_null) {
     // test only null
     {
-        ColumnPtr src_column = ColumnHelper::create_const_null_column(3);
+        auto src_column = ColumnHelper::create_const_null_column(3);
         auto dest_column = ArrayFunctions::array_distinct_any_type(nullptr, {src_column}).value();
         ASSERT_EQ(dest_column->size(), 3);
         ASSERT_TRUE(dest_column->only_null());
     }
     // test const
     {
-        ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+        auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
         src_column->append_datum(DatumArray{"5", "5", "33", "666"});
         src_column = ConstColumn::create(src_column, 3);
         auto dest_column = ArrayFunctions::array_distinct_any_type(nullptr, {src_column}).value();
@@ -5182,7 +5165,7 @@ TEST_F(ArrayFunctionsTest, array_distinct_any_type_only_null) {
     }
     // test array[null]
     {
-        ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+        auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
         src_column->append_datum(DatumArray{"5", Datum(), Datum(), "5", "33", "666", Datum()});
         src_column = ConstColumn::create(src_column, 1);
         auto dest_column = ArrayFunctions::array_distinct_any_type(nullptr, {src_column}).value();
@@ -5191,7 +5174,7 @@ TEST_F(ArrayFunctionsTest, array_distinct_any_type_only_null) {
     }
     // test null array
     {
-        ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+        auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
         src_column->append_datum(DatumArray{"5", "5", "33", "666"});
         src_column->append_nulls(2);
         auto dest_column = ArrayFunctions::array_distinct_any_type(nullptr, {src_column}).value();
@@ -5200,7 +5183,7 @@ TEST_F(ArrayFunctionsTest, array_distinct_any_type_only_null) {
     }
     // test normal
     {
-        ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+        auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
         src_column->append_datum(DatumArray{"5", "5", "33", "666"});
         auto dest_column = ArrayFunctions::array_distinct_any_type(nullptr, {src_column}).value();
         ASSERT_EQ(dest_column->size(), 1);
@@ -5209,19 +5192,19 @@ TEST_F(ArrayFunctionsTest, array_distinct_any_type_only_null) {
 }
 
 TEST_F(ArrayFunctionsTest, array_intersect_any_type_int) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
     src_column->append_datum(DatumArray{(int32_t)5, (int32_t)3, (int32_t)6});
     src_column->append_datum(DatumArray{(int32_t)8});
     src_column->append_datum(DatumArray{(int32_t)4, (int32_t)1});
     src_column->append_datum(Datum());
 
-    ColumnPtr src_column2 = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
     src_column2->append_datum(DatumArray{(int32_t)(5), (int32_t)(6)});
     src_column2->append_datum(DatumArray{(int32_t)(2)});
     src_column2->append_datum(DatumArray{(int32_t)(4), (int32_t)(3), (int32_t)(2), (int32_t)(1)});
     src_column2->append_datum(DatumArray{(int32_t)(4), (int32_t)(9)});
 
-    ColumnPtr src_column3 = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+    auto src_column3 = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
     src_column3->append_datum(DatumArray{(int32_t)(5)});
     src_column3->append_datum(DatumArray{(int32_t)(2), (int32_t)(8)});
     src_column3->append_datum(DatumArray{(int32_t)(4), (int32_t)(1)});
@@ -5238,19 +5221,19 @@ TEST_F(ArrayFunctionsTest, array_intersect_any_type_int) {
 }
 
 TEST_F(ArrayFunctionsTest, array_intersect_any_type_int_with_not_null) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
     src_column->append_datum(DatumArray{(int32_t)(5), (int32_t)(3), (int32_t)(6)});
     src_column->append_datum(DatumArray{(int32_t)(8)});
     src_column->append_datum(DatumArray{(int32_t)(4), (int32_t)(1)});
     src_column->append_datum(DatumArray{(int32_t)(4), (int32_t)(22), Datum()});
 
-    ColumnPtr src_column2 = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
     src_column2->append_datum(DatumArray{(int32_t)(5), (int32_t)(6)});
     src_column2->append_datum(DatumArray{(int32_t)(2)});
     src_column2->append_datum(DatumArray{(int32_t)(4), (int32_t)(3), (int32_t)(2), (int32_t)(1)});
     src_column2->append_datum(DatumArray{(int32_t)(4), Datum(), (int32_t)(22), (int32_t)(66)});
 
-    ColumnPtr src_column3 = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
+    auto src_column3 = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
     src_column3->append_datum(DatumArray{(int32_t)(5)});
     src_column3->append_datum(DatumArray{(int32_t)(2), (int32_t)(8)});
     src_column3->append_datum(DatumArray{(int32_t)(4), (int32_t)(1)});
@@ -5291,19 +5274,19 @@ TEST_F(ArrayFunctionsTest, array_intersect_any_type_int_with_not_null) {
 }
 
 TEST_F(ArrayFunctionsTest, array_intersect_any_type_varchar) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
     src_column->append_datum(DatumArray{Slice("5"), Slice("3"), Slice("6")});
     src_column->append_datum(DatumArray{Slice("8")});
     src_column->append_datum(DatumArray{Slice("4"), Slice("1")});
     src_column->append_datum(Datum());
 
-    ColumnPtr src_column2 = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
     src_column2->append_datum(DatumArray{Slice("5"), Slice("6")});
     src_column2->append_datum(DatumArray{Slice("2")});
     src_column2->append_datum(DatumArray{Slice("4"), Slice("3"), Slice("2"), Slice("1")});
     src_column2->append_datum(DatumArray{Slice("4"), Slice("9")});
 
-    ColumnPtr src_column3 = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+    auto src_column3 = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
     src_column3->append_datum(DatumArray{Slice("5")});
     src_column3->append_datum(DatumArray{Slice("2"), Slice("8")});
     src_column3->append_datum(DatumArray{Slice("4"), Slice("1")});
@@ -5320,19 +5303,19 @@ TEST_F(ArrayFunctionsTest, array_intersect_any_type_varchar) {
 }
 
 TEST_F(ArrayFunctionsTest, array_intersect_any_type_varchar_with_not_null) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
     src_column->append_datum(DatumArray{Slice("5"), Slice("3"), Slice("6")});
     src_column->append_datum(DatumArray{Slice("8")});
     src_column->append_datum(DatumArray{Slice("4"), Slice("1")});
     src_column->append_datum(DatumArray{Slice("4"), Slice("22"), Datum()});
 
-    ColumnPtr src_column2 = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
     src_column2->append_datum(DatumArray{Slice("5"), Slice("6")});
     src_column2->append_datum(DatumArray{Slice("2")});
     src_column2->append_datum(DatumArray{Slice("4"), Slice("3"), Slice("2"), Slice("1")});
     src_column2->append_datum(DatumArray{Slice("4"), Datum(), Slice("22"), Slice("66")});
 
-    ColumnPtr src_column3 = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
+    auto src_column3 = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
     src_column3->append_datum(DatumArray{Slice("5")});
     src_column3->append_datum(DatumArray{Slice("2"), Slice("8")});
     src_column3->append_datum(DatumArray{Slice("4"), Slice("1")});
@@ -5373,7 +5356,7 @@ TEST_F(ArrayFunctionsTest, array_intersect_any_type_varchar_with_not_null) {
 }
 
 TEST_F(ArrayFunctionsTest, array_reverse_any_types_int) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
     src_column->append_datum(DatumArray{5, 3, 6});
     src_column->append_datum(DatumArray{2, 3, 7, 8});
     src_column->append_datum(DatumArray{4, 3, 2, 1});
@@ -5388,7 +5371,7 @@ TEST_F(ArrayFunctionsTest, array_reverse_any_types_int) {
 }
 
 TEST_F(ArrayFunctionsTest, array_reverse_any_types_string) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
     src_column->append_datum(DatumArray{"352", "66", "4325"});
     src_column->append_datum(DatumArray{"235", "99", "8", "43251"});
     src_column->append_datum(DatumArray{"44", "33", "22", "112"});
@@ -5402,7 +5385,7 @@ TEST_F(ArrayFunctionsTest, array_reverse_any_types_string) {
 }
 
 TEST_F(ArrayFunctionsTest, array_reverse_any_types_nullable_elements) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
     src_column->append_datum(DatumArray{5, Datum(), 3, 6});
     src_column->append_datum(DatumArray{2, 3, Datum(), Datum()});
     src_column->append_datum(DatumArray{Datum(), Datum(), Datum(), Datum()});
@@ -5416,7 +5399,7 @@ TEST_F(ArrayFunctionsTest, array_reverse_any_types_nullable_elements) {
 }
 
 TEST_F(ArrayFunctionsTest, array_reverse_any_types_nullable_array) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
     src_column->append_datum(DatumArray{5, Datum(), 3, 6});
     src_column->append_datum(Datum());
     src_column->append_datum(DatumArray{Datum(), Datum(), Datum(), Datum()});
@@ -5430,7 +5413,7 @@ TEST_F(ArrayFunctionsTest, array_reverse_any_types_nullable_array) {
 }
 
 TEST_F(ArrayFunctionsTest, array_reverse_any_types_only_null) {
-    ColumnPtr src_column = ColumnHelper::create_const_null_column(3);
+    auto src_column = ColumnHelper::create_const_null_column(3);
 
     auto dest_column = ArrayFunctions::array_reverse_any_types(nullptr, {src_column}).value();
 
@@ -5441,7 +5424,7 @@ TEST_F(ArrayFunctionsTest, array_reverse_any_types_only_null) {
 }
 
 TEST_F(ArrayFunctionsTest, array_match_nullable) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, true);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, true);
     src_column->append_datum(DatumArray{(int8_t)1, (int8_t)1, (int8_t)0});
     src_column->append_datum(DatumArray{(int8_t)0});
     src_column->append_datum(DatumArray{(int8_t)1});
@@ -5474,7 +5457,7 @@ TEST_F(ArrayFunctionsTest, array_match_nullable) {
 }
 
 TEST_F(ArrayFunctionsTest, array_match_not_null) {
-    ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
     src_column->append_datum(DatumArray{(int8_t)1, (int8_t)1, (int8_t)0});
     src_column->append_datum(DatumArray{(int8_t)0});
     src_column->append_datum(DatumArray{(int8_t)1});
@@ -5509,7 +5492,7 @@ TEST_F(ArrayFunctionsTest, array_match_not_null) {
 TEST_F(ArrayFunctionsTest, array_match_only_null) {
     // test only null
     {
-        ColumnPtr src_column = ColumnHelper::create_const_null_column(3);
+        auto src_column = ColumnHelper::create_const_null_column(3);
         auto dest_column = ArrayMatch<false>::process(nullptr, {src_column});
         ASSERT_EQ(dest_column->size(), 3);
         ASSERT_TRUE(dest_column->only_null());
@@ -5520,9 +5503,9 @@ TEST_F(ArrayFunctionsTest, array_match_only_null) {
     }
     // test const
     {
-        ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
+        auto src_column = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
         src_column->append_datum(DatumArray{(uint8) false, (uint8) true});
-        src_column = ConstColumn::create(src_column, 3);
+        src_column = ConstColumn::create(std::move(src_column), 3);
         auto dest_column = ArrayMatch<false>::process(nullptr, {src_column});
         ASSERT_EQ(dest_column->size(), 3);
         ASSERT_FALSE(dest_column->get(0).get_int8());
@@ -5533,9 +5516,9 @@ TEST_F(ArrayFunctionsTest, array_match_only_null) {
     }
     // test const
     {
-        ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
+        auto src_column = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
         src_column->append_datum(DatumArray{});
-        src_column = ConstColumn::create(src_column, 3);
+        src_column = ConstColumn::create(std::move(src_column), 3);
         auto dest_column = ArrayMatch<true>::process(nullptr, {src_column});
         ASSERT_EQ(dest_column->size(), 3);
         ASSERT_FALSE(dest_column->get(0).get_int8());
@@ -5558,7 +5541,7 @@ TEST_F(ArrayFunctionsTest, array_contains_seq) {
     // array_contains_seq(["a", "b", "c"], ["a", "d"])    -> 0
     // array_contains_all(["a", "b", "c"], ["a", "c"])    -> 0
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
         array->append_datum(DatumArray{"a", "b", "c"});
         array->append_datum(Datum());
         array->append_datum(DatumArray{"a", "b", "c"});
@@ -5570,7 +5553,7 @@ TEST_F(ArrayFunctionsTest, array_contains_seq) {
         array->append_datum(DatumArray{"a", "b", "c"});
         array->append_datum(DatumArray{"a", "b", "c"});
 
-        ColumnPtr target = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+        auto target = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
         target->append_datum(DatumArray{"c"});
         target->append_datum(DatumArray{"c"});
         target->append_datum(Datum());
@@ -5600,12 +5583,12 @@ TEST_F(ArrayFunctionsTest, array_contains_seq) {
     // array_contains_seq(["a","c"], [["c"]])
     // array_contains_seq([["a", "b"], ["c"]], [["a", "b"]])
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, false);
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, false);
         array->append_datum(DatumArray{Datum(DatumArray{"a"}), Datum(DatumArray{"b"})});
         array->append_datum(DatumArray{Datum(DatumArray{"a", "c"})});
         array->append_datum(DatumArray{Datum(DatumArray{"a", "b"}), Datum(DatumArray{"c"})});
 
-        ColumnPtr target = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, false);
+        auto target = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, false);
         target->append_datum(DatumArray{Datum(DatumArray{"c"})});
         target->append_datum(DatumArray{Datum(DatumArray{"c"})});
         target->append_datum(DatumArray{Datum(DatumArray{"a", "b"})});
@@ -5620,12 +5603,12 @@ TEST_F(ArrayFunctionsTest, array_contains_seq) {
     // array_contains_seq([["a","d","c"]], [["e"]])
     // array_contains_seq([["a", "b"], ["c"]], [["a", "b"]])
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, true);
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, true);
         array->append_datum(DatumArray{Datum(DatumArray{"a"}), Datum(DatumArray{"b"}), Datum()});
         array->append_datum(DatumArray{Datum(DatumArray{"a", "d", "c"})});
         array->append_datum(DatumArray{Datum(DatumArray{"a", "b"}), Datum(DatumArray{"c"})});
 
-        ColumnPtr target = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, false);
+        auto target = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, false);
         target->append_datum(DatumArray{Datum(DatumArray{"c"})});
         target->append_datum(DatumArray{Datum(DatumArray{"e"})});
         target->append_datum(DatumArray{Datum(DatumArray{"a", "b"})});
@@ -5640,12 +5623,12 @@ TEST_F(ArrayFunctionsTest, array_contains_seq) {
     // array_contains_seq([["a","d","c"]], [["e", NULL]])
     // array_contains_seq([["a", "b"], ["c"]], [["a", "b"]])
     {
-        ColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, false);
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, false);
         array->append_datum(DatumArray{Datum(DatumArray{"a"}), Datum(DatumArray{"b"})});
         array->append_datum(DatumArray{Datum(DatumArray{"a", "d", "c"})});
         array->append_datum(DatumArray{Datum(DatumArray{"a", "b"}), Datum(DatumArray{"c"})});
 
-        ColumnPtr target = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, true);
+        auto target = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, true);
         target->append_datum(DatumArray{Datum(DatumArray{"c"}), Datum()});
         target->append_datum(DatumArray{Datum(DatumArray{"e"}), Datum()});
         target->append_datum(DatumArray{Datum(DatumArray{"a", "b"})});
@@ -5659,7 +5642,8 @@ TEST_F(ArrayFunctionsTest, array_contains_seq) {
 }
 
 template <LogicalType Type>
-void array_repeat_test(Datum element_0, Datum element_1, Datum element_2, Datum element_null) {
+void array_repeat_test(const Datum& element_0, const Datum& element_1, const Datum& element_2,
+                       const Datum& element_null) {
     {
         using CppType = RunTimeCppType<Type>;
 
@@ -5670,12 +5654,12 @@ void array_repeat_test(Datum element_0, Datum element_1, Datum element_2, Datum 
 
         // The normal case
         {
-            ColumnPtr src_column = ColumnHelper::create_column(TypeDescriptor(Type), false, false, 0);
+            auto src_column = ColumnHelper::create_column(TypeDescriptor(Type), false, false, 0);
             src_column->append_datum(element_0);
             src_column->append_datum(element_1);
             src_column->append_datum(element_2);
 
-            Int32Column::Ptr repeat_count_column = Int32Column::create();
+            auto repeat_count_column = Int32Column::create();
             repeat_count_column->append(repeat_count_0);
             repeat_count_column->append(repeat_count_1);
             repeat_count_column->append(repeat_count_2);
@@ -5706,13 +5690,13 @@ void array_repeat_test(Datum element_0, Datum element_1, Datum element_2, Datum 
 
         // The case for testing NullableColumn
         {
-            ColumnPtr src_column = ColumnHelper::create_column(TypeDescriptor(Type), true, false, 0);
+            auto src_column = ColumnHelper::create_column(TypeDescriptor(Type), true, false, 0);
             src_column->append_datum(element_0);
             src_column->append_datum(element_1);
             src_column->append_datum(element_null);
 
-            NullableColumn::Ptr repeat_count_column =
-                    NullableColumn::create(Int32Column::create(), NullColumn::create(0, DATUM_NULL));
+            auto repeat_count_column =
+                    NullableColumn::create(Int32Column::create(), NullColumn::create(0, std::move(DATUM_NULL)));
             repeat_count_column->append_datum(repeat_count_null);
             repeat_count_column->append_datum(Datum(repeat_count_1));
             repeat_count_column->append_datum(Datum(repeat_count_2));
@@ -5731,15 +5715,14 @@ void array_repeat_test(Datum element_0, Datum element_1, Datum element_2, Datum 
         {
             size_t const_column_row_count = 2;
 
-            ColumnPtr src_column = ColumnHelper::create_column(TypeDescriptor(Type), false, true, 0);
+            auto src_column = ColumnHelper::create_column(TypeDescriptor(Type), false, true, 0);
             for (int i = 0; i < const_column_row_count; i++) {
                 src_column->append_datum(element_0);
             }
 
-            Int32Column::Ptr repeat_count_data_column = Int32Column::create();
+            auto repeat_count_data_column = Int32Column::create();
             repeat_count_data_column->append(repeat_count_0);
-            ConstColumn::Ptr repeat_count_column =
-                    ConstColumn::create(std::move(repeat_count_data_column), const_column_row_count);
+            auto repeat_count_column = ConstColumn::create(std::move(repeat_count_data_column), const_column_row_count);
 
             auto dest_column = ArrayFunctions::repeat(nullptr, {src_column, repeat_count_column}).value();
             ASSERT_EQ(dest_column->size(), const_column_row_count);
@@ -5792,12 +5775,12 @@ TEST_F(ArrayFunctionsTest, array_repeat_array) {
 
         // The normal case
         {
-            ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+            auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
             src_column->append_datum(element_0);
             src_column->append_datum(element_1);
             src_column->append_datum(element_2);
 
-            Int32Column::Ptr repeat_count_column = Int32Column::create();
+            auto repeat_count_column = Int32Column::create();
             repeat_count_column->append(repeat_count_0);
             repeat_count_column->append(repeat_count_1);
             repeat_count_column->append(repeat_count_2);
@@ -5819,13 +5802,13 @@ TEST_F(ArrayFunctionsTest, array_repeat_array) {
 
         // The case for testing NullableColumn
         {
-            ColumnPtr src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+            auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
             src_column->append_datum(element_0);
             src_column->append_datum(element_1);
             src_column->append_datum(element_null);
 
-            NullableColumn::Ptr repeat_count_column =
-                    NullableColumn::create(Int32Column::create(), NullColumn::create(0, DATUM_NULL));
+            auto repeat_count_column =
+                    NullableColumn::create(Int32Column::create(), NullColumn::create(0, std::move(DATUM_NULL)));
             repeat_count_column->append_datum(repeat_count_null);
             repeat_count_column->append_datum(Datum(repeat_count_1));
             repeat_count_column->append_datum(Datum(repeat_count_2));
@@ -5845,14 +5828,13 @@ TEST_F(ArrayFunctionsTest, array_repeat_array) {
         {
             size_t const_column_row_count = 2;
 
-            ColumnPtr src_data_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+            auto src_data_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
             src_data_column->append_datum(element_0);
-            ConstColumn::Ptr src_column = ConstColumn::create(std::move(src_data_column), const_column_row_count);
+            auto src_column = ConstColumn::create(std::move(src_data_column), const_column_row_count);
 
-            Int32Column::Ptr repeat_count_data_column = Int32Column::create();
+            auto repeat_count_data_column = Int32Column::create();
             repeat_count_data_column->append(repeat_count_0);
-            ConstColumn::Ptr repeat_count_column =
-                    ConstColumn::create(std::move(repeat_count_data_column), const_column_row_count);
+            auto repeat_count_column = ConstColumn::create(std::move(repeat_count_data_column), const_column_row_count);
 
             auto dest_column = ArrayFunctions::repeat(nullptr, {src_column, repeat_count_column}).value();
             ASSERT_EQ(dest_column->size(), const_column_row_count);
@@ -5883,19 +5865,19 @@ TEST_F(ArrayFunctionsTest, array_repeat_map) {
 
         // The normal case
         {
-            UInt32Column::Ptr offsets = UInt32Column::create();
-            Int32Column::Ptr keys_data = Int32Column::create();
-            NullColumn::Ptr keys_null = NullColumn::create();
-            NullableColumn::Ptr keys = NullableColumn::create(keys_data, keys_null);
-            Int32Column::Ptr values_data = Int32Column::create();
-            NullColumn::Ptr values_null = NullColumn::create();
-            NullableColumn::Ptr values = NullableColumn::create(values_data, values_null);
-            MapColumn::Ptr src_column = MapColumn::create(keys, values, offsets);
+            auto offsets = UInt32Column::create();
+            auto keys_data = Int32Column::create();
+            auto keys_null = NullColumn::create();
+            auto keys = NullableColumn::create(std::move(keys_data), std::move(keys_null));
+            auto values_data = Int32Column::create();
+            auto values_null = NullColumn::create();
+            auto values = NullableColumn::create(std::move(values_data), std::move(values_null));
+            auto src_column = MapColumn::create(std::move(keys), std::move(values), std::move(offsets));
             src_column->append_datum(element_0);
             src_column->append_datum(element_1);
             src_column->append_datum(element_2);
 
-            Int32Column::Ptr repeat_count_column = Int32Column::create();
+            auto repeat_count_column = Int32Column::create();
             repeat_count_column->append(repeat_count_0);
             repeat_count_column->append(repeat_count_1);
             repeat_count_column->append(repeat_count_2);
@@ -5914,22 +5896,22 @@ TEST_F(ArrayFunctionsTest, array_repeat_map) {
 
         // The case for testing NullableColumn
         {
-            UInt32Column::Ptr offsets = UInt32Column::create();
-            Int32Column::Ptr keys_data = Int32Column::create();
-            NullColumn::Ptr keys_null = NullColumn::create();
-            NullableColumn::Ptr keys = NullableColumn::create(keys_data, keys_null);
-            Int32Column::Ptr values_data = Int32Column::create();
-            NullColumn::Ptr values_null = NullColumn::create();
-            NullableColumn::Ptr values = NullableColumn::create(values_data, values_null);
-            MapColumn::Ptr map_column = MapColumn::create(keys, values, offsets);
-            NullableColumn::Ptr src_column =
-                    NullableColumn::create(std::move(map_column), NullColumn::create(0, DATUM_NULL));
+            auto offsets = UInt32Column::create();
+            auto keys_data = Int32Column::create();
+            auto keys_null = NullColumn::create();
+            auto keys = NullableColumn::create(std::move(keys_data), std::move(keys_null));
+            auto values_data = Int32Column::create();
+            auto values_null = NullColumn::create();
+            auto values = NullableColumn::create(std::move(values_data), std::move(values_null));
+            auto map_column = MapColumn::create(std::move(keys), std::move(values), std::move(offsets));
+            auto src_column =
+                    NullableColumn::create(std::move(map_column), NullColumn::create(0, std::move(DATUM_NULL)));
             src_column->append_datum(element_0);
             src_column->append_datum(element_1);
             src_column->append_datum(element_null);
 
-            NullableColumn::Ptr count_column =
-                    NullableColumn::create(Int32Column::create(), NullColumn::create(0, DATUM_NULL));
+            auto count_column =
+                    NullableColumn::create(Int32Column::create(), NullColumn::create(0, std::move(DATUM_NULL)));
             count_column->append_datum(repeat_count_null);
             count_column->append_datum(Datum(repeat_count_1));
             count_column->append_datum(Datum(repeat_count_2));
@@ -5948,21 +5930,20 @@ TEST_F(ArrayFunctionsTest, array_repeat_map) {
         // The case for testing ConstColumn
         {
             size_t const_column_row_count = 2;
-            UInt32Column::Ptr offsets = UInt32Column::create();
-            Int32Column::Ptr keys_data = Int32Column::create();
-            NullColumn::Ptr keys_null = NullColumn::create();
-            NullableColumn::Ptr keys = NullableColumn::create(keys_data, keys_null);
-            Int32Column::Ptr values_data = Int32Column::create();
-            NullColumn::Ptr values_null = NullColumn::create();
-            NullableColumn::Ptr values = NullableColumn::create(values_data, values_null);
-            MapColumn::Ptr map_column = MapColumn::create(keys, values, offsets);
+            auto offsets = UInt32Column::create();
+            auto keys_data = Int32Column::create();
+            auto keys_null = NullColumn::create();
+            auto keys = NullableColumn::create(std::move(keys_data), std::move(keys_null));
+            auto values_data = Int32Column::create();
+            auto values_null = NullColumn::create();
+            auto values = NullableColumn::create(std::move(values_data), std::move(values_null));
+            auto map_column = MapColumn::create(std::move(keys), std::move(values), std::move(offsets));
             map_column->append_datum(element_0);
-            ConstColumn::Ptr src_column = ConstColumn::create(std::move(map_column), const_column_row_count);
+            auto src_column = ConstColumn::create(std::move(map_column), const_column_row_count);
 
-            Int32Column::Ptr repeat_count_data_column = Int32Column::create();
+            auto repeat_count_data_column = Int32Column::create();
             repeat_count_data_column->append(repeat_count_0);
-            ConstColumn::Ptr repeat_count_column =
-                    ConstColumn::create(std::move(repeat_count_data_column), const_column_row_count);
+            auto repeat_count_column = ConstColumn::create(std::move(repeat_count_data_column), const_column_row_count);
 
             auto dest_column = ArrayFunctions::repeat(nullptr, {src_column, repeat_count_column}).value();
             ASSERT_EQ(dest_column->size(), const_column_row_count);
@@ -6052,9 +6033,9 @@ TEST_F(ArrayFunctionsTest, array_generate_date_with_year_unit) {
 
     ASSERT_TRUE(ArrayGenerate<TYPE_DATE>::prepare(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
 
-    ColumnPtr start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
-    ColumnPtr stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
-    ColumnPtr step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+    auto start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
+    auto stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
+    auto step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
 
     // Test case 1: 2020-01-01 to 2023-01-01, step 1 year
     start_column->append_datum(DateValue::create(2020, 1, 1));
@@ -6116,9 +6097,9 @@ TEST_F(ArrayFunctionsTest, array_generate_date_with_month_unit) {
 
     ASSERT_TRUE(ArrayGenerate<TYPE_DATE>::prepare(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
 
-    ColumnPtr start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
-    ColumnPtr stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
-    ColumnPtr step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+    auto start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
+    auto stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
+    auto step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
 
     // Test case: 2020-01-15 to 2020-04-15, step 1 month
     start_column->append_datum(DateValue::create(2020, 1, 15));
@@ -6155,9 +6136,9 @@ TEST_F(ArrayFunctionsTest, array_generate_date_with_day_unit) {
 
     ASSERT_TRUE(ArrayGenerate<TYPE_DATE>::prepare(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
 
-    ColumnPtr start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
-    ColumnPtr stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
-    ColumnPtr step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+    auto start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
+    auto stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
+    auto step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
 
     // Test case: 2020-01-01 to 2020-01-05, step 1 day
     start_column->append_datum(DateValue::create(2020, 1, 1));
@@ -6195,9 +6176,9 @@ TEST_F(ArrayFunctionsTest, array_generate_datetime_with_hour_unit) {
 
     ASSERT_TRUE(ArrayGenerate<TYPE_DATETIME>::prepare(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
 
-    ColumnPtr start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
-    ColumnPtr stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
-    ColumnPtr step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+    auto start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
+    auto stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
+    auto step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
 
     // Test case: 2020-01-01 10:00:00 to 2020-01-01 14:00:00, step 2 hours
     start_column->append_datum(TimestampValue::create(2020, 1, 1, 10, 0, 0));
@@ -6233,9 +6214,9 @@ TEST_F(ArrayFunctionsTest, array_generate_datetime_with_minute_unit) {
 
     ASSERT_TRUE(ArrayGenerate<TYPE_DATETIME>::prepare(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
 
-    ColumnPtr start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
-    ColumnPtr stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
-    ColumnPtr step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+    auto start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
+    auto stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
+    auto step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
 
     // Test case: 2020-01-01 10:00:00 to 2020-01-01 10:05:00, step 1 minute
     start_column->append_datum(TimestampValue::create(2020, 1, 1, 10, 0, 0));
@@ -6274,9 +6255,9 @@ TEST_F(ArrayFunctionsTest, array_generate_datetime_with_second_unit) {
 
     ASSERT_TRUE(ArrayGenerate<TYPE_DATETIME>::prepare(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
 
-    ColumnPtr start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
-    ColumnPtr stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
-    ColumnPtr step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+    auto start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
+    auto stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
+    auto step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
 
     // Test case: 2020-01-01 10:00:00 to 2020-01-01 10:00:03, step 1 second
     start_column->append_datum(TimestampValue::create(2020, 1, 1, 10, 0, 0));
@@ -6313,9 +6294,9 @@ TEST_F(ArrayFunctionsTest, array_generate_date_with_null_values) {
 
     ASSERT_TRUE(ArrayGenerate<TYPE_DATE>::prepare(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
 
-    ColumnPtr start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
-    ColumnPtr stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
-    ColumnPtr step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+    auto start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
+    auto stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
+    auto step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
 
     // Test case 1: Normal case
     start_column->append_datum(DateValue::create(2020, 1, 1));
@@ -6375,9 +6356,9 @@ TEST_F(ArrayFunctionsTest, array_generate_date_with_week_quarter_units) {
 
     ASSERT_TRUE(ArrayGenerate<TYPE_DATE>::prepare(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
 
-    ColumnPtr start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
-    ColumnPtr stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
-    ColumnPtr step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+    auto start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
+    auto stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
+    auto step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
 
     // Test case: 2020-01-01 to 2020-01-22, step 1 week
     start_column->append_datum(DateValue::create(2020, 1, 1));
@@ -6414,9 +6395,9 @@ TEST_F(ArrayFunctionsTest, array_generate_datetime_with_year_unit) {
 
     ASSERT_TRUE(ArrayGenerate<TYPE_DATETIME>::prepare(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
 
-    ColumnPtr start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
-    ColumnPtr stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
-    ColumnPtr step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+    auto start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
+    auto stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
+    auto step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
 
     // Test case: 2020-01-01 10:30:45 to 2023-01-01 10:30:45, step 1 year
     start_column->append_datum(TimestampValue::create(2020, 1, 1, 10, 30, 45));
@@ -6453,9 +6434,9 @@ TEST_F(ArrayFunctionsTest, array_generate_datetime_with_month_unit) {
 
     ASSERT_TRUE(ArrayGenerate<TYPE_DATETIME>::prepare(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
 
-    ColumnPtr start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
-    ColumnPtr stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
-    ColumnPtr step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+    auto start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
+    auto stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
+    auto step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
 
     // Test case: 2020-01-15 08:20:30 to 2020-04-15 08:20:30, step 1 month
     start_column->append_datum(TimestampValue::create(2020, 1, 15, 8, 20, 30));
@@ -6492,9 +6473,9 @@ TEST_F(ArrayFunctionsTest, array_generate_datetime_with_day_unit) {
 
     ASSERT_TRUE(ArrayGenerate<TYPE_DATETIME>::prepare(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
 
-    ColumnPtr start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
-    ColumnPtr stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
-    ColumnPtr step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+    auto start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
+    auto stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
+    auto step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
 
     // Test case: 2020-01-01 12:00:00 to 2020-01-03 12:00:00, step 1 day
     start_column->append_datum(TimestampValue::create(2020, 1, 1, 12, 0, 0));
@@ -6530,9 +6511,9 @@ TEST_F(ArrayFunctionsTest, array_generate_datetime_with_week_unit) {
 
     ASSERT_TRUE(ArrayGenerate<TYPE_DATETIME>::prepare(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
 
-    ColumnPtr start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
-    ColumnPtr stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
-    ColumnPtr step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+    auto start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
+    auto stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
+    auto step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
 
     // Test case: 2020-01-01 09:00:00 to 2020-01-22 09:00:00, step 1 week
     start_column->append_datum(TimestampValue::create(2020, 1, 1, 9, 0, 0));
@@ -6569,9 +6550,9 @@ TEST_F(ArrayFunctionsTest, array_generate_datetime_with_millisecond_unit) {
 
     ASSERT_TRUE(ArrayGenerate<TYPE_DATETIME>::prepare(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
 
-    ColumnPtr start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
-    ColumnPtr stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
-    ColumnPtr step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+    auto start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
+    auto stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
+    auto step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
 
     // Test case: 2020-01-01 10:00:00.000 to 2020-01-01 10:00:00.003, step 1 millisecond
     // Note: TimestampValue stores microseconds, so 1ms = 1000us
@@ -6621,9 +6602,9 @@ TEST_F(ArrayFunctionsTest, array_generate_datetime_with_microsecond_unit) {
 
     ASSERT_TRUE(ArrayGenerate<TYPE_DATETIME>::prepare(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
 
-    ColumnPtr start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
-    ColumnPtr stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
-    ColumnPtr step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+    auto start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
+    auto stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
+    auto step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
 
     // Test case: 2020-01-01 10:00:00.000000 to 2020-01-01 10:00:00.000005, step 1 microsecond
     auto start_ts = TimestampValue::create(2020, 1, 1, 10, 0, 0);

@@ -17,16 +17,16 @@
 #include <memory>
 
 #include "agent/master_info.h"
+#include "base/failpoint/fail_point.h"
+#include "base/utility/defer_op.h"
 #include "exec/pipeline/pipeline_metrics.h"
 #include "exec/pipeline/stream_pipeline_driver.h"
 #include "exec/workgroup/work_group.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
+#include "runtime/starrocks_metrics.h"
 #include "util/debug/query_trace.h"
-#include "util/defer_op.h"
-#include "util/failpoint/fail_point.h"
 #include "util/stack_util.h"
-#include "util/starrocks_metrics.h"
 #include "util/time_guard.h"
 
 namespace starrocks::pipeline {
@@ -105,14 +105,17 @@ void GlobalDriverExecutor::_worker_thread() {
         if (driver == nullptr) {
             continue;
         }
+
+        auto* fragment_ctx = driver->fragment_ctx();
+        auto* runtime_state = fragment_ctx->runtime_state();
+        auto* query_ctx = driver->query_ctx();
+
         DCHECK(!driver->is_in_ready());
         DCHECK(!driver->is_in_blocked());
 
         if (current_thread != nullptr) {
             current_thread->set_idle(false);
         }
-        auto* query_ctx = driver->query_ctx();
-        auto* fragment_ctx = driver->fragment_ctx();
         const TQueryType::type query_type = fragment_ctx->query_type();
 
         driver->increment_schedule_times();
@@ -124,8 +127,8 @@ void GlobalDriverExecutor::_worker_thread() {
 
         // TODO(trueeyu): This writing is to ensure that MemTracker will not be destructed before the thread ends.
         //  This writing method is a bit tricky, and when there is a better way, replace it
-        auto runtime_state_ptr = fragment_ctx->runtime_state_ptr();
-        auto* runtime_state = runtime_state_ptr.get();
+        // do not remove this writing, it is used to ensure that MemTracker will not be destructed before the SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER
+        auto runtime_state_holder = fragment_ctx->runtime_state_ptr();
         {
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(runtime_state->instance_mem_tracker());
 #if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER)
@@ -311,10 +314,10 @@ void GlobalDriverExecutor::cancel(DriverRawPtr driver) {
 }
 
 void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx,
-                                             const Status& status, bool done, bool attach_profile) {
+                                             const Status& status, bool done) {
     auto* profile = fragment_ctx->runtime_state()->runtime_profile();
     ObjectPool obj_pool;
-    if (attach_profile) {
+    if (query_ctx->enable_profile()) {
         profile = _build_merged_instance_profile(query_ctx, fragment_ctx, &obj_pool);
 
         // Add counters for query level memory and cpu usage, these two metrics will be specially handled at the frontend
@@ -493,9 +496,6 @@ RuntimeProfile* GlobalDriverExecutor::_build_merged_instance_profile(QueryContex
                                                                      FragmentContext* fragment_ctx,
                                                                      ObjectPool* obj_pool) {
     auto* instance_profile = fragment_ctx->runtime_state()->runtime_profile();
-    if (!query_ctx->enable_profile()) {
-        return instance_profile;
-    }
 
     if (query_ctx->profile_level() >= TPipelineProfileLevel::type::DETAIL) {
         return instance_profile;

@@ -61,7 +61,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.text.SimpleDateFormat;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 /*
@@ -505,7 +505,8 @@ public class Repository implements Writable, GsonPostProcessable {
             return PREFIX_JOB_INFO;
         } else {
             return PREFIX_JOB_INFO
-                    + TimeUtils.longToTimeString(createTime, new SimpleDateFormat(BackupJob.TIMESTAMP_FORMAT));
+                    + TimeUtils.longToTimeString(createTime,
+                    DateTimeFormatter.ofPattern(BackupJob.TIMESTAMP_FORMAT).withZone(TimeUtils.getSystemTimeZone().toZoneId()));
         }
     }
 
@@ -680,9 +681,6 @@ public class Repository implements Writable, GsonPostProcessable {
 
         return info;
     }
-
-
-
 
     @Override
     public void gsonPostProcess() throws IOException {

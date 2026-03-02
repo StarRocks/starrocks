@@ -14,6 +14,10 @@
 
 #include "storage/lake/column_mode_partial_update_handler.h"
 
+#include "base/debug/trace.h"
+#include "base/phmap/phmap.h"
+#include "base/time/time.h"
+#include "base/utility/defer_op.h"
 #include "common/tracer.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
@@ -34,11 +38,7 @@
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_rewriter.h"
 #include "storage/tablet.h"
-#include "util/defer_op.h"
-#include "util/phmap/phmap.h"
 #include "util/stack_util.h"
-#include "util/time.h"
-#include "util/trace.h"
 
 namespace starrocks::lake {
 
@@ -99,17 +99,18 @@ Status ColumnModePartialUpdateHandler::_load_upserts(const RowsetUpdateStatePara
         *end_idx = _upserts[start_idx]->end_idx;
         return Status::OK();
     }
+    ASSIGN_OR_RETURN(auto pk_encoding_type, params.tablet_schema->primary_key_encoding_type_or_error());
 
     // 2. build schema.
     MutableColumnPtr pk_column;
-    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
+    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, pk_encoding_type).ok()) {
         std::string err_msg =
                 fmt::format("create column for primary key encoder failed, tablet_id: {}", params.tablet->id());
         DCHECK(false) << err_msg;
         return Status::InternalError(err_msg);
     }
 
-    std::shared_ptr<Chunk> chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, DEFAULT_CHUNK_SIZE);
+    ChunkPtr chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, DEFAULT_CHUNK_SIZE);
 
     // alloc first BatchPKsPtr
     auto header_ptr = std::make_shared<BatchPKs>();
@@ -134,7 +135,7 @@ Status ColumnModePartialUpdateHandler::_load_upserts(const RowsetUpdateStatePara
                 } else if (!st.ok()) {
                     return st;
                 } else {
-                    PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get());
+                    PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get(), pk_encoding_type);
                 }
             }
         }
@@ -428,6 +429,8 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
             (*insert_rowids_by_segment)[upt_id] = std::move(_partial_update_states[upt_id].insert_rowids);
         }
     }
+
+    const size_t partial_update_states_size = _partial_update_states.size();
     _partial_update_states.clear();
     // must record unique column id in delta column group
     // dcg_column_ids and dcg_column_files are mapped one to the other. E.g.
@@ -476,14 +479,10 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
     for (const auto& each : rss_upt_id_to_rowid_pairs) {
         builder->append_dcg(each.first, dcg_column_file_with_encryption_metas[each.first], dcg_column_ids[each.first]);
     }
-    // COLUMN_UPDATE_MODE: remove segments that contain only updated columns
-    // COLUMN_UPSERT_MODE: keep segments; upper layer will append delvec/PK index changes and new rowsets
-    if (params.op_write.txn_meta().partial_update_mode() == PartialUpdateMode::COLUMN_UPDATE_MODE) {
-        builder->apply_column_mode_partial_update(params.op_write);
-    }
+    builder->apply_column_mode_partial_update(params.op_write);
 
     TRACE_COUNTER_INCREMENT("pcu_rss_cnt", rss_upt_id_to_rowid_pairs.size());
-    TRACE_COUNTER_INCREMENT("pcu_upt_cnt", _partial_update_states.size());
+    TRACE_COUNTER_INCREMENT("pcu_upt_cnt", partial_update_states_size);
     TRACE_COUNTER_INCREMENT("pcu_column_cnt", update_column_ids.size());
     return Status::OK();
 }
@@ -501,9 +500,9 @@ bool CompactionUpdateConflictChecker::conflict_check(const TxnLogPB_OpCompaction
     // 1. find all segments that have been compacted
     for (const auto& rowset : metadata.rowsets()) {
         if (input_rowsets.count(rowset.id()) > 0 && rowset.segments_size() > 0) {
-            std::vector<int> temp(rowset.segments_size());
-            std::iota(temp.begin(), temp.end(), rowset.id());
-            input_segments.insert(input_segments.end(), temp.begin(), temp.end());
+            for (int i = 0; i < rowset.segments_size(); ++i) {
+                input_segments.push_back(get_rssid(rowset, i));
+            }
         }
     }
     // 2. find out if these segments have been updated

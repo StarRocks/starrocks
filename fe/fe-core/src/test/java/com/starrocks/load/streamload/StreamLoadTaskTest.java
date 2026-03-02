@@ -23,6 +23,7 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
@@ -30,14 +31,19 @@ import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.scheduler.Coordinator;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TLoadInfo;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.WarehouseIdleChecker;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,8 +51,9 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import java.util.Map;
+import java.util.TimeZone;
 
-import static com.starrocks.common.ErrorCode.ERR_NO_PARTITIONS_HAVE_DATA_LOAD;
+import static com.starrocks.common.ErrorCode.ERR_NO_ROWS_IMPORTED;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doNothing;
@@ -143,7 +150,7 @@ public class StreamLoadTaskTest {
             }
         };
 
-        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class, ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg(),
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class, ERR_NO_ROWS_IMPORTED.formatErrorMsg(),
                 () -> Deencapsulation.invoke(streamLoadTask, "unprotectedWaitCoordFinish"));
     }
 
@@ -241,9 +248,9 @@ public class StreamLoadTaskTest {
         task.beginTxn(0, 2, null,
                 new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "fe"), resp);
         Assertions.assertTrue(resp.stateOK());
+        // PREPARED, COMMITED, FINISHED states should return OK (idempotent behavior)
         for (StreamLoadTask.State st : java.util.List.of(StreamLoadTask.State.PREPARED,
                 StreamLoadTask.State.COMMITED,
-                StreamLoadTask.State.CANCELLED,
                 StreamLoadTask.State.FINISHED)) {
             Deencapsulation.invoke(task, "setState", st);
             TransactionResult r = new TransactionResult();
@@ -251,6 +258,13 @@ public class StreamLoadTaskTest {
                     new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "fe"), r);
             Assertions.assertTrue(r.stateOK());
         }
+        // CANCELLED state should return error (task already failed)
+        Deencapsulation.invoke(task, "setState", StreamLoadTask.State.CANCELLED);
+        Deencapsulation.setField(task, "errorMsg", "cancelled by user");
+        TransactionResult cancelledResp = new TransactionResult();
+        task.beginTxn(0, 2, null,
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "fe"), cancelledResp);
+        Assertions.assertFalse(cancelledResp.stateOK());
     }
 
     @Test
@@ -305,6 +319,8 @@ public class StreamLoadTaskTest {
                 10000, 1, 0, System.currentTimeMillis(), WarehouseManager.DEFAULT_RESOURCE);
         Deencapsulation.invoke(task, "setState", StreamLoadTask.State.PREPARING);
         Deencapsulation.setField(task, "coord", c);
+        Deencapsulation.setField(task, "dbName", "pipe_test_db");
+        Deencapsulation.setField(task, "tableName", "tbl1");
         StreamLoadKvParams params = new StreamLoadKvParams(java.util.Map.of("max_filter_ratio", "0.1"));
         Deencapsulation.setField(task, "streamLoadParams", params);
         new Expectations() {
@@ -333,6 +349,8 @@ public class StreamLoadTaskTest {
                 10000, 1, 0, System.currentTimeMillis(), WarehouseManager.DEFAULT_RESOURCE);
         Deencapsulation.invoke(task, "setState", StreamLoadTask.State.PREPARING);
         Deencapsulation.setField(task, "coord", c);
+        Deencapsulation.setField(task, "dbName", "pipe_test_db");
+        Deencapsulation.setField(task, "tableName", "tbl1");
         StreamLoadKvParams params = new StreamLoadKvParams(java.util.Map.of("max_filter_ratio", "0.5"));
         Deencapsulation.setField(task, "streamLoadParams", params);
         new Expectations() {
@@ -372,7 +390,8 @@ public class StreamLoadTaskTest {
         Deencapsulation.setField(task, "isCommitting", true);
         TransactionResult resp = new TransactionResult();
         task.manualCancelTask(resp);
-        Assertions.assertTrue(resp.stateOK());
+        // Cancel while committing should return error (cannot cancel during commit)
+        Assertions.assertFalse(resp.stateOK());
     }
 
     @Test
@@ -449,5 +468,214 @@ public class StreamLoadTaskTest {
         Deencapsulation.setField(task, "loadId", null);
         task.gsonPostProcess();
         Assertions.assertEquals(id.getHi(), task.getTUniqueId().getHi());
+    }
+
+    @Test
+    public void testToThriftWarehouseFieldInSharedDataMode(@Mocked GlobalStateMgr globalStateMgr,
+                                                            @Mocked WarehouseManager warehouseManager,
+                                                            @Mocked Warehouse warehouse) {
+        StreamLoadTask task = new StreamLoadTask(1017, new Database(), new OlapTable(), "t_label18", "u", "127.0.0.1",
+                10000, 1, 0, System.currentTimeMillis(), WarehouseManager.DEFAULT_RESOURCE);
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        new MockUp<TimeUtils>() {
+            @Mock
+            public TimeZone getTimeZone() {
+                return TimeZone.getDefault();
+            }
+        };
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+
+                globalStateMgr.getWarehouseMgr();
+                result = warehouseManager;
+
+                warehouseManager.getWarehouse(anyLong);
+                result = warehouse;
+
+                warehouse.getName();
+                result = "test_warehouse";
+            }
+        };
+
+        TLoadInfo loadInfo = task.toThrift().get(0);
+        Assertions.assertTrue(loadInfo.isSetWarehouse());
+        Assertions.assertEquals("test_warehouse", loadInfo.getWarehouse());
+    }
+
+    @Test
+    public void testToThriftWarehouseFieldInNonSharedDataMode() {
+        StreamLoadTask task = new StreamLoadTask(1018, new Database(), new OlapTable(), "t_label19", "u", "127.0.0.1",
+                10000, 1, 0, System.currentTimeMillis(), WarehouseManager.DEFAULT_RESOURCE);
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_NOTHING;
+            }
+        };
+
+        TLoadInfo loadInfo = task.toThrift().get(0);
+        Assertions.assertTrue(loadInfo.isSetWarehouse());
+        Assertions.assertEquals("", loadInfo.getWarehouse());
+    }
+
+    @Test
+    public void testToThriftWarehouseFieldWhenWarehouseNotFound(@Mocked GlobalStateMgr globalStateMgr,
+                                                                 @Mocked WarehouseManager warehouseManager) {
+        StreamLoadTask task = new StreamLoadTask(1019, new Database(), new OlapTable(), "t_label20", "u", "127.0.0.1",
+                10000, 1, 0, System.currentTimeMillis(), WarehouseManager.DEFAULT_RESOURCE);
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        new MockUp<TimeUtils>() {
+            @Mock
+            public TimeZone getTimeZone() {
+                return TimeZone.getDefault();
+            }
+        };
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+
+                globalStateMgr.getWarehouseMgr();
+                result = warehouseManager;
+
+                warehouseManager.getWarehouse(anyLong);
+                result = new RuntimeException("Warehouse not found");
+            }
+        };
+
+        TLoadInfo loadInfo = task.toThrift().get(0);
+        Assertions.assertTrue(loadInfo.isSetWarehouse());
+        Assertions.assertEquals("", loadInfo.getWarehouse());
+    }
+
+    @Test
+    public void testTryLoadInCancelledState() throws StarRocksException {
+        StreamLoadTask task = new StreamLoadTask(1020, new Database(), new OlapTable(), "t_label21", "u", "127.0.0.1",
+                10000, 2, 0, System.currentTimeMillis(), WarehouseManager.DEFAULT_RESOURCE);
+        Deencapsulation.setField(task, "tableName", "tbl");
+        Deencapsulation.invoke(task, "setState", StreamLoadTask.State.CANCELLED);
+        Deencapsulation.setField(task, "errorMsg", "cancelled by user");
+        TransactionResult resp = new TransactionResult();
+        TNetworkAddress addr = task.tryLoad(0, task.getTableName(), resp);
+        Assertions.assertNull(addr);
+        Assertions.assertFalse(resp.stateOK());
+    }
+
+    @Test
+    public void testExecuteTaskInCancelledState() {
+        StreamLoadTask task = new StreamLoadTask(1021, new Database(), new OlapTable(), "t_label22", "u", "127.0.0.1",
+                10000, 2, 0, System.currentTimeMillis(), WarehouseManager.DEFAULT_RESOURCE);
+        Deencapsulation.setField(task, "tableName", "tbl");
+        Deencapsulation.invoke(task, "setState", StreamLoadTask.State.CANCELLED);
+        Deencapsulation.setField(task, "errorMsg", "cancelled by user");
+        TransactionResult resp = new TransactionResult();
+        TNetworkAddress addr = task.executeTask(0, task.getTableName(), null, resp);
+        Assertions.assertNull(addr);
+        Assertions.assertFalse(resp.stateOK());
+    }
+
+    @Test
+    public void testPrepareChannelInCancelledState() {
+        StreamLoadTask task = new StreamLoadTask(1022, new Database(), new OlapTable(), "t_label23", "u", "127.0.0.1",
+                10000, 2, 0, System.currentTimeMillis(), WarehouseManager.DEFAULT_RESOURCE);
+        Deencapsulation.setField(task, "tableName", "tbl");
+        Deencapsulation.invoke(task, "setState", StreamLoadTask.State.CANCELLED);
+        Deencapsulation.setField(task, "errorMsg", "cancelled by user");
+        TransactionResult resp = new TransactionResult();
+        task.prepareChannel(0, task.getTableName(), null, resp);
+        Assertions.assertFalse(resp.stateOK());
+    }
+
+    @Test
+    public void testWaitCoordFinishInCancelledState() {
+        StreamLoadTask task = new StreamLoadTask(1023, new Database(), new OlapTable(), "t_label24", "u", "127.0.0.1",
+                10000, 2, 0, System.currentTimeMillis(), WarehouseManager.DEFAULT_RESOURCE);
+        Deencapsulation.invoke(task, "setState", StreamLoadTask.State.CANCELLED);
+        Deencapsulation.setField(task, "errorMsg", "cancelled by user");
+        TransactionResult resp = new TransactionResult();
+        task.waitCoordFinish(resp);
+        Assertions.assertFalse(resp.stateOK());
+    }
+
+    @Test
+    public void testCommitTxnInCancelledState() throws StarRocksException {
+        StreamLoadTask task = new StreamLoadTask(1024, new Database(), new OlapTable(), "t_label25", "u", "127.0.0.1",
+                10000, 2, 0, System.currentTimeMillis(), WarehouseManager.DEFAULT_RESOURCE);
+        Deencapsulation.invoke(task, "setState", StreamLoadTask.State.CANCELLED);
+        Deencapsulation.setField(task, "errorMsg", "cancelled by user");
+        TransactionResult resp = new TransactionResult();
+        task.commitTxn(null, resp);
+        Assertions.assertFalse(resp.stateOK());
+    }
+
+    @Test
+    public void testManualCancelTaskWhenCancelFails() throws StarRocksException {
+        StreamLoadTask task = new StreamLoadTask(1025, new Database(), new OlapTable(), "t_label26", "u", "127.0.0.1",
+                10000, 2, 0, System.currentTimeMillis(), WarehouseManager.DEFAULT_RESOURCE);
+        // Set state to CANCELLED so cancelTask will return error message
+        Deencapsulation.invoke(task, "setState", StreamLoadTask.State.CANCELLED);
+        Deencapsulation.setField(task, "errorMsg", "already cancelled");
+        TransactionResult resp = new TransactionResult();
+        task.manualCancelTask(resp);
+        Assertions.assertFalse(resp.stateOK());
+    }
+
+    @Test
+    public void testCancelCoordinatorOnly(@Mocked Coordinator c) throws StarRocksException {
+        StreamLoadTask task = new StreamLoadTask(1026, new Database(), new OlapTable(), "t_label27", "u", "127.0.0.1",
+                10000, 2, 0, System.currentTimeMillis(), WarehouseManager.DEFAULT_RESOURCE);
+        TUniqueId loadId = new TUniqueId(100, 200);
+        task.setTUniqueId(loadId);
+        task.setCoordinator(c);
+        Deencapsulation.setField(task, "isSyncStreamLoad", false);
+        Deencapsulation.invoke(task, "setState", StreamLoadTask.State.LOADING);
+        QeProcessorImpl.INSTANCE.registerQuery(loadId, c);
+        Assertions.assertEquals(1, QeProcessorImpl.INSTANCE.getCoordinatorCount());
+
+        new Expectations() {
+            {
+                c.cancel(anyString);
+            }
+        };
+
+        task.cancelCoordinatorOnly("test cancel reason");
+
+        Assertions.assertEquals(StreamLoadTask.State.CANCELLED,
+                Deencapsulation.getField(task, "state"));
+        Assertions.assertEquals("test cancel reason",
+                Deencapsulation.getField(task, "errorMsg"));
+        Assertions.assertEquals(0, QeProcessorImpl.INSTANCE.getCoordinatorCount());
+    }
+
+    @Test
+    public void testCancelCoordinatorOnlyInUnreversibleState() {
+        StreamLoadTask task = new StreamLoadTask(1027, new Database(), new OlapTable(), "t_label28", "u", "127.0.0.1",
+                10000, 2, 0, System.currentTimeMillis(), WarehouseManager.DEFAULT_RESOURCE);
+        Deencapsulation.invoke(task, "setState", StreamLoadTask.State.FINISHED);
+
+        task.cancelCoordinatorOnly("test cancel reason");
+
+        // State should remain FINISHED since it's an unreversible state
+        Assertions.assertEquals(StreamLoadTask.State.FINISHED,
+                Deencapsulation.getField(task, "state"));
     }
 }

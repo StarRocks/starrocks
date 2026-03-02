@@ -974,7 +974,8 @@ public class CreateTableWithPartitionTest extends StarRocksTestBase  {
                     "'partition_retention_condition' = 'cast(id as date) > current_date() - interval 1 month'\n" +
                     ")");
         } catch (Exception e) {
-            Assertions.assertTrue(e.getMessage().contains("Partition condition `CAST(id AS DATE) > current_date() - INTERVAL 1 MONTH` " +
+            System.out.println(e.getMessage());
+            Assertions.assertTrue(e.getMessage().contains("Partition condition `CAST(id AS DATE) > CURRENT_DATE() - INTERVAL 1 MONTH` " +
                     "is supported for a partitioned table"));
         }
     }

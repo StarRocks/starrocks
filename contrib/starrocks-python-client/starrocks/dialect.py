@@ -27,12 +27,7 @@ from alembic.operations.ops import AlterColumnOp
 from alembic.util.sqla_compat import compiles
 from sqlalchemy import (
     Column,
-    Connection,
-    Delete,
-    Row,
-    Select,
     Table,
-    TableClause,
     exc,
     log,
     schema as sa_schema,
@@ -40,6 +35,7 @@ from sqlalchemy import (
     types as sqltypes,
     util,
 )
+from sqlalchemy.engine import Connection
 from sqlalchemy.dialects.mysql.base import (
     MySQLCompiler,
     MySQLDDLCompiler,
@@ -50,9 +46,10 @@ from sqlalchemy.dialects.mysql.base import (
 )
 from sqlalchemy.dialects.mysql.pymysql import MySQLDialect_pymysql
 from sqlalchemy.engine import reflection
-from sqlalchemy.engine.interfaces import ReflectedTableComment
+#from sqlalchemy.engine.interfaces import ReflectedTableComment
+from sqlalchemy.engine.row import Row
 from sqlalchemy.sql import sqltypes, bindparam
-from sqlalchemy.sql.expression import Delete, Select, Update
+from sqlalchemy.sql.expression import Delete, Select, Update, TableClause
 
 from starrocks.common import utils
 from starrocks.common.defaults import ReflectionMVDefaults, ReflectionTableDefaults, ReflectionViewDefaults
@@ -65,7 +62,7 @@ from starrocks.common.params import (
     TableKind,
     TableObjectInfoKey,
 )
-from starrocks.common.types import ColumnAggType, SystemRunMode, TableType
+from starrocks.common.types import ColumnAggType, SystemRunMode, TableEngine, TableType
 from starrocks.common.utils import TableAttributeNormalizer
 from starrocks.sql.schema import View
 
@@ -188,10 +185,12 @@ colspecs = base_colspecs | {
 class StarRocksTypeCompiler(MySQLTypeCompiler):
     """
     Compile a datatype to StarRocks' SQL type string.
-    """
+    For special types only, use the default implementation in MySQLTypeCompiler for other types.
 
-    def visit_NVARCHAR(self, type_, **kw):
-        return self.visit_VARCHAR(type_, **kw)
+    NOTE: StarRocks will ignore the length of Integer types, so we need to care about the
+    comparison of Integer types.
+    NOTE: StarRocks does not support scale of Float types.
+    """
 
     def visit_BOOLEAN(self, type_, **kw):
         return "BOOLEAN"
@@ -199,30 +198,25 @@ class StarRocksTypeCompiler(MySQLTypeCompiler):
     def visit_FLOAT(self, type_, **kw):
         return "FLOAT"
 
-    def visit_TINYINT(self, type_, **kw):
-        return "TINYINT"
-
-    def visit_SMALLINT(self, type_, **kw):
-        return "SMALLINT"
-
-    def visit_INTEGER(self, type_, **kw):
-        return "INTEGER"
-
-    def visit_BIGINT(self, type_, **kw):
-        return "BIGINT"
+    def visit_DOUBLE(self, type_, **kw):
+        return "DOUBLE"
 
     def visit_LARGEINT(self, type_, **kw):
+        if getattr(type_, "display_width", None) is not None:
+            return f"LARGEINT({type_.display_width})"
         return "LARGEINT"
+
+    def visit_NVARCHAR(self, type_, **kw):
+        return self.visit_VARCHAR(type_, **kw)
 
     def visit_STRING(self, type_, **kw):
         return "STRING"
-        # return "VARCHAR(65533)"
 
     def visit_VARCHAR(self, type_, **kw):
         # StarRocks supports unbounded strings via STRING. When no length is
         # provided (e.g. from SQLAlchemy String() without length), render
         # STRING instead of requiring a VARCHAR length.
-        if getattr(type_, "length", None) is None:
+        if getattr(type_, "length", None) is None or type_.length == 65533:
             return "STRING"
         return f"VARCHAR({type_.length})"
 
@@ -577,7 +571,8 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
         logger.debug("table original opts for table: %s, schema: %s, opts: %r", table.name, table.schema, opts)
 
         # ENGINE
-        if engine := opts.get(TableInfoKey.ENGINE):
+        engine = opts.get(TableInfoKey.ENGINE)
+        if engine and engine.upper() != TableEngine.OLAP:
             table_opts.append(f'ENGINE={engine}')
 
         # Key / Table Type (Primary key, Duplicate key, Aggregate key, Unique key)
@@ -663,12 +658,12 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
         # Key / Table Type (Primary key, Duplicate key, Aggregate key, Unique key)
         key_type = None
         key_desc = None
-        for tbl_kind_key_str, table_kind in TableInfoKey.KEY_KWARG_MAP.items():
+        for tbl_kind_key_str, table_type in TableInfoKey.KEY_KWARG_MAP.items():
             kwarg_upper = tbl_kind_key_str.upper()
             if kwarg_upper in opts:
                 if key_type:
                     raise exc.CompileError(f"Multiple key types found: {tbl_kind_key_str}, first_key_type: {key_type}")
-                key_type = table_kind
+                key_type = table_type
                 key_columns_str: str = TableAttributeNormalizer.remove_outer_parentheses(opts[kwarg_upper])
                 logger.debug("get table key info: key_type: %s, key_columns: %s", key_type, key_columns_str)
                 # check if the key columns are valid
@@ -1226,8 +1221,9 @@ class StarRocksIdentifierPreparer(MySQLIdentifierPreparer):
     such as: reserved_words = STARROCKS_RESERVED_WORDS | RESERVED_WORDS_MYSQL
     """
 
-    def __init__(self, dialect):
-        super().__init__(dialect, initial_quote='`')
+    def __init__(self, dialect, **kwargs):
+        kwargs.pop("server_ansiquotes", None)
+        super().__init__(dialect, server_ansiquotes=False, **kwargs)
 
     # We don't force to use quote for identifier. we can uncomment this if needed.
     # def _requires_quotes(self, ident):
@@ -1280,15 +1276,15 @@ class StarRocksDialect(MySQLDialect_pymysql):
     def __init__(self, *args, **kwargs):
         super(StarRocksDialect, self).__init__(*args, **kwargs)
         self.run_mode: Optional[str] = None
-        # Explicitly instantiate the preparer here, ensuring it's an instance
-        self.preparer = self.preparer(self)
+        # It may be error to explicitly instantiate the preparer here, `initialize` method will instance it.
+        # self.preparer = self.preparer(self)
 
         # some test parameters
         # self.test_replication_num: Optional[int] = None
 
-    def create_connect_args(self, url):
+    def create_connect_args(self, url, _translate_args: Optional[Dict[str, Any]] = None):
         # Allow the superclass to create the base connect arguments
-        connect_args = super(StarRocksDialect, self).create_connect_args(url)[1]
+        _, connect_args = super(StarRocksDialect, self).create_connect_args(url, _translate_args)
         logger.debug("connect_args: %s", connect_args)
 
         # Handle the test-specific replication_num parameter
@@ -1302,8 +1298,12 @@ class StarRocksDialect(MySQLDialect_pymysql):
 
     def initialize(self, connection: Connection) -> None:
         super().initialize(connection)
+        self._init_run_mode(connection)
+
+    def _init_run_mode(self, connection: Connection) -> None:
         if self.run_mode is None:
             self.run_mode = self._get_run_mode(connection)
+            logger.debug("system run mode: %s" % self.run_mode)
 
     def _get_server_version_info(self, connection: Connection) -> Tuple[int, ...]:
         # get database server version info explicitly over the wire
@@ -1346,7 +1346,7 @@ class StarRocksDialect(MySQLDialect_pymysql):
             rows = result.fetchall()
             if rows and len(rows) > 0:
                 # The result format is: | Key | AliasNames | Value | Type | IsMutable | Comment |
-                return rows[0][2]  # Value column
+                return rows[0][2].lower()  # Value column
             else:
                 # Default to shared_nothing if not found
                 return SystemRunMode.SHARED_NOTHING
@@ -1425,8 +1425,8 @@ class StarRocksDialect(MySQLDialect_pymysql):
 
     @reflection.cache
     def _setup_parser(
-        self, connection: Connection, table_name: str, schema: Optional[str] = None, **kwargs: Any
-    ) -> ReflectedState:
+        self, connection, table_name, schema = None, **kwargs
+    ):
         """
         Override to return different ReflectedState subclasses based on object type.
 
@@ -1475,7 +1475,7 @@ class StarRocksDialect(MySQLDialect_pymysql):
         return TableKind.TABLE  # Default fallback
 
     @reflection.cache
-    def get_table_kind(self, connection: Connection, table_name: str, schema: Optional[str] = None, **kwargs: Any) -> str:
+    def get_table_kind(self, connection, table_name, schema = None, **kwargs):
         """
         Get the object's table_kind (from cache).
         Reuse _setup_parser's cache via _parsed_state_or_create.
@@ -1486,8 +1486,8 @@ class StarRocksDialect(MySQLDialect_pymysql):
 
     @reflection.cache
     def _setup_table_parser(
-        self, connection: Connection, table_name: str, schema: Optional[str] = None, **kwargs: Any
-    ) -> ReflectedState:
+        self, connection, table_name, schema = None, **kwargs
+    ):
         charset: Optional[str] = self._connection_charset
         parser: _reflection.StarRocksTableDefinitionParser = self._tabledef_parser
         # logger.debug("setup table parser for table: %s, schema: %s", table_name, schema)
@@ -1509,14 +1509,21 @@ class StarRocksDialect(MySQLDialect_pymysql):
                 f"Multiple tables found with name {table_name} in schema {schema}"
             )
         # logger.debug("reflected table row for table: %s, info: %s", table_name, dict(table_rows[0]))
-
-        table_config_rows: List[_DecodingRow] = self._read_from_information_schema(
-            connection=connection,
-            inf_sch_table="tables_config",
-            charset=charset,
-            table_schema=schema,
-            table_name=table_name,
-        )
+        try:
+            table_config_rows: List[_DecodingRow] = self._read_from_information_schema(
+                connection=connection,
+                inf_sch_table="tables_config",
+                charset=charset,
+                table_schema=schema,
+                table_name=table_name,
+            )
+        except Exception as e:
+            if 'Unknown table \'information_schema.tables_config\'' in str(e):
+                table_config_rows = [{
+                    'TABLE_ENGINE': table_rows[0].get('ENGINE'),
+                }]
+            else:
+                raise
         if table_config_rows:
             if len(table_config_rows) > 1:
                 raise exc.InvalidRequestError(
@@ -1556,7 +1563,7 @@ class StarRocksDialect(MySQLDialect_pymysql):
         if partition_clause:
             table_config_dict['PARTITION_CLAUSE'] = partition_clause
 
-        return parser.parse(
+        return parser.parse_table(
             table=table_rows[0],
             table_config=table_config_dict,
             columns=column_rows,
@@ -1595,6 +1602,7 @@ class StarRocksDialect(MySQLDialect_pymysql):
             c.split(' ')[0].strip('`'): 'AUTO_INCREMENT' in c
             for c in only_columns
         }
+        # logger.debug("get auto increment info from show create table: %s", col_autoinc)
         return col_autoinc
 
     def _get_partition_clause_from_create_table(self, create_table: str) -> Optional[str]:
@@ -1664,11 +1672,11 @@ class StarRocksDialect(MySQLDialect_pymysql):
     @reflection.cache
     def get_table_comment(
             self,
-            connection: Connection,
-            table_name: str,
-            schema: Optional[str] = None,
-            **kw: Any,
-    ) -> ReflectedTableComment:
+            connection,
+            table_name,
+            schema = None,
+            **kw,
+    ):
         """Get the table comment from the parsed state.
         Overrides the mysql's implementation, which will use 'mysql_comment' as the key,
         here the `comment` supports lower case only.
@@ -1682,8 +1690,8 @@ class StarRocksDialect(MySQLDialect_pymysql):
 
     @reflection.cache
     def get_indexes(
-        self, connection: Connection, table_name: str, schema: Optional[str] = None, **kwargs: Any
-    ) -> List[Dict[str, Any]]:
+        self, connection, table_name, schema = None, **kwargs
+    ):
 
         parsed_state: Any = self._parsed_state_or_create(
             connection, table_name, schema, **kwargs
@@ -1740,12 +1748,14 @@ class StarRocksDialect(MySQLDialect_pymysql):
 
     @reflection.cache
     def has_table(
-        self, connection: Connection, table_name: str, schema: Optional[str] = None, **kwargs: Any
-    ) -> bool:
+        self, connection, table_name, schema = None, **kwargs
+    ):
         try:
             return super().has_table(connection, table_name, schema, **kwargs)
         except exc.DBAPIError as e:
             if self._extract_error_code(e.orig) in (5501, 5502):
+                return False
+            if 'not exists' in str(e.orig).lower():
                 return False
             raise
 
@@ -1765,8 +1775,8 @@ class StarRocksDialect(MySQLDialect_pymysql):
 
     @reflection.cache
     def _setup_view_parser(
-        self, connection: Connection, view_name: str, schema: Optional[str] = None, **kwargs: Any
-    ) -> ReflectedViewState:
+        self, connection, view_name, schema = None, **kwargs
+    ):
         """
         Fetches raw data for a view and passes it to the parser.
         """
@@ -1857,8 +1867,8 @@ class StarRocksDialect(MySQLDialect_pymysql):
 
     @reflection.cache
     def _setup_mv_parser(
-        self, connection: Connection, view_name: str, schema: Optional[str] = None, **kwargs: Any
-    ) -> ReflectedMVState:
+        self, connection, view_name, schema = None, **kwargs
+    ):
         """
         Fetches all raw data for a Materialized View and passes it to the parser.
         """

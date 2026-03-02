@@ -44,7 +44,6 @@
 #include <vector>
 
 #include "arrow_memory_pool.h"
-#include "column/chunk.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
@@ -59,7 +58,7 @@
 #include "fs/fs.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/runtime_state.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 #include "util/priority_thread_pool.hpp"
 
 namespace parquet {
@@ -81,10 +80,7 @@ class ParquetOutputStream;
 
 namespace starrocks::formats {
 
-struct FileColumnId {
-    int32_t field_id = -1;
-    std::vector<FileColumnId> children;
-};
+using FileColumnId = ::starrocks::parquet::FileColumnId;
 
 struct ParquetWriterOptions : FileWriterOptions {
     int64_t dictionary_pagesize = 1024 * 1024; // 1MB
@@ -108,7 +104,7 @@ public:
                       std::vector<std::string> column_names, std::vector<TypeDescriptor> type_descs,
                       std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
                       TCompressionType::type compression_type, std::shared_ptr<ParquetWriterOptions> writer_options,
-                      const std::function<void()>& rollback_action);
+                      std::function<void()> rollback_action, std::vector<bool> nullable = {});
 
     ~ParquetFileWriter() override;
 
@@ -122,19 +118,12 @@ public:
 
     Status write(Chunk* chunk) override;
 
-    CommitResult commit() override;
+    CommitResult close() override;
 
 private:
-    static StatusOr<::parquet::Compression::type> _convert_compression_type(TCompressionType::type type);
-
     arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> _make_schema(
             const std::vector<std::string>& file_column_names, const std::vector<TypeDescriptor>& type_descs,
-            const std::vector<FileColumnId>& file_column_ids);
-
-    arrow::Result<::parquet::schema::NodePtr> _make_schema_node(const std::string& name,
-                                                                const TypeDescriptor& type_desc,
-                                                                ::parquet::Repetition::type rep_type,
-                                                                FileColumnId file_column_id);
+            const std::vector<FileColumnId>& file_column_ids, const std::vector<bool>& nullable);
 
     static FileStatistics _statistics(const ::parquet::FileMetaData* meta_data, bool has_field_id);
 
@@ -152,6 +141,7 @@ private:
     TCompressionType::type _compression_type = TCompressionType::UNKNOWN_COMPRESSION;
     std::shared_ptr<ParquetWriterOptions> _writer_options;
     std::function<StatusOr<ColumnPtr>(Chunk*, size_t)> _eval_func;
+    std::vector<bool> _nullable;
 
     std::shared_ptr<::parquet::ParquetFileWriter> _writer;
     std::shared_ptr<parquet::ChunkWriter> _rowgroup_writer;
@@ -164,7 +154,7 @@ public:
                              std::map<std::string, std::string> options, std::vector<std::string> column_names,
                              std::shared_ptr<std::vector<std::unique_ptr<ColumnEvaluator>>> column_evaluators,
                              std::optional<std::vector<formats::FileColumnId>> field_ids, PriorityThreadPool* executors,
-                             RuntimeState* runtime_state);
+                             RuntimeState* runtime_state, std::vector<bool> nullable = {});
 
     Status init() override;
 
@@ -181,6 +171,7 @@ private:
     std::shared_ptr<std::vector<std::unique_ptr<ColumnEvaluator>>> _column_evaluators;
     PriorityThreadPool* _executors = nullptr;
     RuntimeState* _runtime_state = nullptr;
+    std::vector<bool> _nullable;
 };
 
 } // namespace starrocks::formats

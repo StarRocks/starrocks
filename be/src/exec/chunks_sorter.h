@@ -19,6 +19,7 @@
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
+#include "common/runtime_profile.h"
 #include "exec/pipeline/spill_process_channel.h"
 #include "exec/sort_exec_exprs.h"
 #include "exec/sorting/sort_permute.h"
@@ -26,10 +27,9 @@
 #include "exec/spill/executor.h"
 #include "exec/spill/spiller.h"
 #include "exprs/expr_context.h"
-#include "exprs/runtime_filter.h"
 #include "runtime/descriptors.h"
+#include "runtime/runtime_filter.h"
 #include "runtime/runtime_state.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 

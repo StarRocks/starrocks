@@ -30,9 +30,12 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TruncateTableStmt;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWriteQuorumType;
+import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.TransactionState;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.StringType;
@@ -41,6 +44,7 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
+import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -109,7 +113,9 @@ public class ListPartitionInfoTest {
     }
 
     @Test
-    public void testMultiListPartition(@Injectable OlapTable dstTable) throws StarRocksException {
+    public void testMultiListPartition(@Injectable OlapTable dstTable,
+                                       @Mocked GlobalStateMgr globalStateMgr,
+                                       @Mocked GlobalTransactionMgr globalTransactionMgr) throws StarRocksException {
 
         DescriptorTable descTable = new DescriptorTable();
         TupleDescriptor tuple = descTable.createTupleDescriptor("DstTable");
@@ -120,11 +126,11 @@ public class ListPartitionInfoTest {
 
         // k2
         SlotDescriptor k2 = descTable.addSlotDescriptor(tuple);
-        k2.setColumn(new Column("k2", TypeFactory.createVarchar(25)));
+        k2.setColumn(new Column("k2", TypeFactory.createVarcharType(25)));
         k2.setIsMaterialized(true);
         // v1
         SlotDescriptor v1 = descTable.addSlotDescriptor(tuple);
-        v1.setColumn(new Column("v1", TypeFactory.createVarchar(25)));
+        v1.setColumn(new Column("v1", TypeFactory.createVarcharType(25)));
         v1.setIsMaterialized(true);
         // v2
         SlotDescriptor v2 = descTable.addSlotDescriptor(tuple);
@@ -148,6 +154,14 @@ public class ListPartitionInfoTest {
         idToColumn.put(ColumnId.create("dt"), new Column("dt", StringType.STRING));
         idToColumn.put(ColumnId.create("province"), new Column("province", StringType.STRING));
         new Expectations() {{
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                globalTransactionMgr.getTransactionState(anyLong, anyLong);
+                result = new TransactionState();
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
                 dstTable.getId();
                 result = 1;
                 dstTable.getPartitions();
@@ -156,6 +170,8 @@ public class ListPartitionInfoTest {
                 result = partition;
                 dstTable.getPartitionInfo();
                 result = listPartitionInfo;
+                dstTable.getDefaultDistributionInfo();
+                result = distInfo;
                 dstTable.getIdToColumn();
                 result = idToColumn;
             }};

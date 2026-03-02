@@ -81,6 +81,7 @@ public class PlanTestNoneDBBase extends StarRocksTestBase {
     @BeforeAll
     public static void beforeClass() throws Exception {
         Config.show_execution_groups = false;
+        Config.enable_virtual_columns = false;
         // disable checking tablets
         Config.tablet_sched_max_scheduling_tablets = -1;
         Config.alter_scheduler_interval_millisecond = 1;
@@ -258,14 +259,14 @@ public class PlanTestNoneDBBase extends StarRocksTestBase {
 
     public static void setTableStatistics(OlapTable table, long rowCount) {
         for (Partition partition : table.getAllPartitions()) {
-            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(rowCount);
+            partition.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(rowCount);
         }
     }
 
     public static void setPartitionStatistics(OlapTable table, String partitionName, long rowCount) {
         for (Partition partition : table.getAllPartitions()) {
             if (partition.getName().equals(partitionName)) {
-                partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(rowCount);
+                partition.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(rowCount);
             }
         }
     }
@@ -311,6 +312,14 @@ public class PlanTestNoneDBBase extends StarRocksTestBase {
     public String getCostExplain(String sql) throws Exception {
         return UtFrameUtils.getPlanAndFragment(connectContext, sql).second.
                 getExplainString(TExplainLevel.COSTS);
+    }
+
+    public String getCostExplainWithLabels(String sql) throws Exception {
+        connectContext.getSessionVariable().setEnableLabeledColumnStatisticOutput(true);
+        String plan = UtFrameUtils.getPlanAndFragment(connectContext, sql).second.
+                getExplainString(TExplainLevel.COSTS);
+        connectContext.getSessionVariable().setEnableLabeledColumnStatisticOutput(false);
+        return plan;
     }
 
     public String getDumpString(String sql) throws Exception {

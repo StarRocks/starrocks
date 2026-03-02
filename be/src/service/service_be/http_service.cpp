@@ -69,7 +69,8 @@
 #include "http/http_method.h"
 #include "http/web_page_handler.h"
 #include "runtime/exec_env.h"
-#include "util/starrocks_metrics.h"
+#include "runtime/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
@@ -181,7 +182,7 @@ Status HttpServiceBE::start() {
     _ev_http_server->register_handler(HttpMethod::GET, "/pprof/cmdline", cmdline_action);
     _http_handlers.emplace_back(cmdline_action);
 
-    auto* symbol_action = new SymbolAction(_env->bfd_parser());
+    auto* symbol_action = new SymbolAction();
     _ev_http_server->register_handler(HttpMethod::GET, "/pprof/symbol", symbol_action);
     _ev_http_server->register_handler(HttpMethod::HEAD, "/pprof/symbol", symbol_action);
     _ev_http_server->register_handler(HttpMethod::POST, "/pprof/symbol", symbol_action);
@@ -193,7 +194,7 @@ Status HttpServiceBE::start() {
 
     // register metrics
     {
-        auto action = new MetricsAction(StarRocksMetrics::instance()->metrics());
+        auto action = new MetricsAction(GlobalMetricsRegistry::instance()->metrics());
         _ev_http_server->register_handler(HttpMethod::GET, "/metrics", action);
         _http_handlers.emplace_back(action);
 

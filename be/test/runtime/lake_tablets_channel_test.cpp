@@ -17,10 +17,17 @@
 #include <fmt/format.h>
 #include <gtest/gtest.h>
 
+#include "base/bthreads/util.h"
+#include "base/testutil/assert.h"
+#include "base/testutil/id_generator.h"
+#include "base/testutil/sync_point.h"
+#include "base/uid_util.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "common/logging.h"
+#include "common/runtime_profile.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/load_channel.h"
@@ -39,13 +46,6 @@
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/tablet_schema.h"
-#include "testutil/assert.h"
-#include "testutil/id_generator.h"
-#include "testutil/sync_point.h"
-#include "util/bthreads/util.h"
-#include "util/defer_op.h"
-#include "util/runtime_profile.h"
-#include "util/uid_util.h"
 
 namespace starrocks {
 
@@ -84,6 +84,7 @@ public:
         auto index = _open_request.mutable_schema()->add_indexes();
         index->set_id(kIndexId);
         index->set_schema_hash(0);
+        index->set_schema_id(_schema_id);
         for (int i = 0, sz = metadata->schema().column_size(); i < sz; i++) {
             auto slot = _open_request.mutable_schema()->add_slot_descs();
             slot->set_id(i);
@@ -209,7 +210,7 @@ protected:
         _tablet_manager->prune_metacache();
     }
 
-    std::shared_ptr<Chunk> read_segment(int64_t tablet_id, const std::string& filename) {
+    ChunkUniquePtr read_segment(int64_t tablet_id, const std::string& filename) {
         // Check segment file
         ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(_test_directory));
         auto path = _location_provider->segment_location(tablet_id, filename);
@@ -693,11 +694,131 @@ TEST_F(LakeTabletsChannelTest, test_write_failed) {
     ASSERT_NE(TStatusCode::OK, add_chunk_response.status().status_code());
     ASSERT_FALSE(close_channel);
 
-    _tablets_channel->cancel();
+    _tablets_channel->cancel("write failed");
 
     ASSERT_FALSE(fs::path_exist(_tablet_manager->txn_log_location(10086, kTxnId)));
     ASSERT_FALSE(fs::path_exist(_tablet_manager->txn_log_location(10087, kTxnId)));
     ASSERT_FALSE(fs::path_exist(_tablet_manager->txn_log_location(10088, kTxnId)));
+}
+
+TEST_F(LakeTabletsChannelTest, test_cancel_with_reason) {
+    auto open_request = _open_request;
+    open_request.set_num_senders(1);
+
+    ASSERT_OK(_tablets_channel->open(open_request, &_open_response, _schema_param, false));
+
+    constexpr int kChunkSize = 128;
+    constexpr int kChunkSizePerTablet = kChunkSize / 4;
+    auto chunk = generate_data(kChunkSize);
+
+    // First write should succeed
+    PTabletWriterAddChunkRequest add_chunk_request;
+    PTabletWriterAddBatchResult add_chunk_response;
+    add_chunk_request.set_index_id(kIndexId);
+    add_chunk_request.set_sender_id(0);
+    add_chunk_request.set_eos(false);
+    add_chunk_request.set_packet_seq(0);
+    add_chunk_request.set_timeout_ms(60000);
+    for (int i = 0; i < kChunkSize; i++) {
+        int64_t tablet_id = 10086 + (i / kChunkSizePerTablet);
+        add_chunk_request.add_tablet_ids(tablet_id);
+        add_chunk_request.add_partition_ids(tablet_id < 10088 ? 10 : 11);
+    }
+
+    ASSIGN_OR_ABORT(auto chunk_pb, serde::ProtobufChunkSerde::serialize(chunk));
+    add_chunk_request.mutable_chunk()->Swap(&chunk_pb);
+
+    bool close_channel;
+    _tablets_channel->add_chunk(&chunk, add_chunk_request, &add_chunk_response, &close_channel);
+    ASSERT_EQ(TStatusCode::OK, add_chunk_response.status().status_code());
+    ASSERT_FALSE(close_channel);
+
+    // Cancel with a specific reason
+    _tablets_channel->cancel("load timeout by FE");
+
+    // Subsequent write should fail with the cancel reason
+    PTabletWriterAddChunkRequest add_chunk_request2;
+    PTabletWriterAddBatchResult add_chunk_response2;
+    add_chunk_request2.set_index_id(kIndexId);
+    add_chunk_request2.set_sender_id(0);
+    add_chunk_request2.set_eos(false);
+    add_chunk_request2.set_packet_seq(1);
+    add_chunk_request2.set_timeout_ms(60000);
+    for (int i = 0; i < kChunkSize; i++) {
+        int64_t tablet_id = 10086 + (i / kChunkSizePerTablet);
+        add_chunk_request2.add_tablet_ids(tablet_id);
+        add_chunk_request2.add_partition_ids(tablet_id < 10088 ? 10 : 11);
+    }
+
+    ASSIGN_OR_ABORT(auto chunk_pb2, serde::ProtobufChunkSerde::serialize(chunk));
+    add_chunk_request2.mutable_chunk()->Swap(&chunk_pb2);
+
+    _tablets_channel->add_chunk(&chunk, add_chunk_request2, &add_chunk_response2, &close_channel);
+    ASSERT_NE(TStatusCode::OK, add_chunk_response2.status().status_code());
+    // Verify the cancel reason is propagated in the error message
+    ASSERT_GE(add_chunk_response2.status().error_msgs_size(), 1);
+    const auto& error_msg = add_chunk_response2.status().error_msgs(0);
+    ASSERT_TRUE(error_msg.find("load timeout by FE") != std::string::npos) << "error_msg: " << error_msg;
+}
+
+TEST_F(LakeTabletsChannelTest, test_cancel_with_empty_reason) {
+    auto open_request = _open_request;
+    open_request.set_num_senders(1);
+
+    ASSERT_OK(_tablets_channel->open(open_request, &_open_response, _schema_param, false));
+
+    constexpr int kChunkSize = 128;
+    constexpr int kChunkSizePerTablet = kChunkSize / 4;
+    auto chunk = generate_data(kChunkSize);
+
+    // First write should succeed
+    PTabletWriterAddChunkRequest add_chunk_request;
+    PTabletWriterAddBatchResult add_chunk_response;
+    add_chunk_request.set_index_id(kIndexId);
+    add_chunk_request.set_sender_id(0);
+    add_chunk_request.set_eos(false);
+    add_chunk_request.set_packet_seq(0);
+    add_chunk_request.set_timeout_ms(60000);
+    for (int i = 0; i < kChunkSize; i++) {
+        int64_t tablet_id = 10086 + (i / kChunkSizePerTablet);
+        add_chunk_request.add_tablet_ids(tablet_id);
+        add_chunk_request.add_partition_ids(tablet_id < 10088 ? 10 : 11);
+    }
+
+    ASSIGN_OR_ABORT(auto chunk_pb, serde::ProtobufChunkSerde::serialize(chunk));
+    add_chunk_request.mutable_chunk()->Swap(&chunk_pb);
+
+    bool close_channel;
+    _tablets_channel->add_chunk(&chunk, add_chunk_request, &add_chunk_response, &close_channel);
+    ASSERT_EQ(TStatusCode::OK, add_chunk_response.status().status_code());
+    ASSERT_FALSE(close_channel);
+
+    // Cancel with empty reason - should use default message
+    _tablets_channel->cancel("");
+
+    // Subsequent write should fail with the default cancel reason
+    PTabletWriterAddChunkRequest add_chunk_request2;
+    PTabletWriterAddBatchResult add_chunk_response2;
+    add_chunk_request2.set_index_id(kIndexId);
+    add_chunk_request2.set_sender_id(0);
+    add_chunk_request2.set_eos(false);
+    add_chunk_request2.set_packet_seq(1);
+    add_chunk_request2.set_timeout_ms(60000);
+    for (int i = 0; i < kChunkSize; i++) {
+        int64_t tablet_id = 10086 + (i / kChunkSizePerTablet);
+        add_chunk_request2.add_tablet_ids(tablet_id);
+        add_chunk_request2.add_partition_ids(tablet_id < 10088 ? 10 : 11);
+    }
+
+    ASSIGN_OR_ABORT(auto chunk_pb2, serde::ProtobufChunkSerde::serialize(chunk));
+    add_chunk_request2.mutable_chunk()->Swap(&chunk_pb2);
+
+    _tablets_channel->add_chunk(&chunk, add_chunk_request2, &add_chunk_response2, &close_channel);
+    ASSERT_NE(TStatusCode::OK, add_chunk_response2.status().status_code());
+    // Verify the default cancel reason is used
+    ASSERT_GE(add_chunk_response2.status().error_msgs_size(), 1);
+    const auto& error_msg = add_chunk_response2.status().error_msgs(0);
+    ASSERT_TRUE(error_msg.find("tablet channel cancelled") != std::string::npos) << "error_msg: " << error_msg;
 }
 
 TEST_F(LakeTabletsChannelTest, test_tablet_not_existed) {

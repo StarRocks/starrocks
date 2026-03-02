@@ -17,9 +17,11 @@
 #include <memory>
 
 #include "exec/olap_meta_scan_node.h"
+#include "storage/metadata_util.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
+#include "storage/virtual_column_utils.h"
 
 namespace starrocks {
 
@@ -49,17 +51,27 @@ Status OlapMetaScanner::_init_meta_reader_params() {
     _reader_params.low_card_threshold = _parent->_meta_scan_node.__isset.low_cardinality_threshold
                                                 ? _parent->_meta_scan_node.low_cardinality_threshold
                                                 : DICT_DECODE_MAX_SIZE;
-
-    if (_parent->_meta_scan_node.__isset.schema_id && _parent->_meta_scan_node.schema_id > 0 &&
-        _parent->_meta_scan_node.schema_id == _tablet->tablet_schema()->id()) {
+    int64_t schema_id = -1;
+    if (_parent->_meta_scan_node.__isset.schema_key) {
+        schema_id = _parent->_meta_scan_node.schema_key.schema_id;
+    } else if (_parent->_meta_scan_node.__isset.schema_id) {
+        schema_id = _parent->_meta_scan_node.schema_id;
+    }
+    if (schema_id > 0 && schema_id == _tablet->tablet_schema()->id()) {
         _reader_params.tablet_schema = _tablet->tablet_schema();
     }
 
     if (_reader_params.tablet_schema == nullptr) {
         if (_parent->_meta_scan_node.__isset.columns && !_parent->_meta_scan_node.columns.empty() &&
             (_parent->_meta_scan_node.columns[0].col_unique_id >= 0)) {
-            _reader_params.tablet_schema =
-                    TabletSchema::copy(*_tablet->tablet_schema(), _parent->_meta_scan_node.columns);
+            auto columns_copy = _parent->_meta_scan_node.columns;
+            Status preprocess_status = preprocess_default_expr_for_tcolumns(columns_copy);
+            if (!preprocess_status.ok()) {
+                LOG(WARNING) << "Failed to preprocess default_expr in OlapMetaScanner: "
+                             << preprocess_status.to_string();
+            }
+
+            _reader_params.tablet_schema = TabletSchema::copy(*_tablet->tablet_schema(), columns_copy);
         } else {
             _reader_params.tablet_schema = _tablet->tablet_schema();
         }
@@ -71,7 +83,7 @@ Status OlapMetaScanner::_init_meta_reader_params() {
     // add the extended column access paths into tablet_schema
     {
         TabletSchemaSPtr tmp_schema = TabletSchema::copy(*_reader_params.tablet_schema);
-        int field_number = tmp_schema->num_columns();
+        int field_number = starrocks::next_uniq_id(_parent->_meta_scan_node);
         for (auto& path : _parent->_column_access_paths) {
             int root_column_index = tmp_schema->field_index(path->path());
             RETURN_IF(root_column_index < 0, Status::RuntimeError("unknown access path: " + path->path()));
@@ -90,6 +102,8 @@ Status OlapMetaScanner::_init_meta_reader_params() {
         }
         _reader_params.tablet_schema = tmp_schema;
     }
+
+    ASSIGN_OR_RETURN(_reader_params.tablet_schema, extend_schema_by_virtual_columns(_reader_params.tablet_schema));
     _reader_params.desc_tbl = &_parent->_desc_tbl;
 
     VLOG(2) << "init_meta_reader schema: " << _reader_params.tablet_schema->debug_string();

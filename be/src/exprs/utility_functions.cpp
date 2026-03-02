@@ -30,26 +30,27 @@
 #include <limits>
 #include <random>
 
+#include "base/network/cidr.h"
+#include "base/network/network_util.h"
+#include "base/time/monotime.h"
+#include "base/time/time.h"
+#include "base/uuid/uuid_generator.h"
 #include "column/binary_column.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
+#include "common/system/backend_options.h"
 #include "common/version.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/function_context.h"
 #include "gutil/casts.h"
 #include "runtime/runtime_state.h"
-#include "service/backend_options.h"
 #include "storage/key_coder.h"
 #include "storage/primary_key_encoder.h"
 #include "types/logical_type.h"
-#include "util/cidr.h"
-#include "util/monotime.h"
-#include "util/network_util.h"
 #include "util/thrift_rpc_helper.h"
-#include "util/time.h"
 
 namespace starrocks {
 
@@ -226,6 +227,52 @@ StatusOr<ColumnPtr> UtilityFunctions::uuid_numeric(FunctionContext*, const Colum
 
     for (int i = 0; i < num_rows; ++i) {
         data[i] = next_uuid(timestamp, intip, rand, tid, inc - i);
+    }
+
+    return result;
+}
+
+// UUID v7 generates time-ordered UUIDs according to RFC 9562
+// Returns a VARCHAR column with standard UUID format (8-4-4-4-12)
+StatusOr<ColumnPtr> UtilityFunctions::uuid_v7(FunctionContext* ctx, const Columns& columns) {
+    int32_t num_rows = ColumnHelper::get_const_value<TYPE_INT>(columns.back());
+
+    auto res = BinaryColumn::create();
+    auto& bytes = res->get_bytes();
+    auto& offsets = res->get_offset();
+
+    offsets.resize(num_rows + 1);
+    bytes.resize(36 * num_rows);
+
+    char* ptr = reinterpret_cast<char*>(bytes.data());
+
+    for (int i = 0; i < num_rows; ++i) {
+        offsets[i + 1] = offsets[i] + 36;
+        auto uuid = ThreadLocalUUIDGenerator::next_uuid_v7();
+        std::string uuid_str = boost::uuids::to_string(uuid);
+        memcpy(ptr, uuid_str.c_str(), 36);
+        ptr += 36;
+    }
+
+    return res;
+}
+
+// UUID v7 numeric version - converts the UUID v7 to a 128-bit integer
+// Note: The byte order of the numeric representation depends on the system's endianness.
+// This is consistent with other numeric UUID conversions in the codebase and provides
+// a stable representation for comparison and storage purposes.
+StatusOr<ColumnPtr> UtilityFunctions::uuid_v7_numeric(FunctionContext*, const Columns& columns) {
+    int32_t num_rows = ColumnHelper::get_const_value<TYPE_INT>(columns.back());
+    auto result = Int128Column::create(num_rows);
+    auto& data = result->get_data();
+
+    for (int i = 0; i < num_rows; ++i) {
+        auto uuid = ThreadLocalUUIDGenerator::next_uuid_v7();
+        // Convert UUID bytes to int128_t
+        // Direct memcpy is used for consistency with existing uuid_numeric implementation
+        int128_t value;
+        memcpy(&value, uuid.data, 16);
+        data[i] = value;
     }
 
     return result;

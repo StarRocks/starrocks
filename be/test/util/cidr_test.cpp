@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/cidr.h"
+#include "base/network/cidr.h"
 
 #include <gtest/gtest.h>
 
@@ -24,7 +24,7 @@
 #include <iostream>
 
 #include "common/configbase.h"
-#include "util/cpu_info.h"
+#include "common/system/cpu_info.h"
 #include "util/logging.h"
 
 namespace starrocks {

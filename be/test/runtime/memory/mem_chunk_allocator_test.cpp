@@ -37,7 +37,7 @@
 #include <gtest/gtest.h>
 
 #include "common/config.h"
-#include "runtime/memory/mem_chunk.h"
+#include "common/mem_chunk.h"
 
 namespace starrocks {
 

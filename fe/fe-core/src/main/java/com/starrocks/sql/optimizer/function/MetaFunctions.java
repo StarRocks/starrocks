@@ -29,7 +29,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MvPlanContext;
@@ -54,6 +53,7 @@ import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -83,6 +83,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.starrocks.type.PrimitiveType.BOOLEAN;
@@ -668,12 +669,28 @@ public class MetaFunctions {
         String column = columnName.getVarchar();
 
         CacheDictManager instance = CacheDictManager.getInstance();
-        Optional<ColumnDict> dict = instance.getGlobalDictSync(table.getId(), ColumnId.create(column));
+        Optional<ColumnDict> dict = instance.getGlobalDictSync(table, ColumnId.create(column));
         if (dict.isEmpty()) {
             return ConstantOperator.createNull(VarcharType.VARCHAR);
         } else {
             return ConstantOperator.createVarchar(dict.get().toJson());
         }
+    }
+
+    /**
+     * Return the query ID of the last executed query in the current session.
+     */
+    @ConstantFunction(name = "last_query_id", argTypes = {}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator lastQueryId() {
+        ConnectContext connectContext = ConnectContext.get();
+        if (connectContext == null) {
+            return ConstantOperator.createNull(VarcharType.VARCHAR);
+        }
+        UUID lastQueryId = connectContext.getLastQueryId();
+        if (lastQueryId == null) {
+            return ConstantOperator.createNull(VarcharType.VARCHAR);
+        }
+        return ConstantOperator.createVarchar(lastQueryId.toString());
     }
 
 }

@@ -34,30 +34,30 @@ import java.util.stream.Collectors;
  */
 public class ShowRunningQueriesStmt extends ShowStmt {
     private static final List<Pair<Column, Function<LogicalSlot, String>>> META_DATA = ImmutableList.of(
-            Pair.create(new Column("QueryId", TypeFactory.createVarchar(64)),
+            Pair.create(new Column("QueryId", TypeFactory.createVarcharType(64)),
                     slot -> DebugUtil.printId(slot.getSlotId())),
-            Pair.create(new Column("WarehouseId", TypeFactory.createVarchar(64)),
+            Pair.create(new Column("WarehouseId", TypeFactory.createVarcharType(64)),
                     slot -> slot.getWarehouseId() == WarehouseManager.DEFAULT_WAREHOUSE_ID  ? "-" :
                             Long.toString(slot.getWarehouseId())),
-            Pair.create(new Column("ResourceGroupId", TypeFactory.createVarchar(64)),
+            Pair.create(new Column("ResourceGroupId", TypeFactory.createVarcharType(64)),
                     slot -> slot.getGroupId() == LogicalSlot.ABSENT_GROUP_ID ? "-" : Long.toString(slot.getGroupId())),
-            Pair.create(new Column("StartTime", TypeFactory.createVarchar(64)),
+            Pair.create(new Column("StartTime", TypeFactory.createVarcharType(64)),
                     slot -> TimeUtils.longToTimeString(slot.getStartTimeMs())),
-            Pair.create(new Column("PendingTimeout", TypeFactory.createVarchar(64)),
+            Pair.create(new Column("PendingTimeout", TypeFactory.createVarcharType(64)),
                     slot -> TimeUtils.longToTimeString(slot.getExpiredPendingTimeMs())),
-            Pair.create(new Column("QueryTimeout", TypeFactory.createVarchar(64)),
+            Pair.create(new Column("QueryTimeout", TypeFactory.createVarcharType(64)),
                     slot -> TimeUtils.longToTimeString(slot.getExpiredAllocatedTimeMs())),
-            Pair.create(new Column("State", TypeFactory.createVarchar(64)),
+            Pair.create(new Column("State", TypeFactory.createVarcharType(64)),
                     slot -> slot.getState().toQueryStateString()),
-            Pair.create(new Column("Slots", TypeFactory.createVarchar(64)),
+            Pair.create(new Column("Slots", TypeFactory.createVarcharType(64)),
                     slot -> Integer.toString(slot.getNumPhysicalSlots())),
-            Pair.create(new Column("Fragments", TypeFactory.createVarchar(64)),
+            Pair.create(new Column("Fragments", TypeFactory.createVarcharType(64)),
                     slot -> Integer.toString(slot.getNumFragments())),
-            Pair.create(new Column("DOP", TypeFactory.createVarchar(64)),
+            Pair.create(new Column("DOP", TypeFactory.createVarcharType(64)),
                     slot -> Integer.toString(slot.getPipelineDop())),
-            Pair.create(new Column("Frontend", TypeFactory.createVarchar(64)),
+            Pair.create(new Column("Frontend", TypeFactory.createVarcharType(64)),
                     LogicalSlot::getRequestFeName),
-            Pair.create(new Column("FeStartTime", TypeFactory.createVarchar(64)),
+            Pair.create(new Column("FeStartTime", TypeFactory.createVarcharType(64)),
                     slot -> TimeUtils.longToTimeString(slot.getFeStartTimeMs()))
     );
 

@@ -290,7 +290,14 @@ public class TaskRun implements Comparable<TaskRun> {
         context.getState().reset();
         context.setQueryId(UUID.fromString(status.getQueryId()));
         context.setIsLastStmt(true);
+        context.setSingleStmt(true);
         context.resetSessionVariable();
+        // Preserve critical session variables from parent context if available
+        // This ensures that settings like enableSingleNodeSchedule are inherited
+        if (parentRunCtx != null && parentRunCtx.getSessionVariable() != null) {
+            context.getSessionVariable().setEnableSingleNodeSchedule(
+                    parentRunCtx.getSessionVariable().enableSingleNodeSchedule());
+        }
 
         // NOTE: Ensure the thread local connect context is always the same with the newest ConnectContext.
         // NOTE: Ensure this thread local is removed after this method to avoid memory leak in JVM.
@@ -345,6 +352,11 @@ public class TaskRun implements Comparable<TaskRun> {
 
         Map<String, String> newProperties = refreshTaskProperties(runCtx);
         properties.putAll(newProperties);
+        // Update status properties with the refreshed values (especially warehouse)
+        // so system tables show the correct information
+        if (status != null) {
+            status.setProperties(properties);
+        }
         Map<String, String> taskRunContextProperties = Maps.newHashMap();
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             String key = entry.getKey();
@@ -419,7 +431,7 @@ public class TaskRun implements Comparable<TaskRun> {
                 LOG.warn("Task {} has failed {} times continuously, so we disable it",
                         task.getName(), task.getConsecutiveFailCount());
                 TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-                taskManager.suspendTask(task);
+                taskManager.suspendTask(task, false);
                 String mvName = "";
                 MaterializedView mv = TaskBuilder.getMvFromTask(task);
                 if (mv != null) {
@@ -551,7 +563,7 @@ public class TaskRun implements Comparable<TaskRun> {
         if (!Strings.isNullOrEmpty(task.getDefinition())) {
             // Remove line separator and shrink to MAX_FIELD_VARCHAR_LENGTH/4 which is defined in the TaskRunsSystemTable.java
             String query = LogUtil.removeLineSeparator(task.getDefinition());
-            status.setDefinition(MvUtils.shrinkToSize(query, SystemTable.MAX_FIELD_VARCHAR_LENGTH / 4));
+            status.setDefinition(MvUtils.shrinkToSize(query, SystemTable.MAX_FIELD_VARCHAR_LENGTH - 1));
         }
         status.getMvTaskRunExtraMessage().setExecuteOption(this.executeOption);
 

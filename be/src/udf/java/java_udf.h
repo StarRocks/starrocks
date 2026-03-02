@@ -17,13 +17,13 @@
 #include <unordered_map>
 #include <utility>
 
+#include "base/string/slice.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/function_context.h"
 #include "jni.h"
 #include "types/logical_type.h"
 #include "udf/java/type_traits.h"
-#include "util/slice.h"
 
 // implements by libhdfs
 // hadoop-hdfs-native-client/src/main/native/libhdfs/jni_helper.c
@@ -252,12 +252,23 @@ private:
         env->ExceptionClear();                                                     \
     }
 
-#define RETURN_ERROR_IF_JNI_EXCEPTION(env)                                         \
+#define RETURN_ERROR_IF_JNI_EXCEPTION_WITH_PREFIX(env, prefix)                     \
     if (auto e = env->ExceptionOccurred()) {                                       \
         LOCAL_REF_GUARD(e);                                                        \
-        std::string msg = JVMFunctionHelper::getInstance().dumpExceptionString(e); \
+        std::string err = JVMFunctionHelper::getInstance().dumpExceptionString(e); \
         env->ExceptionClear();                                                     \
-        return Status::InternalError(msg);                                         \
+        return Status::InternalError(fmt::format("{}, {}", prefix, err));          \
+    }
+
+#define RETURN_ERROR_IF_JNI_EXCEPTION(env) RETURN_ERROR_IF_JNI_EXCEPTION_WITH_PREFIX(env, "JNI Exception")
+
+#define RETURN_IF_JNI_EXCEPTION(env, errmsg, ret)                                                                   \
+    if (jthrowable jthr = env->ExceptionOccurred()) {                                                               \
+        LOCAL_REF_GUARD(jthr);                                                                                      \
+        std::string msg = fmt::format("{},{}", errmsg, JVMFunctionHelper::getInstance().dumpExceptionString(jthr)); \
+        LOG(WARNING) << msg;                                                                                        \
+        env->ExceptionClear();                                                                                      \
+        return ret;                                                                                                 \
     }
 
 // Used for UDAF serialization and deserialization,
@@ -578,6 +589,12 @@ struct JavaUDAFContext {
 
     std::unique_ptr<UDAFFunction> _func;
 };
+
+// Java UDAF lifecycle management based on FunctionContext::THREAD_LOCAL state.
+JavaUDAFContext* get_java_udaf_context(FunctionContext* ctx);
+void attach_java_udaf_context(FunctionContext* ctx, std::unique_ptr<JavaUDAFContext> udaf_ctx);
+void clear_java_udaf_states(FunctionContext* ctx);
+void destroy_java_udaf_context(FunctionContext* ctx);
 
 // Check whether java runtime can work
 Status detect_java_runtime();

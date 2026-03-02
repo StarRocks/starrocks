@@ -17,7 +17,9 @@
 
 #include "column/type_traits.h"
 #include "exprs/agg/aggregate.h"
+#include "exprs/function_context.h"
 #include "types/logical_type.h"
+
 namespace starrocks {
 
 // aditional state for Corelation
@@ -157,9 +159,9 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
-        DCHECK((*dst)->is_binary());
-        auto* dst_column = down_cast<BinaryColumn*>((*dst).get());
+                                     MutableColumnPtr& dst) const override {
+        DCHECK(dst->is_binary());
+        auto* dst_column = down_cast<BinaryColumn*>(dst.get());
         Bytes& bytes = dst_column->get_bytes();
         size_t old_size = bytes.size();
 

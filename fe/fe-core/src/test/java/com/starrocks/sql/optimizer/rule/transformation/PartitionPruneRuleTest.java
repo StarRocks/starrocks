@@ -20,15 +20,16 @@ import com.google.common.collect.Range;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.ListPartitionInfo;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PartitionNames;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.pseudocluster.PseudoCluster;
-import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.DateLiteral;
@@ -66,11 +67,11 @@ public class PartitionPruneRuleTest {
     @Test
     public void transform1(@Mocked OlapTable olapTable, @Mocked RangePartitionInfo partitionInfo) {
         FeConstants.runningUnitTest = true;
-        Partition part1 = new Partition(1, 11, "p1", null, null);
-        Partition part2 = new Partition(2, 22, "p2", null, null);
-        Partition part3 = new Partition(3, 33, "p3", null, null);
-        Partition part4 = new Partition(4, 44, "p4", null, null);
-        Partition part5 = new Partition(5, 55, "p5", null, null);
+        Partition part1 = new Partition(1, 11, "p1", new MaterializedIndex(), null);
+        Partition part2 = new Partition(2, 22, "p2", new MaterializedIndex(), null);
+        Partition part3 = new Partition(3, 33, "p3", new MaterializedIndex(), null);
+        Partition part4 = new Partition(4, 44, "p4", new MaterializedIndex(), null);
+        Partition part5 = new Partition(5, 55, "p5", new MaterializedIndex(), null);
 
         List<Column> columns = Lists.newArrayList(
                 new Column("dealDate", DateType.DATE, false)
@@ -169,11 +170,11 @@ public class PartitionPruneRuleTest {
     @Test
     public void transform2(@Mocked OlapTable olapTable, @Mocked RangePartitionInfo partitionInfo) {
         FeConstants.runningUnitTest = true;
-        Partition part1 = new Partition(1, 11, "p1", null, null);
-        Partition part2 = new Partition(2, 22, "p2", null, null);
-        Partition part3 = new Partition(3, 33, "p3", null, null);
-        Partition part4 = new Partition(4, 44, "p4", null, null);
-        Partition part5 = new Partition(5, 55, "p5", null, null);
+        Partition part1 = new Partition(1, 11, "p1", new MaterializedIndex(), null);
+        Partition part2 = new Partition(2, 22, "p2", new MaterializedIndex(), null);
+        Partition part3 = new Partition(3, 33, "p3", new MaterializedIndex(), null);
+        Partition part4 = new Partition(4, 44, "p4", new MaterializedIndex(), null);
+        Partition part5 = new Partition(5, 55, "p5", new MaterializedIndex(), null);
 
         List<Column> columns = Lists.newArrayList(
                 new Column("dealDate", DateType.DATE, false),
@@ -308,8 +309,8 @@ public class PartitionPruneRuleTest {
         LogicalOlapScanOperator operator =
                 new LogicalOlapScanOperator(olapTable, scanColumnMap, columnMetaToColRefMap, null, -1, predicate);
 
-        Partition part1 = new Partition(10001L, 10003L, "p1", null, null);
-        Partition part2 = new Partition(10002L, 10004L, "p2", null, null);
+        Partition part1 = new Partition(10001L, 10003L, "p1", new MaterializedIndex(), null);
+        Partition part2 = new Partition(10002L, 10004L, "p2", new MaterializedIndex(), null);
 
         List<LiteralExpr> p1 = Lists.newArrayList(
                 new PartitionValue("guangdong").getValue(StringType.STRING),
@@ -387,11 +388,11 @@ public class PartitionPruneRuleTest {
         PartitionNames partitionNames = new PartitionNames(true, Lists.newArrayList("p1", "p2"));
         LogicalOlapScanOperator operator =
                 new LogicalOlapScanOperator(olapTable, scanColumnMap, columnMetaToColRefMap,
-                        null, -1, null, olapTable.getBaseIndexId(),
+                        null, -1, null, olapTable.getBaseIndexMetaId(),
                         null, partitionNames, false, Lists.newArrayList(), Lists.newArrayList(), null, false);
 
-        Partition part1 = new Partition(10001L, 10003L, "p1", null, null);
-        Partition part2 = new Partition(10002L, 10004L, "p2", null, null);
+        Partition part1 = new Partition(10001L, 10003L, "p1", new MaterializedIndex(), null);
+        Partition part2 = new Partition(10002L, 10004L, "p2", new MaterializedIndex(), null);
 
         List<LiteralExpr> p1 = Lists.newArrayList(
                 new PartitionValue("guangdong").getValue(StringType.STRING),

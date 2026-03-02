@@ -89,49 +89,49 @@ Status SchemaFeThreadsScanner::fill_chunk(ChunkPtr* chunk) {
             if (slot_id < 1 || slot_id > 8) {
                 return Status::InternalError(strings::Substitute("invalid slot id:$0", slot_id));
             }
-            ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
+            auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(slot_id);
             switch (slot_id) {
             case 1: {
                 // fe_address
                 Slice v(info.fe_address);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&v);
                 break;
             }
             case 2: {
                 // thread_id
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.thread_id);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.thread_id);
                 break;
             }
             case 3: {
                 // thread_name
                 Slice v(info.thread_name);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&v);
                 break;
             }
             case 4: {
                 // thread_state
                 Slice v(info.thread_state);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&v);
                 break;
             }
             case 5: {
                 // is_daemon
-                fill_column_with_slot<TYPE_BOOLEAN>(column.get(), (void*)&info.is_daemon);
+                fill_column_with_slot<TYPE_BOOLEAN>(column, (void*)&info.is_daemon);
                 break;
             }
             case 6: {
                 // priority
-                fill_column_with_slot<TYPE_INT>(column.get(), (void*)&info.priority);
+                fill_column_with_slot<TYPE_INT>(column, (void*)&info.priority);
                 break;
             }
             case 7: {
                 // cpu_time_ms
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.cpu_time_ms);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.cpu_time_ms);
                 break;
             }
             case 8: {
                 // user_time_ms
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.user_time_ms);
+                fill_column_with_slot<TYPE_BIGINT>(column, (void*)&info.user_time_ms);
                 break;
             }
             default:

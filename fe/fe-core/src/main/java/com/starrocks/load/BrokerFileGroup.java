@@ -39,12 +39,10 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.BrokerTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
@@ -56,9 +54,11 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.ImportColumnDesc;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.expression.Delimiter;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -178,7 +178,7 @@ public class BrokerFileGroup implements Writable {
         tableId = table.getId();
 
         // partitionId
-        PartitionNames partitionNames = dataDescription.getPartitionNames();
+        PartitionRef partitionNames = dataDescription.getPartitionNames();
         if (partitionNames != null) {
             specifyPartition = true;
             partitionIds = Lists.newArrayList();

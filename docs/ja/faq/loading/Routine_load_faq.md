@@ -83,3 +83,55 @@ I0325 20:27:50.410579 15259 data_consumer_group.cpp:131] consumer group done: 41
    Routine Load は、正確に一度のセマンティクスを保証します。
 
    各ロードタスクは個別のトランザクションです。トランザクションの実行中にエラーが発生した場合、トランザクションは中止され、FE はロードタスクの関連パーティションの消費進捗を更新しません。次回、FE がタスクキューからロードタスクをスケジュールする際、ロードタスクはパーティションの最後に保存された消費位置から消費要求を送信し、正確に一度のセマンティクスを保証します。
+
+## Routine Load が SSL 認証エラーを返した場合の対処方法
+
+  **エラーメッセージ:** `routines:tls_process_server_certificate:certificate verify failed: broker certificate could not be verified, verify that ssl.ca.location is correctly configured or root CA certificates are installed (install ca-certificates package) (after 273ms in state SSL_HANDSHAKE)`
+
+  **原因分析:** 証明書内のドメインがKafkaブローカーのドメインと一致していません。詳細は[こちら](https://github.com/confluentinc/librdkafka/issues/4349)を参照してください。
+
+  **解決策:** Routine Load ジョブにプロパティ `"property.ssl.endpoint.identification.algorithm" = "none"` を追加してください。
+
+## Routine Load が "JSON data is an array.strip_outer_array must be set true" を報告するのはなぜですか？
+
+入力データが JSON 配列 `([{},{}])` です。プロパティ `strip_outer_array` を `true` に設定して展開します。
+
+## Routine Load ジョブを作成する際に "There are more than 100 routine load jobs running" と表示されるのはなぜですか？
+
+FE 設定の `max_routine_load_job_num` の値を増やします。
+
+## SASL を設定した後でも "failed to get partition meta" で Routine Load ジョブの作成が失敗するのはなぜですか？
+
+実際の原因は、SASL 設定が正しくない可能性があります。
+
+## Routine Load エラー "Create replicas failed …" をどのように処理しますか？
+
+次の FE 設定を調整します。
+
+```SQL
+admin set frontend config ("tablet_create_timeout_second"="5");
+admin set frontend config ("max_create_table_timeout_second"="600");
+```
+
+設定ファイルに設定して変更を永続化することもできます。
+
+## 26. Routine Load が "failed to send task: failed to submit task. error code: TOO MANY TASKS" で失敗する原因は何ですか？
+
+これは、Routine Load の総合並行性がクラスターの能力を超えているためです（`routine_load_thread_pool_size × number of active BEs` に等しい）。
+
+解決策：
+
+- ロード QPS を減らします（推奨クラスター QPS < 10）。`cluster routine_load_task_num / routine_load_task_consume_second` に基づいてクラスター QPS を計算します。
+
+- `max_routine_load_batch_size` および `routine_load_task_timeout_second` を調整して、タスクごとのバッチサイズを増やします（> 1 GB）。
+
+- `routine_load_thread_pool_size` が BE CPU コアの半分未満であることを確認します。
+
+ジョブの並行性は、次の値の最小値によって決まります。
+
+- `kafka_partition_num`
+- `desired_concurrent_number`
+- `alive_be_num`
+- `max_routine_load_task_concurrent_num`
+
+`max_routine_load_task_concurrent_num` を減らすことで並行性を調整し始めることができます。

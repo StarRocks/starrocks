@@ -132,7 +132,10 @@ public class MysqlChannel {
             return;
         }
         try {
-            conn.close();
+            // Non-MySQL connection may have null conn.
+            if (conn != null) {
+                conn.close();
+            }
         } catch (IOException e) {
             LOG.warn("Close channel exception, ignore.");
         } finally {

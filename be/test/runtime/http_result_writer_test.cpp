@@ -18,12 +18,14 @@
 
 #include <memory>
 
+#include "base/testutil/assert.h"
+#include "base/uid_util.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/column_ref.h"
+#include "exprs/expr_context.h"
+#include "exprs/expr_executor.h"
 #include "runtime/buffer_control_block.h"
 #include "storage/chunk_helper.h"
-#include "testutil/assert.h"
-#include "util/uid_util.h"
 
 namespace starrocks {
 
@@ -34,7 +36,7 @@ static ChunkPtr create_chunk(SchemaPtr schema, int col0value, int col1value) {
     auto c1 = Int32Column::create();
     c0->append_numbers(c0v.data(), c0v.size() * sizeof(int));
     c1->append_numbers(c1v.data(), c1v.size() * sizeof(int));
-    auto chunk = std::shared_ptr<Chunk>(new Chunk({std::move(c0), std::move(c1)}, schema));
+    auto chunk = ChunkPtr(new Chunk({std::move(c0), std::move(c1)}, schema));
     chunk->set_slot_id_to_index(0, 0);
     chunk->set_slot_id_to_index(1, 1);
     return chunk;
@@ -57,8 +59,8 @@ TEST(HttpResultWriterTest, BasicJsonFormat) {
     expr_ctxs.push_back(managed_expr_ctxs.back().get());
     managed_expr_ctxs.emplace_back(std::make_unique<ExprContext>(c1ref.get()));
     expr_ctxs.push_back(managed_expr_ctxs.back().get());
-    ASSERT_OK(Expr::prepare(expr_ctxs, &dummy_state));
-    ASSERT_OK(Expr::open(expr_ctxs, &dummy_state));
+    ASSERT_OK(ExprExecutor::prepare(expr_ctxs, &dummy_state));
+    ASSERT_OK(ExprExecutor::open(expr_ctxs, &dummy_state));
 
     TUniqueId uuid(generate_uuid());
     RuntimeProfile dummy_profile{"dummy"};
@@ -94,7 +96,7 @@ TEST(HttpResultWriterTest, BasicJsonFormat) {
         std::vector<int> c0v{10};
         auto c0 = Int32Column::create();
         c0->append_numbers(c0v.data(), c0v.size() * sizeof(int));
-        auto chunk = std::shared_ptr<Chunk>(new Chunk({c0->clone(), c0->clone()}, schema));
+        auto chunk = ChunkPtr(new Chunk({c0->clone(), c0->clone()}, schema));
         chunk->set_slot_id_to_index(0, 0);
         chunk->set_slot_id_to_index(1, 1);
         auto result = writer.process_chunk(chunk.get());

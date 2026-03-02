@@ -27,6 +27,8 @@ import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.common.PCellNone;
+import com.starrocks.sql.common.PCellWithName;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
@@ -55,6 +57,7 @@ import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.UtFrameUtils;
+import org.apache.parquet.Strings;
 import org.assertj.core.util.Sets;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -1607,6 +1610,43 @@ public class MvRewritePreprocessorTest extends MVTestBase {
                     long id2 = mv2.getId();
                     int expectedOrder = Long.compare(id1, id2);
                     Assertions.assertEquals(expectedOrder, compareResult);
+                });
+    }
+
+    @Test
+    public void testMaterializedViewGlobalContextCache() {
+        starRocksAssert.withMaterializedView("create materialized view wrapper_test_mv15 " +
+                        "distributed by random as select k1, v1 from t1",
+                (obj) -> {
+                    MaterializedView mv = getMv(DB_NAME, "wrapper_test_mv15");
+                    CachingMvPlanContextBuilder.MVCacheEntity mvGlobalCache =
+                            CachingMvPlanContextBuilder.getMVCache(mv);
+                    Assertions.assertTrue(mvGlobalCache != null);
+
+                    Table refTable = GlobalStateMgr.getCurrentState()
+                            .getLocalMetastore().getDb(DB_NAME).getTable("t1");
+                    Assertions.assertTrue(refTable != null);
+
+                    PCellWithName.PCellCacheKey key1 = new PCellWithName.PCellCacheKey(null, null);
+                    Object result = mvGlobalCache.getIfPresent(key1);
+                    Assertions.assertTrue(result == null);
+                    result  = mvGlobalCache.get(key1, () -> "test_value");
+                    Assertions.assertEquals("test_value", result);
+
+                    PCellWithName.PCellCacheKey key2 = new PCellWithName.PCellCacheKey(refTable,
+                            PCellWithName.of("p1", new PCellNone()));
+                    result = mvGlobalCache.getIfPresent(key2);
+                    Assertions.assertTrue(result == null);
+                    result  = mvGlobalCache.get(key2, () -> 12345);
+                    Assertions.assertEquals(12345, result);
+
+                    String cacheStats1 = CachingMvPlanContextBuilder.getMVGlobalContextCacheStats(mv);
+                    System.out.println(cacheStats1);
+                    Assertions.assertFalse(Strings.isNullOrEmpty(cacheStats1));
+
+                    String cacheStats2 = CachingMvPlanContextBuilder.getMVPlanCacheStats();
+                    System.out.println(cacheStats2);
+                    Assertions.assertFalse(Strings.isNullOrEmpty(cacheStats2));
                 });
     }
 }

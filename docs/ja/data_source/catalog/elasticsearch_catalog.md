@@ -9,7 +9,7 @@ StarRocks は v3.1 以降、Elasticsearch catalog をサポートしています
 
 StarRocks と Elasticsearch はどちらも人気のある分析システムで、それぞれ異なる強みを持っています。StarRocks は大規模な分散コンピューティングに優れ、外部テーブルを通じて Elasticsearch からデータをクエリすることができます。Elasticsearch は全文検索機能で知られています。StarRocks と Elasticsearch の組み合わせにより、より包括的な OLAP ソリューションが提供されます。Elasticsearch catalog を使用すると、データ移行の必要なく、StarRocks 上で SQL ステートメントを使用して Elasticsearch クラスター内のすべてのインデックスデータを直接分析できます。
 
-他のデータソースの catalog とは異なり、Elasticsearch catalog には作成時に `default` という名前のデータベースが 1 つだけ含まれています。各 Elasticsearch インデックスは自動的にデータテーブルにマッピングされ、`default` データベースにマウントされます。
+他のデータソースの catalog とは異なり、Elasticsearch catalog には作成時に `default_db` という名前のデータベースが 1 つだけ含まれています。各 Elasticsearch インデックスは自動的にデータテーブルにマッピングされ、`default_db` データベースにマウントされます。
 
 ## Elasticsearch catalog の作成
 

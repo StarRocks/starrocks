@@ -41,6 +41,9 @@
 
 #include "agent/master_info.h"
 #include "agent/utils.h"
+#include "base/simd/simd.h"
+#include "base/uid_util.h"
+#include "base/utility/defer_op.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -48,27 +51,28 @@
 #include "column/nullable_column.h"
 #include "common/config.h"
 #include "common/statusor.h"
+#include "common/thread/thread.h"
 #include "common/tracer.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/range_tablet_sink_sender.h"
 #include "exec/tablet_sink_colocate_sender.h"
 #include "exprs/expr.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/join.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "runtime/runtime_state_helper.h"
 #include "serde/protobuf_serde.h"
-#include "simd/simd.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "util/brpc_stub_cache.h"
 #include "util/compression/compression_utils.h"
-#include "util/defer_op.h"
 #include "util/stack_util.h"
-#include "util/thread.h"
 #include "util/thrift_rpc_helper.h"
-#include "util/uid_util.h"
 
 static const uint8_t VALID_SEL_FAILED = 0x0;
 static const uint8_t VALID_SEL_OK = 0x1;
@@ -82,7 +86,7 @@ namespace starrocks {
 OlapTableSink::OlapTableSink(ObjectPool* pool, const std::vector<TExpr>& texprs, Status* status, RuntimeState* state)
         : _pool(pool), _rpc_http_min_size(state->get_rpc_http_min_size()) {
     if (!texprs.empty()) {
-        *status = Expr::create_expr_trees(_pool, texprs, &_output_expr_ctxs, state);
+        *status = ExprFactory::create_expr_trees(_pool, texprs, &_output_expr_ctxs, state);
     }
 }
 
@@ -247,7 +251,7 @@ Status OlapTableSink::prepare(RuntimeState* state) {
     _num_senders = state->num_per_fragment_instances();
 
     // Prepare the exprs to run.
-    RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_output_expr_ctxs, state));
     RETURN_IF_ERROR(_vectorized_partition->prepare(state));
 
     // get table's tuple descriptor
@@ -318,7 +322,11 @@ Status OlapTableSink::prepare(RuntimeState* state) {
                 _load_id, _txn_id, std::move(index_id_to_tablet_be_map), _vectorized_partition,
                 std::move(index_channels), std::move(node_channels), _output_expr_ctxs, _enable_replicated_storage,
                 _write_quorum_type, _num_repicas);
-
+    } else if (_vectorized_partition->is_range_distribution()) {
+        _tablet_sink_sender = std::make_unique<RangeTabletSinkSender>(
+                _load_id, _txn_id, std::move(index_id_to_tablet_be_map), _vectorized_partition,
+                std::move(index_channels), std::move(node_channels), _output_expr_ctxs, _enable_replicated_storage,
+                _write_quorum_type, _num_repicas);
     } else {
         _tablet_sink_sender = std::make_unique<TabletSinkSender>(
                 _load_id, _txn_id, std::move(index_id_to_tablet_be_map), _vectorized_partition,
@@ -421,7 +429,7 @@ Status OlapTableSink::open_wait() {
 }
 
 bool OlapTableSink::is_full() {
-    return _tablet_sink_sender->is_full() || _is_automatic_partition_running.load(std::memory_order_acquire);
+    return _is_automatic_partition_running.load(std::memory_order_acquire) || _tablet_sink_sender->is_full();
 }
 
 Status OlapTableSink::_automatic_create_partition() {
@@ -630,14 +638,14 @@ Status OlapTableSink::_send_chunk(RuntimeState* state, Chunk* chunk, bool nonblo
                 _output_chunk = std::make_unique<Chunk>();
                 for (size_t i = 0; i < _output_expr_ctxs.size(); ++i) {
                     ASSIGN_OR_RETURN(ColumnPtr tmp, _output_expr_ctxs[i]->evaluate(chunk));
-                    ColumnPtr output_column = nullptr;
+                    MutableColumnPtr output_column = nullptr;
                     if (tmp->only_null()) {
                         // Only null column maybe lost type info
                         output_column = ColumnHelper::create_column(_output_tuple_desc->slots()[i]->type(), true);
                         output_column->append_nulls(num_rows);
                     } else {
                         // Unpack normal const column
-                        output_column = ColumnHelper::unpack_and_duplicate_const_column(num_rows, tmp);
+                        output_column = ColumnHelper::unpack_and_duplicate_const_column(num_rows, std::move(tmp));
                     }
                     DCHECK(output_column != nullptr);
                     _output_chunk->append_column(std::move(output_column), _output_tuple_desc->slots()[i]->id());
@@ -733,11 +741,12 @@ Status OlapTableSink::_send_chunk(RuntimeState* state, Chunk* chunk, bool nonblo
                     ss << "The row is out of partition ranges. Please add a new partition.";
                     if (!state->has_reached_max_error_msg_num() && invalid_row_indexs.size() > 0) {
                         std::string debug_row = chunk->debug_row(invalid_row_indexs.back());
-                        state->append_error_msg_to_file(debug_row, ss.str());
+                        RuntimeStateHelper::append_error_msg_to_file(state, debug_row, ss.str());
                     }
                     for (auto i : invalid_row_indexs) {
                         if (state->enable_log_rejected_record()) {
-                            state->append_rejected_record_to_file(chunk->rebuild_csv_row(i, ","), ss.str(), "");
+                            RuntimeStateHelper::append_rejected_record_to_file(state, chunk->rebuild_csv_row(i, ","),
+                                                                               ss.str(), "");
                         } else {
                             break;
                         }
@@ -790,15 +799,16 @@ Status OlapTableSink::_fill_auto_increment_id_internal(Chunk* chunk, SlotDescrip
         return Status::OK();
     }
 
-    ColumnPtr& data_col = NullableColumn::dynamic_pointer_cast(col)->data_column();
-    const auto null_datas = NullableColumn::dynamic_pointer_cast(col)->immutable_null_column_data();
+    auto nullable_col_mut = down_cast<NullableColumn*>(col->as_mutable_raw_ptr());
+    auto* data_col_mut = nullable_col_mut->data_column_raw_ptr();
+    const auto null_datas = nullable_col_mut->immutable_null_column_data();
     Filter filter(null_datas.begin(), null_datas.end());
 
     Filter init_filter(chunk->num_rows(), 0);
 
     if (_keys_type == TKeysType::PRIMARY_KEYS && _output_tuple_desc->slots().back()->col_name() == "__op") {
         size_t op_column_id = chunk->num_columns() - 1;
-        ColumnPtr& op_col = chunk->get_column_by_index(op_column_id);
+        const auto& op_col = chunk->get_column_by_index(op_column_id);
         auto* ops = reinterpret_cast<const uint8_t*>(op_col->raw_data());
         size_t row = chunk->num_rows();
 
@@ -819,9 +829,9 @@ Status OlapTableSink::_fill_auto_increment_id_internal(Chunk* chunk, SlotDescrip
     // will be deleteed and it is matter in this case.
     // Here we just set 0 value in this case.
     uint32 del_rows = SIMD::count_nonzero(init_filter);
+    auto* int64_col = down_cast<Int64Column*>(data_col_mut);
     if (del_rows != 0) {
-        RETURN_IF_ERROR((Int64Column::dynamic_pointer_cast(data_col))
-                                ->fill_range(std::vector<int64_t>(del_rows, 0), init_filter));
+        RETURN_IF_ERROR(int64_col->fill_range(std::vector<int64_t>(del_rows, 0), init_filter));
     }
 
     uint32_t null_rows = SIMD::count_nonzero(filter);
@@ -840,7 +850,7 @@ Status OlapTableSink::_fill_auto_increment_id_internal(Chunk* chunk, SlotDescrip
             // it will be allocate in DeltaWriter.
             ids.assign(null_rows, 0);
         }
-        RETURN_IF_ERROR((Int64Column::dynamic_pointer_cast(data_col))->fill_range(ids, filter));
+        RETURN_IF_ERROR(int64_col->fill_range(ids, filter));
         break;
     }
     default:
@@ -894,7 +904,8 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
     return status;
 }
 
-void OlapTableSink::_print_varchar_error_msg(RuntimeState* state, const Slice& str, SlotDescriptor* desc) {
+void OlapTableSink::_print_varchar_error_msg(RuntimeState* state, const Slice& str, SlotDescriptor* desc, Chunk* chunk,
+                                             int32_t row_index) {
     if (state->has_reached_max_error_msg_num()) {
         return;
     }
@@ -907,39 +918,29 @@ void OlapTableSink::_print_varchar_error_msg(RuntimeState* state, const Slice& s
     }
     std::string error_msg = strings::Substitute("String '$0'(length=$1) is too long. The max length of '$2' is $3",
                                                 error_str, str.get_size(), desc->col_name(), desc->type().len);
-#if BE_TEST
-    LOG(INFO) << error_msg;
-#else
-    state->append_error_msg_to_file("", error_msg);
-#endif
+    RuntimeStateHelper::append_error_msg_to_file(state, chunk->debug_row(row_index), error_msg);
 }
 
-void OlapTableSink::_print_decimal_error_msg(RuntimeState* state, const DecimalV2Value& decimal, SlotDescriptor* desc) {
+void OlapTableSink::_print_decimal_error_msg(RuntimeState* state, const DecimalV2Value& decimal, SlotDescriptor* desc,
+                                             Chunk* chunk, int32_t row_index) {
     if (state->has_reached_max_error_msg_num()) {
         return;
     }
     std::string error_msg = strings::Substitute("Decimal '$0' is out of range. The type of '$1' is $2'",
                                                 decimal.to_string(), desc->col_name(), desc->type().debug_string());
-#if BE_TEST
-    LOG(INFO) << error_msg;
-#else
-    state->append_error_msg_to_file("", error_msg);
-#endif
+    RuntimeStateHelper::append_error_msg_to_file(state, chunk->debug_row(row_index), error_msg);
 }
 
 template <LogicalType LT, typename CppType = RunTimeCppType<LT>>
-void _print_decimalv3_error_msg(RuntimeState* state, const CppType& decimal, const SlotDescriptor* desc) {
+void _print_decimalv3_error_msg(RuntimeState* state, const CppType& decimal, const SlotDescriptor* desc, Chunk* chunk,
+                                int32_t row_index) {
     if (state->has_reached_max_error_msg_num()) {
         return;
     }
     auto decimal_str = DecimalV3Cast::to_string<CppType>(decimal, desc->type().precision, desc->type().scale);
     std::string error_msg = strings::Substitute("Decimal '$0' is out of range. The type of '$1' is $2'", decimal_str,
                                                 desc->col_name(), desc->type().debug_string());
-#if BE_TEST
-    LOG(INFO) << error_msg;
-#else
-    state->append_error_msg_to_file("", error_msg);
-#endif
+    RuntimeStateHelper::append_error_msg_to_file(state, chunk->debug_row(row_index), error_msg);
 }
 
 template <LogicalType LT>
@@ -960,14 +961,15 @@ void OlapTableSink::_validate_decimal(RuntimeState* state, Chunk* chunk, Column*
             const auto& datum = data[i];
             if (datum > max_decimal || datum < min_decimal) {
                 (*validate_selection)[i] = VALID_SEL_FAILED;
-                _print_decimalv3_error_msg<LT>(state, datum, desc);
+                _print_decimalv3_error_msg<LT>(state, datum, desc, chunk, i);
                 if (state->enable_log_rejected_record()) {
                     auto decimal_str =
                             DecimalV3Cast::to_string<CppType>(datum, desc->type().precision, desc->type().scale);
                     std::string error_msg =
                             strings::Substitute("Decimal '$0' is out of range. The type of '$1' is $2'", decimal_str,
                                                 desc->col_name(), desc->type().debug_string());
-                    state->append_rejected_record_to_file(chunk->rebuild_csv_row(i, ","), error_msg, "");
+                    RuntimeStateHelper::append_rejected_record_to_file(state, chunk->rebuild_csv_row(i, ","), error_msg,
+                                                                       "");
                 }
             }
         }
@@ -979,7 +981,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
     size_t num_rows = chunk->num_rows();
     for (int i = 0; i < _output_tuple_desc->slots().size(); ++i) {
         SlotDescriptor* desc = _output_tuple_desc->slots()[i];
-        ColumnPtr& column_ptr = chunk->get_column_by_slot_id(desc->id());
+        auto& column_ptr = chunk->get_column_by_slot_id(desc->id());
 
         // change validation selection value back to OK/FAILED
         // because in previous run, some validation selection value could
@@ -991,7 +993,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
 
         // update_column for auto increment column.
         if (_has_auto_increment && _auto_increment_slot_id == desc->id() && column_ptr->is_nullable()) {
-            auto* nullable = down_cast<NullableColumn*>(column_ptr.get());
+            auto* nullable = down_cast<NullableColumn*>(column_ptr->as_mutable_raw_ptr());
             // If nullable->has_null() && _null_expr_in_auto_increment == true, it means that user specify a
             // null value in auto increment column, we abort the all rows with null.
             // Because be know nothing about whether this row is specified by the user as null or setted during planning.
@@ -1006,18 +1008,20 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
                         LOG(INFO) << ss.str();
 #else
                         if (!state->has_reached_max_error_msg_num()) {
-                            state->append_error_msg_to_file(chunk->debug_row(j), ss.str());
+                            RuntimeStateHelper::append_error_msg_to_file(state, chunk->debug_row(j), ss.str());
                         }
 #endif
                         // If enable_log_rejected_record is true, we need to log the rejected record.
                         if (state->enable_log_rejected_record()) {
-                            state->append_rejected_record_to_file(chunk->rebuild_csv_row(j, ","), ss.str(), "");
+                            RuntimeStateHelper::append_rejected_record_to_file(state, chunk->rebuild_csv_row(j, ","),
+                                                                               ss.str(), "");
                         }
                     }
                 }
             }
-            chunk->update_column(nullable->data_column(), desc->id());
+            chunk->update_column(std::move(nullable->data_column()), desc->id());
         }
+        column_ptr = chunk->get_column_by_slot_id(desc->id());
 
         // Validate column nullable info
         // Column nullable info need to respect slot nullable info
@@ -1028,7 +1032,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
             // Auto increment column is not nullable but use NullableColumn to implement. We should skip the check for it.
         } else if (!desc->is_nullable() && column_ptr->is_nullable() &&
                    (!_has_auto_increment || _auto_increment_slot_id != desc->id())) {
-            auto* nullable = down_cast<NullableColumn*>(column_ptr.get());
+            auto* nullable = down_cast<NullableColumn*>(column_ptr->as_mutable_raw_ptr());
             // Non-nullable column shouldn't have null value,
             // If there is null value, which means expr compute has a error.
             if (nullable->has_null()) {
@@ -1042,18 +1046,19 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
                         LOG(INFO) << ss.str();
 #else
                         if (!state->has_reached_max_error_msg_num()) {
-                            state->append_error_msg_to_file(chunk->debug_row(j), ss.str());
+                            RuntimeStateHelper::append_error_msg_to_file(state, chunk->debug_row(j), ss.str());
                         }
 #endif
                         if (state->enable_log_rejected_record()) {
-                            state->append_rejected_record_to_file(chunk->rebuild_csv_row(j, ","), ss.str(), "");
+                            RuntimeStateHelper::append_rejected_record_to_file(state, chunk->rebuild_csv_row(j, ","),
+                                                                               ss.str(), "");
                         }
                     }
                 }
             }
-            chunk->update_column(nullable->data_column(), desc->id());
+            chunk->update_column(std::move(nullable->data_column()), desc->id());
         } else if (column_ptr->has_null()) {
-            auto* nullable = down_cast<NullableColumn*>(column_ptr.get());
+            auto* nullable = down_cast<NullableColumn*>(column_ptr->as_mutable_raw_ptr());
             NullData& nulls = nullable->null_column_data();
             for (size_t j = 0; j < num_rows; ++j) {
                 if (nulls[j] && _validate_selection[j] != VALID_SEL_FAILED) {
@@ -1064,7 +1069,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
             }
         }
 
-        Column* column = chunk->get_column_by_slot_id(desc->id()).get();
+        Column* column = chunk->get_column_raw_ptr_by_slot_id(desc->id());
         switch (desc->type().type) {
         case TYPE_CHAR:
         case TYPE_VARCHAR:
@@ -1080,12 +1085,13 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
                 if (_validate_selection[j] == VALID_SEL_OK) {
                     if (offset[j + 1] - offset[j] > len) {
                         _validate_selection[j] = VALID_SEL_FAILED;
-                        _print_varchar_error_msg(state, binary->get_slice(j), desc);
+                        _print_varchar_error_msg(state, binary->get_slice(j), desc, chunk, j);
                         if (state->enable_log_rejected_record()) {
                             std::string error_msg =
                                     strings::Substitute("String (length=$0) is too long. The max length of '$1' is $2",
                                                         binary->get_slice(j).size, desc->col_name(), desc->type().len);
-                            state->append_rejected_record_to_file(chunk->rebuild_csv_row(j, ","), error_msg, "");
+                            RuntimeStateHelper::append_rejected_record_to_file(state, chunk->rebuild_csv_row(j, ","),
+                                                                               error_msg, "");
                         }
                     }
                 }
@@ -1105,12 +1111,13 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
 
                     if (datas[j] > _max_decimalv2_val[i] || datas[j] < _min_decimalv2_val[i]) {
                         _validate_selection[j] = VALID_SEL_FAILED;
-                        _print_decimal_error_msg(state, datas[j], desc);
+                        _print_decimal_error_msg(state, datas[j], desc, chunk, j);
                         if (state->enable_log_rejected_record()) {
                             std::string error_msg = strings::Substitute(
                                     "Decimal '$0' is out of range. The type of '$1' is $2'", datas[j].to_string(),
                                     desc->col_name(), desc->type().debug_string());
-                            state->append_rejected_record_to_file(chunk->rebuild_csv_row(j, ","), error_msg, "");
+                            RuntimeStateHelper::append_rejected_record_to_file(state, chunk->rebuild_csv_row(j, ","),
+                                                                               error_msg, "");
                         }
                     }
                 }
@@ -1145,7 +1152,7 @@ void OlapTableSink::_padding_char_column(Chunk* chunk) {
     size_t num_rows = chunk->num_rows();
     for (auto desc : _output_tuple_desc->slots()) {
         if (desc->type().type == TYPE_CHAR) {
-            Column* column = chunk->get_column_by_slot_id(desc->id()).get();
+            Column* column = chunk->get_column_raw_ptr_by_slot_id(desc->id());
             Column* data_column = ColumnHelper::get_data_column(column);
             auto* binary = down_cast<BinaryColumn*>(data_column);
             Offsets& offset = binary->get_offset();
@@ -1174,8 +1181,7 @@ void OlapTableSink::_padding_char_column(Chunk* chunk) {
 
             if (desc->is_nullable()) {
                 auto* nullable_column = down_cast<NullableColumn*>(column);
-                MutableColumnPtr new_column =
-                        NullableColumn::create(std::move(new_binary), nullable_column->null_column()->as_mutable_ptr());
+                auto new_column = NullableColumn::create(std::move(new_binary), nullable_column->null_column());
                 chunk->update_column(std::move(new_column), desc->id());
             } else {
                 chunk->update_column(std::move(new_binary), desc->id());

@@ -1,0 +1,68 @@
+-- name: test_json_set
+-- description: Comprehensive test cases for JSON_SET function including edge cases
+
+CREATE DATABASE IF NOT EXISTS test_json_set_db;
+USE test_json_set_db;
+
+-- 1. Basic Functionality
+SELECT json_set('{"a": 1, "b": 2}', '$.a', 10) as update_existing;
+SELECT json_set('{"a": 1}', '$.b', 2) as insert_new;
+SELECT json_set('{"a": 1, "b": 2}', '$.a', 10, '$.c', 3) as mixed_ops;
+
+-- 2. Nested Objects
+SELECT json_set('{"a": {"x": 1, "y": 2}}', '$.a.x', 100) as update_nested;
+SELECT json_set('{"a": {"x": 1}}', '$.a.y', 200) as insert_nested;
+SELECT json_set('{"level1": {"level2": {"target": "old"}}}', '$.level1.level2.target', "new") as deep_update;
+
+-- 3. Array Operations
+SELECT json_set('{"arr": [10, 20, 30]}', '$.arr[1]', 99) as update_array_index;
+SELECT json_set('{"arr": [10, 20]}', '$.arr[100]', 30) as append_array;
+SELECT json_set('[1, 2, 3]', '$[0]', 9) as root_array_update;
+
+-- 4. Edge Cases: Structural Constraints
+SELECT json_set('{"a": 1}', '$.a.b', 2) as set_on_scalar;
+SELECT json_set('{"a": 1}', '$.missing_parent.child', 2) as missing_parent;
+SELECT json_set('{"a": 1}', '$', '{"new": "doc"}') as replace_root;
+
+-- 5. Data Types
+SELECT if(json_set('{"k": "old"}', '$.k', null) IS NULL, 'NULL_OK', 'FAIL') as set_sql_null;
+SELECT json_set('{"k": "old"}', '$.k', parse_json('null')) as set_json_null;
+SELECT json_set('{"k": "old"}', '$.k', true) as set_bool;
+SELECT json_set('{"k": "old"}', '$.k', parse_json('{"sub": "json"}')) as set_json_object;
+SELECT json_set('{"k": "old"}', '$.k', 123.456) as set_double;
+
+-- 6. Multiple/Chained Operations
+SELECT json_set('{"a": 1}', '$.a', 10, '$.b', 20, '$.a', 30) as chain_override;
+
+-- 7. Table Operations
+CREATE TABLE json_set_test_table (
+    id INT, 
+    data JSON
+) DUPLICATE KEY(id)
+PROPERTIES("replication_num" = "1");
+
+-- FIX: Insert SQL NULL for id=3 to test null column handling correctly
+INSERT INTO json_set_test_table VALUES 
+(1, parse_json('{"name": "Alice", "tags": ["A"]}')),
+(2, parse_json('{"name": "Bob", "score": 10}')),
+(3, NULL),
+(4, parse_json('{}'));
+
+SELECT id, json_set(data, '$.score', 100) FROM json_set_test_table WHERE id = 2;
+SELECT id, json_set(data, '$.city', 'Wonderland') FROM json_set_test_table WHERE id = 1;
+SELECT id, json_set(data, '$.tags[1]', 'B') FROM json_set_test_table WHERE id = 1;
+SELECT id, if(json_set(data, '$.a', 1) IS NULL, 'NULL_OK', 'FAIL') FROM json_set_test_table WHERE id = 3;
+
+-- 8. Error/Null Arguments
+SELECT if(json_set(null, '$.a', 1) IS NULL, 'NULL_OK', 'FAIL') as null_doc;
+SELECT if(json_set('{"a": 1}', null, 1) IS NULL, 'NULL_OK', 'FAIL') as null_path;
+SELECT if(json_set('{"a": 1}', '$.a', 1, null, 2) IS NULL, 'NULL_OK', 'FAIL') as null_path_arg2;
+
+-- 9. String escaping
+SELECT json_set('{"a": 1}', '$."key.with.dot"', 2) as escaped_key;
+
+-- 10. Wildcard/Slice
+SELECT json_set('{"a": [1, 2]}', '$.a[*]', 10);
+
+DROP TABLE json_set_test_table;
+DROP DATABASE test_json_set_db;

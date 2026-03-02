@@ -34,16 +34,16 @@
 
 #pragma once
 
+#include "base/bit/rle_encoding.h"
+#include "base/coding.h"
+#include "base/string/slice.h"
 #include "column/column.h"
 #include "common/status.h"
 #include "storage/range.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_decoder.h"
-#include "storage/type_traits.h"
-#include "util/coding.h"
-#include "util/rle_encoding.h"
-#include "util/slice.h"
+#include "types/type_traits.h"
 
 namespace starrocks {
 

@@ -704,6 +704,31 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Bytes
 - Description: Total number of scanned bytes.
 
+### starrocks_be_files_scan_num_files_read
+
+- Unit: Count
+- Description: Number of files read from external storage (CSV, Parquet, ORC, JSON, Avro). Labels: `file_format`, `scan_type`.
+
+### starrocks_be_files_scan_num_bytes_read
+
+- Unit: Bytes
+- Description: Total bytes read from external storage. Labels: `file_format`, `scan_type`.
+
+### starrocks_be_files_scan_num_raw_rows_read
+
+- Unit: Count
+- Description: Total raw rows read from external storage before format validation and predicate filtering. Labels: `file_format`, `scan_type`.
+
+### starrocks_be_files_scan_num_valid_rows_read
+
+- Unit: Count
+- Description: Number of valid rows read (excluding rows with invalid format). Labels: `file_format`, `scan_type`.
+
+### starrocks_be_files_scan_num_rows_return
+
+- Unit: Count
+- Description: Number of rows returned after predicate filtering. Labels: `file_format`, `scan_type`.
+
 ### disk_reads_completed
 
 - Unit: Count
@@ -963,6 +988,11 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 - Unit: Count
 - Description: Number of queued tasks in the segment flush thread pool.
+
+### starrocks_be_segment_file_not_found_total
+
+- Unit: Count
+- Description: Total number of times a segment file was not found (file missing) during segment open. A continuously increasing value may indicate data loss or storage inconsistency.
 
 ### jemalloc_metadata_bytes
 
@@ -1415,6 +1445,18 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Count
 - Description: Queued task count in the Primary Key index compaction thread pool.
 
+### pk_index_sst_read_error_total
+
+- Type: Counter
+- Unit: Count
+- Description: Total number of SST file read failures in the lake Primary Key persistent index. Incremented when SST multi-get (read) operations fail.
+
+### pk_index_sst_write_error_total
+
+- Type: Counter
+- Unit: Count
+- Description: Total number of SST file write failures in the lake Primary Key persistent index. Incremented when SST file build fails.
+
 ### disks_total_capacity
 
 - Description: Total capacity of the disk.
@@ -1854,3 +1896,203 @@ All transaction metrics share the following labels:
 - Unit: ms
 - Type: Summary
 - Description: The final acknowledgment latency, from when the `publish` task finishes to the final `finish` time when the transaction is marked as `VISIBLE`. This metric includes any final steps or acknowledgments required.
+
+### Merge Commit BE Metrics
+
+#### merge_commit_request_total
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of merge commit requests received by BE.
+
+#### merge_commit_request_bytes
+
+- Unit: Bytes
+- Type: Cumulative
+- Description: Total bytes of data received across merge commit requests.
+
+#### merge_commit_success_total
+
+- Unit: Count
+- Type: Cumulative
+- Description: Merge commit requests that finished successfully.
+
+#### merge_commit_fail_total
+
+- Unit: Count
+- Type: Cumulative
+- Description: Merge commit requests that failed.
+
+#### merge_commit_pending_total
+
+- Unit: Count
+- Type: Instantaneous
+- Description: Merge commit tasks currently waiting in the execution queue.
+
+#### merge_commit_pending_bytes
+
+- Unit: Bytes
+- Type: Instantaneous
+- Description: Total bytes of data held by pending merge commit tasks.
+
+#### merge_commit_send_rpc_total
+
+- Unit: Count
+- Type: Cumulative
+- Description: RPC requests sent to FE for starting merge commit operations.
+
+#### merge_commit_register_pipe_total
+
+- Unit: Count
+- Type: Cumulative
+- Description: Stream load pipes registered for merge commit operations.
+
+#### merge_commit_unregister_pipe_total
+
+- Unit: Count
+- Type: Cumulative
+- Description: Stream load pipes unregistered from merge commit operations.
+
+Latency metrics expose percentile series such as `merge_commit_request_latency_99` and `merge_commit_request_latency_90`, reported in microseconds. The end-to-end latency obeys:
+
+`merge_commit_request = merge_commit_pending + merge_commit_wait_plan + merge_commit_append_pipe + merge_commit_wait_finish`
+
+> **Note**: Before v3.4.11, v3.5.12, and v4.0.4, these latency metrics were reported in nanoseconds.
+
+#### merge_commit_request
+
+- Unit: microsecond
+- Type: Summary
+- Description: End-to-end processing latency for merge commit requests.
+
+#### merge_commit_pending
+
+- Unit: microsecond
+- Type: Summary
+- Description: Time merge commit tasks spend waiting in the pending queue before execution.
+
+#### merge_commit_wait_plan
+
+- Unit: microsecond
+- Type: Summary
+- Description: Combined latency for the RPC request and waiting for the stream load pipe to become available.
+
+#### merge_commit_append_pipe
+
+- Unit: microsecond
+- Type: Summary
+- Description: Time spent appending data to the stream load pipe during merge commit.
+
+#### merge_commit_wait_finish
+
+- Unit: microsecond
+- Type: Summary
+- Description: Time spent waiting for merge commit load operations to finish.
+
+### Iceberg delete FE metrics
+
+#### iceberg_delete_total
+
+- Unit: Count
+- Type: Cumulative
+- Labels:
+  - `status` (`success` or `failed`)
+  - `reason` (`none`, `timeout`, `oom`, `access_denied`, `unknown`)
+  - `delete_type` (`position` or `metadata`)
+- Description: Total number of `DELETE` tasks that target Iceberg tables. The metric is incremented by 1 after each task ends, regardless of success or failure. `delete_type` distinguishes between two delete methods: `position` (generates position delete files) and `metadata` (metadata-level delete).
+
+#### iceberg_delete_duration_ms_total
+
+- Unit: Millisecond
+- Type: Cumulative
+- Labels: `delete_type` (`position` or `metadata`)
+- Description: Total execution time of Iceberg `DELETE` tasks in milliseconds. The duration of each task is added after it ends. `delete_type` distinguishes between two delete methods.
+
+#### iceberg_delete_bytes
+
+- Unit: Bytes
+- Type: Cumulative
+- Labels: `delete_type` (`position` or `metadata`)
+- Description: Total deleted bytes from Iceberg `DELETE` tasks. For `metadata` delete, this represents the size of deleted data files. For `position` delete, this represents the size of position delete files created.
+
+#### iceberg_delete_rows
+
+- Unit: Rows
+- Type: Cumulative
+- Labels: `delete_type` (`position` or `metadata`)
+- Description: Total deleted rows from Iceberg `DELETE` tasks. For `metadata` delete, this represents the number of rows in deleted data files. For `position` delete, this represents the number of position deletes created.
+
+### iceberg_compaction_total
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `compaction_type` (`manual` or `auto`)
+- Description: Total number of Iceberg compaction (`rewrite_data_files`) tasks.
+
+### iceberg_compaction_duration_ms_total
+
+- Unit: Millisecond
+- Type: Cumulative
+- Labels: `compaction_type` (`manual` or `auto`)
+- Description: Total time spent running Iceberg compaction tasks.
+
+### iceberg_compaction_input_files_total
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `compaction_type` (`manual` or `auto`)
+- Description: Total number of data files read by Iceberg compaction tasks.
+
+### iceberg_compaction_output_files_total
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `compaction_type` (`manual` or `auto`)
+- Description: Total number of data files produced by Iceberg compaction tasks.
+
+### iceberg_compaction_removed_delete_files_total
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `compaction_type` (`manual` or `auto`)
+- Description: Total number of delete files removed by Iceberg manual compaction tasks.
+
+### Iceberg write FE metrics
+
+#### iceberg_write_total
+
+- Unit: Count
+- Type: Cumulative
+- Labels:
+  - `status` (`success` or `failed`)
+  - `reason` (`none`, `timeout`, `oom`, `access_denied`, `unknown`)
+  - `write_type` (`insert`, `overwrite`, or `ctas`)
+- Description: Total number of `INSERT`, `INSERT OVERWRITE`, or `CTAS` tasks that target Iceberg tables. The metric is incremented by 1 after each task ends, regardless of success or failure. `write_type` distinguishes between the operation types.
+
+#### iceberg_write_duration_ms_total
+
+- Unit: Millisecond
+- Type: Cumulative
+- Labels: `write_type` (`insert`, `overwrite`, or `ctas`)
+- Description: Total execution time of Iceberg write tasks (`INSERT`, `INSERT OVERWRITE`, `CTAS`) in milliseconds. The duration of each task is added after it ends. `write_type` distinguishes between the operation types.
+
+#### iceberg_write_bytes
+
+- Unit: Bytes
+- Type: Cumulative
+- Labels: `write_type` (`insert`, `overwrite`, or `ctas`)
+- Description: Total written bytes from Iceberg write tasks (`INSERT`, `INSERT OVERWRITE`, `CTAS`). This represents the total size of data files written to the Iceberg table. `write_type` distinguishes between the operation types.
+
+#### iceberg_write_rows
+
+- Unit: Rows
+- Type: Cumulative
+- Labels: `write_type` (`insert`, `overwrite`, or `ctas`)
+- Description: Total written rows from Iceberg write tasks (`INSERT`, `INSERT OVERWRITE`, `CTAS`). This represents the number of rows written to the Iceberg table. `write_type` distinguishes between the operation types.
+
+#### iceberg_write_files
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `write_type` (`insert`, `overwrite`, or `ctas`)
+- Description: Total number of data files written to Iceberg from write tasks (`INSERT`, `INSERT OVERWRITE`, `CTAS`). This represents the count of data files written to the Iceberg table. `write_type` distinguishes between the operation types.

@@ -178,6 +178,9 @@ target_cluster_user=root
 target_cluster_password=
 target_cluster_password_secret_key=
 
+jdbc_connect_timeout_ms=30000
+jdbc_socket_timeout_ms=60000
+
 # カンマ区切りのデータベース名またはテーブル名のリスト <db_name> または <db_name.table_name>
 # 例: db1,db2.tbl2,db3
 # 有効な順序: 1. include 2. exclude
@@ -240,6 +243,8 @@ enable_table_property_sync=false
 | target_cluster_user                       | ターゲットクラスタにログインするために使用されるユーザー名。このユーザーは SYSTEM レベルで OPERATE 権限を付与されている必要があります。 |
 | target_cluster_password                   | ターゲットクラスタにログインするために使用されるユーザーパスワード。      |
 | target_cluster_password_secret_key        | ターゲットクラスタのログインユーザーのパスワードを暗号化するために使用される秘密鍵。デフォルト値は空文字列で、ログインパスワードが暗号化されていないことを意味します。`target_cluster_password` を暗号化したい場合、SQL ステートメント `SELECT TO_BASE64(AES_ENCRYPT('<target_cluster_password>','<target_cluster_password_ secret_key>'))` を使用して暗号化された `target_cluster_password` 文字列を取得できます。 |
+| jdbc_connect_timeout_ms                   | FE クエリの JDBC 接続タイムアウト（ミリ秒）。デフォルト値は `30000`。 |
+| jdbc_socket_timeout_ms                    | FE クエリの JDBC ソケットタイムアウト（ミリ秒）。デフォルト値は `60000`。 |
 | include_data_list                         | 移行が必要なデータベースおよびテーブルをカンマ (`,`) で区切って指定します。例: `db1, db2.tbl2, db3`。この項目は `exclude_data_list` よりも優先されます。クラスタ内のすべてのデータベースとテーブルを移行したい場合、この項目を設定する必要はありません。 |
 | exclude_data_list                         | 移行が不要なデータベースおよびテーブルをカンマ (`,`) で区切って指定します。例: `db1, db2.tbl2, db3`。`include_data_list` がこの項目よりも優先されます。クラスタ内のすべてのデータベースとテーブルを移行したい場合、この項目を設定する必要はありません。 |
 | target_cluster_storage_volume             | ターゲットクラスタが共有データクラスタである場合に、ターゲットクラスタでテーブルを保存するために使用されるストレージボリューム。デフォルトのストレージボリュームを使用したい場合、この項目を指定する必要はありません。 |
@@ -311,19 +316,24 @@ vi conf/hosts.properties
 ファイルのデフォルトの内容は次のとおりで、ネットワークアドレスのマッピングがどのように設定されているかを説明しています。
 
 ```Properties
-# <SOURCE/TARGET>_<domain>=<IP>
+# <SOURCE/TARGET>_<host>=<mappedHost>[;<srcPort>:<dstPort>[,<srcPort>:<dstPort>...]]
 ```
+
+:::note
+`<host>` は `SHOW FRONTENDS`、`SHOW BACKENDS`、または `SHOW COMPUTE NODES` の `IP` 列に表示される値と一致する必要があります。
+:::
 
 次の例では、以下の操作を行います。
 
 1. ソースクラスタのプライベートネットワークアドレス `192.1.1.1` と `192.1.1.2` を `10.1.1.1` と `10.1.1.2` にマッピングします。
-2. ターゲットクラスタのプライベートネットワークアドレス `fe-0.starrocks.svc.cluster.local` を `10.1.2.1` にマッピングします。
+2. ソースクラスタの FE ポート `8030` と `9030` を `10.1.1.1` の `38030` と `39030` にマッピングします。
+3. ターゲットクラスタのプライベートネットワークアドレス `fe-0.starrocks.svc.cluster.local` を `10.1.2.1` にマッピングし、ポート `9030` を再マッピングします。
 
 ```Properties
-# <SOURCE/TARGET>_<domain>=<IP>
-SOURCE_192.1.1.1=10.1.1.1
+# <SOURCE/TARGET>_<host>=<mappedHost>[;<srcPort>:<dstPort>[,<srcPort>:<dstPort>...]]
+SOURCE_192.1.1.1=10.1.1.1;8030:38030,9030:39030
 SOURCE_192.1.1.2=10.1.1.2
-TARGET_fe-0.starrocks.svc.cluster.local=10.1.2.1
+TARGET_fe-0.starrocks.svc.cluster.local=10.1.2.1;9030:19030
 ```
 
 ## ステップ 3: 移行ツールの起動

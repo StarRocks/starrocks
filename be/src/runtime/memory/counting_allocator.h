@@ -18,9 +18,9 @@
 #include <memory>
 
 #include "common/compiler_util.h"
+#include "common/memory/allocator.h"
+#include "common/memory/mem_hook_allocator.h"
 #include "exprs/expr_context.h"
-#include "runtime/memory/allocator.h"
-#include "runtime/memory/mem_hook_allocator.h"
 
 namespace starrocks {
 

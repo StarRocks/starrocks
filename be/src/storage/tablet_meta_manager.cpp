@@ -45,9 +45,14 @@
 #include <string>
 #include <vector>
 
+#include "base/coding.h"
+#include "base/failpoint/fail_point.h"
+#include "base/url_coding.h"
+#include "base/utility/defer_op.h"
 #include "common/compiler_util.h"
 #include "common/logging.h"
 #include "common/tracer.h"
+#include "common/util/debug_util.h"
 #include "fmt/format.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/strings/numbers.h"
@@ -60,11 +65,6 @@
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_updates.h"
-#include "util/coding.h"
-#include "util/debug_util.h"
-#include "util/defer_op.h"
-#include "util/failpoint/fail_point.h"
-#include "util/url_coding.h"
 
 namespace starrocks {
 
@@ -788,8 +788,11 @@ void decode_delta_column_group_key(std::string_view enc_key, TTabletId* tablet_i
     *version = INT64_MAX - BigEndian::ToHost64(UNALIGNED_LOAD64(enc_key.data() + 80));
 }
 
+DEFINE_FAIL_POINT(tablet_meta_manager_rowset_commit_internal_error);
 Status TabletMetaManager::rowset_commit(DataDir* store, TTabletId tablet_id, int64_t logid, EditVersionMetaPB* edit,
                                         const RowsetMetaPB& rowset, const string& rowset_meta_key) {
+    FAIL_POINT_TRIGGER_RETURN(tablet_meta_manager_rowset_commit_internal_error,
+                              Status::InternalError("inject tablet_meta_manager_rowset_commit_internal_error"));
     WriteBatch batch;
     auto handle = store->get_meta()->handle(META_COLUMN_FAMILY_INDEX);
     string logkey = encode_meta_log_key(tablet_id, logid);

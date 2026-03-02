@@ -17,6 +17,7 @@
 #include <functional>
 
 #include "column/vectorized_fwd.h"
+#include "common/runtime_profile.h"
 #include "common/statusor.h"
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exec/pipeline/schedule/observer.h"
@@ -24,7 +25,6 @@
 #include "exprs/runtime_filter_bank.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/mem_tracker.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 class Expr;
@@ -52,7 +52,11 @@ public:
     // prepare is used to do the initialization work
     // It's one of the stages of the operator life cycle（prepare -> finishing -> finished -> [cancelled] -> closed)
     // This method will be exactly invoked once in the whole life cycle
+    // do not add heavy task in this method!
     virtual Status prepare(RuntimeState* state);
+
+    // thread-safe operation in prepare can be moved into prepare_local_state
+    virtual Status prepare_local_state(RuntimeState* state);
 
     // Notifies the operator that no more input chunk will be added.
     // The operator should finish processing.
@@ -170,7 +174,7 @@ public:
 
     const std::vector<SlotId>& filter_null_value_columns() const;
 
-    // equal to ExecNode::eval_conjuncts(_conjunct_ctxs, chunk), is used to apply in-filters to Operators.
+    // equal to ChunkPredicateEvaluator::eval_conjuncts(_conjunct_ctxs, chunk), is used to apply in-filters to Operators.
     Status eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& conjuncts, Chunk* chunk,
                                          FilterPtr* filter = nullptr, bool apply_filter = true);
     // evaluate no eq join runtime in filters
@@ -201,6 +205,7 @@ public:
     RuntimeState* runtime_state() const;
 
     void set_prepare_time(int64_t cost_ns);
+    void set_local_prepare_time(int64_t cost_ns);
 
     // INCREMENTAL MV Methods
     //
@@ -313,7 +318,9 @@ protected:
     RuntimeProfile::Counter* _finishing_timer = nullptr;
     RuntimeProfile::Counter* _finished_timer = nullptr;
     RuntimeProfile::Counter* _close_timer = nullptr;
-    RuntimeProfile::Counter* _prepare_timer = nullptr;
+    RuntimeProfile::Counter* _local_prepare_timer = nullptr;
+    RuntimeProfile::Counter* _global_prepare_timer = nullptr;
+    int64_t _global_prepare_time_ns = 0;
 
     RuntimeProfile::Counter* _push_chunk_num_counter = nullptr;
     RuntimeProfile::Counter* _push_row_num_counter = nullptr;

@@ -24,10 +24,10 @@
 #include <aws/s3/model/PutObjectRequest.h>
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "common/config.h"
 #include "common/logging.h"
 #include "fs/fs_s3.h"
-#include "testutil/assert.h"
 
 namespace starrocks::io {
 

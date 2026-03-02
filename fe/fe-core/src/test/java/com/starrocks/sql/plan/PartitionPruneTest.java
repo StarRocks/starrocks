@@ -60,6 +60,24 @@ public class PartitionPruneTest extends PlanTestBase {
                 + "\"in_memory\" = \"false\"\n"
                 + ");");
 
+        starRocksAssert.withTable("CREATE TABLE `ptest_case` (\n"
+                + "  `k1` int(11) NOT NULL COMMENT \"\",\n"
+                + "  `d2` date    NULL COMMENT \"\",\n"
+                + "  `v1` int(11) NULL COMMENT \"\"\n"
+                + ") ENGINE=OLAP\n"
+                + "DUPLICATE KEY(`k1`, `d2`)\n"
+                + "COMMENT \"OLAP\"\n"
+                + "PARTITION BY RANGE(`d2`)\n"
+                + "(PARTITION P202001 VALUES [('0000-01-01'), ('2020-01-01')),\n"
+                + "PARTITION P202004 VALUES [('2020-01-01'), ('2020-04-01')),\n"
+                + "PARTITION P202007 VALUES [('2020-04-01'), ('2020-07-01')),\n"
+                + "PARTITION P202012 VALUES [('2020-07-01'), ('2020-12-01')))\n"
+                + "DISTRIBUTED BY HASH(`k1`) BUCKETS 10\n"
+                + "PROPERTIES (\n"
+                + "\"replication_num\" = \"1\",\n"
+                + "\"in_memory\" = \"false\"\n"
+                + ");");
+
         // date_trunc('month', c1)
         starRocksAssert.withTable("CREATE TABLE t_gen_col (" +
                 " c1 datetime NOT NULL," +
@@ -237,6 +255,13 @@ public class PartitionPruneTest extends PlanTestBase {
         String sql = "select * from ptest partition(p202007) where d2 is null";
         String plan = getFragmentPlan(sql);
         assertCContains(plan, "partitions=0/4");
+    }
+
+    @Test
+    public void testPartitionClauseCaseInsensitive() throws Exception {
+        String sql = "select * from ptest_case partition(p202007)";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "partitions=1/4");
     }
 
     private static Pair<ScalarOperator, LogicalScanOperator> buildConjunctAndScan(String sql) throws Exception {
@@ -575,12 +600,14 @@ public class PartitionPruneTest extends PlanTestBase {
         starRocksAssert.ddl("alter table t3_pri add partition p20240104 values less than('2024-01-04') ");
         starRocksAssert.ddl("alter table t3_pri add partition p20240105 values less than('2024-01-05') ");
 
-        starRocksAssert.query("select min(c1) from t3_pri").explainContains("TOP-N", "order by: <slot 1> 1: c1");
-        starRocksAssert.query("select max(c1) from t3_pri").explainContains("TOP-N", "order by: <slot 1> 1: c1 DESC");
+        starRocksAssert.query("select min(c1) from t3_pri")
+                .explainContains("TOP-N", "order by: <slot 1> 1: c1", "AGGREGATE");
+        starRocksAssert.query("select max(c1) from t3_pri")
+                .explainContains("TOP-N", "order by: <slot 1> 1: c1 DESC", "AGGREGATE");
         starRocksAssert.query("select min(c1)+1 from t3_pri")
-                .explainContains("TOP-N", "order by: <slot 1> 1: c1");
+                .explainContains("TOP-N", "order by: <slot 1> 1: c1", "AGGREGATE");
         starRocksAssert.query("select max(c1)+1 from t3_pri")
-                .explainContains("TOP-N", "order by: <slot 1> 1: c1 DESC");
+                .explainContains("TOP-N", "order by: <slot 1> 1: c1 DESC", "AGGREGATE");
 
         // NOT SUPPORTED
         starRocksAssert.query("select max(c1-1)+1 from t3_pri").explainContains("OlapScanNode");

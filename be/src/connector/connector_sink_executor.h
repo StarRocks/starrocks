@@ -20,8 +20,8 @@
 
 #include "column/chunk.h"
 #include "common/status.h"
+#include "common/thread/threadpool.h"
 #include "connector/utils.h"
-#include "util/threadpool.h"
 
 namespace starrocks {
 class LoadChunkSpiller;

@@ -704,6 +704,31 @@ displayed_sidebar: docs
 - 单位：Byte
 - 描述：扫描的总字节数。
 
+### starrocks_be_files_scan_num_files_read
+
+- 单位：个
+- 描述：从外部存储（CSV, Parquet, ORC, JSON, Avro）读取的文件数量。标签：`file_format`, `scan_type`。
+
+### starrocks_be_files_scan_num_bytes_read
+
+- 单位：Byte
+- 描述：从外部存储读取的总字节数。标签：`file_format`, `scan_type`。
+
+### starrocks_be_files_scan_num_raw_rows_read
+
+- 单位：个
+- 描述：从外部存储读取的原始行总数（包括格式错误的行，过滤和谓词过滤之前）。标签：`file_format`, `scan_type`。
+
+### starrocks_be_files_scan_num_valid_rows_read
+
+- 单位：个
+- 描述：读取的有效行数（排除格式错误的行）。标签：`file_format`, `scan_type`。
+
+### starrocks_be_files_scan_num_rows_return
+
+- 单位：个
+- 描述：谓词过滤后返回的行数。标签：`file_format`, `scan_type`。
+
 ### disk_reads_completed
 
 - 单位：个
@@ -963,6 +988,11 @@ displayed_sidebar: docs
 
 - 单位：个
 - 描述：Segment Flush 线程池中排队的任务数量。
+
+### starrocks_be_segment_file_not_found_total
+
+- 单位：个
+- 描述：打开 Segment 时发现文件缺失（NOT_FOUND）的累计次数。若该值持续增长，可能表示数据丢失或存储不一致。
 
 ### jemalloc_metadata_bytes
 
@@ -1415,6 +1445,18 @@ displayed_sidebar: docs
 - 单位：个
 - 描述：主键索引 Compaction 线程池中排队的任务数量。
 
+### pk_index_sst_read_error_total
+
+- 类型：Counter
+- 单位：个
+- 描述：存算分离主键持久化索引中 SST 文件读取失败的总次数。当 SST multi-get（读取）操作失败时递增。
+
+### pk_index_sst_write_error_total
+
+- 类型：Counter
+- 单位：个
+- 描述：存算分离主键持久化索引中 SST 文件写入失败的总次数。当 SST 文件构建失败时递增。
+
 ### disks_total_capacity
 
 - 描述：磁盘的总容量。
@@ -1851,3 +1893,170 @@ displayed_sidebar: docs
 - 单位：毫秒
 - 类型：Summary
 - 描述：事务最终确认的延迟，从发布任务完成到事务被标记为 `VISIBLE` 的最终 `finish` 时间。这包括任何最终步骤或所需的确认。
+
+### Merge Commit 指标
+
+这些指标用于跟踪等型批量写入路径中的 merge commit 操作。
+
+#### merge_commit_request_total
+
+- 单位：个
+- 类型：累积值
+- 描述：BE 收到的 merge commit 请求总数。
+
+#### merge_commit_request_bytes
+
+- 单位：字节
+- 类型：累积值
+- 描述：所有 merge commit 请求接收的数据总量。
+
+#### merge_commit_success_total
+
+- 单位：个
+- 类型：累积值
+- 描述：成功完成的 merge commit 请求数。
+
+#### merge_commit_fail_total
+
+- 单位：个
+- 类型：累积值
+- 描述：失败的 merge commit 请求数。
+
+#### merge_commit_pending_total
+
+- 单位：个
+- 类型：瞬时值
+- 描述：当前等待执行的 merge commit 任务数量。
+
+#### merge_commit_pending_bytes
+
+- 单位：字节
+- 类型：瞬时值
+- 描述：当前等待执行的 merge commit 任务持有的数据总量。
+
+#### merge_commit_send_rpc_total
+
+- 单位：个
+- 类型：累积值
+- 描述：用于启动 merge commit 的 RPC 请求数。
+
+#### merge_commit_register_pipe_total
+
+- 单位：个
+- 类型：累积值
+- 描述：为 merge commit 注册的 stream load pipe 数量。
+
+#### merge_commit_unregister_pipe_total
+
+- 单位：个
+- 类型：累积值
+- 描述：为 merge commit 取消注册的 stream load pipe 数量。
+
+延迟指标会输出百分位序列，例如 `merge_commit_request_latency_99` 和 `merge_commit_request_latency_90`，单位为微秒。端到端延迟遵循以下公式：
+
+`merge_commit_request = merge_commit_pending + merge_commit_wait_plan + merge_commit_append_pipe + merge_commit_wait_finish`
+
+> **注意**：在 v3.4.11、v3.5.12 和 v4.0.4 之前，这些延迟指标的单位为纳秒。
+
+#### merge_commit_request
+
+- 单位：微秒
+- 类型：Summary
+- 描述：merge commit 请求的端到端处理延迟。
+
+#### merge_commit_pending
+
+- 单位：微秒
+- 类型：Summary
+- 描述：merge commit 任务在执行前等待的时间。
+
+#### merge_commit_wait_plan
+
+- 单位：微秒
+- 类型：Summary
+- 描述：RPC 请求与等待 stream load pipe 可用的合计耗时。
+
+#### merge_commit_append_pipe
+
+- 单位：微秒
+- 类型：Summary
+- 描述：向 stream load pipe 追加数据的耗时。
+
+#### merge_commit_wait_finish
+
+- 单位：微秒
+- 类型：Summary
+- 描述：等待 merge commit 导入完成的耗时。
+
+### Iceberg 删除 FE 指标
+
+#### iceberg_delete_total
+
+- 单位：个
+- 类型：累积值
+- 标签：
+  - `status`（`success` 或 `failed`）
+  - `reason`（`none`、`timeout`、`oom`、`access_denied`、`unknown`）
+  - `delete_type`（`position` 或 `metadata`）
+- 描述：目标表为 Iceberg 的 `DELETE` 任务总数。每个任务结束后都会加 1，无论成功还是失败。`delete_type` 区分两种删除方式：`position`（生成 position delete 文件）和 `metadata`（元数据级删除）。
+
+#### iceberg_delete_duration_ms_total
+
+- 单位：毫秒
+- 类型：累积值
+- 标签：`delete_type`（`position` 或 `metadata`）
+- 描述：Iceberg `DELETE` 任务的总耗时（毫秒）。每个任务结束后会累加该任务耗时。`delete_type` 区分两种删除方式。
+
+#### iceberg_delete_bytes
+
+- 单位：字节
+- 类型：累积值
+- 标签：`delete_type`（`position` 或 `metadata`）
+- 描述：Iceberg `DELETE` 任务删除的总字节数。对于 `metadata` 删除，表示被删除的数据文件大小；对于 `position` 删除，表示创建的 position delete 文件大小。
+
+#### iceberg_delete_rows
+
+- 单位：行
+- 类型：累积值
+- 标签：`delete_type`（`position` 或 `metadata`）
+- 描述：Iceberg `DELETE` 任务删除的总行数。对于 `metadata` 删除，表示被删除数据文件中的行数；对于 `position` 删除，表示创建的 position delete 记录数。
+
+### Iceberg 写入 FE 指标
+
+#### iceberg_write_total
+
+- 单位：个
+- 类型：累积值
+- 标签：
+  - `status`（`success` 或 `failed`）
+  - `reason`（`none`、`timeout`、`oom`、`access_denied`、`unknown`）
+  - `write_type`（`insert`、`overwrite` 或 `ctas`）
+- 描述：目标表为 Iceberg 的 `INSERT`、`INSERT OVERWRITE` 或 `CTAS` 任务总数。每个任务结束后都会加 1，无论成功还是失败。`write_type` 区分三种操作类型。
+
+#### iceberg_write_duration_ms_total
+
+- 单位：毫秒
+- 类型：累积值
+- 标签：`write_type`（`insert`、`overwrite` 或 `ctas`）
+- 描述：Iceberg 写入任务（`INSERT`、`INSERT OVERWRITE`、`CTAS`）的总耗时（毫秒）。每个任务结束后会累加该任务耗时。`write_type` 区分三种操作类型。
+
+#### iceberg_write_bytes
+
+- 单位：字节
+- 类型：累积值
+- 标签：`write_type`（`insert`、`overwrite` 或 `ctas`）
+- 描述：Iceberg 写入任务（`INSERT`、`INSERT OVERWRITE`、`CTAS`）的写入总字节数。表示写入到 Iceberg 表的数据文件总大小。`write_type` 区分三种操作类型。
+
+#### iceberg_write_rows
+
+- 单位：行
+- 类型：累积值
+- 标签：`write_type`（`insert`、`overwrite` 或 `ctas`）
+- 描述：Iceberg 写入任务（`INSERT`、`INSERT OVERWRITE`、`CTAS`）的写入总行数。表示写入到 Iceberg 表的行数。`write_type` 区分三种操作类型。
+
+#### iceberg_write_files
+
+- 单位：个数
+- 类型：累积值
+- 标签：`write_type`（`insert`、`overwrite` 或 `ctas`）
+- 描述：Iceberg 写入任务（`INSERT`、`INSERT OVERWRITE`、`CTAS`）写入的数据文件总数。表示写入到 Iceberg 表的数据文件个数。`write_type` 区分三种操作类型。

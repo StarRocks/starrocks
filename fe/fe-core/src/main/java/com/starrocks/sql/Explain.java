@@ -39,6 +39,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperato
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalConcatenateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDecodeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalEsScanOperator;
@@ -60,6 +61,8 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSetOperation;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalSplitConsumeOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalSplitProduceOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionTableScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
@@ -82,6 +85,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import static com.starrocks.qe.SessionVariableConstants.AUTO;
 
 public class Explain {
     public static final Explain DEFAULT_EXPLAIN = new Explain(true, false, "    ", "    ");
@@ -194,7 +199,7 @@ public class Explain {
             PhysicalOlapScanOperator scan = (PhysicalOlapScanOperator) optExpression.getOp();
 
             StringBuilder sb = new StringBuilder("- SCAN [")
-                    .append(((OlapTable) scan.getTable()).getIndexNameById(scan.getSelectedIndexId()))
+                    .append(((OlapTable) scan.getTable()).getIndexNameByMetaId(scan.getSelectedIndexMetaId()))
                     .append("]")
                     .append(buildOutputColumns(scan,
                             "[" + scan.getOutputColumns().stream().map(EXPR_PRINTER::print)
@@ -453,6 +458,10 @@ public class Explain {
             sb.append("\n");
 
             buildCostEstimate(sb, optExpression, context.step);
+            if (enableCosts && !AUTO.equalsIgnoreCase(aggregate.getNeededPreaggregationMode())) {
+                buildOperatorProperty(sb,
+                        "streaming_preaggregation_mode: " + aggregate.getNeededPreaggregationMode(), context.step);
+            }
 
             for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregate.getAggregations().entrySet()) {
                 String analyticCallString =
@@ -750,6 +759,33 @@ public class Explain {
             buildCommonProperty(sb, scan, context.step);
 
             return new OperatorStr(sb.toString(), context.step, Collections.emptyList());
+        }
+
+        @Override
+        public OperatorStr visitPhysicalConcatenater(OptExpression optExpression, ExplainContext context) {
+            PhysicalConcatenateOperator op = (PhysicalConcatenateOperator) optExpression.getOp();
+            StringBuilder sb = new StringBuilder();
+            sb.append("- CONCATENATE\n");
+            return new OperatorStr(sb.toString(), context.step,
+                    buildChildOperatorStr(optExpression, context.step));
+        }
+
+        @Override
+        public OperatorStr visitPhysicalSplitProducer(OptExpression optExpression, ExplainContext context) {
+            PhysicalSplitProduceOperator op = (PhysicalSplitProduceOperator) optExpression.getOp();
+            StringBuilder sb = new StringBuilder();
+            sb.append("- SplitProducer(splitId=").append(op.getSplitId()).append(")\n");
+            return new OperatorStr(sb.toString(), context.step,
+                    buildChildOperatorStr(optExpression, context.step));
+        }
+
+        @Override
+        public OperatorStr visitPhysicalSplitConsumer(OptExpression optExpression, ExplainContext context) {
+            PhysicalSplitConsumeOperator op = (PhysicalSplitConsumeOperator) optExpression.getOp();
+            StringBuilder sb = new StringBuilder();
+            sb.append("- SplitConsumer(cteId=").append(op.getSplitId()).append(")\n");
+            return new OperatorStr(sb.toString(), context.step,
+                    buildChildOperatorStr(optExpression, context.step));
         }
     }
 

@@ -1,4 +1,4 @@
--- name: test_query_detail_api
+-- name: test_query_detail_api @sequential
 create database db_${uuid0};
 -- result:
 -- !result
@@ -19,6 +19,10 @@ insert into test_table values (1, 'test1', 10.5), (2, 'test2', 20.5), (3, 'test3
 -- result:
 -- !result
 function: query_detail_check("select * from test_table", 3, 3)
+-- result:
+{'success': True}
+-- !result
+function: query_detail_check("select * from test_table where value > 100", 3, 0)
 -- result:
 {'success': True}
 -- !result

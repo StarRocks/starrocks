@@ -23,13 +23,13 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -43,6 +43,7 @@ import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDecodeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
@@ -479,7 +480,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                     PhysicalOlapScanOperator newOlapScan =
                             new PhysicalOlapScanOperator(scanOperator.getTable(), newColRefToColumnMetaMap,
                                     scanOperator.getDistributionSpec(), scanOperator.getLimit(), newPredicate,
-                                    scanOperator.getSelectedIndexId(), scanOperator.getSelectedPartitionId(),
+                                    scanOperator.getSelectedIndexMetaId(), scanOperator.getSelectedPartitionId(),
                                     scanOperator.getSelectedTabletId(), scanOperator.getHintsReplicaId(),
                                     newPrunedPredicates,
                                     scanOperator.getProjection(), scanOperator.isUsePkIndex(),
@@ -775,10 +776,36 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                             aggOperator.isSplit(), aggOperator.getLimit(),
                             aggOperator.getPredicate(), aggOperator.getProjection());
             newHashAggregator.setMergedLocalAgg(aggOperator.isMergedLocalAgg());
+            newHashAggregator.setTopNLocalAgg(aggOperator.isTopNLocalAgg());
+            newHashAggregator.setTopNSortInfo(rewriteTopNSortInfo(aggOperator.getTopNSortInfo(),
+                    context.stringColumnIdToDictColumnIds, context));
             newHashAggregator.setUseSortAgg(aggOperator.isUseSortAgg());
             newHashAggregator.setUsePerBucketOptmize(aggOperator.isUsePerBucketOptmize());
             newHashAggregator.setWithoutColocateRequirement(aggOperator.isWithoutColocateRequirement());
+            newHashAggregator.setDistinctColumnDataSkew(aggOperator.getDistinctColumnDataSkew());
+            newHashAggregator.setForcePreAggregation(aggOperator.isForcePreAggregation());
+            newHashAggregator.setLocalLimit(aggOperator.getLocalLimit());
+            newHashAggregator.setGroupByMinMaxStatistic(aggOperator.getGroupByMinMaxStatistic());
             return newHashAggregator;
+        }
+
+        private LogicalTopNOperator.TopNSortInfo rewriteTopNSortInfo(LogicalTopNOperator.TopNSortInfo sortInfo,
+                                                                     Map<Integer, Integer> stringToDictIds,
+                                                                     DecodeContext context) {
+            if (sortInfo == null || stringToDictIds.isEmpty()) {
+                return sortInfo;
+            }
+            List<Ordering> newOrderByElements = sortInfo.orderByElements().stream().map(ordering -> {
+                ColumnRefOperator columnRef = ordering.getColumnRef();
+                Integer dictId = stringToDictIds.get(columnRef.getId());
+                if (dictId != null) {
+                    ColumnRefOperator dictRef = context.columnRefFactory.getColumnRef(dictId);
+                    return new Ordering(dictRef, ordering.isAscending(), ordering.isNullsFirst());
+                }
+                return ordering;
+            }).collect(Collectors.toList());
+            return new LogicalTopNOperator.TopNSortInfo(newOrderByElements, sortInfo.sortPhase(),
+                    sortInfo.topNType(), sortInfo.limit(), sortInfo.offset());
         }
 
         @Override

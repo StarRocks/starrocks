@@ -35,7 +35,7 @@
 #pragma once
 
 #include "common/config.h"
-#include "io/seekable_input_stream.h"
+#include "io/core/seekable_input_stream.h"
 #include "storage/olap_common.h"
 #include "storage/options.h"
 #include "storage/rowset/page_handle.h"
@@ -63,6 +63,8 @@ public:
     //RandomAccessFile* read_file = nullptr;
     io::SeekableInputStream* read_file = nullptr;
     OlapReaderStatistics* stats = nullptr;
+
+    std::optional<size_t> segment_rows = std::nullopt;
 };
 
 } // namespace starrocks

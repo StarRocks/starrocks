@@ -441,3 +441,61 @@ To solve this problem, you can create the materialized view as follows:
 CREATE MATERIALIZED VIEW mv3 REFRESH ASYNC AS
 SELECT dt, c_city, sum(tax) FROM tbl GROUP BY dt, c_city;
 ```
+
+## FAQ
+
+#### Which resource group controls the resources for asynchronous materialized views? How can I adjust the configuration of it?
+
+If the `resource_group` property is not specified when creating an asynchronous materialized view, the system assigns it to the default resource group `default_mv_wg`. Its default configuration is:
+- `cpu_core_limit`: 1
+- `mem_limit`: 80%
+- `concurrency_limit`: 0
+- `spill_mem_limit_threshold`: 80%
+
+You can adjust its CPU limit, memory limit, concurrency limit, and spill threshold through the following BE configuration items:
+- `default_mv_resource_group_cpu_limit`
+- `default_mv_resource_group_memory_limit`
+- `default_mv_resource_group_concurrency_limit`
+- `default_mv_resource_group_spill_mem_limit_threshold`
+
+You can also assign a dedicated resource group to a materialized view by specifying the `resource_group` property.
+
+Example:
+
+```SQL
+CREATE MATERIALIZED VIEW IF NOT EXISTS mv_test.test_1
+PARTITION BY `metric_date`
+REFRESH MANUAL
+PROPERTIES (
+  "replicated_storage" = "true",
+  "partition_refresh_number" = "1",
+  "force_external_table_query_rewrite" = "CHECKED",
+  "query_rewrite_consistency" = "LOOSE",
+  "replication_num" = "1",
+  "storage_medium" = "HDD",
+  # highlight-start
+  "resource_group" = "rg_mv"
+  # highlight-end
+) AS ...
+```
+
+#### If an asynchronous materialized view is scheduled to refresh every 1 minute, what happens if the refresh takes longer than 1 minute?
+
+The system handles this automatically:
+
+- If there are pending tasks in the queue, the newly triggered task is merged (status `MERGED`).
+- If there are no pending tasks (only running or succeeded/failed tasks), the newly triggered task waits until the current running task finishes before executing.
+
+Limitation: Only one refresh task per materialized view can run at a time.
+
+#### After setting auto_refresh_partitions_limit, will the system always refresh exactly that number of partitions?
+
+No. This parameter represents an upper limit. If the system detects that fewer base-table partitions have changed, only those actual partitions will be refreshed.
+
+#### A materialized view is configured to refresh every 5 minutes, but in `information_schema.task_runs` it appears to refresh every 5 seconds. Why?
+
+From v3.3 onwards, the default value of `partition_refresh_number` changed from -1 to 1, meaning each refresh operation only processes one partition at a time. If many partitions need to be refreshed, the system splits the work into multiple subtasks, which results in more frequent scheduling entries in `task_runs` than the user-defined refresh interval.
+
+#### Can multiple asynchronous materialized views be nested? Any recommendations?
+
+Nesting is supported, but it is recommended to minimize nesting depth. Excessive nesting significantly increases troubleshooting complexity.

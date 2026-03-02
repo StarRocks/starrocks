@@ -15,14 +15,14 @@
 #include <string>
 #include <string_view>
 
+#include "base/string/slice.h"
 #include "common/statusor.h"
 #include "fs/credential/cloud_configuration_factory.h"
 #include "fs/encryption.h"
 #include "gen_cpp/PlanNodes_types.h"
-#include "io/input_stream.h"
-#include "io/seekable_input_stream.h"
+#include "io/core/input_stream.h"
+#include "io/core/seekable_input_stream.h"
 #include "runtime/descriptors.h"
-#include "util/slice.h"
 
 namespace starrocks {
 
@@ -347,6 +347,12 @@ struct WritableFileOptions {
     // See OpenMode for details.
     FileSystem::OpenMode mode = FileSystem::MUST_CREATE;
     FileEncryptionInfo encryption_info;
+
+    // Content type for cloud storage (S3, Azure, etc.)
+    // Use constants from common/http/content_type.h:
+    //   http::ContentType::CSV, http::ContentType::PARQUET, http::ContentType::ORC, http::ContentType::OCTET_STREAM
+    // If empty, defaults to http::ContentType::OCTET_STREAM ("application/octet-stream")
+    std::string content_type;
 };
 
 // A `SequentialFile` is an `io::InputStream` with a name.

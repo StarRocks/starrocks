@@ -22,6 +22,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
+import com.starrocks.persist.AlterResourceInfo;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -148,9 +149,12 @@ public class IcebergResource extends Resource {
      * @param properties the properties that user uses to alter
      * @throws DdlException
      */
-    public void alterProperties(Map<String, String> properties) throws DdlException {
+    @Override
+    public AlterResourceInfo checkAlterProperties(Map<String, String> properties) throws DdlException {
         Preconditions.checkState(properties != null, "properties can not be null");
 
+        String changedMetastoreURIs = null;
+        String changedCatalogImpl = null;
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             String key = entry.getKey();
             String value = entry.getValue();
@@ -159,15 +163,30 @@ public class IcebergResource extends Resource {
                     throw new DdlException(HIVE_METASTORE_URIS + " can not be null");
                 }
                 validateMetastoreUris(value);
-                this.metastoreURIs = value;
+                changedMetastoreURIs = value;
             } else if (ICEBERG_IMPL.equals(key)) {
                 if (StringUtils.isBlank(value)) {
                     throw new DdlException(ICEBERG_IMPL + " can not be null");
                 }
-                this.catalogImpl = value;
+                changedCatalogImpl = value;
             } else {
                 throw new DdlException(String.format("property %s has not support yet", key));
             }
+        }
+        if (changedMetastoreURIs == null && changedCatalogImpl == null) {
+            return null;
+        } else {
+            return new AlterResourceInfo(name, changedMetastoreURIs, changedCatalogImpl);
+        }
+    }
+
+    @Override
+    public void alterProperties(AlterResourceInfo info) {
+        if (info.getMetastoreURIs() != null) {
+            this.metastoreURIs = info.getMetastoreURIs();
+        }
+        if (info.getCatalogImpl() != null) {
+            this.catalogImpl = info.getCatalogImpl();
         }
     }
 }

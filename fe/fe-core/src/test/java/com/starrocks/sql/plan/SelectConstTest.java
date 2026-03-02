@@ -86,6 +86,7 @@ public class SelectConstTest extends PlanTestBase {
         assertPlanContains("select current_user()", "<slot 2> : '\\'root\\'@\\'%\\''");
         assertPlanContains("select connection_id()", "<slot 2> : 0");
         assertPlanContains("select current_role()", "<slot 2> : 'root'");
+        assertPlanContains("select current_warehouse()", "<slot 2> : 'default_warehouse'");
     }
 
     @Test

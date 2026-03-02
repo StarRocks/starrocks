@@ -20,14 +20,15 @@
 #include <string>
 #include <utility>
 
+#include "base/utility/arrow_utils.h"
 #include "column/nullable_column.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
 #include "exec/arrow_to_starrocks_converter.h"
+#include "exprs/function_helper.h"
 #include "gutil/casts.h"
 #include "util/arrow/row_batch.h"
 #include "util/arrow/starrocks_column_to_arrow.h"
-#include "util/arrow/utils.h"
 
 namespace starrocks {
 
@@ -86,12 +87,12 @@ StatusOr<ColumnPtr> AbstractArrowFuncCallStub::_convert_arrow_to_native(const ar
                                                 field_type.type()->ToString(), _func_ctx->get_return_type().type));
     }
     // UDF return result is always nullable
-    auto native_column = _func_ctx->create_column(_func_ctx->get_return_type(), true);
+    auto native_column = FunctionHelper::create_column(_func_ctx->get_return_type(), true);
     auto nullable_column = down_cast<NullableColumn*>(native_column.get());
-    auto null_column = nullable_column->mutable_null_column();
+    auto null_column = nullable_column->null_column_raw_ptr();
     auto null_data = null_column->get_data().data();
 
-    auto data_column = nullable_column->data_column().get();
+    auto data_column = nullable_column->data_column_raw_ptr();
 
     native_column->reserve(result_num_rows);
 

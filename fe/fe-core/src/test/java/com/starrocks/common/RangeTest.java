@@ -16,9 +16,15 @@ package com.starrocks.common;
 
 import com.google.gson.annotations.SerializedName;
 import com.google.gson.reflect.TypeToken;
+import com.starrocks.catalog.Tuple;
+import com.starrocks.catalog.Variant;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.Type;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+
+import java.util.Arrays;
 
 public class RangeTest {
 
@@ -867,5 +873,85 @@ public class RangeTest {
         RangeContainer deserialized2 = GsonUtils.GSON.fromJson(json2, RangeContainer.class);
 
         Assertions.assertEquals(container2, deserialized2);
+    }
+
+    @Test
+    public void testTupleRangeOverlapExample1() throws Exception {
+        Type intType = IntegerType.INT;
+
+        Tuple t1011 = new Tuple(Arrays.asList(Variant.of(intType, "10"), Variant.of(intType, "11")));
+        Tuple t1012 = new Tuple(Arrays.asList(Variant.of(intType, "10"), Variant.of(intType, "12")));
+        Tuple t2021 = new Tuple(Arrays.asList(Variant.of(intType, "20"), Variant.of(intType, "21")));
+        Tuple t0813 = new Tuple(Arrays.asList(Variant.of(intType, "8"), Variant.of(intType, "13")));
+
+        Tuple tMinMin = new Tuple(Arrays.asList(Variant.minVariant(intType), Variant.minVariant(intType)));
+        Tuple tMaxMax = new Tuple(Arrays.asList(Variant.maxVariant(intType), Variant.maxVariant(intType)));
+
+        // 1. [(10,11), (20,21))
+        Range<Tuple> r1 = Range.of(t1011, t2021, true, false);
+        // 2. ((-inf, -inf), (10, 11))
+        Range<Tuple> r2 = Range.of(tMinMin, t1011, false, false);
+        // 3. [(20,21), (+inf, inf))
+        Range<Tuple> r3 = Range.of(t2021, tMaxMax, true, false);
+
+        // Target: [(-inf, -inf), (10, 12))
+        Range<Tuple> target1 = Range.of(tMinMin, t1012, true, false);
+        Assertions.assertTrue(r1.isOverlapping(target1));
+        Assertions.assertTrue(r2.isOverlapping(target1));
+        Assertions.assertTrue(!r3.isOverlapping(target1));
+
+        // Target: [(-inf, -inf), (8, 13))
+        Range<Tuple> target2 = Range.of(tMinMin, t0813, true, false);
+        Assertions.assertTrue(!r1.isOverlapping(target2));
+        Assertions.assertTrue(r2.isOverlapping(target2));
+        Assertions.assertTrue(!r3.isOverlapping(target2));
+    }
+
+    @Test
+    public void testTupleRangeOverlapExample2() throws Exception {
+        Type intType = IntegerType.INT;
+
+        Tuple t10 = new Tuple(Arrays.asList(Variant.of(intType, "10")));
+        Tuple t20 = new Tuple(Arrays.asList(Variant.of(intType, "20")));
+
+        Tuple tMin = new Tuple(Arrays.asList(Variant.minVariant(intType)));
+        Tuple tMax = new Tuple(Arrays.asList(Variant.maxVariant(intType)));
+
+        // 1. [10, 20)
+        Range<Tuple> r1 = Range.of(t10, t20, true, false);
+        // 2. (-inf, 10)
+        Range<Tuple> r2 = Range.of(tMin, t10, false, false);
+        // 3. [20, inf]
+        Range<Tuple> r3 = Range.of(t20, tMax, true, false);
+
+        // Target: [10, 20)
+        Range<Tuple> target1 = Range.of(t10, t20, true, false);
+        Assertions.assertTrue(r1.isOverlapping(target1));
+        Assertions.assertTrue(!r2.isOverlapping(target1));
+        Assertions.assertTrue(!r3.isOverlapping(target1));
+    }
+
+    @Test
+    public void testTupleRangeOverlapExample3() throws Exception {
+        Type intType = IntegerType.INT;
+
+        Tuple t10 = new Tuple(Arrays.asList(Variant.of(intType, "10")));
+        Tuple t20 = new Tuple(Arrays.asList(Variant.of(intType, "20")));
+
+        Tuple tMin = new Tuple(Arrays.asList(Variant.minVariant(intType)));
+        Tuple tMax = new Tuple(Arrays.asList(Variant.maxVariant(intType)));
+
+        // 1. [10, 20)
+        Range<Tuple> r1 = Range.of(t10, t20, true, false);
+        // 2. (-inf, 10)
+        Range<Tuple> r2 = Range.of(tMin, t10, false, false);
+        // 3. [20, inf]
+        Range<Tuple> r3 = Range.of(t20, tMax, true, false);
+
+        // Target: [-inf, 10)
+        Range<Tuple> target1 = Range.of(tMin, t10, true, false);
+        Assertions.assertTrue(!r1.isOverlapping(target1));
+        Assertions.assertTrue(r2.isOverlapping(target1));
+        Assertions.assertTrue(!r3.isOverlapping(target1));
     }
 }

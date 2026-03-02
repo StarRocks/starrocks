@@ -32,10 +32,10 @@ const config = {
 
   onBrokenAnchors: "ignore",
   onBrokenLinks: "ignore",
-  onBrokenMarkdownLinks: "throw",
+  markdown: { hooks: { onBrokenMarkdownLinks: 'throw' } },
 
   future: {
-    experimental_faster: true,
+    v4: true,
   },
 
   i18n: {
@@ -47,6 +47,9 @@ const config = {
       },
       zh: {
         htmlLang: "zh-CN",
+      },
+      ja: {
+        htmlLang: "ja-JP",
       },
     },
   },
@@ -214,6 +217,7 @@ const config = {
           "diff",
           "json",
           "scss",
+          "scala",
         ],
       },
       algolia: {

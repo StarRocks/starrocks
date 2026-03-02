@@ -40,25 +40,27 @@
 #include <memory>
 #include <vector>
 
-namespace starrocks {
+#include "common/mem_chunk.h"
 
-struct MemChunk;
+namespace starrocks {
 class ChunkArena;
 class MemTracker;
+class MetricRegistry;
 
 // Used to allocate memory with power-of-two length.
 // This Allocator allocates memory from system.
 class MemChunkAllocator {
 public:
-    static void init_metrics();
-
     // Allocate a MemChunk with a power-of-two length "size".
     // Return true if success and allocated chunk is saved in "chunk".
     // Otherwise return false.
-    static bool allocate(size_t size, MemChunk* chunk);
+    [[nodiscard]] static bool allocate(size_t size, MemChunk* chunk);
 
     // Free chunk allocated from this allocator
     static void free(const MemChunk& chunk);
 };
+
+// Internal helper used by Runtime glue code to register allocator metrics.
+void register_mem_chunk_allocator_metrics(MetricRegistry* registry);
 
 } // namespace starrocks

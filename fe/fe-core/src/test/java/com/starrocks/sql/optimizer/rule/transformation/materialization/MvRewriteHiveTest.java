@@ -902,4 +902,40 @@ public class MvRewriteHiveTest extends MVTestBase {
         // - one is for view scan operator
         Assertions.assertTrue(mvPlanContexts.size() == 2);
     }
+
+    @Test
+    public void testHivePartialRefreshWithTheSameTables() throws Exception {
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `test_mv1`\n" +
+                "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                "PARTITION BY (`l_shipdate`)\n" +
+                "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`\n"  +
+                "FROM `hive0`.`partitioned_db`.`lineitem_par` as a;");
+        // only partial
+        refreshMaterializedViewWithPartition("test", "test_mv1",
+                "1998-01-02", "1998-01-04");
+        String query1 = "SELECT COUNT(1) FROM (" +
+                " SELECT `l_orderkey`, `l_suppkey`, `l_shipdate` FROM `hive0`.`partitioned_db`.`lineitem_par` as a " +
+                "WHERE l_shipdate='1998-01-02'\n UNION ALL " +
+                "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate` FROM `hive0`.`partitioned_db`.`lineitem_par` as a " +
+                "WHERE l_shipdate='1998-01-05') t";
+        String plan = getFragmentPlan(query1);
+        // refresh part can be rewritten
+        PlanTestBase.assertContains(plan, "  2:OlapScanNode\n" +
+                "     TABLE: test_mv1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=1/2");
+        // non -refresh part cannot be rewritten
+        PlanTestBase.assertContains(plan, "     TABLE: lineitem_par\n" +
+                        "     PARTITION PREDICATES: 45: l_shipdate = '1998-01-05'," +
+                " (45: l_shipdate IN ('1998-01-01', '1998-01-04', '1998-01-05')) OR (45: l_shipdate IS NULL)\n" +
+                        "     partitions=1/6");
+        dropMv("test", "test_mv1");
+    }
+
+
 }

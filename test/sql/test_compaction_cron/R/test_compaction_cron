@@ -1,4 +1,4 @@
--- name: test_disable_compaction @sequential
+-- name: test_disable_compaction @sequential @native
 create database test_disable_compaction;
 -- result:
 -- !result
@@ -50,7 +50,7 @@ alter table t set ('base_compaction_forbidden_time_ranges'='* 7-20 * * *');
 -- result:
 E: (5064, 'Getting analyzing error. Detail message: Property base_compaction_forbidden_time_ranges not support primary keys table or cloud native table.')
 -- !result
--- name: test_invalid_cron @sequential
+-- name: test_invalid_cron @sequential @native
 create table t(k int, v int) properties('base_compaction_forbidden_time_ranges'='5 8-18 * * *');
 -- result:
 E: (1064, "Invalid crontab format. The minute field must be '*'.")
@@ -63,7 +63,7 @@ create table t(k int, v int) properties('base_compaction_forbidden_time_ranges'=
 -- result:
 E: (1064, 'Invalid crontab format. You can check through https://www.freeformatter.com/cron-expression-generator-quartz.html')
 -- !result
--- name: test_create_alter_compaction_control @sequential
+-- name: test_create_alter_compaction_control @sequential @native
 create table t(k int, v int) properties('base_compaction_forbidden_time_ranges'='* 8-18 * * *');
 -- result:
 -- !result

@@ -18,8 +18,8 @@
 #include <span>
 #include <vector>
 
-#include "runtime/memory/column_allocator.h"
-#include "util/raw_container.h"
+#include "base/container/raw_container.h"
+#include "common/memory/column_allocator.h"
 
 namespace starrocks {
 

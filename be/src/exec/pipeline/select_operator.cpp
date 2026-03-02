@@ -16,6 +16,7 @@
 
 #include "column/chunk.h"
 #include "exprs/expr.h"
+#include "exprs/expr_executor.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
@@ -64,12 +65,12 @@ StatusOr<ChunkPtr> SelectOperator::pull_chunk(RuntimeState* state) {
                 _pre_output_chunk = std::move(_curr_chunk);
                 return output_chunk;
             } else {
-                auto& dest_columns = _pre_output_chunk->columns();
                 auto& src_columns = _curr_chunk->columns();
                 size_t num_rows = cur_size;
                 // copy the new read chunk to the reserved
+                auto& dest_columns = _pre_output_chunk->columns();
                 for (size_t i = 0; i < dest_columns.size(); i++) {
-                    dest_columns[i]->append(*src_columns[i], 0, num_rows);
+                    dest_columns[i]->as_mutable_raw_ptr()->append(*src_columns[i], 0, num_rows);
                 }
                 _curr_chunk = nullptr;
             }
@@ -90,7 +91,7 @@ Status SelectOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
         SCOPED_TIMER(_conjuncts_timer);
         for (const auto& [slot_id, expr] : _common_exprs) {
             ASSIGN_OR_RETURN(auto col, expr->evaluate(_curr_chunk.get()));
-            _curr_chunk->append_column(col, slot_id);
+            _curr_chunk->append_column(std::move(col), slot_id);
         }
     }
     RETURN_IF_ERROR(eval_conjuncts_and_in_filters(_conjunct_ctxs, _curr_chunk.get()));
@@ -112,20 +113,20 @@ Status SelectOperator::reset_state(starrocks::RuntimeState* state, const std::ve
 
 Status SelectOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
-    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_conjunct_ctxs, state));
     std::vector<ExprContext*> common_expr_ctxs;
     for (const auto& [_, ctx] : _common_exprs) {
         common_expr_ctxs.emplace_back(ctx);
     }
-    RETURN_IF_ERROR(Expr::prepare(common_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(common_expr_ctxs, state));
 
-    RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(common_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(common_expr_ctxs, state));
     return Status::OK();
 }
 
 void SelectOperatorFactory::close(RuntimeState* state) {
-    Expr::close(_conjunct_ctxs, state);
+    ExprExecutor::close(_conjunct_ctxs, state);
     OperatorFactory::close(state);
 }
 

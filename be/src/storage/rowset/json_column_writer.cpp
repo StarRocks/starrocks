@@ -35,12 +35,12 @@
 #include "common/status.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/casts.h"
-#include "runtime/types.h"
 #include "storage/rowset/column_writer.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/json_column_compactor.h"
 #include "types/constexpr.h"
 #include "types/logical_type.h"
+#include "types/type_descriptor.h"
 #include "util/json_flattener.h"
 #include "velocypack/vpack.h"
 
@@ -82,7 +82,7 @@ Status FlatJsonColumnWriter::append(const Column& column) {
     return Status::OK();
 }
 
-Status FlatJsonColumnWriter::_flat_column(Columns& json_datas) {
+Status FlatJsonColumnWriter::_flat_column(MutableColumns& json_datas) {
     // all json datas must full json
     JsonPathDeriver deriver;
     deriver.init_flat_json_config(_flat_json_config);

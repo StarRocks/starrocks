@@ -18,18 +18,18 @@
 #include <memory>
 #include <utility>
 
+#include "base/failpoint/fail_point.h"
 #include "common/logging.h"
-#include "exec/exec_node.h"
+#include "common/runtime_profile.h"
+#include "common/system/backend_options.h"
 #include "exec/pipeline/query_context.h"
+#include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_state.h"
-#include "service/backend_options.h"
-#include "util/failpoint/fail_point.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {
 
@@ -72,32 +72,50 @@ Operator::Operator(OperatorFactory* factory, int32_t id, std::string name, int32
 
 Status Operator::prepare(RuntimeState* state) {
     FAIL_POINT_TRIGGER_RETURN_ERROR(random_error);
+
+    if (state->query_ctx() && state->query_ctx()->spill_manager()) {
+        _mem_resource_manager.prepare(this, state->query_ctx()->spill_manager());
+    }
+
+    return Status::OK();
+}
+
+Status Operator::prepare_local_state(RuntimeState* state) {
     _mem_tracker = std::make_shared<MemTracker>();
+
     _total_timer = ADD_TIMER(_common_metrics, "OperatorTotalTime");
     _push_timer = ADD_TIMER(_common_metrics, "PushTotalTime");
     _pull_timer = ADD_TIMER(_common_metrics, "PullTotalTime");
     _finishing_timer = ADD_TIMER_WITH_THRESHOLD(_common_metrics, "SetFinishingTime", 1_ms);
     _finished_timer = ADD_TIMER_WITH_THRESHOLD(_common_metrics, "SetFinishedTime", 1_ms);
     _close_timer = ADD_TIMER_WITH_THRESHOLD(_common_metrics, "CloseTime", 1_ms);
-    _prepare_timer = ADD_TIMER_WITH_THRESHOLD(_common_metrics, "PrepareTime", 1_ms);
-
+    _local_prepare_timer = ADD_TIMER_WITH_THRESHOLD(_common_metrics, "LocalPrepareTime", 1_ms);
+    if (_global_prepare_time_ns > 1) {
+        _global_prepare_timer = ADD_TIMER_WITH_THRESHOLD(_common_metrics, "GlobalPrepareTime", 1_ms);
+        COUNTER_SET(_global_prepare_timer, _global_prepare_time_ns);
+    }
     _push_chunk_num_counter = ADD_COUNTER(_common_metrics, "PushChunkNum", TUnit::UNIT);
     _push_row_num_counter = ADD_COUNTER(_common_metrics, "PushRowNum", TUnit::UNIT);
     _pull_chunk_num_counter = ADD_COUNTER(_common_metrics, "PullChunkNum", TUnit::UNIT);
     _pull_row_num_counter = ADD_COUNTER(_common_metrics, "PullRowNum", TUnit::UNIT);
     _pull_chunk_bytes_counter = ADD_COUNTER(_common_metrics, "OutputChunkBytes", TUnit::BYTES);
-    if (state->query_ctx() && state->query_ctx()->spill_manager()) {
-        _mem_resource_manager.prepare(this, state->query_ctx()->spill_manager());
-    }
+
     for_each_child_operator([&](Operator* child) {
         child->_common_metrics->add_info_string("IsSubordinate");
         child->_common_metrics->add_info_string("IsChild");
     });
+
     return Status::OK();
 }
 
 void Operator::set_prepare_time(int64_t cost_ns) {
-    COUNTER_SET(_prepare_timer, cost_ns);
+    _global_prepare_time_ns = cost_ns;
+}
+
+void Operator::set_local_prepare_time(int64_t cost_ns) {
+    if (_local_prepare_timer != nullptr) {
+        COUNTER_SET(_local_prepare_timer, cost_ns);
+    }
 }
 
 void Operator::set_precondition_ready(RuntimeState* state) {
@@ -131,7 +149,7 @@ void Operator::close(RuntimeState* state) {
             for (const auto& [filter_id, desc] : rf_bloom_filters->descriptors()) {
                 rf_desc += "<" + std::to_string(filter_id) + ": ";
                 if (desc != nullptr && desc->runtime_filter(0) != nullptr) {
-                    rf_desc += to_string(desc->runtime_filter(0)->type());
+                    rf_desc += desc->runtime_filter(0)->debug_string();
                 } else {
                     rf_desc += "NULL";
                 }
@@ -193,8 +211,8 @@ Status Operator::eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& 
         SCOPED_TIMER(_conjuncts_timer);
         auto before = chunk->num_rows();
         COUNTER_UPDATE(_conjuncts_input_counter, before);
-        RETURN_IF_ERROR(
-                starrocks::ExecNode::eval_conjuncts(_cached_conjuncts_and_in_filters, chunk, filter, apply_filter));
+        RETURN_IF_ERROR(starrocks::ChunkPredicateEvaluator::eval_conjuncts(_cached_conjuncts_and_in_filters, chunk,
+                                                                           filter, apply_filter));
         auto after = chunk->num_rows();
         COUNTER_UPDATE(_conjuncts_output_counter, after);
     }
@@ -218,7 +236,7 @@ Status Operator::eval_no_eq_join_runtime_in_filters(Chunk* chunk) {
         }
         size_t before = chunk->num_rows();
         COUNTER_UPDATE(_conjuncts_input_counter, before);
-        RETURN_IF_ERROR(starrocks::ExecNode::eval_conjuncts(selected_vector, chunk, nullptr));
+        RETURN_IF_ERROR(starrocks::ChunkPredicateEvaluator::eval_conjuncts(selected_vector, chunk, nullptr));
         size_t after = chunk->num_rows();
         COUNTER_UPDATE(_conjuncts_output_counter, after);
     }
@@ -238,7 +256,7 @@ Status Operator::eval_conjuncts(const std::vector<ExprContext*>& conjuncts, Chun
         SCOPED_TIMER(_conjuncts_timer);
         size_t before = chunk->num_rows();
         COUNTER_UPDATE(_conjuncts_input_counter, before);
-        RETURN_IF_ERROR(starrocks::ExecNode::eval_conjuncts(conjuncts, chunk, filter));
+        RETURN_IF_ERROR(starrocks::ChunkPredicateEvaluator::eval_conjuncts(conjuncts, chunk, filter));
         size_t after = chunk->num_rows();
         COUNTER_UPDATE(_conjuncts_output_counter, after);
     }
@@ -256,7 +274,7 @@ void Operator::eval_runtime_bloom_filters(Chunk* chunk) {
         bloom_filters->evaluate(chunk, _bloom_filter_eval_context);
     }
 
-    ExecNode::eval_filter_null_values(chunk, filter_null_value_columns());
+    ChunkPredicateEvaluator::eval_filter_null_values(chunk, filter_null_value_columns());
 }
 
 RuntimeState* Operator::runtime_state() const {
@@ -352,8 +370,7 @@ void OperatorFactory::_prepare_runtime_holders(const std::vector<RuntimeFilterHo
 
         auto&& in_filters = collector->get_in_filters_bounded_by_tuple_ids(_tuple_ids);
         for (auto* filter : in_filters) {
-            WARN_IF_ERROR(filter->prepare(runtime_state()), "prepare filter expression failed");
-            WARN_IF_ERROR(filter->open(runtime_state()), "open filter expression failed");
+            DCHECK(filter->opened());
             runtime_in_filters->push_back(filter);
         }
     }

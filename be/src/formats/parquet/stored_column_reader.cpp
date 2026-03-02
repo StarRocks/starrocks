@@ -22,6 +22,7 @@
 #include <string>
 #include <utility>
 
+#include "base/simd/simd.h"
 #include "column/column.h"
 #include "column_reader.h"
 #include "common/compiler_util.h"
@@ -31,7 +32,6 @@
 #include "formats/parquet/schema.h"
 #include "formats/parquet/types.h"
 #include "formats/parquet/utils.h"
-#include "simd/simd.h"
 
 namespace tparquet {
 class ColumnChunk;
@@ -203,7 +203,7 @@ Status RepeatedStoredColumnReader::_delimit_rows(const level_t* rep_levels, size
         ss << ", " << rep_levels[i];
     }
     ss << "]";
-    VLOG_FILE << ss.str();
+    VLOG_ROW << ss.str();
 #endif
 
     if (!_meet_first_record) {
@@ -231,7 +231,7 @@ Status RepeatedStoredColumnReader::_delimit_rows(const level_t* rep_levels, size
       //  we have read all the records in this column chunk.
     // }
 
-    VLOG_FILE << "rows_reader=" << rows_read << ", level_parsed=" << levels_pos;
+    VLOG_ROW << "rows_reader=" << rows_read << ", level_parsed=" << levels_pos;
     *num_rows = rows_read;
     *num_levels_parsed = levels_pos;
     return Status::OK();

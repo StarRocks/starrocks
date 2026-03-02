@@ -79,7 +79,8 @@ Status LocalPrimaryKeyRecover::rowset_iterator(
         // NOT acquire rowset reference because tbalet already in error state, rowset reclaim should stop
         // NOT apply delvec when create segment iterator
         // 1. get iterator for each segment
-        auto res = rowset->get_segment_iterators2(pkey_schema, _tablet->tablet_schema(), nullptr,
+        // Use MetaLoadMode::NONE to skip loading delete vectors and DCGs during recovery
+        auto res = rowset->get_segment_iterators2(pkey_schema, _tablet->tablet_schema(), MetaLoadMode::NONE,
                                                   latest_applied_major_version, &stats);
         if (!res.ok()) {
             return res.status();
@@ -141,6 +142,10 @@ Status LocalPrimaryKeyRecover::finalize_delvec(const PrimaryIndex::DeletesMap& n
 
 int64_t LocalPrimaryKeyRecover::tablet_id() {
     return _tablet->tablet_id();
+}
+
+StatusOr<PrimaryKeyEncodingType> LocalPrimaryKeyRecover::primary_key_encoding_type() const {
+    return PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1;
 }
 
 } // namespace starrocks

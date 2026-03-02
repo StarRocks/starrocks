@@ -17,7 +17,6 @@
 #include "column/binary_column.h"
 #include "column/column.h"
 #include "column/fixed_length_column.h"
-
 namespace starrocks {
 class StructColumn final : public CowFactory<ColumnFactory<Column, StructColumn>, StructColumn> {
     friend class CowFactory<ColumnFactory<Column, StructColumn>, StructColumn>;
@@ -30,12 +29,10 @@ public:
     // Used to construct an unnamed struct
     StructColumn(MutableColumns&& fields);
     StructColumn(MutableColumns&& fields, std::vector<std::string> field_names);
-    StructColumn(const StructColumn& rhs) {
-        for (const auto& field : rhs._fields) {
-            _fields.emplace_back(field->clone());
-        }
-        _field_names = rhs._field_names;
-    }
+    StructColumn(const Columns& fields);
+    StructColumn(const Columns& fields, std::vector<std::string> field_names);
+    DISALLOW_COPY(StructColumn);
+
     StructColumn(StructColumn&& rhs) noexcept
             : _fields(std::move(rhs._fields)), _field_names(std::move(rhs._field_names)) {}
 
@@ -71,9 +68,9 @@ public:
 
     void resize(size_t n) override;
 
-    StatusOr<ColumnPtr> upgrade_if_overflow() override;
+    StatusOr<MutableColumnPtr> upgrade_if_overflow() override;
 
-    StatusOr<ColumnPtr> downgrade() override;
+    StatusOr<MutableColumnPtr> downgrade() override;
 
     bool has_large_column() const override;
 
@@ -120,15 +117,17 @@ public:
 
     MutableColumnPtr clone_empty() const override;
 
+    MutableColumnPtr clone() const override {
+        auto p = clone_empty();
+        p->append(*this, 0, size());
+        return p;
+    }
+
     size_t filter_range(const Filter& filter, size_t from, size_t to) override;
 
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
 
     int equals(size_t left, const Column& rhs, size_t right, bool safe_eq = true) const override;
-
-    void fnv_hash(uint32_t* seed, uint32_t from, uint32_t to) const override;
-
-    void crc32_hash(uint32_t* seed, uint32_t from, uint32_t to) const override;
 
     int64_t xor_checksum(uint32_t from, uint32_t to) const override;
 
@@ -156,15 +155,30 @@ public:
 
     void check_or_die() const override;
 
-    const Columns& fields() const { return _fields; }
-    const Columns& fields_column() const { return _fields; }
-    Columns& fields_column() { return _fields; }
+    Columns fields() const;
+    const size_t fields_size() const { return _fields.size(); }
 
-    const ColumnPtr& field_column(const std::string& field_name) const;
-    ColumnPtr& field_column(const std::string& field_name);
+    const ColumnPtr& get_column_by_idx(size_t idx) const { return _fields[idx]; }
+    ColumnPtr& get_column_by_idx(size_t idx) { return _fields[idx]; }
+
+    StatusOr<const ColumnPtr&> field_column(const std::string& field_name) const;
+    StatusOr<ColumnPtr&> field_column(const std::string& field_name);
+
+    Column* field_column_raw_ptr(size_t idx) { return _fields[idx].get(); }
+    const Column* field_column_raw_ptr(size_t idx) const { return _fields[idx].get(); }
+
+    StatusOr<Column*> field_column_raw_ptr(const std::string& field_name) {
+        ASSIGN_OR_RETURN(size_t idx, _find_field_idx_by_name(field_name));
+        return _fields[idx].get();
+    }
+
+    StatusOr<const Column*> field_column_raw_ptr(const std::string& field_name) const {
+        ASSIGN_OR_RETURN(size_t idx, _find_field_idx_by_name(field_name));
+        return _fields[idx].get();
+    }
 
     const std::vector<std::string>& field_names() const { return _field_names; }
-
+    std::vector<std::string>& field_names() { return _field_names; }
     Status unfold_const_children(const TypeDescriptor& type) override;
 
     void mutate_each_subcolumn() override {
@@ -174,10 +188,10 @@ public:
     }
 
 private:
-    size_t _find_field_idx_by_name(const std::string& field_name) const;
+    StatusOr<size_t> _find_field_idx_by_name(const std::string& field_name) const;
 
     // A collection that contains StructType's subfield column.
-    Columns _fields;
+    std::vector<Column::WrappedPtr> _fields;
 
     // A collection that contains each struct subfield name.
     // _fields and _field_names should have the same size (_fields.size() == _field_names.size()).

@@ -17,8 +17,8 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/mem_pool.h"
 #include "storage/olap_type_infra.h"
-#include "storage/type_traits.h"
 #include "types/logical_type.h"
+#include "types/type_traits.h"
 
 namespace starrocks {
 

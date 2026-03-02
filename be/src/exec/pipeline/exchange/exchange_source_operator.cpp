@@ -20,14 +20,21 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "runtime/runtime_state_helper.h"
 
 namespace starrocks::pipeline {
 Status ExchangeSourceOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
     _stream_recvr = static_cast<ExchangeSourceOperatorFactory*>(_factory)->create_stream_recvr(state);
-    _stream_recvr->bind_profile(_driver_sequence, _unique_metrics);
     _stream_recvr->attach_observer(state, observer());
     _stream_recvr->attach_query_ctx(state->query_ctx());
+    return Status::OK();
+}
+
+Status ExchangeSourceOperator::prepare_local_state(RuntimeState* state) {
+    RETURN_IF_ERROR(SourceOperator::prepare_local_state(state));
+    _stream_recvr->bind_profile(_driver_sequence, _unique_metrics);
+
     return Status::OK();
 }
 
@@ -78,7 +85,7 @@ std::shared_ptr<DataStreamRecvr> ExchangeSourceOperatorFactory::create_stream_re
     if (_stream_recvr != nullptr) {
         return _stream_recvr;
     }
-    auto query_statistic_recv = state->query_recv();
+    auto query_statistic_recv = RuntimeStateHelper::query_recv(state);
     _stream_recvr = state->exec_env()->stream_mgr()->create_recvr(
             state, _row_desc, state->fragment_instance_id(), _plan_node_id, _num_sender,
             config::exchg_node_buffer_size_bytes, false, query_statistic_recv, true, _degree_of_parallelism, false);

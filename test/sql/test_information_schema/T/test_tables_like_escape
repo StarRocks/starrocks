@@ -1,0 +1,13 @@
+-- name: test_tables_like_escape
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE `a_a` (
+  `k1` int
+) DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+select table_name from information_schema.tables
+where table_schema='db_${uuid0}' and table_name like 'a\\_a';
+
+drop database if exists db_${uuid0};

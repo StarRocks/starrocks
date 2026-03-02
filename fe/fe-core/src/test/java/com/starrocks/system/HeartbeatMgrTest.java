@@ -231,7 +231,7 @@ public class HeartbeatMgrTest {
         new HeartbeatMgr(false).setLeader(1, "123", 1);
 
         ComputeNode cn = new ComputeNode(1, "192.168.1.1", 8111);
-        HeartbeatMgr.BackendHeartbeatHandler handler = new HeartbeatMgr.BackendHeartbeatHandler(cn);
+        HeartbeatMgr.BackendHeartbeatHandler handler = new HeartbeatMgr.BackendHeartbeatHandler(cn, true);
         HeartbeatResponse response = handler.call();
         Assertions.assertTrue(response instanceof BackendHbResponse);
         BackendHbResponse hbResponse = (BackendHbResponse) response;

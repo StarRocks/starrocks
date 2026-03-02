@@ -31,6 +31,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.server.WarehouseManager.DEFAULT_WAREHOUSE_ID;
+
 /**
  * Extract features from physical plan
  */
@@ -55,13 +57,18 @@ public class FeatureExtractor {
         var sumVector = PlanFeatures.aggregate(root);
         planFeatures.addOperatorFeatures(sumVector);
 
+        ConnectContext ctx = ConnectContext.get();
+        long warehouseId = DEFAULT_WAREHOUSE_ID;
+        if (ctx != null && ctx.getCurrentWarehouseIdAllowNull() != null) {
+            warehouseId = ctx.getCurrentWarehouseIdAllowNull();
+        }
+
         // environment
-        planFeatures.setAvgCpuCoreOfBe(BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe());
-        planFeatures.setNumBeNodes(BackendResourceStat.getInstance().getNumBes());
-        planFeatures.setMemCapacityOfBE(BackendResourceStat.getInstance().getAvgMemLimitBytes());
+        planFeatures.setAvgCpuCoreOfBe(BackendResourceStat.getInstance().getAvgNumCoresOfBe(warehouseId));
+        planFeatures.setNumBeNodes(BackendResourceStat.getInstance().getNumBes(warehouseId));
+        planFeatures.setMemCapacityOfBE(BackendResourceStat.getInstance().getAvgMemLimitBytes(warehouseId));
 
         // variables
-        ConnectContext ctx = ConnectContext.get();
         if (ctx != null) {
             planFeatures.setDop(ctx.getSessionVariable().getPipelineDop());
         }

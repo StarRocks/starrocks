@@ -26,6 +26,7 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
+import com.starrocks.catalog.TableOperation;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.DebugUtil;
@@ -51,6 +52,8 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 public class MetaUtils {
 
@@ -71,24 +74,45 @@ public class MetaUtils {
         }
     }
 
-    public static void checkNotSupportCatalog(String catalogName, String operation) {
-        if (catalogName == null) {
-            throw new SemanticException("Catalog is null");
-        }
-        if (CatalogMgr.isInternalCatalog(catalogName)) {
-            return;
+    public static void checkNotSupportCatalog(Table table, TableOperation operation) {
+        checkNotSupportCatalog(table, operation, null);
+    }
+
+    /**
+     * Check if the specified operation is supported on the given table.
+     * Throws SemanticException if the operation is not supported by the table type.
+     * For internal catalog tables, all operations are supported.
+     *
+     * @param table The table to check
+     * @param operation The operation to check
+     * @param catalogName The catalog name to check, defaults to table.getCatalogName() when null
+     * @throws SemanticException if the operation is not supported
+     */
+    public static void checkNotSupportCatalog(Table table, TableOperation operation, String catalogName) {
+        if (table == null) {
+            throw new SemanticException("Table is null");
         }
         if (operation == null) {
-            throw new SemanticException("operation is null");
+            throw new SemanticException("Operation is null");
         }
 
-        Catalog catalog = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogByName(catalogName);
+        String targetCatalogName = table.getCatalogName() != null ? table.getCatalogName() : catalogName;
+        if (targetCatalogName == null) {
+            throw new SemanticException("Catalog is null");
+        }
+        // Internal catalog tables support all operations
+        if (CatalogMgr.isInternalCatalog(targetCatalogName)) {
+            return;
+        }
+
+        Catalog catalog = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogByName(targetCatalogName);
         if (catalog == null) {
-            throw new SemanticException("Catalog %s is not found", catalogName);
+            throw new SemanticException("Catalog %s is not found", targetCatalogName);
         }
 
-        if (!operation.equals("ALTER") && catalog.getType().equalsIgnoreCase("iceberg")) {
-            throw new SemanticException("Table of iceberg catalog doesn't support [%s]", operation);
+        if (!table.supportsOperation(operation)) {
+            throw new SemanticException("Table of %s catalog doesn't support [%s]",
+                    table.getType().name(), operation.name());
         }
     }
 
@@ -200,13 +224,19 @@ public class MetaUtils {
         }
     }
 
-    public static long lookupDbIdByTableId(long tableId) {
+    public static long lookupDbIdByTable(OlapTable table) {
+        Optional<Long> dbId = table.mayGetDatabaseId();
+        if (dbId.isPresent()) {
+            return dbId.get();
+        }
+        long tableId = table.getId();
         long res = -1;
         for (Long id : GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds()) {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(id);
             if (db != null &&
                     GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId) != null) {
                 res = db.getId();
+                table.maySetDatabaseId(res);
                 break;
             }
         }
@@ -237,22 +267,30 @@ public class MetaUtils {
         return result;
     }
 
-    public static List<String> getRangeDistributionColumnNames(OlapTable olapTable) {
-        List<String> columnNames = new ArrayList<>();
-        MaterializedIndexMeta baseIndexMeta = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
+    public static List<Column> getRangeDistributionColumns(OlapTable olapTable) {
+        List<Column> columns = new ArrayList<>();
+        MaterializedIndexMeta baseIndexMeta = olapTable.getIndexMetaByMetaId(olapTable.getBaseIndexMetaId());
         List<Column> baseSchema = olapTable.getBaseSchema();
         if (baseIndexMeta.getSortKeyIdxes() != null) {
             for (Integer i : baseIndexMeta.getSortKeyIdxes()) {
-                columnNames.add(baseSchema.get(i).getName());
+                columns.add(baseSchema.get(i));
             }
         } else {
             for (Column column : baseSchema) {
                 if (column.isKey()) {
-                    columnNames.add(column.getName());
+                    columns.add(column);
                 }
             }
         }
-        return columnNames;
+        return columns;
+    }
+
+    public static List<String> getRangeDistributionColumnNames(OlapTable olapTable) {
+        return getRangeDistributionColumns(olapTable).stream().map(Column::getName).collect(Collectors.toList());
+    }
+
+    public static List<String> getRangeDistributionColumnIds(OlapTable olapTable) {
+        return getRangeDistributionColumns(olapTable).stream().map(col -> col.getColumnId().getId()).collect(Collectors.toList());
     }
 
     public static List<String> getColumnNamesByColumnIds(Table table, List<ColumnId> columnIds) {

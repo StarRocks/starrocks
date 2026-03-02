@@ -44,7 +44,11 @@
 #include "agent/finish_task.h"
 #include "agent/master_info.h"
 #include "agent/task_signatures_manager.h"
+#include "base/network/network_util.h"
+#include "base/string/string_parser.hpp"
+#include "base/utility/defer_op.h"
 #include "common/status.h"
+#include "common/system/backend_options.h"
 #include "engine_storage_migration_task.h"
 #include "fs/fs.h"
 #include "gen_cpp/BackendService.h"
@@ -56,14 +60,10 @@
 #include "runtime/client_cache.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "service/backend_options.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/snapshot_manager.h"
 #include "storage/tablet_updates.h"
-#include "util/defer_op.h"
-#include "util/network_util.h"
-#include "util/string_parser.hpp"
 #include "util/thrift_rpc_helper.h"
 
 using std::set;
@@ -934,7 +934,7 @@ Status EngineCloneTask::_clone_full_data(Tablet* tablet, TabletMeta* cloned_tabl
     for (auto& rs_meta_ptr : rs_metas_found_in_src) {
         RowsetSharedPtr rowset_to_remove;
         if (auto s = RowsetFactory::create_rowset(cloned_tablet_meta->tablet_schema_ptr(), tablet->schema_hash_path(),
-                                                  rs_meta_ptr, &rowset_to_remove);
+                                                  rs_meta_ptr, &rowset_to_remove, tablet->data_dir()->get_meta());
             !s.ok()) {
             LOG(WARNING) << "failed to init rowset to remove: " << rs_meta_ptr->rowset_id().to_string();
             continue;

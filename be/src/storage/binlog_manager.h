@@ -20,12 +20,12 @@
 #include <map>
 #include <unordered_map>
 
+#include "base/concurrency/blocking_queue.hpp"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/binlog.pb.h"
 #include "storage/binlog_builder.h"
 #include "storage/binlog_file_writer.h"
 #include "storage/binlog_reader.h"
-#include "util/blocking_queue.hpp"
 
 namespace starrocks {
 

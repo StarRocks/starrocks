@@ -34,8 +34,8 @@ void CompactionTaskStats::collect(const OlapReaderStatistics& reader_stats) {
     column_iterator_init_ns = reader_stats.column_iterator_init_ns;
     io_count_local_disk = reader_stats.io_count_local_disk;
     io_count_remote = reader_stats.io_count_remote;
-    // read segment count is managed else where
-    // read_segment_count = reader_stats.segments_read_count;
+    // Note: read_segment_count is managed explicitly in compaction task code
+    // by summing rowset->num_segments(), not from reader_stats.
 }
 
 void CompactionTaskStats::collect(const OlapWriterStatistics& writer_stats) {
@@ -54,8 +54,7 @@ CompactionTaskStats CompactionTaskStats::operator+(const CompactionTaskStats& th
     diff.column_iterator_init_ns += that.column_iterator_init_ns;
     diff.io_count_local_disk += that.io_count_local_disk;
     diff.io_count_remote += that.io_count_remote;
-    // read segment count is managed else where
-    // diff.read_segment_count += that.read_segment_count;
+    diff.read_segment_count += that.read_segment_count;
     diff.write_segment_count += that.write_segment_count;
     diff.write_segment_bytes += that.write_segment_bytes;
     diff.io_ns_write_remote += that.io_ns_write_remote;
@@ -75,8 +74,7 @@ CompactionTaskStats CompactionTaskStats::operator-(const CompactionTaskStats& th
     diff.column_iterator_init_ns -= that.column_iterator_init_ns;
     diff.io_count_local_disk -= that.io_count_local_disk;
     diff.io_count_remote -= that.io_count_remote;
-    // read segment count is managed else where
-    // diff.read_segment_count -= that.read_segment_count;
+    diff.read_segment_count -= that.read_segment_count;
     diff.write_segment_count -= that.write_segment_count;
     diff.write_segment_bytes -= that.write_segment_bytes;
     diff.io_ns_write_remote -= that.io_ns_write_remote;

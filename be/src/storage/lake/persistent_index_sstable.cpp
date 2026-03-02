@@ -16,13 +16,15 @@
 
 #include <butil/time.h> // NOLINT
 
+#include "base/debug/trace.h"
+#include "base/testutil/sync_point.h"
 #include "fs/fs.h"
 #include "fs/key_cache.h"
 #include "gen_cpp/types.pb.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/lake/lake_delvec_loader.h"
 #include "storage/lake/utils.h"
 #include "storage/sstable/table_builder.h"
-#include "util/trace.h"
 
 namespace starrocks::lake {
 
@@ -36,7 +38,13 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
     }
     options.block_cache = cache;
     sstable::Table* table;
-    RETURN_IF_ERROR(sstable::Table::Open(options, rf.get(), sstable_pb.filesize(), &table));
+    auto open_st = sstable::Table::Open(options, rf.get(), sstable_pb.filesize(), &table);
+    TEST_SYNC_POINT_CALLBACK("PersistentIndexSstable::init:table_open_error", &open_st);
+    if (!open_st.ok()) {
+        StarRocksMetrics::instance()->pk_index_sst_read_error_total.increment(1);
+        LOG(WARNING) << "Failed to open PersistentIndex SST file: " << sstable_pb.filename() << ", error: " << open_st;
+        return open_st;
+    }
     _sst.reset(table);
     _rf = std::move(rf);
     _sstable_pb.CopyFrom(sstable_pb);
@@ -63,7 +71,8 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
 }
 
 Status PersistentIndexSstable::build_sstable(const phmap::btree_map<std::string, IndexValueWithVer, std::less<>>& map,
-                                             WritableFile* wf, uint64_t* filesz) {
+                                             WritableFile* wf, uint64_t* filesz,
+                                             PersistentIndexSstableRangePB* range_pb) {
     std::unique_ptr<sstable::FilterPolicy> filter_policy;
     filter_policy.reset(const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
     sstable::Options options;
@@ -77,8 +86,17 @@ Status PersistentIndexSstable::build_sstable(const phmap::btree_map<std::string,
         value->set_rowid(v.second.get_rowid());
         RETURN_IF_ERROR(builder.Add(Slice(k), Slice(index_value_pb.SerializeAsString())));
     }
-    RETURN_IF_ERROR(builder.Finish());
+    if (auto st = builder.Finish(); !st.ok()) {
+        StarRocksMetrics::instance()->pk_index_sst_write_error_total.increment(1);
+        LOG(WARNING) << "Failed to finish PersistentIndex SST, error: " << st;
+        return st;
+    }
     *filesz = builder.FileSize();
+    if (range_pb != nullptr) {
+        auto [key_start, key_end] = builder.KeyRange();
+        range_pb->set_start_key(key_start.to_string());
+        range_pb->set_end_key(key_end.to_string());
+    }
     return Status::OK();
 }
 
@@ -88,12 +106,29 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
     sstable::ReadIOStat stat;
     sstable::ReadOptions options;
     options.stat = &stat;
+    std::unique_ptr<RandomAccessFile> rf;
+    if (config::enable_pk_index_parallel_execution) {
+        RandomAccessFileOptions opts;
+        if (!_sstable_pb.encryption_meta().empty()) {
+            ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(_sstable_pb.encryption_meta()));
+            opts.encryption_info = std::move(info);
+        }
+        ASSIGN_OR_RETURN(rf, fs::new_random_access_file(opts, _rf->filename()));
+    }
+    options.file = rf.get();
     // Currently, there is no need to set predicate for MultiGet of persistent index sstable. Because predicate
     // only used for sstable compaction to filter out some keys for tablet split purpose and such keys can not
     // be read by the persistent index by designed. So even we provide a predicate, all keys read by multi_get
     // will always meet the condition.
     auto start_ts = butil::gettimeofday_us();
-    RETURN_IF_ERROR(_sst->MultiGet(options, keys, key_indexes.begin(), key_indexes.end(), &index_value_with_vers));
+    auto multiget_st = _sst->MultiGet(options, keys, key_indexes.begin(), key_indexes.end(), &index_value_with_vers);
+    TEST_SYNC_POINT_CALLBACK("PersistentIndexSstable::multi_get:error", &multiget_st);
+    if (!multiget_st.ok()) {
+        StarRocksMetrics::instance()->pk_index_sst_read_error_total.increment(1);
+        LOG(WARNING) << "Failed to multi_get from PersistentIndex SST file: " << _sstable_pb.filename()
+                     << ", error: " << multiget_st;
+        return multiget_st;
+    }
     auto end_ts = butil::gettimeofday_us();
     TRACE_COUNTER_INCREMENT("multi_get_us", end_ts - start_ts);
     TRACE_COUNTER_INCREMENT("read_block_hit_cache_cnt", stat.block_cnt_from_cache);
@@ -125,6 +160,13 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
                 index_value_with_ver_pb.mutable_values(j)->set_version(_sstable_pb.shared_version());
             }
         }
+        if (_sstable_pb.rssid_offset() != 0) {
+            for (size_t j = 0; j < index_value_with_ver_pb.values_size(); ++j) {
+                const int64_t rssid =
+                        static_cast<int64_t>(index_value_with_ver_pb.values(j).rssid()) + _sstable_pb.rssid_offset();
+                index_value_with_ver_pb.mutable_values(j)->set_rssid(static_cast<uint32_t>(rssid));
+            }
+        }
 
         if (index_value_with_ver_pb.values_size() > 0) {
             if (version < 0) {
@@ -147,6 +189,27 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
 
 size_t PersistentIndexSstable::memory_usage() const {
     return (_sst != nullptr) ? _sst->memory_usage() : 0;
+}
+
+Status PersistentIndexSstable::sample_keys(std::vector<std::string>* keys, size_t sample_interval_bytes) const {
+    if (_sst == nullptr) {
+        return Status::InvalidArgument("SSTable is not initialized");
+    }
+    return _sst->sample_keys(keys, sample_interval_bytes);
+}
+
+StatusOr<PersistentIndexSstableUniquePtr> PersistentIndexSstable::new_sstable(
+        const PersistentIndexSstablePB& sstable_pb, const std::string& location, Cache* cache, bool need_filter,
+        const DelVectorPtr& delvec, const TabletMetadataPtr& metadata, TabletManager* tablet_mgr) {
+    auto sstable = std::make_unique<PersistentIndexSstable>();
+    RandomAccessFileOptions opts;
+    if (!sstable_pb.encryption_meta().empty()) {
+        ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(sstable_pb.encryption_meta()));
+        opts.encryption_info = std::move(info);
+    }
+    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, location));
+    RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, cache, need_filter, delvec, metadata, tablet_mgr));
+    return std::move(sstable);
 }
 
 PersistentIndexSstableStreamBuilder::PersistentIndexSstableStreamBuilder(std::unique_ptr<WritableFile> wf,
@@ -194,6 +257,11 @@ FileInfo PersistentIndexSstableStreamBuilder::file_info() const {
     file_info.size = _table_builder ? _table_builder->FileSize() : 0;
     file_info.encryption_meta = _encryption_meta;
     return file_info;
+}
+
+std::pair<Slice, Slice> PersistentIndexSstableStreamBuilder::key_range() const {
+    DCHECK(_table_builder != nullptr);
+    return _table_builder->KeyRange();
 }
 
 } // namespace starrocks::lake

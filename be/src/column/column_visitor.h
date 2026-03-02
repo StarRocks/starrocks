@@ -14,12 +14,12 @@
 
 #pragma once
 
+#include "base/types/decimal12.h"
+#include "base/types/int96.h"
+#include "base/types/uint24.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
-#include "runtime/decimalv2_value.h"
-#include "storage/decimal12.h"
-#include "storage/uint24.h"
-#include "util/int96.h"
+#include "types/decimalv2_value.h"
 
 namespace starrocks {
 
@@ -83,7 +83,7 @@ public:
     virtual Status visit(const FixedLengthColumnBase<uint24_t>& column);
     virtual Status visit(const FixedLengthColumnBase<decimal12_t>& column);
     virtual Status visit(const ObjectColumn<JsonValue>& column);
-    virtual Status visit(const ObjectColumn<VariantValue>& column);
+    virtual Status visit(const ObjectColumn<VariantRowValue>& column);
     virtual Status visit(const ArrayViewColumn& column) {
         return Status::NotSupported("ArrayViewColumn is not supported");
     }

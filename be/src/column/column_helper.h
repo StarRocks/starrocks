@@ -15,19 +15,18 @@
 #pragma once
 
 // NOTE: This file is included by a large number of files. Be cautious when adding more includes to avoid unnecessary recompilation or increased build dependencies.
-#include <runtime/types.h>
-
 #include <utility>
 
+#include "base/simd/simd.h"
+#include "column/column_filter_range.h"
 #include "column/const_column.h"
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
-#include "gutil/cpu.h"
-#include "simd/simd.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 struct TypeDescriptor;
@@ -40,7 +39,7 @@ public:
     // The input column is nullable or non-nullable uint8 column
     // The result column is not nullable uint8 column
     // For nullable uint8 column, we merge it's null column and data column
-    // Used in ExecNode::eval_conjuncts
+    // Used in ChunkPredicateEvaluator::eval_conjuncts
     static Filter& merge_nullable_filter(Column* column);
 
     // merge column with filter, and save result to filer.
@@ -107,16 +106,27 @@ public:
 
     // If column is const column, duplicate the data column to chunk_size
     static ColumnPtr unpack_and_duplicate_const_column(size_t chunk_size, const ColumnPtr& column) {
-        return unpack_and_duplicate_const_column(chunk_size, column->as_mutable_ptr());
+        if (column->is_constant()) {
+            // use clone is not safe, because the new cloned data may be freed after the function returns.
+            return unpack_and_duplicate_const_column(chunk_size, column->as_mutable_ptr());
+        } else {
+            return column;
+        }
+    }
+
+    // If column is const column, duplicate the data column to chunk_size
+    static MutableColumnPtr unpack_and_duplicate_const_column(size_t chunk_size, ColumnPtr&& column) {
+        return unpack_and_duplicate_const_column(chunk_size, Column::mutate(std::move(column)));
     }
 
     static MutableColumnPtr unpack_and_duplicate_const_column(size_t chunk_size, MutableColumnPtr&& column) {
         if (column->is_constant()) {
             auto* const_column = down_cast<ConstColumn*>(column.get());
-            const_column->mutable_data_column()->assign(chunk_size, 0);
-            return const_column->data_column_ptr();
+            const_column->assign(chunk_size, 0);
+            return const_column->data_column()->as_mutable_ptr();
+        } else {
+            return std::move(column);
         }
-        return std::move(column);
     }
 
     static inline bool offsets_equal(const UInt32Column::Ptr& offset0, const UInt32Column::Ptr& offset1) {
@@ -135,25 +145,13 @@ public:
             DCHECK(ok);
             return col;
         } else if (column->is_constant()) {
-            auto* const_column = down_cast<ConstColumn*>(column->as_mutable_ptr().get());
-            const_column->data_column()->assign(size, 0);
-            return const_column->data_column();
+            // use clone is not safe, because the new cloned data may be freed after the function returns.
+            auto* const_column = down_cast<ConstColumn*>(column->as_mutable_raw_ptr());
+            const_column->assign(size, 0);
+            return const_column->data_column()->as_mutable_ptr();
+        } else {
+            return column;
         }
-        return column;
-    }
-
-    static ColumnPtr unfold_const_column(const TypeDescriptor& type_desc, size_t size, ColumnPtr&& column) {
-        if (column->only_null()) {
-            auto col = ColumnHelper::create_column(type_desc, true);
-            [[maybe_unused]] bool ok = col->append_nulls(size);
-            DCHECK(ok);
-            return col;
-        } else if (column->is_constant()) {
-            auto* const_column = down_cast<ConstColumn*>(column.get());
-            const_column->data_column()->assign(size, 0);
-            return const_column->data_column();
-        }
-        return column;
     }
 
     static ColumnPtr copy_and_unfold_const_column(const TypeDescriptor& dst_type_desc, bool dst_nullable,
@@ -181,8 +179,8 @@ public:
     static std::tuple<Column*, NullColumn*> unpack_nullable_column(const MutableColumnPtr& col) {
         if (col->is_nullable()) {
             auto nullable = down_cast<NullableColumn*>(col.get());
-            auto* data = nullable->data_column().get();
-            auto* nulls = nullable->null_column().get();
+            auto* data = nullable->data_column_raw_ptr();
+            auto* nulls = nullable->null_column_raw_ptr();
             return {data, nulls};
         } else {
             return {col.get(), nullptr};
@@ -201,53 +199,77 @@ public:
     }
 
     // Update column according to whether the dest column and source column are nullable or not.
-    static ColumnPtr update_column_nullable(bool dst_nullable, const ColumnPtr& src_column, int num_rows) {
+    static ColumnPtr update_column_nullable(bool dst_nullable, ColumnPtr&& src_column, int num_rows) {
         if (src_column->is_nullable()) {
             if (dst_nullable) {
                 // 1. Src column and dest column are both nullable.
-                return src_column;
+                return std::move(src_column);
             } else {
                 // 2. src column is nullable, and dest column is non-nullable.
-                auto* nullable_column = as_raw_column<NullableColumn>(src_column);
+                auto* nullable_column = as_raw_column<NullableColumn>(src_column.get());
                 DCHECK(!nullable_column->has_null());
                 return nullable_column->data_column();
             }
         } else {
             // 3. Src column and dest column are both non-nullable.
             if (!dst_nullable) {
-                return src_column;
+                return std::move(src_column);
             } else {
                 // 4. src column is non-nullable, and dest column is nullable.
-                ColumnPtr nullable_column =
-                        NullableColumn::create(src_column->as_mutable_ptr(), NullColumn::create(num_rows, 0));
-                return nullable_column;
+                auto mut_column = Column::mutate(std::move(src_column));
+                return NullableColumn::create(std::move(mut_column), NullColumn::create(num_rows, 0));
+            }
+        }
+    }
+
+    // Update column according to whether the dest column and source column are nullable or not.
+    static MutableColumnPtr update_column_nullable(bool dst_nullable, MutableColumnPtr&& src_column, int num_rows) {
+        if (src_column->is_nullable()) {
+            if (dst_nullable) {
+                // 1. Src column and dest column are both nullable.
+                return std::move(src_column);
+            } else {
+                // 2. src column is nullable, and dest column is non-nullable.
+                auto* nullable_column = as_raw_column<NullableColumn>(src_column.get());
+                DCHECK(!nullable_column->has_null());
+                return nullable_column->data_column()->as_mutable_ptr();
+            }
+        } else {
+            // 3. Src column and dest column are both non-nullable.
+            if (!dst_nullable) {
+                return std::move(src_column);
+            } else {
+                // 4. src column is non-nullable, and dest column is nullable.
+                return NullableColumn::create(std::move(src_column), NullColumn::create(num_rows, 0));
             }
         }
     }
 
     // Cast to Nullable
-    static MutableColumnPtr cast_to_nullable_column(ColumnPtr src_column) {
-        if (src_column->is_nullable()) {
-            return src_column->as_mutable_ptr();
+    static MutableColumnPtr cast_to_nullable_column(ColumnPtr&& src_column) {
+        auto mut_column = Column::mutate(std::move(src_column));
+        if (mut_column->is_nullable()) {
+            return mut_column;
         }
-        return NullableColumn::create(src_column->as_mutable_ptr(), NullColumn::create(src_column->size(), 0));
+        return NullableColumn::create(std::move(mut_column), NullColumn::create(mut_column->size(), 0));
     }
 
     // Move the source column according to the specific dest type and nullable.
-    static ColumnPtr move_column(const TypeDescriptor& dst_type_desc, bool dst_nullable, const ColumnPtr& src_column,
+    static ColumnPtr move_column(const TypeDescriptor& dst_type_desc, bool dst_nullable, ColumnPtr&& src_column,
                                  int num_rows) {
         if (src_column->is_constant()) {
             return copy_and_unfold_const_column(dst_type_desc, dst_nullable, src_column, num_rows);
         }
 
-        return update_column_nullable(dst_nullable, src_column, num_rows);
+        return update_column_nullable(dst_nullable, std::move(src_column), num_rows);
     }
 
     // Copy the source column according to the specific dest type and nullable.
     static MutableColumnPtr clone_column(const TypeDescriptor& dst_type_desc, bool dst_nullable,
                                          const ColumnPtr& src_column, int num_rows) {
-        auto dst_column = update_column_nullable(dst_nullable, src_column, num_rows);
-        return dst_column->clone();
+        // Clone the source column to avoid modifying the original column.
+        auto dst_column = src_column->clone();
+        return update_column_nullable(dst_nullable, std::move(dst_column), num_rows);
     }
 
     // Create an empty column
@@ -259,16 +281,17 @@ public:
     // expression trees' return column should align return type when some return columns maybe diff from the required
     // return type, as well the null flag. e.g., concat_ws returns col from create_const_null_column(), it's type is
     // Nullable(int8), but required return type is nullable(string), so col need align return type to nullable(string).
-    static ColumnPtr align_return_type(ColumnPtr&& old_col, const TypeDescriptor& type_desc, size_t num_rows,
-                                       const bool is_nullable);
+    static MutableColumnPtr align_return_type(ColumnPtr&& old_col, const TypeDescriptor& type_desc, size_t num_rows,
+                                              const bool is_nullable);
+    static MutableColumnPtr align_return_type(MutableColumnPtr&& old_col, const TypeDescriptor& type_desc,
+                                              size_t num_rows, const bool is_nullable);
 
     // Create a column with specified size, the column will be resized to size
     static MutableColumnPtr create_column(const TypeDescriptor& type_desc, bool nullable, bool is_const, size_t size,
                                           bool use_adaptive_nullable_column = false);
-    /**
-     * Cast columnPtr to special type ColumnPtr
-     * Plz sure actual column type by yourself
-     */
+
+    // Cast ColumnPtr to special type ColumnPtr, ensure the input column is of the expected type,
+    // otherwise it will throw an exception.
     template <LogicalType Type>
     static inline typename RunTimeColumnType<Type>::Ptr cast_to(const ColumnPtr& value) {
 #ifndef NDEBUG
@@ -279,6 +302,8 @@ public:
         return RunTimeColumnType<Type>::static_pointer_cast(value);
     }
 
+    // Cast ColumnPtr to special type ColumnPtr, ensure the input column is of the expected type,
+    // otherwise it will throw an exception.
     template <LogicalType Type>
     static inline typename RunTimeColumnType<Type>::Ptr cast_to(ColumnPtr&& value) {
 #ifndef NDEBUG
@@ -289,6 +314,8 @@ public:
         return RunTimeColumnType<Type>::static_pointer_cast(std::move(value));
     }
 
+    // Cast MutableColumnPtr to special type MutableColumnPtr, ensure the input column is of the expected type,
+    // otherwise it will throw an exception.
     template <LogicalType Type>
     static inline typename RunTimeColumnType<Type>::MutablePtr cast_to(MutableColumnPtr&& value) {
 #ifndef NDEBUG
@@ -299,13 +326,10 @@ public:
         return RunTimeColumnType<Type>::static_pointer_cast(std::move(value));
     }
 
-    /**
-     * Cast columnPtr to special type Column*
-     * Plz sure actual column type by yourself
-     */
-    // TODO(COW): return const Column* instead of Column*
+    // Cast ColumnPtr to special type Column*, ensure the input column is of the expected type,
+    // otherwise it will throw an exception.
     template <LogicalType Type>
-    static inline RunTimeColumnType<Type>* cast_to_raw(const ColumnPtr& value) {
+    static inline const RunTimeColumnType<Type>* cast_to_raw(const ColumnPtr& value) {
 #ifdef NDEBUG
         auto* raw_column_ptr = down_cast<const RunTimeColumnType<Type>*>(value.get());
 #else
@@ -313,9 +337,11 @@ public:
         DCHECK(raw_column_ptr) << "Cast failed for column: "
                                << " (expected type: " << Type << ", actual type: " << value->get_name() << ")";
 #endif
-        return const_cast<RunTimeColumnType<Type>*>(raw_column_ptr);
+        return raw_column_ptr;
     }
 
+    // Cast Column* to special type Column*, ensure the input column is of the expected type,
+    // otherwise it will throw an exception.
     template <LogicalType Type>
     static inline RunTimeColumnType<Type>* cast_to_raw(Column* value) {
 #ifdef NDEBUG
@@ -328,6 +354,8 @@ public:
 #endif
     }
 
+    // Cast Column* to special type Column*, ensure the input column is of the expected type,
+    // otherwise it will throw an exception.
     template <LogicalType Type>
     static inline const RunTimeColumnType<Type>* cast_to_raw(const Column* value) {
 #ifdef NDEBUG
@@ -340,10 +368,22 @@ public:
 #endif
     }
 
-    /**
-     * Cast columnPtr to special type ColumnPtr
-     * Plz sure actual column type by yourself
-     */
+    // Cast MutableColumnPtr to special type Column*, ensure the input column is of the expected type,
+    // otherwise it will throw an exception.
+    template <LogicalType Type>
+    static inline RunTimeColumnType<Type>* cast_to_raw(const MutableColumnPtr& value) {
+#ifdef NDEBUG
+        return down_cast<RunTimeColumnType<Type>*>(value.get());
+#else
+        auto* result = dynamic_cast<RunTimeColumnType<Type>*>(value.get());
+        DCHECK(result) << "Cast failed for column: "
+                       << " (expected type: " << Type << ", actual type: " << value->get_name() << ")";
+        return result;
+#endif
+    }
+
+    // Cast ColumnPtr to special type ColumnPtr, ensure the input column is of the expected type,
+    // otherwise it will throw an exception.
     template <typename Type>
     static inline typename Type::Ptr as_column(const ColumnPtr& value) {
 #ifdef NDEBUG
@@ -356,6 +396,8 @@ public:
 #endif
     }
 
+    // Cast ColumnPtr to special type ColumnPtr, ensure the input column is of the expected type,
+    // otherwise it will throw an exception.
     template <typename Type>
     static inline typename Type::Ptr as_column(ColumnPtr&& value) {
 #ifdef NDEBUG
@@ -368,6 +410,8 @@ public:
 #endif
     }
 
+    // Cast MutableColumnPtr to special type ColumnPtr, ensure the input column is of the expected type,
+    // otherwise it will throw an exception.
     template <typename Type>
     static inline typename Type::MutablePtr as_column(MutableColumnPtr&& value) {
 #ifdef NDEBUG
@@ -380,6 +424,8 @@ public:
 #endif
     }
 
+    // Cast ColumnPtr to special type Column*, ensure the input column is of the expected type,
+    // otherwise it will throw an exception.
     template <typename Type>
     static inline const Type* as_raw_const_column(const ColumnPtr& value) {
 #ifdef NDEBUG
@@ -392,6 +438,8 @@ public:
 #endif
     }
 
+    // Cast MutableColumnPtr to special type Column*, ensure the input column is of the expected type,
+    // otherwise it will throw an exception.
     template <typename Type>
     static inline Type* as_raw_column(const MutableColumnPtr& value) {
 #ifdef NDEBUG
@@ -404,6 +452,8 @@ public:
 #endif
     }
 
+    // Cast Column* to special type Column*, ensure the input column is of the expected type,
+    // otherwise it will throw an exception.
     template <typename Type>
     static inline const Type* as_raw_column(const Column* value) {
 #ifdef NDEBUG
@@ -415,25 +465,53 @@ public:
         return result;
 #endif
     }
-    /**
-     * Cast columnPtr to special type Column*
-     * Plz sure actual column type by yourself
-     */
+
+    // Cast ColumnPtr to special type Column*, ensure the input column is of the expected type,
+    // otherwise it will throw an exception.
     template <typename Type>
-    static inline Type* as_raw_column(const ColumnPtr& value) {
+    static inline const Type* as_raw_column(const ColumnPtr& value) {
 #ifdef NDEBUG
-        auto* col = down_cast<const Type*>(value.get());
+        return down_cast<const Type*>(value.get());
 #else
         auto* col = dynamic_cast<const Type*>(value.get());
         DCHECK(col) << "Cast failed for column: "
                     << " (expected type: " << typeid(Type).name() << ", actual type: " << value->get_name() << ")";
+        return col;
 #endif
-        // TODO: remove const_cast
-        return const_cast<Type*>(col);
     }
 
+    // Cast ColumnPtr to special type Column*, ensure the input column is of the expected type,
+    // otherwise it will throw an exception.
+    template <typename Type>
+    static inline Type* as_raw_column(ColumnPtr& value) {
+        return as_raw_column<Type>(value->as_mutable_raw_ptr());
+    }
+
+    // Cast Column* to special type Column*, ensure the input column is of the expected type,
+    // otherwise it will throw an exception.
+    template <typename Type>
+    static inline Type* as_raw_column(Column* value) {
+#ifdef NDEBUG
+        return down_cast<Type*>(value);
+#else
+        auto* col = dynamic_cast<Type*>(value);
+        DCHECK(col) << "Cast failed for column: "
+                    << " (expected type: " << typeid(Type).name() << ", actual type: " << value->get_name() << ")";
+        return col;
+#endif
+    }
+
+    // Get the C++ data of the column, ensure the input column is of the expected type,
+    // otherwise it will throw an exception.
     template <LogicalType Type>
-    static inline RunTimeCppType<Type>* get_cpp_data(const ColumnPtr& value) {
+    static inline const RunTimeCppType<Type>* get_cpp_data(const ColumnPtr& value) {
+        return cast_to_raw<Type>(value)->get_data().data();
+    }
+
+    // Get the C++ data of the column, ensure the input column is of the expected type,
+    // otherwise it will throw an exception.
+    template <LogicalType Type>
+    static inline const RunTimeCppType<Type>* get_cpp_data(const MutableColumnPtr& value) {
         return cast_to_raw<Type>(value)->get_data().data();
     }
 
@@ -468,10 +546,10 @@ public:
     static Column* get_data_column(Column* column) {
         if (column->is_nullable()) {
             auto* nullable_column = down_cast<NullableColumn*>(column);
-            return nullable_column->mutable_data_column();
+            return nullable_column->data_column_raw_ptr();
         } else if (column->is_constant()) {
             auto* const_column = down_cast<ConstColumn*>(column);
-            return const_column->mutable_data_column();
+            return const_column->data_column_raw_ptr();
         } else {
             return column;
         }
@@ -495,10 +573,10 @@ public:
         if (column->only_null()) {
             const auto* const_column = down_cast<const ConstColumn*>(column);
             const auto* nullable_column = down_cast<const NullableColumn*>(const_column->data_column().get());
-            return nullable_column->mutable_null_column();
+            return nullable_column->null_column_raw_ptr();
         } else if (column->is_nullable()) {
             auto* nullable_column = down_cast<const NullableColumn*>(column);
-            return nullable_column->mutable_null_column();
+            return nullable_column->null_column_raw_ptr();
         } else {
             return nullptr;
         }
@@ -537,24 +615,18 @@ public:
     static size_t compute_bytes_size(ColumnsConstIterator const& begin, ColumnsConstIterator const& end);
 
     template <typename T, bool avx512f>
-    static size_t t_filter_range(const Filter& filter, T* dst_data, const T* src_data, size_t from, size_t to);
+    static size_t t_filter_range(const Filter& filter, T* dst_data, const T* src_data, size_t from, size_t to) {
+        return column_filter_range::t_filter_range<T, avx512f>(filter, dst_data, src_data, from, to);
+    }
 
     template <typename T>
     static size_t filter_range(const Filter& filter, T* data, size_t from, size_t to) {
-        if (base::CPU::instance()->has_avx512f()) {
-            return t_filter_range<T, true>(filter, data, data, from, to);
-        } else {
-            return t_filter_range<T, false>(filter, data, data, from, to);
-        }
+        return column_filter_range::filter_range<T>(filter, data, from, to);
     }
 
     template <typename T>
     static size_t filter_range(const Filter& filter, T* dst_data, const T* src_data, size_t from, size_t to) {
-        if (base::CPU::instance()->has_avx512f()) {
-            return t_filter_range<T, true>(filter, dst_data, src_data, from, to);
-        } else {
-            return t_filter_range<T, false>(filter, dst_data, src_data, from, to);
-        }
+        return column_filter_range::filter_range<T>(filter, dst_data, src_data, from, to);
     }
 
     template <typename T>
@@ -586,20 +658,15 @@ public:
 
     // unpack array column, return offsets_column, elements_column, elements_null_column
     static std::tuple<UInt32Column::Ptr, ColumnPtr, NullColumnPtr> unpack_array_column(const ColumnPtr& column);
-};
 
-// Hold a slice of chunk
-template <class Ptr = ChunkUniquePtr>
-struct ChunkSliceTemplate {
-    Ptr chunk;
-    size_t segment_id = 0;
-    size_t offset = 0;
+    // (NOT SAFE) mutate the columns to mutable columns and don't move the columns
+    static MutableColumns to_mutable_columns(const Columns& columns);
 
-    bool empty() const;
-    size_t rows() const;
-    size_t skip(size_t skip_rows);
-    ChunkUniquePtr cutoff(size_t required_rows);
-    void reset(Ptr input);
+    // mutate the columns to mutable columns and reset columns
+    static MutableColumns to_mutable_columns(Columns&& columns);
+
+    // convert the mutable columns to immutable columns and reset the columns
+    static Columns to_columns(MutableColumns&& columns);
 };
 
 template <LogicalType ltype>
@@ -611,37 +678,42 @@ struct GetContainer {
     static const auto get_data(const ColumnPtr& column) {
         return ColumnHelper::as_raw_column<ColumnType>(column.get())->immutable_data();
     }
+    static const auto get_data(const MutableColumnPtr& column) {
+        return ColumnHelper::as_raw_column<ColumnType>(column.get())->immutable_data();
+    }
 };
 
-#define GET_CONTAINER(ltype)                                                            \
-    template <>                                                                         \
-    struct GetContainer<ltype> {                                                        \
-        static const auto get_data(const Column* column) {                              \
-            return ColumnHelper::as_raw_column<BinaryColumn>(column)->get_proxy_data(); \
-        }                                                                               \
-        static const auto get_data(const ColumnPtr& column) {                           \
-            return ColumnHelper::as_raw_column<BinaryColumn>(column)->get_proxy_data(); \
-        }                                                                               \
+#define GET_CONTAINER(ltype)                                                                  \
+    template <>                                                                               \
+    struct GetContainer<ltype> {                                                              \
+        static const auto get_data(const Column* column) {                                    \
+            return ColumnHelper::as_raw_column<BinaryColumn>(column)->get_proxy_data();       \
+        }                                                                                     \
+        static const auto get_data(const ColumnPtr& column) {                                 \
+            return ColumnHelper::as_raw_column<BinaryColumn>(column)->get_proxy_data();       \
+        }                                                                                     \
+        static const auto get_data(const MutableColumnPtr& column) {                          \
+            return ColumnHelper::as_raw_column<BinaryColumn>(column.get())->get_proxy_data(); \
+        }                                                                                     \
     };
 APPLY_FOR_ALL_STRING_TYPE(GET_CONTAINER)
 #undef GET_CONTAINER
 
-#define GET_CONTAINER(ltype)                                                    \
-    template <>                                                                 \
-    struct GetContainer<ltype> {                                                \
-        using ColumnType = typename RunTimeTypeTraits<ltype>::ColumnType;       \
-        static const auto get_data(const Column* column) {                      \
-            return ColumnHelper::as_raw_column<ColumnType>(column)->get_data(); \
-        }                                                                       \
-        static const auto get_data(const ColumnPtr& column) {                   \
-            return ColumnHelper::as_raw_column<ColumnType>(column)->get_data(); \
-        }                                                                       \
+#define GET_CONTAINER(ltype)                                                          \
+    template <>                                                                       \
+    struct GetContainer<ltype> {                                                      \
+        using ColumnType = typename RunTimeTypeTraits<ltype>::ColumnType;             \
+        static const auto get_data(const Column* column) {                            \
+            return ColumnHelper::as_raw_column<ColumnType>(column)->get_data();       \
+        }                                                                             \
+        static const auto get_data(const ColumnPtr& column) {                         \
+            return ColumnHelper::as_raw_column<ColumnType>(column)->get_data();       \
+        }                                                                             \
+        static const auto get_data(const MutableColumnPtr& column) {                  \
+            return ColumnHelper::as_raw_column<ColumnType>(column.get())->get_data(); \
+        }                                                                             \
     };
 // GET_CONTAINER(TYPE_JSON)
 #undef GET_CONTAINER
-
-using ChunkSlice = ChunkSliceTemplate<ChunkUniquePtr>;
-using ChunkSharedSlice = ChunkSliceTemplate<ChunkPtr>;
-using SegmentedChunkSlice = ChunkSliceTemplate<SegmentedChunkPtr>;
 
 } // namespace starrocks

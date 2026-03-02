@@ -23,7 +23,7 @@
 #include "exec/olap_common.h"
 #include "runtime/global_dict/decoder.h"
 #include "runtime/global_dict/parser.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 
@@ -55,7 +55,7 @@ protected:
 private:
     void _init_counter();
 
-    std::shared_ptr<Chunk> _input_chunk;
+    ChunkPtr _input_chunk;
     std::vector<int32_t> _encode_column_cids;
     std::vector<int32_t> _decode_column_cids;
     std::vector<TypeDescriptor*> _decode_column_types;

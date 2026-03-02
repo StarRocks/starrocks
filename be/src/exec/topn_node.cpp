@@ -33,6 +33,8 @@
 #include "exec/pipeline/sort/spillable_partition_sort_sink_operator.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/pipeline/spill_process_channel.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
 
@@ -58,10 +60,10 @@ Status TopNNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(_sort_exec_exprs.init(tnode.sort_node.sort_info, _pool, state));
     // create analytic_partition_exprs for pipeline execution engine to speedup AnalyticNode evaluation.
     if (tnode.sort_node.__isset.analytic_partition_exprs) {
-        RETURN_IF_ERROR(Expr::create_expr_trees(_pool, tnode.sort_node.analytic_partition_exprs,
-                                                &_analytic_partition_exprs, state));
-        RETURN_IF_ERROR(Expr::prepare(_analytic_partition_exprs, runtime_state()));
-        RETURN_IF_ERROR(Expr::open(_analytic_partition_exprs, runtime_state()));
+        RETURN_IF_ERROR(ExprFactory::create_expr_trees(_pool, tnode.sort_node.analytic_partition_exprs,
+                                                       &_analytic_partition_exprs, state));
+        RETURN_IF_ERROR(ExprExecutor::prepare(_analytic_partition_exprs, runtime_state()));
+        RETURN_IF_ERROR(ExprExecutor::open(_analytic_partition_exprs, runtime_state()));
         for (auto& expr : _analytic_partition_exprs) {
             auto& type_desc = expr->root()->type();
             if (!type_desc.support_groupby()) {
@@ -74,7 +76,7 @@ Status TopNNode::init(const TPlanNode& tnode, RuntimeState* state) {
     // create analytic_partition_exprs for pipeline execution engine to speedup AnalyticNode evaluation.
     if (tnode.sort_node.__isset.partition_exprs) {
         RETURN_IF_ERROR(
-                Expr::create_expr_trees(_pool, tnode.sort_node.partition_exprs, &_local_partition_exprs, state));
+                ExprFactory::create_expr_trees(_pool, tnode.sort_node.partition_exprs, &_local_partition_exprs, state));
     }
 
     _is_asc_order = tnode.sort_node.sort_info.is_asc_order;
@@ -304,7 +306,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> TopNNode::_decompose_to_
     auto spill_channel_factory = std::make_shared<SpillProcessChannelFactory>(degree_of_parallelism);
 
     // spill process operator
-    if (runtime_state()->enable_spill() && runtime_state()->enable_sort_spill() && _limit < 0 && !is_partition_topn) {
+    if constexpr (std::is_same_v<SpillablePartitionSortSinkOperatorFactory, SinkFactory>) {
         context->interpolate_spill_process(id(), spill_channel_factory, degree_of_parallelism);
     }
 
@@ -404,7 +406,7 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
                                                                                 is_partition_skewed, need_merge,
                                                                                 enable_parallel_merge, is_per_pipeline);
     } else {
-        if (runtime_state()->enable_spill() && runtime_state()->enable_sort_spill() && _limit < 0) {
+        if (runtime_state()->enable_spill() && runtime_state()->enable_sort_spill()) {
             if (enable_parallel_merge) {
                 operators_source_with_sort =
                         _decompose_to_pipeline<SortContextFactory, SpillablePartitionSortSinkOperatorFactory,

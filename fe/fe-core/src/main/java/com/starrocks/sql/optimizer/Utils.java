@@ -21,7 +21,6 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
@@ -30,6 +29,7 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.JoinOperator;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
@@ -275,7 +275,7 @@ public class Utils {
         return createCompound(CompoundPredicateOperator.CompoundType.OR, Arrays.asList(nodes));
     }
 
-    public static ScalarOperator compoundAnd(Collection<ScalarOperator> nodes) {
+    public static ScalarOperator compoundAnd(Collection<? extends ScalarOperator> nodes) {
         return createCompound(CompoundPredicateOperator.CompoundType.AND, nodes);
     }
 
@@ -310,7 +310,7 @@ public class Utils {
     //  /\   /\
     // a  b c  d
     public static ScalarOperator createCompound(CompoundPredicateOperator.CompoundType type,
-                                                Collection<ScalarOperator> nodes) {
+                                                Collection<? extends ScalarOperator> nodes) {
         LinkedList<ScalarOperator> link =
                 nodes.stream().filter(Objects::nonNull).collect(Collectors.toCollection(Lists::newLinkedList));
 
@@ -826,7 +826,7 @@ public class Utils {
             return false;
         }
         Set<ColumnRefOperator> distinctChildren = Sets.newHashSet();
-        for (CallOperator callOperator : aggCallOperators) {
+        for (CallOperator callOperator : distinctFuncs) {
             if (distinctChildren.isEmpty()) {
                 distinctChildren = Sets.newHashSet(callOperator.getColumnRefs());
             } else {
@@ -862,6 +862,19 @@ public class Utils {
             }
         }
         return false;
+    }
+
+    /**
+     * Ensure the operator is predicate's min granularity.
+     */
+    public static boolean canPushDownPredicate(ScalarOperator operator) {
+        if (operator == null) {
+            return false;
+        }
+        if (hasNonDeterministicFunc(operator)) {
+            return false;
+        }
+        return true;
     }
 
     public static void calculateStatistics(OptExpression expr, OptimizerContext context) {

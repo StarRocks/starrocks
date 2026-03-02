@@ -1,4 +1,4 @@
--- name: test_iceberg_read_bloom_filter
+-- name: test_iceberg_read_bloom_filter @sequential
 set enable_dynamic_prune_scan_range=false;
 -- result:
 -- !result
@@ -19,6 +19,9 @@ set enable_profile=true;
 -- result:
 -- !result
 set enable_async_profile=false;
+-- result:
+-- !result
+set plan_mode=local;
 -- result:
 -- !result
 select * from iceberg_oss_db.bloom_filter_table5 where c1 = 2;

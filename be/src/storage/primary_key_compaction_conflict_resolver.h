@@ -17,8 +17,10 @@
 #include <string>
 
 #include "common/status.h"
+#include "fs/fs.h"
 #include "storage/chunk_iterator.h"
 #include "storage/del_vector.h"
+#include "storage/primary_key_encoding_types.h"
 
 namespace starrocks {
 
@@ -39,7 +41,13 @@ struct CompactConflictResolveParams {
 class PrimaryKeyCompactionConflictResolver {
 public:
     virtual ~PrimaryKeyCompactionConflictResolver() = default;
-    virtual StatusOr<std::string> filename() const = 0;
+    // Returns FileInfo instead of string to support both local and remote storage
+    // WHY: Changed from string to FileInfo to include optional file size.
+    // BENEFIT: For remote storage (S3/HDFS), having size upfront avoids expensive
+    // get_size() metadata calls (~10-50ms each), significantly improving performance
+    // during parallel pk index execution where hundreds of mapper files are accessed.
+    virtual StatusOr<FileInfo> filename() const = 0;
+    virtual StatusOr<PrimaryKeyEncodingType> primary_key_encoding_type() const = 0;
     virtual Schema generate_pkey_schema() = 0;
     virtual Status breakpoint_check() { return Status::OK(); }
     virtual Status segment_iterator(

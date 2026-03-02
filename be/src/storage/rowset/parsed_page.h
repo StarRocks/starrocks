@@ -98,6 +98,10 @@ public:
         return Status::NotSupported("Read by range Not Support");
     }
 
+    virtual Status read_by_rowids(Column* column, const rowid_t* rowids, size_t* count) {
+        return Status::NotSupported("Read by rowids Not Support");
+    }
+
     // prerequisite: encoding_type() is `DICT_ENCODING`.
     // Attempts to read up to |*count| dictionary codes from this page into the |column|.
     // On success, `Status::OK` is returned, and the number of codes read will be updated to
@@ -114,6 +118,29 @@ public:
 
     virtual size_t read_null_count() { return 0; }
 
+    virtual Status read_dict_codes_by_rowids(Column* column, const rowid_t* rowids, size_t* count) = 0;
+
+    // Check if this page supports read_by_rowds efficiently.
+    // V1 format returns false due to null/non-null interleaving complexity.
+    // V2 format returns true if _data_decoder supports read_by_rowids.
+    bool supports_read_by_rowids() {
+        if (_version == 1) {
+            return false;
+        }
+        return _data_decoder->supports_read_by_rowids();
+    }
+
+    virtual Status read_with_filter(Column* column, const SparseRange<>& range,
+                                    const std::vector<const ColumnPredicate*>& compound_and_predicates,
+                                    uint8_t* selection, uint16_t* selected_idx) = 0;
+    void reserve_col(size_t n, Column* column) {
+        if (_data_decoder != nullptr) {
+            _data_decoder->reserve_col(n, column);
+        } else {
+            column->reserve(n);
+        }
+    }
+
 protected:
     uint32_t _page_index{0};
     uint64_t _num_rows{0};
@@ -126,6 +153,7 @@ protected:
     ordinal_t _corresponding_element_ordinal = 0;
     std::unique_ptr<PageDecoder> _data_decoder;
     PagePointer _page_pointer;
+    uint32_t _version;
 };
 
 Status parse_page(std::unique_ptr<ParsedPage>* result, PageHandle handle, const Slice& body,

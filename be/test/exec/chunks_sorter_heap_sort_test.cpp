@@ -22,18 +22,19 @@
 #include <optional>
 #include <vector>
 
+#include "base/testutil/assert.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
-#include "column/datum.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
-#include "runtime/types.h"
-#include "testutil/assert.h"
+#include "exprs/expr_executor.h"
+#include "types/datum.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
-#include "util/value_generator.h"
+#include "types/type_descriptor.h"
+#include "types/value_generator.h"
 
 namespace starrocks {
 
@@ -68,7 +69,7 @@ struct BuildOptions {
 
 template <LogicalType TYPE>
 struct ColumnRandomAppender {
-    static bool append(ColumnPtr& col, int sz) {
+    static bool append(MutableColumnPtr& col, int sz) {
         auto* spec_col = ColumnHelper::cast_to_raw<TYPE>(col);
         if constexpr (isArithmeticLT<TYPE>) {
             auto& container = spec_col->get_data();
@@ -117,7 +118,7 @@ struct FakeChunks {
     }
 
     ChunkPtr next_chunk(int chunk_sz) {
-        Columns columns;
+        MutableColumns columns;
         for (int i = 0; i < _slot_refs.size(); ++i) {
             columns.push_back(ColumnHelper::create_column(*_type_descs[i], _build_options[i].is_nullable_value));
         }
@@ -142,7 +143,7 @@ struct FakeChunks {
                 }
             }
         }
-        return std::make_shared<Chunk>(columns, map);
+        return std::make_shared<Chunk>(ColumnHelper::to_columns(std::move(columns)), map);
     }
     const std::vector<ColumnRef*>& slot_refs() { return _slot_refs; }
 
@@ -174,9 +175,9 @@ TEST_F(ChunksSorterHeapSortTest, single_column_order_by_notnull_test) {
         // Test sort by INT less than limit
         {
             std::vector<ExprContext*> sort_exprs;
-            sort_exprs.push_back(_pool.add(new ExprContext(fake_chunks.slot_refs()[0])));
-            ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
-            ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
+            sort_exprs.emplace_back(_pool.add(new ExprContext(fake_chunks.slot_refs()[0])));
+            ASSERT_OK(ExprExecutor::prepare(sort_exprs, _runtime_state.get()));
+            ASSERT_OK(ExprExecutor::open(sort_exprs, _runtime_state.get()));
             ChunksSorterHeapSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &null_first, "", 0, 1024);
             sorter.setup_runtime(_runtime_state.get(), _pool.add(new RuntimeProfile("")),
                                  _pool.add(new MemTracker(1L << 62, "parent", nullptr)));
@@ -195,9 +196,9 @@ TEST_F(ChunksSorterHeapSortTest, single_column_order_by_notnull_test) {
         // Test sort by INT greater than limit
         {
             std::vector<ExprContext*> sort_exprs;
-            sort_exprs.push_back(_pool.add(new ExprContext(fake_chunks.slot_refs()[0])));
-            ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
-            ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
+            sort_exprs.emplace_back(_pool.add(new ExprContext(fake_chunks.slot_refs()[0])));
+            ASSERT_OK(ExprExecutor::prepare(sort_exprs, _runtime_state.get()));
+            ASSERT_OK(ExprExecutor::open(sort_exprs, _runtime_state.get()));
             ChunksSorterHeapSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &null_first, "", 0, 1024);
             sorter.setup_runtime(_runtime_state.get(), _pool.add(new RuntimeProfile("")),
                                  _pool.add(new MemTracker(1L << 62, "parent", nullptr)));
@@ -219,9 +220,9 @@ TEST_F(ChunksSorterHeapSortTest, single_column_order_by_notnull_test) {
         // Test sort by VARCHAR
         {
             std::vector<ExprContext*> sort_exprs;
-            sort_exprs.push_back(_pool.add(new ExprContext(fake_chunks.slot_refs()[1])));
-            ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
-            ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
+            sort_exprs.emplace_back(_pool.add(new ExprContext(fake_chunks.slot_refs()[1])));
+            ASSERT_OK(ExprExecutor::prepare(sort_exprs, _runtime_state.get()));
+            ASSERT_OK(ExprExecutor::open(sort_exprs, _runtime_state.get()));
             ChunksSorterHeapSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &null_first, "", 0, 1024);
             sorter.setup_runtime(_runtime_state.get(), _pool.add(new RuntimeProfile("")),
                                  _pool.add(new MemTracker(1L << 62, "parent", nullptr)));
@@ -253,9 +254,9 @@ TEST_F(ChunksSorterHeapSortTest, single_column_order_by_nullable_test) {
 
         {
             std::vector<ExprContext*> sort_exprs;
-            sort_exprs.push_back(_pool.add(new ExprContext(fake_chunks.slot_refs()[0])));
-            ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
-            ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
+            sort_exprs.emplace_back(_pool.add(new ExprContext(fake_chunks.slot_refs()[0])));
+            ASSERT_OK(ExprExecutor::prepare(sort_exprs, _runtime_state.get()));
+            ASSERT_OK(ExprExecutor::open(sort_exprs, _runtime_state.get()));
             // limit 5
             int limit_sz = 5;
             ChunksSorterHeapSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &null_first, "", 0, limit_sz);
@@ -279,9 +280,9 @@ TEST_F(ChunksSorterHeapSortTest, single_column_order_by_nullable_test) {
         null_first[0] = false;
         {
             std::vector<ExprContext*> sort_exprs;
-            sort_exprs.push_back(_pool.add(new ExprContext(fake_chunks.slot_refs()[0])));
-            ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
-            ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
+            sort_exprs.emplace_back(_pool.add(new ExprContext(fake_chunks.slot_refs()[0])));
+            ASSERT_OK(ExprExecutor::prepare(sort_exprs, _runtime_state.get()));
+            ASSERT_OK(ExprExecutor::open(sort_exprs, _runtime_state.get()));
             // limit 5
             int limit_sz = 10;
             ChunksSorterHeapSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &null_first, "", 0, limit_sz);
@@ -306,9 +307,9 @@ TEST_F(ChunksSorterHeapSortTest, single_column_order_by_nullable_test) {
         null_first[0] = true;
         {
             std::vector<ExprContext*> sort_exprs;
-            sort_exprs.push_back(_pool.add(new ExprContext(fake_chunks.slot_refs()[0])));
-            ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
-            ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
+            sort_exprs.emplace_back(_pool.add(new ExprContext(fake_chunks.slot_refs()[0])));
+            ASSERT_OK(ExprExecutor::prepare(sort_exprs, _runtime_state.get()));
+            ASSERT_OK(ExprExecutor::open(sort_exprs, _runtime_state.get()));
             // limit 5
             int limit_sz = 5;
             ChunksSorterHeapSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &null_first, "", 0, limit_sz);

@@ -18,16 +18,16 @@
 #include <memory>
 #include <vector>
 
+#include "base/utility/defer_op.h"
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "exec/sorting/merge.h"
-#include "exprs/runtime_filter.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
+#include "runtime/runtime_filter.h"
 #include "types/logical_type_infra.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 

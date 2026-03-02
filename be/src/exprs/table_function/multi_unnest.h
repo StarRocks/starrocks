@@ -38,13 +38,13 @@ public:
         long row_count = state->get_columns()[0]->size();
         state->set_processed_rows(row_count);
 
-        Columns unnested_array_list;
+        MutableColumns unnested_array_list;
         for (auto& col_idx : state->get_columns()) {
-            Column* column = col_idx.get();
+            Column* column = ColumnHelper::get_data_column(col_idx->as_mutable_raw_ptr());
 
             auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(column));
-            ColumnPtr unnested_array_elements = col_array->elements_column()->clone_empty();
-            unnested_array_list.emplace_back(unnested_array_elements);
+            MutableColumnPtr unnested_array_elements = col_array->elements_column()->clone_empty();
+            unnested_array_list.emplace_back(std::move(unnested_array_elements));
         }
 
         auto copy_count_column = UInt32Column::create();
@@ -53,7 +53,7 @@ public:
         for (int row_idx = 0; row_idx < row_count; ++row_idx) {
             uint32_t max_length_array_size = 0;
             for (auto& col_idx : state->get_columns()) {
-                Column* column = col_idx.get();
+                Column* column = col_idx->as_mutable_raw_ptr();
                 if (column->is_null(row_idx)) {
                     // current row is null, ignore the offset.
                     continue;
@@ -76,7 +76,7 @@ public:
             }
 
             for (int col_idx = 0; col_idx < state->get_columns().size(); ++col_idx) {
-                Column* column = state->get_columns()[col_idx].get();
+                Column* column = state->get_columns()[col_idx]->as_mutable_raw_ptr();
                 auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(column));
                 auto offset_column = col_array->offsets_column();
 

@@ -14,7 +14,8 @@
 
 #pragma once
 
-#include "exec/exec_node.h"
+#include "base/concurrency/race_detect.h"
+#include "base/concurrency/spinlock.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exec/pipeline/source_operator.h"
@@ -22,8 +23,7 @@
 #include "exec/query_cache/cache_operator.h"
 #include "exec/query_cache/lane_arbiter.h"
 #include "exec/workgroup/work_group_fwd.h"
-#include "util/race_detect.h"
-#include "util/spinlock.h"
+#include "exprs/chunk_predicate_evaluator.h"
 
 namespace starrocks {
 
@@ -221,7 +221,7 @@ protected:
             }
             bloom_filters->evaluate(chunk, _bloom_filter_eval_context);
         }
-        ExecNode::eval_filter_null_values(chunk, filter_null_value_columns());
+        ChunkPredicateEvaluator::eval_filter_null_values(chunk, filter_null_value_columns());
     }
 
 protected:

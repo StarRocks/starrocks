@@ -20,6 +20,8 @@ package com.starrocks.qe;
 import com.starrocks.sql.ast.AddBackendBlackListStmt;
 import com.starrocks.sql.ast.AddComputeNodeBlackListStmt;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
+import com.starrocks.sql.ast.AddSqlDigestBlackListStmt;
+import com.starrocks.sql.ast.AdminAlterAutomatedSnapshotIntervalStmt;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
@@ -28,12 +30,15 @@ import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOnStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AdminSetPartitionVersionStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
+import com.starrocks.sql.ast.AdminShowAutomatedSnapshotStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
+import com.starrocks.sql.ast.AdminShowTabletStatusStmt;
 import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
+import com.starrocks.sql.ast.AlterDatabaseSetStmt;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
@@ -43,6 +48,7 @@ import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.AlterTaskStmt;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AnalyzeProfileStmt;
@@ -92,6 +98,7 @@ import com.starrocks.sql.ast.DeallocateStmt;
 import com.starrocks.sql.ast.DelBackendBlackListStmt;
 import com.starrocks.sql.ast.DelComputeNodeBlackListStmt;
 import com.starrocks.sql.ast.DelSqlBlackListStmt;
+import com.starrocks.sql.ast.DelSqlDigestBlackListStmt;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DescStorageVolumeStmt;
 import com.starrocks.sql.ast.DescribeStmt;
@@ -207,6 +214,7 @@ import com.starrocks.sql.ast.ShowRunningQueriesStmt;
 import com.starrocks.sql.ast.ShowSmallFilesStmt;
 import com.starrocks.sql.ast.ShowSnapshotStmt;
 import com.starrocks.sql.ast.ShowSqlBlackListStmt;
+import com.starrocks.sql.ast.ShowSqlDigestBlackListStmt;
 import com.starrocks.sql.ast.ShowStatusStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.ShowStorageVolumesStmt;
@@ -368,6 +376,11 @@ public class RedirectStatus {
         }
 
         @Override
+        public RedirectStatus visitAlterDatabaseSetStatement(AlterDatabaseSetStmt statement, Void context) {
+            return visitDDLStatement(statement, context);
+        }
+
+        @Override
         public RedirectStatus visitCreateDbStatement(CreateDbStmt statement, Void context) {
             return visitDDLStatement(statement, context);
         }
@@ -525,6 +538,11 @@ public class RedirectStatus {
 
         @Override
         public RedirectStatus visitDropTaskStmt(DropTaskStmt statement, Void context) {
+            return visitDDLStatement(statement, context);
+        }
+
+        @Override
+        public RedirectStatus visitAlterTaskStatement(AlterTaskStmt statement, Void context) {
             return visitDDLStatement(statement, context);
         }
 
@@ -706,6 +724,16 @@ public class RedirectStatus {
         }
 
         @Override
+        public RedirectStatus visitAdminShowAutomatedSnapshotStatement(AdminShowAutomatedSnapshotStmt statement,
+                                                                       Void context) {
+            if (ConnectContext.get().getSessionVariable().getForwardToLeader()) {
+                return RedirectStatus.FORWARD_NO_SYNC;
+            } else {
+                return RedirectStatus.NO_FORWARD;
+            }
+        }
+
+        @Override
         public RedirectStatus visitAdminShowReplicaDistributionStatement(AdminShowReplicaDistributionStmt statement,
                                                                          Void context) {
             if (ConnectContext.get().getSessionVariable().getForwardToLeader()) {
@@ -717,6 +745,15 @@ public class RedirectStatus {
 
         @Override
         public RedirectStatus visitAdminShowReplicaStatusStatement(AdminShowReplicaStatusStmt statement, Void context) {
+            if (ConnectContext.get().getSessionVariable().getForwardToLeader()) {
+                return RedirectStatus.FORWARD_NO_SYNC;
+            } else {
+                return RedirectStatus.NO_FORWARD;
+            }
+        }
+
+        @Override
+        public RedirectStatus visitAdminShowTabletStatusStatement(AdminShowTabletStatusStmt statement, Void context) {
             if (ConnectContext.get().getSessionVariable().getForwardToLeader()) {
                 return RedirectStatus.FORWARD_NO_SYNC;
             } else {
@@ -761,6 +798,12 @@ public class RedirectStatus {
 
         @Override
         public RedirectStatus visitAdminSetAutomatedSnapshotOffStatement(AdminSetAutomatedSnapshotOffStmt clause, Void context) {
+            return visitDDLStatement(clause, context);
+        }
+
+        @Override
+        public RedirectStatus visitAdminAlterAutomatedSnapshotIntervalStatement(AdminAlterAutomatedSnapshotIntervalStmt clause,
+                                                                                Void context) {
             return visitDDLStatement(clause, context);
         }
 
@@ -1316,6 +1359,23 @@ public class RedirectStatus {
 
         @Override
         public RedirectStatus visitShowWhiteListStatement(ShowWhiteListStmt statement, Void context) {
+            return visitShowStatement(statement, context);
+        }
+
+        // --------------------------------------- Sql Digest BlackList Statement -----------------------------------
+
+        @Override
+        public RedirectStatus visitAddSqlDigestBlackListStatement(AddSqlDigestBlackListStmt statement, Void context) {
+            return RedirectStatus.FORWARD_NO_SYNC;
+        }
+
+        @Override
+        public RedirectStatus visitDelSqlDigestBlackListStatement(DelSqlDigestBlackListStmt statement, Void context) {
+            return RedirectStatus.FORWARD_NO_SYNC;
+        }
+
+        @Override
+        public RedirectStatus visitShowSqlDigestBlackListStatement(ShowSqlDigestBlackListStmt statement, Void context) {
             return visitShowStatement(statement, context);
         }
 

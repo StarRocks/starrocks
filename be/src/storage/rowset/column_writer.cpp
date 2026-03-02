@@ -37,14 +37,16 @@
 #include <cstddef>
 #include <memory>
 
+#include "base/simd/simd.h"
 #include "column/nullable_column.h"
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
-#include "simd/simd.h"
 #include "storage/index/inverted/inverted_index_option.h"
 #ifndef __APPLE__
 #include "storage/index/inverted/inverted_plugin_factory.h"
 #endif
+#include "base/bit/rle_encoding.h"
+#include "base/string/faststring.h"
 #include "storage/rowset/array_column_writer.h"
 #include "storage/rowset/bitmap_index_writer.h"
 #include "storage/rowset/bitshuffle_page.h"
@@ -61,8 +63,6 @@
 #include "types/logical_type.h"
 #include "util/bloom_filter.h"
 #include "util/compression/block_compression.h"
-#include "util/faststring.h"
-#include "util/rle_encoding.h"
 
 namespace starrocks {
 
@@ -256,7 +256,7 @@ public:
 private:
     std::unique_ptr<ScalarColumnWriter> _scalar_column_writer;
     bool _is_speculated = false;
-    ColumnPtr _buf_column = nullptr;
+    MutableColumnPtr _buf_column = nullptr;
 };
 
 class DictColumnWriter final : public ColumnWriter {
@@ -299,7 +299,7 @@ public:
 private:
     std::unique_ptr<ScalarColumnWriter> _scalar_column_writer;
     bool _is_speculated = false;
-    ColumnPtr _buf_column = nullptr;
+    MutableColumnPtr _buf_column = nullptr;
 };
 
 StatusOr<std::unique_ptr<ColumnWriter>> ColumnWriter::create(const ColumnWriterOptions& opts,
@@ -577,7 +577,7 @@ Status ScalarColumnWriter::write_bloom_filter_index() {
 Status ScalarColumnWriter::write_inverted_index() {
 #ifndef __APPLE__
     if (_inverted_index_builder != nullptr) {
-        return _inverted_index_builder->finish();
+        return _inverted_index_builder->finish(_wfile, _opts.meta);
     }
 #endif
     return Status::OK();

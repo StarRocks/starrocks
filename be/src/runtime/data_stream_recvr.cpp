@@ -34,13 +34,17 @@
 
 #include "runtime/data_stream_recvr.h"
 
-#include <util/time.h>
-
 #include <condition_variable>
 #include <deque>
 #include <utility>
 
+#include "base/phmap/phmap.h"
+#include "base/string/faststring.h"
+#include "base/time/time.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
+#include "common/runtime_profile.h"
+#include "common/util/debug_util.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/sort_exec_exprs.h"
 #include "gen_cpp/data.pb.h"
@@ -52,12 +56,7 @@
 #include "runtime/sender_queue.h"
 #include "runtime/sorted_chunks_merger.h"
 #include "util/compression/block_compression.h"
-#include "util/debug_util.h"
-#include "util/defer_op.h"
-#include "util/faststring.h"
 #include "util/logging.h"
-#include "util/phmap/phmap.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 
@@ -301,7 +300,7 @@ DataStreamRecvr::~DataStreamRecvr() {
     DCHECK(_mgr == nullptr) << "Must call close()";
 }
 
-Status DataStreamRecvr::get_chunk(std::unique_ptr<Chunk>* chunk) {
+Status DataStreamRecvr::get_chunk(ChunkUniquePtr* chunk) {
     DCHECK(!_is_merging);
     DCHECK_EQ(_sender_queues.size(), 1);
     Chunk* tmp_chunk = nullptr;
@@ -310,7 +309,7 @@ Status DataStreamRecvr::get_chunk(std::unique_ptr<Chunk>* chunk) {
     return status;
 }
 
-Status DataStreamRecvr::get_chunk_for_pipeline(std::unique_ptr<Chunk>* chunk, const int32_t driver_sequence) {
+Status DataStreamRecvr::get_chunk_for_pipeline(ChunkUniquePtr* chunk, const int32_t driver_sequence) {
     // TODO: notify here
     DCHECK(!_is_merging);
     DCHECK_EQ(_sender_queues.size(), 1);

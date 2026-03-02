@@ -17,6 +17,8 @@
 
 package com.starrocks.common.util;
 
+import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.TableName;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetNamesVar;
@@ -24,9 +26,11 @@ import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetTransaction;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.InformationFunction;
 import com.starrocks.sql.ast.expression.VariableExpr;
+import com.starrocks.statistic.StatsConstants;
 import org.apache.commons.lang3.StringUtils;
 
 public class SqlUtils {
@@ -79,7 +83,9 @@ public class SqlUtils {
                             return true;
                         } else if (itemExpr instanceof InformationFunction informationFunction) {
                             return informationFunction.getFuncType().equalsIgnoreCase("connection_id")
-                                    || informationFunction.getFuncType().equalsIgnoreCase("session_id");
+                                    || informationFunction.getFuncType().equalsIgnoreCase("session_id")
+                                    ||
+                                    informationFunction.getFuncType().equalsIgnoreCase(FunctionSet.CURRENT_WAREHOUSE);
                         }
                     }
                 }
@@ -93,6 +99,23 @@ public class SqlUtils {
                             || item instanceof SystemVariable));
         }
 
+        return false;
+    }
+
+    /**
+     * Return true if the SQL queries any table under information_schema.
+     */
+    public static boolean isInformationQuery(StatementBase parsedStmt) {
+        if (parsedStmt instanceof QueryStatement queryStatement) {
+            if (queryStatement.getQueryRelation() != null &&
+                    queryStatement.getQueryRelation() instanceof SelectRelation selectRelation) {
+                if (selectRelation.getRelation() instanceof TableRelation tableRelation) {
+                    TableName tableName = tableRelation.getName();
+                    return tableName != null
+                            && StatsConstants.INFORMATION_SCHEMA.equalsIgnoreCase(tableName.getDb());
+                }
+            }
+        }
         return false;
     }
 }

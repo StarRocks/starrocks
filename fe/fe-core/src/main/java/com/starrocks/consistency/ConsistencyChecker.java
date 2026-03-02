@@ -514,7 +514,7 @@ public class ConsistencyChecker extends FrontendDaemon {
 
                             // sort materializedIndices
                             List<MaterializedIndex> visibleIndexes =
-                                        physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE);
+                                        physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE);
                             Queue<MetaObject> indexQueue =
                                     new PriorityQueue<>(Math.max(visibleIndexes.size(), 1), COMPARATOR);
                             indexQueue.addAll(visibleIndexes);

@@ -65,4 +65,9 @@ public class ViewPEntryObject extends TablePEntryObject {
     public String toString() {
         return toStringImpl("VIEWS");
     }
+
+    @Override
+    public ViewPEntryObject clone() {
+        return new ViewPEntryObject(this.databaseUUID, this.tableUUID);
+    }
 }

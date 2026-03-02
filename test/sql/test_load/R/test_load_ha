@@ -1,4 +1,4 @@
--- name: test_load_ha @sequential
+-- name: test_load_ha @sequential @native
 create database db_${uuid0};
 -- result:
 -- !result
@@ -69,3 +69,7 @@ select * from t;
 -- result:
 2	n2	2
 -- !result
+CLEANUP {
+    ADMIN DISABLE FAILPOINT 'load_memtable_flush';
+    ADMIN DISABLE FAILPOINT 'load_segment_flush';
+} END CLEANUP

@@ -15,10 +15,12 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.ast.expression.UserVariableExpr;
 import com.starrocks.sql.parser.NodePosition;
 
 public class KillAnalyzeStmt extends StatementBase {
     private final long analyzeId;
+    private final UserVariableExpr userVariableExpr;
 
     public KillAnalyzeStmt(long analyzeId) {
         this(analyzeId, NodePosition.ZERO);
@@ -27,14 +29,29 @@ public class KillAnalyzeStmt extends StatementBase {
     public KillAnalyzeStmt(long analyzeId, NodePosition pos) {
         super(pos);
         this.analyzeId = analyzeId;
+        this.userVariableExpr = null;
+    }
+
+    public KillAnalyzeStmt(UserVariableExpr userVariableExpr, NodePosition pos) {
+        super(pos);
+        this.analyzeId = -1;
+        this.userVariableExpr = userVariableExpr;
     }
 
     public boolean isKillAllPendingTasks() {
-        return analyzeId == -1;
+        return analyzeId == -1 && userVariableExpr == null;
     }
 
     public long getAnalyzeId() {
         return analyzeId;
+    }
+
+    public UserVariableExpr getUserVariableExpr() {
+        return userVariableExpr;
+    }
+
+    public boolean hasUserVariable() {
+        return userVariableExpr != null;
     }
 
     @Override

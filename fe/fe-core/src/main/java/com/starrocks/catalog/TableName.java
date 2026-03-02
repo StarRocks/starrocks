@@ -47,6 +47,7 @@ import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.parser.NodePosition;
 import org.apache.commons.lang3.StringUtils;
 
@@ -106,6 +107,21 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
         } else {
             throw new IllegalArgumentException("illegal table name: " + name);
         }
+    }
+
+    /**
+     * Creates a TableName from a TableRef.
+     * This is a utility method for converting AST TableRef to persistence TableName.
+     *
+     * @param tableRef the TableRef to convert
+     * @return a TableName instance, or null if tableRef is null
+     */
+    public static TableName fromTableRef(TableRef tableRef) {
+        if (tableRef == null) {
+            return null;
+        }
+        return new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                tableRef.getTableName(), tableRef.getPos());
     }
 
     public void normalization(ConnectContext connectContext) {

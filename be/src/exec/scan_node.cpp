@@ -36,6 +36,7 @@
 
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/morsel.h"
+#include "exprs/expr_factory.h"
 
 namespace starrocks {
 
@@ -58,7 +59,7 @@ Status ScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
         for (auto const& [key, val] : tnode.common.heavy_exprs) {
             ExprContext* context;
-            RETURN_IF_ERROR(Expr::create_expr_tree(_pool, val, &context, state, true));
+            RETURN_IF_ERROR(ExprFactory::create_expr_tree(_pool, val, &context, state, true));
             _heavy_expr_slot_ids.emplace_back(key);
             _heavy_expr_ctxs.emplace_back(context);
         }

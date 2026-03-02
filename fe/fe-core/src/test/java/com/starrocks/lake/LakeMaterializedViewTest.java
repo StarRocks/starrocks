@@ -22,14 +22,12 @@ import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.S3FileStoreInfo;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -57,7 +55,9 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.Task;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TStorageMedium;
@@ -165,7 +165,7 @@ public class LakeMaterializedViewTest extends StarRocksTestBase {
         // Lake mv
         LakeMaterializedView mv = new LakeMaterializedView(mvId, dbId, "mv1", columns, KeysType.AGG_KEYS,
                 partitionInfo, distributionInfo, mvRefreshScheme);
-        Deencapsulation.setField(mv, "baseIndexId", indexId);
+        Deencapsulation.setField(mv, "baseIndexMetaId", indexId);
         mv.addPartition(partition);
         mv.setIndexMeta(indexId, "mv1", columns, 0, 0, (short) 1, TStorageType.COLUMN, KeysType.AGG_KEYS);
 
@@ -433,7 +433,7 @@ public class LakeMaterializedViewTest extends StarRocksTestBase {
         LocalDate upper1 = LocalDate.now().minus(duration);
         LocalDate lower1 = upper1.minus(duration);
         Range<PartitionKey> range1 = Range.closedOpen(PartitionKey.ofDate(lower1), PartitionKey.ofDate(upper1));
-        partitionInfo.addPartition(partition1Id, false, range1, DataProperty.DEFAULT_DATA_PROPERTY, (short) 1, false,
+        partitionInfo.addPartition(partition1Id, false, range1, DataProperty.DEFAULT_DATA_PROPERTY, (short) 1,
                 new DataCacheInfo(true, false));
 
         // partition2
@@ -446,7 +446,7 @@ public class LakeMaterializedViewTest extends StarRocksTestBase {
         LocalDate upper2 = LocalDate.now();
         LocalDate lower2 = upper2.minus(duration);
         Range<PartitionKey> range2 = Range.closedOpen(PartitionKey.ofDate(lower2), PartitionKey.ofDate(upper2));
-        partitionInfo.addPartition(partition2Id, false, range2, DataProperty.DEFAULT_DATA_PROPERTY, (short) 1, false,
+        partitionInfo.addPartition(partition2Id, false, range2, DataProperty.DEFAULT_DATA_PROPERTY, (short) 1,
                 new DataCacheInfo(true, false));
 
         // refresh scheme
@@ -456,7 +456,7 @@ public class LakeMaterializedViewTest extends StarRocksTestBase {
         // Lake mv
         LakeMaterializedView mv = new LakeMaterializedView(mvId, dbId, "mv1", columns, KeysType.AGG_KEYS,
                 partitionInfo, distributionInfo, mvRefreshScheme);
-        Deencapsulation.setField(mv, "baseIndexId", indexId);
+        Deencapsulation.setField(mv, "baseIndexMetaId", indexId);
         mv.addPartition(partition1);
         mv.addPartition(partition2);
         mv.setIndexMeta(indexId, "mv1", columns, 0, 0, (short) 1, TStorageType.COLUMN, KeysType.AGG_KEYS);
@@ -476,7 +476,6 @@ public class LakeMaterializedViewTest extends StarRocksTestBase {
 
         // range partition
         PartitionInfo rangePartitionInfo = new RangePartitionInfo(Lists.newArrayList());
-        rangePartitionInfo.setIsInMemory(partitionId, true);
         LakeMaterializedView mv1 =
                 new LakeMaterializedView(mvId, dbId, "mv1", null, null, rangePartitionInfo, null, null);
 
@@ -485,7 +484,6 @@ public class LakeMaterializedViewTest extends StarRocksTestBase {
 
         // un-partitioned
         PartitionInfo singlePartitionInfo = new PartitionInfo(PartitionType.UNPARTITIONED);
-        singlePartitionInfo.setIsInMemory(partitionId, true);
         LakeMaterializedView mv2 =
                 new LakeMaterializedView(mvId, dbId, "mv1", null, null, singlePartitionInfo, null, null);
         recyclePartitionInfo = mv2.buildRecyclePartitionInfo(dbId, partition);
@@ -493,7 +491,6 @@ public class LakeMaterializedViewTest extends StarRocksTestBase {
 
         // list partition
         PartitionInfo listPartitionInfo = new ListPartitionInfo(PartitionType.LIST, Lists.newArrayList());
-        listPartitionInfo.setIsInMemory(partitionId, true);
         LakeMaterializedView mv3 =
                 new LakeMaterializedView(mvId, dbId, "mv1", null, null, listPartitionInfo, null, null);
         recyclePartitionInfo = mv3.buildRecyclePartitionInfo(dbId, partition);

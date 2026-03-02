@@ -15,16 +15,17 @@
 #include "fs/key_cache.h"
 
 #include "agent/master_info.h"
+#include "base/metrics.h"
+#include "base/url_coding.h"
+#include "base/utility/defer_op.h"
 #include "fs/encrypt_file.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/Types_types.h"
 #include "gutil/casts.h"
 #include "runtime/client_cache.h"
-#include "util/defer_op.h"
-#include "util/metrics.h"
-#include "util/starrocks_metrics.h"
+#include "runtime/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 #include "util/thrift_rpc_helper.h"
-#include "util/url_coding.h"
 
 namespace starrocks {
 
@@ -131,9 +132,11 @@ KeyCache& KeyCache::instance() {
 }
 
 KeyCache::KeyCache() {
-    StarRocksMetrics::instance()->metrics()->register_metric("encryption_keys_created", &encryption_keys_created);
-    StarRocksMetrics::instance()->metrics()->register_metric("encryption_keys_unwrapped", &encryption_keys_unwrapped);
-    StarRocksMetrics::instance()->metrics()->register_metric("encryption_keys_in_cache", &encryption_keys_in_cache);
+    GlobalMetricsRegistry::instance()->metrics()->register_metric("encryption_keys_created", &encryption_keys_created);
+    GlobalMetricsRegistry::instance()->metrics()->register_metric("encryption_keys_unwrapped",
+                                                                  &encryption_keys_unwrapped);
+    GlobalMetricsRegistry::instance()->metrics()->register_metric("encryption_keys_in_cache",
+                                                                  &encryption_keys_in_cache);
 }
 
 Status KeyCache::_resolve_encryption_meta(const EncryptionMetaPB& metaPb, std::vector<const EncryptionKey*>& keys,

@@ -40,8 +40,8 @@ public class MvRefreshArbiter {
     private static final Logger LOG = LogManager.getLogger(MvRefreshArbiter.class);
 
     public static boolean needsToRefreshTable(MaterializedView mv, BaseTableInfo baseTableInfo, Table table,
-                                              boolean isQueryRewrite) {
-        Optional<Boolean> needsToRefresh = needsToRefreshTable(mv, baseTableInfo, table, true, isQueryRewrite);
+                                              MVTimelinessArbiter.QueryRewriteParams queryRewriteParams) {
+        Optional<Boolean> needsToRefresh = needsToRefreshTable(mv, baseTableInfo, table, true, queryRewriteParams);
         if (needsToRefresh.isPresent()) {
             return needsToRefresh.get();
         }
@@ -52,11 +52,12 @@ public class MvRefreshArbiter {
      * Once materialized view's base tables have updated, we need to check correspond materialized views' partitions
      * to be refreshed.
      * @param mv The materialized view to check
-     * @param isQueryRewrite Mark whether this caller is query rewrite or not, when it's true we can use staleness to shortcut
+     * @param queryRewriteParams Mark whether this caller is query rewrite or not, when it's true we can use staleness to shortcut
      * @return mv timeliness update info which contains all need refreshed partitions of materialized view and partition name
      * to partition values.
      */
-    public static MvUpdateInfo getMVTimelinessUpdateInfo(MaterializedView mv, boolean isQueryRewrite) {
+    public static MvUpdateInfo getMVTimelinessUpdateInfo(MaterializedView mv,
+                                                         MVTimelinessArbiter.QueryRewriteParams queryRewriteParams) {
         // Skip check for sync materialized view.
         if (mv.getRefreshScheme().isSync()) {
             return MvUpdateInfo.noRefresh(mv);
@@ -65,7 +66,7 @@ public class MvRefreshArbiter {
         // check mv's query rewrite consistency mode property only in query rewrite.
         TableProperty tableProperty = mv.getTableProperty();
         TableProperty.QueryRewriteConsistencyMode mvConsistencyRewriteMode = tableProperty.getQueryRewriteConsistencyMode();
-        if (isQueryRewrite) {
+        if (queryRewriteParams.isQueryRewrite()) {
             switch (mvConsistencyRewriteMode) {
                 case DISABLE:
                     return MvUpdateInfo.fullRefresh(mv);
@@ -80,7 +81,7 @@ public class MvRefreshArbiter {
 
         logMVPrepare(mv, "MV refresh arbiter start to get partition names to refresh, query rewrite mode: {}",
                 mvConsistencyRewriteMode);
-        MVTimelinessArbiter timelinessArbiter = buildMVTimelinessArbiter(mv, isQueryRewrite);
+        MVTimelinessArbiter timelinessArbiter = buildMVTimelinessArbiter(mv, queryRewriteParams);
         try (Timer ignored = Tracers.watchScope("MVTimelinessUpdateInfo")) {
             return timelinessArbiter.getMVTimelinessUpdateInfo(mvConsistencyRewriteMode);
         } catch (AnalysisException e) {
@@ -92,18 +93,18 @@ public class MvRefreshArbiter {
     /**
      * Create the MVTimelinessArbiter instance according to the partition info of the materialized view.
      * @param mv the materialized view to get the timeliness arbiter
-     * @param isQueryRewrite whether this caller is query rewrite or mv refresh
+     * @param queryRewriteParams whether this caller is query rewrite or mv refresh
      * @return MVTimelinessArbiter instance according to the partition info of the materialized view
      */
     public static MVTimelinessArbiter buildMVTimelinessArbiter(MaterializedView mv,
-                                                               boolean isQueryRewrite) {
+                                                               MVTimelinessArbiter.QueryRewriteParams queryRewriteParams) {
         PartitionInfo partitionInfo = mv.getPartitionInfo();
         if (partitionInfo.isUnPartitioned()) {
-            return new MVTimelinessNonPartitionArbiter(mv, isQueryRewrite);
+            return new MVTimelinessNonPartitionArbiter(mv, queryRewriteParams);
         } else if (partitionInfo.isRangePartition()) {
-            return new MVTimelinessRangePartitionArbiter(mv, isQueryRewrite);
+            return new MVTimelinessRangePartitionArbiter(mv, queryRewriteParams);
         } else if (partitionInfo.isListPartition()) {
-            return new MVTimelinessListPartitionArbiter(mv, isQueryRewrite);
+            return new MVTimelinessListPartitionArbiter(mv, queryRewriteParams);
         } else {
             throw UnsupportedException.unsupportedException("unsupported partition info type:" +
                     partitionInfo.getClass().getName());
@@ -118,7 +119,7 @@ public class MvRefreshArbiter {
                                                          BaseTableInfo baseTableInfo,
                                                          Table baseTable,
                                                          boolean withMv,
-                                                         boolean isQueryRewrite) {
+                                                         MVTimelinessArbiter.QueryRewriteParams queryRewriteParams) {
         if (baseTable.isView()) {
             // do nothing
             return Optional.of(false);
@@ -129,14 +130,15 @@ public class MvRefreshArbiter {
                 return Optional.of(false);
             }
 
-            Set<String> baseUpdatedPartitionNames = mv.getUpdatedPartitionNamesOfOlapTable(olapBaseTable, isQueryRewrite);
+            Set<String> baseUpdatedPartitionNames = mv.getUpdatedPartitionNamesOfOlapTable(olapBaseTable,
+                    queryRewriteParams.isQueryRewrite());
             if (!baseUpdatedPartitionNames.isEmpty()) {
                 return Optional.of(true);
             }
 
             // recursive check its children
             if (withMv && baseTable.isMaterializedView()) {
-                MvUpdateInfo mvUpdateInfo = getMVTimelinessUpdateInfo((MaterializedView) baseTable, isQueryRewrite);
+                MvUpdateInfo mvUpdateInfo = getMVTimelinessUpdateInfo((MaterializedView) baseTable, queryRewriteParams);
                 if (mvUpdateInfo == null || !mvUpdateInfo.isValidRewrite()) {
                     return Optional.empty();
                 }
@@ -145,7 +147,8 @@ public class MvRefreshArbiter {
             }
             return Optional.of(false);
         } else {
-            Set<String> baseUpdatedPartitionNames = mv.getUpdatedPartitionNamesOfExternalTable(baseTable, isQueryRewrite);
+            Set<String> baseUpdatedPartitionNames = mv.getUpdatedPartitionNamesOfExternalTable(baseTable,
+                    queryRewriteParams.isQueryRewrite());
             if (baseUpdatedPartitionNames == null) {
                 return Optional.empty();
             }
@@ -157,27 +160,28 @@ public class MvRefreshArbiter {
      * Get to refresh partition info of the specific table.
      * @param baseTable: the table to check
      * @param withMv: whether to check the materialized view if it's a materialized view
-     * @param isQueryRewrite: whether this caller is query rewrite or not
+     * @param queryRewriteParams: whether this caller is query rewrite or not
      * @return MvBaseTableUpdateInfo: the update info of the base table
      */
     public static MvBaseTableUpdateInfo getMvBaseTableUpdateInfo(MaterializedView mv,
                                                                  Table baseTable,
                                                                  boolean withMv,
-                                                                 boolean isQueryRewrite) {
+                                                                 MVTimelinessArbiter.QueryRewriteParams queryRewriteParams) {
         MvBaseTableUpdateInfo baseTableUpdateInfo = new MvBaseTableUpdateInfo();
         if (baseTable.isView()) {
             // do nothing
             return baseTableUpdateInfo;
         } else if (baseTable.isNativeTableOrMaterializedView()) {
             OlapTable olapBaseTable = (OlapTable) baseTable;
-            Set<String> baseUpdatedPartitionNames = mv.getUpdatedPartitionNamesOfOlapTable(olapBaseTable, isQueryRewrite);
+            Set<String> baseUpdatedPartitionNames = mv.getUpdatedPartitionNamesOfOlapTable(olapBaseTable,
+                    queryRewriteParams.isQueryRewrite());
             if (baseUpdatedPartitionNames == null) {
                 return null;
             }
             PCellSortedSet updatedPCellSet = PCellUtils.ofOlapTable(olapBaseTable, baseUpdatedPartitionNames);
             // recursive check its children
             if (withMv && baseTable.isMaterializedView()) {
-                MvUpdateInfo mvUpdateInfo = getMVTimelinessUpdateInfo((MaterializedView) baseTable, isQueryRewrite);
+                MvUpdateInfo mvUpdateInfo = getMVTimelinessUpdateInfo((MaterializedView) baseTable, queryRewriteParams);
                 if (mvUpdateInfo == null || !mvUpdateInfo.isValidRewrite()) {
                     return null;
                 }
@@ -188,7 +192,8 @@ public class MvRefreshArbiter {
             // update base table's partition info
             baseTableUpdateInfo.addToRefreshPartitionNames(updatedPCellSet);
         } else {
-            Set<String> baseUpdatedPartitionNames = mv.getUpdatedPartitionNamesOfExternalTable(baseTable, isQueryRewrite);
+            Set<String> baseUpdatedPartitionNames = mv.getUpdatedPartitionNamesOfExternalTable(baseTable,
+                    queryRewriteParams.isQueryRewrite());
             if (baseUpdatedPartitionNames == null) {
                 return null;
             }

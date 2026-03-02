@@ -16,6 +16,7 @@
 
 #include <variant>
 
+#include "base/simd/simd.h"
 #include "exec/aggregator.h"
 #include "exec/pipeline/aggregate/aggregate_distinct_streaming_sink_operator.h"
 #include "exec/pipeline/aggregate/aggregate_distinct_streaming_source_operator.h"
@@ -23,7 +24,6 @@
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "runtime/current_thread.h"
-#include "simd/simd.h"
 
 namespace starrocks {
 

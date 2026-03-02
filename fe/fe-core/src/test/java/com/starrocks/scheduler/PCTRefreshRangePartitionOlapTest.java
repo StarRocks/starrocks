@@ -15,7 +15,6 @@
 package com.starrocks.scheduler;
 
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.common.Config;
 import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ExecPlan;
@@ -34,7 +33,6 @@ public class PCTRefreshRangePartitionOlapTest extends MVTestBase {
 
     @BeforeAll
     public static void beforeClass() throws Exception {
-        Config.query_detail_explain_level = "NORMAL";
         MVTestBase.beforeClass();
     }
 

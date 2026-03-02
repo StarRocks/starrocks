@@ -90,8 +90,8 @@ public class ConnectorTableTriggerAnalyzeMgr {
             ConnectorTableColumnKey columnKey = entry.getKey();
             // first check table exist
             if (!tableExist) {
-                try {
-                    tableTriple = StatisticsUtils.getTableTripleByUUID(new ConnectContext(), columnKey.tableUUID);
+                try (ConnectContext.ContextScope scope = ConnectContext.enterOnlyReadIcebergCacheScope(ConnectContext.get())) {
+                    tableTriple = StatisticsUtils.getTableTripleByUUID(scope.getContext(), columnKey.tableUUID);
                     // check table could run analyze
                     if (!tableTriple.getRight().isAnalyzableExternalTable()) {
                         return;

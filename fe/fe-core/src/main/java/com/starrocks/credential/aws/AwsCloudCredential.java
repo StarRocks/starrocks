@@ -23,6 +23,7 @@ import com.staros.proto.AwsSimpleCredentialInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.S3FileStoreInfo;
+import com.starrocks.connector.share.credential.AwsCredentialUtil;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudCredential;
 import com.starrocks.credential.provider.AssumedRoleCredentialProvider;
@@ -49,7 +50,6 @@ import software.amazon.awssdk.services.sts.StsClientBuilder;
 import software.amazon.awssdk.services.sts.auth.StsAssumeRoleCredentialsProvider;
 import software.amazon.awssdk.services.sts.model.AssumeRoleRequest;
 
-import java.net.URI;
 import java.util.Map;
 import java.util.UUID;
 
@@ -175,7 +175,7 @@ public class AwsCloudCredential implements CloudCredential {
             stsClientBuilder.region(Region.of(region));
         }
         if (!endpoint.isEmpty()) {
-            stsClientBuilder.endpointOverride(URI.create(endpoint));
+            stsClientBuilder.endpointOverride(AwsCredentialUtil.ensureSchemeInEndpoint(endpoint));
         }
 
         // Build AssumeRoleRequest
@@ -374,4 +374,5 @@ public class AwsCloudCredential implements CloudCredential {
         }
         return region;
     }
+
 }

@@ -23,11 +23,10 @@ import com.google.common.collect.Maps;
 import com.google.common.util.concurrent.Uninterruptibles;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.Table;
@@ -62,11 +61,10 @@ import com.starrocks.scheduler.mv.pct.PCTTableSnapshotInfo;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.InsertStmt;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.PCellSetMapping;
 import com.starrocks.sql.common.PCellSortedSet;
@@ -74,6 +72,7 @@ import com.starrocks.sql.common.PCellUtils;
 import com.starrocks.sql.common.PCellWithName;
 import com.starrocks.sql.common.PartitionNameSetMap;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import org.apache.logging.log4j.Logger;
@@ -412,31 +411,19 @@ public abstract class BaseMVRefreshProcessor {
                     throw new DmlException("Force refresh failed, database:" + db.getFullName() + " not exist");
                 }
                 try {
-                    PartitionInfo partitionInfo = mv.getPartitionInfo();
-                    DataProperty dataProperty = null;
-                    if (!mv.isPartitionedTable()) {
-                        String partitionName = toRefreshPartitions.getPartitions().iterator().next().name();
-                        Partition partition = mv.getPartition(partitionName);
-                        dataProperty = partitionInfo.getDataProperty(partition.getId());
-                        mv.dropPartition(db.getId(), partitionName, false);
+                    // for non-partitioned MVs, or for complete refresh of partitioned MVs, just clear the visible
+                    // version map directly since all partitions will be refreshed.
+                    if (!mv.isPartitionedTable() || mvRefreshParams.isCompleteRefresh()) {
+                        mv.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
                     } else {
-                        for (PCellWithName partName : toRefreshPartitions.getPartitions()) {
-                            mvRefreshPartitioner.dropPartition(db, mv, partName.name());
-                        }
-                    }
-
-                    // for non-partitioned table, we need to build the partition here
-                    if (!mv.isPartitionedTable()) {
-                        LocalMetastore localMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
-                        ConnectContext connectContext = mvContext.getCtx();
-                        localMetastore.buildNonPartitionOlapTable(db, mv, partitionInfo, dataProperty,
-                                connectContext.getCurrentComputeResource());
+                        mv.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMapByMVPartitions(
+                                toRefreshPartitions.getPartitionNames());
                     }
                 } catch (Exception e) {
-                    logger.warn("failed to drop partitions {} for force refresh",
+                    logger.warn("failed to clear version map {} for force refresh",
                             Joiner.on(",").join(toRefreshPartitions.getPartitionNames()),
                             DebugUtil.getRootStackTrace(e));
-                    throw new AnalysisException("failed to drop partitions for force refresh: " + e.getMessage());
+                    throw new AnalysisException("failed to clear version map for force refresh: " + e.getMessage());
                 } finally {
                     locker.unLockTableWithIntensiveDbLock(db.getId(), this.mv.getId(), LockType.WRITE);
                 }
@@ -475,9 +462,9 @@ public abstract class BaseMVRefreshProcessor {
                 (InsertStmt) SqlParser.parse(definition, ctx.getSessionVariable()).get(0);
         // set target partitions
         if (PCellUtils.isNotEmpty(mvTargetPartitionNames)) {
-            PartitionNames partitionNames =
-                    new PartitionNames(false, Lists.newArrayList(mvTargetPartitionNames.getPartitionNames()));
-            insertStmt.setTargetPartitionNames(partitionNames);
+            PartitionRef partitionRef = new PartitionRef(Lists.newArrayList(mvTargetPartitionNames.getPartitionNames()),
+                    false, NodePosition.ZERO);
+            insertStmt.setTargetPartitionNames(partitionRef);
         }
 
         // insert overwrite mv must set system = true
@@ -515,7 +502,14 @@ public abstract class BaseMVRefreshProcessor {
         if (this.mvContext == null || this.mvContext.getStatus() == null) {
             return;
         }
-        action.accept(this.mvContext.getStatus());
+
+        // ignore exception for update task run status
+        try {
+            action.accept(this.mvContext.getStatus());
+        } catch (Exception e) {
+            logger.warn("failed to update task run status for mv refresh, task run id: {}, error: {}",
+                    this.mvContext.getTaskRunId(), DebugUtil.getRootStackTrace(e));
+        }
     }
 
     /**
@@ -664,6 +658,16 @@ public abstract class BaseMVRefreshProcessor {
                 // NOTE: DeepCopy.copyWithGson is very time costing, use `copyOnlyForQuery` to reduce the cost.
                 // TODO: Implement a `SnapshotTable` later which can use the copied table or transfer to the real table.
                 final Table table = tableOpt.get();
+
+                // Check if the table is an Iceberg table with partition evolution
+                if (table instanceof IcebergTable) {
+                    IcebergTable icebergTable = (IcebergTable) table;
+                    if (icebergTable.getNativeTable().specs().size() > 1) {
+                        throw new DmlException("Do not support refresh materialized view when base iceberg table " +
+                                table.getName() + " has done partition evolution");
+                    }
+                }
+
                 if (table.isNativeTableOrMaterializedView()) {
                     OlapTable copied = null;
                     if (table.isOlapOrCloudNativeTable()) {

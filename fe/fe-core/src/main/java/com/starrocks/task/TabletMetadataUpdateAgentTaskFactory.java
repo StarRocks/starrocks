@@ -41,7 +41,7 @@ public class TabletMetadataUpdateAgentTaskFactory {
                                                                                        Boolean value,
                                                                                        TTabletMetaType metaType) {
         if (metaType == TTabletMetaType.INMEMORY) {
-            return createIsInMemoryUpdateTask(backendId, tablets, value);
+            return null;
         }
         if (metaType == TTabletMetaType.ENABLE_PERSISTENT_INDEX) {
             return createEnablePersistentIndexUpdateTask(backendId, tablets, value);
@@ -51,19 +51,6 @@ public class TabletMetadataUpdateAgentTaskFactory {
 
     public static TabletMetadataUpdateAgentTask createPartitionIdUpdateTask(long backendId, Set<Long> tablets) {
         return new UpdatePartitionIdTask(backendId, requireNonNull(tablets, "tablets is null"));
-    }
-
-    public static TabletMetadataUpdateAgentTask createIsInMemoryUpdateTask(long backendId, Set<Long> tablets,
-                                                                           Boolean value) {
-        requireNonNull(tablets, "tablets is null");
-        List<Pair<Long, Boolean>> valueList =
-                tablets.stream().map(id -> new Pair<>(id, value)).collect(Collectors.toList());
-        return createIsInMemoryUpdateTask(backendId, valueList);
-    }
-
-    public static TabletMetadataUpdateAgentTask createIsInMemoryUpdateTask(long backendId,
-                                                                           List<Pair<Long, Boolean>> inMemoryConfigs) {
-        return new UpdateIsInMemoryTask(backendId, inMemoryConfigs);
     }
 
     public static TabletMetadataUpdateAgentTask createLakePersistentIndexUpdateTask(long backendId, Set<Long> tablets,
@@ -166,33 +153,6 @@ public class TabletMetadataUpdateAgentTaskFactory {
                 if (metaInfos.size() > 10000) {
                     break;
                 }
-            }
-            return metaInfos;
-        }
-    }
-
-    private static class UpdateIsInMemoryTask extends TabletMetadataUpdateAgentTask {
-        private final List<Pair<Long, Boolean>> isInMemoryList;
-
-        private UpdateIsInMemoryTask(long backendId, List<Pair<Long, Boolean>> isInMemoryList) {
-            super(backendId, isInMemoryList.hashCode());
-            this.isInMemoryList = isInMemoryList;
-        }
-
-        @Override
-        public Set<Long> getTablets() {
-            return isInMemoryList.stream().map(p -> p.first).collect(Collectors.toSet());
-        }
-
-        @Override
-        public List<TTabletMetaInfo> getTTabletMetaInfoList() {
-            List<TTabletMetaInfo> metaInfos = Lists.newArrayList();
-            for (Pair<Long, Boolean> pair : isInMemoryList) {
-                TTabletMetaInfo metaInfo = new TTabletMetaInfo();
-                metaInfo.setTablet_id(pair.first);
-                metaInfo.setIs_in_memory(pair.second);
-                metaInfo.setMeta_type(TTabletMetaType.INMEMORY);
-                metaInfos.add(metaInfo);
             }
             return metaInfos;
         }

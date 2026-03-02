@@ -54,6 +54,11 @@ enum TFunctionVersion {
     RUNTIME_FILTER_SERIALIZE_VERSION_3 = 8,
 }
 
+enum TArrowFlightSQLVersion {
+  V0 = 0,
+  V1 = 1,
+}
+
 enum TQueryType {
     SELECT,
     LOAD,
@@ -350,6 +355,17 @@ struct TQueryOptions {
   191: optional i64 column_view_concat_bytes_limit;
 
   200: optional bool enable_full_sort_use_german_string;
+
+  // Hash function version for exchange shuffle
+  // 0: fnv_hash (default, for backward compatibility)
+  // 1: xxh3_hash (faster)
+  201: optional i32 exchange_hash_function_version = 0;
+   // whether enable predicate column late materialization
+  202: optional bool enable_predicate_col_late_materialize;
+  
+  210: optional bool enable_global_late_materialization;
+  211: optional bool enable_schedule_log;
+
 }
 
 // A scan range plus the parameters needed to execute that scan.
@@ -520,6 +536,8 @@ struct TExecPlanFragmentParams {
   60: optional TPredicateTreeParams pred_tree_params
 
   61: optional list<i32> exec_stats_node_ids;
+
+  62: optional i32 arrow_flight_sql_version;
 }
 
 struct TExecPlanFragmentResult {

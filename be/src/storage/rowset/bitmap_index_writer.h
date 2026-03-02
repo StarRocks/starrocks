@@ -50,18 +50,28 @@ class WritableFile;
 
 class BitmapIndexWriter {
 public:
-    static Status create(const TypeInfoPtr& type_info, std::unique_ptr<BitmapIndexWriter>* res);
+    static Status create(const TypeInfoPtr& type_info, std::unique_ptr<BitmapIndexWriter>* res, int32_t gram_num = -1);
 
     BitmapIndexWriter() = default;
     virtual ~BitmapIndexWriter() = default;
+
+    virtual void add_value_with_current_rowid(const void* vptr) = 0;
 
     virtual void add_values(const void* values, size_t count) = 0;
 
     virtual void add_nulls(uint32_t count) = 0;
 
     virtual Status finish(WritableFile* file, ColumnIndexMetaPB* index_meta) = 0;
+    virtual Status finish(WritableFile* file, BitmapIndexPB* meta) = 0;
 
     virtual uint64_t size() const = 0;
+
+    virtual void incre_rowid() = 0;
+
+    void set_dictionary_compression(CompressionTypePB compression) { _dictionary_compression = compression; }
+
+protected:
+    CompressionTypePB _dictionary_compression = LZ4;
 
 private:
     BitmapIndexWriter(const BitmapIndexWriter&) = delete;

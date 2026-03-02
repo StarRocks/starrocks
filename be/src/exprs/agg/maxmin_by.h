@@ -17,6 +17,7 @@
 #include <limits>
 #include <type_traits>
 
+#include "base/container/raw_container.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/type_traits.h"
@@ -25,7 +26,6 @@
 #include "exprs/agg/aggregate_traits.h"
 #include "gutil/casts.h"
 #include "types/logical_type.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 
@@ -401,6 +401,8 @@ public:
         }
     }
 
+    bool support_nullable_immediate_input() const override { return true; }
+
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         Slice src;
         if (column->only_null() || column->is_null(row_num)) {
@@ -474,7 +476,7 @@ public:
             if (this->data(state).buffer_result.size() == 0 && !State::not_filter_nulls_flag) {
                 column->append_default();
             } else {
-                down_cast<BinaryColumn*>(column->data_column().get())->append(Slice(buffer.data(), buffer.size()));
+                down_cast<BinaryColumn*>(column->data_column_raw_ptr())->append(Slice(buffer.data(), buffer.size()));
                 column->null_column_data().push_back(0);
             }
         } else {
@@ -484,19 +486,19 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
+                                     MutableColumnPtr& dst) const override {
         if (src[1]->only_null()) {
-            DCHECK((*dst)->is_nullable());
-            (*dst)->append_default(chunk_size);
+            DCHECK(dst->is_nullable());
+            dst->append_default(chunk_size);
             return;
         }
 
         const auto* col_maxmin = down_cast<const InputColumnType*>(ColumnHelper::get_data_column(src[1].get()));
         const auto maxmin_datas = col_maxmin->immutable_data();
         BinaryColumn* result = nullptr;
-        if ((*dst)->is_nullable()) {
-            auto* dst_nullable_column = down_cast<NullableColumn*>((*dst).get());
-            result = down_cast<BinaryColumn*>(dst_nullable_column->data_column().get());
+        if (dst->is_nullable()) {
+            auto* dst_nullable_column = down_cast<NullableColumn*>(dst.get());
+            result = down_cast<BinaryColumn*>(dst_nullable_column->data_column_raw_ptr());
 
             if (src[1]->is_nullable()) {
                 auto null_column_data = down_cast<const NullableColumn*>(src[1].get())->immutable_null_column_data();
@@ -505,7 +507,7 @@ public:
                 dst_nullable_column->null_column_data().resize(chunk_size, 0);
             }
         } else {
-            result = down_cast<BinaryColumn*>((*dst).get());
+            result = down_cast<BinaryColumn*>(dst.get());
         }
 
         Bytes& bytes = result->get_bytes();
@@ -516,8 +518,8 @@ public:
         for (size_t i = 0; i < chunk_size; ++i) {
             if (src[1]->is_null(i)) {
                 result->get_offset()[i + 1] = old_size;
-                DCHECK((*dst)->is_nullable());
-                down_cast<NullableColumn*>((*dst).get())->set_has_null(true);
+                DCHECK(dst->is_nullable());
+                down_cast<NullableColumn*>(dst.get())->set_has_null(true);
             } else {
                 auto is_null = src[0]->only_null() || src[0]->is_null(i);
                 T value = maxmin_datas[i];
@@ -530,7 +532,7 @@ public:
                         p += sizeof(T);
                         *p = 1;
                     } else {
-                        auto* dst_nullable_column = down_cast<NullableColumn*>((*dst).get());
+                        auto* dst_nullable_column = down_cast<NullableColumn*>(dst.get());
                         auto& dst_nulls = dst_nullable_column->null_column_data();
                         dst_nulls[i] = DATUM_NULL;
                         dst_nullable_column->set_has_null(true);
@@ -582,7 +584,7 @@ public:
                 to->append_default();
             } else {
                 if (to->is_nullable()) {
-                    down_cast<NullableColumn*>(to)->null_column()->append(DATUM_NOT_NULL);
+                    down_cast<NullableColumn*>(to)->null_column_raw_ptr()->append(DATUM_NOT_NULL);
                 }
                 ColumnHelper::get_data_column(to)->deserialize_and_append(this->data(state).buffer_result.data());
             }
@@ -591,7 +593,7 @@ public:
                 to->append_default();
             } else {
                 if (to->is_nullable()) {
-                    down_cast<NullableColumn*>(to)->null_column()->append(DATUM_NOT_NULL);
+                    down_cast<NullableColumn*>(to)->null_column_raw_ptr()->append(DATUM_NOT_NULL);
                 }
                 ColumnHelper::get_data_column(to)->deserialize_and_append(this->data(state).buffer_result.data());
             }
@@ -610,7 +612,7 @@ public:
             } else {
                 if (dst->is_nullable()) {
                     for (size_t i = start; i < end; ++i) {
-                        down_cast<NullableColumn*>(dst)->null_column()->append(DATUM_NOT_NULL);
+                        down_cast<NullableColumn*>(dst)->null_column_raw_ptr()->append(DATUM_NOT_NULL);
                     }
                 }
                 for (size_t i = start; i < end; ++i) {
@@ -625,7 +627,7 @@ public:
             } else {
                 if (dst->is_nullable()) {
                     for (size_t i = start; i < end; ++i) {
-                        down_cast<NullableColumn*>(dst)->null_column()->append(DATUM_NOT_NULL);
+                        down_cast<NullableColumn*>(dst)->null_column_raw_ptr()->append(DATUM_NOT_NULL);
                     }
                 }
                 for (size_t i = start; i < end; ++i) {
@@ -668,6 +670,8 @@ public:
             update(ctx, columns, state, i);
         }
     }
+
+    bool support_nullable_immediate_input() const override { return true; }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         if (column->only_null() || column->is_null(row_num)) {
@@ -729,7 +733,7 @@ public:
             if (!this->data(state).has_value()) {
                 column->append_default();
             } else {
-                down_cast<BinaryColumn*>(column->data_column().get())->append(Slice(buffer.data(), buffer.size()));
+                down_cast<BinaryColumn*>(column->data_column_raw_ptr())->append(Slice(buffer.data(), buffer.size()));
                 column->null_column_data().push_back(0);
             }
         } else {
@@ -739,18 +743,18 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
+                                     MutableColumnPtr& dst) const override {
         if (src[1]->only_null()) {
-            DCHECK((*dst)->is_nullable());
-            (*dst)->append_default(chunk_size);
+            DCHECK(dst->is_nullable());
+            dst->append_default(chunk_size);
             return;
         }
         const BinaryColumn* col_maxmin = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(src[1].get()));
 
         BinaryColumn* result = nullptr;
-        if ((*dst)->is_nullable()) {
-            auto* dst_nullable_column = down_cast<NullableColumn*>((*dst).get());
-            result = down_cast<BinaryColumn*>(dst_nullable_column->data_column().get());
+        if (dst->is_nullable()) {
+            auto* dst_nullable_column = down_cast<NullableColumn*>(dst.get());
+            result = down_cast<BinaryColumn*>(dst_nullable_column->data_column_raw_ptr());
 
             if (src[1]->is_nullable()) {
                 auto null_datas = down_cast<const NullableColumn*>(src[1].get())->immutable_null_column_data();
@@ -760,7 +764,7 @@ public:
                 dst_nullable_column->null_column_data().resize(chunk_size, 0);
             }
         } else {
-            result = down_cast<BinaryColumn*>((*dst).get());
+            result = down_cast<BinaryColumn*>(dst.get());
         }
 
         Bytes& bytes = result->get_bytes();
@@ -769,7 +773,7 @@ public:
         size_t old_size = bytes.size();
         for (size_t i = 0; i < chunk_size; ++i) {
             if (src[1]->is_null(i)) {
-                auto* dst_nullable_column = down_cast<NullableColumn*>((*dst).get());
+                auto* dst_nullable_column = down_cast<NullableColumn*>(dst.get());
                 dst_nullable_column->set_has_null(true);
                 result->get_offset()[i + 1] = old_size;
             } else {
@@ -788,7 +792,7 @@ public:
                         p += value_size;
                         *p = 1;
                     } else {
-                        auto* dst_nullable_column = down_cast<NullableColumn*>((*dst).get());
+                        auto* dst_nullable_column = down_cast<NullableColumn*>(dst.get());
                         auto& dst_nulls = dst_nullable_column->null_column_data();
                         dst_nulls[i] = DATUM_NULL;
                         dst_nullable_column->set_has_null(true);
@@ -829,7 +833,7 @@ public:
                 to->append_default();
             } else {
                 if (to->is_nullable()) {
-                    down_cast<NullableColumn*>(to)->null_column()->append(DATUM_NOT_NULL);
+                    down_cast<NullableColumn*>(to)->null_column_raw_ptr()->append(DATUM_NOT_NULL);
                 }
                 ColumnHelper::get_data_column(to)->deserialize_and_append(this->data(state).buffer_result.data());
             }
@@ -838,7 +842,7 @@ public:
                 to->append_default();
             } else {
                 if (to->is_nullable()) {
-                    down_cast<NullableColumn*>(to)->null_column()->append(DATUM_NOT_NULL);
+                    down_cast<NullableColumn*>(to)->null_column_raw_ptr()->append(DATUM_NOT_NULL);
                 }
                 ColumnHelper::get_data_column(to)->deserialize_and_append(this->data(state).buffer_result.data());
             }
@@ -857,7 +861,7 @@ public:
             } else {
                 if (dst->is_nullable()) {
                     for (size_t i = start; i < end; ++i) {
-                        down_cast<NullableColumn*>(dst)->null_column()->append(DATUM_NOT_NULL);
+                        down_cast<NullableColumn*>(dst)->null_column_raw_ptr()->append(DATUM_NOT_NULL);
                     }
                 }
                 for (size_t i = start; i < end; ++i) {
@@ -872,7 +876,7 @@ public:
             } else {
                 if (dst->is_nullable()) {
                     for (size_t i = start; i < end; ++i) {
-                        down_cast<NullableColumn*>(dst)->null_column()->append(DATUM_NOT_NULL);
+                        down_cast<NullableColumn*>(dst)->null_column_raw_ptr()->append(DATUM_NOT_NULL);
                     }
                 }
                 for (size_t i = start; i < end; ++i) {

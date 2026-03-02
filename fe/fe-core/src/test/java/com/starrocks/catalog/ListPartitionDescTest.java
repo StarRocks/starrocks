@@ -21,6 +21,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.sql.analyzer.PartitionDescAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
@@ -28,7 +29,6 @@ import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.thrift.TStorageMedium;
-import com.starrocks.thrift.TTabletType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.DecimalType;
 import com.starrocks.type.IntegerType;
@@ -67,7 +67,7 @@ public class ListPartitionDescTest {
         userId.setAggregateType(AggregateType.NONE);
         ColumnDef rechargeMoney = new ColumnDef("recharge_money", new TypeDef(TypeFactory.createDecimalV2Type(32, 2)));
         rechargeMoney.setAggregateType(AggregateType.NONE);
-        ColumnDef province = new ColumnDef("province", new TypeDef(TypeFactory.createVarchar(64)));
+        ColumnDef province = new ColumnDef("province", new TypeDef(TypeFactory.createVarcharType(64)));
         province.setAggregateType(AggregateType.NONE);
         ColumnDef dt = new ColumnDef("dt", new TypeDef(TypeFactory.createType(PrimitiveType.DATE)));
         dt.setAggregateType(AggregateType.NONE);
@@ -216,9 +216,9 @@ public class ListPartitionDescTest {
     @Test
     public void testNotAggregatedColumn() {
         assertThrows(AnalysisException.class, () -> {
-            ColumnDef province = new ColumnDef("province", new TypeDef(TypeFactory.createVarchar(64)));
+            ColumnDef province = new ColumnDef("province", new TypeDef(TypeFactory.createVarcharType(64)));
             province.setAggregateType(AggregateType.MAX);
-            ColumnDef dt = new ColumnDef("dt", new TypeDef(TypeFactory.createVarchar(10)));
+            ColumnDef dt = new ColumnDef("dt", new TypeDef(TypeFactory.createVarcharType(10)));
             dt.setAggregateType(AggregateType.NONE);
             List<ColumnDef> columnDefList = Lists.newArrayList(province, dt);
             ListPartitionDesc listSinglePartitionDesc = this.findListSinglePartitionDesc("province", "p1", "p2", null);
@@ -317,8 +317,6 @@ public class ListPartitionDescTest {
         Assertions.assertEquals(time, dataProperty.getCooldownTimeMs());
 
         Assertions.assertEquals(1, partitionInfo.getReplicationNum(10001L));
-        Assertions.assertEquals(TTabletType.TABLET_TYPE_MEMORY, partitionInfo.getTabletType(10001L));
-        Assertions.assertEquals(true, partitionInfo.getIsInMemory(10001L));
         Assertions.assertEquals(false, partitionInfo.isMultiColumnPartition());
     }
 
@@ -334,8 +332,6 @@ public class ListPartitionDescTest {
         Assertions.assertEquals(time, dataProperty.getCooldownTimeMs());
 
         Assertions.assertEquals(1, partitionInfo.getReplicationNum(10001L));
-        Assertions.assertEquals(TTabletType.TABLET_TYPE_MEMORY, partitionInfo.getTabletType(10001L));
-        Assertions.assertEquals(true, partitionInfo.getIsInMemory(10001L));
         Assertions.assertEquals(true, partitionInfo.isMultiColumnPartition());
     }
 

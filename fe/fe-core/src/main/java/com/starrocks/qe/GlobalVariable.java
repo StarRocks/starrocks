@@ -77,6 +77,9 @@ public final class GlobalVariable {
     public static final String ACTIVATE_ALL_ROLES_ON_LOGIN = "activate_all_roles_on_login";
     public static final String ACTIVATE_ALL_ROLES_ON_LOGIN_V2 = "activate_all_roles_on_login_v2";
     public static final String ENABLE_TDE = "enable_tde";
+    public static final String ARROW_FLIGHT_PROXY = "arrow_flight_proxy";
+    public static final String ARROW_FLIGHT_PROXY_ENABLED = "arrow_flight_proxy_enabled";
+    public static final String MAX_UNKNOWN_STRING_META_LENGTH = "max_unknown_string_meta_length";
 
     // cngroup
     public static final String CNGROUP_RESOURCE_USAGE_FRESH_RATIO = "cngroup_resource_usage_fresh_ratio";
@@ -97,6 +100,8 @@ public final class GlobalVariable {
     public static final String SPM_CAPTURE_INCLUDE_TABLE_PATTERN = "plan_capture_include_pattern";
 
     public static final String ENABLE_TABLE_NAME_CASE_INSENSITIVE = "enable_table_name_case_insensitive";
+
+    public static final String RUN_MODE = "run_mode";
 
 
     @VariableMgr.VarAttr(name = VERSION_COMMENT, flag = VariableMgr.READ_ONLY)
@@ -163,6 +168,9 @@ public final class GlobalVariable {
     @VariableMgr.VarAttr(name = ENABLE_TABLE_NAME_CASE_INSENSITIVE, flag = VariableMgr.READ_ONLY)
     public static boolean enableTableNameCaseInsensitive = false;
 
+    @VariableMgr.VarAttr(name = RUN_MODE, flag = VariableMgr.READ_ONLY)
+    public static String runMode = Config.run_mode;
+
     /**
      * Query will be pending when BE is overloaded, if `enableQueryQueueXxx` is true.
      * <p>
@@ -221,6 +229,17 @@ public final class GlobalVariable {
 
     @VariableMgr.VarAttr(name = ENABLE_TDE, flag = VariableMgr.GLOBAL | VariableMgr.READ_ONLY)
     public static boolean enableTde = KeyMgr.isEncrypted();
+
+    // Arrow Flight SQL proxy endpoint. Format: "hostname:port" or "grpcs://hostname:port" for TLS.
+    @VariableMgr.VarAttr(name = ARROW_FLIGHT_PROXY, flag = VariableMgr.GLOBAL)
+    private static volatile String arrowFlightProxy = "";
+
+    // Enable Arrow Flight SQL proxy mode.
+    @VariableMgr.VarAttr(name = ARROW_FLIGHT_PROXY_ENABLED, flag = VariableMgr.GLOBAL)
+    private static volatile boolean arrowFlightProxyEnabled = true;
+
+    @VariableMgr.VarAttr(name = MAX_UNKNOWN_STRING_META_LENGTH, flag = VariableMgr.GLOBAL)
+    private static int maxUnknownStringMetaLength = 64;
 
     @VariableMgr.VarAttr(name = CNGROUP_RESOURCE_USAGE_FRESH_RATIO)
     private static double cngroupResourceUsageFreshRatio = 0.5;
@@ -314,7 +333,7 @@ public final class GlobalVariable {
 
     public static int getQueryQueueDriverHighWater() {
         if (queryQueueDriverHighWater == 0) {
-            return BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe() * 16;
+            return BackendResourceStat.getInstance().getAvgNumCoresOfBe() * 16;
         }
         return queryQueueDriverHighWater;
     }
@@ -329,7 +348,7 @@ public final class GlobalVariable {
 
     public static int getQueryQueueDriverLowWater() {
         if (queryQueueDriverLowWater == 0) {
-            return BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe() * 8;
+            return BackendResourceStat.getInstance().getAvgNumCoresOfBe() * 8;
         }
         return queryQueueDriverLowWater;
     }
@@ -388,6 +407,29 @@ public final class GlobalVariable {
 
     public static void setActivateAllRolesOnLogin(boolean activateAllRolesOnLogin) {
         GlobalVariable.activateAllRolesOnLogin = activateAllRolesOnLogin;
+    }
+
+    public static String getArrowFlightProxy() {
+        return arrowFlightProxy;
+    }
+
+    public static void setArrowFlightProxy(String arrowFlightProxy) {
+        GlobalVariable.arrowFlightProxy = arrowFlightProxy;
+    }
+
+    public static boolean isArrowFlightProxyEnabled() {
+        return arrowFlightProxyEnabled;
+    }
+
+    public static void setArrowFlightProxyEnabled(boolean arrowFlightProxyEnabled) {
+        GlobalVariable.arrowFlightProxyEnabled = arrowFlightProxyEnabled;
+    }
+
+    public static int getMaxUnknownStringMetaLength() {
+        if (maxUnknownStringMetaLength <= 0) {
+            return 64;
+        }
+        return maxUnknownStringMetaLength;
     }
 
     public static void setCngroupResourceUsageFreshRatio(double value) {

@@ -23,6 +23,7 @@
 #include <mutex>
 #include <random>
 
+#include "base/testutil/assert.h"
 #include "fs/fs_util.h"
 #include "runtime/mem_pool.h"
 #include "storage/compaction.h"
@@ -33,7 +34,6 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_updates.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -105,7 +105,7 @@ TEST_F(CompactionManagerTest, test_candidates) {
     std::vector<CompactionCandidate> candidates;
     DataDir data_dir("./data_dir");
     for (int i = 0; i <= 10; i++) {
-        TabletSharedPtr tablet = std::make_shared<Tablet>();
+        TabletSharedPtr tablet = std::make_shared<Tablet>(DUP_KEYS);
         TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
         tablet_meta->set_tablet_id(i);
         tablet->set_tablet_meta(tablet_meta);
@@ -156,7 +156,7 @@ TEST_F(CompactionManagerTest, test_candidates_exceede) {
     std::vector<CompactionCandidate> candidates;
     DataDir data_dir("./data_dir");
     for (int i = 0; i < 20; i++) {
-        TabletSharedPtr tablet = std::make_shared<Tablet>();
+        TabletSharedPtr tablet = std::make_shared<Tablet>(DUP_KEYS);
         TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
         tablet_meta->set_tablet_id(i);
         tablet->set_tablet_meta(tablet_meta);
@@ -188,7 +188,7 @@ TEST_F(CompactionManagerTest, test_disable_compaction) {
     std::vector<CompactionCandidate> candidates;
     DataDir data_dir("./data_dir");
     for (int i = 0; i < 10; i++) {
-        TabletSharedPtr tablet = std::make_shared<Tablet>();
+        TabletSharedPtr tablet = std::make_shared<Tablet>(DUP_KEYS);
         TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
         tablet_meta->set_tablet_id(i);
         tablet_meta->TEST_set_table_id(1);
@@ -260,6 +260,7 @@ private:
 
 class MockTablet : public Tablet {
 public:
+    MockTablet() : Tablet(DUP_KEYS) {}
     MOCK_METHOD(std::shared_ptr<CompactionTask>, create_compaction_task, (), (override));
 };
 
@@ -353,7 +354,7 @@ TEST_F(CompactionManagerTest, test_remove_disable_compaction) {
     std::vector<CompactionCandidate> candidates;
     DataDir data_dir("./data_dir");
     for (int i = 0; i < 10; i++) {
-        TabletSharedPtr tablet = std::make_shared<Tablet>();
+        TabletSharedPtr tablet = std::make_shared<Tablet>(DUP_KEYS);
         TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
         tablet_meta->set_tablet_id(i);
         tablet_meta->TEST_set_table_id(2);
@@ -400,7 +401,7 @@ TEST_F(CompactionManagerTest, test_compaction_tasks) {
     config::max_compaction_concurrency = 2;
     config::cumulative_compaction_num_threads_per_disk = config::max_compaction_concurrency;
     for (int i = 0; i < config::max_compaction_concurrency + 1; i++) {
-        TabletSharedPtr tablet = std::make_shared<Tablet>();
+        TabletSharedPtr tablet = std::make_shared<Tablet>(DUP_KEYS);
         TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
         tablet_meta->set_tablet_id(i);
         tablet->set_tablet_meta(tablet_meta);
@@ -468,7 +469,7 @@ TEST_F(CompactionManagerTest, test_compaction_parallel) {
     int task_id = 0;
     // each tablet has 3 compaction tasks
     for (int i = 0; i < tablet_num; i++) {
-        TabletSharedPtr tablet = std::make_shared<Tablet>();
+        TabletSharedPtr tablet = std::make_shared<Tablet>(DUP_KEYS);
         TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
         tablet_meta->set_tablet_id(i);
         tablet->set_tablet_meta(tablet_meta);
@@ -569,7 +570,7 @@ TEST_F(CompactionManagerTest, test_get_compaction_status) {
     rs_meta_pb->set_start_version(0);
     rs_meta_pb->set_end_version(1);
     auto rowset_meta = std::make_shared<RowsetMeta>(rs_meta_pb);
-    auto rowset = std::make_shared<Rowset>(schema, "", rowset_meta);
+    auto rowset = std::make_shared<Rowset>(schema, "", rowset_meta, data_dir.get_meta());
     mock_rowsets.emplace_back(rowset);
 
     // generate compaction task

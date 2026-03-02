@@ -34,7 +34,7 @@ my_table = Table(
 
 Note: Usage mirrors standard SQLAlchemy patterns (e.g., MySQL dialect), but you should use types from `starrocks` and keep them uppercase.
 
-**Important**: If you specify a StarRocks table key via `starrocks_PRIMARY_KEY`, `starrocks_UNIQUE_KEY`, `starrocks_DUPLICATE_KEY`, or `starrocks_AGGREGATE_KEY`, all columns listed in that key **MUST** also be declared with `primary_key=True` on their `Column(...)` definitions. This ensures SQLAlchemy metadata and Alembic autogenerate behave correctly.
+**Important**: If you specify a StarRocks table key via `starrocks_primary_key`, `starrocks_unique_key`, `starrocks_duplicate_key`, or `starrocks_aggregate_key`, all columns listed in that key **MUST** also be declared with `primary_key=True` on their `Column(...)` definitions. This ensures SQLAlchemy metadata and Alembic autogenerate behave correctly.
 
 ## Defining Table Attributes
 
@@ -48,7 +48,7 @@ StarRocks-specific physical attributes for a table are configured by passing spe
 
 Here is a comprehensive list of the supported `starrocks_` prefixed arguments. The order of attributes in the documentation follows the recommended order in the `CREATE TABLE` DDL statement.
 
-The prefix `starrocks_` should be **lower case**, the other part can be either lower case or upper case for clearity.
+The prefix `starrocks_` should be **lower case**. The suffix is case-insensitive, but it is recommended to use lowercase in your code for consistency (all examples in this guide use lowercase).
 
 ##### 1. `starrocks_engine`
 

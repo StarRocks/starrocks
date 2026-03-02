@@ -19,8 +19,6 @@ export STARROCKS_HOME=`cd "$curdir/.."; pwd`
 
 source $STARROCKS_HOME/bin/common.sh
 
-JEMALLOC_LIB=$STARROCKS_HOME/lib/libjemalloc.so
-ln -s -f $STARROCKS_HOME/lib/libjemalloc.so.2 $JEMALLOC_LIB
-export LD_LIBRARY_PATH=$STARROCKS_HOME/lib:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/jemalloc:$STARROCKS_HOME/lib:$LD_LIBRARY_PATH
 
 ${STARROCKS_HOME}/lib/starrocks_be --version

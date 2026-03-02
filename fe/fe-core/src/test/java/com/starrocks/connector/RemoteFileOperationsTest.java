@@ -25,7 +25,7 @@ import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastore;
 import com.starrocks.connector.hive.HiveMetastoreTest;
 import com.starrocks.connector.hive.HiveRemoteFileIO;
-import com.starrocks.connector.hive.HiveWriteUtils;
+import com.starrocks.connector.hive.HiveUtils;
 import com.starrocks.connector.hive.MockedRemoteFileSystem;
 import com.starrocks.connector.hive.Partition;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
@@ -196,7 +196,7 @@ public class RemoteFileOperationsTest {
         CachingRemoteFileIO cachingFileIO = new CachingRemoteFileIO(hiveRemoteFileIO, executorToRefresh, 10, 10, 0.1);
         RemoteFileOperations ops = new RemoteFileOperations(cachingFileIO, executorToLoad, executorToLoad,
                 false, true, new Configuration());
-        new MockUp<HiveWriteUtils>() {
+        new MockUp<HiveUtils>() {
             @Mock
             public boolean pathExists(Path path, Configuration conf) {
                 return true;

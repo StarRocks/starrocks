@@ -19,6 +19,7 @@
 
 #include <cstdint>
 
+#include "base/simd/simd.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
@@ -26,7 +27,6 @@
 #include "column/type_traits.h"
 #include "common/logging.h"
 #include "function_helper.h"
-#include "simd/simd.h"
 
 namespace starrocks {
 
@@ -201,7 +201,7 @@ public:
                     return result;
                 }
 
-                auto nullable_data = down_cast<NullableColumn*>(result.get());
+                auto nullable_data = down_cast<const NullableColumn*>(result.get());
                 if (result->has_null()) {
                     // case 2: the result rows are partially nulls, must merge null columns
                     // both inside the input column and inside the results.

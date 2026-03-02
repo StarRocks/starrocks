@@ -13,12 +13,14 @@
 # limitations under the License.
 
 class SystemRunMode:
+    """`run_mode` values defined by StarRocks"""
     SHARED_DATA = "shared_data"
     SHARED_NOTHING = "shared_nothing"
 
 
 class TableEngine:
     OLAP = "OLAP"
+    CLOUD_NATIVE = "CLOUD_NATIVE"
 
 
 class TableDistribution:
