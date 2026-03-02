@@ -715,6 +715,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：Update Cache 的过期时间。
 - 引入版本：-
 
+##### exec_state_report_max_threads
+
+- 默认值：2
+- 类型：Int
+- 单位：Threads
+- 是否动态：是
+- 描述：exec-state-report 线程池的最大线程数。该线程池由 `ExecStateReporter` 用于将普通优先级的执行状态报告（如 Fragment 完成状态、错误状态等）从 BE 异步地通过 RPC 上报给 FE。启动时实际使用的线程数为 `max(1, exec_state_report_max_threads)`。运行时修改此配置会触发对所有 Executor Set（共享和独占）中线程池调用 `update_max_threads`。该线程池的任务队列大小固定为 1000，当所有线程繁忙且队列已满时，新的上报任务将被静默丢弃。高优先级线程池由 `priority_exec_state_report_max_threads` 控制。若在高并发查询场景下观察到执行状态上报延迟或丢失，可适当增大此值。
+- 引入版本：v4.1.0, v4.0.8, v3.5.15
+
 ##### file_descriptor_cache_clean_interval
 
 - 默认值：3600
@@ -4944,6 +4953,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：
 - 引入版本：-
 -->
+
+##### priority_exec_state_report_max_threads
+
+- 默认值：2
+- 类型：Int
+- 单位：Threads
+- 是否动态：是
+- 描述：高优先级 exec-state-report 线程池的最大线程数。该线程池由 `ExecStateReporter` 用于将高优先级执行状态报告（如紧急 Fragment 失败）从 BE 异步地通过 RPC 上报给 FE。与普通线程池不同，该线程池的任务队列无上限。启动时实际使用的线程数为 `max(1, priority_exec_state_report_max_threads)`。运行时修改此配置会触发对所有 Executor Set（共享和独占）中优先级线程池调用 `update_max_threads`。普通线程池由 `exec_state_report_max_threads` 控制。Expand commentComment on line R1106Resolved
+- 引入版本：v4.1.0, v4.0.8, v3.5.15
 
 <!--
 ##### priority_queue_remaining_tasks_increased_frequency
