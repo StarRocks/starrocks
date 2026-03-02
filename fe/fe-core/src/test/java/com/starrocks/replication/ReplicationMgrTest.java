@@ -73,6 +73,7 @@ public class ReplicationMgrTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
+        GlobalStateMgr.getCurrentState().getPublishVersionDaemon().setStop();
         AnalyzeTestUtil.init();
         starRocksAssert = new StarRocksAssert(AnalyzeTestUtil.getConnectContext());
         starRocksAssert.withDatabase("test").useDatabase("test");
