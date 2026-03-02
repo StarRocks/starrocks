@@ -955,6 +955,9 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096);
     auto chunk = chunk_shared_ptr.get();
     auto rowsets = Rowset::get_rowsets(tablet_mgr, metadata);
+    int64_t get_next_cost_us = 0;
+    int64_t pk_encode_cost_us = 0;
+    int64_t build_values_cost_us = 0;
     // Rowset whose version is between max_sstable_version and base_version should be recovered.
     for (auto& rowset : rowsets) {
         TRACE_COUNTER_INCREMENT("total_segment_cnt", rowset->num_segments());
@@ -987,7 +990,9 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
             while (true) {
                 chunk->reset();
                 rowids.clear();
+                int64_t t1 = GetCurrentTimeMicros();
                 auto st = itr->get_next(chunk, &rowids);
+                get_next_cost_us += GetCurrentTimeMicros() - t1;
                 if (st.is_end_of_file()) {
                     break;
                 } else if (!st.ok()) {
@@ -995,13 +1000,16 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                 } else {
                     Column* pkc = nullptr;
                     if (pk_column) {
+                        int64_t t2 = GetCurrentTimeMicros();
                         pk_column->reset_column();
                         PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get(),
                                                   pk_encoding_type);
+                        pk_encode_cost_us += GetCurrentTimeMicros() - t2;
                         pkc = pk_column.get();
                     } else {
                         pkc = const_cast<Column*>(chunk->columns()[0].get());
                     }
+                    int64_t t3 = GetCurrentTimeMicros();
                     uint64_t base = ((uint64_t)rssid) << 32;
                     std::vector<IndexValue> values;
                     values.reserve(pkc->size());
@@ -1009,6 +1017,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                     for (uint32_t i = 0; i < pkc->size(); i++) {
                         values.emplace_back(base + rowids[i]);
                     }
+                    build_values_cost_us += GetCurrentTimeMicros() - t3;
                     if (values.back().get_value() <= rebuild_rss_rowid_point) {
                         // lower AND equal than rebuild point, skip
                         continue;
@@ -1036,6 +1045,11 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
             RETURN_IF_ERROR(load_dels(rowset, pkey_schema, rowset_version));
         }
     }
+    TRACE_COUNTER_INCREMENT("rebuild_get_next_cost_us", get_next_cost_us);
+    TRACE_COUNTER_INCREMENT("rebuild_pk_encode_cost_us", pk_encode_cost_us);
+    TRACE_COUNTER_INCREMENT("rebuild_build_values_cost_us", build_values_cost_us);
+    TRACE_COUNTER_INCREMENT("segment_io_local_disk_us", stats.io_ns_read_local_disk / 1000);
+    TRACE_COUNTER_INCREMENT("segment_io_remote_us", stats.io_ns_remote / 1000);
     return Status::OK();
 }
 
