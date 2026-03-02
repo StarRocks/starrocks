@@ -1,0 +1,18 @@
+-- name: test_exec_state_report_threadpool_size
+
+-- take the config and metric snapshot before making changes
+SELECT NAME, VALUE, `DEFAULT`, MUTABLE FROM information_schema.be_configs WHERE NAME LIKE '%exec_state_report_max_threads' ORDER BY BE_ID, NAME limit 2;
+
+-- make changes, enlarge both thread pools
+UPDATE information_schema.be_configs SET VALUE = '4' WHERE NAME = 'exec_state_report_max_threads';
+UPDATE information_schema.be_configs SET VALUE = '6' WHERE NAME = 'priority_exec_state_report_max_threads';
+
+-- confirm the change takes effect
+SELECT NAME, VALUE, `DEFAULT`, MUTABLE FROM information_schema.be_configs WHERE NAME LIKE '%exec_state_report_max_threads' ORDER BY BE_ID, NAME limit 2;
+
+-- make changes, shrink to its original size
+UPDATE information_schema.be_configs SET VALUE = '2' WHERE NAME = 'exec_state_report_max_threads';
+UPDATE information_schema.be_configs SET VALUE = '2' WHERE NAME = 'priority_exec_state_report_max_threads';
+
+-- confirm the change takes effect
+SELECT NAME, VALUE, `DEFAULT`, MUTABLE FROM information_schema.be_configs WHERE NAME LIKE '%exec_state_report_max_threads' ORDER BY BE_ID, NAME limit 2;

@@ -157,6 +157,20 @@ void ExecutorsManager::change_enable_resource_group_cpu_borrowing(bool val) {
     update_shared_executors();
 }
 
+void ExecutorsManager::change_exec_state_report_max_threads(int max_threads) {
+    for_each_executors([max_threads](const auto& executors) {
+        auto st = executors.update_exec_state_report_max_threads(max_threads);
+        LOG_IF(WARNING, !st.ok()) << "[WORKGROUP] change exec_state_report_max_threads failed: " << st;
+    });
+}
+
+void ExecutorsManager::change_priority_exec_state_report_max_threads(int max_threads) {
+    for_each_executors([max_threads](const auto& executors) {
+        auto st = executors.update_priority_exec_state_report_max_threads(max_threads);
+        LOG_IF(WARNING, !st.ok()) << "[WORKGROUP] change priority_exec_state_report_max_threads failed: " << st;
+    });
+}
+
 void ExecutorsManager::for_each_executors(const ExecutorsConsumer& consumer) const {
     for (const auto& [_, wg] : _parent->_workgroups) {
         if (wg != nullptr && wg->exclusive_executors() != nullptr) {

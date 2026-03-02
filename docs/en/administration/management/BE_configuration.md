@@ -773,6 +773,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: The maximum buffer size on the receiver end of an exchange node for each query. This configuration item is a soft limit. A backpressure is triggered when data is sent to the receiver end with an excessive speed.
 - Introduced in: -
 
+##### exec_state_report_max_threads
+
+- Default: 2
+- Type: Int
+- Unit: Threads
+- Is mutable: Yes
+- Description: Maximum number of threads for the exec-state-report thread pool. This pool is used by `ExecStateReporter` to asynchronously send non-priority execution status reports (such as fragment completion and error status) from BE to FE via RPC. The actual pool size at startup is `max(1, exec_state_report_max_threads)`. Changing this config at runtime triggers `update_max_threads` on the pool in every executor set (shared and exclusive). The pool has a fixed task queue size of 1000; report submissions are silently dropped when all threads are busy and the queue is full. Paired with `priority_exec_state_report_max_threads` for the high-priority pool. Increase this value when delayed or dropped exec-state reports are observed under high query concurrency.
+- Introduced in: v4.1.0, v4.0.8, v3.5.15
+
 ##### file_descriptor_cache_capacity
 
 - Default: 16384
@@ -1105,6 +1114,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Is mutable: Yes
 - Description: Sets the maximum queue size (number of pending tasks) for the "cloud_native_pk_index_get" thread pool used by PK index parallel get operations in shared-data (cloud-native/lake) mode. The actual thread count for that pool is controlled by `pk_index_parallel_get_threadpool_max_threads`; this setting only limits how many tasks may be queued awaiting execution. The very large default (2^20) effectively makes the queue unbounded; lowering it prevents excessive memory growth from queued tasks but may cause task submissions to block or fail when the queue is full. Tune together with `pk_index_parallel_get_threadpool_max_threads` based on workload concurrency and memory constraints.
 - Introduced in: -
+
+##### priority_exec_state_report_max_threads
+
+- Default: 2
+- Type: Int
+- Unit: Threads
+- Is mutable: Yes
+- Description: Maximum number of threads for the high-priority exec-state-report thread pool. This pool is used by `ExecStateReporter` to asynchronously send high-priority execution status reports (such as urgent fragment failures) from BE to FE via RPC. Unlike the normal exec-state-report pool, this pool has an unbounded task queue. The actual pool size at startup is `max(1, priority_exec_state_report_max_threads)`. Changing this config at runtime triggers `update_max_threads` on the priority pool in every executor set (shared and exclusive). Paired with `exec_state_report_max_threads` for the normal pool. Increase this value when high-priority reports are delayed under heavy concurrent query loads.
+- Introduced in: v4.1.0, v4.0.8, v3.5.15
 
 ##### priority_queue_remaining_tasks_increased_frequency
 
