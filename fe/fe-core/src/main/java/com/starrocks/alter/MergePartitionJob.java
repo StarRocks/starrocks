@@ -314,7 +314,7 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
             PartitionDesc partitionDesc = addPartitionClause.getPartitionDesc();
             List<String> partitionNames;
             if (partitionDesc instanceof RangePartitionDesc) {
-                partitionNames = ((RangePartitionDesc) partitionDesc).getPartitionColNames();
+                partitionNames = ((RangePartitionDesc) partitionDesc).getPartitionNames();
             } else {
                 throw new DdlException("Unsupported partitionDesc");
             }
