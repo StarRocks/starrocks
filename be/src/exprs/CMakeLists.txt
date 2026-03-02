@@ -26,6 +26,7 @@ set(EXPR_CORE_FILES
   array_expr.cpp
   base64.cpp
   bit_functions.cpp
+  binary_predicate.cpp
   bitmap_functions.cpp
   cast_nested.cpp
   case_expr.cpp
@@ -34,6 +35,7 @@ set(EXPR_CORE_FILES
   chunk_predicate_evaluator.cpp
   column_ref.cpp
   compound_predicate.cpp
+  condition_expr.cpp
   encryption_functions.cpp
   es_functions.cpp
   expr_executor.cpp
@@ -95,12 +97,10 @@ set(EXPR_FILES
   table_function/list_rowsets.cpp
   array_functions.cpp
   arrow_function_call.cpp
-  binary_predicate.cpp
   cast_expr.cpp
   cast_expr_array.cpp
   cast_expr_struct.cpp
   dictmapping_expr.cpp
-  condition_expr.cpp
   find_in_set.cpp
   function_call_expr.cpp
   geo_functions.cpp
