@@ -531,8 +531,8 @@ StatusOr<WriterAndStream> ParquetFileWriterFactory::create(const std::string& pa
                                                       std::move(column_evaluators), _compression_type, _parsed_options,
                                                       rollback_action);
     return WriterAndStream{
-            .writer = std::move(writer),
             .stream = std::move(async_output_stream),
+            .writer = std::move(writer),
     };
 }
 
