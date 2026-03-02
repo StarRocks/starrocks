@@ -31,6 +31,8 @@
 
 namespace starrocks::connector {
 
+DEFINE_FAIL_POINT(parquet_chunk_writer_init_failed);
+
 PartitionChunkWriter::PartitionChunkWriter(std::string partition, std::vector<int8_t> partition_field_null_list,
                                            const std::shared_ptr<PartitionChunkWriterContext>& ctx)
         : _partition(std::move(partition)),
@@ -51,6 +53,9 @@ Status PartitionChunkWriter::create_file_writer_if_needed() {
         _file_writer = std::move(new_writer_and_stream.writer);
         _out_stream = std::move(new_writer_and_stream.stream);
         RETURN_IF_ERROR(_file_writer->init());
+
+        FAIL_POINT_TRIGGER_EXECUTE(parquet_chunk_writer_init_failed,
+                                   { return Status::InternalError("Create file writer failed due to fail point"); });
         _io_poller->enqueue(_out_stream);
     }
     return Status::OK();
