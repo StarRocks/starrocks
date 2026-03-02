@@ -661,6 +661,16 @@ void WorkGroupManager::change_enable_resource_group_cpu_borrowing(const bool val
     _executors_manager.change_enable_resource_group_cpu_borrowing(val);
 }
 
+void WorkGroupManager::change_exec_state_report_max_threads(int max_threads) {
+    std::shared_lock read_lock(_mutex);
+    _executors_manager.change_exec_state_report_max_threads(max_threads);
+}
+
+void WorkGroupManager::change_priority_exec_state_report_max_threads(int max_threads) {
+    std::shared_lock read_lock(_mutex);
+    _executors_manager.change_priority_exec_state_report_max_threads(max_threads);
+}
+
 // ------------------------------------------------------------------------------------
 // DefaultWorkGroupInitialization
 // ------------------------------------------------------------------------------------
