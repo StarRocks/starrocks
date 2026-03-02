@@ -5266,6 +5266,20 @@ StatusOr<ColumnPtr> StringFunctions::format_bytes(FunctionContext* context, cons
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
+// raise_error
+StatusOr<ColumnPtr> StringFunctions::raise_error(FunctionContext* context, const Columns& columns) {
+    ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
+    auto size = columns[0]->size();
+    for (int row = 0; row < size; ++row) {
+        if (viewer.is_null(row)) {
+            continue;
+        }
+        auto msg = viewer.value(row);
+        throw RuntimeException(std::string(msg.data, msg.size));
+    }
+    return ColumnHelper::create_const_null_column(size);
+}
+
 static Status initcap_impl(const Slice& str, std::string* result) {
     if (str.empty()) {
         return Status::OK();
