@@ -17,12 +17,12 @@
 #include <memory>
 #include <string>
 
-#include "base/testutil/assert.h"
-#include "base/testutil/parallel_test.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/pipeline_metrics.h"
 #include "exec/workgroup/pipeline_executor_set.h"
 #include "exec/workgroup/work_group.h"
+#include "testutil/assert.h"
+#include "testutil/parallel_test.h"
 
 namespace starrocks::workgroup {
 
