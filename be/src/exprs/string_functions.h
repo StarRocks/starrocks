@@ -652,6 +652,15 @@ public:
      */
     DEFINE_VECTORIZED_FN(format_bytes);
 
+    /**
+     * Raises a runtime error with the given message.
+     *
+     * @param: [message]
+     * @paramType: [StringColumn]
+     * @return: BooleanColumn (never returned for non-null input; always throws)
+     */
+    DEFINE_VECTORIZED_FN(raise_error);
+
     static Status ngram_search_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status ngram_search_case_insensitive_prepare(FunctionContext* context,
                                                         FunctionContext::FunctionStateScope scope);
