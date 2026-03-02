@@ -16,7 +16,11 @@ package com.starrocks.server;
 
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.common.AnalysisException;
+<<<<<<< HEAD:fe/fe-core/src/test/java/com/starrocks/server/SqlBlacklistTest.java
 import com.starrocks.common.jmockit.Deencapsulation;
+=======
+import com.starrocks.common.SqlBlacklistedException;
+>>>>>>> bd951a8a67 ([Enhancement]  Exclude Blacklisted Queries from Error Metrics (#69621)):fe/fe-core/src/test/java/com/starrocks/meta/SqlBlacklistTest.java
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.meta.BlackListSql;
 import com.starrocks.meta.SqlBlackList;
@@ -232,7 +236,7 @@ public class SqlBlacklistTest {
     public void testVerifyingSQLExistsInBlackList() {
         Pattern p = Pattern.compile("qwert");
         sqlBlackList.put(p);
-        AnalysisException exception = assertThrows(AnalysisException.class, () -> sqlBlackList.verifying("qwert"));
+        AnalysisException exception = assertThrows(SqlBlacklistedException.class, () -> sqlBlackList.verifying("qwert"));
         Assertions.assertEquals("Access denied; This sql is in blacklist (id: 0), please contact your admin",
                 exception.getMessage());
     }

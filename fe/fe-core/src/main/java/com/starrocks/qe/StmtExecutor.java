@@ -76,6 +76,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.QueryDumpLog;
+import com.starrocks.common.SqlBlacklistedException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.TimeoutException;
@@ -1047,6 +1048,8 @@ public class StmtExecutor {
             if (parsedStmt instanceof KillStmt) {
                 // ignore kill stmt execute err(not monitor it)
                 context.getState().setErrType(QueryState.ErrType.IGNORE_ERR);
+            } else if (e instanceof SqlBlacklistedException) {
+                context.getState().setErrType(QueryState.ErrType.BLACKLISTED);
             } else if (e instanceof TimeoutException) {
                 context.getState().setErrType(QueryState.ErrType.EXEC_TIME_OUT);
             } else if (e instanceof NoAliveBackendException) {
