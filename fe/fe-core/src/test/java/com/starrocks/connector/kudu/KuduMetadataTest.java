@@ -214,3 +214,4 @@ public class KuduMetadataTest {
         return constructor.newInstance(status, errPb);
     }
 }
+
