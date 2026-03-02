@@ -41,16 +41,11 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Log4jConfig;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.Version;
-import com.starrocks.common.util.NetUtils;
-import com.starrocks.common.util.Util;
 import com.starrocks.failpoint.FailPoint;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.StateChangeExecutor;
 import com.starrocks.http.HttpServer;
-import com.starrocks.http.rest.ActionStatus;
-import com.starrocks.http.rest.BootstrapFinishAction;
 import com.starrocks.journal.Journal;
-import com.starrocks.journal.JournalWriter;
 import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.journal.bdbje.BDBTool;
@@ -59,7 +54,6 @@ import com.starrocks.lake.snapshot.RestoreClusterSnapshotMgr;
 import com.starrocks.leader.MetaHelper;
 import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.qe.CoordinatorMonitor;
-import com.starrocks.qe.ProxyContextManager;
 import com.starrocks.qe.QeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.GracefulExitFlag;
@@ -84,7 +78,6 @@ import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.lang.management.ManagementFactory;
-import java.net.InetSocketAddress;
 import java.nio.channels.FileLock;
 import java.util.List;
 import java.util.Optional;
@@ -238,14 +231,6 @@ public class StarRocksFE {
                     LOG.info("start to handle graceful exit");
                     GracefulExitFlag.markGracefulExit();
 
-                    // transfer leader if current node is leader
-                    try {
-                        transferLeader();
-                    } catch (Exception e) {
-                        LOG.warn("handle graceful exit failed", e);
-                        System.exit(-1);
-                    }
-
                     // Wait for queries to complete
                     try {
                         waitForDraining(startTime);
@@ -278,85 +263,12 @@ public class StarRocksFE {
         });
     }
 
-    private static void transferLeader() throws InterruptedException {
-        if (GlobalStateMgr.getCurrentState().isLeader()) {
-            LOG.info("start to transfer leader");
-            JournalWriter journalWriter = GlobalStateMgr.getCurrentState().getJournalWriter();
-            // stop journal writer
-            journalWriter.stopAndWait();
-            Journal journal = GlobalStateMgr.getCurrentState().getJournal();
-
-            // stop star mgr journal writer before bdb env close, to avoid "Unclosed Database: starmgr_*" errors
-            if (RunMode.isSharedDataMode()) {
-                StarMgrServer starMgrServer = StarMgrServer.getCurrentState();
-                if (starMgrServer != null && starMgrServer.getJournalSystem() != null) {
-                    JournalWriter starMgrJournalWriter = starMgrServer.getJournalSystem().getJournalWriter();
-                    if (starMgrJournalWriter != null) {
-                        starMgrJournalWriter.stopAndWait();
-                    } else {
-                        LOG.warn("skip stopping StarMgr journal writer because getJournalWriter() returned null");
-                    }
-                } else {
-                    LOG.warn("skip stopping StarMgr journal writer because StarMgrServer or its journal system " +
-                            "is not initialized");
-                }
-            }
-
-            // transfer leader
-            if (journal instanceof BDBJEJournal) {
-                BDBEnvironment bdbEnvironment = ((BDBJEJournal) journal).getBdbEnvironment();
-                if (bdbEnvironment != null) {
-                    // close bdb env, leader election will be triggered
-                    bdbEnvironment.close();
-                    // wait for new leader
-                    while (true) {
-                        try {
-                            InetSocketAddress address = GlobalStateMgr.getCurrentState().getHaProtocol().getLeader();
-                            // wait for new leader to be ready
-                            if (isNewLeaderReady(address.getHostString())) {
-                                LOG.info("leader is transferred to {}", address);
-                                break;
-                            }
-                        } catch (Exception e) {
-                            Thread.sleep(300L);
-                        }
-                    }
-                }
-
-                GlobalStateMgr.getCurrentState().markLeaderTransferred();
-
-                if (RunMode.isSharedDataMode()) {
-                    StarMgrServer.getCurrentState().markLeaderTransferred();
-                }
-            }
-        }
-    }
-
-    private static boolean isNewLeaderReady(String leaderHost) {
-        String accessibleHostPort = NetUtils.getHostPortInAccessibleFormat(leaderHost, Config.http_port);
-        String url = "http://" + accessibleHostPort
-                + "/api/bootstrap"
-                + "?cluster_id=" + GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId()
-                + "&token=" +  GlobalStateMgr.getCurrentState().getNodeMgr().getToken();
-        try {
-            String resultStr = Util.getResultForUrl(url, null,
-                    Config.heartbeat_timeout_second * 1000,
-                    Config.heartbeat_timeout_second * 1000);
-            BootstrapFinishAction.BootstrapResult result = BootstrapFinishAction.BootstrapResult.fromJson(resultStr);
-            return result.getStatus() == ActionStatus.OK;
-        } catch (Exception e) {
-            LOG.warn("call leader bootstrap api failed", e);
-        }
-        return false;
-    }
-
     private static void waitForDraining(long startTimeNano) throws InterruptedException {
         ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
         final long waitInterval = 1000L;
         while (true) {
             connectScheduler.closeAllIdleConnection();
-            int totalConns = connectScheduler.getTotalConnCount()
-                    + ProxyContextManager.getInstance().getTotalConnCount();
+            int totalConns = connectScheduler.getTotalConnCount();
             if (totalConns > 0) {
                 LOG.info("waiting for {} connections to drain", totalConns);
             } else if (System.nanoTime() - startTimeNano
