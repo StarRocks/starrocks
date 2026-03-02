@@ -385,6 +385,19 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             return ExecEnv::GetInstance()->load_channel_mgr()->async_rpc_pool()->update_max_threads(
                     config::load_channel_rpc_thread_pool_num);
         });
+        _config_callback.emplace("exec_state_report_max_threads", [&]() -> Status {
+            LOG(INFO) << "set exec_state_report_max_threads:" << config::exec_state_report_max_threads;
+            ExecEnv::GetInstance()->workgroup_manager()->change_exec_state_report_max_threads(
+                    config::exec_state_report_max_threads);
+            return Status::OK();
+        });
+        _config_callback.emplace("priority_exec_state_report_max_threads", [&]() -> Status {
+            LOG(INFO) << "set priority_exec_state_report_max_threads:"
+                      << config::priority_exec_state_report_max_threads;
+            ExecEnv::GetInstance()->workgroup_manager()->change_priority_exec_state_report_max_threads(
+                    config::priority_exec_state_report_max_threads);
+            return Status::OK();
+        });
         _config_callback.emplace("number_tablet_writer_threads", [&]() -> Status {
             int max_delta_writer_thread_num = caculate_delta_writer_thread_num(config::number_tablet_writer_threads);
             LOG(INFO) << "set max delta writer thread num: " << max_delta_writer_thread_num;
