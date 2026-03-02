@@ -26,6 +26,8 @@
 
 #include <future>
 #include <ostream>
+#include <sstream>
+#include <string>
 #include <utility>
 
 #include "base/failpoint/fail_point.h"
@@ -287,16 +289,26 @@ Status ParquetFileWriter::init() {
     }
 
     ASSIGN_OR_RETURN(auto compression, parquet::ParquetBuildHelper::convert_compression_type(_compression_type));
-    _properties = std::make_unique<::parquet::WriterProperties::Builder>()
-                          ->version(_writer_options->version)
-                          ->enable_write_page_index()
-                          ->data_pagesize(_writer_options->page_size)
-                          ->write_batch_size(_writer_options->write_batch_size)
-                          ->dictionary_pagesize_limit(_writer_options->dictionary_pagesize)
-                          ->compression(compression)
-                          ->created_by(fmt::format("{} starrocks-{}", CREATED_BY_VERSION, get_short_version()))
-                          ->memory_pool(&_memory_pool)
-                          ->build();
+    ::parquet::WriterProperties::Builder builder;
+    builder.version(_writer_options->version)
+            ->enable_write_page_index()
+            ->data_pagesize(_writer_options->page_size)
+            ->write_batch_size(_writer_options->write_batch_size)
+            ->dictionary_pagesize_limit(_writer_options->dictionary_pagesize)
+            ->compression(compression)
+            ->created_by(fmt::format("{} starrocks-{}", CREATED_BY_VERSION, get_short_version()))
+            ->memory_pool(&_memory_pool);
+
+    // Apply column-level dictionary encoding configuration
+    for (const auto& [col_name, enabled] : _writer_options->column_dictionary_enabled) {
+        if (enabled) {
+            builder.enable_dictionary(col_name);
+        } else {
+            builder.disable_dictionary(col_name);
+        }
+    }
+
+    _properties = builder.build();
 
     _writer = ::parquet::ParquetFileWriter::Open(_output_stream, _schema, _properties);
     return Status::OK();
@@ -347,6 +359,8 @@ Status ParquetFileWriterFactory::init() {
 #ifndef BE_TEST
     _parsed_options->time_zone = _runtime_state->timezone();
 #endif
+    // Apply column-level dictionary encoding configuration set via setter
+    _parsed_options->column_dictionary_enabled = std::move(_column_dictionary_enabled);
     return Status::OK();
 }
 
