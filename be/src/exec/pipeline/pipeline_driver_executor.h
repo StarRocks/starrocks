@@ -95,6 +95,8 @@ public:
 
     void bind_cpus(const CpuUtil::CpuIds& cpuids, const std::vector<CpuUtil::CpuIds>& borrowed_cpuids) override;
 
+    ExecStateReporter* exec_state_reporter() { return _exec_state_reporter.get(); }
+
 private:
     using Base = FactoryMethod<DriverExecutor, GlobalDriverExecutor>;
     void _worker_thread();

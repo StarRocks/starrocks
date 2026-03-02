@@ -309,6 +309,8 @@ public:
     void change_num_connector_scan_threads(uint32_t num_connector_scan_threads);
     void change_enable_resource_group_cpu_borrowing(bool val);
     void set_workgroup_expiration_time(std::chrono::seconds value);
+    void change_exec_state_report_max_threads(int max_threads);
+    void change_priority_exec_state_report_max_threads(int max_threads);
 
 private:
     using MutexType = std::shared_mutex;
