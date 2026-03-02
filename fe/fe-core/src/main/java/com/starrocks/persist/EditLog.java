@@ -61,7 +61,6 @@ import com.starrocks.ha.LeaderInfo;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
-import com.starrocks.journal.LeaderTransferException;
 import com.starrocks.journal.SerializeException;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.load.DeleteMgr;
@@ -77,7 +76,6 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.proto.EncryptionKeyPB;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.replication.ReplicationJob;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.mv.MVEpoch;
@@ -1400,12 +1398,6 @@ public class EditLog {
      */
     private JournalTask submitLog(short op, Writable writable, long maxWaitIntervalMs) {
         long startTimeNano = System.nanoTime();
-        if (GlobalStateMgr.getCurrentState().isLeaderTransferred()) {
-            if (ConnectContext.get() != null) {
-                ConnectContext.get().setIsLeaderTransferred(true);
-            }
-            throw new LeaderTransferException();
-        }
 
         // do not check whether global state mgr is leader when writing star mgr journal,
         // because starmgr state change happens before global state mgr state change,
@@ -1467,12 +1459,6 @@ public class EditLog {
                 result = task.get();
                 break;
             } catch (InterruptedException | ExecutionException e) {
-                if (e.getCause() != null && e.getCause() instanceof LeaderTransferException) {
-                    if (ConnectContext.get() != null) {
-                        ConnectContext.get().setIsLeaderTransferred(true);
-                    }
-                    throw (LeaderTransferException) (e.getCause());
-                }
                 LOG.warn("failed to wait, wait and retry {} times..: {}", cnt, e);
                 cnt++;
             }
