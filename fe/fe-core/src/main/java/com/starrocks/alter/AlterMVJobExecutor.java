@@ -454,7 +454,29 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             // Note: warehouse is stored as warehouseId and output in getMaterializedViewDdlStmt(),
             // so we don't need to add it to TableProperty.properties to avoid duplication.
             materializedView.setWarehouseId(warehouse.getId());
+            // Also update the associated task's properties to remove stale warehouse
+            updateTaskWarehouseProperty(materializedView);
         });
+    }
+
+    /**
+     * Update the associated task's properties to remove stale warehouse property.
+     * The warehouse will be fetched from MV dynamically during task execution.
+     */
+    private void updateTaskWarehouseProperty(MaterializedView materializedView) {
+        try {
+            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+            String taskName = TaskBuilder.getMvTaskName(materializedView.getId());
+            Task task = taskManager.getTask(taskName);
+            if (task != null) {
+                // Remove the warehouse property from task so it will be fetched from MV at runtime.
+                // Use removeTaskProperty to ensure thread-safe modification under task lock.
+                taskManager.removeTaskProperty(task, PropertyAnalyzer.PROPERTIES_WAREHOUSE);
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to update task warehouse property for MV {}: {}",
+                    materializedView.getName(), e.getMessage());
+        }
     }
 
     private void alterLabelsLocation(Map<String, String> properties,
