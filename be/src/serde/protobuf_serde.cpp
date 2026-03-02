@@ -189,11 +189,7 @@ StatusOr<Chunk> deserialize_chunk_pb_with_schema(const Schema& schema, std::stri
 
     ASSIGN_OR_RETURN(auto chunk, ChunkHelper::new_chunk_checked(schema, rows));
     for (auto& column : chunk->columns()) {
-<<<<<<< HEAD
-        ASSIGN_OR_RETURN(cur, ColumnArraySerde::deserialize(cur, column.get()));
-=======
-        ASSIGN_OR_RETURN(cur, ColumnArraySerde::deserialize(cur, end, column->as_mutable_raw_ptr()));
->>>>>>> 29c7511dfc ([Enhancement] Prevent crashes when deserialization mismatches occur (#69481))
+        ASSIGN_OR_RETURN(cur, end, ColumnArraySerde::deserialize(cur, column.get()));
     }
     return Chunk(std::move(*chunk));
 }
