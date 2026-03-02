@@ -35,6 +35,9 @@
 #include <aws/core/Aws.h>
 #include <fmt/format.h>
 #include <gflags/gflags.h>
+#include <thrift/protocol/TBinaryProtocol.h>
+#include <thrift/transport/TBufferTransports.h>
+#include <thrift/transport/TSocket.h>
 
 #include <iostream>
 #include <set>
@@ -50,6 +53,8 @@
 #include "fs/fs_posix.h"
 #include "fs/fs_s3.h"
 #include "fs/fs_util.h"
+#include "fs/key_cache.h"
+#include "gen_cpp/FrontendService.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gen_cpp/segment.pb.h"
@@ -133,6 +138,10 @@ DEFINE_string(audit_file, "", "audit file path");
 DEFINE_bool(do_delete, false, "do delete files");
 DEFINE_uint64(page_offset, -1, "page offset");
 DEFINE_uint32(page_size, -1, "page size");
+DEFINE_string(encryption_meta, "",
+              "hex-encoded encryption_meta from PersistentIndexSstablePB (for dump_lake_persistent_index_sst)");
+DEFINE_string(fe_host, "", "FE master hostname for TDE key refresh (for dump_lake_persistent_index_sst)");
+DEFINE_int32(fe_port, 9020, "FE master thrift port for TDE key refresh (for dump_lake_persistent_index_sst)");
 
 // flag defined in gflags library
 DECLARE_bool(help);
@@ -202,6 +211,8 @@ std::string get_usage(const std::string& progname) {
       {progname} --operation=lake_datafile_gc --root_path=<path> --expired_sec=<86400> --conf_file=<path> --audit_file=<path> --do_delete=<true|false>
     dump_lake_persistent_index_sst:
       {progname} --operation=dump_lake_persistent_index_sst --file=</path/to/persistent_index.sst>
+               [--encryption_meta=<hex>] [--fe_host=<host>] [--fe_port=<port>]
+      (for encrypted SST files, provide --encryption_meta + --fe_host [+ --fe_port])
     )";
     return fmt::format(usage_msg, fmt::arg("progname", progname));
 }
@@ -209,6 +220,26 @@ std::string get_usage(const std::string& progname) {
 static void show_usage() {
     FLAGS_helpshort = true;
     google::HandleCommandLineHelpFlags();
+}
+
+// Decode a hex string (lower- or uppercase) into its binary representation.
+// Returns false if |hex| has odd length or contains non-hex characters.
+static bool hex_to_bytes(const std::string& hex, std::string* out) {
+    if (hex.size() % 2 != 0) return false;
+    out->resize(hex.size() / 2);
+    for (size_t i = 0; i < hex.size(); i += 2) {
+        auto nibble = [](char c) -> int {
+            if (c >= '0' && c <= '9') return c - '0';
+            if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+            if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+            return -1;
+        };
+        int hi = nibble(hex[i]);
+        int lo = nibble(hex[i + 1]);
+        if (hi < 0 || lo < 0) return false;
+        (*out)[i / 2] = static_cast<char>((hi << 4) | lo);
+    }
+    return true;
 }
 
 // Dump space-usage statistics and all key-value entries from a PK-index SST file.
@@ -222,11 +253,13 @@ static void show_usage() {
 //
 // Each KV pair has value encoded as IndexValuesWithVerPB protobuf:
 //   { version, rssid, rowid }  (multiple versions supported per key)
-void dump_lake_persistent_index_sst(const std::string& file_name) {
+void dump_lake_persistent_index_sst(const std::string& file_name, const starrocks::FileEncryptionInfo& enc_info = {}) {
     using namespace starrocks::sstable;
 
-    // Open the SST file.
-    auto res = starrocks::FileSystem::Default()->new_random_access_file(file_name);
+    // Open the SST file, applying encryption options when the SST is TDE-protected.
+    starrocks::RandomAccessFileOptions file_opts;
+    file_opts.encryption_info = enc_info;
+    auto res = starrocks::FileSystem::Default()->new_random_access_file(file_opts, file_name);
     if (!res.ok()) {
         std::cerr << "open file failed: " << res.status() << std::endl;
         return;
@@ -1697,7 +1730,56 @@ int meta_tool_main(int argc, char** argv) {
             std::cerr << "no --file specified for dump_lake_persistent_index_sst" << std::endl;
             return -1;
         }
-        dump_lake_persistent_index_sst(FLAGS_file);
+        starrocks::FileEncryptionInfo enc_info;
+        if (!FLAGS_encryption_meta.empty()) {
+            if (FLAGS_fe_host.empty()) {
+                std::cerr << "--fe_host is required when --encryption_meta is specified" << std::endl;
+                return -1;
+            }
+            // Decode the hex-encoded encryption_meta into raw bytes.
+            std::string enc_meta_bytes;
+            if (!hex_to_bytes(FLAGS_encryption_meta, &enc_meta_bytes)) {
+                std::cerr << "invalid hex in --encryption_meta" << std::endl;
+                return -1;
+            }
+            // Fetch KEK(s) from FE via a direct Thrift connection (no ExecEnv needed).
+            using apache::thrift::protocol::TBinaryProtocol;
+            using apache::thrift::transport::TBufferedTransport;
+            using apache::thrift::transport::TSocket;
+            auto socket = std::make_shared<TSocket>(FLAGS_fe_host, FLAGS_fe_port);
+            auto transport = std::make_shared<TBufferedTransport>(socket);
+            auto protocol = std::make_shared<TBinaryProtocol>(transport);
+            starrocks::FrontendServiceClient fe_client(protocol);
+            try {
+                transport->open();
+            } catch (const apache::thrift::TException& e) {
+                std::cerr << "failed to connect to FE " << FLAGS_fe_host << ":" << FLAGS_fe_port << ": " << e.what()
+                          << std::endl;
+                return -1;
+            }
+            starrocks::TGetKeysRequest keys_req;
+            starrocks::TGetKeysResponse keys_resp;
+            try {
+                fe_client.getKeys(keys_resp, keys_req);
+            } catch (const apache::thrift::TException& e) {
+                transport->close();
+                std::cerr << "getKeys RPC to FE failed: " << e.what() << std::endl;
+                return -1;
+            }
+            transport->close();
+            auto refresh_st = starrocks::KeyCache::instance().refresh_keys(keys_resp.key_metas);
+            if (!refresh_st.ok()) {
+                std::cerr << "failed to load keys from FE: " << refresh_st << std::endl;
+                return -1;
+            }
+            auto enc_info_res = starrocks::KeyCache::instance().unwrap_encryption_meta(enc_meta_bytes);
+            if (!enc_info_res.ok()) {
+                std::cerr << "failed to unwrap encryption_meta: " << enc_info_res.status() << std::endl;
+                return -1;
+            }
+            enc_info = std::move(enc_info_res).value();
+        }
+        dump_lake_persistent_index_sst(FLAGS_file, enc_info);
     } else if (FLAGS_operation == "print_lake_metadata") {
         starrocks::TabletMetadataPB metadata;
         if (!metadata.ParseFromIstream(&std::cin)) {
