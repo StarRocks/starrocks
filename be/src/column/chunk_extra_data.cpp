@@ -94,7 +94,7 @@ StatusOr<const uint8_t*> ChunkExtraColumnsData::deserialize(const uint8_t* buff,
     DCHECK_EQ(encode_level, 0);
     for (auto& column : _columns) {
         using Serd = serde::ColumnArraySerde;
-        ASSIGN_OR_RETURN(buff, Serde::deserialize(buff, end, column.get(), sorted, encode_level));
+        ASSIGN_OR_RETURN(buff, Serd::deserialize(buff, end, column.get(), sorted, encode_level));
     }
     return buff;
 }
