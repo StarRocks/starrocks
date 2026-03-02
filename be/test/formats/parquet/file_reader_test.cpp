@@ -31,6 +31,7 @@
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
+#include "column/variant_encoder.h"
 #include "common/logging.h"
 #include "common/util/thrift_util.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
@@ -56,7 +57,6 @@
 #include "testutil/exprs_test_helper.h"
 #include "types/type_descriptor.h"
 #include "types/variant.h"
-#include "util/variant_encoder.h"
 
 namespace starrocks::parquet {
 

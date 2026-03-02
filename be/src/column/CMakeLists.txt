@@ -28,6 +28,7 @@ ADD_BE_LIB(ColumnCore
         object_column.cpp
         variant_column.cpp
         variant_converter.cpp
+        variant_encoder.cpp
         fixed_length_column_base.cpp
         fixed_length_column.cpp
         binary_column.cpp

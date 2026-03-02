@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/variant_encoder.h"
+#include "column/variant_encoder.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -31,16 +31,16 @@
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
-#include "column/datum_convert.h"
 #include "column/fixed_length_column.h"
 #include "column/json_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
 #include "common/status.h"
-#include "storage/types.h"
 #include "types/time_types.h"
 #include "types/type_descriptor.h"
+#include "types/type_info.h"
+#include "types/type_traits.h"
 #include "types/variant.h"
 #include "velocypack/vpack.h"
 
@@ -94,6 +94,76 @@ static void collect_keys_from_static_type(const TypeDescriptor& type, VariantEnc
         }
     } else if (type.type == TYPE_ARRAY) {
         collect_keys_from_static_type(type.children[0], ctx);
+    }
+}
+
+template <LogicalType LT>
+static StatusOr<std::string> key_datum_to_string_with_type_info(const TypeInfo* type_info, const Datum& key_datum) {
+    using CppType = typename CppTypeTraits<LT>::CppType;
+    CppType value = key_datum.get<CppType>();
+    return type_info->to_string(&value);
+}
+
+static StatusOr<std::string> encode_map_key_to_string(const TypeDescriptor& key_type, const Datum& key_datum) {
+    TypeInfoPtr key_type_info = get_type_info(key_type);
+    if (key_type_info == nullptr) {
+        return Status::VariantError("Unsupported variant map key type: " + key_type.debug_string());
+    }
+
+    switch (key_type.type) {
+    case TYPE_BOOLEAN:
+        return key_datum_to_string_with_type_info<TYPE_BOOLEAN>(key_type_info.get(), key_datum);
+    case TYPE_CHAR:
+        return key_datum_to_string_with_type_info<TYPE_CHAR>(key_type_info.get(), key_datum);
+    case TYPE_VARCHAR:
+        return key_datum_to_string_with_type_info<TYPE_VARCHAR>(key_type_info.get(), key_datum);
+    case TYPE_VARBINARY:
+        return key_datum_to_string_with_type_info<TYPE_VARBINARY>(key_type_info.get(), key_datum);
+    case TYPE_TINYINT:
+        return key_datum_to_string_with_type_info<TYPE_TINYINT>(key_type_info.get(), key_datum);
+    case TYPE_SMALLINT:
+        return key_datum_to_string_with_type_info<TYPE_SMALLINT>(key_type_info.get(), key_datum);
+    case TYPE_INT:
+        return key_datum_to_string_with_type_info<TYPE_INT>(key_type_info.get(), key_datum);
+    case TYPE_BIGINT:
+        return key_datum_to_string_with_type_info<TYPE_BIGINT>(key_type_info.get(), key_datum);
+    case TYPE_LARGEINT:
+        return key_datum_to_string_with_type_info<TYPE_LARGEINT>(key_type_info.get(), key_datum);
+    case TYPE_INT256:
+        return key_datum_to_string_with_type_info<TYPE_INT256>(key_type_info.get(), key_datum);
+    case TYPE_DATE_V1:
+        return key_datum_to_string_with_type_info<TYPE_DATE_V1>(key_type_info.get(), key_datum);
+    case TYPE_DATE:
+        return key_datum_to_string_with_type_info<TYPE_DATE>(key_type_info.get(), key_datum);
+    case TYPE_DATETIME_V1:
+        return key_datum_to_string_with_type_info<TYPE_DATETIME_V1>(key_type_info.get(), key_datum);
+    case TYPE_DATETIME:
+        return key_datum_to_string_with_type_info<TYPE_DATETIME>(key_type_info.get(), key_datum);
+    case TYPE_DECIMAL:
+        return key_datum_to_string_with_type_info<TYPE_DECIMAL>(key_type_info.get(), key_datum);
+    case TYPE_DECIMALV2:
+        return key_datum_to_string_with_type_info<TYPE_DECIMALV2>(key_type_info.get(), key_datum);
+    case TYPE_DECIMAL32:
+        return key_datum_to_string_with_type_info<TYPE_DECIMAL32>(key_type_info.get(), key_datum);
+    case TYPE_DECIMAL64:
+        return key_datum_to_string_with_type_info<TYPE_DECIMAL64>(key_type_info.get(), key_datum);
+    case TYPE_DECIMAL128:
+        return key_datum_to_string_with_type_info<TYPE_DECIMAL128>(key_type_info.get(), key_datum);
+    case TYPE_DECIMAL256:
+        return key_datum_to_string_with_type_info<TYPE_DECIMAL256>(key_type_info.get(), key_datum);
+    case TYPE_FLOAT:
+        return key_datum_to_string_with_type_info<TYPE_FLOAT>(key_type_info.get(), key_datum);
+    case TYPE_DOUBLE:
+        return key_datum_to_string_with_type_info<TYPE_DOUBLE>(key_type_info.get(), key_datum);
+    case TYPE_JSON: {
+        const JsonValue* json = key_datum.get_json();
+        if (json == nullptr) {
+            return Status::VariantError("Null JSON map key is not supported");
+        }
+        return json->to_string();
+    }
+    default:
+        return Status::VariantError("Unsupported variant map key type: " + key_type.debug_string());
     }
 }
 
@@ -460,11 +530,11 @@ static Status collect_keys_from_column_row(const ColumnPtr& column, const TypeDe
         const ColumnPtr& values_col = map_col->values_column();
         const TypeDescriptor& key_type = type.children[0];
         const TypeDescriptor& value_type = type.children[1];
-        const TypeInfoPtr key_type_info = get_type_info(key_type);
         for (uint32_t i = offset_data[row]; i < offset_data[row + 1]; ++i) {
             const Datum key_datum = ColumnHelper::get_data_column(keys_col)->get(i);
             if (!key_datum.is_null()) {
-                ctx->keys.insert(datum_to_string(key_type_info.get(), key_datum));
+                ASSIGN_OR_RETURN(std::string key_str, encode_map_key_to_string(key_type, key_datum));
+                ctx->keys.insert(std::move(key_str));
             }
             RETURN_IF_ERROR(collect_keys_from_column_row(values_col, value_type, i, ctx));
         }
@@ -576,12 +646,11 @@ static StatusOr<std::string> encode_value_from_column_row(const ColumnPtr& colum
         const ColumnPtr& values_col = map_col->values_column();
         const TypeDescriptor& key_type = type.children[0];
         const TypeDescriptor& value_type = type.children[1];
-        const TypeInfoPtr key_type_info = get_type_info(key_type);
         std::map<uint32_t, std::string> fields;
         for (uint32_t i = offset_data[row]; i < offset_data[row + 1]; ++i) {
             const Datum key_datum = ColumnHelper::get_data_column(keys_col)->get(i);
             if (key_datum.is_null()) continue;
-            std::string key_str = datum_to_string(key_type_info.get(), key_datum);
+            ASSIGN_OR_RETURN(std::string key_str, encode_map_key_to_string(key_type, key_datum));
             auto it = ctx->key_to_id.find(key_str);
             if (it == ctx->key_to_id.end()) return Status::VariantError("Variant metadata missing field: " + key_str);
             ASSIGN_OR_RETURN(auto encoded_value, encode_value_from_column_row(values_col, value_type, i, ctx));
