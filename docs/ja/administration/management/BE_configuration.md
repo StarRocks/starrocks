@@ -488,6 +488,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: Update Cache の有効期限。
 - 導入バージョン: -
 
+##### exec_state_report_max_threads
+
+- デフォルト: 2
+- タイプ: Int
+- 単位: スレッド
+- 可変: はい
+- 説明: exec-state-report スレッドプールの最大スレッド数。このプールは `ExecStateReporter` が通常優先度の実行状態レポート（フラグメント完了やエラーステータスなど）を BE から FE へ非同期で RPC 送信するために使用されます。起動時の実際のプールサイズは `max(1, exec_state_report_max_threads)` になります。このコンフィグを実行時に変更すると、全エグゼキュータセット（共有・専有）のプールに対して `update_max_threads` が呼び出されます。プールのタスクキューサイズは 1000 固定です。高並行クエリ実行時に実行状態レポートが遅延または消失する場合は値を増やしてください。対応する高優先度プールは `priority_exec_state_report_max_threads` で制御します。
+- 導入バージョン: v4.1.0, v4.0.8, v3.5.15
+
 ##### file_descriptor_cache_clean_interval
 
 - デフォルト: 3600
@@ -1703,7 +1712,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - タイプ: Int
 - 単位: スレッド
 - 可変: はい
-- 説明: 高優先度 exec-state-report スレッドプールの最大スレッド数。このプールは `ExecStateReporter` が高優先度の実行状態レポート（緊急なフラグメント失敗など）を BE から FE へ非同期で RPC 送信するために使用されます。通常のプールとは異なり、このプールのタスクキューはサイズ無制限です。起動時の実際のプールサイズは `max(1, priority_exec_state_report_max_threads)` になります。このコンフィグを実行時に変更すると、全エグゼキュータセット（共有・専有）の優先度プールに対して `update_max_threads` が呼び出されます。通常プールは `exec_state_report_max_threads` で制御します。
+- 説明: 高優先度 exec-state-report スレッドプールの最大スレッド数。このプールは `ExecStateReporter` が高優先度の実行状態レポート（緊急なフラグメント失敗など）を BE から FE へ非同期で RPC 送信するために使用されます。通常のプールとは異なり、このプールのタスクキューはサイズ無制限です。起動時の実際のプールサイズは `max(1, priority_exec_state_report_max_threads)` になります。このコンフィグを実行時に変更すると、全エグゼキュータセット（共有・専有）の優先度プールに対して `update_max_threads` が呼び出されます。通常プールは `exec_state_report_max_threads` で制御します。Expand commentComment on line R919Resolved
 - 導入バージョン: v4.1.0, v4.0.8, v3.5.15
 
 ##### query_cache_capacity

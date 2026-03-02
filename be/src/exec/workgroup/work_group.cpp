@@ -661,8 +661,6 @@ void WorkGroupManager::change_enable_resource_group_cpu_borrowing(const bool val
     _executors_manager.change_enable_resource_group_cpu_borrowing(val);
 }
 
-<<<<<<< HEAD
-=======
 void WorkGroupManager::change_exec_state_report_max_threads(int max_threads) {
     std::shared_lock read_lock(_mutex);
     _executors_manager.change_exec_state_report_max_threads(max_threads);
@@ -673,12 +671,6 @@ void WorkGroupManager::change_priority_exec_state_report_max_threads(int max_thr
     _executors_manager.change_priority_exec_state_report_max_threads(max_threads);
 }
 
-void WorkGroupManager::set_workgroup_expiration_time(const std::chrono::seconds value) {
-    std::unique_lock write_lock(_mutex);
-    _workgroup_expiration_time = value;
-}
-
->>>>>>> 65e2d09862 ([Enhancement] Support dynamic configuration for exec state report thread pool sizes (#69142))
 // ------------------------------------------------------------------------------------
 // DefaultWorkGroupInitialization
 // ------------------------------------------------------------------------------------

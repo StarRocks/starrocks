@@ -20,13 +20,7 @@
 #include <memory>
 
 #include "agent/master_info.h"
-<<<<<<< HEAD
-=======
-#include "base/network/network_util.h"
 #include "common/config.h"
-#include "common/system/backend_options.h"
-#include "exec/pipeline/pipeline_metrics.h"
->>>>>>> 65e2d09862 ([Enhancement] Support dynamic configuration for exec state report thread pool sizes (#69142))
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
 #include "service/backend_options.h"
