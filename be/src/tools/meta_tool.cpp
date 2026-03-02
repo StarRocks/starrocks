@@ -45,6 +45,7 @@
 #include "base/path/path_util.h"
 #include "column/datum_convert.h"
 #include "common/status.h"
+#include "common/util/debug_util.h"
 #include "fs/fs.h"
 #include "fs/fs_posix.h"
 #include "fs/fs_s3.h"
@@ -52,6 +53,7 @@
 #include "gen_cpp/lake_types.pb.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gen_cpp/segment.pb.h"
+#include "gen_cpp/types.pb.h"
 #include "gutil/strings/numbers.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
@@ -59,8 +61,6 @@
 #include "runtime/memory/mem_chunk_allocator.h"
 #include "storage/chunk_helper.h"
 #include "storage/data_dir.h"
-#include "common/util/debug_util.h"
-#include "gen_cpp/types.pb.h"
 #include "storage/delta_column_group.h"
 #include "storage/key_coder.h"
 #include "storage/lake/tablet_manager.h"
@@ -331,11 +331,10 @@ void dump_lake_persistent_index_sst(const std::string& file_name) {
     std::cout << fmt::format("  Data blocks:       {:>12} bytes ({:.2f}%, {} blocks)\n", data_block_total_size,
                              pct(data_block_total_size), data_block_count);
     if (filter_block_size > 0) {
-        std::cout << fmt::format("  Filter block ({}): {:>12} bytes ({:.2f}%)\n", filter_policy_name,
-                                 filter_block_size, pct(filter_block_size));
+        std::cout << fmt::format("  Filter block ({}): {:>12} bytes ({:.2f}%)\n", filter_policy_name, filter_block_size,
+                                 pct(filter_block_size));
     }
-    std::cout << fmt::format("  Index block:       {:>12} bytes ({:.2f}%)\n", index_block_size,
-                             pct(index_block_size));
+    std::cout << fmt::format("  Index block:       {:>12} bytes ({:.2f}%)\n", index_block_size, pct(index_block_size));
     std::cout << fmt::format("  Metaindex block:   {:>12} bytes ({:.2f}%)\n", metaindex_block_size,
                              pct(metaindex_block_size));
     std::cout << fmt::format("  Footer:            {:>12} bytes ({:.2f}%)\n", footer_size, pct(footer_size));
@@ -375,8 +374,7 @@ void dump_lake_persistent_index_sst(const std::string& file_name) {
             }
         } else {
             // Fallback: print raw hex value if protobuf parse fails.
-            std::cout << fmt::format("key={} value=<raw:{}>\n",
-                                     starrocks::hexdump(key.get_data(), key.get_size()),
+            std::cout << fmt::format("key={} value=<raw:{}>\n", starrocks::hexdump(key.get_data(), key.get_size()),
                                      starrocks::hexdump(val.get_data(), val.get_size()));
         }
         entry_count++;
