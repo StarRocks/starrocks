@@ -22,6 +22,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.http.rest.ActionStatus;
 import com.starrocks.http.rest.TransactionResult;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TUniqueId;
@@ -551,5 +552,13 @@ public class StreamLoadMultiStmtTaskTest {
     public void testCancelAfterRestartWithNoTxnId() {
         multiTask.cancelAfterRestart();
         Assertions.assertEquals("CANCELLED", multiTask.getStateName());
+    }
+
+    @Test
+    public void testCancelAfterRestartOnDeserializedTask() {
+        String json = GsonUtils.GSON.toJson(multiTask);
+        StreamLoadMultiStmtTask deserialized = GsonUtils.GSON.fromJson(json, StreamLoadMultiStmtTask.class);
+        Assertions.assertDoesNotThrow(deserialized::cancelAfterRestart);
+        Assertions.assertEquals("CANCELLED", deserialized.getStateName());
     }
 }

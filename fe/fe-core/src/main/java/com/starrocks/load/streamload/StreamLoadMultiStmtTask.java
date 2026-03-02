@@ -690,6 +690,7 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
     @Override
     public void gsonPostProcess() throws IOException {
         loadId = new TUniqueId(loadIdHi, loadIdLo);
+        init();
     }
 
     @Override

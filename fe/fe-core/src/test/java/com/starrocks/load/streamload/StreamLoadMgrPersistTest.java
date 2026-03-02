@@ -443,6 +443,37 @@ public class StreamLoadMgrPersistTest {
     }
 
     @Test
+    public void testReplayMultiStmtTaskThenCancelAfterRestart() throws Exception {
+        String dbName = "test_db";
+        String label = "test_multi_stmt_cancel_restart";
+        String user = "test_user";
+        String clientIp = "127.0.0.1";
+        long timeoutMillis = 60000L;
+        long dbId = 10006L;
+        long tableId = 20006L;
+        long partitionId = 30006L;
+        long indexId = 40006L;
+
+        createDatabaseWithTable(dbId, dbName, tableId, "test_table", partitionId, indexId);
+
+        TransactionResult resp = new TransactionResult();
+        masterStreamLoadMgr.beginMultiStatementLoadTask(dbName, label, user, clientIp,
+                timeoutMillis, resp, WarehouseManager.DEFAULT_RESOURCE);
+        Assertions.assertTrue(resp.stateOK());
+
+        StreamLoadMgr followerStreamLoadMgr = new StreamLoadMgr();
+        StreamLoadMultiStmtTask replayTask = (StreamLoadMultiStmtTask) UtFrameUtils
+                .PseudoJournalReplayer.replayNextJournal(OperationType.OP_CREATE_MULTI_STMT_STREAM_LOAD_TASK);
+        followerStreamLoadMgr.replayCreateLoadTask(replayTask);
+
+        Assertions.assertDoesNotThrow(followerStreamLoadMgr::cancelUnDurableTaskAfterRestart);
+
+        AbstractStreamLoadTask followerTask = followerStreamLoadMgr.getTaskByLabel(label);
+        Assertions.assertNotNull(followerTask);
+        Assertions.assertEquals("CANCELLED", followerTask.getStateName());
+    }
+
+    @Test
     public void testImageBackwardCompatibilityAfterSupportMergeCommitTask() throws Exception {
         String path = Objects.requireNonNull(getClass().getClassLoader().getResource(
                 "persist/StreamLoadMgrPersistTest_testImageBackwardCompatibilityAfterSupportMergeCommitTask.image")).getPath();
