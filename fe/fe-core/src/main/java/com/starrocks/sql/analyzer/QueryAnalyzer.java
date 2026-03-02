@@ -1920,6 +1920,11 @@ public class QueryAnalyzer {
             try (Timer ignored = Tracers.watchScope("AnalyzeTable")) {
                 Table table = metadataMgr.getTable(session, catalogName, dbName, tableName.getTbl());
                 if (table != null) {
+                    // Validate constraints similar to resolveTable
+                    PartitionRef partitionNamesObject = tableRelation.getPartitionNames();
+                    if (table.isExternalTableWithFileSystem() && partitionNamesObject != null) {
+                        throw unsupportedException("Unsupported table type for partition clause, type: " + table.getType());
+                    }
                     tableRelation.setTable(table);
                 }
                 // If table == null (CTE or non-existent table), leave it unresolved.
