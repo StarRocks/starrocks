@@ -814,6 +814,11 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
     }
 
     @Override
+    public String getUser() {
+        return user;
+    }
+
+    @Override
     public String getTableName() {
         return tableRef.getTableName();
     }
@@ -846,6 +851,11 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
     @Override
     public long endTimeMs() {
         return loadTimeTrace.endTimeMs.get();
+    }
+
+    @Override
+    public Long getLoadStartTimeMs() {
+        return loadTimeTrace.startTimeMs.get();
     }
 
     @Override

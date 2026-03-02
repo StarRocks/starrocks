@@ -1,0 +1,113 @@
+-- name: test_information_schema_loads_predicate_pushdown
+create database db_${uuid0};
+use db_${uuid0};
+set enable_evaluate_schema_scan_rule=true;
+
+create table t_insert_${uuid0} (id int) distributed by hash(id) buckets 1 properties("replication_num" = "1");
+create table t_stream_${uuid0} (id int) distributed by hash(id) buckets 1 properties("replication_num" = "1");
+create table t_merge_${uuid0} (id int) primary key(id) distributed by hash(id) properties("replication_num" = "1");
+create table t_mstmt_${uuid0} (id int) distributed by hash(id) buckets 1 properties("replication_num" = "1");
+
+-- insert into
+insert into t_insert_${uuid0} values (1);
+
+-- stream load
+[UC]shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "label:sl_${uuid0}" -d '2' ${url}/api/db_${uuid0}/t_stream_${uuid0}/_stream_load
+
+-- merge commit stream load (MergeCommitTask)
+[UC]shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "format:json" -H "enable_merge_commit:true" -H "merge_commit_interval_ms:3000" -H "merge_commit_parallel:1" -d '{"id":3}' ${url}/api/db_${uuid0}/t_merge_${uuid0}/_stream_load
+
+-- multi-statement stream load transaction (StreamLoadMultiStmtTask)
+[UC]shell: curl --location-trusted -u root: -H "label:mstmt_${uuid0}" -H "db:db_${uuid0}" -H "source_type:12" -XPOST ${url}/api/transaction/begin
+[UC]shell: curl --location-trusted -u root: -H "label:mstmt_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:t_mstmt_${uuid0}" -H "source_type:12" -H "format:json" -d '{"id":"4"}' -X PUT ${url}/api/transaction/load
+[UC]shell: curl --location-trusted -u root: -H "label:mstmt_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:t_mstmt_${uuid0}" -H "source_type:12" -H "format:json" -d '{"id":"5"}' -X PUT ${url}/api/transaction/load
+[UC]shell: curl --location-trusted -u root: -H "label:mstmt_${uuid0}" -H "Expect:100-continue" -H "db:db_${uuid0}" -H "table:t_mstmt_${uuid0}" -H "source_type:12" -H "format:json" -d '{"id":"6"}' -X PUT ${url}/api/transaction/load
+[UC]shell: curl --location-trusted -u root: -H "label:mstmt_${uuid0}" -H "db:db_${uuid0}" -H "source_type:12" -XPOST ${url}/api/transaction/commit
+
+function: wait_db_transaction_finish("db_${uuid0}", 60)
+sync;
+
+-- verify 4 load methods are all visible in information_schema.loads
+select count(1) from information_schema.loads where db_name='db_${uuid0}' and table_name='t_insert_${uuid0}';
+select count(1) from information_schema.loads where db_name='db_${uuid0}' and table_name='t_stream_${uuid0}';
+select count(1) from information_schema.loads where db_name='db_${uuid0}' and table_name='t_merge_${uuid0}';
+select count(1) from information_schema.loads where db_name='db_${uuid0}' and table_name='t_mstmt_${uuid0}';
+
+-- all pushdown predicates combined (hit)
+select count(1) from information_schema.loads
+where db_name='db_${uuid0}'
+  and user='root'
+  and create_time >= date_sub(now(), interval 1 hour) and create_time <= date_add(now(), interval 1 hour)
+  and load_start_time >= date_sub(now(), interval 1 hour) and load_start_time <= date_add(now(), interval 1 hour)
+  and load_finish_time >= date_sub(now(), interval 1 hour) and load_finish_time <= date_add(now(), interval 1 hour);
+
+-- equality predicates: DB_NAME/TABLE_NAME/USER/STATE (hit + miss)
+select count(1) from information_schema.loads where db_name='db_${uuid0}';
+select count(1) from information_schema.loads where db_name='db_${uuid1}' and load_start_time >= date_sub(now(), interval 1 hour) and load_start_time <= date_add(now(), interval 1 hour);
+
+select count(1) from information_schema.loads where db_name='db_${uuid0}' and table_name='t_stream_${uuid0}';
+select count(1) from information_schema.loads where db_name='db_${uuid0}' and table_name='__no_such_table__';
+select count(1) from information_schema.loads where db_name='db_${uuid0}' and user='root';
+select count(1) from information_schema.loads where db_name='db_${uuid0}' and user='__no_such_user__';
+select count(1) from information_schema.loads where db_name='db_${uuid0}' and state='FINISHED';
+select count(1) from information_schema.loads where db_name='db_${uuid0}' and state='__NO_SUCH_STATE__';
+
+select count(1) from information_schema.loads where table_name='t_stream_${uuid0}'
+and load_start_time >= date_sub(now(), interval 1 hour) and load_start_time <= date_add(now(), interval 1 hour);
+
+select count(1) from information_schema.loads where table_name='__no_such_table__'
+and load_start_time >= date_sub(now(), interval 1 hour) and load_start_time <= date_add(now(), interval 1 hour);
+
+select count(1) from information_schema.loads where user='__no_such_user__'
+and load_start_time >= date_sub(now(), interval 1 hour) and load_start_time <= date_add(now(), interval 1 hour);
+
+select count(1) from information_schema.loads where state='__NO_SUCH_STATE__'
+and load_start_time >= date_sub(now(), interval 1 hour) and load_start_time <= date_add(now(), interval 1 hour);
+
+-- range predicates: CREATE_TIME/LOAD_START_TIME/LOAD_FINISH_TIME (hit + miss)
+select count(1) from information_schema.loads where db_name='db_${uuid0}' and create_time >= date_sub(now(), interval 1 hour) and create_time <= date_add(now(), interval 1 hour) and load_start_time >= date_sub(now(), interval 1 hour);
+select count(1) from information_schema.loads where db_name='db_${uuid0}' and create_time > date_add(now(), interval 1 hour) and load_start_time >= date_sub(now(), interval 1 hour);
+
+select count(1) from information_schema.loads where db_name='db_${uuid0}' and load_start_time >= date_sub(now(), interval 1 hour) and load_start_time <= date_add(now(), interval 1 hour);
+select count(1) from information_schema.loads where db_name='db_${uuid0}' and load_start_time > date_add(now(), interval 1 hour);
+
+select count(1) from information_schema.loads where db_name='db_${uuid0}' and load_finish_time >= date_sub(now(), interval 1 hour) and load_finish_time <= date_add(now(), interval 1 hour);
+select count(1) from information_schema.loads where db_name='db_${uuid0}' and load_finish_time > date_add(now(), interval 1 hour);
+
+-- job_id
+[UC]job_id=select id from information_schema.loads where db_name='db_${uuid0}' and table_name='t_insert_${uuid0}';
+select count(1) from information_schema.loads where id = '${job_id}';
+[UC]job_id=select id from information_schema.loads where db_name='db_${uuid0}' and table_name='t_stream_${uuid0}';
+select count(1) from information_schema.loads where id = '${job_id}';
+[UC]job_id=select id from information_schema.loads where db_name='db_${uuid0}' and table_name='t_merge_${uuid0}';
+select count(1) from information_schema.loads where id = '${job_id}';
+[UC]job_id=select id from information_schema.loads where db_name='db_${uuid0}' and table_name='t_mstmt_${uuid0}';
+select count(1) from information_schema.loads where id = '${job_id}';
+
+-- label
+[UC]job_label=select label from information_schema.loads where db_name='db_${uuid0}' and table_name='t_insert_${uuid0}';
+select count(1) from information_schema.loads where label = '${job_label}';
+select count(1) from information_schema.loads where label = '${job_label}' and db_name='db_${uuid0}';
+select count(1) from information_schema.loads where label = 'no_exist_${job_label}';
+select count(1) from information_schema.loads where label = 'no_exist_${job_label}' and db_name='db_${uuid0}';
+
+select count(1) from information_schema.loads where label = 'sl_${uuid0}';
+select count(1) from information_schema.loads where label = 'sl_${uuid0}' and db_name='db_${uuid0}';
+select count(1) from information_schema.loads where label = 'no_exist_sl_${uuid0}';
+select count(1) from information_schema.loads where label = 'no_exist_sl_${uuid0}' and db_name='db_${uuid0}';
+
+select count(1) from information_schema.loads where label = 'mstmt_${uuid0}';
+select count(1) from information_schema.loads where label = 'mstmt_${uuid0}' and db_name='db_${uuid0}';
+select count(1) from information_schema.loads where label = 'no_exist_mstmt_${uuid0}';
+select count(1) from information_schema.loads where label = 'no_exist_mstmt_${uuid0}' and db_name='db_${uuid0}';
+
+select count(1) > 0 from information_schema.loads;
+
+drop database db_${uuid0} force;
+
+select count(1) from information_schema.loads where db_name='db_${uuid0}' and table_name='t_insert_${uuid0}';
+select count(1) from information_schema.loads where db_name='db_${uuid0}' and table_name='t_stream_${uuid0}';
+select count(1) from information_schema.loads where db_name='db_${uuid0}' and table_name='t_merge_${uuid0}';
+select count(1) from information_schema.loads where db_name='db_${uuid0}' and table_name='t_mstmt_${uuid0}';
+
+select count(1) > 0 from information_schema.loads;
