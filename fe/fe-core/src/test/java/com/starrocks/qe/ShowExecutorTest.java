@@ -44,6 +44,7 @@ import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TableRef;
 import com.starrocks.authorization.GrantType;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.BaseTableInfo;
@@ -90,6 +91,7 @@ import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AdminShowTabletStatusStmt;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.SetType;
@@ -1320,5 +1322,19 @@ public class ShowExecutorTest {
         Assertions.assertFalse(stmtExecutor.shouldMarkIdleCheck(
                 SqlParser.parseSingleStatement("admin set frontend config('proc_profile_cpu_enable' = 'true')",
                         SqlModeHelper.MODE_DEFAULT)));
+    }
+
+    @Test
+    public void testAdminShowTabletStatusStmt() throws Exception {
+        TableRef tableRef = new TableRef(new TableName("testDb", "testTbl"), null, null, NodePosition.ZERO);
+        AdminShowTabletStatusStmt stmt = new AdminShowTabletStatusStmt(tableRef, null, Collections.emptyMap(), NodePosition.ZERO);
+
+        ctx.setGlobalStateMgr(globalStateMgr);
+        ctx.setQualifiedUser("testUser");
+
+        // Use assertThrows to check if it throws exception when table is not cloud native
+        assertThrows(SemanticException.class, () -> {
+            ShowExecutor.execute(stmt, ctx);
+        });
     }
 }

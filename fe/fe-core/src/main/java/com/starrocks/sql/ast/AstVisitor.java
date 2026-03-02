@@ -55,6 +55,7 @@ import com.starrocks.analysis.UserVariableHint;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.connector.parser.trino.PlaceholderExpr;
 import com.starrocks.sql.ShowTemporaryTableStmt;
+import com.starrocks.sql.ast.AdminShowTabletStatusStmt;
 import com.starrocks.sql.ast.feedback.AddPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.ClearPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.DelPlanAdvisorStmt;
@@ -412,6 +413,10 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitAdminShowReplicaDistributionStatement(AdminShowReplicaDistributionStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitAdminShowTabletStatusStatement(AdminShowTabletStatusStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 
