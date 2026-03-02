@@ -24,8 +24,9 @@
 #include "exec/pipeline/schedule/observer.h"
 #include "exprs/expr_context.h"
 #include "exprs/predicate.h"
-#include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/Types_types.h"
+#include "runtime/runtime_filter/runtime_filter_descriptor.h"
+#include "runtime/runtime_filter/runtime_filter_probe.h"
 
 namespace starrocks::pipeline {
 

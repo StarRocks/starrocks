@@ -25,6 +25,7 @@
 #include "exec/except_hash_set.h"
 #include "exec/olap_common.h"
 #include "exec/pipeline/context_with_dependency.h"
+#include "exec/pipeline/schedule/observer.h"
 #include "exprs/expr_context.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"

@@ -27,6 +27,7 @@
 #include "formats/orc/orc_memory_pool.h"
 #include "formats/orc/utils.h"
 #include "formats/utils.h"
+#include "fs/fs.h"
 #include "io/async_flush_output_stream.h"
 #include "runtime/current_thread.h"
 
