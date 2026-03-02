@@ -25,6 +25,7 @@ set(EXPR_CORE_TEST_FILES
     in_const_predicate_test.cpp
     in_predicate_test.cpp
     is_null_predicate_test.cpp
+    binary_predicate_core_test.cpp
     array_element_expr_test.cpp
     es_functions_test.cpp
     function_helper_test.cpp
@@ -32,6 +33,7 @@ set(EXPR_CORE_TEST_FILES
     map_expr_test.cpp
     map_element_expr_test.cpp
     map_functions_test.cpp
+    condition_expr_core_test.cpp
     compound_predicate_core_test.cpp
     json_each_core_test.cpp
     struct_functions_test.cpp

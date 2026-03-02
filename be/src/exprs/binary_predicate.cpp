@@ -21,7 +21,6 @@
 #include "exprs/binary_function.h"
 #include "exprs/unary_function.h"
 #include "runtime/runtime_state.h"
-#include "storage/column_predicate.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
 
