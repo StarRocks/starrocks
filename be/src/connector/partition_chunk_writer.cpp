@@ -31,66 +31,8 @@
 
 namespace starrocks::connector {
 
-<<<<<<< HEAD
-=======
 DEFINE_FAIL_POINT(parquet_chunk_writer_init_failed);
 
-namespace {
-
-FieldPtr build_field_from_type_desc(const TypeDescriptor& type_desc, const std::string& name, int32_t id,
-                                    bool nullable) {
-    TypeInfoPtr type_info = get_type_info(type_desc);
-    DCHECK(type_info != nullptr);
-
-    if (type_desc.children.empty()) {
-        return std::make_shared<Field>(id, name, type_info, nullable);
-    }
-
-    Fields sub_fields;
-    switch (type_desc.type) {
-    case TYPE_ARRAY: {
-        const TypeDescriptor& item_type = type_desc.children[0];
-        sub_fields.push_back(build_field_from_type_desc(item_type, name + ".item", id * 10 + 1, true));
-        break;
-    }
-    case TYPE_MAP: {
-        const TypeDescriptor& key_type = type_desc.children[0];
-        const TypeDescriptor& value_type = type_desc.children[1];
-        sub_fields.push_back(build_field_from_type_desc(key_type, name + ".key", id * 10 + 1, true));
-        sub_fields.push_back(build_field_from_type_desc(value_type, name + ".value", id * 10 + 2, true));
-        break;
-    }
-    case TYPE_STRUCT: {
-        for (size_t i = 0; i < type_desc.children.size(); ++i) {
-            const TypeDescriptor& child_type = type_desc.children[i];
-            std::string child_name;
-            if (i < type_desc.field_names.size()) {
-                child_name = type_desc.field_names[i];
-            } else {
-                child_name = name + ".field" + std::to_string(i);
-            }
-            sub_fields.push_back(build_field_from_type_desc(child_type, child_name, id * 10 + 1 + i, true));
-        }
-        break;
-    }
-    default:
-        break;
-    }
-
-    auto field = std::make_shared<Field>(id, name, type_info, nullable);
-    for (auto& sub_field : sub_fields) {
-        field->add_sub_field(*sub_field);
-    }
-    return field;
-}
-
-FieldPtr build_field_from_slot_desc(const SlotDescriptor& slot) {
-    return build_field_from_type_desc(slot.type(), slot.col_name(), slot.id(), slot.is_nullable());
-}
-
-} // namespace
-
->>>>>>> 014ff21df1 ([BugFix] Fix the AsyncFlushOutputStream use-after-free (#69688))
 PartitionChunkWriter::PartitionChunkWriter(std::string partition, std::vector<int8_t> partition_field_null_list,
                                            const std::shared_ptr<PartitionChunkWriterContext>& ctx)
         : _partition(std::move(partition)),
