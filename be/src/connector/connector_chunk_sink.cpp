@@ -62,8 +62,11 @@ Status ConnectorChunkSink::add(Chunk* chunk) {
             RETURN_IF_ERROR(commit_result.io_status);
             auto path = partitioned ? _location_provider->get(partition) : _location_provider->get();
             ASSIGN_OR_RETURN(auto new_writer_and_stream, _file_writer_factory->create(path));
-            std::unique_ptr<Writer> new_writer = std::move(new_writer_and_stream.writer);
+            // The destruction of new_writer triggers a flush of new_stream.
+            // Therefore, we must ensure new_writer is destroyed first, followed by new_stream.
+            // Failing to do so will result in a use-after-free error for new_stream.
             std::unique_ptr<Stream> new_stream = std::move(new_writer_and_stream.stream);
+            std::unique_ptr<Writer> new_writer = std::move(new_writer_and_stream.writer);
             RETURN_IF_ERROR(new_writer->init());
             RETURN_IF_ERROR(new_writer->write(chunk));
             _writer_stream_pairs[partition] = std::make_pair(std::move(new_writer), new_stream.get());
@@ -74,8 +77,11 @@ Status ConnectorChunkSink::add(Chunk* chunk) {
     } else {
         auto path = partitioned ? _location_provider->get(partition) : _location_provider->get();
         ASSIGN_OR_RETURN(auto new_writer_and_stream, _file_writer_factory->create(path));
-        std::unique_ptr<Writer> new_writer = std::move(new_writer_and_stream.writer);
+        // The destruction of new_writer triggers a flush of new_stream.
+        // Therefore, we must ensure new_writer is destroyed first, followed by new_stream.
+        // Failing to do so will result in a use-after-free error for new_stream.
         std::unique_ptr<Stream> new_stream = std::move(new_writer_and_stream.stream);
+        std::unique_ptr<Writer> new_writer = std::move(new_writer_and_stream.writer);
         RETURN_IF_ERROR(new_writer->init());
         RETURN_IF_ERROR(new_writer->write(chunk));
         _writer_stream_pairs[partition] = std::make_pair(std::move(new_writer), new_stream.get());
