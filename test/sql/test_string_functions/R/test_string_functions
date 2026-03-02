@@ -857,3 +857,32 @@ None	None
 1073741824	1.00 GB
 -- !result
 
+
+-- name: test_raise_error
+select raise_error('custom error message');
+-- result:
+[REGEX].*custom error message.*
+-- !result
+select raise_error(null);
+-- result:
+None
+-- !result
+select raise_error('');
+-- result:
+[REGEX].*
+-- !result
+create table t_raise_error(id int, msg varchar(100))
+        DUPLICATE KEY(id)
+        DISTRIBUTED BY HASH(id)
+        BUCKETS 1
+        PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+insert into t_raise_error values (1, null), (2, null);
+-- result:
+-- !result
+select raise_error(msg) from t_raise_error order by id;
+-- result:
+None
+None
+-- !result
