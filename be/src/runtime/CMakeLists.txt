@@ -29,6 +29,7 @@ set(RUNTIME_CORE_FILES
     starrocks_metrics.cpp
     memory/roaring_hook.cpp
     memory/system_allocator.cpp
+    memory/tracked_allocator.cpp
     memory/mem_chunk_allocator.cpp
     memory/memory_allocator.cpp
 )

@@ -51,6 +51,11 @@ TEST(JemallocAllocatorTest, ClearAndAlignment) {
 }
 
 TEST(TrackedAllocatorTest, TracksMemTrackerConsumption) {
+    struct RestoreMemTrackerSource {
+        ~RestoreMemTrackerSource() { starrocks::CurrentThread::set_mem_tracker_source(nullptr, nullptr); }
+    } restore_guard;
+    starrocks::CurrentThread::set_mem_tracker_source([]() { return true; }, []() { return (starrocks::MemTracker*)nullptr; });
+
     TrackedAllocator<JemallocAllocator<false>> allocator;
     starrocks::MemTracker tracker(-1, "jemalloc-ut");
     starrocks::CurrentThreadMemTrackerSetter setter(&tracker);
