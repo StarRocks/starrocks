@@ -249,6 +249,9 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     // only use state entry once, remove it when publish finish or fail
     DeferOp remove_state_entry([&] { _update_state_cache.remove(state_entry); });
     auto& state = state_entry->value();
+    // Snapshot IO stats before publish to exclude preload IO from trace counters.
+    const int64_t io_local_disk_ns_before = state.stats().io_ns_read_local_disk;
+    const int64_t io_remote_ns_before = state.stats().io_ns_remote;
 
     std::vector<FileMetaPB> orphan_files;
     std::map<int, FileInfo> replace_segments;
@@ -494,6 +497,9 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     TRACE_COUNTER_INCREMENT("total_del", total_del);
     TRACE_COUNTER_INCREMENT("upsert_rows", op_write.rowset().num_rows());
     TRACE_COUNTER_INCREMENT("base_version", base_version);
+    TRACE_COUNTER_INCREMENT("segment_io_local_disk_us",
+                            (state.stats().io_ns_read_local_disk - io_local_disk_ns_before) / 1000);
+    TRACE_COUNTER_INCREMENT("segment_io_remote_us", (state.stats().io_ns_remote - io_remote_ns_before) / 1000);
     VLOG(1) << strings::Substitute(
             "[publish_pk_tablet][end] tablet:$0 txn:$1 rowset_id:$2 upsert_segments:$3 dels:$4 new_del:$5 total_del:$6 "
             "upsert_rows:$7 base_version:$8 new_version:$9",
