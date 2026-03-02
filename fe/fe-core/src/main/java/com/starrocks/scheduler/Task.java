@@ -16,22 +16,15 @@ package com.starrocks.scheduler;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.authentication.AuthenticationMgr;
-<<<<<<< HEAD
-=======
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.UserIdentity;
->>>>>>> 596f6e1c51 ([BugFix] Fix task run warehouse display after changing mv warehouse (#69567))
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.scheduler.persist.TaskSchedule;
-<<<<<<< HEAD
-import com.starrocks.sql.ast.UserIdentity;
-=======
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
->>>>>>> 596f6e1c51 ([BugFix] Fix task run warehouse display after changing mv warehouse (#69567))
+import com.starrocks.sql.ast.UserIdentity;
 
 import java.io.IOException;
 import java.util.Map;

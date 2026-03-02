@@ -403,9 +403,6 @@ public class TaskManager implements MemoryTrackable {
         }
     }
 
-<<<<<<< HEAD
-    public void dropTasks(List<Long> taskIdList, boolean isReplay) {
-=======
     /**
      * Remove a property from the task's properties map.
      * This method is thread-safe and acquires the task lock before modifying the properties.
@@ -425,8 +422,7 @@ public class TaskManager implements MemoryTrackable {
         }
     }
 
-    public void dropTasks(List<Long> taskIdList) {
->>>>>>> 596f6e1c51 ([BugFix] Fix task run warehouse display after changing mv warehouse (#69567))
+    public void dropTasks(List<Long> taskIdList, boolean isReplay) {
         takeTaskLock();
         try {
             for (long taskId : taskIdList) {

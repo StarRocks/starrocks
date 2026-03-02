@@ -111,8 +111,6 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         return null;
     }
 
-<<<<<<< HEAD
-=======
     private void alterPartitionTTLNumber(Map<String, String> properties,
                                          MaterializedView materializedView,
                                          TableProperty tableProperty,
@@ -161,16 +159,12 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 db, materializedView, properties, true, mvPartitionByExprToAdjustMap);
         if (ttlRetentionCondition != null
                 && !ttlRetentionCondition.equalsIgnoreCase(tableProperty.getPartitionRetentionCondition())) {
-            Pair<Optional<Expr>, Optional<ScalarOperator>> condition
-                    = materializedView.analyzeMVRetentionCondition(context, ttlRetentionCondition);
-            if (condition != null) {
-                appliers.add(() -> {
-                    tableProperty.modifyTableProperties(
-                            PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, ttlRetentionCondition);
-                    tableProperty.setPartitionRetentionCondition(ttlRetentionCondition);
-                    materializedView.setMVRetentionCondition(condition.first, condition.second);
-                });
-            }
+            appliers.add(() -> {
+                tableProperty.modifyTableProperties(
+                        PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, ttlRetentionCondition);
+                tableProperty.setPartitionRetentionCondition(ttlRetentionCondition);
+                materializedView.analyzeMVRetentionCondition(context);
+            });
         }
     }
 
@@ -214,54 +208,6 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         }
     }
 
-    private void alterMVRefreshMode(Map<String, String> properties,
-                                    MaterializedView materializedView,
-                                    TableProperty tableProperty,
-                                    List<Runnable> appliers,
-                                    ConnectContext context) {
-        String mvRefreshMode = PropertyAnalyzer.analyzeRefreshMode(properties);
-        // cannot alter original pct based mv to incremental or auto, only support original ivm/pct based mv
-        MaterializedView.RefreshMode currentRefreshMode =
-                MaterializedView.RefreshMode.valueOf(mvRefreshMode.toUpperCase(Locale.ROOT));
-        if (currentRefreshMode.isIncrementalOrAuto()) {
-            ParseNode mvDefinedQueryParseNode = materializedView.getDefineQueryParseNode();
-            if ((mvDefinedQueryParseNode instanceof QueryStatement queryStatement)) {
-                IVMAnalyzer ivmAnalyzer = new IVMAnalyzer(context, null, queryStatement);
-
-                Optional<IVMAnalyzer.IVMAnalyzeResult> result;
-                try {
-                    result = ivmAnalyzer.rewrite(
-                            MaterializedView.RefreshMode.valueOf(mvRefreshMode.toUpperCase(Locale.ROOT)));
-                } catch (SemanticException e) {
-                    throw new SemanticException("Cannot alter materialized view refresh mode to %s: %s",
-                            mvRefreshMode, e.getMessage());
-                }
-                if (result.isEmpty()) {
-                    throw new SemanticException("Cannot alter materialized view refresh mode to %s," +
-                            " because the materialized view is not eligible for %s refresh mode",
-                            mvRefreshMode, mvRefreshMode);
-                }
-                // if materialized's original refresh mode is not auto or ivm, throw exception
-                if (!materializedView.getCurrentRefreshMode().isIncrementalOrAuto()) {
-                    throw new SemanticException("Cannot alter materialized view refresh mode to %s," +
-                            " only support alter original incremental/auto based materialized view",
-                            mvRefreshMode);
-                }
-                currentRefreshMode = result.get().currentRefreshMode();
-            } else {
-                throw new SemanticException("Cannot alter materialized view refresh mode to %s", mvRefreshMode);
-            }
-        }
-
-        MaterializedView.RefreshMode finalCurrentRefreshMode = currentRefreshMode;
-        if (!tableProperty.getMvRefreshMode().equals(mvRefreshMode)) {
-            appliers.add(() -> {
-                tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE, mvRefreshMode);
-                tableProperty.setMvRefreshMode(mvRefreshMode);
-                materializedView.setCurrentRefreshMode(finalCurrentRefreshMode);
-            });
-        }
-    }
 
     private void alterResourceGroup(Map<String, String> properties,
                                     TableProperty tableProperty,
@@ -566,7 +512,6 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         });
     }
 
->>>>>>> 596f6e1c51 ([BugFix] Fix task run warehouse display after changing mv warehouse (#69567))
     @Override
     public Void visitModifyTablePropertiesClause(ModifyTablePropertiesClause modifyTablePropertiesClause,
                                                  ConnectContext context) {
