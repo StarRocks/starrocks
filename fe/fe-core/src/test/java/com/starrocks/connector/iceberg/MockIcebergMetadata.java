@@ -618,9 +618,9 @@ public class MockIcebergMetadata implements ConnectorMetadata {
         // Return a mock IcebergView for testing
         if (dbName.equalsIgnoreCase("view_db") && viewName.equalsIgnoreCase("iceberg_view")) {
             List<Column> schema = Lists.newArrayList(
-                    new Column("id", IntegerType.INT),
-                    new Column("data", VarcharType.VARCHAR),
-                    new Column("date", DateType.DATE)
+                    new Column("id", Type.INT),
+                    new Column("data", Type.VARCHAR),
+                    new Column("date", Type.DATE)
             );
             return new IcebergView(1, MOCKED_ICEBERG_CATALOG_NAME, dbName, viewName, schema,
                     "SELECT 1 as id, 'data' as data, CAST('2024-01-01' as DATE) as date", MOCKED_ICEBERG_CATALOG_NAME, dbName,
