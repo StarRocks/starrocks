@@ -28,6 +28,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MaterializedView.PartitionRefreshStrategy;
 import com.starrocks.catalog.OlapTable;
@@ -1363,9 +1364,18 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                             baseTableInfo.getTableInfoStr());
                 }
 
+                // Check if the table is an Iceberg table with partition evolution
+                Table table = tableOpt.get();
+                if (table instanceof IcebergTable) {
+                    IcebergTable icebergTable = (IcebergTable) table;
+                    if (icebergTable.getNativeTable().specs().size() > 1) {
+                        throw new DmlException("Do not support refresh materialized view when base iceberg table " +
+                                table.getName() + " has done partition evolution");
+                    }
+                }
+
                 // NOTE: DeepCopy.copyWithGson is very time costing, use `copyOnlyForQuery` to reduce the cost.
                 // TODO: Implement a `SnapshotTable` later which can use the copied table or transfer to the real table.
-                Table table = tableOpt.get();
                 if (table.isNativeTableOrMaterializedView()) {
                     OlapTable copied = null;
                     if (table.isOlapOrCloudNativeTable()) {

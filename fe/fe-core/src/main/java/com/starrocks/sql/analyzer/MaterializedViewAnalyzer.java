@@ -165,8 +165,7 @@ public class MaterializedViewAnalyzer {
                     Table.TableType.KUDU,
                     Table.TableType.DELTALAKE,
                     Table.TableType.VIEW,
-                    Table.TableType.HIVE_VIEW,
-                    Table.TableType.ICEBERG_VIEW);
+                    Table.TableType.HIVE_VIEW);
 
     public static void analyze(StatementBase stmt, ConnectContext session) {
         new MaterializedViewAnalyzerVisitor().visit(stmt, session);
@@ -199,6 +198,15 @@ public class MaterializedViewAnalyzer {
 
             if (table.isView()) {
                 continue;
+            }
+
+            // Check if the table is an Iceberg table with partition evolution
+            if (table instanceof IcebergTable) {
+                IcebergTable icebergTable = (IcebergTable) table;
+                if (icebergTable.getNativeTable().specs().size() > 1) {
+                    throw new SemanticException("Do not support create materialized view when base iceberg table " +
+                            table.getName() + " has done partition evolution", tableNameInfo.getPos());
+                }
             }
 
             if (!FeConstants.isReplayFromQueryDump && !isSupportedExternalTables(table)) {
