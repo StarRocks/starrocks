@@ -110,9 +110,8 @@ Status PartitionChunkWriter::create_file_writer_if_needed() {
         _out_stream = std::move(new_writer_and_stream.stream);
         RETURN_IF_ERROR(_file_writer->init());
 
-        FAIL_POINT_TRIGGER_EXECUTE(parquet_chunk_writer_init_failed, {
-            return Status::InternalError("Create file writer failed due to fail point");
-        });
+        FAIL_POINT_TRIGGER_EXECUTE(parquet_chunk_writer_init_failed,
+                                   { return Status::InternalError("Create file writer failed due to fail point"); });
         _io_poller->enqueue(_out_stream);
     }
     return Status::OK();
