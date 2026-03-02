@@ -72,6 +72,7 @@ import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AdminShowTabletStatusStmt;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.ShowColumnStmt;
@@ -654,5 +655,20 @@ public class ShowExecutorTest {
         ShowIndexStmt stmt = new ShowIndexStmt(tableRef);
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
         Assertions.assertEquals(0, resultSet.getResultRows().size());
+    }
+
+    @Test
+    public void testAdminShowTabletStatusStmt() throws Exception {
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("testDb", "testTbl")),
+                null, NodePosition.ZERO);
+        AdminShowTabletStatusStmt stmt = new AdminShowTabletStatusStmt(tableRef, null, Collections.emptyMap(), NodePosition.ZERO);
+
+        ctx.setGlobalStateMgr(globalStateMgr);
+        ctx.setQualifiedUser("testUser");
+
+        // Use assertThrows to check if it throws exception when table is not cloud native
+        assertThrows(SemanticException.class, () -> {
+            ShowExecutor.execute(stmt, ctx);
+        });
     }
 }

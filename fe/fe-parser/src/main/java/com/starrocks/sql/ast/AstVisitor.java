@@ -182,6 +182,10 @@ public interface AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    default R visitAdminShowTabletStatusStatement(AdminShowTabletStatusStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
     default R visitAdminShowReplicaStatusStatement(AdminShowReplicaStatusStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
