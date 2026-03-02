@@ -10,16 +10,14 @@ This topic describes how to compile StarRocks on the Ubuntu operating system. St
 
 ### Install Dependencies
 
-Run the following commands to update the package list and install necessary dependencies.
-
-> **Note:** For Ubuntu 24.04 and newer, `libbinutils-dev` is required to resolve linker dependencies.
+Run the following commands to install necessary dependencies:
 
 ```bash
 sudo apt update
 ```
 
 ```bash
-sudo apt install build-essential automake bison byacc ccache flex libiberty-dev libtool maven zip python3 python-is-python3 bzip2 libbinutils-dev git -y
+sudo apt install build-essential automake bison byacc ccache flex libiberty-dev libtool maven zip python3 python-is-python3 bzip2 -y
 ```
 
 ### Install Compiler
@@ -96,7 +94,7 @@ Q-2: Building StarRocks fails on Ubuntu 24.04 or GCC 12+ with strict warning err
 
 A: To prevent build failures in third-party libraries, export the following flag before building:
 
-```Bash
+```bash
 export DISABLE_WARNING_AS_ERROR=1
 ./build.sh
 ```
