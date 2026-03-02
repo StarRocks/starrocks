@@ -1467,10 +1467,10 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             properties.putAll(clauseProperties);
         }
 
-        List<String> rangePartitionColNames = null;
+        List<String> rangePartitionNames = null;
         if (addPartitionClause.getPartitionDesc() instanceof RangePartitionDesc) {
-            rangePartitionColNames =
-                    ((RangePartitionDesc) addPartitionClause.getPartitionDesc()).getPartitionColNames();
+            rangePartitionNames =
+                    ((RangePartitionDesc) addPartitionClause.getPartitionDesc()).getPartitionNames();
         }
 
         Iterator<PartitionDesc> iterator = partitionDescs.iterator();
@@ -1500,11 +1500,11 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                                 addPartitionClause.isTempPartition());
                         if (enclosingId >= 0) {
                             Partition enclosingPartition = olapTable.getPartition(enclosingId);
-                            if (enclosingPartition != null && rangePartitionColNames != null) {
-                                int idx = rangePartitionColNames.indexOf(
+                            if (enclosingPartition != null && rangePartitionNames != null) {
+                                int idx = rangePartitionNames.indexOf(
                                         singleRangePartitionDesc.getPartitionName());
                                 if (idx >= 0) {
-                                    rangePartitionColNames.set(idx, enclosingPartition.getName());
+                                    rangePartitionNames.set(idx, enclosingPartition.getName());
                                 }
                             }
                             iterator.remove();
@@ -1540,10 +1540,10 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             }
         }
 
-        if (rangePartitionColNames != null) {
-            LinkedHashSet<String> deduped = new LinkedHashSet<>(rangePartitionColNames);
-            rangePartitionColNames.clear();
-            rangePartitionColNames.addAll(deduped);
+        if (rangePartitionNames != null) {
+            LinkedHashSet<String> deduped = new LinkedHashSet<>(rangePartitionNames);
+            rangePartitionNames.clear();
+            rangePartitionNames.addAll(deduped);
         }
     }
 

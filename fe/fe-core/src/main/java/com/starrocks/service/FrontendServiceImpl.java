@@ -2231,18 +2231,18 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         AddPartitionClause addPartitionClause;
-        List<String> partitionColNames = Lists.newArrayList();
+        List<String> partitionNames = Lists.newArrayList();
         try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()),
                 LockType.READ)) {
             addPartitionClause = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(olapTable,
                     request.partition_values, isTemp, partitionNamePrefix);
             PartitionDesc partitionDesc = addPartitionClause.getPartitionDesc();
             if (partitionDesc instanceof RangePartitionDesc) {
-                partitionColNames = ((RangePartitionDesc) partitionDesc).getPartitionColNames();
+                partitionNames = ((RangePartitionDesc) partitionDesc).getPartitionNames();
             } else if (partitionDesc instanceof ListPartitionDesc) {
-                partitionColNames = ((ListPartitionDesc) partitionDesc).getPartitionColNames();
+                partitionNames = ((ListPartitionDesc) partitionDesc).getPartitionNames();
             }
-            if (olapTable.getNumberOfPartitions() + partitionColNames.size() > Config.max_partition_number_per_table) {
+            if (olapTable.getNumberOfPartitions() + partitionNames.size() > Config.max_partition_number_per_table) {
                 throw new AnalysisException("Table " + olapTable.getName() +
                         " automatically created partitions exceeded the maximum limit: " +
                         Config.max_partition_number_per_table + ". You can modify this restriction on by setting" +
@@ -2374,7 +2374,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             txnState.writeLock();
             try {
                 return buildCreatePartitionResponse(
-                        olapTable, txnState, partitions, tablets, partitionColNames, isTemp);
+                        olapTable, txnState, partitions, tablets, partitionNames, isTemp);
             } finally {
                 txnState.writeUnlock();
             }
@@ -2387,7 +2387,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                                                                        TransactionState txnState,
                                                                        List<TOlapTablePartition> partitions,
                                                                        List<TTabletLocation> tablets,
-                                                                       List<String> partitionColNames,
+                                                                       List<String> partitionNames,
                                                                        boolean isTemp) {
         TCreatePartitionResult result = new TCreatePartitionResult();
         TStatus errorStatus = new TStatus(RUNTIME_ERROR);
@@ -2399,7 +2399,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             result.setStatus(errorStatus);
             return result;
         }
-        for (String partitionName : partitionColNames) {
+        for (String partitionName : partitionNames) {
             // get partition info from snapshot
             TOlapTablePartition tPartition = txnState.getPartitionNameToTPartition(olapTable.getId()).get(partitionName);
             if (tPartition != null) {

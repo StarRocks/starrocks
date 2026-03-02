@@ -351,16 +351,16 @@ public class InsertOverwriteJobRunner {
             throw new RuntimeException(ex);
         }
         PartitionDesc partitionDesc = addPartitionClause.getPartitionDesc();
-        List<String> partitionColNames;
+        List<String> partitionNames;
         if (partitionDesc instanceof RangePartitionDesc) {
-            partitionColNames = ((RangePartitionDesc) partitionDesc).getPartitionColNames();
+            partitionNames = ((RangePartitionDesc) partitionDesc).getPartitionNames();
         } else if (partitionDesc instanceof ListPartitionDesc) {
-            partitionColNames = ((ListPartitionDesc) partitionDesc).getPartitionColNames();
+            partitionNames = ((ListPartitionDesc) partitionDesc).getPartitionNames();
         } else {
             throw new RuntimeException("Unsupported partitionDesc");
         }
-        for (String partitionColName : partitionColNames) {
-            Partition partition = olapTable.getPartition(partitionColName);
+        for (String partitionName : partitionNames) {
+            Partition partition = olapTable.getPartition(partitionName);
             if (!sourcePartitionIds.contains(partition.getId())) {
                 sourcePartitionIds.add(partition.getId());
             }
