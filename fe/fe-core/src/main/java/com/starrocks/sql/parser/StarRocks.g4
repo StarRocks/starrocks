@@ -768,7 +768,7 @@ adminShowReplicaStatusStatement
     ;
 
 adminShowTabletStatusStatement
-    : ADMIN SHOW TABLET STATUS FROM qualifiedName partitionNames? properties? (WHERE where=expression)?
+    : ADMIN SHOW TABLET STATUS FROM qualifiedName partitionNames? (WHERE where=expression)? properties?
     ;
 
 adminRepairTableStatement
