@@ -34,7 +34,11 @@ import com.starrocks.common.proc.ProcResult;
 import com.starrocks.common.proc.RollupProcDir;
 import com.starrocks.common.proc.SchemaChangeProcDir;
 import com.starrocks.common.proc.TransProcDir;
+<<<<<<< HEAD
 import com.starrocks.sql.ShowTemporaryTableStmt;
+=======
+import com.starrocks.sql.ast.AdminRepairTableStmt;
+>>>>>>> ad88c10cad ([Enhancement] Improve repair table and show tablet status (#69656))
 import com.starrocks.sql.ast.AdminShowAutomatedSnapshotStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
@@ -130,6 +134,13 @@ import com.starrocks.sql.ast.spm.ShowBaselinePlanStmt;
 import com.starrocks.sql.ast.warehouse.ShowClustersStmt;
 import com.starrocks.sql.ast.warehouse.ShowNodesStmt;
 import com.starrocks.sql.ast.warehouse.ShowWarehousesStmt;
+<<<<<<< HEAD
+=======
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.StringType;
+import com.starrocks.type.TypeFactory;
+>>>>>>> ad88c10cad ([Enhancement] Improve repair table and show tablet status (#69656))
 
 import java.util.List;
 
@@ -369,12 +380,32 @@ public class ShowResultMetaFactory implements AstVisitor<ShowResultSetMetaData, 
     @Override
     public ShowResultSetMetaData visitAdminShowTabletStatusStatement(AdminShowTabletStatusStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
+<<<<<<< HEAD
                 .addColumn(new Column("TabletId", ScalarType.createVarcharType(30)))
                 .addColumn(new Column("PartitionId", ScalarType.createVarcharType(30)))
                 .addColumn(new Column("Version", ScalarType.createVarcharType(30)))
                 .addColumn(new Column("Status", ScalarType.createVarcharType(30)))
                 .addColumn(new Column("MissingDataFileCount", ScalarType.createVarcharType(30)))
                 .addColumn(new Column("MissingDataFiles", ScalarType.createVarcharType(65535)))
+=======
+                .addColumn(new Column("TabletId", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("PartitionId", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("Version", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("Status", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("MissingDataFileCount", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("MissingDataFiles", StringType.STRING))
+                .build();
+    }
+
+    @Override
+    public ShowResultSetMetaData visitAdminRepairTableStatement(AdminRepairTableStmt statement, Void context) {
+        return ShowResultSetMetaData.builder()
+                .addColumn(new Column("PartitionId", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("VisibleVersion", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("RepairStatus", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("TabletRecoverInfo", StringType.STRING))
+                .addColumn(new Column("ErrorMsg", StringType.STRING))
+>>>>>>> ad88c10cad ([Enhancement] Improve repair table and show tablet status (#69656))
                 .build();
     }
 
