@@ -132,7 +132,6 @@ import com.starrocks.qe.feedback.skeleton.SkeletonNode;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.FeExecuteCoordinator;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.GracefulExitFlag;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.ExecuteEnv;
@@ -546,7 +545,6 @@ public class StmtExecutor {
         long beginTimeInNanoSecond = TimeUtils.getStartTime();
         context.setStmtId(STMT_ID_GENERATOR.incrementAndGet());
         context.setIsForward(false);
-        context.setIsLeaderTransferred(false);
         context.setCurrentThreadId(Thread.currentThread().getId());
 
         // set execution id.
@@ -877,12 +875,6 @@ public class StmtExecutor {
             }
 
             recordExecStatsIntoContext();
-
-            if (GracefulExitFlag.isGracefulExit() && context.isLeaderTransferred() && !isInternalStmt) {
-                LOG.info("leader is transferred during executing, forward to new leader");
-                isForwardToLeaderOpt = Optional.of(true);
-                forwardToLeader();
-            }
         }
     }
 
@@ -2701,9 +2693,6 @@ public class StmtExecutor {
                 txnStatus = TransactionStatus.COMMITTED;
                 final long waitInterval = 300;
                 while (publishWaitMs > 0) {
-                    if (GlobalStateMgr.getCurrentState().isLeaderTransferred()) {
-                        break;
-                    }
 
                     if (visibleWaiter.await(Math.min(publishWaitMs, waitInterval), TimeUnit.MILLISECONDS)) {
                         txnStatus = TransactionStatus.VISIBLE;
