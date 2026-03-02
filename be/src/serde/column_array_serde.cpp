@@ -20,15 +20,9 @@
 #include <streamvbyte.h>
 #include <streamvbytedelta.h>
 
-<<<<<<< HEAD
-=======
 #include <cstdint>
 #include <limits>
 
-#include "base/coding.h"
-#include "base/status.h"
-#include "base/statusor.h"
->>>>>>> 29c7511dfc ([Enhancement] Prevent crashes when deserialization mismatches occur (#69481))
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_visitor_adapter.h"
@@ -40,11 +34,6 @@
 #include "column/nullable_column.h"
 #include "column/object_column.h"
 #include "column/struct_column.h"
-<<<<<<< HEAD
-=======
-#include "column/variant_column.h"
-#include "column/vectorized_fwd.h"
->>>>>>> 29c7511dfc ([Enhancement] Prevent crashes when deserialization mismatches occur (#69481))
 #include "common/statusor.h"
 #include "serde/protobuf_serde.h"
 #include "types/hll.h"
