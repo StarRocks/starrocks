@@ -239,8 +239,8 @@ StatusOr<WriterAndStream> CSVFileWriterFactory::create(const std::string& path) 
                                                   std::move(column_evaluators), _parsed_options, rollback_action);
     cleanup_on_failure.cancel(); // Prevent cleanup on success
     return WriterAndStream{
-            .writer = std::move(writer),
             .stream = std::move(async_output_stream),
+            .writer = std::move(writer),
     };
 }
 

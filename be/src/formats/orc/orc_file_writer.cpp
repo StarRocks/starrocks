@@ -512,8 +512,8 @@ StatusOr<WriterAndStream> ORCFileWriterFactory::create(const string& path) const
             std::make_unique<ORCFileWriter>(path, orc_output_stream, _column_names, types, std::move(column_evaluators),
                                             _compression_type, _parsed_options, rollback_action);
     return WriterAndStream{
-            .writer = std::move(writer),
             .stream = std::move(async_output_stream),
+            .writer = std::move(writer),
     };
 }
 

@@ -69,8 +69,8 @@ public:
 };
 
 struct WriterAndStream {
-    std::unique_ptr<FileWriter> writer;
     std::unique_ptr<io::AsyncFlushOutputStream> stream;
+    std::unique_ptr<FileWriter> writer;
 };
 
 class FileWriterFactory {
