@@ -54,7 +54,6 @@ import com.starrocks.lake.snapshot.RestoreClusterSnapshotMgr;
 import com.starrocks.leader.MetaHelper;
 import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.qe.CoordinatorMonitor;
-import com.starrocks.qe.ProxyContextManager;
 import com.starrocks.qe.QeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.GracefulExitFlag;
@@ -259,8 +258,7 @@ public class StarRocksFEServer {
         final long waitInterval = 1000L;
         while (true) {
             connectScheduler.closeAllIdleConnection();
-            int totalConns = connectScheduler.getTotalConnCount()
-                    + ProxyContextManager.getInstance().getTotalConnCount();
+            int totalConns = connectScheduler.getTotalConnCount();
             if (totalConns > 0) {
                 LOG.info("waiting for {} connections to drain", totalConns);
             } else if (System.nanoTime() - startTimeNano
