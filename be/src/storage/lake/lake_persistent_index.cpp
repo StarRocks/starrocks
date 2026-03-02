@@ -790,22 +790,14 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                     if (pk_column) {
                         int64_t t2 = GetCurrentTimeMicros();
                         pk_column->reset_column();
-<<<<<<< HEAD
                         PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get());
-=======
-                        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get(),
-                                                  pk_encoding_type);
                         pk_encode_cost_us += GetCurrentTimeMicros() - t2;
->>>>>>> 38b5c9f373 ([Enhancement] Add fine-grained trace counters for lake persistent index publish (#69640))
                         pkc = pk_column.get();
                     } else {
                         pkc = chunk->columns()[0].get();
                     }
-<<<<<<< HEAD
                     uint32_t rssid = rowset->id() + i;
-=======
                     int64_t t3 = GetCurrentTimeMicros();
->>>>>>> 38b5c9f373 ([Enhancement] Add fine-grained trace counters for lake persistent index publish (#69640))
                     uint64_t base = ((uint64_t)rssid) << 32;
                     std::vector<IndexValue> values;
                     values.reserve(pkc->size());
