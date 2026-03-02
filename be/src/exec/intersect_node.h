@@ -16,6 +16,7 @@
 
 #include <unordered_set>
 
+#include "base/hash/hash_std.hpp"
 #include "base/phmap/phmap.h"
 #include "base/string/slice.h"
 #include "column/chunk.h"
@@ -26,7 +27,6 @@
 #include "exec/olap_common.h"
 #include "exprs/expr_context.h"
 #include "runtime/mem_pool.h"
-#include "util/hash_util.hpp"
 
 namespace starrocks {
 class DescriptorTbl;

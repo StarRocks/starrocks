@@ -24,6 +24,7 @@
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
+#include "exprs/expr_factory.h"
 #include "gutil/casts.h"
 #include "types/logical_type.h"
 #include "types/percentile_value.h"

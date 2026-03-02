@@ -989,6 +989,11 @@ displayed_sidebar: docs
 - 单位：个
 - 描述：Segment Flush 线程池中排队的任务数量。
 
+### starrocks_be_segment_file_not_found_total
+
+- 单位：个
+- 描述：打开 Segment 时发现文件缺失（NOT_FOUND）的累计次数。若该值持续增长，可能表示数据丢失或存储不一致。
+
 ### jemalloc_metadata_bytes
 
 - 单位：Byte
@@ -1439,6 +1444,18 @@ displayed_sidebar: docs
 
 - 单位：个
 - 描述：主键索引 Compaction 线程池中排队的任务数量。
+
+### pk_index_sst_read_error_total
+
+- 类型：Counter
+- 单位：个
+- 描述：存算分离主键持久化索引中 SST 文件读取失败的总次数。当 SST multi-get（读取）操作失败时递增。
+
+### pk_index_sst_write_error_total
+
+- 类型：Counter
+- 单位：个
+- 描述：存算分离主键持久化索引中 SST 文件写入失败的总次数。当 SST 文件构建失败时递增。
 
 ### disks_total_capacity
 
@@ -1970,3 +1987,76 @@ displayed_sidebar: docs
 - 单位：微秒
 - 类型：Summary
 - 描述：等待 merge commit 导入完成的耗时。
+
+### Iceberg 删除 FE 指标
+
+#### iceberg_delete_total
+
+- 单位：个
+- 类型：累积值
+- 标签：
+  - `status`（`success` 或 `failed`）
+  - `reason`（`none`、`timeout`、`oom`、`access_denied`、`unknown`）
+  - `delete_type`（`position` 或 `metadata`）
+- 描述：目标表为 Iceberg 的 `DELETE` 任务总数。每个任务结束后都会加 1，无论成功还是失败。`delete_type` 区分两种删除方式：`position`（生成 position delete 文件）和 `metadata`（元数据级删除）。
+
+#### iceberg_delete_duration_ms_total
+
+- 单位：毫秒
+- 类型：累积值
+- 标签：`delete_type`（`position` 或 `metadata`）
+- 描述：Iceberg `DELETE` 任务的总耗时（毫秒）。每个任务结束后会累加该任务耗时。`delete_type` 区分两种删除方式。
+
+#### iceberg_delete_bytes
+
+- 单位：字节
+- 类型：累积值
+- 标签：`delete_type`（`position` 或 `metadata`）
+- 描述：Iceberg `DELETE` 任务删除的总字节数。对于 `metadata` 删除，表示被删除的数据文件大小；对于 `position` 删除，表示创建的 position delete 文件大小。
+
+#### iceberg_delete_rows
+
+- 单位：行
+- 类型：累积值
+- 标签：`delete_type`（`position` 或 `metadata`）
+- 描述：Iceberg `DELETE` 任务删除的总行数。对于 `metadata` 删除，表示被删除数据文件中的行数；对于 `position` 删除，表示创建的 position delete 记录数。
+
+### Iceberg 写入 FE 指标
+
+#### iceberg_write_total
+
+- 单位：个
+- 类型：累积值
+- 标签：
+  - `status`（`success` 或 `failed`）
+  - `reason`（`none`、`timeout`、`oom`、`access_denied`、`unknown`）
+  - `write_type`（`insert`、`overwrite` 或 `ctas`）
+- 描述：目标表为 Iceberg 的 `INSERT`、`INSERT OVERWRITE` 或 `CTAS` 任务总数。每个任务结束后都会加 1，无论成功还是失败。`write_type` 区分三种操作类型。
+
+#### iceberg_write_duration_ms_total
+
+- 单位：毫秒
+- 类型：累积值
+- 标签：`write_type`（`insert`、`overwrite` 或 `ctas`）
+- 描述：Iceberg 写入任务（`INSERT`、`INSERT OVERWRITE`、`CTAS`）的总耗时（毫秒）。每个任务结束后会累加该任务耗时。`write_type` 区分三种操作类型。
+
+#### iceberg_write_bytes
+
+- 单位：字节
+- 类型：累积值
+- 标签：`write_type`（`insert`、`overwrite` 或 `ctas`）
+- 描述：Iceberg 写入任务（`INSERT`、`INSERT OVERWRITE`、`CTAS`）的写入总字节数。表示写入到 Iceberg 表的数据文件总大小。`write_type` 区分三种操作类型。
+
+#### iceberg_write_rows
+
+- 单位：行
+- 类型：累积值
+- 标签：`write_type`（`insert`、`overwrite` 或 `ctas`）
+- 描述：Iceberg 写入任务（`INSERT`、`INSERT OVERWRITE`、`CTAS`）的写入总行数。表示写入到 Iceberg 表的行数。`write_type` 区分三种操作类型。
+
+#### iceberg_write_files
+
+- 单位：个数
+- 类型：累积值
+- 标签：`write_type`（`insert`、`overwrite` 或 `ctas`）
+- 描述：Iceberg 写入任务（`INSERT`、`INSERT OVERWRITE`、`CTAS`）写入的数据文件总数。表示写入到 Iceberg 表的数据文件个数。`write_type` 区分三种操作类型。

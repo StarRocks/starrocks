@@ -22,6 +22,7 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
+#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_state.h"
 #include "runtime/starrocks_metrics.h"
 #include "runtime/stream_load/load_stream_mgr.h"
@@ -73,6 +74,8 @@ std::shared_ptr<RuntimeState> ConnectorScanNodeTest::create_runtime_state(const 
     TQueryGlobals query_globals;
     std::shared_ptr<RuntimeState> runtime_state =
             std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, _exec_env);
+    auto* fragment_dict_state = runtime_state->obj_pool()->add(new FragmentDictState());
+    runtime_state->set_fragment_dict_state(fragment_dict_state);
     TUniqueId id;
     runtime_state->init_mem_trackers(id);
     return runtime_state;

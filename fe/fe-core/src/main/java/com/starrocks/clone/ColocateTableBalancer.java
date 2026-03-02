@@ -363,10 +363,11 @@ public class ColocateTableBalancer extends FrontendDaemon {
                     group2ColocateRelocationInfo.put(gid,
                             new ColocateRelocationInfo(!unavailableBeIdsInGroup.isEmpty(),
                                     colocateIndex.getBackendsPerBucketSeq(gid), Maps.newHashMap()));
-                    colocateIndex.addBackendsPerBucketSeq(gid, balancedBackendsPerBucketSeq);
                     ColocatePersistInfo info =
                             ColocatePersistInfo.createForBackendsPerBucketSeq(gid, balancedBackendsPerBucketSeq);
-                    globalStateMgr.getEditLog().logColocateBackendsPerBucketSeq(info);
+                    globalStateMgr.getEditLog().logColocateBackendsPerBucketSeq(info, wal -> {
+                        colocateIndex.addBackendsPerBucketSeq(gid, balancedBackendsPerBucketSeq);
+                    });
                     colocateIndex.markGroupUnstable(groupId, true);
                     LOG.info("balance colocate per group , group id {}, " +
                                     "now backends per bucket sequence is: {}, " +
@@ -669,10 +670,11 @@ public class ColocateTableBalancer extends FrontendDaemon {
             toChangeGroups.add(entry.getKey());
             List<List<Long>> oldBackendsPerBucketSeq = colocateIndex.getBackendsPerBucketSeq(entry.getKey());
             for (GroupId groupId : toChangeGroups) {
-                colocateIndex.addBackendsPerBucketSeq(groupId, balancedBackendsPerBucketSeq);
                 ColocatePersistInfo info =
                         ColocatePersistInfo.createForBackendsPerBucketSeq(groupId, balancedBackendsPerBucketSeq);
-                globalStateMgr.getEditLog().logColocateBackendsPerBucketSeq(info);
+                globalStateMgr.getEditLog().logColocateBackendsPerBucketSeq(info, wal -> {
+                    colocateIndex.addBackendsPerBucketSeq(groupId, balancedBackendsPerBucketSeq);
+                });
                 colocateIndex.markGroupUnstable(groupId, true);
                 LOG.info("overall colocate balance for group {}, now backends per bucket sequence is: {}, " +
                                 "bucket sequence before balance: {}",

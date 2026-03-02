@@ -1020,6 +1020,9 @@ CONF_Bool(pipeline_analytic_enable_streaming_process, "true");
 CONF_mBool(pipeline_analytic_enable_removable_cumulative_process, "true");
 CONF_Int32(pipline_limit_max_delivery, "4096");
 
+// only used in DCHECK
+CONF_mBool(enable_dcheck_on_serde_failure, "false");
+
 CONF_mBool(use_default_dop_when_shared_scan, "true");
 /// For parallel scan on the single tablet.
 // These three configs are used to calculate the minimum number of rows picked up from a segment at one time.
@@ -1367,6 +1370,11 @@ CONF_mDouble(spill_max_dir_bytes_ratio, "0.8"); // 80%
 // min bytes size of spill read buffer. if the buffer size is less than this value, we will disable buffer read
 CONF_Int64(spill_read_buffer_min_bytes, "1048576");
 CONF_mInt64(mem_limited_chunk_queue_block_size, "8388608");
+
+// The max number of threads for exec_state_report thread pool.
+CONF_mInt32(exec_state_report_max_threads, "2");
+// The max number of threads for priority_exec_state_report thread pool.
+CONF_mInt32(priority_exec_state_report_max_threads, "2");
 
 CONF_Int32(internal_service_query_rpc_thread_num, "-1");
 CONF_Int32(internal_service_datacache_rpc_thread_num, "-1");

@@ -123,6 +123,7 @@ statement
     | adminShowAutomatedSnapshotStatement
     | adminShowReplicaDistributionStatement
     | adminShowReplicaStatusStatement
+    | adminShowTabletStatusStatement
     | adminRepairTableStatement
     | adminCancelRepairTableStatement
     | adminCheckTabletsStatement
@@ -790,6 +791,10 @@ adminShowReplicaDistributionStatement
 
 adminShowReplicaStatusStatement
     : ADMIN SHOW REPLICA STATUS FROM qualifiedName partitionNames? showPredicateClauses
+    ;
+
+adminShowTabletStatusStatement
+    : ADMIN SHOW TABLET STATUS FROM qualifiedName partitionNames? showPredicateClauses properties?
     ;
 
 adminRepairTableStatement

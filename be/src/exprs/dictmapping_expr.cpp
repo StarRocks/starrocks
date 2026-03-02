@@ -16,6 +16,7 @@
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -27,7 +28,12 @@ Status DictMappingExpr::open(RuntimeState* state, ExprContext* context, Function
         return Status::OK();
     }
 
-    return state->mutable_dict_optimize_parser()->rewrite_expr(state, context, this, _output_id);
+    auto* fragment_dict_state = state->fragment_dict_state();
+    DCHECK(fragment_dict_state != nullptr);
+    if (fragment_dict_state == nullptr) {
+        return Status::InternalError("fragment dict state is not set");
+    }
+    return fragment_dict_state->mutable_dict_optimize_parser()->rewrite_expr(state, context, this, _output_id);
 }
 
 StatusOr<ColumnPtr> DictMappingExpr::evaluate_checked(ExprContext* context, Chunk* ptr) {

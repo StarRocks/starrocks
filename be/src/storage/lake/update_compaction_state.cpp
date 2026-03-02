@@ -64,7 +64,8 @@ Status CompactionState::_load_segments(Rowset* rowset, const TabletSchemaCSPtr& 
     Schema pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
 
     MutableColumnPtr pk_column;
-    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, true));
+    ASSIGN_OR_RETURN(auto pk_encoding_type, rowset->tablet_schema()->primary_key_encoding_type_or_error());
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, pk_encoding_type, true));
 
     if (_segment_iters.empty()) {
         ASSIGN_OR_RETURN(_segment_iters, rowset->get_each_segment_iterator(pkey_schema, false, &_stats));
@@ -90,7 +91,8 @@ Status CompactionState::_load_segments(Rowset* rowset, const TabletSchemaCSPtr& 
             } else if (!st.ok()) {
                 return st;
             } else {
-                TRY_CATCH_BAD_ALLOC(PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get()));
+                TRY_CATCH_BAD_ALLOC(PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get(),
+                                                              pk_encoding_type));
             }
         }
         itr->close();

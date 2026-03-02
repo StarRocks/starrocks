@@ -59,7 +59,8 @@ public:
 
     int64_t max_serialized_size(const int encode_level = 0);
     StatusOr<uint8_t*> serialize(uint8_t* buff, bool sorted = false, const int encode_level = 0);
-    StatusOr<const uint8_t*> deserialize(const uint8_t* buff, bool sorted = false, const int encode_level = 0);
+    StatusOr<const uint8_t*> deserialize(const uint8_t* buff, const uint8_t* end, bool sorted = false,
+                                         const int encode_level = 0);
 
     static ChunkExtraColumnsData* as_raw(const ChunkExtraDataPtr& extra_data);
 

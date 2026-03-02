@@ -72,6 +72,7 @@ import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.information.AnalyzeStatusSystemTable;
 import com.starrocks.catalog.system.information.ColumnStatsUsageSystemTable;
 import com.starrocks.catalog.system.information.FeThreadsSystemTable;
+import com.starrocks.catalog.system.information.LoadsSystemTable;
 import com.starrocks.catalog.system.information.MaterializedViewsSystemTable;
 import com.starrocks.catalog.system.information.TablesSystemTable;
 import com.starrocks.catalog.system.information.TaskRunsSystemTable;
@@ -415,6 +416,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -2213,18 +2215,18 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         AddPartitionClause addPartitionClause;
-        List<String> partitionColNames = Lists.newArrayList();
+        List<String> partitionNames = Lists.newArrayList();
         try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()),
                 LockType.READ)) {
             addPartitionClause = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(olapTable,
                     request.partition_values, isTemp, partitionNamePrefix);
             PartitionDesc partitionDesc = addPartitionClause.getPartitionDesc();
             if (partitionDesc instanceof RangePartitionDesc) {
-                partitionColNames = ((RangePartitionDesc) partitionDesc).getPartitionColNames();
+                partitionNames = ((RangePartitionDesc) partitionDesc).getPartitionNames();
             } else if (partitionDesc instanceof ListPartitionDesc) {
-                partitionColNames = ((ListPartitionDesc) partitionDesc).getPartitionColNames();
+                partitionNames = ((ListPartitionDesc) partitionDesc).getPartitionNames();
             }
-            if (olapTable.getNumberOfPartitions() + partitionColNames.size() > Config.max_partition_number_per_table) {
+            if (olapTable.getNumberOfPartitions() + partitionNames.size() > Config.max_partition_number_per_table) {
                 throw new AnalysisException("Table " + olapTable.getName() +
                         " automatically created partitions exceeded the maximum limit: " +
                         Config.max_partition_number_per_table + ". You can modify this restriction on by setting" +
@@ -2270,8 +2272,25 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         " already create partition failed");
             }
 
+            // Run analyzer first so that system partitions enclosed by existing partitions
+            // are removed from the resolved list before we decide whether new partitions
+            // will actually be created.
+            ConnectContext ctx = Util.getOrCreateInnerContext();
+            if (txnState.getWarehouseId() != WarehouseManager.DEFAULT_WAREHOUSE_ID) {
+                ctx.setCurrentWarehouseId(txnState.getWarehouseId());
+            }
+            try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(),
+                    Lists.newArrayList(table.getId()), LockType.READ)) {
+                AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(olapTable);
+                analyzer.analyze(ctx, addPartitionClause);
+            }
+
+            Set<String> resolvedPartitionNames = new TreeSet<>();
+            for (PartitionDesc desc : addPartitionClause.getResolvedPartitionDescList()) {
+                resolvedPartitionNames.add(desc.getPartitionName());
+            }
             boolean willCreateNewPartition =
-                    CatalogUtils.checkIfNewPartitionExists(olapTable, creatingPartitionNames);
+                    CatalogUtils.checkIfNewPartitionExists(olapTable, resolvedPartitionNames);
 
             // ingestion is top priority, if schema change or rollup is running, cancel it
             try {
@@ -2299,17 +2318,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 LOG.warn("cancel schema change or rollup failed. error: {}", e.getMessage());
             }
 
-            // If a create partition request is from BE or CN, the warehouse information may be lost, we can get it from txn state.
-            ConnectContext ctx = Util.getOrCreateInnerContext();
-            if (txnState.getWarehouseId() != WarehouseManager.DEFAULT_WAREHOUSE_ID) {
-                ctx.setCurrentWarehouseId(txnState.getWarehouseId());
+            if (willCreateNewPartition) {
+                state.getLocalMetastore().addPartitions(ctx, db, olapTable.getName(), addPartitionClause);
+            } else {
+                LOG.info("skip addPartitions for automatic create partition txn_id={}, no new partition after analyze",
+                        request.getTxn_id());
             }
-            try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()),
-                    LockType.READ)) {
-                AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(olapTable);
-                analyzer.analyze(ctx, addPartitionClause);
-            }
-            state.getLocalMetastore().addPartitions(ctx, db, olapTable.getName(), addPartitionClause);
         } catch (Exception e) {
             LOG.warn("failed to add partitions", e);
             errorStatus.setError_msgs(Lists.newArrayList(
@@ -2344,7 +2358,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             txnState.writeLock();
             try {
                 return buildCreatePartitionResponse(
-                        olapTable, txnState, partitions, tablets, partitionColNames, isTemp);
+                        olapTable, txnState, partitions, tablets, partitionNames, isTemp);
             } finally {
                 txnState.writeUnlock();
             }
@@ -2357,7 +2371,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                                                                        TransactionState txnState,
                                                                        List<TOlapTablePartition> partitions,
                                                                        List<TTabletLocation> tablets,
-                                                                       List<String> partitionColNames,
+                                                                       List<String> partitionNames,
                                                                        boolean isTemp) {
         TCreatePartitionResult result = new TCreatePartitionResult();
         TStatus errorStatus = new TStatus(RUNTIME_ERROR);
@@ -2369,7 +2383,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             result.setStatus(errorStatus);
             return result;
         }
-        for (String partitionName : partitionColNames) {
+        for (String partitionName : partitionNames) {
             // get partition info from snapshot
             TOlapTablePartition tPartition = txnState.getPartitionNameToTPartition(olapTable.getId()).get(partitionName);
             if (tPartition != null) {
@@ -2619,58 +2633,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TGetLoadsResult getLoads(TGetLoadsParams request) throws TException {
         LOG.debug("Recieve getLoads: {}", request);
-
-        TGetLoadsResult result = new TGetLoadsResult();
-        List<TLoadInfo> loads = Lists.newArrayList();
-        try {
-            if (request.isSetJob_id()) {
-                LoadJob job = GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJob(request.getJob_id());
-                if (job != null) {
-                    loads.add(job.toThrift());
-                }
-            } else if (request.isSetDb()) {
-                long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(request.getDb()).getId();
-                if (request.isSetLabel()) {
-                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJobsByDb(
-                                    dbId, request.getLabel(), true).stream()
-                            .map(LoadJob::toThrift).collect(Collectors.toList()));
-                } else {
-                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJobsByDb(
-                                    dbId, null, false).stream().map(LoadJob::toThrift)
-                            .collect(Collectors.toList()));
-                }
-            } else {
-                if (request.isSetLabel()) {
-                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJobs(request.getLabel())
-                            .stream().map(LoadJob::toThrift).collect(Collectors.toList()));
-                } else {
-                    loads.addAll(GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJobs(null)
-                            .stream().map(LoadJob::toThrift).collect(Collectors.toList()));
-                }
-            }
-
-            if (request.isSetJob_id()) {
-                AbstractStreamLoadTask task = GlobalStateMgr.getCurrentState()
-                        .getStreamLoadMgr().getTaskById(request.getJob_id());
-                if (task != null) {
-                    loads.addAll(task.toThrift());
-                }
-            } else {
-                List<AbstractStreamLoadTask> streamLoadTaskList = GlobalStateMgr.getCurrentState().getStreamLoadMgr()
-                        .getTaskByName(request.getLabel());
-                if (streamLoadTaskList != null) {
-                    for (AbstractStreamLoadTask streamLoadTask : streamLoadTaskList) {
-                        loads.addAll(streamLoadTask.toThrift());
-                    }
-                }
-            }
-
-            result.setLoads(loads);
-        } catch (Exception e) {
-            LOG.warn("Failed to getLoads", e);
-            throw e;
-        }
-        return result;
+        return LoadsSystemTable.query(request);
     }
 
     @Override

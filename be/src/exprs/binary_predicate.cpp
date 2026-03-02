@@ -30,6 +30,7 @@
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Value.h>
 
+#include "exprs/jit/expr_jit_codegen.h"
 #include "exprs/jit/ir_helper.h"
 #endif
 
@@ -127,7 +128,13 @@ std::string get_cmp_op_name() {
 }
 
 template <LogicalType Type, typename OP>
-class VectorizedBinaryPredicate final : public Predicate {
+#ifdef STARROCKS_JIT_ENABLE
+class VectorizedBinaryPredicate final : public Predicate,
+                                        public JITCodegenNode
+#else
+class VectorizedBinaryPredicate final : public Predicate
+#endif
+{
 public:
     explicit VectorizedBinaryPredicate(const TExprNode& node) : Predicate(node) {}
     ~VectorizedBinaryPredicate() override = default;
@@ -166,8 +173,8 @@ public:
             return Status::NotSupported("JIT of decimal cmp not support");
         } else {
             std::vector<LLVMDatum> datums(2);
-            ASSIGN_OR_RETURN(datums[0], _children[0]->generate_ir(context, jit_ctx))
-            ASSIGN_OR_RETURN(datums[1], _children[1]->generate_ir(context, jit_ctx))
+            ASSIGN_OR_RETURN(datums[0], ExprJITCodegen::generate_ir(context, _children[0], jit_ctx))
+            ASSIGN_OR_RETURN(datums[1], ExprJITCodegen::generate_ir(context, _children[1], jit_ctx))
 
             auto* l = datums[0].value;
             auto* r = datums[1].value;
@@ -220,9 +227,9 @@ public:
     }
 
     std::string jit_func_name_impl(RuntimeState* state) const override {
-        return "{" + _children[0]->jit_func_name(state) + get_cmp_op_name<Type, OP>() +
-               _children[1]->jit_func_name(state) + "}" + (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") +
-               type().debug_string();
+        return "{" + ExprJITCodegen::func_name(_children[0], state) + get_cmp_op_name<Type, OP>() +
+               ExprJITCodegen::func_name(_children[1], state) + "}" + (is_constant() ? "c:" : "") +
+               (is_nullable() ? "n:" : "") + type().debug_string();
     }
 #endif
 
@@ -396,7 +403,13 @@ public:
 };
 
 template <LogicalType Type, typename OP>
-class VectorizedNullSafeEqPredicate final : public Predicate {
+#ifdef STARROCKS_JIT_ENABLE
+class VectorizedNullSafeEqPredicate final : public Predicate,
+                                            public JITCodegenNode
+#else
+class VectorizedNullSafeEqPredicate final : public Predicate
+#endif
+{
 public:
     explicit VectorizedNullSafeEqPredicate(const TExprNode& node) : Predicate(node) {}
     ~VectorizedNullSafeEqPredicate() override = default;
@@ -444,8 +457,8 @@ public:
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
         std::vector<LLVMDatum> datums(2);
-        ASSIGN_OR_RETURN(datums[0], _children[0]->generate_ir(context, jit_ctx))
-        ASSIGN_OR_RETURN(datums[1], _children[1]->generate_ir(context, jit_ctx))
+        ASSIGN_OR_RETURN(datums[0], ExprJITCodegen::generate_ir(context, _children[0], jit_ctx))
+        ASSIGN_OR_RETURN(datums[1], ExprJITCodegen::generate_ir(context, _children[1], jit_ctx))
         auto& b = jit_ctx->builder;
         if constexpr (lt_is_decimal<Type>) {
             // TODO(yueyang): Implement decimal cmp in LLVM IR.
@@ -472,8 +485,9 @@ public:
     }
 
     std::string jit_func_name_impl(RuntimeState* state) const override {
-        return "{" + _children[0]->jit_func_name(state) + "<=>" + _children[1]->jit_func_name(state) + "}" +
-               (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
+        return "{" + ExprJITCodegen::func_name(_children[0], state) + "<=>" +
+               ExprJITCodegen::func_name(_children[1], state) + "}" + (is_constant() ? "c:" : "") +
+               (is_nullable() ? "n:" : "") + type().debug_string();
     }
 #endif
 

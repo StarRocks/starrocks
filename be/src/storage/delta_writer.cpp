@@ -698,7 +698,11 @@ Status DeltaWriter::_reset_mem_table() {
         _mem_table = std::make_unique<MemTable>(_tablet->tablet_id(), &_vectorized_schema, _opt.slots,
                                                 _mem_table_sink.get(), "", _mem_tracker);
     }
-    RETURN_IF_ERROR(_mem_table->prepare());
+    PrimaryKeyEncodingType pk_encoding_type = PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
+    if (_tablet->keys_type() == KeysType::PRIMARY_KEYS) {
+        pk_encoding_type = PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1;
+    }
+    RETURN_IF_ERROR(_mem_table->prepare(pk_encoding_type));
     _mem_table->set_write_buffer_row(_memtable_buffer_row);
     _write_buffer_size = _mem_table->write_buffer_size();
     return Status::OK();
@@ -887,12 +891,13 @@ Status DeltaWriter::_fill_auto_increment_id(Chunk& chunk) {
     }
     Schema pkey_schema = ChunkHelper::convert_schema(_tablet_schema, pk_columns);
     MutableColumnPtr pk_column;
-    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
+    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1).ok()) {
         CHECK(false) << "create column for primary key encoder failed";
     }
     auto col = pk_column->clone();
 
-    PrimaryKeyEncoder::encode(pkey_schema, chunk, 0, chunk.num_rows(), col.get());
+    PrimaryKeyEncoder::encode(pkey_schema, chunk, 0, chunk.num_rows(), col.get(),
+                              PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
     MutableColumnPtr upserts = std::move(col);
 
     std::vector<uint64_t> rss_rowids;

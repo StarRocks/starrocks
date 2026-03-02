@@ -826,6 +826,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String BIG_QUERY_LOG_SCAN_BYTES_THRESHOLD = "big_query_log_scan_bytes_threshold";
     public static final String BIG_QUERY_LOG_SCAN_ROWS_THRESHOLD = "big_query_log_scan_rows_threshold";
     public static final String BIG_QUERY_PROFILE_THRESHOLD = "big_query_profile_threshold";
+    public static final String PROFILE_LOG_LATENCY_THRESHOLD_MS = "profile_log_latency_threshold_ms";
 
     public static final String SQL_DIALECT = "sql_dialect";
 
@@ -1081,9 +1082,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_PREDICATE_COL_LATE_MATERIALIZE = "enable_predicate_col_late_materialize";
 
     public static final String PUSH_DOWN_HEAVY_EXPRS = "push_down_heavy_exprs";
-
-    public static final String ARROW_FLIGHT_PROXY = "arrow_flight_proxy";
-    public static final String ARROW_FLIGHT_PROXY_ENABLED = "arrow_flight_proxy_enabled";
 
     public static final String TOPN_PUSH_DOWN_AGG_MODE = "topn_push_down_agg_mode";
 
@@ -1535,6 +1533,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = BIG_QUERY_PROFILE_THRESHOLD)
     private String bigQueryProfileThreshold = "30s";
+
+    // -1 = use FE config profile_log_latency_threshold_ms; >= 0 = minimum latency (ms) to log to fe.profile.log
+    @VariableMgr.VarAttr(name = PROFILE_LOG_LATENCY_THRESHOLD_MS, flag = VariableMgr.SESSION_ONLY)
+    private long profileLogLatencyThresholdMs = -1;
 
     // Profile output format version: 1 = legacy (separate MIN/MAX counters), 2 = compact (inline min/max)
     @VariableMgr.VarAttr(name = PROFILE_FORMAT_VERSION)
@@ -2289,11 +2291,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = PUSH_DOWN_HEAVY_EXPRS)
     private boolean pushDownHeavyExprs = true;
 
-    @VarAttr(name = ARROW_FLIGHT_PROXY)
-    private String arrowFlightProxy = "";
-    @VarAttr(name = ARROW_FLIGHT_PROXY_ENABLED)
-    private boolean arrowFlightProxyEnabled = true;
-
     @VarAttr(name = TOPN_PUSH_DOWN_AGG_MODE, flag = VariableMgr.INVISIBLE)
     private int topNPushDownAggMode = 1;
 
@@ -2590,6 +2587,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public String getConnectorSinkCompressionCodec() {
         return connectorSinkCompressionCodec;
+    }
+
+    public void setConnectorSinkCompressionCodec(String connectorSinkCompressionCodec) {
+        this.connectorSinkCompressionCodec = connectorSinkCompressionCodec;
     }
 
     @VariableMgr.VarAttr(name = CONNECTOR_SINK_TARGET_MAX_FILE_SIZE)
@@ -3837,6 +3838,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setBigQueryProfileThreshold(String bigQueryProfileThreshold) {
         this.bigQueryProfileThreshold = bigQueryProfileThreshold;
+    }
+
+    public long getProfileLogLatencyThresholdMs() {
+        return profileLogLatencyThresholdMs;
+    }
+
+    public void setProfileLogLatencyThresholdMs(long profileLogLatencyThresholdMs) {
+        this.profileLogLatencyThresholdMs = profileLogLatencyThresholdMs;
     }
 
     // when pipeline engine is enabled
@@ -5974,22 +5983,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isPushDownHeavyExprs() {
         return this.pushDownHeavyExprs;
-    }
-
-    public void setArrowFlightProxy(String proxy) {
-        this.arrowFlightProxy = proxy;
-    }
-
-    public String getArrowFlightProxy() {
-        return this.arrowFlightProxy;
-    }
-
-    public void setArrowFlightProxyEnabled(boolean flag) {
-        this.arrowFlightProxyEnabled = flag;
-    }
-
-    public boolean isArrowFlightProxyEnabled() {
-        return this.arrowFlightProxyEnabled;
     }
 
     public void setEnablePreAggTopNPushDown(int  topNPushDownAggMode) {

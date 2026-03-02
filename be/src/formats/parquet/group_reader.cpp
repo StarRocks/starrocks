@@ -29,8 +29,8 @@
 #include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/statusor.h"
-#include "exec/exec_node.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
+#include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "formats/parquet/column_reader_factory.h"
@@ -289,7 +289,8 @@ StatusOr<size_t> GroupReader::_read_range_round_by_round(const Range<uint64_t>& 
                 temp_chunk->columns().reserve(1);
                 ColumnPtr& column = (*chunk)->get_column_by_slot_id(slot_id);
                 temp_chunk->append_column(column, slot_id);
-                ASSIGN_OR_RETURN(hit_count, ExecNode::eval_conjuncts_into_filter(ctxs, temp_chunk.get(), filter));
+                ASSIGN_OR_RETURN(hit_count,
+                                 ChunkPredicateEvaluator::eval_conjuncts_into_filter(ctxs, temp_chunk.get(), filter));
                 if (hit_count == 0) {
                     break;
                 }
@@ -323,7 +324,8 @@ StatusOr<size_t> GroupReader::_read_range_round_by_round(const Range<uint64_t>& 
             temp_chunk->columns().reserve(1);
             ColumnPtr& column = (*chunk)->get_column_by_slot_id(slot_id);
             temp_chunk->append_column(column, slot_id);
-            ASSIGN_OR_RETURN(hit_count, ExecNode::eval_conjuncts_into_filter(ctxs, temp_chunk.get(), filter));
+            ASSIGN_OR_RETURN(hit_count,
+                             ChunkPredicateEvaluator::eval_conjuncts_into_filter(ctxs, temp_chunk.get(), filter));
             if (hit_count == 0) {
                 break;
             }

@@ -35,21 +35,29 @@
 #include "exprs/expr_context.h"
 
 #include <fmt/format.h>
-#include <storage/chunk_helper.h>
 
 #include <memory>
-#include <sstream>
 #include <stdexcept>
 
 #include "column/chunk.h"
+#include "column/column_helper.h"
 #include "common/statusor.h"
-#include "exprs/column_ref.h"
 #include "exprs/expr.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
-#include "runtime/runtime_state_helper.h"
 
 namespace starrocks {
+
+namespace {
+
+ChunkPtr create_dummy_chunk() {
+    auto dummy_chunk = std::make_shared<Chunk>();
+    auto column = ColumnHelper::create_const_column<TYPE_INT>(1, 1);
+    dummy_chunk->append_column(std::move(column), 0);
+    return dummy_chunk;
+}
+
+} // namespace
 
 ExprContext::ExprContext(Expr* root) : _root(root) {}
 
@@ -89,13 +97,6 @@ Status ExprContext::open(RuntimeState* state) {
     } catch (std::runtime_error& e) {
         return Status::RuntimeError(fmt::format("Expr evaluate meet error: {}", e.what()));
     }
-}
-
-Status ExprContext::open(std::vector<ExprContext*> evals, RuntimeState* state) {
-    for (auto& eval : evals) {
-        RETURN_IF_ERROR(eval->open(state));
-    }
-    return Status::OK();
 }
 
 void ExprContext::close(RuntimeState* state) {
@@ -174,7 +175,7 @@ StatusOr<ColumnPtr> ExprContext::evaluate(Expr* e, Chunk* chunk, uint8_t* filter
     // but some expr can not handle situation that input chunk is nullptr or empty correctly
     // so we create chunk with one column and one raw
     if (chunk == nullptr) {
-        dummy_chunk = ChunkHelper::createDummyChunk();
+        dummy_chunk = create_dummy_chunk();
         chunk = dummy_chunk.get();
     }
 #ifndef NDEBUG
@@ -214,26 +215,6 @@ bool ExprContext::is_index_only_filter() const {
 
 bool ExprContext::error_if_overflow() const {
     return _runtime_state != nullptr && _runtime_state->error_if_overflow();
-}
-
-Status ExprContext::rewrite_jit_expr(ObjectPool* pool) {
-    if (_runtime_state == nullptr || !RuntimeStateHelper::is_jit_enabled(_runtime_state)) {
-        return Status::OK();
-    }
-#ifdef STARROCKS_JIT_ENABLE
-    bool replaced = false;
-    auto st = _root->replace_compilable_exprs(&_root, pool, _runtime_state, replaced);
-    if (!st.ok()) {
-        LOG(WARNING) << "Can't replace compilable exprs.\n" << st.message() << "\n" << (root())->debug_string();
-        // Fall back to the non-JIT path.
-        return Status::OK();
-    }
-    if (replaced) { // only prepare jit_expr
-        WARN_IF_ERROR(_root->prepare_jit_expr(_runtime_state, this), "prepare rewritten expr failed");
-    }
-#endif
-
-    return Status::OK();
 }
 
 } // namespace starrocks

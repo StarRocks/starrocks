@@ -26,3 +26,6 @@ admin enable failpoint 'operator_return_failed_status';
 admin disable failpoint 'operator_return_failed_status';
 -- result:
 -- !result
+CLEANUP {
+    admin disable failpoint 'operator_return_failed_status';
+} END CLEANUP

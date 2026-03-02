@@ -2,6 +2,9 @@ name: Translation Status Check
 on:
   pull_request_target: # <--- CHANGED: Gives Write Perms for Forks
     paths: ['docs/en/**', 'docs/zh/**', 'docs/ja/**']
+  workflow_run:
+    workflows: ["Translation Runner"]
+    types: [completed]
 
 jobs:
   report:
@@ -10,20 +13,58 @@ jobs:
       pull-requests: write # Explicitly request write access
       contents: read       # We only need to read the code
     steps:
+      # Get PR number from workflow_run context if needed
+      - name: Get PR Number
+        id: pr_number
+        uses: actions/github-script@v7
+        with:
+          script: |
+            let prNumber;
+            if (context.eventName === 'pull_request_target') {
+              prNumber = context.payload.pull_request.number;
+            } else if (context.eventName === 'workflow_run') {
+              const { data: pullRequests } = await github.rest.pulls.list({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                head: context.payload.workflow_run.head_branch,
+                state: 'open',
+              });
+              prNumber = pullRequests.length > 0 ? pullRequests[0].number : null;
+            }
+            if (!prNumber) {
+              core.setFailed('No open pull request found for this workflow_run head branch or unsupported event context.');
+              return;
+            }
+            core.setOutput('pr_number', prNumber);
+      
       # 1. Checkout the PR's Merge Commit so we can see the NEW files
       - name: Checkout PR Code
         uses: actions/checkout@v4
         with:
           # Critical: Checkout the merge commit, not the default 'main'
-          ref: refs/pull/${{ github.event.pull_request.number }}/merge
+          ref: refs/pull/${{ steps.pr_number.outputs.pr_number }}/merge
           fetch-depth: 0
+
+      # Get PR details (base SHA etc)
+      - name: Get PR Details
+        id: pr_details
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = '${{ steps.pr_number.outputs.pr_number }}';
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+            });
+            core.setOutput('base_sha', pr.base.sha);
 
       # 2. Get Changed Files (Compares PR vs Base)
       - name: Get Changed Files
         id: changed-files
         uses: tj-actions/changed-files@v44
         with:
-          base_sha: ${{ github.event.pull_request.base.sha }}
+          base_sha: ${{ steps.pr_details.outputs.base_sha }}
           json: true
           files: |
             docs/en/**/*.md*
@@ -55,56 +96,125 @@ jobs:
               return;
             }
 
-            let contentBuffer = "";
-            let hasMissingTranslations = false;
+            // Translation rules:
+            // - English (en) can translate to: Chinese (zh), Japanese (ja)
+            // - Chinese (zh) can translate to: English (en) only
+            // - Japanese (ja) cannot be a source file
+            const getValidTargets = (sourceLang) => {
+              if (sourceLang === 'en') return ['zh', 'ja'];
+              if (sourceLang === 'zh') return ['en'];
+              if (sourceLang === 'ja') return []; // Japanese files are not source files
+              return [];
+            };
 
+            // Group files by base filename to check if all languages exist
+            const filesByBase = {};
             files.forEach(file => {
               if (!fs.existsSync(file)) return;
-
+              
               const parts = file.split('/');
-              if (parts.length < 2) return; 
+              if (parts.length < 3) return;
               
-              const sourceLang = parts[1]; 
-              if (!['en', 'zh', 'ja'].includes(sourceLang)) return;
+              const lang = parts[1];
+              if (!['en', 'zh', 'ja'].includes(lang)) return;
+              
+              // Get base name: extract everything after the language folder
+              const baseName = parts.slice(2).join('/');
+              
+              if (!filesByBase[baseName]) {
+                filesByBase[baseName] = { en: false, zh: false, ja: false, paths: {} };
+              }
+              filesByBase[baseName][lang] = true;
+              filesByBase[baseName].paths[lang] = file;
+            });
 
-              const targets = ['en', 'zh', 'ja'].filter(l => l !== sourceLang);
+            let automatedCheckboxBuffer = "";
+            let manualTranslationBuffer = "";
+            let hasAutomatedTranslations = false;
+            let hasManualTranslations = false;
+
+            Object.entries(filesByBase).forEach(([baseName, langData]) => {
+              const allLanguagesPresent = langData.en && langData.zh && langData.ja;
               
-              let fileChecklist = "";
-              targets.forEach(lang => {
-                const targetPath = file.replace(`docs/${sourceLang}/`, `docs/${lang}/`);
-                const isTargetChanged = files.includes(targetPath);
-                const exists = fs.existsSync(targetPath);
+              // If all three language versions exist in the PR, no translation needed
+              if (allLanguagesPresent) {
+                return;
+              }
+
+              // Process each language that was changed
+              ['en', 'zh', 'ja'].forEach(sourceLang => {
+                if (!langData[sourceLang]) return; // Only process changed files
                 
-                if (!exists || !isTargetChanged) {
-                  const status = exists ? "(Update)" : "(New)";
-                  fileChecklist += `- [ ] **${lang}** for \`${file}\` ${status}\n`;
+                const file = langData.paths[sourceLang];
+                const validTargets = getValidTargets(sourceLang);
+                
+                if (validTargets.length === 0) {
+                  // Japanese files need manual translation from en or zh
+                  if (sourceLang === 'ja') {
+                    // Check if en or zh versions exist in repo
+                    const enExists = langData.en;
+                    const zhExists = langData.zh;
+                    
+                    if (!enExists && !zhExists) {
+                      manualTranslationBuffer += `- \`${file}\` (Japanese file - requires English or Chinese source)\n`;
+                      hasManualTranslations = true;
+                    }
+                  }
+                  return;
+                }
+
+                // Check which target translations are needed
+                let automatedChecklist = "";
+                let manualChecklist = "";
+
+                validTargets.forEach(lang => {
+                  if (!langData[lang]) {
+                    // Target language doesn't exist
+                    const status = "(New)";
+                    const canAutomate = (sourceLang === 'en' || (sourceLang === 'zh' && lang === 'en'));
+                    
+                    if (canAutomate) {
+                      automatedChecklist += `- [ ] **${lang}** for \`${file}\` ${status}\n`;
+                    } else {
+                      manualChecklist += `- **${lang}** for \`${file}\` ${status}\n`;
+                    }
+                  }
+                });
+
+                if (automatedChecklist) {
+                  hasAutomatedTranslations = true;
+                  automatedCheckboxBuffer += `#### \`${file}\`\n${automatedChecklist}\n`;
+                }
+
+                if (manualChecklist) {
+                  hasManualTranslations = true;
+                  manualTranslationBuffer += `#### \`${file}\`\n${manualChecklist}\n`;
                 }
               });
-
-              if (fileChecklist) {
-                hasMissingTranslations = true;
-                contentBuffer += `#### \`${file}\`\n${fileChecklist}\n`;
-              }
             });
 
             // 3. Output logic
-            if (!hasMissingTranslations) {
+            if (!hasAutomatedTranslations && !hasManualTranslations) {
               // SUCCESS CASE: Keep the header so we find the comment next time!
               body += "\n✅ **All translation files are up to date.**\n";
               body += "Great job! No translation actions are required for this PR.\n";
             } else {
               // ACTION REQUIRED CASE
               body += "Thanks for your doc contribution! The following languages are missing or outdated for your changes.\n\n";
-              body += "If you are fluent in any of the missing languages you can add them. If not, a maintainer will take a look and generate the changes below.\n\n";
-              body += "**Maintainer:** Check the ones you wish to generate:\n\n";
               
-              body += "#### ⚡ Global Actions\n";
-              body += "- [ ] **Japanese (ja)** for **ALL** missing/outdated files\n";
-              body += "- [ ] **Chinese (zh)** for **ALL** missing/outdated files\n";
-              body += "- [ ] **English (en)** for **ALL** missing/outdated files\n\n---\n";
+              if (hasAutomatedTranslations) {
+                body += "## 🤖 Automated Translations\n";
+                body += "If you are fluent in any of the missing languages you can add them. If not, a maintainer can generate the translations below.\n\n";
+                body += "**Maintainer:** Check the ones you wish to generate:\n\n";
+                body += automatedCheckboxBuffer;
+                body += "---\n*Maintainers: Check boxes and reply with `/translate` to start.*\n\n";
+              }
 
-              body += contentBuffer;
-              body += "---\n*Maintainers: Check boxes and reply with `/translate` to start.*\n";
+              if (hasManualTranslations) {
+                body += "## 👤 Manual Translations Required\n";
+                body += "The following translations must be done manually by a human translator:\n\n";
+                body += manualTranslationBuffer;
+              }
             }
 
             body += `\n\n> 🕒 **Last updated:** ${timestamp}`;
@@ -115,7 +225,7 @@ jobs:
         uses: peter-evans/find-comment@v3
         id: findcheckboxcomment
         with:
-          issue-number: ${{ github.event.pull_request.number }}
+          issue-number: ${{ steps.pr_number.outputs.pr_number }}
           comment-author: 'github-actions[bot]'
           body-includes: "### 🌎 Translation Required?"
 
@@ -123,7 +233,7 @@ jobs:
         uses: peter-evans/create-or-update-comment@v5
         with:
           comment-id: ${{ steps.findcheckboxcomment.outputs.comment-id }}
-          issue-number: ${{ github.event.pull_request.number }}
+          issue-number: ${{ steps.pr_number.outputs.pr_number }}
           body: ${{ steps.checklist.outputs.body }}
           edit-mode: replace
 
@@ -135,6 +245,6 @@ jobs:
             github.rest.issues.addLabels({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: context.issue.number,
+              issue_number: ${{ steps.pr_number.outputs.pr_number }},
               labels: ['docs-maintainer']
             });

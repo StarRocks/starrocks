@@ -1,2 +1,0 @@
-google-genai==0.3.0
-pyyaml==6.0.2

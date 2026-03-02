@@ -290,6 +290,8 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_ALLOW_EMPTY_TABLET_RECOVERY = "allow_empty_tablet_recovery";
     // If true, just return the repair plan without executing it
     public static final String PROPERTIES_DRY_RUN = "dry_run";
+    // Show at most `limit` missing data files per tablet
+    public static final String PROPERTIES_MAX_MISSING_DATA_FILES_TO_SHOW = "max_missing_data_files_to_show";
 
     /**
      * Matches location labels like : ["*", "a:*", "bcd_123:*", "123bcd_:val_123", "  a :  b  "],
@@ -383,7 +385,11 @@ public class PropertyAnalyzer {
 
         } else if (hasCoolDownTTL) {
             if (!hasMedium) {
-                throw new AnalysisException("Invalid data property. storage medium property is not found");
+                if (inferredDataProperty != null && Config.tablet_sched_storage_cooldown_second > 0) {
+                    storageMedium = inferredDataProperty.getStorageMedium();
+                } else {
+                    throw new AnalysisException("Invalid data property. storage medium property is not found");
+                }
             }
             if (storageMedium == TStorageMedium.HDD) {
                 throw new AnalysisException("Can not assign cooldown ttl to table with HDD storage medium");

@@ -22,9 +22,9 @@
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exec/pipeline/schedule/observer.h"
 #include "exec/spill/operator_mem_resource_manager.h"
-#include "exprs/runtime_filter_bank.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/runtime_filter/runtime_filter_probe.h"
 
 namespace starrocks {
 class Expr;
@@ -174,7 +174,7 @@ public:
 
     const std::vector<SlotId>& filter_null_value_columns() const;
 
-    // equal to ExecNode::eval_conjuncts(_conjunct_ctxs, chunk), is used to apply in-filters to Operators.
+    // equal to ChunkPredicateEvaluator::eval_conjuncts(_conjunct_ctxs, chunk), is used to apply in-filters to Operators.
     Status eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& conjuncts, Chunk* chunk,
                                          FilterPtr* filter = nullptr, bool apply_filter = true);
     // evaluate no eq join runtime in filters

@@ -14,6 +14,7 @@
 
 #include "storage/persistent_index_compaction_manager.h"
 
+#include "base/utility/defer_op.h"
 #include "common/thread/threadpool.h"
 #include "runtime/starrocks_metrics.h"
 #include "storage/storage_engine.h"

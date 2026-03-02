@@ -33,11 +33,16 @@
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/agg/combinator/agg_state_utils.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 #include "exprs/literal.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "types/logical_type.h"
+#ifndef __APPLE__
+#include "udf/java/java_udf.h"
+#endif
 #include "udf/java/utils.h"
 
 namespace starrocks {
@@ -280,15 +285,15 @@ Status Aggregator::open(RuntimeState* state) {
         return Status::OK();
     }
     _is_opened = true;
-    RETURN_IF_ERROR(Expr::open(_group_by_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_group_by_expr_ctxs, state));
     for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
-        RETURN_IF_ERROR(Expr::open(_agg_expr_ctxs[i], state));
+        RETURN_IF_ERROR(ExprExecutor::open(_agg_expr_ctxs[i], state));
         RETURN_IF_ERROR(_evaluate_const_columns(i));
     }
     for (auto& _intermediate_agg_expr_ctx : _intermediate_agg_expr_ctxs) {
-        RETURN_IF_ERROR(Expr::open(_intermediate_agg_expr_ctx, state));
+        RETURN_IF_ERROR(ExprExecutor::open(_intermediate_agg_expr_ctx, state));
     }
-    RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_conjunct_ctxs, state));
 
     // init function context
     _has_udaf = std::any_of(_fns.begin(), _fns.end(),
@@ -296,12 +301,20 @@ Status Aggregator::open(RuntimeState* state) {
 #ifndef __APPLE__
     if (_has_udaf) {
         auto promise_st = call_function_in_pthread(state, [this]() {
+            std::vector<int> attached_udaf_idx;
+            attached_udaf_idx.reserve(_agg_fn_ctxs.size());
             for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
                 if (_fns[i].binary_type == TFunctionBinaryType::SRJAR) {
                     const auto& fn = _fns[i];
                     auto st = init_udaf_context(fn.fid, fn.hdfs_location, fn.checksum, fn.aggregate_fn.symbol,
                                                 _agg_fn_ctxs[i]);
-                    RETURN_IF_ERROR(st);
+                    if (!st.ok()) {
+                        for (int idx : attached_udaf_idx) {
+                            destroy_java_udaf_context(_agg_fn_ctxs[idx]);
+                        }
+                        return st;
+                    }
+                    attached_udaf_idx.emplace_back(i);
                 }
             }
             return Status::OK();
@@ -417,9 +430,11 @@ Status Aggregator::prepare(RuntimeState* state, RuntimeProfile* runtime_profile)
     _intermediate_tuple_id = _params->intermediate_tuple_id;
     _output_tuple_id = _params->output_tuple_id;
 
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool.get(), _params->conjuncts, &_conjunct_ctxs, state, true));
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool.get(), _params->grouping_exprs, &_group_by_expr_ctxs, state, true));
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool.get(), _params->grouping_min_max, &_group_by_min_max, state, true));
+    RETURN_IF_ERROR(ExprFactory::create_expr_trees(_pool.get(), _params->conjuncts, &_conjunct_ctxs, state, true));
+    RETURN_IF_ERROR(
+            ExprFactory::create_expr_trees(_pool.get(), _params->grouping_exprs, &_group_by_expr_ctxs, state, true));
+    RETURN_IF_ERROR(
+            ExprFactory::create_expr_trees(_pool.get(), _params->grouping_min_max, &_group_by_min_max, state, true));
     _ranges.resize(_group_by_expr_ctxs.size());
     if (_group_by_min_max.size() == _group_by_expr_ctxs.size() * 2) {
         for (size_t i = 0; i < _group_by_expr_ctxs.size(); ++i) {
@@ -474,9 +489,9 @@ Status Aggregator::prepare(RuntimeState* state, RuntimeProfile* runtime_profile)
         for (int j = 0; j < desc.nodes[0].num_children; ++j) {
             ++node_idx;
             Expr* expr = nullptr;
-            ExprContext* ctx = nullptr;
-            RETURN_IF_ERROR(Expr::create_tree_from_thrift_with_jit(_pool.get(), desc.nodes, nullptr, &node_idx, &expr,
-                                                                   &ctx, state));
+            RETURN_IF_ERROR(
+                    ExprFactory::create_expr_from_thrift_nodes(_pool.get(), desc.nodes, &node_idx, &expr, state, true));
+            ExprContext* ctx = _pool->add(new ExprContext(expr));
             _agg_expr_ctxs[i].emplace_back(ctx);
         }
 
@@ -495,9 +510,9 @@ Status Aggregator::prepare(RuntimeState* state, RuntimeProfile* runtime_profile)
         for (int i = 0; i < agg_size; ++i) {
             int node_idx = 0;
             Expr* expr = nullptr;
-            ExprContext* ctx = nullptr;
-            RETURN_IF_ERROR(Expr::create_tree_from_thrift_with_jit(_pool.get(), aggr_exprs[i].nodes, nullptr, &node_idx,
-                                                                   &expr, &ctx, state));
+            RETURN_IF_ERROR(ExprFactory::create_expr_from_thrift_nodes(_pool.get(), aggr_exprs[i].nodes, &node_idx,
+                                                                       &expr, state, true));
+            ExprContext* ctx = _pool->add(new ExprContext(expr));
             _intermediate_agg_expr_ctxs[i].emplace_back(ctx);
         }
     }
@@ -512,17 +527,17 @@ Status Aggregator::prepare(RuntimeState* state, RuntimeProfile* runtime_profile)
     _output_tuple_desc = state->desc_tbl().get_tuple_descriptor(_output_tuple_id);
     DCHECK_EQ(_intermediate_tuple_desc->slots().size(), _output_tuple_desc->slots().size());
 
-    RETURN_IF_ERROR(Expr::prepare(_group_by_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_group_by_expr_ctxs, state));
 
     for (const auto& ctx : _agg_expr_ctxs) {
-        RETURN_IF_ERROR(Expr::prepare(ctx, state));
+        RETURN_IF_ERROR(ExprExecutor::prepare(ctx, state));
     }
 
     for (const auto& ctx : _intermediate_agg_expr_ctxs) {
-        RETURN_IF_ERROR(Expr::prepare(ctx, state));
+        RETURN_IF_ERROR(ExprExecutor::prepare(ctx, state));
     }
 
-    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_conjunct_ctxs, state));
 
     // Initial for FunctionContext of every aggregate functions
     for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
@@ -667,11 +682,13 @@ Status Aggregator::_reset_state(RuntimeState* state, bool reset_sink_complete) {
         _release_agg_memory();
     }
 
+#ifndef __APPLE__
     for (int i = 0; i < _agg_functions.size(); i++) {
-        if (_agg_fn_ctxs[i]) {
-            _agg_fn_ctxs[i]->release_mems();
+        if (_agg_fn_ctxs[i] != nullptr && _fns[i].binary_type == TFunctionBinaryType::SRJAR) {
+            clear_java_udaf_states(_agg_fn_ctxs[i]);
         }
     }
+#endif
 
     _mem_pool->free_all();
     _agg_state_mem_usage = 0;
@@ -745,11 +762,13 @@ void Aggregator::close(RuntimeState* state) {
             _mem_pool->free_all();
         }
 
+#ifndef __APPLE__
         for (int i = 0; i < _agg_functions.size(); i++) {
-            if (_agg_fn_ctxs[i]) {
-                _agg_fn_ctxs[i]->release_mems();
+            if (_agg_fn_ctxs[i] != nullptr && _fns[i].binary_type == TFunctionBinaryType::SRJAR) {
+                destroy_java_udaf_context(_agg_fn_ctxs[i]);
             }
         }
+#endif
 
         if (_is_only_group_by_columns) {
             _hash_set_variant.reset();
@@ -757,11 +776,11 @@ void Aggregator::close(RuntimeState* state) {
             _hash_map_variant.reset();
         }
 
-        Expr::close(_group_by_expr_ctxs, state);
+        ExprExecutor::close(_group_by_expr_ctxs, state);
         for (const auto& i : _agg_expr_ctxs) {
-            Expr::close(i, state);
+            ExprExecutor::close(i, state);
         }
-        Expr::close(_conjunct_ctxs, state);
+        ExprExecutor::close(_conjunct_ctxs, state);
 
         for (auto* func : _combinator_function) {
             delete func;

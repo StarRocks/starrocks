@@ -28,7 +28,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellWithName;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
-import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Iterator;
@@ -42,9 +41,6 @@ import java.util.stream.Collectors;
  * MVVersionManager is used to update materialized view version info when base table partition changes after mv refresh finished.
  */
 public class MVVersionManager {
-    // only used in the static methods
-    private static final Logger LOG = LogManager.getLogger(MVVersionManager.class);
-
     private final Logger logger;
     private final MaterializedView mv;
     private final MvTaskRunContext mvTaskRunContext;
@@ -69,8 +65,8 @@ public class MVVersionManager {
                                     Set<Long> refBaseTableIds,
                                     Map<BaseTableSnapshotInfo, PCellSortedSet> refTableAndPartitionNames,
                                     Map<BaseTableInfo, TvrVersionRange> tempMvTvrVersionRangeMap) {
-        MaterializedView.MvRefreshScheme mvRefreshScheme = mv.getRefreshScheme();
-        MaterializedView.AsyncRefreshContext refreshContext = mvRefreshScheme.getAsyncRefreshContext();
+        MaterializedView.MvRefreshScheme copiedScheme = mv.getRefreshScheme().copy(); // copy on write
+        MaterializedView.AsyncRefreshContext refreshContext = copiedScheme.getAsyncRefreshContext();
         // update materialized view partition to ref base table partition names meta
         updateAssociatedPartitionMeta(refreshContext, mvRefreshedPartitions, refTableAndPartitionNames);
         // Update meta information for OLAP tables and external tables
@@ -88,7 +84,7 @@ public class MVVersionManager {
         if (tempMvTvrVersionRangeMap != null) {
             // update the tvr version range map in mv context
             final Map<BaseTableInfo, TvrVersionRange> mvTvrVersionRangeMap =
-                    mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableInfoTvrVersionRangeMap();
+                    refreshContext.getBaseTableInfoTvrVersionRangeMap();
             for (Map.Entry<BaseTableInfo, TvrVersionRange> entry : tempMvTvrVersionRangeMap.entrySet()) {
                 mvTvrVersionRangeMap.put(entry.getKey(), entry.getValue());
             }
@@ -105,8 +101,14 @@ public class MVVersionManager {
                 }
             }
         }
-        mvRefreshScheme.setLastRefreshTime(maxChangedTableRefreshTime);
-        updateEditLogAfterVersionMetaChanged(mv, maxChangedTableRefreshTime);
+        copiedScheme.setLastRefreshTime(maxChangedTableRefreshTime);
+        ChangeMaterializedViewRefreshSchemeLog changeRefreshSchemeLog =
+                new ChangeMaterializedViewRefreshSchemeLog(mv, copiedScheme);
+        logger.info("Update materialized view {} refresh scheme, " +
+                        "last refresh time: {}, version meta changed",
+                mv.getName(), maxChangedTableRefreshTime);
+        GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog,
+                wal -> mv.setRefreshScheme(copiedScheme));
 
         // trigger timeless info event since mv version changed
         GlobalStateMgr.getCurrentState().getMaterializedViewMgr().triggerTimelessInfoEvent(mv,
@@ -294,19 +296,4 @@ public class MVVersionManager {
         }
     }
 
-    /**
-     * Sync meta changes to followers by edit log after version meta changed.
-     * @param mv  mv that need to update
-     * @param maxChangedTableRefreshTime max changed table refresh time
-     */
-    public static void updateEditLogAfterVersionMetaChanged(MaterializedView mv,
-                                                            long maxChangedTableRefreshTime) {
-        mv.getRefreshScheme().setLastRefreshTime(maxChangedTableRefreshTime);
-        ChangeMaterializedViewRefreshSchemeLog changeRefreshSchemeLog =
-                new ChangeMaterializedViewRefreshSchemeLog(mv);
-        LOG.info("Update materialized view {} refresh scheme, " +
-                        "last refresh time: {}, version meta changed",
-                mv.getName(), maxChangedTableRefreshTime);
-        GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog);
-    }
 }

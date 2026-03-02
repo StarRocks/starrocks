@@ -431,13 +431,14 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
 
                 // inactive the related MVs
                 AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(origTable,
-                        MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(origTblName), false);
+                        MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(origTblName));
                 AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(olapNewTbl,
-                        MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(newTblName), false);
+                        MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(newTblName));
 
                 SwapTableOperationLog log = new SwapTableOperationLog(db.getId(), origTable.getId(), olapNewTbl.getId());
-                GlobalStateMgr.getCurrentState().getAlterJobMgr().swapTableInternal(log);
-                GlobalStateMgr.getCurrentState().getEditLog().logSwapTable(log);
+                GlobalStateMgr.getCurrentState().getEditLog().logSwapTable(log, wal -> {
+                    GlobalStateMgr.getCurrentState().getAlterJobMgr().swapTableInternal(log);
+                });
 
                 LOG.info("finish swap table {}-{} with table {}-{}", origTable.getId(), origTblName, newTbl.getId(),
                         newTblName);
@@ -910,7 +911,7 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
         List<Partition> partitionsToUpdateShardGroup = new ArrayList<>();
         for (String partitionName : partitionNames) {
             Partition partition = olapTable.getPartition(partitionName);
-            // 1. date property
+            // 1. data property
 
             // skip change storage_cooldown_ttl for shadow partition
             if (partitionName.startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)
@@ -936,7 +937,6 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
                         newDataProperty = new DataProperty(TStorageMedium.SSD, coolDownTimeStamp);
                     }
                 }
-                partitionInfo.setDataProperty(partition.getId(), newDataProperty);
             }
             // 2. replication num
             if (newReplicationNum != (short) -1) {
@@ -944,48 +944,57 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
                     throw new DdlException(
                             "table " + olapTable.getName() + " is colocate table, cannot change replicationNum");
                 }
-                partitionInfo.setReplicationNum(partition.getId(), newReplicationNum);
-                // update default replication num if this table is unpartitioned table
-                if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
-                    olapTable.setReplicationNum(newReplicationNum);
-                }
             }
+
             // 3. enable data cache
             if (newEnableDataCache != null && olapTable.isCloudNativeTableOrMaterializedView()) {
                 DataCacheInfo dataCacheInfo = partitionInfo.getDataCacheInfo(partition.getId());
                 if (dataCacheInfo == null || newEnableDataCache != dataCacheInfo.isEnabled()) {
-                    partitionsToUpdateShardGroup.add(olapTable.getPartition(partitionName));
-                    boolean asyncWriteBack = dataCacheInfo != null && dataCacheInfo.isAsyncWriteBack();
-                    partitionInfo.setDataCacheInfo(partition.getId(), new DataCacheInfo(newEnableDataCache, asyncWriteBack));
+                    partitionsToUpdateShardGroup.add(partition);
                 }
             }
+
             ModifyPartitionInfo info = new ModifyPartitionInfo(db.getId(), olapTable.getId(), partition.getId(),
                     newDataProperty, newReplicationNum, newEnableDataCache);
             modifyPartitionInfos.add(info);
         }
 
-        if (newEnableDataCache != null && !partitionsToUpdateShardGroup.isEmpty()) {
-            // The updateShardGroup function is called centrally here, rather than iteratively within a for-loop, to
-            // ensure that updateShardGroup and the persistence of ModifyPartitionInfo are closely enough,
-            // thereby preventing metadata inconsistency.
-            try {
-                GlobalStateMgr.getCurrentState().getStarOSAgent().updateShardGroup(
-                        partitionsToUpdateShardGroup, newEnableDataCache);
-            } catch (DdlException e) {
-                // Revert in-memory datacache changes for partitions that were actually modified
-                for (Partition partition : partitionsToUpdateShardGroup) {
-                    DataCacheInfo dataCacheInfo = partitionInfo.getDataCacheInfo(partition.getId());
-                    partitionInfo.setDataCacheInfo(partition.getId(),
-                            new DataCacheInfo(!newEnableDataCache, dataCacheInfo.isAsyncWriteBack()));
-                }
-                throw new DdlException("Failed to update shard group for datacache.enable change: " + e.getMessage(),
-                        e);
-            }
+        if (!partitionsToUpdateShardGroup.isEmpty()) {
+            GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .updateShardGroup(partitionsToUpdateShardGroup, newEnableDataCache);
         }
 
         // log here
         BatchModifyPartitionsInfo info = new BatchModifyPartitionsInfo(modifyPartitionInfos);
-        GlobalStateMgr.getCurrentState().getEditLog().logBatchModifyPartition(info);
+        Boolean finalNewEnableDataCache = newEnableDataCache;
+        GlobalStateMgr.getCurrentState().getEditLog().logBatchModifyPartition(info, wal -> {
+            for (ModifyPartitionInfo modifyPartitionInfo : modifyPartitionInfos) {
+                if (modifyPartitionInfo.getDataProperty() != null) {
+                    partitionInfo.setDataProperty(modifyPartitionInfo.getPartitionId(),
+                            modifyPartitionInfo.getDataProperty());
+                }
+
+                if (modifyPartitionInfo.getReplicationNum() != (short) -1) {
+                    short replicationNum = modifyPartitionInfo.getReplicationNum();
+                    partitionInfo.setReplicationNum(modifyPartitionInfo.getPartitionId(), replicationNum);
+                    // update default replication num if this table is unpartitioned table
+                    if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
+                        olapTable.setReplicationNum(replicationNum);
+                    }
+                }
+            }
+
+            if (finalNewEnableDataCache == null) {
+                return;
+            }
+
+            for (Partition partition : partitionsToUpdateShardGroup) {
+                DataCacheInfo dataCacheInfo = partitionInfo.getDataCacheInfo(partition.getId());
+                boolean asyncWriteBack = dataCacheInfo != null && dataCacheInfo.isAsyncWriteBack();
+                partitionInfo.setDataCacheInfo(partition.getId(),
+                        new DataCacheInfo(finalNewEnableDataCache, asyncWriteBack));
+            }
+        });
     }
 
     // Alter View

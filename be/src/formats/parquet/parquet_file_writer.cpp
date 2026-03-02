@@ -26,8 +26,11 @@
 
 #include <future>
 #include <ostream>
+#include <sstream>
+#include <string>
 #include <utility>
 
+#include "base/failpoint/fail_point.h"
 #include "column/column_helper.h"
 #include "common/http/content_type.h"
 #include "common/util/debug_util.h"
@@ -39,7 +42,6 @@
 #include "formats/utils.h"
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
-#include "types/logical_type.h"
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks {
@@ -48,6 +50,10 @@ class ColumnHelper;
 } // namespace starrocks
 
 namespace starrocks::formats {
+
+DEFINE_FAIL_POINT(parquet_writer_close_failed);
+DEFINE_FAIL_POINT(parquet_writer_throw_exception);
+DEFINE_FAIL_POINT(parquet_writer_rowgroup_write_failed);
 
 Status ParquetFileWriter::write(Chunk* chunk) {
     if (_rowgroup_writer == nullptr) {
@@ -58,6 +64,7 @@ Status ParquetFileWriter::write(Chunk* chunk) {
 
     RETURN_IF_ERROR(_rowgroup_writer->write(chunk));
 
+    FAIL_POINT_TRIGGER_EXECUTE(parquet_writer_rowgroup_write_failed, { _writer_options->rowgroup_size = 0; });
     if (_rowgroup_writer->estimated_buffered_bytes() >= _writer_options->rowgroup_size) {
         return _flush_row_group();
     }
@@ -65,16 +72,22 @@ Status ParquetFileWriter::write(Chunk* chunk) {
     return Status::OK();
 }
 
-FileWriter::CommitResult ParquetFileWriter::commit() {
-    FileWriter::CommitResult result{
+FileWriter::CommitResult ParquetFileWriter::close() {
+    CommitResult result{
             .io_status = Status::OK(), .format = PARQUET, .location = _location, .rollback_action = _rollback_action};
     try {
         if (_writer != nullptr) {
             _writer->Close();
         }
-    } catch (const ::parquet::ParquetStatusException& e) {
+        FAIL_POINT_TRIGGER_EXECUTE(parquet_writer_throw_exception, {
+            throw ::parquet::ParquetException("Parquet writer throws exception by fail point");
+        });
+    } catch (const std::exception& e) {
         result.io_status.update(Status::IOError(fmt::format("{}: {}", "close file error", e.what())));
     }
+
+    FAIL_POINT_TRIGGER_EXECUTE(parquet_writer_close_failed,
+                               { result.io_status.update(Status::IOError("writer close failed by fail point")); });
 
     if (auto status = _output_stream->Close(); !status.ok()) {
         result.io_status.update(Status::IOError(fmt::format("{}: {}", "close output stream error", status.message())));
@@ -109,7 +122,10 @@ Status ParquetFileWriter::_flush_row_group() {
     DCHECK(_rowgroup_writer != nullptr);
     try {
         _rowgroup_writer->close();
-    } catch (const ::parquet::ParquetStatusException& e) {
+        FAIL_POINT_TRIGGER_EXECUTE(parquet_writer_rowgroup_write_failed, {
+            throw ::parquet::ParquetException("Parquet row group writer throws exception by fail point");
+        });
+    } catch (const std::exception& e) {
         Status exception = Status::IOError(fmt::format("{}: {}", "flush rowgroup error", e.what()));
         LOG(WARNING) << exception;
         return exception;
@@ -273,16 +289,26 @@ Status ParquetFileWriter::init() {
     }
 
     ASSIGN_OR_RETURN(auto compression, parquet::ParquetBuildHelper::convert_compression_type(_compression_type));
-    _properties = std::make_unique<::parquet::WriterProperties::Builder>()
-                          ->version(_writer_options->version)
-                          ->enable_write_page_index()
-                          ->data_pagesize(_writer_options->page_size)
-                          ->write_batch_size(_writer_options->write_batch_size)
-                          ->dictionary_pagesize_limit(_writer_options->dictionary_pagesize)
-                          ->compression(compression)
-                          ->created_by(fmt::format("{} starrocks-{}", CREATED_BY_VERSION, get_short_version()))
-                          ->memory_pool(&_memory_pool)
-                          ->build();
+    ::parquet::WriterProperties::Builder builder;
+    builder.version(_writer_options->version)
+            ->enable_write_page_index()
+            ->data_pagesize(_writer_options->page_size)
+            ->write_batch_size(_writer_options->write_batch_size)
+            ->dictionary_pagesize_limit(_writer_options->dictionary_pagesize)
+            ->compression(compression)
+            ->created_by(fmt::format("{} starrocks-{}", CREATED_BY_VERSION, get_short_version()))
+            ->memory_pool(&_memory_pool);
+
+    // Apply column-level dictionary encoding configuration
+    for (const auto& [col_name, enabled] : _writer_options->column_dictionary_enabled) {
+        if (enabled) {
+            builder.enable_dictionary(col_name);
+        } else {
+            builder.disable_dictionary(col_name);
+        }
+    }
+
+    _properties = builder.build();
 
     _writer = ::parquet::ParquetFileWriter::Open(_output_stream, _schema, _properties);
     return Status::OK();
@@ -333,6 +359,8 @@ Status ParquetFileWriterFactory::init() {
 #ifndef BE_TEST
     _parsed_options->time_zone = _runtime_state->timezone();
 #endif
+    // Apply column-level dictionary encoding configuration set via setter
+    _parsed_options->column_dictionary_enabled = std::move(_column_dictionary_enabled);
     return Status::OK();
 }
 
@@ -353,8 +381,8 @@ StatusOr<WriterAndStream> ParquetFileWriterFactory::create(const std::string& pa
                                                       std::move(column_evaluators), _compression_type, _parsed_options,
                                                       rollback_action, _nullable);
     return WriterAndStream{
-            .writer = std::move(writer),
             .stream = std::move(async_output_stream),
+            .writer = std::move(writer),
     };
 }
 

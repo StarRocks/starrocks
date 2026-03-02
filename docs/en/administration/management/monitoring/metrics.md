@@ -989,6 +989,11 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Count
 - Description: Number of queued tasks in the segment flush thread pool.
 
+### starrocks_be_segment_file_not_found_total
+
+- Unit: Count
+- Description: Total number of times a segment file was not found (file missing) during segment open. A continuously increasing value may indicate data loss or storage inconsistency.
+
 ### jemalloc_metadata_bytes
 
 - Unit: Bytes
@@ -1439,6 +1444,18 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 - Unit: Count
 - Description: Queued task count in the Primary Key index compaction thread pool.
+
+### pk_index_sst_read_error_total
+
+- Type: Counter
+- Unit: Count
+- Description: Total number of SST file read failures in the lake Primary Key persistent index. Incremented when SST multi-get (read) operations fail.
+
+### pk_index_sst_write_error_total
+
+- Type: Counter
+- Unit: Count
+- Description: Total number of SST file write failures in the lake Primary Key persistent index. Incremented when SST file build fails.
 
 ### disks_total_capacity
 
@@ -1971,3 +1988,111 @@ Latency metrics expose percentile series such as `merge_commit_request_latency_9
 - Unit: microsecond
 - Type: Summary
 - Description: Time spent waiting for merge commit load operations to finish.
+
+### Iceberg delete FE metrics
+
+#### iceberg_delete_total
+
+- Unit: Count
+- Type: Cumulative
+- Labels:
+  - `status` (`success` or `failed`)
+  - `reason` (`none`, `timeout`, `oom`, `access_denied`, `unknown`)
+  - `delete_type` (`position` or `metadata`)
+- Description: Total number of `DELETE` tasks that target Iceberg tables. The metric is incremented by 1 after each task ends, regardless of success or failure. `delete_type` distinguishes between two delete methods: `position` (generates position delete files) and `metadata` (metadata-level delete).
+
+#### iceberg_delete_duration_ms_total
+
+- Unit: Millisecond
+- Type: Cumulative
+- Labels: `delete_type` (`position` or `metadata`)
+- Description: Total execution time of Iceberg `DELETE` tasks in milliseconds. The duration of each task is added after it ends. `delete_type` distinguishes between two delete methods.
+
+#### iceberg_delete_bytes
+
+- Unit: Bytes
+- Type: Cumulative
+- Labels: `delete_type` (`position` or `metadata`)
+- Description: Total deleted bytes from Iceberg `DELETE` tasks. For `metadata` delete, this represents the size of deleted data files. For `position` delete, this represents the size of position delete files created.
+
+#### iceberg_delete_rows
+
+- Unit: Rows
+- Type: Cumulative
+- Labels: `delete_type` (`position` or `metadata`)
+- Description: Total deleted rows from Iceberg `DELETE` tasks. For `metadata` delete, this represents the number of rows in deleted data files. For `position` delete, this represents the number of position deletes created.
+
+### iceberg_compaction_total
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `compaction_type` (`manual` or `auto`)
+- Description: Total number of Iceberg compaction (`rewrite_data_files`) tasks.
+
+### iceberg_compaction_duration_ms_total
+
+- Unit: Millisecond
+- Type: Cumulative
+- Labels: `compaction_type` (`manual` or `auto`)
+- Description: Total time spent running Iceberg compaction tasks.
+
+### iceberg_compaction_input_files_total
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `compaction_type` (`manual` or `auto`)
+- Description: Total number of data files read by Iceberg compaction tasks.
+
+### iceberg_compaction_output_files_total
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `compaction_type` (`manual` or `auto`)
+- Description: Total number of data files produced by Iceberg compaction tasks.
+
+### iceberg_compaction_removed_delete_files_total
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `compaction_type` (`manual` or `auto`)
+- Description: Total number of delete files removed by Iceberg manual compaction tasks.
+
+### Iceberg write FE metrics
+
+#### iceberg_write_total
+
+- Unit: Count
+- Type: Cumulative
+- Labels:
+  - `status` (`success` or `failed`)
+  - `reason` (`none`, `timeout`, `oom`, `access_denied`, `unknown`)
+  - `write_type` (`insert`, `overwrite`, or `ctas`)
+- Description: Total number of `INSERT`, `INSERT OVERWRITE`, or `CTAS` tasks that target Iceberg tables. The metric is incremented by 1 after each task ends, regardless of success or failure. `write_type` distinguishes between the operation types.
+
+#### iceberg_write_duration_ms_total
+
+- Unit: Millisecond
+- Type: Cumulative
+- Labels: `write_type` (`insert`, `overwrite`, or `ctas`)
+- Description: Total execution time of Iceberg write tasks (`INSERT`, `INSERT OVERWRITE`, `CTAS`) in milliseconds. The duration of each task is added after it ends. `write_type` distinguishes between the operation types.
+
+#### iceberg_write_bytes
+
+- Unit: Bytes
+- Type: Cumulative
+- Labels: `write_type` (`insert`, `overwrite`, or `ctas`)
+- Description: Total written bytes from Iceberg write tasks (`INSERT`, `INSERT OVERWRITE`, `CTAS`). This represents the total size of data files written to the Iceberg table. `write_type` distinguishes between the operation types.
+
+#### iceberg_write_rows
+
+- Unit: Rows
+- Type: Cumulative
+- Labels: `write_type` (`insert`, `overwrite`, or `ctas`)
+- Description: Total written rows from Iceberg write tasks (`INSERT`, `INSERT OVERWRITE`, `CTAS`). This represents the number of rows written to the Iceberg table. `write_type` distinguishes between the operation types.
+
+#### iceberg_write_files
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `write_type` (`insert`, `overwrite`, or `ctas`)
+- Description: Total number of data files written to Iceberg from write tasks (`INSERT`, `INSERT OVERWRITE`, `CTAS`). This represents the count of data files written to the Iceberg table. `write_type` distinguishes between the operation types.

@@ -307,6 +307,7 @@ private:
     };
 
     Status _init();
+    Status _init_internal();
     Status _try_to_update_ranges_by_runtime_filter();
     Status _do_get_next(Chunk* result, vector<rowid_t>* rowid);
 
@@ -824,6 +825,16 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema
 }
 
 Status SegmentIterator::_init() {
+    auto st = _init_internal();
+    if (st.is_not_found()) {
+        // NOTE: this may cause the metric increasing twice the call path is from segment::open.
+        // It is fine for now since the metric is only used for alerting.
+        StarRocksMetrics::instance()->segment_file_not_found_total.increment(1);
+    }
+    return st;
+}
+
+Status SegmentIterator::_init_internal() {
     SCOPED_RAW_TIMER(&_opts.stats->segment_init_ns);
     if (_opts.is_cancelled != nullptr && _opts.is_cancelled->load(std::memory_order_acquire)) {
         return Status::Cancelled("Cancelled");

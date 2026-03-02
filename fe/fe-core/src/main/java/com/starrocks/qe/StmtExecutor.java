@@ -68,6 +68,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.QueryDumpLog;
+import com.starrocks.common.SqlBlacklistedException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.TimeoutException;
@@ -141,7 +142,6 @@ import com.starrocks.qe.scheduler.FeExecuteCoordinator;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.GracefulExitFlag;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
@@ -165,6 +165,7 @@ import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AnalyzeProfileStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AnalyzeTypeDesc;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTemporaryTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTemporaryTableStmt;
@@ -807,7 +808,6 @@ public class StmtExecutor {
         long beginTimeInNanoSecond = TimeUtils.getStartTime();
         context.setStmtId(STMT_ID_GENERATOR.incrementAndGet());
         context.setIsForward(false);
-        context.setIsLeaderTransferred(false);
         context.setCurrentThreadId(Thread.currentThread().getId());
 
         SessionVariable sessionVariableBackup = context.getSessionVariable();
@@ -829,6 +829,14 @@ public class StmtExecutor {
         final Long originWarehouseId = context.getCurrentWarehouseIdAllowNull();
         if (shouldMarkIdleCheck && originWarehouseId != null) {
             WarehouseIdleChecker.increaseRunningSQL(originWarehouseId);
+        }
+
+        final boolean originSkipIcebergCache = context.isOnlyReadIcebergCache();
+        if (parsedStmt instanceof InsertStmt || parsedStmt instanceof CreateTableAsSelectStmt) {
+            context.setOnlyReadIcebergCache(true);
+        } else if (parsedStmt instanceof RefreshMaterializedViewStatement 
+                || parsedStmt instanceof CreateMaterializedViewStatement) {
+            context.setOnlyReadIcebergCache(true);
         }
 
         RecursiveCTEExecutor cteExecutor = null;
@@ -891,8 +899,23 @@ public class StmtExecutor {
                 return;
             }
 
-            // execPlan is the output of planner
-            ExecPlan execPlan = generateExecPlan();
+            // Register as a planning query so it is visible in current_queries during optimization.
+            // The planning entry is removed before handleQueryStmt/handleDMLStmt re-registers
+            // with the real Coordinator, avoiding AlreadyExistsException from putIfAbsent.
+            ExecPlan execPlan;
+            context.setPlanning(true);
+            try {
+                QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(),
+                        QeProcessorImpl.QueryInfo.fromPlanningQuery(context, originStmt.originStmt));
+            } catch (Exception e) {
+                LOG.warn("Failed to register planning query: {}", DebugUtil.printId(context.getExecutionId()), e);
+            }
+            try {
+                execPlan = generateExecPlan();
+            } finally {
+                context.setPlanning(false);
+                QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
+            }
 
             // no need to execute http query dump request in BE
             if (context.isHTTPQueryDump) {
@@ -1142,6 +1165,8 @@ public class StmtExecutor {
             if (parsedStmt instanceof KillStmt) {
                 // ignore kill stmt execute err(not monitor it)
                 context.getState().setErrType(QueryState.ErrType.IGNORE_ERR);
+            } else if (e instanceof SqlBlacklistedException) {
+                context.getState().setErrType(QueryState.ErrType.BLACKLISTED);
             } else if (e instanceof TimeoutException) {
                 context.getState().setErrType(QueryState.ErrType.EXEC_TIME_OUT);
             } else if (e instanceof NoAliveBackendException) {
@@ -1182,14 +1207,9 @@ public class StmtExecutor {
 
             recordExecStatsIntoContext();
 
-            if (GracefulExitFlag.isGracefulExit() && context.isLeaderTransferred() && !isInternalStmt) {
-                LOG.info("leader is transferred during executing, forward to new leader");
-                isForwardToLeaderOpt = Optional.of(true);
-                forwardToLeader();
-            }
-
             // process post-action after query is finished
             context.onQueryFinished();
+            context.setOnlyReadIcebergCache(originSkipIcebergCache);
             if (cteExecutor != null) {
                 cteExecutor.finalizeRecursiveCTE();
             }
@@ -1359,6 +1379,8 @@ public class StmtExecutor {
         // if create table failed should not drop table. because table may already exist,
         // and for other cases the exception will throw and the rest of the code will not be executed.
         try {
+            // Set CTAS flag for metrics tracking
+            context.setCTAS(true);
             InsertStmt insertStmt = createTableAsSelectStmt.getInsertStmt();
             ExecPlan execPlan = StatementPlanner.plan(insertStmt, context);
             handleDMLStmtWithProfile(execPlan, ((CreateTableAsSelectStmt) parsedStmt).getInsertStmt());
@@ -1369,6 +1391,9 @@ public class StmtExecutor {
             LOG.warn("handle create table as select stmt fail", t);
             dropTableCreatedByCTAS(createTableAsSelectStmt);
             throw t;
+        } finally {
+            // Reset CTAS flag
+            context.setCTAS(false);
         }
     }
 
@@ -1460,8 +1485,14 @@ public class StmtExecutor {
             QeProcessorImpl.INSTANCE.unMonitorQuery(executionId);
             QeProcessorImpl.INSTANCE.unregisterQuery(executionId);
             if (Config.enable_collect_query_detail_info && Config.enable_profile_log) {
-                String jsonString = GSON.toJson(queryDetail);
-                PROFILE_LOG.info(jsonString);
+                long latencyThresholdMs = Config.profile_log_latency_threshold_ms;
+                if (context.getSessionVariable().getProfileLogLatencyThresholdMs() >= 0) {
+                    latencyThresholdMs = context.getSessionVariable().getProfileLogLatencyThresholdMs();
+                }
+                if (totalTimeMs >= latencyThresholdMs) {
+                    String jsonString = GSON.toJson(queryDetail);
+                    PROFILE_LOG.info(jsonString);
+                }
             }
         };
         return coord.tryProcessProfileAsync(task);
@@ -1548,6 +1579,10 @@ public class StmtExecutor {
                             context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                             PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
                 }
+            }
+            if (!killConnection) {
+                // Expose a structured cancellation signal for query-level kill.
+                killCtx.getState().setErrorCode(ErrorCode.ERR_QUERY_INTERRUPTED);
             }
             killCtx.kill(killConnection, "killed manually: " + originStmt.getOrigStmt());
         }
@@ -2908,7 +2943,6 @@ public class StmtExecutor {
         }
 
         // Handle metadata-level delete for Iceberg
-        // execute the delete operation here
         if (stmt instanceof DeleteStmt && execPlan != null && execPlan.isIcebergMetadataDelete()) {
             // Execute metadata-level delete
             IcebergMetadataDeleteNode node = (IcebergMetadataDeleteNode) execPlan.getTopFragment().getPlanRoot();
@@ -3286,9 +3320,6 @@ public class StmtExecutor {
                 txnStatus = TransactionStatus.COMMITTED;
                 final long waitInterval = 300;
                 while (publishWaitMs > 0) {
-                    if (GlobalStateMgr.getCurrentState().isLeaderTransferred()) {
-                        break;
-                    }
 
                     if (visibleWaiter.await(Math.min(publishWaitMs, waitInterval), TimeUnit.MILLISECONDS)) {
                         txnStatus = TransactionStatus.VISIBLE;

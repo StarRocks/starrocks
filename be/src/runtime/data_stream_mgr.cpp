@@ -139,6 +139,7 @@ Status DataStreamMgr::transmit_chunk(const PTransmitChunkParams& request, ::goog
     t_finst_id.hi = finst_id.hi();
     t_finst_id.lo = finst_id.lo();
     SCOPED_SET_TRACE_INFO({}, {}, t_finst_id)
+    SCOPED_SET_TRACE_PLAN_NODE_ID(request.node_id());
     DUMP_TRACE_IF_TIMEOUT(config::pipeline_datastream_timeout_guard_ms);
 
     std::shared_ptr<DataStreamRecvr> recvr = find_recvr(t_finst_id, request.node_id());

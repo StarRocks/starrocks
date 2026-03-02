@@ -370,11 +370,11 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                             prealloc_metadata->CopyFrom(*metadata);
                         }
                     } else {
-                        g_publish_version_failed_tasks << 1;
                         if (res.status().is_resource_busy()) {
                             VLOG(2) << "Fail to publish version: " << res.status() << ". tablet_info=" << tablet_info
                                     << " txns=" << JoinMapped(txns, txn_info_string, ",") << " version=" << new_version;
                         } else {
+                            g_publish_version_failed_tasks << 1;
                             LOG(WARNING) << "Fail to publish version: " << res.status()
                                          << ". tablet_info=" << tablet_info
                                          << " txn_ids=" << JoinMapped(txns, txn_info_string, ",")
@@ -461,12 +461,12 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                                 }
                             }
                         } else {
-                            g_publish_version_failed_tasks << 1;
                             if (res.is_resource_busy()) {
                                 VLOG(2) << "Failed to publish resharding tablet: " << res
                                         << ". resharding_tablet_info=" << resharding_tablet_info.DebugString()
                                         << " txn=" << txn_info.DebugString() << " version=" << new_version;
                             } else {
+                                g_publish_version_failed_tasks << 1;
                                 LOG(WARNING) << "Failed to publish resharding tablet: " << res
                                              << ". resharding_tablet_info=" << resharding_tablet_info.DebugString()
                                              << " txn=" << txn_info.DebugString() << " version=" << new_version;

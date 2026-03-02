@@ -1468,7 +1468,7 @@ public class AnalyzerUtils {
 
             // table partitions for check
             PCellSortedSet tablePartitions = olapTable.getListPartitionItems();
-            Set<String> partitionColNameSet = Sets.newHashSet();
+            Set<String> partitionNameSet = Sets.newHashSet();
             List<PartitionDesc> partitionDescs = Lists.newArrayList();
             for (List<String> partitionValue : partitionValues) {
                 List<String> formattedPartitionValue = Lists.newArrayList();
@@ -1488,7 +1488,7 @@ public class AnalyzerUtils {
                     }
                     partitionName = partitionNamePrefix + PARTITION_NAME_PREFIX_SPLIT + partitionName;
                 }
-                if (!partitionColNameSet.contains(partitionName)) {
+                if (!partitionNameSet.contains(partitionName)) {
                     List<List<String>> partitionItems = Collections.singletonList(partitionValue);
                     PListCell cell = new PListCell(partitionItems);
                     partitionName = calculateUniquePartitionName(partitionName, cell, tablePartitions);
@@ -1496,14 +1496,15 @@ public class AnalyzerUtils {
                             partitionName, partitionItems, partitionProperties);
                     multiItemListPartitionDesc.setSystem(true);
                     partitionDescs.add(multiItemListPartitionDesc);
-                    partitionColNameSet.add(partitionName);
+                    partitionNameSet.add(partitionName);
 
                     // update table partition
                     tablePartitions.add(partitionName, cell);
                 }
             }
-            List<String> partitionColNames = Lists.newArrayList(partitionColNameSet);
-            ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionColNames, partitionDescs);
+            List<String> partitionNames = Lists.newArrayList(partitionNameSet);
+            ListPartitionDesc listPartitionDesc = new ListPartitionDesc(Lists.newArrayList(), partitionDescs);
+            listPartitionDesc.setPartitionNames(partitionNames);
             listPartitionDesc.setSystem(true);
             return new AddPartitionClause(listPartitionDesc, distributionDesc,
                     partitionProperties, isTemp);
@@ -1573,7 +1574,7 @@ public class AnalyzerUtils {
         Map<String, String> partitionProperties = ImmutableMap.of("replication_num", String.valueOf(replicationNum));
 
         List<PartitionDesc> partitionDescs = Lists.newArrayList();
-        List<String> partitionColNames = Lists.newArrayList();
+        List<String> partitionNames = Lists.newArrayList();
         for (List<String> partitionValue : partitionValues) {
             if (partitionValue.size() != 1) {
                 throw new AnalysisException("automatic partition only support single column for range partition.");
@@ -1630,19 +1631,20 @@ public class AnalyzerUtils {
                     partitionName = partitionPrefix + PARTITION_NAME_PREFIX_SPLIT + partitionName;
                 }
 
-                if (!partitionColNames.contains(partitionName)) {
+                if (!partitionNames.contains(partitionName)) {
                     SingleRangePartitionDesc singleRangePartitionDesc =
                             new SingleRangePartitionDesc(true, partitionName, partitionKeyDesc, partitionProperties);
                     singleRangePartitionDesc.setSystem(true);
                     partitionDescs.add(singleRangePartitionDesc);
-                    partitionColNames.add(partitionName);
+                    partitionNames.add(partitionName);
                 }
             } catch (AnalysisException e) {
                 LOG.warn("failed to analyse partition value", e);
                 throw new AnalysisException(String.format("failed to analyse partition value:%s", partitionValue));
             }
         }
-        RangePartitionDesc rangePartitionDesc = new RangePartitionDesc(partitionColNames, partitionDescs);
+        RangePartitionDesc rangePartitionDesc = new RangePartitionDesc(Lists.newArrayList(), partitionDescs);
+        rangePartitionDesc.setPartitionNames(partitionNames);
         rangePartitionDesc.setSystem(true);
         return new AddPartitionClause(rangePartitionDesc, distributionDesc, partitionProperties, isTemp);
     }
