@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -e
+set -o pipefail
 
 # --- StarRocks Debian Packaging Build Script ---
 # Purpose: Generates .deb packages for FE, BE, and CN components.
