@@ -788,70 +788,6 @@ public class CatalogRecycleBinTest {
         long adjustedTime2 = Deencapsulation.invoke(recycleBin, "getAdjustedRecycleTimestamp", p2.getId());
         Assertions.assertEquals(0, adjustedTime2);
     }
-<<<<<<< HEAD
-=======
-
-    @Test
-    public void testAsyncDeleteForTablesMemoryLeak() {
-        // This test verifies the fix for memory leak in asyncDeleteForTables map
-        // Non-retryable tables should not be added to asyncDeleteForTables to prevent memory leak
-        CatalogRecycleBin recycleBin = new CatalogRecycleBin();
-        long dbId = 1;
-
-        // Create non-retryable tables (regular tables in shared-nothing mode)
-        Table nonRetryableTable1 = new Table(111, "non_retryable_1", Table.TableType.OLAP, Lists.newArrayList());
-        Table nonRetryableTable2 = new Table(222, "non_retryable_2", Table.TableType.OLAP, Lists.newArrayList());
-
-        // Recycle non-retryable tables
-        recycleBin.recycleTable(dbId, nonRetryableTable1, false);
-        recycleBin.recycleTable(dbId, nonRetryableTable2, false);
-
-        // Verify tables are in recycle bin
-        Assertions.assertEquals(2, recycleBin.getTables(dbId).size());
-        Assertions.assertNotNull(recycleBin.getTable(dbId, nonRetryableTable1.getId()));
-        Assertions.assertNotNull(recycleBin.getTable(dbId, nonRetryableTable2.getId()));
-
-        // Set expire time to trigger erasure
-        Config.catalog_trash_expire_second = 3600;
-        long now = System.currentTimeMillis();
-        long expireFromNow = now - 3600 * 1000L;
-        recycleBin.idToRecycleTime.put(nonRetryableTable1.getId(), expireFromNow - 1000);
-        recycleBin.idToRecycleTime.put(nonRetryableTable2.getId(), expireFromNow - 1000);
-
-        // Get asyncDeleteForTables map before erasure
-        java.util.Map<?, ?> asyncDeleteForTablesBefore =
-                Deencapsulation.getField(recycleBin, "asyncDeleteForTables");
-        int sizeBeforeErase = asyncDeleteForTablesBefore.size();
-
-        // Trigger table erasure
-        recycleBin.eraseTable(now);
-        waitTableClearFinished(recycleBin, nonRetryableTable1.getId(), now);
-        waitTableClearFinished(recycleBin, nonRetryableTable2.getId(), now);
-
-        // Verify tables are removed from recycle bin
-        Assertions.assertNull(recycleBin.getTable(dbId, nonRetryableTable1.getId()));
-        Assertions.assertNull(recycleBin.getTable(dbId, nonRetryableTable2.getId()));
-
-        // CRITICAL: Verify asyncDeleteForTables map does NOT contain non-retryable tables
-        // This is the key assertion to verify the memory leak fix
-        java.util.Map<?, ?> asyncDeleteForTablesAfter =
-                Deencapsulation.getField(recycleBin, "asyncDeleteForTables");
-
-        // Non-retryable tables should never be added to asyncDeleteForTables
-        // So the size should remain the same (or even decrease if there were retryable tables before)
-        Assertions.assertTrue(asyncDeleteForTablesAfter.size() <= sizeBeforeErase,
-                "asyncDeleteForTables should not grow for non-retryable tables. " +
-                "Before: " + sizeBeforeErase + ", After: " + asyncDeleteForTablesAfter.size());
-
-        // Verify the map doesn't contain entries for our non-retryable tables
-        for (Object key : asyncDeleteForTablesAfter.keySet()) {
-            CatalogRecycleBin.RecycleTableInfo info = (CatalogRecycleBin.RecycleTableInfo) key;
-            Assertions.assertNotEquals(nonRetryableTable1.getId(), info.getTable().getId(),
-                    "Non-retryable table should not be in asyncDeleteForTables");
-            Assertions.assertNotEquals(nonRetryableTable2.getId(), info.getTable().getId(),
-                    "Non-retryable table should not be in asyncDeleteForTables");
-        }
-    }
 
     /**
      * Regression test for the bug where disableRecoverPartitionWithSameName() would unconditionally
@@ -864,7 +800,26 @@ public class CatalogRecycleBinTest {
      * was added, effectively restarting the retention clock and preventing erasure.
      */
     @Test
-    public void testDisableRecoverPartitionWithSameNameNoClockResetForNonRecoverable() {
+    public void testDisableRecoverPartitionWithSameNameNoClockResetForNonRecoverable(
+            @Mocked GlobalStateMgr globalStateMgr, @Mocked EditLog editLog) {
+        ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getClusterSnapshotMgr();
+                result = clusterSnapshotMgr;
+
+                globalStateMgr.getEditLog();
+                minTimes = 0;
+                result = editLog;
+
+                editLog.logErasePartition(anyLong);
+                minTimes = 0;
+            }
+        };
         long dbId = 1;
         long tableId = 2;
         long retentionPeriodSec = 1800; // 30 minutes
@@ -875,7 +830,7 @@ public class CatalogRecycleBinTest {
         MaterializedIndex baseIndex1 = new MaterializedIndex(100, MaterializedIndex.IndexState.NORMAL);
         Partition p1 = new Partition(1001, 1002, "CALLS_INFO_EVENTS_ONL", baseIndex1, null);
         RecycleRangePartitionInfo info1 =
-                new RecycleRangePartitionInfo(dbId, tableId, p1, null, dataProperty, (short) 2, null);
+                new RecycleRangePartitionInfo(dbId, tableId, p1, null, dataProperty, (short) 2, false, null);
         info1.setRecoverable(false);
         info1.setRetentionPeriod(retentionPeriodSec);
         recycleBin.recyclePartition(info1);
@@ -893,7 +848,7 @@ public class CatalogRecycleBinTest {
         MaterializedIndex baseIndex2 = new MaterializedIndex(101, MaterializedIndex.IndexState.NORMAL);
         Partition p2 = new Partition(2001, 2002, "CALLS_INFO_EVENTS_ONL", baseIndex2, null);
         RecycleRangePartitionInfo info2 =
-                new RecycleRangePartitionInfo(dbId, tableId, p2, null, dataProperty, (short) 2, null);
+                new RecycleRangePartitionInfo(dbId, tableId, p2, null, dataProperty, (short) 2, false, null);
         info2.setRecoverable(false);
         info2.setRetentionPeriod(retentionPeriodSec);
         recycleBin.recyclePartition(info2);
@@ -934,14 +889,14 @@ public class CatalogRecycleBinTest {
         MaterializedIndex baseIndex1 = new MaterializedIndex(101, MaterializedIndex.IndexState.NORMAL);
         Partition p1 = new Partition(3001, 3002, "same_name", baseIndex1, null);
         RecycleRangePartitionInfo info1 =
-                new RecycleRangePartitionInfo(dbId, tableId, p1, null, dataProperty, (short) 2, null);
+                new RecycleRangePartitionInfo(dbId, tableId, p1, null, dataProperty, (short) 2, false, null);
         info1.setRecoverable(true);
         recycleBin.recyclePartition(info1);
 
         MaterializedIndex baseIndex2 = new MaterializedIndex(102, MaterializedIndex.IndexState.NORMAL);
         Partition p2 = new Partition(4001, 4002, "same_name", baseIndex2, null);
         RecycleRangePartitionInfo info2 =
-                new RecycleRangePartitionInfo(dbId, tableId, p2, null, dataProperty, (short) 2, null);
+                new RecycleRangePartitionInfo(dbId, tableId, p2, null, dataProperty, (short) 2, false, null);
         info2.setRecoverable(true);
         // Note: recycling p2 will call disableRecoverPartitionWithSameName which marks p1 non-recoverable
         recycleBin.recyclePartition(info2);
@@ -960,7 +915,7 @@ public class CatalogRecycleBinTest {
         MaterializedIndex baseIndex3 = new MaterializedIndex(103, MaterializedIndex.IndexState.NORMAL);
         Partition p3 = new Partition(5001, 5002, "same_name", baseIndex3, null);
         RecycleRangePartitionInfo info3 =
-                new RecycleRangePartitionInfo(dbId, tableId, p3, null, dataProperty, (short) 2, null);
+                new RecycleRangePartitionInfo(dbId, tableId, p3, null, dataProperty, (short) 2, false, null);
         info3.setRecoverable(true);
         recycleBin.recyclePartition(info3);
 
@@ -979,5 +934,4 @@ public class CatalogRecycleBinTest {
         RecyclePartitionInfo p3Info = recycleBin.getRecyclePartitionInfo(p3.getId());
         Assertions.assertTrue(p3Info.isRecoverable(), "p3 is the newly added partition and should remain recoverable");
     }
->>>>>>> 3c45ee6403 ([BugFix] Fix retention clock reset and incomplete scan in disableRecoverPartitionWithSameName (#69677))
 }
