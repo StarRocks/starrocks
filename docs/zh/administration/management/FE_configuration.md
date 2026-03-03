@@ -3758,6 +3758,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 设置用于直接写入 HDFS 或对象存储时（不使用 broker）的 HDFS 写入缓冲区大小（以 KB 为单位）。FE 将此值转换为字节（`<< 10`），并初始化 HdfsFsManager 中的本地写入缓冲区，并在 Thrift 请求中传播（例如 TUploadReq、TExportSink、sink options），以便后端/代理使用相同的缓冲区大小。增加此值可以提高大型顺序写入的吞吐量，但代价是每个写入器占用更多内存；减小此值可以减少每个流的内存使用量，并可能降低小型写入的延迟。与 `hdfs_read_buffer_size_kb` 一起调整，并考虑可用内存和并发写入器。
 - 引入版本: v3.2.0
 
+##### `lake_enable_drop_tablet_cache`
+
+- 默认值：`true`
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：shared-data 模式下，在实际数据被删除前，清理 BE/CN 上的缓存。
+- 引入版本：v4.0
+
 ##### `lake_batch_publish_max_version_num`
 
 - 默认值: 10
