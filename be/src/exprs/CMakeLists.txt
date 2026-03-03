@@ -29,6 +29,9 @@ set(EXPR_CORE_FILES
   binary_predicate.cpp
   bitmap_functions.cpp
   cast_nested.cpp
+  cast_expr.cpp
+  cast_expr_array.cpp
+  cast_expr_struct.cpp
   case_expr.cpp
   cast_expr_json.cpp
   cast_expr_map.cpp
@@ -97,9 +100,6 @@ set(EXPR_FILES
   table_function/list_rowsets.cpp
   array_functions.cpp
   arrow_function_call.cpp
-  cast_expr.cpp
-  cast_expr_array.cpp
-  cast_expr_struct.cpp
   dictmapping_expr.cpp
   find_in_set.cpp
   function_call_expr.cpp
