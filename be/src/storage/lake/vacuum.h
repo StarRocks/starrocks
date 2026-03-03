@@ -76,4 +76,7 @@ StatusOr<std::map<std::string, DirEntry>> find_orphan_data_files(FileSystem* fs,
 
 Status do_delete_files(FileSystem* fs, const std::vector<std::string>& paths);
 
+// drop tablet data cache, starts from `version`
+Status drop_tablet_cache(TabletManager* tablet_mgr, int64_t tablet_id, int64_t version);
+
 } // namespace starrocks::lake
