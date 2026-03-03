@@ -99,33 +99,6 @@ Status SchemaBeTabletsScanner::start(RuntimeState* state) {
     auto o_id = get_backend_id();
     _be_id = o_id.has_value() ? o_id.value() : -1;
     _infos.clear();
-<<<<<<< HEAD
-    // shared-nothing
-    auto manager = StorageEngine::instance()->tablet_manager();
-    manager->get_tablets_basic_infos(_param->table_id, _param->partition_id, _param->tablet_id, _infos,
-                                     &authorized_table_ids);
-    // shared-data
-    auto lake_manager = ExecEnv::GetInstance()->lake_tablet_manager();
-    if (lake_manager != nullptr) {
-        std::unordered_map<int64_t, int64_t> partition_versions;
-        int64_t table_id_offset = 0;
-        while (true) {
-            TGetPartitionsMetaRequest partitions_meta_req;
-            partitions_meta_req.__set_auth_info(auth_info);
-            partitions_meta_req.__set_start_table_id_offset(table_id_offset);
-            TGetPartitionsMetaResponse partitions_meta_response;
-            RETURN_IF_ERROR(
-                    SchemaHelper::get_partitions_meta(_ss_state, partitions_meta_req, &partitions_meta_response));
-            for (const auto& info : partitions_meta_response.partitions_meta_infos) {
-                partition_versions.emplace(info.partition_id, info.visible_version);
-            }
-            table_id_offset = partitions_meta_response.next_table_id_offset;
-            if (!table_id_offset) {
-                break;
-            }
-        }
-=======
->>>>>>> e17ba2577e ([BugFix] Support fetching tablet infos based on run mode in SchemaBeTabletsScanner (#69645))
 
     auto run_mode = get_master_run_mode();
     if (!run_mode.has_value() || run_mode.value() == TRunMode::SHARED_NOTHING) {
@@ -135,7 +108,6 @@ Status SchemaBeTabletsScanner::start(RuntimeState* state) {
                                          &authorized_table_ids);
     }
 
-#ifndef __APPLE__
     if (!run_mode.has_value() || run_mode.value() == TRunMode::SHARED_DATA) {
         // shared-data
         auto lake_manager = ExecEnv::GetInstance()->lake_tablet_manager();
@@ -162,11 +134,7 @@ Status SchemaBeTabletsScanner::start(RuntimeState* state) {
                                                  authorized_table_ids, partition_versions, _infos);
         }
     }
-<<<<<<< HEAD
-=======
-#endif // __APPLE__
 
->>>>>>> e17ba2577e ([BugFix] Support fetching tablet infos based on run mode in SchemaBeTabletsScanner (#69645))
     LOG(INFO) << strings::Substitute("get_tablets_basic_infos table_id:$0 partition:$1 tablet:$2 #info:$3",
                                      _param->table_id, _param->partition_id, _param->tablet_id, _infos.size());
     _cur_idx = 0;
