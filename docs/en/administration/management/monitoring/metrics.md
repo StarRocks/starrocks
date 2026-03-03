@@ -2027,8 +2027,6 @@ Latency metrics expose percentile series such as `merge_commit_request_latency_9
 - Labels: `delete_type` (`position` or `metadata`)
 - Description: Total deleted rows from Iceberg `DELETE` tasks. For `metadata` delete, this represents the number of rows in deleted data files. For `position` delete, this represents the number of position deletes created.
 
-<<<<<<< HEAD
-=======
 #### iceberg_compaction_total
 
 - Unit: Count
@@ -2064,7 +2062,6 @@ Latency metrics expose percentile series such as `merge_commit_request_latency_9
 - Labels: `compaction_type` (`manual` or `auto`)
 - Description: Total number of delete files removed by Iceberg manual compaction tasks.
 
->>>>>>> 8827cf9852 ([Doc] Add Iceberg Compaction Metrics (#69718))
 ### Iceberg write FE metrics
 
 #### iceberg_write_total
