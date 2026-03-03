@@ -2151,3 +2151,51 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 - タイプ: Cumulative
 - ラベル: `write_type` (`insert`, `overwrite`, または `ctas`)
 - 説明: Iceberg 書き込みタスク（`INSERT`、`INSERT OVERWRITE`、`CTAS`）で書き込まれたデータファイルの総数。Iceberg テーブルに書き込まれたデータファイルの個数を表します。`write_type` は 3 つの操作タイプを区別します。
+
+### DataCache メトリクス
+
+DataCache メトリクスは、データキャッシュのキャッシュ容量、使用量、およびヒット率の可視性を提供します。
+
+以下のメトリクスは BE Prometheus エンドポイント (`/metrics`) で公開されています。
+
+#### datacache_mem_quota_bytes
+
+- 単位: Bytes
+- タイプ: Gauge
+- 説明: datacache の設定されたメモリクォータ。
+
+#### datacache_mem_used_bytes
+
+- 単位: Bytes
+- タイプ: Gauge
+- 説明: datacache の現在のメモリ使用量。
+
+#### datacache_disk_quota_bytes
+
+- 単位: Bytes
+- タイプ: Gauge
+- 説明: datacache の設定されたディスククォータ。
+
+#### datacache_disk_used_bytes
+
+- 単位: Bytes
+- タイプ: Gauge
+- 説明: datacache の現在のディスク使用量。
+
+#### datacache_meta_used_bytes
+
+- 単位: Bytes
+- タイプ: Gauge
+- 説明: datacache メタデータのメモリ使用量。
+
+#### block_cache_hit_bytes
+
+- 単位: Bytes
+- タイプ: Counter
+- 説明: ブロックキャッシュヒットの累積バイト数。現在、外部テーブルのキャッシュヒットバイトのみがカウントされています。
+
+#### block_cache_miss_bytes
+
+- 単位: Bytes
+- タイプ: Counter
+- 説明: ブロックキャッシュミスの累積バイト数。現在、外部テーブルのキャッシュミスバイトのみがカウントされています。
