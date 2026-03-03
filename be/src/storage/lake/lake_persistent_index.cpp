@@ -116,7 +116,8 @@ bool LakePersistentIndex::is_memtable_full() const {
 }
 
 bool LakePersistentIndex::too_many_rebuild_files() const {
-    return _need_rebuild_file_cnt >= config::cloud_native_pk_index_rebuild_files_threshold;
+    return config::cloud_native_pk_index_rebuild_files_threshold > 0 &&
+           _need_rebuild_file_cnt >= config::cloud_native_pk_index_rebuild_files_threshold;
 }
 
 bool LakePersistentIndex::too_many_rebuild_rows() const {
