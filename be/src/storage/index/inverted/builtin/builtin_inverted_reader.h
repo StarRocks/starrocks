@@ -32,7 +32,7 @@ class FunctionContext;
 class BuiltinInvertedReader : public InvertedReader {
 public:
     explicit BuiltinInvertedReader(const uint32_t index_id, int32_t gram_num);
-    ~BuiltinInvertedReader() override = default;
+    ~BuiltinInvertedReader() override;
 
     static Status create(const std::shared_ptr<TabletIndex>& tablet_index, LogicalType field_type,
                          std::unique_ptr<InvertedReader>* res);
