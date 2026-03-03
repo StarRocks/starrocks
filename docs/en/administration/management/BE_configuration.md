@@ -2966,6 +2966,24 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ### Shared-data
 
+##### cloud_native_pk_index_rebuild_files_threshold
+
+- Default: 50
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of segment files that need to be rebuilt in cloud-native Primary Key index. If the number of files that need to be rebuilt during index recovery exceeds this threshold, StarRocks will flush the in-memory MemTable immediately to reduce the number of segments that must be replayed. Set to `0` to disable this early-flush strategy.
+- Introduced in: -
+
+##### cloud_native_pk_index_rebuild_rows_threshold
+
+- Default: 10000000
+- Type: Long
+- Unit: Rows
+- Is mutable: Yes
+- Description: The maximum number of rows that need to be rebuilt in cloud-native Primary Key index. If the number of rows that need to be rebuilt during index recovery exceeds this threshold, StarRocks will flush the in-memory MemTable immediately to reduce the rebuild overhead. Set to `0` to disable this early-flush strategy. Works in conjunction with `cloud_native_pk_index_rebuild_files_threshold`; a flush is triggered if either threshold is exceeded.
+- Introduced in: -
+
 ##### download_buffer_size
 
 - Default: 4194304
