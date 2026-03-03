@@ -44,8 +44,15 @@ public class JDBCScanNode extends ScanNode {
 
     private final List<String> columns = new ArrayList<>();
     private final List<String> filters = new ArrayList<>();
+    // Aggregate expressions pushed down to the remote DB (e.g. ["COUNT(*)"]).
+    // When non-empty, these replace the columns list in the generated SQL.
+    private final List<String> pushedAggExpressions = new ArrayList<>();
     private String tableName;
     private JDBCTable table;
+
+    private boolean useCountOpt() {
+        return getScanOptimizeOption() != null && getScanOptimizeOption().getCanUseCountOpt();
+    }
 
     public JDBCScanNode(PlanNodeId id, TupleDescriptor desc, JDBCTable tbl) {
         super(id, desc, "SCAN JDBC");
@@ -110,7 +117,11 @@ public class JDBCScanNode extends ScanNode {
 
     private String getJDBCQueryStr() {
         StringBuilder sql = new StringBuilder("SELECT ");
-        sql.append(Joiner.on(", ").join(columns));
+        if (!pushedAggExpressions.isEmpty()) {
+            sql.append(Joiner.on(", ").join(pushedAggExpressions));
+        } else {
+            sql.append(Joiner.on(", ").join(columns));
+        }
         sql.append(" FROM ").append(tableName);
 
         if (!filters.isEmpty()) {
@@ -122,6 +133,10 @@ public class JDBCScanNode extends ScanNode {
     }
 
     private void createJDBCTableColumns() {
+        if (useCountOpt()) {
+            buildPushedAggExpressions();
+            return;
+        }
         String objectIdentifier = getIdentifierSymbol();
         for (SlotDescriptor slot : desc.getSlots()) {
             if (!slot.isMaterialized()) {
@@ -138,6 +153,21 @@ public class JDBCScanNode extends ScanNode {
         // this happens when count(*)
         if (columns.isEmpty()) {
             columns.add("*");
+        }
+    }
+
+    /**
+     * Build the pushed aggregate expressions for aggregate pushdown.
+     * v1: COUNT(*) only. The expression is dialect-aware (COUNT_BIG for SQL Server).
+     * v2 can add MIN(col), MAX(col), etc. — the thrift/BE interface already supports arbitrary expressions.
+     */
+    private void buildPushedAggExpressions() {
+        String jdbcUri = getJdbcUri();
+        if (jdbcUri != null && jdbcUri.startsWith("jdbc:sqlserver")) {
+            // SQL Server COUNT() returns int (overflows at ~2.1B rows). Use COUNT_BIG() for safety.
+            pushedAggExpressions.add("COUNT_BIG(*)");
+        } else {
+            pushedAggExpressions.add("COUNT(*)");
         }
     }
 
@@ -202,6 +232,9 @@ public class JDBCScanNode extends ScanNode {
         msg.jdbc_scan_node.setColumns(columns);
         msg.jdbc_scan_node.setFilters(filters);
         msg.jdbc_scan_node.setLimit(limit);
+        if (!pushedAggExpressions.isEmpty()) {
+            msg.jdbc_scan_node.setPushed_agg_expressions(pushedAggExpressions);
+        }
     }
 
     @Override

@@ -2021,9 +2021,9 @@ public class PlanFragmentBuilder {
             }
 
             scanNode.setLimit(node.getLimit());
+            scanNode.setScanOptimizeOption(node.getScanOptimizeOption());
             scanNode.computeColumnsAndFilters();
             scanNode.computeStatistics(optExpression.getStatistics());
-            scanNode.setScanOptimizeOption(node.getScanOptimizeOption());
             context.getScanNodes().add(scanNode);
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), scanNode, DataPartition.UNPARTITIONED);

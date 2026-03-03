@@ -811,6 +811,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_REWRITE_SUM_BY_ASSOCIATIVE_RULE = "enable_rewrite_sum_by_associative_rule";
     public static final String ENABLE_REWRITE_SIMPLE_AGG_TO_META_SCAN = "enable_rewrite_simple_agg_to_meta_scan";
     public static final String ENABLE_REWRITE_SIMPLE_AGG_TO_HDFS_SCAN = "enable_rewrite_simple_agg_to_hdfs_scan";
+    public static final String ENABLE_JDBC_AGG_PUSHDOWN = "enable_jdbc_agg_pushdown";
     public static final String ENABLE_REWRITE_PARTITION_COLUMN_MINMAX = "enable_rewrite_partition_column_minmax";
     public static final String ENABLE_MIN_MAX_OPTIMIZATION = "enable_min_max_optimization";
     public static final String ENABLE_PRUNE_COMPLEX_TYPES = "enable_prune_complex_types";
@@ -1984,6 +1985,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_REWRITE_SIMPLE_AGG_TO_HDFS_SCAN)
     private boolean enableRewriteSimpleAggToHdfsScan = true;
+
+    @VarAttr(name = ENABLE_JDBC_AGG_PUSHDOWN)
+    private boolean enableJdbcAggPushdown = true;
 
     @VarAttr(name = ENABLE_EVALUATE_SCHEMA_SCAN_RULE)
     private boolean enableEvaluateSchemaScanRule = true;
@@ -4991,6 +4995,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableRewriteSimpleAggToHdfsScan() {
         return this.enableRewriteSimpleAggToHdfsScan;
+    }
+
+    public void setEnableJdbcAggPushdown(boolean v) {
+        this.enableJdbcAggPushdown = v;
+    }
+
+    public boolean isEnableJdbcAggPushdown() {
+        return this.enableJdbcAggPushdown;
     }
 
     public boolean isEnableEvaluateSchemaScanRule() {

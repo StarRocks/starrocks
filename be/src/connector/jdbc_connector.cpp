@@ -48,16 +48,27 @@ const TupleDescriptor* JDBCDataSourceProvider::tuple_descriptor(RuntimeState* st
 // ================================
 
 static std::string get_jdbc_sql(const Slice jdbc_url, const std::string& table, const std::vector<std::string>& columns,
-                                const std::vector<std::string>& filters, int64_t limit) {
+                                const std::vector<std::string>& filters, int64_t limit,
+                                const std::vector<std::string>& pushed_agg_expressions) {
     std::ostringstream oss;
     oss << "SELECT";
-    if (limit != -1 && jdbc_url.starts_with("jdbc:sqlserver")) {
-        oss << fmt::format(" TOP({}) ", limit);
-        limit = -1;
+
+    if (!pushed_agg_expressions.empty()) {
+        // FE provides fully-formed aggregate expressions (e.g. "COUNT(*)", "COUNT_BIG(*)").
+        // Just join them as the SELECT list.
+        for (size_t i = 0; i < pushed_agg_expressions.size(); i++) {
+            oss << (i == 0 ? " " : ", ") << pushed_agg_expressions[i];
+        }
+    } else {
+        if (limit != -1 && jdbc_url.starts_with("jdbc:sqlserver")) {
+            oss << fmt::format(" TOP({}) ", limit);
+            limit = -1;
+        }
+        for (size_t i = 0; i < columns.size(); i++) {
+            oss << (i == 0 ? "" : ",") << " " << columns[i];
+        }
     }
-    for (size_t i = 0; i < columns.size(); i++) {
-        oss << (i == 0 ? "" : ",") << " " << columns[i];
-    }
+
     oss << " FROM " << table;
     if (!filters.empty()) {
         oss << " WHERE ";
@@ -65,7 +76,7 @@ static std::string get_jdbc_sql(const Slice jdbc_url, const std::string& table, 
             oss << (i == 0 ? "" : " AND") << "(" << filters[i] << ")";
         }
     }
-    if (limit != -1) {
+    if (pushed_agg_expressions.empty() && limit != -1) {
         if (jdbc_url.starts_with("jdbc:oracle")) {
             // oracle doesn't support limit clause, we should generate a subquery to do this
             // ref: https://stackoverflow.com/questions/470542/how-do-i-limit-the-number-of-rows-returned-by-an-oracle-query-after-ordering
@@ -150,8 +161,12 @@ Status JDBCDataSource::_create_scanner(RuntimeState* state) {
     scan_ctx.jdbc_url = jdbc_table->jdbc_url();
     scan_ctx.user = jdbc_table->jdbc_user();
     scan_ctx.passwd = jdbc_table->jdbc_passwd();
+    std::vector<std::string> pushed_agg_expressions;
+    if (jdbc_scan_node.__isset.pushed_agg_expressions) {
+        pushed_agg_expressions = jdbc_scan_node.pushed_agg_expressions;
+    }
     scan_ctx.sql = get_jdbc_sql(scan_ctx.jdbc_url, jdbc_scan_node.table_name, jdbc_scan_node.columns,
-                                jdbc_scan_node.filters, _read_limit);
+                                jdbc_scan_node.filters, _read_limit, pushed_agg_expressions);
     _scanner = _pool->add(new JDBCScanner(scan_ctx, _tuple_desc, _runtime_profile));
 
     RETURN_IF_ERROR(_scanner->open(state));

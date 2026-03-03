@@ -156,6 +156,7 @@ import com.starrocks.sql.optimizer.rule.transformation.RewriteDuplicateAggregate
 import com.starrocks.sql.optimizer.rule.transformation.RewriteHllCountDistinctRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteMinMaxByMonotonicFunctionRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToHDFSScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToJDBCScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSumByAssociativeRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteToVectorPlanRule;
@@ -421,6 +422,7 @@ public class RuleSet {
                     new PushDownFlatJsonMetaToMetaScanRule(),
                     new RewriteSimpleAggToMetaScanRule(),
                     RewriteSimpleAggToHDFSScanRule.SCAN_AND_PROJECT,
+                    RewriteSimpleAggToJDBCScanRule.SCAN_AND_PROJECT,
                     new MinMaxOptOnScanRule()
             ));
 
