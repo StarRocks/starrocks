@@ -269,6 +269,9 @@ GlobalMetricsRegistry::GlobalMetricsRegistry(StarRocksMetrics* fast_metrics)
     REGISTER_STARROCKS_METRIC(datacache_mem_used_bytes);
     REGISTER_STARROCKS_METRIC(datacache_disk_quota_bytes);
     REGISTER_STARROCKS_METRIC(datacache_disk_used_bytes);
+    REGISTER_STARROCKS_METRIC(datacache_meta_used_bytes);
+    REGISTER_STARROCKS_METRIC(block_cache_hit_bytes);
+    REGISTER_STARROCKS_METRIC(block_cache_miss_bytes);
 }
 
 void GlobalMetricsRegistry::initialize(const std::vector<std::string>& paths, bool init_system_metrics,
