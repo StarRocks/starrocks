@@ -21,12 +21,14 @@ case "$1" in
                 rm -rf "/var/lib/starrocks/$COMP"
                 rm -rf "/var/log/starrocks/$COMP"
                 rm -rf "/etc/starrocks/$COMP"
+                # Clean up the component-specific runtime directory created by systemd/PID_DIR.
+                rm -rf "/run/starrocks-$COMP"
             fi
         fi
 
         # Clean up empty parent directories
         # rmdir will only succeed if the directory is empty, which is safe.
-        for dir in /etc/starrocks /var/lib/starrocks /var/log/starrocks /run/starrocks; do
+        for dir in /etc/starrocks /var/lib/starrocks /var/log/starrocks; do
             if [ -d "$dir" ]; then
                 rmdir "$dir" 2>/dev/null || true
             fi
