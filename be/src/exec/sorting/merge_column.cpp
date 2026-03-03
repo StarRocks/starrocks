@@ -179,7 +179,7 @@ public:
             auto& right_data = down_cast<const ColumnType*>(_right_col)->get_german_strings();
             return merge_ordinary_column<Container, GermanString>(left_data, right_data);
         } else {
-            using ImmContainer = BinaryColumnBase<SizeT>::ImmContainer;
+            using ImmContainer = typename BinaryColumnBase<SizeT>::ImmContainer;
             auto left_data = down_cast<const ColumnType*>(_left_col)->immutable_data();
             auto right_data = down_cast<const ColumnType*>(_right_col)->immutable_data();
             return merge_ordinary_column<ImmContainer, Slice>(left_data, right_data);
