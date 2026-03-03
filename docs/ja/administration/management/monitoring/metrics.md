@@ -581,6 +581,30 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 - タイプ: Instantaneous
 - 説明: リソースグループのメモリ使用量の瞬時値。
 
+### starrocks_be_mem_pool_mem_limit_bytes
+
+- 単位: Bytes
+- タイプ: Instantaneous
+- 説明: メモリプールのメモリクォータの瞬時値。
+
+### starrocks_be_mem_pool_mem_usage_bytes
+
+- 単位: Bytes
+- タイプ: Instantaneous
+- 説明: メモリプールのメモリ使用量の瞬時値。
+
+### starrocks_be_mem_pool_mem_usage_ratio
+
+- 単位: -
+- タイプ: Instantaneous
+- 説明: メモリプールのメモリクォータに対するメモリ使用量の比率。
+
+### starrocks_be_mem_pool_workgroup_count
+
+- 単位: Count
+- タイプ: Instantaneous
+- 説明: メモリプールに割り当てられたリソースグループ数の瞬時値。
+
 ### starrocks_be_pipe_prepare_pool_queue_len
 
 - 単位: Count
