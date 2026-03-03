@@ -32,6 +32,8 @@ Release Date: February 28, 2026
   Supports TRUNCATE TABLE on external Hive and Iceberg tables. [#64768](https://github.com/StarRocks/starrocks/pull/64768) [#65016](https://github.com/StarRocks/starrocks/pull/65016)
 - **Incremental materialized view on Iceberg and Paimon**
   Extends the support for incremental materialized view refresh to Iceberg append-only tables and Paimon tables, enabling query acceleration without full table refresh. [#65469](https://github.com/StarRocks/starrocks/pull/65469) [#62699](https://github.com/StarRocks/starrocks/pull/62699)
+- **VARIANT Type for Semi-Structured Data in Iceberg**
+  Supports the VARIANT data type in Iceberg Catalog for flexible, schema-on-read storage and querying of semi-structured data. Supports read, write, type casting, and Parquet integration. [#63639](https://github.com/StarRocks/starrocks/pull/63639) [#66539](https://github.com/StarRocks/starrocks/pull/66539)
 - Supports reading file path and row position metadata columns from Iceberg tables. [#67003](https://github.com/StarRocks/starrocks/pull/67003)
 - Supports reading `_row_id` from Iceberg v3 tables, and supports global late materialization for Iceberg v3. [#62318](https://github.com/StarRocks/starrocks/pull/62318) [#64133](https://github.com/StarRocks/starrocks/pull/64133)
 - Supports creating Iceberg views with custom properties, and displays properties in SHOW CREATE VIEW output. [#65938](https://github.com/StarRocks/starrocks/pull/65938)
@@ -44,10 +46,6 @@ Release Date: February 28, 2026
 
 ### Query Engine
 
-- **ASOF JOIN**
-  Introduces ASOF JOIN for time-series and event correlation queries, enabling efficient matching of the nearest record across two datasets by a temporal or ordered key. [#63070](https://github.com/StarRocks/starrocks/pull/63070) [#63236](https://github.com/StarRocks/starrocks/pull/63236)
-- **VARIANT Type for Semi-Structured Data**
-  Introduces the VARIANT data type for flexible, schema-on-read storage and querying of semi-structured data. Supports read, write, type casting, and Parquet integration. [#63639](https://github.com/StarRocks/starrocks/pull/63639) [#66539](https://github.com/StarRocks/starrocks/pull/66539)
 - **Recursive CTE**
   Supports Recursive Common Table Expressions for hierarchical traversals, graph queries, and iterative SQL computations. [#65932](https://github.com/StarRocks/starrocks/pull/65932)
 - Improved Skew Join v2 rewrite with statistics-based skew detection, histogram support, and NULL-skew awareness. [#68680](https://github.com/StarRocks/starrocks/pull/68680) [#68886](https://github.com/StarRocks/starrocks/pull/68886)

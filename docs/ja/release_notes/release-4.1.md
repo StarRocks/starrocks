@@ -32,6 +32,8 @@ displayed_sidebar: docs
   外部 Hive および Iceberg テーブルに対する TRUNCATE TABLE をサポート。 [#64768](https://github.com/StarRocks/starrocks/pull/64768) [#65016](https://github.com/StarRocks/starrocks/pull/65016)
 - **Iceberg および Paimon に対する増分マテリアライズドビュー**
   Iceberg append-only テーブルおよび Paimon テーブルで増分リフレッシュをサポートし、フルリフレッシュなしでクエリ高速化を実現。 [#65469](https://github.com/StarRocks/starrocks/pull/65469) [#62699](https://github.com/StarRocks/starrocks/pull/62699)
+- **Iceberg における半構造化データ用 VARIANT 型**
+  Iceberg Catalog における VARIANT データ型をサポートし、半構造化データの柔軟なスキーマオンリード方式による保存とクエリを可能にします。 [#63639](https://github.com/StarRocks/starrocks/pull/63639) [#66539](https://github.com/StarRocks/starrocks/pull/66539)
 - Iceberg テーブルのファイルパスおよび行位置メタデータ列を読み取り可能。 [#67003](https://github.com/StarRocks/starrocks/pull/67003)
 - Iceberg v3 テーブルの `_row_id` をサポートし、global late materialization に対応。 [#62318](https://github.com/StarRocks/starrocks/pull/62318) [#64133](https://github.com/StarRocks/starrocks/pull/64133)
 - カスタムプロパティ付き Iceberg ビューの作成をサポートし、SHOW CREATE VIEW に表示。 [#65938](https://github.com/StarRocks/starrocks/pull/65938)
@@ -44,10 +46,6 @@ displayed_sidebar: docs
 
 ### クエリエンジン
 
-- **ASOF JOIN**
-  時系列およびイベント相関クエリ向けに ASOF JOIN を導入。時間または順序キーに基づき、2つのデータセット間で最も近いレコードを効率的にマッチングします。 [#63070](https://github.com/StarRocks/starrocks/pull/63070) [#63236](https://github.com/StarRocks/starrocks/pull/63236)
-- **半構造化データ向け VARIANT 型**
-  Schema-on-read に対応した VARIANT 型を導入。読み書き、型変換、Parquet 統合をサポート。 [#63639](https://github.com/StarRocks/starrocks/pull/63639) [#66539](https://github.com/StarRocks/starrocks/pull/66539)
 - **再帰 CTE**
   階層探索、グラフクエリ、反復 SQL 計算向けに再帰 Common Table Expression をサポート。 [#65932](https://github.com/StarRocks/starrocks/pull/65932)
 - Skew Join v2 を改善し、統計ベースのスキュー検出、ヒストグラム対応、NULL スキュー認識を実装。 [#68680](https://github.com/StarRocks/starrocks/pull/68680) [#68886](https://github.com/StarRocks/starrocks/pull/68886)
