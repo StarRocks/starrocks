@@ -35,6 +35,9 @@
 #include <aws/core/Aws.h>
 #include <fmt/format.h>
 #include <gflags/gflags.h>
+#include <thrift/protocol/TBinaryProtocol.h>
+#include <thrift/transport/TBufferTransports.h>
+#include <thrift/transport/TSocket.h>
 
 #include <iostream>
 #include <set>
@@ -42,13 +45,17 @@
 
 #include "column/datum_convert.h"
 #include "common/status.h"
+#include "common/util/debug_util.h"
 #include "fs/fs.h"
 #include "fs/fs_posix.h"
 #include "fs/fs_s3.h"
 #include "fs/fs_util.h"
+#include "fs/key_cache.h"
+#include "gen_cpp/FrontendService.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gen_cpp/segment.pb.h"
+#include "gen_cpp/types.pb.h"
 #include "gutil/strings/numbers.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
@@ -70,6 +77,11 @@
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/zone_map_index.h"
+#include "storage/sstable/block.h"
+#include "storage/sstable/comparator.h"
+#include "storage/sstable/format.h"
+#include "storage/sstable/options.h"
+#include "storage/sstable/table.h"
 #include "storage/tablet_meta.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/zone_map_detail.h"
@@ -105,7 +117,8 @@ DEFINE_string(root_path, "", "storage root path");
 DEFINE_string(operation, "",
               "valid operation: get_meta, flag, load_meta, delete_meta, delete_rowset_meta, get_persistent_index_meta, "
               "delete_persistent_index_meta, show_meta, check_table_meta_consistency, print_lake_metadata, "
-              "print_lake_bundle_metadata, print_lake_txn_log, print_lake_schema, dump_zonemap");
+              "print_lake_bundle_metadata, print_lake_txn_log, print_lake_schema, dump_zonemap, "
+              "dump_lake_persistent_index_sst");
 DEFINE_int64(tablet_id, 0, "tablet_id for tablet meta");
 DEFINE_string(tablet_uid, "", "tablet_uid for tablet meta");
 DEFINE_int64(table_id, 0, "table id for table meta");
@@ -123,6 +136,10 @@ DEFINE_string(audit_file, "", "audit file path");
 DEFINE_bool(do_delete, false, "do delete files");
 DEFINE_uint64(page_offset, -1, "page offset");
 DEFINE_uint32(page_size, -1, "page size");
+DEFINE_string(encryption_meta, "",
+              "hex-encoded encryption_meta from PersistentIndexSstablePB (for dump_lake_persistent_index_sst)");
+DEFINE_string(fe_host, "", "FE master hostname for TDE key refresh (for dump_lake_persistent_index_sst)");
+DEFINE_int32(fe_port, 9020, "FE master thrift port for TDE key refresh (for dump_lake_persistent_index_sst)");
 
 // flag defined in gflags library
 DECLARE_bool(help);
@@ -190,6 +207,10 @@ std::string get_usage(const std::string& progname) {
       cat <tablet_schema_file> | {progname} --operation=print_lake_schema
     lake_datafile_gc:
       {progname} --operation=lake_datafile_gc --root_path=<path> --expired_sec=<86400> --conf_file=<path> --audit_file=<path> --do_delete=<true|false>
+    dump_lake_persistent_index_sst:
+      {progname} --operation=dump_lake_persistent_index_sst --file=</path/to/persistent_index.sst>
+               [--encryption_meta=<hex>] [--fe_host=<host>] [--fe_port=<port>]
+      (for encrypted SST files, provide --encryption_meta + --fe_host [+ --fe_port])
     )";
     return fmt::format(usage_msg, fmt::arg("progname", progname));
 }
@@ -197,6 +218,203 @@ std::string get_usage(const std::string& progname) {
 static void show_usage() {
     FLAGS_helpshort = true;
     google::HandleCommandLineHelpFlags();
+}
+
+// Decode a hex string (lower- or uppercase) into its binary representation.
+// Returns false if |hex| has odd length or contains non-hex characters.
+static bool hex_to_bytes(const std::string& hex, std::string* out) {
+    if (hex.size() % 2 != 0) return false;
+    out->resize(hex.size() / 2);
+    for (size_t i = 0; i < hex.size(); i += 2) {
+        auto nibble = [](char c) -> int {
+            if (c >= '0' && c <= '9') return c - '0';
+            if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+            if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+            return -1;
+        };
+        int hi = nibble(hex[i]);
+        int lo = nibble(hex[i + 1]);
+        if (hi < 0 || lo < 0) return false;
+        (*out)[i / 2] = static_cast<char>((hi << 4) | lo);
+    }
+    return true;
+}
+
+// Dump space-usage statistics and all key-value entries from a PK-index SST file.
+//
+// SST file layout (from the beginning):
+//   [Data Blocks...]     - one block per ~4KB of key-value data
+//   [Filter Block]       - bloom filter for all keys (optional)
+//   [Metaindex Block]    - maps meta block names to their BlockHandles
+//   [Index Block]        - maps last-key-of-data-block to its BlockHandle
+//   [Footer (48 bytes)]  - holds handles for the metaindex and index blocks
+//
+// Each KV pair has value encoded as IndexValuesWithVerPB protobuf:
+//   { version, rssid, rowid }  (multiple versions supported per key)
+void dump_lake_persistent_index_sst(const std::string& file_name, const starrocks::FileEncryptionInfo& enc_info = {}) {
+    using namespace starrocks::sstable;
+
+    // Open the SST file, applying encryption options when the SST is TDE-protected.
+    starrocks::RandomAccessFileOptions file_opts;
+    file_opts.encryption_info = enc_info;
+    auto res = starrocks::FileSystem::Default()->new_random_access_file(file_opts, file_name);
+    if (!res.ok()) {
+        std::cerr << "open file failed: " << res.status() << std::endl;
+        return;
+    }
+    auto file = std::move(res).value();
+
+    // Get file size.
+    auto size_res = file->get_size();
+    if (!size_res.ok()) {
+        std::cerr << "get file size failed: " << size_res.status() << std::endl;
+        return;
+    }
+    auto file_size = static_cast<uint64_t>(size_res.value());
+
+    if (file_size < Footer::kEncodedLength) {
+        std::cerr << "file is too short to be an sstable" << std::endl;
+        return;
+    }
+
+    // Read and decode the 48-byte footer at the end of the file.
+    char footer_buf[Footer::kEncodedLength];
+    auto st = file->read_at_fully(file_size - Footer::kEncodedLength, footer_buf, Footer::kEncodedLength);
+    if (!st.ok()) {
+        std::cerr << "read footer failed: " << st << std::endl;
+        return;
+    }
+    Slice footer_input(footer_buf, Footer::kEncodedLength);
+    Footer footer;
+    st = footer.DecodeFrom(&footer_input);
+    if (!st.ok()) {
+        std::cerr << "decode footer failed: " << st << std::endl;
+        return;
+    }
+
+    // Read the index block (each entry value is an encoded BlockHandle for a data block).
+    ReadOptions ropt;
+    BlockContents index_contents;
+    st = ReadBlock(file.get(), ropt, footer.index_handle(), &index_contents);
+    if (!st.ok()) {
+        std::cerr << "read index block failed: " << st << std::endl;
+        return;
+    }
+
+    // Read the metaindex block (maps meta-block names such as "filter.*" to their handles).
+    BlockContents metaindex_contents;
+    st = ReadBlock(file.get(), ropt, footer.metaindex_handle(), &metaindex_contents);
+    if (!st.ok()) {
+        std::cerr << "read metaindex block failed: " << st << std::endl;
+        return;
+    }
+
+    // Walk the index block to count data blocks and sum their on-disk sizes.
+    // Each entry's value is a varint-encoded BlockHandle {offset, size}.
+    // On-disk size = handle.size() (compressed payload) + kBlockTrailerSize (1-byte type + 4-byte CRC32).
+    Block index_block(index_contents);
+    auto* index_iter = index_block.NewIterator(BytewiseComparator());
+    uint64_t data_block_count = 0;
+    uint64_t data_block_total_size = 0;
+    index_iter->SeekToFirst();
+    while (index_iter->Valid()) {
+        BlockHandle h;
+        Slice handle_val = index_iter->value();
+        if (h.DecodeFrom(&handle_val).ok()) {
+            data_block_count++;
+            data_block_total_size += h.size() + kBlockTrailerSize;
+        }
+        index_iter->Next();
+    }
+    delete index_iter;
+
+    // Walk the metaindex block to locate the bloom filter block (key = "filter.<policy-name>").
+    Block metaindex_block(metaindex_contents);
+    auto* meta_iter = metaindex_block.NewIterator(BytewiseComparator());
+    uint64_t filter_block_size = 0;
+    std::string filter_policy_name;
+    meta_iter->SeekToFirst();
+    while (meta_iter->Valid()) {
+        std::string key = meta_iter->key().to_string();
+        constexpr std::string_view kFilterPrefix = "filter.";
+        if (key.rfind(kFilterPrefix, 0) == 0) {
+            BlockHandle h;
+            Slice val = meta_iter->value();
+            if (h.DecodeFrom(&val).ok()) {
+                filter_block_size = h.size() + kBlockTrailerSize;
+                filter_policy_name = key.substr(kFilterPrefix.size());
+            }
+        }
+        meta_iter->Next();
+    }
+    delete meta_iter;
+
+    // Derive sizes of the structural sections.
+    uint64_t index_block_size = footer.index_handle().size() + kBlockTrailerSize;
+    uint64_t metaindex_block_size = footer.metaindex_handle().size() + kBlockTrailerSize;
+    uint64_t footer_size = Footer::kEncodedLength;
+
+    // Print space statistics.
+    auto pct = [&](uint64_t sz) -> double { return file_size > 0 ? 100.0 * sz / file_size : 0.0; };
+    std::cout << "=== SST File Space Statistics ===\n";
+    std::cout << fmt::format("File:                {}\n", file_name);
+    std::cout << fmt::format("Total size:          {:>12} bytes (100.00%)\n", file_size);
+    std::cout << fmt::format("  Data blocks:       {:>12} bytes ({:.2f}%, {} blocks)\n", data_block_total_size,
+                             pct(data_block_total_size), data_block_count);
+    if (filter_block_size > 0) {
+        std::cout << fmt::format("  Filter block ({}): {:>12} bytes ({:.2f}%)\n", filter_policy_name, filter_block_size,
+                                 pct(filter_block_size));
+    }
+    std::cout << fmt::format("  Index block:       {:>12} bytes ({:.2f}%)\n", index_block_size, pct(index_block_size));
+    std::cout << fmt::format("  Metaindex block:   {:>12} bytes ({:.2f}%)\n", metaindex_block_size,
+                             pct(metaindex_block_size));
+    std::cout << fmt::format("  Footer:            {:>12} bytes ({:.2f}%)\n", footer_size, pct(footer_size));
+
+    // Open the table via the official API for full KV iteration.
+    Options tbl_opts;
+    Table* table = nullptr;
+    st = Table::Open(tbl_opts, file.get(), file_size, &table);
+    if (!st.ok()) {
+        std::cerr << "open SST table for iteration failed: " << st << std::endl;
+        return;
+    }
+    std::unique_ptr<Table> table_guard(table);
+
+    ReadOptions iter_opts;
+    iter_opts.fill_cache = false;
+    auto* iter = table_guard->NewIterator(iter_opts);
+    std::unique_ptr<Iterator> iter_guard(iter);
+
+    // Dump all key-value entries.
+    // Keys are order-preserving-encoded primary keys (binary); values are
+    // protobuf-serialized IndexValuesWithVerPB { repeated { version, rssid, rowid } }.
+    std::cout << "\n=== KV Dump ===\n";
+    uint64_t entry_count = 0;
+    iter->SeekToFirst();
+    while (iter->Valid()) {
+        Slice key = iter->key();
+        Slice val = iter->value();
+
+        starrocks::IndexValuesWithVerPB pb;
+        if (pb.ParseFromArray(val.get_data(), val.get_size())) {
+            for (int i = 0; i < pb.values_size(); ++i) {
+                const auto& v = pb.values(i);
+                std::cout << fmt::format("key={} version={} rssid={} rowid={}\n",
+                                         starrocks::hexdump(key.get_data(), key.get_size()), v.version(), v.rssid(),
+                                         v.rowid());
+            }
+        } else {
+            // Fallback: print raw hex value if protobuf parse fails.
+            std::cout << fmt::format("key={} value=<raw:{}>\n", starrocks::hexdump(key.get_data(), key.get_size()),
+                                     starrocks::hexdump(val.get_data(), val.get_size()));
+        }
+        entry_count++;
+        iter->Next();
+    }
+    if (!iter->status().ok()) {
+        std::cerr << "iterator error: " << iter->status() << std::endl;
+    }
+    std::cout << fmt::format("\nTotal entries: {}\n", entry_count);
 }
 
 void show_meta() {
@@ -1505,6 +1723,61 @@ int meta_tool_main(int argc, char** argv) {
             std::cerr << "dump zonemap failed: " << st.message() << std::endl;
             return -1;
         }
+    } else if (FLAGS_operation == "dump_lake_persistent_index_sst") {
+        if (FLAGS_file == "") {
+            std::cerr << "no --file specified for dump_lake_persistent_index_sst" << std::endl;
+            return -1;
+        }
+        starrocks::FileEncryptionInfo enc_info;
+        if (!FLAGS_encryption_meta.empty()) {
+            if (FLAGS_fe_host.empty()) {
+                std::cerr << "--fe_host is required when --encryption_meta is specified" << std::endl;
+                return -1;
+            }
+            // Decode the hex-encoded encryption_meta into raw bytes.
+            std::string enc_meta_bytes;
+            if (!hex_to_bytes(FLAGS_encryption_meta, &enc_meta_bytes)) {
+                std::cerr << "invalid hex in --encryption_meta" << std::endl;
+                return -1;
+            }
+            // Fetch KEK(s) from FE via a direct Thrift connection (no ExecEnv needed).
+            using apache::thrift::protocol::TBinaryProtocol;
+            using apache::thrift::transport::TBufferedTransport;
+            using apache::thrift::transport::TSocket;
+            auto socket = std::make_shared<TSocket>(FLAGS_fe_host, FLAGS_fe_port);
+            auto transport = std::make_shared<TBufferedTransport>(socket);
+            auto protocol = std::make_shared<TBinaryProtocol>(transport);
+            starrocks::FrontendServiceClient fe_client(protocol);
+            try {
+                transport->open();
+            } catch (const apache::thrift::TException& e) {
+                std::cerr << "failed to connect to FE " << FLAGS_fe_host << ":" << FLAGS_fe_port << ": " << e.what()
+                          << std::endl;
+                return -1;
+            }
+            starrocks::TGetKeysRequest keys_req;
+            starrocks::TGetKeysResponse keys_resp;
+            try {
+                fe_client.getKeys(keys_resp, keys_req);
+            } catch (const apache::thrift::TException& e) {
+                transport->close();
+                std::cerr << "getKeys RPC to FE failed: " << e.what() << std::endl;
+                return -1;
+            }
+            transport->close();
+            auto refresh_st = starrocks::KeyCache::instance().refresh_keys(keys_resp.key_metas);
+            if (!refresh_st.ok()) {
+                std::cerr << "failed to load keys from FE: " << refresh_st << std::endl;
+                return -1;
+            }
+            auto enc_info_res = starrocks::KeyCache::instance().unwrap_encryption_meta(enc_meta_bytes);
+            if (!enc_info_res.ok()) {
+                std::cerr << "failed to unwrap encryption_meta: " << enc_info_res.status() << std::endl;
+                return -1;
+            }
+            enc_info = std::move(enc_info_res).value();
+        }
+        dump_lake_persistent_index_sst(FLAGS_file, enc_info);
     } else if (FLAGS_operation == "print_lake_metadata") {
         starrocks::TabletMetadataPB metadata;
         if (!metadata.ParseFromIstream(&std::cin)) {
