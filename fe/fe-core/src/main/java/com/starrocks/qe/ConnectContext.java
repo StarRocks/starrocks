@@ -813,6 +813,10 @@ public class ConnectContext {
         endTime = Instant.now();
     }
 
+    public Instant getEndTime() {
+        return endTime;
+    }
+
     public void updateReturnRows(long returnRows) {
         this.returnRows += returnRows;
     }
