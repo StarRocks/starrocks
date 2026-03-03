@@ -642,7 +642,7 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         // The fe unit test need to check the selected index id without any data.
         // So if set FeConstants.runningUnitTest, we can ensure that the number of partitions is not empty,
         // And the test case can continue to execute the logic of 'select best roll up'
-        return ((visibleVersion != PARTITION_INIT_VERSION)
+        return ((dataVersion != PARTITION_INIT_VERSION)
                 || FeConstants.runningUnitTest);
     }
 
