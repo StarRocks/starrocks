@@ -21,6 +21,7 @@
 #include "fs/fs_memory.h"
 #include "gen_cpp/segment.pb.h"
 #include "roaring/roaring.hh"
+#include "runtime/exec_env.h"
 #include "storage/index/inverted/builtin/builtin_inverted_index_iterator.h"
 #include "storage/index/inverted/builtin/builtin_inverted_reader.h"
 #include "storage/index/inverted/builtin/builtin_inverted_writer.h"
@@ -801,6 +802,321 @@ TEST_F(BuiltinInvertedIndexTest, test_complex_wildcard_query) {
     ASSERT_OK(iter->close());
 
     delete iter;
+}
+
+// Verify that BuiltinInvertedReader correctly tracks memory via the builtin_inverted_index_mem_tracker.
+// The tracker balance should be zero after the reader is destroyed.
+TEST_F(BuiltinInvertedIndexTest, test_mem_tracker_balance) {
+    auto* tracker = GlobalEnv::GetInstance()->builtin_inverted_index_mem_tracker();
+    int64_t baseline = tracker != nullptr ? tracker->consumption() : 0;
+
+    std::vector<std::string> values = {"alpha", "beta", "gamma"};
+    std::vector<Slice> slices;
+    slices.reserve(values.size());
+    for (auto& v : values) {
+        slices.emplace_back(v.data(), v.size());
+    }
+
+    TabletIndex tablet_index;
+    tablet_index.add_index_properties(INVERTED_INDEX_PARSER_KEY, INVERTED_INDEX_PARSER_NONE);
+
+    TypeInfoPtr type_info = get_type_info(TYPE_VARCHAR);
+
+    std::string file_name = kTestDir + "/mem_tracker_test";
+    ColumnMetaPB meta;
+    {
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+        std::unique_ptr<InvertedWriter> writer;
+        ASSERT_OK(BuiltinInvertedWriter::create(type_info, &tablet_index, &writer));
+        ASSERT_OK(writer->init());
+        writer->add_values(slices.data(), slices.size());
+        writer->add_nulls(0);
+        ASSERT_OK(writer->finish(wfile.get(), &meta));
+        ASSERT_TRUE(wfile->close().ok());
+    }
+
+    const auto& builtin_meta = meta.indexes(0).builtin_inverted_index();
+    ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
+    _opts.read_file = rfile.get();
+    _opts.segment_rows = slices.size();
+
+    {
+        auto tablet_index_sp = std::make_shared<TabletIndex>(tablet_index);
+        std::unique_ptr<InvertedReader> reader;
+        ASSERT_OK(BuiltinInvertedReader::create(tablet_index_sp, TYPE_VARCHAR, &reader));
+
+        // After construction, tracker should have consumed sizeof(BuiltinInvertedReader).
+        if (tracker != nullptr) {
+            ASSERT_GT(tracker->consumption() - baseline, 0);
+            ASSERT_EQ(tracker->consumption() - baseline, static_cast<int64_t>(sizeof(BuiltinInvertedReader)));
+        }
+
+        // Load the index – tracker should grow further.
+        BuiltinInvertedIndexPB builtin_meta_copy = builtin_meta;
+        ASSERT_OK(reader->load(_opts, &builtin_meta_copy));
+
+        auto* builtin_reader = dynamic_cast<BuiltinInvertedReader*>(reader.get());
+        ASSERT_NE(builtin_reader, nullptr);
+        if (tracker != nullptr) {
+            ASSERT_EQ(tracker->consumption() - baseline, static_cast<int64_t>(builtin_reader->mem_usage()));
+        }
+    }
+    // After reader is destroyed, tracker should return to baseline.
+    if (tracker != nullptr) {
+        ASSERT_EQ(tracker->consumption(), baseline);
+    }
+}
+
+// Verify that load failure does not cause a tracker imbalance.
+TEST_F(BuiltinInvertedIndexTest, test_mem_tracker_balance_on_load_failure) {
+    auto* tracker = GlobalEnv::GetInstance()->builtin_inverted_index_mem_tracker();
+    int64_t baseline = tracker != nullptr ? tracker->consumption() : 0;
+
+    {
+        TabletIndex tablet_index;
+        tablet_index.add_index_properties(INVERTED_INDEX_PARSER_KEY, INVERTED_INDEX_PARSER_NONE);
+
+        auto tablet_index_sp = std::make_shared<TabletIndex>(tablet_index);
+        std::unique_ptr<InvertedReader> reader;
+        ASSERT_OK(BuiltinInvertedReader::create(tablet_index_sp, TYPE_VARCHAR, &reader));
+
+        // Load with nullptr meta should fail.
+        ASSERT_FALSE(reader->load(_opts, nullptr).ok());
+    }
+    // Tracker should be back to baseline after failed load + destruction.
+    if (tracker != nullptr) {
+        ASSERT_EQ(tracker->consumption(), baseline);
+    }
+}
+
+// Verify that load failure due to invalid bitmap metadata (corrupt BitmapIndexPB)
+// does not cause a tracker imbalance. This covers the error path in load() where
+// _bitmap_index->load() fails and _bitmap_index is reset.
+TEST_F(BuiltinInvertedIndexTest, test_mem_tracker_balance_on_bitmap_load_failure) {
+    auto* tracker = GlobalEnv::GetInstance()->builtin_inverted_index_mem_tracker();
+    int64_t baseline = tracker != nullptr ? tracker->consumption() : 0;
+
+    {
+        TabletIndex tablet_index;
+        tablet_index.add_index_properties(INVERTED_INDEX_PARSER_KEY, INVERTED_INDEX_PARSER_NONE);
+
+        auto tablet_index_sp = std::make_shared<TabletIndex>(tablet_index);
+        std::unique_ptr<InvertedReader> reader;
+        ASSERT_OK(BuiltinInvertedReader::create(tablet_index_sp, TYPE_VARCHAR, &reader));
+
+        // After construction, tracker should have consumed sizeof(BuiltinInvertedReader).
+        if (tracker != nullptr) {
+            ASSERT_EQ(tracker->consumption() - baseline, static_cast<int64_t>(sizeof(BuiltinInvertedReader)));
+        }
+
+        // Create an empty file for the read_file option.
+        std::string file_name = kTestDir + "/invalid_bitmap_meta";
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+        ASSERT_TRUE(wfile->close().ok());
+        ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
+        _opts.read_file = rfile.get();
+
+        // Create a BuiltinInvertedIndexPB with an empty BitmapIndexPB (invalid metadata).
+        // The dict_column inside will have data_type=0 which is unsupported, causing
+        // BitmapIndexReader::_do_load to fail.
+        BuiltinInvertedIndexPB builtin_meta;
+        builtin_meta.mutable_bitmap_index();
+        ASSERT_FALSE(reader->load(_opts, &builtin_meta).ok());
+
+        // After failed load, tracker should still only have sizeof(BuiltinInvertedReader),
+        // because _bitmap_index was reset on failure.
+        if (tracker != nullptr) {
+            ASSERT_EQ(tracker->consumption() - baseline, static_cast<int64_t>(sizeof(BuiltinInvertedReader)));
+        }
+    }
+    // After destruction, tracker should return to baseline.
+    if (tracker != nullptr) {
+        ASSERT_EQ(tracker->consumption(), baseline);
+    }
+}
+
+// Verify that mem_usage() returns the correct values before and after load.
+TEST_F(BuiltinInvertedIndexTest, test_mem_usage_before_and_after_load) {
+    std::vector<std::string> values = {"foo", "bar", "baz"};
+    std::vector<Slice> slices;
+    for (auto& v : values) slices.emplace_back(v);
+
+    TabletIndex tablet_index;
+    tablet_index.add_index_properties(INVERTED_INDEX_PARSER_KEY, INVERTED_INDEX_PARSER_NONE);
+
+    TypeInfoPtr type_info = get_type_info(TYPE_VARCHAR);
+    std::string file_name = kTestDir + "/mem_usage_test";
+    ColumnMetaPB meta;
+    {
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+        std::unique_ptr<InvertedWriter> writer;
+        ASSERT_OK(BuiltinInvertedWriter::create(type_info, &tablet_index, &writer));
+        ASSERT_OK(writer->init());
+        writer->add_values(slices.data(), slices.size());
+        writer->add_nulls(0);
+        ASSERT_OK(writer->finish(wfile.get(), &meta));
+        ASSERT_TRUE(wfile->close().ok());
+    }
+
+    ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
+    _opts.read_file = rfile.get();
+    _opts.segment_rows = slices.size();
+
+    auto tablet_index_sp = std::make_shared<TabletIndex>(tablet_index);
+    std::unique_ptr<InvertedReader> reader;
+    ASSERT_OK(BuiltinInvertedReader::create(tablet_index_sp, TYPE_VARCHAR, &reader));
+
+    auto* builtin_reader = dynamic_cast<BuiltinInvertedReader*>(reader.get());
+    ASSERT_NE(builtin_reader, nullptr);
+
+    // Before load: mem_usage should be exactly sizeof(BuiltinInvertedReader)
+    // because _bitmap_index is nullptr.
+    ASSERT_EQ(builtin_reader->mem_usage(), sizeof(BuiltinInvertedReader));
+
+    // Load the index.
+    BuiltinInvertedIndexPB builtin_meta_copy = meta.indexes(0).builtin_inverted_index();
+    ASSERT_OK(reader->load(_opts, &builtin_meta_copy));
+
+    // After load: mem_usage should be > sizeof(BuiltinInvertedReader) because
+    // _bitmap_index is now loaded and has its own memory footprint.
+    ASSERT_GT(builtin_reader->mem_usage(), sizeof(BuiltinInvertedReader));
+    // It should equal sizeof(BuiltinInvertedReader) + _bitmap_index->mem_usage().
+    // Since we can't directly access _bitmap_index, just verify the total is reasonable.
+    ASSERT_GT(builtin_reader->mem_usage(), sizeof(BuiltinInvertedReader) + sizeof(BitmapIndexReader));
+}
+
+// Verify that multiple BuiltinInvertedReaders cumulatively track their memory,
+// and that the tracker returns to baseline after all readers are destroyed.
+TEST_F(BuiltinInvertedIndexTest, test_mem_tracker_multiple_readers) {
+    auto* tracker = GlobalEnv::GetInstance()->builtin_inverted_index_mem_tracker();
+    int64_t baseline = tracker != nullptr ? tracker->consumption() : 0;
+
+    std::vector<std::string> values = {"x", "y", "z"};
+    std::vector<Slice> slices;
+    for (auto& v : values) slices.emplace_back(v);
+
+    TabletIndex tablet_index;
+    tablet_index.add_index_properties(INVERTED_INDEX_PARSER_KEY, INVERTED_INDEX_PARSER_NONE);
+
+    TypeInfoPtr type_info = get_type_info(TYPE_VARCHAR);
+    std::string file_name = kTestDir + "/multi_reader_test";
+    ColumnMetaPB meta;
+    {
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+        std::unique_ptr<InvertedWriter> writer;
+        ASSERT_OK(BuiltinInvertedWriter::create(type_info, &tablet_index, &writer));
+        ASSERT_OK(writer->init());
+        writer->add_values(slices.data(), slices.size());
+        writer->add_nulls(0);
+        ASSERT_OK(writer->finish(wfile.get(), &meta));
+        ASSERT_TRUE(wfile->close().ok());
+    }
+
+    ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
+    _opts.read_file = rfile.get();
+    _opts.segment_rows = slices.size();
+
+    {
+        auto tablet_index_sp = std::make_shared<TabletIndex>(tablet_index);
+
+        // Create reader 1.
+        std::unique_ptr<InvertedReader> reader1;
+        ASSERT_OK(BuiltinInvertedReader::create(tablet_index_sp, TYPE_VARCHAR, &reader1));
+
+        if (tracker != nullptr) {
+            ASSERT_EQ(tracker->consumption() - baseline, static_cast<int64_t>(sizeof(BuiltinInvertedReader)));
+        }
+
+        // Create reader 2 (without loading, just construction).
+        std::unique_ptr<InvertedReader> reader2;
+        ASSERT_OK(BuiltinInvertedReader::create(tablet_index_sp, TYPE_VARCHAR, &reader2));
+
+        // Two readers constructed: tracker should have 2 * sizeof(BuiltinInvertedReader).
+        if (tracker != nullptr) {
+            ASSERT_EQ(tracker->consumption() - baseline, static_cast<int64_t>(2 * sizeof(BuiltinInvertedReader)));
+        }
+
+        // Load reader 1.
+        BuiltinInvertedIndexPB builtin_meta_copy = meta.indexes(0).builtin_inverted_index();
+        ASSERT_OK(reader1->load(_opts, &builtin_meta_copy));
+
+        auto* builtin_reader1 = dynamic_cast<BuiltinInvertedReader*>(reader1.get());
+        ASSERT_NE(builtin_reader1, nullptr);
+
+        if (tracker != nullptr) {
+            // reader1 is fully loaded, reader2 is only constructed.
+            int64_t expected = static_cast<int64_t>(builtin_reader1->mem_usage() + sizeof(BuiltinInvertedReader));
+            ASSERT_EQ(tracker->consumption() - baseline, expected);
+        }
+
+        // Destroy reader2 first.
+        reader2.reset();
+
+        if (tracker != nullptr) {
+            // Only reader1 remains.
+            ASSERT_EQ(tracker->consumption() - baseline, static_cast<int64_t>(builtin_reader1->mem_usage()));
+        }
+    }
+    // All readers destroyed.
+    if (tracker != nullptr) {
+        ASSERT_EQ(tracker->consumption(), baseline);
+    }
+}
+
+// Verify memory tracking works correctly with the English parser path (tokenized index).
+TEST_F(BuiltinInvertedIndexTest, test_mem_tracker_english_parser) {
+    auto* tracker = GlobalEnv::GetInstance()->builtin_inverted_index_mem_tracker();
+    int64_t baseline = tracker != nullptr ? tracker->consumption() : 0;
+
+    std::vector<std::string> values = {"hello world", "foo bar baz"};
+    std::vector<Slice> slices;
+    for (auto& v : values) slices.emplace_back(v);
+
+    TabletIndex tablet_index;
+    tablet_index.add_index_properties(INVERTED_INDEX_PARSER_KEY, INVERTED_INDEX_PARSER_ENGLISH);
+
+    TypeInfoPtr type_info = get_type_info(TYPE_VARCHAR);
+    std::string file_name = kTestDir + "/mem_tracker_english";
+    ColumnMetaPB meta;
+    {
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+        std::unique_ptr<InvertedWriter> writer;
+        ASSERT_OK(BuiltinInvertedWriter::create(type_info, &tablet_index, &writer));
+        ASSERT_OK(writer->init());
+        writer->add_values(slices.data(), slices.size());
+        writer->add_nulls(0);
+        ASSERT_OK(writer->finish(wfile.get(), &meta));
+        ASSERT_TRUE(wfile->close().ok());
+    }
+
+    ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
+    _opts.read_file = rfile.get();
+    _opts.segment_rows = slices.size();
+
+    {
+        auto tablet_index_sp = std::make_shared<TabletIndex>(tablet_index);
+        std::unique_ptr<InvertedReader> reader;
+        ASSERT_OK(BuiltinInvertedReader::create(tablet_index_sp, TYPE_VARCHAR, &reader));
+
+        if (tracker != nullptr) {
+            ASSERT_EQ(tracker->consumption() - baseline, static_cast<int64_t>(sizeof(BuiltinInvertedReader)));
+        }
+
+        BuiltinInvertedIndexPB builtin_meta_copy = meta.indexes(0).builtin_inverted_index();
+        ASSERT_OK(reader->load(_opts, &builtin_meta_copy));
+
+        auto* builtin_reader = dynamic_cast<BuiltinInvertedReader*>(reader.get());
+        ASSERT_NE(builtin_reader, nullptr);
+
+        if (tracker != nullptr) {
+            ASSERT_EQ(tracker->consumption() - baseline, static_cast<int64_t>(builtin_reader->mem_usage()));
+            // Loaded index should use more memory than just the struct size.
+            ASSERT_GT(tracker->consumption() - baseline, static_cast<int64_t>(sizeof(BuiltinInvertedReader)));
+        }
+    }
+    if (tracker != nullptr) {
+        ASSERT_EQ(tracker->consumption(), baseline);
+    }
 }
 
 TEST_F(BuiltinInvertedIndexTest, test_simple_analyzer) {
