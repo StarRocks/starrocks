@@ -399,7 +399,7 @@ public:
     // Cast ColumnPtr to special type ColumnPtr, ensure the input column is of the expected type,
     // otherwise it will throw an exception.
     template <typename Type>
-    static inline Type::Ptr as_column(ColumnPtr&& value) {
+    static inline typename Type::Ptr as_column(ColumnPtr&& value) {
 #ifdef NDEBUG
         return Type::static_pointer_cast(std::move(value));
 #else
