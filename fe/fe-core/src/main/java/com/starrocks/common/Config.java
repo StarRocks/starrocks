@@ -3516,6 +3516,14 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_experimental_temporary_table = true;
 
+    /**
+     * Enable pre-resolution of external tables (JDBC, Iceberg, etc.) before acquiring internal table locks.
+     * This avoids holding meta lock while fetching external metadata via RPC.
+     * Set to false to fallback to the original behavior if issues occur.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_experimental_external_table_preparse = true;
+
     @ConfField(mutable = true)
     public static long max_per_node_grep_log_limit = 500000;
 
