@@ -2,7 +2,7 @@
 set -e
 
 case "$1" in
-    remove|deconfigure)
+    remove|upgrade|deconfigure|failed-upgrade)
         if [ -n "$DPKG_MAINTSCRIPT_PACKAGE" ]; then
             case "$DPKG_MAINTSCRIPT_PACKAGE" in
                 starrocks-*)
@@ -13,27 +13,11 @@ case "$1" in
                     ;;
             esac
 
-            if [ -n "$COMP" ] && [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet "starrocks-$COMP" 2>/dev/null; then
-                echo "Stopping StarRocks $COMP service before removal..."
-                systemctl stop "starrocks-$COMP" || true
-            fi
-        fi
-    ;;
-
-    upgrade|failed-upgrade)
-        if [ -n "$DPKG_MAINTSCRIPT_PACKAGE" ]; then
-            case "$DPKG_MAINTSCRIPT_PACKAGE" in
-                starrocks-*)
-                    COMP=${DPKG_MAINTSCRIPT_PACKAGE#starrocks-}
-                    ;;
-                *)
-                    COMP=""
-                    ;;
-            esac
-
-            if [ -n "$COMP" ] && [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet "starrocks-$COMP" 2>/dev/null; then
-                echo "Stopping StarRocks $COMP service before upgrade..."
-                systemctl stop "starrocks-$COMP" || true
+            if [ -n "$COMP" ] && [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
+                if systemctl is-active --quiet "starrocks-$COMP" 2>/dev/null; then
+                    echo "Stopping StarRocks $COMP service (reason: $1)..."
+                    systemctl stop "starrocks-$COMP" || true
+                fi
             fi
         fi
     ;;
