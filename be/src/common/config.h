@@ -1217,7 +1217,7 @@ CONF_Int32(lake_pk_index_block_cache_limit_percent, "10");
 // clear *.meta cache for lake table
 CONF_mBool(lake_clear_corrupted_cache_meta, "true");
 // clear *.data cache for lake table
-CONF_mBool(lake_clear_corrupted_cache_data, "false");
+CONF_mBool(lake_clear_corrupted_cache_data, "true");
 // The maximum number of files which need to rebuilt in cloud native pk index.
 // If files which need to rebuilt larger than this, we will flush memtable immediately.
 CONF_mInt32(cloud_native_pk_index_rebuild_files_threshold, "50");
