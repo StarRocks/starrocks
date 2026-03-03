@@ -1560,6 +1560,11 @@ displayed_sidebar: docs
 - 单位：Byte
 - 描述：Bitmap 索引使用的内存。
 
+### builtin_inverted_index_mem_bytes
+
+- 单位：Byte
+- 描述：内置倒排索引使用的内存。
+
 ### update_rowset_commit_apply_duration_us
 
 - 单位：微秒

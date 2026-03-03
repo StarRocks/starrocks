@@ -1560,6 +1560,11 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Bytes
 - Description: Memory used by bitmap indexes.
 
+### builtin_inverted_index_mem_bytes
+
+- Unit: Bytes
+- Description: Memory used by builtin inverted indexes.
+
 ### update_rowset_commit_apply_duration_us
 
 - Unit: us
