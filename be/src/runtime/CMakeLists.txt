@@ -25,6 +25,9 @@ set(RUNTIME_CORE_FILES
     mem_pool.cpp
     runtime_filter.cpp
     runtime_filter_layout.cpp
+    runtime_filter_builder.cpp
+    runtime_filter_factory.cpp
+    runtime_filter_cache.cpp
     bucket_aware_partition.cpp
     starrocks_metrics.cpp
     memory/roaring_hook.cpp
@@ -108,8 +111,6 @@ set(RUNTIME_FILES
     sorted_chunks_merger.cpp
     tablets_channel.cpp
     runtime_filter_worker.cpp
-    runtime_filter_factory.cpp
-    runtime_filter_builder.cpp
     runtime_filter_serde.cpp
     runtime_filter/runtime_filter_descriptor.cpp
     runtime_filter/runtime_filter_probe.cpp
@@ -119,7 +120,6 @@ set(RUNTIME_FILES
     global_dict/parser.cpp
     global_dict/miscs.cpp
     global_dict/types.cpp
-    runtime_filter_cache.cpp
     lake_tablets_channel.cpp
     lake_snapshot_loader.cpp
     profile_report_worker.cpp

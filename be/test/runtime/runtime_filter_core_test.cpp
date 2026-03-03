@@ -15,12 +15,17 @@
 #include <gtest/gtest.h>
 
 #include <cstdint>
+#include <memory>
 #include <vector>
 
+#include "base/uid_util.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "runtime/bucket_aware_partition.h"
 #include "runtime/runtime_filter.h"
+#include "runtime/runtime_filter_builder.h"
+#include "runtime/runtime_filter_cache.h"
+#include "runtime/runtime_filter_factory.h"
 #include "runtime/runtime_filter_layout.h"
 
 namespace starrocks {
@@ -217,6 +222,104 @@ TEST(RuntimeFilterCoreTest, ComputePartitionIndexForBucketAwareLayout) {
         ASSERT_LT(expected_bucket_ids[i], bucketseq_to_instance.size());
         EXPECT_EQ(ctx.hash_values[i], static_cast<uint32_t>(bucketseq_to_instance[expected_bucket_ids[i]]));
     }
+}
+
+TEST(RuntimeFilterCoreTest, RuntimeFilterBuilderFillOnNullableColumn) {
+    auto filter = std::unique_ptr<RuntimeFilter>(RuntimeFilterFactory::create_bloom_filter(nullptr, TYPE_INT, 0));
+    ASSERT_NE(filter, nullptr);
+    filter->get_membership_filter()->init(64);
+
+    auto nullable_col = ColumnHelper::cast_to_nullable_column(make_int_column({10, 20}));
+    nullable_col->append_nulls(1);
+
+    auto st = RuntimeFilterBuilder::fill(filter.get(), TYPE_INT, nullable_col, 0, false);
+    ASSERT_TRUE(st.ok()) << st.message();
+    EXPECT_FALSE(filter->has_null());
+
+    RuntimeFilter::RunningContext ctx;
+    auto value_probe = make_int_column({10, 20});
+    ctx.selection.assign(value_probe->size(), 1);
+    filter->evaluate(value_probe.get(), &ctx);
+    expect_filter_eq(ctx.selection, {1, 1});
+}
+
+TEST(RuntimeFilterCoreTest, RuntimeFilterBuilderFillWithEqNull) {
+    auto filter = std::unique_ptr<RuntimeFilter>(RuntimeFilterFactory::create_bloom_filter(nullptr, TYPE_INT, 0));
+    ASSERT_NE(filter, nullptr);
+    filter->get_membership_filter()->init(64);
+
+    auto nullable_col = ColumnHelper::cast_to_nullable_column(make_int_column({10, 20}));
+    nullable_col->append_nulls(1);
+
+    auto st = RuntimeFilterBuilder::fill(filter.get(), TYPE_INT, nullable_col, 0, true);
+    ASSERT_TRUE(st.ok()) << st.message();
+    EXPECT_TRUE(filter->has_null());
+
+    RuntimeFilter::RunningContext ctx;
+    auto null_probe = ColumnHelper::create_const_null_column(3);
+    ctx.selection.assign(null_probe->size(), 1);
+    filter->evaluate(null_probe.get(), &ctx);
+    expect_filter_eq(ctx.selection, {1, 1, 1});
+}
+
+TEST(RuntimeFilterCoreTest, RuntimeFilterFactoryCreatePaths) {
+    ObjectPool pool;
+
+    auto* bloom = RuntimeFilterFactory::create_filter(&pool, RuntimeFilterSerializeType::BLOOM_FILTER, TYPE_INT, 0);
+    ASSERT_NE(bloom, nullptr);
+    EXPECT_EQ(bloom->type(), RuntimeFilterSerializeType::BLOOM_FILTER);
+
+    auto* empty = RuntimeFilterFactory::create_filter(&pool, RuntimeFilterSerializeType::EMPTY_FILTER, TYPE_INT, 0);
+    ASSERT_NE(empty, nullptr);
+    EXPECT_EQ(empty->type(), RuntimeFilterSerializeType::EMPTY_FILTER);
+
+    auto* bitset = RuntimeFilterFactory::create_filter(&pool, RuntimeFilterSerializeType::BITSET_FILTER, TYPE_INT, 0);
+    ASSERT_NE(bitset, nullptr);
+    EXPECT_EQ(bitset->type(), RuntimeFilterSerializeType::BITSET_FILTER);
+
+    auto* in_filter = RuntimeFilterFactory::create_filter(&pool, RuntimeFilterSerializeType::IN_FILTER, TYPE_INT, 0);
+    ASSERT_NE(in_filter, nullptr);
+    EXPECT_EQ(in_filter->type(), RuntimeFilterSerializeType::IN_FILTER);
+
+    auto* unsupported_bitset = RuntimeFilterFactory::create_bitset_filter(&pool, TYPE_VARCHAR, 0);
+    EXPECT_EQ(unsupported_bitset, nullptr);
+
+    auto* none_filter = RuntimeFilterFactory::create_filter(&pool, RuntimeFilterSerializeType::NONE, TYPE_INT, 0);
+    EXPECT_EQ(none_filter, nullptr);
+}
+
+TEST(RuntimeFilterCoreTest, RuntimeFilterCachePutGetRemoveAndTrace) {
+    RuntimeFilterCache cache(2);
+    auto st = cache.init();
+    ASSERT_TRUE(st.ok()) << st.message();
+
+    TUniqueId query_id;
+    query_id.hi = 1;
+    query_id.lo = 2;
+    constexpr int filter_id = 7;
+
+    auto bloom = std::make_shared<ComposedRuntimeBloomFilter<TYPE_INT>>();
+    bloom->membership_filter().init(32);
+    bloom->insert(42);
+    RuntimeFilterPtr rf = bloom;
+
+    cache.put_if_absent(query_id, filter_id, rf);
+    auto cached = cache.get(query_id, filter_id);
+    ASSERT_NE(cached, nullptr);
+    EXPECT_EQ(cached.get(), rf.get());
+    EXPECT_EQ(cache.get(query_id, filter_id + 1), nullptr);
+
+    cache.set_enable_trace(true);
+    cache.add_rf_event(query_id, filter_id, std::string("core-test-event"));
+    auto events = cache.get_events();
+    EXPECT_FALSE(events.empty());
+    EXPECT_NE(events.find(print_id(query_id)), events.end());
+
+    cache.remove(query_id);
+    EXPECT_EQ(cache.get(query_id, filter_id), nullptr);
+
+    cache.stop_clean_thread();
+    EXPECT_TRUE(cache.is_stopped());
 }
 
 } // namespace
