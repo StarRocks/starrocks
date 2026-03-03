@@ -2027,6 +2027,44 @@ Latency metrics expose percentile series such as `merge_commit_request_latency_9
 - Labels: `delete_type` (`position` or `metadata`)
 - Description: Total deleted rows from Iceberg `DELETE` tasks. For `metadata` delete, this represents the number of rows in deleted data files. For `position` delete, this represents the number of position deletes created.
 
+<<<<<<< HEAD
+=======
+#### iceberg_compaction_total
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `compaction_type` (`manual` or `auto`)
+- Description: Total number of Iceberg compaction (`rewrite_data_files`) tasks.
+
+#### iceberg_compaction_duration_ms_total
+
+- Unit: Millisecond
+- Type: Cumulative
+- Labels: `compaction_type` (`manual` or `auto`)
+- Description: Total time spent running Iceberg compaction tasks.
+
+#### iceberg_compaction_input_files_total
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `compaction_type` (`manual` or `auto`)
+- Description: Total number of data files read by Iceberg compaction tasks.
+
+#### iceberg_compaction_output_files_total
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `compaction_type` (`manual` or `auto`)
+- Description: Total number of data files produced by Iceberg compaction tasks.
+
+#### iceberg_compaction_removed_delete_files_total
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `compaction_type` (`manual` or `auto`)
+- Description: Total number of delete files removed by Iceberg manual compaction tasks.
+
+>>>>>>> 8827cf9852 ([Doc] Add Iceberg Compaction Metrics (#69718))
 ### Iceberg write FE metrics
 
 #### iceberg_write_total
