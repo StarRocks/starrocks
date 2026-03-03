@@ -15,7 +15,7 @@ Run the build script from this directory:
 `./build.sh 4.0.4 ../../out/fe ../../out/be amd64 ../../out/be`
 
 ## Installation
-Install the generated packages using `apt` (to ensure dependencies like `libssl` and `libibverbs1` are resolved):
+Install the generated packages using `apt`:
 `sudo apt install ./starrocks-fe_4.0.4_amd64.deb`
 
 > **Note:** `starrocks-be` and `starrocks-cn` are mutually exclusive and cannot be installed on the same host simultaneously.
