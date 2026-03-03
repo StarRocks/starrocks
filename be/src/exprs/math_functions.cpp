@@ -486,7 +486,7 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_string(FunctionContext* contex
     auto col = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(c0);
     MutableColumnPtr res = RunTimeColumnType<TYPE_UNSIGNED_INT>::create();
     res->resize_uninitialized(size);
-    auto raw_c0 = col->get_proxy_data();
+    auto raw_c0 = col->immutable_data();
     // result column is mutable, use non-const raw pointer
     RunTimeCppType<TYPE_UNSIGNED_INT>* raw_res =
             ColumnHelper::cast_to_raw<TYPE_UNSIGNED_INT>(res.get())->get_data().data();

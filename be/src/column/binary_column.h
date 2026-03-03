@@ -344,7 +344,7 @@ public:
         return _german_strings;
     }
 
-    const BinaryDataProxyContainer& get_proxy_data() const { return _immuable_container; }
+    const ImmContainer immutable_data() const { return _immuable_container; }
 
     Bytes& get_bytes() {
         _ensure_materialized();
