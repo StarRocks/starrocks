@@ -2446,6 +2446,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ### 共有データ
 
+##### cloud_native_pk_index_rebuild_files_threshold
+
+- デフォルト: 50
+- タイプ: Int
+- 単位: -
+- 変更可能: Yes
+- 説明: クラウドネイティブ主キーインデックスのリビルド時に許容される最大 Segment ファイル数。リビルドが必要なファイル数がこの閾値を超えた場合、StarRocks はメモリ内の MemTable を即座にフラッシュし、リプレイが必要な Segment 数を削減します。`0` に設定するとこの早期フラッシュ戦略は無効になります。
+- 導入バージョン: -
+
+##### cloud_native_pk_index_rebuild_rows_threshold
+
+- デフォルト: 10000000
+- タイプ: Long
+- 単位: 行
+- 変更可能: Yes
+- 説明: クラウドネイティブ主キーインデックスのリビルド時に許容される最大行数。リビルドが必要な行数がこの閾値を超えた場合、StarRocks はメモリ内の MemTable を即座にフラッシュし、インデックス再構築のコストを削減します。`0` に設定するとこの早期フラッシュ戦略は無効になります。`cloud_native_pk_index_rebuild_files_threshold` と連携して動作し、いずれかの閾値を超えるとフラッシュがトリガーされます。
+- 導入バージョン: -
+
 ##### download_buffer_size
 
 - デフォルト: 4194304

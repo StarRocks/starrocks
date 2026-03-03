@@ -141,9 +141,9 @@ public:
     // Check if this rowset need to rebuild, return `True` means need to rebuild this rowset.
     static bool needs_rowset_rebuild(const RowsetMetadataPB& rowset, uint32_t rebuild_rss_id);
 
-    // Return the files cnt that need to rebuild.
-    static size_t need_rebuild_file_cnt(const TabletMetadataPB& metadata,
-                                        const PersistentIndexSstableMetaPB& sstable_meta);
+    // Return the {file_cnt, row_cnt} that need to rebuild in a single rowset traversal.
+    static std::pair<size_t, int64_t> need_rebuild_counts(const TabletMetadataPB& metadata,
+                                                          const PersistentIndexSstableMetaPB& sstable_meta);
 
     Status flush_memtable(bool force = false);
 
@@ -153,6 +153,8 @@ private:
     bool is_memtable_full() const;
 
     bool too_many_rebuild_files() const;
+
+    bool too_many_rebuild_rows() const;
 
     // batch get
     // |n|: size of key/value array
@@ -190,6 +192,7 @@ private:
     TabletManager* _tablet_mgr{nullptr};
     int64_t _tablet_id{0};
     size_t _need_rebuild_file_cnt{0};
+    int64_t _need_rebuild_row_cnt{0};
     // Collection of sstable fileset, from old to new.
     std::vector<std::unique_ptr<PersistentIndexSstableFileset>> _sstable_filesets;
 };
