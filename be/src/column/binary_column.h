@@ -398,7 +398,11 @@ public:
         return _german_strings;
     }
 
+<<<<<<< HEAD
     const ProxyContainer& get_proxy_data() const { return _immuable_container; }
+=======
+    const ImmContainer immutable_data() const { return _immuable_container; }
+>>>>>>> d7ec772 ([Refactor] Remove get_proxy_data from BinaryColumn (#69758))
 
     Bytes& get_bytes() {
         _ensure_materialized();

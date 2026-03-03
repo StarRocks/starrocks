@@ -287,7 +287,7 @@ public:
     static MutableColumnPtr align_return_type(MutableColumnPtr&& old_col, const TypeDescriptor& type_desc,
                                               size_t num_rows, const bool is_nullable);
 
-    // Create a column with specified size, the column will be resized to size
+    // Create a column with a specified size, the column will be resized to size
     static MutableColumnPtr create_column(const TypeDescriptor& type_desc, bool nullable, bool is_const, size_t size,
                                           bool use_adaptive_nullable_column = false);
 
@@ -816,6 +816,7 @@ struct GetContainer {
     }
 };
 
+<<<<<<< HEAD
 #define GET_CONTAINER(ltype)                                                                  \
     template <>                                                                               \
     struct GetContainer<ltype> {                                                              \
@@ -853,4 +854,6 @@ using ChunkSlice = ChunkSliceTemplate<ChunkUniquePtr>;
 using ChunkSharedSlice = ChunkSliceTemplate<ChunkPtr>;
 using SegmentedChunkSlice = ChunkSliceTemplate<SegmentedChunkPtr>;
 
+=======
+>>>>>>> d7ec772 ([Refactor] Remove get_proxy_data from BinaryColumn (#69758))
 } // namespace starrocks
