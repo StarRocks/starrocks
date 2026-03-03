@@ -56,19 +56,15 @@ public:
         result->resize_uninitialized(v1->size());
         auto* data3 = result->get_data().data();
 
-        if constexpr (lt_is_string<LType> || lt_is_binary<LType>) {
-            auto& r1 = ColumnHelper::cast_to_raw<LType>(v1)->get_proxy_data();
-            auto& r2 = ColumnHelper::cast_to_raw<RType>(v2)->get_proxy_data();
+        if constexpr (lt_is_string<LType> || lt_is_binary<LType> || lt_is_object_family<LType> ||
+                      lt_is_object_family<RType>) {
+            const auto r1 = ColumnHelper::cast_to_raw<LType>(v1)->immutable_data();
+            const auto r2 = ColumnHelper::cast_to_raw<RType>(v2)->immutable_data();
             for (int i = 0; i < s; ++i) {
                 data3[i] = OP::template apply<LCppType, RCppType, ResultCppType>(r1[i], r2[i]);
             }
-        } else if constexpr (lt_is_object_family<LType> || lt_is_object_family<RType>) {
-            const auto data1 = ColumnHelper::cast_to_raw<LType>(v1)->immutable_data();
-            const auto data2 = ColumnHelper::cast_to_raw<RType>(v2)->immutable_data();
-            for (int i = 0; i < s; ++i) {
-                data3[i] = OP::template apply<LCppType, RCppType, ResultCppType>(data1[i], data2[i]);
-            }
         } else {
+            // Use raw pointers for auto-vectorization to optimize performance with fixed-length values.
             auto* data1 = ColumnHelper::cast_to_raw<LType>(v1)->immutable_data().data();
             auto* data2 = ColumnHelper::cast_to_raw<RType>(v2)->immutable_data().data();
             for (int i = 0; i < s; ++i) {
@@ -91,20 +87,15 @@ public:
         result->resize_uninitialized(size);
         auto* data3 = result->get_data().data();
 
-        if constexpr (lt_is_string<LType> || lt_is_binary<LType>) {
-            auto data1 = ColumnHelper::cast_to_raw<LType>(v1)->get_proxy_data()[0];
-            auto& r2 = ColumnHelper::cast_to_raw<RType>(v2)->get_proxy_data();
-            for (int i = 0; i < size; ++i) {
-                data3[i] = OP::template apply<LCppType, RCppType, ResultCppType>(data1, r2[i]);
-            }
-        } else if constexpr (lt_is_object_family<LType> || lt_is_object_family<RType>) {
-            const auto data1 = ColumnHelper::cast_to_raw<LType>(v1)->immutable_data()[0];
+        const auto data1 = ColumnHelper::cast_to_raw<LType>(v1)->immutable_data()[0];
+        if constexpr (lt_is_string<LType> || lt_is_binary<LType> || lt_is_object_family<LType> ||
+                      lt_is_object_family<RType>) {
             const auto data2 = ColumnHelper::cast_to_raw<RType>(v2)->immutable_data();
             for (int i = 0; i < size; ++i) {
                 data3[i] = OP::template apply<LCppType, RCppType, ResultCppType>(data1, data2[i]);
             }
         } else {
-            const auto data1 = ColumnHelper::cast_to_raw<LType>(v1)->immutable_data()[0];
+            // Use raw pointers for auto-vectorization to optimize performance with fixed-length values.
             const auto* data2 = ColumnHelper::cast_to_raw<RType>(v2)->immutable_data().data();
             for (int i = 0; i < size; ++i) {
                 data3[i] = OP::template apply<LCppType, RCppType, ResultCppType>(data1, data2[i]);
@@ -127,21 +118,16 @@ public:
         auto& r3 = result->get_data();
         auto* data3 = r3.data();
 
-        if constexpr (lt_is_string<LType> || lt_is_binary<LType>) {
-            auto& r1 = ColumnHelper::cast_to_raw<LType>(v1)->get_proxy_data();
-            auto data2 = ColumnHelper::cast_to_raw<RType>(v2)->get_proxy_data()[0];
-            for (int i = 0; i < size; ++i) {
-                data3[i] = OP::template apply<LCppType, RCppType, ResultCppType>(r1[i], data2);
-            }
-        } else if constexpr (lt_is_object_family<LType> || lt_is_object_family<RType>) {
+        auto data2 = ColumnHelper::cast_to_raw<RType>(v2)->immutable_data()[0];
+        if constexpr (lt_is_string<LType> || lt_is_binary<LType> || lt_is_object_family<LType> ||
+                      lt_is_object_family<RType>) {
             const auto data1 = ColumnHelper::cast_to_raw<LType>(v1)->immutable_data();
-            const auto data2 = ColumnHelper::cast_to_raw<RType>(v2)->immutable_data()[0];
             for (int i = 0; i < size; ++i) {
                 data3[i] = OP::template apply<LCppType, RCppType, ResultCppType>(data1[i], data2);
             }
         } else {
+            // Use raw pointers for auto-vectorization to optimize performance with fixed-length values.
             const auto* data1 = ColumnHelper::cast_to_raw<LType>(v1)->immutable_data().data();
-            auto data2 = ColumnHelper::cast_to_raw<RType>(v2)->immutable_data()[0];
             for (int i = 0; i < size; ++i) {
                 data3[i] = OP::template apply<LCppType, RCppType, ResultCppType>(data1[i], data2);
             }
@@ -161,15 +147,9 @@ public:
         result->resize_uninitialized(1);
         auto& r3 = result->get_data();
 
-        if constexpr (lt_is_string<LType> || lt_is_binary<LType>) {
-            auto& r1 = ColumnHelper::cast_to_raw<LType>(v1)->get_proxy_data();
-            auto& r2 = ColumnHelper::cast_to_raw<RType>(v2)->get_proxy_data();
-            r3[0] = OP::template apply<LCppType, RCppType, ResultCppType>(r1[0], r2[0]);
-        } else {
-            auto& r1 = ColumnHelper::cast_to_raw<LType>(v1)->immutable_data();
-            auto& r2 = ColumnHelper::cast_to_raw<RType>(v2)->immutable_data();
-            r3[0] = OP::template apply<LCppType, RCppType, ResultCppType>(r1[0], r2[0]);
-        }
+        const auto r1 = ColumnHelper::cast_to_raw<LType>(v1)->immutable_data();
+        const auto r2 = ColumnHelper::cast_to_raw<RType>(v2)->immutable_data();
+        r3[0] = OP::template apply<LCppType, RCppType, ResultCppType>(r1[0], r2[0]);
 
         return result;
     }
