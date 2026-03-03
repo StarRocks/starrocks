@@ -1987,3 +1987,162 @@ displayed_sidebar: docs
 - 单位：微秒
 - 类型：Summary
 - 描述：等待 merge commit 导入完成的耗时。
+<<<<<<< HEAD
+=======
+
+### Iceberg 删除 FE 指标
+
+#### iceberg_delete_total
+
+- 单位：个
+- 类型：累积值
+- 标签：
+  - `status`（`success` 或 `failed`）
+  - `reason`（`none`、`timeout`、`oom`、`access_denied`、`unknown`）
+  - `delete_type`（`position` 或 `metadata`）
+- 描述：目标表为 Iceberg 的 `DELETE` 任务总数。每个任务结束后都会加 1，无论成功还是失败。`delete_type` 区分两种删除方式：`position`（生成 position delete 文件）和 `metadata`（元数据级删除）。
+
+#### iceberg_delete_duration_ms_total
+
+- 单位：毫秒
+- 类型：累积值
+- 标签：`delete_type`（`position` 或 `metadata`）
+- 描述：Iceberg `DELETE` 任务的总耗时（毫秒）。每个任务结束后会累加该任务耗时。`delete_type` 区分两种删除方式。
+
+#### iceberg_delete_bytes
+
+- 单位：字节
+- 类型：累积值
+- 标签：`delete_type`（`position` 或 `metadata`）
+- 描述：Iceberg `DELETE` 任务删除的总字节数。对于 `metadata` 删除，表示被删除的数据文件大小；对于 `position` 删除，表示创建的 position delete 文件大小。
+
+#### iceberg_delete_rows
+
+- 单位：行
+- 类型：累积值
+- 标签：`delete_type`（`position` 或 `metadata`）
+- 描述：Iceberg `DELETE` 任务删除的总行数。对于 `metadata` 删除，表示被删除数据文件中的行数；对于 `position` 删除，表示创建的 position delete 记录数。
+
+#### iceberg_compaction_total
+
+- 单位：Count
+- 类型：Cumulative
+- 标签：`compaction_type` (`manual` または `auto`)
+- 描述：Iceberg Compaction（`rewrite_data_files`）任务的总数。
+
+#### iceberg_compaction_duration_ms_total
+
+- 单位：Millisecond
+- 类型：Cumulative
+- 标签：`compaction_type` (`manual` または `auto`)
+- 描述：运行　Iceberg Compaction　任务的总耗时。
+
+#### iceberg_compaction_input_files_total
+
+- 单位：Count
+- 类型：Cumulative
+- 标签：`compaction_type` (`manual` または `auto`)
+- 描述：Iceberg Compaction 读取的数据文件总数。
+
+#### iceberg_compaction_output_files_total
+
+- 单位：Count
+- 类型：Cumulative
+- 标签：`compaction_type` (`manual` または `auto`)
+- 描述：Iceberg Compaction 生成的数据文件总数。
+
+#### iceberg_compaction_removed_delete_files_total
+
+- 单位：Count
+- 类型：Cumulative
+- 标签：`compaction_type` (`manual` または `auto`)
+- 描述：Iceberg Compaction 任务移除的　Delete 文件总数。
+
+### Iceberg 写入 FE 指标
+
+#### iceberg_write_total
+
+- 单位：个
+- 类型：累积值
+- 标签：
+  - `status`（`success` 或 `failed`）
+  - `reason`（`none`、`timeout`、`oom`、`access_denied`、`unknown`）
+  - `write_type`（`insert`、`overwrite` 或 `ctas`）
+- 描述：目标表为 Iceberg 的 `INSERT`、`INSERT OVERWRITE` 或 `CTAS` 任务总数。每个任务结束后都会加 1，无论成功还是失败。`write_type` 区分三种操作类型。
+
+#### iceberg_write_duration_ms_total
+
+- 单位：毫秒
+- 类型：累积值
+- 标签：`write_type`（`insert`、`overwrite` 或 `ctas`）
+- 描述：Iceberg 写入任务（`INSERT`、`INSERT OVERWRITE`、`CTAS`）的总耗时（毫秒）。每个任务结束后会累加该任务耗时。`write_type` 区分三种操作类型。
+
+#### iceberg_write_bytes
+
+- 单位：字节
+- 类型：累积值
+- 标签：`write_type`（`insert`、`overwrite` 或 `ctas`）
+- 描述：Iceberg 写入任务（`INSERT`、`INSERT OVERWRITE`、`CTAS`）的写入总字节数。表示写入到 Iceberg 表的数据文件总大小。`write_type` 区分三种操作类型。
+
+#### iceberg_write_rows
+
+- 单位：行
+- 类型：累积值
+- 标签：`write_type`（`insert`、`overwrite` 或 `ctas`）
+- 描述：Iceberg 写入任务（`INSERT`、`INSERT OVERWRITE`、`CTAS`）的写入总行数。表示写入到 Iceberg 表的行数。`write_type` 区分三种操作类型。
+
+#### iceberg_write_files
+
+- 单位：个数
+- 类型：累积值
+- 标签：`write_type`（`insert`、`overwrite` 或 `ctas`）
+- 描述：Iceberg 写入任务（`INSERT`、`INSERT OVERWRITE`、`CTAS`）写入的数据文件总数。表示写入到 Iceberg 表的数据文件个数。`write_type` 区分三种操作类型。
+
+### DataCache 指标
+
+DataCache 指标提供了数据缓存的缓存容量、使用率和命中率的可见性。
+
+以下指标在 BE Prometheus 端点 (`/metrics`) 上暴露：
+
+#### datacache_mem_quota_bytes
+
+- 单位：Byte
+- 类型：Gauge
+- 描述：datacache 的内存配额。
+
+#### datacache_mem_used_bytes
+
+- 单位：Byte
+- 类型：Gauge
+- 描述：datacache 的当前内存使用量。
+
+#### datacache_disk_quota_bytes
+
+- 单位：Byte
+- 类型：Gauge
+- 描述：datacache 的磁盘配额。
+
+#### datacache_disk_used_bytes
+
+- 单位：Byte
+- 类型：Gauge
+- 描述：datacache 的当前磁盘使用量。
+
+#### datacache_meta_used_bytes
+
+- 单位：Byte
+- 类型：Gauge
+- 描述：datacache 元数据的内存使用量。
+
+#### block_cache_hit_bytes
+
+- 单位：Byte
+- 类型：Counter
+- 描述：Block Cache累计命中的字节数。目前仅统计外表的缓存命中情况。
+
+#### block_cache_miss_bytes
+
+- 单位：Byte
+- 类型：Counter
+- 描述：Block Cache累计未命中的字节数。目前仅统计外表的缓存未命中情况。
+>>>>>>> 8827cf9852 ([Doc] Add Iceberg Compaction Metrics (#69718))
