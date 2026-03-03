@@ -393,8 +393,8 @@ void detail::MergeNode::process_input(const int32_t parallel_idx) {
     SortedRun dest_run(dest_chunk, dest_orderby);
     std::vector<int32_t> orderby_indexes = _build_orderby_indexes(dest_run.chunk, _merger->sort_exprs());
 
-    _output_segments[local_parallel_idx] = std::make_unique<OutputSegment>(
-            std::move(dest_run), std::move(orderby_indexes), _merge_length);
+    _output_segments[local_parallel_idx] =
+            std::make_unique<OutputSegment>(std::move(dest_run), std::move(orderby_indexes), _merge_length);
 
     merge(_merger->sort_descs(), _left_buffer, _right_buffer, *_output_segments[local_parallel_idx], local_parallel_idx,
           _global_2_local_parallel_idx.size());
@@ -575,8 +575,7 @@ void detail::LeafNode::process_input(const int32_t parallel_idx) {
             const size_t num_rows = standard_chunk->num_rows();
             SortedRun run(standard_chunk, standard_orderby);
             std::vector<int32_t> orderby_indexes;
-            auto output_segment =
-                    std::make_unique<OutputSegment>(std::move(run), std::move(orderby_indexes), num_rows);
+            auto output_segment = std::make_unique<OutputSegment>(std::move(run), std::move(orderby_indexes), num_rows);
 
             output_size += output_segment->total_len;
             _output_segments.emplace_back(std::move(output_segment));
