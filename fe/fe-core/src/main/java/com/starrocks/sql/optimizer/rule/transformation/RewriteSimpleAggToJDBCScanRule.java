@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
@@ -26,6 +25,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.ScanOptimizeOption;
+import com.starrocks.sql.optimizer.ScanOptimizeOption.AggPushdownDesc;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -42,14 +42,18 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
 /**
- * Rewrites simple COUNT(*) aggregations on JDBC scan operators to push the aggregate
- * down to the remote database. Instead of fetching all rows and counting locally,
- * the remote DB executes SELECT COUNT(*) and returns a single row.
+ * Rewrites simple aggregate-only queries (no GROUP BY) on JDBC scan operators to push
+ * the aggregation down to the remote database. Supported functions: COUNT(*), COUNT(col),
+ * MIN(col), MAX(col).
+ *
+ * Instead of fetching all rows and aggregating locally, the remote DB executes e.g.
+ * {@code SELECT COUNT(*), MIN(col_a), MAX(col_b)} and returns a single row.
  *
  * Follows the same pattern as {@link RewriteSimpleAggToHDFSScanRule}.
  */
@@ -77,21 +81,118 @@ public class RewriteSimpleAggToJDBCScanRule extends TransformationRule {
         hasProjectOperator = true;
     }
 
+    private LogicalScanOperator getScanOperator(final OptExpression input) {
+        if (hasProjectOperator) {
+            return (LogicalScanOperator) input.getInputs().get(0).getInputs().get(0).getOp();
+        } else {
+            return (LogicalScanOperator) input.getInputs().get(0).getOp();
+        }
+    }
+
+    /**
+     * Resolves a column ref to its corresponding Column in the scan operator.
+     * For SCAN_AND_PROJECT, traces through the project's columnRefMap.
+     * Returns null if the column ref cannot be resolved to a direct scan column.
+     */
+    private Column resolveToScanColumn(ColumnRefOperator ref, OptExpression input) {
+        LogicalScanOperator scanOperator = getScanOperator(input);
+
+        if (hasProjectOperator) {
+            LogicalProjectOperator projectOp =
+                    (LogicalProjectOperator) input.getInputs().get(0).getOp();
+            ScalarOperator mapped = projectOp.getColumnRefMap().get(ref);
+            if (mapped == null || !mapped.isColumnRef()) {
+                return null;
+            }
+            ref = (ColumnRefOperator) mapped;
+        }
+
+        return scanOperator.getColRefToColumnMetaMap().get(ref);
+    }
+
+    /**
+     * Types safe for MIN/MAX pushdown — consistent semantics across all JDBC databases.
+     */
+    private static boolean isSafeForMinMaxPushdown(Type type) {
+        return type.isNumericType() || type.isDateType();
+    }
+
+    @Override
+    public boolean check(final OptExpression input, OptimizerContext context) {
+        if (!context.getSessionVariable().isEnableJdbcAggPushdown()) {
+            return false;
+        }
+        LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) input.getOp();
+        LogicalScanOperator scanOperator = getScanOperator(input);
+
+        // no limit on scan
+        if (scanOperator.getLimit() != -1) {
+            return false;
+        }
+
+        // no GROUP BY — pushing GROUP BY would return multiple rows from remote
+        if (!aggregationOperator.getGroupingKeys().isEmpty()) {
+            return false;
+        }
+
+        // not applicable if there is no aggregation functions, like `distinct x`.
+        if (aggregationOperator.getAggregations().isEmpty()) {
+            return false;
+        }
+
+        // all agg functions must be pushable: COUNT(*), COUNT(const), COUNT(col), MIN(col), MAX(col)
+        boolean allValid = aggregationOperator.getAggregations().values().stream().allMatch(
+                aggregator -> {
+                    AggregateFunction aggregateFunction = (AggregateFunction) aggregator.getFunction();
+                    String functionName = aggregateFunction.functionName();
+
+                    // no DISTINCT pushdown
+                    if (aggregator.isDistinct()) {
+                        return false;
+                    }
+
+                    if (functionName.equals(FunctionSet.COUNT)) {
+                        ColumnRefSet usedColumns = aggregator.getUsedColumns();
+                        if (usedColumns.isEmpty()) {
+                            // COUNT(*) or COUNT(non-null-constant)
+                            List<ScalarOperator> arguments = aggregator.getArguments();
+                            if (arguments.isEmpty()) {
+                                return true;
+                            }
+                            return arguments.size() == 1 && !arguments.get(0).isConstantNull();
+                        } else {
+                            // COUNT(col) — single column ref that resolves to a scan column
+                            List<ScalarOperator> arguments = aggregator.getArguments();
+                            return arguments.size() == 1 && arguments.get(0).isColumnRef()
+                                    && resolveToScanColumn(
+                                            (ColumnRefOperator) arguments.get(0), input) != null;
+                        }
+                    }
+
+                    if (functionName.equals(FunctionSet.MIN) || functionName.equals(FunctionSet.MAX)) {
+                        List<ScalarOperator> arguments = aggregator.getArguments();
+                        if (arguments.size() != 1 || !arguments.get(0).isColumnRef()) {
+                            return false;
+                        }
+                        ColumnRefOperator colRef = (ColumnRefOperator) arguments.get(0);
+                        if (resolveToScanColumn(colRef, input) == null) {
+                            return false;
+                        }
+                        return isSafeForMinMaxPushdown(colRef.getType());
+                    }
+
+                    return false;
+                }
+        );
+        return allValid;
+    }
+
     private OptExpression buildAggScanOperator(LogicalAggregationOperator aggregationOperator,
                                                LogicalScanOperator scanOperator,
+                                               OptExpression input,
                                                OptimizerContext context) {
         ColumnRefFactory columnRefFactory = context.getColumnRefFactory();
-
-        // only need to handle count(*)
         Map<ColumnRefOperator, CallOperator> aggs = aggregationOperator.getAggregations();
-        Preconditions.checkArgument(aggs.entrySet().size() == 1);
-        ColumnRefOperator aggColumnRef = aggs.entrySet().iterator().next().getKey();
-        CallOperator aggCall = aggs.entrySet().iterator().next().getValue();
-        Preconditions.checkArgument(aggCall.getFnName().equals(FunctionSet.COUNT) && !aggCall.isDistinct());
-
-        Map<ColumnRefOperator, CallOperator> newAggCalls = Maps.newHashMap();
-        // JDBC has no partition columns to preserve — start with empty map
-        Map<ColumnRefOperator, Column> newScanColumnRefs = Maps.newHashMap();
 
         // Find the table relation id from existing scan columns
         int tableRelationId = -1;
@@ -111,29 +212,96 @@ public class RewriteSimpleAggToJDBCScanRule extends TransformationRule {
             return null;
         }
 
-        ColumnRefOperator sumOutputColumnRef =
-                columnRefFactory.create("sum_" + aggCall.getFnName(), aggCall.getType(), aggCall.isNullable());
-        {
-            // generate a placeholder column for scan node.
-            // ___count___ must be the column name for backend code.
-            String metaColumnName = "___" + aggCall.getFnName() + "___";
-            // Use BIGINT (not NULL type) — JDBC scanner goes through _precheck_data_type() → TypeCheckerManager
-            // which rejects TYPE_NULL. BIGINT matches the COUNT(*) result type from all JDBC drivers.
-            Column c = new Column(metaColumnName, Type.BIGINT);
-            c.setIsAllowNull(true);
-            ColumnRefOperator placeholderColumn =
-                    columnRefFactory.create(metaColumnName, Type.BIGINT, true);
-            columnRefFactory.updateColumnToRelationIds(placeholderColumn.getId(), tableRelationId);
-            columnRefFactory.updateColumnRefToColumns(placeholderColumn, c, scanOperator.getTable());
-            newScanColumnRefs.put(placeholderColumn, c);
+        Map<ColumnRefOperator, CallOperator> newAggCalls = Maps.newLinkedHashMap();
+        Map<ColumnRefOperator, Column> newScanColumnRefs = Maps.newLinkedHashMap();
+        Map<ColumnRefOperator, ScalarOperator> aggResultProjections = Maps.newLinkedHashMap();
+        List<AggPushdownDesc> aggDescriptors = new ArrayList<>();
+        int aggIndex = 0;
 
-            CallOperator sumCall = new CallOperator(FunctionSet.SUM, Type.BIGINT,
-                    Collections.singletonList(placeholderColumn),
-                    Expr.getBuiltinFunction(FunctionSet.SUM, new Type[] {Type.BIGINT},
-                            Function.CompareMode.IS_IDENTICAL));
-            newAggCalls.put(sumOutputColumnRef, sumCall);
+        // aggs is ImmutableMap (from LogicalAggregationOperator) — insertion-order iteration guaranteed.
+        for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggs.entrySet()) {
+            ColumnRefOperator aggColumnRef = entry.getKey();
+            CallOperator aggCall = entry.getValue();
+            String fnName = aggCall.getFnName();
+
+            String metaColumnName = "___agg_" + aggIndex + "___";
+            aggIndex++;
+
+            if (fnName.equals(FunctionSet.COUNT)) {
+                // COUNT(*), COUNT(constant), or COUNT(col) — result is always BIGINT
+                Column c = new Column(metaColumnName, Type.BIGINT);
+                c.setIsAllowNull(true);
+                ColumnRefOperator placeholder =
+                        columnRefFactory.create(metaColumnName, Type.BIGINT, true);
+                columnRefFactory.updateColumnToRelationIds(placeholder.getId(), tableRelationId);
+                columnRefFactory.updateColumnRefToColumns(placeholder, c, scanOperator.getTable());
+                newScanColumnRefs.put(placeholder, c);
+
+                // Upper agg: SUM(placeholder) to merge (single row for JDBC, but keeps plan structure consistent)
+                ColumnRefOperator sumOutput =
+                        columnRefFactory.create("sum_count_" + aggIndex, Type.BIGINT, true);
+                CallOperator sumCall = new CallOperator(FunctionSet.SUM, Type.BIGINT,
+                        Collections.singletonList(placeholder),
+                        Expr.getBuiltinFunction(FunctionSet.SUM, new Type[] {Type.BIGINT},
+                                Function.CompareMode.IS_IDENTICAL));
+                newAggCalls.put(sumOutput, sumCall);
+
+                // Project: IFNULL(SUM(...), 0) to avoid null result
+                CallOperator ifNullCall = new CallOperator(FunctionSet.IFNULL, Type.BIGINT,
+                        Lists.newArrayList(sumOutput, ConstantOperator.createBigint(0)),
+                        Expr.getBuiltinFunction(FunctionSet.IFNULL,
+                                new Type[] {Type.BIGINT, Type.BIGINT},
+                                Function.CompareMode.IS_IDENTICAL));
+                aggResultProjections.put(aggColumnRef, ifNullCall);
+
+                // Determine remote column name for the descriptor
+                String remoteColName = null;
+                if (!aggCall.getUsedColumns().isEmpty()) {
+                    ColumnRefOperator colRef = (ColumnRefOperator) aggCall.getArguments().get(0);
+                    Column scanCol = resolveToScanColumn(colRef, input);
+                    if (scanCol != null) {
+                        remoteColName = scanCol.getName();
+                    }
+                }
+                aggDescriptors.add(new AggPushdownDesc(FunctionSet.COUNT.toUpperCase(), remoteColName));
+
+            } else if (fnName.equals(FunctionSet.MIN) || fnName.equals(FunctionSet.MAX)) {
+                // MIN/MAX — result type matches the column type
+                ColumnRefOperator colRef = (ColumnRefOperator) aggCall.getArguments().get(0);
+                Column scanCol = resolveToScanColumn(colRef, input);
+                if (scanCol == null) {
+                    LOG.warn("Cannot resolve column ref {} to scan column", colRef);
+                    return null;
+                }
+                // Use StarRocks aggregate return type — for numeric/date types this aligns with
+                // JDBC driver type mapping. (String/boolean types are excluded by isSafeForMinMaxPushdown.)
+                Type colType = aggCall.getType();
+
+                Column c = new Column(metaColumnName, colType);
+                c.setIsAllowNull(true);
+                ColumnRefOperator placeholder =
+                        columnRefFactory.create(metaColumnName, colType, true);
+                columnRefFactory.updateColumnToRelationIds(placeholder.getId(), tableRelationId);
+                columnRefFactory.updateColumnRefToColumns(placeholder, c, scanOperator.getTable());
+                newScanColumnRefs.put(placeholder, c);
+
+                // Upper agg: MIN/MAX(placeholder) — idempotent for single-row JDBC result
+                ColumnRefOperator aggOutput =
+                        columnRefFactory.create(fnName.toLowerCase() + "_" + aggIndex, colType, true);
+                CallOperator newAggCall = new CallOperator(fnName, colType,
+                        Collections.singletonList(placeholder),
+                        Expr.getBuiltinFunction(fnName, new Type[] {colType},
+                                Function.CompareMode.IS_IDENTICAL));
+                newAggCalls.put(aggOutput, newAggCall);
+
+                // No IFNULL for MIN/MAX — null is a valid result for empty tables
+                aggResultProjections.put(aggColumnRef, aggOutput);
+
+                aggDescriptors.add(new AggPushdownDesc(fnName.toUpperCase(), scanCol.getName()));
+            }
         }
 
+        // Build reverse column map for the new scan
         Map<Column, ColumnRefOperator> newScanColumnMeta = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, Column> c : newScanColumnRefs.entrySet()) {
             newScanColumnMeta.put(c.getValue(), c.getKey());
@@ -144,7 +312,7 @@ public class RewriteSimpleAggToJDBCScanRule extends TransformationRule {
         ScanOptimizeOption newOption = scanOperator.getScanOptimizeOption() != null
                 ? scanOperator.getScanOptimizeOption().copy()
                 : new ScanOptimizeOption();
-        newOption.setCanUseCountOpt(true);
+        newOption.setPushedAggDescriptors(aggDescriptors);
         newScan.setScanOptimizeOption(newOption);
         // Note: JDBC scans don't support getScanOperatorPredicates() (no partition pruning),
         // so we skip copying them — unlike the HDFS variant which needs partition predicates.
@@ -153,18 +321,20 @@ public class RewriteSimpleAggToJDBCScanRule extends TransformationRule {
                 aggregationOperator.getGroupingKeys(), newAggCalls);
         newAggOperator.setProjection(aggregationOperator.getProjection());
 
-        // ifnull(sum(__count__)), 0) to avoid null result
-        CallOperator ifNullCall = new CallOperator(FunctionSet.IFNULL, Type.BIGINT,
-                Lists.newArrayList(sumOutputColumnRef, ConstantOperator.createBigint(0)),
-                Expr.getBuiltinFunction(FunctionSet.IFNULL, new Type[] {Type.BIGINT, Type.BIGINT},
-                        Function.CompareMode.IS_IDENTICAL));
-        Map<ColumnRefOperator, ScalarOperator> newProjectMap = Maps.newHashMap();
-        newProjectMap.putAll(newAggOperator.getColumnRefMap());
-        newProjectMap.remove(sumOutputColumnRef);
-        newProjectMap.put(aggColumnRef, ifNullCall);
-        LogicalProjectOperator newProjectOperator = new LogicalProjectOperator(newProjectMap);
+        // Build final project: start with any extra projection expressions from original agg operator,
+        // then override with our computed aggregate result mappings (IFNULL for COUNT, pass-through for MIN/MAX).
+        Map<ColumnRefOperator, ScalarOperator> finalProjectMap = Maps.newLinkedHashMap();
+        finalProjectMap.putAll(newAggOperator.getColumnRefMap());
+        finalProjectMap.putAll(aggResultProjections);
+        // Remove intermediate agg output refs (sumOutput, aggOutput) that are not original agg column refs
+        for (ColumnRefOperator newAggKey : newAggCalls.keySet()) {
+            if (!aggs.containsKey(newAggKey)) {
+                finalProjectMap.remove(newAggKey);
+            }
+        }
+        LogicalProjectOperator newProjectOperator = new LogicalProjectOperator(finalProjectMap);
 
-        // project(ifnull) -> agg(sum(__count__)) -> scan
+        // project -> agg -> scan
         OptExpression optExpression = OptExpression.create(newProjectOperator);
         OptExpression aggExpression = OptExpression.create(newAggOperator);
         optExpression.getInputs().add(aggExpression);
@@ -172,66 +342,11 @@ public class RewriteSimpleAggToJDBCScanRule extends TransformationRule {
         return optExpression;
     }
 
-    private LogicalScanOperator getScanOperator(final OptExpression input) {
-        if (hasProjectOperator) {
-            return (LogicalScanOperator) input.getInputs().get(0).getInputs().get(0).getOp();
-        } else {
-            return (LogicalScanOperator) input.getInputs().get(0).getOp();
-        }
-    }
-
-    @Override
-    public boolean check(final OptExpression input, OptimizerContext context) {
-        if (!context.getSessionVariable().isEnableJdbcAggPushdown()) {
-            return false;
-        }
-        LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) input.getOp();
-        LogicalScanOperator scanOperator = getScanOperator(input);
-
-        // no limit on scan
-        if (scanOperator.getLimit() != -1) {
-            return false;
-        }
-
-        // no GROUP BY (v1 — JDBC doesn't have partition columns concept)
-        if (!aggregationOperator.getGroupingKeys().isEmpty()) {
-            return false;
-        }
-
-        // not applicable if there is no aggregation functions, like `distinct x`.
-        if (aggregationOperator.getAggregations().isEmpty()) {
-            return false;
-        }
-
-        // all agg functions must be COUNT(*) or COUNT(non-null-constant), non-DISTINCT
-        boolean allValid = aggregationOperator.getAggregations().values().stream().allMatch(
-                aggregator -> {
-                    AggregateFunction aggregateFunction = (AggregateFunction) aggregator.getFunction();
-                    String functionName = aggregateFunction.functionName();
-                    ColumnRefSet usedColumns = aggregator.getUsedColumns();
-
-                    if (functionName.equals(FunctionSet.COUNT) && !aggregator.isDistinct() && usedColumns.isEmpty()) {
-                        List<ScalarOperator> arguments = aggregator.getArguments();
-                        if (arguments.isEmpty()) {
-                            // count()/count(*)
-                            return true;
-                        } else if (arguments.size() == 1 && !arguments.get(0).isConstantNull()) {
-                            // count(non-null constant)
-                            return true;
-                        }
-                        return false;
-                    }
-                    return false;
-                }
-        );
-        return allValid;
-    }
-
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) input.getOp();
         LogicalScanOperator scanOperator = getScanOperator(input);
-        OptExpression result = buildAggScanOperator(aggregationOperator, scanOperator, context);
+        OptExpression result = buildAggScanOperator(aggregationOperator, scanOperator, input, context);
         if (result == null) {
             return Lists.newArrayList(input);
         }

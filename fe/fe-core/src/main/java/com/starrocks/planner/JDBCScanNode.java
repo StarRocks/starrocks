@@ -33,6 +33,8 @@ import com.starrocks.thrift.TJDBCScanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.sql.optimizer.ScanOptimizeOption;
+import com.starrocks.sql.optimizer.ScanOptimizeOption.AggPushdownDesc;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -50,8 +52,9 @@ public class JDBCScanNode extends ScanNode {
     private String tableName;
     private JDBCTable table;
 
-    private boolean useCountOpt() {
-        return getScanOptimizeOption() != null && getScanOptimizeOption().getCanUseCountOpt();
+    private boolean hasAggPushdown() {
+        ScanOptimizeOption opt = getScanOptimizeOption();
+        return opt != null && !opt.getPushedAggDescriptors().isEmpty();
     }
 
     public JDBCScanNode(PlanNodeId id, TupleDescriptor desc, JDBCTable tbl) {
@@ -79,12 +82,7 @@ public class JDBCScanNode extends ScanNode {
             if (i > 0) {
                 sb.append(".");
             }
-            String part = parts[i];
-            if (part.length() > 2 && part.startsWith(identifier) && part.endsWith(identifier)) {
-                sb.append(part);
-            } else {
-                sb.append(identifier).append(part).append(identifier);
-            }
+            sb.append(quoteIdentifierPart(parts[i], identifier));
         }
         return sb.toString();
     }
@@ -133,7 +131,7 @@ public class JDBCScanNode extends ScanNode {
     }
 
     private void createJDBCTableColumns() {
-        if (useCountOpt()) {
+        if (hasAggPushdown()) {
             buildPushedAggExpressions();
             return;
         }
@@ -147,7 +145,7 @@ public class JDBCScanNode extends ScanNode {
                     colName.startsWith(objectIdentifier) && colName.endsWith(objectIdentifier))) {
                 columns.add(colName);
             } else {
-                columns.add(objectIdentifier + colName + objectIdentifier);
+                columns.add(quoteIdentifierPart(colName, objectIdentifier));
             }
         }
         // this happens when count(*)
@@ -157,18 +155,45 @@ public class JDBCScanNode extends ScanNode {
     }
 
     /**
-     * Build the pushed aggregate expressions for aggregate pushdown.
-     * v1: COUNT(*) only. The expression is dialect-aware (COUNT_BIG for SQL Server).
-     * v2 can add MIN(col), MAX(col), etc. — the thrift/BE interface already supports arbitrary expressions.
+     * Build pushed aggregate expressions from {@link AggPushdownDesc} descriptors.
+     * Generates dialect-aware SQL: COUNT_BIG for SQL Server, identifier quoting per DB type.
      */
     private void buildPushedAggExpressions() {
+        List<AggPushdownDesc> descriptors = getScanOptimizeOption().getPushedAggDescriptors();
         String jdbcUri = getJdbcUri();
-        if (jdbcUri != null && jdbcUri.startsWith("jdbc:sqlserver")) {
-            // SQL Server COUNT() returns int (overflows at ~2.1B rows). Use COUNT_BIG() for safety.
-            pushedAggExpressions.add("COUNT_BIG(*)");
-        } else {
-            pushedAggExpressions.add("COUNT(*)");
+        String identifier = getIdentifierSymbol();
+        boolean isSqlServer = jdbcUri != null && jdbcUri.startsWith("jdbc:sqlserver");
+
+        for (AggPushdownDesc desc : descriptors) {
+            String fn = desc.getFunctionName();
+            String col = desc.getColumnName();
+
+            if (fn.equalsIgnoreCase("COUNT")) {
+                String countFn = isSqlServer ? "COUNT_BIG" : "COUNT";
+                if (col == null) {
+                    pushedAggExpressions.add(countFn + "(*)");
+                } else {
+                    pushedAggExpressions.add(countFn + "(" + quoteIdentifierPart(col, identifier) + ")");
+                }
+            } else {
+                // MIN, MAX — no dialect variation needed
+                pushedAggExpressions.add(fn + "(" + quoteIdentifierPart(col, identifier) + ")");
+            }
         }
+    }
+
+    /**
+     * Quotes a single identifier part (column name, table name component).
+     * Escapes any embedded identifier characters by doubling them (SQL standard).
+     */
+    private static String quoteIdentifierPart(String name, String identifier) {
+        if (identifier.isEmpty()) {
+            return name;
+        }
+        if (name.length() > 2 && name.startsWith(identifier) && name.endsWith(identifier)) {
+            return name;
+        }
+        return identifier + name.replace(identifier, identifier + identifier) + identifier;
     }
 
     private String getJdbcUri() {
@@ -190,7 +215,9 @@ public class JDBCScanNode extends ScanNode {
         }
         if (jdbcUri.startsWith("jdbc:postgresql") ||
                 jdbcUri.startsWith("jdbc:postgres") ||
-                jdbcUri.startsWith("jdbc:vertica")) {
+                jdbcUri.startsWith("jdbc:vertica") ||
+                jdbcUri.startsWith("jdbc:oracle") ||
+                jdbcUri.startsWith("jdbc:sqlserver")) {
             return "\"";
         }
         return "";
@@ -207,7 +234,7 @@ public class JDBCScanNode extends ScanNode {
         for (SlotRef slotRef : slotRefs) {
             SlotRef tmpRef = (SlotRef) slotRef.clone();
             tmpRef.setTblName(null);
-            tmpRef.setLabel(identifier + tmpRef.getLabel() + identifier);
+            tmpRef.setLabel(quoteIdentifierPart(tmpRef.getLabel(), identifier));
             sMap.put(slotRef, tmpRef);
         }
 

@@ -14,11 +14,39 @@
 
 package com.starrocks.sql.optimizer;
 
+import java.util.Collections;
+import java.util.List;
+
 public class ScanOptimizeOption {
+
+    /**
+     * Describes a single aggregate expression to push down to a remote JDBC database.
+     * Used by RewriteSimpleAggToJDBCScanRule to communicate to JDBCScanNode what SQL
+     * aggregate expressions to generate (e.g. COUNT(*), MIN(col), MAX(col)).
+     */
+    public static class AggPushdownDesc {
+        private final String functionName; // "COUNT", "MIN", "MAX"
+        private final String columnName;   // null for COUNT(*), actual remote column name otherwise
+
+        public AggPushdownDesc(String functionName, String columnName) {
+            this.functionName = functionName;
+            this.columnName = columnName;
+        }
+
+        public String getFunctionName() {
+            return functionName;
+        }
+
+        public String getColumnName() {
+            return columnName;
+        }
+    }
+
     private boolean canUseAnyColumn;
     private boolean canUseMinMaxOpt;
     private boolean usePartitionColumnValueOnly;
     private boolean canUseCountOpt;
+    private List<AggPushdownDesc> pushedAggDescriptors = Collections.emptyList();
 
     public void setCanUseAnyColumn(boolean v) {
         canUseAnyColumn = v;
@@ -52,12 +80,21 @@ public class ScanOptimizeOption {
         return canUseCountOpt;
     }
 
+    public void setPushedAggDescriptors(List<AggPushdownDesc> descriptors) {
+        this.pushedAggDescriptors = List.copyOf(descriptors);
+    }
+
+    public List<AggPushdownDesc> getPushedAggDescriptors() {
+        return pushedAggDescriptors;
+    }
+
     public ScanOptimizeOption copy() {
         ScanOptimizeOption opt = new ScanOptimizeOption();
         opt.canUseAnyColumn = this.canUseAnyColumn;
         opt.canUseMinMaxOpt = this.canUseMinMaxOpt;
         opt.usePartitionColumnValueOnly = this.usePartitionColumnValueOnly;
         opt.canUseCountOpt = this.canUseCountOpt;
+        opt.pushedAggDescriptors = List.copyOf(this.pushedAggDescriptors);
         return opt;
     }
 }
