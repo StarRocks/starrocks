@@ -16,6 +16,7 @@
 
 #include <thrift/protocol/TDebugProtocol.h>
 
+#include <atomic>
 #include <vector>
 
 #include "base/failpoint/fail_point.h"
@@ -24,9 +25,6 @@
 #include "exprs/arithmetic_expr.h"
 #include "exprs/array_element_expr.h"
 #include "exprs/array_expr.h"
-#include "exprs/array_map_expr.h"
-#include "exprs/array_sort_lambda_expr.h"
-#include "exprs/arrow_function_call.h"
 #include "exprs/binary_predicate.h"
 #include "exprs/case_expr.h"
 #include "exprs/cast_expr.h"
@@ -34,19 +32,14 @@
 #include "exprs/column_ref.h"
 #include "exprs/compound_predicate.h"
 #include "exprs/condition_expr.h"
-#include "exprs/dict_query_expr.h"
-#include "exprs/dictionary_get_expr.h"
-#include "exprs/dictmapping_expr.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
-#include "exprs/function_call_expr.h"
+#include "exprs/expr_factory_internal.h"
 #include "exprs/in_predicate.h"
 #include "exprs/info_func.h"
 #include "exprs/is_null_predicate.h"
-#include "exprs/java_function_call_expr.h"
 #include "exprs/lambda_function.h"
 #include "exprs/literal.h"
-#include "exprs/map_apply_expr.h"
 #include "exprs/map_element_expr.h"
 #include "exprs/map_expr.h"
 #include "exprs/match_expr.h"
@@ -54,12 +47,52 @@
 #include "exprs/subfield_expr.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
-#include "runtime/runtime_state_helper.h"
-#ifdef STARROCKS_JIT_ENABLE
-#include "exprs/jit/expr_jit_pass.h"
-#endif
 
 namespace starrocks {
+
+namespace {
+
+std::atomic<ExprFactoryInternal::NonCoreExprCreator> g_non_core_expr_creator{nullptr};
+std::atomic<ExprFactoryInternal::JITRewriteHook> g_jit_rewrite_hook{nullptr};
+
+} // namespace
+
+void ExprFactoryInternal::register_non_core_expr_creator(NonCoreExprCreator creator) {
+    DCHECK_NE(creator, nullptr);
+    auto old_creator = g_non_core_expr_creator.load(std::memory_order_acquire);
+    if (old_creator == nullptr) {
+        g_non_core_expr_creator.store(creator, std::memory_order_release);
+        return;
+    }
+    DCHECK_EQ(old_creator, creator);
+}
+
+Status ExprFactoryInternal::try_create_non_core_expr(ObjectPool* pool, const TExprNode& texpr_node, Expr** expr,
+                                                     RuntimeState* state) {
+    auto creator = g_non_core_expr_creator.load(std::memory_order_acquire);
+    if (creator == nullptr) {
+        return Status::NotSupported("non-core expr creator is not registered");
+    }
+    return creator(pool, texpr_node, expr, state);
+}
+
+void ExprFactoryInternal::register_jit_rewrite_hook(JITRewriteHook hook) {
+    DCHECK_NE(hook, nullptr);
+    auto old_hook = g_jit_rewrite_hook.load(std::memory_order_acquire);
+    if (old_hook == nullptr) {
+        g_jit_rewrite_hook.store(hook, std::memory_order_release);
+        return;
+    }
+    DCHECK_EQ(old_hook, hook);
+}
+
+Status ExprFactoryInternal::try_rewrite_root_with_jit(Expr** root_expr, ObjectPool* pool, RuntimeState* state) {
+    auto rewrite_hook = g_jit_rewrite_hook.load(std::memory_order_acquire);
+    if (rewrite_hook == nullptr || state == nullptr || root_expr == nullptr || *root_expr == nullptr) {
+        return Status::OK();
+    }
+    return rewrite_hook(root_expr, pool, state);
+}
 
 namespace {
 
@@ -117,11 +150,7 @@ Status create_vectorized_expr(ObjectPool* pool, const TExprNode& texpr_node, Exp
     }
     case TExprNodeType::COMPUTE_FUNCTION_CALL:
     case TExprNodeType::FUNCTION_CALL: {
-        if (texpr_node.fn.binary_type == TFunctionBinaryType::SRJAR) {
-            *expr = pool->add(new JavaFunctionCallExpr(texpr_node));
-        } else if (texpr_node.fn.binary_type == TFunctionBinaryType::PYTHON) {
-            *expr = pool->add(new ArrowFunctionCallExpr(texpr_node));
-        } else if (texpr_node.fn.name.function_name == "if") {
+        if (texpr_node.fn.name.function_name == "if") {
             *expr = pool->add(VectorizedConditionExprFactory::create_if_expr(texpr_node));
         } else if (texpr_node.fn.name.function_name == "nullif") {
             *expr = pool->add(VectorizedConditionExprFactory::create_null_if_expr(texpr_node));
@@ -132,14 +161,11 @@ Status create_vectorized_expr(ObjectPool* pool, const TExprNode& texpr_node, Exp
         } else if (texpr_node.fn.name.function_name == "is_null_pred" ||
                    texpr_node.fn.name.function_name == "is_not_null_pred") {
             *expr = pool->add(VectorizedIsNullPredicateFactory::from_thrift(texpr_node));
-        } else if (texpr_node.fn.name.function_name == "array_map") {
-            *expr = pool->add(new ArrayMapExpr(texpr_node));
-        } else if (texpr_node.fn.name.function_name == "array_sort_lambda") {
-            *expr = pool->add(new ArraySortLambdaExpr(texpr_node));
-        } else if (texpr_node.fn.name.function_name == "map_apply") {
-            *expr = pool->add(new MapApplyExpr(texpr_node));
         } else {
-            *expr = pool->add(new VectorizedFunctionCallExpr(texpr_node));
+            auto st = ExprFactoryInternal::try_create_non_core_expr(pool, texpr_node, expr, state);
+            if (!st.ok() && !st.is_not_supported()) {
+                return st;
+            }
         }
         break;
     }
@@ -182,21 +208,20 @@ Status create_vectorized_expr(ObjectPool* pool, const TExprNode& texpr_node, Exp
     case TExprNodeType::PLACEHOLDER_EXPR:
         *expr = pool->add(new PlaceHolderRef(texpr_node));
         break;
-    case TExprNodeType::DICT_EXPR:
-        *expr = pool->add(new DictMappingExpr(texpr_node));
-        break;
     case TExprNodeType::LAMBDA_FUNCTION_EXPR:
         *expr = pool->add(new LambdaFunction(texpr_node));
         break;
     case TExprNodeType::CLONE_EXPR:
         *expr = pool->add(new CloneExpr(texpr_node));
         break;
+    case TExprNodeType::DICT_EXPR:
     case TExprNodeType::DICT_QUERY_EXPR:
-        *expr = pool->add(new DictQueryExpr(texpr_node));
-        break;
-    case TExprNodeType::DICTIONARY_GET_EXPR:
-        *expr = pool->add(new DictionaryGetExpr(texpr_node));
-        break;
+    case TExprNodeType::DICTIONARY_GET_EXPR: {
+        auto st = ExprFactoryInternal::try_create_non_core_expr(pool, texpr_node, expr, state);
+        if (!st.ok() && !st.is_not_supported()) {
+            return st;
+        }
+    } break;
     case TExprNodeType::MATCH_EXPR:
         *expr = pool->add(new MatchExpr(texpr_node));
         break;
@@ -257,15 +282,10 @@ Status create_tree_from_thrift(ObjectPool* pool, const std::vector<TExprNode>& n
 Status create_tree_from_thrift_with_jit(ObjectPool* pool, const std::vector<TExprNode>& nodes, int* node_idx,
                                         Expr** root_expr, RuntimeState* state) {
     Status status = create_tree_from_thrift(pool, nodes, nullptr, node_idx, root_expr, state);
-    if (state == nullptr || !status.ok() || !RuntimeStateHelper::is_jit_enabled(state)) {
+    if (!status.ok()) {
         return status;
     }
-
-#ifdef STARROCKS_JIT_ENABLE
-    RETURN_IF_ERROR(ExprJITPass::rewrite_root(root_expr, pool, state));
-#endif
-
-    return status;
+    return ExprFactoryInternal::try_rewrite_root_with_jit(root_expr, pool, state);
 }
 
 } // namespace
