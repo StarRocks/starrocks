@@ -602,8 +602,11 @@ struct GetContainer {
     }
 };
 
+<<<<<<< HEAD
 using ChunkSlice = ChunkSliceTemplate<ChunkUniquePtr>;
 using ChunkSharedSlice = ChunkSliceTemplate<ChunkPtr>;
 using SegmentedChunkSlice = ChunkSliceTemplate<SegmentedChunkPtr>;
 
+=======
+>>>>>>> d7ec772 ([Refactor] Remove get_proxy_data from BinaryColumn (#69758))
 } // namespace starrocks
