@@ -2062,6 +2062,7 @@ Latency metrics expose percentile series such as `merge_commit_request_latency_9
 - Labels: `write_type` (`insert`, `overwrite`, or `ctas`)
 - Description: Total number of data files written to Iceberg from write tasks (`INSERT`, `INSERT OVERWRITE`, `CTAS`). This represents the count of data files written to the Iceberg table. `write_type` distinguishes between the operation types.
 
+<<<<<<< HEAD
 ### Iceberg Compaction FE metrics
 
 #### iceberg_compaction_total
@@ -2098,3 +2099,52 @@ Latency metrics expose percentile series such as `merge_commit_request_latency_9
 - Type: Cumulative
 - Labels: `compaction_type` (`manual` or `auto`)
 - Description: Total number of delete files removed by Iceberg manual compaction tasks.
+=======
+### DataCache metrics
+
+DataCache metrics provide visibility into cache capacity, usage, and hit rate for data caching.
+
+The following metrics are exposed on the BE Prometheus endpoint (`/metrics`):
+
+#### datacache_mem_quota_bytes
+
+- Unit: Bytes
+- Type: Gauge
+- Description: The configured memory quota for datacache.
+
+#### datacache_mem_used_bytes
+
+- Unit: Bytes
+- Type: Gauge
+- Description: The current memory usage of datacache.
+
+#### datacache_disk_quota_bytes
+
+- Unit: Bytes
+- Type: Gauge
+- Description: The configured disk quota for datacache.
+
+#### datacache_disk_used_bytes
+
+- Unit: Bytes
+- Type: Gauge
+- Description: The current disk usage of datacache.
+
+#### datacache_meta_used_bytes
+
+- Unit: Bytes
+- Type: Gauge
+- Description: The memory usage for datacache metadata.
+
+#### block_cache_hit_bytes
+
+- Unit: Bytes
+- Type: Counter
+- Description: Cumulative bytes of block cache hits. For now, only the cache hit bytes for external table is being counted.
+
+#### block_cache_miss_bytes
+
+- Unit: Bytes
+- Type: Counter
+- Description: Cumulative bytes of block cache misses. For now, only the cache miss bytes for external table is being counted.
+>>>>>>> 3bd2f88dbf ([Enhancement] Add some monitor metrics for datacache (#69576))
