@@ -820,7 +820,7 @@ public class ConnectContext {
         return endTime;
     }
 
-    public void updateReturnRows(int returnRows) {
+    public void updateReturnRows(long returnRows) {
         this.returnRows += returnRows;
     }
 
