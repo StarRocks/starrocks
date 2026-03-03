@@ -2937,6 +2937,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ### 存算分离
 
+##### cloud_native_pk_index_rebuild_files_threshold
+
+- 默认值：50
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：云原生主键索引在恢复（Rebuild）时允许重建的最大 Segment 文件数。若需要重建的文件数超过该阈值，StarRocks 会立即将内存中的 MemTable 刷盘，以减少需要重放的 Segment 数量。设置为 `0` 则禁用此提前刷盘策略。
+- 引入版本：-
+
+##### cloud_native_pk_index_rebuild_rows_threshold
+
+- 默认值：10000000
+- 类型：Long
+- 单位：行
+- 是否动态：是
+- 描述：云原生主键索引在恢复（Rebuild）时允许重建的最大行数。若需要重建的行数超过该阈值，StarRocks 会立即将内存中的 MemTable 刷盘，以降低索引重建开销。设置为 `0` 则禁用此提前刷盘策略。与 `cloud_native_pk_index_rebuild_files_threshold` 配合使用，任一阈值超出均会触发刷盘。
+- 引入版本：-
+
 ##### download_buffer_size
 
 - 默认值：4194304
