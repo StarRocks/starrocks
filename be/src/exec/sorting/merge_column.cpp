@@ -172,10 +172,24 @@ public:
     template <typename SizeT>
     Status do_visit(const BinaryColumnBase<SizeT>& _) {
         using ColumnType = const BinaryColumnBase<SizeT>;
+<<<<<<< HEAD
         using Container = typename BinaryColumnBase<SizeT>::BinaryDataProxyContainer;
         auto& left_data = down_cast<const ColumnType*>(_left_col)->get_proxy_data();
         auto& right_data = down_cast<const ColumnType*>(_right_col)->get_proxy_data();
         return merge_ordinary_column<Container, Slice>(left_data, right_data);
+=======
+        if (use_german_string) {
+            using Container = typename BinaryColumnBase<SizeT>::GermanStringContainer;
+            auto& left_data = down_cast<const ColumnType*>(_left_col)->get_german_strings();
+            auto& right_data = down_cast<const ColumnType*>(_right_col)->get_german_strings();
+            return merge_ordinary_column<Container, GermanString>(left_data, right_data);
+        } else {
+            using ImmContainer = typename BinaryColumnBase<SizeT>::ImmContainer;
+            auto left_data = down_cast<const ColumnType*>(_left_col)->immutable_data();
+            auto right_data = down_cast<const ColumnType*>(_right_col)->immutable_data();
+            return merge_ordinary_column<ImmContainer, Slice>(left_data, right_data);
+        }
+>>>>>>> d7ec7728c1 ([Refactor] Remove get_proxy_data from BinaryColumn (#69758))
     }
 
     Status do_visit(const NullableColumn& _) {

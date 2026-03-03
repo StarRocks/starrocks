@@ -95,6 +95,14 @@ using SliceAggTwoLevelHashMap =
         phmap::parallel_flat_hash_map<Slice, AggDataPtr, SliceHashWithSeed<seed>, SliceEqual,
                                       phmap::priv::Allocator<phmap::priv::Pair<const Slice, AggDataPtr>>, PHMAPN>;
 
+<<<<<<< HEAD
+=======
+template <typename T>
+auto get_immutable_data(T* obj) {
+    return obj->immutable_data();
+}
+
+>>>>>>> d7ec7728c1 ([Refactor] Remove get_proxy_data from BinaryColumn (#69758))
 static_assert(sizeof(AggDataPtr) == sizeof(size_t));
 #define AGG_HASH_MAP_PRECOMPUTE_HASH_VALUES(column, prefetch_dist)              \
     size_t const column_size = column->size();                                  \
