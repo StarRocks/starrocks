@@ -507,7 +507,7 @@ MutableColumns ColumnHelper::to_mutable_columns(const Columns& columns) {
     MutableColumns mutable_columns;
     mutable_columns.reserve(columns.size());
     for (const auto& column : columns) {
-        mutable_columns.emplace_back(Column::mutate(column));
+        mutable_columns.emplace_back(std::move(*column).mutate()); // NOLINT(performance-move-const-arg)
     }
     return mutable_columns;
 }
