@@ -2059,3 +2059,38 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 - タイプ: Cumulative
 - ラベル: `delete_type` (`position` または `metadata`)
 - 説明: Iceberg `DELETE` タスクによって削除された総行数。`metadata` 削除の場合、削除されたデータファイル内の行数を表します。`position` 削除の場合、作成された position delete レコード数を表します。
+
+#### iceberg_compaction_total
+
+- 単位: Count
+- タイプ: Cumulative
+- ラベル: `compaction_type` (`manual` または `auto`)
+- 説明: Iceberg Compaction（`rewrite_data_files`）タスクの総数。
+
+#### iceberg_compaction_duration_ms_total
+
+- 単位: Millisecond
+- タイプ: Cumulative
+- ラベル: `compaction_type` (`manual` または `auto`)
+- 説明: Iceberg Compaction タスクの実行に費やされた合計時間。
+
+#### iceberg_compaction_input_files_total
+
+- 単位: Count
+- タイプ: Cumulative
+- ラベル: `compaction_type` (`manual` または `auto`)
+- 説明: Iceberg Compaction タスクによって読み込まれたデータファイルの総数。
+
+#### iceberg_compaction_output_files_total
+
+- 単位: Count
+- タイプ: Cumulative
+- ラベル: `compaction_type` (`manual` または `auto`)
+- 説明: Iceberg Compaction タスクによって生成されたデータファイルの総数。
+
+#### iceberg_compaction_removed_delete_files_total
+
+- 単位: Count
+- タイプ: Cumulative
+- ラベル: `compaction_type` (`manual` または `auto`)
+- 説明: Iceberg Compaction タスクによって削除された Delete File の総数。
