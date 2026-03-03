@@ -82,7 +82,7 @@ MutableColumnPtr FunctionHelper::create_column(const TypeDescriptor& type_desc, 
         p = MapColumn::create(std::move(keys), std::move(values), std::move(offsets));
     } else {
         auto col = type_dispatch_column(type, ColumnBuilder(), type_desc);
-        p = col ? std::move(*col).mutate() : nullptr;
+        p = col ? std::move(*col).mutate() : nullptr; // NOLINT(performance-move-const-arg)
     }
 
     if (nullable && p != nullptr) {

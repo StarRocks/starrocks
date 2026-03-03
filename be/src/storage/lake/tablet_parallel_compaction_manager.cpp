@@ -697,8 +697,8 @@ StatusOr<int> TabletParallelCompactionManager::create_parallel_tasks(
                                                                       max_bytes, std::move(callback), release_token));
 
     // Step 4: Submit subtasks
-    return submit_subtasks_from_groups(std::move(state_ptr), std::move(subtask_groups), force_base_compaction,
-                                       thread_pool, acquire_token, release_token);
+    return submit_subtasks_from_groups(state_ptr, std::move(subtask_groups), force_base_compaction, thread_pool,
+                                       acquire_token, release_token);
 }
 
 std::shared_ptr<TabletParallelCompactionState> TabletParallelCompactionManager::get_tablet_state(int64_t tablet_id,
