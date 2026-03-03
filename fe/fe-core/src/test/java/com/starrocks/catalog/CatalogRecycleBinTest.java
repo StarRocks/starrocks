@@ -1181,4 +1181,146 @@ public class CatalogRecycleBinTest {
         long adjustedTime2 = Deencapsulation.invoke(recycleBin, "getAdjustedRecycleTimestamp", p2.getId());
         Assertions.assertEquals(0, adjustedTime2);
     }
+
+    /**
+     * Regression test for the bug where disableRecoverPartitionWithSameName() would unconditionally
+     * reset idToRecycleTime for already-non-recoverable partitions with retention periods, causing
+     * them to become permanently stuck in the recycle bin.
+     *
+     * Scenario: Multiple non-recoverable partitions with the same name and a retention period are
+     * recycled at intervals shorter than the retention period. The old implementation would reset
+     * the recycle time of an already-non-recoverable partition each time a new same-name partition
+     * was added, effectively restarting the retention clock and preventing erasure.
+     */
+    @Test
+    public void testDisableRecoverPartitionWithSameNameNoClockResetForNonRecoverable(
+            @Mocked GlobalStateMgr globalStateMgr, @Mocked EditLog editLog) {
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getEditLog();
+                minTimes = 0;
+                result = editLog;
+
+                editLog.logErasePartition(anyLong);
+                minTimes = 0;
+            }
+        };
+        long dbId = 1;
+        long tableId = 2;
+        long retentionPeriodSec = 1800; // 30 minutes
+        DataProperty dataProperty = new DataProperty(TStorageMedium.HDD);
+        CatalogRecycleBin recycleBin = new CatalogRecycleBin();
+
+        // Step 1: Recycle partition p1 (non-recoverable, with retention period)
+        MaterializedIndex baseIndex1 = new MaterializedIndex(100, MaterializedIndex.IndexState.NORMAL);
+        Partition p1 = new Partition(1001, 1002, "CALLS_INFO_EVENTS_ONL", baseIndex1, null);
+        RecycleRangePartitionInfo info1 =
+                new RecycleRangePartitionInfo(dbId, tableId, p1, null, dataProperty, (short) 2, false, null);
+        info1.setRecoverable(false);
+        info1.setRetentionPeriod(retentionPeriodSec);
+        recycleBin.recyclePartition(info1);
+
+        // Step 2: Simulate p1 sitting in the recycle bin for a while, then manually push its
+        // recycle time back so it would be eligible for erasure after the retention period.
+        // In the production scenario, this partition had been in the bin for 17+ hours.
+        long simulatedOldRecycleTime = System.currentTimeMillis() - (retentionPeriodSec + 600) * 1000L;
+        recycleBin.idToRecycleTime.put(p1.getId(), simulatedOldRecycleTime);
+
+        // Step 3: Recycle a new partition p2 with the SAME name.
+        // This triggers disableRecoverPartitionWithSameName().
+        // Bug: the old code would reset p1's idToRecycleTime to now, restarting its 30-min clock.
+        // Fix: p1 is already non-recoverable, so its recycle time should NOT be reset.
+        MaterializedIndex baseIndex2 = new MaterializedIndex(101, MaterializedIndex.IndexState.NORMAL);
+        Partition p2 = new Partition(2001, 2002, "CALLS_INFO_EVENTS_ONL", baseIndex2, null);
+        RecycleRangePartitionInfo info2 =
+                new RecycleRangePartitionInfo(dbId, tableId, p2, null, dataProperty, (short) 2, false, null);
+        info2.setRecoverable(false);
+        info2.setRetentionPeriod(retentionPeriodSec);
+        recycleBin.recyclePartition(info2);
+
+        // Verify: p1's recycle time should NOT have been reset to current time
+        long p1RecycleTimeAfter = recycleBin.idToRecycleTime.get(p1.getId());
+        Assertions.assertEquals(simulatedOldRecycleTime, p1RecycleTimeAfter,
+                "Recycle time of already-non-recoverable partition should not be reset");
+
+        // Verify: p1 is still non-recoverable
+        RecyclePartitionInfo p1Info = recycleBin.getRecyclePartitionInfo(p1.getId());
+        Assertions.assertFalse(p1Info.isRecoverable());
+
+        // Verify: p1 should be erasable now (its retention period has long expired)
+        long now = System.currentTimeMillis();
+        recycleBin.erasePartition(now);
+        waitPartitionClearFinished(recycleBin, p1.getId(), now);
+        Assertions.assertNull(recycleBin.getPartition(p1.getId()),
+                "Partition p1 should have been erased since its retention period expired");
+
+        // Verify: p2 should still be in the recycle bin (it was just added)
+        Assertions.assertNotNull(
+                recycleBin.getPartition(p2.getId()), "Partition p2 should still be in the recycle bin");
+    }
+
+    /**
+     * Test that disableRecoverPartitionWithSameName processes ALL matching partitions,
+     * not just the first one found (removed the `break` statement).
+     */
+    @Test
+    public void testDisableRecoverPartitionWithSameNameProcessesAllMatches() {
+        long dbId = 1;
+        long tableId = 2;
+        DataProperty dataProperty = new DataProperty(TStorageMedium.HDD);
+        CatalogRecycleBin recycleBin = new CatalogRecycleBin();
+
+        // Add two recoverable partitions with the same name
+        MaterializedIndex baseIndex1 = new MaterializedIndex(101, MaterializedIndex.IndexState.NORMAL);
+        Partition p1 = new Partition(3001, 3002, "same_name", baseIndex1, null);
+        RecycleRangePartitionInfo info1 =
+                new RecycleRangePartitionInfo(dbId, tableId, p1, null, dataProperty, (short) 2, false, null);
+        info1.setRecoverable(true);
+        recycleBin.recyclePartition(info1);
+
+        MaterializedIndex baseIndex2 = new MaterializedIndex(102, MaterializedIndex.IndexState.NORMAL);
+        Partition p2 = new Partition(4001, 4002, "same_name", baseIndex2, null);
+        RecycleRangePartitionInfo info2 =
+                new RecycleRangePartitionInfo(dbId, tableId, p2, null, dataProperty, (short) 2, false, null);
+        info2.setRecoverable(true);
+        // Note: recycling p2 will call disableRecoverPartitionWithSameName which marks p1 non-recoverable
+        recycleBin.recyclePartition(info2);
+
+        // p1 should now be non-recoverable (disabled by p2's recycle)
+        RecyclePartitionInfo p1Info = recycleBin.getRecyclePartitionInfo(p1.getId());
+        Assertions.assertFalse(
+                p1Info.isRecoverable(), "p1 should be marked non-recoverable after p2 with same name was recycled");
+
+        // Now add a third partition p3 with the same name.
+        // With the fix (no break), BOTH p1 and p2 should be processed.
+        // p1 is already non-recoverable — its recycle time should NOT be reset.
+        // p2 is still recoverable — it should be marked non-recoverable.
+        long p1RecycleTimeBefore = recycleBin.idToRecycleTime.get(p1.getId());
+
+        MaterializedIndex baseIndex3 = new MaterializedIndex(103, MaterializedIndex.IndexState.NORMAL);
+        Partition p3 = new Partition(5001, 5002, "same_name", baseIndex3, null);
+        RecycleRangePartitionInfo info3 =
+                new RecycleRangePartitionInfo(dbId, tableId, p3, null, dataProperty, (short) 2, false, null);
+        info3.setRecoverable(true);
+        recycleBin.recyclePartition(info3);
+
+        // p1: already non-recoverable, recycle time should NOT be changed
+        RecyclePartitionInfo p1InfoAfter = recycleBin.getRecyclePartitionInfo(p1.getId());
+        Assertions.assertFalse(p1InfoAfter.isRecoverable());
+        Assertions.assertEquals(p1RecycleTimeBefore, recycleBin.idToRecycleTime.get(p1.getId()),
+                "p1's recycle time should not change since it was already non-recoverable");
+
+        // p2: was recoverable, should now be non-recoverable (processed because no break)
+        RecyclePartitionInfo p2Info = recycleBin.getRecyclePartitionInfo(p2.getId());
+        Assertions.assertFalse(p2Info.isRecoverable(),
+                "p2 should be marked non-recoverable — all matches should be processed, not just the first");
+
+        // p3: just added, should be recoverable
+        RecyclePartitionInfo p3Info = recycleBin.getRecyclePartitionInfo(p3.getId());
+        Assertions.assertTrue(p3Info.isRecoverable(), "p3 is the newly added partition and should remain recoverable");
+    }
 }
