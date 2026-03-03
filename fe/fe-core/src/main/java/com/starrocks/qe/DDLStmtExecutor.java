@@ -1170,10 +1170,10 @@ public class DDLStmtExecutor {
             Task task = taskManager.getTask(taskName);
             switch (alterTaskStmt.getAction()) {
                 case RESUME:
-                    taskManager.resumeTask(task);
+                    taskManager.resumeTask(task, false);
                     break;
                 case SUSPEND:
-                    taskManager.suspendTask(task);
+                    taskManager.suspendTask(task, false);
                     break;
                 case SET:
                     taskManager.updateTaskProperties(task, alterTaskStmt.getProperties());

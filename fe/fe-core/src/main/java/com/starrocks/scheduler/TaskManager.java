@@ -466,14 +466,16 @@ public class TaskManager implements MemoryTrackable {
      * Suspend a task, which will stop the task scheduler and kill the running task run.
      * NOTE: this method will write edit log.
      */
-    public void suspendTask(Task task) {
+    public void suspendTask(Task task, boolean isReplay) {
         if (task == null) {
             return;
         }
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterTask(
-                new AlterTaskInfo(task.getName(), Constants.TaskState.PAUSE),
-                wal -> task.setState(Constants.TaskState.PAUSE)
-        );
+        if (!isReplay) {
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterTask(
+                    new AlterTaskInfo(task.getName(), Constants.TaskState.PAUSE),
+                    wal -> task.setState(Constants.TaskState.PAUSE)
+            );
+        }
         suspendTaskInternal(task);
     }
 
@@ -512,14 +514,16 @@ public class TaskManager implements MemoryTrackable {
      * Resume a task, which will restart the task scheduler if the task is periodical.
      * NOTE: this method will write edit log.
      */
-    public void resumeTask(Task task) {
+    public void resumeTask(Task task, boolean isReplay) {
         if (task == null) {
             return;
         }
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterTask(
-                new AlterTaskInfo(task.getName(), Constants.TaskState.ACTIVE),
-                wal -> task.setState(Constants.TaskState.ACTIVE)
-        );
+        if (!isReplay) {
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterTask(
+                    new AlterTaskInfo(task.getName(), Constants.TaskState.ACTIVE),
+                    wal -> task.setState(Constants.TaskState.ACTIVE)
+            );
+        }
         resumeTaskInternal(task);
     }
 
@@ -549,21 +553,6 @@ public class TaskManager implements MemoryTrackable {
     }
 
     /**
-<<<<<<< HEAD
-     * Remove a property from the task's properties map.
-     * This method is thread-safe and acquires the task lock before modifying the properties.
-     */
-    public void removeTaskProperty(Task task, String propertyKey) {
-        if (task == null || propertyKey == null) {
-            return;
-        }
-        takeTaskLock();
-        try {
-            Map<String, String> current = task.getProperties();
-            if (current != null) {
-                current.remove(propertyKey);
-            }
-=======
      * Update task properties for subsequent executions.
      * NOTE: this method will write edit log.
      */
@@ -602,7 +591,25 @@ public class TaskManager implements MemoryTrackable {
                 task.setProperties(current);
             }
             current.putAll(properties);
->>>>>>> 061d18e8cd ([Feature] Support alter task command (#68675))
+        } finally {
+            taskUnlock();
+        }
+    }
+
+    /**
+     * Remove a property from the task's properties map.
+     * This method is thread-safe and acquires the task lock before modifying the properties.
+     */
+    public void removeTaskProperty(Task task, String propertyKey) {
+        if (task == null || propertyKey == null) {
+            return;
+        }
+        takeTaskLock();
+        try {
+            Map<String, String> current = task.getProperties();
+            if (current != null) {
+                current.remove(propertyKey);
+            }
         } finally {
             taskUnlock();
         }
