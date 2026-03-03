@@ -142,6 +142,7 @@ public:
     MemTracker* ordinal_index_mem_tracker() { return _ordinal_index_mem_tracker.get(); }
     MemTracker* bitmap_index_mem_tracker() { return _bitmap_index_mem_tracker.get(); }
     MemTracker* bloom_filter_index_mem_tracker() { return _bloom_filter_index_mem_tracker.get(); }
+    MemTracker* builtin_inverted_index_mem_tracker() { return _builtin_inverted_index_mem_tracker.get(); }
     MemTracker* segment_zonemap_mem_tracker() { return _segment_zonemap_mem_tracker.get(); }
     MemTracker* short_key_index_mem_tracker() { return _short_key_index_mem_tracker.get(); }
     MemTracker* compaction_mem_tracker() { return _compaction_mem_tracker.get(); }
@@ -207,6 +208,7 @@ private:
     std::shared_ptr<MemTracker> _ordinal_index_mem_tracker;
     std::shared_ptr<MemTracker> _bitmap_index_mem_tracker;
     std::shared_ptr<MemTracker> _bloom_filter_index_mem_tracker;
+    std::shared_ptr<MemTracker> _builtin_inverted_index_mem_tracker;
 
     // The memory used for compaction
     std::shared_ptr<MemTracker> _compaction_mem_tracker;
