@@ -14,8 +14,6 @@
 
 #include "exprs/cast_expr.h"
 
-#include "exprs/expr_factory.h"
-
 #ifdef STARROCKS_JIT_ENABLE
 #include <llvm/ADT/APInt.h>
 #include <llvm/IR/Constants.h>

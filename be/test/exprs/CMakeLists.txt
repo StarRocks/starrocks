@@ -17,6 +17,7 @@ set(EXPR_CORE_TEST_FILES
     arithmetic_expr_test.cpp
     array_expr_test.cpp
     case_expr_test.cpp
+    cast_expr_core_test.cpp
     function_context_core_test.cpp
     expr_core_test.cpp
     expr_context_core_test.cpp
