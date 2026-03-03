@@ -2060,3 +2060,51 @@ displayed_sidebar: docs
 - 类型：累积值
 - 标签：`write_type`（`insert`、`overwrite` 或 `ctas`）
 - 描述：Iceberg 写入任务（`INSERT`、`INSERT OVERWRITE`、`CTAS`）写入的数据文件总数。表示写入到 Iceberg 表的数据文件个数。`write_type` 区分三种操作类型。
+
+### DataCache BE 指标
+
+DataCache 指标提供了数据缓存的缓存容量、使用率和命中率的可见性。
+
+以下指标在 BE Prometheus 端点 (`/metrics`) 上暴露：
+
+#### datacache_mem_quota_bytes
+
+- 单位：Byte
+- 类型：Gauge
+- 描述：datacache 的内存配额。
+
+#### datacache_mem_used_bytes
+
+- 单位：Byte
+- 类型：Gauge
+- 描述：datacache 的当前内存使用量。
+
+#### datacache_disk_quota_bytes
+
+- 单位：Byte
+- 类型：Gauge
+- 描述：datacache 的磁盘配额。
+
+#### datacache_disk_used_bytes
+
+- 单位：Byte
+- 类型：Gauge
+- 描述：datacache 的当前磁盘使用量。
+
+#### datacache_meta_used_bytes
+
+- 单位：Byte
+- 类型：Gauge
+- 描述：datacache 元数据的内存使用量。
+
+#### block_cache_hit_bytes
+
+- 单位：Byte
+- 类型：Counter
+- 描述：Block Cache累计命中的字节数。目前仅统计外表的缓存命中情况。
+
+#### block_cache_miss_bytes
+
+- 单位：Byte
+- 类型：Counter
+- 描述：Block Cache累计未命中的字节数。目前仅统计外表的缓存未命中情况。
