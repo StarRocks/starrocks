@@ -22,28 +22,6 @@ namespace starrocks::lake {
 
 namespace {
 
-// Build ZoneMapDetail from TuplePB for a specific column.
-// Returns error if column_idx is out of range.
-StatusOr<ZoneMapDetail> build_zone_map_detail(const TuplePB& min_tuple, const TuplePB& max_tuple, int column_idx) {
-    if (column_idx >= min_tuple.values_size() || column_idx >= max_tuple.values_size()) {
-        return Status::InvalidArgument(fmt::format("column_idx {} out of range, min size: {}, max size: {}", column_idx,
-                                                   min_tuple.values_size(), max_tuple.values_size()));
-    }
-
-    DatumVariant min_variant;
-    RETURN_IF_ERROR(min_variant.from_proto(min_tuple.values(column_idx)));
-
-    DatumVariant max_variant;
-    RETURN_IF_ERROR(max_variant.from_proto(max_tuple.values(column_idx)));
-
-    // Data is sorted by sort key, nulls are placed first.
-    // If min is null, the segment contains null values (has_null = true).
-    // If min is not null, the segment does not contain null values.
-    // ZoneMapDetail(min_or_null_value, max_value) constructor handles this automatically.
-    ZoneMapDetail detail(min_variant.value(), max_variant.value());
-    return detail;
-}
-
 // Predicate tree visitor that determines if a segment can be pruned.
 struct MetadataPruner {
     // Handle single column predicate.
@@ -67,15 +45,26 @@ struct MetadataPruner {
             return false;
         }
 
-        // Build ZoneMapDetail using position 0 (the leading sort key) in the tuple.
-        auto detail_or = build_zone_map_detail(min_tuple, max_tuple, /*column_idx=*/0);
-        if (!detail_or.ok()) {
+        constexpr int column_idx = 0;
+        if (column_idx >= min_tuple.values_size() || column_idx >= max_tuple.values_size()) {
             return false;
         }
 
-        // Reuse ColumnPredicate::zone_map_filter.
-        // zone_map_filter returns false if segment definitely does not contain matching data.
-        return !col_pred->zone_map_filter(detail_or.value());
+        DatumVariant min_variant;
+        if (!min_variant.from_proto(min_tuple.values(column_idx)).ok()) {
+            return false;
+        }
+
+        DatumVariant max_variant;
+        if (!max_variant.from_proto(max_tuple.values(column_idx)).ok()) {
+            return false;
+        }
+
+        // DatumVariant owns the underlying Slice data via CopiedDatum. ZoneMapDetail only
+        // holds shallow Datum copies, so min_variant/max_variant must stay alive while
+        // zone_map_filter accesses the data.
+        ZoneMapDetail detail(min_variant.value(), max_variant.value());
+        return !col_pred->zone_map_filter(detail);
     }
 
     // AND node: if any child can prune, the whole AND can prune.
