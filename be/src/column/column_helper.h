@@ -293,7 +293,7 @@ public:
     // Cast ColumnPtr to special type ColumnPtr, ensure the input column is of the expected type,
     // otherwise it will throw an exception.
     template <LogicalType Type>
-    static inline RunTimeColumnType<Type>::Ptr cast_to(const ColumnPtr& value) {
+    static inline typename RunTimeColumnType<Type>::Ptr cast_to(const ColumnPtr& value) {
 #ifndef NDEBUG
         auto* result = dynamic_cast<const RunTimeColumnType<Type>*>(value.get());
         DCHECK(result) << "Cast failed for column: "
@@ -305,7 +305,7 @@ public:
     // Cast ColumnPtr to special type ColumnPtr, ensure the input column is of the expected type,
     // otherwise it will throw an exception.
     template <LogicalType Type>
-    static inline RunTimeColumnType<Type>::Ptr cast_to(ColumnPtr&& value) {
+    static inline typename RunTimeColumnType<Type>::Ptr cast_to(ColumnPtr&& value) {
 #ifndef NDEBUG
         auto* result = dynamic_cast<const RunTimeColumnType<Type>*>(value.get());
         DCHECK(result) << "Cast failed for column: "
@@ -317,7 +317,7 @@ public:
     // Cast MutableColumnPtr to special type MutableColumnPtr, ensure the input column is of the expected type,
     // otherwise it will throw an exception.
     template <LogicalType Type>
-    static inline RunTimeColumnType<Type>::MutablePtr cast_to(MutableColumnPtr&& value) {
+    static inline typename RunTimeColumnType<Type>::MutablePtr cast_to(MutableColumnPtr&& value) {
 #ifndef NDEBUG
         auto* result = dynamic_cast<const RunTimeColumnType<Type>*>(value.get());
         DCHECK(result) << "Cast failed for column: "
@@ -385,7 +385,7 @@ public:
     // Cast ColumnPtr to special type ColumnPtr, ensure the input column is of the expected type,
     // otherwise it will throw an exception.
     template <typename Type>
-    static inline Type::Ptr as_column(const ColumnPtr& value) {
+    static inline typename Type::Ptr as_column(const ColumnPtr& value) {
 #ifdef NDEBUG
         return Type::static_pointer_cast(value);
 #else
@@ -413,7 +413,7 @@ public:
     // Cast MutableColumnPtr to special type ColumnPtr, ensure the input column is of the expected type,
     // otherwise it will throw an exception.
     template <typename Type>
-    static inline Type::MutablePtr as_column(MutableColumnPtr&& value) {
+    static inline typename Type::MutablePtr as_column(MutableColumnPtr&& value) {
 #ifdef NDEBUG
         return Type::static_pointer_cast(std::move(value));
 #else
@@ -671,7 +671,7 @@ public:
 
 template <LogicalType ltype>
 struct GetContainer {
-    using ColumnType = RunTimeTypeTraits<ltype>::ColumnType;
+    using ColumnType = typename RunTimeTypeTraits<ltype>::ColumnType;
     static const auto get_data(const Column* column) {
         return ColumnHelper::as_raw_column<ColumnType>(column)->immutable_data();
     }

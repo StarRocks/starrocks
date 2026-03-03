@@ -147,8 +147,8 @@ public:
         result->resize_uninitialized(1);
         auto& r3 = result->get_data();
 
-        auto& r1 = ColumnHelper::cast_to_raw<LType>(v1)->immutable_data();
-        auto& r2 = ColumnHelper::cast_to_raw<RType>(v2)->immutable_data();
+        const auto r1 = ColumnHelper::cast_to_raw<LType>(v1)->immutable_data();
+        const auto r2 = ColumnHelper::cast_to_raw<RType>(v2)->immutable_data();
         r3[0] = OP::template apply<LCppType, RCppType, ResultCppType>(r1[0], r2[0]);
 
         return result;
