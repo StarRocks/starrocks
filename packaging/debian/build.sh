@@ -215,7 +215,7 @@ for COMP in "fe" "be" "cn"; do
     # Patch common log and PID paths
     for VAR in "sys_log_dir" "LOG_DIR" "PID_DIR"; do
         if [ "$VAR" == "PID_DIR" ]; then
-            VALUE="/run/starrocks"
+            VALUE="/run/starrocks-$COMP"
         else
             VALUE="/var/log/starrocks/$COMP"
         fi
