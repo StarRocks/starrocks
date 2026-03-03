@@ -16,11 +16,23 @@
 
 #include <fmt/format.h>
 
+#include "runtime/exec_env.h"
+#include "runtime/mem_tracker.h"
 #include "storage/index/index_descriptor.h"
 #include "storage/index/inverted/builtin/builtin_inverted_index_iterator.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
+
+BuiltinInvertedReader::BuiltinInvertedReader(const uint32_t index_id, int32_t gram_num)
+        : InvertedReader("", index_id), _gram_num(gram_num), _bitmap_index(nullptr) {
+    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->builtin_inverted_index_mem_tracker(),
+                             sizeof(BuiltinInvertedReader));
+}
+
+BuiltinInvertedReader::~BuiltinInvertedReader() {
+    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->builtin_inverted_index_mem_tracker(), mem_usage());
+}
 
 Status BuiltinInvertedReader::new_iterator(const std::shared_ptr<TabletIndex> index_meta,
                                            InvertedIndexIterator** iterator, const IndexReadOptions& index_opt) {
@@ -52,12 +64,21 @@ Status BuiltinInvertedReader::load(const IndexReadOptions& opt, void* meta) {
         return Status::InvalidArgument("Invalid argument for loading builtin inverted index");
     }
     const BitmapIndexPB bitmap_index_meta = reinterpret_cast<BuiltinInvertedIndexPB*>(meta)->bitmap_index();
-    _bitmap_index = std::make_unique<BitmapIndexReader>(_gram_num);
+    _bitmap_index = std::make_unique<BitmapIndexReader>(_gram_num, false);
 
-    ASSIGN_OR_RETURN(auto first_load, _bitmap_index->load(opt, bitmap_index_meta));
+    auto ret = _bitmap_index->load(opt, bitmap_index_meta);
+    if (!ret.ok()) {
+        _bitmap_index.reset();
+        return Status::InternalError(
+                fmt::format("Failed to load bitmap index for builtin inverted index: {}", ret.status().to_string()));
+    }
+    bool first_load = ret.value();
     if (!first_load) {
+        _bitmap_index.reset();
         return Status::InternalError("loading builtin inverted index more than once");
     }
+    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->builtin_inverted_index_mem_tracker(),
+                             mem_usage() - sizeof(BuiltinInvertedReader));
     return Status::OK();
 }
 
