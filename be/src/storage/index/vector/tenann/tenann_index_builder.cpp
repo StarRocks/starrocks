@@ -149,7 +149,7 @@ Status TenAnnIndexBuilderProxy::add(const Column& array_column, const size_t off
 Status TenAnnIndexBuilderProxy::flush() {
     try {
         _index_builder->Flush();
-    } catch (tenann::FatalError& e) {
+    } catch (tenann::Error& e) {
         LOG(WARNING) << e.what();
         return Status::InternalError(e.what());
     }
