@@ -250,8 +250,9 @@ for COMP in "fe" "be" "cn"; do
     if [ -d "$STAGING_DIR/etc/starrocks/$COMP" ]; then
         if ! find "$STAGING_DIR/etc/starrocks/$COMP" -type f -print0 \
             | LC_ALL=C sort -z \
-            | xargs -0 -I {} sh -c 'echo "$1" | sed "s|^'"$STAGING_DIR"'||"' _ {} \
-            > "$STAGING_DIR/DEBIAN/conffiles"
+            | while IFS= read -r -d '' filepath; do
+                printf '%s\n' "${filepath#"$STAGING_DIR"}"
+            done > "$STAGING_DIR/DEBIAN/conffiles"
         then
             echo "ERROR: Failed to generate conffiles for $COMP" >&2
             exit 1
