@@ -22,6 +22,7 @@
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
 #include "column/variant_column.h"
+#include "column/variant_encoder.h"
 #include "exprs/literal.h"
 #include "formats/parquet/predicate_filter_evaluator.h"
 #include "formats/parquet/schema.h"
@@ -29,7 +30,6 @@
 #include "gutil/strings/substitute.h"
 #include "storage/column_expr_predicate.h"
 #include "types/variant_value.h"
-#include "util/variant_encoder.h"
 
 namespace starrocks::parquet {
 

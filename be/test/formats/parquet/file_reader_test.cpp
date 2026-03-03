@@ -56,7 +56,6 @@
 #include "testutil/exprs_test_helper.h"
 #include "types/type_descriptor.h"
 #include "types/variant.h"
-#include "util/variant_encoder.h"
 
 namespace starrocks::parquet {
 

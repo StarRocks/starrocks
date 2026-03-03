@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/variant_encoder.h"
+#include "column/variant_encoder.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -38,9 +38,9 @@
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
 #include "common/status.h"
-#include "storage/types.h"
 #include "types/time_types.h"
 #include "types/type_descriptor.h"
+#include "types/type_info.h"
 #include "types/variant.h"
 #include "velocypack/vpack.h"
 

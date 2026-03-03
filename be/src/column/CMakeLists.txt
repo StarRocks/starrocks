@@ -37,6 +37,8 @@ ADD_BE_LIB(ColumnCore
         json_column.cpp
         adaptive_nullable_column.cpp
         column_helper.cpp
+        datum_convert.cpp
+        variant_encoder.cpp
         type_traits.cpp
         column_viewer.cpp
         column_view/column_view_base.cpp
@@ -56,7 +58,6 @@ ADD_BE_LIB(Column
         chunk_slice.cpp
         column_helper_time.cpp
         append_with_mask.cpp
-        datum_convert.cpp
         datum_tuple.cpp
         stream_chunk.cpp
 )
