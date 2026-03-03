@@ -32,6 +32,8 @@ displayed_sidebar: docs
   支持对外部 Hive 和 Iceberg 表执行 TRUNCATE TABLE。 [#64768](https://github.com/StarRocks/starrocks/pull/64768) [#65016](https://github.com/StarRocks/starrocks/pull/65016)
 - **Iceberg 与 Paimon 上的增量物化视图**
   将增量物化视图刷新能力扩展至 Iceberg Append-only 表和 Paimon 表，无需全表刷新即可实现查询加速。 [#65469](https://github.com/StarRocks/starrocks/pull/65469) [#62699](https://github.com/StarRocks/starrocks/pull/62699)
+- **面向 Iceberg 半结构化数据的 VARIANT 类型**
+  Iceberg Catalog 支持 VARIANT 数据类型，用于灵活的 Schema-on-read 半结构化数据存储与查询。支持读写、类型转换及 Parquet 集成。 [#63639](https://github.com/StarRocks/starrocks/pull/63639) [#66539](https://github.com/StarRocks/starrocks/pull/66539)
 - 支持读取 Iceberg 表中的文件路径和行位置元数据列。 [#67003](https://github.com/StarRocks/starrocks/pull/67003)
 - 支持读取 Iceberg v3 表中的 `_row_id`，并支持 Iceberg v3 的全局延迟物化（global late materialization）。 [#62318](https://github.com/StarRocks/starrocks/pull/62318) [#64133](https://github.com/StarRocks/starrocks/pull/64133)
 - 支持创建带自定义属性的 Iceberg 视图，并在 SHOW CREATE VIEW 输出中展示属性。 [#65938](https://github.com/StarRocks/starrocks/pull/65938)
@@ -44,10 +46,6 @@ displayed_sidebar: docs
 
 ### 查询引擎
 
-- **ASOF JOIN**
-  引入 ASOF JOIN，用于时间序列和事件关联查询，支持基于时间或有序键在两个数据集之间高效匹配最接近的记录。 [#63070](https://github.com/StarRocks/starrocks/pull/63070) [#63236](https://github.com/StarRocks/starrocks/pull/63236)
-- **面向半结构化数据的 VARIANT 类型**
-  引入 VARIANT 数据类型，用于灵活的 Schema-on-read 半结构化数据存储与查询。支持读写、类型转换及 Parquet 集成。 [#63639](https://github.com/StarRocks/starrocks/pull/63639) [#66539](https://github.com/StarRocks/starrocks/pull/66539)
 - **递归 CTE**
   支持递归公共表表达式（Recursive CTE），用于层级遍历、图查询和迭代式 SQL 计算。 [#65932](https://github.com/StarRocks/starrocks/pull/65932)
 - 改进 Skew Join v2 重写逻辑，支持基于统计信息的倾斜检测、直方图支持及 NULL 倾斜感知。 [#68680](https://github.com/StarRocks/starrocks/pull/68680) [#68886](https://github.com/StarRocks/starrocks/pull/68886)
