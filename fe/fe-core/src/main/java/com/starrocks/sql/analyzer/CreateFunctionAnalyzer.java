@@ -173,24 +173,10 @@ public class CreateFunctionAnalyzer {
     }
 
     private String getRealUrl(String url) throws IOException {
-        URI uri = URI.create(url);
-        String scheme = uri.getScheme();
-
-        if (scheme == null) {
-            return url;
+        if (!url.contains(":/")) {
+            return getJUdfUrl(url);
         }
-
-        switch (scheme.toLowerCase()) {
-            case "http":
-            case "https":
-            case "file":
-                return url;
-            case "s3":
-            case "s3a":
-                return getJUdfUrl(url);
-            default:
-                throw new IOException("Unsupported UDF URL scheme: " + scheme);
-        }
+        return url;
     }
 
     private String getJUdfUrl(String url) throws IOException {
@@ -198,7 +184,6 @@ public class CreateFunctionAnalyzer {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                     String.format("STARROCKS_HOME not found. Please set it first."));
         }
-        String objectPath = url.substring(url.indexOf("://") + 3);
         StorageVolumeMgr storageVolumeMgr = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
         if (storageVolumeMgr == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
@@ -209,9 +194,10 @@ public class CreateFunctionAnalyzer {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                     String.format("Storage volume '%s' not found. Please create it first.", this.storageVolumeName));
         }
-        String targetPath = String.format("%s/%s", STARROCKS_HOME_DIR + "/plugins/java_udf", objectPath);
+        String objectFullPath = sv.getLocations().get(0) + "/udf" + url;
+        String targetPath = String.format("%s/%s", STARROCKS_HOME_DIR + "/plugins/java_udf", url);
         String targetUrl = String.format("file://%s", targetPath);
-        UDFDownloader.download2Local(sv, url, targetPath);
+        UDFDownloader.download2Local(sv, objectFullPath, targetPath);
         return targetUrl;
     }
 
