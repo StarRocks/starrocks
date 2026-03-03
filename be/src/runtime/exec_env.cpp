@@ -227,6 +227,8 @@ Status GlobalEnv::_init_mem_tracker() {
     _bitmap_index_mem_tracker = regist_tracker(MemTrackerType::BITMAP_INDEX, -1, column_metadata_mem_tracker());
     _bloom_filter_index_mem_tracker =
             regist_tracker(MemTrackerType::BLOOM_FILTER_INDEX, -1, column_metadata_mem_tracker());
+    _builtin_inverted_index_mem_tracker =
+            regist_tracker(MemTrackerType::BUILTIN_INVERTED_INDEX, -1, column_metadata_mem_tracker());
 
     int64_t compaction_mem_limit = calc_max_compaction_memory(_process_mem_tracker->limit());
     _compaction_mem_tracker = regist_tracker(MemTrackerType::COMPACTION, compaction_mem_limit, process_mem_tracker());
