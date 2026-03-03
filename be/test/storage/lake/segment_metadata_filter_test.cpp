@@ -656,4 +656,69 @@ TEST_F(SegmentMetadataFilterTest, test_non_leading_sort_key_custom_order_by) {
     }
 }
 
+// Regression test: VARCHAR sort key with EQ predicate previously caused heap-use-after-free
+// because build_zone_map_detail returned a ZoneMapDetail holding shallow-copied Slices
+// while the owning DatumVariants had already been destroyed.
+TEST_F(SegmentMetadataFilterTest, test_varchar_sort_key_no_use_after_free) {
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(DUP_KEYS);
+    schema_pb.set_num_short_key_columns(1);
+
+    auto* c0 = schema_pb.add_column();
+    c0->set_unique_id(0);
+    c0->set_name("c0");
+    c0->set_type("VARCHAR");
+    c0->set_length(128);
+    c0->set_is_key(true);
+    c0->set_is_nullable(false);
+
+    auto* c1 = schema_pb.add_column();
+    c1->set_unique_id(1);
+    c1->set_name("c1");
+    c1->set_type("INT");
+    c1->set_is_key(false);
+    c1->set_is_nullable(false);
+    c1->set_aggregation("NONE");
+
+    schema_pb.add_sort_key_idxes(0);
+    auto varchar_schema = TabletSchema::create(schema_pb);
+
+    auto make_varchar_variant = [](const std::string& value) {
+        VariantPB var;
+        TypeDescriptor td = TypeDescriptor::create_varchar_type(128);
+        *var.mutable_type() = td.to_protobuf();
+        var.set_variant_type(VariantTypePB::NORMAL_VALUE);
+        var.set_value(value);
+        return var;
+    };
+
+    SegmentMetadataPB meta;
+    auto* min_tuple = meta.mutable_sort_key_min();
+    *min_tuple->add_values() = make_varchar_variant("apple");
+    auto* max_tuple = meta.mutable_sort_key_max();
+    *max_tuple->add_values() = make_varchar_variant("mango");
+    meta.set_num_rows(100);
+
+    // Value within range
+    {
+        std::unique_ptr<ColumnPredicate> pred(new_column_eq_predicate(get_type_info(TYPE_VARCHAR), 0, "banana"));
+        PredicateTree pred_tree = create_pred_tree_with_column_pred(pred.get());
+        ASSERT_TRUE(SegmentMetadataFilter::may_contain(meta, pred_tree, *varchar_schema));
+    }
+
+    // Value below range
+    {
+        std::unique_ptr<ColumnPredicate> pred(new_column_eq_predicate(get_type_info(TYPE_VARCHAR), 0, "aaa"));
+        PredicateTree pred_tree = create_pred_tree_with_column_pred(pred.get());
+        ASSERT_FALSE(SegmentMetadataFilter::may_contain(meta, pred_tree, *varchar_schema));
+    }
+
+    // Value above range
+    {
+        std::unique_ptr<ColumnPredicate> pred(new_column_eq_predicate(get_type_info(TYPE_VARCHAR), 0, "zzz"));
+        PredicateTree pred_tree = create_pred_tree_with_column_pred(pred.get());
+        ASSERT_FALSE(SegmentMetadataFilter::may_contain(meta, pred_tree, *varchar_schema));
+    }
+}
+
 } // namespace starrocks::lake
