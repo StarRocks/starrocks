@@ -191,7 +191,7 @@ public:
 
     template <typename T>
     Status do_visit(const BinaryColumnBase<T>& column) {
-        const auto& lhs_datas = column.get_proxy_data();
+        const auto lhs_datas = column.immutable_data();
         Slice rhs_data = _rhs_value.get<Slice>();
 
         if (_sort_order == 1) {
@@ -281,7 +281,7 @@ public:
 
     template <typename T>
     Status do_visit(const BinaryColumnBase<T>& column) {
-        auto& data = column.get_proxy_data();
+        auto data = column.immutable_data();
         ImmutableNullData null_data;
         if (_nullable_column != nullptr) {
             null_data = _nullable_column->immutable_data();
