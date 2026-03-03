@@ -2026,6 +2026,41 @@ displayed_sidebar: docs
 - 标签：`delete_type`（`position` 或 `metadata`）
 - 描述：Iceberg `DELETE` 任务删除的总行数。对于 `metadata` 删除，表示被删除数据文件中的行数；对于 `position` 删除，表示创建的 position delete 记录数。
 
+#### iceberg_compaction_total
+
+- 单位：Count
+- 类型：Cumulative
+- 标签：`compaction_type` (`manual` または `auto`)
+- 描述：Iceberg Compaction（`rewrite_data_files`）任务的总数。
+
+#### iceberg_compaction_duration_ms_total
+
+- 单位：Millisecond
+- 类型：Cumulative
+- 标签：`compaction_type` (`manual` または `auto`)
+- 描述：运行　Iceberg Compaction　任务的总耗时。
+
+#### iceberg_compaction_input_files_total
+
+- 单位：Count
+- 类型：Cumulative
+- 标签：`compaction_type` (`manual` または `auto`)
+- 描述：Iceberg Compaction 读取的数据文件总数。
+
+#### iceberg_compaction_output_files_total
+
+- 单位：Count
+- 类型：Cumulative
+- 标签：`compaction_type` (`manual` または `auto`)
+- 描述：Iceberg Compaction 生成的数据文件总数。
+
+#### iceberg_compaction_removed_delete_files_total
+
+- 单位：Count
+- 类型：Cumulative
+- 标签：`compaction_type` (`manual` または `auto`)
+- 描述：Iceberg Compaction 任务移除的　Delete 文件总数。
+
 ### Iceberg 写入 FE 指标
 
 #### iceberg_write_total
