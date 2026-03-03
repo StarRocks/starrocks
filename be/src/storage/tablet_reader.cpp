@@ -41,6 +41,7 @@
 #include "storage/seek_range.h"
 #include "storage/tablet.h"
 #include "storage/tablet_updates.h"
+#include "storage/type_info_allocator_adapter.h"
 #include "storage/types.h"
 #include "storage/union_iterator.h"
 #include "types/logical_type.h"
@@ -630,6 +631,13 @@ Status TabletReader::_init_delete_predicates(const TabletReaderParams& params, D
 // convert an OlapTuple to SeekTuple.
 Status TabletReader::_to_seek_tuple(const TabletSchemaCSPtr& tablet_schema, const OlapTuple& input, SeekTuple* tuple,
                                     MemPool* mempool) {
+    const TypeInfoAllocator* allocator = nullptr;
+    TypeInfoAllocator type_info_allocator;
+    if (mempool != nullptr) {
+        type_info_allocator = make_type_info_allocator(mempool);
+        allocator = &type_info_allocator;
+    }
+
     Schema schema;
     std::vector<Datum> values;
     values.reserve(input.size());
@@ -653,10 +661,10 @@ Status TabletReader::_to_seek_tuple(const TabletSchemaCSPtr& tablet_schema, cons
         // we treat it as VARCHAR, because the execution level CHAR is VARCHAR
         // CHAR type strings are truncated at the storage level after '\0'.
         if (f->type()->type() == TYPE_CHAR) {
-            RETURN_IF_ERROR(
-                    datum_from_string(get_type_info(TYPE_VARCHAR).get(), &values.back(), input.get_value(i), mempool));
+            RETURN_IF_ERROR(datum_from_string(get_type_info(TYPE_VARCHAR).get(), &values.back(), input.get_value(i),
+                                              allocator));
         } else {
-            RETURN_IF_ERROR(datum_from_string(f->type().get(), &values.back(), input.get_value(i), mempool));
+            RETURN_IF_ERROR(datum_from_string(f->type().get(), &values.back(), input.get_value(i), allocator));
         }
     }
     *tuple = SeekTuple(std::move(schema), std::move(values));
