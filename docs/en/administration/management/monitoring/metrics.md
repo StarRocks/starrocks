@@ -579,6 +579,30 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Type: Instantaneous
 - Description: Instantaneous value of resource group memory usage.
 
+### starrocks_be_mem_pool_mem_limit_bytes
+
+- Unit: Bytes
+- Type: Instantaneous
+- Description: Memory limit for each memory pool, measured in bytes.
+
+### starrocks_be_mem_pool_mem_usage_bytes
+
+- Unit: Bytes
+- Type: Instantaneous
+- Description: Currently used total memory by each memory pool, measured in bytes.
+
+### starrocks_be_mem_pool_mem_usage_ratio
+
+- Unit: -
+- Type: Instantaneous
+- Description: Ratio of the memory usage of the memory pool to the memory limit of the memory pool.
+
+### starrocks_be_mem_pool_workgroup_count
+
+- Unit: Count
+- Type: Instantaneous
+- Description: Number of resource groups assigned to each memory pool.
+
 ### starrocks_be_pipe_prepare_pool_queue_len
 
 - Unit: Count
