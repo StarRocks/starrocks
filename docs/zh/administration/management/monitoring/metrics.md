@@ -2033,28 +2033,28 @@ displayed_sidebar: docs
 - 标签：`compaction_type` (`manual` または `auto`)
 - 描述：Iceberg Compaction（`rewrite_data_files`）任务的总数。
 
-### iceberg_compaction_duration_ms_total
+#### iceberg_compaction_duration_ms_total
 
 - 单位：Millisecond
 - 类型：Cumulative
 - 标签：`compaction_type` (`manual` または `auto`)
 - 描述：运行　Iceberg Compaction　任务的总耗时。
 
-### iceberg_compaction_input_files_total
+#### iceberg_compaction_input_files_total
 
 - 单位：Count
 - 类型：Cumulative
 - 标签：`compaction_type` (`manual` または `auto`)
 - 描述：Iceberg Compaction 读取的数据文件总数。
 
-### iceberg_compaction_output_files_total
+#### iceberg_compaction_output_files_total
 
 - 单位：Count
 - 类型：Cumulative
 - 标签：`compaction_type` (`manual` または `auto`)
 - 描述：Iceberg Compaction 生成的数据文件总数。
 
-### iceberg_compaction_removed_delete_files_total
+#### iceberg_compaction_removed_delete_files_total
 
 - 单位：Count
 - 类型：Cumulative
