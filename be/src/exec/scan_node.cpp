@@ -137,8 +137,10 @@ static StatusOr<std::map<int, pipeline::MorselQueuePtr>> uniform_distribute_mors
                                                            std::move(morsels), has_more_scan_ranges));
         }
 
+        // queue_per_driver's size determines the scan's dop
+        // if morsels can be split, then we hope scan's dop is the same as pipeline dop
         if (has_more_from_split) {
-            for (; driver_seq < dop; driver_seq++) {
+            for (driver_seq = queue_per_driver.size(); driver_seq < dop; driver_seq++) {
                 queue_per_driver.emplace(driver_seq, std::make_unique<pipeline::DynamicMorselQueue>(
                                                              pipeline::Morsels(), has_more_scan_ranges));
             }
