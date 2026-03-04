@@ -40,8 +40,8 @@ public:
     using Byte = uint8_t;
     using Bytes = starrocks::raw::RawVectorPad16<uint8_t, ColumnAllocator<uint8_t>>;
 
-    struct BinaryDataProxyContainer {
-        BinaryDataProxyContainer(const BinaryColumnBase& column) : _column(column) {}
+    struct ImmContainer {
+        ImmContainer(const BinaryColumnBase& column) : _column(column) {}
 
         Slice operator[](size_t index) const { return _column.get_slice(index); }
 
@@ -53,8 +53,6 @@ public:
 
     using Container = Buffer<Slice>;
     using GermanStringContainer = Buffer<GermanString>;
-    using ProxyContainer = BinaryDataProxyContainer;
-    using ImmContainer = BinaryDataProxyContainer;
 
     // TODO(kks): when we create our own vector, we could let vector[-1] = 0,
     // and then we don't need explicitly emplace_back zero value
@@ -68,7 +66,7 @@ public:
     }
 
     explicit BinaryColumnBase(ContainerResource resource, Offsets offsets)
-            : _bytes(), _offsets(std::move(offsets)), _resource(std::move(resource)), _immuable_container(*this) {
+            : _bytes(), _offsets(std::move(offsets)), _resource(std::move(resource)) {
         if (_offsets.empty()) {
             _offsets.emplace_back(0);
         }
@@ -81,10 +79,7 @@ public:
 
     // NOTE: do *NOT* copy |_slices|
     BinaryColumnBase(BinaryColumnBase<T>&& rhs) noexcept
-            : _bytes(std::move(rhs._bytes)),
-              _offsets(std::move(rhs._offsets)),
-              _resource(std::move(rhs._resource)),
-              _immuable_container(*this) {}
+            : _bytes(std::move(rhs._bytes)), _offsets(std::move(rhs._offsets)), _resource(std::move(rhs._resource)) {}
 
     BinaryColumnBase<T>& operator=(BinaryColumnBase<T>&& rhs) noexcept {
         BinaryColumnBase<T> tmp(std::move(rhs));
@@ -344,7 +339,7 @@ public:
         return _german_strings;
     }
 
-    const ImmContainer immutable_data() const { return _immuable_container; }
+    const ImmContainer immutable_data() const { return ImmContainer(*this); }
 
     Bytes& get_bytes() {
         _ensure_materialized();
@@ -435,8 +430,6 @@ private:
     mutable bool _slices_cache = false;
     mutable GermanStringContainer _german_strings;
     mutable bool _german_strings_cache = false;
-
-    BinaryDataProxyContainer _immuable_container = BinaryDataProxyContainer(*this);
 };
 
 using Offsets = BinaryColumnBase<uint32_t>::Offsets;

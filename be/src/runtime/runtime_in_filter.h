@@ -76,7 +76,7 @@ class InRuntimeFilter final : public AbstractInRuntimeFilter {
 public:
     using CppType = RunTimeCppType<Type>;
     using ColumnType = RunTimeColumnType<Type>;
-    using ContainerType = RunTimeProxyContainerType<Type>;
+    using ContainerType = RunTimeImmContainerType<Type>;
     using HashSet = typename detail::LHashSet<Type>::LType;
     using ScopedPtr = typename butil::DoublyBufferedData<HashSet>::ScopedPtr;
 
