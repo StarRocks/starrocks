@@ -758,9 +758,6 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
                                   << "Using typed_value.";
                     }
 
-                    VariantMetadata meta(metadata_slice);
-                    RETURN_IF_ERROR(_ctx.use_metadata(meta));
-
                     // For partially shredded objects (both value and typed_value non-null),
                     // we need to pass both columns to the encoder for merging
                     if (!value_slice.empty() && _typed_value_type.is_struct_type()) {
@@ -773,7 +770,7 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
                         wrapper_type.children.emplace_back(TYPE_VARBINARY);
                         wrapper_type.children.emplace_back(_typed_value_type);
 
-                        auto variant = VariantEncoder::encode_shredded_column_row(wrapper_col, wrapper_type, i, &_ctx);
+                        auto variant = VariantEncoder::encode_datum(wrapper_col->get(i), wrapper_type);
                         if (!variant.ok()) {
                             variant_column->append(VariantRowValue::from_null());
                             continue;
@@ -781,8 +778,7 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
                         variant_column->append(variant.value());
                     } else {
                         // Only typed_value is present, encode directly
-                        auto variant = VariantEncoder::encode_shredded_column_row(typed_value_col, _typed_value_type, i,
-                                                                                  &_ctx);
+                        auto variant = VariantEncoder::encode_datum(typed_value_col->get(i), _typed_value_type);
                         if (!variant.ok()) {
                             variant_column->append(VariantRowValue::from_null());
                             continue;
@@ -839,9 +835,6 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
                               << "Using typed_value.";
                 }
 
-                VariantMetadata meta(metadata_slice);
-                RETURN_IF_ERROR(_ctx.use_metadata(meta));
-
                 // For partially shredded objects (both value and typed_value non-null),
                 // we need to pass both columns to the encoder for merging
                 if (!value_slice.empty() && _typed_value_type.is_struct_type()) {
@@ -854,7 +847,7 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
                     wrapper_type.children.emplace_back(TYPE_VARBINARY);
                     wrapper_type.children.emplace_back(_typed_value_type);
 
-                    auto variant = VariantEncoder::encode_shredded_column_row(wrapper_col, wrapper_type, i, &_ctx);
+                    auto variant = VariantEncoder::encode_datum(wrapper_col->get(i), wrapper_type);
                     if (!variant.ok()) {
                         variant_column->append(VariantRowValue::from_null());
                         continue;
@@ -862,8 +855,7 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
                     variant_column->append(variant.value());
                 } else {
                     // Only typed_value is present, encode directly
-                    auto variant =
-                            VariantEncoder::encode_shredded_column_row(typed_value_col, _typed_value_type, i, &_ctx);
+                    auto variant = VariantEncoder::encode_datum(typed_value_col->get(i), _typed_value_type);
                     if (!variant.ok()) {
                         variant_column->append(VariantRowValue::from_null());
                         continue;

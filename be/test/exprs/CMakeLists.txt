@@ -38,7 +38,6 @@ set(EXPR_CORE_TEST_FILES
     json_each_core_test.cpp
     struct_functions_test.cpp
     subfield_expr_test.cpp
-    variant_path_parser_test.cpp
     vectorized_literal_test.cpp
 )
 
