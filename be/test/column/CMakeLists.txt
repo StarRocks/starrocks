@@ -19,6 +19,7 @@ set(COLUMN_TEST_FILES
     german_string_test.cpp
     object_column_core_test.cpp
     variant_column_test.cpp
+    variant_encoder_test.cpp
     column_visitor_test.cpp
     column_filter_range_test.cpp
     column_viewer_core_test.cpp
@@ -37,8 +38,9 @@ set(COLUMN_TEST_FILES
     adaptive_nullable_column_core_test.cpp
     column_view_base_core_test.cpp
     type_traits_core_test.cpp
-    variant_converter_core_test.cpp
-    variant_encoder_core_test.cpp
+    variant_converter_test.cpp
+    variant_path_parser_test.cpp
+    variant_builder_test.cpp
 )
 
 set(COLUMN_TEST_LINK_LIBS

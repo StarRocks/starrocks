@@ -81,10 +81,10 @@ static void create_variant_from_test_data(const std::string& metadata_file, cons
 }
 
 // Test cases using real variant test data
-class VariantQueryTestFixture
+class VariantFunctionsTestQuery
         : public ::testing::TestWithParam<std::tuple<std::string, std::string, std::string, std::string>> {};
 
-TEST_P(VariantQueryTestFixture, variant_query_with_test_data) {
+TEST_P(VariantFunctionsTestQuery, variant_query_with_test_data) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto variant_column = VariantColumn::create();
     ColumnBuilder<TYPE_VARCHAR> path_builder(1);
@@ -135,7 +135,7 @@ TEST_P(VariantQueryTestFixture, variant_query_with_test_data) {
 
 // Test cases using real variant test data from parquet test files
 INSTANTIATE_TEST_SUITE_P(
-        VariantQueryTestWithRealData, VariantQueryTestFixture,
+        VariantQueryTestWithRealData, VariantFunctionsTestQuery,
         ::testing::Values(
                 // clang-format off
                 // Basic primitive tests using real test data
@@ -170,10 +170,6 @@ INSTANTIATE_TEST_SUITE_P(
                 std::make_tuple("primitive_int8.metadata", "primitive_int8.value", "NULL", "NULL")
                 // clang-format on
                 ));
-
-// Simplified test cases for basic functionality using simple variant values
-class VariantQuerySimpleTestFixture
-        : public ::testing::TestWithParam<std::tuple<std::string, std::string, std::string>> {};
 
 TEST_F(VariantFunctionsTest, variant_query_invalid_arguments) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
