@@ -91,6 +91,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.DuplicatedRequestException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
@@ -912,6 +913,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         for (Column column : table.getBaseSchema()) {
             if (column.isHidden()) {
+                continue;
+            }
+            // Filter out expression partition generated columns in DESC and information_schema.columns.
+            // SHOW CREATE TABLE also filters them in AstToStringBuilder to display user-created DDL.
+            if (column.isNameWithPrefix(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
                 continue;
             }
             final TColumnDesc desc =
