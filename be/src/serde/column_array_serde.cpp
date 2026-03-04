@@ -37,6 +37,7 @@
 #include "column/struct_column.h"
 #include "column/variant_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/config.h"
 #include "common/statusor.h"
 #include "serde/protobuf_serde.h"
 #include "types/hll.h"
