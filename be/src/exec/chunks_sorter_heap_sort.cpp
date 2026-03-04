@@ -256,7 +256,23 @@ void ChunksSorterHeapSort::_do_filter_data_for_type(detail::ChunkHolder* chunk_h
         auto* __restrict__ filter_data = filter->data();
         int sort_order_flag = _sort_desc.get_column_desc(0).sort_order;
 
-        auto do_filter = [&](const auto& order_by_data) {
+        if constexpr (lt_is_object_family<TYPE>) {
+            // Order by object values is not supported now, fe will report an error:
+            // Type (nested) percentile/hll/bitmap/json/struct/map not support order-by.
+            // So this code block will not be executed.
+            const auto& order_by_data = order_by_column->immutable_data();
+            if (sort_order_flag > 0) {
+                for (int i = 0; i < row_sz; ++i) {
+                    filter_data[i] = (*order_by_data[i]) < (*need_filter_data);
+                }
+            } else {
+                for (int i = 0; i < row_sz; ++i) {
+                    filter_data[i] = (*order_by_data[i]) > (*need_filter_data);
+                }
+            }
+        } else {
+            // Use raw pointers for auto-vectorization to optimize performance with fixed-length values.
+            const auto* __restrict__ order_by_data = order_by_column->get_data().data();
             if (sort_order_flag > 0) {
                 for (int i = 0; i < row_sz; ++i) {
                     filter_data[i] = order_by_data[i] < need_filter_data;
@@ -266,14 +282,6 @@ void ChunksSorterHeapSort::_do_filter_data_for_type(detail::ChunkHolder* chunk_h
                     filter_data[i] = order_by_data[i] > need_filter_data;
                 }
             }
-        };
-
-        if constexpr (lt_is_object_family<TYPE>) {
-            do_filter(order_by_column->immutable_data());
-        } else {
-            // Use raw pointers for auto-vectorization to optimize performance with fixed-length values.
-            const auto* __restrict__ raw = order_by_column->get_data().data();
-            do_filter(raw);
         }
     }
 }
