@@ -49,7 +49,6 @@
 #include "storage/column_predicate.h"
 #include "storage/olap_common.h"
 #include "storage/range.h"
-#include "storage/rowset/page_decoder.h"
 #include "storage/types.h"
 
 namespace starrocks {
@@ -97,9 +96,7 @@ public:
         status = page_decoder.next_batch(&size, column.get());
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(3U, size);
-        ASSERT_EQ("Hello", column->get_data()[0]);
-        ASSERT_EQ(",", column->get_data()[1]);
-        ASSERT_EQ("StarRocks", column->get_data()[2]);
+        ASSERT_EQ("['Hello', ',', 'StarRocks']", column->debug_string());
 
         size = 1024;
         auto column1 = BinaryColumn::create();
@@ -107,7 +104,7 @@ public:
         status = page_decoder.next_batch(&size, column1.get());
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(1, size);
-        ASSERT_EQ("StarRocks", column1->get_data()[0]);
+        ASSERT_EQ("StarRocks", column1->immutable_data()[0]);
 
         auto column2 = BinaryColumn::create();
         ASSERT_OK(page_decoder.seek_to_position_in_page(0));
@@ -117,8 +114,7 @@ public:
         status = page_decoder.next_batch(read_range, column2.get());
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(2, column2->size());
-        ASSERT_EQ("Hello", column2->get_data()[0]);
-        ASSERT_EQ("StarRocks", column2->get_data()[1]);
+        ASSERT_EQ("[Hello, StarRocks]", column2->debug_string());
     }
 };
 
@@ -216,9 +212,7 @@ TEST_F(BinaryPlainPageTest, TestNextBatchWithFilter) {
         ASSERT_EQ(1, selection[4]);
 
         ASSERT_EQ(3, column->size());
-        ASSERT_EQ("c_300", column->get_data()[0]);
-        ASSERT_EQ("d_400", column->get_data()[1]);
-        ASSERT_EQ("e_500", column->get_data()[2]);
+        ASSERT_EQ("[c_300, d_400, e_500]", column->debug_string());
     }
 
     // Reset decoder
@@ -252,9 +246,7 @@ TEST_F(BinaryPlainPageTest, TestNextBatchWithFilter) {
         auto nullable_col = down_cast<NullableColumn*>(column.get());
         auto binary_col = down_cast<BinaryColumn*>(nullable_col->data_column_raw_ptr());
 
-        ASSERT_EQ("c_300", binary_col->get_data()[0]);
-        ASSERT_EQ("d_400", binary_col->get_data()[1]);
-        ASSERT_EQ("e_500", binary_col->get_data()[2]);
+        ASSERT_EQ("[c_300, d_400, e_500]", binary_col->debug_string());
 
         ASSERT_EQ(3, nullable_col->null_column_raw_ptr()->size());
         ASSERT_EQ(0, nullable_col->null_column_data()[0]);
@@ -306,7 +298,7 @@ TEST_F(BinaryPlainPageTest, TestNextBatchWithFilter) {
         auto nullable_col = down_cast<NullableColumn*>(column.get());
         auto binary_col = down_cast<BinaryColumn*>(nullable_col->data_column_raw_ptr());
 
-        ASSERT_EQ("d_400", binary_col->get_data()[0]);
+        ASSERT_EQ("d_400", binary_col->immutable_data()[0]);
     }
 }
 
@@ -337,12 +329,7 @@ TEST_F(BinaryPlainPageTest, TestReadByRowids) {
     Status st = decoder.read_by_rowids(0, rowids, &num_read, column.get());
     ASSERT_TRUE(st.ok());
     ASSERT_EQ(4, num_read);
-    ASSERT_EQ(4, column->size());
-
-    ASSERT_EQ("val_1", column->get_data()[0]);
-    ASSERT_EQ("val_3", column->get_data()[1]);
-    ASSERT_EQ("val_5", column->get_data()[2]);
-    ASSERT_EQ("val_8", column->get_data()[3]);
+    ASSERT_EQ("[val_1, val_3, val_5, val_8]", column->debug_string());
 }
 
 TEST_F(BinaryPlainPageTest, TestDictFilterSelectionLargeDictSize) {

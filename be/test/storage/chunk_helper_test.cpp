@@ -266,7 +266,7 @@ TEST_F(ChunkHelperTest, SegmentedChunk) {
     while (!slice.empty()) {
         auto chunk = slice.cutoff(1000);
         EXPECT_LE(chunk->num_rows(), 1000);
-        auto& slices = ColumnHelper::as_column<BinaryColumn>(chunk->get_column_by_index(1))->get_data();
+        const auto& slices = ColumnHelper::as_column<BinaryColumn>(chunk->get_column_by_index(1))->immutable_data();
         for (int i = 0; i < chunk->num_rows(); i++) {
             EXPECT_EQ(total_rows + i, chunk->get_column_by_index(0)->get(i).get_int32());
             EXPECT_EQ(fmt::format("str{}", total_rows + i + 1), slices[i].to_string());

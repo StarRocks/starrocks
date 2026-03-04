@@ -214,7 +214,7 @@ void test_agg_function(FunctionContext* ctx, const AggregateFunction* func, TRes
     const Column* row_column = column.get();
     func->update_batch_single_state(ctx, row_column->size(), &row_column, aggr_state->state());
     func->finalize_to_column(ctx, aggr_state->state(), result_column.get());
-    ASSERT_EQ(update_result1, result_column->get_data()[0]);
+    ASSERT_EQ(update_result1, result_column->immutable_data()[0]);
 
     // update input column 2
     auto aggr_state2 = ManagedAggrState::create(ctx, func);
@@ -222,7 +222,7 @@ void test_agg_function(FunctionContext* ctx, const AggregateFunction* func, TRes
     row_column = column2.get();
     func->update_batch_single_state(ctx, row_column->size(), &row_column, aggr_state2->state());
     func->finalize_to_column(ctx, aggr_state2->state(), result_column.get());
-    ASSERT_EQ(update_result2, result_column->get_data()[1]);
+    ASSERT_EQ(update_result2, result_column->immutable_data()[1]);
 
     // merge column 1 and column 2
     MutableColumnPtr serde_column = BinaryColumn::create();
@@ -234,7 +234,7 @@ void test_agg_function(FunctionContext* ctx, const AggregateFunction* func, TRes
     func->serialize_to_column(ctx, aggr_state->state(), serde_column.get());
     func->merge(ctx, serde_column.get(), aggr_state2->state(), 0);
     func->finalize_to_column(ctx, aggr_state2->state(), result_column.get());
-    ASSERT_EQ(merge_result, result_column->get_data()[2]);
+    ASSERT_EQ(merge_result, result_column->immutable_data()[2]);
 }
 
 template <LogicalType LT, typename TResult = RunTimeCppType<TYPE_DECIMAL128>, typename = DecimalLTGuard<LT>>
