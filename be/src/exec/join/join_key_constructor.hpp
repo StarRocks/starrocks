@@ -25,24 +25,29 @@ namespace starrocks {
 // KeyConstructorForOneKey
 // ------------------------------------------------------------------------------------
 
+
+template <LogicalType LT>
+void BuildKeyConstructorForOneKey<LT>::build_key(RuntimeState* state, JoinHashTableItems* table_items) {
+    // TODO: Going forward, if system testing verifies: the slice cache has no impact on join performance on all scene,
+    // we will ultimately avoid building the slice cache. According to the current simple benchmark results,
+    // it only has a minor performance optimization in mid-cardinality scenarios.
+    if constexpr (lt_is_string<LT>) {
+        const auto* data_column = ColumnHelper::get_data_column(table_items->key_columns[0]);
+        if (UNLIKELY(data_column->is_large_binary())) {
+            ColumnHelper::as_raw_column<LargeBinaryColumn>(data_column)->build_slices(table_items->build_slice);
+        } else {
+            ColumnHelper::as_raw_column<BinaryColumn>(data_column)->build_slices(table_items->build_slice);
+        }
+    }
+}
+
 template <LogicalType LT>
 auto BuildKeyConstructorForOneKey<LT>::get_key_data(const JoinHashTableItems& table_items) -> const ImmBuffer<CppType> {
-    ColumnPtr data_column;
-    if (table_items.key_columns[0]->is_nullable()) {
-        auto* null_column = ColumnHelper::as_raw_column<NullableColumn>(table_items.key_columns[0]);
-        data_column = null_column->data_column();
-    } else {
-        data_column = table_items.key_columns[0];
-    }
-
     if constexpr (lt_is_string<LT>) {
-        if (UNLIKELY(data_column->is_large_binary())) {
-            return ColumnHelper::as_raw_column<LargeBinaryColumn>(data_column)->get_data();
-        } else {
-            return ColumnHelper::as_raw_column<BinaryColumn>(data_column)->get_data();
-        }
+        return table_items.build_slice;
     } else {
-        return ColumnHelper::as_raw_column<ColumnType>(data_column)->get_data();
+        const auto* data_column = ColumnHelper::get_data_column(table_items.key_columns[0]);
+        return ColumnHelper::as_raw_column<ColumnType>(data_column)->immutable_data();
     }
 }
 
@@ -67,17 +72,21 @@ void ProbeKeyConstructorForOneKey<LT>::build_key(const JoinHashTableItems& table
     } else {
         probe_state->null_array = std::nullopt;
     }
+    if constexpr (lt_is_string<LT>) {
+        const auto* data_column = ColumnHelper::get_data_column_by_type<LT>((*probe_state.key_columns)[0]);
+        data_column->build_slices(probe_state->probe_slice);
+    }
 }
 
 template <LogicalType LT>
 auto ProbeKeyConstructorForOneKey<LT>::get_key_data(const HashTableProbeState& probe_state)
         -> const ImmBuffer<CppType> {
-    if ((*probe_state.key_columns)[0]->is_nullable()) {
-        auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>((*probe_state.key_columns)[0]);
-        return ColumnHelper::as_raw_column<ColumnType>(nullable_column->data_column())->get_data();
+    if constexpr(lt_is_string<LT>) {
+        return probe_state.probe_slice;
+    } else {
+        const auto* data_column = ColumnHelper::get_data_column_by_type<LT>((*probe_state.key_columns)[0]);
+        return data_column->get_data();
     }
-
-    return ColumnHelper::as_raw_column<ColumnType>((*probe_state.key_columns)[0])->get_data();
 }
 
 // ------------------------------------------------------------------------------------
