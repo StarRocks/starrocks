@@ -770,6 +770,9 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
                         wrapper_type.children.emplace_back(TYPE_VARBINARY);
                         wrapper_type.children.emplace_back(_typed_value_type);
 
+                        // TODO(variant-shredding-next-pr): Temporary compatibility path.
+                        // Remove this wrapper-struct encode_datum() fallback once we have
+                        // a dedicated shredded-row encoder with correct metadata merge.
                         auto variant = VariantEncoder::encode_datum(wrapper_col->get(i), wrapper_type);
                         if (!variant.ok()) {
                             variant_column->append(VariantRowValue::from_null());
@@ -847,6 +850,9 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
                     wrapper_type.children.emplace_back(TYPE_VARBINARY);
                     wrapper_type.children.emplace_back(_typed_value_type);
 
+                    // TODO(variant-shredding-next-pr): Temporary compatibility path.
+                    // Remove this wrapper-struct encode_datum() fallback once we have
+                    // a dedicated shredded-row encoder with correct metadata merge.
                     auto variant = VariantEncoder::encode_datum(wrapper_col->get(i), wrapper_type);
                     if (!variant.ok()) {
                         variant_column->append(VariantRowValue::from_null());
