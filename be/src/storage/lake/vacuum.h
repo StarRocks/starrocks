@@ -16,7 +16,6 @@
 
 #include <list>
 
-#include "common/config.h"
 #include "common/statusor.h"
 #include "gen_cpp/lake_service.pb.h"
 #include "storage/lake/async_file_deleter.h"
