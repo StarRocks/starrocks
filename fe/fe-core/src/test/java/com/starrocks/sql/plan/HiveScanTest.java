@@ -137,15 +137,11 @@ public class HiveScanTest extends ConnectorPlanTestBase {
     @Test
     public void testIcebergRewriteSimpleAggToHdfsScan() throws Exception {
         connectContext.getSessionVariable().setEnableRewriteSimpleAggToHdfsScan(true);
-        // positive cases.
+        // positive cases with GROUP BY — these use the ___count___ BE scan optimization.
         {
             String[] sqlString = {
-                    "select count(*) + 1 from iceberg0.partitioned_db.t1",
-                    "select count(*) + 1 from iceberg0.partitioned_db.t1 where date = '2020-01-01'",
                     "select count(*) + 1, date from iceberg0.partitioned_db.t1 where date = '2020-01-01' " +
                             "group by date",
-                    "select count(*) from iceberg0.partitioned_db.t1",
-                    "select count(*) from iceberg0.partitioned_db.t1 where date = '2020-01-01'",
                     "select count(*), date from iceberg0.partitioned_db.t1 where date = '2020-01-01' " +
                             "group by date",
                     "select count(*), date from iceberg0.partitioned_db.t1 group by date having date > '2020-01-01'",
@@ -155,6 +151,23 @@ public class HiveScanTest extends ConnectorPlanTestBase {
                 String plan = getFragmentPlan(sql);
                 assertContains(plan, "___count___");
                 assertContains(plan, "ifnull");
+            }
+        }
+        // positive cases without GROUP BY — the FE manifest short-circuit computes count(*) = 0
+        // directly from the mock Iceberg table (null snapshot = empty table), returning a constant.
+        {
+            String[] sqlString = {
+                    "select count(*) + 1 from iceberg0.partitioned_db.t1",
+                    "select count(*) + 1 from iceberg0.partitioned_db.t1 where date = '2020-01-01'",
+                    "select count(*) from iceberg0.partitioned_db.t1",
+                    "select count(*) from iceberg0.partitioned_db.t1 where date = '2020-01-01'",
+            };
+            for (int i = 0; i < sqlString.length; i++) {
+                String sql = sqlString[i];
+                String plan = getFragmentPlan(sql);
+                // FE manifest short-circuit: empty mock table → constant result via UNION
+                assertContains(plan, "UNION");
+                assertNotContains(plan, "___count___");
             }
         }
         // negative cases.

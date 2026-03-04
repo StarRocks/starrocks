@@ -31,6 +31,7 @@ public class GetRemoteFilesParams {
     private boolean useCache = true;
     private boolean checkPartitionExistence = true;
     private boolean enableColumnStats = false;
+    private boolean useManifestCountOpt = false;
 
     protected GetRemoteFilesParams(Builder builder) {
         this.partitionKeys = builder.partitionKeys;
@@ -43,6 +44,7 @@ public class GetRemoteFilesParams {
         this.useCache = builder.useCache;
         this.checkPartitionExistence = builder.checkPartitionExistence;
         this.enableColumnStats = builder.enableColumnStats;
+        this.useManifestCountOpt = builder.useManifestCountOpt;
     }
 
     public int getPartitionSize() {
@@ -67,6 +69,7 @@ public class GetRemoteFilesParams {
                 .setUseCache(useCache)
                 .setCheckPartitionExistence(checkPartitionExistence)
                 .setEnableColumnStats(enableColumnStats)
+                .setUseManifestCountOpt(useManifestCountOpt)
                 .build();
     }
 
@@ -134,6 +137,10 @@ public class GetRemoteFilesParams {
         return enableColumnStats;
     }
 
+    public boolean isUseManifestCountOpt() {
+        return useManifestCountOpt;
+    }
+
     public static class Builder {
         private List<PartitionKey> partitionKeys;
         private List<String> partitionNames;
@@ -145,6 +152,7 @@ public class GetRemoteFilesParams {
         private boolean useCache = true;
         private boolean checkPartitionExistence = true;
         private boolean enableColumnStats = false;
+        private boolean useManifestCountOpt = false;
 
         public Builder setPartitionKeys(List<PartitionKey> partitionKeys) {
             this.partitionKeys = partitionKeys;
@@ -193,6 +201,11 @@ public class GetRemoteFilesParams {
 
         public Builder setEnableColumnStats(boolean enableColumnStats) {
             this.enableColumnStats = enableColumnStats;
+            return this;
+        }
+
+        public Builder setUseManifestCountOpt(boolean useManifestCountOpt) {
+            this.useManifestCountOpt = useManifestCountOpt;
             return this;
         }
 

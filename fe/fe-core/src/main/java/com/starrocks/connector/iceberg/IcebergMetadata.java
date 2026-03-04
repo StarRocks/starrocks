@@ -90,6 +90,7 @@ import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileContent;
+import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.HistoryEntry;
 import org.apache.iceberg.ManifestFile;
@@ -141,10 +142,12 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -187,8 +190,15 @@ public class IcebergMetadata implements ConnectorMetadata {
     private final Map<TableIdentifier, org.apache.iceberg.Table> tables = new ConcurrentHashMap<>();
     private final Map<String, Database> databases = new ConcurrentHashMap<>();
     private final Map<PredicateSearchKey, List<FileScanTask>> splitTasks = new ConcurrentHashMap<>();
-    private final Set<PredicateSearchKey> scannedTables = new HashSet<>();
+    private final Set<PredicateSearchKey> scannedTables = ConcurrentHashMap.newKeySet();
     private final Set<PredicateSearchKey> preparedTables = ConcurrentHashMap.newKeySet();
+    // Cache for manifest-level count optimization results (O(partitions) synthetic tasks).
+    // Kept separate from splitTasks so the full file list remains available for non-count queries.
+    private final Map<PredicateSearchKey, List<FileScanTask>> manifestCountCache = new ConcurrentHashMap<>();
+    // Keys for which aggregateTasksByPartition() previously returned null (e.g. mixed
+    // partitioned/unpartitioned files).  Avoids re-running the expensive planFiles() scan on
+    // every query when the optimization is known to be inapplicable for a given snapshot key.
+    private final Set<PredicateSearchKey> manifestCountOptFailedKeys = ConcurrentHashMap.newKeySet();
 
     private final Map<IcebergRemoteFileInfoSourceKey, RemoteFileInfoSource> remoteFileInfoSources = new ConcurrentHashMap<>();
 
@@ -546,7 +556,22 @@ public class IcebergMetadata implements ConnectorMetadata {
     public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
         TableVersionRange version = params.getTableVersionRange();
         long snapshotId = version.end().isPresent() ? version.end().get() : -1;
-        return getRemoteFiles((IcebergTable) table, snapshotId, params.getPredicate(), params.getLimit());
+        IcebergTable icebergTable = (IcebergTable) table;
+        String dbName = icebergTable.getCatalogDBName();
+        String tableName = icebergTable.getCatalogTableName();
+        if (params.isUseManifestCountOpt() && snapshotId != -1) {
+            List<RemoteFileInfo> result = tryGetRemoteFilesViaManifestCount(
+                    icebergTable, snapshotId, params.getPredicate());
+            if (result != null) {
+                LOG.info("getRemoteFiles [manifestCountOpt]: returning {} tasks for {}.{} snapshotId={}",
+                        result.size(), dbName, tableName, snapshotId);
+                return result;
+            }
+        }
+        List<RemoteFileInfo> result = getRemoteFiles(icebergTable, snapshotId, params.getPredicate(), params.getLimit());
+        LOG.info("getRemoteFiles [regular]: returning {} tasks for {}.{} snapshotId={} useManifestOpt={} limit={}",
+                result.size(), dbName, tableName, snapshotId, params.isUseManifestCountOpt(), params.getLimit());
+        return result;
     }
 
     private List<RemoteFileInfo> getRemoteFiles(IcebergTable table, long snapshotId,
@@ -564,6 +589,464 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         return icebergScanTasks.stream().map(IcebergRemoteFileInfo::new).collect(Collectors.toList());
+    }
+
+    /**
+     * Attempt to serve a getRemoteFiles request using manifest-level partition count aggregation.
+     * Instead of returning O(files) scan tasks, returns one synthetic task per distinct partition
+     * with a pre-aggregated record count. The BE honours the record_count in each scan range and
+     * skips all Parquet I/O when canUseCountOpt is set (see HdfsScanner::can_use_count_optimization).
+     *
+     * Returns null if the optimization cannot be applied (e.g. table has delete files), in which
+     * case the caller should fall back to the regular path.
+     */
+    private List<RemoteFileInfo> tryGetRemoteFilesViaManifestCount(IcebergTable table,
+            long snapshotId, ScalarOperator predicate) {
+        String dbName = table.getCatalogDBName();
+        String tableName = table.getCatalogTableName();
+        PredicateSearchKey key = PredicateSearchKey.of(dbName, tableName, snapshotId, predicate);
+
+        // Return already-computed manifest-count result
+        if (manifestCountCache.containsKey(key)) {
+            List<FileScanTask> cached = manifestCountCache.get(key);
+            LOG.info("tryGetRemoteFilesViaManifestCount: CACHE HIT for {}.{} snapshotId={} cachedSize={}",
+                    dbName, tableName, snapshotId, cached.size());
+            return cached.stream()
+                    .map(IcebergRemoteFileInfo::new).collect(Collectors.toList());
+        }
+
+        // Short-circuit: a previous attempt for this snapshot key determined the optimization
+        // is inapplicable (e.g. files with unpartitioned specs mixed with partitioned ones).
+        // Skip the expensive planFiles() and return null immediately.
+        if (manifestCountOptFailedKeys.contains(key)) {
+            return null;
+        }
+
+        org.apache.iceberg.Table nativeTbl = table.getNativeTable();
+        Snapshot snapshot = nativeTbl.snapshot(snapshotId);
+        if (snapshot == null) {
+            return null;
+        }
+
+        // If the snapshot has any delete files the manifest record_count may not reflect
+        // actual live row counts; skip the optimization
+        if (!snapshot.deleteManifests(nativeTbl.io()).isEmpty()) {
+            return null;
+        }
+
+        // Convert the scan predicate to an Iceberg expression up front so we can:
+        //   (a) bail out early if the predicate cannot be expressed as a partition filter, and
+        //   (b) reuse the result in the cold-path planFiles() call below.
+        //
+        // ScalarOperatorToIcebergExpr returns Expressions.alwaysTrue() for any sub-expression
+        // it cannot convert (e.g. function calls like date_trunc, upper, etc.).  If the whole
+        // predicate collapses to alwaysTrue() but there WAS a predicate, Iceberg cannot prune
+        // any files.  In that case record_count would cover rows that do not satisfy the
+        // original filter, so we must not use the count optimisation.
+        List<ScalarOperator> scalarOperators = Utils.extractConjuncts(predicate);
+        ScalarOperatorToIcebergExpr.IcebergContext icebergContext =
+                new ScalarOperatorToIcebergExpr.IcebergContext(nativeTbl.schema().asStruct());
+        Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(scalarOperators, icebergContext);
+
+        if (predicate != null && icebergPredicate.op() == Expression.Operation.TRUE) {
+            LOG.info("tryGetRemoteFilesViaManifestCount: predicate={} could not be converted to an " +
+                    "Iceberg partition expression for {}.{}, skipping count optimisation",
+                    predicate, dbName, tableName);
+            return null;
+        }
+
+        // Read the manifest list — opens only the small manifest-list Avro file, not any
+        // individual manifest or data file.  Cost is O(num_manifests), essentially free.
+        List<ManifestFile> dataManifests = snapshot.dataManifests(nativeTbl.io());
+        int currentSpecId = nativeTbl.spec().specId();
+
+        // === Optimization A: pre-check manifest spec IDs ===
+        // ManifestFile.partitionSpecId() is available from the manifest list with no extra IO.
+        // If any manifest's spec is null or unpartitioned while the current spec is partitioned,
+        // aggregateTasksByPartition() would bail out anyway — detect this cheaply and avoid
+        // triggering the expensive planFiles() call.
+        if (!nativeTbl.spec().isUnpartitioned()) {
+            for (ManifestFile manifest : dataManifests) {
+                if (manifest.partitionSpecId() != currentSpecId) {
+                    PartitionSpec mSpec = nativeTbl.specs().get(manifest.partitionSpecId());
+                    if (mSpec == null || mSpec.isUnpartitioned()) {
+                        LOG.info("tryGetRemoteFilesViaManifestCount: manifest specId={} maps to a {} spec " +
+                                "while current specId={} is partitioned for {}.{}, skipping",
+                                manifest.partitionSpecId(),
+                                mSpec == null ? "unknown" : "unpartitioned",
+                                currentSpecId, dbName, tableName);
+                        manifestCountOptFailedKeys.add(key);
+                        return null;
+                    }
+                }
+            }
+        }
+
+        // === Optimization B: aggregate from manifest row counts ===
+        // When every manifest covers exactly one distinct partition value (lowerBound == upperBound
+        // for all partition fields, no nulls), addedRowsCount + existingRowsCount in the manifest
+        // is the exact live row count for that partition.  No planFiles() needed at all.
+        // This is the common case for append-only daily-partitioned tables where each day's data
+        // is written in a separate transaction (one manifest per partition).
+        List<FileScanTask> manifestDerivedTasks =
+                tryAggregateFromManifestRowCounts(nativeTbl, dataManifests, icebergPredicate);
+        LOG.info("tryGetRemoteFilesViaManifestCount: pathB result={} numDataManifests={} for {}.{}",
+                manifestDerivedTasks == null ? "null" : manifestDerivedTasks.size(),
+                dataManifests.size(), dbName, tableName);
+        if (manifestDerivedTasks != null && (!manifestDerivedTasks.isEmpty() || dataManifests.isEmpty())) {
+            manifestCountCache.put(key, manifestDerivedTasks);
+            return manifestDerivedTasks.stream()
+                    .map(IcebergRemoteFileInfo::new).collect(Collectors.toList());
+        }
+
+        // Build or reuse the file-level task list.
+        // When splitTasks already has the key we reuse those (possibly row-group-split) tasks for
+        // the aggregation attempt.  When we plan from scratch we materialise planFiles() into a
+        // list so the tasks remain available even after aggregateTasksByPartition consumes them.
+        List<FileScanTask> fileScanTaskList;
+        boolean fromFreshPlan;
+        if (splitTasks.containsKey(key)) {
+            // prepareMetadata already ran; reuse the in-memory list (avoid a second planFiles() call)
+            fileScanTaskList = splitTasks.get(key);
+            fromFreshPlan = false;
+            LOG.info("tryGetRemoteFilesViaManifestCount: warm path for {}.{} snapshotId={} splitTasksSize={}",
+                    dbName, tableName, snapshotId, fileScanTaskList.size());
+        } else {
+            // Cold path: plan files now without TableScanUtil.splitFiles — one task per file.
+            // Materialise into a List so the tasks survive a failed aggregateTasksByPartition call.
+            StarRocksIcebergTableScanContext scanContext = new StarRocksIcebergTableScanContext(
+                    catalogName, dbName, tableName, planMode(ConnectContext.get()), ConnectContext.get());
+            scanContext.setLocalParallelism(catalogProperties.getIcebergJobPlanningThreadNum());
+            scanContext.setLocalPlanningMaxSlotSize(catalogProperties.getLocalPlanningMaxSlotBytes());
+
+            TableScan scan = icebergCatalog.getTableScan(nativeTbl, scanContext)
+                    .useSnapshot(snapshotId)
+                    .metricsReporter(metricsReporter)
+                    .planWith(jobPlanningExecutor);
+            if (icebergPredicate.op() != Expression.Operation.TRUE) {
+                scan = scan.filter(icebergPredicate);
+            }
+            try (CloseableIterable<FileScanTask> ownedIterable = scan.planFiles()) {
+                fileScanTaskList = Lists.newArrayList(ownedIterable);
+            } catch (Exception e) {
+                LOG.warn("tryGetRemoteFilesViaManifestCount: planFiles failed for {}.{}: {}",
+                        dbName, tableName, e.getMessage());
+                manifestCountOptFailedKeys.add(key);
+                return null;
+            }
+            fromFreshPlan = true;
+        }
+
+        List<FileScanTask> syntheticTasks = null;
+        try {
+            syntheticTasks = aggregateTasksByPartition(fileScanTaskList, nativeTbl);
+        } catch (Exception e) {
+            LOG.warn("Failed to aggregate tasks by partition for manifest count optimization on {}.{}: {}",
+                    dbName, tableName, e.getMessage());
+        }
+
+        LOG.info("tryGetRemoteFilesViaManifestCount: aggregateTasksByPartition result={} for {}.{} " +
+                "fromFreshPlan={} fileScanTaskListSize={}",
+                syntheticTasks == null ? "null" : syntheticTasks.size(),
+                dbName, tableName, fromFreshPlan, fileScanTaskList.size());
+
+        if (syntheticTasks != null) {
+            manifestCountCache.put(key, syntheticTasks);
+            return syntheticTasks.stream().map(IcebergRemoteFileInfo::new).collect(Collectors.toList());
+        }
+
+        // Partition aggregation failed.  When we planned from scratch (no splitFiles), the
+        // file-level list is still a valid fallback: 1 scan range per file instead of 1 per
+        // row group (~8x cheaper).  The BE count optimisation reads record_count from scan-range
+        // metadata and issues 0 bytes of S3 IO, so file-level granularity is perfectly correct.
+        // Cache the list in manifestCountCache so subsequent count-opt queries skip re-planning.
+        if (fromFreshPlan) {
+            manifestCountCache.put(key, fileScanTaskList);
+            return fileScanTaskList.stream().map(IcebergRemoteFileInfo::new).collect(Collectors.toList());
+        }
+
+        // We reused cached split tasks and aggregation still failed — mark the key as permanently
+        // failed so subsequent queries bypass the planFiles() attempt entirely.
+        manifestCountOptFailedKeys.add(key);
+        return null;
+    }
+
+    /**
+     * Attempts to build per-partition synthetic FileScanTasks directly from the manifest list,
+     * avoiding planFiles() entirely.
+     *
+     * <p>Each ManifestFile in the manifest list carries per-partition-field summary bounds
+     * (lowerBound / upperBound) and aggregate row counts (addedRowsCount + existingRowsCount).
+     * When every manifest covers exactly one distinct partition value — i.e. lowerBound equals
+     * upperBound for every partition field and neither is null — the manifest row count is the
+     * exact live count for that partition.  Multiple manifests for the same partition are summed.
+     *
+     * <p>This is the common case for append-only daily-partitioned tables where each day's data
+     * is written in a separate Iceberg transaction (one manifest per partition).  planFiles()
+     * opens every manifest Avro file to iterate individual FileScanTask entries; this method
+     * only needs the manifest list, which is already in memory.
+     *
+     * <p>Returns null if any manifest fails the single-partition or row-count-available check,
+     * signalling the caller to fall back to planFiles().
+     */
+    private List<FileScanTask> tryAggregateFromManifestRowCounts(
+            org.apache.iceberg.Table nativeTbl,
+            List<ManifestFile> dataManifests,
+            Expression icebergPredicate) {
+
+        // Apply partition-level predicate pruning using PartitionFieldSummary bounds.
+        // For alwaysTrue() (no predicate) this returns all manifests unchanged.
+        // For a partition equality / range filter this eliminates manifests whose
+        // partition bounds provably cannot contain matching rows.
+        List<ManifestFile> filtered = IcebergApiConverter.filterManifests(
+                dataManifests, nativeTbl, icebergPredicate);
+
+        // filterManifests removes manifests where hasAddedFiles() and hasExistingFiles() are
+        // both false.  This can happen when manifest-list statistics (added_files_count,
+        // existing_files_count) are null — e.g. manifests written by older Iceberg writers or
+        // third-party engines that omit these optional fields.  If filtering removed all
+        // manifests but the input was non-empty, the counts would be zero (incorrect).
+        // Fall back to planFiles() which reads the actual manifest entries.
+        if (filtered.isEmpty() && !dataManifests.isEmpty()) {
+            LOG.info("tryAggregateFromManifestRowCounts: filterManifests removed all {} manifests " +
+                    "for table {}, falling back to planFiles()",
+                    dataManifests.size(), nativeTbl.location());
+            return null;
+        }
+
+        Map<String, Long> countByKey = new LinkedHashMap<>();
+        Map<String, StructLike> partitionByKey = new LinkedHashMap<>();
+        Map<String, Integer> specIdByKey = new LinkedHashMap<>();
+
+        for (ManifestFile manifest : filtered) {
+            // Row counts must be present — older Iceberg writers may omit them.
+            Long addedRows = manifest.addedRowsCount();
+            Long existingRows = manifest.existingRowsCount();
+            Long deletedRows = manifest.deletedRowsCount();
+            if (addedRows == null && existingRows == null) {
+                return null;
+            }
+            // If any file entries in this manifest have been superseded (REPLACE/OVERWRITE
+            // operations produce DELETED-status entries), deletedRowsCount() reflects rows in
+            // those deleted files.  addedRows + existingRows would overcount.
+            // Fall back to planFiles() which returns only live files.
+            if (deletedRows != null && deletedRows > 0) {
+                return null;
+            }
+            long rowCount = (addedRows != null ? addedRows : 0L)
+                    + (existingRows != null ? existingRows : 0L);
+
+            // Fetch the partition spec before checking summaries so we can special-case
+            // unpartitioned tables (empty summaries list).
+            int mSpecId = manifest.partitionSpecId();
+            PartitionSpec mSpec = nativeTbl.specs().get(mSpecId);
+            if (mSpec == null) {
+                return null;
+            }
+
+            List<ManifestFile.PartitionFieldSummary> summaries = manifest.partitions();
+
+            if (!mSpec.isUnpartitioned()) {
+                // For partitioned manifests every field must cover exactly one distinct value
+                // so we can derive an exact per-partition count from the manifest row count.
+                if (summaries == null || summaries.isEmpty() || mSpec.fields().size() != summaries.size()) {
+                    return null;
+                }
+                for (ManifestFile.PartitionFieldSummary summary : summaries) {
+                    if (summary.containsNull()
+                            || summary.lowerBound() == null || summary.upperBound() == null
+                            || !summary.lowerBound().equals(summary.upperBound())) {
+                        return null;
+                    }
+                }
+            }
+
+            // Decode the single partition value for each field from lowerBound.
+            // For unpartitioned tables summaries is empty; we produce an empty-key partition.
+            int numFields = summaries == null ? 0 : summaries.size();
+            Types.StructType partitionType = mSpec.partitionType();
+            PartitionData partitionData = new PartitionData(numFields);
+            for (int i = 0; i < numFields; i++) {
+                Type nestedType = partitionType.fields().get(i).type();
+                Object value = Conversions.fromByteBuffer(nestedType, summaries.get(i).lowerBound());
+                partitionData.set(i, value);
+            }
+
+            String pKey = makePartitionKey(mSpecId, mSpec, partitionData);
+            countByKey.merge(pKey, rowCount, Long::sum);
+            partitionByKey.putIfAbsent(pKey, partitionData);
+            specIdByKey.putIfAbsent(pKey, mSpecId);
+        }
+
+        // Build one synthetic FileScanTask per distinct (specId, partition) with the
+        // aggregated row count.  Empty result is valid (predicate matched no partitions).
+        String tableLocation = nativeTbl.location();
+        List<FileScanTask> result = new ArrayList<>(countByKey.size());
+        for (Map.Entry<String, Long> entry : countByKey.entrySet()) {
+            String pKey = entry.getKey();
+            long count = entry.getValue();
+            StructLike partData = partitionByKey.get(pKey);
+            int specId = specIdByKey.get(pKey);
+            PartitionSpec spec = nativeTbl.specs().get(specId);
+
+            DataFile syntheticFile = DataFiles.builder(spec)
+                    .withPath(tableLocation + "/count-opt-" + pKey)
+                    .withFileSizeInBytes(0)
+                    .withFormat(FileFormat.PARQUET)
+                    .withPartition(partData)
+                    .withRecordCount(count)
+                    .build();
+
+            result.add(new SyntheticCountFileScanTask(syntheticFile, spec));
+        }
+        return result;
+    }
+
+    /**
+     * Aggregates an iterable of file-level scan tasks into one synthetic task per distinct partition.
+     * Each synthetic task carries a pre-summed record_count and an empty deletes list so the BE
+     * can short-circuit with canUseCountOpt without reading any data files.
+     */
+    private List<FileScanTask> aggregateTasksByPartition(Iterable<FileScanTask> tasks,
+            org.apache.iceberg.Table nativeTbl) {
+        // specId + "|" + per-field values → aggregated count / representative partition StructLike
+        Map<String, Long> countByKey = new LinkedHashMap<>();
+        Map<String, StructLike> partitionByKey = new LinkedHashMap<>();
+        Map<String, Integer> specIdByKey = new LinkedHashMap<>();
+
+        int currentSpecId = nativeTbl.spec().specId();
+        boolean currentSpecIsPartitioned = !nativeTbl.spec().isUnpartitioned();
+
+        for (FileScanTask task : tasks) {
+            int specId = task.file().specId();
+
+            // If the file was written under a different spec than the current table spec, only
+            // bail out when the file's *own* spec is absent from the specs map or is unpartitioned.
+            // In the unpartitioned case task.file().partition() returns an empty struct, so every
+            // such file would land in the null-partition bucket — incorrect for a partitioned table.
+            //
+            // When the file's spec IS partitioned (different spec ID but still has partition fields,
+            // e.g. Hudi tables synced via XTable where spec IDs may differ across file batches),
+            // task.file().partition() still carries valid partition data under that spec's layout.
+            // We aggregate those files using their own spec's partition key; the resulting synthetic
+            // tasks are merged correctly by the BE's GROUP BY aggregation.
+            if (currentSpecIsPartitioned && specId != currentSpecId) {
+                PartitionSpec fileSpec = nativeTbl.specs().get(specId);
+                if (fileSpec == null || fileSpec.isUnpartitioned()) {
+                    LOG.info("aggregateTasksByPartition: file specId={} maps to a {} spec " +
+                            "while current specId={} is partitioned for table {}, " +
+                            "skipping manifest count optimization",
+                            specId, fileSpec == null ? "unknown" : "unpartitioned",
+                            currentSpecId, nativeTbl.location());
+                    return null;
+                }
+                // File spec is partitioned — partition data is valid, continue with its own spec.
+            }
+
+            PartitionSpec spec = nativeTbl.specs().get(specId);
+            if (spec == null) {
+                // Unknown spec — cannot build a reliable partition key.
+                LOG.warn("aggregateTasksByPartition: unknown specId={} for table {}, skipping optimization",
+                        specId, nativeTbl.location());
+                return null;
+            }
+            StructLike partition = task.file().partition();
+            String key = makePartitionKey(specId, spec, partition);
+            countByKey.merge(key, task.file().recordCount(), Long::sum);
+            partitionByKey.putIfAbsent(key, partition);
+            specIdByKey.putIfAbsent(key, specId);
+        }
+
+        String tableLocation = nativeTbl.location();
+        List<FileScanTask> result = new ArrayList<>(countByKey.size());
+        for (Map.Entry<String, Long> entry : countByKey.entrySet()) {
+            String key = entry.getKey();
+            long count = entry.getValue();
+            StructLike partitionData = partitionByKey.get(key);
+            int specId = specIdByKey.get(key);
+            PartitionSpec spec = nativeTbl.specs().get(specId);
+
+            DataFile syntheticFile = DataFiles.builder(spec)
+                    .withPath(tableLocation + "/count-opt-" + Math.abs(key.hashCode()))
+                    .withFileSizeInBytes(0)
+                    .withFormat(FileFormat.PARQUET)
+                    .withPartition(partitionData)
+                    .withRecordCount(count)
+                    .build();
+
+            result.add(new SyntheticCountFileScanTask(syntheticFile, spec));
+        }
+        return result;
+    }
+
+    /** Builds a stable, collision-free string key for a (specId, partition) pair.
+     *
+     * Uses length-prefixed encoding for each field value so that string partition
+     * columns containing the separator characters cannot produce false collisions.
+     * Format: {@code specId|len:value len:value ...}  where null fields use {@code -1:}.
+     */
+    private static String makePartitionKey(int specId, PartitionSpec spec, StructLike partition) {
+        StringBuilder sb = new StringBuilder().append(specId).append('|');
+        for (int i = 0; i < spec.fields().size(); i++) {
+            Object value = partition.get(i, Object.class);
+            if (value == null) {
+                sb.append("-1:");
+            } else {
+                String s = value.toString();
+                sb.append(s.length()).append(':').append(s);
+            }
+        }
+        return sb.toString();
+    }
+
+    /**
+     * A minimal FileScanTask implementation representing an entire partition's record count.
+     * Has no delete files so the BE's can_use_file_record_count check passes, enabling the
+     * count optimization short-circuit in HdfsScanner::get_next().
+     */
+    private static final class SyntheticCountFileScanTask implements FileScanTask {
+        private final DataFile file;
+        private final PartitionSpec spec;
+
+        private SyntheticCountFileScanTask(DataFile file, PartitionSpec spec) {
+            this.file = file;
+            this.spec = spec;
+        }
+
+        @Override
+        public DataFile file() {
+            return file;
+        }
+
+        @Override
+        public List<DeleteFile> deletes() {
+            return Collections.emptyList();
+        }
+
+        @Override
+        public PartitionSpec spec() {
+            return spec;
+        }
+
+        @Override
+        public long start() {
+            return 0;
+        }
+
+        @Override
+        public long length() {
+            return 0;
+        }
+
+        @Override
+        public Expression residual() {
+            return Expressions.alwaysTrue();
+        }
+
+        @Override
+        public Iterable<FileScanTask> split(long splitSize) {
+            return Lists.newArrayList(this);
+        }
     }
 
     @Override
@@ -829,6 +1312,8 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         splitTasks.put(key, icebergScanTasks);
+        LOG.info("collectTableStatisticsAndCacheIcebergSplit: stored {} tasks for {}.{} snapshotId={}",
+                icebergScanTasks.size(), dbName, tableName, snapshotId);
         scannedTables.add(key);
     }
 
@@ -846,7 +1331,10 @@ public class IcebergMetadata implements ConnectorMetadata {
         String tableName = table.getCatalogTableName();
         PredicateSearchKey predicateSearchKey = PredicateSearchKey.of(dbName, tableName, snapshotId.get(), param.getPredicate());
         RemoteFileInfoSource baseSource;
-        if (splitTasks.containsKey(predicateSearchKey)) {
+        // Only reuse a cached file list when scannedTables confirms it was produced by a full
+        // (unlimited) scan.  A limited-query result in splitTasks is a truncated subset and must
+        // not be served here.
+        if (splitTasks.containsKey(predicateSearchKey) && scannedTables.contains(predicateSearchKey)) {
             baseSource = buildRemoteInfoSource(splitTasks.get(predicateSearchKey));
         } else {
             List<ScalarOperator> scalarOperators = Utils.extractConjuncts(params.getPredicate());
@@ -1413,6 +1901,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         return PlanMode.fromName(connectContext.getSessionVariable().getPlanMode());
     }
 
+
     private boolean enableCollectColumnStatistics(ConnectContext connectContext) {
         if (connectContext == null) {
             return false;
@@ -1428,9 +1917,11 @@ public class IcebergMetadata implements ConnectorMetadata {
     @Override
     public void clear() {
         splitTasks.clear();
+        manifestCountCache.clear();
         databases.clear();
         tables.clear();
         scannedTables.clear();
+        manifestCountOptFailedKeys.clear();
         metricsReporter.clear();
     }
 

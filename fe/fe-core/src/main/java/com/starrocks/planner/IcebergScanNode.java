@@ -159,6 +159,7 @@ public class IcebergScanNode extends ScanNode {
                         .setTableVersionRange(TableVersionRange.withEnd(snapshotId))
                         .setPredicate(icebergJobPlanningPredicate)
                         .setEnableColumnStats(scanOptimizeOption.getCanUseMinMaxOpt())
+                        .setUseManifestCountOpt(scanOptimizeOption.getCanUseCountOpt())
                         .build();
 
         RemoteFileInfoSource remoteFileInfoSource;

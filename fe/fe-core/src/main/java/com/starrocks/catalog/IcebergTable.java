@@ -176,11 +176,14 @@ public class IcebergTable extends Table {
     }
 
     public boolean isAllPartitionColumnsAlwaysIdentity() {
-        // now we are sure we have never applied transformation,
-        // we check if all partition columns are identity.
-        for (PartitionField field : getNativeTable().spec().fields()) {
-            if (!field.transform().isIdentity()) {
-                return false;
+        // Check all historical specs — a table that evolved from e.g. day(ts) to identity(ts)
+        // still has old files under the non-identity spec, so we cannot guarantee that every
+        // partition value maps 1:1 to the source column value across the full table history.
+        for (PartitionSpec spec : getNativeTable().specs().values()) {
+            for (PartitionField field : spec.fields()) {
+                if (!field.transform().isVoid() && !field.transform().isIdentity()) {
+                    return false;
+                }
             }
         }
         return true;

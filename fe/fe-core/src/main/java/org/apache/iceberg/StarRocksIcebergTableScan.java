@@ -159,7 +159,7 @@ public class StarRocksIcebergTableScan
         MetadataCollectJob metadataCollectJob = new IcebergMetadataCollectJob(
                 catalogName, dbName, tableName, TResultSinkType.METADATA_ICEBERG, snapshotId(), icebergSerializedPredicate);
 
-        metadataCollectJob.init(connectContext.getSessionVariable());
+        metadataCollectJob.init(connectContext);
 
         long currentTimestamp = System.currentTimeMillis();
         String threadNamePrefix = String.format("%s-%s-%s-%d", catalogName, dbName, tableName, currentTimestamp);
