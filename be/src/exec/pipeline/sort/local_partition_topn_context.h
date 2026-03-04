@@ -16,6 +16,7 @@
 
 #include <queue>
 
+#include "exec/aggregator.h"
 #include "exec/analytor.h"
 #include "exec/chunks_sorter.h"
 #include "exec/partition/chunks_partitioner.h"
@@ -23,8 +24,6 @@
 
 namespace starrocks {
 class RuntimeFilterBuildDescriptor;
-
-struct FunctionTypes;
 } // namespace starrocks
 
 namespace starrocks::pipeline {
@@ -57,7 +56,7 @@ struct PreAggState {
     std::vector<Columns> _agg_input_columns;
     //raw pointers in order to get multi-column values
     std::vector<std::vector<const Column*>> _agg_input_raw_columns;
-    std::vector<FunctionTypes> _agg_fn_types;
+    std::vector<AggFunctionTypes> _agg_fn_types;
     // every partition has one Agg State
     std::vector<ManagedFunctionStatesPtr<PreAggState>> _managed_fn_states;
 };
@@ -76,8 +75,8 @@ class LocalPartitionTopnContext {
     friend class ManagedFunctionStates<LocalPartitionTopnContext>;
 
 public:
-    LocalPartitionTopnContext(const std::vector<TExpr>& t_partition_exprs, bool has_nullable_key, bool enable_pre_agg,
-                              const std::vector<TExpr>& t_pre_agg_exprs,
+    LocalPartitionTopnContext(const std::vector<TExpr>& t_partition_exprs, bool has_outer_join_child,
+                              bool enable_pre_agg, const std::vector<TExpr>& t_pre_agg_exprs,
                               const std::vector<TSlotId>& t_pre_agg_output_slot_id,
                               const std::vector<ExprContext*>& sort_exprs, std::vector<bool> is_asc_order,
                               std::vector<bool> is_null_first, std::string sort_keys, int64_t offset,
@@ -138,6 +137,7 @@ private:
     std::vector<ExprContext*> _partition_exprs;
     std::vector<PartitionColumnType> _partition_types;
     bool _has_nullable_key = false;
+    bool _has_outer_join_child = false;
 
     // used in preagg
     std::unique_ptr<MemPool> _mem_pool = nullptr;
