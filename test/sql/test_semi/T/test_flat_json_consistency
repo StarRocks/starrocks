@@ -1,4 +1,4 @@
--- name: test_flat_json_consistency
+-- name: test_flat_json_consistency @sequential
 
 -- Test case for FlatJSON consistency issue where non-existent fields
 -- were being created as empty objects during reconstruction
