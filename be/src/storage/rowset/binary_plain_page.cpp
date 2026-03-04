@@ -14,8 +14,6 @@
 
 #include "storage/rowset/binary_plain_page.h"
 
-#include "common/config.h"
-
 #ifdef __SSE4_2__
 #include <emmintrin.h>
 #endif

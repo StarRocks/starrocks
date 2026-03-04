@@ -23,12 +23,24 @@
 #include "column/bytes.h"
 #include "column/mysql_row_buffer.h"
 #include "column/vectorized_fwd.h"
+#include "common/config.h"
 #include "gutil/bits.h"
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
 
 namespace starrocks {
+template <typename T>
+BinaryColumnBase<T>::BinaryColumnBase(ContainerResource resource, Offsets offsets)
+        : _bytes(), _offsets(std::move(offsets)), _resource(std::move(resource)) {
+    if (_offsets.empty()) {
+        _offsets.emplace_back(0);
+    }
+    if (!config::enable_zero_copy_from_page_cache) {
+        _ensure_materialized();
+    }
+}
+
 template <typename T>
 void BinaryColumnBase<T>::check_or_die() const {
     CHECK_EQ(get_immutable_bytes().size(), _offsets.back());
