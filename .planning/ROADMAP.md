@@ -28,7 +28,14 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. User can run `DESCRIBE my_adbc.mydb.mytable` and see columns with correct StarRocks types (int, varchar, decimal, date, etc.)
   4. User can run `DROP CATALOG my_adbc` and the catalog is removed
   5. FE and BE build cleanly (`./build.sh --fe --be`) with Arrow ADBC Maven and CMake dependencies included
-**Plans**: TBD
+**Plans**: 5 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — FE Maven + BE thirdparty ADBC build dependencies (BUILD-01, BUILD-02)
+- [ ] 01-02-PLAN.md — Connector skeleton: ConnectorType.ADBC, ADBCConnector, ADBCTable, ADBCSchemaResolver base, ADBCTableName (CAT-01, CAT-02, CAT-04, CAT-05, TYPE-02)
+- [ ] 01-03-PLAN.md — Arrow type mapping: FlightSQLSchemaResolver TDD (TYPE-01, TYPE-02, TYPE-03, TYPE-04)
+- [ ] 01-04-PLAN.md — Metadata operations: ADBCMetadata + ADBCMetaCache with ADBC Java API (CAT-03, CAT-04, CAT-05, CAT-06, CAT-07, CAT-08, CAT-09)
+- [ ] 01-05-PLAN.md — SQL analysis guards + full build verification (BUILD-03, CAT-01, CAT-02, CAT-03, CAT-06, CAT-07, CAT-08)
 
 ### Phase 2: Scanning
 **Goal**: Users can SELECT from ADBC tables with full pushdown; Arrow data flows from BE native C++ ADBC to StarRocks Chunk; partitions are discovered and pruned
@@ -61,6 +68,6 @@ Phases execute in numeric order: 1 → 2 → 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/TBD | Not started | - |
+| 1. Foundation | 0/5 | Ready to execute | - |
 | 2. Scanning | 0/TBD | Not started | - |
 | 3. JDBC Parity | 0/TBD | Not started | - |
