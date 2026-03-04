@@ -541,8 +541,13 @@ public class CreateTableAnalyzer {
             if (partitionDesc != null) {
                 if (partitionDesc.getType() == PartitionType.RANGE || partitionDesc.getType() == PartitionType.LIST) {
                     try {
+<<<<<<< HEAD
                         PartitionDescAnalyzer.analyze(partitionDesc);
                         partitionDesc.analyze(stmt.getColumnDefs(), stmt.getProperties());
+=======
+                        PartitionDescAnalyzer.analyze(partitionDesc, stmt.getColumnDefs(), stmt.getProperties(),
+                                stmt.getKeysDesc().getKeysType());
+>>>>>>> f500e2bd1d ([BugFix] fix PK key column fail to check generated column (#69054))
                     } catch (AnalysisException e) {
                         throw new SemanticException(e.getMessage());
                     }

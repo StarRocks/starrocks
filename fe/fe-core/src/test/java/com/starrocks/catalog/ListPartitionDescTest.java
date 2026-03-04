@@ -213,7 +213,11 @@ public class ListPartitionDescTest {
             dt.setAggregateType(AggregateType.NONE);
             List<ColumnDef> columnDefList = Lists.newArrayList(province, dt);
             ListPartitionDesc listSinglePartitionDesc = this.findListSinglePartitionDesc("province", "p1", "p2", null);
+<<<<<<< HEAD
             listSinglePartitionDesc.analyze(columnDefList, null);
+=======
+            PartitionDescAnalyzer.analyzeListPartitionDesc(listSinglePartitionDesc, columnDefList, null, null);
+>>>>>>> f500e2bd1d ([BugFix] fix PK key column fail to check generated column (#69054))
         });
     }
 
