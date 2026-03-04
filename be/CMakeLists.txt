@@ -420,12 +420,12 @@ set(STARROCKS_LINK_LIBS
     orc
     ${WL_END_GROUP}
     -Wl,--whole-archive ExprCore -Wl,--no-whole-archive
-    IOCore
-    FSCore
     RuntimeCore
     ChunkCore
     ColumnCore
     TypesCore
+    FSCore
+    IOCore
     Common
     Base
     Gutil
