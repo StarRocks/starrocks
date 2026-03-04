@@ -45,6 +45,7 @@ ADD_BE_LIB(ColumnCore
         variant_path_parser.cpp
         variant_encoder.cpp
         variant_builder.cpp
+        variant_merger.cpp
         column_hash/column_hash.cpp
 )
 

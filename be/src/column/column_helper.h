@@ -600,6 +600,10 @@ public:
         return down_cast<const BinaryColumn*>(get_data_column(column));
     }
 
+    // If column[row] is not null and is a binary column, writes the slice to *out and returns true.
+    // Handles ConstColumn (normalises row to 0) and NullableColumn (null check).
+    static bool get_binary_slice_at(const Column* column, size_t row, Slice* out);
+
     static bool is_all_const(const Columns& columns);
 
     // Returns
