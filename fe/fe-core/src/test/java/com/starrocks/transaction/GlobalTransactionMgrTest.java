@@ -453,6 +453,7 @@ public class GlobalTransactionMgrTest {
         // Assert.assertNotEquals("label", routineLoadManager.getNeedScheduleTasksQueue().peek().getId());
         boolean oldValue = Config.lock_manager_enabled;
         Config.lock_manager_enabled = false;
+        transactionState = masterTransMgr.getTransactionState(1L, 1L);
         masterTransMgr.finishTransactionNew(transactionState, Sets.newHashSet());
         TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(1L);
         assertEquals(100, entity.counterRoutineLoadRowsTotal.getValue().intValue());
@@ -665,7 +666,8 @@ public class GlobalTransactionMgrTest {
         errorReplicaIds = Sets.newHashSet();
         assertEquals(masterTransMgr.canTxnFinished(transactionState, errorReplicaIds, Sets.newHashSet()), true);
         masterTransMgr.finishTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId, errorReplicaIds);
-        assertEquals(TransactionStatus.VISIBLE, transactionState.getTransactionStatus());
+        assertEquals(TransactionStatus.VISIBLE, masterTransMgr
+                .getTransactionState(GlobalStateMgrTestUtil.testDbId1, transactionId).getTransactionStatus());
         assertEquals(GlobalStateMgrTestUtil.testStartVersion + 1, replcia1.getVersion());
         assertEquals(GlobalStateMgrTestUtil.testStartVersion + 1, replcia2.getVersion());
         assertEquals(GlobalStateMgrTestUtil.testStartVersion, replcia3.getVersion());
@@ -736,7 +738,8 @@ public class GlobalTransactionMgrTest {
         errorReplicaIds = Sets.newHashSet();
         FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
         masterTransMgr.finishTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId2, errorReplicaIds);
-        assertEquals(TransactionStatus.VISIBLE, transactionState.getTransactionStatus());
+        assertEquals(TransactionStatus.VISIBLE, masterTransMgr
+                .getTransactionState(GlobalStateMgrTestUtil.testDbId1, transactionId2).getTransactionStatus());
         assertEquals(GlobalStateMgrTestUtil.testStartVersion + 2, replcia1.getVersion());
         assertEquals(GlobalStateMgrTestUtil.testStartVersion + 2, replcia2.getVersion());
         assertEquals(GlobalStateMgrTestUtil.testStartVersion, replcia3.getVersion());

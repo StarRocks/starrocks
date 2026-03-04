@@ -795,7 +795,7 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
     }
 
     @Override
-    public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason)
+    public void afterAborted(TransactionState txnState, String txnStatusChangeReason)
             throws StarRocksException {
         // This transaction abort must come from outside, because run() removes the callback before abort txn.
         cancel(txnStatusChangeReason);

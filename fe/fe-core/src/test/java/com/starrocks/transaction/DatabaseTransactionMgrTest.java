@@ -853,12 +853,16 @@ public class DatabaseTransactionMgrTest {
 
         assertEquals(3, masterDbTransMgr.getRunningTxnNums());
         assertEquals(4, masterDbTransMgr.getFinishedTxnNums());
-        assertEquals(TransactionStatus.VISIBLE, transactionState6.getTransactionStatus());
-        assertEquals(TransactionStatus.VISIBLE, transactionState7.getTransactionStatus());
-        assertEquals(TransactionStatus.VISIBLE, transactionState8.getTransactionStatus());
+        assertEquals(TransactionStatus.VISIBLE, masterDbTransMgr.getTransactionState(txnId6).getTransactionStatus());
+        assertEquals(TransactionStatus.VISIBLE, masterDbTransMgr.getTransactionState(txnId7).getTransactionStatus());
+        assertEquals(TransactionStatus.VISIBLE, masterDbTransMgr.getTransactionState(txnId8).getTransactionStatus());
 
         FakeGlobalStateMgr.setGlobalStateMgr(slaveGlobalStateMgr);
-        slaveTransMgr.replayUpsertTransactionStateBatch(stateBatch);
+        TransactionStateBatch replayStateBatch = new TransactionStateBatch(List.of(
+                fakeEditLog.getTransaction(txnId6),
+                fakeEditLog.getTransaction(txnId7),
+                fakeEditLog.getTransaction(txnId8)));
+        slaveTransMgr.replayUpsertTransactionStateBatch(replayStateBatch);
         assertEquals(4, masterDbTransMgr.getFinishedTxnNums());
     }
 
@@ -949,7 +953,8 @@ public class DatabaseTransactionMgrTest {
         // unlock the lock in lockThread
         Assertions.assertDoesNotThrow(
                 () -> masterTransMgr.finishTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId, null, 1000L));
-        assertEquals(TransactionStatus.VISIBLE, txnState.getTransactionStatus());
+        assertEquals(TransactionStatus.VISIBLE,
+                masterDbTransMgr.getTransactionState(transactionId).getTransactionStatus());
         lockThread.join();
     }
 
