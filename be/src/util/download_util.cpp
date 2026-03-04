@@ -23,9 +23,6 @@
 #include "gutil/strings/substitute.h"
 #include "http/http_client.h"
 #include "udf/udf_downloder.h"
-#include "util/defer_op.h"
-#include "util/md5.h"
-#include "util/uuid_generator.h"
 
 namespace starrocks {
 
