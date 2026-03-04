@@ -361,9 +361,11 @@ public class IcebergApiConverter {
             }
             Column column = new Column(field.name(), srType, field.isOptional());
             column.setComment(field.doc());
-            String initialDefault = toInitialDefaultValueString(field);
-            if (initialDefault != null) {
-                column.setDefaultValue(initialDefault);
+            // Prioritize write-default (used for INSERT) over initial-default (used for backfill)
+            String writeDefault = toWriteDefaultValueString(field);
+            String defaultVal = writeDefault != null ? writeDefault : toInitialDefaultValueString(field);
+            if (defaultVal != null) {
+                column.setDefaultValue(defaultVal);
             }
             fullSchema.add(column);
         }

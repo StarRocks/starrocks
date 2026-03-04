@@ -18,12 +18,9 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
-import com.starrocks.connector.iceberg.IcebergApiConverter;
-import org.apache.iceberg.Schema;
 
 import java.util.Arrays;
 import java.util.List;
@@ -52,18 +49,10 @@ public class ExternalSchemaProcNode implements ProcNodeInterface {
 
         List<Column> schema = table.getFullVisibleSchema();
         List<String> partitionColumns = table.getPartitionColumnNames();
-        Schema icebergSchema = null;
-        if (table.isIcebergTable()) {
-            icebergSchema = ((IcebergTable) table).getNativeTable().schema();
-        }
 
         for (Column column : schema) {
             String extraStr = partitionColumns.contains(column.getName()) ? PARTITION_KEY : "";
-            String defaultStr = icebergSchema == null ? null :
-                    IcebergApiConverter.getWriteDefaultValue(icebergSchema, column.getName());
-            if (defaultStr == null) {
-                defaultStr = column.getMetaDefaultValue(Lists.newArrayList());
-            }
+            String defaultStr = column.getMetaDefaultValue(Lists.newArrayList());
             if (defaultStr == null) {
                 defaultStr = DEFAULT_STR;
             }

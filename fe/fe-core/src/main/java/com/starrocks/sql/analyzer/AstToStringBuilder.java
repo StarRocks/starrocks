@@ -41,7 +41,6 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
 import com.starrocks.common.util.PrintableMap;
-import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.credential.CredentialUtil;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ParseNode;
@@ -51,7 +50,6 @@ import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang.NotImplementedException;
 import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.commons.text.translate.UnicodeUnescaper;
-import org.apache.iceberg.Schema;
 import org.apache.iceberg.SortDirection;
 import org.apache.iceberg.SortField;
 import org.apache.iceberg.SortOrder;
@@ -411,16 +409,8 @@ public class AstToStringBuilder {
                 .append(" (\n");
 
         // Columns
-        List<String> columns;
-        if (table.isIcebergTable()) {
-            Schema schema = ((IcebergTable) table).getNativeTable().schema();
-            columns = table.getFullVisibleSchema().stream()
-                    .map(column -> toMysqlDDL(column, IcebergApiConverter.getWriteDefaultValue(schema, column.getName())))
-                    .collect(Collectors.toList());
-        } else {
-            columns = table.getFullVisibleSchema().stream().map(AstToStringBuilder::toMysqlDDL)
-                    .collect(Collectors.toList());
-        }
+        List<String> columns = table.getFullVisibleSchema().stream().map(AstToStringBuilder::toMysqlDDL)
+                .collect(Collectors.toList());
         createTableSql.append(String.join(",\n", columns))
                 .append("\n)");
 
@@ -527,15 +517,10 @@ public class AstToStringBuilder {
     }
 
     private static String toMysqlDDL(Column column) {
-        return toMysqlDDL(column, null);
-    }
-
-    private static String toMysqlDDL(Column column, String overrideDefaultValue) {
         StringBuilder sb = new StringBuilder();
         sb.append("  `").append(column.getName()).append("` ");
         sb.append(column.getType().toSql());
-        String defaultValue =
-                overrideDefaultValue != null ? overrideDefaultValue : column.getMetaDefaultValue(Lists.newArrayList());
+        String defaultValue = column.getMetaDefaultValue(Lists.newArrayList());
         if (defaultValue == null) {
             sb.append(" DEFAULT NULL");
         } else {
