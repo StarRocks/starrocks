@@ -19,6 +19,7 @@ import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
 import com.starrocks.connector.iceberg.IcebergUtil;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.type.DateType;
 import com.starrocks.type.VarcharType;
@@ -81,7 +82,7 @@ public class RemoveOrphanFilesProcedure extends IcebergTableProcedure {
     }
 
     @Override
-    public void execute(IcebergTableProcedureContext context, Map<String, ConstantOperator> args) {
+    public ShowResultSet execute(IcebergTableProcedureContext context, Map<String, ConstantOperator> args) {
         if (args.size() > 2) {
             throw new StarRocksConnectorException("invalid args. only support " +
                     "`older_than` and `location` in the remove orphan files operation");
@@ -101,7 +102,7 @@ public class RemoveOrphanFilesProcedure extends IcebergTableProcedure {
 
         Table table = context.table();
         if (table.currentSnapshot() == null) {
-            return;
+            return null;
         }
         if (table.location() == null || table.location().isEmpty()) {
             throw new StarRocksConnectorException("table location is empty");
@@ -150,6 +151,7 @@ public class RemoveOrphanFilesProcedure extends IcebergTableProcedure {
         validFileNames.add("version-hint.text");
 
         scanAndDeleteInvalidFiles(location, olderThanMillis, validFileNames, context.hdfsEnvironment());
+        return null;
     }
 
     /**

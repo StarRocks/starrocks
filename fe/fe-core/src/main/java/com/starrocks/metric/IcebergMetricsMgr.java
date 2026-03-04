@@ -34,12 +34,32 @@ public class IcebergMetricsMgr {
     private static final Map<String, LongCounterMetric> COUNTER_ICEBERG_DELETE_BYTES = new ConcurrentHashMap<>();
     private static final Map<String, LongCounterMetric> COUNTER_ICEBERG_DELETE_ROWS = new ConcurrentHashMap<>();
 
-    private static final String DELETE_TYPE_POSITION = "position";
-    private static final String DELETE_TYPE_METADATA = "metadata";
+    // compaction metrics (rewrite_data_files)
+    private static final Map<String, LongCounterMetric> COUNTER_ICEBERG_COMPACTION_TOTAL =
+            new ConcurrentHashMap<>();
+    private static final Map<String, LongCounterMetric> COUNTER_ICEBERG_COMPACTION_DURATION_MS =
+            new ConcurrentHashMap<>();
+    private static final Map<String, LongCounterMetric> COUNTER_ICEBERG_COMPACTION_INPUT_FILES =
+            new ConcurrentHashMap<>();
+    private static final Map<String, LongCounterMetric> COUNTER_ICEBERG_COMPACTION_OUTPUT_FILES =
+            new ConcurrentHashMap<>();
+    private static final Map<String, LongCounterMetric> COUNTER_ICEBERG_COMPACTION_REMOVED_DELETE_FILES =
+            new ConcurrentHashMap<>();
+
     private static final String STATUS_SUCCESS = "success";
     private static final String STATUS_FAILED = "failed";
     private static final String REASON_NONE = "none";
     private static final String REASON_UNKNOWN = "unknown";
+
+    private static final String REASON_TIMEOUT = "timeout";
+    private static final String REASON_OOM = "oom";
+    private static final String REASON_ACCESS_DENIED = "access_denied";
+
+    private static final String DELETE_TYPE_POSITION = "position";
+    private static final String DELETE_TYPE_METADATA = "metadata";
+
+    private static final String COMPACTION_TYPE_MANUAL = "manual";
+    private static final String COMPACTION_TYPE_AUTO = "auto";
 
     /**
      * Record a completed Iceberg delete task.
@@ -238,15 +258,107 @@ public class IcebergMetricsMgr {
         }
         String normalized = errorMessage.toLowerCase();
         if (normalized.contains("timeout") || normalized.contains("timed out")) {
-            return "timeout";
+            return REASON_TIMEOUT;
         }
         if (normalized.contains("outofmemory") || normalized.contains("out of memory")) {
-            return "oom";
+            return REASON_OOM;
         }
         if (normalized.contains("access denied") || normalized.contains("permission denied")
                 || normalized.contains("not authorized") || normalized.contains("unauthorized")) {
-            return "access_denied";
+            return REASON_ACCESS_DENIED;
         }
         return REASON_UNKNOWN;
+    }
+
+    private static String normalizeCompactionType(String compactionType) {
+        if (COMPACTION_TYPE_MANUAL.equalsIgnoreCase(compactionType)) {
+            return COMPACTION_TYPE_MANUAL;
+        }
+        if (COMPACTION_TYPE_AUTO.equalsIgnoreCase(compactionType)) {
+            return COMPACTION_TYPE_AUTO;
+        }
+        return Strings.isNullOrEmpty(compactionType) ? REASON_UNKNOWN : compactionType.toLowerCase();
+    }
+
+    // compaction (rewrite_data_files)
+    public static void increaseIcebergCompactionTotal(String status, String reason, String compactionType) {
+        String normalizedType = normalizeCompactionType(compactionType);
+        String normalizedStatus = normalizeStatus(status);
+        String normalizedReason = normalizeReason(reason);
+        String key = normalizedType + "|" + normalizedStatus + "|" + normalizedReason;
+        LongCounterMetric counter = COUNTER_ICEBERG_COMPACTION_TOTAL.computeIfAbsent(key, k -> {
+            LongCounterMetric metric = new LongCounterMetric("iceberg_compaction_total",
+                    Metric.MetricUnit.REQUESTS,
+                    "total iceberg compaction tasks by type, status and reason");
+            metric.addLabel(new MetricLabel("compaction_type", normalizedType));
+            metric.addLabel(new MetricLabel("status", normalizedStatus));
+            metric.addLabel(new MetricLabel("reason", normalizedReason));
+            MetricRepo.addMetric(metric);
+            return metric;
+        });
+        counter.increase(1L);
+    }
+
+    public static void increaseIcebergCompactionTotalSuccess() {
+        increaseIcebergCompactionTotal(STATUS_SUCCESS, REASON_NONE, COMPACTION_TYPE_MANUAL);
+    }
+
+    public static void increaseIcebergCompactionTotalFail(Throwable t) {
+        increaseIcebergCompactionTotal(STATUS_FAILED, classifyFailReason(t), COMPACTION_TYPE_MANUAL);
+    }
+
+    public static void increaseIcebergCompactionDurationMs(long durationMs, String compactionType) {
+        String normalizedType = normalizeCompactionType(compactionType);
+        LongCounterMetric counter = COUNTER_ICEBERG_COMPACTION_DURATION_MS.computeIfAbsent(
+                normalizedType, k -> {
+                    LongCounterMetric metric = new LongCounterMetric("iceberg_compaction_duration_ms_total",
+                            Metric.MetricUnit.MILLISECONDS, "total duration of iceberg compaction tasks");
+                    metric.addLabel(new MetricLabel("compaction_type", normalizedType));
+                    MetricRepo.addMetric(metric);
+                    return metric;
+                });
+        counter.increase(durationMs);
+    }
+
+    public static void increaseIcebergCompactionInputFiles(long count, String compactionType) {
+        String normalizedType = normalizeCompactionType(compactionType);
+        LongCounterMetric counter = COUNTER_ICEBERG_COMPACTION_INPUT_FILES.computeIfAbsent(
+                normalizedType, k -> {
+                    LongCounterMetric metric = new LongCounterMetric("iceberg_compaction_input_files_total",
+                            Metric.MetricUnit.REQUESTS,
+                            "total input data files for iceberg compaction");
+                    metric.addLabel(new MetricLabel("compaction_type", normalizedType));
+                    MetricRepo.addMetric(metric);
+                    return metric;
+                });
+        counter.increase(count);
+    }
+
+    public static void increaseIcebergCompactionOutputFiles(long count, String compactionType) {
+        String normalizedType = normalizeCompactionType(compactionType);
+        LongCounterMetric counter = COUNTER_ICEBERG_COMPACTION_OUTPUT_FILES.computeIfAbsent(
+                normalizedType, k -> {
+                    LongCounterMetric metric = new LongCounterMetric("iceberg_compaction_output_files_total",
+                            Metric.MetricUnit.REQUESTS,
+                            "total output data files generated by iceberg compaction");
+                    metric.addLabel(new MetricLabel("compaction_type", normalizedType));
+                    MetricRepo.addMetric(metric);
+                    return metric;
+                });
+        counter.increase(count);
+    }
+
+    public static void increaseIcebergCompactionRemovedDeleteFiles(long count, String compactionType) {
+        String normalizedType = normalizeCompactionType(compactionType);
+        LongCounterMetric counter = COUNTER_ICEBERG_COMPACTION_REMOVED_DELETE_FILES.computeIfAbsent(
+                normalizedType, k -> {
+                    LongCounterMetric metric = new LongCounterMetric("iceberg_compaction_removed_delete_files_total",
+                            Metric.MetricUnit.REQUESTS,
+                            "total delete files removed during iceberg compaction");
+                    metric.addLabel(new MetricLabel("compaction_type", normalizedType));
+                    MetricRepo.addMetric(metric);
+                    return metric;
+                });
+        counter.increase(count);
     }
 }

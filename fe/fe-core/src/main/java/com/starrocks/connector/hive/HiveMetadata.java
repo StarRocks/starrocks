@@ -47,6 +47,7 @@ import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
@@ -517,7 +518,7 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void alterTable(ConnectContext context, AlterTableStmt stmt) throws StarRocksException {
+    public ShowResultSet alterTable(ConnectContext context, AlterTableStmt stmt) throws StarRocksException {
         Table table = getTable(context, stmt.getDbName(), stmt.getTableName());
         if (table == null) {
             throw new StarRocksConnectorException(
@@ -526,6 +527,7 @@ public class HiveMetadata implements ConnectorMetadata {
         HiveTable hiveTable = (HiveTable) table;
         HiveAlterTableExecutor executor = new HiveAlterTableExecutor(stmt, hiveTable, context, hmsOps);
         executor.execute();
+        return null;
     }
 
     public static boolean useMetadataCache() {
