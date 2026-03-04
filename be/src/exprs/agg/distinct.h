@@ -352,37 +352,7 @@ struct DistinctAggregateStateV2<LT, SumLT, FixedLengthLTGuard<LT>> {
 };
 
 template <LogicalType LT, LogicalType SumLT>
-<<<<<<< HEAD
-struct DistinctAggregateStateV2<LT, SumLT, StringLTGuard<LT>> : public DistinctAggregateState<LT, SumLT> {};
-=======
-struct DistinctAggregateStateV2Base<LT, SumLT, false, StringOrBinaryGuard<LT>>
-        : public DistinctAggregateState<LT, SumLT> {};
-
-template <LogicalType LT, LogicalType SumLT, typename = guard::Guard>
-struct DistinctAggregateStateV2 : public DistinctAggregateStateV2Base<LT, SumLT, false> {};
-
-template <LogicalType LT, LogicalType SumLT, bool compute_sum, typename = guard::Guard>
-struct FusedMultiDistinctAggregateState : public DistinctAggregateStateV2Base<LT, SumLT, compute_sum> {
-    using CppType = RunTimeCppType<LT>;
-    using Base = DistinctAggregateStateV2Base<LT, SumLT, compute_sum>;
-    using Base::reset;
-    using Base::update;
-    MemPool mem_pool;
-
-    void update(CppType key) {
-        if constexpr (IsSlice<CppType>) {
-            this->Base::update(&mem_pool, key);
-        } else {
-            this->Base::update(key);
-        }
-    }
-
-    void reset() {
-        this->Base::reset();
-        mem_pool.clear();
-    }
-};
->>>>>>> c35e344ffe ([Enhancement] support varbinary for count distinct like agg functions (#68442))
+struct DistinctAggregateStateV2<LT, SumLT, StringOrBinaryGuard<LT>> : public DistinctAggregateState<LT, SumLT> {};
 
 // Dear god this template class as template parameter kills me!
 template <LogicalType LT, LogicalType SumLT,
