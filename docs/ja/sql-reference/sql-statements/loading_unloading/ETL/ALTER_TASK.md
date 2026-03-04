@@ -6,7 +6,7 @@ displayed_sidebar: docs
 
 ## 説明
 
-[SUBMIT TASK](SUBMIT_TASK.md) を使用して送信された非同期 ETL タスクを変更します。この機能は StarRocks v4.1 からサポートされています。
+[SUBMIT TASK](SUBMIT_TASK.md) を使用して送信された非同期 ETL タスクを変更します。この機能は v4.1 からサポートされています。
 
 このステートメントを使用して以下を行うことができます：
 
