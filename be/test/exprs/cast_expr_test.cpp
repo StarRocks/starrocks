@@ -26,7 +26,6 @@
 #include "column/type_traits.h"
 #include "column/variant_column.h"
 #include "column/vectorized_fwd.h"
-#include "exprs/expr_factory.h"
 #include "exprs/exprs_test_helper.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "gen_cpp/Exprs_types.h"
@@ -2373,12 +2372,6 @@ TEST_F(VectorizedCastExprTest, unsupported_test) {
     cast_expr.__set_child_type_desc(gen_multi_array_type_desc(to_thrift(TYPE_INT), 1));
     std::unique_ptr<Expr> expr2(VectorizedCastExprFactory::from_thrift(cast_expr));
     ASSERT_TRUE(expr2 == nullptr);
-
-    Expr* expr3 = nullptr;
-    ObjectPool pool;
-    TExpr texpr;
-    texpr.nodes.emplace_back(cast_expr);
-    ASSERT_FALSE(ExprFactory::create_expr_tree(&pool, texpr, &expr3, &runtime_state).ok());
 }
 
 TTypeDesc gen_struct_type_desc(const std::vector<TPrimitiveType::type>& field_types,

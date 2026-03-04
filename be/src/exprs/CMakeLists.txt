@@ -41,6 +41,7 @@ set(EXPR_CORE_FILES
   condition_expr.cpp
   encryption_functions.cpp
   es_functions.cpp
+  expr_factory.cpp
   expr_executor.cpp
   function_helper.cpp
   gin_functions.cpp
@@ -95,7 +96,7 @@ set(EXPR_FILES
   agg/factory/aggregate_resolver_window.cpp
   agg/combinator/agg_state_utils.cpp
   binary_functions.cpp
-  expr_factory.cpp
+  expr_factory_exprs_extension.cpp
   table_function/table_function_factory.cpp
   table_function/list_rowsets.cpp
   array_functions.cpp
