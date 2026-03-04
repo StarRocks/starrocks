@@ -45,7 +45,7 @@
 
 #include "column/datum_convert.h"
 #include "common/status.h"
-#include "common/util/debug_util.h"
+#include "util/debug_util.h"
 #include "fs/fs.h"
 #include "fs/fs_posix.h"
 #include "fs/fs_s3.h"
