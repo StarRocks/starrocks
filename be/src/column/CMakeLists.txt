@@ -43,6 +43,10 @@ ADD_BE_LIB(ColumnCore
         column_viewer.cpp
         column_view/column_view_base.cpp
         column_view/column_view_helper.cpp
+        variant_path_parser.cpp
+        variant_encoder.cpp
+        variant_builder.cpp
+        variant_merger.cpp
         column_hash/column_hash.cpp
 )
 
