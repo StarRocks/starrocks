@@ -22,7 +22,6 @@ set(CORE_FILES
     encrypt_file.cpp
     bundle_file.cpp
     fs_options.cpp
-    fs_options_helper.cpp
     )
 
 ADD_BE_LIB(FSCore
@@ -34,6 +33,7 @@ target_link_libraries(FSCore PUBLIC IOCore)
 set(EXEC_FILES
     fd_cache.cpp
     fs_factory.cpp
+    fs_options_helper.cpp
     key_cache.cpp
     fs_posix.cpp
     fs_broker.cpp
