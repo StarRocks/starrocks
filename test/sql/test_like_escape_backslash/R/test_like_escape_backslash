@@ -1,7 +1,8 @@
 -- name: test_like_escape_backslash
--- result:
 DROP TABLE IF EXISTS t_like_escape;
 -- result:
+-- !result
+
 CREATE TABLE IF NOT EXISTS t_like_escape (
     c0 INT NOT NULL,
     c1 VARCHAR(200) NOT NULL
@@ -10,6 +11,8 @@ DUPLICATE KEY(c0)
 DISTRIBUTED BY HASH(c0) BUCKETS 1
 PROPERTIES ("replication_num" = "1");
 -- result:
+-- !result
+
 INSERT INTO t_like_escape (c0, c1) VALUES
 (1, 'abc'),
 (2, 'abc\\def'),
@@ -21,6 +24,8 @@ INSERT INTO t_like_escape (c0, c1) VALUES
 (8, 'star\\test'),
 (9, 'abc_def');
 -- result:
+-- !result
+
 SELECT c0, c1 FROM t_like_escape WHERE c1 LIKE '%\\\\%' ORDER BY c0;
 -- result:
 2	abc\def
@@ -28,25 +33,30 @@ SELECT c0, c1 FROM t_like_escape WHERE c1 LIKE '%\\\\%' ORDER BY c0;
 6	\asdf
 7	test\asdf
 8	star\test
--- result:
+-- !result
+
 SELECT c0, c1 FROM t_like_escape WHERE c1 LIKE '%\\\\asdf' ORDER BY c0;
 -- result:
 6	\asdf
 7	test\asdf
--- result:
+-- !result
+
 SELECT c0, c1 FROM t_like_escape WHERE c1 LIKE 'star\\\\%' ORDER BY c0;
 -- result:
 3	star\
 8	star\test
--- result:
+-- !result
+
 SELECT c0, c1 FROM t_like_escape WHERE c1 LIKE 'star\\\\' ORDER BY c0;
 -- result:
 3	star\
--- result:
+-- !result
+
 SELECT c0, c1 FROM t_like_escape WHERE c1 LIKE 'star\\%' ORDER BY c0;
 -- result:
 4	star%
--- result:
+-- !result
+
 SELECT c0, c1 FROM t_like_escape WHERE like(c1, '%\\\\%') ORDER BY c0;
 -- result:
 2	abc\def
@@ -54,11 +64,13 @@ SELECT c0, c1 FROM t_like_escape WHERE like(c1, '%\\\\%') ORDER BY c0;
 6	\asdf
 7	test\asdf
 8	star\test
--- result:
+-- !result
+
 SELECT c0, c1 FROM t_like_escape WHERE like(c1, 'star\\\\') ORDER BY c0;
 -- result:
 3	star\
--- result:
+-- !result
+
 SELECT c0, c1 FROM t_like_escape WHERE c1 LIKE '%\\\\%' OR c1 LIKE 'star%' ORDER BY c0;
 -- result:
 2	abc\def
@@ -68,9 +80,13 @@ SELECT c0, c1 FROM t_like_escape WHERE c1 LIKE '%\\\\%' OR c1 LIKE 'star%' ORDER
 6	\asdf
 7	test\asdf
 8	star\test
--- result:
+-- !result
+
 SELECT c0, c1 FROM t_like_escape WHERE c1 LIKE 'abc\\_def' ORDER BY c0;
 -- result:
 9	abc_def
--- result:
+-- !result
+
 DROP TABLE t_like_escape;
+-- result:
+-- !result
