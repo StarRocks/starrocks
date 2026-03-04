@@ -29,6 +29,7 @@
 #include "exprs/expr_factory.h"
 #include "fs/fs.h"
 #include "fs/fs_broker.h"
+#include "fs/fs_factory.h"
 #include "gutil/strings/substitute.h"
 #include "io/compressed_input_stream.h"
 #include "runtime/descriptors.h"
@@ -304,7 +305,7 @@ Status FileScanner::create_sequential_file(const TBrokerRangeDesc& range_desc, c
     }
     case TFileType::FILE_BROKER: {
         if (params.__isset.use_broker && !params.use_broker) {
-            ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(range_desc.path, FSOptions(&params)));
+            ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateUniqueFromString(range_desc.path, FSOptions(&params)));
             ASSIGN_OR_RETURN(auto file, fs->new_sequential_file(range_desc.path));
             src_file = std::shared_ptr<SequentialFile>(std::move(file));
             break;
@@ -341,7 +342,7 @@ Status FileScanner::create_random_access_file(const TBrokerRangeDesc& range_desc
     }
     case TFileType::FILE_BROKER: {
         if (params.__isset.use_broker && !params.use_broker) {
-            ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(range_desc.path, FSOptions(&params)));
+            ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateUniqueFromString(range_desc.path, FSOptions(&params)));
             ASSIGN_OR_RETURN(auto file, fs->new_random_access_file(RandomAccessFileOptions(), range_desc.path));
             src_file = std::shared_ptr<RandomAccessFile>(std::move(file));
             break;

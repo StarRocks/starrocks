@@ -31,6 +31,7 @@
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "fmt/format.h"
 #include "fs/fs.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/util.h"
 #include "storage/lake/cloud_native_index_compaction_task.h"
@@ -188,7 +189,7 @@ std::string TabletManager::tablet_latest_metadata_cache_key(int64_t tablet_id) {
 }
 
 Status TabletManager::drop_local_cache(const std::string& path) {
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(path));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(path));
     return fs->drop_local_cache(path);
 }
 
@@ -381,7 +382,7 @@ Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadat
     const std::string meta_location =
             bundle_tablet_metadata_location(tablet_metas.begin()->first, tablet_metas.begin()->second.version());
 
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(meta_location));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(meta_location));
     WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     ASSIGN_OR_RETURN(auto meta_file, fs->new_writable_file(opts, meta_location));
     std::string serialized_buf;
@@ -588,7 +589,7 @@ StatusOr<TabletMetadataPtrs> TabletManager::get_metas_from_bundle_tablet_metadat
     std::unique_ptr<RandomAccessFile> input_file;
     RandomAccessFileOptions opts{.skip_fill_local_cache = true};
     if (input_fs == nullptr) {
-        ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(location));
+        ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(location));
         ASSIGN_OR_RETURN(input_file, fs->new_random_access_file(opts, location));
     } else {
         ASSIGN_OR_RETURN(input_file, input_fs->new_random_access_file(opts, location));
@@ -645,7 +646,7 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t ta
     ASSIGN_OR_RETURN(auto real_path, _location_provider->real_location(path));
     std::shared_ptr<FileSystem> file_system;
     if (!fs) {
-        ASSIGN_OR_RETURN(file_system, FileSystem::CreateSharedFromString(path));
+        ASSIGN_OR_RETURN(file_system, FileSystemFactory::CreateSharedFromString(path));
     } else {
         file_system = fs;
     }
@@ -765,7 +766,7 @@ StatusOr<TabletMetadataIter> TabletManager::list_tablet_metadata(int64_t tablet_
     std::string prefix = fmt::format("{:016X}_", tablet_id);
 
     auto root = _location_provider->metadata_root_location(tablet_id);
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(root));
     auto scan_cb = [&](std::string_view name) {
         if (HasPrefixString(name, prefix)) {
             objects.insert(join_path(root, name));
@@ -1302,7 +1303,7 @@ StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, i
         if (segment_info.fs) {
             fs = segment_info.fs;
         } else {
-            ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(segment_info.path));
+            ASSIGN_OR_RETURN(fs, FileSystemFactory::CreateSharedFromString(segment_info.path));
         }
         segment = std::make_shared<Segment>(std::move(fs), segment_info, segment_id, std::move(tablet_schema), this);
         if (fill_meta_cache) {

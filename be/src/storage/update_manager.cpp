@@ -22,6 +22,7 @@
 #include "base/time/time.h"
 #include "base/utility/pretty_printer.h"
 #include "common/system/cpu_info.h"
+#include "fs/fs_factory.h"
 #include "gutil/endian.h"
 #include "runtime/current_thread.h"
 #include "runtime/starrocks_metrics.h"
@@ -311,7 +312,7 @@ StatusOr<size_t> UpdateManager::clear_delta_column_group_before_version(KVStore*
         }
     }
     RETURN_IF_ERROR(meta->write_batch(&wb));
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(tablet_path));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(tablet_path));
     for (const auto& filename : clear_filenames) {
         WARN_IF_ERROR(fs->delete_file(filename), "delete file fail, filename: " + filename);
     }

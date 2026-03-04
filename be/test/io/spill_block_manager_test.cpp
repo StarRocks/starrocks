@@ -57,6 +57,7 @@
 #include "exprs/expr_context.h"
 #include "fmt/format.h"
 #include "fs/fs.h"
+#include "fs/fs_factory.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/mem_tracker.h"
@@ -70,7 +71,7 @@ std::string generate_spill_path(const TUniqueId& query_id, const std::string& pa
 }
 
 spill::DirPtr create_spill_dir(const std::string& path, int64_t capacity_limit) {
-    auto fs = FileSystem::CreateSharedFromString(path);
+    auto fs = FileSystemFactory::CreateSharedFromString(path);
     return std::make_shared<spill::Dir>(path, fs.value(), capacity_limit);
 }
 
