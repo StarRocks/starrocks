@@ -88,7 +88,7 @@ public:
         // but the operator is thread-unsafe, it's will cause crash in multi-thread(OLAP_SCANNER) when
         // OLAP_SCANNER call expression.
         // Call the get_data() when create ConstColumn is a short-term solution
-        if constexpr(!lt_is_object_family<Type>) {
+        if constexpr (!lt_is_object_family<Type>) {
             ptr->get_data();
         }
         return ConstColumn::create(std::move(ptr), chunk_size);
