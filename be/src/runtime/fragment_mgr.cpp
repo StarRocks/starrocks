@@ -438,8 +438,8 @@ Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, co
             return Status::OK();
         }
     }
-    exec_state.reset(new FragmentExecState(params.params.query_id, fragment_instance_id, params.backend_num, _exec_env,
-                                           params.coord));
+    exec_state = std::make_shared<FragmentExecState>(params.params.query_id, fragment_instance_id, params.backend_num,
+                                                     _exec_env, params.coord);
     RETURN_IF_ERROR_WITH_WARN(exec_state->prepare(params), "Fail to prepare Fragment");
 
     {

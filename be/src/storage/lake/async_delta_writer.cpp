@@ -183,7 +183,7 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
         if (async_writer->closed()) {
             st.update(Status::InternalError("AsyncDeltaWriter has been closed"));
         }
-        auto task_ptr = *iter;
+        const auto& task_ptr = *iter;
         num_tasks += 1;
         pending_time_ns += MonotonicNanos() - task_ptr->create_time_ns;
         switch (task_ptr->type) {

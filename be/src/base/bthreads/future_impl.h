@@ -94,7 +94,7 @@ protected:
     void set_exception(std::exception_ptr exception) {
         int expect_status = Status::kNotReady;
         if (_status->compare_exchange_strong(expect_status, Status::kWriting, butil::memory_order_acq_rel)) {
-            _exception = exception;
+            _exception = std::move(exception);
             mark_ready_ant_notify();
         } else {
             throw future_error(future_errc::promise_already_satisfied);

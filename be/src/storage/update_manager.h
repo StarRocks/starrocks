@@ -45,7 +45,7 @@ class PersistentIndexLoadExecutor;
 class LocalDelvecLoader : public DelvecLoader {
 public:
     LocalDelvecLoader(KVStore* meta) : _meta(meta) {}
-    Status load(const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec);
+    Status load(const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec) override;
 
 private:
     KVStore* _meta = nullptr;
@@ -54,9 +54,9 @@ private:
 class LocalDeltaColumnGroupLoader : public DeltaColumnGroupLoader {
 public:
     LocalDeltaColumnGroupLoader(KVStore* meta) : _meta(meta) {}
-    Status load(const TabletSegmentId& tsid, int64_t version, DeltaColumnGroupList* pdcgs);
+    Status load(const TabletSegmentId& tsid, int64_t version, DeltaColumnGroupList* pdcgs) override;
     Status load(int64_t tablet_id, RowsetId rowsetid, uint32_t segment_id, int64_t version,
-                DeltaColumnGroupList* pdcgs);
+                DeltaColumnGroupList* pdcgs) override;
     KVStore* meta() const { return _meta; }
 
 private:
@@ -158,6 +158,9 @@ public:
     bool TEST_update_state_exist(Tablet* tablet, Rowset* rowset);
     bool TEST_primary_index_refcnt(int64_t tablet_id, uint32_t expected_cnt);
 
+    UpdateManager(const UpdateManager&) = delete;
+    const UpdateManager& operator=(const UpdateManager&) = delete;
+
 private:
     // default 6min
     int64_t _cache_expire_ms = 360000;
@@ -191,9 +194,6 @@ private:
     std::unique_ptr<PersistentIndexLoadExecutor> _pindex_load_executor;
 
     bool _keep_pindex_bf = true;
-
-    UpdateManager(const UpdateManager&) = delete;
-    const UpdateManager& operator=(const UpdateManager&) = delete;
 };
 
 } // namespace starrocks

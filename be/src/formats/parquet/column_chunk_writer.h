@@ -26,8 +26,8 @@
 #include <parquet/arrow/reader.h>
 #include <parquet/arrow/writer.h>
 #include <parquet/exception.h>
-#include <stdint.h>
 
+#include <cstdint>
 #include <utility>
 
 #include "fs/fs.h"

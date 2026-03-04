@@ -181,7 +181,7 @@ public:
     // TODO: remove this method
     std::shared_ptr<LocationProvider> TEST_set_location_provider(std::shared_ptr<LocationProvider> value) {
         auto ret = _location_provider;
-        _location_provider = value;
+        _location_provider = std::move(value);
         return ret;
     }
 

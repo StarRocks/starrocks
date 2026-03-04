@@ -190,9 +190,8 @@ public:
     //  Decrease or increase cache capacity.
     virtual bool adjust_capacity(int64_t delta, size_t min_capacity = 0) = 0;
 
-private:
     Cache(const Cache&) = delete;
-    const Cache& operator=(const Cache&) = delete;
+    Cache& operator=(const Cache&) = delete;
 };
 
 // An entry is a variable length heap-allocated structure.  Entries

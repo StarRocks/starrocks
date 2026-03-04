@@ -27,7 +27,7 @@ class DatumVariant {
 public:
     DatumVariant() = default;
 
-    DatumVariant(const TypeInfoPtr& type, const Datum& value) : _type(type), _value(value) {}
+    DatumVariant(TypeInfoPtr type, const Datum& value) : _type(std::move(type)), _value(value) {}
 
     const TypeInfoPtr& type() const { return _type; }
 

@@ -37,7 +37,7 @@ Aws::SDKOptions aws_sdk_options;
 
 lake::TabletManager* _lake_tablet_manager = nullptr;
 
-void starrocks_format_initialize(void) {
+void starrocks_format_initialize() {
     setenv("STARROCKS_HOME", "./", 0);
     setenv("UDF_RUNTIME_DIR", "./", 0);
 
@@ -75,7 +75,7 @@ void starrocks_format_initialize(void) {
     }
 }
 
-void starrocks_format_shutdown(void) {
+void starrocks_format_shutdown() {
     if (_starrocks_format_inited) {
         LOG(INFO) << "starrocks format module start to deinitialize";
         Aws::ShutdownAPI(aws_sdk_options);

@@ -15,9 +15,9 @@
 #pragma once
 
 #include <parquet/types.h>
-#include <stddef.h>
-#include <stdint.h>
 
+#include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>

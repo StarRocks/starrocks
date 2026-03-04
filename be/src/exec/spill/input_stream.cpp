@@ -257,7 +257,7 @@ Status BufferedInputStream::prefetch(workgroup::YieldContext& yield_ctx, SerdeCo
 class SequenceInputStream : public SpillInputStream {
 public:
     SequenceInputStream(std::vector<BlockPtr> input_blocks, SerdePtr serde, BlockReaderOptions options)
-            : _input_blocks(std::move(input_blocks)), _serde(std::move(serde)), _options(std::move(options)) {}
+            : _input_blocks(std::move(input_blocks)), _serde(std::move(serde)), _options(options) {}
     ~SequenceInputStream() override = default;
 
     StatusOr<ChunkUniquePtr> get_next(workgroup::YieldContext& yield_ctx, SerdeContext& ctx) override;

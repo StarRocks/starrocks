@@ -24,7 +24,7 @@ struct FileEncryptionInfo {
     EncryptionAlgorithmPB algorithm = EncryptionAlgorithmPB::NO_ENCRYPTION;
     std::string key;
     FileEncryptionInfo() = default;
-    FileEncryptionInfo(EncryptionAlgorithmPB algorithm, std::string key) : algorithm(algorithm), key(key) {}
+    FileEncryptionInfo(EncryptionAlgorithmPB algorithm, std::string key) : algorithm(algorithm), key(std::move(key)) {}
     const uint8_t* key_bytes() const { return reinterpret_cast<const uint8_t*>(key.data()); }
     bool is_encrypted() const { return algorithm != EncryptionAlgorithmPB::NO_ENCRYPTION; }
 };

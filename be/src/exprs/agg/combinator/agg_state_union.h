@@ -30,7 +30,7 @@ struct AggStateUnionState {};
 class AggStateUnion final : public AggStateCombinator<AggStateUnionState, AggStateUnion> {
 public:
     AggStateUnion(AggStateDesc agg_state_desc, const AggregateFunction* function)
-            : AggStateCombinator(agg_state_desc, function) {
+            : AggStateCombinator(std::move(agg_state_desc), function) {
         DCHECK(_function != nullptr);
     }
 

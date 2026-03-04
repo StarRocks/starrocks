@@ -506,8 +506,8 @@ size_t ColumnHelper::compute_bytes_size(ColumnsConstIterator const& begin, Colum
 MutableColumns ColumnHelper::to_mutable_columns(const Columns& columns) {
     MutableColumns mutable_columns;
     mutable_columns.reserve(columns.size());
-    for (auto& column : columns) {
-        mutable_columns.emplace_back(std::move(*column).mutate());
+    for (const auto& column : columns) {
+        mutable_columns.emplace_back(std::move(*column).mutate()); // NOLINT(performance-move-const-arg)
     }
     return mutable_columns;
 }

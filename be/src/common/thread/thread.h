@@ -272,6 +272,9 @@ private:
 // pretty complicated to get right.
 class ThreadJoiner {
 public:
+    ThreadJoiner(const ThreadJoiner&) = delete;
+    ThreadJoiner& operator=(const ThreadJoiner&) = delete;
+
     explicit ThreadJoiner(Thread* thread);
 
     // Start emitting warnings after this many milliseconds.
@@ -308,9 +311,6 @@ private:
     int _warn_after_ms;
     int _warn_every_ms;
     int _give_up_after_ms;
-
-    ThreadJoiner(const ThreadJoiner&) = delete;
-    const ThreadJoiner& operator=(const ThreadJoiner&) = delete;
 };
 
 } //namespace starrocks

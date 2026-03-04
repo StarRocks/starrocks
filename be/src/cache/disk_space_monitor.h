@@ -40,7 +40,7 @@ public:
 
         virtual dev_t device_id(const std::string& path);
 
-        virtual ~FileSystemWrapper() {}
+        virtual ~FileSystemWrapper() = default;
     };
 
     struct DiskStats {
@@ -67,7 +67,7 @@ public:
         size_t total_cache_usage = 0;
     };
 
-    DiskSpace(const std::string& path, std::shared_ptr<FileSystemWrapper> fs) : _path(path), _fs(fs) {}
+    DiskSpace(std::string path, std::shared_ptr<FileSystemWrapper> fs) : _path(std::move(path)), _fs(std::move(fs)) {}
 
     Status init_spaces(const std::vector<DirSpace>& dir_spaces);
 

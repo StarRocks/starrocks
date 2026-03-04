@@ -965,6 +965,7 @@ void MetaFileBuilder::batch_apply_opwrite(const TxnLogPB_OpWrite& op_write,
     std::vector<std::string> del_encryption_metas;
 
     // Collect del files
+    dels.reserve(op_write.dels_size());
     for (int i = 0; i < op_write.dels_size(); i++) {
         dels.push_back(op_write.dels(i));
     }
@@ -973,6 +974,7 @@ void MetaFileBuilder::batch_apply_opwrite(const TxnLogPB_OpWrite& op_write,
         CHECK(op_write.del_encryption_metas_size() == op_write.dels_size())
                 << fmt::format("del_encryption_metas_size:{} != dels_size:{}", op_write.del_encryption_metas_size(),
                                op_write.dels_size());
+        del_encryption_metas.reserve(op_write.del_encryption_metas_size());
         for (int i = 0; i < op_write.del_encryption_metas_size(); i++) {
             del_encryption_metas.push_back(op_write.del_encryption_metas(i));
         }

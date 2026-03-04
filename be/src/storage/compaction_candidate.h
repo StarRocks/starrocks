@@ -34,28 +34,21 @@ struct CompactionCandidate {
     CompactionCandidate(TabletSharedPtr t, CompactionType compaction_type)
             : tablet(std::move(t)), type(compaction_type) {}
 
-    CompactionCandidate(const TabletSharedPtr& t, CompactionType compaction_type) : tablet(t), type(compaction_type) {}
-
     CompactionCandidate(const CompactionCandidate& other) {
         tablet = other.tablet;
         type = other.type;
         score = other.score;
     }
 
-    CompactionCandidate& operator=(const CompactionCandidate& rhs) {
-        tablet = rhs.tablet;
-        type = rhs.type;
-        score = rhs.score;
-        return *this;
-    }
+    CompactionCandidate& operator=(const CompactionCandidate& rhs) = default;
 
-    CompactionCandidate(CompactionCandidate&& other) {
+    CompactionCandidate(CompactionCandidate&& other) noexcept {
         tablet = std::move(other.tablet);
         type = other.type;
         score = other.score;
     }
 
-    CompactionCandidate& operator=(CompactionCandidate&& rhs) {
+    CompactionCandidate& operator=(CompactionCandidate&& rhs) noexcept {
         tablet = std::move(rhs.tablet);
         type = rhs.type;
         score = rhs.score;

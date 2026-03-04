@@ -273,7 +273,7 @@ Status FragmentContext::prepare_all_pipelines() {
 }
 
 void FragmentContext::set_stream_load_contexts(const std::vector<StreamLoadContext*>& contexts) {
-    _stream_load_contexts = std::move(contexts);
+    _stream_load_contexts = contexts;
 }
 
 // Note: this function should be thread safe

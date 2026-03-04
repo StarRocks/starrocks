@@ -736,6 +736,7 @@ StatusOr<std::vector<std::pair<int64_t, int64_t>>> ScalarColumnIterator::get_io_
                                                                                           Column* dst) {
     (void)dst;
     std::vector<std::pair<int64_t, int64_t>> res;
+    res.reserve(range.size());
     auto reader = get_column_reader();
     if (reader == nullptr) {
         // should't happen
@@ -756,7 +757,7 @@ StatusOr<std::vector<std::pair<int64_t, int64_t>>> ScalarColumnIterator::get_io_
             // merge page index
             page_index.back().second = iter_end.page_index();
         } else {
-            page_index.emplace_back(std::make_pair(iter_start.page_index(), iter_end.page_index()));
+            page_index.emplace_back(iter_start.page_index(), iter_end.page_index());
         }
 
         prev_page_index = iter_end.page_index();

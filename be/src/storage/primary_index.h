@@ -166,9 +166,9 @@ public:
     Status get_load_status() { return _status; }
 
     // only for ut
-    void set_status(bool loaded, Status st) {
+    void set_status(bool loaded, Status&& st) {
         _loaded = loaded;
-        _status = st;
+        _status = std::move(st);
     }
 
     // Return the pointer of specific position of slice array.

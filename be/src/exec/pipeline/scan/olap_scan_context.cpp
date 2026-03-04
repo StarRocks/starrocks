@@ -155,7 +155,7 @@ Status OlapScanContext::parse_conjuncts(RuntimeState* state, const std::vector<E
     opts.enable_column_expr_predicate = enable_column_expr_predicate;
     opts.pred_tree_params = state->fragment_ctx()->pred_tree_params();
 
-    _conjuncts_manager = std::make_unique<ScanConjunctsManager>(std::move(opts));
+    _conjuncts_manager = std::make_unique<ScanConjunctsManager>(opts);
     ScanConjunctsManager& cm = *_conjuncts_manager;
 
     // Parse conjuncts via _conjuncts_manager.

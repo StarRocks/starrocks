@@ -102,8 +102,8 @@ struct CastFn {
     template <bool AllowThrowException>                                                                                \
     struct CastFn<FROM_TYPE, TO_TYPE, AllowThrowException> {                                                           \
         static ColumnPtr cast_fn(ColumnPtr&& column) {                                                                  \
-            if constexpr (std::numeric_limits<RunTimeCppType<TO_TYPE>>::max() <                                        \
-                          std::numeric_limits<RunTimeCppType<FROM_TYPE>>::max()) {                                     \
+            if constexpr (static_cast<long double>(std::numeric_limits<RunTimeCppType<TO_TYPE>>::max()) <              \
+                          static_cast<long double>(std::numeric_limits<RunTimeCppType<FROM_TYPE>>::max())) {           \
                 if constexpr (!AllowThrowException) {                                                                  \
                     return VectorizedInputCheckUnaryFunction<UNARY_IMPL, NumberCheck>::template evaluate<FROM_TYPE,    \
                                                                                                          TO_TYPE>(     \
@@ -517,7 +517,7 @@ ColumnPtr cast_int_from_string_fn(ColumnPtr& column) {
                 null_data[i] = (result != StringParser::PARSE_SUCCESS);
             }
         }
-        return NullableColumn::create(std::move(res_data_column), std::move(null_column));
+        return NullableColumn::create(std::move(res_data_column), std::move(null_column_ptr));
     } else {
         NullColumn::MutablePtr null_column = NullColumn::create(sz);
         auto& null_data = null_column->get_data();
@@ -996,7 +996,7 @@ static ColumnPtr cast_from_string_to_datetime_fn(ColumnPtr& column) {
                 null_data[i] = !success;
             }
         }
-        return NullableColumn::create(std::move(res_data_column), std::move(null_column));
+        return NullableColumn::create(std::move(res_data_column), std::move(null_column_ptr));
     } else {
         const auto* data_column = down_cast<const BinaryColumn*>(column.get());
         NullColumn::MutablePtr null_column = NullColumn::create(num_rows);
@@ -1267,11 +1267,8 @@ public:
                                                                                lt_is_float<ToType>)) {
                 typedef RunTimeCppType<FromType> FromCppType;
                 typedef RunTimeCppType<ToType> ToCppType;
-                if constexpr ((std::is_floating_point_v<ToCppType> || std::is_floating_point_v<FromCppType>)
-                                      ? (static_cast<long double>(std::numeric_limits<ToCppType>::max()) <
-                                         static_cast<long double>(std::numeric_limits<FromCppType>::max()))
-                                      : (std::numeric_limits<ToCppType>::max() <
-                                         std::numeric_limits<FromCppType>::max())) {
+                if constexpr (static_cast<long double>(std::numeric_limits<ToCppType>::max()) <
+                              static_cast<long double>(std::numeric_limits<FromCppType>::max())) {
                     // Check overflow.
 
                     llvm::Value* max_overflow = nullptr;

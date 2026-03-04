@@ -66,7 +66,7 @@ public:
 
     // Flush all buffered data and close all existing channels to destination
     // hosts. Further send() calls are illegal after calling close().
-    Status close(RuntimeState* state, Status exec_status) override;
+    Status close(RuntimeState* state, const Status& exec_status) override;
     RuntimeProfile* profile() override { return _profile; }
 
     void set_query_statistics(std::shared_ptr<QueryStatistics> statistics) override;

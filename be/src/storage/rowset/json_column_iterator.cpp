@@ -46,8 +46,8 @@ class JsonFlatColumnIterator final : public ColumnIterator {
 public:
     JsonFlatColumnIterator(ColumnReader* reader, std::unique_ptr<ColumnIterator> null_iter,
                            std::vector<std::unique_ptr<ColumnIterator>> field_iters,
-                           const std::vector<std::string>& target_paths, const std::vector<LogicalType>& target_types,
-                           const std::vector<std::string>& source_paths, const std::vector<LogicalType>& source_types,
+                           std::vector<std::string> target_paths, std::vector<LogicalType> target_types,
+                           std::vector<std::string> source_paths, std::vector<LogicalType> source_types,
                            bool need_remain)
             : _reader(reader),
               _null_iter(std::move(null_iter)),
@@ -197,7 +197,7 @@ Status JsonFlatColumnIterator::_read(JsonColumn* json_column, FUNC read_fn) {
     } else {
         // convert mutable columns to immutable columns
         Columns immutable_columns = ColumnHelper::to_columns(std::move(columns));
-        RETURN_IF_ERROR(transformer->trans(std::move(immutable_columns)));
+        RETURN_IF_ERROR(transformer->trans(immutable_columns));
         auto result = transformer->mutable_result();
         json_column->set_flat_columns(_target_paths, _target_types, std::move(result));
     }
@@ -444,8 +444,8 @@ Status JsonDynamicFlatIterator::get_row_ranges_by_zone_map(const std::vector<con
 class JsonMergeIterator final : public ColumnIterator {
 public:
     JsonMergeIterator(ColumnReader* reader, std::unique_ptr<ColumnIterator> null_iter,
-                      std::vector<std::unique_ptr<ColumnIterator>> all_iter, const std::vector<std::string>& src_paths,
-                      const std::vector<LogicalType>& src_types)
+                      std::vector<std::unique_ptr<ColumnIterator>> all_iter, std::vector<std::string> src_paths,
+                      std::vector<LogicalType> src_types)
             : _reader(reader),
               _null_iter(std::move(null_iter)),
               _all_iter(std::move(all_iter)),
@@ -796,13 +796,14 @@ private:
 
 StatusOr<std::unique_ptr<ColumnIterator>> create_json_flat_iterator(
         ColumnReader* reader, std::unique_ptr<ColumnIterator> null_iter,
-        std::vector<std::unique_ptr<ColumnIterator>> iters, const std::vector<std::string>& target_paths,
-        const std::vector<LogicalType>& target_types, const std::vector<std::string>& source_paths,
-        const std::vector<LogicalType>& source_types, bool need_remain) {
+        std::vector<std::unique_ptr<ColumnIterator>> iters, std::vector<std::string> target_paths,
+        std::vector<LogicalType> target_types, std::vector<std::string> source_paths,
+        std::vector<LogicalType> source_types, bool need_remain) {
     VLOG(2) << fmt::format("create_json_flat_iterator: num_iters={} source_paths={} target_paths={} need_remain={}",
                            iters.size(), fmt::join(source_paths, ","), fmt::join(target_paths, ","), need_remain);
-    return std::make_unique<JsonFlatColumnIterator>(reader, std::move(null_iter), std::move(iters), target_paths,
-                                                    target_types, source_paths, source_types, need_remain);
+    return std::make_unique<JsonFlatColumnIterator>(reader, std::move(null_iter), std::move(iters),
+                                                    std::move(target_paths), std::move(target_types),
+                                                    std::move(source_paths), std::move(source_types), need_remain);
 }
 
 StatusOr<std::unique_ptr<ColumnIterator>> create_json_dynamic_flat_iterator(
@@ -815,12 +816,12 @@ StatusOr<std::unique_ptr<ColumnIterator>> create_json_dynamic_flat_iterator(
 
 StatusOr<std::unique_ptr<ColumnIterator>> create_json_merge_iterator(
         ColumnReader* reader, std::unique_ptr<ColumnIterator> null_iter,
-        std::vector<std::unique_ptr<ColumnIterator>> all_iters, const std::vector<std::string>& merge_paths,
-        const std::vector<LogicalType>& merge_types) {
+        std::vector<std::unique_ptr<ColumnIterator>> all_iters, std::vector<std::string> merge_paths,
+        std::vector<LogicalType> merge_types) {
     VLOG(2) << fmt::format("create_json_merge_iterator: null={} merge_paths={}", null_iter != nullptr,
                            fmt::join(merge_paths, ","));
-    return std::make_unique<JsonMergeIterator>(reader, std::move(null_iter), std::move(all_iters), merge_paths,
-                                               merge_types);
+    return std::make_unique<JsonMergeIterator>(reader, std::move(null_iter), std::move(all_iters),
+                                               std::move(merge_paths), std::move(merge_types));
 }
 
 StatusOr<ColumnIteratorUPtr> create_json_extract_iterator(ColumnIteratorUPtr source_iter, bool source_nullable,

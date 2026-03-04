@@ -31,7 +31,7 @@ using DatumRowOpt = std::optional<DatumRow>;
 class DatumRowIterator final : public ChunkIterator {
 public:
     explicit DatumRowIterator(Schema schema, std::vector<DatumRow>&& rows)
-            : ChunkIterator(schema, rows.size()), _rows(std::move(rows)) {}
+            : ChunkIterator(std::move(schema), rows.size()), _rows(std::move(rows)) {}
     void close() override {}
 
 protected:
@@ -50,7 +50,7 @@ class MemStateTable : public StateTable {
 public:
     // For MemStateTable, we assume flushed chunk's columns is assigned as:
     // _k_num | _v_num
-    MemStateTable(std::vector<SlotDescriptor*> slots, size_t k_num)
+    MemStateTable(const std::vector<SlotDescriptor*>& slots, size_t k_num)
             : _slots(slots), _k_num(k_num), _cols_num(slots.size()) {
         for (auto i = 0; i < _slots.size(); i++) {
             auto& slot = _slots[i];

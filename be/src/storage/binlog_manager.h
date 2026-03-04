@@ -128,8 +128,8 @@ private:
 // automatically in the destructor
 class BinlogFileReadHolder {
 public:
-    BinlogFileReadHolder(std::shared_ptr<std::atomic<int64_t>> _reader_count, BinlogFileMetaPBPtr file_meta)
-            : _reader_count(_reader_count), _file_meta(file_meta) {
+    BinlogFileReadHolder(const std::shared_ptr<std::atomic<int64_t>>& reader_count, BinlogFileMetaPBPtr file_meta)
+            : _reader_count(reader_count), _file_meta(std::move(file_meta)) {
         _reader_count->fetch_add(1);
     }
 
@@ -148,13 +148,13 @@ using BinlogFileReadHolderPtr = std::shared_ptr<BinlogFileReadHolder>;
 // reference count about how many readers are using it
 class BinlogFile {
 public:
-    BinlogFile(BinlogFileMetaPBPtr file_meta) : _file_meta(file_meta) {
+    BinlogFile(BinlogFileMetaPBPtr file_meta) : _file_meta(std::move(file_meta)) {
         _reader_count = std::make_shared<std::atomic<int64_t>>();
     }
 
     BinlogFileMetaPBPtr& file_meta() { return _file_meta; }
 
-    void update_file_meta(BinlogFileMetaPBPtr& file_meta) { _file_meta = file_meta; }
+    void update_file_meta(BinlogFileMetaPBPtr file_meta) { _file_meta = std::move(file_meta); }
 
     BinlogFileReadHolderPtr new_read_holder() {
         return std::make_shared<BinlogFileReadHolder>(_reader_count, _file_meta);

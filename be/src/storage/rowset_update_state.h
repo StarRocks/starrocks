@@ -64,20 +64,20 @@ struct PartialUpdateState {
 struct AutoIncrementPartialUpdateState {
     std::vector<uint64_t> src_rss_rowids;
     MutableColumnPtr write_column;
-    Rowset* rowset;
-    TabletSchemaCSPtr schema;
+    Rowset* rowset = nullptr;
+    TabletSchemaCSPtr schema = nullptr;
     // auto increment column id in partial segment file
     // but not in full tablet schema
-    uint32_t id;
-    uint32_t segment_id;
+    uint32_t id = 0;
+    uint32_t segment_id = 0;
     std::vector<uint32_t> rowids;
     MutableColumnPtr delete_pks;
-    bool skip_rewrite;
-    AutoIncrementPartialUpdateState() : rowset(nullptr), schema(nullptr), id(0), segment_id(0), skip_rewrite(false) {}
+    bool skip_rewrite = false;
+    AutoIncrementPartialUpdateState() = default;
 
     void init(Rowset* rowset, TabletSchemaCSPtr schema, uint32_t id, uint32_t segment_id) {
         this->rowset = rowset;
-        this->schema = schema;
+        this->schema = std::move(schema);
         this->id = id;
         this->segment_id = segment_id;
     }
@@ -132,6 +132,9 @@ public:
     Status load_upserts(Rowset* rowset, uint32_t upsert_id);
     void release_upserts(uint32_t idx);
     void release_deletes(uint32_t idx);
+
+    RowsetUpdateState(const RowsetUpdateState&) = delete;
+    const RowsetUpdateState& operator=(const RowsetUpdateState&) = delete;
 
 private:
     Status _load_deletes(Rowset* rowset, uint32_t delete_id, Column* pk_column);
@@ -189,9 +192,6 @@ private:
 
     std::vector<AutoIncrementPartialUpdateState> _auto_increment_partial_update_states;
     std::map<string, string> _column_to_expr_value;
-
-    RowsetUpdateState(const RowsetUpdateState&) = delete;
-    const RowsetUpdateState& operator=(const RowsetUpdateState&) = delete;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const RowsetUpdateState& o) {

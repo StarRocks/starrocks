@@ -370,7 +370,7 @@ BlobContainerClientPtr AzBlobClientFactory::create_blob_container_client(
 
 class AzBlobFileSystem : public FileSystem {
 public:
-    explicit AzBlobFileSystem(const FSOptions& options);
+    explicit AzBlobFileSystem(FSOptions options);
     ~AzBlobFileSystem() override = default;
 
     AzBlobFileSystem(const AzBlobFileSystem&) = delete;
@@ -475,8 +475,7 @@ private:
     AzBlobClientFactory* _factory;
 };
 
-AzBlobFileSystem::AzBlobFileSystem(const FSOptions& options)
-        : _options(std::move(options)), _factory(blob_client_factory()) {}
+AzBlobFileSystem::AzBlobFileSystem(FSOptions options) : _options(std::move(options)), _factory(blob_client_factory()) {}
 
 StatusOr<BlobContainerClientPtr> AzBlobFileSystem::new_blob_container_client(const AzBlobURI& uri) {
     // Create azure cloud credential from TCloudConfiguration.cloud_properties

@@ -308,6 +308,7 @@ StatusOr<ColumnPtr> TimeFunctions::utc_time(FunctionContext* context, const Colu
 }
 
 StatusOr<ColumnPtr> TimeFunctions::timestamp(FunctionContext* context, const Columns& columns) {
+    // NOLINTNEXTLINE(performance-move-const-arg)
     return std::move(*columns[0]).mutate();
 }
 
@@ -3202,6 +3203,7 @@ Status TimeFunctions::date_trunc_prepare(FunctionContext* context, FunctionConte
 }
 
 StatusOr<ColumnPtr> TimeFunctions::date_trunc_day(FunctionContext* context, const starrocks::Columns& columns) {
+    // NOLINTNEXTLINE(performance-move-const-arg)
     return std::move(*columns[1]).mutate();
 }
 

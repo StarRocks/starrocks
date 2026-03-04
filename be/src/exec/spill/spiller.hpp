@@ -184,7 +184,7 @@ Status RawSpillerWriter::flush(RuntimeState* state, MemGuard&& guard) {
         auto defer = CancelableDefer([&]() {
             {
                 std::lock_guard _(_mutex);
-                _mem_table_pool.emplace(std::move(mem_table));
+                _mem_table_pool.emplace(mem_table);
             }
             _spiller->update_spilled_task_status(_decrease_running_flush_tasks());
         });

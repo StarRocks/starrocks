@@ -140,8 +140,8 @@ private:
 
 class StreamLoadPipeReader {
 public:
-    StreamLoadPipeReader(std::shared_ptr<StreamLoadPipe> pipe) : _pipe(pipe) {}
-    virtual ~StreamLoadPipeReader() {}
+    explicit StreamLoadPipeReader(std::shared_ptr<StreamLoadPipe> pipe) : _pipe(std::move(pipe)) {}
+    virtual ~StreamLoadPipeReader() = default;
     virtual StatusOr<ByteBufferPtr> read() { return _pipe->read(); }
 
 private:

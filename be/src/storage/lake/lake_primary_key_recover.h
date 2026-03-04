@@ -36,8 +36,8 @@ class MetaFileBuilder;
 class LakePrimaryKeyRecover : public PrimaryKeyRecover {
 public:
     explicit LakePrimaryKeyRecover(MetaFileBuilder* builder, Tablet* tablet, MutableTabletMetadataPtr metadata)
-            : _builder(builder), _tablet(tablet), _metadata(metadata) {}
-    ~LakePrimaryKeyRecover() {}
+            : _builder(builder), _tablet(tablet), _metadata(std::move(metadata)) {}
+    ~LakePrimaryKeyRecover() override = default;
 
     // clean old state, include pk index and delvec
     Status pre_cleanup() override;

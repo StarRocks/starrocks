@@ -1070,6 +1070,7 @@ static Status is_ordered(ChunkIteratorPtr& iter, bool unique) {
 
 Status Rowset::verify() {
     vector<ColumnId> key_columns;
+    key_columns.reserve(_schema->num_key_columns());
     vector<ColumnId> order_columns;
     bool is_pk_ordered = false;
     for (int i = 0; i < _schema->num_key_columns(); i++) {

@@ -65,14 +65,14 @@ class PathUtils {
 public:
     // requires: path contains "/"
     static std::string get_parent_path(const std::string& path) {
-        std::size_t i = path.find_last_of("/");
+        std::size_t i = path.find_last_of('/');
         CHECK_NE(i, std::string::npos);
         return path.substr(0, i);
     }
 
     // requires: path contains "/"
     static std::string get_filename(const std::string& path) {
-        std::size_t i = path.find_last_of("/");
+        std::size_t i = path.find_last_of('/');
         CHECK_NE(i, std::string::npos);
         return path.substr(i + 1);
     }
@@ -90,10 +90,10 @@ class LocationProvider {
 public:
     // file_name_prefix = {query_id}_{be_number}_{driver_id}
     LocationProvider(const std::string& base_path, const std::string& query_id, int be_number, int driver_id,
-                     const std::string& file_suffix)
+                     std::string file_suffix)
             : _base_path(PathUtils::remove_trailing_slash(base_path)),
               _file_name_prefix(fmt::format("{}_{}_{}", query_id, be_number, driver_id)),
-              _file_name_suffix(file_suffix) {}
+              _file_name_suffix(std::move(file_suffix)) {}
 
     // location = base_path/partition/{query_id}_{be_number}_{driver_id}_index.file_suffix
     std::string get(const std::string& partition) {

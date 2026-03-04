@@ -144,23 +144,22 @@ Status JsonPathPiece::parse(const std::string& path_string, std::vector<JsonPath
         auto& current = path_exprs[i];
 
         if (i == 0) {
-            std::shared_ptr<ArraySelector> selector(new ArraySelectorNone());
             if (current != "$") {
-                parsed_paths->emplace_back(JsonPathPiece("$", std::move(selector)));
+                parsed_paths->emplace_back("$", std::make_shared<ArraySelectorNone>());
             } else {
-                parsed_paths->emplace_back(JsonPathPiece("$", std::move(selector)));
+                parsed_paths->emplace_back("$", std::make_shared<ArraySelectorNone>());
                 continue;
             }
         }
 
         if (!RE2::FullMatch(current, JSONPATH_PATTERN, &variable, &array_pieces)) {
-            parsed_paths->emplace_back("", std::unique_ptr<ArraySelector>(new ArraySelectorNone()));
+            parsed_paths->emplace_back("", std::make_unique<ArraySelectorNone>());
             return Status::InvalidArgument(strings::Substitute("Invalid json path: $0", path_exprs[i]));
         } else if (array_pieces.empty()) {
             // No array selector
             std::unique_ptr<ArraySelector> selector;
             RETURN_IF_ERROR(ArraySelector::parse(array_pieces, &selector));
-            parsed_paths->emplace_back(JsonPathPiece(variable, std::move(selector)));
+            parsed_paths->emplace_back(variable, std::move(selector));
         } else {
             // Cosume multiple array selector
             re2::StringPiece array_piece(array_pieces);
@@ -168,7 +167,7 @@ Status JsonPathPiece::parse(const std::string& path_string, std::vector<JsonPath
             while (RE2::Consume(&array_piece, ARRAY_INDEX_PATTERN, &single_piece)) {
                 std::unique_ptr<ArraySelector> selector;
                 RETURN_IF_ERROR(ArraySelector::parse(single_piece, &selector));
-                parsed_paths->emplace_back(JsonPathPiece(variable, std::move(selector)));
+                parsed_paths->emplace_back(variable, std::move(selector));
                 variable = "";
             }
         }

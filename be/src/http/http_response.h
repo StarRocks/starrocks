@@ -34,7 +34,7 @@ public:
     HttpResponse(const HttpStatus& status, const std::string* content);
 
     // status and content
-    HttpResponse(const HttpStatus& status, const std::string& type, const std::string* content);
+    HttpResponse(const HttpStatus& status, std::string type, const std::string* content);
 
     // Add one header
     void add_header(const std::string& key, const std::string& value);

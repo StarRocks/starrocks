@@ -145,6 +145,7 @@ StatusOr<ColumnPtr> CastStringToArray::evaluate_checked(ExprContext* context, Ch
         if (input->only_null()) {
             return ColumnHelper::create_const_null_column(rows);
         } else {
+            // NOLINTNEXTLINE(performance-move-const-arg)
             return ConstColumn::create(std::move(*(input->data_column())).clone(), rows);
         }
     }
@@ -220,15 +221,15 @@ StatusOr<ColumnPtr> CastStringToArray::evaluate_checked(ExprContext* context, Ch
     }
 
     // 3. Assemble elements into array column
-    ColumnPtr res = ArrayColumn::create(std::move(elements), std::move(offsets));
+    ColumnPtr res = ArrayColumn::create(elements, offsets);
 
     if (column->is_nullable() || has_null) {
-        res = NullableColumn::create(std::move(res), std::move(null_column));
+        res = NullableColumn::create(res, null_column);
     }
 
     // Wrap constant column if source column is constant.
     if (column->is_constant()) {
-        res = ConstColumn::create(std::move(res), column->size());
+        res = ConstColumn::create(res, column->size());
     }
     return res;
 }
@@ -300,14 +301,14 @@ StatusOr<ColumnPtr> CastJsonToArray::evaluate_checked(ExprContext* context, Chun
     }
 
     // 3. Assemble elements into array column
-    ColumnPtr res = ArrayColumn::create(std::move(elements), std::move(offsets));
+    ColumnPtr res = ArrayColumn::create(elements, offsets);
     if (column->is_nullable()) {
-        res = NullableColumn::create(std::move(res), std::move(null_column));
+        res = NullableColumn::create(res, null_column);
     }
 
     // Wrap constant column if source column is constant.
     if (column->is_constant()) {
-        res = ConstColumn::create(std::move(res), column->size());
+        res = ConstColumn::create(res, column->size());
     }
     return res;
 }
@@ -369,12 +370,12 @@ StatusOr<ColumnPtr> CastVariantToArray::evaluate_checked(ExprContext* context, C
     }
 
     // 3. Assemble elements into array column
-    MutableColumnPtr res = ArrayColumn::create(std::move(elements)->as_mutable_ptr(), std::move(offsets));
+    ColumnPtr res = ArrayColumn::create(std::move(elements)->as_mutable_ptr(), std::move(offsets));
     if (column->is_nullable()) {
-        res = NullableColumn::create(std::move(res), std::move(null_column));
+        res = NullableColumn::create(res, null_column);
     }
     if (column->is_constant()) {
-        res = ConstColumn::create(std::move(res), column->size());
+        res = ConstColumn::create(res, column->size());
     }
 
     return res;

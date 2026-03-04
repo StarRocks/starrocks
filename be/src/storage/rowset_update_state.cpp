@@ -108,6 +108,7 @@ Status RowsetUpdateState::_load_upserts(Rowset* rowset, uint32_t idx, Column* pk
     OlapReaderStatistics stats;
     const auto& schema = rowset->schema();
     vector<uint32_t> pk_columns;
+    pk_columns.reserve(schema->num_key_columns());
     for (size_t i = 0; i < schema->num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }
@@ -164,6 +165,7 @@ Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
     _tablet_id = tablet->tablet_id();
     const auto& schema = rowset->schema();
     vector<uint32_t> pk_columns;
+    pk_columns.reserve(schema->num_key_columns());
     for (size_t i = 0; i < schema->num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }
@@ -198,6 +200,7 @@ Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
 Status RowsetUpdateState::load_deletes(Rowset* rowset, uint32_t idx) {
     const auto& schema = rowset->schema();
     vector<uint32_t> pk_columns;
+    pk_columns.reserve(schema->num_key_columns());
     for (size_t i = 0; i < schema->num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }
@@ -211,6 +214,7 @@ Status RowsetUpdateState::load_deletes(Rowset* rowset, uint32_t idx) {
 Status RowsetUpdateState::load_upserts(Rowset* rowset, uint32_t upsert_id) {
     const auto& schema = rowset->schema();
     vector<uint32_t> pk_columns;
+    pk_columns.reserve(schema->num_key_columns());
     for (size_t i = 0; i < schema->num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }

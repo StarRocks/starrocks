@@ -29,9 +29,9 @@
 #include <parquet/exception.h>
 #include <parquet/schema.h>
 #include <parquet/types.h>
-#include <stddef.h>
-#include <stdint.h>
 
+#include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <utility>

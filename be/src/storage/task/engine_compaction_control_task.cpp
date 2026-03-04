@@ -23,7 +23,7 @@
 
 namespace starrocks {
 
-EngineCompactionControlTask::EngineCompactionControlTask(const std::map<TTableId, int64_t>& table_to_disable_deadline)
+EngineCompactionControlTask::EngineCompactionControlTask(std::map<TTableId, int64_t> table_to_disable_deadline)
         : _table_to_disable_deadline(std::move(table_to_disable_deadline)) {}
 
 Status EngineCompactionControlTask::execute() {

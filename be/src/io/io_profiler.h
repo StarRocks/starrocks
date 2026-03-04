@@ -82,7 +82,7 @@ public:
     public:
         Scope() = delete;
         Scope(const Scope&) = delete;
-        Scope(Scope&& other) {
+        Scope(Scope&& other) noexcept {
             _old = other._old;
             _tls_io_snapshot = other._tls_io_snapshot;
             other._old = nullptr;

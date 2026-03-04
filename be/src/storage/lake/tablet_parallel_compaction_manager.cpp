@@ -245,6 +245,7 @@ std::vector<std::vector<RowsetPtr>> TabletParallelCompactionManager::_group_rows
 
         if (should_start_new_group) {
             std::vector<uint32_t> group_ids;
+            group_ids.reserve(current_group.size());
             for (const auto& r : current_group) {
                 group_ids.push_back(r->id());
             }
@@ -269,6 +270,7 @@ std::vector<std::vector<RowsetPtr>> TabletParallelCompactionManager::_group_rows
     // Add the last group if not empty
     if (!current_group.empty()) {
         std::vector<uint32_t> group_ids;
+        group_ids.reserve(current_group.size());
         for (const auto& r : current_group) {
             group_ids.push_back(r->id());
         }
@@ -338,6 +340,7 @@ StatusOr<std::vector<RowsetPtr>> TabletParallelCompactionManager::pick_rowsets_f
     // Log metadata details for debugging duplicate compaction issues
     std::vector<uint32_t> first_rowset_ids;
     int count = std::min(10, metadata->rowsets_size());
+    first_rowset_ids.reserve(count);
     for (int i = 0; i < count; i++) {
         first_rowset_ids.push_back(metadata->rowsets(i).id());
     }
@@ -394,6 +397,7 @@ std::vector<std::vector<RowsetPtr>> TabletParallelCompactionManager::split_rowse
 
     if (stats.total_bytes <= max_bytes || max_parallel <= 1 || stats.has_delete_predicate || not_enough_segments) {
         std::vector<uint32_t> group_ids;
+        group_ids.reserve(all_rowsets.size());
         for (const auto& r : all_rowsets) {
             group_ids.push_back(r->id());
         }
@@ -693,8 +697,8 @@ StatusOr<int> TabletParallelCompactionManager::create_parallel_tasks(
                                                                       max_bytes, std::move(callback), release_token));
 
     // Step 4: Submit subtasks
-    return submit_subtasks_from_groups(std::move(state_ptr), std::move(subtask_groups), force_base_compaction,
-                                       thread_pool, acquire_token, release_token);
+    return submit_subtasks_from_groups(state_ptr, std::move(subtask_groups), force_base_compaction, thread_pool,
+                                       acquire_token, release_token);
 }
 
 std::shared_ptr<TabletParallelCompactionState> TabletParallelCompactionManager::get_tablet_state(int64_t tablet_id,
@@ -1322,7 +1326,7 @@ void TabletParallelCompactionManager::execute_subtask(int64_t tablet_id, int64_t
         return;
     }
 
-    auto compaction_task = compaction_task_or.value();
+    const auto& compaction_task = compaction_task_or.value();
 
     // Increment runs counter to track that this subtask has actually started execution.
     // This is important for list_tasks() to correctly display the profile for completed subtasks,
@@ -1388,7 +1392,7 @@ Status TabletParallelCompactionManager::execute_sst_compaction_for_parallel(
         return Status::OK(); // Don't fail the entire compaction for SST compaction failure
     }
 
-    auto tablet = tablet_or.value();
+    const auto& tablet = tablet_or.value();
     const auto& metadata = tablet.metadata();
 
     // Check if this is a primary key table with cloud native persistent index

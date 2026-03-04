@@ -45,7 +45,7 @@ using JITCallableCachePtr = std::unique_ptr<JITCallableCache>;
 
 class JITCallable {
 public:
-    JITCallable(MemMgrPtr&& mem_mgr, JITScalarFunction&& func) : _mem_mgr(std::move(mem_mgr)), _func(std::move(func)) {
+    JITCallable(MemMgrPtr&& mem_mgr, JITScalarFunction&& func) : _mem_mgr(std::move(mem_mgr)), _func(func) {
         DCHECK(_mem_mgr != nullptr);
         DCHECK(_func != nullptr);
     }
@@ -54,14 +54,14 @@ public:
 
     JITCallable(const JITCallable&) = delete;
 
-    JITCallable(JITCallable&& that) : _mem_mgr(std::move(that._mem_mgr)), _func(std::move(that._func)) {
+    JITCallable(JITCallable&& that) noexcept : _mem_mgr(std::move(that._mem_mgr)), _func(that._func) {
         that._func = nullptr; // Prevent double free
     }
 
-    JITCallable& operator=(JITCallable&& that) {
+    JITCallable& operator=(JITCallable&& that) noexcept {
         if (this != &that) {
             _mem_mgr = std::move(that._mem_mgr);
-            _func = std::move(that._func);
+            _func = that._func;
             that._func = nullptr; // Prevent double free
         }
         return *this;

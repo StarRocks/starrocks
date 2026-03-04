@@ -602,6 +602,7 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
 
     auto tschema = std::make_shared<TabletSchema>(metadata->schema());
     std::vector<uint32_t> pk_cids;
+    pk_cids.reserve(tschema->num_key_columns());
     for (size_t i = 0; i < tschema->num_key_columns(); i++) pk_cids.push_back((uint32_t)i);
     Schema pkey_schema = ChunkHelper::convert_schema(tschema, pk_cids);
 
@@ -927,6 +928,7 @@ Status UpdateManager::_process_single_chunk_update_with_condition(
         // STEP 2: Read condition column values from new rows (from SST files)
         std::map<uint32_t, std::vector<uint32_t>> new_rowids_by_rssid;
         std::vector<uint32_t> rowids;
+        rowids.reserve(pk_column->size());
         for (int j = 0; j < pk_column->size(); ++j) {
             // Build absolute rowids: current.second is the base offset for this chunk
             rowids.push_back(j + current.second);
@@ -1086,6 +1088,7 @@ Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& p
 
         std::map<uint32_t, std::vector<uint32_t>> new_rowids_by_rssid;
         std::vector<uint32_t> rowids;
+        rowids.reserve(upsert->size());
         for (int j = 0; j < upsert->size(); ++j) {
             rowids.push_back(j);
         }
@@ -1198,7 +1201,7 @@ static StatusOr<std::shared_ptr<Segment>> get_lake_dcg_segment(GetDeltaColumnCon
             return Status::InternalError(
                     fmt::format("DCG file not found for column {}: {}", ucid, column_file_result.status().to_string()));
         }
-        std::string column_file = column_file_result.value();
+        const std::string& column_file = column_file_result.value();
 
         if (ctx.dcg_segments.count(column_file) == 0) {
             auto dcg_segment_result = ctx.segment->new_dcg_segment(*dcg, idx.first, read_tablet_schema);
@@ -1227,7 +1230,7 @@ static StatusOr<std::unique_ptr<ColumnIterator>> new_lake_dcg_column_iterator(
         return dcg_segment_result.status();
     }
 
-    auto dcg_segment = dcg_segment_result.value();
+    const auto& dcg_segment = dcg_segment_result.value();
     if (ctx.dcg_read_files.count(dcg_segment->file_name()) == 0) {
         RandomAccessFileOptions ropts;
         if (!dcg_segment->file_info().encryption_meta.empty()) {
@@ -1432,7 +1435,7 @@ Status UpdateManager::get_del_vec(const TabletSegmentId& tsid, int64_t version, 
             return Status::OK();
         }
     }
-    (*pdelvec).reset(new DelVector());
+    *pdelvec = std::make_shared<DelVector>();
     // 2. find in delvec file
     return get_del_vec_in_meta(tsid, version, fill_cache, pdelvec->get());
 }

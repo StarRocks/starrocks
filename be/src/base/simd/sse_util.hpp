@@ -20,11 +20,10 @@
 #include <nmmintrin.h>
 #include <smmintrin.h>
 
-namespace starrocks {
+namespace starrocks::sse_util {
 
 // This class contains constants useful for text processing with SSE4.2
 // intrinsics.
-namespace sse_util {
 // Number of characters that fit in 64/128 bit register.
 // SSE provides instructions for loading 64 or 128 bits into a register
 // at a time.
@@ -53,5 +52,4 @@ static const int SSE_BITMASK[CHARS_PER_128_BIT_REGISTER] = {
         1 << 8, 1 << 9, 1 << 10, 1 << 11, 1 << 12, 1 << 13, 1 << 14, 1 << 15,
 };
 
-} // namespace sse_util
-} // namespace starrocks
+} // namespace starrocks::sse_util

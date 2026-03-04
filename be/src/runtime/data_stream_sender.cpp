@@ -606,7 +606,7 @@ Status DataStreamSender::send_chunk(RuntimeState* state, Chunk* chunk) {
     return Status::OK();
 }
 
-Status DataStreamSender::close(RuntimeState* state, Status exec_status) {
+Status DataStreamSender::close(RuntimeState* state, const Status& exec_status) {
     RETURN_IF_ERROR(DataSink::close(state, exec_status));
     ScopedTimer<MonotonicStopWatch> close_timer(_profile != nullptr ? _profile->total_time_counter() : nullptr);
     // TODO: only close channels that didn't have any errors

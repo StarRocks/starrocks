@@ -32,11 +32,11 @@
 #include <parquet/properties.h>
 #include <parquet/schema.h>
 #include <parquet/types.h>
-#include <stdint.h>
 
 #include <atomic>
 #include <condition_variable>
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <mutex>

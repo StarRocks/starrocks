@@ -552,7 +552,7 @@ Status OlapScanNode::_start_scan(RuntimeState* state) {
     opts.max_scan_key_num = max_scan_key_num;
     opts.enable_column_expr_predicate = enable_column_expr_predicate;
 
-    _conjuncts_manager = std::make_unique<ScanConjunctsManager>(std::move(opts));
+    _conjuncts_manager = std::make_unique<ScanConjunctsManager>(opts);
     ScanConjunctsManager& cm = *_conjuncts_manager;
 
     RETURN_IF_ERROR(cm.parse_conjuncts());

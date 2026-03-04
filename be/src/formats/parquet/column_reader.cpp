@@ -57,14 +57,13 @@ Status ColumnDictFilterContext::rewrite_conjunct_ctxs_to_predicate(StoredColumnR
     ColumnPtr result_column = std::move(dict_value_column);
     for (int32_t i = sub_field_path.size() - 1; i >= 0; i--) {
         if (!result_column->is_nullable()) {
-            result_column =
-                    NullableColumn::create(std::move(result_column), NullColumn::create(result_column->size(), 0));
+            result_column = NullableColumn::create(result_column, NullColumn::create(result_column->size(), 0));
         }
         Columns columns;
         columns.emplace_back(result_column);
         std::vector<std::string> field_names;
         field_names.emplace_back(sub_field_path[i]);
-        result_column = StructColumn::create(std::move(columns), std::move(field_names));
+        result_column = StructColumn::create(columns, field_names);
     }
 
     ChunkPtr dict_value_chunk = std::make_shared<Chunk>();

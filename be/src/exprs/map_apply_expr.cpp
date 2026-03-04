@@ -73,6 +73,7 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
             DCHECK(nullable != nullptr);
             data_column = nullable->data_column();
             // empty null map with non-empty elements
+            // NOLINTNEXTLINE(performance-move-const-arg)
             auto data_mut = std::move(*data_column).mutate();
             data_mut->empty_null_in_complex_column(
                     nullable->null_column()->immutable_data(),
@@ -82,6 +83,7 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
                 input_null_map = FunctionHelper::union_null_column(nullable->null_column(),
                                                                    std::move(input_null_map)); // merge null
             } else {
+                // NOLINTNEXTLINE(performance-move-const-arg)
                 input_null_map = ColumnHelper::as_column<NullColumn>(std::move(*nullable->null_column()).mutate());
             }
         }
@@ -130,6 +132,7 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
         // evaluate the lambda expression
         if (cur_chunk->num_rows() <= chunk->num_rows() * 8) {
             ASSIGN_OR_RETURN(auto tmp_column, context->evaluate(_children[0], cur_chunk.get()));
+            // NOLINTNEXTLINE(performance-move-const-arg)
             column = ColumnHelper::align_return_type(std::move(*tmp_column).mutate(), type(), cur_chunk->num_rows(),
                                                      false);
         } else { // split large chunks into small ones to avoid too large or various batch_size
@@ -140,6 +143,7 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
                 ASSIGN_OR_RETURN(auto tmp_col, context->evaluate(_children[0], tmp_chunk.get()));
                 tmp_col = ColumnHelper::align_return_type(std::move(tmp_col), type(), tmp_chunk->num_rows(), false);
                 if (column == nullptr) {
+                    // NOLINTNEXTLINE(performance-move-const-arg)
                     column = std::move(*tmp_col).mutate();
                 } else {
                     column->append(*tmp_col);
@@ -156,7 +160,11 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
     }
 
     auto res_map = MapColumn::create(
-            std::move(*map_col->keys_column()).mutate(), std::move(*map_col->values_column()).mutate(),
+            // NOLINTNEXTLINE(performance-move-const-arg)
+            std::move(*map_col->keys_column()).mutate(),
+            // NOLINTNEXTLINE(performance-move-const-arg)
+            std::move(*map_col->values_column()).mutate(),
+            // NOLINTNEXTLINE(performance-move-const-arg)
             ColumnHelper::as_column<UInt32Column>(std::move(*input_map->offsets_column()).mutate()));
 
     if (_maybe_duplicated_keys && res_map->size() > 0) {

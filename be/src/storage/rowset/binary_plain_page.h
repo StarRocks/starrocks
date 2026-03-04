@@ -182,8 +182,7 @@ private:
 template <LogicalType Type>
 class BinaryPlainPageDecoder final : public PageDecoder {
 public:
-    explicit BinaryPlainPageDecoder(Slice data)
-            : _data(data), _parsed(false), _num_elems(0), _offsets_pos(0), _cur_idx(0) {}
+    explicit BinaryPlainPageDecoder(Slice data) : _data(data) {}
 
     Status init() override {
         RETURN_IF(_parsed, Status::OK());
@@ -376,14 +375,14 @@ private:
     }
 
     Slice _data;
-    bool _parsed;
+    bool _parsed{};
 
-    uint32_t _num_elems;
-    uint32_t _offsets_pos;
+    uint32_t _num_elems{};
+    uint32_t _offsets_pos{};
     uint32_t* _offsets_ptr = nullptr;
 
     // Index of the currently seeked element in the page.
-    uint32_t _cur_idx;
+    uint32_t _cur_idx{};
 
     size_t _estimated_row_size;
 

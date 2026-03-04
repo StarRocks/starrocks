@@ -31,6 +31,7 @@ StatusOr<ColumnPtr> BinaryFunctions::to_binary(FunctionContext* context, const C
     switch (to_binary_type) {
     case BinaryFormatType::UTF8: {
         auto& src_column = columns[0];
+        // NOLINTNEXTLINE(performance-move-const-arg)
         return std::move(*src_column).mutate();
     }
     case BinaryFormatType::ENCODE64:
@@ -76,6 +77,7 @@ StatusOr<ColumnPtr> BinaryFunctions::from_binary(FunctionContext* context, const
     switch (to_binary_type) {
     case BinaryFormatType::UTF8: {
         auto& src_column = columns[0];
+        // NOLINTNEXTLINE(performance-move-const-arg)
         return std::move(*src_column).mutate();
     }
     case BinaryFormatType::ENCODE64:

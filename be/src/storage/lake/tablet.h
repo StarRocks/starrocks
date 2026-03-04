@@ -60,14 +60,14 @@ public:
                     TabletMetadataPtr tablet_metadata)
             : _mgr(mgr), _id(id) {
         _location_provider = std::move(location_provider);
-        _tablet_metadata = tablet_metadata;
+        _tablet_metadata = std::move(tablet_metadata);
     }
 
     explicit Tablet(TabletManager* mgr, int64_t id, std::shared_ptr<LocationProvider> location_provider,
                     std::shared_ptr<TabletSchema> tablet_schema)
             : _mgr(mgr), _id(id) {
         _location_provider = std::move(location_provider);
-        _tablet_schema = tablet_schema;
+        _tablet_schema = std::move(tablet_schema);
     }
 
     ~Tablet() override = default;

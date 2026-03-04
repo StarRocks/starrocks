@@ -435,7 +435,7 @@ void Thread::finish_thread(void* arg) {
 }
 
 void Thread::init_threadmgr() {
-    thread_manager.reset(new ThreadMgr());
+    thread_manager = std::make_shared<ThreadMgr>();
 }
 
 ThreadJoiner::ThreadJoiner(Thread* thr)

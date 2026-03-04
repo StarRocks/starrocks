@@ -309,6 +309,7 @@ Status OlapTableSink::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(_init_node_channels(state, index_id_to_tablet_be_map));
 
     std::vector<IndexChannel*> index_channels;
+    index_channels.reserve(_channels.size());
     for (const auto& channel : _channels) {
         index_channels.emplace_back(channel.get());
     }
@@ -869,17 +870,18 @@ bool OlapTableSink::is_close_done() {
     return _tablet_sink_sender->is_close_done();
 }
 
-Status OlapTableSink::close(RuntimeState* state, Status close_status) {
-    if (close_status.ok()) {
+Status OlapTableSink::close(RuntimeState* state, const Status& close_status) {
+    Status status = close_status;
+    if (status.ok()) {
         SCOPED_TIMER(_profile->total_time_counter());
         SCOPED_TIMER(_ts_profile->close_timer);
         do {
-            close_status = try_close(state);
-            if (!close_status.ok()) break;
+            status = try_close(state);
+            if (!status.ok()) break;
             SleepFor(MonoDelta::FromMilliseconds(5));
         } while (!is_close_done());
     }
-    return close_wait(state, close_status);
+    return close_wait(state, status);
 }
 
 Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {

@@ -159,7 +159,7 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
 
     _runtime_state->set_per_fragment_instance_idx(params.sender_id);
     _runtime_state->set_num_per_fragment_instances(params.num_senders);
-    _query_statistics.reset(new QueryStatistics());
+    _query_statistics = std::make_shared<QueryStatistics>();
 
     // set up sink, if required
     if (request.fragment.__isset.output_sink) {

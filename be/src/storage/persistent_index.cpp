@@ -3213,6 +3213,7 @@ StatusOr<std::unique_ptr<ImmutableIndex>> ImmutableIndex::load(std::unique_ptr<R
     size_t nshard_bf = meta.shard_bf_off_size();
     DCHECK(nshard_bf == 0 || nshard_bf == nshard + 1);
     std::vector<size_t> bf_off;
+    bf_off.reserve(nshard_bf);
     for (size_t i = 0; i < nshard_bf; i++) {
         bf_off.emplace_back(meta.shard_bf_off(i));
     }

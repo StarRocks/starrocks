@@ -158,7 +158,7 @@ Status BinlogManager::_recover_version(int64_t version, BinlogLsn& min_lsn, std:
             useless_file_ids->push_back(file_id);
             continue;
         }
-        BinlogFileMetaPBPtr file_meta = status_or.value();
+        const auto& file_meta = status_or.value();
         recovered_file_metas.push_back(file_meta);
         BinlogLsn lsn(file_meta->start_version(), file_meta->start_seq_id());
         last_file_meta = file_meta;
@@ -259,7 +259,7 @@ void BinlogManager::precommit_ingestion(int64_t version, const BinlogBuildResult
     VLOG(3) << "Pre-commit ingestion, tablet: " << _tablet_id << ", version: " << version << ", path: " << _path;
     DCHECK_EQ(version, _ingestion_version);
     DCHECK(_build_result == nullptr);
-    _build_result = std::move(result);
+    _build_result = result;
 }
 
 void BinlogManager::abort_ingestion(int64_t version, const BinlogBuildResultPtr& result) {
@@ -469,7 +469,7 @@ void BinlogManager::delete_unused_binlog() {
         LOG(ERROR) << "Failed to delete unused binlog, tablet: " << _tablet_id << ", " << status_or.status();
         return;
     }
-    std::shared_ptr<FileSystem> fs = status_or.value();
+    const auto& fs = status_or.value();
     int64_t file_id;
     int32_t total_num = 0;
     int32_t fail_num = 0;
