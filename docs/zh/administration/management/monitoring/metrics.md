@@ -579,6 +579,30 @@ displayed_sidebar: docs
 - 类型：瞬时值
 - 描述：该资源组内存使用率瞬时值
 
+### starrocks_be_mem_pool_mem_limit_bytes
+
+- 单位：Byte
+- 类型：瞬时值
+- 描述：该内存池内存配额的瞬时值
+
+### starrocks_be_mem_pool_mem_usage_bytes
+
+- 单位：Byte
+- 类型：瞬时值
+- 描述：该内存池当前内存使用量的瞬时值
+
+### starrocks_be_mem_pool_mem_usage_ratio
+
+- 单位：-
+- 类型：瞬时值
+- 描述：该内存池内存使用量与内存配额比率的瞬时值
+
+### starrocks_be_mem_pool_workgroup_count
+
+- 单位：个
+- 类型：瞬时值
+- 描述：该内存池分配的资源组数量的瞬时值
+
 ### starrocks_be_pipe_prepare_pool_queue_len
 
 - 单位：个
