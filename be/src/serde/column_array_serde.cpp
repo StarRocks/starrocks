@@ -444,32 +444,15 @@ public:
 
 class VariantColumnSerde {
 public:
-    enum class VariantMode : uint8_t {
-        kShreddedMode = 1,
-    };
-
     static int64_t max_serialized_size(const VariantColumn& column) {
-        int64_t size = 0;
-        size += sizeof(uint8_t); // mode flag
-        size += max_serialized_size_shredded(column);
-        return size;
+        return max_serialized_size_shredded(column);
     }
 
-    static uint8_t* serialize(const VariantColumn& column, uint8_t* buff) {
-        buff = write_little_endian_8(static_cast<uint8_t>(VariantMode::kShreddedMode), buff);
-        buff = serialize_shredded(column, buff);
-        return buff;
-    }
+    static uint8_t* serialize(const VariantColumn& column, uint8_t* buff) { return serialize_shredded(column, buff); }
 
     static StatusOr<const uint8_t*> deserialize(const uint8_t* buff, const uint8_t* end, VariantColumn* column) {
-        uint8_t mode_flag = 0;
-        ASSIGN_OR_RETURN(buff, read_little_endian_8(buff, end, &mode_flag));
         column->reset_column();
-
-        if (mode_flag == static_cast<uint8_t>(VariantMode::kShreddedMode)) {
-            return deserialize_shredded(buff, end, column);
-        }
-        return Status::Corruption(fmt::format("Unknown variant column mode: {}", mode_flag));
+        return deserialize_shredded(buff, end, column);
     }
 
 private:

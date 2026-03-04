@@ -198,22 +198,40 @@ PARALLEL_TEST(ColumnArraySerdeTest, variant_column_shredded_complex_type_descrip
 }
 
 // NOLINTNEXTLINE
-PARALLEL_TEST(ColumnArraySerdeTest, variant_column_unknown_mode_corruption) {
+PARALLEL_TEST(ColumnArraySerdeTest, variant_column_shredded_base_only_without_typed_columns) {
     auto c1 = VariantColumn::create();
-    MutableColumns typed;
-    typed.emplace_back(ColumnHelper::create_column(TYPE_INT_DESC, true));
-    c1->set_shredded_columns({"a"}, {TYPE_INT_DESC}, std::move(typed), nullptr, nullptr);
+    auto metadata = BinaryColumn::create();
+    auto remain = BinaryColumn::create();
+
+    metadata->append(Slice("m0", 2));
+    metadata->append(Slice("m1", 2));
+    remain->append(Slice("r0", 2));
+    remain->append(Slice("r1", 2));
+    c1->set_shredded_columns({}, {}, {}, std::move(metadata), std::move(remain));
+    ASSERT_EQ(2, c1->size());
+    ASSERT_TRUE(c1->typed_columns().empty());
+    ASSERT_TRUE(c1->has_metadata_column());
+    ASSERT_TRUE(c1->has_remain_value());
 
     std::vector<uint8_t> buffer;
     buffer.resize(ColumnArraySerde::max_serialized_size(*c1));
     ASSIGN_OR_ABORT(auto p1, ColumnArraySerde::serialize(*c1, buffer.data()));
     ASSERT_EQ(buffer.data() + buffer.size(), p1);
 
-    buffer[0] = 0xFF; // invalid mode
     auto c2 = VariantColumn::create();
-    auto st = ColumnArraySerde::deserialize(buffer.data(), buffer.data() + buffer.size(), c2.get());
-    ASSERT_FALSE(st.ok());
-    ASSERT_TRUE(st.status().is_corruption());
+    ASSIGN_OR_ABORT(auto p2, ColumnArraySerde::deserialize(buffer.data(), buffer.data() + buffer.size(), c2.get()));
+    ASSERT_EQ(buffer.data() + buffer.size(), p2);
+
+    ASSERT_EQ(2, c2->size());
+    ASSERT_TRUE(c2->typed_columns().empty());
+    ASSERT_TRUE(c2->has_metadata_column());
+    ASSERT_TRUE(c2->has_remain_value());
+    ASSERT_TRUE(c2->shredded_paths().empty());
+    ASSERT_TRUE(c2->shredded_types().empty());
+    for (int i = 0; i < 2; ++i) {
+        ASSERT_EQ(c1->metadata_column()->get(i).get_slice(), c2->metadata_column()->get(i).get_slice());
+        ASSERT_EQ(c1->remain_value_column()->get(i).get_slice(), c2->remain_value_column()->get(i).get_slice());
+    }
 }
 
 // NOLINTNEXTLINE
@@ -230,8 +248,8 @@ PARALLEL_TEST(ColumnArraySerdeTest, variant_column_shredded_count_mismatch_corru
     ASSERT_EQ(buffer.data() + buffer.size(), p1);
 
     // Layout for one short path "a":
-    // [mode:1][num_paths:4][path_len:4][path:1][num_types:4][type_desc:32][num_typed_cols:4]...
-    constexpr size_t kNumTypesOffset = 1 + 4 + 4 + 1;
+    // [num_paths:4][path_len:4][path:1][num_types:4][type_desc:32][num_typed_cols:4]...
+    constexpr size_t kNumTypesOffset = 4 + 4 + 1;
     constexpr size_t kNumTypedColsOffset = kNumTypesOffset + 4 + 32;
 
     // num_types mismatch

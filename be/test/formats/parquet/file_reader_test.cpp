@@ -4415,5 +4415,4 @@ TEST_F(FileReaderTest, test_read_variant) {
     ASSERT_EQ(total_rows, 24) << "Should have read all 24 rows from the variant parquet file";
 }
 
-
 } // namespace starrocks::parquet
