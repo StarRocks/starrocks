@@ -1,0 +1,66 @@
+# Roadmap: ADBC External Catalog
+
+## Overview
+
+Three phases deliver a fully JDBC-parity ADBC external catalog. Phase 1 wires up the catalog infrastructure end-to-end — build dependencies, DDL, metadata browsing, and the type system. Phase 2 delivers the actual data path — BE native C++ ADBC scanning, Arrow-to-Chunk conversion, pushdowns, and optimizer integration. Phase 3 completes JDBC parity with materialized view support and statistics collection.
+
+## Phases
+
+**Phase Numbering:**
+- Integer phases (1, 2, 3): Planned milestone work
+- Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
+
+Decimal phases appear between their surrounding integers in numeric order.
+
+- [ ] **Phase 1: Foundation** - Build dependencies compile, catalog DDL works, metadata browsable, Arrow types map correctly
+- [ ] **Phase 2: Scanning** - Full data path from FE query to BE Arrow scan to StarRocks Chunk, with column/predicate/limit pushdown and partition pruning
+- [ ] **Phase 3: JDBC Parity** - Materialized views refresh against ADBC tables, column statistics drive optimizer costs
+
+## Phase Details
+
+### Phase 1: Foundation
+**Goal**: Users can create, browse, and drop ADBC catalogs; the build compiles with ADBC dependencies; Arrow types resolve to correct StarRocks types
+**Depends on**: Nothing (first phase)
+**Requirements**: BUILD-01, BUILD-02, BUILD-03, CAT-01, CAT-02, CAT-03, CAT-04, CAT-05, CAT-06, CAT-07, CAT-08, CAT-09, TYPE-01, TYPE-02, TYPE-03, TYPE-04
+**Success Criteria** (what must be TRUE):
+  1. User can run `CREATE CATALOG my_adbc TYPE='adbc' PROPERTIES('adbc.driver'='flight_sql', 'uri'='...')` without error
+  2. User can run `SHOW DATABASES IN my_adbc` and see remote schemas returned
+  3. User can run `DESCRIBE my_adbc.mydb.mytable` and see columns with correct StarRocks types (int, varchar, decimal, date, etc.)
+  4. User can run `DROP CATALOG my_adbc` and the catalog is removed
+  5. FE and BE build cleanly (`./build.sh --fe --be`) with Arrow ADBC Maven and CMake dependencies included
+**Plans**: TBD
+
+### Phase 2: Scanning
+**Goal**: Users can SELECT from ADBC tables with full pushdown; Arrow data flows from BE native C++ ADBC to StarRocks Chunk; partitions are discovered and pruned
+**Depends on**: Phase 1
+**Requirements**: SCAN-01, SCAN-02, SCAN-03, SCAN-04, SCAN-05, SCAN-06, SCAN-07, OPT-01, OPT-02, OPT-03, OPT-04, PART-01, PART-02, PART-03
+**Success Criteria** (what must be TRUE):
+  1. User can `SELECT col1, col2 FROM my_adbc.mydb.mytable WHERE col1 = 'value' LIMIT 100` and receive correct results
+  2. `EXPLAIN SELECT ...` shows the pushed-down SQL query string sent to the remote source (predicate + limit visible)
+  3. Column pruning is active: only selected columns appear in the remote query, not SELECT *
+  4. Partition pruning filters irrelevant partitions during query planning (visible in EXPLAIN)
+  5. Connection pooling is operational: repeated queries reuse connections without error or resource leak
+**Plans**: TBD
+
+### Phase 3: JDBC Parity
+**Goal**: Users can create materialized views over ADBC tables, refresh them incrementally, and the optimizer uses column statistics for cost-based decisions
+**Depends on**: Phase 2
+**Requirements**: MV-01, MV-02, MV-03, MV-04, STAT-01, STAT-02
+**Success Criteria** (what must be TRUE):
+  1. User can `CREATE MATERIALIZED VIEW mv AS SELECT ... FROM my_adbc.mydb.mytable` and the MV is created without error
+  2. `REFRESH MATERIALIZED VIEW mv` successfully fetches data from the ADBC table and populates the MV
+  3. Incremental MV refresh (PCT) detects partition changes and refreshes only affected partitions
+  4. The query optimizer rewrites eligible queries to use the MV instead of scanning the ADBC table
+  5. `ANALYZE TABLE my_adbc.mydb.mytable` collects column statistics (min, max, ndv, null count) when the remote source provides them
+**Plans**: TBD
+
+## Progress
+
+**Execution Order:**
+Phases execute in numeric order: 1 → 2 → 3
+
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 1. Foundation | 0/TBD | Not started | - |
+| 2. Scanning | 0/TBD | Not started | - |
+| 3. JDBC Parity | 0/TBD | Not started | - |
