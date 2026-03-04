@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # ALTER TASK
 
-ALTER TASK modifies an asynchronous ETL task submitted using [SUBMIT TASK](SUBMIT_TASK.md). This feature has been supported since StarRocks v4.1.
+Modifies an asynchronous ETL task submitted using [SUBMIT TASK](SUBMIT_TASK.md). This feature has been supported from v4.1 onwards.
 
 You can use this statement to:
 
@@ -24,9 +24,9 @@ ALTER TASK [IF EXISTS] <task_name> { RESUME | SUSPEND | SET ('key' = 'value'[, .
 | ------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | IF EXISTS     | No           | If this parameter is specified, StarRocks will not throw an exception when modifying a task that does not exist. If this parameter is not specified, the system will throw an exception when modifying a task that does not exist. |
 | task_name     | Yes          | The name of the task to modify.                                                                                                                                                                                         |
-| RESUME        | No           | Resume a suspended task. The task will be scheduled according to its original schedule (for periodic tasks) or be available for manual execution (for manual tasks).                                                      |
-| SUSPEND       | No           | Suspend a running task. For periodic tasks, this stops the task scheduler and kills any running task runs.                                                                                                              |
-| SET           | No           | Update the properties of the task. The properties will be merged with existing properties and applied to subsequent task executions.                                                                                      |
+| RESUME        | No           | Resumes a suspended task. The task will be scheduled according to its original schedule (for periodic tasks) or be available for manual execution (for manual tasks).                                                      |
+| SUSPEND       | No           | Suspends a running task. For periodic tasks, this stops the task scheduler and kills any running task runs.                                                                                                              |
+| SET           | No           | Updates the properties of the task. The properties will be merged with existing properties and applied to subsequent task executions.                                                                                      |
 
 ## Usage notes
 
