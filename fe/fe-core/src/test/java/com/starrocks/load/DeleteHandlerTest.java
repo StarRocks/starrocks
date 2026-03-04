@@ -34,6 +34,7 @@ import com.starrocks.common.util.concurrent.lock.LockException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.common.util.concurrent.lock.NotSupportLockException;
+import com.starrocks.epack.failover.FailoverGroupMgr;
 import com.starrocks.load.DeleteJob.DeleteState;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
@@ -140,6 +141,14 @@ public class DeleteHandlerTest {
 
             @Mock
             public void logInsertTransactionState(TransactionState transactionState) {
+            }
+        };
+
+        FailoverGroupMgr failoverGroupMgr = new FailoverGroupMgr();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public FailoverGroupMgr getFailoverGroupMgr() {
+                return failoverGroupMgr;
             }
         };
 
