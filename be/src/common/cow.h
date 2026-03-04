@@ -19,7 +19,7 @@
 #include <type_traits>
 #include <vector>
 
-#include "common/config.h"
+#include "common/config_cow.h"
 #include "common/logging.h"
 #include "common/stack_util.h"
 #include "gutil/casts.h"

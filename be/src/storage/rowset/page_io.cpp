@@ -45,6 +45,7 @@
 #include "base/utility/scoped_cleanup.h"
 #include "cache/mem_cache/page_cache.h"
 #include "column/column.h"
+#include "common/config.h"
 #include "common/logging.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"

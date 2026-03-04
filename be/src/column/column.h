@@ -23,7 +23,7 @@
 #include "column/column_visitor_mutable.h"
 #include "column/container_resource.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_cow.h"
 #include "common/cow.h"
 #include "common/delete_condition.h" // for DelCondSatisfied
 #include "common/memory/column_allocator.h"

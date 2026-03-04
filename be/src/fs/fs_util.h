@@ -19,7 +19,6 @@
 #include <vector>
 
 #include "base/testutil/sync_point.h"
-#include "common/config.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
 
@@ -227,13 +226,9 @@ inline bool is_in_list(std::string_view uri, const std::vector<std::string>& lis
     return false;
 }
 
-inline bool is_fallback_to_hadoop_fs(std::string_view uri) {
-    return is_in_list(uri, config::fallback_to_hadoop_fs_list);
-}
+bool is_fallback_to_hadoop_fs(std::string_view uri);
 
-inline bool is_s3_uri(std::string_view uri) {
-    return is_in_list(uri, config::s3_compatible_fs_list);
-}
+bool is_s3_uri(std::string_view uri);
 
 inline bool is_azblob_uri(std::string_view uri) {
     return starts_with(uri, "wasb://") || starts_with(uri, "wasbs://");

@@ -22,6 +22,7 @@
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "common/config.h"
 #include "common/status.h"
 #include "exprs/base64.h"
 #include "types/logical_type_infra.h"

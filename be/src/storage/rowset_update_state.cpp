@@ -19,6 +19,7 @@
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "column/binary_column.h"
+#include "common/config.h"
 #include "common/tracer.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"

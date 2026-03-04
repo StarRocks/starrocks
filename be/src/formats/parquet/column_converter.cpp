@@ -36,6 +36,7 @@
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
+#include "common/config.h"
 #include "formats/parquet/schema.h"
 #include "formats/parquet/types.h"
 #include "gutil/casts.h"

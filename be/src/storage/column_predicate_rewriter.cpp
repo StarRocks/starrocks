@@ -24,7 +24,6 @@
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
 #include "common/object_pool.h"
 #include "common/statusor.h"
 #include "exprs/column_ref.h"

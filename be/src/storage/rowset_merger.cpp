@@ -19,6 +19,7 @@
 
 #include "base/utility/pretty_printer.h"
 #include "column/binary_column.h"
+#include "common/config.h"
 #include "gutil/stl_util.h"
 #include "runtime/starrocks_metrics.h"
 #include "storage/chunk_helper.h"
