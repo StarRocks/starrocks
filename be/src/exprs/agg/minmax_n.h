@@ -187,8 +187,8 @@ public:
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         DCHECK(!column->is_nullable());
 
-        DCHECK(column->is_binary());
-        Slice bytes = column->get(row_num).get_slice();
+        DCHECK(column->is_binary() || column->is_large_binary());
+        Slice bytes = ColumnHelper::get_binary_slice(column, row_num);
 
         size_t start = 0;
         int32_t n_encoded;
@@ -233,16 +233,21 @@ public:
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         // Like approx_top_k: serialize_to_column outputs to BinaryColumn (for distributed aggregation)
-        DCHECK(to->is_binary());
-        serialize_state(this->data(state), down_cast<BinaryColumn*>(to));
+        DCHECK(to->is_binary() || to->is_large_binary());
+        auto* data_column = ColumnHelper::get_data_column(to);
+        if (data_column->is_large_binary()) {
+            serialize_state(this->data(state), down_cast<LargeBinaryColumn*>(data_column));
+        } else {
+            serialize_state(this->data(state), down_cast<BinaryColumn*>(data_column));
+        }
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      MutableColumnPtr& dst) const override {
         DCHECK(!src[0]->is_nullable());
         int32_t n = get_n_value(ctx);
-        DCHECK(dst->is_binary());
-        auto* dst_column = down_cast<BinaryColumn*>(dst.get());
+        DCHECK(dst->is_binary() || dst->is_large_binary());
+        auto* dst_data_column = ColumnHelper::get_data_column(dst.get());
         auto* src_column = down_cast<const InputColumnType*>(src[0].get());
 
         for (size_t i = 0; i < src_column->size(); ++i) {
@@ -250,11 +255,16 @@ public:
             state.reset(n);
             const auto& value = AggDataTypeTraits<LT>::get_row_ref(*src_column, i);
             state.template process<false>(ctx->mem_pool(), value);
-            serialize_state(state, dst_column);
+            if (dst_data_column->is_large_binary()) {
+                serialize_state(state, down_cast<LargeBinaryColumn*>(dst_data_column));
+            } else {
+                serialize_state(state, down_cast<BinaryColumn*>(dst_data_column));
+            }
         }
     }
 
-    void serialize_state(const MinMaxNAggregateState<LT, IsMin>& state, BinaryColumn* dst) const {
+    template <typename BinaryColumnType>
+    void serialize_state(const MinMaxNAggregateState<LT, IsMin>& state, BinaryColumnType* dst) const {
         Bytes& bytes = dst->get_bytes();
         const size_t old_size = bytes.size();
 
@@ -311,9 +321,17 @@ public:
 
     void batch_serialize(FunctionContext* ctx, size_t chunk_size, const Buffer<AggDataPtr>& agg_states,
                          size_t state_offset, Column* to) const override {
-        auto* column = down_cast<BinaryColumn*>(to);
-        for (size_t i = 0; i < chunk_size; i++) {
-            serialize_state(this->data(agg_states[i] + state_offset), column);
+        auto* data_column = ColumnHelper::get_data_column(to);
+        if (data_column->is_large_binary()) {
+            auto* column = down_cast<LargeBinaryColumn*>(data_column);
+            for (size_t i = 0; i < chunk_size; i++) {
+                serialize_state(this->data(agg_states[i] + state_offset), column);
+            }
+        } else {
+            auto* column = down_cast<BinaryColumn*>(data_column);
+            for (size_t i = 0; i < chunk_size; i++) {
+                serialize_state(this->data(agg_states[i] + state_offset), column);
+            }
         }
     }
 

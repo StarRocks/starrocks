@@ -20,6 +20,7 @@
 #include <memory>
 
 #include "column/array_column.h"
+#include "column/binary_column.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "exprs/agg/aggregate_factory.h"
@@ -87,6 +88,50 @@ static inline Columns build_args_with_custom_offset(const ColumnPtr& value, cons
 }
 
 TEST_F(LagWindowTest, test_basic_lag) {
+    auto data_col = Int32Column::create();
+    auto null_col = NullColumn::create();
+
+    data_col->append(10);
+    null_col->append(0);
+    data_col->append(0);
+    null_col->append(1);
+    data_col->append(30);
+    null_col->append(0);
+    data_col->append(40);
+    null_col->append(0);
+
+    ColumnPtr value_col = NullableColumn::create(std::move(data_col), std::move(null_col));
+    auto default_col = ColumnHelper::create_const_column<TYPE_INT>(0, value_col->size());
+    const int64_t offset = 1;
+
+    Columns args = build_lag_args(value_col, offset, default_col);
+    std::vector<const Column*> raw_cols{args[0].get(), args[1].get(), args[2].get()};
+
+    const AggregateFunction* lag_func = get_aggregate_function("lag", TYPE_INT, TYPE_INT, /*is_nullable*/ true);
+    auto state = ManagedAggrState::create(ctx, lag_func);
+    lag_func->reset(ctx, args, state->state());
+
+    const int64_t N = value_col->size();
+    for (int64_t row = 0; row < N; ++row) {
+        int64_t frame_start = row - offset;
+        int64_t frame_end = frame_start + 1; // half-open [start, end)
+
+        lag_func->update_batch_single_state_with_frame(ctx, state->state(), raw_cols.data(),
+                                                       /*peer_group_start*/ 0,
+                                                       /*peer_group_end*/ N, frame_start, frame_end);
+
+        auto* lag_state = reinterpret_cast<LeadLagState<TYPE_INT, /*ignoreNulls=*/false>*>(state->state());
+        int32_t expected = (row == 0) ? 0 : (row == 1) ? 10 : (row == 2) ? 0 : (row == 3) ? 30 : -1;
+
+        if (lag_state->is_null) {
+            ASSERT_EQ(expected, 0) << "row=" << row;
+        } else {
+            ASSERT_EQ(expected, lag_state->value) << "row=" << row;
+        }
+    }
+}
+
+TEST_F(LagWindowTest, test_default_value_is_col_and_ignore_nulls) {
     auto data_col = Int32Column::create();
     auto null_col = NullColumn::create();
 
@@ -225,57 +270,41 @@ TEST_F(LagWindowTest, test_default_value_is_col) {
     }
 }
 
-TEST_F(LagWindowTest, test_default_value_is_col_and_ignore_nulls) {
-    auto data_col = Int32Column::create();
+TEST_F(LagWindowTest, test_lag_large_binary) {
+    auto data_col = LargeBinaryColumn::create();
     auto null_col = NullColumn::create();
 
-    data_col->append(10);
+    data_col->append(Slice("a"));
     null_col->append(0);
-    data_col->append(0);
-    null_col->append(1);
-    data_col->append(30);
+    data_col->append(Slice("b"));
     null_col->append(0);
-    data_col->append(40);
+    data_col->append(Slice("c"));
     null_col->append(0);
 
     ColumnPtr value_col = NullableColumn::create(std::move(data_col), std::move(null_col));
-
-    auto default_data_col = Int32Column::create();
-    auto default_null_col = NullColumn::create();
-
-    for (int i = 0; i < 4; ++i) {
-        default_data_col->append(i + 1);
-        default_null_col->append(0);
-    }
-
-    ColumnPtr default_col = NullableColumn::create(std::move(default_data_col), std::move(default_null_col));
-
+    auto default_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("z"), value_col->size());
     const int64_t offset = 1;
 
     Columns args = build_lag_args(value_col, offset, default_col);
     std::vector<const Column*> raw_cols{args[0].get(), args[1].get(), args[2].get()};
 
-    const AggregateFunction* lag_func = get_aggregate_function("lag_in", TYPE_INT, TYPE_INT, /*is_nullable*/ true);
+    const AggregateFunction* lag_func = get_aggregate_function("lag", TYPE_VARCHAR, TYPE_VARCHAR, true);
     auto state = ManagedAggrState::create(ctx, lag_func);
     lag_func->reset(ctx, args, state->state());
 
     const int64_t N = value_col->size();
+    std::vector<std::string> expected{"z", "a", "b"};
     for (int64_t row = 0; row < N; ++row) {
         int64_t frame_start = row - offset;
-        int64_t frame_end = frame_start + 1; // half-open [start, end)
+        int64_t frame_end = frame_start + 1;
 
-        lag_func->update_batch_single_state_with_frame(ctx, state->state(), raw_cols.data(),
-                                                       /*peer_group_start*/ 0,
-                                                       /*peer_group_end*/ N, frame_start, frame_end);
+        lag_func->update_batch_single_state_with_frame(ctx, state->state(), raw_cols.data(), 0, N, frame_start,
+                                                       frame_end);
 
-        auto* lag_state = reinterpret_cast<LeadLagState<TYPE_INT, /*ignoreNulls=*/true>*>(state->state());
-        int32_t expected = (row == 0) ? 1 : (row == 1) ? 10 : (row == 2) ? 10 : (row == 3) ? 30 : -1;
-
-        if (lag_state->is_null) {
-            ASSERT_EQ(expected, 0) << "row=" << row;
-        } else {
-            ASSERT_EQ(expected, lag_state->value) << "row=" << row;
-        }
+        auto* lag_state = reinterpret_cast<LeadLagState<TYPE_VARCHAR, /*ignoreNulls=*/false>*>(state->state());
+        ASSERT_FALSE(lag_state->is_null) << "row=" << row;
+        Slice value = AggDataTypeTraits<TYPE_VARCHAR>::get_ref(lag_state->value);
+        ASSERT_EQ(expected[row], value.to_string()) << "row=" << row;
     }
 }
 

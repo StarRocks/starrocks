@@ -15,6 +15,7 @@
 
 #include <cmath>
 
+#include "column/column_helper.h"
 #include "column/type_traits.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/function_context.h"
@@ -103,8 +104,8 @@ public:
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
-        DCHECK(column->is_binary());
-        Slice slice = column->get(row_num).get_slice();
+        DCHECK(column->is_binary() || column->is_large_binary());
+        Slice slice = ColumnHelper::get_binary_slice(column, row_num);
 
         auto meanX = *reinterpret_cast<double*>(slice.data);
         auto meanY = *reinterpret_cast<double*>(slice.data + sizeof(double));
@@ -133,44 +134,79 @@ public:
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        DCHECK(to->is_binary());
-        auto* column = down_cast<BinaryColumn*>(to);
-        Bytes& bytes = column->get_bytes();
-
-        size_t old_size = bytes.size();
-        size_t new_size = old_size + sizeof(double) * 3 + sizeof(int64_t);
+        DCHECK(to->is_binary() || to->is_large_binary());
+        Column* data_column = ColumnHelper::get_data_column(to);
+        size_t new_size = sizeof(double) * 3 + sizeof(int64_t);
         if constexpr (isCorelation) {
             new_size += (sizeof(double) * 2);
         }
-        bytes.resize(new_size);
+        if (data_column->is_large_binary()) {
+            auto* column = down_cast<LargeBinaryColumn*>(data_column);
+            Bytes& bytes = column->get_bytes();
+            size_t old_size = bytes.size();
+            size_t total_size = old_size + new_size;
+            bytes.resize(total_size);
+            memcpy(bytes.data() + old_size, &(this->data(state).meanX), sizeof(double));
+            memcpy(bytes.data() + old_size + sizeof(double), &(this->data(state).meanY), sizeof(double));
+            memcpy(bytes.data() + old_size + sizeof(double) * 2, &(this->data(state).c2), sizeof(double));
+            memcpy(bytes.data() + old_size + sizeof(double) * 3, &(this->data(state).count), sizeof(int64_t));
 
-        memcpy(bytes.data() + old_size, &(this->data(state).meanX), sizeof(double));
-        memcpy(bytes.data() + old_size + sizeof(double), &(this->data(state).meanY), sizeof(double));
-        memcpy(bytes.data() + old_size + sizeof(double) * 2, &(this->data(state).c2), sizeof(double));
-        memcpy(bytes.data() + old_size + sizeof(double) * 3, &(this->data(state).count), sizeof(int64_t));
+            if constexpr (isCorelation) {
+                memcpy(bytes.data() + old_size + sizeof(double) * 3 + sizeof(int64_t), &(this->data(state).m2X),
+                       sizeof(double));
+                memcpy(bytes.data() + old_size + sizeof(double) * 3 + sizeof(int64_t) + sizeof(double),
+                       &(this->data(state).m2Y), sizeof(double));
+            }
+            column->get_offset().emplace_back(total_size);
+        } else {
+            auto* column = down_cast<BinaryColumn*>(data_column);
+            Bytes& bytes = column->get_bytes();
+            size_t old_size = bytes.size();
+            size_t total_size = old_size + new_size;
+            bytes.resize(total_size);
+            memcpy(bytes.data() + old_size, &(this->data(state).meanX), sizeof(double));
+            memcpy(bytes.data() + old_size + sizeof(double), &(this->data(state).meanY), sizeof(double));
+            memcpy(bytes.data() + old_size + sizeof(double) * 2, &(this->data(state).c2), sizeof(double));
+            memcpy(bytes.data() + old_size + sizeof(double) * 3, &(this->data(state).count), sizeof(int64_t));
 
-        if constexpr (isCorelation) {
-            memcpy(bytes.data() + old_size + sizeof(double) * 3 + sizeof(int64_t), &(this->data(state).m2X),
-                   sizeof(double));
-            memcpy(bytes.data() + old_size + sizeof(double) * 3 + sizeof(int64_t) + sizeof(double),
-                   &(this->data(state).m2Y), sizeof(double));
+            if constexpr (isCorelation) {
+                memcpy(bytes.data() + old_size + sizeof(double) * 3 + sizeof(int64_t), &(this->data(state).m2X),
+                       sizeof(double));
+                memcpy(bytes.data() + old_size + sizeof(double) * 3 + sizeof(int64_t) + sizeof(double),
+                       &(this->data(state).m2Y), sizeof(double));
+            }
+            column->get_offset().emplace_back(total_size);
         }
-        column->get_offset().emplace_back(new_size);
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      MutableColumnPtr& dst) const override {
-        DCHECK(dst->is_binary());
-        auto* dst_column = down_cast<BinaryColumn*>(dst.get());
-        Bytes& bytes = dst_column->get_bytes();
-        size_t old_size = bytes.size();
+        DCHECK(dst->is_binary() || dst->is_large_binary());
+        auto* dst_column = ColumnHelper::get_data_column(dst.get());
+        Bytes* bytes = nullptr;
+        Buffer<uint32_t>* offsets = nullptr;
+        Buffer<uint64_t>* large_offsets = nullptr;
+        if (dst_column->is_large_binary()) {
+            auto* column = down_cast<LargeBinaryColumn*>(dst_column);
+            bytes = &column->get_bytes();
+            large_offsets = &column->get_offset();
+        } else {
+            auto* column = down_cast<BinaryColumn*>(dst_column);
+            bytes = &column->get_bytes();
+            offsets = &column->get_offset();
+        }
+        size_t old_size = bytes->size();
 
         size_t one_element_size = sizeof(double) * 3 + sizeof(int64_t);
         if constexpr (isCorelation) {
             one_element_size += (sizeof(double) * 2);
         }
-        bytes.resize(one_element_size * chunk_size);
-        dst_column->get_offset().resize(chunk_size + 1);
+        bytes->resize(one_element_size * chunk_size);
+        if (large_offsets != nullptr) {
+            large_offsets->resize(chunk_size + 1);
+        } else {
+            offsets->resize(chunk_size + 1);
+        }
 
         const auto* src_column0 = down_cast<const InputColumnType*>(src[0].get());
         const auto* src_column1 = down_cast<const InputColumnType*>(src[1].get());
@@ -185,23 +221,27 @@ public:
         for (size_t i = 0; i < chunk_size; ++i) {
             meanX = static_cast<double>(src0_data[i]);
             meanY = static_cast<double>(src1_data[i]);
-            memcpy(bytes.data() + old_size, &meanX, sizeof(double));
-            memcpy(bytes.data() + old_size + sizeof(double), &meanY, sizeof(double));
-            memcpy(bytes.data() + old_size + sizeof(double) * 2, &c2, sizeof(double));
-            memcpy(bytes.data() + old_size + sizeof(double) * 3, &count, sizeof(int64_t));
+            memcpy(bytes->data() + old_size, &meanX, sizeof(double));
+            memcpy(bytes->data() + old_size + sizeof(double), &meanY, sizeof(double));
+            memcpy(bytes->data() + old_size + sizeof(double) * 2, &c2, sizeof(double));
+            memcpy(bytes->data() + old_size + sizeof(double) * 3, &count, sizeof(int64_t));
             if constexpr (isCorelation) {
                 double m2X = 0;
                 double m2Y = 0;
-                memcpy(bytes.data() + old_size + sizeof(double) * 3 + sizeof(int64_t), &m2X, sizeof(double));
-                memcpy(bytes.data() + old_size + sizeof(double) * 3 + sizeof(int64_t) + sizeof(double), &m2Y,
+                memcpy(bytes->data() + old_size + sizeof(double) * 3 + sizeof(int64_t), &m2X, sizeof(double));
+                memcpy(bytes->data() + old_size + sizeof(double) * 3 + sizeof(int64_t) + sizeof(double), &m2Y,
                        sizeof(double));
             }
             old_size += one_element_size;
 
-            dst_column->get_offset()[i + 1] = old_size;
+            if (large_offsets != nullptr) {
+                (*large_offsets)[i + 1] = old_size;
+            } else {
+                (*offsets)[i + 1] = old_size;
+            }
         }
     }
-};
+}; // namespace starrocks
 
 template <LogicalType LT, bool isSample, typename T = RunTimeCppType<LT>>
 class CorVarianceAggregateFunction final : public CorVarianceBaseAggregateFunction<LT, false> {

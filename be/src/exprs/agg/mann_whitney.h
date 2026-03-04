@@ -24,6 +24,7 @@
 #include <iterator>
 
 #include "boost/math/distributions/normal.hpp"
+#include "column/column_helper.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
@@ -268,8 +269,9 @@ public:
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
-        DCHECK(column->is_binary());
-        const uint8_t* serialized_data = reinterpret_cast<const uint8_t*>(column->get(row_num).get_slice().data);
+        DCHECK(column->is_binary() || column->is_large_binary());
+        const uint8_t* serialized_data =
+                reinterpret_cast<const uint8_t*>(ColumnHelper::get_binary_slice(column, row_num).data);
         if (this->data(state).is_uninitialized()) {
             this->data(state).deserialize(serialized_data);
             return;
@@ -279,14 +281,29 @@ public:
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        DCHECK(to->is_binary());
-        auto* column = down_cast<BinaryColumn*>(to);
-        Bytes& bytes = column->get_bytes();
-        size_t old_size = bytes.size();
+        DCHECK(to->is_binary() || to->is_large_binary());
+        auto* data_column = ColumnHelper::get_data_column(to);
+        Bytes* bytes = nullptr;
+        Buffer<uint32_t>* offsets = nullptr;
+        Buffer<uint64_t>* large_offsets = nullptr;
+        if (data_column->is_large_binary()) {
+            auto* column = down_cast<LargeBinaryColumn*>(data_column);
+            bytes = &column->get_bytes();
+            large_offsets = &column->get_offset();
+        } else {
+            auto* column = down_cast<BinaryColumn*>(data_column);
+            bytes = &column->get_bytes();
+            offsets = &column->get_offset();
+        }
+        size_t old_size = bytes->size();
         size_t new_size = old_size + this->data(state).serialized_size();
-        bytes.resize(new_size);
-        column->get_offset().emplace_back(new_size);
-        uint8_t* serialized_data = bytes.data() + old_size;
+        bytes->resize(new_size);
+        if (data_column->is_large_binary()) {
+            large_offsets->emplace_back(new_size);
+        } else {
+            offsets->emplace_back(new_size);
+        }
+        uint8_t* serialized_data = bytes->data() + old_size;
         this->data(state).serialize(serialized_data);
     }
 

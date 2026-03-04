@@ -32,7 +32,7 @@
 namespace starrocks {
 template <typename T>
 BinaryColumnBase<T>::BinaryColumnBase(ContainerResource resource, Offsets offsets)
-        : _bytes(), _offsets(std::move(offsets)), _resource(std::move(resource)) {
+        : _bytes(), _offsets(std::move(offsets)), _resource(std::move(resource)), _immuable_container(*this) {
     if (_offsets.empty()) {
         _offsets.emplace_back(0);
     }

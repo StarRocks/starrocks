@@ -18,6 +18,8 @@
 #include <type_traits>
 
 #include "base/container/raw_container.h"
+#include "column/binary_column.h"
+#include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/type_traits.h"
 #include "exprs/agg/aggregate.h"
@@ -269,9 +271,7 @@ public:
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
-        DCHECK((*columns[0]).is_binary());
-        auto* binary_column = down_cast<const BinaryColumn*>(columns[0]);
-        auto value = binary_column->get_slice(row_num);
+        auto value = ColumnHelper::get_binary_slice(columns[0], row_num);
         OP()(this->data(state), value);
     }
 
@@ -288,13 +288,14 @@ public:
                                              int64_t partition_end, int64_t rows_start_offset, int64_t rows_end_offset,
                                              bool ignore_subtraction, bool ignore_addition,
                                              [[maybe_unused]] bool has_null) const override {
-        [[maybe_unused]] const auto& column = down_cast<const BinaryColumn&>(*columns[0]);
+        const Column* data_column = ColumnHelper::get_data_column(columns[0]);
 
         const int64_t previous_frame_first_position = current_row_position - 1 + rows_start_offset;
         int64_t current_frame_last_position = current_row_position + rows_end_offset;
         if (!ignore_subtraction && previous_frame_first_position >= partition_start &&
             previous_frame_first_position < partition_end) {
-            if (OP::equals(this->data(state), column.get_slice(previous_frame_first_position))) {
+            if (OP::equals(this->data(state),
+                           ColumnHelper::get_binary_slice(data_column, previous_frame_first_position))) {
                 current_frame_last_position = std::min(current_frame_last_position, partition_end - 1);
                 this->data(state).reset();
                 int64_t frame_start = previous_frame_first_position + 1;
@@ -322,16 +323,12 @@ public:
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
-        DCHECK(column->is_binary());
-        auto* binary_column = down_cast<const BinaryColumn*>(column);
-        auto value = binary_column->get_slice(row_num);
+        auto value = ColumnHelper::get_binary_slice(column, row_num);
         OP()(this->data(state), value);
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        DCHECK(to->is_binary());
-        auto* column = down_cast<BinaryColumn*>(to);
-        column->append(this->data(state).slice());
+        ColumnHelper::append_binary_value(to, this->data(state).slice());
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
@@ -340,17 +337,14 @@ public:
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        DCHECK(to->is_binary());
-        auto* column = down_cast<BinaryColumn*>(to);
-        column->append(this->data(state).slice());
+        ColumnHelper::append_binary_value(to, this->data(state).slice());
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
         DCHECK_GT(end, start);
-        auto* column = down_cast<BinaryColumn*>(dst);
         for (size_t i = start; i < end; ++i) {
-            column->append(this->data(state).slice());
+            ColumnHelper::append_binary_value(dst, this->data(state).slice());
         }
     }
 
