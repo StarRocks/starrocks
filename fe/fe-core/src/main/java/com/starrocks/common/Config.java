@@ -3212,6 +3212,10 @@ public class Config extends ConfigBase {
             "will disable compaction.")
     public static int lake_compaction_max_tasks = -1;
 
+    @ConfField(mutable = true, comment = "Default max parallel compaction subtasks per tablet when not specified in " +
+            "table properties. 0 means disable parallel compaction.")
+    public static int lake_compaction_max_parallel_default = 3;
+
     @ConfField(mutable = true)
     public static int lake_compaction_history_size = 20;
 
