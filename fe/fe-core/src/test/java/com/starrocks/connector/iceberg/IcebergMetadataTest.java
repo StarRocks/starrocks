@@ -384,6 +384,11 @@ public class IcebergMetadataTest extends TableTestBase {
             public List<String> getPartitionColumnNamesWithTransform() {
                 return ImmutableList.of("hour(`c1`)");
             }
+
+            @Mock
+            public int getFormatVersion() {
+                return 1;
+            }
         };
 
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
@@ -411,12 +416,13 @@ public class IcebergMetadataTest extends TableTestBase {
         Assertions.assertEquals("db", icebergTable.getCatalogDBName());
         Assertions.assertEquals("tbl", icebergTable.getCatalogTableName());
         String createSql = AstToStringBuilder.getExternalCatalogTableDdlStmt(actual);
-        Assertions.assertEquals("CREATE TABLE `tbl` (\n" +
-                        "  `c1` int(11) DEFAULT NULL,\n" +
-                        "  `c2` varchar(1048576) DEFAULT NULL\n" +
-                        ")\n" +
-                        "PARTITION BY hour(`c1`)\n" +
-                        "ORDER BY (c1 ASC NULLS FIRST,c2 DESC NULLS LAST);",
+        Assertions.assertEquals("CREATE TABLE `tbl` (\n"
+                        + "  `c1` int(11) DEFAULT NULL,\n"
+                        + "  `c2` varchar(1048576) DEFAULT NULL\n"
+                        + ")\n"
+                        + "PARTITION BY hour(`c1`)\n"
+                        + "ORDER BY (c1 ASC NULLS FIRST,c2 DESC NULLS LAST)\n"
+                        + "PROPERTIES (\"format-version\" = \"1\");",
                 createSql);
     }
 

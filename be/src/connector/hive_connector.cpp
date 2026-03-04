@@ -84,10 +84,15 @@ HiveDataSource::HiveDataSource(const HiveDataSourceProvider* provider, const THd
 Status HiveDataSource::_check_all_slots_nullable() {
     for (const auto* slot : _tuple_desc->slots()) {
         if (!slot->is_nullable()) {
-            return Status::RuntimeError(fmt::format(
-                    "All columns must be nullable for external table. Column '{}' is not nullable, You can rebuild the"
-                    "external table and We strongly recommend that you use catalog to access external data.",
-                    slot->col_name()));
+            // Check if the non-nullable column has a default value
+            // If it has a default value, allow scanning as old data files can be filled with the default
+            if (_materialize_slot_default_values.find(slot->id()) == _materialize_slot_default_values.end()) {
+                return Status::RuntimeError(fmt::format(
+                        "All columns must be nullable for external table. Column '{}' is not nullable, You can rebuild "
+                        "the"
+                        "external table and We strongly recommend that you use catalog to access external data.",
+                        slot->col_name()));
+            }
         }
     }
     return Status::OK();

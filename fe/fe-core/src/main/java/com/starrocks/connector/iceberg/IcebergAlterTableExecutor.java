@@ -217,9 +217,7 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
 
             if (columnDef.getDefaultValueDef().isSet) {
                 Literal<?> defaultLiteral = buildIcebergDefaultLiteral(columnDef, colType);
-                if (defaultLiteral != null) {
-                    updateSchema.updateColumnDefault(columnDef.getName(), defaultLiteral);
-                }
+                updateSchema.updateColumnDefault(columnDef.getName(), defaultLiteral);
             }
 
             // AFTER column / FIRST
