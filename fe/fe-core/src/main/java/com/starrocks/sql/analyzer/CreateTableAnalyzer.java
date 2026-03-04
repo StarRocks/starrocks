@@ -644,7 +644,8 @@ public class CreateTableAnalyzer {
                         partitionDesc instanceof SingleItemListPartitionDesc ||
                         partitionDesc instanceof SingleRangePartitionDesc) {
                     try {
-                        PartitionDescAnalyzer.analyze(partitionDesc, stmt.getColumnDefs(), stmt.getProperties());
+                        PartitionDescAnalyzer.analyze(partitionDesc, stmt.getColumnDefs(), stmt.getProperties(),
+                                stmt.getKeysDesc().getKeysType());
                     } catch (AnalysisException e) {
                         throw new SemanticException(e.getMessage());
                     }
