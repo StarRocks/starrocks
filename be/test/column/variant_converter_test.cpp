@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "column/variant_converter.h"
+
 #include <arrow/util/endian.h>
 #include <gtest/gtest.h>
 
@@ -21,7 +23,6 @@
 
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
-#include "column/variant_converter.h"
 #include "gutil/casts.h"
 #include "types/date_value.h"
 #include "types/time_types.h"
@@ -61,10 +62,11 @@ VariantRowValue make_variant_row(std::string value_bytes) {
 
 } // namespace
 
-TEST(VariantConverterCoreTest, CastArithmeticAndTemporalValues) {
+TEST(VariantConverterTest, CastArithmeticAndTemporalValues) {
     VariantRowValue int_row = make_variant_row(encode_primitive<int32_t>(VariantType::INT32, 42));
     ColumnBuilder<TYPE_BIGINT> int_builder(1);
-    Status int_status = cast_variant_value_to<TYPE_BIGINT, true>(int_row, cctz::utc_time_zone(), int_builder);
+    Status int_status =
+            VariantConverter::cast_to<TYPE_BIGINT, true>(int_row.as_ref(), cctz::utc_time_zone(), int_builder);
     ASSERT_TRUE(int_status.ok()) << int_status;
     auto int_column = int_builder.build(false);
     auto* int_data = ColumnHelper::cast_to_raw<TYPE_BIGINT>(int_column.get());
@@ -74,7 +76,8 @@ TEST(VariantConverterCoreTest, CastArithmeticAndTemporalValues) {
     int32_t days = DateValue::create(2025, 2, 2).to_days_since_unix_epoch();
     VariantRowValue date_row = make_variant_row(encode_primitive<int32_t>(VariantType::DATE, days));
     ColumnBuilder<TYPE_DATE> date_builder(1);
-    Status date_status = cast_variant_value_to<TYPE_DATE, true>(date_row, cctz::utc_time_zone(), date_builder);
+    Status date_status =
+            VariantConverter::cast_to<TYPE_DATE, true>(date_row.as_ref(), cctz::utc_time_zone(), date_builder);
     ASSERT_TRUE(date_status.ok()) << date_status;
     auto date_column = date_builder.build(false);
     auto* date_data = ColumnHelper::cast_to_raw<TYPE_DATE>(date_column.get());
@@ -84,7 +87,8 @@ TEST(VariantConverterCoreTest, CastArithmeticAndTemporalValues) {
     int64_t time_micros = (1 * 3600 + 2 * 60 + 3) * USECS_PER_SEC + 456;
     VariantRowValue time_row = make_variant_row(encode_primitive<int64_t>(VariantType::TIME_NTZ, time_micros));
     ColumnBuilder<TYPE_TIME> time_builder(1);
-    Status time_status = cast_variant_value_to<TYPE_TIME, true>(time_row, cctz::utc_time_zone(), time_builder);
+    Status time_status =
+            VariantConverter::cast_to<TYPE_TIME, true>(time_row.as_ref(), cctz::utc_time_zone(), time_builder);
     ASSERT_TRUE(time_status.ok()) << time_status;
     auto time_column = time_builder.build(false);
     auto* time_data = ColumnHelper::cast_to_raw<TYPE_TIME>(time_column.get());
@@ -96,8 +100,8 @@ TEST(VariantConverterCoreTest, CastArithmeticAndTemporalValues) {
     VariantRowValue datetime_row = make_variant_row(
             encode_primitive<int64_t>(VariantType::TIMESTAMP_NTZ, kSeconds * USECS_PER_SEC + kSubMicros));
     ColumnBuilder<TYPE_DATETIME> datetime_builder(1);
-    Status datetime_status =
-            cast_variant_value_to<TYPE_DATETIME, true>(datetime_row, cctz::utc_time_zone(), datetime_builder);
+    Status datetime_status = VariantConverter::cast_to<TYPE_DATETIME, true>(datetime_row.as_ref(),
+                                                                            cctz::utc_time_zone(), datetime_builder);
     ASSERT_TRUE(datetime_status.ok()) << datetime_status;
     auto datetime_column = datetime_builder.build(false);
     auto* datetime_data = ColumnHelper::cast_to_raw<TYPE_DATETIME>(datetime_column.get());
@@ -108,10 +112,11 @@ TEST(VariantConverterCoreTest, CastArithmeticAndTemporalValues) {
     EXPECT_EQ(expected, datetime_data->get_data()[0]);
 }
 
-TEST(VariantConverterCoreTest, CastBooleanAndString) {
+TEST(VariantConverterTest, CastBooleanAndString) {
     VariantRowValue bool_row = make_variant_row(encode_string("TrUe"));
     ColumnBuilder<TYPE_BOOLEAN> bool_builder(1);
-    Status bool_status = cast_variant_value_to<TYPE_BOOLEAN, true>(bool_row, cctz::utc_time_zone(), bool_builder);
+    Status bool_status =
+            VariantConverter::cast_to<TYPE_BOOLEAN, true>(bool_row.as_ref(), cctz::utc_time_zone(), bool_builder);
     ASSERT_TRUE(bool_status.ok()) << bool_status;
     auto bool_column = bool_builder.build(false);
     auto* bool_data = ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(bool_column.get());
@@ -120,7 +125,8 @@ TEST(VariantConverterCoreTest, CastBooleanAndString) {
 
     VariantRowValue int_row = make_variant_row(encode_primitive<int32_t>(VariantType::INT32, 42));
     ColumnBuilder<TYPE_VARCHAR> string_builder(1);
-    Status string_status = cast_variant_value_to<TYPE_VARCHAR, true>(int_row, cctz::utc_time_zone(), string_builder);
+    Status string_status =
+            VariantConverter::cast_to<TYPE_VARCHAR, true>(int_row.as_ref(), cctz::utc_time_zone(), string_builder);
     ASSERT_TRUE(string_status.ok()) << string_status;
     auto string_column = string_builder.build(false);
     auto* string_data = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(string_column.get());
@@ -128,22 +134,43 @@ TEST(VariantConverterCoreTest, CastBooleanAndString) {
     EXPECT_EQ("42", string_data->get_slice(0).to_string());
 }
 
-TEST(VariantConverterCoreTest, ThrowAndNullOnInvalidBooleanString) {
+TEST(VariantConverterTest, ThrowAndNullOnInvalidBooleanString) {
     VariantRowValue invalid_bool_row = make_variant_row(encode_string("not_bool"));
 
     ColumnBuilder<TYPE_BOOLEAN> throw_builder(1);
-    auto throw_status =
-            cast_variant_value_to<TYPE_BOOLEAN, true>(invalid_bool_row, cctz::utc_time_zone(), throw_builder);
+    auto throw_status = VariantConverter::cast_to<TYPE_BOOLEAN, true>(invalid_bool_row.as_ref(), cctz::utc_time_zone(),
+                                                                      throw_builder);
     EXPECT_FALSE(throw_status.ok());
 
     ColumnBuilder<TYPE_BOOLEAN> null_builder(1);
-    Status null_status =
-            cast_variant_value_to<TYPE_BOOLEAN, false>(invalid_bool_row, cctz::utc_time_zone(), null_builder);
+    Status null_status = VariantConverter::cast_to<TYPE_BOOLEAN, false>(invalid_bool_row.as_ref(),
+                                                                        cctz::utc_time_zone(), null_builder);
     ASSERT_TRUE(null_status.ok()) << null_status;
     auto null_column = null_builder.build(false);
     ASSERT_TRUE(null_column->is_nullable());
     auto* nullable = down_cast<NullableColumn*>(null_column.get());
     EXPECT_TRUE(nullable->is_null(0));
+}
+
+TEST(VariantConverterTest, CastFromRowRefMatchesRowValue) {
+    VariantRowValue int_row = make_variant_row(encode_primitive<int32_t>(VariantType::INT32, 7));
+    VariantRowRef int_ref = int_row.as_ref();
+
+    ColumnBuilder<TYPE_BIGINT> from_value_builder(1);
+    Status from_value_status =
+            VariantConverter::cast_to<TYPE_BIGINT, true>(int_row.as_ref(), cctz::utc_time_zone(), from_value_builder);
+    ASSERT_TRUE(from_value_status.ok()) << from_value_status;
+    auto from_value = from_value_builder.build(false);
+
+    ColumnBuilder<TYPE_BIGINT> from_ref_builder(1);
+    Status from_ref_status =
+            VariantConverter::cast_to<TYPE_BIGINT, true>(int_ref, cctz::utc_time_zone(), from_ref_builder);
+    ASSERT_TRUE(from_ref_status.ok()) << from_ref_status;
+    auto from_ref = from_ref_builder.build(false);
+
+    ASSERT_EQ(from_value->size(), from_ref->size());
+    EXPECT_EQ(ColumnHelper::cast_to_raw<TYPE_BIGINT>(from_value.get())->get_data()[0],
+              ColumnHelper::cast_to_raw<TYPE_BIGINT>(from_ref.get())->get_data()[0]);
 }
 
 } // namespace starrocks

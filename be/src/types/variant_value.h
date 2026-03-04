@@ -21,13 +21,38 @@
 #include <string_view>
 
 #include "base/container/raw_container.h"
+#include "base/statusor.h"
 #include "base/string/slice.h"
 #include "common/compiler_util.h"
-#include "common/statusor.h"
 #include "fmt/format.h"
 #include "types/variant.h"
 
 namespace starrocks {
+
+class VariantRowValue;
+
+// Non-owning row-level variant reference. Holds only metadata/value views.
+// Lifetime: referenced bytes must outlive this object.
+class VariantRowRef {
+public:
+    VariantRowRef(std::string_view metadata, std::string_view value) : _metadata(metadata), _value(value) {}
+    VariantRowRef(const VariantMetadata& metadata, const VariantValue& value) : _metadata(metadata), _value(value) {}
+    VariantRowRef() : _metadata(VariantMetadata::kEmptyMetadata), _value(VariantValue::kEmptyValue) {}
+
+    const VariantMetadata& get_metadata() const { return _metadata; }
+    const VariantValue& get_value() const { return _value; }
+    bool is_null() const { return _value.is_null(); }
+
+    static VariantRowRef from_variant(const VariantMetadata& metadata, const VariantValue& value) {
+        return VariantRowRef(metadata, value);
+    }
+
+    VariantRowValue to_owned() const;
+
+private:
+    VariantMetadata _metadata;
+    VariantValue _value;
+};
 
 class VariantRowValue {
 public:
@@ -136,6 +161,7 @@ public:
 
     const VariantMetadata& get_metadata() const { return _metadata; }
     const VariantValue& get_value() const { return _value; }
+    VariantRowRef as_ref() const { return VariantRowRef(_metadata, _value); }
 
     // Variant value has a maximum size limit of 16MB to prevent excessive memory usage.
     static constexpr uint32_t kMaxVariantSize = 16 * 1024 * 1024;
@@ -202,6 +228,10 @@ private:
     VariantMetadata _metadata;
     VariantValue _value;
 };
+
+inline VariantRowValue VariantRowRef::to_owned() const {
+    return VariantRowValue::from_variant(_metadata, _value);
+}
 
 inline bool operator==(const VariantRowValue& lhs, const VariantRowValue& rhs) {
     return lhs.get_metadata() == rhs.get_metadata() && lhs.get_value() == rhs.get_value();
