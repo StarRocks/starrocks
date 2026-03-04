@@ -346,20 +346,23 @@ inline void AsyncDeltaWriterImpl::close() {
 
         TEST_SYNC_POINT("AsyncDeltaWriterImpl::close:2");
 
-        // Wait for block merge finished.
-        if (_block_merge_token != nullptr) {
-            _block_merge_token->shutdown();
-            _block_merge_token.reset();
-        }
-
         // After the execution_queue been `stop()`ed all incoming `write()` and `finish()` requests
         // will fail immediately.
         int r = bthread::execution_queue_stop(old_id);
         PLOG_IF(WARNING, r != 0) << "Fail to stop execution queue";
 
         // Wait for all running tasks completed.
+        // Must join execution queue BEFORE destroying _block_merge_token, because a running
+        // execute() task may still submit to _block_merge_token in kFinishTask handler.
         r = bthread::execution_queue_join(old_id);
         PLOG_IF(WARNING, r != 0) << "Fail to join execution queue";
+
+        // Wait for block merge finished. Safe to destroy now since the execution queue has
+        // been joined and no new merge tasks can be submitted.
+        if (_block_merge_token != nullptr) {
+            _block_merge_token->shutdown();
+            _block_merge_token.reset();
+        }
     }
 }
 
