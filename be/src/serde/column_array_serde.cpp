@@ -444,9 +444,7 @@ public:
 
 class VariantColumnSerde {
 public:
-    static int64_t max_serialized_size(const VariantColumn& column) {
-        return max_serialized_size_shredded(column);
-    }
+    static int64_t max_serialized_size(const VariantColumn& column) { return max_serialized_size_shredded(column); }
 
     static uint8_t* serialize(const VariantColumn& column, uint8_t* buff) { return serialize_shredded(column, buff); }
 
