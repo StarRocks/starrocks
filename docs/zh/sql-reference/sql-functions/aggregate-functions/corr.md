@@ -28,10 +28,6 @@ CORR(expr1, expr2)
 
 ![corr_formula](../../../_assets/corr_formula.png)
 
-<!--$$
-\frac{\sum_{i=1}^{n}((x_i - \bar{x})(y_i - \bar{y}))}{\sqrt{\sum_{i=1}^{n}((x_i - \bar{x})^2) \cdot \sum_{i=1}^{n}((y_i - \bar{y})^2)}}
-$$ -->
-
 ## 使用说明
 
 * 计算相关系数时，只有同一行的两列数据都不为 null 时，该行数据才会被统计到最终结果中，否则该行数据会被忽略。
