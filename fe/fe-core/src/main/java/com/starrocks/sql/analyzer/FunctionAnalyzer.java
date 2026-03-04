@@ -1517,14 +1517,6 @@ public class FunctionAnalyzer {
             throw new SemanticException(fnName + "() does not support named parameters");
         }
 
-        // Check for mixed named and positional arguments
-        // Positional arguments have empty string "" as their name
-        boolean hasNamedArg = paramNames.stream().anyMatch(name -> !name.isEmpty());
-        boolean hasPositionalArg = paramNames.stream().anyMatch(String::isEmpty);
-        if (hasNamedArg && hasPositionalArg) {
-            throw new SemanticException(fnName + "() mixing named and positional arguments is not allowed");
-        }
-
         // Safe to call: hasNamedArg() above guarantees argNames is not null
         String[] validParamNames = fn.getArgNames();
         Set<String> validParams = new HashSet<>(Arrays.asList(validParamNames));

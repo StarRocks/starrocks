@@ -2520,12 +2520,8 @@ sampleClause
     ;
 
 argumentList
-    : argumentItem (',' argumentItem)*
-    ;
-
-argumentItem
-    : namedArgument
-    | expression
+    : namedArgumentList
+    | expressionList
     ;
 
 namedArgumentList

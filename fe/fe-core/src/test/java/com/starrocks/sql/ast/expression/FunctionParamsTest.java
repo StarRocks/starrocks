@@ -425,34 +425,6 @@ public class FunctionParamsTest {
         params2.hashCode();
     }
 
-    // ========== Test Category 2.5: Mixing Named and Positional Detection ==========
-
-    @Test
-    public void testMixingNamedAndPositionalDetection() {
-        // Mixed: first is named, second is positional
-        List<Expr> exprs = Arrays.asList(
-                new NamedArgument("url", new StringLiteral("https://example.com")),
-                new StringLiteral("POST")  // Positional
-        );
-
-        FunctionParams params = new FunctionParams(false, exprs);
-
-        // exprsNames should exist (because at least one named arg exists)
-        Assertions.assertNotNull(params.getExprsNames(),
-                "Expression names should not be null when any named arg exists");
-
-        // Check that mixing can be detected: named args have non-empty names, positional have empty
-        boolean hasNamed = params.getExprsNames().stream().anyMatch(name -> !name.isEmpty());
-        boolean hasPositional = params.getExprsNames().stream().anyMatch(String::isEmpty);
-
-        Assertions.assertTrue(hasNamed, "Should detect named arguments");
-        Assertions.assertTrue(hasPositional, "Should detect positional arguments");
-
-        // This is how mixing detection works
-        boolean isMixed = hasNamed && hasPositional;
-        Assertions.assertTrue(isMixed, "Should detect mixed named and positional");
-    }
-
     @Test
     public void testAllNamedNoMixing() {
         // All named arguments - no mixing
