@@ -47,14 +47,6 @@ struct is_relocatable<T> : T::is_relocatable {};
 template <typename T>
 inline constexpr bool is_relocatable_v = is_relocatable<T>::value;
 
-#if defined(__AVX512F__)
-constexpr size_t SIMD_PADDING_BYTES = 64;
-#elif defined(__AVX2__)
-constexpr size_t SIMD_PADDING_BYTES = 32;
-#else
-constexpr size_t SIMD_PADDING_BYTES = 16;
-#endif
-
 static constexpr size_t empty_raw_buffer_size = 1024;
 alignas(std::max_align_t) extern uint8_t empty_raw_buffer[empty_raw_buffer_size];
 
@@ -86,6 +78,8 @@ public:
     static constexpr size_t kElementSize = sizeof(T);
     static constexpr size_t kPadding = ((padding + kElementSize - 1) / kElementSize) * kElementSize;
     static constexpr uint8_t* null = empty_raw_buffer;
+    static_assert(alignof(T) <= alignof(std::max_align_t),
+                  "RawBuffer only supports element types aligned to at most std::max_align_t");
 
     using value_type = T;
     using iterator = T*;
@@ -106,7 +100,7 @@ public:
     bool empty() const { return _start == _end; }
     size_t size() const { return (_end - _start) / kElementSize; }
     size_t capacity() const { return (_end_of_storage - _start) / kElementSize; }
-    size_t allocated_bytes() const { return _end_of_storage - _start + kPadding; }
+    size_t allocated_bytes() const { return _start == null ? 0 : _end_of_storage - _start + kPadding; }
     size_t used_bytes() const { return _end - _start; }
 
     T& operator[](size_t idx) { return data()[idx]; }
@@ -280,6 +274,7 @@ template <class T, size_t padding>
 void RawBuffer<T, padding>::relocate(memory::Allocator* allocator, size_t new_allocated_bytes) {
     if (UNLIKELY(_start == null)) {
         _start = reinterpret_cast<uint8_t*>(allocator->alloc(new_allocated_bytes));
+        DCHECK(_start != nullptr);
         _end = _start;
         _end_of_storage = _start + new_allocated_bytes - kPadding;
         return;
@@ -291,11 +286,13 @@ void RawBuffer<T, padding>::relocate(memory::Allocator* allocator, size_t new_al
         if (old_allocated_bytes >= 4096) {
             uint8_t* new_start = reinterpret_cast<uint8_t*>(
                     allocator->realloc(reinterpret_cast<void*>(_start), old_allocated_bytes, new_allocated_bytes));
+            DCHECK(new_start != nullptr);
             _start = new_start;
             _end = _start + old_used_bytes;
             _end_of_storage = _start + new_allocated_bytes - kPadding;
         } else {
             uint8_t* new_start = reinterpret_cast<uint8_t*>(allocator->alloc(new_allocated_bytes));
+            DCHECK(new_start != nullptr);
             strings::memcpy_inlined(new_start, reinterpret_cast<const void*>(_start), old_used_bytes);
             allocator->free(reinterpret_cast<void*>(_start), old_allocated_bytes);
             _start = new_start;
@@ -304,6 +301,7 @@ void RawBuffer<T, padding>::relocate(memory::Allocator* allocator, size_t new_al
         }
     } else {
         uint8_t* new_start = reinterpret_cast<uint8_t*>(allocator->alloc(new_allocated_bytes));
+        DCHECK(new_start != nullptr);
         T* new_data = reinterpret_cast<T*>(new_start);
         T* old_data = reinterpret_cast<T*>(_start);
         size_t old_size = size();
@@ -414,6 +412,7 @@ void RawBuffer<T, padding>::assign(memory::Allocator* allocator, size_t count, c
         std::fill(begin(), begin() + count, value);
     } else {
         destroy(begin(), end());
+        _end = _start;
         std::uninitialized_fill_n(begin(), count, value);
     }
     _end = _start + count * kElementSize;
@@ -430,9 +429,10 @@ void RawBuffer<T, padding>::assign(memory::Allocator* allocator, InputIt first, 
     }
 
     destroy(begin(), end());
+    _end = _start;
 
     T* ptr = data();
-    if constexpr (is_relocatable_v<T> && std::is_pointer_v<InputIt>) {
+    if constexpr (std::is_trivially_copyable_v<T> && std::is_pointer_v<InputIt>) {
         strings::memcpy_inlined(ptr, reinterpret_cast<const void*>(first), count * kElementSize);
     } else {
         std::uninitialized_copy(first, last, ptr);
@@ -502,7 +502,7 @@ typename RawBuffer<T, padding>::iterator RawBuffer<T, padding>::append(memory::A
 
     T* insert_pos = reinterpret_cast<T*>(_end);
     // Append new elements at the end
-    if constexpr (is_relocatable_v<T> && std::is_pointer_v<InputIt>) {
+    if constexpr (std::is_trivially_copyable_v<T> && std::is_pointer_v<InputIt>) {
         strings::memcpy_inlined(insert_pos, reinterpret_cast<const void*>(first), count * kElementSize);
     } else {
         std::uninitialized_copy(first, last, insert_pos);

@@ -18,7 +18,7 @@
 
 #include <vector>
 
-#include "runtime/memory/memory_allocator.h"
+#include "base/memory/jemalloc_allocator.h"
 
 namespace starrocks {
 
@@ -58,6 +58,53 @@ struct CountingType {
         dtor_count = 0;
         copy_count = 0;
         move_count = 0;
+    }
+};
+
+struct RelocatableCopyAwareType {
+    using is_relocatable = std::true_type;
+
+    static inline int copy_count = 0;
+
+    int value = 0;
+    bool copied = false;
+
+    RelocatableCopyAwareType() = default;
+    explicit RelocatableCopyAwareType(int v) : value(v) {}
+    RelocatableCopyAwareType(const RelocatableCopyAwareType& other) : value(other.value), copied(true) { ++copy_count; }
+    RelocatableCopyAwareType(RelocatableCopyAwareType&& other) noexcept : value(other.value), copied(other.copied) {}
+    RelocatableCopyAwareType& operator=(const RelocatableCopyAwareType&) = default;
+    RelocatableCopyAwareType& operator=(RelocatableCopyAwareType&&) = default;
+    ~RelocatableCopyAwareType() = default;
+
+    static void reset() { copy_count = 0; }
+};
+
+struct ThrowOnCopyType {
+    static inline int live_count = 0;
+    static inline int copy_count = 0;
+    static inline int throw_on_copy_at = -1;
+
+    int value = 0;
+
+    ThrowOnCopyType() { ++live_count; }
+    explicit ThrowOnCopyType(int v) : value(v) { ++live_count; }
+    ThrowOnCopyType(const ThrowOnCopyType& other) : value(other.value) {
+        ++copy_count;
+        if (throw_on_copy_at > 0 && copy_count == throw_on_copy_at) {
+            throw std::runtime_error("copy failure");
+        }
+        ++live_count;
+    }
+    ThrowOnCopyType(ThrowOnCopyType&& other) noexcept : value(other.value) { ++live_count; }
+    ThrowOnCopyType& operator=(const ThrowOnCopyType&) = default;
+    ThrowOnCopyType& operator=(ThrowOnCopyType&&) = default;
+    ~ThrowOnCopyType() { --live_count; }
+
+    static void reset() {
+        live_count = 0;
+        copy_count = 0;
+        throw_on_copy_at = -1;
     }
 };
 
@@ -238,6 +285,21 @@ TEST_F(BufferTest, BufferRelease) {
     buf.release();
     ASSERT_EQ(0, buf.size());
     ASSERT_EQ(0, buf.capacity());
+}
+
+TEST_F(BufferTest, BufferAllocatedBytesOnEmptySentinel) {
+    Buffer<int, 16> buf(&_allocator);
+
+    ASSERT_EQ(0, buf.allocated_bytes());
+
+    buf.shrink_to_fit();
+    ASSERT_EQ(0, buf.allocated_bytes());
+
+    buf.reserve(8);
+    ASSERT_GT(buf.allocated_bytes(), 0);
+
+    buf.release();
+    ASSERT_EQ(0, buf.allocated_bytes());
 }
 
 // Test Buffer with different types
@@ -429,6 +491,62 @@ TEST_F(BufferTest, BufferPadding) {
     ASSERT_EQ(buf8.allocated_bytes(), buf8.capacity() * element_size + padding8);
     ASSERT_EQ(buf16.allocated_bytes(), buf16.capacity() * element_size + padding16);
     ASSERT_EQ(buf32.allocated_bytes(), buf32.capacity() * element_size + padding32);
+}
+
+TEST_F(BufferTest, BufferPointerRangeCopyForNonTrivialRelocatableType) {
+    RelocatableCopyAwareType::reset();
+
+    RelocatableCopyAwareType src[2];
+    src[0].value = 1;
+    src[1].value = 2;
+
+    RelocatableCopyAwareType extra[2];
+    extra[0].value = 3;
+    extra[1].value = 4;
+
+    Buffer<RelocatableCopyAwareType, 16> buf(&_allocator);
+
+    buf.assign(src, src + 2);
+    ASSERT_EQ(2, buf.size());
+    ASSERT_TRUE(buf[0].copied);
+    ASSERT_TRUE(buf[1].copied);
+    ASSERT_EQ(2, RelocatableCopyAwareType::copy_count);
+
+    auto* inserted = buf.append(extra, extra + 2);
+    ASSERT_EQ(4, buf.size());
+    ASSERT_EQ(3, inserted[0].value);
+    ASSERT_EQ(4, inserted[1].value);
+    ASSERT_TRUE(inserted[0].copied);
+    ASSERT_TRUE(inserted[1].copied);
+    ASSERT_EQ(4, RelocatableCopyAwareType::copy_count);
+}
+
+TEST_F(BufferTest, BufferAssignExceptionLeavesBufferReusable) {
+    ThrowOnCopyType::reset();
+
+    {
+        ThrowOnCopyType src[3];
+        src[0].value = 1;
+        src[1].value = 2;
+        src[2].value = 3;
+
+        Buffer<ThrowOnCopyType, 16> buf(&_allocator);
+        buf.emplace_back(9);
+        buf.emplace_back(8);
+        ASSERT_EQ(2, buf.size());
+
+        ThrowOnCopyType::copy_count = 0;
+        ThrowOnCopyType::throw_on_copy_at = 2;
+        ASSERT_THROW(buf.assign(src, src + 3), std::runtime_error);
+        ASSERT_EQ(0, buf.size());
+
+        ThrowOnCopyType::throw_on_copy_at = -1;
+        buf.emplace_back(7);
+        ASSERT_EQ(1, buf.size());
+        ASSERT_EQ(7, buf[0].value);
+    }
+
+    ASSERT_EQ(0, ThrowOnCopyType::live_count);
 }
 
 } // namespace starrocks
