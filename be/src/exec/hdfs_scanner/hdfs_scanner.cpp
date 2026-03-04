@@ -16,6 +16,7 @@
 
 #include "cache/data_cache_hit_rate_counter.hpp"
 #include "column/column_helper.h"
+#include "column/datum_convert.h"
 #include "column/type_traits.h"
 #include "common/config_cache_fwd.h"
 #include "common/config_scan_io_fwd.h"
@@ -29,6 +30,7 @@
 #include "storage/predicate_parser.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/runtime_range_pruner.hpp"
+#include "storage/type_info_allocator_adapter.h"
 #include "storage/types.h"
 #include "util/compression/compression_utils.h"
 #include "util/compression/stream_decompressor.h"
@@ -42,11 +44,33 @@ static Status fill_default_value_for_not_existed_slot(SlotDescriptor* slot_desc,
     if (type_info == nullptr) {
         return Status::InternalError(fmt::format("failed to get type info for slot {}", slot_desc->col_name()));
     }
-    std::unique_ptr<DefaultValueColumnIterator> default_value_iter = std::make_unique<DefaultValueColumnIterator>(
-            true, default_value, slot_desc->is_nullable(), type_info, slot_desc->type().len, row_count);
-    ColumnIteratorOptions iter_opts;
-    RETURN_IF_ERROR(default_value_iter->init(iter_opts));
-    return default_value_iter->fetch_values_by_rowid(nullptr, row_count, column);
+
+    // For Iceberg: treat the default value string literally
+    // - Empty string means SQL NULL (when IcebergApiConverter returns null in Java)
+    // - "NULL" is a literal string, not SQL null
+    if (default_value.empty()) {
+        if (!slot_desc->is_nullable()) {
+            return Status::InternalError(
+                    fmt::format("non-nullable column {} has empty default value", slot_desc->col_name()));
+        }
+        [[maybe_unused]] bool ok = column->append_nulls(row_count);
+        DCHECK(ok) << "cannot append null to non-nullable column";
+        return Status::OK();
+    }
+
+    // Parse default value into Datum using TypeInfo::from_string
+    // This handles all basic types: INT, BIGINT, FLOAT, DOUBLE, BOOLEAN, STRING, DATE, TIMESTAMP
+    MemPool mem_pool;
+    TypeInfoAllocator type_info_allocator = make_type_info_allocator(&mem_pool);
+    Datum datum;
+    RETURN_IF_ERROR(datum_from_string(type_info.get(), &datum, default_value, &type_info_allocator));
+
+    // Fill column with the default value
+    for (size_t i = 0; i < row_count; ++i) {
+        column->append_datum(datum);
+    }
+
+    return Status::OK();
 }
 
 class CountedSeekableInputStream final : public io::SeekableInputStreamWrapper {
