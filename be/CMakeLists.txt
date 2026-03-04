@@ -421,6 +421,7 @@ set(STARROCKS_LINK_LIBS
     ${WL_END_GROUP}
     -Wl,--whole-archive ExprCore -Wl,--no-whole-archive
     IOCore
+    FSCore
     RuntimeCore
     ChunkCore
     ColumnCore

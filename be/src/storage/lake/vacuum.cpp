@@ -26,6 +26,7 @@
 #include "base/utility/defer_op.h"
 #include "common/status.h"
 #include "fs/fs.h"
+#include "fs/fs_factory.h"
 #include "gutil/stl_util.h"
 #include "gutil/strings/util.h"
 #include "storage/lake/filenames.h"
@@ -183,7 +184,7 @@ Status delete_files(const std::vector<std::string>& paths) {
     if (paths.empty()) {
         return Status::OK();
     }
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(paths[0]));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(paths[0]));
     return do_delete_files(fs.get(), paths);
 }
 
@@ -546,7 +547,7 @@ Status vacuum_txn_log(std::string_view root_location, int64_t min_active_txn_id,
                       int64_t* vacuumed_file_size) {
     DCHECK(vacuumed_files != nullptr);
     DCHECK(vacuumed_file_size != nullptr);
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_location));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(root_location));
     auto t0 = butil::gettimeofday_s();
     auto deleter = AsyncFileDeleter(config::lake_vacuum_min_batch_delete_size);
     auto ret = Status::OK();
@@ -680,7 +681,7 @@ static bool can_bundle_meta_file_to_be_deleted(const BundleTabletMetaState& stat
 static StatusOr<BundleTabletMetaState> check_bundle_tablet_meta_state(
         const std::string& meta_path, const std::vector<int64_t>& to_delete_tablet_ids) {
     RandomAccessFileOptions opts{.skip_fill_local_cache = true};
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(meta_path));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(meta_path));
     ASSIGN_OR_RETURN(auto input_file, fs->new_random_access_file(opts, meta_path));
     // Read the entire file content into a string.
     ASSIGN_OR_RETURN(auto serialized_string, input_file->read_all());
@@ -752,7 +753,7 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
     DCHECK(tablet_mgr != nullptr);
     DCHECK(std::is_sorted(tablet_ids.begin(), tablet_ids.end()));
 
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_dir));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(root_dir));
 
     std::unordered_set<int64_t> bundle_tablet_versions;
     std::unordered_map<int64_t, std::map<int64_t, BundleTabletMetaState>> tablet_versions;
@@ -1224,7 +1225,7 @@ static StatusOr<std::map<std::string, DirEntry>> find_orphan_data_files(FileSyst
 static StatusOr<std::pair<int64_t, int64_t>> partition_datafile_gc(std::string_view root_location,
                                                                    std::string_view audit_file_path,
                                                                    int64_t expired_seconds, bool do_delete) {
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_location));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(root_location));
     std::ofstream audit_ostream(std::string(audit_file_path), std::ofstream::app);
 
     if (audit_ostream) {
@@ -1311,7 +1312,7 @@ static StatusOr<std::pair<int64_t, int64_t>> path_datafile_gc(std::string_view r
     Status status;
     std::pair<int64_t, int64_t> total(0, 0);
 
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_location));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(root_location));
     RETURN_IF_ERROR_WITH_WARN(
             ignore_not_found(fs->iterate_dir2(
                     std::string(root_location),
@@ -1375,7 +1376,7 @@ StatusOr<int64_t> garbage_file_check(std::string_view root_location) {
 
 Status drop_tablet_cache(TabletManager* tablet_mgr, int64_t tablet_id, int64_t version) {
     auto drop_cache_func = [&](std::string& path, int64_t offset, int64_t size) {
-        auto fs_or = FileSystem::CreateSharedFromString(path);
+        auto fs_or = FileSystemFactory::CreateSharedFromString(path);
         if (fs_or.ok()) {
             TEST_SYNC_POINT_CALLBACK("drop_tablet_cache:drop_local_cache", &path);
             auto result = (*fs_or)->drop_local_cache(path, offset, size);

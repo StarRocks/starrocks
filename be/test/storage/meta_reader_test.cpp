@@ -25,6 +25,7 @@
 #include "column/fixed_length_column.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "storage/rowset/column_iterator.h"
@@ -45,7 +46,7 @@ public:
         _tablet_schema = TabletSchema::create(schema_pb);
 
         _segment_name = "segment_meta_collector_test.dat";
-        ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(_segment_name));
+        ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(_segment_name));
         auto encryption_pair = KeyCache::instance().create_plain_random_encryption_meta_pair().value();
         WritableFileOptions options{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE,
                                     .encryption_info = encryption_pair.info};
@@ -170,7 +171,7 @@ TEST_F(SegmentMetaCollecterTest, test_collect_dict_json_column_success) {
     // Create JSON segment with dictionary-encoded string data
     std::string json_segment_name = "json_meta_collector_test.dat";
     DeferOp defer_op([&] { delete_file(json_segment_name); });
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(json_segment_name));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(json_segment_name));
     auto encryption_pair = KeyCache::instance().create_plain_random_encryption_meta_pair().value();
     WritableFileOptions file_options{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE,
                                      .encryption_info = encryption_pair.info};
@@ -252,7 +253,7 @@ TEST_F(SegmentMetaCollecterTest, test_collect_multiple_meta_fields) {
 
     std::string segment_name = "test_multiple_meta_fields.dat";
     DeferOp defer_op([&] { delete_file(segment_name); });
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(segment_name));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(segment_name));
     auto encryption_pair = KeyCache::instance().create_plain_random_encryption_meta_pair().value();
     WritableFileOptions file_options{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE,
                                      .encryption_info = encryption_pair.info};

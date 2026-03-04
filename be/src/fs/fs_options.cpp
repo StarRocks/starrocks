@@ -1,0 +1,52 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "fs/fs_options.h"
+
+namespace starrocks {
+
+FSOptions::FSOptions(const TBrokerScanRangeParams* scan_range_params, const TExportSink* export_sink,
+                     const ResultFileOptions* result_file_options, const TUploadReq* upload,
+                     const TDownloadReq* download, const TCloudConfiguration* cloud_configuration,
+                     const std::unordered_map<std::string, std::string>& fs_options)
+        : scan_range_params(scan_range_params),
+          export_sink(export_sink),
+          result_file_options(result_file_options),
+          upload(upload),
+          download(download),
+          cloud_configuration(cloud_configuration),
+          _fs_options(fs_options) {}
+
+FSOptions::FSOptions() : FSOptions(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr) {}
+
+FSOptions::FSOptions(const TBrokerScanRangeParams* scan_range_params)
+        : FSOptions(scan_range_params, nullptr, nullptr, nullptr, nullptr, nullptr) {}
+
+FSOptions::FSOptions(const TExportSink* export_sink)
+        : FSOptions(nullptr, export_sink, nullptr, nullptr, nullptr, nullptr) {}
+
+FSOptions::FSOptions(const ResultFileOptions* result_file_options)
+        : FSOptions(nullptr, nullptr, result_file_options, nullptr, nullptr, nullptr) {}
+
+FSOptions::FSOptions(const TUploadReq* upload) : FSOptions(nullptr, nullptr, nullptr, upload, nullptr, nullptr) {}
+
+FSOptions::FSOptions(const TDownloadReq* download) : FSOptions(nullptr, nullptr, nullptr, nullptr, download, nullptr) {}
+
+FSOptions::FSOptions(const TCloudConfiguration* cloud_configuration)
+        : FSOptions(nullptr, nullptr, nullptr, nullptr, nullptr, cloud_configuration) {}
+
+FSOptions::FSOptions(const std::unordered_map<std::string, std::string>& fs_options)
+        : FSOptions(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, fs_options) {}
+
+} // namespace starrocks

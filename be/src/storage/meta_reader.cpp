@@ -24,6 +24,7 @@
 #include "column/column_helper.h"
 #include "column/datum_convert.h"
 #include "common/status.h"
+#include "fs/fs_factory.h"
 #include "runtime/global_dict/config.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/column_iterator.h"
@@ -240,7 +241,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> SegmentMetaCollecter::_new_dcg_column_
 }
 
 Status SegmentMetaCollecter::_init_return_column_iterators() {
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_segment->file_name()));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(_segment->file_name()));
     RandomAccessFileOptions ropts;
     if (_segment->encryption_info()) {
         ropts.encryption_info = *_segment->encryption_info();
@@ -264,7 +265,7 @@ Status SegmentMetaCollecter::_init_return_column_iterators() {
                     _column_iterators[cid] = std::move(col_iter);
                     RandomAccessFileOptions opts;
                     opts.encryption_info = dcg_encryption_info;
-                    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dcg_filename));
+                    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(dcg_filename));
                     ASSIGN_OR_RETURN(auto dcg_file, fs->new_random_access_file(opts, dcg_filename));
                     iter_opts.read_file = dcg_file.get();
                     _column_files[cid] = std::move(dcg_file);

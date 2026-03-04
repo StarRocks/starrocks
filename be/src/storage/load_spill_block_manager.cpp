@@ -20,6 +20,7 @@
 #include "exec/spill/file_block_manager.h"
 #include "exec/spill/hybird_block_manager.h"
 #include "exec/spill/log_block_manager.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "runtime/exec_env.h"
@@ -131,7 +132,7 @@ Status LoadSpillBlockManager::init() {
     // Remote FS can also use data cache to speed up.
 
     if (!_fs) {
-        ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_remote_spill_path));
+        ASSIGN_OR_RETURN(_fs, FileSystemFactory::CreateSharedFromString(_remote_spill_path));
     }
     if (_fs->type() != FileSystem::Type::STARLET) {
         // in starlet fs, there is opt create_missing_parent and it will create the parent dir if not exists.
