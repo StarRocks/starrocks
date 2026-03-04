@@ -88,7 +88,9 @@ public:
         // but the operator is thread-unsafe, it's will cause crash in multi-thread(OLAP_SCANNER) when
         // OLAP_SCANNER call expression.
         // Call the get_data() when create ConstColumn is a short-term solution
-        ptr->get_data();
+        if constexpr (!lt_is_object_family<Type>) {
+            ptr->get_data();
+        }
         return ConstColumn::create(std::move(ptr), chunk_size);
     }
 
@@ -534,13 +536,13 @@ public:
     template <LogicalType Type>
     static inline RunTimeCppType<Type> get_const_value(const Column* col) {
         const ColumnPtr& c = as_raw_column<ConstColumn>(col)->data_column();
-        return cast_to_raw<Type>(c)->get_data()[0];
+        return cast_to_raw<Type>(c)->immutable_data()[0];
     }
 
     template <LogicalType Type>
     static inline RunTimeCppType<Type> get_const_value(const ColumnPtr& col) {
         const ColumnPtr& c = as_raw_column<ConstColumn>(col)->data_column();
-        return cast_to_raw<Type>(c)->get_data()[0];
+        return cast_to_raw<Type>(c)->immutable_data()[0];
     }
 
     static Column* get_data_column(Column* column) {

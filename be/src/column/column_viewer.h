@@ -59,8 +59,7 @@ private:
 
     NullColumnPtr _null_column;
 
-    // raw pointer
-    const RunTimeCppType<Type>* _data;
+    RunTimeImmContainerType<Type> _data;
 
     const NullColumn::ValueType* _null_data;
 
