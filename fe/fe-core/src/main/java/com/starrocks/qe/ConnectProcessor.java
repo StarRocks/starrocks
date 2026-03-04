@@ -299,7 +299,13 @@ public class ConnectProcessor {
             // but redact sensitive credentials first
             ctx.getAuditEventBuilder().setStmt(SqlCredentialRedactor.redact(origStmt));
         } else {
+<<<<<<< HEAD
             ctx.getAuditEventBuilder().setStmt(LogUtil.removeLineSeparator(origStmt));
+=======
+            // Always redact credentials as defense in depth - raw SQL may contain
+            // credentials that AuditEncryptionChecker does not yet recognize
+            return SqlCredentialRedactor.redact(LogUtil.removeLineSeparator(origStmt));
+>>>>>>> 1f348288a2 ([BugFix] audit log no longer has client id (#69383))
         }
 
         GlobalStateMgr.getCurrentState().getAuditEventProcessor().handleAuditEvent(ctx.getAuditEventBuilder().build());
