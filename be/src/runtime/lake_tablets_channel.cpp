@@ -1025,6 +1025,9 @@ void LakeTabletsChannel::_update_tablet_profile(const DeltaWriter* writer, Runti
                       DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.flush_time_ns.load(), 0));
     ADD_AND_SET_TIMER(profile, "MemtableIOTime",
                       DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.io_time_ns.load(), 0));
+    ADD_AND_SET_COUNTER(profile, "MemtableIOSpeed", TUnit::BYTES_PER_SECOND,
+        DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.flush_disk_size.load() /
+            flush_stat->memtable_stats.io_time_ns.load(), 0));
     ADD_AND_SET_COUNTER(profile, "MemtableMemorySize", TUnit::BYTES,
                         DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.flush_memory_size.load(), 0));
     ADD_AND_SET_COUNTER(profile, "MemtableDiskSize", TUnit::BYTES,
