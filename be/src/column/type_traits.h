@@ -276,21 +276,21 @@ template <>
 struct RunTimeTypeTraits<TYPE_HLL> {
     using CppType = HyperLogLog*;
     using ColumnType = HyperLogLogColumn;
-    using ImmContainerType = ColumnType::Container;
+    using ImmContainerType = ColumnType::ImmContainer;
 };
 
 template <>
 struct RunTimeTypeTraits<TYPE_OBJECT> {
     using CppType = BitmapValue*;
     using ColumnType = BitmapColumn;
-    using ImmContainerType = ColumnType::Container;
+    using ImmContainerType = ColumnType::ImmContainer;
 };
 
 template <>
 struct RunTimeTypeTraits<TYPE_PERCENTILE> {
     using CppType = PercentileValue*;
     using ColumnType = PercentileColumn;
-    using ImmContainerType = ColumnType::Container;
+    using ImmContainerType = ColumnType::ImmContainer;
 };
 
 template <>

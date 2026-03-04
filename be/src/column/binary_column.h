@@ -41,14 +41,15 @@ public:
     using Bytes = starrocks::raw::RawVectorPad16<uint8_t, ColumnAllocator<uint8_t>>;
 
     struct ImmContainer {
-        ImmContainer(const BinaryColumnBase& column) : _column(column) {}
+        ImmContainer() = default;
+        explicit ImmContainer(const BinaryColumnBase& column) : _column(&column) {}
 
-        Slice operator[](size_t index) const { return _column.get_slice(index); }
+        Slice operator[](size_t index) const { return _column->get_slice(index); }
 
-        size_t size() const { return _column.size(); }
+        size_t size() const { return _column->size(); }
 
     private:
-        const BinaryColumnBase& _column;
+        const BinaryColumnBase* _column = nullptr;
     };
 
     using Container = Buffer<Slice>;
@@ -339,7 +340,7 @@ public:
         return _german_strings;
     }
 
-    const ImmContainer immutable_data() const { return ImmContainer(*this); }
+    ImmContainer immutable_data() const { return ImmContainer(*this); }
 
     Bytes& get_bytes() {
         _ensure_materialized();
