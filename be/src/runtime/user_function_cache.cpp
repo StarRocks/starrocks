@@ -57,12 +57,11 @@ static const int kLibShardNum = 128;
 struct UserFunctionCacheEntry {
     UserFunctionCacheEntry(int64_t fid_, std::string checksum_, std::string lib_file_,
                            TFunctionBinaryType::type function_type, TCloudConfiguration cloud_configuration)
-        : function_id(fid_),
-          checksum(std::move(checksum_)),
-          lib_file(std::move(lib_file_)),
-          function_type(function_type),
-          cloud_configuration(cloud_configuration) {
-    }
+            : function_id(fid_),
+              checksum(std::move(checksum_)),
+              lib_file(std::move(lib_file_)),
+              function_type(function_type),
+              cloud_configuration(cloud_configuration) {}
 
     ~UserFunctionCacheEntry();
 
@@ -143,8 +142,9 @@ Status UserFunctionCache::get_libpath(int64_t fid, const std::string& url, const
                                       FuncType function_type, std::string* libpath,
                                       const TCloudConfiguration& cloud_configuration) {
     UserFunctionCacheEntryPtr entry;
-    RETURN_IF_ERROR(_get_cache_entry(fid, url, checksum, function_type, &entry,
-        [](const auto& entry) -> StatusOr<std::any> { return std::any{}; }, cloud_configuration));
+    RETURN_IF_ERROR(_get_cache_entry(
+            fid, url, checksum, function_type, &entry,
+            [](const auto& entry) -> StatusOr<std::any> { return std::any{}; }, cloud_configuration));
     *libpath = entry->lib_file;
     return Status::OK();
 }
@@ -183,7 +183,7 @@ Status UserFunctionCache::_load_entry_from_lib(const std::string& dir, const std
     auto it = _entry_map.find(function_id);
     if (it != _entry_map.end()) {
         LOG(WARNING) << "meet a same function id user function library, function_id=" << function_id
-        << ", one_checksum=" << checksum << ", other_checksum=" << it->second->checksum;
+                     << ", one_checksum=" << checksum << ", other_checksum=" << it->second->checksum;
         return Status::InternalError("duplicate function id");
     }
     // create a cache entry and put it into entry map
@@ -238,8 +238,8 @@ Status UserFunctionCache::_get_cache_entry(int64_t fid, const std::string& url, 
         if (it != _entry_map.end()) {
             entry = it->second;
         } else {
-            entry = std::make_shared<UserFunctionCacheEntry>(fid, checksum, _make_lib_file(fid, checksum, suffix),
-                                                             type, cloud_configuration);
+            entry = std::make_shared<UserFunctionCacheEntry>(fid, checksum, _make_lib_file(fid, checksum, suffix), type,
+                                                             cloud_configuration);
             _entry_map.emplace(fid, entry);
         }
     }
