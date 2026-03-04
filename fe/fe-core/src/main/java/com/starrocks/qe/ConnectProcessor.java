@@ -331,7 +331,9 @@ public class ConnectProcessor {
                             .setEnableDigest(Config.enable_sql_desensitize_in_log))
                     .orElse("this is a desensitized sql");
         } else {
-            return LogUtil.removeLineSeparator(origStmt);
+            // Always redact credentials as defense in depth - raw SQL may contain
+            // credentials that AuditEncryptionChecker does not yet recognize
+            return SqlCredentialRedactor.redact(LogUtil.removeLineSeparator(origStmt));
         }
     }
 
