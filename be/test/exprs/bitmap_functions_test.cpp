@@ -22,6 +22,7 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/vectorized_fwd.h"
+#include "common/config.h"
 #include "exprs/base64.h"
 #include "exprs/function_context.h"
 #include "types/bitmap_value.h"

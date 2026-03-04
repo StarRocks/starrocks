@@ -19,6 +19,7 @@
 #include "column/array_column.h"
 #include "column/object_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/config.h"
 #include "common/status.h"
 #include "fs/fs.h"
 #include "storage/index/vector/vector_index_builder_factory.h"

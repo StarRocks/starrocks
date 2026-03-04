@@ -24,6 +24,7 @@
 #include "base/container/raw_container.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
+#include "common/config.h"
 #include "common/status.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
