@@ -16,7 +16,6 @@
 
 #include <utility>
 
-#include "common/config.h"
 #include "common/status.h"
 #include "fs/fs_util.h"
 #include "storage/index/vector/vector_index_builder.h"
