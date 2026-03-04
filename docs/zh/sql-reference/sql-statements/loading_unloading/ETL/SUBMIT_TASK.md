@@ -21,7 +21,7 @@ displayed_sidebar: docs
 
 您可以通过查询 `INFORMATION_SCHEMA.tasks` 查看任务列表，或通过查询 `INFORMATION_SCHEMA.task_runs` 查看任务的执行历史。有关更多信息，请参阅[使用说明](#使用说明)。
 
-您可以使用 [DROP TASK](DROP_TASK.md) 删除异步任务。
+您可以使用 [ALTER TASK](ALTER_TASK.md) 修改异步任务，或使用 [DROP TASK](DROP_TASK.md) 删除异步任务。
 
 ## 语法
 
