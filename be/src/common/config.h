@@ -1446,6 +1446,10 @@ CONF_mInt32(pindex_rebuild_load_wait_seconds, "20");
 // Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
 CONF_Int64(query_cache_capacity, "536870912");
 
+// Experimental internal switch: whether to enable lake capture_tablet_and_rowsets for query cache stale entries.
+// This config is temporary and may be removed after the related lake capture implementation is fixed.
+CONF_mBool(experimental_enable_lake_capture_tablet_and_rowsets, "false");
+
 // When query cache enabled, the operators in the drivers contains cache operator are multilane
 // operators, if the number of lanes is big, Fragment Instance would spend too much time to prepare
 // operators since the number of operators scale up with the number of lanes.

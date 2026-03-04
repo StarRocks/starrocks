@@ -1372,7 +1372,11 @@ void TabletManager::stop() {
 
 StatusOr<TabletAndRowsets> TabletManager::capture_tablet_and_rowsets(int64_t tablet_id, int64_t from_version,
                                                                      int64_t to_version) {
+    if (!config::experimental_enable_lake_capture_tablet_and_rowsets) {
+        return Status::NotSupported("capture_tablet_and_rowsets is disabled");
+    }
     DCHECK(from_version <= to_version);
+
     auto tablet_ptr = std::make_shared<Tablet>(this, tablet_id);
     std::vector<std::shared_ptr<BaseRowset>> rowsets;
 
