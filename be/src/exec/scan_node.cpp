@@ -34,6 +34,7 @@
 
 #include "exec/scan_node.h"
 
+#include "common/config.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "exprs/expr_factory.h"
@@ -50,6 +51,9 @@ const std::string ScanNode::_s_scanner_thread_counters_prefix = "ScannerThreads"
 const std::string ScanNode::_s_scanner_thread_total_wallclock_time = "ScannerThreadsTotalWallClockTime";
 
 const string ScanNode::_s_num_scanner_threads_started = "NumScannerThreadsStarted";
+
+ScanNode::ScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
+        : ExecNode(pool, tnode, descs), _io_tasks_per_scan_operator(config::io_tasks_per_scan_operator) {}
 
 Status ScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
