@@ -3,15 +3,12 @@ displayed_sidebar: docs
 toc_max_heading_level: 4
 ---
 
-import Tip from '../../../_assets/commonMarkdown/quickstart-shared-nothing-tip.mdx';
 import TableURL from '../../../_assets/commonMarkdown/stream_load_table_url.mdx';
 import TableURLTip from '../../../_assets/commonMarkdown/stream_load_table_url_tip.mdx';
 
 # STREAM LOAD
 
 STREAM LOAD 允许您从本地文件系统或流式数据源导入数据。提交导入作业后，系统会同步运行该作业，并在作业完成后返回作业结果。您可以根据作业结果判断作业是否成功。有关 Stream Load 的应用场景、限制和支持的数据文件格式的信息，请参阅[通过 Stream Load 从本地文件系统导入数据](../../../loading/StreamLoad.md)。
-
-<Tip />
 
 从 v3.2.7 版本开始，Stream Load 支持在传输过程中压缩 JSON 数据，从而减少网络带宽开销。用户可以使用参数指定不同的压缩算法 `compression` 和 `Content-Encoding`。支持的压缩算法包括 GZIP、BZIP2、LZ4_FRAME 和 ZSTD。有关更多信息，请参阅[data_desc](#data_desc)。
 
