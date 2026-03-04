@@ -1,5 +1,6 @@
 ---
 sidebar_position: 10
+keywords: ['分区', 'partition']
 ---
 
 # 分区
