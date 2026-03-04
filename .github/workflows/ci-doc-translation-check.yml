@@ -19,11 +19,6 @@ jobs:
         with:
           result-encoding: string
           script: |
-            // If triggered by the Translation Runner, we can always proceed
-            if (context.payload.workflow_run.name === 'Translation Runner') {
-              return 'true';
-            }
-            
             // Query the jobs of the CI DOC Checker run
             const { data: jobsData } = await github.rest.actions.listJobsForWorkflowRun({
               owner: context.repo.owner,
