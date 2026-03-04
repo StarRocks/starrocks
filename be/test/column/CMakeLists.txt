@@ -40,6 +40,7 @@ set(COLUMN_TEST_FILES
     type_traits_core_test.cpp
     variant_converter_test.cpp
     variant_path_parser_test.cpp
+    variant_builder_test.cpp
 )
 
 set(COLUMN_TEST_LINK_LIBS
