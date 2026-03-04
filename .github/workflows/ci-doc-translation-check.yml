@@ -254,9 +254,24 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            github.rest.issues.addLabels({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: ${{ steps.pr_number.outputs.pr_number }},
-              labels: ['docs-maintainer']
-            });
+            try {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: ${{ steps.pr_number.outputs.pr_number }},
+                labels: ['docs-maintainer']
+              });
+            } catch (error) {
+              const status = error?.status ?? error?.response?.status;
+              const message = String(error?.message ?? '').toLowerCase();
+              const hasAlreadyExistsCode = Array.isArray(error?.response?.data?.errors)
+                && error.response.data.errors.some(item => item?.code === 'already_exists');
+
+              // Ignore only idempotent duplicate-label errors; surface all other failures.
+              if (status === 422 && (message.includes('already exists') || hasAlreadyExistsCode)) {
+                core.info('docs-maintainer label already exists. Skipping.');
+                return;
+              }
+
+              throw error;
+            }
