@@ -6622,6 +6622,25 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     }
 
     @Override
+    public ParseNode visitFunctionNamedArgument(
+            com.starrocks.sql.parser.StarRocksParser.FunctionNamedArgumentContext context) {
+        String name = ((Identifier) visit(context.identifier())).getValue();
+        if (name == null || name.isEmpty() || name.equals(" ")) {
+            throw new ParsingException(PARSER_ERROR_MSG.unsupportedExpr(" The left of => shouldn't be empty"));
+        }
+        ParseNode parseNode = visit(context.expression());
+        if (parseNode == null) {
+            throw new ParsingException(PARSER_ERROR_MSG.unsupportedExpr(" The right of => shouldn't be null"));
+        }
+        if (!(parseNode instanceof Expr)) {
+            throw new ParsingException(PARSER_ERROR_MSG.unsupportedExpr(
+                    " Named argument value must be an expression, got " + parseNode.getClass().getSimpleName()),
+                    createPos(context.expression()));
+        }
+        return new NamedArgument(name, (Expr) parseNode, createPos(context));
+    }
+
+    @Override
     public ParseNode visitArgumentItem(com.starrocks.sql.parser.StarRocksParser.ArgumentItemContext context) {
         // argumentItem can be either a namedArgument or an expression
         if (context.namedArgument() != null) {
@@ -8179,7 +8198,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         NodePosition pos = createPos(context);
 
         // Extract all named arguments - they will be processed by ExpressionAnalyzer
-        List<Expr> args = visit(context.namedArgumentList().namedArgument(), Expr.class);
+        List<Expr> args = visit(context.functionNamedArgumentList().functionNamedArgument(), Expr.class);
 
         // Create FunctionCallExpr with named arguments preserved
         // ExpressionAnalyzer.reorderNamedArgAndAppendDefaults() will handle reordering
