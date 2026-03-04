@@ -34,6 +34,7 @@
 
 #pragma once
 
+#include "config_cow.h"
 #include "configbase.h"
 
 namespace starrocks::config {
@@ -1927,11 +1928,6 @@ CONF_mBool(enable_fetch_local_pass_through, "true");
 CONF_mInt64(max_lookup_batch_request, "8");
 // For table schema service: max retry attempts for fetching schema from FE.
 CONF_mInt32(table_schema_service_max_retries, "3");
-
-// Enable cow optimization for column operations, used to avoid the overhead of reference counting when accessing columns.
-CONF_mBool(enable_cow_optimization, "true");
-// The diagnose level for cow optimization, 0 means no diagnose, 1 means diagnose when use_count > 1, 2 means diagnose when use_count > 2.
-CONF_Int32(cow_optimization_diagnose_level, "0");
 
 // If the first predicate column's selectivity is higher than this threshold, trigger sampling
 // to potentially find a better predicate order. When selectivity is already good (low), sampling

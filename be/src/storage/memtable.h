@@ -155,7 +155,8 @@ private:
 
     std::string _merge_condition;
 
-    int64_t _max_buffer_size = config::write_buffer_size;
+    // Keep this fallback value in sync with config::write_buffer_size default.
+    int64_t _max_buffer_size = 104857600;
     // initial value is max size
     size_t _max_buffer_row = std::numeric_limits<size_t>::max();
     size_t _total_rows = 0;

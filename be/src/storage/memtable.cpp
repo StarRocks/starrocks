@@ -19,6 +19,7 @@
 #include "base/time/time.h"
 #include "column/binary_column.h"
 #include "column/json_column.h"
+#include "common/config.h"
 #include "common/logging.h"
 #include "exec/sorting/sorting.h"
 #include "gutil/strings/substitute.h"
@@ -94,6 +95,7 @@ MemTable::MemTable(int64_t tablet_id, const Schema* schema, const std::vector<Sl
           _sink(sink),
           _aggregator(nullptr),
           _merge_condition(std::move(merge_condition)),
+          _max_buffer_size(config::write_buffer_size),
           _mem_tracker(mem_tracker) {
     if (_keys_type == KeysType::PRIMARY_KEYS && _slot_descs != nullptr &&
         _slot_descs->back()->col_name() == LOAD_OP_COLUMN) {
@@ -109,6 +111,7 @@ MemTable::MemTable(int64_t tablet_id, const Schema* schema, const std::vector<Sl
           _keys_type(schema->keys_type()),
           _sink(sink),
           _aggregator(nullptr),
+          _max_buffer_size(config::write_buffer_size),
           _mem_tracker(mem_tracker) {
     if (_keys_type == KeysType::PRIMARY_KEYS && _slot_descs != nullptr &&
         _slot_descs->back()->col_name() == LOAD_OP_COLUMN) {

@@ -42,6 +42,7 @@
 #include <string>
 #include <thread>
 
+#include "common/config.h"
 #include "fs/fs_util.h"
 #include "runtime/mem_tracker.h"
 #include "storage/olap_define.h"

@@ -23,6 +23,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/datum_convert.h"
+#include "common/config.h"
 #include "common/status.h"
 #include "fs/fs_factory.h"
 #include "runtime/global_dict/config.h"
@@ -57,6 +58,8 @@ Status SegmentMetaCollecter::parse_field_and_colname(const std::string& item, st
     }
     return Status::InvalidArgument("cannot find column: " + item);
 }
+
+MetaReaderParams::MetaReaderParams() : chunk_size(config::vector_chunk_size) {}
 
 MetaReader::MetaReader() : _is_init(false), _has_more(false) {}
 

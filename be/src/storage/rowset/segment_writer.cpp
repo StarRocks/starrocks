@@ -44,6 +44,7 @@
 #include "column/datum_tuple.h"
 #include "column/nullable_column.h"
 #include "column/schema.h"
+#include "common/config.h"
 #include "common/logging.h" // LOG
 #include "fs/fs.h"          // FileSystem
 #include "gen_cpp/segment.pb.h"

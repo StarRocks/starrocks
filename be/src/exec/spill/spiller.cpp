@@ -27,7 +27,6 @@
 
 #include "base/failpoint/fail_point.h"
 #include "column/chunk.h"
-#include "common/config.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exec/sort_exec_exprs.h"

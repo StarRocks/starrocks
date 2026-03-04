@@ -40,6 +40,7 @@
 #include <vector>
 
 #include "base/failpoint/fail_point.h"
+#include "common/config.h"
 #include "exec/sorting/sorting.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"

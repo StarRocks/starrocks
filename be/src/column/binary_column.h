@@ -66,15 +66,7 @@ public:
         }
     }
 
-    explicit BinaryColumnBase(ContainerResource resource, Offsets offsets)
-            : _bytes(), _offsets(std::move(offsets)), _resource(std::move(resource)) {
-        if (_offsets.empty()) {
-            _offsets.emplace_back(0);
-        }
-        if (!config::enable_zero_copy_from_page_cache) {
-            _ensure_materialized();
-        }
-    }
+    explicit BinaryColumnBase(ContainerResource resource, Offsets offsets);
 
     DISALLOW_COPY_TEMPLATE(BinaryColumnBase, BinaryColumnBase<T>);
 

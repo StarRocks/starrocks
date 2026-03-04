@@ -29,6 +29,7 @@
 #include "column/const_column.h"
 #include "column/decimalv3_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/config.h"
 #include "exec/sorting/merge.h"
 #include "exec/sorting/merge_path.h"
 #include "exec/sorting/sort_helper.h"

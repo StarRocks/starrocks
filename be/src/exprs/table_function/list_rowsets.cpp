@@ -19,7 +19,6 @@
 #include "column/binary_column.h"
 #include "column/column_viewer.h"
 #include "column/fixed_length_column.h"
-#include "common/config.h"
 #include "gutil/casts.h"
 #include "json2pb/pb_to_json.h"
 #include "runtime/exec_env.h"
