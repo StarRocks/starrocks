@@ -26,6 +26,7 @@
 #include <sstream>
 #include <streambuf>
 #include <thread>
+#include "common/config.h"
 
 #include "common/status.h"
 #include "gutil/strings/join.h"

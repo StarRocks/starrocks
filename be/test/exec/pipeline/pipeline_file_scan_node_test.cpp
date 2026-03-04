@@ -25,6 +25,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
+#include "common/config.h"
 #include "common/system/disk_info.h"
 #include "common/system/mem_info.h"
 #include "common/util/thrift_util.h"
