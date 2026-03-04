@@ -38,14 +38,15 @@ public:
     using Container = Buffer<ValueType*>;
 
     struct ImmContainer {
-        ImmContainer(const ObjectColumn& column) : _column(column) {}
+        ImmContainer() = default;
+        explicit ImmContainer(const ObjectColumn& column) : _column(&column) {}
 
-        T* operator[](size_t index) const { return _column.get_object(index); }
+        T* operator[](size_t index) const { return _column->get_object(index); }
 
-        size_t size() const { return _column.size(); }
+        size_t size() const { return _column->size(); }
 
     private:
-        const ObjectColumn& _column;
+        const ObjectColumn* _column = nullptr;
     };
 
     ObjectColumn() = default;
@@ -157,17 +158,7 @@ public:
 
     T* get_object(size_t n) const { return const_cast<T*>(&_pool[n]); }
 
-    Buffer<T*>& get_data() {
-        _build_cache();
-        return _cache;
-    }
-
-    const Buffer<T*>& get_data() const {
-        _build_cache();
-        return _cache;
-    }
-
-    const ImmContainer immutable_data() const { return ImmContainer(*this); }
+    ImmContainer immutable_data() const { return ImmContainer(*this); }
 
     Datum get(size_t n) const override { return Datum(get_object(n)); }
 
@@ -181,8 +172,6 @@ public:
         auto& r = down_cast<ObjectColumn&>(rhs);
         std::swap(this->_delete_state, r._delete_state);
         std::swap(this->_pool, r._pool);
-        std::swap(this->_cache_ok, r._cache_ok);
-        std::swap(this->_cache, r._cache);
         std::swap(this->_buffer, r._buffer);
         std::swap(this->_slices, r._slices);
     }
@@ -190,15 +179,8 @@ public:
     void reset_column() override {
         Column::reset_column();
         _pool.clear();
-        _cache_ok = false;
-        _cache.clear();
         _slices.clear();
         _buffer.clear();
-    }
-
-    void reset_cache() {
-        _cache_ok = false;
-        _cache.clear();
     }
 
     Buffer<T>& get_pool() { return _pool; }
@@ -241,26 +223,10 @@ private:
     // add this to avoid warning clang-diagnostic-overloaded-virtual
     using Column::append;
 
-    void _build_cache() const {
-        if (_cache_ok) {
-            return;
-        }
-
-        _cache.clear();
-        _cache.reserve(_pool.size());
-        for (int i = 0; i < _pool.size(); ++i) {
-            _cache.emplace_back(const_cast<T*>(&_pool[i]));
-        }
-
-        _cache_ok = true;
-    }
-
     // Currently, only for data loading
     void _build_slices() const;
 
     Buffer<T> _pool;
-    mutable bool _cache_ok = false;
-    mutable Buffer<T*> _cache;
 
     // Only for data loading
     mutable Buffer<Slice> _slices;
