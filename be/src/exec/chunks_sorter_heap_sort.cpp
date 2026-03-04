@@ -219,13 +219,13 @@ void ChunksSorterHeapSort::_do_filter_data_for_type(detail::ChunkHolder* chunk_h
         bool top_is_null = top_cursor_column->is_null(cursor_rid);
         const auto& need_filter_data = ColumnHelper::cast_to_raw<TYPE>(
                                                down_cast<const NullableColumn*>(top_cursor_column.get())->data_column())
-                                               ->get_data()[cursor_rid];
+                                               ->immutable_data()[cursor_rid];
 
         const auto& order_by_null_column = down_cast<const NullableColumn*>(input_column.get())->null_column();
         const auto& order_by_data_column = down_cast<const NullableColumn*>(input_column.get())->data_column();
 
         const auto* null_data = order_by_null_column->immutable_data().data();
-        const auto* order_by_data = ColumnHelper::cast_to_raw<TYPE>(order_by_data_column)->get_data().data();
+        const auto& order_by_data = ColumnHelper::cast_to_raw<TYPE>(order_by_data_column)->immutable_data();
         auto* __restrict__ filter_data = filter->data();
 
         // null compare flag
@@ -250,21 +250,30 @@ void ChunksSorterHeapSort::_do_filter_data_for_type(detail::ChunkHolder* chunk_h
         }
 
     } else {
-        const auto& need_filter_data = ColumnHelper::cast_to_raw<TYPE>(top_cursor_column)->get_data()[cursor_rid];
+        const auto& need_filter_data = ColumnHelper::cast_to_raw<TYPE>(top_cursor_column)->immutable_data()[cursor_rid];
         auto* order_by_column = ColumnHelper::cast_to_raw<TYPE>(input_column);
 
-        const auto* __restrict__ order_by_data = order_by_column->get_data().data();
         auto* __restrict__ filter_data = filter->data();
         int sort_order_flag = _sort_desc.get_column_desc(0).sort_order;
 
-        if (sort_order_flag > 0) {
-            for (int i = 0; i < row_sz; ++i) {
-                filter_data[i] = order_by_data[i] < need_filter_data;
+        auto do_filter = [&](const auto& order_by_data) {
+            if (sort_order_flag > 0) {
+                for (int i = 0; i < row_sz; ++i) {
+                    filter_data[i] = order_by_data[i] < need_filter_data;
+                }
+            } else {
+                for (int i = 0; i < row_sz; ++i) {
+                    filter_data[i] = order_by_data[i] > need_filter_data;
+                }
             }
+        };
+
+        if constexpr (lt_is_object_family<TYPE>) {
+            do_filter(order_by_column->immutable_data());
         } else {
-            for (int i = 0; i < row_sz; ++i) {
-                filter_data[i] = order_by_data[i] > need_filter_data;
-            }
+            // Use raw pointers for auto-vectorization to optimize performance with fixed-length values.
+            const auto* __restrict__ raw = order_by_column->get_data().data();
+            do_filter(raw);
         }
     }
 }

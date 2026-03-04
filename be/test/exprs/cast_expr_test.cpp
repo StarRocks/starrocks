@@ -1144,7 +1144,7 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapSingle) {
 
         for (int j = 0; j < v->size(); ++j) {
             Buffer<int64_t> array;
-            v->get_data()[j]->to_array(&array);
+            v->immutable_data()[j]->to_array(&array);
             ASSERT_EQ(expect_array, array);
         }
     }
@@ -1218,7 +1218,7 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapSet) {
 
         for (int j = 0; j < v->size(); ++j) {
             Buffer<int64_t> array;
-            v->get_data()[j]->to_array(&array);
+            v->immutable_data()[j]->to_array(&array);
             ASSERT_EQ(expect_array, array);
         }
     }
@@ -1296,7 +1296,7 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapMap) {
 
         for (int j = 0; j < v->size(); ++j) {
             Buffer<int64_t> array;
-            v->get_data()[j]->to_array(&array);
+            v->immutable_data()[j]->to_array(&array);
             ASSERT_EQ(expect_array, array);
         }
     }
@@ -1864,7 +1864,7 @@ TEST_F(VectorizedCastExprTest, jsonToValue) {
 
     // cast self
     auto jsonCol = evaluateCastFromJson<TYPE_JSON>(cast_expr, "{\"a\": 1}");
-    EXPECT_EQ("{\"a\": 1}", jsonCol->get_data()[0]->to_string().value());
+    EXPECT_EQ("{\"a\": 1}", jsonCol->immutable_data()[0]->to_string().value());
 
     // cast success
     EXPECT_EQ(1, evaluateCastFromJson<TYPE_INT>(cast_expr, 1)->get_data()[0]);
