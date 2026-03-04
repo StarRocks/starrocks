@@ -28,6 +28,7 @@
 #include "base/string/faststring.h"
 #include "column/chunk.h"
 #include "common/brpc_helper.h"
+#include "common/config.h"
 #include "common/statusor.h"
 #include "exec/tablet_info.h"
 #include "gen_cpp/internal_service.pb.h"
