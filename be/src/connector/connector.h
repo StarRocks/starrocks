@@ -102,7 +102,7 @@ protected:
     pipeline::ScanSplitContext* _split_context = nullptr;
 
     virtual Status _init_chunk_if_needed(ChunkPtr* chunk, size_t n) {
-        *chunk = ChunkHelper::new_chunk(*_tuple_desc, n);
+        ASSIGN_OR_RETURN(*chunk, ChunkHelper::new_chunk_checked(*_tuple_desc, n));
         return Status::OK();
     }
 

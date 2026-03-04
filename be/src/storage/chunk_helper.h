@@ -71,6 +71,13 @@ public:
 
     static Chunk* new_chunk_pooled(const Schema& schema, size_t n);
 
+    // a wrapper of new_chunk_pooled with memory check
+    static StatusOr<Chunk*> new_chunk_pooled_checked(const Schema& schema, size_t n);
+    // a wrapper of new_chunk with memory check
+    static StatusOr<ChunkUniquePtr> new_chunk_checked(const Schema& schema, size_t n);
+    static StatusOr<ChunkUniquePtr> new_chunk_checked(const std::vector<SlotDescriptor*>& slots, size_t n);
+    static StatusOr<ChunkUniquePtr> new_chunk_checked(const TupleDescriptor& tuple_desc, size_t n);
+
     // Create a vectorized column from field .
     // REQUIRE: |type| must be scalar type.
     static MutableColumnPtr column_from_field_type(LogicalType type, bool nullable);

@@ -65,9 +65,7 @@ Status PrimaryKeyRecover::recover() {
                         std::vector<uint8_t> read_buffer(file_size);
                         RETURN_IF_ERROR(read_file->read_at_fully(0, read_buffer.data(), read_buffer.size()));
                         auto col = pk_column->clone();
-                        if (serde::ColumnArraySerde::deserialize(read_buffer.data(), col.get()) == nullptr) {
-                            return Status::InternalError("column deserialization failed");
-                        }
+                        RETURN_IF_ERROR(serde::ColumnArraySerde::deserialize(read_buffer.data(), col.get()));
                         RETURN_IF_ERROR(index.erase(*col, &new_deletes));
                         del_index++;
                     } else {
