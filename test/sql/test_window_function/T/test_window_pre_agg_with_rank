@@ -183,4 +183,8 @@ SELECT * FROM (
     FROM t_rank_bitmap_crash
 ) s
 ORDER BY rk,k, ts DESC
+<<<<<<< HEAD
 LIMIT 3;
+=======
+LIMIT 3;
+>>>>>>> e3f53f97f0 ([BugFix] fix local partition topn crash  (#69752))

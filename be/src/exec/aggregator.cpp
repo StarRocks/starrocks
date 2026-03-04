@@ -51,6 +51,63 @@ static const std::string AGG_STATE_UNION_SUFFIX = "_union";
 static const std::string AGG_STATE_MERGE_SUFFIX = "_merge";
 static const std::string FUNCTION_COUNT = "count";
 
+<<<<<<< HEAD
+=======
+template <class HashMapWithKey>
+struct AllocateState {
+    AllocateState(Aggregator* aggregator_) : aggregator(aggregator_) {}
+    inline AggDataPtr operator()(const typename HashMapWithKey::KeyType& key);
+    inline AggDataPtr operator()(std::nullptr_t);
+
+private:
+    Aggregator* aggregator;
+};
+
+template <class HashMapWithKey>
+inline AggDataPtr AllocateState<HashMapWithKey>::operator()(const typename HashMapWithKey::KeyType& key) {
+    AggDataPtr agg_state = aggregator->_state_allocator.allocate();
+    *reinterpret_cast<typename HashMapWithKey::KeyType*>(agg_state) = key;
+    size_t created = 0;
+    size_t aggregate_function_sz = aggregator->_agg_fn_ctxs.size();
+    try {
+        for (int i = 0; i < aggregate_function_sz; i++) {
+            aggregator->_agg_functions[i]->create(aggregator->_agg_fn_ctxs[i],
+                                                  agg_state + aggregator->_agg_states_offsets[i]);
+            created++;
+        }
+        return agg_state;
+    } catch (std::bad_alloc& e) {
+        for (size_t i = 0; i < created; ++i) {
+            aggregator->_agg_functions[i]->destroy(aggregator->_agg_fn_ctxs[i],
+                                                   agg_state + aggregator->_agg_states_offsets[i]);
+        }
+        aggregator->_state_allocator.rollback();
+        throw;
+    }
+}
+
+template <class HashMapWithKey>
+inline AggDataPtr AllocateState<HashMapWithKey>::operator()(std::nullptr_t) {
+    AggDataPtr agg_state = aggregator->_state_allocator.allocate_null_key_data();
+    size_t created = 0;
+    size_t aggregate_function_sz = aggregator->_agg_fn_ctxs.size();
+    try {
+        for (int i = 0; i < aggregate_function_sz; i++) {
+            aggregator->_agg_functions[i]->create(aggregator->_agg_fn_ctxs[i],
+                                                  agg_state + aggregator->_agg_states_offsets[i]);
+            created++;
+        }
+        return agg_state;
+    } catch (std::bad_alloc& e) {
+        for (int i = 0; i < created; i++) {
+            aggregator->_agg_functions[i]->destroy(aggregator->_agg_fn_ctxs[i],
+                                                   agg_state + aggregator->_agg_states_offsets[i]);
+        }
+        throw;
+    }
+}
+
+>>>>>>> e3f53f97f0 ([BugFix] fix local partition topn crash  (#69752))
 bool AggFunctionTypes::use_nullable_fn(bool use_intermediate_as_output) const {
     // The non-nullable version functions assume that both the input and output are non-nullable, while the nullable version
     // functions support nullable input or nullable output, which will judge whether the input and output are nullable.
