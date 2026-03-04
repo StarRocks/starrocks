@@ -111,7 +111,8 @@ public class RecycleLakePartitionInfoEditLogTest {
         // Mock LakeTableHelper using MockUp
         new MockUp<LakeTableHelper>() {
             @Mock
-            public boolean removePartitionDirectory(Partition partition, ComputeResource computeResource) {
+            public boolean removePartitionDirectory(Partition partition, ComputeResource computeResource,
+                    boolean dropCache) {
                 return true;
             }
             
@@ -165,7 +166,8 @@ public class RecycleLakePartitionInfoEditLogTest {
         // 3. Mock LakeTableHelper.removePartitionDirectory to return true
         new MockUp<LakeTableHelper>() {
             @Mock
-            public boolean removePartitionDirectory(Partition partition, ComputeResource computeResource) {
+            public boolean removePartitionDirectory(Partition partition, ComputeResource computeResource,
+                    boolean dropCache) {
                 return true;
             }
             
@@ -218,7 +220,8 @@ public class RecycleLakePartitionInfoEditLogTest {
         // 3. Mock LakeTableHelper.removePartitionDirectory to return true
         new MockUp<LakeTableHelper>() {
             @Mock
-            public boolean removePartitionDirectory(Partition partition, ComputeResource computeResource) {
+            public boolean removePartitionDirectory(Partition partition, ComputeResource computeResource,
+                    boolean dropCache) {
                 return true;
             }
             
