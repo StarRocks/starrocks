@@ -44,6 +44,7 @@
 #include "exec/plain_text_builder.h"
 #include "formats/csv/converter.h"
 #include "fs/fs_broker.h"
+#include "fs/fs_factory.h"
 #include "gutil/strings/substitute.h"
 #include "io/formatted_output_stream.h"
 #include "runtime/runtime_state.h"
@@ -83,7 +84,8 @@ Status FileResultWriter::_create_fs() {
                                                      _file_opts->broker_properties,
                                                      config::broker_write_timeout_seconds * 1000);
         } else {
-            ASSIGN_OR_RETURN(_fs, FileSystem::CreateUniqueFromString(_file_opts->file_path, FSOptions(_file_opts)));
+            ASSIGN_OR_RETURN(_fs,
+                             FileSystemFactory::CreateUniqueFromString(_file_opts->file_path, FSOptions(_file_opts)));
         }
     }
     if (_fs == nullptr) {

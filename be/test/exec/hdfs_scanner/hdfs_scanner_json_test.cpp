@@ -19,6 +19,7 @@
 
 #include "base/testutil/assert.h"
 #include "formats/parquet/parquet_test_util/util.h"
+#include "fs/fs_factory.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks {
@@ -53,7 +54,7 @@ void HdfsScannerJsonReaderTest::SetUp() {
 void HdfsScannerJsonReaderTest::TearDown() {}
 
 void HdfsScannerJsonReaderTest::create_random_access_file(const std::string& path) {
-    ASSIGN_OR_ABORT(_fs, FileSystem::CreateSharedFromString(path));
+    ASSIGN_OR_ABORT(_fs, FileSystemFactory::CreateSharedFromString(path));
     _opts.fs = _fs.get();
     _opts.path = path;
     _opts.file_size = _fs->get_file_size(path).value();

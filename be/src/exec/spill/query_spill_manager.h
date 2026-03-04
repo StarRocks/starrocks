@@ -24,6 +24,10 @@
 #include "fs/fs.h"
 #include "gen_cpp/Types_types.h"
 
+namespace starrocks {
+class TQueryOptions;
+}
+
 namespace starrocks::spill {
 class GlobalSpillManager {
 public:
