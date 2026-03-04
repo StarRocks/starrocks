@@ -44,6 +44,7 @@
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_factory.h"
+#include "fs/fs_factory.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/mem_pool.h"
@@ -362,7 +363,7 @@ Status LinkedSchemaChange::generate_delta_column_group_and_cols(const Tablet* ne
         }
 
         // Write cols file with current new_chunk
-        ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(new_tablet->schema_hash_path()));
+        ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(new_tablet->schema_hash_path()));
         const std::string path = Rowset::delta_column_group_path(new_tablet->schema_hash_path(), rid, idx, version,
                                                                  last_dcg_counts[idx]);
         // must record unique column id in delta column group

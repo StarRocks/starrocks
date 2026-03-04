@@ -21,6 +21,7 @@
 #include <sstream>
 
 #include "base/crypto/md5.h"
+#include "fs/fs_factory.h"
 
 namespace starrocks::fs {
 
@@ -46,12 +47,12 @@ Status list_dirs_files(FileSystem* fs, const std::string& path, std::set<std::st
 }
 
 Status list_dirs_files(const std::string& path, std::set<std::string>* dirs, std::set<std::string>* files) {
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(path));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(path));
     return list_dirs_files(fs.get(), path, dirs, files);
 }
 
 StatusOr<std::string> md5sum(const std::string& path) {
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(path));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(path));
     ASSIGN_OR_RETURN(auto file, fs->new_random_access_file(path));
     ASSIGN_OR_RETURN(auto length, file->get_size());
     std::unique_ptr<unsigned char[]> buf(new (std::nothrow) unsigned char[length]);

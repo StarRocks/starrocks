@@ -19,6 +19,7 @@
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "common/tracer.h"
+#include "fs/fs_factory.h"
 #include "fs/key_cache.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
@@ -520,7 +521,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(uint32_t segment_id, co
 }
 
 StatusOr<bool> RowsetUpdateState::file_exist(const std::string& full_path) {
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(full_path));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(full_path));
     auto st = fs->path_exists(full_path);
     if (st.ok()) {
         return true;
@@ -538,7 +539,7 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
     TRACE_COUNTER_SCOPE_LATENCY_US("rewrite_segment_latency_us");
     const RowsetMetadata& rowset_meta = params.op_write.rowset();
     auto root_path = params.tablet->metadata_root_location();
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_path));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(root_path));
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(params.metadata->schema());
     // get rowset schema
     if (!params.op_write.has_txn_meta() || params.op_write.rewrite_segments_size() == 0 ||
@@ -853,7 +854,7 @@ Status RowsetUpdateState::load_delete(uint32_t del_id, const RowsetUpdateStatePa
     RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, pk_encoding_type));
 
     auto root_path = params.tablet->metadata_root_location();
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_path));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(root_path));
     const std::string& path = params.op_write.dels(del_id);
     RandomAccessFileOptions opts;
     if (params.op_write.dels_size() == params.op_write.del_encryption_metas_size()) {

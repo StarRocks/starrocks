@@ -26,6 +26,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "common/logging.h"
+#include "fs/fs_factory.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate.h"
 #include "storage/lake/metacache.h"
@@ -171,7 +172,7 @@ TEST_F(LakeRowsetTest, test_segment_update_cache_size) {
     // get the same segments from the rowset
     auto sample_segment = segments[0];
     std::string path = sample_segment->file_name();
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(path));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(path));
     auto schema = sample_segment->tablet_schema_share_ptr();
 
     // create a dummy segment with the same path to cache ahead in metacache,

@@ -15,6 +15,7 @@
 #include "storage/lake/transactions.h"
 
 #include "base/container/lru_cache.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "gutil/strings/join.h"
@@ -513,7 +514,7 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
             // TODO: use rename() API if supported by the underlying filesystem.
             auto st = fs::copy_file(txn_log_path, txn_vlog_path).status();
             if (st.is_not_found()) {
-                ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(txn_vlog_path));
+                ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(txn_vlog_path));
                 auto check_st = fs->path_exists(txn_vlog_path);
                 if (check_st.ok()) {
                     continue;

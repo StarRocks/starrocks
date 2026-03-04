@@ -18,6 +18,7 @@
 #include "base/container/raw_container.h"
 #include "base/hash/crc32c.h"
 #include "fs/fs.h"
+#include "fs/fs_factory.h"
 #include "storage/binlog_file_writer.h"
 #include "storage/binlog_util.h"
 #include "storage/rowset/page_io.h"
@@ -34,7 +35,7 @@ BinlogFileReader::BinlogFileReader(std::string file_name, std::shared_ptr<Binlog
 Status BinlogFileReader::seek(int64_t version, int64_t seq_id) {
     VLOG(3) << "Seek binlog file reader: " << _file_path << ", version: " << version << ", seq_id: " << seq_id;
     std::shared_ptr<FileSystem> fs;
-    ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(_file_path))
+    ASSIGN_OR_RETURN(fs, FileSystemFactory::CreateSharedFromString(_file_path))
     ASSIGN_OR_RETURN(_file, fs->new_random_access_file(_file_path))
     ASSIGN_OR_RETURN(_file_size, _file->get_size())
     _file_header = std::make_unique<BinlogFileHeaderPB>();
@@ -486,7 +487,7 @@ StatusOr<BinlogFileMetaPBPtr> BinlogFileReader::load_meta_by_scan_pages(int64_t 
 StatusOr<BinlogFileMetaPBPtr> BinlogFileReader::load_meta(int64_t file_id, std::string& file_path,
                                                           BinlogLsn& max_lsn_exclusive) {
     std::shared_ptr<FileSystem> fs;
-    ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(file_path))
+    ASSIGN_OR_RETURN(fs, FileSystemFactory::CreateSharedFromString(file_path))
     ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(file_path))
     ASSIGN_OR_RETURN(auto file_size, read_file->get_size())
 

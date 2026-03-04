@@ -55,6 +55,7 @@
 #include "common/status.h"
 #include "common/system/cpu_info.h"
 #include "fs/fs.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/mem_tracker.h"
@@ -122,7 +123,7 @@ Status move_to_trash(const std::filesystem::path& file_path) {
 }
 
 Status read_write_test_file(const string& test_file_path) {
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(test_file_path));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(test_file_path));
 
     if (fs->path_exists(test_file_path).ok()) {
         RETURN_IF_ERROR(fs->delete_file(test_file_path));

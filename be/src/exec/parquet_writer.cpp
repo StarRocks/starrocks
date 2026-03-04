@@ -21,6 +21,7 @@
 
 #include "base/uid_util.h"
 #include "formats/parquet/file_writer.h"
+#include "fs/fs_factory.h"
 #include "runtime/exec_env.h"
 
 namespace starrocks {
@@ -38,8 +39,8 @@ RollingAsyncParquetWriter::RollingAsyncParquetWriter(
           _driver_id(driver_id) {}
 
 Status RollingAsyncParquetWriter::init() {
-    ASSIGN_OR_RETURN(
-            _fs, FileSystem::CreateUniqueFromString(_table_info.partition_location, FSOptions(&_table_info.cloud_conf)))
+    ASSIGN_OR_RETURN(_fs, FileSystemFactory::CreateUniqueFromString(_table_info.partition_location,
+                                                                    FSOptions(&_table_info.cloud_conf)))
     _schema = _table_info.schema;
     _partition_location = _table_info.partition_location;
 

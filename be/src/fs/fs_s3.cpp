@@ -35,7 +35,9 @@
 #include "common/config.h"
 #include "common/http/content_type.h"
 #include "common/s3_uri.h"
+#include "fs/credential/cloud_configuration_factory.h"
 #include "fs/encrypt_file.h"
+#include "fs/fs_options_helper.h"
 #include "fs/output_stream_adapter.h"
 #include "gutil/casts.h"
 #include "gutil/strings/util.h"
@@ -202,7 +204,7 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfigurati
     string access_key_id;
     string secret_access_key;
     bool path_style_access = config::object_storage_endpoint_path_style_access;
-    const THdfsProperties* hdfs_properties = opts.hdfs_properties();
+    const THdfsProperties* hdfs_properties = FSOptionsHelper::hdfs_properties(opts);
     if (hdfs_properties != nullptr) {
         if (hdfs_properties->__isset.access_key) {
             access_key_id = hdfs_properties->access_key;
@@ -270,7 +272,7 @@ static std::shared_ptr<Aws::S3::S3Client> new_s3client(
         const S3URI& uri, const FSOptions& opts,
         S3ClientFactory::OperationType operation_type = S3ClientFactory::OperationType::UNKNOWN) {
     Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
-    const THdfsProperties* hdfs_properties = opts.hdfs_properties();
+    const THdfsProperties* hdfs_properties = FSOptionsHelper::hdfs_properties(opts);
     // TODO(SmithCruise) If CloudType is DEFAULT, we should use hadoop sdk to access file,
     // otherwise user's core-site.xml will not take effect in s3 sdk
     if ((hdfs_properties != nullptr && hdfs_properties->__isset.cloud_configuration) ||

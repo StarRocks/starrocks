@@ -17,6 +17,7 @@
 #include <memory>
 
 #include "common/config.h"
+#include "fs/fs_options_helper.h"
 #include "gutil/strings/substitute.h"
 #include "udf/java/java_udf.h"
 #include "util/hdfs_util.h"
@@ -30,9 +31,10 @@ static const std::map<std::string, std::string> get_cloud_properties(const FSOpt
     if (options.cloud_configuration != nullptr) {
         // This branch is used by data lake
         cloud_configuration = options.cloud_configuration;
-    } else if (options.hdfs_properties() != nullptr && options.hdfs_properties()->__isset.cloud_configuration) {
+    } else if (FSOptionsHelper::hdfs_properties(options) != nullptr &&
+               FSOptionsHelper::hdfs_properties(options)->__isset.cloud_configuration) {
         // This branch is used by broker load
-        cloud_configuration = &options.hdfs_properties()->cloud_configuration;
+        cloud_configuration = &FSOptionsHelper::hdfs_properties(options)->cloud_configuration;
     }
     if (cloud_configuration != nullptr && cloud_configuration->__isset.cloud_properties) {
         return cloud_configuration->cloud_properties;
@@ -45,7 +47,7 @@ static Status create_hdfs_fs_handle(const std::string& namenode, const std::shar
     RETURN_IF_ERROR(detect_java_runtime());
     auto hdfs_builder = hdfsNewBuilder();
     hdfsBuilderSetNameNode(hdfs_builder, namenode.c_str());
-    const THdfsProperties* properties = options.hdfs_properties();
+    const THdfsProperties* properties = FSOptionsHelper::hdfs_properties(options);
     if (properties != nullptr) {
         if (properties->__isset.hdfs_username) {
             hdfsBuilderSetUserName(hdfs_builder, properties->hdfs_username.data());
@@ -83,7 +85,7 @@ static Status create_hdfs_fs_handle(const std::string& namenode, const std::shar
 Status HdfsFsCache::get_connection(const std::string& namenode, std::shared_ptr<HdfsFsClient>& hdfs_client,
                                    const FSOptions& options) {
     std::string cache_key = namenode;
-    const THdfsProperties* properties = options.hdfs_properties();
+    const THdfsProperties* properties = FSOptionsHelper::hdfs_properties(options);
     if (properties != nullptr && properties->__isset.hdfs_username) {
         cache_key += properties->hdfs_username;
     }

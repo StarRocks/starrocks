@@ -16,6 +16,7 @@
 
 #include "base/testutil/assert.h"
 #include "fs/fs.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "storage/data_dir.h"
 #include "storage/lake/filenames.h"
@@ -143,7 +144,7 @@ TEST_F(RowsMapperTest, test_open_with_size_in_fileinfo) {
     ASSERT_OK(builder.finalize());
 
     // Get file size
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(filename));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(filename));
     ASSIGN_OR_ABORT(auto rfile, fs->new_random_access_file(filename));
     ASSIGN_OR_ABORT(int64_t file_size, rfile->get_size());
     rfile.reset();

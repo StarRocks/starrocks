@@ -30,6 +30,7 @@
 #include "common/util/debug_util.h"
 #include "file_store.pb.h"
 #include "fmt/format.h"
+#include "fs/fs_factory.h"
 #include "fslib/star_cache_configuration.h"
 #include "fslib/star_cache_handler.h"
 #include "gflags/gflags.h"
