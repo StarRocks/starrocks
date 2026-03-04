@@ -30,7 +30,7 @@ private:
     FSOptions(const TBrokerScanRangeParams* scan_range_params, const TExportSink* export_sink,
               const ResultFileOptions* result_file_options, const TUploadReq* upload, const TDownloadReq* download,
               const TCloudConfiguration* cloud_configuration,
-              const std::unordered_map<std::string, std::string>& fs_options = {});
+              std::unordered_map<std::string, std::string> fs_options = {});
 
 public:
     FSOptions();

@@ -14,19 +14,21 @@
 
 #include "fs/fs_options.h"
 
+#include <utility>
+
 namespace starrocks {
 
 FSOptions::FSOptions(const TBrokerScanRangeParams* scan_range_params, const TExportSink* export_sink,
                      const ResultFileOptions* result_file_options, const TUploadReq* upload,
                      const TDownloadReq* download, const TCloudConfiguration* cloud_configuration,
-                     const std::unordered_map<std::string, std::string>& fs_options)
+                     std::unordered_map<std::string, std::string> fs_options)
         : scan_range_params(scan_range_params),
           export_sink(export_sink),
           result_file_options(result_file_options),
           upload(upload),
           download(download),
           cloud_configuration(cloud_configuration),
-          _fs_options(fs_options) {}
+          _fs_options(std::move(fs_options)) {}
 
 FSOptions::FSOptions() : FSOptions(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr) {}
 
