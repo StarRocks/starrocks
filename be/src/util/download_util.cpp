@@ -89,7 +89,6 @@ Status DownloadUtil::download(const std::string& url, const std::string& target_
     return Status::OK();
 }
 
-
 static std::string get_scheme(const std::string& url) {
     auto pos = url.find("://");
     if (pos == std::string::npos) {
@@ -98,9 +97,7 @@ static std::string get_scheme(const std::string& url) {
     return url.substr(0, pos);
 }
 
-Status DownloadUtil::get_real_url(const std::string& url,
-                                  std::string* real_url,
-                                  const FSOptions& options) {
+Status DownloadUtil::get_real_url(const std::string& url, std::string* real_url, const FSOptions& options) {
     if (url.find(":/") == std::string::npos) {
         return get_java_udf_url(url, real_url, options);
     }
@@ -108,16 +105,13 @@ Status DownloadUtil::get_real_url(const std::string& url,
     return Status::OK();
 }
 
-
 Status DownloadUtil::get_java_udf_url(const std::string& url, std::string* real_url, const FSOptions& options) {
     const char* starrocks_home = std::getenv("STARROCKS_HOME");
     if (starrocks_home == nullptr) {
-        return Status::RuntimeError(
-                "STARROCKS_HOME is not set, cannot download Java UDF");
+        return Status::RuntimeError("STARROCKS_HOME is not set, cannot download Java UDF");
     }
     std::string object_full_path = fmt::format("udf/{}", url);
-    std::string target_path =
-            fmt::format("{}/plugins/java_udf/{}", starrocks_home, url);
+    std::string target_path = fmt::format("{}/plugins/java_udf/{}", starrocks_home, url);
     std::string target_url = std::string("file://") + target_path;
     udf_downloder downloader;
     Status status = downloader.download_remote_file_2_local(object_full_path, target_path, options);

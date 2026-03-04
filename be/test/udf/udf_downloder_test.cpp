@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 #include "udf/udf_downloder.h"
 
 #include <gtest/gtest.h>
@@ -26,20 +25,15 @@ class UDFDownloaderTest : public testing::Test {
 public:
     std::unique_ptr<udf_downloder> downloader;
 
-    void SetUp() override {
-        downloader = std::make_unique<udf_downloder>();
-    }
-    void TearDown() override {
-        downloader.reset();
-    }
+    void SetUp() override { downloader = std::make_unique<udf_downloder>(); }
+    void TearDown() override { downloader.reset(); }
 };
 
 TEST_F(UDFDownloaderTest, TestDownloadFromCloudRegularStorageEngine) {
-
     std::string localPath = "/tmp/test.jar";
 
-    Status status = downloader->download_remote_file_2_local("s3://test-bucket/starrocks/udf/test.jar",
-            localPath, FSOptions{});
+    Status status =
+            downloader->download_remote_file_2_local("s3://test-bucket/starrocks/udf/test.jar", localPath, FSOptions{});
 
     EXPECT_FALSE(status.ok());
 }

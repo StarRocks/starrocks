@@ -38,7 +38,8 @@ Status init_udaf_context(int64_t id, const std::string& url, const std::string& 
     std::string libpath;
     std::string state = symbol + "$State";
     auto func_cache = UserFunctionCache::instance();
-    RETURN_IF_ERROR(func_cache->get_libpath(id, url, checksum, TFunctionBinaryType::SRJAR, &libpath, cloud_configuration));
+    RETURN_IF_ERROR(
+            func_cache->get_libpath(id, url, checksum, TFunctionBinaryType::SRJAR, &libpath, cloud_configuration));
     auto udaf_ctx = std::make_unique<JavaUDAFContext>();
     auto udf_classloader = std::make_unique<ClassLoader>(std::move(libpath));
     auto analyzer = std::make_unique<ClassAnalyzer>();

@@ -21,7 +21,8 @@ namespace starrocks {
 
 std::mutex udf_downloder::_download_mutex;
 
-Status udf_downloder::download_remote_file_2_local(const std::string& remotePath, std::string& localPath, const FSOptions& options) {
+Status udf_downloder::download_remote_file_2_local(const std::string& remotePath, std::string& localPath,
+                                                   const FSOptions& options) {
     std::lock_guard<std::mutex> lock(_download_mutex);
     udf_downloder downloader;
     RETURN_IF_ERROR(downloader.setup_local_file_path(localPath));
@@ -33,9 +34,9 @@ Status udf_downloder::download_remote_file_2_local(const std::string& remotePath
 }
 
 Status udf_downloder::setup_local_file_path(const std::string& local_path) {
-    auto status = FileSystem::Default() -> path_exists(local_path);
+    auto status = FileSystem::Default()->path_exists(local_path);
     if (status.ok()) {
-        RETURN_IF_ERROR(FileSystem::Default() -> delete_file(local_path));
+        RETURN_IF_ERROR(FileSystem::Default()->delete_file(local_path));
         LOG(INFO) << fmt::format("Removed the {} existing file", local_path);
     }
     std::string dir_path = local_path.substr(0, local_path.find_last_of('/'));
@@ -58,4 +59,4 @@ Status udf_downloder::do_download(const std::string& remotePath, std::string& lo
     }
     return Status::OK();
 }
-}
+} // namespace starrocks

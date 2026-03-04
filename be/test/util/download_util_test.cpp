@@ -100,7 +100,6 @@ TEST_F(DownloadUtilTest, test_long_filename) {
     ASSERT_FALSE(st.ok()) << st;
 }
 
-
 TEST_F(DownloadUtilTest, test_download_from_s3) {
     const std::string target_file =
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
