@@ -633,11 +633,15 @@ public class PartitionPruneTest extends PlanTestBase {
                 "    \"replication_num\" = \"1\"\n" +
                 ");");
         starRocksAssert.getCtx().executeSql("insert into t4_range_minmax values('2025-04-29', 1, 'bar')");
-        FeConstants.runningUnitTest = false;
-        starRocksAssert.getTable("test", "t4_range_minmax")
-                .getPartition("p20250428").getDefaultPhysicalPartition().updateVisibleVersion(1);
-        starRocksAssert.query("select min(dt), max(dt) from t4_range_minmax").explainContains("partitions=1/2");
-        FeConstants.runningUnitTest = true;
-
+        try {
+            FeConstants.runningUnitTest = false;
+            starRocksAssert.getTable("test", "t4_range_minmax")
+                    .getPartition("p20250428").getDefaultPhysicalPartition().updateVisibleVersion(1);
+            starRocksAssert.getTable("test", "t4_range_minmax")
+                    .getPartition("p20250428").getDefaultPhysicalPartition().setDataVersion(1);
+            starRocksAssert.query("select min(dt), max(dt) from t4_range_minmax").explainContains("partitions=1/2");
+        } finally {
+            FeConstants.runningUnitTest = true;
+        }
     }
 }
