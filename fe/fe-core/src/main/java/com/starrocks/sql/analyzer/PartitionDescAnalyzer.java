@@ -39,6 +39,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.MultiRangePartitionDesc;
@@ -90,8 +91,14 @@ public class PartitionDescAnalyzer {
      */
     public static void analyze(PartitionDesc partitionDesc, List<ColumnDef> columnDefs, Map<String, String> otherProperties)
             throws AnalysisException {
+        analyze(partitionDesc, columnDefs, otherProperties, null);
+    }
+
+    public static void analyze(PartitionDesc partitionDesc, List<ColumnDef> columnDefs,
+                               Map<String, String> otherProperties, KeysType keysType)
+            throws AnalysisException {
         if (partitionDesc instanceof ListPartitionDesc) {
-            analyzeListPartitionDesc((ListPartitionDesc) partitionDesc, columnDefs, otherProperties);
+            analyzeListPartitionDesc((ListPartitionDesc) partitionDesc, columnDefs, otherProperties, keysType);
         } else if (partitionDesc instanceof RangePartitionDesc) {
             analyzeRangePartitionDesc((RangePartitionDesc) partitionDesc, columnDefs, otherProperties);
         } else if (partitionDesc instanceof ExpressionPartitionDesc) {
@@ -345,11 +352,12 @@ public class PartitionDescAnalyzer {
     // Analyze methods for different partition types
 
     public static void analyzeListPartitionDesc(ListPartitionDesc desc, List<ColumnDef> columnDefs,
-                                                Map<String, String> tableProperties) throws AnalysisException {
+                                                Map<String, String> tableProperties, KeysType keysType)
+            throws AnalysisException {
         // analyze partition columns
         List<ColumnDef> columnDefList = analyzeListPartitionColumns(desc, columnDefs);
         // analyze partition expr
-        analyzeListPartitionExprs(desc, columnDefs);
+        analyzeListPartitionExprs(desc, columnDefs, keysType);
         // analyze single list property
         analyzeSingleListPartitions(desc, tableProperties, columnDefList);
         // analyze multi list partition
@@ -583,19 +591,48 @@ public class PartitionDescAnalyzer {
         return partitionColumns;
     }
 
-    private static void analyzeListPartitionExprs(ListPartitionDesc desc, List<ColumnDef> columnDefs) throws AnalysisException {
-        if (desc.getPartitionExprs() == null) {
-            return;
+    private static void analyzeListPartitionExprs(ListPartitionDesc desc, List<ColumnDef> columnDefs, KeysType keysType)
+            throws AnalysisException {
+        List<String> slotRefs = Lists.newArrayList();
+        if (desc.getPartitionExprs() != null) {
+            slotRefs.addAll(desc.getPartitionExprs().stream()
+                    .flatMap(e -> ExprUtils.collectAllSlotRefs(e).stream())
+                    .map(SlotRef::getColumnName)
+                    .collect(Collectors.toList()));
         }
-        List<String> slotRefs = desc.getPartitionExprs().stream()
-                .flatMap(e -> ExprUtils.collectAllSlotRefs(e).stream())
-                .map(SlotRef::getColumnName)
-                .collect(Collectors.toList());
-        
+        Map<String, ColumnDef> columnDefMap = columnDefs.stream()
+                .collect(Collectors.toMap(ColumnDef::getName, c -> c, (a, b) -> a,
+                        () -> Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER)));
+        for (String partitionCol : desc.getPartitionColNames()) {
+            ColumnDef partitionColumnDef = columnDefMap.get(partitionCol);
+            if (partitionColumnDef == null) {
+                continue;
+            }
+            if (partitionColumnDef.isGeneratedColumn()) {
+                slotRefs.addAll(ExprUtils.collectAllSlotRefs(partitionColumnDef.getGeneratedColumnExpr())
+                        .stream().map(SlotRef::getColumnName).collect(Collectors.toList()));
+            } else {
+                slotRefs.add(partitionColumnDef.getName());
+            }
+        }
+
         for (ColumnDef columnDef : columnDefs) {
-            if ((slotRefs.isEmpty() || slotRefs.contains(columnDef.getName())) && !columnDef.isKey()
+            if ((slotRefs.isEmpty() || slotRefs.contains(columnDef.getName()))
+                    && !columnDef.isKey()
                     && columnDef.getAggregateType() != AggregateType.NONE) {
                 throw new AnalysisException("The partition expr should base on key column");
+            }
+        }
+
+        if (keysType == KeysType.PRIMARY_KEYS) {
+            Set<String> keyColumnNames = columnDefs.stream()
+                    .filter(ColumnDef::isKey)
+                    .map(ColumnDef::getName)
+                    .collect(Collectors.toCollection(() -> Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER)));
+            for (String slotRef : slotRefs) {
+                if (!keyColumnNames.contains(slotRef)) {
+                    throw new AnalysisException("The partition expr should base on key column");
+                }
             }
         }
     }
