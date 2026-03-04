@@ -23,7 +23,6 @@
 #include "column/bytes.h"
 #include "column/mysql_row_buffer.h"
 #include "column/vectorized_fwd.h"
-#include "common/logging.h"
 #include "gutil/bits.h"
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"

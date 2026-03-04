@@ -29,7 +29,6 @@ public:
     using ValueType = VariantRowValue;
     using SuperClass = CowFactory<ColumnFactory<ObjectColumn<VariantRowValue>, VariantColumn>, VariantColumn, Column>;
     using BaseClass = VariantColumnBase;
-    using ImmContainer = ObjectDataProxyContainer;
 
     VariantColumn() = default;
     explicit VariantColumn(size_t size) : SuperClass(size) {}
