@@ -6,7 +6,7 @@ displayed_sidebar: docs
 
 ## 功能
 
-修改通过 [SUBMIT TASK](SUBMIT_TASK.md) 语句提交的异步 ETL 任务。此功能从 StarRocks v4.1 起支持。
+修改通过 [SUBMIT TASK](SUBMIT_TASK.md) 语句提交的异步 ETL 任务。此功能从 v4.1 起支持。
 
 您可以使用该语句执行以下操作：
 
