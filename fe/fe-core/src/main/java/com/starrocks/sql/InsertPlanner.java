@@ -40,7 +40,6 @@ import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.ConnectorSinkShuffleMode;
 import com.starrocks.connector.ConnectorSinkSortScope;
-import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.load.Load;
 import com.starrocks.planner.BlackHoleTableSink;
 import com.starrocks.planner.DataSink;
@@ -638,7 +637,7 @@ public class InsertPlanner {
                         if (isAutoIncrement) {
                             row.set(columnIdx, new NullLiteral());
                         } else {
-                            row.set(columnIdx, getInsertDefaultExpr(targetColumn, insertStatement));
+                            row.set(columnIdx, new StringLiteral(targetColumn.calculatedDefaultValue()));
                         }
                     }
                     row.set(columnIdx, TypeManager.addCastExpr(row.get(columnIdx), targetColumn.getType()));
@@ -658,7 +657,7 @@ public class InsertPlanner {
                             if (isAutoIncrement) {
                                 row.set(idx, new NullLiteral());
                             } else {
-                                row.set(idx, getInsertDefaultExpr(targetColumn, insertStatement));
+                                row.set(idx, new StringLiteral(targetColumn.calculatedDefaultValue()));
                             }
                         }
                         row.set(idx, TypeManager.addCastExpr(row.get(idx), targetColumn.getType()));
@@ -689,7 +688,32 @@ public class InsertPlanner {
             } else {
                 int idx = insertStatement.getTargetColumnNames().indexOf(targetColumn.getName().toLowerCase());
                 if (idx == -1) {
-                    ScalarOperator scalarOperator = getInsertDefaultScalarOperator(targetColumn, insertStatement);
+                    ScalarOperator scalarOperator;
+                    Column.DefaultValueType defaultValueType = targetColumn.getDefaultValueType();
+                    if (defaultValueType == Column.DefaultValueType.NULL || targetColumn.isAutoIncrement()) {
+                        scalarOperator = ConstantOperator.createNull(targetColumn.getType());
+                    } else if (defaultValueType == Column.DefaultValueType.CONST) {
+                        if (targetColumn.getDefaultExpr() != null && targetColumn.getDefaultExpr().getExprObject() != null) {
+                            Expr expr = targetColumn.getDefaultExpr().obtainExpr();
+                            if (!expr.getType().equals(targetColumn.getType())) {
+                                expr = new CastExpr(targetColumn.getType(), expr);
+                            }
+                            scalarOperator = SqlToScalarOperatorTranslator.translate(expr);
+                        } else {
+                            scalarOperator = ConstantOperator.createVarchar(targetColumn.calculatedDefaultValue());
+                        }
+                    } else if (defaultValueType == Column.DefaultValueType.VARY) {
+                        if (isValidDefaultFunction(targetColumn.getDefaultExpr().getExpr())) {
+                            scalarOperator = SqlToScalarOperatorTranslator.
+                                    translate(targetColumn.getDefaultExpr().obtainExpr());
+                        } else {
+                            throw new SemanticException(
+                                    "Column:" + targetColumn.getName() + " has unsupported default value:"
+                                            + targetColumn.getDefaultExpr().getExpr());
+                        }
+                    } else {
+                        throw new SemanticException("Unknown default value type:%s", defaultValueType.toString());
+                    }
                     ColumnRefOperator col = columnRefFactory
                             .create(scalarOperator, scalarOperator.getType(), scalarOperator.isNullable());
 
@@ -1072,67 +1096,6 @@ public class InsertPlanner {
         }
 
         return skip;
-    }
-
-    private Expr getInsertDefaultExpr(Column targetColumn, InsertStmt insertStatement) {
-        String writeDefault = getIcebergWriteDefaultValue(targetColumn, insertStatement);
-        if (writeDefault != null) {
-            return new StringLiteral(writeDefault);
-        }
-        if (insertStatement.getTargetTable() instanceof IcebergTable) {
-            if (targetColumn.isAllowNull()) {
-                return new NullLiteral();
-            }
-            throw new SemanticException("Column has no write default value, column=%s", targetColumn.getName());
-        }
-        return new StringLiteral(targetColumn.calculatedDefaultValue());
-    }
-
-    private ScalarOperator getInsertDefaultScalarOperator(Column targetColumn, InsertStmt insertStatement) {
-        String writeDefault = getIcebergWriteDefaultValue(targetColumn, insertStatement);
-        if (writeDefault != null) {
-            return ConstantOperator.createVarchar(writeDefault);
-        }
-        if (insertStatement.getTargetTable() instanceof IcebergTable) {
-            if (!targetColumn.isAllowNull() && !targetColumn.isAutoIncrement()) {
-                throw new SemanticException("Column has no write default value, column=%s", targetColumn.getName());
-            }
-            return ConstantOperator.createNull(targetColumn.getType());
-        }
-
-        Column.DefaultValueType defaultValueType = targetColumn.getDefaultValueType();
-        if (defaultValueType == Column.DefaultValueType.NULL || targetColumn.isAutoIncrement()) {
-            return ConstantOperator.createNull(targetColumn.getType());
-        } else if (defaultValueType == Column.DefaultValueType.CONST) {
-            if (targetColumn.getDefaultExpr() != null && targetColumn.getDefaultExpr().getExprObject() != null) {
-                Expr expr = targetColumn.getDefaultExpr().obtainExpr();
-                if (!expr.getType().equals(targetColumn.getType())) {
-                    expr = new CastExpr(targetColumn.getType(), expr);
-                }
-                return SqlToScalarOperatorTranslator.translate(expr);
-            } else {
-                return ConstantOperator.createVarchar(targetColumn.calculatedDefaultValue());
-            }
-        } else if (defaultValueType == Column.DefaultValueType.VARY) {
-            if (isValidDefaultFunction(targetColumn.getDefaultExpr().getExpr())) {
-                return SqlToScalarOperatorTranslator.translate(targetColumn.getDefaultExpr().obtainExpr());
-            } else {
-                throw new SemanticException(
-                        "Column:" + targetColumn.getName() + " has unsupported default value:"
-                                + targetColumn.getDefaultExpr().getExpr());
-            }
-        } else {
-            throw new SemanticException("Unknown default value type:%s", defaultValueType.toString());
-        }
-    }
-
-    private String getIcebergWriteDefaultValue(Column targetColumn, InsertStmt insertStatement) {
-        Table targetTable = insertStatement.getTargetTable();
-        if (!(targetTable instanceof IcebergTable)) {
-            return null;
-        }
-        IcebergTable icebergTable = (IcebergTable) targetTable;
-        return IcebergApiConverter.getWriteDefaultValue(icebergTable.getNativeTable().schema(), targetColumn.getName());
     }
 
     private boolean checkPartitionInsertValid(Table targetTable) {
