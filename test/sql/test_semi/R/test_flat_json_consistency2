@@ -3,8 +3,7 @@ drop table if exists test_json;
 -- result:
 -- !result
 create table test_json (c1 int, c2 json)
-distributed by random buckets 1
-properties("flat_json.enable"="true");
+distributed by random buckets 1;
 -- result:
 -- !result
 insert into test_json values
@@ -25,8 +24,7 @@ drop table if exists test_json;
 -- result:
 -- !result
 create table test_json (c1 int, c2 json)
-distributed by random buckets 1
-properties("flat_json.enable"="true");
+distributed by random buckets 1;
 -- result:
 -- !result
 insert into test_json values
@@ -47,8 +45,7 @@ drop table if exists test_json;
 -- result:
 -- !result
 create table test_json (c1 int, c2 json)
-distributed by random buckets 1
-properties("flat_json.enable"="true");
+distributed by random buckets 1;
 -- result:
 -- !result
 insert into test_json values
@@ -69,8 +66,7 @@ drop table if exists test_json;
 -- result:
 -- !result
 create table test_json (c1 int, c2 json)
-distributed by random buckets 1
-properties("flat_json.enable"="true");
+distributed by random buckets 1;
 -- result:
 -- !result
 insert into test_json values
@@ -91,8 +87,7 @@ drop table if exists test_json;
 -- result:
 -- !result
 create table test_json (c1 int, c2 json)
-distributed by random buckets 1
-properties("flat_json.enable"="true");
+distributed by random buckets 1;
 -- result:
 -- !result
 insert into test_json values
@@ -113,8 +108,7 @@ drop table if exists test_json;
 -- result:
 -- !result
 create table test_json (c1 int, c2 json)
-distributed by random buckets 1
-properties("flat_json.enable"="true");
+distributed by random buckets 1;
 -- result:
 -- !result
 insert into test_json values
@@ -135,8 +129,7 @@ drop table if exists test_json;
 -- result:
 -- !result
 create table test_json (c1 int, c2 json)
-distributed by random buckets 1
-properties("flat_json.enable"="true");
+distributed by random buckets 1;
 -- result:
 -- !result
 insert into test_json values
@@ -157,8 +150,7 @@ drop table if exists test_json;
 -- result:
 -- !result
 create table test_json (c1 int, c2 json)
-distributed by random buckets 1
-properties("flat_json.enable"="true");
+distributed by random buckets 1;
 -- result:
 -- !result
 insert into test_json values
@@ -179,8 +171,7 @@ drop table if exists test_json;
 -- result:
 -- !result
 create table test_json (c1 int, c2 json)
-distributed by random buckets 1
-properties("flat_json.enable"="true");
+distributed by random buckets 1;
 -- result:
 -- !result
 insert into test_json values
@@ -201,8 +192,7 @@ drop table if exists test_json;
 -- result:
 -- !result
 create table test_json (c1 int, c2 json)
-distributed by random buckets 1
-properties("flat_json.enable"="true");
+distributed by random buckets 1;
 -- result:
 -- !result
 insert into test_json values
@@ -223,8 +213,7 @@ drop table if exists test_json;
 -- result:
 -- !result
 create table test_json (c1 int, c2 json)
-distributed by random buckets 1
-properties("flat_json.enable"="true");
+distributed by random buckets 1;
 -- result:
 -- !result
 insert into test_json values
@@ -245,8 +234,7 @@ drop table if exists test_json;
 -- result:
 -- !result
 create table test_json (c1 int, c2 json)
-distributed by random buckets 1
-properties("flat_json.enable"="true");
+distributed by random buckets 1;
 -- result:
 -- !result
 insert into test_json values
@@ -267,8 +255,7 @@ drop table if exists test_json;
 -- result:
 -- !result
 create table test_json (c1 int, c2 json)
-distributed by random buckets 1
-properties("flat_json.enable"="true");
+distributed by random buckets 1;
 -- result:
 -- !result
 insert into test_json values
@@ -289,8 +276,7 @@ drop table if exists test_json;
 -- result:
 -- !result
 create table test_json (c1 int, c2 json)
-distributed by random buckets 1
-properties("flat_json.enable"="true");
+distributed by random buckets 1;
 -- result:
 -- !result
 insert into test_json values
