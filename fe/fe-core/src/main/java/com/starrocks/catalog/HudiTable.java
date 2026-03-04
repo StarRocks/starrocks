@@ -163,7 +163,8 @@ public class HudiTable extends Table {
     @Override
     public String getUUID() {
         if (CatalogMgr.isExternalCatalog(catalogName)) {
-            return String.join(".", catalogName, hiveDbName, hiveTableName, Long.toString(createTime));
+            String fullUUID = String.join(".", catalogName, hiveDbName, hiveTableName, Long.toString(createTime));
+            return hashUUIDIfTooLong(fullUUID);
         } else {
             return Long.toString(id);
         }

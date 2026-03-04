@@ -65,6 +65,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 
@@ -254,6 +257,38 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
      */
     public String getUUID() {
         return Long.toString(id);
+    }
+
+    /**
+     * Hash the UUID string using MD5 if it exceeds the maximum length.
+     * This prevents "primary key size exceed the limit" errors when storing
+     * table UUIDs in statistics tables (e.g. external_column_statistics),
+     * where the UUID is part of the primary key and the total PK size is
+     * bounded by the BE config `primary_key_limit_size` (default 128 bytes).
+     *
+     * Connector tables construct their UUID as "{catalog}.{db}.{table}.{extra}",
+     * which can easily exceed 128 bytes when catalog / db / table names are long.
+     * Hashing caps the UUID at 32 chars (MD5 hex) while preserving uniqueness.
+     *
+     * @param uuid the original UUID string
+     * @return the original UUID if length <= 64, otherwise its lower-case MD5 hex string
+     */
+    protected static String hashUUIDIfTooLong(String uuid) {
+        if (uuid.length() <= 64) {
+            return uuid;
+        }
+        try {
+            MessageDigest digest = MessageDigest.getInstance("MD5");
+            byte[] hashBytes = digest.digest(uuid.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(32);
+            for (byte b : hashBytes) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (NoSuchAlgorithmException e) {
+            // MD5 is guaranteed to be available in every Java implementation
+            return uuid;
+        }
     }
 
     public void setId(long id) {
