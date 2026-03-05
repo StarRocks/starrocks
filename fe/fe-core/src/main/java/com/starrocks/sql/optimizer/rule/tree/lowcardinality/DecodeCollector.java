@@ -535,6 +535,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         context.parent = parent;
         DecodeInfo info = optExpression.getOp().accept(this, optExpression, context);
         if (info.isEmpty()) {
+            collectProjection(optExpression.getOp(), info);
             return info;
         }
 
