@@ -35,6 +35,9 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.catalog.Database;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -43,8 +46,10 @@ import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryStatement;
@@ -695,5 +700,187 @@ public class ConnectContextTest {
 
         // Should not throw exception even if getting CN group name fails
         Assertions.assertDoesNotThrow(() -> ctx.onQueryFinished());
+    }
+
+    // -----------------------------------------------------------------------
+    // Tests for changeCatalogDb() journal-replay wait on follower FE
+    // -----------------------------------------------------------------------
+
+    /**
+     * On a follower FE, if the database is not found locally on the first check
+     * (journal not yet replayed), the follower fetches the leader's max journal ID,
+     * waits for local replay, and retries. If the database exists after the wait,
+     * changeCatalogDb() should succeed.
+     */
+    @Test
+    public void testChangeCatalogDb_followerWaitsForJournalAndSucceeds(
+            @Mocked MetadataMgr metadataMgr,
+            @Mocked JournalObservable journalObservable) throws Exception {
+        Database mockDb = new Database(1L, "testdb");
+
+        new MockUp<LeaderOpExecutor>() {
+            @Mock
+            public static long fetchLeaderMaxJournalId(ConnectContext ctx) {
+                return 100L;
+            }
+        };
+
+        new Expectations() {
+            {
+                globalStateMgr.isLeader();
+                result = false;
+                minTimes = 0;
+
+                globalStateMgr.getMetadataMgr();
+                result = metadataMgr;
+                minTimes = 0;
+
+                globalStateMgr.getJournalObservable();
+                result = journalObservable;
+                minTimes = 0;
+
+                // First call (outer condition): null  → enter wait block
+                // Second call (inner condition): mockDb → no error thrown
+                metadataMgr.getDb((ConnectContext) any, anyString, anyString);
+                returns(null, mockDb);
+
+                // Simulate a successful journal replay (no-op)
+                journalObservable.waitOn(100L, anyInt);
+            }
+        };
+
+        new MockUp<Authorizer>() {
+            @Mock
+            public void checkAnyActionOnOrInDb(ConnectContext ctx, String catalog, String db)
+                    throws AccessDeniedException {
+            }
+        };
+
+        ConnectContext ctx = new ConnectContext(connection);
+        ctx.setGlobalStateMgr(globalStateMgr);
+
+        Assertions.assertDoesNotThrow(() -> ctx.changeCatalogDb("testdb"));
+        Assertions.assertEquals("testdb", ctx.getDatabase());
+    }
+
+    /**
+     * On a follower FE, if the database is still missing after journal replay wait
+     * (the database genuinely does not exist), changeCatalogDb() should throw ERR_BAD_DB_ERROR.
+     */
+    @Test
+    public void testChangeCatalogDb_followerThrowsWhenDbStillMissingAfterWait(
+            @Mocked MetadataMgr metadataMgr,
+            @Mocked JournalObservable journalObservable) {
+        new MockUp<LeaderOpExecutor>() {
+            @Mock
+            public static long fetchLeaderMaxJournalId(ConnectContext ctx) {
+                return 100L;
+            }
+        };
+
+        new Expectations() {
+            {
+                globalStateMgr.isLeader();
+                result = false;
+                minTimes = 0;
+
+                globalStateMgr.getMetadataMgr();
+                result = metadataMgr;
+                minTimes = 0;
+
+                globalStateMgr.getJournalObservable();
+                result = journalObservable;
+                minTimes = 0;
+
+                // Both calls return null: db genuinely does not exist
+                metadataMgr.getDb((ConnectContext) any, anyString, anyString);
+                result = null;
+
+                journalObservable.waitOn(100L, anyInt);
+            }
+        };
+
+        ConnectContext ctx = new ConnectContext(connection);
+        ctx.setGlobalStateMgr(globalStateMgr);
+
+        Assertions.assertThrows(DdlException.class, () -> ctx.changeCatalogDb("nonexistent"));
+    }
+
+    /**
+     * On the leader FE, changeCatalogDb() should throw immediately without fetching
+     * the leader journal ID or waiting for journal replay.
+     */
+    @Test
+    public void testChangeCatalogDb_leaderDoesNotWaitForJournal(
+            @Mocked MetadataMgr metadataMgr) {
+        new Expectations() {
+            {
+                globalStateMgr.isLeader();
+                result = true;
+                minTimes = 0;
+
+                globalStateMgr.getMetadataMgr();
+                result = metadataMgr;
+                minTimes = 0;
+
+                metadataMgr.getDb((ConnectContext) any, anyString, anyString);
+                result = null;
+
+                // getJournalObservable must never be called on the leader
+                globalStateMgr.getJournalObservable();
+                times = 0;
+            }
+        };
+
+        ConnectContext ctx = new ConnectContext(connection);
+        ctx.setGlobalStateMgr(globalStateMgr);
+
+        Assertions.assertThrows(DdlException.class, () -> ctx.changeCatalogDb("somedb"));
+    }
+
+    /**
+     * On a follower FE, if the journal replay wait times out (DdlException from waitOn),
+     * the exception is swallowed and the inner db check still runs, throwing ERR_BAD_DB_ERROR.
+     */
+    @Test
+    public void testChangeCatalogDb_followerThrowsDbErrorAfterJournalWaitTimeout(
+            @Mocked MetadataMgr metadataMgr,
+            @Mocked JournalObservable journalObservable) throws DdlException {
+        new MockUp<LeaderOpExecutor>() {
+            @Mock
+            public static long fetchLeaderMaxJournalId(ConnectContext ctx) {
+                return 100L;
+            }
+        };
+
+        new Expectations() {
+            {
+                globalStateMgr.isLeader();
+                result = false;
+                minTimes = 0;
+
+                globalStateMgr.getMetadataMgr();
+                result = metadataMgr;
+                minTimes = 0;
+
+                globalStateMgr.getJournalObservable();
+                result = journalObservable;
+                minTimes = 0;
+
+                // Both calls return null: db does not appear even after wait
+                metadataMgr.getDb((ConnectContext) any, anyString, anyString);
+                result = null;
+
+                // Simulate journal replay timeout
+                journalObservable.waitOn(100L, anyInt);
+                result = new DdlException("journal replay timeout");
+            }
+        };
+
+        ConnectContext ctx = new ConnectContext(connection);
+        ctx.setGlobalStateMgr(globalStateMgr);
+
+        // The timeout exception is caught internally; ERR_BAD_DB_ERROR is still thrown
+        Assertions.assertThrows(DdlException.class, () -> ctx.changeCatalogDb("nonexistent"));
     }
 }
