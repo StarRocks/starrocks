@@ -24,13 +24,9 @@
 #include "exprs/base64.h"
 #include "exprs/expr.h"
 #include "formats/parquet/parquet_file_writer.h"
-<<<<<<< HEAD
+#include "util/compression/compression_utils.h"
 #include "util/integer_util.h"
 #include "util/url_coding.h"
-=======
-#include "types/datum.h"
-#include "util/compression/compression_utils.h"
->>>>>>> 85a2748cd8 ([BugFix] Fix duplicated CSV compression suffix in file sink output names (#69749))
 
 namespace starrocks::connector {
 
