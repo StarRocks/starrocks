@@ -165,7 +165,7 @@ jobs:
 
       - name: link check
         if: always()
-        uses: lycheeverse/lychee-action@v1.8.0
+        uses: lycheeverse/lychee-action@v2.8.0
         with:
           fail: true
           args: >
