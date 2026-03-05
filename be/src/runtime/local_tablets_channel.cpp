@@ -71,6 +71,7 @@ LocalTabletsChannel::LocalTabletsChannel(LoadChannel* load_channel, const Tablet
           _load_channel(load_channel),
           _key(key),
           _mem_tracker(mem_tracker),
+          _max_sliding_window_size(config::max_load_dop * 3),
           _mem_pool(std::make_unique<MemPool>()) {
     static std::once_flag once_flag;
     std::call_once(once_flag, [] {

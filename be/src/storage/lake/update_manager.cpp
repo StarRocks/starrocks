@@ -86,6 +86,10 @@ UpdateManager::~UpdateManager() {
     _compaction_cache.clear();
 }
 
+UpdateManager::PkIndexShard& UpdateManager::_get_pk_index_shard(int64_t tabletId) {
+    return _pk_index_shards[tabletId & (config::pk_index_map_shard_size - 1)];
+}
+
 inline std::string cache_key(uint32_t tablet_id, int64_t txn_id) {
     return strings::Substitute("$0_$1", tablet_id, txn_id);
 }
