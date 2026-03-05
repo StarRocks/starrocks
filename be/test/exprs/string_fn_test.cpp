@@ -4597,11 +4597,23 @@ PARALLEL_TEST(VecStringFunctionsTest, initcapTest) {
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
     // Fast Path Assertions
-    ASSERT_EQ(
-            "['Hello World', 'Hello World', 'Hello World', 'Starrocks Database', '1st Place, In-The-World!','    "
-            "Hello   World   '"
-            ", 'Abc_Def.Ghi+Jkl', 'A', '', 'Héllo', 'École', 'Ça Va', 'Café Resumé', 'Привет Мир', 'Hello-Wörld_123']",
-            result->debug_string());
+    ASSERT_EQ("Hello World", v->immutable_data()[0].to_string());
+    ASSERT_EQ("Hello World", v->immutable_data()[1].to_string());
+    ASSERT_EQ("Hello World", v->immutable_data()[2].to_string());
+    ASSERT_EQ("Starrocks Database", v->immutable_data()[3].to_string());
+    ASSERT_EQ("1st Place, In-The-World!", v->immutable_data()[4].to_string());
+    ASSERT_EQ("   Hello   World   ", v->immutable_data()[5].to_string());
+    ASSERT_EQ("Abc_Def.Ghi+Jkl", v->immutable_data()[6].to_string());
+    ASSERT_EQ("A", v->immutable_data()[7].to_string());
+    ASSERT_EQ("", v->immutable_data()[8].to_string());
+
+    // Slow Path Assertions
+    ASSERT_EQ("Héllo", v->immutable_data()[9].to_string());
+    ASSERT_EQ("École", v->immutable_data()[10].to_string());
+    ASSERT_EQ("Ça Va", v->immutable_data()[11].to_string());
+    ASSERT_EQ("Café Resumé", v->immutable_data()[12].to_string());
+    ASSERT_EQ("Привет Мир", v->immutable_data()[13].to_string());
+    ASSERT_EQ("Hello-Wörld_123", v->immutable_data()[14].to_string());
 
     // --- Error Path (Invalid UTF-8) ---
     Columns invalid_columns;
