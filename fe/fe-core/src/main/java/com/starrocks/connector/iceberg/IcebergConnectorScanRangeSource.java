@@ -359,10 +359,17 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         List<SlotDescriptor> slots = desc.getSlots();
         Map<Integer, TExpr> extendedColumns = new HashMap<>();
         boolean hasRowIdColumn = false;
+        // Late materialization adds _row_source_id and _scan_range_id along with _row_id.
+        // We need to distinguish between user-requested _row_id and late materialization internal use.
+        boolean hasLateMaterializationColumns = false;
         for (SlotDescriptor slot : slots) {
             String name = slot.getColumn().getName();
             if (name.equalsIgnoreCase(ROW_ID)) {
                 hasRowIdColumn = true;
+                continue;
+            }
+            if (name.equalsIgnoreCase("_row_source_id") || name.equalsIgnoreCase("_scan_range_id")) {
+                hasLateMaterializationColumns = true;
                 continue;
             }
             LiteralExpr value;
@@ -398,11 +405,17 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         }
 
         if (hasRowIdColumn) {
-            if (task.file() == null || task.file().firstRowId() == null) {
-                throw new StarRocksConnectorException(
-                        "Iceberg v3 row lineage requires first_row_id for _row_id, file: %s", filePath);
+            // Only throw exception if user explicitly requested _row_id (not from late materialization)
+            if (!hasLateMaterializationColumns) {
+                if (task.file() == null || task.file().firstRowId() == null) {
+                    throw new StarRocksConnectorException(
+                            "Iceberg v3 row lineage requires first_row_id for _row_id, file: %s", filePath);
+                }
             }
-            hdfsScanRange.setFirst_row_id(task.file().firstRowId());
+            // Set first_row_id if available (for both user-requested and late materialization cases)
+            if (task.file() != null && task.file().firstRowId() != null) {
+                hdfsScanRange.setFirst_row_id(task.file().firstRowId());
+            }
         } else if (task.file() != null && task.file().firstRowId() != null) {
             hdfsScanRange.setFirst_row_id(task.file().firstRowId());
         }

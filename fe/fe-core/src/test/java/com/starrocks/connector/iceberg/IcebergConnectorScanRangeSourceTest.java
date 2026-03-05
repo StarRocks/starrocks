@@ -289,4 +289,166 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
                     hdfsScanRange.getFirst_row_id());
         }
     }
+
+    /**
+     * Test that when late materialization adds _row_id along with _row_source_id and _scan_range_id,
+     * and the file doesn't have firstRowId, the scan range building should NOT throw exception.
+     * This is because the _row_id is for internal use by late materialization, not user-requested.
+     */
+    @Test
+    public void testBuildScanRangeWithLateMaterializationColumnsNotThrows() throws Exception {
+        // Use v2 table which doesn't have firstRowId in files
+        TupleDescriptor localTupleDescriptor = new TupleDescriptor(new TupleId(5));
+        SlotDescriptor idSlot = new SlotDescriptor(new SlotId(1), localTupleDescriptor);
+        idSlot.setType(INT);
+        idSlot.setColumn(new Column("id", INT));
+        localTupleDescriptor.addSlot(idSlot);
+
+        SlotDescriptor dataSlot = new SlotDescriptor(new SlotId(2), localTupleDescriptor);
+        dataSlot.setType(VARCHAR);
+        dataSlot.setColumn(new Column("data", VARCHAR));
+        localTupleDescriptor.addSlot(dataSlot);
+
+        // _row_id added by late materialization
+        SlotDescriptor rowIdSlot = new SlotDescriptor(new SlotId(3), localTupleDescriptor);
+        rowIdSlot.setType(BIGINT);
+        rowIdSlot.setColumn(new Column(IcebergTable.ROW_ID, BIGINT));
+        localTupleDescriptor.addSlot(rowIdSlot);
+
+        // _row_source_id - indicates late materialization is active
+        SlotDescriptor rowSourceIdSlot = new SlotDescriptor(new SlotId(4), localTupleDescriptor);
+        rowSourceIdSlot.setType(INT);
+        rowSourceIdSlot.setColumn(new Column("_row_source_id", INT));
+        localTupleDescriptor.addSlot(rowSourceIdSlot);
+
+        // _scan_range_id - indicates late materialization is active
+        SlotDescriptor scanRangeIdSlot = new SlotDescriptor(new SlotId(5), localTupleDescriptor);
+        scanRangeIdSlot.setType(INT);
+        scanRangeIdSlot.setColumn(new Column("_scan_range_id", INT));
+        localTupleDescriptor.addSlot(scanRangeIdSlot);
+
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
+        List<Column> schema = Lists.newArrayList(new Column("id", INT), new Column("data", VARCHAR));
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog",
+                "resource", "db", "table", "", schema, mockedNativeTableA, Maps.newHashMap());
+
+        IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
+                RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, localTupleDescriptor, Optional.empty(),
+                PartitionIdGenerator.of(), false, false);
+
+        FileScanTask fileScanTask = Lists.newArrayList(mockedNativeTableA.newScan().planFiles()).get(0);
+        long partitionId = scanRangeSource.addPartition(fileScanTask);
+
+        // Should NOT throw exception because late materialization columns are present
+        // The file from v2 table doesn't have firstRowId
+        THdfsScanRange hdfsScanRange = scanRangeSource.buildScanRange(
+                fileScanTask, fileScanTask.file(), partitionId);
+        Assertions.assertNotNull(hdfsScanRange);
+    }
+
+    /**
+     * Test that when late materialization adds _row_id along with _row_source_id and _scan_range_id,
+     * and the file has firstRowId (v3 table), the scan range should include first_row_id.
+     */
+    @Test
+    public void testBuildScanRangeWithLateMaterializationColumnsSetsFirstRowIdWhenPresent() throws Exception {
+        TestTables.TestTable mockedNativeTableV3 = create(SCHEMA_A, SPEC_A, "tv3_late", 3);
+
+        TupleDescriptor localTupleDescriptor = new TupleDescriptor(new TupleId(6));
+        SlotDescriptor idSlot = new SlotDescriptor(new SlotId(1), localTupleDescriptor);
+        idSlot.setType(INT);
+        idSlot.setColumn(new Column("id", INT));
+        localTupleDescriptor.addSlot(idSlot);
+
+        SlotDescriptor dataSlot = new SlotDescriptor(new SlotId(2), localTupleDescriptor);
+        dataSlot.setType(VARCHAR);
+        dataSlot.setColumn(new Column("data", VARCHAR));
+        localTupleDescriptor.addSlot(dataSlot);
+
+        // _row_id added by late materialization
+        SlotDescriptor rowIdSlot = new SlotDescriptor(new SlotId(3), localTupleDescriptor);
+        rowIdSlot.setType(BIGINT);
+        rowIdSlot.setColumn(new Column(IcebergTable.ROW_ID, BIGINT));
+        localTupleDescriptor.addSlot(rowIdSlot);
+
+        // _row_source_id - indicates late materialization is active
+        SlotDescriptor rowSourceIdSlot = new SlotDescriptor(new SlotId(4), localTupleDescriptor);
+        rowSourceIdSlot.setType(INT);
+        rowSourceIdSlot.setColumn(new Column("_row_source_id", INT));
+        localTupleDescriptor.addSlot(rowSourceIdSlot);
+
+        // _scan_range_id - indicates late materialization is active
+        SlotDescriptor scanRangeIdSlot = new SlotDescriptor(new SlotId(5), localTupleDescriptor);
+        scanRangeIdSlot.setType(INT);
+        scanRangeIdSlot.setColumn(new Column("_scan_range_id", INT));
+        localTupleDescriptor.addSlot(scanRangeIdSlot);
+
+        mockedNativeTableV3.newFastAppend().appendFile(FILE_A).commit();
+        List<Column> schema = Lists.newArrayList(new Column("id", INT), new Column("data", VARCHAR));
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table_v3_late", "iceberg_catalog",
+                "resource", "db", "table", "", schema, mockedNativeTableV3, Maps.newHashMap());
+
+        IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
+                RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, localTupleDescriptor, Optional.empty(),
+                PartitionIdGenerator.of(), false, false);
+
+        FileScanTask fileScanTask = Lists.newArrayList(mockedNativeTableV3.newScan().planFiles()).get(0);
+        long partitionId = scanRangeSource.addPartition(fileScanTask);
+
+        if (fileScanTask.file().firstRowId() != null) {
+            THdfsScanRange hdfsScanRange = scanRangeSource.buildScanRange(
+                    fileScanTask, fileScanTask.file(), partitionId);
+            Assertions.assertTrue(hdfsScanRange.isSetFirst_row_id());
+            Assertions.assertEquals(fileScanTask.file().firstRowId().longValue(),
+                    hdfsScanRange.getFirst_row_id());
+        }
+    }
+
+    /**
+     * Test that when only _row_source_id is present (partial late materialization columns),
+     * it's still recognized as late materialization and won't throw exception.
+     */
+    @Test
+    public void testBuildScanRangeWithOnlyRowSourceIdNotThrows() throws Exception {
+        // Use v2 table which doesn't have firstRowId in files
+        TupleDescriptor localTupleDescriptor = new TupleDescriptor(new TupleId(7));
+        SlotDescriptor idSlot = new SlotDescriptor(new SlotId(1), localTupleDescriptor);
+        idSlot.setType(INT);
+        idSlot.setColumn(new Column("id", INT));
+        localTupleDescriptor.addSlot(idSlot);
+
+        SlotDescriptor dataSlot = new SlotDescriptor(new SlotId(2), localTupleDescriptor);
+        dataSlot.setType(VARCHAR);
+        dataSlot.setColumn(new Column("data", VARCHAR));
+        localTupleDescriptor.addSlot(dataSlot);
+
+        // _row_id added by late materialization
+        SlotDescriptor rowIdSlot = new SlotDescriptor(new SlotId(3), localTupleDescriptor);
+        rowIdSlot.setType(BIGINT);
+        rowIdSlot.setColumn(new Column(IcebergTable.ROW_ID, BIGINT));
+        localTupleDescriptor.addSlot(rowIdSlot);
+
+        // Only _row_source_id - should still be recognized as late materialization
+        SlotDescriptor rowSourceIdSlot = new SlotDescriptor(new SlotId(4), localTupleDescriptor);
+        rowSourceIdSlot.setType(INT);
+        rowSourceIdSlot.setColumn(new Column("_row_source_id", INT));
+        localTupleDescriptor.addSlot(rowSourceIdSlot);
+
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
+        List<Column> schema = Lists.newArrayList(new Column("id", INT), new Column("data", VARCHAR));
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table_partial", "iceberg_catalog",
+                "resource", "db", "table", "", schema, mockedNativeTableA, Maps.newHashMap());
+
+        IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
+                RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, localTupleDescriptor, Optional.empty(),
+                PartitionIdGenerator.of(), false, false);
+
+        FileScanTask fileScanTask = Lists.newArrayList(mockedNativeTableA.newScan().planFiles()).get(0);
+        long partitionId = scanRangeSource.addPartition(fileScanTask);
+
+        // Should NOT throw exception because _row_source_id indicates late materialization
+        THdfsScanRange hdfsScanRange = scanRangeSource.buildScanRange(
+                fileScanTask, fileScanTask.file(), partitionId);
+        Assertions.assertNotNull(hdfsScanRange);
+    }
 }
