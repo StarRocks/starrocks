@@ -26,7 +26,7 @@ scan:
     - "**/parquet-hadoop-bundle-1.15.2.jar"
     # io.grpc:grpc-netty-shaded (grpc-netty-shaded-1.63.0.jar) CVE-2025-55163
     - "**/grpc-netty-shaded-1.63.0.jar"
-    # from java extention
+    # from java extension
     - "**/parquet-jackson-1.15.2.jar"
     # from fe
     - "**/parquet-jackson-1.16.0.jar"
