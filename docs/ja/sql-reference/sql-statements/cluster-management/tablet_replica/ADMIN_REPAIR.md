@@ -12,8 +12,6 @@ displayed_sidebar: docs
 
 共有データクラスタ内のクラウドネイティブテーブルの場合、メタデータまたはデータファイルが失われた際に、履歴上の利用可能なバージョンへのロールバックを試行します。**これにより一部のタブレットの最新データが失われる可能性がある**ことにご注意ください。
 
-詳細な手順については、[レプリカの管理](../../../../administration/management/resource_management/Replica.md) を参照してください。
-
 :::tip
 
 この操作には、SYSTEM レベルの OPERATE 権限が必要です。[GRANT](../../account-management/GRANT.md) の指示に従って、この権限を付与することができます。
