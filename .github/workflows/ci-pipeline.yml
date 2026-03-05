@@ -246,7 +246,7 @@ jobs:
               - 'be/**/*.hh'
               - 'be/**/*.hpp'
               - 'be/**/*.hxx'
-              - 'be/CMakeLists.txt'
+              - 'be/**/CMakeLists.txt'
               - 'be/cmake_modules/**'
               - 'gensrc/**'
 
