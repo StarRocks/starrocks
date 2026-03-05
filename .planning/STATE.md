@@ -5,7 +5,7 @@
 See: .planning/PROJECT.md (updated 2026-03-04)
 
 **Core value:** Users can CREATE EXTERNAL CATALOG with ADBC and query remote Arrow Flight SQL databases with full JDBC-parity features
-**Current focus:** Phase 1 - Foundation
+**Current focus:** Phase 2 - Scanning (Phase 1 complete)
 
 ## Current Position
 
