@@ -951,6 +951,31 @@ build_arrow() {
     restore_compile_flags
 }
 
+# adbc
+build_adbc() {
+    check_if_source_exist $ADBC_SOURCE
+    cd $TP_SOURCE_DIR/$ADBC_SOURCE/c
+    mkdir -p build && cd build
+    rm -rf CMakeCache.txt CMakeFiles/
+    ${CMAKE_CMD} \
+        -DADBC_DRIVER_FLIGHTSQL=ON \
+        -DADBC_BUILD_SHARED=OFF \
+        -DADBC_BUILD_STATIC=ON \
+        -DADBC_BUILD_TESTS=OFF \
+        -DADBC_BUILD_BENCHMARKS=OFF \
+        -DADBC_BUILD_EXAMPLES=OFF \
+        -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
+        -DCMAKE_INSTALL_LIBDIR=lib64 \
+        -DCMAKE_PREFIX_PATH="${TP_INSTALL_DIR}" \
+        -DArrow_DIR="${TP_INSTALL_DIR}/lib64/cmake/Arrow" \
+        -DArrowFlight_DIR="${TP_INSTALL_DIR}/lib64/cmake/ArrowFlight" \
+        -DArrowFlightSQL_DIR="${TP_INSTALL_DIR}/lib64/cmake/ArrowFlightSQL" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -G "${CMAKE_GENERATOR}" ..
+    ${BUILD_SYSTEM} -j$PARALLEL
+    ${BUILD_SYSTEM} install
+}
+
 # s2
 build_s2() {
     check_if_source_exist $S2_SOURCE

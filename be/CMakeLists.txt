@@ -635,6 +635,8 @@ set(STARROCKS_DEPENDENCIES
     arrow
     arrow_flight
     arrow_flight_sql
+    adbc
+    adbc_driver_flightsql
     benchgen
     gRPC::grpc
     gRPC::grpc++
