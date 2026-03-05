@@ -93,7 +93,7 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
         this.partitionExprs = partitionExprs;
     }
 
-    public void updateSlotRef(Map<String, Column> nameToColumn) {
+    public void updateSlotRef(Map<ColumnId, Column> idToColumn) {
         for (ColumnIdExpr columnIdExpr : partitionExprs) {
             Expr expr = columnIdExpr.getExpr();
             SlotRef slotRef = getPartitionExprSlotRef(expr);
@@ -101,13 +101,13 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
                 LOG.warn("Unknown expr type: {}", ExprToSql.toSql(expr));
                 continue;
             }
-            // FIXME: use the slot ref's column name to find the partition column which maybe not the same as the slot ref's
-            //  column name.
-            String slotRefName = slotRef.getColumnName();
-            if (!nameToColumn.containsKey(slotRefName)) {
+            // column name is the original column name before rename.
+            ColumnId columnId = slotRef.getColumnId() != null
+                    ? slotRef.getColumnId() : ColumnId.create(slotRef.getColumnName());
+            if (!idToColumn.containsKey(columnId)) {
                 continue;
             }
-            Column partitionColumn = nameToColumn.get(slotRefName);
+            Column partitionColumn = idToColumn.get(columnId);
             // analyze partition expression
             analyzePartitionExpressionExpr(slotRef, partitionColumn, expr);
         }
