@@ -881,6 +881,14 @@ under the License.
             <groupId>org.apache.arrow</groupId>
             <artifactId>arrow-jdbc</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.apache.arrow.adbc</groupId>
+            <artifactId>adbc-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.arrow.adbc</groupId>
+            <artifactId>adbc-driver-flight-sql</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>software.amazon.awssdk</groupId>

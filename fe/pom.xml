@@ -69,6 +69,7 @@ under the License.
         <hikaricp.version>7.0.2</hikaricp.version>
         <kafka-clients.version>3.9.1</kafka-clients.version>
         <arrow.version>18.0.0</arrow.version>
+        <adbc.version>0.19.0</adbc.version>
         <grpc.version>1.63.0</grpc.version>
         <io.netty.version>4.1.132.Final</io.netty.version>
         <puppycrawl.version>10.21.1</puppycrawl.version>
@@ -1341,6 +1342,18 @@ under the License.
                 <groupId>org.apache.arrow</groupId>
                 <artifactId>arrow-jdbc</artifactId>
                 <version>${arrow.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.arrow.adbc</groupId>
+                <artifactId>adbc-core</artifactId>
+                <version>${adbc.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.arrow.adbc</groupId>
+                <artifactId>adbc-driver-flight-sql</artifactId>
+                <version>${adbc.version}</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.owasp.encoder/encoder -->
