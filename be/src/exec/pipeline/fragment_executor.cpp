@@ -576,7 +576,7 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
                                  scan_ranges, scan_ranges_per_driver_seq, scan_node->id(), group_execution_scan_dop,
                                  _is_in_colocate_exec_group(scan_node->id()), enable_tablet_internal_parallel,
                                  tablet_internal_parallel_mode, enable_shared_scan));
-        morsel_queue_factory->set_has_more(has_more_morsel);
+        morsel_queue_factory->set_has_more_scan_ranges(has_more_morsel);
         scan_node->enable_shared_scan(enable_shared_scan && morsel_queue_factory->is_shared());
         morsel_queue_factories.emplace(scan_node->id(), std::move(morsel_queue_factory));
     }
@@ -1066,7 +1066,7 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
         bool has_more_morsel = false;
         pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, true, &morsels, &has_more_morsel);
         RETURN_IF_ERROR(morsel_queue_factory->append_morsels(0, std::move(morsels)));
-        morsel_queue_factory->set_has_more(has_more_morsel);
+        morsel_queue_factory->set_has_more_scan_ranges(has_more_morsel);
         notify_ids.insert(node_id);
 
         if (morsel_queue_factory->reach_limit()) {
@@ -1098,7 +1098,7 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
                 pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, true, &morsels, &local_has_more);
                 RETURN_IF_ERROR(morsel_queue_factory->append_morsels(driver_seq, std::move(morsels)));
             }
-            morsel_queue_factory->set_has_more(has_more_morsel);
+            morsel_queue_factory->set_has_more_scan_ranges(has_more_morsel);
             notify_ids.insert(node_id);
 
             if (morsel_queue_factory->reach_limit()) {
