@@ -46,7 +46,11 @@ DEFINE_FAIL_POINT(node_channel_set_brpc_timeout);
 
 class OlapTableSink; // forward declaration
 NodeChannel::NodeChannel(OlapTableSink* parent, int64_t node_id, bool is_incremental, ExprContext* where_clause)
-        : _parent(parent), _node_id(node_id), _is_incremental(is_incremental), _where_clause(where_clause) {
+        : _parent(parent),
+          _node_id(node_id),
+          _enable_colocate_mv_index(config::enable_load_colocate_mv),
+          _is_incremental(is_incremental),
+          _where_clause(where_clause) {
     // restrict the chunk memory usage of send queue & brpc write buffer
     _mem_tracker = std::make_unique<MemTracker>(config::send_channel_buffer_limit, "", nullptr);
     _ts_profile = _parent->ts_profile();
