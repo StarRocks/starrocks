@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+keywords: ['alter table']
 ---
 
 # ALTER TABLE
