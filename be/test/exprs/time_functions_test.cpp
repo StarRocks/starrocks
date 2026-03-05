@@ -4366,7 +4366,6 @@ TEST_F(TimeFunctionsTest, unixtimeToDatetimeInvalidTimestamp) {
             auto nullable_col = ColumnHelper::as_column<NullableColumn>(result);
         }
 
-
         delete fn_ctx;
     }
 }
