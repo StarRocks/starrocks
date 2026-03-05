@@ -19,7 +19,6 @@
 #include <vector>
 
 #include "column/chunk.h"
-#include "common/config.h"
 #include "exec/sorting/sorting.h"
 #include "gutil/strings/substitute.h"
 #include "storage/chunk_helper.h"

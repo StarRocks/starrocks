@@ -22,6 +22,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
+#include "common/config.h"
 #include "common/logging.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
@@ -106,22 +107,6 @@ inline AggDataPtr AllocateState<HashMapWithKey>::operator()(std::nullptr_t) {
     }
 }
 
-template <bool UseIntermediateAsOutput>
-bool AggFunctionTypes::is_result_nullable() const {
-    if constexpr (UseIntermediateAsOutput) {
-        // If using intermediate results as output, no output will be generated and only the input will be serialized.
-        // Therefore, only judge whether the input is nullable to decide whether to serialize null data.
-        return has_nullable_child || serialize_always_nullable;
-    } else {
-        // `is_nullable` means whether the output MAY be nullable. It will be false only when the output is always non-nullable.
-        // Therefore, we need to decide whether the output is really nullable case by case:
-        // 1. Same as input: `has_nullable_child` = `has_nullable_child && is_nullable(true)`.
-        // 2. Always non-nullable: `false` = `has_nullable_child && is_nullable(false)`, eg. count, count distinct, and bitmap_union_int.
-        // 3. Always nullable: `is_always_nullable_result`.
-        return (has_nullable_child && is_nullable) || is_always_nullable_result;
-    }
-}
-
 bool AggFunctionTypes::use_nullable_fn(bool use_intermediate_as_output) const {
     // The non-nullable version functions assume that both the input and output are non-nullable, while the nullable version
     // functions support nullable input or nullable output, which will judge whether the input and output are nullable.
@@ -173,6 +158,13 @@ bool AggrAutoContext::is_low_reduction(const size_t agg_count, const size_t chun
 
 Status init_udaf_context(int64_t fid, const std::string& url, const std::string& checksum, const std::string& symbol,
                          FunctionContext* context);
+
+int64_t Aggregator::get_two_level_threahold() {
+    if (config::two_level_memory_threshold < 0) {
+        return agg::two_level_memory_threshold;
+    }
+    return config::two_level_memory_threshold;
+}
 
 AggregatorParamsPtr convert_to_aggregator_params(const TPlanNode& tnode) {
     auto params = std::make_shared<AggregatorParams>();

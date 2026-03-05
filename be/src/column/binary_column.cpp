@@ -23,13 +23,24 @@
 #include "column/bytes.h"
 #include "column/mysql_row_buffer.h"
 #include "column/vectorized_fwd.h"
-#include "common/logging.h"
+#include "common/config.h"
 #include "gutil/bits.h"
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
 
 namespace starrocks {
+template <typename T>
+BinaryColumnBase<T>::BinaryColumnBase(ContainerResource resource, Offsets offsets)
+        : _bytes(), _offsets(std::move(offsets)), _resource(std::move(resource)) {
+    if (_offsets.empty()) {
+        _offsets.emplace_back(0);
+    }
+    if (!config::enable_zero_copy_from_page_cache) {
+        _ensure_materialized();
+    }
+}
+
 template <typename T>
 void BinaryColumnBase<T>::check_or_die() const {
     CHECK_EQ(get_immutable_bytes().size(), _offsets.back());
@@ -426,6 +437,21 @@ void BinaryColumnBase<T>::append_value_multiple_times(const void* value, size_t 
         _offsets.emplace_back(bytes.size());
     }
     invalidate_slice_cache();
+}
+
+template <typename T>
+void BinaryColumnBase<T>::build_slices(Container& slices) const {
+    if constexpr (std::is_same_v<T, uint32_t>) {
+        DCHECK_LT(_total_bytes(), (size_t)UINT32_MAX) << "BinaryColumn size overflow";
+    }
+
+    DCHECK(_offsets.size() > 0);
+
+    slices.resize(_offsets.size() - 1);
+    const uint8_t* data_ptr = _data_base();
+    for (size_t i = 0; i < _offsets.size() - 1; ++i) {
+        slices[i] = {data_ptr + _offsets[i], _offsets[i + 1] - _offsets[i]};
+    }
 }
 
 template <typename T>

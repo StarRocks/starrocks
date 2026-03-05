@@ -14,6 +14,7 @@
 
 #include "connector/sink_memory_manager.h"
 
+#include "common/config.h"
 #include "runtime/exec_env.h"
 
 namespace starrocks::connector {

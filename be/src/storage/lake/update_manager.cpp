@@ -18,6 +18,8 @@
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/pretty_printer.h"
+#include "common/config.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "runtime/current_thread.h"
@@ -82,6 +84,10 @@ UpdateManager::~UpdateManager() {
     _index_cache.clear();
     _update_state_cache.clear();
     _compaction_cache.clear();
+}
+
+UpdateManager::PkIndexShard& UpdateManager::_get_pk_index_shard(int64_t tabletId) {
+    return _pk_index_shards[tabletId & (config::pk_index_map_shard_size - 1)];
 }
 
 inline std::string cache_key(uint32_t tablet_id, int64_t txn_id) {
@@ -619,7 +625,7 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
         update_cids.push_back((uint32_t)ai_cid);
     }
 
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(tablet->metadata_root_location()));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(tablet->metadata_root_location()));
 
     TxnLogPB_OpWrite new_rows_op;
     uint64_t total_rows = 0;
@@ -1381,7 +1387,7 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, c
     for (const auto& [rssid, rowids] : rowids_by_rssid) {
         if (fs == nullptr) {
             auto root_path = params.tablet->metadata_root_location();
-            ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(root_path));
+            ASSIGN_OR_RETURN(fs, FileSystemFactory::CreateSharedFromString(root_path));
         }
 
         if (params.container.rssid_to_file().count(rssid) == 0) {
@@ -1396,7 +1402,7 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, c
     if (auto_increment_state != nullptr && with_default) {
         if (fs == nullptr) {
             auto root_path = params.tablet->metadata_root_location();
-            ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(root_path));
+            ASSIGN_OR_RETURN(fs, FileSystemFactory::CreateSharedFromString(root_path));
         }
         uint32_t segment_id = auto_increment_state->segment_id;
         const std::vector<uint32_t>& rowids = auto_increment_state->rowids;

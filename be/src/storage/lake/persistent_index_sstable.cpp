@@ -18,7 +18,9 @@
 
 #include "base/debug/trace.h"
 #include "base/testutil/sync_point.h"
+#include "common/config.h"
 #include "fs/fs.h"
+#include "fs/fs_factory.h"
 #include "fs/key_cache.h"
 #include "gen_cpp/types.pb.h"
 #include "runtime/starrocks_metrics.h"
@@ -35,7 +37,7 @@ Status drop_corrupted_sstable_cache(const std::string& path) {
     if (!config::lake_clear_corrupted_cache_data) {
         return Status::NotSupported("lake_clear_corrupted_cache_data is turned off");
     }
-    auto fs_or = FileSystem::CreateSharedFromString(path);
+    auto fs_or = FileSystemFactory::CreateSharedFromString(path);
     if (!fs_or.ok()) {
         LOG(INFO) << "clear corrupted cache for " << path << ", error:" << fs_or.status();
         return fs_or.status();

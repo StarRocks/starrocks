@@ -276,7 +276,7 @@ class ArrayOverlap {
 public:
     using CppType = RunTimeCppType<LT>;
     using ColumnType = RunTimeColumnType<LT>;
-    using DataArray = typename RunTimeTypeTraits<LT>::ProxyContainerType;
+    using DataArray = typename RunTimeTypeTraits<LT>::ImmContainerType;
     using HashFunc = PhmapDefaultHashFunc<LT, PhmapSeed1>;
     using HashSet = phmap::flat_hash_set<CppType, HashFunc>;
 
@@ -877,7 +877,6 @@ private:
         for (size_t i = 0; i < chunk_size; i++) {
             std::reverse(pool.begin() + array_offsets[i], pool.begin() + array_offsets[i + 1]);
         }
-        json_column->reset_cache();
     }
 
     static void _reverse_data_column(Column* column, const Buffer<uint32_t>& offsets, size_t chunk_size) {

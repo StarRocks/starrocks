@@ -20,6 +20,7 @@ set(EXPR_CORE_TEST_FILES
     cast_expr_core_test.cpp
     function_context_core_test.cpp
     expr_core_test.cpp
+    expr_factory_core_test.cpp
     expr_context_core_test.cpp
     hash_functions_test.cpp
     hyperloglog_functions_test.cpp
@@ -39,7 +40,6 @@ set(EXPR_CORE_TEST_FILES
     json_each_core_test.cpp
     struct_functions_test.cpp
     subfield_expr_test.cpp
-    variant_path_parser_test.cpp
     vectorized_literal_test.cpp
 )
 

@@ -376,7 +376,7 @@ public class BestMvSelector {
                 }
                 score.baseTable = olapScanOperator.getTable();
                 score.sortScore += calcSortScore(olapScanOperator.getTable(), equivalenceColumns, nonEquivalenceColumns);
-                score.distScore += calcDistScore(score.baseTable, distEqCols);
+                score.distScore += calcDistScore(score.baseTable, distEqCols, equivalenceColumns);
                 score.scanCount += 1;
             }
             return null;
@@ -610,20 +610,29 @@ public class BestMvSelector {
     }
 
     private int calcDistScore(Table table,
+                              Set<String> distEqCols,
                               Set<String> equivalenceColumns) {
         if (table == null || !(table instanceof OlapTable)) {
-            return 0;
-        }
-        if (!isColocateTable(table)) {
             return 0;
         }
         OlapTable olapTable = (OlapTable) table;
         Set<String> distCols = getTableDistColumns(olapTable);
         int score = 0;
+
+        // For tables actually in a colocate group: consider distEqCols (grouping keys, join keys, distinct columns)
+        // for colocation join optimization
+        // For all hash-distributed tables: consider equivalenceColumns (query filter columns)
+        // for tablet pruning benefit
+        // Only hash distribution supports tablet pruning
+        boolean isColocateTable = isColocateTable(table);
+        int bonus = isColocateTable ? 2 : 1;
         for (String distCol : distCols) {
             String columName = distCol.toLowerCase();
+            if (distEqCols.contains(columName)) {
+                score += bonus * 2;
+            }
             if (equivalenceColumns.contains(columName)) {
-                score += 2;
+                score += bonus;
             }
         }
         return score;

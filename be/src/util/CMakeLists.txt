@@ -36,6 +36,7 @@ set(UTIL_FILES
 # perf-counters.cpp
   static_asserts.cpp
   stack_util.cpp
+  time_guard.cpp
   system_metrics.cpp
 # coding_util.cpp
   thrift_rpc_helper.cpp

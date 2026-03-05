@@ -14,7 +14,6 @@ set(EXEC_FILES
         ./column/decimalv3_column_test.cpp
         ./column/fixed_length_column_extended_test.cpp
         ./column/json_column_test.cpp
-        ./column/variant_column_extended_test.cpp
         ./column/map_column_test.cpp
         ./column/struct_column_test.cpp
         ./column/nullable_column_test.cpp
@@ -41,7 +40,6 @@ set(EXEC_FILES
         ./fs/fs_memory_test.cpp
         ./fs/fs_s3_test.cpp
         ./fs/fs_test.cpp
-        ./fs/encrypt_file_test.cpp
         ./fs/key_cache_test.cpp
         ./fs/output_stream_wrapper_test.cpp
         ./fs/poco_http_client_test.cpp
@@ -356,6 +354,7 @@ add_subdirectory(types)
 add_subdirectory(runtime)
 add_subdirectory(exprs)
 add_subdirectory(io)
+add_subdirectory(fs)
 
 add_library(starrocks_test_objs OBJECT ${EXEC_FILES})
 target_link_libraries(starrocks_test_objs PRIVATE StarRocksPCH)

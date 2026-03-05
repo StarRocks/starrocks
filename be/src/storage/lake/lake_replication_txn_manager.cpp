@@ -17,6 +17,8 @@
 #include "agent/master_info.h"
 #include "base/debug/trace.h"
 #include "base/utility/defer_op.h"
+#include "common/config.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_starlet.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
@@ -81,7 +83,7 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
 #else
     auto src_meta_dir = "test_lake_replication/meta";
     auto src_data_dir = "test_lake_replication/data";
-    auto shared_src_fs_st_or = FileSystem::CreateSharedFromString(src_data_dir);
+    auto shared_src_fs_st_or = FileSystemFactory::CreateSharedFromString(src_data_dir);
     if (!shared_src_fs_st_or.ok()) {
         return Status::Corruption("Failed to create virtual starlet filesystem");
     }

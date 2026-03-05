@@ -34,6 +34,7 @@
 
 #pragma once
 
+#include "config_cow.h"
 #include "configbase.h"
 
 namespace starrocks::config {
@@ -1539,6 +1540,10 @@ CONF_mInt32(pindex_rebuild_load_wait_seconds, "20");
 // Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
 CONF_Int64(query_cache_capacity, "536870912");
 
+// Experimental internal switch: whether to enable lake capture_tablet_and_rowsets for query cache stale entries.
+// This config is temporary and may be removed after the related lake capture implementation is fixed.
+CONF_mBool(experimental_enable_lake_capture_tablet_and_rowsets, "false");
+
 // When query cache enabled, the operators in the drivers contains cache operator are multilane
 // operators, if the number of lanes is big, Fragment Instance would spend too much time to prepare
 // operators since the number of operators scale up with the number of lanes.
@@ -1923,11 +1928,6 @@ CONF_mBool(enable_fetch_local_pass_through, "true");
 CONF_mInt64(max_lookup_batch_request, "8");
 // For table schema service: max retry attempts for fetching schema from FE.
 CONF_mInt32(table_schema_service_max_retries, "3");
-
-// Enable cow optimization for column operations, used to avoid the overhead of reference counting when accessing columns.
-CONF_mBool(enable_cow_optimization, "true");
-// The diagnose level for cow optimization, 0 means no diagnose, 1 means diagnose when use_count > 1, 2 means diagnose when use_count > 2.
-CONF_Int32(cow_optimization_diagnose_level, "0");
 
 // If the first predicate column's selectivity is higher than this threshold, trigger sampling
 // to potentially find a better predicate order. When selectivity is already good (low), sampling

@@ -31,6 +31,7 @@
 #include "common/thread/thread.h"
 #include "common/thread/threadpool.h"
 #include "exec/write_combined_txn_log.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/tablet_schema.pb.h"
 #include "gutil/strings/join.h"
@@ -1639,7 +1640,7 @@ static Status check_missing_files(const TabletMetadata& metadata, const lake::Ta
     std::shared_ptr<FileSystem> fs = nullptr;
     auto check_file = [&](const std::string& path, const std::string& filename) -> Status {
         if (fs == nullptr) {
-            ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(path));
+            ASSIGN_OR_RETURN(fs, FileSystemFactory::CreateSharedFromString(path));
         }
         auto st = fs->path_exists(path);
         if (st.is_not_found()) {

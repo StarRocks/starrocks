@@ -19,6 +19,7 @@
 #include <thread>
 
 #include "fs/fs.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
@@ -56,12 +57,12 @@ PrimaryKeyDump::PrimaryKeyDump(const std::string& dump_filepath) {
 }
 
 Status PrimaryKeyDump::dump_file_exist() {
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_dump_filepath));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(_dump_filepath));
     return fs->path_exists(_dump_filepath);
 }
 
 Status PrimaryKeyDump::init_dump_file() {
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_dump_filepath));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(_dump_filepath));
     WritableFileOptions wblock_opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     ASSIGN_OR_RETURN(_dump_wfile, fs->new_writable_file(wblock_opts, _dump_filepath));
     return Status::OK();
@@ -169,7 +170,7 @@ public:
     Status init(const TabletSchemaCSPtr& tablet_schema, const std::string& tablet_path) {
         _tmp_file = tablet_path + "/PrimaryKeyChunkDumper_" + pthread_to_string();
         (void)fs::delete_file(_tmp_file);
-        ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(tablet_path));
+        ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(tablet_path));
         WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::OpenMode::CREATE_OR_OPEN_WITH_TRUNCATE};
         ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(opts, _tmp_file));
         SegmentWriterOptions writer_options;
@@ -206,7 +207,7 @@ public:
     StatusOr<ChunkIteratorPtr> read(const std::string& dump_filepath, const Schema& schema,
                                     const TabletSchemaCSPtr& tablet_schema, const PrimaryKeyColumnPB& pk_column_pb) {
         RETURN_IF_ERROR(_copy_to_tmp_file(dump_filepath, pk_column_pb));
-        ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_tmp_file));
+        ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(_tmp_file));
         SegmentReadOptions seg_options;
         seg_options.fs = fs;
         seg_options.stats = &_stats;
@@ -332,7 +333,7 @@ Status PrimaryKeyDump::dump() {
 
 Status PrimaryKeyDump::read_deserialize_from_file(const std::string& dump_filepath, PrimaryKeyDumpPB* dump_pb) {
     std::unique_ptr<RandomAccessFile> rfile;
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dump_filepath));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(dump_filepath));
     ASSIGN_OR_RETURN(rfile, fs->new_random_access_file(dump_filepath));
     ASSIGN_OR_RETURN(int64_t file_size, rfile->get_size());
     // 1. get protobuf size from tail
@@ -356,7 +357,7 @@ Status PrimaryKeyDump::deserialize_pkcol_pkindex_from_meta(
         const std::function<void(uint32_t, const Chunk&)>& column_key_func,
         const std::function<void(const std::string&, const PartialKVsPB&)>& index_kvs_func) {
     std::unique_ptr<RandomAccessFile> rfile;
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dump_filepath));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(dump_filepath));
     ASSIGN_OR_RETURN(rfile, fs->new_random_access_file(dump_filepath));
     // 1. deserialize pk column
     for (const auto& primary_key_column : dump_pb.primary_key_column()) {

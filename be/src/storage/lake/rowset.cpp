@@ -20,6 +20,7 @@
 #include "base/debug/trace.h"
 #include "column/datum_convert.h"
 #include "common/config.h"
+#include "fs/fs_factory.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
 #include "storage/delete_predicates.h"
@@ -267,7 +268,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
         seg_options.fs = options.lake_io_opts.fs;
     } else {
         auto root_loc = _tablet_mgr->tablet_root_location(tablet_id());
-        ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(root_loc));
+        ASSIGN_OR_RETURN(seg_options.fs, FileSystemFactory::CreateSharedFromString(root_loc));
     }
     seg_options.stats = options.stats;
     seg_options.ranges = options.ranges;
@@ -445,7 +446,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
     seg_iterators.reserve(segments.size());
     auto root_loc = _tablet_mgr->tablet_root_location(tablet_id());
     SegmentReadOptions seg_options;
-    ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(root_loc));
+    ASSIGN_OR_RETURN(seg_options.fs, FileSystemFactory::CreateSharedFromString(root_loc));
     seg_options.stats = stats;
 
     ASSIGN_OR_RETURN(auto shared_segment_range, get_seek_range());
@@ -480,7 +481,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
     std::vector<ChunkIteratorPtr> seg_iterators;
     seg_iterators.reserve(segments.size());
     SegmentReadOptions seg_options;
-    ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(root_loc));
+    ASSIGN_OR_RETURN(seg_options.fs, FileSystemFactory::CreateSharedFromString(root_loc));
     seg_options.stats = stats;
     seg_options.lake_io_opts.fs = seg_options.fs;
     seg_options.lake_io_opts.location_provider = _tablet_mgr->location_provider();

@@ -27,7 +27,9 @@
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
+#include "common/config.h"
 #include "common/logging.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
@@ -92,7 +94,7 @@ public:
         _tablet_metadata = generate_tablet_metadata(PRIMARY_KEYS);
         _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
         _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
-        ASSIGN_OR_ABORT(_fs, FileSystem::CreateSharedFromString(kTestDirectory));
+        ASSIGN_OR_ABORT(_fs, FileSystemFactory::CreateSharedFromString(kTestDirectory));
     }
 
 protected:

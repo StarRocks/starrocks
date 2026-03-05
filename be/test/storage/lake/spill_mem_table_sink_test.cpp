@@ -23,6 +23,7 @@
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
+#include "common/config.h"
 #include "common/logging.h"
 #include "common/runtime_profile.h"
 #include "exec/spill/options.h"

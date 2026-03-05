@@ -39,7 +39,9 @@
 
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
+#include "common/config.h"
 #include "fmt/format.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
 #include "rowset_options.h"
@@ -213,7 +215,7 @@ StatusOr<std::shared_ptr<Segment>> Rowset::_load_segment(int32_t idx, const Tabl
 // use partial_rowset_footer to indicate the segment footer position and size
 // if partial_rowset_footer is nullptr, the segment_footer is at the end of the segment_file
 Status Rowset::do_load() {
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_rowset_path));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(_rowset_path));
     _segments.clear();
     size_t footer_size_hint = 16 * 1024;
     for (int seg_id = 0; seg_id < num_segments(); ++seg_id) {
@@ -247,7 +249,7 @@ void Rowset::warmup_lrucache() {
 // this function is only used for partial update so far
 // make sure segment_footer is in the end of segment_file before call this function
 Status Rowset::reload() {
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_rowset_path));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(_rowset_path));
     _segments.clear();
     size_t footer_size_hint = 16 * 1024;
     for (int seg_id = 0; seg_id < num_segments(); ++seg_id) {
@@ -267,7 +269,7 @@ Status Rowset::reload_segment(int32_t segment_id) {
         LOG(WARNING) << "Error segment id: " << segment_id;
         return Status::InternalError("Error segment id");
     }
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_rowset_path));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(_rowset_path));
     size_t footer_size_hint = 16 * 1024;
     auto res = _load_segment(segment_id, _schema, fs, nullptr, &footer_size_hint);
     if (!res.ok()) {
@@ -283,7 +285,7 @@ Status Rowset::reload_segment_with_schema(int32_t segment_id, TabletSchemaCSPtr&
         LOG(WARNING) << "Error segment id: " << segment_id;
         return Status::InternalError("Error segment id");
     }
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_rowset_path));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(_rowset_path));
     size_t footer_size_hint = 16 * 1024;
     auto res = _load_segment(segment_id, schema, fs, nullptr, &footer_size_hint);
     if (!res.ok()) {
@@ -348,7 +350,7 @@ Status Rowset::remove() {
     VLOG(2) << "Removing files in rowset id=" << unique_id() << " version=" << start_version() << "-" << end_version()
             << " tablet_id=" << _rowset_meta->tablet_id();
     Status result;
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_rowset_path));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(_rowset_path));
     auto merge_status = [&](const Status& st) {
         if (result.ok() && !st.ok() && !st.is_not_found()) result = st;
     };
@@ -396,7 +398,7 @@ Status Rowset::remove() {
 // KVStore for this rowset's tablet, avoiding metadata corruption when the same
 // tablet exists on multiple disks.
 Status Rowset::remove_delta_column_group() {
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_rowset_path));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(_rowset_path));
     return _remove_delta_column_group_files(fs);
 }
 
@@ -757,7 +759,7 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     RETURN_IF_ERROR(load());
 
     SegmentReadOptions seg_options;
-    ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_rowset_path));
+    ASSIGN_OR_RETURN(seg_options.fs, FileSystemFactory::CreateSharedFromString(_rowset_path));
     seg_options.stats = options.stats;
     seg_options.ranges = options.ranges;
     seg_options.pred_tree = options.pred_tree;
@@ -887,7 +889,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_segment_iterators2(const Sch
     RETURN_IF_ERROR(load());
 
     SegmentReadOptions seg_options;
-    ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_rowset_path));
+    ASSIGN_OR_RETURN(seg_options.fs, FileSystemFactory::CreateSharedFromString(_rowset_path));
     seg_options.stats = stats;
     seg_options.is_primary_keys = schema.keys_type() == KeysType::PRIMARY_KEYS;
     seg_options.tablet_id = rowset_meta()->tablet_id();
@@ -935,7 +937,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_segment_iterators2(const Sch
 StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_update_file_iterators(const Schema& schema,
                                                                           OlapReaderStatistics* stats) {
     SegmentReadOptions seg_options;
-    ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_rowset_path));
+    ASSIGN_OR_RETURN(seg_options.fs, FileSystemFactory::CreateSharedFromString(_rowset_path));
     seg_options.stats = stats;
     seg_options.tablet_id = rowset_meta()->tablet_id();
     seg_options.rowset_id = rowset_meta()->get_rowset_seg_id();
@@ -969,7 +971,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_update_file_iterators(const 
 StatusOr<ChunkIteratorPtr> Rowset::get_update_file_iterator(const Schema& schema, uint32_t update_file_id,
                                                             OlapReaderStatistics* stats) {
     SegmentReadOptions seg_options;
-    ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_rowset_path));
+    ASSIGN_OR_RETURN(seg_options.fs, FileSystemFactory::CreateSharedFromString(_rowset_path));
     seg_options.stats = stats;
     seg_options.tablet_id = rowset_meta()->tablet_id();
     seg_options.rowset_id = rowset_meta()->get_rowset_seg_id();

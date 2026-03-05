@@ -38,7 +38,6 @@
 #include <functional>
 
 #include "base/string/slice.h"
-#include "common/config.h"
 #include "common/status.h"
 #include "gen_cpp/segment.pb.h"
 #include "storage/types.h"
@@ -52,10 +51,7 @@ class PageBuilder;
 class PageDecoder;
 class PageBuilderOptions;
 
-inline bool enable_non_string_column_dict_encoding() {
-    double epsilon = 0.0001;
-    return std::abs(config::dictionary_encoding_ratio_for_non_string_column - 0) > epsilon;
-}
+bool enable_non_string_column_dict_encoding();
 
 // We dont make TYPE_TINYINT support dict encoding. The reason is that TYPE_TINYINT is only have
 // 256 different values, that is too small to make our speculation mechanism work. And according

@@ -24,6 +24,7 @@
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
+#include "common/config.h"
 #include "common/logging.h"
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"

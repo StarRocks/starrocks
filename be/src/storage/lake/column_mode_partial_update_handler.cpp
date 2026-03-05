@@ -18,7 +18,9 @@
 #include "base/phmap/phmap.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
+#include "common/config.h"
 #include "common/tracer.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "gutil/strings/substitute.h"
@@ -281,7 +283,7 @@ StatusOr<ChunkPtr> ColumnModePartialUpdateHandler::_read_from_source_segment(con
                                            fileinfo, rssid - rowset_id /* segment id inside rowset */,
                                            &footer_size_hint, lake_io_opts, true, params.tablet_schema));
     SegmentReadOptions seg_options;
-    ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(fileinfo.path));
+    ASSIGN_OR_RETURN(seg_options.fs, FileSystemFactory::CreateSharedFromString(fileinfo.path));
     seg_options.stats = &stats;
     seg_options.is_primary_keys = true;
     seg_options.tablet_id = params.tablet->id();

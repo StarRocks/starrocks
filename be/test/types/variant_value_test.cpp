@@ -47,14 +47,14 @@ uint32_t decode_size_header(const uint8_t* bytes) {
 
 } // namespace
 
-TEST(VariantRowValueTypeCoreTest, CreateFromNullMetadataReturnsNullVariant) {
+TEST(VariantRowValueTest, CreateFromNullMetadataReturnsNullVariant) {
     auto row = VariantRowValue::create("", "");
     ASSERT_TRUE(row.ok());
     EXPECT_EQ(row->get_metadata().raw(), VariantMetadata::kEmptyMetadata);
     EXPECT_EQ(row->get_value().raw(), VariantValue::kEmptyValue);
 }
 
-TEST(VariantRowValueTypeCoreTest, CreateFromSliceParsesMetadataAndValue) {
+TEST(VariantRowValueTest, CreateFromSliceParsesMetadataAndValue) {
     std::string value = make_primitive_value(VariantType::INT8, std::string(1, static_cast<char>(42)));
     std::string encoded = make_encoded_variant(VariantMetadata::kEmptyMetadata, value);
 
@@ -64,7 +64,7 @@ TEST(VariantRowValueTypeCoreTest, CreateFromSliceParsesMetadataAndValue) {
     EXPECT_EQ(row->get_value().raw(), value);
 }
 
-TEST(VariantRowValueTypeCoreTest, CreateFromSliceRejectsInvalidInput) {
+TEST(VariantRowValueTest, CreateFromSliceRejectsInvalidInput) {
     Slice null_data_slice(static_cast<const char*>(nullptr), sizeof(uint32_t));
     auto null_data = VariantRowValue::create(null_data_slice);
     ASSERT_FALSE(null_data.ok());
@@ -83,7 +83,7 @@ TEST(VariantRowValueTypeCoreTest, CreateFromSliceRejectsInvalidInput) {
     EXPECT_TRUE(too_large.status().to_string().find("exceeds maximum limit") != std::string::npos);
 }
 
-TEST(VariantRowValueTypeCoreTest, ValidateMetadataRejectsInvalidHeader) {
+TEST(VariantRowValueTest, ValidateMetadataRejectsInvalidHeader) {
     auto short_meta = VariantRowValue::validate_metadata(std::string_view("\x01\x00", 2));
     EXPECT_FALSE(short_meta.ok());
 
@@ -92,7 +92,7 @@ TEST(VariantRowValueTypeCoreTest, ValidateMetadataRejectsInvalidHeader) {
     EXPECT_FALSE(unsupported.ok());
 }
 
-TEST(VariantRowValueTypeCoreTest, SerializeRoundTrip) {
+TEST(VariantRowValueTest, SerializeRoundTrip) {
     std::string value = make_primitive_value(VariantType::INT32, std::string_view("\x01\x00\x00\x00", 4));
     auto row = VariantRowValue::create(VariantMetadata::kEmptyMetadata, value);
     ASSERT_TRUE(row.ok());
@@ -109,7 +109,7 @@ TEST(VariantRowValueTypeCoreTest, SerializeRoundTrip) {
     EXPECT_EQ(encoded_actual, encoded_expected);
 }
 
-TEST(VariantRowValueTypeCoreTest, SerializeDefaultVariantUsesCanonicalEmptyPayload) {
+TEST(VariantRowValueTest, SerializeDefaultVariantUsesCanonicalEmptyPayload) {
     VariantRowValue row;
     std::vector<uint8_t> buffer(row.serialize_size(), 0);
     size_t written = row.serialize(buffer.data());
@@ -122,7 +122,7 @@ TEST(VariantRowValueTypeCoreTest, SerializeDefaultVariantUsesCanonicalEmptyPaylo
     EXPECT_EQ(payload, std::string(VariantMetadata::kEmptyMetadata) + std::string(VariantValue::kEmptyValue));
 }
 
-TEST(VariantRowValueTypeCoreTest, CopyAndMoveKeepViewsCorrectlyBound) {
+TEST(VariantRowValueTest, CopyAndMoveKeepViewsCorrectlyBound) {
     std::string value = make_primitive_value(VariantType::INT16, std::string_view("\x39\x30", 2));
     VariantRowValue original(VariantMetadata::kEmptyMetadata, value);
 
@@ -139,7 +139,7 @@ TEST(VariantRowValueTypeCoreTest, CopyAndMoveKeepViewsCorrectlyBound) {
     EXPECT_EQ(copied.get_value().raw(), VariantValue::kEmptyValue);
 }
 
-TEST(VariantRowValueTypeCoreTest, AssignmentOperatorsPreserveValueAndMovedFromState) {
+TEST(VariantRowValueTest, AssignmentOperatorsPreserveValueAndMovedFromState) {
     std::string src_value = make_primitive_value(VariantType::INT8, std::string(1, static_cast<char>(7)));
     VariantRowValue source(VariantMetadata::kEmptyMetadata, src_value);
 
@@ -158,7 +158,7 @@ TEST(VariantRowValueTypeCoreTest, AssignmentOperatorsPreserveValueAndMovedFromSt
     EXPECT_EQ(source.get_value().raw(), VariantValue::kEmptyValue);
 }
 
-TEST(VariantRowValueTypeCoreTest, CompareOperatorsFollowRawOrdering) {
+TEST(VariantRowValueTest, CompareOperatorsFollowRawOrdering) {
     std::string low_value = make_primitive_value(VariantType::INT8, std::string(1, static_cast<char>(1)));
     std::string high_value = make_primitive_value(VariantType::INT8, std::string(1, static_cast<char>(2)));
 
