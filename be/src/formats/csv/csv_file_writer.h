@@ -16,6 +16,7 @@
 
 #include "formats/csv/converter.h"
 #include "formats/file_writer.h"
+#include "gen_cpp/Types_types.h"
 #include "io/formatted_output_stream.h"
 
 namespace starrocks {
@@ -64,7 +65,7 @@ public:
 
     Status write(Chunk* chunk) override;
 
-    CommitResult commit() override;
+    CommitResult close() override;
 
 private:
     const std::string _location;

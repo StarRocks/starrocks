@@ -23,12 +23,12 @@
 #include <vector>
 
 #include "base/hash/hash.h"
+#include "base/phmap/phmap.h"
 #include "bench/bench_util.h"
 #include "exprs/hash_functions.h"
 #include "exprs/time_functions.h"
 #include "runtime/runtime_state.h"
 #include "testutil/function_utils.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 

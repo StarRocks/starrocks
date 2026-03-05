@@ -17,24 +17,21 @@
 
 package com.starrocks.fs.hdfs;
 
+import java.util.Objects;
+
 public class HdfsFsIdentity {
 
-    private final String hostName;
+    private final String uriIdentity;
     private final String ugiInfo;
 
-    public HdfsFsIdentity(String hostName, String ugiInfo) {
-        this.hostName = hostName;
+    public HdfsFsIdentity(String uriIdentity, String ugiInfo) {
+        this.uriIdentity = uriIdentity;
         this.ugiInfo = ugiInfo;
     }
 
     @Override
     public int hashCode() {
-        final int prime = 31;
-        int result = 1;
-        result = prime * result
-                + ((hostName == null) ? 0 : hostName.hashCode());
-        result = prime * result + ((ugiInfo == null) ? 0 : ugiInfo.hashCode());
-        return result;
+        return Objects.hash(uriIdentity, ugiInfo);
     }
 
     @Override
@@ -49,11 +46,11 @@ public class HdfsFsIdentity {
             return false;
         }
         HdfsFsIdentity other = (HdfsFsIdentity) obj;
-        if (hostName == null) {
-            if (other.hostName != null) {
+        if (uriIdentity == null) {
+            if (other.uriIdentity != null) {
                 return false;
             }
-        } else if (!hostName.equals(other.hostName)) {
+        } else if (!uriIdentity.equals(other.uriIdentity)) {
             return false;
         }
         if (ugiInfo == null) {

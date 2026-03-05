@@ -14,8 +14,8 @@
 
 #pragma once
 
+#include "common/runtime_profile.h"
 #include "exec/join/join_hash_map.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 

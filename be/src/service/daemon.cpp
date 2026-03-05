@@ -39,8 +39,9 @@
 #include "column/column_helper.h"
 #include "common/config.h"
 #include "common/process_exit.h"
+#include "common/status.h"
+#include "common/util/minidump.h"
 #include "exec/workgroup/work_group.h"
-#include "util/minidump.h"
 #include "util/system_metrics.h"
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
@@ -48,36 +49,117 @@
 #endif
 #include <fmt/ranges.h>
 
+#include <cerrno>
 #include <csignal>
+#include <cstdio>
+#include <cstring>
+#include <filesystem>
 
+#include "base/network/network_util.h"
+#include "base/time/monotime.h"
+#include "base/time/time.h"
+#include "base/time/timezone_utils.h"
+#include "common/system/backend_options.h"
+#include "common/system/cpu_info.h"
+#include "common/system/disk_info.h"
+#include "common/system/mem_info.h"
+#include "common/thread/thread.h"
+#include "common/util/debug_util.h"
+#include "common/util/misc.h"
+#include "common/util/thrift_util.h"
 #include "fs/encrypt_file.h"
+#include "fs/fs_util.h"
 #include "gutil/cpu.h"
 #include "jemalloc/jemalloc.h"
-#include "runtime/time_types.h"
+#include "runtime/starrocks_metrics.h"
 #include "runtime/user_function_cache.h"
-#include "service/backend_options.h"
 #include "service/mem_hook.h"
 #include "storage/options.h"
 #include "storage/storage_engine.h"
-#include "util/cpu_info.h"
-#include "util/debug_util.h"
-#include "util/disk_info.h"
+#include "types/time_types.h"
+#include "util/global_metrics_registry.h"
 #include "util/logging.h"
-#include "util/mem_info.h"
 #include "util/memory_lock.h"
-#include "util/misc.h"
-#include "util/monotime.h"
-#include "util/network_util.h"
-#include "util/starrocks_metrics.h"
-#include "util/thread.h"
-#include "util/thrift_util.h"
-#include "util/time.h"
-#include "util/timezone_utils.h"
 
 namespace starrocks {
 DEFINE_bool(cn, false, "start as compute node");
 
 std::string dump_memory_tracker();
+
+static bool is_known_disk_device_name(const std::string& dev) {
+    for (int i = 0; i < DiskInfo::num_disks(); ++i) {
+        if (DiskInfo::device_name(i) == dev) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static Status get_disk_devices(const std::vector<std::string>& paths, std::set<std::string>* devices) {
+    std::vector<std::string> real_paths;
+    real_paths.reserve(paths.size());
+    for (const auto& path : paths) {
+        std::string real_path;
+        Status st = fs::canonicalize(path, &real_path);
+        if (!st.ok()) {
+            WARN_IF_ERROR(st, "canonicalize path " + path + " failed, skip disk monitoring of this path");
+            continue;
+        }
+        real_paths.emplace_back(std::move(real_path));
+    }
+
+    FILE* fp = fopen("/proc/mounts", "r");
+    if (fp == nullptr) {
+        std::stringstream ss;
+        char buf[64];
+        ss << "open /proc/mounts failed, errno:" << errno << ", message:" << strerror_r(errno, buf, 64);
+        LOG(WARNING) << ss.str();
+        return Status::InternalError(ss.str());
+    }
+
+    Status status;
+    char* line_ptr = nullptr;
+    size_t line_buf_size = 0;
+    for (const auto& path : real_paths) {
+        size_t max_mount_size = 0;
+        std::string match_dev;
+        rewind(fp);
+        while (getline(&line_ptr, &line_buf_size, fp) > 0) {
+            char dev_path[4096];
+            char mount_path[4096];
+            int num = sscanf(line_ptr, "%4095s %4095s", dev_path, mount_path);
+            if (num < 2) {
+                continue;
+            }
+            size_t mount_size = strlen(mount_path);
+            if (mount_size < max_mount_size || path.size() < mount_size ||
+                strncmp(path.c_str(), mount_path, mount_size) != 0) {
+                continue;
+            }
+            std::string dev = std::filesystem::path(dev_path).filename().string();
+            if (is_known_disk_device_name(dev)) {
+                max_mount_size = mount_size;
+                match_dev = std::move(dev);
+            }
+        }
+        if (ferror(fp) != 0) {
+            std::stringstream ss;
+            char buf[64];
+            ss << "open /proc/mounts failed, errno:" << errno << ", message:" << strerror_r(errno, buf, 64);
+            LOG(WARNING) << ss.str();
+            status = Status::InternalError(ss.str());
+            break;
+        }
+        if (max_mount_size > 0) {
+            devices->emplace(match_dev);
+        }
+    }
+    if (line_ptr != nullptr) {
+        free(line_ptr);
+    }
+    fclose(fp);
+    return status;
+}
 
 /*
  * This thread will calculate some metrics at a fix interval(15 sec)
@@ -99,15 +181,15 @@ void calculate_metrics(void* arg_this) {
 
     auto* daemon = static_cast<Daemon*>(arg_this);
     while (!daemon->stopped()) {
-        StarRocksMetrics::instance()->metrics()->trigger_hook();
+        GlobalMetricsRegistry::instance()->metrics()->trigger_hook();
 
         if (last_ts == -1L) {
             last_ts = MonotonicSeconds();
             lst_push_bytes = StarRocksMetrics::instance()->push_request_write_bytes.value();
             lst_query_bytes = StarRocksMetrics::instance()->query_scan_bytes.value();
-            StarRocksMetrics::instance()->system_metrics()->get_disks_io_time(&lst_disks_io_time);
-            StarRocksMetrics::instance()->system_metrics()->get_network_traffic(&lst_net_send_bytes,
-                                                                                &lst_net_receive_bytes);
+            GlobalMetricsRegistry::instance()->system_metrics()->get_disks_io_time(&lst_disks_io_time);
+            GlobalMetricsRegistry::instance()->system_metrics()->get_network_traffic(&lst_net_send_bytes,
+                                                                                     &lst_net_receive_bytes);
         } else {
             int64_t current_ts = MonotonicSeconds();
             long interval = (current_ts - last_ts);
@@ -127,25 +209,25 @@ void calculate_metrics(void* arg_this) {
 
             // 3. max disk io util.
             StarRocksMetrics::instance()->max_disk_io_util_percent.set_value(
-                    StarRocksMetrics::instance()->system_metrics()->get_max_io_util(lst_disks_io_time, 15));
+                    GlobalMetricsRegistry::instance()->system_metrics()->get_max_io_util(lst_disks_io_time, 15));
             // Update lst map.
-            StarRocksMetrics::instance()->system_metrics()->get_disks_io_time(&lst_disks_io_time);
+            GlobalMetricsRegistry::instance()->system_metrics()->get_disks_io_time(&lst_disks_io_time);
 
             // 4. max network traffic.
             int64_t max_send = 0;
             int64_t max_receive = 0;
-            StarRocksMetrics::instance()->system_metrics()->get_max_net_traffic(
+            GlobalMetricsRegistry::instance()->system_metrics()->get_max_net_traffic(
                     lst_net_send_bytes, lst_net_receive_bytes, 15, &max_send, &max_receive);
             StarRocksMetrics::instance()->max_network_send_bytes_rate.set_value(max_send);
             StarRocksMetrics::instance()->max_network_receive_bytes_rate.set_value(max_receive);
             // update lst map
-            StarRocksMetrics::instance()->system_metrics()->get_network_traffic(&lst_net_send_bytes,
-                                                                                &lst_net_receive_bytes);
+            GlobalMetricsRegistry::instance()->system_metrics()->get_network_traffic(&lst_net_send_bytes,
+                                                                                     &lst_net_receive_bytes);
         }
 
         LOG(INFO) << dump_memory_tracker();
 
-        StarRocksMetrics::instance()->table_metrics_mgr()->cleanup();
+        GlobalMetricsRegistry::instance()->table_metrics_mgr()->cleanup();
         nap_sleep(15, [daemon] { return daemon->stopped(); });
     }
 }
@@ -214,7 +296,7 @@ void jemalloc_tracker_daemon(void* arg_this) {
 
 #define DUMP_METRIC(name, value_expr) fmt::format_to(std::back_inserter(buffer), " " #name "({})", value_expr);
 std::string dump_memory_tracker() {
-    auto* mem_metrics = StarRocksMetrics::instance()->system_metrics()->memory_metrics();
+    auto* mem_metrics = GlobalMetricsRegistry::instance()->system_metrics()->memory_metrics();
 
     fmt::memory_buffer buffer;
     fmt::format_to(std::back_inserter(buffer), "Current memory statistics:");
@@ -244,6 +326,7 @@ std::string dump_memory_tracker() {
 }
 
 static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
+    GlobalMetricsRegistry::instance()->metrics()->set_collect_hook_enabled(!config::enable_metric_calculator);
     bool init_system_metrics = config::enable_system_metrics;
     bool init_jvm_metrics = config::enable_jvm_metrics;
     std::set<std::string> disk_devices;
@@ -254,7 +337,7 @@ static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
         paths.emplace_back(store_path.path);
     }
     if (init_system_metrics) {
-        auto st = DiskInfo::get_disk_devices(paths, &disk_devices);
+        auto st = get_disk_devices(paths, &disk_devices);
         if (!st.ok()) {
             LOG(WARNING) << "get disk devices failed, status=" << st.message();
             return;
@@ -265,8 +348,8 @@ static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
             return;
         }
     }
-    StarRocksMetrics::instance()->initialize(paths, init_system_metrics, init_jvm_metrics, disk_devices,
-                                             network_interfaces);
+    GlobalMetricsRegistry::instance()->initialize(paths, init_system_metrics, init_jvm_metrics, disk_devices,
+                                                  network_interfaces);
 }
 
 Slice get_process_comm(pid_t pid, char* buffer, int max_size) {
@@ -308,7 +391,7 @@ void sigterm_handler(int signo, siginfo_t* info, void* context) {
         LOG(ERROR) << "got signal: " << strsignal(signo) << " from pid: " << info->si_pid << "(" << process_comm << ")"
                    << ", is going to exit";
 
-        StarRocksMetrics::instance()->system_metrics()->update_memory_metrics();
+        GlobalMetricsRegistry::instance()->system_metrics()->update_memory_metrics();
         LOG(ERROR) << dump_memory_tracker();
     }
 #ifdef USE_STAROS

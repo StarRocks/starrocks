@@ -19,6 +19,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.SchemaInfo;
@@ -58,6 +59,7 @@ import org.junit.jupiter.api.Test;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -878,5 +880,75 @@ public class LakeTableSchemaChangeJobTest {
             Assertions.assertNotNull(schema1);
             Assertions.assertNotNull(schema2);
         }
+    }
+
+    @Test
+    public void testAggTableAddKeyColumnSortKeyUpdated() throws Exception {
+        LakeTable aggTable = createTable(connectContext,
+                "CREATE TABLE t_agg_sort_key (k0 INT, k1 INT, v0 INT SUM)"
+                        + " AGGREGATE KEY(k0, k1) DISTRIBUTED BY HASH(k0) BUCKETS " + NUM_BUCKETS
+                        + " ORDER BY(k1, k0)");
+        doTestSortKeyUpdatedAfterAddKeyColumn(aggTable, "t_agg_sort_key");
+    }
+
+    @Test
+    public void testUniqueTableAddKeyColumnSortKeyUpdated() throws Exception {
+        LakeTable uniqTable = createTable(connectContext,
+                "CREATE TABLE t_uniq_sort_key (k0 INT, k1 INT, v0 VARCHAR(1024))"
+                        + " UNIQUE KEY(k0, k1) DISTRIBUTED BY HASH(k0) BUCKETS " + NUM_BUCKETS
+                        + " ORDER BY(k1, k0)");
+        doTestSortKeyUpdatedAfterAddKeyColumn(uniqTable, "t_uniq_sort_key");
+    }
+
+    private void doTestSortKeyUpdatedAfterAddKeyColumn(LakeTable tbl, String tableName) throws Exception {
+        Assertions.assertEquals(Arrays.asList(1, 0),
+                tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId()).getSortKeyIdxes());
+
+        alterTable(connectContext, "ALTER TABLE " + tableName + " ADD COLUMN k_new1 INT KEY AFTER k0");
+        runSchemaChangeJobToFinish(tbl);
+
+        Assertions.assertEquals("k0", tbl.getBaseSchema().get(0).getName());
+        Assertions.assertEquals("k_new1", tbl.getBaseSchema().get(1).getName());
+        Assertions.assertEquals("k1", tbl.getBaseSchema().get(2).getName());
+        assertSortKey(tbl, Arrays.asList(2, 0, 1));
+    }
+
+    private void assertSortKey(LakeTable tbl, List<Integer> expectedSortKeyIndexes) {
+        List<Column> columns = tbl.getBaseSchema();
+        MaterializedIndexMeta indexMeta = tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId());
+        Assertions.assertEquals(expectedSortKeyIndexes, indexMeta.getSortKeyIdxes());
+        List<Integer> sortKeyUniqueIds = indexMeta.getSortKeyUniqueIds();
+        Assertions.assertNotNull(sortKeyUniqueIds);
+        Assertions.assertEquals(expectedSortKeyIndexes.size(), sortKeyUniqueIds.size());
+        for (int i = 0; i < expectedSortKeyIndexes.size(); i++) {
+            Assertions.assertEquals(columns.get(expectedSortKeyIndexes.get(i)).getUniqueId(),
+                    (int) sortKeyUniqueIds.get(i));
+        }
+    }
+
+    private LakeTableSchemaChangeJob runSchemaChangeJobToFinish(LakeTable tbl) throws Exception {
+        LakeTableSchemaChangeJob job = getAlterJob(tbl);
+
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+            public void sendAgentTask(AgentBatchTask batchTask) {
+                batchTask.getAllTasks().forEach(t -> t.setFinished(true));
+            }
+        };
+        job.runPendingJob();
+        job.runWaitingTxnJob();
+        job.runRunningJob();
+
+        new MockUp<AlterJobV2>() {
+            @Mock
+            public boolean publishVersion() {
+                return true;
+            }
+        };
+        while (job.getJobState() != AlterJobV2.JobState.FINISHED) {
+            job.runFinishedRewritingJob();
+            Thread.sleep(100);
+        }
+        return job;
     }
 }

@@ -21,6 +21,7 @@
 #include "base/testutil/assert.h"
 #include "cache/disk_cache/block_cache.h"
 #include "column/column_helper.h"
+#include "common/config.h"
 #include "exec/hdfs_scanner/hdfs_scanner_orc.h"
 #include "exec/hdfs_scanner/hdfs_scanner_parquet.h"
 #include "exec/pipeline/fragment_context.h"
@@ -65,6 +66,7 @@ void CacheSelectScannerTest::_create_runtime_state(const std::string& timezone) 
     pipeline::FragmentContext* fragment_context = _pool.add(new pipeline::FragmentContext());
     fragment_context->set_pred_tree_params({true, true});
     _runtime_state->set_fragment_ctx(fragment_context);
+    _runtime_state->set_fragment_dict_state(fragment_context->dict_state());
 }
 
 THdfsScanRange* CacheSelectScannerTest::_create_scan_range(const std::string& file, uint64_t offset, uint64_t length,

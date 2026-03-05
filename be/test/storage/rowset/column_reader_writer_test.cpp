@@ -37,6 +37,7 @@
 #include <iostream>
 
 #include "base/testutil/assert.h"
+#include "base/types/decimal12.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column.h"
@@ -44,12 +45,12 @@
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/config.h"
 #include "fs/fs_memory.h"
 #include "gen_cpp/segment.pb.h"
 #include "runtime/mem_pool.h"
 #include "storage/aggregate_type.h"
 #include "storage/chunk_helper.h"
-#include "storage/decimal12.h"
 #include "storage/olap_common.h"
 #include "storage/range.h"
 #include "storage/rowset/column_reader.h"
@@ -59,9 +60,9 @@
 #include "storage/rowset/segment.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_schema_helper.h"
-#include "storage/type_traits.h"
 #include "storage/types.h"
 #include "types/date_value.h"
+#include "types/type_traits.h"
 
 using std::string;
 

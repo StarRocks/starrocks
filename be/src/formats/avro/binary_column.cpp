@@ -21,9 +21,10 @@
 #include "base/utility/defer_op.h"
 #include "column/binary_column.h"
 #include "column/json_column.h"
+#include "common/config.h"
 #include "common/status.h"
 #include "gutil/strings/substitute.h"
-#include "util/json.h"
+#include "types/json_value.h"
 
 namespace starrocks {
 

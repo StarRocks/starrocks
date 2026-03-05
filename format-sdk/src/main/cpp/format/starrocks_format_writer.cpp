@@ -28,6 +28,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "common/status.h"
+#include "fs/fs_factory.h"
 #include "options.h"
 #include "starrocks_format/starrocks_lib.h"
 #include "storage/chunk_helper.h"
@@ -78,7 +79,8 @@ public:
              * fs.s3a.retry.interval
              */
             auto fs_options = filter_map_by_key_prefix(_options, "fs.");
-            FORMAT_ASSIGN_OR_RAISE_ARROW_STATUS(auto fs, FileSystem::Create(_tablet_root_path, FSOptions(fs_options)));
+            FORMAT_ASSIGN_OR_RAISE_ARROW_STATUS(auto fs,
+                                                FileSystemFactory::Create(_tablet_root_path, FSOptions(fs_options)));
             // get tablet schema;
             FORMAT_ASSIGN_OR_RAISE_ARROW_STATUS(auto metadata, get_tablet_metadata(fs));
             _tablet_schema = std::make_shared<TabletSchema>(metadata->schema());
@@ -150,7 +152,7 @@ private:
 
         auto txn_log_path = _loc_provider->txn_log_location(log->tablet_id(), log->txn_id());
         auto fs_options = filter_map_by_key_prefix(_options, "fs.");
-        ASSIGN_OR_RETURN(auto fs, FileSystem::Create(txn_log_path, FSOptions(fs_options)));
+        ASSIGN_OR_RETURN(auto fs, FileSystemFactory::Create(txn_log_path, FSOptions(fs_options)));
         ProtobufFile file(txn_log_path, fs);
         return file.save(*log);
     }

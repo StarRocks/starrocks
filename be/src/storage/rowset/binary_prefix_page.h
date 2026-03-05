@@ -41,6 +41,7 @@
 #include <string>
 #include <vector>
 
+#include "base/coding.h"
 #include "base/string/faststring.h"
 #include "base/string/slice.h"
 #include "runtime/mem_pool.h"
@@ -48,7 +49,6 @@
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_decoder.h"
-#include "util/coding.h"
 
 namespace starrocks {
 

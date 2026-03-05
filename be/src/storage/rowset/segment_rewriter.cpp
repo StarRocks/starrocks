@@ -2,12 +2,15 @@
 
 #include "segment_rewriter.h"
 
+#include "base/container/raw_container.h"
+#include "base/path/filesystem_util.h"
 #include "base/string/slice.h"
 #include "base/testutil/sync_point.h"
 #include "column/chunk.h"
 #include "column/column.h"
 #include "column/schema.h"
 #include "fs/fs.h"
+#include "fs/fs_factory.h"
 #include "fs/key_cache.h"
 #include "gen_cpp/segment.pb.h"
 #include "storage/chunk_helper.h"
@@ -15,8 +18,6 @@
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_writer.h"
-#include "util/filesystem_util.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 
@@ -32,7 +33,7 @@ Status SegmentRewriter::rewrite_partial_update(const FileInfo& src, FileInfo* de
         dest->size = src.size.value_or(0);
         return fs::copy_file(src.path, dest->path, kBufferSize).status();
     }
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dest->path));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(dest->path));
     RandomAccessFileOptions ropts;
     WritableFileOptions wopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     if (!src.encryption_meta.empty()) {
@@ -96,7 +97,7 @@ Status SegmentRewriter::rewrite_auto_increment(const std::string& src_path, cons
         DCHECK_EQ(columns, nullptr);
     }
 
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dest_path));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(dest_path));
 
     uint32_t auto_increment_column_id = 0;
     for (const auto& col : tschema->columns()) {
@@ -188,7 +189,7 @@ Status SegmentRewriter::rewrite_auto_increment_lake(
         DCHECK_EQ(unmodified_column_data, nullptr);
     }
 
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dest->path));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(dest->path));
 
     ColumnId auto_increment_column_id = 0;
     for (const auto& col : tschema->columns()) {

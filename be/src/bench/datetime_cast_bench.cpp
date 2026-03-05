@@ -16,7 +16,7 @@
 
 #include "column/binary_column.h"
 #include "column/column_helper.h"
-#include "runtime/time_types.h"
+#include "types/time_types.h"
 #include "types/timestamp_value.h"
 
 namespace starrocks {

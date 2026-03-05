@@ -13,10 +13,12 @@
 // limitations under the License.
 
 #include "column/column_builder.h"
+#include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/map_column.h"
+#include "column/variant_column.h"
 #include "exprs/cast_expr.h"
-#include "util/variant.h"
+#include "types/variant.h"
 
 namespace starrocks {
 
@@ -88,6 +90,7 @@ StatusOr<ColumnPtr> CastVariantToMap::evaluate_checked(ExprContext* context, Chu
     }
 
     ColumnViewer<TYPE_VARIANT> variant_viewer(src_column);
+    const auto* variant_data_column = down_cast<const VariantColumn*>(ColumnHelper::get_data_column(src_column.get()));
     NullColumn::MutablePtr null_column = NullColumn::create();
     UInt32Column::MutablePtr offsets_column = UInt32Column::create();
     ColumnBuilder<TYPE_VARCHAR> keys_builder(src_column->size());
@@ -102,9 +105,19 @@ StatusOr<ColumnPtr> CastVariantToMap::evaluate_checked(ExprContext* context, Chu
             continue;
         }
 
-        const VariantRowValue* variant = variant_viewer.value(i);
-        const VariantValue& value = variant->get_value();
-        const VariantMetadata& metadata = variant->get_metadata();
+        const size_t variant_row = src_column->is_constant() ? 0 : i;
+        VariantRowRef row_ref;
+        VariantRowValue variant_buffer;
+        if (!variant_data_column->try_get_row_ref(variant_row, &row_ref)) {
+            const VariantRowValue* variant = variant_data_column->get_row_value(variant_row, &variant_buffer);
+            if (variant == nullptr) {
+                null_column->append(1);
+                continue;
+            }
+            row_ref = variant->as_ref();
+        }
+        const VariantValue& value = row_ref.get_value();
+        const VariantMetadata& metadata = row_ref.get_metadata();
         // Only OBJECT type can be cast to MAP, other types are set to null
         if (value.type() == VariantType::OBJECT) {
             ASSIGN_OR_RETURN(const auto object_info, value.get_object_info());

@@ -18,13 +18,16 @@
 #include <memory>
 
 #include "column/column_helper.h"
+#include "common/config.h"
+#include "common/system/disk_info.h"
+#include "common/system/mem_info.h"
 #include "exec/connector_scan_node.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/storage_engine.h"
-#include "util/disk_info.h"
-#include "util/mem_info.h"
+#include "util/global_metrics_registry.h"
 
 //TODO: test multi thread
 //TODO: test runtime filter
@@ -34,6 +37,7 @@ public:
     void SetUp() override {
         config::enable_system_metrics = false;
         config::enable_metric_calculator = false;
+        GlobalMetricsRegistry::instance()->metrics()->set_collect_hook_enabled(true);
 
         _exec_env = ExecEnv::GetInstance();
 

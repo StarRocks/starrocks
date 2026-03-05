@@ -19,9 +19,8 @@
 #include <string>
 
 #include "base/string/slice.h"
-#include "runtime/time_types.h"
-#include "storage/uint24.h"
-#include "util/hash_util.hpp"
+#include "base/types/uint24.h"
+#include "types/time_types.h"
 
 namespace starrocks {
 class TimestampValue;
@@ -135,6 +134,18 @@ DateValue DateValue::from_days_since_unix_epoch(int days_since_unix_epoch) {
 
 inline int32_t DateValue::to_days_since_unix_epoch() const {
     return _julian - date::UNIX_EPOCH_JULIAN;
+}
+
+inline void DateValue::to_date(int* year, int* month, int* day) const {
+    date::to_date_with_cache(_julian, year, month, day);
+}
+
+inline std::chrono::sys_days DateValue::to_sys_days() const {
+    int year, month, day;
+    to_date(&year, &month, &day);
+    return std::chrono::sys_days{std::chrono::year_month_day{std::chrono::year{year},
+                                                             std::chrono::month{static_cast<unsigned>(month)},
+                                                             std::chrono::day{static_cast<unsigned>(day)}}};
 }
 
 template <TimeUnit UNIT>

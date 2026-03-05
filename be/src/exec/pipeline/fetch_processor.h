@@ -19,6 +19,8 @@
 #include <vector>
 
 #include "base/concurrency/bthread_shared_mutex.h"
+#include "base/container/raw_container.h"
+#include "base/phmap/phmap.h"
 #include "bthread/mutex.h"
 #include "column/column.h"
 #include "column/vectorized_fwd.h"
@@ -28,8 +30,6 @@
 #include "exec/pipeline/lookup_request.h"
 #include "exec/sorting/sort_permute.h"
 #include "runtime/descriptors.h"
-#include "util/phmap/phmap.h"
-#include "util/raw_container.h"
 
 namespace starrocks::pipeline {
 
@@ -87,6 +87,7 @@ public:
     bool is_finished() const;
 
     Status set_sink_finishing(RuntimeState* state);
+    void set_source_finishing();
 
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk);
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state);
@@ -138,6 +139,7 @@ private:
     Status _io_task_status;
 
     std::atomic_bool _is_sink_complete = false;
+    std::atomic_bool _is_source_finishing = false;
 
     RuntimeProfile::Counter* _build_row_id_chunk_timer = nullptr;
     RuntimeProfile::Counter* _gen_fetch_tasks_timer = nullptr;

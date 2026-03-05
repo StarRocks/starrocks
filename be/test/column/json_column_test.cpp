@@ -24,12 +24,13 @@
 #include "base/testutil/parallel_test.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
+#include "column/mysql_row_buffer.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
-#include "runtime/types.h"
-#include "util/json.h"
+#include "types/json_value.h"
+#include "types/type_descriptor.h"
 #include "velocypack/vpack.h"
 
 namespace starrocks {

@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include "column/binary_column.h"
+#include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
@@ -285,15 +286,16 @@ TEST(StructColumnTest, test_copy_construtor) {
     ASSERT_EQ("{id:1,name:'smith'}", col->debug_item(0));
     ASSERT_EQ("{id:2,name:'cruise'}", col->debug_item(1));
 
-    StructColumn copy(*col);
+    auto copy_ptr = col->clone();
+    auto* copy = down_cast<StructColumn*>(copy_ptr.get());
     col->reset_column();
     ASSERT_EQ(0, col->size());
-    ASSERT_EQ(2, copy.size());
-    ASSERT_EQ("{id:1,name:'smith'}", copy.debug_item(0));
-    ASSERT_EQ("{id:2,name:'cruise'}", copy.debug_item(1));
+    ASSERT_EQ(2, copy->size());
+    ASSERT_EQ("{id:1,name:'smith'}", copy->debug_item(0));
+    ASSERT_EQ("{id:2,name:'cruise'}", copy->debug_item(1));
 
-    ASSERT_TRUE(copy.get_column_by_idx(0)->use_count() == 1);
-    ASSERT_TRUE(copy.get_column_by_idx(1)->use_count() == 1);
+    ASSERT_TRUE(copy->get_column_by_idx(0)->use_count() == 1);
+    ASSERT_TRUE(copy->get_column_by_idx(1)->use_count() == 1);
 }
 
 TEST(StructColumnTest, test_move_construtor) {

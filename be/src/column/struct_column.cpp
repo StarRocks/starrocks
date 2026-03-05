@@ -15,8 +15,7 @@
 #include "column/struct_column.h"
 
 #include "column/column_helper.h"
-#include "column/column_view/column_view.h"
-#include "util/mysql_row_buffer.h"
+#include "column/mysql_row_buffer.h"
 
 namespace starrocks {
 
@@ -156,8 +155,8 @@ bool StructColumn::has_large_column() const {
 void StructColumn::assign(size_t n, size_t idx) {
     DCHECK_LE(idx, size()) << "Range error when assign StructColumn";
     auto desc = this->clone_empty();
-    auto datum = get(idx);
-    desc->append_value_multiple_times(&datum, n);
+    // Avoid Datum-based round-trip for nested object fields (e.g. shredded VARIANT).
+    desc->append_value_multiple_times(*this, idx, n);
     swap_column(*desc);
     desc->reset_column();
 }
@@ -202,7 +201,7 @@ void StructColumn::update_rows(const Column& src, const uint32_t* indexes) {
 
 void StructColumn::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
     if (src.is_struct_view()) {
-        down_cast<const ColumnView*>(&src)->append_to(*this, indexes, from, size);
+        src.append_selective_to(*this, indexes, from, size);
         return;
     }
     DCHECK(src.is_struct());

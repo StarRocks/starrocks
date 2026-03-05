@@ -22,15 +22,18 @@
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
-#include "column/datum.h"
 #include "column/datum_convert.h"
+#include "common/config.h"
 #include "common/status.h"
+#include "fs/fs_factory.h"
 #include "runtime/global_dict/config.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/rowset.h"
 #include "storage/utils.h"
+#include "storage/virtual_column_utils.h"
+#include "types/datum.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -55,6 +58,8 @@ Status SegmentMetaCollecter::parse_field_and_colname(const std::string& item, st
     }
     return Status::InvalidArgument("cannot find column: " + item);
 }
+
+MetaReaderParams::MetaReaderParams() : chunk_size(config::vector_chunk_size) {}
 
 MetaReader::MetaReader() : _is_init(false), _has_more(false) {}
 
@@ -179,6 +184,7 @@ Status SegmentMetaCollecter::init(const SegmentMetaCollecterParams* params, cons
         return Status::InvalidArgument("tablet schema is nullptr");
     }
     _params = params;
+    _tablet_id = options.tablet_id;
     if (options.dcg_loader != nullptr) {
         if (options.is_primary_keys) {
             TabletSegmentId tsid;
@@ -238,7 +244,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> SegmentMetaCollecter::_new_dcg_column_
 }
 
 Status SegmentMetaCollecter::_init_return_column_iterators() {
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_segment->file_name()));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(_segment->file_name()));
     RandomAccessFileOptions ropts;
     if (_segment->encryption_info()) {
         ropts.encryption_info = *_segment->encryption_info();
@@ -262,7 +268,7 @@ Status SegmentMetaCollecter::_init_return_column_iterators() {
                     _column_iterators[cid] = std::move(col_iter);
                     RandomAccessFileOptions opts;
                     opts.encryption_info = dcg_encryption_info;
-                    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dcg_filename));
+                    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(dcg_filename));
                     ASSIGN_OR_RETURN(auto dcg_file, fs->new_random_access_file(opts, dcg_filename));
                     iter_opts.read_file = dcg_file.get();
                     _column_files[cid] = std::move(dcg_file);
@@ -286,7 +292,14 @@ Status SegmentMetaCollecter::collect(std::vector<Column*>* dsts) {
     }
 
     for (size_t i = 0; i < _params->fields.size(); i++) {
-        RETURN_IF_ERROR(_collect(_params->fields[i], _params->cids[i], (*dsts)[i], _params->field_type[i]));
+        auto tablet_column = _params->tablet_schema->column(_params->cids[i]);
+        auto field_name = _params->fields[i];
+        auto field_type = _params->field_type[i];
+        if (tablet_column.is_virtual_column()) {
+            RETURN_IF_ERROR(_collect_virtual(field_name, tablet_column.name(), (*dsts)[i], field_type));
+        } else {
+            RETURN_IF_ERROR(_collect(field_name, _params->cids[i], (*dsts)[i], field_type));
+        }
     }
     return Status::OK();
 }
@@ -310,6 +323,24 @@ Status SegmentMetaCollecter::_collect(const std::string& name, ColumnId cid, Col
         return _collect_column_compressed_size(cid, column, type);
     }
     return Status::NotSupported("Not Support Collect Meta: " + name);
+}
+
+Status SegmentMetaCollecter::_collect_virtual(const std::string& name, const std::string_view col_name, Column* column,
+                                              LogicalType type) {
+    VirtualColumnFactory::Options options;
+    options.tablet_id = _tablet_id;
+    options.segment_id = _segment->id();
+    if (name == META_MAX) {
+        size_t num_rows = _segment->num_rows();
+        options.num_rows = num_rows > 0 ? num_rows - 1 : 0;
+        return VirtualColumnFactory::append_to_column(options, col_name, column);
+    } else if (name == META_MIN) {
+        options.num_rows = 0;
+        return VirtualColumnFactory::append_to_column(options, col_name, column);
+    } else if (name == META_COUNT_ROWS) {
+        return _collect_rows(column, type);
+    }
+    return Status::NotSupported("Not Support Collect Virtual Meta: " + name);
 }
 
 std::string append_read_name(const ColumnReader* col_reader) {

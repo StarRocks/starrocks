@@ -15,32 +15,19 @@
 #pragma once
 
 #include <cstdint>
-#include <cstring>
-#include <map>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
 
 #include "column/column.h"
-#include "common/status.h"
-#include "runtime/types.h"
-#include "types/logical_type.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 
 class MemPool;
 class RuntimeState;
 
-class Column;
-class Slice;
-struct JavaUDAFContext;
-#if defined(__APPLE__)
-// On macOS build, Java is disabled. Provide an empty definition so that
-// std::unique_ptr<JavaUDAFContext> has a complete type and can be destroyed
-// without pulling in JNI headers.
-struct JavaUDAFContext {};
-#endif
 struct NgramBloomFilterState;
 
 class FunctionContext {
@@ -138,8 +125,6 @@ public:
     bool is_udf() { return _is_udf; }
     void set_is_udf(bool is_udf) { this->_is_udf = is_udf; }
 
-    MutableColumnPtr create_column(const TypeDesc& type_desc, bool nullable);
-
     // Create a test FunctionContext object. The caller is responsible for calling delete
     // on it. This context has additional debugging validation enabled.
     static FunctionContext* create_test_context();
@@ -168,10 +153,6 @@ public:
     RuntimeState* state() { return _state; }
     bool has_error() const;
     const char* error_msg() const;
-
-    JavaUDAFContext* udaf_ctxs() { return _jvm_udaf_ctxs.get(); }
-
-    void release_mems();
 
     ssize_t get_group_concat_max_len() { return group_concat_max_len; }
     // min value is 4, default is 1024
@@ -221,9 +202,6 @@ private:
     // If it is not explicitly set externally (e.g. AggFuncBasedValueAggregator),
     // it will point to the internal _mem_usage
     int64_t* _mem_usage_counter = &_mem_usage;
-
-    // UDAF Context
-    std::unique_ptr<JavaUDAFContext> _jvm_udaf_ctxs;
 
     std::vector<bool> _is_asc_order;
     std::vector<bool> _nulls_first;

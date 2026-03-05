@@ -14,11 +14,14 @@
 
 #include "storage/load_chunk_spiller.h"
 
+#include "common/config.h"
 #include "exec/spill/options.h"
 #include "exec/spill/serde.h"
 #include "exec/spill/spiller.h"
 #include "exec/spill/spiller_factory.h"
 #include "runtime/runtime_state.h"
+#include "runtime/runtime_state_helper.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/tablet_internal_parallel_merge_task.h"
@@ -28,7 +31,6 @@
 #include "storage/load_spill_pipeline_merge_iterator.h"
 #include "storage/merge_iterator.h"
 #include "storage/union_iterator.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -157,7 +159,8 @@ Status LoadChunkSpiller::_prepare(const ChunkPtr& chunk_ptr) {
         _spiller = _spiller_factory->create(options);
         RETURN_IF_ERROR(_spiller->prepare(_runtime_state.get()));
         DCHECK(_profile != nullptr) << "LoadChunkSpiller profile is null";
-        spill::SpillProcessMetrics metrics(_profile, _runtime_state->mutable_total_spill_bytes());
+        spill::SpillProcessMetrics metrics(_profile,
+                                           RuntimeStateHelper::mutable_total_spill_bytes(_runtime_state.get()));
         _spiller->set_metrics(metrics);
         // 2. prepare serde
         if (const_cast<spill::ChunkBuilder*>(&_spiller->chunk_builder())->chunk_schema()->empty()) {

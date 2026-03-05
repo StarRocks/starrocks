@@ -18,9 +18,9 @@
 
 #include "base/testutil/assert.h"
 #include "column/column_helper.h"
-#include "runtime/types.h"
+#include "column/json_converter.h"
 #include "simdjson.h"
-#include "util/json_converter.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 

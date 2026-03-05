@@ -44,6 +44,8 @@
 #include <sstream>
 #include <vector>
 
+#include "base/utility/pretty_printer.h"
+#include "common/config.h"
 #include "common/configbase.h"
 #include "http/action/profile_utils.h"
 #include "http/web_page_handler.h"
@@ -52,7 +54,6 @@
 #include "runtime/mem_tracker.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
-#include "util/pretty_printer.h"
 
 namespace starrocks {
 

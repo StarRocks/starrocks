@@ -20,7 +20,6 @@
 #include "column/column_helper.h"
 #include "column/column_visitor_adapter.h"
 #include "column/const_column.h"
-#include "column/datum.h"
 #include "column/german_string.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
@@ -30,6 +29,7 @@
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
 #include "runtime/chunk_cursor.h"
+#include "types/datum.h"
 
 namespace starrocks {
 
@@ -179,10 +179,10 @@ public:
             auto& right_data = down_cast<const ColumnType*>(_right_col)->get_german_strings();
             return merge_ordinary_column<Container, GermanString>(left_data, right_data);
         } else {
-            using Container = typename BinaryColumnBase<SizeT>::BinaryDataProxyContainer;
-            auto& left_data = down_cast<const ColumnType*>(_left_col)->get_proxy_data();
-            auto& right_data = down_cast<const ColumnType*>(_right_col)->get_proxy_data();
-            return merge_ordinary_column<Container, Slice>(left_data, right_data);
+            using ImmContainer = typename BinaryColumnBase<SizeT>::ImmContainer;
+            auto left_data = down_cast<const ColumnType*>(_left_col)->immutable_data();
+            auto right_data = down_cast<const ColumnType*>(_right_col)->immutable_data();
+            return merge_ordinary_column<ImmContainer, Slice>(left_data, right_data);
         }
     }
 

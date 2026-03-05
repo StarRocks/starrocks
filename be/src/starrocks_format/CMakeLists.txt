@@ -25,10 +25,13 @@ set(STARROCKS_LIBS
     Base
     Common
     Column
+    ColumnCore
     Connector
     Exec
     -Wl,--whole-archive Exprs -Wl,--no-whole-archive
+    -Wl,--whole-archive ExprCore -Wl,--no-whole-archive
     FileSystem
+    FSCore
     Formats
     Gutil
     IO
@@ -36,6 +39,8 @@ set(STARROCKS_LIBS
     Storage
     Rowset
     Runtime
+    RuntimeCore
+    TypesCore
     Types
     Util
     Script

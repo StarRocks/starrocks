@@ -17,9 +17,12 @@
 #include <utility>
 
 #include "base/simd/simd.h"
-#include "exec/exec_node.h"
+#include "base/time/timezone_utils.h"
+#include "common/config.h"
+#include "common/runtime_profile.h"
 #include "exec/iceberg/iceberg_delete_builder.h"
 #include "exec/paimon/paimon_delete_file_builder.h"
+#include "exprs/chunk_predicate_evaluator.h"
 #include "formats/orc/orc_chunk_reader.h"
 #include "formats/orc/orc_input_stream.h"
 #include "formats/orc/orc_memory_pool.h"
@@ -27,8 +30,6 @@
 #include "formats/orc/utils.h"
 #include "gen_cpp/orc_proto.pb.h"
 #include "storage/chunk_helper.h"
-#include "util/runtime_profile.h"
-#include "util/timezone_utils.h"
 
 namespace starrocks {
 
@@ -298,8 +299,8 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
         }
 
         // do evaluation with dictionary.
-        Status status = ExecNode::eval_conjuncts(_scanner_ctx.conjunct_ctxs_by_slot.at(slot_id), dict_value_chunk.get(),
-                                                 filter_ptr);
+        Status status = ChunkPredicateEvaluator::eval_conjuncts(_scanner_ctx.conjunct_ctxs_by_slot.at(slot_id),
+                                                                dict_value_chunk.get(), filter_ptr);
         if (!status.ok()) {
             LOG(WARNING) << "eval conjuncts fails: " << status.message();
             _dict_filter_eval_cache.erase(slot_id);
@@ -662,8 +663,8 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
                     if (_orc_row_reader_filter->is_slot_evaluated(it.first)) {
                         continue;
                     }
-                    ASSIGN_OR_RETURN(rows_read,
-                                     ExecNode::eval_conjuncts_into_filter(it.second, ck.get(), &_chunk_filter));
+                    ASSIGN_OR_RETURN(rows_read, ChunkPredicateEvaluator::eval_conjuncts_into_filter(it.second, ck.get(),
+                                                                                                    &_chunk_filter));
                     if (rows_read == 0) {
                         // If rows_read = 0, we need to set chunk size = 0 and bypass filter chunk directly
                         ck->set_num_rows(0);

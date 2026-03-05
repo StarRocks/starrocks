@@ -19,6 +19,7 @@
 #include <atomic>
 #include <chrono>
 
+#include "base/phmap/phmap.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exec/pipeline/fragment_context.h"
@@ -34,10 +35,9 @@
 #include "exec/pipeline/schedule/pipeline_timer.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/workgroup/work_group_fwd.h"
-#include "exprs/runtime_filter_bank.h"
 #include "fmt/printf.h"
 #include "runtime/mem_tracker.h"
-#include "util/phmap/phmap.h"
+#include "runtime/runtime_filter/runtime_filter_probe.h"
 
 namespace starrocks {
 

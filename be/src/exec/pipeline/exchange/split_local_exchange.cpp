@@ -16,18 +16,28 @@
 
 #include <memory>
 
-#include "exec/exec_node.h"
+#include "common/config.h"
+#include "exprs/chunk_predicate_evaluator.h"
+#include "exprs/expr_executor.h"
 
 namespace starrocks::pipeline {
 
+SplitLocalExchanger::SplitLocalExchanger(int num_consumers, std::vector<ExprContext*>& split_expr_ctxs,
+                                         size_t chunk_size)
+        : _split_expr_ctxs(std::move(split_expr_ctxs)),
+          _buffer(num_consumers),
+          _opened_source_opcount(num_consumers, 0),
+          kBufferedRowSizeScaleFactor(config::split_exchanger_buffer_chunk_num),
+          _chunk_size(chunk_size) {}
+
 Status SplitLocalExchanger::prepare(RuntimeState* state) {
-    RETURN_IF_ERROR(Expr::prepare(_split_expr_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(_split_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_split_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_split_expr_ctxs, state));
     return Status::OK();
 }
 
 void SplitLocalExchanger::close(RuntimeState* state) {
-    Expr::close(_split_expr_ctxs, state);
+    ExprExecutor::close(_split_expr_ctxs, state);
 }
 
 Status SplitLocalExchanger::init_metrics(RuntimeProfile* profile, bool is_first_sink_driver) {
@@ -53,8 +63,8 @@ Status SplitLocalExchanger::push_chunk(const ChunkPtr& chunk, int32_t sink_drive
     for (size_t i = _split_expr_ctxs.size() - 1; i > 0; i--) {
         Filter chunk_filter(cur_chunk->num_rows(), 1);
         auto& expr_ctx = _split_expr_ctxs[i];
-        ASSIGN_OR_RETURN(size_t new_chunk_size,
-                         ExecNode::eval_conjuncts_into_filter({expr_ctx}, cur_chunk.get(), &chunk_filter));
+        ASSIGN_OR_RETURN(size_t new_chunk_size, ChunkPredicateEvaluator::eval_conjuncts_into_filter(
+                                                        {expr_ctx}, cur_chunk.get(), &chunk_filter));
         // all false for expr_ctx
         if (new_chunk_size == 0) {
             continue;

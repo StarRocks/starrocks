@@ -17,17 +17,16 @@
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
-#include "base/testutil/sync_point.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
-#include "column/datum.h"
 #include "column/type_traits.h"
+#include "common/config.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/tablet_range_helper.h"
 #include "storage/primary_key_encoder.h"
-#include "storage/record_predicate/column_hash_is_congruent.h"
 #include "test_util.h"
+#include "types/datum.h"
 
 namespace starrocks::lake {
 
@@ -84,6 +83,7 @@ protected:
         TabletSchemaPB schema_pb;
         schema_pb.set_keys_type(PRIMARY_KEYS);
         schema_pb.set_num_short_key_columns(num_key_columns);
+        schema_pb.set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
         for (int i = 0; i < (int)columns.size(); ++i) {
             auto* c = schema_pb.add_column();
             c->set_name(columns[i].first);
@@ -309,8 +309,10 @@ TEST_F(LakePersistentIndexTest, test_major_compaction_with_tablet_range) {
         chunk->append_column(std::move(col), (SlotId)0);
 
         MutableColumnPtr pk_column;
-        EXPECT_OK(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
-        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get());
+        EXPECT_OK(
+                PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2));
+        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get(),
+                                  PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2);
         if (pk_column->is_binary()) {
             return down_cast<BinaryColumn*>(pk_column.get())->get_slice(0).to_string();
         } else {
@@ -345,6 +347,8 @@ TEST_F(LakePersistentIndexTest, test_major_compaction_with_tablet_range) {
         index->prepare(EditVersion(i, 0), 0);
         ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), upsert_old_values.data()));
         ASSERT_OK(index->flush_memtable(true));
+        // Wait for async flush to complete if any
+        ASSERT_OK(index->sync_flush_all_memtables(10000000)); // 10 seconds timeout
     }
     ASSERT_TRUE(index->memory_usage() > 0);
 
@@ -357,6 +361,7 @@ TEST_F(LakePersistentIndexTest, test_major_compaction_with_tablet_range) {
     auto* schema_pb = tablet_metadata_ptr->mutable_schema();
     schema_pb->clear_sort_key_idxes();
     schema_pb->add_sort_key_idxes(0);
+    schema_pb->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
 
     // Configure a tablet range ["key_10", "key_30").
     TabletRangePB* range_pb = tablet_metadata_ptr->mutable_range();
@@ -392,6 +397,106 @@ TEST_F(LakePersistentIndexTest, test_major_compaction_with_tablet_range) {
     ASSERT_EQ(encode_key("key_10"), out_sst.range().start_key());
     // end_key is inclusive, so for ["key_10", "key_30") we expect the last key to be "key_29".
     ASSERT_EQ(encode_key("key_29"), out_sst.range().end_key());
+
+    config::l0_max_mem_usage = l0_max_mem_usage;
+}
+
+TEST_F(LakePersistentIndexTest, test_range_single_int_pk_end_to_end) {
+    auto l0_max_mem_usage = config::l0_max_mem_usage;
+    config::l0_max_mem_usage = 10;
+    constexpr int N = 30;
+
+    auto* schema_pb = _tablet_metadata->mutable_schema();
+    schema_pb->clear_sort_key_idxes();
+    schema_pb->add_sort_key_idxes(0);
+    schema_pb->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+
+    auto tablet_schema = TabletSchema::create(_tablet_metadata->schema());
+    std::vector<ColumnId> pk_columns = {0};
+    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
+
+    auto encode_key = [&](int32_t v) {
+        auto chunk = std::make_unique<Chunk>();
+        auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+        col->append_datum(Datum(v));
+        chunk->append_column(std::move(col), (SlotId)0);
+
+        MutableColumnPtr pk_column;
+        EXPECT_OK(
+                PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2));
+        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get(),
+                                  PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2);
+        return down_cast<BinaryColumn*>(pk_column.get())->get_slice(0).to_string();
+    };
+
+    auto tablet_id = _tablet_metadata->id();
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
+    ASSERT_OK(index->init(_tablet_metadata));
+
+    for (int batch = 0; batch < 3; ++batch) {
+        std::vector<std::string> keys;
+        std::vector<Slice> key_slices;
+        std::vector<IndexValue> values;
+        std::vector<IndexValue> upsert_old_values(N);
+        keys.reserve(N);
+        key_slices.reserve(N);
+        values.reserve(N);
+        for (int j = 0; j < N; ++j) {
+            const int key = 100 + batch * N + j;
+            keys.emplace_back(encode_key(key));
+            key_slices.emplace_back(keys.back());
+            values.emplace_back(key * 10);
+        }
+        index->prepare(EditVersion(batch, 0), 0);
+        ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), upsert_old_values.data()));
+        ASSERT_OK(index->flush_memtable(true));
+        ASSERT_OK(index->sync_flush_all_memtables(10000000)); // 10 seconds timeout
+    }
+
+    Tablet tablet(_tablet_mgr.get(), tablet_id);
+    auto tablet_metadata_ptr = std::make_shared<TabletMetadata>();
+    tablet_metadata_ptr->CopyFrom(*_tablet_metadata);
+
+    TabletRangePB* range_pb = tablet_metadata_ptr->mutable_range();
+    range_pb->Clear();
+    range_pb->mutable_lower_bound()->add_values()->CopyFrom(make_int_variant_pb(100));
+    range_pb->set_lower_bound_included(true);
+    range_pb->mutable_upper_bound()->add_values()->CopyFrom(make_int_variant_pb(200));
+    range_pb->set_upper_bound_included(false);
+
+    MetaFileBuilder builder(tablet, tablet_metadata_ptr);
+    ASSERT_OK(index->commit(&builder));
+
+    auto* sstable_meta = tablet_metadata_ptr->mutable_sstable_meta();
+    for (auto& sst_pb : *sstable_meta->mutable_sstables()) {
+        sst_pb.set_shared(true);
+    }
+
+    auto txn_log = std::make_shared<TxnLogPB>();
+    ASSERT_OK(LakePersistentIndex::major_compact(_tablet_mgr.get(), tablet_metadata_ptr, txn_log.get()));
+    ASSERT_TRUE(txn_log->op_compaction().has_output_sstable());
+
+    const auto& out_sst = txn_log->op_compaction().output_sstable();
+    ASSERT_EQ(encode_key(100), out_sst.range().start_key());
+    ASSERT_EQ(encode_key(100 + 3 * N - 1), out_sst.range().end_key());
+
+    ASSERT_OK(index->apply_opcompaction(txn_log->op_compaction()));
+
+    std::vector<std::string> probe_keys = {encode_key(99), encode_key(100), encode_key(150), encode_key(189),
+                                           encode_key(199)};
+    std::vector<Slice> probe_key_slices;
+    probe_key_slices.reserve(probe_keys.size());
+    for (const auto& k : probe_keys) {
+        probe_key_slices.emplace_back(k);
+    }
+
+    std::vector<IndexValue> get_values(probe_keys.size());
+    ASSERT_OK(index->get(probe_key_slices.size(), probe_key_slices.data(), get_values.data()));
+    ASSERT_EQ(NullIndexValue, get_values[0].get_value());
+    ASSERT_EQ(IndexValue(1000), get_values[1]);
+    ASSERT_EQ(IndexValue(1500), get_values[2]);
+    ASSERT_EQ(IndexValue(1890), get_values[3]);
+    ASSERT_EQ(NullIndexValue, get_values[4].get_value());
 
     config::l0_max_mem_usage = l0_max_mem_usage;
 }
@@ -601,108 +706,6 @@ TEST_F(LakePersistentIndexTest, test_compaction_strategy_same_max_rss_rowid) {
     ASSERT_EQ(0, sstables.size()) << "Should be empty since no cumulative sstables exist";
 }
 
-TEST_F(LakePersistentIndexTest, test_major_compaction_with_predicate) {
-    auto l0_max_mem_usage = config::l0_max_mem_usage;
-    auto lake_pk_index_cumulative_base_compaction_ratio = config::lake_pk_index_cumulative_base_compaction_ratio;
-    SyncPoint::GetInstance()->SetCallBack("LakePersistentIndex::minor_compact:inject_predicate", [](void* arg) {
-        PersistentIndexSstablePB* sstable_pb = (PersistentIndexSstablePB*)arg;
-        auto sstable_predicate_pb = sstable_pb->mutable_predicate();
-        auto record_predicate_pb = sstable_predicate_pb->mutable_record_predicate();
-
-        record_predicate_pb->set_type(RecordPredicatePB::COLUMN_HASH_IS_CONGRUENT);
-        auto column_hash_is_congruent_pb = record_predicate_pb->mutable_column_hash_is_congruent();
-        column_hash_is_congruent_pb->set_modulus(16);
-        column_hash_is_congruent_pb->set_remainder(0);
-        column_hash_is_congruent_pb->add_column_names("c0");
-    });
-    SyncPoint::GetInstance()->EnableProcessing();
-
-    DeferOp defer([&]() {
-        SyncPoint::GetInstance()->ClearCallBack("LakePersistentIndex::minor_compact:inject_predicate");
-        SyncPoint::GetInstance()->DisableProcessing();
-        config::lake_pk_index_cumulative_base_compaction_ratio = lake_pk_index_cumulative_base_compaction_ratio;
-        config::l0_max_mem_usage = l0_max_mem_usage;
-    });
-
-    config::l0_max_mem_usage = 1024 * 1024 * 1024;
-    using Key = int32_t;
-    const int M = 5;
-    const int N = 100;
-    vector<Key> total_keys;
-    vector<Slice> total_key_slices;
-    vector<IndexValue> total_values;
-    vector<size_t> idxes;
-    vector<uint8_t> hits;
-    total_key_slices.reserve(M * N);
-    total_keys.reserve(M * N);
-    auto tablet_id = _tablet_metadata->id();
-    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
-    ASSERT_OK(index->init(_tablet_metadata));
-    int k = 0;
-    for (int i = 0; i < M; ++i) {
-        vector<Key> keys;
-        keys.reserve(N);
-        vector<Slice> key_slices;
-        key_slices.reserve(N);
-        vector<IndexValue> values;
-        values.reserve(N);
-        for (int j = 0; j < N; j++) {
-            int32_t cur_k = i * N + j;
-            int32_t cur_v = j * 2;
-            keys.emplace_back(cur_k);
-            total_keys.emplace_back(cur_k);
-
-            uint32_t hash = 0;
-            auto key_column = Int32Column::create();
-            key_column->append(keys[j]);
-            key_column->crc32_hash(&(hash), 0, 1);
-            hits.push_back(hash % 16 == 0);
-
-            key_slices.emplace_back((uint8_t*)(&keys[j]), sizeof(Key));
-            total_key_slices.emplace_back((uint8_t*)(&total_keys[k]), sizeof(Key));
-            values.emplace_back(cur_v);
-            total_values.emplace_back(cur_v);
-
-            ++k;
-        }
-        index->prepare(EditVersion(i, 0), 0);
-        vector<IndexValue> upsert_old_values(keys.size());
-        ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), upsert_old_values.data()));
-        // generate sst files.
-        index->flush_memtable(true);
-        ASSERT_OK(index->sync_flush_all_memtables(60 * 1000 * 1000)); // Wait up to 60s
-    }
-    ASSERT_TRUE(index->memory_usage() > 0);
-
-    Tablet tablet(_tablet_mgr.get(), tablet_id);
-    auto tablet_metadata_ptr = std::make_shared<TabletMetadata>();
-    tablet_metadata_ptr->CopyFrom(*_tablet_metadata);
-    MetaFileBuilder builder(tablet, tablet_metadata_ptr);
-    // commit sst files
-    ASSERT_OK(index->commit(&builder));
-
-    vector<IndexValue> get_values = vector<IndexValue>(M * N, IndexValue(NullIndexValue));
-    auto hit_count = SIMD::count_nonzero(hits.data(), hits.size());
-    auto txn_log = std::make_shared<TxnLogPB>();
-    // try to compact sst files.
-    ASSERT_OK(LakePersistentIndex::major_compact(_tablet_mgr.get(), tablet_metadata_ptr, txn_log.get()));
-    ASSERT_TRUE(txn_log->op_compaction().input_sstables_size() == M);
-    ASSERT_TRUE(txn_log->op_compaction().has_output_sstable() || hit_count == 0);
-    ASSERT_OK(index->apply_opcompaction(txn_log->op_compaction()));
-    ASSERT_OK(index->get(M * N, total_key_slices.data(), get_values.data()));
-    ASSERT_TRUE(hit_count < M * N);
-
-    for (int i = 0; i < M * N; i++) {
-        ASSERT_TRUE(!(total_values[i] == IndexValue(NullIndexValue)));
-        if (hits[i]) {
-            ASSERT_TRUE(!(get_values[i] == IndexValue(NullIndexValue)));
-            ASSERT_EQ(total_values[i], get_values[i]);
-        } else {
-            ASSERT_EQ(IndexValue(NullIndexValue), get_values[i]);
-        }
-    }
-}
-
 TEST_F(LakePersistentIndexTest, test_tablet_range_single_column_pk) {
     auto schema_pb = create_tablet_schema_pb({{"pk", "INT"}, {"v1", "INT"}}, 1);
     auto schema = std::make_shared<const TabletSchema>(schema_pb);
@@ -726,8 +729,10 @@ TEST_F(LakePersistentIndexTest, test_tablet_range_single_column_pk) {
         chunk->append_column(std::move(col), (SlotId)0);
 
         MutableColumnPtr pk_column;
-        EXPECT_OK(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
-        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get());
+        EXPECT_OK(
+                PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2));
+        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get(),
+                                  PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2);
         if (pk_column->is_binary()) {
             return down_cast<BinaryColumn*>(pk_column.get())->get_slice(0).to_string();
         } else {
@@ -771,8 +776,10 @@ TEST_F(LakePersistentIndexTest, test_tablet_range_multi_column_pk) {
         chunk->append_column(std::move(col2), (SlotId)1);
 
         MutableColumnPtr pk_column;
-        EXPECT_OK(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
-        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get());
+        EXPECT_OK(
+                PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2));
+        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get(),
+                                  PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2);
         if (pk_column->is_binary()) {
             return down_cast<BinaryColumn*>(pk_column.get())->get_slice(0).to_string();
         } else {
@@ -795,6 +802,105 @@ TEST_F(LakePersistentIndexTest, test_tablet_range_infinite_bounds) {
 
     ASSERT_TRUE(sst_seek_range.seek_key.empty());
     ASSERT_TRUE(sst_seek_range.stop_key.empty());
+}
+
+// Helper: build a RowsetMetadataPB with given id, per-segment row counts (segment_metas populated),
+// and an optional del file count.
+static RowsetMetadataPB make_rowset(uint32_t id, const std::vector<int64_t>& seg_rows, int del_file_cnt = 0) {
+    RowsetMetadataPB rowset;
+    rowset.set_id(id);
+    int64_t total_rows = 0;
+    for (int64_t r : seg_rows) {
+        rowset.add_segments("seg.dat");
+        auto* meta = rowset.add_segment_metas();
+        meta->set_num_rows(r);
+        total_rows += r;
+    }
+    rowset.set_num_rows(total_rows);
+    for (int i = 0; i < del_file_cnt; ++i) {
+        rowset.add_del_files();
+    }
+    return rowset;
+}
+
+// Helper: build a RowsetMetadataPB without segment_metas (proportional fallback path).
+static RowsetMetadataPB make_rowset_no_meta(uint32_t id, int seg_cnt, int64_t total_rows) {
+    RowsetMetadataPB rowset;
+    rowset.set_id(id);
+    for (int i = 0; i < seg_cnt; ++i) {
+        rowset.add_segments("seg.dat");
+    }
+    rowset.set_num_rows(total_rows);
+    return rowset;
+}
+
+TEST_F(LakePersistentIndexTest, test_need_rebuild_counts) {
+    TabletMetadataPB metadata;
+    PersistentIndexSstableMetaPB sstable_meta;
+
+    // Case 1: no rowsets, no SSTs → {0, 0}
+    {
+        auto [file_cnt, row_cnt] = LakePersistentIndex::need_rebuild_counts(metadata, sstable_meta);
+        EXPECT_EQ(file_cnt, 0);
+        EXPECT_EQ(row_cnt, 0);
+    }
+
+    // Case 2: three rowsets, no SSTs → all segments need rebuild, exact row count via segment_metas.
+    // Rowset layout: id=0 (100 rows), id=1 (200 rows), id=2 (150 rows), each with 1 segment.
+    {
+        metadata.Clear();
+        sstable_meta.Clear();
+        *metadata.add_rowsets() = make_rowset(0, {100});
+        *metadata.add_rowsets() = make_rowset(1, {200});
+        *metadata.add_rowsets() = make_rowset(2, {150});
+
+        auto [file_cnt, row_cnt] = LakePersistentIndex::need_rebuild_counts(metadata, sstable_meta);
+        EXPECT_EQ(file_cnt, 3u);
+        EXPECT_EQ(row_cnt, 450);
+    }
+
+    // Case 3: SST covers rowsets 0 and 1 (max_rss_rowid has rss_id=2 in high 32 bits).
+    // Only rowset 2's segment (rssid=2) needs rebuild.
+    {
+        metadata.Clear();
+        sstable_meta.Clear();
+        *metadata.add_rowsets() = make_rowset(0, {100});
+        *metadata.add_rowsets() = make_rowset(1, {200});
+        *metadata.add_rowsets() = make_rowset(2, {150});
+        auto* sst = sstable_meta.add_sstables();
+        sst->set_max_rss_rowid(static_cast<int64_t>(2LL << 32)); // rebuild_rss_id = 2
+
+        auto [file_cnt, row_cnt] = LakePersistentIndex::need_rebuild_counts(metadata, sstable_meta);
+        EXPECT_EQ(file_cnt, 1u);
+        EXPECT_EQ(row_cnt, 150);
+    }
+
+    // Case 4: proportional fallback when segment_metas is absent.
+    // Rowset id=0 has 2 segments and 200 total rows; SST covers segment 0 (rssid=0),
+    // segment 1 (rssid=1) needs rebuild → proportional estimate: 200 * 1 / 2 = 100.
+    {
+        metadata.Clear();
+        sstable_meta.Clear();
+        *metadata.add_rowsets() = make_rowset_no_meta(0, 2, 200);
+        auto* sst = sstable_meta.add_sstables();
+        sst->set_max_rss_rowid(static_cast<int64_t>(1LL << 32)); // rebuild_rss_id = 1
+
+        auto [file_cnt, row_cnt] = LakePersistentIndex::need_rebuild_counts(metadata, sstable_meta);
+        EXPECT_EQ(file_cnt, 1u);
+        EXPECT_EQ(row_cnt, 100);
+    }
+
+    // Case 5: del files are counted in file_cnt but not in row_cnt.
+    // Rowset id=0: 1 segment (100 rows) + 2 del files.
+    {
+        metadata.Clear();
+        sstable_meta.Clear();
+        *metadata.add_rowsets() = make_rowset(0, {100}, /*del_file_cnt=*/2);
+
+        auto [file_cnt, row_cnt] = LakePersistentIndex::need_rebuild_counts(metadata, sstable_meta);
+        EXPECT_EQ(file_cnt, 3u); // 1 segment + 2 del files
+        EXPECT_EQ(row_cnt, 100);
+    }
 }
 
 } // namespace starrocks::lake

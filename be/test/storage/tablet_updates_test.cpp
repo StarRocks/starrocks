@@ -16,14 +16,16 @@
 
 #include <random>
 
+#include "base/failpoint/fail_point.h"
 #include "base/testutil/sync_point.h"
+#include "common/config.h"
+#include "fs/fs_factory.h"
 #include "script/script.h"
 #include "storage/local_primary_key_recover.h"
 #include "storage/primary_key_dump.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/task/engine_checksum_task.h"
 #include "storage/txn_manager.h"
-#include "util/failpoint/fail_point.h"
 
 namespace starrocks {
 
@@ -2400,7 +2402,7 @@ void TabletUpdatesTest::load_snapshot(const std::string& meta_dir, const TabletS
     std::string rowset_path = last_rowset->rowset_path();
     std::string segment_path =
             strings::Substitute("$0/$1_$2.dat", rowset_path, last_rowset->rowset_id().to_string(), 0);
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString("posix://"));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString("posix://"));
     ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(segment_path));
 
     ASSERT_TRUE(Segment::parse_segment_footer(read_file.get(), footer, nullptr, nullptr).ok());
@@ -3005,6 +3007,95 @@ TEST_F(TabletUpdatesTest, get_column_values) {
 
 TEST_F(TabletUpdatesTest, get_column_values_with_persistent_index) {
     test_get_column_values(true);
+}
+
+void TabletUpdatesTest::test_get_column_values_with_invalid_rssid(bool enable_persistent_index) {
+    auto orig = config::vertical_compaction_max_columns_per_group;
+    config::vertical_compaction_max_columns_per_group = 5;
+    DeferOp unset_config([&] { config::vertical_compaction_max_columns_per_group = orig; });
+
+    srand(GetCurrentTimeMicros());
+    auto tablet = create_tablet(rand(), rand());
+    DeferOp del_tablet([&]() {
+        auto tablet_mgr = StorageEngine::instance()->tablet_manager();
+        (void)tablet_mgr->drop_tablet(tablet->tablet_id());
+        (void)fs::remove_all(tablet->schema_hash_path());
+    });
+    tablet->set_enable_persistent_index(enable_persistent_index);
+    const int N = 100;
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.emplace_back(i);
+    }
+
+    // Commit multiple rowsets, record the first rowset seg id before compaction.
+    ASSERT_TRUE(tablet->rowset_commit(2, create_rowset(tablet, keys)).ok());
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    ASSERT_TRUE(tablet->rowset_commit(3, create_rowset(tablet, keys)).ok());
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    ASSERT_TRUE(tablet->rowset_commit(4, create_rowset(tablet, keys)).ok());
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+    // Record a valid rssid before compaction (the first rowset seg id).
+    uint32_t old_rssid = 0;
+    {
+        std::vector<RowsetSharedPtr> rowsets;
+        EditVersion version;
+        ASSERT_TRUE(tablet->updates()->get_applied_rowsets(4, &rowsets, &version).ok());
+        ASSERT_FALSE(rowsets.empty());
+        old_rssid = rowsets[0]->rowset_meta()->get_rowset_seg_id();
+    }
+
+    // Trigger compaction: old rowsets are replaced by a new compacted rowset with a higher seg id.
+    ASSERT_TRUE(tablet->updates()->compaction(_compaction_mem_tracker.get()).ok());
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    ASSERT_EQ(tablet->updates()->num_rowsets(), 1);
+
+    // GC old rowsets from _rowsets map. Without this, _rowsets still contains old entries
+    // even though they are no longer part of any active version.
+    tablet->updates()->remove_expired_versions(INT64_MAX);
+
+    // Verify the compacted rowset has a seg id greater than old_rssid.
+    uint32_t new_min_rssid = 0;
+    {
+        std::vector<RowsetSharedPtr> rowsets;
+        EditVersion version;
+        ASSERT_TRUE(tablet->updates()->get_applied_rowsets(4, &rowsets, &version).ok());
+        ASSERT_EQ(rowsets.size(), 1);
+        new_min_rssid = rowsets[0]->rowset_meta()->get_rowset_seg_id();
+    }
+    ASSERT_GT(new_min_rssid, old_rssid);
+
+    // Prepare columns for reading.
+    std::vector<uint32_t> read_column_ids = {1, 2};
+    MutableColumns read_columns(read_column_ids.size());
+    const auto& tablet_schema = tablet->unsafe_tablet_schema_ref();
+    for (auto i = 0; i < read_column_ids.size(); i++) {
+        const auto read_column_id = read_column_ids[i];
+        auto tablet_column = tablet_schema.column(read_column_id);
+        auto column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+        read_columns[i] = column->clone_empty();
+    }
+
+    // Test: use old_rssid (now stale, smaller than all keys in rssid_to_rowsets) to simulate
+    // stale primary index entries pointing to compacted-away rowsets.
+    // This triggers the begin() iterator guard: upper_bound(old_rssid) == begin().
+    {
+        std::map<uint32_t, std::vector<uint32_t>> rowids_by_rssid;
+        rowids_by_rssid[old_rssid] = {0, 1, 2};
+        auto st = tablet->updates()->get_column_values(read_column_ids, 0, false, rowids_by_rssid, &read_columns,
+                                                       nullptr, tablet->tablet_schema());
+        ASSERT_FALSE(st.ok()) << "Should fail for stale rssid after compaction";
+        ASSERT_TRUE(st.is_internal_error());
+    }
+}
+
+TEST_F(TabletUpdatesTest, get_column_values_with_invalid_rssid) {
+    test_get_column_values_with_invalid_rssid(false);
+}
+
+TEST_F(TabletUpdatesTest, get_column_values_with_invalid_rssid_persistent_index) {
+    test_get_column_values_with_invalid_rssid(true);
 }
 
 void TabletUpdatesTest::test_get_missing_version_ranges(const std::vector<int64_t>& versions,
@@ -4289,6 +4380,55 @@ TEST_F(TabletUpdatesTest, test_compaction_commit_fail_release_rowset_id) {
     // Verify the tablet state remains unchanged after failed compaction
     ASSERT_EQ(6, _tablet->updates()->max_version());
     ASSERT_EQ(N, read_tablet(_tablet, 6));
+}
+
+TEST_F(TabletUpdatesTest, test_make_snapshot_on_tablet_meta_keep_rowsets) {
+    srand(GetCurrentTimeMicros());
+    _tablet = create_tablet(rand(), rand());
+
+    // write
+    const int N = 1000;
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.emplace_back(i);
+    }
+    auto rs0 = create_rowset(_tablet, keys);
+    ASSERT_TRUE(_tablet->rowset_commit(2, rs0).ok());
+    ASSERT_EQ(2, _tablet->updates()->max_version());
+
+    auto rs1 = create_rowset(_tablet, keys);
+    ASSERT_TRUE(_tablet->rowset_commit(3, rs1).ok());
+    ASSERT_EQ(3, _tablet->updates()->max_version());
+
+    std::string schema_hash_path = _tablet->schema_hash_path();
+
+    // Check that rowset files exist
+    bool has_rowset_files = false;
+    for (const auto& entry : std::filesystem::directory_iterator(schema_hash_path)) {
+        if (entry.path().extension() == ".dat") {
+            has_rowset_files = true;
+            break;
+        }
+    }
+    ASSERT_TRUE(has_rowset_files);
+
+    // make snapshot
+    ASSERT_TRUE(SnapshotManager::instance()->make_snapshot_on_tablet_meta(_tablet).ok());
+
+    // Check that the snapshot meta file was created (meta)
+    bool has_meta_file = false;
+    bool still_has_rowset_files = false;
+    for (const auto& entry : std::filesystem::directory_iterator(schema_hash_path)) {
+        if (entry.path().filename() == "meta") {
+            has_meta_file = true;
+        }
+        if (entry.path().extension() == ".dat") {
+            still_has_rowset_files = true;
+        }
+    }
+
+    ASSERT_TRUE(has_meta_file);
+    ASSERT_TRUE(still_has_rowset_files);
 }
 
 } // namespace starrocks

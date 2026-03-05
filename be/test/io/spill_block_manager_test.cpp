@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "base/testutil/assert.h"
+#include "base/uid_util.h"
 #include "base/utility/defer_op.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
@@ -35,6 +36,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "common/object_pool.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exec/sorting/merge.h"
@@ -55,13 +57,12 @@
 #include "exprs/expr_context.h"
 #include "fmt/format.h"
 #include "fs/fs.h"
+#include "fs/fs_factory.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
-#include "util/runtime_profile.h"
-#include "util/uid_util.h"
 
 namespace starrocks::vectorized {
 
@@ -70,7 +71,7 @@ std::string generate_spill_path(const TUniqueId& query_id, const std::string& pa
 }
 
 spill::DirPtr create_spill_dir(const std::string& path, int64_t capacity_limit) {
-    auto fs = FileSystem::CreateSharedFromString(path);
+    auto fs = FileSystemFactory::CreateSharedFromString(path);
     return std::make_shared<spill::Dir>(path, fs.value(), capacity_limit);
 }
 

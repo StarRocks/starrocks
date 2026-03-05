@@ -16,9 +16,10 @@
 
 #include <roaring/roaring64.h>
 
+#include "base/string/base85.h"
 #include "base/uuid/uuid_generator.h"
+#include "common/config.h"
 #include "deletion_bitmap.h"
-#include "util/base85.h"
 
 namespace starrocks {
 

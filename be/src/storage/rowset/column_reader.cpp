@@ -46,18 +46,21 @@
 #include "column/column_helper.h"
 #include "column/datum_convert.h"
 #include "common/compiler_util.h"
+#include "common/config.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "gen_cpp/segment.pb.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "runtime/types.h"
 #include "storage/column_predicate.h"
 #include "storage/index/index_descriptor.h"
+#include "types/type_descriptor.h"
 #ifndef __APPLE__
+#include "storage/index/inverted/builtin/builtin_inverted_reader.h"
 #include "storage/index/inverted/inverted_plugin_factory.h"
 #endif
+#include "base/bit/rle_encoding.h"
 #include "storage/rowset/array_column_iterator.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/bitmap_index_reader.h"
@@ -78,7 +81,6 @@
 #include "types/logical_type.h"
 #include "util/bloom_filter.h"
 #include "util/compression/block_compression.h"
-#include "util/rle_encoding.h"
 
 namespace starrocks {
 
@@ -120,6 +122,8 @@ ColumnReader::~ColumnReader() {
         _bloom_filter_index_meta.reset(nullptr);
     }
     if (_builtin_inverted_index_meta != nullptr) {
+        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->builtin_inverted_index_mem_tracker(),
+                                 _builtin_inverted_index_meta->SpaceUsedLong());
         _builtin_inverted_index_meta.reset(nullptr);
     }
     MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->column_metadata_mem_tracker(), sizeof(ColumnReader));
@@ -127,6 +131,7 @@ ColumnReader::~ColumnReader() {
 
 Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
     _column_type = static_cast<LogicalType>(meta->type());
+    _column_length = meta->length();
     _dict_page_pointer = PagePointer(meta->dict_page());
     _total_mem_footprint = meta->total_mem_footprint();
     if (column == nullptr) {
@@ -207,6 +212,9 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
                 break;
             case BUILTIN_INVERTED_INDEX:
                 _builtin_inverted_index_meta.reset(index_meta->release_builtin_inverted_index());
+                MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->builtin_inverted_index_mem_tracker(),
+                                         _builtin_inverted_index_meta->SpaceUsedLong());
+                _meta_mem_usage.fetch_add(_builtin_inverted_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
                 break;
             case UNKNOWN_INDEX_TYPE:
                 return Status::Corruption(fmt::format("Bad file {}: unknown index type", file_name()));
@@ -552,28 +560,38 @@ Status ColumnReader::_load_inverted_index(const std::shared_ptr<TabletIndex>& in
 
 #ifndef __APPLE__
     SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
-    return success_once(_inverted_index_load_once,
-                        [&]() {
-                            LogicalType type;
-                            if (_column_type == LogicalType::TYPE_ARRAY) {
-                                type = _column_child_type;
-                            } else {
-                                type = _column_type;
-                            }
+    return success_once(
+                   _inverted_index_load_once,
+                   [&]() {
+                       LogicalType type;
+                       if (_column_type == LogicalType::TYPE_ARRAY) {
+                           type = _column_child_type;
+                       } else {
+                           type = _column_type;
+                       }
 
-                            ASSIGN_OR_RETURN(auto imp_type, get_inverted_imp_type(*index_meta));
-                            std::string index_path = IndexDescriptor::inverted_index_file_path(
-                                    opts.rowset_path, opts.rowsetid.to_string(), _segment->id(),
-                                    index_meta->index_id());
-                            ASSIGN_OR_RETURN(auto inverted_plugin, InvertedPluginFactory::get_plugin(imp_type));
-                            RETURN_IF_ERROR(inverted_plugin->create_inverted_index_reader(index_path, index_meta, type,
-                                                                                          &_inverted_index));
-                            RETURN_IF_ERROR(_inverted_index->load(index_opt, _builtin_inverted_index_meta.get()));
-                            if (_builtin_inverted_index_meta != nullptr) {
-                                _builtin_inverted_index_meta.reset();
-                            }
-                            return Status::OK();
-                        })
+                       ASSIGN_OR_RETURN(auto imp_type, get_inverted_imp_type(*index_meta));
+                       std::string index_path = IndexDescriptor::inverted_index_file_path(
+                               opts.rowset_path, opts.rowsetid.to_string(), _segment->id(), index_meta->index_id());
+                       ASSIGN_OR_RETURN(auto inverted_plugin, InvertedPluginFactory::get_plugin(imp_type));
+                       RETURN_IF_ERROR(inverted_plugin->create_inverted_index_reader(index_path, index_meta, type,
+                                                                                     &_inverted_index));
+                       RETURN_IF_ERROR(_inverted_index->load(index_opt, _builtin_inverted_index_meta.get()));
+                       if (_builtin_inverted_index_meta != nullptr) {
+                           auto* builtin_inverted_index = dynamic_cast<BuiltinInvertedReader*>(_inverted_index.get());
+                           RETURN_IF(builtin_inverted_index == nullptr,
+                                     Status::Corruption("Inverted index reader type mismatch"));
+
+                           MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->builtin_inverted_index_mem_tracker(),
+                                                    _builtin_inverted_index_meta->SpaceUsedLong());
+                           _meta_mem_usage.fetch_sub(_builtin_inverted_index_meta->SpaceUsedLong(),
+                                                     std::memory_order_relaxed);
+                           _meta_mem_usage.fetch_add(builtin_inverted_index->mem_usage(), std::memory_order_relaxed);
+                           _builtin_inverted_index_meta.reset();
+                           _segment->update_cache_size();
+                       }
+                       return Status::OK();
+                   })
             .status();
 #endif
     return Status::OK();

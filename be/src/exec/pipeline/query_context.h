@@ -22,6 +22,9 @@
 
 #include "base/concurrency/spinlock.h"
 #include "base/hash/hash.h"
+#include "base/hash/hash_std.hpp"
+#include "base/time/time.h"
+#include "base/uid_util.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/stream_epoch_manager.h"
@@ -33,8 +36,6 @@
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_state.h"
 #include "util/debug/query_trace.h"
-#include "util/hash_util.hpp"
-#include "util/time.h"
 
 namespace starrocks {
 

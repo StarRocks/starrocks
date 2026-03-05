@@ -29,11 +29,15 @@
 #include "exec/pipeline/nljoin/spillable_nljoin_probe_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr_context.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 #include "exprs/literal.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "glog/logging.h"
 #include "runtime/current_thread.h"
+#include "runtime/runtime_filter/runtime_filter_helper.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -71,8 +75,8 @@ Status CrossJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
         }
 
         if (tnode.nestloop_join_node.__isset.join_conjuncts) {
-            RETURN_IF_ERROR(
-                    Expr::create_expr_trees(_pool, tnode.nestloop_join_node.join_conjuncts, &_join_conjuncts, state));
+            RETURN_IF_ERROR(ExprFactory::create_expr_trees(_pool, tnode.nestloop_join_node.join_conjuncts,
+                                                           &_join_conjuncts, state));
         }
 
         if (tnode.nestloop_join_node.__isset.interpolate_passthrough) {
@@ -91,7 +95,7 @@ Status CrossJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
         if (tnode.nestloop_join_node.__isset.common_slot_map) {
             for (const auto& [key, val] : tnode.nestloop_join_node.common_slot_map) {
                 ExprContext* context;
-                RETURN_IF_ERROR(Expr::create_expr_tree(_pool, val, &context, state, true));
+                RETURN_IF_ERROR(ExprFactory::create_expr_tree(_pool, val, &context, state, true));
                 _common_expr_ctxs.insert({key, context});
             }
         }
@@ -109,7 +113,7 @@ Status CrossJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
 Status CrossJoinNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::prepare(state));
-    RETURN_IF_ERROR(Expr::prepare(_join_conjuncts, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_join_conjuncts, state));
 
     _build_timer = ADD_TIMER(runtime_profile(), "BuildTime");
     _probe_timer = ADD_TIMER(runtime_profile(), "ProbeTime");
@@ -123,7 +127,7 @@ Status CrossJoinNode::prepare(RuntimeState* state) {
 Status CrossJoinNode::open(RuntimeState* state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(ExecNode::open(state));
-    RETURN_IF_ERROR(Expr::open(_join_conjuncts, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_join_conjuncts, state));
 
     RETURN_IF_ERROR(_build(state));
 
@@ -329,8 +333,8 @@ Status CrossJoinNode::get_next_internal(RuntimeState* state, ChunkPtr* chunk, bo
                     return Status::OK();
                 } else {
                     // should output (*chunk) first before EOS
-                    RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
-                    RETURN_IF_ERROR(ExecNode::eval_conjuncts(_join_conjuncts, (*chunk).get()));
+                    RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
+                    RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_join_conjuncts, (*chunk).get()));
                     break;
                 }
             }
@@ -434,8 +438,8 @@ Status CrossJoinNode::get_next_internal(RuntimeState* state, ChunkPtr* chunk, bo
 
         TRY_CATCH_ALLOC_SCOPE_END()
 
-        RETURN_IF_ERROR(ExecNode::eval_conjuncts(_join_conjuncts, (*chunk).get()));
-        RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
+        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_join_conjuncts, (*chunk).get()));
+        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
 
         // we get result chunk.
         break;
@@ -478,7 +482,7 @@ void CrossJoinNode::close(RuntimeState* state) {
         _probe_chunk->reset();
     }
 
-    Expr::close(_join_conjuncts, state);
+    ExprExecutor::close(_join_conjuncts, state);
     ExecNode::close(state);
 }
 

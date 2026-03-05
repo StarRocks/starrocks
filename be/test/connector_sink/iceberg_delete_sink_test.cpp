@@ -22,11 +22,12 @@
 
 #include "base/testutil/assert.h"
 #include "column/chunk.h"
-#include "column/datum.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/config.h"
 #include "common/status.h"
+#include "common/util/thrift_util.h"
 #include "exec/pipeline/fragment_context.h"
 #include "formats/column_evaluator.h"
 #include "gen_cpp/Exprs_types.h"
@@ -35,9 +36,9 @@
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
-#include "runtime/types.h"
 #include "testutil/column_test_helper.h"
-#include "util/thrift_util.h"
+#include "types/datum.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::connector {
 

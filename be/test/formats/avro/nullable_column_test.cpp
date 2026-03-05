@@ -26,7 +26,7 @@
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "exec/avro_test.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 
 #ifdef __cplusplus
 extern "C" {

@@ -26,7 +26,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "common/logging.h"
-#include "runtime/types.h"
+#include "fs/fs_factory.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate.h"
 #include "storage/lake/metacache.h"
@@ -39,6 +39,7 @@
 #include "storage/rowset/rowset_options.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::lake {
 
@@ -171,7 +172,7 @@ TEST_F(LakeRowsetTest, test_segment_update_cache_size) {
     // get the same segments from the rowset
     auto sample_segment = segments[0];
     std::string path = sample_segment->file_name();
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(path));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(path));
     auto schema = sample_segment->tablet_schema_share_ptr();
 
     // create a dummy segment with the same path to cache ahead in metacache,
@@ -296,35 +297,61 @@ TEST_F(LakeRowsetTest, test_partial_compaction) {
     }
 }
 
-TEST_F(LakeRowsetTest, test_read_by_column_hash_is_congruent) {
+TEST_F(LakeRowsetTest, test_partial_compaction_sparse_segment_id_no_collision) {
     create_rowsets_for_testing();
+    auto* rowset_meta = _tablet_metadata->mutable_rowsets(0);
+    rowset_meta->set_next_compaction_offset(2);
+    rowset_meta->clear_segment_metas();
+    rowset_meta->add_segment_metas()->set_segment_idx(0);
+    rowset_meta->add_segment_metas()->set_segment_idx(2);
+    rowset_meta->add_segment_metas()->set_segment_idx(4);
 
-    auto rowset =
-            std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
-    RowsetReadOptions rs_opts;
-    OlapReaderStatistics stats;
-    rs_opts.stats = &stats;
-    TabletSchemaCSPtr opt_tablet_schema = std::make_shared<const TabletSchema>(_tablet_metadata->schema());
-    rs_opts.tablet_schema = opt_tablet_schema;
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
+    int64_t txn_id = next_id();
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+    {
+        std::vector<int> k1{40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51};
+        std::vector<int> v1{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
 
-    std::string col_name(_tablet_schema->column(0).name());
-    std::vector<ColumnId> input_schema_cids;
-    input_schema_cids.push_back(1);
-    auto mutable_rowset_meta_ptr = const_cast<RowsetMetadataPB*>(&rowset->metadata());
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        c0->append_numbers(k1.data(), k1.size() * sizeof(int));
+        c1->append_numbers(v1.data(), v1.size() * sizeof(int));
+        Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
 
-    auto record_predicate_pb = mutable_rowset_meta_ptr->mutable_record_predicate();
-    record_predicate_pb->set_type(RecordPredicatePB::COLUMN_HASH_IS_CONGRUENT);
-    auto column_hash_is_congruent_pb = record_predicate_pb->mutable_column_hash_is_congruent();
-    column_hash_is_congruent_pb->set_modulus(2);
-    column_hash_is_congruent_pb->set_remainder(0);
-    column_hash_is_congruent_pb->add_column_names(col_name);
+        ASSERT_OK(writer->open());
+        ASSERT_OK(writer->write(chunk0));
+        ASSERT_OK(writer->finish());
+        ASSERT_OK(writer->write(chunk0));
+        ASSERT_OK(writer->finish());
+        ASSERT_EQ(2, writer->segments().size());
+    }
 
-    auto input_schema = ChunkHelper::convert_schema(_tablet_schema, input_schema_cids);
-    ASSERT_OK(rowset->read(input_schema, rs_opts));
-    ASSERT_ERROR(rowset->get_each_segment_iterator(input_schema, false, &stats));
-    ASSERT_ERROR(rowset->get_each_segment_iterator_with_delvec(input_schema, 1, nullptr, &stats));
+    TxnLogPB txn_log;
+    auto* op_compaction = txn_log.mutable_op_compaction();
+    auto rs = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 1 /* compaction_segment_limit */);
+    ASSERT_TRUE(rs->partial_segments_compaction());
+    CompactionTaskContext context(txn_id, _tablet_metadata->id(), 456, false, false, nullptr);
+    VersionedTablet vt(nullptr, _tablet_metadata);
+    VerticalCompactionTask task(vt, {rs}, &context, _tablet_schema);
+    ASSERT_OK(task.fill_compaction_segment_info(op_compaction, writer.get()));
+
+    const auto& output_rowset = op_compaction->output_rowset();
+    ASSERT_EQ(4, output_rowset.segments_size());
+    ASSERT_EQ(4, output_rowset.segment_metas_size());
+    EXPECT_EQ(2, op_compaction->new_segment_offset());
+    EXPECT_EQ(2, op_compaction->new_segment_count());
+
+    std::unordered_set<uint32_t> segment_ids;
+    for (int i = 0; i < output_rowset.segment_metas_size(); ++i) {
+        segment_ids.insert(output_rowset.segment_metas(i).segment_idx());
+    }
+    EXPECT_EQ(static_cast<size_t>(output_rowset.segment_metas_size()), segment_ids.size());
+    EXPECT_TRUE(segment_ids.contains(0));
+    EXPECT_TRUE(segment_ids.contains(2));
+    EXPECT_TRUE(segment_ids.contains(5));
+    EXPECT_TRUE(segment_ids.contains(6));
 }
-
 namespace {
 
 static VariantPB make_int_variant_pb(int32_t v) {
@@ -355,6 +382,22 @@ static void set_rowset_shared_segments(RowsetMetadataPB* rowset_meta, bool share
     rowset_meta->clear_shared_segments();
     for (int i = 0; i < rowset_meta->segments_size(); i++) {
         rowset_meta->add_shared_segments(shared);
+    }
+}
+
+static void set_rowset_range_int(RowsetMetadataPB* rowset_meta, std::optional<int32_t> lower, bool lower_included,
+                                 std::optional<int32_t> upper, bool upper_included) {
+    auto* range = rowset_meta->mutable_range();
+    range->Clear();
+    if (lower.has_value()) {
+        auto* tuple = range->mutable_lower_bound();
+        *tuple->add_values() = make_int_variant_pb(lower.value());
+        range->set_lower_bound_included(lower_included);
+    }
+    if (upper.has_value()) {
+        auto* tuple = range->mutable_upper_bound();
+        *tuple->add_values() = make_int_variant_pb(upper.value());
+        range->set_upper_bound_included(upper_included);
     }
 }
 
@@ -429,6 +472,28 @@ TEST_F(LakeRowsetTest, test_tablet_range_pruning_inclusive_exclusive) {
     // Per segment keys include 10,11,12. Total segments = 3.
     // With tablet range [10, 12) (closed-open), each segment contributes keys {10, 11}.
     ASSERT_EQ(make_rowset_and_count(10, true, 12, false), 3 * 2);
+}
+
+TEST_F(LakeRowsetTest, test_rowset_range_overrides_tablet_range) {
+    create_rowsets_for_testing();
+
+    // tablet range [10, 12), rowset range [11, 13)
+    set_tablet_range_int(_tablet_metadata.get(), 10, true, 12, false);
+    auto* rs_meta = _tablet_metadata->mutable_rowsets(0);
+    set_rowset_shared_segments(rs_meta, true);
+    set_rowset_range_int(rs_meta, 11, true, 13, false);
+
+    auto rowset =
+            std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+    RowsetReadOptions rs_opts;
+    OlapReaderStatistics stats;
+    rs_opts.stats = &stats;
+    rs_opts.tablet_schema = std::make_shared<const TabletSchema>(_tablet_metadata->schema());
+    auto input_schema = ChunkHelper::convert_schema(_tablet_schema, std::vector<ColumnId>{0});
+    ASSIGN_OR_ABORT(auto iters, rowset->read(input_schema, rs_opts));
+
+    // If rowset range takes precedence, keep keys [11,13) => each segment contributes 11,12
+    ASSERT_EQ(count_rows_from_iters(iters), 3 * 2);
 }
 
 TEST_F(LakeRowsetTest, test_tablet_range_pb_invalid_bounds) {
@@ -1054,6 +1119,100 @@ TEST_F(LakeRowsetSegmentMetadataFilterTest, test_load_segments_parallel_with_ski
     ASSERT_EQ(segments[1], nullptr);
     // Segment 2 should be loaded at index 2
     ASSERT_NE(segments[2], nullptr);
+}
+
+// ================================================================================
+// Tests for Rowset segment range mode (large rowset split compaction)
+// ================================================================================
+
+TEST_F(LakeRowsetTest, test_segment_range_mode_basic) {
+    create_rowsets_for_testing();
+
+    // Create a rowset with segment range [0, 2) out of 3 segments
+    auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* segment_start */,
+                                                 2 /* segment_end */);
+
+    EXPECT_TRUE(rowset->is_segment_range_mode());
+    EXPECT_EQ(0, rowset->segment_range_start());
+    EXPECT_EQ(2, rowset->segment_range_end());
+    EXPECT_EQ(2, rowset->num_segments()); // Only 2 segments in range
+}
+
+TEST_F(LakeRowsetTest, test_segment_range_mode_middle_range) {
+    create_rowsets_for_testing();
+
+    // Create a rowset with segment range [1, 3) out of 3 segments
+    auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 1 /* segment_start */,
+                                                 3 /* segment_end */);
+
+    EXPECT_TRUE(rowset->is_segment_range_mode());
+    EXPECT_EQ(1, rowset->segment_range_start());
+    EXPECT_EQ(3, rowset->segment_range_end());
+    EXPECT_EQ(2, rowset->num_segments());
+}
+
+TEST_F(LakeRowsetTest, test_segment_range_mode_single_segment) {
+    create_rowsets_for_testing();
+
+    // Create a rowset with segment range [1, 2) - single segment
+    auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 1 /* segment_start */,
+                                                 2 /* segment_end */);
+
+    EXPECT_TRUE(rowset->is_segment_range_mode());
+    EXPECT_EQ(1, rowset->segment_range_start());
+    EXPECT_EQ(2, rowset->segment_range_end());
+    EXPECT_EQ(1, rowset->num_segments());
+}
+
+TEST_F(LakeRowsetTest, test_segment_range_mode_load_segments) {
+    create_rowsets_for_testing();
+
+    // Create rowset with segment range [0, 2) out of 3 segments
+    auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* segment_start */,
+                                                 2 /* segment_end */);
+
+    // Load segments with fill_data_cache = false
+    ASSIGN_OR_ABORT(auto segments, rowset->segments(false));
+    ASSERT_EQ(2, segments.size()); // Only 2 segments loaded
+}
+
+TEST_F(LakeRowsetTest, test_segment_range_mode_vs_normal_mode) {
+    create_rowsets_for_testing();
+
+    // Normal mode: all 3 segments
+    auto normal_rowset =
+            std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+    EXPECT_FALSE(normal_rowset->is_segment_range_mode());
+    EXPECT_EQ(3, normal_rowset->num_segments());
+
+    // Segment range mode: 2 segments [0, 2)
+    auto range_rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* segment_start */,
+                                                       2 /* segment_end */);
+    EXPECT_TRUE(range_rowset->is_segment_range_mode());
+    EXPECT_EQ(2, range_rowset->num_segments());
+
+    // Compaction segment limit mode: 1 segment
+    auto limit_rowset =
+            std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 1 /* compaction_segment_limit */);
+    EXPECT_FALSE(limit_rowset->is_segment_range_mode());
+    EXPECT_TRUE(limit_rowset->partial_segments_compaction());
+    EXPECT_EQ(1, limit_rowset->num_segments());
+}
+
+TEST_F(LakeRowsetTest, test_segment_range_mode_segment_ids) {
+    create_rowsets_for_testing();
+
+    // Create rowset with segment range [1, 3) - segments 1 and 2
+    auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 1 /* segment_start */,
+                                                 3 /* segment_end */);
+
+    ASSIGN_OR_ABORT(auto segments, rowset->segments(false));
+    ASSERT_EQ(2, segments.size());
+
+    // Verify segment IDs are correctly set (should be 1 and 2, not 0 and 1)
+    // The segment ID is stored in the segment's metadata
+    EXPECT_EQ(1, segments[0]->id());
+    EXPECT_EQ(2, segments[1]->id());
 }
 
 } // namespace starrocks::lake

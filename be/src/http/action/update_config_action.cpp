@@ -44,9 +44,13 @@
 #include "agent/agent_common.h"
 #include "agent/agent_server.h"
 #include "cache/datacache.h"
+#include "cache/datacache_utils.h"
 #include "cache/mem_cache/page_cache.h"
+#include "common/config.h"
 #include "common/configbase.h"
 #include "common/status.h"
+#include "common/system/cpu_info.h"
+#include "common/util/bthreads/executor.h"
 #include "exec/workgroup/scan_executor.h"
 #include "gutil/strings/substitute.h"
 #include "http/http_channel.h"
@@ -69,7 +73,6 @@
 #include "storage/segment_replicate_executor.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
-#include "util/bthreads/executor.h"
 #include "util/priority_thread_pool.hpp"
 
 #ifdef USE_STAROS
@@ -382,6 +385,19 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             LOG(INFO) << "set load_channel_rpc_thread_pool_num:" << config::load_channel_rpc_thread_pool_num;
             return ExecEnv::GetInstance()->load_channel_mgr()->async_rpc_pool()->update_max_threads(
                     config::load_channel_rpc_thread_pool_num);
+        });
+        _config_callback.emplace("exec_state_report_max_threads", [&]() -> Status {
+            LOG(INFO) << "set exec_state_report_max_threads:" << config::exec_state_report_max_threads;
+            ExecEnv::GetInstance()->workgroup_manager()->change_exec_state_report_max_threads(
+                    config::exec_state_report_max_threads);
+            return Status::OK();
+        });
+        _config_callback.emplace("priority_exec_state_report_max_threads", [&]() -> Status {
+            LOG(INFO) << "set priority_exec_state_report_max_threads:"
+                      << config::priority_exec_state_report_max_threads;
+            ExecEnv::GetInstance()->workgroup_manager()->change_priority_exec_state_report_max_threads(
+                    config::priority_exec_state_report_max_threads);
+            return Status::OK();
         });
         _config_callback.emplace("number_tablet_writer_threads", [&]() -> Status {
             int max_delta_writer_thread_num = caculate_delta_writer_thread_num(config::number_tablet_writer_threads);

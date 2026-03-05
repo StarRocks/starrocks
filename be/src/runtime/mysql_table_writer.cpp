@@ -52,6 +52,7 @@
 #include <sstream>
 
 #include "exprs/expr.h"
+#include "exprs/expr_context.h"
 #include "runtime/mysql_table_writer.h"
 
 namespace starrocks {

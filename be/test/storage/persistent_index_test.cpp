@@ -18,9 +18,13 @@
 
 #include <cstdlib>
 
+#include "base/coding.h"
+#include "base/failpoint/fail_point.h"
 #include "base/string/faststring.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/parallel_test.h"
+#include "common/config.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_memory.h"
 #include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
@@ -33,8 +37,6 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/update_manager.h"
-#include "util/coding.h"
-#include "util/failpoint/fail_point.h"
 
 namespace starrocks {
 
@@ -1322,7 +1324,7 @@ TEST_P(PersistentIndexTest, test_flush_fixlen_to_immutable) {
     ASSERT_TRUE(idx->flush_to_immutable_index(writer, nshard, npage_hint, page_size, nbucket, true).ok());
     writer->finish();
 
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString("posix://"));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString("posix://"));
     ASSIGN_OR_ABORT(auto rf, fs->new_random_access_file("./index.l1.1.1"));
     auto st_load = ImmutableIndex::load(std::move(rf), true);
     if (!st_load.ok()) {
@@ -1361,7 +1363,7 @@ TEST_P(PersistentIndexTest, test_flush_fixlen_to_immutable) {
 
 TEST_P(PersistentIndexTest, test_flush_varlen_to_immutable) {
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_flush_varlen_to_immutable";
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString("posix://"));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString("posix://"));
     bool created;
     ASSERT_OK(fs->create_dir_if_missing(kPersistentIndexDir, &created));
     PersistentIndex index(kPersistentIndexDir);
@@ -2033,7 +2035,7 @@ TEST_P(PersistentIndexTest, test_flush_l1_advance) {
 
 TEST_P(PersistentIndexTest, test_bloom_filter_for_pindex) {
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_bloom_filter_for_pindex";
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString("posix://"));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString("posix://"));
     bool created;
     ASSERT_OK(fs->create_dir_if_missing(kPersistentIndexDir, &created));
     config::l0_max_mem_usage = 10240;
@@ -2183,7 +2185,7 @@ TEST_P(PersistentIndexTest, test_bloom_filter_for_pindex) {
 TEST_P(PersistentIndexTest, test_bloom_filter_working) {
     write_pindex_bf = true;
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_bloom_filter_working";
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString("posix://"));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString("posix://"));
     bool created;
     ASSERT_OK(fs->create_dir_if_missing(kPersistentIndexDir, &created));
     const int64_t old_l0_max_mem_usage = config::l0_max_mem_usage;

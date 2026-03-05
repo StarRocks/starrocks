@@ -141,6 +141,7 @@ inline uint64_t crc_hash_64_unmixed(const void* data, int32_t length, uint64_t h
     }
 
     uint64_t words = length / sizeof(uint64_t);
+    uint64_t remainder = length % sizeof(uint64_t);
     auto* p = reinterpret_cast<const uint8_t*>(data);
     auto* end = reinterpret_cast<const uint8_t*>(data) + length;
     while (words--) {
@@ -153,15 +154,16 @@ inline uint64_t crc_hash_64_unmixed(const void* data, int32_t length, uint64_t h
 #endif
         p += sizeof(uint64_t);
     }
-    // Reduce the branch condition
-    p = end - 8;
+    if (remainder != 0) {
+        p = end - 8;
 #if defined(__x86_64__)
-    hash = _mm_crc32_u64(hash, unaligned_load<uint64_t>(p));
+        hash = _mm_crc32_u64(hash, unaligned_load<uint64_t>(p));
 #elif defined(__aarch64__)
-    hash = __crc32cd(hash, unaligned_load<uint64_t>(p));
+        hash = __crc32cd(hash, unaligned_load<uint64_t>(p));
 #else
 #error "Not supported architecture"
 #endif
+    }
 
     return hash;
 #endif

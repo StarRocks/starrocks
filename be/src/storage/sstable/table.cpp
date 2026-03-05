@@ -6,6 +6,9 @@
 
 #include <butil/time.h> // NOLINT
 
+#include "base/coding.h"
+#include "base/container/lru_cache.h"
+#include "base/debug/trace.h"
 #include "common/status.h"
 #include "fs/fs.h"
 #include "runtime/exec_env.h"
@@ -17,9 +20,6 @@
 #include "storage/sstable/format.h"
 #include "storage/sstable/options.h"
 #include "storage/sstable/two_level_iterator.h"
-#include "util/coding.h"
-#include "util/lru_cache.h"
-#include "util/trace.h"
 
 namespace starrocks::sstable {
 
@@ -96,7 +96,7 @@ Status Table::sample_keys(std::vector<std::string>* keys, size_t sample_interval
     // skip interval_step keys per sample
     DCHECK(rep_->options.block_size > 0);
     size_t interval_step = sample_interval_bytes / rep_->options.block_size + 1;
-    size_t index = 0;
+    size_t index = 1; // First key is already included, so start with 1 to skip it.
     // If the key is last key in index block, it's a short successor key.
     // E.g.
     //      index block may contains ["key_0001", "key_0005", "l"]

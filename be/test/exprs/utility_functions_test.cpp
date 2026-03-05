@@ -22,13 +22,13 @@
 
 #include "base/random/random.h"
 #include "base/testutil/assert.h"
+#include "base/time/time.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "common/statusor.h"
 #include "exprs/function_context.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
-#include "util/time.h"
 
 namespace starrocks {
 

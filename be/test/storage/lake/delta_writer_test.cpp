@@ -16,7 +16,9 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <random>
+#include <thread>
 
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
@@ -25,7 +27,9 @@
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
+#include "common/config.h"
 #include "common/logging.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
@@ -218,7 +222,7 @@ TEST_F(LakeDeltaWriterTest, test_write_with_load_id) {
     ASSERT_GT(txnlog->op_write().rowset().data_size(), 0);
 
     // Check segment file
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(kTestDirectory));
     auto path0 = _tablet_mgr->segment_location(tablet_id, txnlog->op_write().rowset().segments(0));
 
     ASSIGN_OR_ABORT(auto seg0, Segment::open(fs, FileInfo{path0}, 0, _tablet_schema));
@@ -304,7 +308,7 @@ TEST_F(LakeDeltaWriterTest, test_write) {
     ASSERT_EQ(txnlog->op_write().schema_key().schema_id(), _tablet_schema->id());
 
     // Check segment file
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(kTestDirectory));
     auto path0 = _tablet_mgr->segment_location(tablet_id, txnlog->op_write().rowset().segments(0));
 
     ASSIGN_OR_ABORT(auto seg0, Segment::open(fs, FileInfo{path0}, 0, _tablet_schema));
@@ -366,7 +370,7 @@ TEST_F(LakeDeltaWriterTest, test_close) {
     ASSERT_TRUE(tablet.get_txn_log(txn_id).status().is_not_found());
 
     // Segment file should not exist
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(kTestDirectory));
     ASSERT_OK(fs->iterate_dir(join_path(kTestDirectory, kMetadataDirectoryName), [&](std::string_view name) {
         EXPECT_TRUE(is_tablet_metadata(name)) << name;
         return true;
@@ -419,7 +423,7 @@ TEST_F(LakeDeltaWriterTest, test_finish_without_write_txn_log) {
 
     // Segment file should exist
     int segment_files = 0;
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(kTestDirectory));
     ASSERT_OK(fs->iterate_dir(join_path(kTestDirectory, kSegmentDirectoryName), [&](std::string_view name) {
         segment_files += is_segment(name);
         return true;
@@ -708,6 +712,457 @@ TEST_F(LakeDeltaWriterTest, test_write_oom) {
     ASSERT_ERROR(delta_writer->write(chunk0, indexes.data(), indexes.size()));
     GlobalEnv::GetInstance()->load_mem_tracker()->release(100);
     GlobalEnv::GetInstance()->load_mem_tracker()->set_limit(old_limit);
+}
+
+// Test parallel memtable finalize feature
+// When enable_parallel_memtable_finalize is true, the finalize operation
+// is moved from write thread to flush thread for better parallelism
+TEST_F(LakeDeltaWriterTest, test_parallel_memtable_finalize_enabled) {
+    // Prepare data for writing
+    static const int kChunkSize = 128;
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    // Enable parallel memtable finalize
+    auto backup = config::enable_parallel_memtable_finalize;
+    config::enable_parallel_memtable_finalize = true;
+    DeferOp defer([&]() { config::enable_parallel_memtable_finalize = backup; });
+
+    // Create and open DeltaWriter
+    auto txn_id = next_id();
+    auto tablet_id = _tablet_metadata->id();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .set_profile(&_dummy_runtime_profile)
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+
+    // Write multiple times
+    ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+    ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+    ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+
+    // Finish
+    ASSERT_OK(delta_writer->finish_with_txnlog());
+    delta_writer->close();
+
+    // Check TxnLog
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
+    ASSIGN_OR_ABORT(auto txnlog, tablet.get_txn_log(txn_id));
+    ASSERT_EQ(tablet_id, txnlog->tablet_id());
+    ASSERT_EQ(txn_id, txnlog->txn_id());
+    ASSERT_TRUE(txnlog->has_op_write());
+    ASSERT_EQ(3 * kChunkSize, txnlog->op_write().rowset().num_rows());
+}
+
+// Test parallel memtable finalize feature disabled
+TEST_F(LakeDeltaWriterTest, test_parallel_memtable_finalize_disabled) {
+    // Prepare data for writing
+    static const int kChunkSize = 128;
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    // Disable parallel memtable finalize
+    auto backup = config::enable_parallel_memtable_finalize;
+    config::enable_parallel_memtable_finalize = false;
+    DeferOp defer([&]() { config::enable_parallel_memtable_finalize = backup; });
+
+    // Create and open DeltaWriter
+    auto txn_id = next_id();
+    auto tablet_id = _tablet_metadata->id();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .set_profile(&_dummy_runtime_profile)
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+
+    // Write multiple times
+    ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+    ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+    ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+
+    // Finish
+    ASSERT_OK(delta_writer->finish_with_txnlog());
+    delta_writer->close();
+
+    // Check TxnLog
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
+    ASSIGN_OR_ABORT(auto txnlog, tablet.get_txn_log(txn_id));
+    ASSERT_EQ(tablet_id, txnlog->tablet_id());
+    ASSERT_EQ(txn_id, txnlog->txn_id());
+    ASSERT_TRUE(txnlog->has_op_write());
+    ASSERT_EQ(3 * kChunkSize, txnlog->op_write().rowset().num_rows());
+}
+
+// Test parallel memtable finalize with memtable full trigger
+// When memtable is full, async flush is triggered without waiting
+TEST_F(LakeDeltaWriterTest, test_parallel_finalize_with_memtable_full) {
+    // Prepare data for writing
+    static const int kChunkSize = 128;
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    // Enable parallel memtable finalize and set small buffer size
+    auto backup_parallel = config::enable_parallel_memtable_finalize;
+    auto backup_buffer = config::write_buffer_size;
+    config::enable_parallel_memtable_finalize = true;
+    config::write_buffer_size = 1; // Very small to trigger memtable full
+    DeferOp defer([&]() {
+        config::enable_parallel_memtable_finalize = backup_parallel;
+        config::write_buffer_size = backup_buffer;
+    });
+
+    // Create and open DeltaWriter
+    auto txn_id = next_id();
+    auto tablet_id = _tablet_metadata->id();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .set_profile(&_dummy_runtime_profile)
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+
+    // Write multiple times - each write should trigger memtable full
+    ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+    ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+    ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+
+    // Finish
+    ASSERT_OK(delta_writer->finish_with_txnlog());
+    delta_writer->close();
+
+    // Check TxnLog - should have data from all writes
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
+    ASSIGN_OR_ABORT(auto txnlog, tablet.get_txn_log(txn_id));
+    ASSERT_EQ(tablet_id, txnlog->tablet_id());
+    ASSERT_EQ(txn_id, txnlog->txn_id());
+    ASSERT_TRUE(txnlog->has_op_write());
+    ASSERT_EQ(3 * kChunkSize, txnlog->op_write().rowset().num_rows());
+}
+
+// Test parallel finalize with memory limit exceeded
+// When memory limit is exceeded, flush_async + wait_for_flush_token is used
+TEST_F(LakeDeltaWriterTest, test_parallel_finalize_with_memory_limit) {
+    // Prepare data for writing
+    static const int kChunkSize = 128;
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    // Enable parallel memtable finalize
+    auto backup = config::enable_parallel_memtable_finalize;
+    config::enable_parallel_memtable_finalize = true;
+    DeferOp defer_config([&]() { config::enable_parallel_memtable_finalize = backup; });
+
+    // Set very small memory limit to trigger memory-based flush
+    _mem_tracker->set_limit(1);
+    DeferOp defer_limit([&]() { _mem_tracker->set_limit(-1); });
+
+    // Create and open DeltaWriter
+    auto txn_id = next_id();
+    auto tablet_id = _tablet_metadata->id();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .set_profile(&_dummy_runtime_profile)
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+
+    // Consume memory to exceed limit
+    _mem_tracker->consume(10);
+
+    // Write multiple times - should trigger memory-based flush with wait_for_flush_token
+    ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+    ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+    ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+
+    // Finish
+    ASSERT_OK(delta_writer->finish_with_txnlog());
+    delta_writer->close();
+
+    // Check TxnLog
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
+    ASSIGN_OR_ABORT(auto txnlog, tablet.get_txn_log(txn_id));
+    ASSERT_EQ(tablet_id, txnlog->tablet_id());
+    ASSERT_EQ(txn_id, txnlog->txn_id());
+    ASSERT_TRUE(txnlog->has_op_write());
+    // Data should be correctly written despite memory pressure
+    ASSERT_EQ(3 * kChunkSize, txnlog->op_write().rowset().num_rows());
+}
+
+// Test fast cancel functionality: after cancel() is called,
+// subsequent write() and flush() operations should fail immediately.
+TEST_F(LakeDeltaWriterTest, test_fast_cancel) {
+    // Prepare data for writing
+    static const int kChunkSize = 128;
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    // Create and open DeltaWriter
+    auto txn_id = next_id();
+    auto tablet_id = _tablet_metadata->id();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .set_profile(&_dummy_runtime_profile)
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+
+    // First write should succeed
+    ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+
+    // Cancel the writer with a specific error status
+    delta_writer->cancel(Status::Cancelled("transaction aborted"));
+
+    // Subsequent write should fail with the cancel status
+    auto write_st = delta_writer->write(chunk0, indexes.data(), indexes.size());
+    ASSERT_TRUE(write_st.is_cancelled());
+    ASSERT_TRUE(write_st.message().find("transaction aborted") != std::string::npos);
+
+    // Subsequent flush should also fail with the cancel status
+    auto flush_st = delta_writer->flush();
+    ASSERT_TRUE(flush_st.is_cancelled());
+
+    // Close should still work
+    delta_writer->close();
+}
+
+// Test fast cancel in finish path: after cancel() is called, finish_with_txnlog()
+// should fail immediately with cancelled status.
+TEST_F(LakeDeltaWriterTest, test_finish_after_cancel) {
+    static const int kChunkSize = 128;
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto txn_id = next_id();
+    auto tablet_id = _tablet_metadata->id();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .set_profile(&_dummy_runtime_profile)
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+    ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+
+    delta_writer->cancel(Status::Cancelled("txn aborted before finish"));
+
+    auto res = delta_writer->finish_with_txnlog();
+    ASSERT_TRUE(res.status().is_cancelled());
+    ASSERT_TRUE(res.status().message().find("txn aborted before finish") != std::string::npos);
+
+    delta_writer->close();
+}
+
+// Test that cancel() with OK status is a no-op
+TEST_F(LakeDeltaWriterTest, test_cancel_with_ok_status) {
+    // Prepare data for writing
+    static const int kChunkSize = 128;
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    // Create and open DeltaWriter
+    auto txn_id = next_id();
+    auto tablet_id = _tablet_metadata->id();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .set_profile(&_dummy_runtime_profile)
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+
+    // Cancel with OK status should be a no-op
+    delta_writer->cancel(Status::OK());
+
+    // Write should still succeed
+    ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+
+    // Finish and close
+    ASSERT_OK(delta_writer->finish_with_txnlog());
+    delta_writer->close();
+}
+
+// Test that multiple cancel() calls only use the first error status
+TEST_F(LakeDeltaWriterTest, test_multiple_cancel) {
+    // Prepare data for writing
+    static const int kChunkSize = 128;
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    // Create and open DeltaWriter
+    auto txn_id = next_id();
+    auto tablet_id = _tablet_metadata->id();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .set_profile(&_dummy_runtime_profile)
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+
+    // First cancel with a specific status
+    delta_writer->cancel(Status::Cancelled("first cancel"));
+
+    // Second cancel with a different status should be ignored
+    delta_writer->cancel(Status::InternalError("second cancel"));
+
+    // Write should fail with the first cancel status
+    auto write_st = delta_writer->write(chunk0, indexes.data(), indexes.size());
+    ASSERT_TRUE(write_st.is_cancelled());
+    ASSERT_TRUE(write_st.message().find("first cancel") != std::string::npos);
+
+    delta_writer->close();
+}
+
+// Test that cancel() and close() can be called concurrently without crashing.
+// This verifies the fix for the race condition where cancel() accesses _flush_token
+// while close() resets it, now both are protected by _cancel_lock.
+TEST_F(LakeDeltaWriterTest, test_concurrent_cancel_and_close) {
+    // Prepare data for writing
+    static const int kChunkSize = 128;
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    // Create and open DeltaWriter
+    auto txn_id = next_id();
+    auto tablet_id = _tablet_metadata->id();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .set_profile(&_dummy_runtime_profile)
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+
+    // Write some data to create _flush_token
+    ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+
+    // Call cancel() and close() concurrently - should not crash, deadlock, or ASAN error
+    auto t1 = std::thread([&]() { delta_writer->cancel(Status::Cancelled("concurrent cancel")); });
+    auto t2 = std::thread([&]() { delta_writer->close(); });
+    t1.join();
+    t2.join();
+}
+
+// Test that concurrent cancel() and write() work correctly with shared_mutex.
+// cancel() uses unique_lock while write() uses shared_lock, so concurrent writes
+// should not block each other, but cancel should properly synchronize.
+TEST_F(LakeDeltaWriterTest, test_concurrent_cancel_and_write) {
+    // Prepare data for writing
+    static const int kChunkSize = 128;
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    // Create and open DeltaWriter
+    auto txn_id = next_id();
+    auto tablet_id = _tablet_metadata->id();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .set_profile(&_dummy_runtime_profile)
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+
+    std::atomic<bool> cancel_called{false};
+    std::atomic<int> write_count{0};
+
+    // Start a writer thread
+    auto writer_thread = std::thread([&]() {
+        for (int i = 0; i < 100; i++) {
+            auto st = delta_writer->write(chunk0, indexes.data(), indexes.size());
+            write_count.fetch_add(1);
+            if (!st.ok()) {
+                // After cancel, all writes should fail with cancelled status
+                ASSERT_TRUE(st.is_cancelled()) << st;
+                break;
+            }
+        }
+    });
+
+    // Start a cancel thread that cancels after a short delay
+    auto cancel_thread = std::thread([&]() {
+        // Wait until some writes have happened
+        while (write_count.load() < 5) {
+            std::this_thread::yield();
+        }
+        delta_writer->cancel(Status::Cancelled("concurrent cancel during write"));
+        cancel_called.store(true);
+    });
+
+    writer_thread.join();
+    cancel_thread.join();
+
+    ASSERT_TRUE(cancel_called.load());
+
+    delta_writer->close();
 }
 
 } // namespace starrocks::lake

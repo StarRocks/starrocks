@@ -20,11 +20,11 @@
 #include "column/bytes.h"
 #include "column/column.h"
 #include "column/container_resource.h"
-#include "column/datum.h"
 #include "column/german_string.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "gutil/strings/fastmem.h"
+#include "types/datum.h"
 
 namespace starrocks {
 
@@ -40,21 +40,20 @@ public:
     using Byte = uint8_t;
     using Bytes = starrocks::raw::RawVectorPad16<uint8_t, ColumnAllocator<uint8_t>>;
 
-    struct BinaryDataProxyContainer {
-        BinaryDataProxyContainer(const BinaryColumnBase& column) : _column(column) {}
+    struct ImmContainer {
+        ImmContainer() = default;
+        explicit ImmContainer(const BinaryColumnBase& column) : _column(&column) {}
 
-        Slice operator[](size_t index) const { return _column.get_slice(index); }
+        Slice operator[](size_t index) const { return _column->get_slice(index); }
 
-        size_t size() const { return _column.size(); }
+        size_t size() const { return _column->size(); }
 
     private:
-        const BinaryColumnBase& _column;
+        const BinaryColumnBase* _column = nullptr;
     };
 
     using Container = Buffer<Slice>;
     using GermanStringContainer = Buffer<GermanString>;
-    using ProxyContainer = BinaryDataProxyContainer;
-    using ImmContainer = BinaryDataProxyContainer;
 
     // TODO(kks): when we create our own vector, we could let vector[-1] = 0,
     // and then we don't need explicitly emplace_back zero value
@@ -67,32 +66,13 @@ public:
         }
     }
 
-    explicit BinaryColumnBase(ContainerResource resource, Offsets offsets)
-            : _bytes(), _offsets(std::move(offsets)), _resource(std::move(resource)), _immuable_container(*this) {
-        if (_offsets.empty()) {
-            _offsets.emplace_back(0);
-        }
-        if (!config::enable_zero_copy_from_page_cache) {
-            _ensure_materialized();
-        }
-    }
+    explicit BinaryColumnBase(ContainerResource resource, Offsets offsets);
 
-    // NOTE: do *NOT* copy |_slices|
-    BinaryColumnBase(const BinaryColumnBase<T>& rhs)
-            : _bytes(rhs._bytes), _offsets(rhs._offsets), _resource(rhs._resource), _immuable_container(*this) {}
+    DISALLOW_COPY_TEMPLATE(BinaryColumnBase, BinaryColumnBase<T>);
 
     // NOTE: do *NOT* copy |_slices|
     BinaryColumnBase(BinaryColumnBase<T>&& rhs) noexcept
-            : _bytes(std::move(rhs._bytes)),
-              _offsets(std::move(rhs._offsets)),
-              _resource(std::move(rhs._resource)),
-              _immuable_container(*this) {}
-
-    BinaryColumnBase<T>& operator=(const BinaryColumnBase<T>& rhs) {
-        BinaryColumnBase<T> tmp(rhs);
-        this->swap_column(tmp);
-        return *this;
-    }
+            : _bytes(std::move(rhs._bytes)), _offsets(std::move(rhs._offsets)), _resource(std::move(rhs._resource)) {}
 
     BinaryColumnBase<T>& operator=(BinaryColumnBase<T>&& rhs) noexcept {
         BinaryColumnBase<T> tmp(std::move(rhs));
@@ -301,6 +281,12 @@ public:
 
     MutableColumnPtr clone_empty() const override { return BinaryColumnBase<T>::create(); }
 
+    MutableColumnPtr clone() const override {
+        auto p = clone_empty();
+        p->append(*this, 0, size());
+        return p;
+    }
+
     MutableColumnPtr cut(size_t start, size_t length) const;
     size_t filter_range(const Filter& filter, size_t start, size_t to) override;
 
@@ -346,7 +332,7 @@ public:
         return _german_strings;
     }
 
-    const BinaryDataProxyContainer& get_proxy_data() const { return _immuable_container; }
+    ImmContainer immutable_data() const { return ImmContainer(*this); }
 
     Bytes& get_bytes() {
         _ensure_materialized();
@@ -420,6 +406,8 @@ public:
 
     Status capacity_limit_reached() const override;
 
+    void build_slices(Container& slices) const;
+
 private:
     void _build_slices() const;
     void _build_german_strings() const;
@@ -437,8 +425,6 @@ private:
     mutable bool _slices_cache = false;
     mutable GermanStringContainer _german_strings;
     mutable bool _german_strings_cache = false;
-
-    BinaryDataProxyContainer _immuable_container = BinaryDataProxyContainer(*this);
 };
 
 using Offsets = BinaryColumnBase<uint32_t>::Offsets;

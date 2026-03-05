@@ -18,7 +18,10 @@
 
 #include <climits>
 
+#include "base/debug/trace.h"
+#include "base/phmap/phmap_fwd_decl.h"
 #include "base/testutil/sync_point.h"
+#include "common/config.h"
 #include "gutil/strings/join.h"
 #include "runtime/current_thread.h"
 #include "storage/lake/lake_primary_index.h"
@@ -29,8 +32,6 @@
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/update_manager.h"
 #include "util/dynamic_cache.h"
-#include "util/phmap/phmap_fwd_decl.h"
-#include "util/trace.h"
 
 namespace starrocks::lake {
 
@@ -470,7 +471,6 @@ private:
 
             // Reuse publish_primary_compaction for each subtask
             // - Internal conflict check is performed per subtask
-            // - Light publish uses subtask's lcrm_file
             // - Primary index and metadata are updated
             RETURN_IF_ERROR(_tablet.update_mgr()->publish_primary_compaction(subtask_op, txn_id, *_metadata, _tablet,
                                                                              _index_entry, &_builder, _base_version));
@@ -495,10 +495,16 @@ private:
             _builder.remove_compacted_sst(sst_op);
         }
 
+        // Cleanup orphan lcrm files from merged large rowset split subtasks
+        // These files are no longer valid after merging (segment IDs changed)
+        for (const auto& lcrm_file : op_parallel.orphan_lcrm_files()) {
+            _metadata->add_orphan_files()->CopyFrom(lcrm_file);
+        }
+
         return Status::OK();
     }
 
-    // Helper function: check if all input rowsets exist in current metadata
+    // Helper function: check if all input rowsets exist in current metadata rowsets()
     bool _check_input_rowsets_exist(const TxnLogPB_OpCompaction& op) const {
         for (uint32_t input_id : op.input_rowsets()) {
             bool found = false;
@@ -522,7 +528,8 @@ private:
             DCHECK(rowset.has_id());
             auto new_rowset = _metadata->add_rowsets();
             new_rowset->CopyFrom(rowset);
-            _metadata->set_next_rowset_id(new_rowset->id() + std::max(1, new_rowset->segments_size()));
+            new_rowset->set_version(_new_version);
+            _metadata->set_next_rowset_id(new_rowset->id() + get_rowset_id_step(*new_rowset));
         }
         if (op_schema_change.has_delvec_meta()) {
             DCHECK(op_schema_change.linked_segment());
@@ -620,8 +627,9 @@ private:
                     rowset->CopyFrom(op_write.rowset());
                     const auto new_rowset_id = rowset->id() + _metadata->next_rowset_id();
                     rowset->set_id(new_rowset_id);
-                    new_next_rowset_id = std::max<uint32_t>(new_next_rowset_id,
-                                                            new_rowset_id + std::max(1, rowset->segments_size()));
+                    rowset->set_version(_new_version);
+                    new_next_rowset_id =
+                            std::max<uint32_t>(new_next_rowset_id, new_rowset_id + get_rowset_id_step(*rowset));
                 }
                 for (const auto& [segment_id, delvec_data] : op_replication.delvecs()) {
                     auto delvec = std::make_shared<DelVector>();
@@ -758,7 +766,8 @@ public:
         std::vector<std::string> all_segments;
         std::vector<int64_t> all_segment_sizes;
         std::vector<std::string> all_segment_encryption_metas;
-        std::vector<const SegmentMetadataPB*> all_segment_metas;
+        std::vector<SegmentMetadataPB> all_segment_metas;
+        uint32_t assigned_segment_idx = 0;
 
         // Traverse all transaction logs and collect op_write information
         VLOG(2) << "Collecting op_write information from transaction logs for tablet " << _tablet.id();
@@ -804,11 +813,17 @@ public:
                         all_segment_encryption_metas.emplace_back(rowset.segment_encryption_metas(i));
                     }
 
-                    // Collect segment metas
-                    all_segment_metas.reserve(all_segment_metas.size() + rowset.segment_metas_size());
-                    for (int i = 0; i < rowset.segment_metas_size(); i++) {
-                        all_segment_metas.emplace_back(&rowset.segment_metas(i));
+                    // Collect segment metas and remap segment_id into the merged rowset's local id space.
+                    // Keep one SegmentMetadataPB per segment to preserve index alignment.
+                    all_segment_metas.reserve(all_segment_metas.size() + rowset.segments_size());
+                    for (int i = 0; i < rowset.segments_size(); i++) {
+                        all_segment_metas.emplace_back();
+                        if (i < rowset.segment_metas_size()) {
+                            all_segment_metas.back().CopyFrom(rowset.segment_metas(i));
+                        }
+                        all_segment_metas.back().set_segment_idx(assigned_segment_idx + get_segment_idx(rowset, i));
                     }
+                    assigned_segment_idx += get_rowset_id_step(rowset);
                 }
             } else {
                 return Status::NotSupported(
@@ -846,13 +861,14 @@ public:
         }
 
         // Set segment metas
-        for (const auto* segment_meta : all_segment_metas) {
-            merged_rowset->add_segment_metas()->CopyFrom(*segment_meta);
+        for (const auto& segment_meta : all_segment_metas) {
+            merged_rowset->add_segment_metas()->CopyFrom(segment_meta);
         }
 
         // Set rowset ID and update next_rowset_id
         merged_rowset->set_id(_metadata->next_rowset_id());
-        _metadata->set_next_rowset_id(_metadata->next_rowset_id() + std::max(1, merged_rowset->segments_size()));
+        merged_rowset->set_version(_new_version);
+        _metadata->set_next_rowset_id(_metadata->next_rowset_id() + get_rowset_id_step(*merged_rowset));
         VLOG(2) << "Set rowset id to " << merged_rowset->id() << " and updated next_rowset_id to "
                 << _metadata->next_rowset_id() << " for tablet " << _tablet.id();
 
@@ -889,7 +905,8 @@ private:
             auto rowset = _metadata->add_rowsets();
             rowset->CopyFrom(op_write.rowset());
             rowset->set_id(_metadata->next_rowset_id());
-            _metadata->set_next_rowset_id(_metadata->next_rowset_id() + std::max(1, rowset->segments_size()));
+            rowset->set_version(_new_version);
+            _metadata->set_next_rowset_id(_metadata->next_rowset_id() + get_rowset_id_step(*rowset));
             if (!_metadata->rowset_to_schema().empty()) {
                 auto schema_id = _metadata->schema().id();
                 (*_metadata->mutable_rowset_to_schema())[rowset->id()] = schema_id;
@@ -1000,7 +1017,8 @@ private:
             auto output_rowset = _metadata->mutable_rowsets(first_idx);
             output_rowset->CopyFrom(op_compaction.output_rowset());
             output_rowset->set_id(_metadata->next_rowset_id());
-            _metadata->set_next_rowset_id(_metadata->next_rowset_id() + output_rowset->segments_size());
+            output_rowset->set_version(_new_version);
+            _metadata->set_next_rowset_id(_metadata->next_rowset_id() + get_rowset_id_step(*output_rowset));
             ++first_input_pos;
             has_output_rowset = true;
             output_rowset_id = output_rowset->id();
@@ -1077,7 +1095,8 @@ private:
             DCHECK(rowset.has_id());
             auto new_rowset = _metadata->add_rowsets();
             new_rowset->CopyFrom(rowset);
-            _metadata->set_next_rowset_id(new_rowset->id() + std::max(1, new_rowset->segments_size()));
+            new_rowset->set_version(_new_version);
+            _metadata->set_next_rowset_id(new_rowset->id() + get_rowset_id_step(*new_rowset));
         }
         DCHECK(!op_schema_change.has_delvec_meta());
         return Status::OK();

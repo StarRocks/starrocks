@@ -22,11 +22,10 @@ add_subdirectory(rowset)
 set(STORAGE_FILES
     aggregate_type.cpp
     base_tablet.cpp
-    decimal12.cpp
-    decimal_type_info.cpp
     delete_handler.cpp
     del_vector.cpp
     delta_column_group.cpp
+    flat_json_config.cpp
     key_coder.cpp
     memtable_flush_executor.cpp
     segment_flush_executor.cpp
@@ -64,7 +63,7 @@ set(STORAGE_FILES
     tablet_schema_map.cpp
     tablet_updates.cpp
     txn_manager.cpp
-    types.cpp
+    type_info_factory.cpp
     update_manager.cpp
     utils.cpp
     compaction_utils.cpp
@@ -111,6 +110,7 @@ set(STORAGE_FILES
     rowset/parsed_page.cpp
     rowset/zone_map_index.cpp
     rowset/segment_iterator.cpp
+    rowset/options.cpp
     rowset/segment_options.cpp
     rowset/rowid_range_option.cpp
     rowset/rowset_meta.cpp
@@ -127,6 +127,7 @@ set(STORAGE_FILES
     aggregate_iterator.cpp
     async_delta_writer.cpp
     chunk_helper.cpp
+    chunk_variant_helper.cpp
     chunk_iterator.cpp
     column_predicate_cmp.cpp
     column_in_predicate.cpp
@@ -176,6 +177,7 @@ set(STORAGE_FILES
     compaction_manager.cpp
     horizontal_compaction_task.cpp
     vertical_compaction_task.cpp
+    virtual_column_utils.cpp
     compaction_task_factory.cpp
     default_compaction_policy.cpp
     size_tiered_compaction_policy.cpp
@@ -184,6 +186,7 @@ set(STORAGE_FILES
     primary_key_recover.cpp
     local_primary_key_recover.cpp
     lake/async_delta_writer.cpp
+    lake/async_file_deleter.cpp
     lake/compaction_policy.cpp
     lake/compaction_scheduler.cpp
     lake/compaction_task.cpp
@@ -267,8 +270,6 @@ set(STORAGE_FILES
     lake/lake_primary_key_compaction_conflict_resolver.cpp
     lake/column_mode_partial_update_handler.cpp
     lake/tablet_write_log_manager.cpp
-    sstable/sstable_predicate.cpp
-    sstable/sstable_predicate_utils.cpp
     primary_key_dump.cpp
     dictionary_cache_manager.cpp
     rows_mapper.cpp
@@ -292,8 +293,6 @@ set(STORAGE_FILES
     index/vector/tenann/del_id_filter.cpp
     index/vector/tenann/tenann_index_builder.cpp
     index/vector/tenann/tenann_index_utils.cpp
-    record_predicate/record_predicate_helper.cpp
-    record_predicate/column_hash_is_congruent.cpp
     lake/table_schema_service.cpp
     index/inverted/builtin/builtin_plugin.cpp
     index/inverted/builtin/builtin_inverted_writer.cpp

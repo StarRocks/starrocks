@@ -15,6 +15,8 @@
 
 #include <gtest/gtest.h>
 
+#include <type_traits>
+
 namespace starrocks {
 
 TEST(BitMask, Basic) {
@@ -29,5 +31,10 @@ TEST(BitMask, Basic) {
         ASSERT_FALSE(bit_mask.is_bit_set(i));
     }
     ASSERT_TRUE(bit_mask.all_bits_zero());
+}
+
+TEST(BitMask, NotCopyable) {
+    EXPECT_FALSE(std::is_copy_constructible_v<BitMask>);
+    EXPECT_FALSE(std::is_copy_assignable_v<BitMask>);
 }
 } // namespace starrocks

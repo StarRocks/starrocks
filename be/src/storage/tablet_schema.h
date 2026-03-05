@@ -47,6 +47,7 @@
 #include "runtime/agg_state_desc.h"
 #include "storage/aggregate_type.h"
 #include "storage/olap_define.h"
+#include "storage/primary_key_encoding_types.h"
 #include "storage/tablet_index.h"
 #include "storage/types.h"
 #include "util/once.h"
@@ -74,6 +75,7 @@ class TabletColumn {
         std::string default_value;
         std::vector<TabletColumn> sub_columns;
         bool has_default_value = false;
+        bool is_virtual_column = false;
     };
 
 public:
@@ -167,6 +169,13 @@ public:
         ExtraFields* ext = _get_or_alloc_extra_fields();
         ext->has_default_value = true;
         ext->default_value = std::move(value);
+    }
+
+    bool is_virtual_column() const { return _extra_fields && _extra_fields->is_virtual_column; }
+
+    void set_is_virtual_column(bool is_virtual) {
+        ExtraFields* ext = _get_or_alloc_extra_fields();
+        ext->is_virtual_column = is_virtual;
     }
 
     bool has_agg_state_desc() const { return _agg_state_desc != nullptr; }
@@ -305,7 +314,6 @@ public:
     size_t estimate_row_size(size_t variable_len) const;
     int32_t field_index(int32_t col_unique_id) const;
     size_t field_index(std::string_view field_name) const;
-    size_t field_index(std::string_view field_name, std::string_view extra_column_name) const;
     const TabletColumn& column(size_t ordinal) const;
     const std::vector<TabletColumn>& columns() const;
     const std::vector<ColumnId> sort_key_idxes() const { return _sort_key_idxes; }
@@ -321,6 +329,17 @@ public:
     double bf_fpp() const { return _bf_fpp; }
     CompressionTypePB compression_type() const { return _compression_type; }
     int compression_level() const { return _compression_level; }
+
+    bool has_valid_primary_key_encoding_type() const {
+        return _primary_key_encoding_type != PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
+    }
+    PrimaryKeyEncodingType primary_key_encoding_type() const { return _primary_key_encoding_type; }
+    StatusOr<PrimaryKeyEncodingType> primary_key_encoding_type_or_error() const {
+        if (!has_valid_primary_key_encoding_type()) {
+            return Status::InternalError("tablet schema has no available primary key encoding type");
+        }
+        return _primary_key_encoding_type;
+    }
     void append_column(TabletColumn column);
 
     int32_t schema_version() const { return _schema_version; }
@@ -412,6 +431,8 @@ private:
     mutable std::unique_ptr<starrocks::Schema> _schema;
     mutable std::once_flag _init_schema_once_flag;
     int32_t _schema_version = -1;
+
+    PrimaryKeyEncodingType _primary_key_encoding_type = PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
 };
 
 bool operator==(const TabletSchema& a, const TabletSchema& b);

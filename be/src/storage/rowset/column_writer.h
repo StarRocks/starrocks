@@ -47,12 +47,12 @@
 #ifndef __APPLE__
 #include "storage/index/inverted/inverted_writer.h"
 #endif
+#include "base/bit/bitmap.h"   // for BitmapChange
 #include "base/string/slice.h" // for OwnedSlice
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/page_pointer.h" // for PagePointer
 #include "storage/tablet_schema.h"       // for TabletColumn
-#include "util/bitmap.h"                 // for BitmapChange
 
 namespace starrocks {
 
@@ -65,11 +65,13 @@ class Column;
 static const size_t dictionary_min_rowcount = 256;
 
 struct ColumnWriterOptions {
+    ColumnWriterOptions();
+
     // input and output parameter:
     // - input: column_id/unique_id/type/length/encoding/compression/is_nullable members
     // - output: encoding/indexes/dict_page members
     ColumnMetaPB* meta;
-    uint32_t data_page_size = config::data_page_size;
+    uint32_t data_page_size;
     uint32_t page_format = 2;
     // store compressed page only when space saving is above the threshold.
     // space saving = 1 - compressed_size / uncompressed_size

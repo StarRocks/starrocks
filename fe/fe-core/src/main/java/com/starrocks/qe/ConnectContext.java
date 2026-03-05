@@ -231,6 +231,7 @@ public class ConnectContext {
     protected TWorkGroup resourceGroup;
 
     protected volatile boolean isPending = false;
+    protected volatile boolean isPlanning = false;
     protected volatile boolean isForward = false;
 
     private ConnectContext parent;
@@ -238,6 +239,9 @@ public class ConnectContext {
     private boolean relationAliasCaseInsensitive = false;
 
     private final Map<String, PrepareStmtContext> preparedStmtCtxs = Maps.newHashMap();
+
+    // Control whether to read Iceberg caches without populating/updating them for the current execution.
+    private boolean onlyReadIcebergCache = false;
 
     private UUID sessionId;
 
@@ -263,9 +267,6 @@ public class ConnectContext {
     // session level SPM storage
     private SQLPlanStorage sqlPlanStorage = SQLPlanStorage.create(false);
 
-    // Whether leader is transferred during executing stmt
-    private boolean isLeaderTransferred = false;
-
     private AtomicLong currentThreadAllocatedMemory = new AtomicLong(0);
 
     // thread id is the thread who created this ConnectContext's id
@@ -279,6 +280,9 @@ public class ConnectContext {
 
     private boolean skipFinishSink = false;
     private FinishSinkHandler handler = null;
+
+    // Track if current write is CTAS (Create Table As Select)
+    private boolean isCTAS = false;
 
     public void setTxnId(long txnId) {
         this.txnId = txnId;
@@ -1287,6 +1291,47 @@ public class ConnectContext {
         this.querySource = querySource;
     }
 
+    public boolean isOnlyReadIcebergCache() {
+        return onlyReadIcebergCache;
+    }
+
+    public void setOnlyReadIcebergCache(boolean onlyReadIcebergCache) {
+        this.onlyReadIcebergCache = onlyReadIcebergCache;
+    }
+
+    /**
+     * Scope helper to enable only-read-iceberg-cache semantics with automatic restore.
+     * Use in try-with-resources to mimic defer behavior.
+     */
+    public static ContextScope enterOnlyReadIcebergCacheScope(ConnectContext ctx) {
+        ConnectContext target = ctx != null ? ctx : new ConnectContext();
+        boolean originOnlyRead = target.isOnlyReadIcebergCache();
+        QuerySource originSource = target.getQuerySource();
+        target.setOnlyReadIcebergCache(true);
+        return new ContextScope(target, originOnlyRead, originSource);
+    }
+
+    public static class ContextScope implements AutoCloseable {
+        private final ConnectContext ctx;
+        private final boolean originOnlyRead;
+        private final QuerySource originSource;
+
+        ContextScope(ConnectContext ctx, boolean originOnlyRead, QuerySource originSource) {
+            this.ctx = ctx;
+            this.originOnlyRead = originOnlyRead;
+            this.originSource = originSource;
+        }
+
+        public ConnectContext getContext() {
+            return ctx;
+        }
+
+        @Override
+        public void close() {
+            ctx.setOnlyReadIcebergCache(originOnlyRead);
+        }
+    }
+
     public void startAcceptQuery(ConnectProcessor connectProcessor) {
         mysqlChannel.startAcceptQuery(this, connectProcessor);
     }
@@ -1477,6 +1522,14 @@ public class ConnectContext {
         return isPending;
     }
 
+    public void setPlanning(boolean planning) {
+        isPlanning = planning;
+    }
+
+    public boolean isPlanning() {
+        return isPlanning;
+    }
+
     public void setIsForward(boolean forward) {
         isForward = forward;
     }
@@ -1647,14 +1700,6 @@ public class ConnectContext {
         }
     }
 
-    public boolean isLeaderTransferred() {
-        return isLeaderTransferred;
-    }
-
-    public void setIsLeaderTransferred(boolean isLeaderTransferred) {
-        this.isLeaderTransferred = isLeaderTransferred;
-    }
-
     /**
      * Set thread-local context for the scope, and remove it after leaving the scope
      */
@@ -1783,6 +1828,14 @@ public class ConnectContext {
 
     public FinishSinkHandler getFinishSinkHandler() {
         return handler;
+    }
+
+    public void setCTAS(boolean isCTAS) {
+        this.isCTAS = isCTAS;
+    }
+
+    public boolean isCTAS() {
+        return isCTAS;
     }
 
     public interface Listener {

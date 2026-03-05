@@ -20,6 +20,8 @@
 #include <utility>
 
 #include "base/container/fixed_hash_map.h"
+#include "base/failpoint/fail_point.h"
+#include "base/phmap/phmap.h"
 #include "base/utility/defer_op.h"
 #include "column/column.h"
 #include "column/column_hash.h"
@@ -33,8 +35,6 @@
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
 #include "runtime/mem_pool.h"
-#include "util/failpoint/fail_point.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 
@@ -100,17 +100,8 @@ using SliceAggTwoLevelHashMap =
                                       phmap::priv::Allocator<phmap::priv::Pair<const Slice, AggDataPtr>>, PHMAPN>;
 
 template <typename T>
-concept HasImmutableData = requires(T t) {
-    {t.immutable_data()};
-};
-
-template <typename T>
 auto get_immutable_data(T* obj) {
-    if constexpr (HasImmutableData<T>) {
-        return obj->immutable_data();
-    } else {
-        return obj->get_proxy_data();
-    }
+    return obj->immutable_data();
 }
 
 static_assert(sizeof(AggDataPtr) == sizeof(size_t));

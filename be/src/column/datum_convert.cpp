@@ -14,11 +14,11 @@
 
 #include "column/datum_convert.h"
 
+#include <cstring>
+
 #include "gutil/strings/substitute.h"
-#include "runtime/mem_pool.h"
-#include "storage/olap_type_infra.h"
-#include "storage/type_traits.h"
 #include "types/logical_type.h"
+#include "types/type_traits.h"
 
 namespace starrocks {
 
@@ -32,19 +32,46 @@ Status datum_from_string(TypeInfo* type_info, Datum* dst, const std::string& str
     return Status::OK();
 }
 
-Status datum_from_string(TypeInfo* type_info, Datum* dst, const std::string& str, MemPool* mem_pool) {
+Status datum_from_string(TypeInfo* type_info, Datum* dst, const std::string& str,
+                         const TypeInfoAllocator* type_info_allocator) {
     const auto type = type_info->type();
     switch (type) {
-#define M(type) \
-    case type:  \
-        return datum_from_string<type>(type_info, dst, str);
-
-        APPLY_FOR_TYPE_INTEGER(M)
-        APPLY_FOR_TYPE_TIME(M)
-        APPLY_FOR_TYPE_DECIMAL(M)
-        M(TYPE_FLOAT)
-        M(TYPE_DOUBLE)
-#undef M
+    case TYPE_TINYINT:
+        return datum_from_string<TYPE_TINYINT>(type_info, dst, str);
+    case TYPE_SMALLINT:
+        return datum_from_string<TYPE_SMALLINT>(type_info, dst, str);
+    case TYPE_BIGINT:
+        return datum_from_string<TYPE_BIGINT>(type_info, dst, str);
+    case TYPE_LARGEINT:
+        return datum_from_string<TYPE_LARGEINT>(type_info, dst, str);
+    case TYPE_INT:
+        return datum_from_string<TYPE_INT>(type_info, dst, str);
+    case TYPE_INT256:
+        return datum_from_string<TYPE_INT256>(type_info, dst, str);
+    case TYPE_DATE_V1:
+        return datum_from_string<TYPE_DATE_V1>(type_info, dst, str);
+    case TYPE_DATE:
+        return datum_from_string<TYPE_DATE>(type_info, dst, str);
+    case TYPE_DATETIME_V1:
+        return datum_from_string<TYPE_DATETIME_V1>(type_info, dst, str);
+    case TYPE_DATETIME:
+        return datum_from_string<TYPE_DATETIME>(type_info, dst, str);
+    case TYPE_DECIMAL:
+        return datum_from_string<TYPE_DECIMAL>(type_info, dst, str);
+    case TYPE_DECIMALV2:
+        return datum_from_string<TYPE_DECIMALV2>(type_info, dst, str);
+    case TYPE_DECIMAL32:
+        return datum_from_string<TYPE_DECIMAL32>(type_info, dst, str);
+    case TYPE_DECIMAL64:
+        return datum_from_string<TYPE_DECIMAL64>(type_info, dst, str);
+    case TYPE_DECIMAL128:
+        return datum_from_string<TYPE_DECIMAL128>(type_info, dst, str);
+    case TYPE_DECIMAL256:
+        return datum_from_string<TYPE_DECIMAL256>(type_info, dst, str);
+    case TYPE_FLOAT:
+        return datum_from_string<TYPE_FLOAT>(type_info, dst, str);
+    case TYPE_DOUBLE:
+        return datum_from_string<TYPE_DOUBLE>(type_info, dst, str);
     case TYPE_BOOLEAN: {
         bool v;
         RETURN_IF_ERROR(type_info->from_string(&v, str));
@@ -58,10 +85,10 @@ Status datum_from_string(TypeInfo* type_info, Datum* dst, const std::string& str
         /* Type need memory allocated */
         Slice slice;
         slice.size = str.size();
-        if (mem_pool == nullptr) {
+        if (type_info_allocator == nullptr) {
             slice.data = (char*)str.data();
         } else {
-            slice.data = reinterpret_cast<char*>(mem_pool->allocate(slice.size));
+            slice.data = reinterpret_cast<char*>(type_info_allocator->allocate(slice.size));
             RETURN_IF_UNLIKELY_NULL(slice.data, Status::MemoryAllocFailed("alloc mem for varchar field failed"));
             memcpy(slice.data, str.data(), slice.size);
         }
@@ -98,11 +125,44 @@ std::string datum_to_string(TypeInfo* type_info, const Datum& datum) {
     case TYPE_CHAR:
     case TYPE_VARCHAR:
         return datum_to_string<TYPE_VARCHAR>(type_info, datum);
-#define M(type) \
-    case type:  \
-        return datum_to_string<type>(type_info, datum);
-        APPLY_FOR_TYPE_CONVERT_TO_VARCHAR(M)
-#undef M
+    case TYPE_TINYINT:
+        return datum_to_string<TYPE_TINYINT>(type_info, datum);
+    case TYPE_SMALLINT:
+        return datum_to_string<TYPE_SMALLINT>(type_info, datum);
+    case TYPE_BIGINT:
+        return datum_to_string<TYPE_BIGINT>(type_info, datum);
+    case TYPE_LARGEINT:
+        return datum_to_string<TYPE_LARGEINT>(type_info, datum);
+    case TYPE_INT:
+        return datum_to_string<TYPE_INT>(type_info, datum);
+    case TYPE_INT256:
+        return datum_to_string<TYPE_INT256>(type_info, datum);
+    case TYPE_DATE_V1:
+        return datum_to_string<TYPE_DATE_V1>(type_info, datum);
+    case TYPE_DATE:
+        return datum_to_string<TYPE_DATE>(type_info, datum);
+    case TYPE_DATETIME_V1:
+        return datum_to_string<TYPE_DATETIME_V1>(type_info, datum);
+    case TYPE_DATETIME:
+        return datum_to_string<TYPE_DATETIME>(type_info, datum);
+    case TYPE_DECIMAL:
+        return datum_to_string<TYPE_DECIMAL>(type_info, datum);
+    case TYPE_DECIMALV2:
+        return datum_to_string<TYPE_DECIMALV2>(type_info, datum);
+    case TYPE_DECIMAL32:
+        return datum_to_string<TYPE_DECIMAL32>(type_info, datum);
+    case TYPE_DECIMAL64:
+        return datum_to_string<TYPE_DECIMAL64>(type_info, datum);
+    case TYPE_DECIMAL128:
+        return datum_to_string<TYPE_DECIMAL128>(type_info, datum);
+    case TYPE_DECIMAL256:
+        return datum_to_string<TYPE_DECIMAL256>(type_info, datum);
+    case TYPE_FLOAT:
+        return datum_to_string<TYPE_FLOAT>(type_info, datum);
+    case TYPE_JSON:
+        return datum_to_string<TYPE_JSON>(type_info, datum);
+    case TYPE_DOUBLE:
+        return datum_to_string<TYPE_DOUBLE>(type_info, datum);
     default:
         return "";
     }

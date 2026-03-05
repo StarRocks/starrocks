@@ -25,8 +25,8 @@
 #include <mutex>
 #include <utility>
 
+#include "base/failpoint/fail_point.h"
 #include "column/chunk.h"
-#include "common/config.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exec/sort_exec_exprs.h"
@@ -38,7 +38,6 @@
 #include "gutil/port.h"
 #include "runtime/runtime_state.h"
 #include "serde/column_array_serde.h"
-#include "util/failpoint/fail_point.h"
 
 namespace starrocks::spill {
 DEFINE_FAIL_POINT(spill_restore_sleep);

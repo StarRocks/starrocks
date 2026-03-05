@@ -14,11 +14,117 @@
 
 #include "exec/schema_scanner/schema_loads_scanner.h"
 
+#include <boost/algorithm/string.hpp>
+
 #include "exec/schema_scanner/schema_helper.h"
+#include "exprs/column_ref.h"
+#include "exprs/expr_context.h"
+#include "exprs/literal.h"
 #include "http/http_client.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
+
+namespace {
+bool _extract_literal_datetime_value(Expr* expr, std::string& result) {
+    auto* literal = dynamic_cast<VectorizedLiteral*>(expr);
+    if (literal == nullptr) {
+        return false;
+    }
+
+    auto literal_col_status = literal->evaluate_checked(nullptr, nullptr);
+    if (!literal_col_status.ok()) {
+        return false;
+    }
+
+    const auto literal_col = literal_col_status.value();
+    if (literal_col->is_null(0)) {
+        return false;
+    }
+
+    const auto datum = literal_col->get(0);
+    result = datum.get_timestamp().to_string(true);
+
+    return true;
+}
+
+bool _try_parse_datetime_range_predicate(const SchemaScannerParam* param, Expr* conjunct, const std::string& col_name,
+                                         std::string& literal_value, bool& is_lower_bound) {
+    const TExprNodeType::type& node_type = conjunct->node_type();
+    const TExprOpcode::type& op_type = conjunct->op();
+    if (node_type != TExprNodeType::BINARY_PRED || (op_type != TExprOpcode::GE && op_type != TExprOpcode::GT &&
+                                                    op_type != TExprOpcode::LE && op_type != TExprOpcode::LT)) {
+        return false;
+    }
+
+    Expr* slot_child = conjunct->get_child(0);
+    Expr* value_child = conjunct->get_child(1);
+    if (value_child->node_type() == TExprNodeType::SLOT_REF) {
+        std::swap(slot_child, value_child);
+        is_lower_bound = (op_type == TExprOpcode::LE || op_type == TExprOpcode::LT);
+    } else {
+        is_lower_bound = (op_type == TExprOpcode::GE || op_type == TExprOpcode::GT);
+    }
+
+    if (slot_child->node_type() != TExprNodeType::SLOT_REF) {
+        return false;
+    }
+
+    const SlotId slot_id = down_cast<const ColumnRef*>(slot_child)->slot_id();
+    auto& slot_id_mapping = param->slot_id_mapping;
+    if (const auto it = slot_id_mapping.find(slot_id);
+        it == slot_id_mapping.end() || !boost::iequals(it->second->col_name(), col_name)) {
+        return false;
+    }
+
+    if (!_extract_literal_datetime_value(value_child, literal_value)) {
+        return false;
+    }
+
+    return true;
+}
+
+void _update_range_bound(std::string& bound, bool& has_bound, const std::string& candidate, bool is_lower_bound) {
+    if (!has_bound) {
+        bound = candidate;
+        has_bound = true;
+        return;
+    }
+
+    if ((is_lower_bound && candidate > bound) || (!is_lower_bound && candidate < bound)) {
+        bound = candidate;
+    }
+}
+
+// Collect datetime range predicates on one column from schema scan conjuncts.
+// Usage:
+// 1. Pass a target column name, e.g. "LOAD_START_TIME".
+// 2. This function scans conjuncts and picks predicates with operators in {>, >=, <, <=}.
+// 3. It normalizes them into [lower_bound, upper_bound] (both inclusive for FE-side filtering).
+// Purpose: convert BE-side scan predicates into FE RPC parameters to reduce rows returned by getLoads().
+void _parse_datetime_range_predicates(const SchemaScannerParam* param, const std::string& col_name,
+                                      std::string& lower_bound, bool& has_lower_bound, std::string& upper_bound,
+                                      bool& has_upper_bound) {
+    if (param->expr_contexts == nullptr) {
+        return;
+    }
+
+    for (auto* expr_context : *(param->expr_contexts)) {
+        std::string literal_value;
+        bool is_lower_bound = false;
+        if (!_try_parse_datetime_range_predicate(param, expr_context->root(), col_name, literal_value,
+                                                 is_lower_bound)) {
+            continue;
+        }
+
+        if (is_lower_bound) {
+            _update_range_bound(lower_bound, has_lower_bound, literal_value, true);
+        } else {
+            _update_range_bound(upper_bound, has_upper_bound, literal_value, false);
+        }
+    }
+}
+} // namespace
 
 SchemaScanner::ColumnDesc SchemaLoadsScanner::_s_tbls_columns[] = {
         //   name,       type,          size,     is_null
@@ -59,7 +165,59 @@ Status SchemaLoadsScanner::start(RuntimeState* state) {
     TGetLoadsParams load_params;
     if (nullptr != _param->db) {
         load_params.__set_db(*(_param->db));
+    } else if (std::string db_name; _parse_expr_predicate("DB_NAME", db_name)) {
+        load_params.__set_db(db_name);
     }
+
+    if (std::string table_name; _parse_expr_predicate("TABLE_NAME", table_name)) {
+        load_params.__set_table_name(table_name);
+    }
+    if (std::string user; _parse_expr_predicate("USER", user)) {
+        load_params.__set_user(user);
+    }
+    if (std::string state_str; _parse_expr_predicate("STATE", state_str)) {
+        load_params.__set_state(state_str);
+    }
+
+    std::string load_start_time_from;
+    std::string load_start_time_to;
+    bool has_load_start_time_from = false;
+    bool has_load_start_time_to = false;
+    _parse_datetime_range_predicates(_param, "LOAD_START_TIME", load_start_time_from, has_load_start_time_from,
+                                     load_start_time_to, has_load_start_time_to);
+    if (has_load_start_time_from) {
+        load_params.__set_load_start_time_from(load_start_time_from);
+    }
+    if (has_load_start_time_to) {
+        load_params.__set_load_start_time_to(load_start_time_to);
+    }
+
+    std::string load_finish_time_from;
+    std::string load_finish_time_to;
+    bool has_load_finish_time_from = false;
+    bool has_load_finish_time_to = false;
+    _parse_datetime_range_predicates(_param, "LOAD_FINISH_TIME", load_finish_time_from, has_load_finish_time_from,
+                                     load_finish_time_to, has_load_finish_time_to);
+    if (has_load_finish_time_from) {
+        load_params.__set_load_finish_time_from(load_finish_time_from);
+    }
+    if (has_load_finish_time_to) {
+        load_params.__set_load_finish_time_to(load_finish_time_to);
+    }
+
+    std::string create_time_from;
+    std::string create_time_to;
+    bool has_create_time_from = false;
+    bool has_create_time_to = false;
+    _parse_datetime_range_predicates(_param, "CREATE_TIME", create_time_from, has_create_time_from, create_time_to,
+                                     has_create_time_to);
+    if (has_create_time_from) {
+        load_params.__set_create_time_from(create_time_from);
+    }
+    if (has_create_time_to) {
+        load_params.__set_create_time_to(create_time_to);
+    }
+
     if (nullptr != _param->label) {
         load_params.__set_label(*(_param->label));
     }

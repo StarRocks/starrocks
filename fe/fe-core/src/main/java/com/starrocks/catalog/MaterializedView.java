@@ -29,8 +29,6 @@ import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.backup.Status;
 import com.starrocks.backup.mv.MvBaseTableBackupInfo;
 import com.starrocks.backup.mv.MvRestoreContext;
-import com.starrocks.catalog.LightWeightDeltaLakeTable;
-import com.starrocks.catalog.LightWeightIcebergTable;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.GlobalConstraintManager;
 import com.starrocks.catalog.mv.MVPlanValidationResult;
@@ -243,7 +241,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     @Override
     public boolean getUseFastSchemaEvolution() {
-        return false;
+        return true;
     }
 
     @Override
@@ -408,6 +406,38 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             this.mvPartitionNameRefBaseTablePartitionMap.clear();
         }
 
+        public void clearVisibleVersionMapByMVPartitions(Set<String> mvPartitionNames) {
+            if (CollectionUtils.isEmpty(mvPartitionNames)) {
+                return;
+            }
+            LOG.info("Clear materialized view's version map by mv partitions: {}", mvPartitionNames);
+
+            Set<String> associatedBasePartitionNames = Sets.newHashSet();
+            for (String mvPartitionName : mvPartitionNames) {
+                Set<String> associatedPartitions = this.mvPartitionNameRefBaseTablePartitionMap.remove(mvPartitionName);
+                if (CollectionUtils.isNotEmpty(associatedPartitions)) {
+                    associatedBasePartitionNames.addAll(associatedPartitions);
+                }
+            }
+
+            for (Map<String, BasePartitionInfo> partitionInfos : this.baseTableVisibleVersionMap.values()) {
+                clearPartitionInfosByMVPartitions(partitionInfos, mvPartitionNames, associatedBasePartitionNames);
+            }
+            for (Map<String, BasePartitionInfo> partitionInfos : this.baseTableInfoVisibleVersionMap.values()) {
+                clearPartitionInfosByMVPartitions(partitionInfos, mvPartitionNames, associatedBasePartitionNames);
+            }
+        }
+
+        private static void clearPartitionInfosByMVPartitions(Map<String, BasePartitionInfo> partitionInfos,
+                                                              Set<String> mvPartitionNames,
+                                                              Set<String> associatedBasePartitionNames) {
+            if (MapUtils.isEmpty(partitionInfos)) {
+                return;
+            }
+            partitionInfos.entrySet().removeIf(entry ->
+                    mvPartitionNames.contains(entry.getKey()) || associatedBasePartitionNames.contains(entry.getKey()));
+        }
+
         public boolean isDefineStartTime() {
             return defineStartTime;
         }
@@ -539,6 +569,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
         public MvRefreshScheme copy() {
             MvRefreshScheme res = new MvRefreshScheme();
+            res.moment = this.moment;
             res.type = this.type;
             res.lastRefreshTime = this.lastRefreshTime;
             if (this.asyncRefreshContext != null) {
@@ -681,6 +712,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         this.dbId = dbId;
         this.refreshScheme = refreshScheme;
         this.active = true;
+
+        // Assign unique ids for columns
+        initUniqueId();
     }
 
     // Used for sync mv
@@ -1209,11 +1243,18 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     @Override
     public void dropPartition(long dbId, String partitionName, boolean isForceDrop) {
-        super.dropPartition(dbId, partitionName, isForceDrop);
+        if (isForceDrop) {
+            super.dropPartitionWithRetention(dbId, partitionName, Config.partition_recycle_retention_period_secs);
+        } else {
+            super.dropPartition(dbId, partitionName, isForceDrop);
+        }
 
         // if mv's partition is dropped, we need to update mv's timeliness.
         GlobalStateMgr.getCurrentState().getMaterializedViewMgr()
                 .triggerTimelessInfoEvent(this, MVTimelinessMgr.MVChangeEvent.MV_PARTITION_DROPPED);
+
+        // Update schema update time to invalidate cached plans
+        lastSchemaUpdateTime.set(System.nanoTime());
     }
 
     @Override
@@ -1324,6 +1365,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     private void onReload(boolean isReloadAsync,
                           boolean desiredActive,
                           boolean isThrowException) {
+        // Only skip reload during FE startup/checkpoint scenarios (isReloadAsync=true).
+        if (isReloadAsync && hasReloaded()) {
+            return;
+        }
         try {
             // set inactive first to avoid inconsistent state during reloading
             this.active = false;
@@ -1332,9 +1377,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             // reload mv required metadata synchronously
             onReloadImpl();
             // if desired to be active, check whether you can be active
-            if (desiredActive) {
-                checkAndSetActive(isReloadAsync);
-            }
+            checkAndSetActive(isReloadAsync, desiredActive);
         } catch (Throwable e) {
             LOG.error("reload mv failed: {}", this, e);
             // only set inactive when it is desired to be active
@@ -1352,7 +1395,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         }
     }
 
-    private void checkAndSetActive(boolean isReloadAsync) {
+    private void checkAndSetActive(boolean isReloadAsync, boolean desiredActive) {
         // to avoid blocking the main replay thread and reduce fe restart time, check isActive asynchronously,
         // this method is time costing because:
         // - if mv contains external base tables, it may need to connect external systems to check table existence
@@ -1361,8 +1404,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         if (isReloadAsync) {
             CachingMvPlanContextBuilder.submitAsyncTask(buildTaskName("MVCheckIsActive"), () -> {
                 try {
-                    InactiveReason reason = checkIsActiveOnLoadBlocking();
-                    setInActiveReason(reason);
+                    onReloadImplHeavy();
+
+                    if (desiredActive) {
+                        InactiveReason reason = checkIsActiveOnLoadBlocking();
+                        setInActiveReason(reason);
+                    }
                 } catch (Throwable e) {
                     LOG.error("check and set active failed for mv: {}", this, e);
                     setInActiveReason(InactiveReason.ofInactive("check and set active failed: " + e.getMessage()));
@@ -1372,8 +1419,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 return null;
             });
         } else {
-            InactiveReason reason = checkIsActiveOnLoadBlocking();
-            setInActiveReason(reason);
+            onReloadImplHeavy();
+
+            if (desiredActive) {
+                InactiveReason reason = checkIsActiveOnLoadBlocking();
+                setInActiveReason(reason);
+            }
         }
     }
 
@@ -1407,19 +1458,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      */
     private void onReloadImpl() {
         long startMillis = System.currentTimeMillis();
-        // analyze partition info
-        analyzePartitionInfo();
-        // analyze mv partition exprs
-        analyzePartitionExprs();
-
-        if (tableProperty != null) {
-            tableProperty.buildConstraint();
-        }
-        
-        // register constraints from global state manager
-        GlobalConstraintManager globalConstraintManager = GlobalStateMgr.getCurrentState().getGlobalConstraintManager();
-        globalConstraintManager.registerConstraint(this);
-
         // register into mv metrics
         try {
             MaterializedViewMetricsRegistry.getInstance().registerMetricsEntity(getMvId());
@@ -1434,7 +1472,29 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     /**
-     * Check whether this materialized view can be active on load.
+     * This method needs to visit external catalog to analyze partition exprs,
+     * so it should be called in an async load thread.
+     */
+    private void onReloadImplHeavy() {
+        // analyze partition info
+        analyzePartitionInfo();
+
+        // analyze mv partition exprs
+        analyzePartitionExprs();
+
+        if (tableProperty != null) {
+            tableProperty.buildConstraint();
+        }
+
+        // register constraints from global state manager
+        GlobalConstraintManager globalConstraintManager = GlobalStateMgr.getCurrentState().getGlobalConstraintManager();
+        globalConstraintManager.registerConstraint(this);
+    }
+
+    /**
+     * Check whether this materialized view can be active on load, since this method may
+     * visit external systems and recursively reload base mvs, it may cost some time.
+     *
      * @return InactiveReason, which contains whether this mv is active and the reason if not active.
      */
     private InactiveReason checkIsActiveOnLoadBlocking() {
@@ -1559,6 +1619,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         // analyze expression, because it converts to sql for serialize
         ConnectContext connectContext = ConnectContext.buildInner();
+        connectContext.setOnlyReadIcebergCache(true);
         connectContext.setDatabase(db.getFullName());
         // set privilege
         connectContext.setQualifiedUser(AuthenticationMgr.ROOT_USER);
@@ -1808,6 +1869,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             if (name.equalsIgnoreCase(PropertyAnalyzer.PROPERTY_MV_SORT_KEYS)) {
                 continue;
             }
+            // warehouse is handled separately below
+            if (name.equalsIgnoreCase(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
+                continue;
+            }
+
             if (!first) {
                 sb.append(",\n");
             }
@@ -2232,6 +2298,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         // analyze partition exprs
         Map<Table, List<Expr>> refBaseTablePartitionExprs = getRefBaseTablePartitionExprs(false);
         ConnectContext connectContext = ConnectContext.buildInner();
+        connectContext.setOnlyReadIcebergCache(true);
         if (refBaseTablePartitionExprs != null) {
             for (BaseTableInfo baseTableInfo : baseTableInfos) {
                 Optional<Table> refBaseTableOpt = MvUtils.getTable(baseTableInfo);
@@ -2269,12 +2336,34 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             Preconditions.checkArgument(refBaseTablePartitionSlotsOpt.isPresent() &&
                     !refBaseTablePartitionSlotsOpt.get().isEmpty(), String.format("Ref base table " +
                     "partition column slots should not be empty:%s", refBaseTablePartitionSlotsOpt));
-            LOG.info("Materialized view {} ref base table partition columns: {}, exprs: {}, slots: {}",
-                    name, refBaseTablePartitionColumnsOpt.get(),
-                    refBaseTablePartitionExprsOpt.get(), refBaseTablePartitionSlotsOpt.get());
+
+            String columnsSummary = formatPartitionColumns(refBaseTablePartitionColumnsOpt.get());
+            String exprsSummary = formatPartitionExprs(refBaseTablePartitionExprsOpt.get());
+            String slotsSummary = formatPartitionSlots(refBaseTablePartitionSlotsOpt.get());
+            LOG.info("Materialized view {} ref base table partition summary: columns={}, exprs={}, slots={}",
+                    name, columnsSummary, exprsSummary, slotsSummary);
         } else {
             LOG.info("Materialized view {} is un-partitioned", name);
         }
+    }
+
+    private static String formatPartitionColumns(Map<Table, List<Column>> columns) {
+        return columns.entrySet().stream()
+                .map(entry -> entry.getKey().getName() + "=[" +
+                        entry.getValue().stream().map(Column::getName).collect(Collectors.joining(", ")) + "]")
+                .collect(Collectors.joining("; "));
+    }
+
+    private static String formatPartitionExprs(Map<Table, List<Expr>> exprs) {
+        return exprs.entrySet().stream()
+                .map(entry -> entry.getKey().getName() + "(" + entry.getValue().size() + ")")
+                .collect(Collectors.joining("; "));
+    }
+
+    private static String formatPartitionSlots(Map<Table, List<SlotRef>> slots) {
+        return slots.entrySet().stream()
+                .map(entry -> entry.getKey().getName() + "(" + entry.getValue().size() + ")")
+                .collect(Collectors.joining("; "));
     }
 
     public synchronized Pair<Optional<Expr>, Optional<ScalarOperator>> analyzeMVRetentionCondition(
@@ -2554,11 +2643,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
         // write edit log
         if (isWriteBaseTableInfoChangeEditLog) {
-            Map<Long, Map<String, BasePartitionInfo>> baseTableVisibleVersionMap =
-                    this.refreshScheme.asyncRefreshContext.baseTableVisibleVersionMap;
             AlterMaterializedViewBaseTableInfosLog alterMaterializedViewBaseTableInfos =
-                    new AlterMaterializedViewBaseTableInfosLog(dbId, getId(), oldMvId, baseTableInfos,
-                            baseTableVisibleVersionMap);
+                    new AlterMaterializedViewBaseTableInfosLog(oldMvId, this);
             GlobalStateMgr.getCurrentState().getEditLog().logAlterMvBaseTableInfos(alterMaterializedViewBaseTableInfos);
         }
 
@@ -2577,31 +2663,118 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * Replay AlterMaterializedViewBaseTableInfosLog and update associated variables.
      */
     public void replayAlterMaterializedViewBaseTableInfos(AlterMaterializedViewBaseTableInfosLog log) {
-        this.setBaseTableInfos(log.getBaseTableInfos());
-        Map<Long, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMap =
-                this.refreshScheme.asyncRefreshContext.baseTableVisibleVersionMap;
-        for (Map.Entry<Long, Map<String, MaterializedView.BasePartitionInfo>> e :
-                log.getBaseTableVisibleVersionMap().entrySet()) {
-            if (!baseTableVisibleVersionMap.containsKey(e.getKey())) {
-                baseTableVisibleVersionMap.put(e.getKey(), e.getValue());
-            } else {
-                Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap = baseTableVisibleVersionMap.get(e.getKey());
-                partitionInfoMap.putAll(e.getValue());
-            }
-        }
-        for (BaseTableInfo baseTableInfo : baseTableInfos) {
-            Optional<Table> baseTableOpt = MvUtils.getTableWithIdentifier(baseTableInfo);
-            if (baseTableOpt.isEmpty()) {
-                continue;
-            }
-            Table baseTable = baseTableOpt.get();
-            baseTable.getRelatedMaterializedViews().remove(log.getMvId());
-            baseTable.getRelatedMaterializedViews().add(getMvId());
-        }
-        setActive();
+        int mvAlterType = log.getAlterType();
+        LOG.info("Replay alter materialized view base table infos log for mv {}, alter type is {}",
+                this.getName(), mvAlterType);
+        AlterMaterializedViewBaseTableInfosLog.AlterType alterType =
+                AlterMaterializedViewBaseTableInfosLog.AlterType.valueOf(mvAlterType);
+        switch (alterType) {
+            case ADD_COLUMN: {
+                // add column
+                this.viewDefineSql = log.getViewDefineSql();
+                this.simpleDefineSql = log.getSimpleDefineSql();
+                this.originalViewDefineSql = log.getOriginalViewDefineSql();
+                if (log.getQueryOutputIndices() != null) {
+                    this.queryOutputIndices = log.getQueryOutputIndices();
+                }
+                // reset cached query parse node
+                resetDefinedQueryParseNode();
+                // init unique id
+                initUniqueId();
 
-        // recheck again
-        fixRelationship();
+                // update version map if needed
+                Map<Long, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMap =
+                        this.refreshScheme.asyncRefreshContext.baseTableVisibleVersionMap;
+                // overwrite existing version info
+                for (Map.Entry<Long, Map<String, MaterializedView.BasePartitionInfo>> e :
+                        log.getBaseTableVisibleVersionMap().entrySet()) {
+                    baseTableVisibleVersionMap.computeIfAbsent(e.getKey(), k -> new HashMap<>())
+                            .putAll(e.getValue());
+                }
+                Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> baseTableInfoVisibleVersionMap =
+                        this.refreshScheme.asyncRefreshContext.baseTableInfoVisibleVersionMap;
+                for (Map.Entry<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> e :
+                        log.getBaseTableInfoVisibleVersionMap().entrySet()) {
+                    baseTableInfoVisibleVersionMap.computeIfAbsent(e.getKey(), k -> new HashMap<>())
+                            .putAll(e.getValue());
+                }
+                break;
+            }
+            case DROP_COLUMN:
+                // drop column
+                this.viewDefineSql = log.getViewDefineSql();
+                this.simpleDefineSql = log.getSimpleDefineSql();
+                this.originalViewDefineSql = log.getOriginalViewDefineSql();
+                if (log.getQueryOutputIndices() != null) {
+                    this.queryOutputIndices = log.getQueryOutputIndices();
+                }
+                // reset cached query parse node
+                resetDefinedQueryParseNode();
+                // init unique id
+                initUniqueId();
+                break;
+            default: {
+                this.setBaseTableInfos(log.getBaseTableInfos());
+                Map<Long, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMap =
+                        this.refreshScheme.asyncRefreshContext.baseTableVisibleVersionMap;
+                for (Map.Entry<Long, Map<String, MaterializedView.BasePartitionInfo>> e :
+                        log.getBaseTableVisibleVersionMap().entrySet()) {
+                    baseTableVisibleVersionMap.computeIfAbsent(e.getKey(), k -> new HashMap<>())
+                            .putAll(e.getValue());
+                }
+                for (BaseTableInfo baseTableInfo : baseTableInfos) {
+                    Optional<Table> baseTableOpt = MvUtils.getTableWithIdentifier(baseTableInfo);
+                    if (baseTableOpt.isEmpty()) {
+                        continue;
+                    }
+                    Table baseTable = baseTableOpt.get();
+                    baseTable.getRelatedMaterializedViews().remove(log.getMvId());
+                    baseTable.getRelatedMaterializedViews().add(getMvId());
+                }
+                setActive();
+
+                // recheck again
+                fixRelationship();
+            }
+        }
+    }
+
+    public synchronized void resetDefinedQueryParseNode() {
+        this.defineQueryParseNode = null;
+    }
+
+    public synchronized ParseNode initDefineQueryParseNode() {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (db == null) {
+            return null;
+        }
+        ParseNode defineQueryParseNode = null;
+        ConnectContext connectContext = ConnectContext.buildInner();
+        connectContext.setOnlyReadIcebergCache(true);
+        if (!Strings.isNullOrEmpty(originalViewDefineSql)) {
+            try {
+                String currentDBName = Strings.isNullOrEmpty(originalDBName) ? db.getOriginName() : originalDBName;
+                connectContext.setDatabase(currentDBName);
+                defineQueryParseNode = MvUtils.getQueryAst(originalViewDefineSql, connectContext);
+                clearHeavyObjectFromParseNode(defineQueryParseNode);
+            } catch (Exception e) {
+                // ignore
+                LOG.warn("parse original view define sql failed:", e);
+            }
+        }
+        if (defineQueryParseNode == null) {
+            if (!Strings.isNullOrEmpty(viewDefineSql)) {
+                try {
+                    connectContext.setDatabase(db.getOriginName());
+                    defineQueryParseNode = MvUtils.getQueryAst(viewDefineSql, connectContext);
+                    clearHeavyObjectFromParseNode(defineQueryParseNode);
+                } catch (Exception e) {
+                    // ignore
+                    LOG.warn("parse view define sql failed:", e);
+                }
+            }
+        }
+        return defineQueryParseNode;
     }
 
     /**
@@ -2609,34 +2782,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      */
     public synchronized ParseNode getDefineQueryParseNode() {
         if (this.defineQueryParseNode == null) {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-            if (db == null) {
-                return null;
-            }
-            ConnectContext connectContext = ConnectContext.buildInner();
-            if (!Strings.isNullOrEmpty(originalViewDefineSql)) {
-                try {
-                    String currentDBName = Strings.isNullOrEmpty(originalDBName) ? db.getOriginName() : originalDBName;
-                    connectContext.setDatabase(currentDBName);
-                    this.defineQueryParseNode = MvUtils.getQueryAst(originalViewDefineSql, connectContext);
-                    clearHeavyObjectFromParseNode(this.defineQueryParseNode);
-                } catch (Exception e) {
-                    // ignore
-                    LOG.warn("parse original view define sql failed:", e);
-                }
-            }
-            if (this.defineQueryParseNode == null) {
-                if (!Strings.isNullOrEmpty(viewDefineSql)) {
-                    try {
-                        connectContext.setDatabase(db.getOriginName());
-                        this.defineQueryParseNode = MvUtils.getQueryAst(viewDefineSql, connectContext);
-                        clearHeavyObjectFromParseNode(this.defineQueryParseNode);
-                    } catch (Exception e) {
-                        // ignore
-                        LOG.warn("parse view define sql failed:", e);
-                    }
-                }
-            }
+            this.defineQueryParseNode = initDefineQueryParseNode();
         }
         return this.defineQueryParseNode;
     }
@@ -2687,5 +2833,37 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     .filter(col -> isWithInvisible || !col.isHidden())
                     .collect(Collectors.toList());
         }
+    }
+
+    /**
+     * To support fast schema evolution, we need to init unique id for each column in base schema.
+     */
+    public void initUniqueId() {
+        List<Column> baseSchema = getBaseSchema();
+        if (baseSchema != null && !baseSchema.isEmpty()
+                && baseSchema.get(0).getUniqueId() == Column.COLUMN_UNIQUE_ID_INIT_VALUE) {
+            for (Column column : baseSchema) {
+                column.setUniqueId(incAndGetMaxColUniqueId());
+            }
+        }
+    }
+
+    /**
+     * TODO(fixme): Since MV FSE will not trigger to refresh MV, so it may cause data
+     * inconsistent with mv's defined query. Only support MV FSE when:
+     * - `query_rewrite_consistency` is set to `force_mv` which can accept some data inconsistent.
+     * - disabled for refresh which is not used for mv rewrite.
+     */
+    public boolean isSupportFastSchemaEvolutionInDanger() {
+        if (tableProperty == null || !isActive()) {
+            return false;
+        }
+        TableProperty.QueryRewriteConsistencyMode queryRewriteConsistencyMode =
+                tableProperty.getQueryRewriteConsistencyMode();
+        if (queryRewriteConsistencyMode == TableProperty.QueryRewriteConsistencyMode.FORCE_MV ||
+                queryRewriteConsistencyMode == TableProperty.QueryRewriteConsistencyMode.DISABLE) {
+            return true;
+        }
+        return !tableProperty.getMvQueryRewriteSwitch().isEnable();
     }
 }

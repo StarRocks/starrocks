@@ -37,6 +37,7 @@ package com.starrocks.catalog;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.HashBasedTable;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
@@ -51,6 +52,8 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.RecoverInfo;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -83,7 +86,7 @@ import javax.validation.constraints.NotNull;
 import static com.starrocks.server.GlobalStateMgr.isCheckpointThread;
 import static java.lang.Math.max;
 
-public class CatalogRecycleBin extends FrontendDaemon implements Writable {
+public class CatalogRecycleBin extends FrontendDaemon implements Writable, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(CatalogRecycleBin.class);
     // erase meta at least after MIN_ERASE_LATENCY milliseconds
     // to avoid erase log ahead of drop log
@@ -718,6 +721,22 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         } // end for partitions
     }
 
+    /**
+     * Marks all existing same-name partitions (matching {@code dbId}, {@code tableId}, and
+     * {@code partitionName}) as non-recoverable when a new partition with the same name is
+     * recycled.
+     *
+     * <p>Two invariants are maintained:
+     * <ol>
+     *   <li><b>All matches are processed</b> — every existing same-name partition is visited so
+     *       that none remains recoverable (there is intentionally no early-exit {@code break}).
+     *   <li><b>Retention clock is never reset for already-non-recoverable partitions</b> — only
+     *       transitions from recoverable→non-recoverable update {@code idToRecycleTime}.
+     *       Skipping non-recoverable partitions preserves their original retention deadline,
+     *       preventing them from becoming permanently stuck in the recycle bin when a
+     *       same-name partition is added within the retention window.
+     * </ol>
+     */
     private synchronized void disableRecoverPartitionWithSameName(long dbId, long tableId, String partitionName) {
         for (Map.Entry<Long, RecyclePartitionInfo> entry : idToPartition.entrySet()) {
             RecyclePartitionInfo partitionInfo = entry.getValue();
@@ -725,9 +744,10 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                     !partitionInfo.getPartition().getName().equalsIgnoreCase(partitionName)) {
                 continue;
             }
-            partitionInfo.setRecoverable(false);
-            idToRecycleTime.replace(partitionInfo.getPartition().getId(), System.currentTimeMillis());
-            break;
+            if (partitionInfo.isRecoverable()) {
+                partitionInfo.setRecoverable(false);
+                idToRecycleTime.replace(partitionInfo.getPartition().getId(), System.currentTimeMillis());
+            }
         }
     }
 
@@ -927,6 +947,12 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 rangePartitionInfo.setDataCacheInfo(partitionId,
                         ((RecyclePartitionInfoV2) partitionInfo).getDataCacheInfo());
             }
+
+            // Corner case: The user may have dropped the partition (non-force), then changed
+            // the table's datacache.enable property while the partition was in the recycle bin.
+            // When the partition is recovered (including replay), its DataCacheInfo should be
+            // updated to match the table's current datacache.enable value.
+            partitionInfo.syncDataCacheInfoWithTable(table, rangePartitionInfo, partitionId);
 
             iterator.remove();
             idToRecycleTime.remove(partitionId);
@@ -1379,5 +1405,24 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         idToPartition.remove(partitionId);
         idToRecycleTime.remove(partitionId);
         enableEraseLater.remove(partitionId);
+    }
+
+    @Override
+    public synchronized Map<String, Long> estimateCount() {
+        return ImmutableMap.<String, Long>builder()
+                .put("Database", (long) idToDatabase.size())
+                .put("Table", (long) idToTableInfo.size())
+                .put("Partition", (long) idToPartition.size())
+                .put("AsyncDeletePartition", (long) asyncDeleteForPartitions.size())
+                .put("AsyncDeleteTable", (long) asyncDeleteForTables.size())
+                .build();
+    }
+
+    @Override
+    public synchronized long estimateSize() {
+        return Estimator.estimate(idToDatabase, 20) +
+                Estimator.estimate(idToTableInfo.rowMap(), 20) +
+                Estimator.estimate(idToPartition, 20) +
+                Estimator.estimate(idToRecycleTime, 20);
     }
 }

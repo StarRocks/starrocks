@@ -16,6 +16,8 @@
 
 #include <unordered_set>
 
+#include "base/hash/hash_std.hpp"
+#include "base/phmap/phmap.h"
 #include "base/string/slice.h"
 #include "column/chunk.h"
 #include "column/column_hash.h"
@@ -26,8 +28,6 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
-#include "util/hash_util.hpp"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 

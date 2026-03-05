@@ -974,6 +974,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                     .setIndexes(olapTable.getCopiedIndexes())
                     .setSortKeyIndexes(indexMeta.getSortKeyIdxes())
                     .setSortKeyUniqueIds(indexMeta.getSortKeyUniqueIds())
+                    .setPrimaryKeyEncodingType(olapTable.getPrimaryKeyEncodingType())
                     .build().toTabletSchema();
 
             CreateReplicaTask task = CreateReplicaTask.newBuilder()
@@ -1214,13 +1215,14 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 reportedTablet.getMin_readable_version());
 
         if (replica.getState() == ReplicaState.CLONE) {
-            replica.setState(ReplicaState.NORMAL);
-            tablet.setLastFullCloneFinishedTimeMs(System.currentTimeMillis());
-            GlobalStateMgr.getCurrentState().getEditLog().logAddReplica(info);
+            GlobalStateMgr.getCurrentState().getEditLog().logAddReplica(info, wal -> {
+                replica.setState(ReplicaState.NORMAL);
+                tablet.setLastFullCloneFinishedTimeMs(System.currentTimeMillis());
+            });
         } else {
             // if in VERSION_INCOMPLETE, replica is not newly created, thus the state is not CLONE
             // so, we keep it state unchanged, and log update replica
-            GlobalStateMgr.getCurrentState().getEditLog().logUpdateReplica(info);
+            GlobalStateMgr.getCurrentState().getEditLog().logUpdateReplica(info, wal -> {});
         }
         return String.format("version:%d min_readable_version:%d", reportedTablet.getVersion(),
                 reportedTablet.getMin_readable_version());

@@ -15,7 +15,9 @@
 #include <gtest/gtest.h>
 
 #include "agent/agent_task.h"
+#include "base/failpoint/fail_point.h"
 #include "base/testutil/id_generator.h"
+#include "common/config.h"
 #include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/schema_change.h"
@@ -24,7 +26,6 @@
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/txn_log_applier.h"
 #include "test_util.h"
-#include "util/failpoint/fail_point.h"
 
 namespace starrocks::lake {
 

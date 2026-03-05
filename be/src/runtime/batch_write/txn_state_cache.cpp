@@ -20,10 +20,12 @@
 #include <utility>
 
 #include "agent/master_info.h"
+#include "base/utility/defer_op.h"
+#include "common/config.h"
+#include "common/thread/thread.h"
 #include "gen_cpp/FrontendService.h"
 #include "runtime/batch_write/batch_write_util.h"
 #include "runtime/client_cache.h"
-#include "util/thread.h"
 #include "util/thrift_rpc_helper.h"
 
 namespace starrocks {

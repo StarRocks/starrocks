@@ -40,11 +40,10 @@
 #include <string>
 #include <vector>
 
+#include "base/bit/bit_util.h"
 #include "base/string/posion.h"
 #include "common/compiler_util.h"
-#include "common/config.h"
-#include "runtime/memory/mem_chunk.h"
-#include "util/bit_util.h"
+#include "common/mem_chunk.h"
 
 namespace starrocks {
 
@@ -120,7 +119,7 @@ public:
     // Don't check memory limit
     uint8_t* allocate_aligned(int64_t size, int alignment) {
         DCHECK_GE(alignment, 1);
-        DCHECK_LE(alignment, config::memory_max_alignment);
+        DCHECK_LE(alignment, memory_max_alignment());
         // alignment should be a power of 2
         DCHECK((alignment & (alignment - 1)) == 0);
         return allocate<false>(size, alignment, 0);
@@ -154,6 +153,8 @@ public:
 
 private:
     friend class MemPoolTest;
+    static int memory_max_alignment();
+
     static const int INITIAL_CHUNK_SIZE = 4 * 1024;
 
     /// The maximum size of chunk that should be allocated. Allocations larger than this

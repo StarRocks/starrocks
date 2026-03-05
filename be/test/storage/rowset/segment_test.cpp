@@ -39,8 +39,10 @@
 #include <functional>
 #include <iostream>
 
+#include "base/failpoint/fail_point.h"
 #include "base/testutil/assert.h"
 #include "column/datum_tuple.h"
+#include "common/config.h"
 #include "common/logging.h"
 #include "fs/fs_memory.h"
 #include "fs/key_cache.h"
@@ -56,7 +58,6 @@
 #include "storage/rowset/segment_writer.h"
 #include "storage/tablet_schema.h"
 #include "storage/tablet_schema_helper.h"
-#include "util/failpoint/fail_point.h"
 
 namespace starrocks {
 

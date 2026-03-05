@@ -38,7 +38,9 @@
 #include <sstream>
 #include <string>
 
+#include "base/time/time.h"
 #include "base/utility/defer_op.h"
+#include "common/config.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "common/tracer.h"
@@ -50,6 +52,7 @@
 #include "http/http_request.h"
 #include "http/http_status.h"
 #include "runtime/exec_env.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/base_compaction.h"
 #include "storage/compaction_manager.h"
 #include "storage/compaction_task.h"
@@ -60,8 +63,6 @@
 #include "storage/tablet_manager.h"
 #include "storage/tablet_updates.h"
 #include "util/json_util.h"
-#include "util/starrocks_metrics.h"
-#include "util/time.h"
 
 namespace starrocks {
 

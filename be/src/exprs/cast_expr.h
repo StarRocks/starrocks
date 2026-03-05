@@ -17,17 +17,17 @@
 #include <type_traits>
 #include <utility>
 
+#include "base/types/int128.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/type_traits.h"
+#include "column/variant_path_parser.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
 #include "jsonpath.h"
-#include "runtime/types.h"
-#include "types/large_int_value.h"
-#include "variant_path_parser.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 
@@ -404,7 +404,7 @@ struct CastToString {
             return v.to_string();
         } else if constexpr (IsInt128<Type>) {
             // int128_t
-            return LargeIntValue::to_string(v);
+            return int128_to_string(v);
         } else if constexpr (IsInt256<Type>) {
             // int256_t
             return v.to_string();

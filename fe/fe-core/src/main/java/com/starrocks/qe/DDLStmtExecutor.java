@@ -68,6 +68,7 @@ import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.AlterTaskStmt;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
@@ -443,10 +444,11 @@ public class DDLStmtExecutor {
 
         @Override
         public ShowResultSet visitAlterTableStatement(AlterTableStmt stmt, ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getMetadataMgr().alterTable(context, stmt);
-            });
-            return null;
+            try {
+                return context.getGlobalStateMgr().getMetadataMgr().alterTable(context, stmt);
+            } catch (StarRocksException e) {
+                throw new RuntimeException(e);
+            }
         }
 
         @Override
@@ -871,7 +873,7 @@ public class DDLStmtExecutor {
             });
 
             if (isDryRun) {
-                return new ShowResultSet(TabletRepairHelper.getDryRunRepairResultMetaData(), result);
+                return new ShowResultSet(new ShowResultMetaFactory().getMetadata(stmt), result);
             } else {
                 return null;
             }
@@ -1152,6 +1154,33 @@ public class DDLStmtExecutor {
                         "the related task will be deleted automatically.");
             }
             taskManager.dropTasks(Collections.singletonList(task.getId()));
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAlterTaskStatement(AlterTaskStmt alterTaskStmt, ConnectContext context) {
+            TaskManager taskManager = context.getGlobalStateMgr().getTaskManager();
+            String taskName = alterTaskStmt.getTaskName().getName();
+            if (!taskManager.containTask(taskName)) {
+                if (alterTaskStmt.isIfExists()) {
+                    return null;
+                }
+                throw new SemanticException("Task " + taskName + " is not exist");
+            }
+            Task task = taskManager.getTask(taskName);
+            switch (alterTaskStmt.getAction()) {
+                case RESUME:
+                    taskManager.resumeTask(task, false);
+                    break;
+                case SUSPEND:
+                    taskManager.suspendTask(task, false);
+                    break;
+                case SET:
+                    taskManager.updateTaskProperties(task, alterTaskStmt.getProperties());
+                    break;
+                default:
+                    throw new SemanticException("Unsupported alter task action: " + alterTaskStmt.getAction());
+            }
             return null;
         }
 

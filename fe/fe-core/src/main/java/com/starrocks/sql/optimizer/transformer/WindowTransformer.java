@@ -308,6 +308,20 @@ public class WindowTransformer {
                 }
             }
 
+            // Translate skewColumn and skewValues if present
+            ScalarOperator skewColumnOp = null;
+            List<ScalarOperator> skewValueOps = List.of();
+            if (windowOperator.getSkewColumn() != null) {
+                skewColumnOp = SqlToScalarOperatorTranslator
+                        .translate(windowOperator.getSkewColumn(), subOpt.getExpressionMapping(), columnRefFactory);
+            }
+            if (windowOperator.getSkewValues() != null && !windowOperator.getSkewValues().isEmpty()) {
+                skewValueOps = windowOperator.getSkewValues().stream()
+                        .map(v -> SqlToScalarOperatorTranslator
+                                .translate(v, subOpt.getExpressionMapping(), columnRefFactory))
+                        .toList();
+            }
+
             logicalWindowOperators.add(new LogicalWindowOperator.Builder()
                     .setWindowCall(analyticCall)
                     .setPartitionExpressions(partitions)
@@ -316,6 +330,8 @@ public class WindowTransformer {
                     .setEnforceSortColumns(sortEnforceProperty.stream().distinct().collect(Collectors.toList()))
                     .setUseHashBasedPartition(windowOperator.useHashBasedPartition)
                     .setIsSkewed(windowOperator.isSkewed)
+                    .setSkewColumn(skewColumnOp)
+                    .setSkewValues(skewValueOps)
                     .build());
         }
 
@@ -650,6 +666,10 @@ public class WindowTransformer {
         // hashCode method.
         private boolean isSkewed;
 
+        // Skew hint with explicit column and values: [skew|t.column(value1, value2, ...)]
+        private Expr skewColumn;
+        private List<Expr> skewValues;
+
         public WindowOperator(AnalyticExpr analyticExpr, List<Expr> partitionExprs,
                               List<OrderByElement> orderByElements, AnalyticWindow window) {
             this.windowFunctions.add(analyticExpr);
@@ -681,8 +701,12 @@ public class WindowTransformer {
             }
             if (!partitionExprs.isEmpty()) {
                 this.isSkewed = analyticExpr.isSkewed();
+                this.skewColumn = analyticExpr.getSkewColumn();
+                this.skewValues = analyticExpr.getSkewValues();
             } else {
                 this.isSkewed = false;
+                this.skewColumn = null;
+                this.skewValues = List.of();
             }
         }
 
@@ -718,6 +742,22 @@ public class WindowTransformer {
 
         public void setSkewed() {
             isSkewed = true;
+        }
+
+        public void setSkewColumn(Expr skewColumn) {
+            this.skewColumn = skewColumn;
+        }
+
+        public void setSkewValues(List<Expr> skewValues) {
+            this.skewValues = skewValues;
+        }
+
+        public Expr getSkewColumn() {
+            return skewColumn;
+        }
+
+        public List<Expr> getSkewValues() {
+            return skewValues;
         }
 
         @Override

@@ -579,6 +579,30 @@ displayed_sidebar: docs
 - 类型：瞬时值
 - 描述：该资源组内存使用率瞬时值
 
+### starrocks_be_mem_pool_mem_limit_bytes
+
+- 单位：Byte
+- 类型：瞬时值
+- 描述：该内存池内存配额的瞬时值
+
+### starrocks_be_mem_pool_mem_usage_bytes
+
+- 单位：Byte
+- 类型：瞬时值
+- 描述：该内存池当前内存使用量的瞬时值
+
+### starrocks_be_mem_pool_mem_usage_ratio
+
+- 单位：-
+- 类型：瞬时值
+- 描述：该内存池内存使用量与内存配额比率的瞬时值
+
+### starrocks_be_mem_pool_workgroup_count
+
+- 单位：个
+- 类型：瞬时值
+- 描述：该内存池分配的资源组数量的瞬时值
+
 ### starrocks_be_pipe_prepare_pool_queue_len
 
 - 单位：个
@@ -988,6 +1012,11 @@ displayed_sidebar: docs
 
 - 单位：个
 - 描述：Segment Flush 线程池中排队的任务数量。
+
+### starrocks_be_segment_file_not_found_total
+
+- 单位：个
+- 描述：打开 Segment 时发现文件缺失（NOT_FOUND）的累计次数。若该值持续增长，可能表示数据丢失或存储不一致。
 
 ### jemalloc_metadata_bytes
 
@@ -1440,6 +1469,18 @@ displayed_sidebar: docs
 - 单位：个
 - 描述：主键索引 Compaction 线程池中排队的任务数量。
 
+### pk_index_sst_read_error_total
+
+- 类型：Counter
+- 单位：个
+- 描述：存算分离主键持久化索引中 SST 文件读取失败的总次数。当 SST multi-get（读取）操作失败时递增。
+
+### pk_index_sst_write_error_total
+
+- 类型：Counter
+- 单位：个
+- 描述：存算分离主键持久化索引中 SST 文件写入失败的总次数。当 SST 文件构建失败时递增。
+
 ### disks_total_capacity
 
 - 描述：磁盘的总容量。
@@ -1542,6 +1583,11 @@ displayed_sidebar: docs
 
 - 单位：Byte
 - 描述：Bitmap 索引使用的内存。
+
+### builtin_inverted_index_mem_bytes
+
+- 单位：Byte
+- 描述：内置倒排索引使用的内存。
 
 ### update_rowset_commit_apply_duration_us
 
@@ -1828,6 +1874,12 @@ displayed_sidebar: docs
 
 ### 事务延迟指标
 
+#### starrocks_fe_publish_version_daemon_loop_total
+
+- 单位：个
+- 类型：累积值
+- 描述：该 FE 节点上 `publish-version-daemon` 循环执行的总次数。
+
 以下 `summary` 类型的指标提供了事务不同阶段的延迟分布。这些指标仅由 Leader FE 节点上报。
 
 每个指标都包含以下输出：
@@ -1857,7 +1909,7 @@ displayed_sidebar: docs
 
 - 单位：毫秒
 - 类型：Summary
-- 描述：事务在 `publish` 阶段的总延迟，从 `commit` 时间到 `finish` 时间。这是已提交的事务对查询可见所需的时间。此指标是 `schedule`、`execute` 和 `ack` 三个子阶段的总和。
+- 描述：事务在 `publish` 阶段的总延迟，从 `commit` 时间到 `finish` 时间。这是已提交的事务对查询可见所需的时间。此指标是 `schedule`、`execute`、`can_finish` 和 `ack` 四个子阶段的总和。
 
 #### starrocks_fe_txn_publish_schedule_latency_ms
 
@@ -1871,11 +1923,17 @@ displayed_sidebar: docs
 - 类型：Summary
 - 描述：事务 Publish 任务的活动执行时间，从任务被执行到完成，代表了用于使事务的更改变为可见而实际花费的时间。
 
+#### starrocks_fe_txn_publish_can_finish_latency_ms
+
+- 单位：毫秒
+- 类型：Summary
+- 描述：从 `publish` 任务完成到 `canTxnFinish()` 首次返回 true 的延迟，即从 `publish version finish` 到 `ready-to-finish` 的耗时。
+
 #### starrocks_fe_txn_publish_ack_latency_ms
 
 - 单位：毫秒
 - 类型：Summary
-- 描述：事务最终确认的延迟，从发布任务完成到事务被标记为 `VISIBLE` 的最终 `finish` 时间。这包括任何最终步骤或所需的确认。
+- 描述：事务最终确认的延迟，从 `ready-to-finish` 到事务被标记为 `VISIBLE` 的最终 `finish` 时间。这包括事务进入可完成状态后的最终确认步骤。
 
 ### Merge Commit 指标
 
@@ -1970,3 +2028,159 @@ displayed_sidebar: docs
 - 单位：微秒
 - 类型：Summary
 - 描述：等待 merge commit 导入完成的耗时。
+
+### Iceberg 删除 FE 指标
+
+#### iceberg_delete_total
+
+- 单位：个
+- 类型：累积值
+- 标签：
+  - `status`（`success` 或 `failed`）
+  - `reason`（`none`、`timeout`、`oom`、`access_denied`、`unknown`）
+  - `delete_type`（`position` 或 `metadata`）
+- 描述：目标表为 Iceberg 的 `DELETE` 任务总数。每个任务结束后都会加 1，无论成功还是失败。`delete_type` 区分两种删除方式：`position`（生成 position delete 文件）和 `metadata`（元数据级删除）。
+
+#### iceberg_delete_duration_ms_total
+
+- 单位：毫秒
+- 类型：累积值
+- 标签：`delete_type`（`position` 或 `metadata`）
+- 描述：Iceberg `DELETE` 任务的总耗时（毫秒）。每个任务结束后会累加该任务耗时。`delete_type` 区分两种删除方式。
+
+#### iceberg_delete_bytes
+
+- 单位：字节
+- 类型：累积值
+- 标签：`delete_type`（`position` 或 `metadata`）
+- 描述：Iceberg `DELETE` 任务删除的总字节数。对于 `metadata` 删除，表示被删除的数据文件大小；对于 `position` 删除，表示创建的 position delete 文件大小。
+
+#### iceberg_delete_rows
+
+- 单位：行
+- 类型：累积值
+- 标签：`delete_type`（`position` 或 `metadata`）
+- 描述：Iceberg `DELETE` 任务删除的总行数。对于 `metadata` 删除，表示被删除数据文件中的行数；对于 `position` 删除，表示创建的 position delete 记录数。
+
+#### iceberg_compaction_total
+
+- 单位：Count
+- 类型：Cumulative
+- 标签：`compaction_type` (`manual` または `auto`)
+- 描述：Iceberg Compaction（`rewrite_data_files`）任务的总数。
+
+#### iceberg_compaction_duration_ms_total
+
+- 单位：Millisecond
+- 类型：Cumulative
+- 标签：`compaction_type` (`manual` または `auto`)
+- 描述：运行　Iceberg Compaction　任务的总耗时。
+
+#### iceberg_compaction_input_files_total
+
+- 单位：Count
+- 类型：Cumulative
+- 标签：`compaction_type` (`manual` または `auto`)
+- 描述：Iceberg Compaction 读取的数据文件总数。
+
+#### iceberg_compaction_output_files_total
+
+- 单位：Count
+- 类型：Cumulative
+- 标签：`compaction_type` (`manual` または `auto`)
+- 描述：Iceberg Compaction 生成的数据文件总数。
+
+#### iceberg_compaction_removed_delete_files_total
+
+- 单位：Count
+- 类型：Cumulative
+- 标签：`compaction_type` (`manual` または `auto`)
+- 描述：Iceberg Compaction 任务移除的　Delete 文件总数。
+
+### Iceberg 写入 FE 指标
+
+#### iceberg_write_total
+
+- 单位：个
+- 类型：累积值
+- 标签：
+  - `status`（`success` 或 `failed`）
+  - `reason`（`none`、`timeout`、`oom`、`access_denied`、`unknown`）
+  - `write_type`（`insert`、`overwrite` 或 `ctas`）
+- 描述：目标表为 Iceberg 的 `INSERT`、`INSERT OVERWRITE` 或 `CTAS` 任务总数。每个任务结束后都会加 1，无论成功还是失败。`write_type` 区分三种操作类型。
+
+#### iceberg_write_duration_ms_total
+
+- 单位：毫秒
+- 类型：累积值
+- 标签：`write_type`（`insert`、`overwrite` 或 `ctas`）
+- 描述：Iceberg 写入任务（`INSERT`、`INSERT OVERWRITE`、`CTAS`）的总耗时（毫秒）。每个任务结束后会累加该任务耗时。`write_type` 区分三种操作类型。
+
+#### iceberg_write_bytes
+
+- 单位：字节
+- 类型：累积值
+- 标签：`write_type`（`insert`、`overwrite` 或 `ctas`）
+- 描述：Iceberg 写入任务（`INSERT`、`INSERT OVERWRITE`、`CTAS`）的写入总字节数。表示写入到 Iceberg 表的数据文件总大小。`write_type` 区分三种操作类型。
+
+#### iceberg_write_rows
+
+- 单位：行
+- 类型：累积值
+- 标签：`write_type`（`insert`、`overwrite` 或 `ctas`）
+- 描述：Iceberg 写入任务（`INSERT`、`INSERT OVERWRITE`、`CTAS`）的写入总行数。表示写入到 Iceberg 表的行数。`write_type` 区分三种操作类型。
+
+#### iceberg_write_files
+
+- 单位：个数
+- 类型：累积值
+- 标签：`write_type`（`insert`、`overwrite` 或 `ctas`）
+- 描述：Iceberg 写入任务（`INSERT`、`INSERT OVERWRITE`、`CTAS`）写入的数据文件总数。表示写入到 Iceberg 表的数据文件个数。`write_type` 区分三种操作类型。
+
+### DataCache 指标
+
+DataCache 指标提供了数据缓存的缓存容量、使用率和命中率的可见性。
+
+以下指标在 BE Prometheus 端点 (`/metrics`) 上暴露：
+
+#### datacache_mem_quota_bytes
+
+- 单位：Byte
+- 类型：Gauge
+- 描述：datacache 的内存配额。
+
+#### datacache_mem_used_bytes
+
+- 单位：Byte
+- 类型：Gauge
+- 描述：datacache 的当前内存使用量。
+
+#### datacache_disk_quota_bytes
+
+- 单位：Byte
+- 类型：Gauge
+- 描述：datacache 的磁盘配额。
+
+#### datacache_disk_used_bytes
+
+- 单位：Byte
+- 类型：Gauge
+- 描述：datacache 的当前磁盘使用量。
+
+#### datacache_meta_used_bytes
+
+- 单位：Byte
+- 类型：Gauge
+- 描述：datacache 元数据的内存使用量。
+
+#### block_cache_hit_bytes
+
+- 单位：Byte
+- 类型：Counter
+- 描述：Block Cache累计命中的字节数。目前仅统计外表的缓存命中情况。
+
+#### block_cache_miss_bytes
+
+- 单位：Byte
+- 类型：Counter
+- 描述：Block Cache累计未命中的字节数。目前仅统计外表的缓存未命中情况。

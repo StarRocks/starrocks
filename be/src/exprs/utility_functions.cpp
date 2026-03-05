@@ -30,6 +30,10 @@
 #include <limits>
 #include <random>
 
+#include "base/network/cidr.h"
+#include "base/network/network_util.h"
+#include "base/time/monotime.h"
+#include "base/time/time.h"
 #include "base/uuid/uuid_generator.h"
 #include "column/binary_column.h"
 #include "column/column_builder.h"
@@ -37,20 +41,16 @@
 #include "column/column_viewer.h"
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
+#include "common/system/backend_options.h"
 #include "common/version.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/function_context.h"
 #include "gutil/casts.h"
 #include "runtime/runtime_state.h"
-#include "service/backend_options.h"
 #include "storage/key_coder.h"
 #include "storage/primary_key_encoder.h"
 #include "types/logical_type.h"
-#include "util/cidr.h"
-#include "util/monotime.h"
-#include "util/network_util.h"
 #include "util/thrift_rpc_helper.h"
-#include "util/time.h"
 
 namespace starrocks {
 

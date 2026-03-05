@@ -30,9 +30,9 @@
 #include <unordered_set>
 #include <vector>
 
+#include "base/phmap/phmap.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "common/statusor.h"
@@ -40,7 +40,6 @@
 #include "storage/rowset/column_reader.h"
 #include "types/logical_type.h"
 #include "util/block_split_bloom_filter.h"
-#include "util/phmap/phmap.h"
 #include "velocypack/vpack.h"
 
 namespace starrocks {
@@ -84,6 +83,7 @@ public:
     uint32_t last_row = -1;
     uint32_t multi_times = 0;
     uint32_t base_type_count = 0; // for count the base type, e.g: int, double, string
+    uint32_t object_count = 0;    // for count the object type
 
     JsonFlatPath() = default;
     JsonFlatPath(JsonFlatPath&&) = default;
@@ -117,16 +117,16 @@ public:
     static std::pair<std::string_view, std::string_view> split_path(const std::string_view& path);
 };
 
-// to deriver json flanttern path
+// to deriver json flatten path
 class JsonPathDeriver {
 public:
-    JsonPathDeriver() = default;
+    JsonPathDeriver();
     JsonPathDeriver(const std::vector<std::string>& paths, const std::vector<LogicalType>& types, bool has_remain);
     void init_flat_json_config(const FlatJsonConfig* flat_json_config);
 
     ~JsonPathDeriver() = default;
 
-    // dervie paths
+    // derive paths
     void derived(const std::vector<const Column*>& json_datas);
 
     StatusOr<size_t> check_null_factor(const std::vector<const Column*>& json_datas);
@@ -166,9 +166,9 @@ private:
     std::vector<std::string> _paths;
     std::vector<LogicalType> _types;
 
-    double _min_json_sparsity_factory = config::json_flat_sparsity_factor;
-    double _max_json_null_factor = config::json_flat_null_factor;
-    int _max_column = config::json_flat_column_max;
+    double _min_json_sparsity_factory = 0;
+    double _max_json_null_factor = 0;
+    int _max_column = 0;
 
     size_t _total_rows;
     std::shared_ptr<JsonFlatPath> _path_root;

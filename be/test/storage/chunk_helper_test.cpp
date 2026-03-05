@@ -15,10 +15,12 @@
 #include "storage/chunk_helper.h"
 
 #include "column/chunk.h"
+#include "column/chunk_slice.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/config.h"
 #include "common/object_pool.h"
 #include "gtest/gtest.h"
 #include "runtime/descriptor_helper.h"

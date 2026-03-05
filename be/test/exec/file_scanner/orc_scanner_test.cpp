@@ -21,6 +21,7 @@
 
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
+#include "common/config.h"
 #include "glog/logging.h"
 #include "orc/OrcFile.hh"
 #include "runtime/descriptor_helper.h"

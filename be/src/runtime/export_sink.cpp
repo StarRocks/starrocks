@@ -37,15 +37,18 @@
 #include <memory>
 #include <sstream>
 
+#include "base/time/time.h"
 #include "column/column.h"
+#include "common/runtime_profile.h"
 #include "exec/plain_text_builder.h"
 #include "exprs/expr.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 #include "fs/fs_broker.h"
+#include "fs/fs_factory.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "util/runtime_profile.h"
-#include "util/time.h"
 
 namespace starrocks {
 
@@ -63,7 +66,7 @@ Status ExportSink::init(const TDataSink& t_sink, RuntimeState* state) {
     _t_export_sink = t_sink.export_sink;
 
     // From the thrift expressions create the real exprs.
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, _t_output_expr, &_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprFactory::create_expr_trees(_pool, _t_output_expr, &_output_expr_ctxs, state));
     return Status::OK();
 }
 
@@ -79,7 +82,7 @@ Status ExportSink::prepare(RuntimeState* state) {
     SCOPED_TIMER(_profile->total_time_counter());
 
     // Prepare the exprs to run.
-    RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_output_expr_ctxs, state));
 
     // TODO(lingbin): add some Counter
     _bytes_written_counter = ADD_COUNTER(profile(), "BytesExported", TUnit::BYTES);
@@ -91,7 +94,7 @@ Status ExportSink::prepare(RuntimeState* state) {
 
 Status ExportSink::open(RuntimeState* state) {
     // Prepare the exprs to run.
-    RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_output_expr_ctxs, state));
     // open broker
     int query_timeout = state->query_options().query_timeout;
     int timeout_ms = query_timeout > 3600 ? 3600000 : query_timeout * 1000;
@@ -103,7 +106,7 @@ Status ExportSink::close(RuntimeState* state, Status exec_status) {
     if (_closed) {
         return Status::OK();
     }
-    Expr::close(_output_expr_ctxs, state);
+    ExprExecutor::close(_output_expr_ctxs, state);
     if (_file_builder != nullptr) {
         Status st = _file_builder->finish();
         _file_builder.reset();
@@ -129,7 +132,7 @@ Status ExportSink::open_file_writer(int timeout_ms) {
     }
     case TFileType::FILE_BROKER: {
         if (_t_export_sink.__isset.use_broker && !_t_export_sink.use_broker) {
-            ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(file_path, FSOptions(&_t_export_sink)));
+            ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateUniqueFromString(file_path, FSOptions(&_t_export_sink)));
             ASSIGN_OR_RETURN(output_file, fs->new_writable_file(options, file_path));
             break;
         } else {

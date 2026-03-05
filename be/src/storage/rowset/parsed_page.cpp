@@ -39,10 +39,12 @@
 #include <cstddef>
 #include <memory>
 
+#include "base/bit/rle_encoding.h"
 #include "base/simd/simd.h"
 #include "base/string/faststring.h"
 #include "column/append_with_mask.h"
 #include "column/nullable_column.h"
+#include "common/config.h"
 #include "common/status.h"
 #include "gutil/strings/substitute.h"
 #include "storage/column_predicate.h"
@@ -53,7 +55,6 @@
 #include "storage/rowset/page_handle.h"
 #include "storage/rowset/page_handle_fwd.h"
 #include "util/compression/block_compression.h"
-#include "util/rle_encoding.h"
 
 namespace starrocks {
 

@@ -29,16 +29,18 @@
 #include "column/const_column.h"
 #include "column/decimalv3_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/config.h"
 #include "exec/sorting/merge.h"
 #include "exec/sorting/merge_path.h"
 #include "exec/sorting/sort_helper.h"
 #include "exec/sorting/sort_permute.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
+#include "exprs/expr_executor.h"
 #include "runtime/chunk_cursor.h"
 #include "runtime/runtime_state.h"
-#include "runtime/types.h"
 #include "types/logical_type.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 
@@ -152,8 +154,8 @@ TEST_P(MergeTestFixture, merge_sorter_chunks_two_way) {
         sort_exprs.emplace_back(new ExprContext(exprs.back().get()));
     }
 
-    ASSERT_OK(Expr::prepare(sort_exprs, runtime_state.get()));
-    ASSERT_OK(Expr::open(sort_exprs, runtime_state.get()));
+    ASSERT_OK(ExprExecutor::prepare(sort_exprs, runtime_state.get()));
+    ASSERT_OK(ExprExecutor::open(sort_exprs, runtime_state.get()));
 
     size_t expected_size = left_rows + right_rows;
     ChunkPtr output;
@@ -442,8 +444,8 @@ TEST(SortingTest, merge_sorted_chunks) {
     std::vector<ExprContext*> sort_exprs;
     exprs.emplace_back(std::make_unique<ColumnRef>(TypeDescriptor(TYPE_INT), 0));
     sort_exprs.emplace_back(new ExprContext(exprs.back().get()));
-    ASSERT_OK(Expr::prepare(sort_exprs, runtime_state.get()));
-    ASSERT_OK(Expr::open(sort_exprs, runtime_state.get()));
+    ASSERT_OK(ExprExecutor::prepare(sort_exprs, runtime_state.get()));
+    ASSERT_OK(ExprExecutor::open(sort_exprs, runtime_state.get()));
 
     DeferOp defer([&]() { clear_exprs(sort_exprs); });
 
@@ -470,8 +472,8 @@ TEST(SortingTest, merge_sorted_stream) {
         sort_exprs.emplace_back(new ExprContext(exprs.back().get()));
         map[i] = i;
     }
-    ASSERT_OK(Expr::prepare(sort_exprs, runtime_state.get()));
-    ASSERT_OK(Expr::open(sort_exprs, runtime_state.get()));
+    ASSERT_OK(ExprExecutor::prepare(sort_exprs, runtime_state.get()));
+    ASSERT_OK(ExprExecutor::open(sort_exprs, runtime_state.get()));
     DeferOp defer([&]() { clear_exprs(sort_exprs); });
 
     std::vector<ChunkProvider> chunk_providers;
@@ -537,8 +539,8 @@ static void test_merge_path(const size_t num_cols, const size_t left_start, cons
         sort_exprs.emplace_back(new ExprContext(exprs.back().get()));
         map[i] = i;
     }
-    ASSERT_OK(Expr::prepare(sort_exprs, runtime_state.get()));
-    ASSERT_OK(Expr::open(sort_exprs, runtime_state.get()));
+    ASSERT_OK(ExprExecutor::prepare(sort_exprs, runtime_state.get()));
+    ASSERT_OK(ExprExecutor::open(sort_exprs, runtime_state.get()));
     DeferOp defer([&]() { clear_exprs(sort_exprs); });
 
     static std::default_random_engine e(0);

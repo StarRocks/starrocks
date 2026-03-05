@@ -20,6 +20,8 @@
 
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
+#include "common/config.h"
+#include "common/runtime_profile.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/query_context.h"
@@ -27,7 +29,6 @@
 #include "exec/workgroup/work_group.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {
 
@@ -55,6 +56,7 @@ public:
         dummy_query_ctx = std::make_shared<QueryContext>();
 
         dummy_runtime_state.set_fragment_ctx(&dummy_fragment_ctx);
+        dummy_runtime_state.set_fragment_dict_state(dummy_fragment_ctx.dict_state());
         dummy_runtime_state.set_query_ctx(dummy_query_ctx.get());
     }
     void TearDown() override {}

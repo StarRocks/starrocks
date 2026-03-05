@@ -23,7 +23,7 @@
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "exprs/mock_vectorized_expr.h"
-#include "util/json.h"
+#include "types/json_value.h"
 
 namespace starrocks {
 

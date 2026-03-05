@@ -17,13 +17,12 @@
 #include <span>
 #include <utility>
 
+#include "base/container/raw_container.h"
 #include "column/column.h"
 #include "column/container_resource.h"
-#include "column/datum.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
-#include "util/raw_container.h"
-
+#include "types/datum.h"
 namespace starrocks {
 
 template <typename T>
@@ -59,8 +58,7 @@ public:
 
     FixedLengthColumnBase(const size_t n, const ValueType x) : _data(n, x) {}
 
-    FixedLengthColumnBase(const FixedLengthColumnBase& src)
-            : _resource(src._resource), _data(src.immutable_data().begin(), src.immutable_data().end()) {}
+    DISALLOW_COPY_TEMPLATE(FixedLengthColumnBase, FixedLengthColumnBase<T>);
 
     // Only used as a underlying type for other column type(i.e. DecimalV3Column), C++
     // is weak to implement delegation for composite type like golang, so we have to use
@@ -241,7 +239,6 @@ public:
 
     const ImmContainer get_data() const { return immutable_data(); }
 
-    // TODO: remove this function
     const ImmContainer immutable_data() const {
         if (!_resource.empty()) {
             return _resource.span<T>();

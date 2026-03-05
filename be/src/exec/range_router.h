@@ -25,7 +25,7 @@
 #include "common/status.h"
 #include "exec/tablet_info.h"
 #include "gen_cpp/Types_types.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 

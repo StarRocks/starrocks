@@ -39,6 +39,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/types/int128.h"
 #include "common/logging.h"
 #include "exec/filter_condition.h"
 #include "exec/olap_utils.h"
@@ -46,7 +47,6 @@
 #include "gutil/stl_util.h"
 #include "gutil/strings/substitute.h"
 #include "storage/olap_tuple.h"
-#include "types/large_int_value.h"
 
 namespace starrocks {
 

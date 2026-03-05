@@ -29,12 +29,19 @@
 #include <type_traits>
 #include <utility>
 
+#include "base/time/date_func.h"
+#include "base/types/int128.h"
+#include "base/types/numeric_types.h"
 #include "base/utility/mysql_global.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "column/json_converter.h"
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
+#include "column/variant_column.h"
+#include "column/variant_converter.h"
+#include "column/variant_encoder.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "common/status.h"
@@ -42,23 +49,19 @@
 #include "exprs/binary_function.h"
 #include "exprs/column_ref.h"
 #include "exprs/decimal_cast_expr.h"
+#include "exprs/expr_context.h"
 #include "exprs/unary_function.h"
 #include "gutil/casts.h"
-#include "runtime/datetime_value.h"
 #include "runtime/exception.h"
 #include "runtime/runtime_state.h"
-#include "runtime/types.h"
+#include "types/datetime_value.h"
 #include "types/hll.h"
-#include "types/large_int_value.h"
+#include "types/json_value.h"
 #include "types/logical_type.h"
-#include "util/date_func.h"
-#include "util/json.h"
-#include "util/json_converter.h"
-#include "util/numeric_types.h"
-#include "util/variant_converter.h"
-#include "util/variant_encoder.h"
+#include "types/type_descriptor.h"
 
 #ifdef STARROCKS_JIT_ENABLE
+#include "exprs/jit/expr_jit_codegen.h"
 #include "exprs/jit/ir_helper.h"
 #endif
 
@@ -192,15 +195,33 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
             std::string str = CastToString::apply<RunTimeCppType<FromType>, std::string>(v);
             value = JsonValue::from_string(str);
         } else if constexpr (lt_is_variant<FromType>) {
-            auto json_str = static_cast<VariantRowValue*>(viewer.value(row))->to_json(cctz::local_time_zone());
-            if (!json_str.ok()) {
-                overflow = true;
-            } else {
-                auto parsed = JsonValue::parse_json_or_string(json_str.value());
-                if (parsed.ok()) {
-                    value = parsed.value();
-                } else {
+            const auto* variant_data_column =
+                    down_cast<const VariantColumn*>(ColumnHelper::get_data_column(column.get()));
+            const size_t variant_row = column->is_constant() ? 0 : row;
+            VariantRowRef row_ref;
+            if (!variant_data_column->try_get_row_ref(variant_row, &row_ref)) {
+                VariantRowValue variant_buffer;
+                const VariantRowValue* variant = variant_data_column->get_row_value(variant_row, &variant_buffer);
+                if (variant == nullptr) {
                     overflow = true;
+                } else {
+                    row_ref = variant->as_ref();
+                }
+            }
+
+            if (!overflow) {
+                std::stringstream ss;
+                auto st = VariantUtil::variant_to_json(row_ref.get_metadata(), row_ref.get_value(), ss,
+                                                       cctz::local_time_zone());
+                if (!st.ok()) {
+                    overflow = true;
+                } else {
+                    auto parsed = JsonValue::parse_json_or_string(ss.str());
+                    if (parsed.ok()) {
+                        value = parsed.value();
+                    } else {
+                        overflow = true;
+                    }
                 }
             }
         } else {
@@ -212,8 +233,7 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
         if (overflow || value.is_null()) {
             if constexpr (AllowThrowException) {
                 if constexpr (FromType == TYPE_LARGEINT) {
-                    THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType,
-                                                             LargeIntValue::to_string(viewer.value(row)));
+                    THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, int128_to_string(viewer.value(row)));
                 } else {
                     THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, viewer.value(row));
                 }
@@ -254,6 +274,7 @@ template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
 static ColumnPtr cast_from_variant_fn(ColumnPtr& column) {
     ColumnViewer<TYPE_VARIANT> viewer(column);
     ColumnBuilder<ToType> builder(viewer.size());
+    const auto* variant_data_column = down_cast<const VariantColumn*>(ColumnHelper::get_data_column(column.get()));
 
     for (int row = 0; row < viewer.size(); ++row) {
         if (viewer.is_null(row)) {
@@ -261,16 +282,22 @@ static ColumnPtr cast_from_variant_fn(ColumnPtr& column) {
             continue;
         }
 
-        const VariantRowValue* variant = viewer.value(row);
-        if (variant == nullptr) {
-            builder.append_null();
-            continue;
+        const size_t variant_row = column->is_constant() ? 0 : row;
+        VariantRowRef row_ref;
+        if (!variant_data_column->try_get_row_ref(variant_row, &row_ref)) {
+            VariantRowValue variant_buffer;
+            const VariantRowValue* variant = variant_data_column->get_row_value(variant_row, &variant_buffer);
+            if (variant == nullptr) {
+                builder.append_null();
+                continue;
+            }
+            row_ref = variant->as_ref();
         }
 
-        auto status = cast_variant_value_to<ToType, AllowThrowException>(*variant, cctz::local_time_zone(), builder);
+        auto status = VariantConverter::cast_to<ToType, AllowThrowException>(row_ref, cctz::local_time_zone(), builder);
         if (!status.ok()) {
             if constexpr (AllowThrowException) {
-                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, variant->to_string());
+                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, row_ref.to_owned().to_string());
             }
             builder.append_null();
         }
@@ -455,9 +482,9 @@ DEFINE_UNARY_FN_WITH_IMPL(NumberCheckWithThrowException, value) {
     if (result) {
         std::stringstream ss;
         if constexpr (std::is_same_v<Type, __int128_t>) {
-            ss << LargeIntValue::to_string(value) << " conflict with range of "
-               << "(" << LargeIntValue::to_string((Type)std::numeric_limits<ResultType>::lowest()) << ", "
-               << LargeIntValue::to_string((Type)std::numeric_limits<ResultType>::max()) << ")";
+            ss << int128_to_string(value) << " conflict with range of "
+               << "(" << int128_to_string((Type)std::numeric_limits<ResultType>::lowest()) << ", "
+               << int128_to_string((Type)std::numeric_limits<ResultType>::max()) << ")";
         } else {
             ss << value << " conflict with range of "
                << "(" << (Type)std::numeric_limits<ResultType>::lowest() << ", "
@@ -1153,7 +1180,13 @@ CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_TIME, cast_from_string_to_time_fn);
 // clang-format on
 
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
-class VectorizedCastExpr final : public Expr {
+#ifdef STARROCKS_JIT_ENABLE
+class VectorizedCastExpr final : public Expr,
+                                 public JITCodegenNode
+#else
+class VectorizedCastExpr final : public Expr
+#endif
+{
 public:
     DEFINE_CAST_CONSTRUCT(VectorizedCastExpr);
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
@@ -1240,12 +1273,12 @@ public:
     }
 
     std::string jit_func_name_impl(RuntimeState* state) const override {
-        return "{cast(" + _children[0]->jit_func_name(state) + ")}" + (is_constant() ? "c:" : "") +
+        return "{cast(" + ExprJITCodegen::func_name(_children[0], state) + ")}" + (is_constant() ? "c:" : "") +
                (is_nullable() ? "n:" : "") + type().debug_string();
     }
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
-        ASSIGN_OR_RETURN(auto datum, _children[0]->generate_ir(context, jit_ctx))
+        ASSIGN_OR_RETURN(auto datum, ExprJITCodegen::generate_ir(context, _children[0], jit_ctx))
         auto* l = datum.value;
         auto& b = jit_ctx->builder;
         if constexpr (FromType == TYPE_JSON || ToType == TYPE_JSON) {
@@ -1386,6 +1419,7 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(DoubleCastToString, v) {
     return {buf, len};
 }
 
+// clang-format off
 // The StringUnaryFunction templace is defined in unary_function.h
 // This place is a trait for this, it's for performance.
 // CastToString will copy string when returning value,
@@ -1409,6 +1443,7 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(DoubleCastToString, v) {
         }                                                                                                   \
         return result;                                                                                      \
     }
+// clang-format on
 
 DEFINE_INT_CAST_TO_STRING(TYPE_BOOLEAN, TYPE_VARCHAR);
 DEFINE_INT_CAST_TO_STRING(TYPE_TINYINT, TYPE_VARCHAR);

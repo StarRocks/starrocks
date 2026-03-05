@@ -18,6 +18,7 @@
 
 #include <regex>
 
+#include "base/url_coding.h"
 #include "common/logging.h"
 #include "common/vlog_cntl.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
@@ -42,7 +43,6 @@
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_updates.h"
 #include "util/stack_util.h"
-#include "util/url_coding.h"
 #include "wrenbind17/wrenbind17.hpp"
 
 using namespace wrenbind17;
@@ -249,6 +249,7 @@ void bind_exec_env(ForeignModule& m) {
         REG_METHOD(GlobalEnv, ordinal_index_mem_tracker);
         REG_METHOD(GlobalEnv, bitmap_index_mem_tracker);
         REG_METHOD(GlobalEnv, bloom_filter_index_mem_tracker);
+        REG_METHOD(GlobalEnv, builtin_inverted_index_mem_tracker);
         REG_METHOD(GlobalEnv, segment_zonemap_mem_tracker);
         REG_METHOD(GlobalEnv, short_key_index_mem_tracker);
     }

@@ -23,6 +23,8 @@
 #include "exec/pipeline/set/union_passthrough_operator.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 
 namespace starrocks {
 UnionNode::UnionNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
@@ -48,14 +50,14 @@ Status UnionNode::init(const TPlanNode& tnode, RuntimeState* state) {
     const auto& const_expr_lists = tnode.union_node.const_expr_lists;
     for (const auto& exprs : const_expr_lists) {
         std::vector<ExprContext*> ctxs;
-        RETURN_IF_ERROR(Expr::create_expr_trees(_pool, exprs, &ctxs, state));
+        RETURN_IF_ERROR(ExprFactory::create_expr_trees(_pool, exprs, &ctxs, state));
         _const_expr_lists.push_back(ctxs);
     }
 
     const auto& result_expr_lists = tnode.union_node.result_expr_lists;
     for (const auto& exprs : result_expr_lists) {
         std::vector<ExprContext*> ctxs;
-        RETURN_IF_ERROR(Expr::create_expr_trees(_pool, exprs, &ctxs, state));
+        RETURN_IF_ERROR(ExprFactory::create_expr_trees(_pool, exprs, &ctxs, state));
         _child_expr_lists.push_back(ctxs);
     }
 
@@ -63,7 +65,7 @@ Status UnionNode::init(const TPlanNode& tnode, RuntimeState* state) {
         auto& local_partition_by_exprs = tnode.union_node.local_partition_by_exprs;
         for (auto& texprs : local_partition_by_exprs) {
             std::vector<ExprContext*> ctxs;
-            RETURN_IF_ERROR(Expr::create_expr_trees(_pool, texprs, &ctxs, state));
+            RETURN_IF_ERROR(ExprFactory::create_expr_trees(_pool, texprs, &ctxs, state));
             _local_partition_by_exprs.push_back(ctxs);
         }
     }
@@ -100,11 +102,11 @@ Status UnionNode::prepare(RuntimeState* state) {
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(_tuple_id);
 
     for (const vector<ExprContext*>& exprs : _const_expr_lists) {
-        RETURN_IF_ERROR(Expr::prepare(exprs, state));
+        RETURN_IF_ERROR(ExprExecutor::prepare(exprs, state));
     }
 
     for (auto& _child_expr_list : _child_expr_lists) {
-        RETURN_IF_ERROR(Expr::prepare(_child_expr_list, state));
+        RETURN_IF_ERROR(ExprExecutor::prepare(_child_expr_list, state));
     }
 
     return Status::OK();
@@ -116,11 +118,11 @@ Status UnionNode::open(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::open(state));
 
     for (const vector<ExprContext*>& exprs : _const_expr_lists) {
-        RETURN_IF_ERROR(Expr::open(exprs, state));
+        RETURN_IF_ERROR(ExprExecutor::open(exprs, state));
     }
 
     for (const vector<ExprContext*>& exprs : _child_expr_lists) {
-        RETURN_IF_ERROR(Expr::open(exprs, state));
+        RETURN_IF_ERROR(ExprExecutor::open(exprs, state));
     }
 
     if (!_children.empty()) {
@@ -186,10 +188,10 @@ void UnionNode::close(RuntimeState* state) {
         return;
     }
     for (auto& exprs : _child_expr_lists) {
-        Expr::close(exprs, state);
+        ExprExecutor::close(exprs, state);
     }
     for (auto& exprs : _const_expr_lists) {
-        Expr::close(exprs, state);
+        ExprExecutor::close(exprs, state);
     }
     ExecNode::close(state);
 }

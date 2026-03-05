@@ -35,7 +35,6 @@ class ColumnAccessPath;
 class DeltaColumnGroupLoader;
 class DelvecLoader;
 class ObjectPool;
-class RecordPredicate;
 class RuntimeProfile;
 class TabletSchema;
 class Status;
@@ -61,8 +60,6 @@ public:
     RuntimeFilterPredicates runtime_filter_preds;
 
     DisjunctivePredicates delete_predicates;
-
-    std::shared_ptr<RecordPredicate> record_predicate;
 
     // used for updatable tablet to get delvec
     std::shared_ptr<DelvecLoader> delvec_loader;

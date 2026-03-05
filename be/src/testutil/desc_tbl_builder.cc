@@ -36,9 +36,10 @@
 
 #include <vector>
 
+#include "base/bit/bit_util.h"
+#include "common/config.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
-#include "util/bit_util.h"
 
 using std::vector;
 

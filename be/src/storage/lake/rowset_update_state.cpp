@@ -14,8 +14,13 @@
 
 #include "rowset_update_state.h"
 
+#include "base/debug/trace.h"
+#include "base/phmap/phmap.h"
+#include "base/time/time.h"
 #include "base/utility/defer_op.h"
+#include "common/config.h"
 #include "common/tracer.h"
+#include "fs/fs_factory.h"
 #include "fs/key_cache.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
@@ -29,10 +34,7 @@
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/segment_rewriter.h"
 #include "storage/tablet_schema.h"
-#include "util/phmap/phmap.h"
 #include "util/stack_util.h"
-#include "util/time.h"
-#include "util/trace.h"
 
 namespace starrocks::lake {
 
@@ -73,11 +75,15 @@ Status SegmentPKIterator::_load() {
     return Status::OK();
 }
 
-Status SegmentPKIterator::init(const ChunkIteratorPtr& iter, const Schema& pkey_schema, bool lazy_load) {
+Status SegmentPKIterator::init(const ChunkIteratorPtr& iter, const Schema& pkey_schema, bool lazy_load,
+                               PrimaryKeyEncodingType encoding_type) {
     _iter = iter;
     _pkey_schema = pkey_schema;
     _lazy_load = lazy_load;
     _begin_rowid_offsets.push_back(0);
+    RETURN_IF(encoding_type == PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE,
+              Status::InvalidArgument("PK_ENCODING_TYPE_NONE is not a valid encoding type"));
+    _encoding_type = encoding_type;
     _status = _load();
     if (_status.ok()) {
         _memory_usage =
@@ -108,8 +114,11 @@ std::pair<ChunkPtr, size_t> SegmentPKIterator::current() {
 StatusOr<MutableColumnPtr> SegmentPKIterator::encoded_pk_column(const Chunk* chunk) {
     TRACE_COUNTER_SCOPE_LATENCY_US("pk_encode_us");
     MutableColumnPtr pk_column;
-    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(_pkey_schema, &pk_column));
-    TRY_CATCH_BAD_ALLOC(PrimaryKeyEncoder::encode(_pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get()));
+    RETURN_IF(_encoding_type == PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE,
+              Status::InvalidArgument("PK_ENCODING_TYPE_NONE is not a valid encoding type"));
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(_pkey_schema, &pk_column, _encoding_type));
+    TRY_CATCH_BAD_ALLOC(
+            PrimaryKeyEncoder::encode(_pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get(), _encoding_type));
     return std::move(pk_column);
 }
 
@@ -318,11 +327,12 @@ Status RowsetUpdateState::_do_load_upserts(uint32_t segment_id, const RowsetUpda
         ASSIGN_OR_RETURN(_segment_iters, _rowset_ptr->get_each_segment_iterator(pkey_schema, false, &_stats));
     }
     RETURN_ERROR_IF_FALSE(_segment_iters.size() == _rowset_ptr->num_segments());
+    ASSIGN_OR_RETURN(auto pk_encoding_type, params.tablet_schema->primary_key_encoding_type_or_error());
     auto& iter = _segment_iters[segment_id];
     SegmentPKIteratorPtr result = std::make_unique<SegmentPKIterator>();
     // Initialize PK iterator with lazy loading if conditions allow (see should_enable_lazy_load for details).
     // Lazy loading can significantly reduce memory usage for large segments at the cost of deferred I/O.
-    RETURN_IF_ERROR(result->init(iter, pkey_schema, should_enable_lazy_load(params)));
+    RETURN_IF_ERROR(result->init(iter, pkey_schema, should_enable_lazy_load(params), pk_encoding_type));
     _upserts[segment_id] = std::move(result);
     _memory_usage += _upserts[segment_id]->memory_usage();
 
@@ -512,7 +522,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(uint32_t segment_id, co
 }
 
 StatusOr<bool> RowsetUpdateState::file_exist(const std::string& full_path) {
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(full_path));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(full_path));
     auto st = fs->path_exists(full_path);
     if (st.ok()) {
         return true;
@@ -530,7 +540,7 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
     TRACE_COUNTER_SCOPE_LATENCY_US("rewrite_segment_latency_us");
     const RowsetMetadata& rowset_meta = params.op_write.rowset();
     auto root_path = params.tablet->metadata_root_location();
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_path));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(root_path));
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(params.metadata->schema());
     // get rowset schema
     if (!params.op_write.has_txn_meta() || params.op_write.rewrite_segments_size() == 0 ||
@@ -841,10 +851,11 @@ Status RowsetUpdateState::load_delete(uint32_t del_id, const RowsetUpdateStatePa
     }
     Schema pkey_schema = ChunkHelper::convert_schema(params.tablet_schema, pk_columns);
     MutableColumnPtr pk_column;
-    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
+    ASSIGN_OR_RETURN(auto pk_encoding_type, params.tablet_schema->primary_key_encoding_type_or_error());
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, pk_encoding_type));
 
     auto root_path = params.tablet->metadata_root_location();
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_path));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(root_path));
     const std::string& path = params.op_write.dels(del_id);
     RandomAccessFileOptions opts;
     if (params.op_write.dels_size() == params.op_write.del_encryption_metas_size()) {
@@ -859,7 +870,9 @@ Status RowsetUpdateState::load_delete(uint32_t del_id, const RowsetUpdateStatePa
     ASSIGN_OR_RETURN(auto read_buffer, read_file->read_all());
     auto col = pk_column->clone();
     using Serd = serde::ColumnArraySerde;
-    RETURN_IF_ERROR(Serd::deserialize(reinterpret_cast<const uint8_t*>(read_buffer.data()), col.get()));
+    const auto* begin = reinterpret_cast<const uint8_t*>(read_buffer.data());
+    const auto* end = begin + read_buffer.size();
+    RETURN_IF_ERROR(Serd::deserialize(begin, end, col.get()));
     col->raw_data();
     _memory_usage += col->memory_usage();
     _deletes[del_id] = std::move(col);

@@ -17,8 +17,10 @@
 #include <atomic>
 #include <memory>
 
+#include "base/failpoint/fail_point.h"
 #include "base/utility/defer_op.h"
 #include "column/column_helper.h"
+#include "common/config.h"
 #include "common/statusor.h"
 #include "exec/hash_join_components.h"
 #include "exec/hash_join_node.h"
@@ -33,7 +35,7 @@
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/runtime_state.h"
-#include "util/failpoint/fail_point.h"
+#include "runtime/runtime_state_helper.h"
 
 namespace starrocks::pipeline {
 
@@ -42,7 +44,7 @@ DEFINE_FAIL_POINT(spill_flush_set_invalid_status);
 Status SpillableHashJoinBuildOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(HashJoinBuildOperator::prepare(state));
     _join_builder->spiller()->set_metrics(
-            spill::SpillProcessMetrics(_unique_metrics.get(), state->mutable_total_spill_bytes()));
+            spill::SpillProcessMetrics(_unique_metrics.get(), RuntimeStateHelper::mutable_total_spill_bytes(state)));
     RETURN_IF_ERROR(_join_builder->spiller()->prepare(state));
     if (state->spill_mode() == TSpillMode::FORCE) {
         set_spill_strategy(spill::SpillStrategy::SPILL_ALL);

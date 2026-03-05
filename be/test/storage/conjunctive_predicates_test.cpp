@@ -21,15 +21,18 @@
 #include <vector>
 
 #include "base/testutil/assert.h"
+#include "common/config.h"
 #include "exec/olap_scan_prepare.h"
 #include "exprs/binary_predicate.h"
 #include "exprs/column_ref.h"
+#include "exprs/expr_executor.h"
 #include "exprs/mock_vectorized_expr.h"
-#include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/Opcodes_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
+#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/runtime_filter/runtime_filter_probe.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate.h"
 #include "storage/predicate_parser.h"
@@ -318,6 +321,12 @@ struct MockConstExprBuilder {
 
 class ConjunctiveTestFixture : public testing::TestWithParam<std::tuple<TExprOpcode::type, LogicalType>> {
 public:
+    void SetUp() override {
+        _runtime_state.init_instance_mem_tracker();
+        _fragment_dict_state = std::make_unique<FragmentDictState>();
+        _runtime_state.set_fragment_dict_state(_fragment_dict_state.get());
+    }
+
     TSlotDescriptor _create_slot_desc(LogicalType type, const std::string& col_name, int col_pos) {
         TSlotDescriptorBuilder builder;
 
@@ -380,6 +389,7 @@ public:
 protected:
     RuntimeState _runtime_state;
     ObjectPool _pool;
+    std::unique_ptr<FragmentDictState> _fragment_dict_state;
 };
 
 // normalize a simple predicate: col op const
@@ -392,8 +402,8 @@ TEST_P(ConjunctiveTestFixture, test_parse_conjuncts) {
     std::vector<std::string> key_column_names = {"c1"};
     SlotDescriptor* slot = tuple_desc->slots()[0];
     std::vector<ExprContext*> conjunct_ctxs = {_pool.add(new ExprContext(build_predicate(ltype, op, slot)))};
-    ASSERT_OK(Expr::prepare(conjunct_ctxs, &_runtime_state));
-    ASSERT_OK(Expr::open(conjunct_ctxs, &_runtime_state));
+    ASSERT_OK(ExprExecutor::prepare(conjunct_ctxs, &_runtime_state));
+    ASSERT_OK(ExprExecutor::open(conjunct_ctxs, &_runtime_state));
     auto tablet_schema = TabletSchema::create(create_tablet_schema(ltype));
 
     ScanConjunctsManagerOptions opts;

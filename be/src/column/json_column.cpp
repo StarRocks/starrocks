@@ -18,7 +18,8 @@
 
 #include <sstream>
 
-#include "column/column_view/column_view.h"
+#include "base/hash/hash_util.hpp"
+#include "column/mysql_row_buffer.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
@@ -26,8 +27,6 @@
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "types/logical_type.h"
-#include "util/hash_util.hpp"
-#include "util/mysql_row_buffer.h"
 
 namespace starrocks {
 
@@ -257,7 +256,7 @@ void JsonColumn::append_default() {
 
 void JsonColumn::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
     if (src.is_json_view()) {
-        down_cast<const ColumnView*>(&src)->append_to(*this, indexes, from, size);
+        src.append_selective_to(*this, indexes, from, size);
         return;
     }
     const auto* other_json = down_cast<const JsonColumn*>(&src);

@@ -21,8 +21,9 @@
 
 #include "base/testutil/assert.h"
 #include "base/testutil/parallel_test.h"
+#include "common/config.h"
+#include "common/simdjson_util.h"
 #include "exprs/json_functions.h"
-#include "util/simdjson_util.h"
 
 namespace starrocks {
 

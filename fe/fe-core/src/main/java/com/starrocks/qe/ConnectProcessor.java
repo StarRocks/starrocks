@@ -245,27 +245,29 @@ public class ConnectProcessor {
                 .setPreparedStmtId(executor == null ? null : executor.getPreparedStmtId());
 
         if (ctx.getState().isQuery()) {
-            MetricRepo.COUNTER_QUERY_ALL.increase(1L);
-            ResourceGroupMetricMgr.increaseQuery(ctx, 1L);
-            if (ctx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
-                // err query
-                MetricRepo.COUNTER_QUERY_ERR.increase(1L);
-                ResourceGroupMetricMgr.increaseQueryErr(ctx, 1L);
-                //represent analysis err
-                if (ctx.getState().getErrType() == QueryState.ErrType.ANALYSIS_ERR) {
-                    MetricRepo.COUNTER_QUERY_ANALYSIS_ERR.increase(1L);
-                } else if (ctx.getState().getErrType() == QueryState.ErrType.EXEC_TIME_OUT) {
-                    MetricRepo.COUNTER_QUERY_TIMEOUT.increase(1L);
+            if (ctx.getState().getErrType() != QueryState.ErrType.BLACKLISTED) {
+                MetricRepo.COUNTER_QUERY_ALL.increase(1L);
+                ResourceGroupMetricMgr.increaseQuery(ctx, 1L);
+                if (ctx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
+                    // err query
+                    MetricRepo.COUNTER_QUERY_ERR.increase(1L);
+                    ResourceGroupMetricMgr.increaseQueryErr(ctx, 1L);
+                    //represent analysis err
+                    if (ctx.getState().getErrType() == QueryState.ErrType.ANALYSIS_ERR) {
+                        MetricRepo.COUNTER_QUERY_ANALYSIS_ERR.increase(1L);
+                    } else if (ctx.getState().getErrType() == QueryState.ErrType.EXEC_TIME_OUT) {
+                        MetricRepo.COUNTER_QUERY_TIMEOUT.increase(1L);
+                    } else {
+                        MetricRepo.COUNTER_QUERY_INTERNAL_ERR.increase(1L);
+                    }
                 } else {
-                    MetricRepo.COUNTER_QUERY_INTERNAL_ERR.increase(1L);
-                }
-            } else {
-                // ok query
-                MetricRepo.COUNTER_QUERY_SUCCESS.increase(1L);
-                MetricRepo.HISTO_QUERY_LATENCY.update(elapseMs);
-                ResourceGroupMetricMgr.updateQueryLatency(ctx, elapseMs);
-                if (elapseMs > Config.qe_slow_log_ms) {
-                    MetricRepo.COUNTER_SLOW_QUERY.increase(1L);
+                    // ok query
+                    MetricRepo.COUNTER_QUERY_SUCCESS.increase(1L);
+                    MetricRepo.HISTO_QUERY_LATENCY.update(elapseMs);
+                    ResourceGroupMetricMgr.updateQueryLatency(ctx, elapseMs);
+                    if (elapseMs > Config.qe_slow_log_ms) {
+                        MetricRepo.COUNTER_SLOW_QUERY.increase(1L);
+                    }
                 }
             }
             ctx.getAuditEventBuilder().setIsQuery(true);
@@ -329,7 +331,9 @@ public class ConnectProcessor {
                             .setEnableDigest(Config.enable_sql_desensitize_in_log))
                     .orElse("this is a desensitized sql");
         } else {
-            return LogUtil.removeLineSeparator(origStmt);
+            // Always redact credentials as defense in depth - raw SQL may contain
+            // credentials that AuditEncryptionChecker does not yet recognize
+            return SqlCredentialRedactor.redact(LogUtil.removeLineSeparator(origStmt));
         }
     }
 

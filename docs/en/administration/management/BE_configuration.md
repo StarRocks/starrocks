@@ -10,6 +10,8 @@ import PostBEConfig from '../../_assets/commonMarkdown/BE_dynamic_note.mdx'
 
 import StaticBEConfigNote from '../../_assets/commonMarkdown/StaticBE_config_note.mdx'
 
+import EditionSpecificBEItem from '../../_assets/commonMarkdown/Edition_Specific_BE_Item.mdx'
+
 # BE Configuration
 
 <BEConfigMethod />
@@ -140,7 +142,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Type: Strings
 - Unit: -
 - Is mutable: No
-- Description: The module of the logs to be printed. For example, if you set this configuration item to OLAP, StarRocks only prints the logs of the OLAP module. Valid values are namespaces in BE, including `starrocks`, `starrocks::debug`, `starrocks::fs`, `starrocks::io`, `starrocks::lake`, `starrocks::pipeline`, `starrocks::query_cache`, `starrocks::stream`, and `starrocks::workgroup`.
+- Description: Specifies the file names (without extensions) or file name wildcards for which VLOG logs should be printed. Multiple file names can be separated by commas. For example, if you set this configuration item to `storage_engine,tablet_manager`, StarRocks prints VLOG logs from the storage_engine.cpp and tablet_manager.cpp files. You can also use wildcards, e.g., set to `*` to print VLOG logs from all files. The VLOG log printing level is controlled by the `sys_log_verbose_level` parameter.
 - Introduced in: -
 
 ### Server
@@ -771,6 +773,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: The maximum buffer size on the receiver end of an exchange node for each query. This configuration item is a soft limit. A backpressure is triggered when data is sent to the receiver end with an excessive speed.
 - Introduced in: -
 
+##### exec_state_report_max_threads
+
+- Default: 2
+- Type: Int
+- Unit: Threads
+- Is mutable: Yes
+- Description: Maximum number of threads for the exec-state-report thread pool. This pool is used by `ExecStateReporter` to asynchronously send non-priority execution status reports (such as fragment completion and error status) from BE to FE via RPC. The actual pool size at startup is `max(1, exec_state_report_max_threads)`. Changing this config at runtime triggers `update_max_threads` on the pool in every executor set (shared and exclusive). The pool has a fixed task queue size of 1000; report submissions are silently dropped when all threads are busy and the queue is full. Paired with `priority_exec_state_report_max_threads` for the high-priority pool. Increase this value when delayed or dropped exec-state reports are observed under high query concurrency.
+- Introduced in: v4.1.0, v4.0.8, v3.5.15
+
 ##### file_descriptor_cache_capacity
 
 - Default: 16384
@@ -1104,6 +1115,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: Sets the maximum queue size (number of pending tasks) for the "cloud_native_pk_index_get" thread pool used by PK index parallel get operations in shared-data (cloud-native/lake) mode. The actual thread count for that pool is controlled by `pk_index_parallel_get_threadpool_max_threads`; this setting only limits how many tasks may be queued awaiting execution. The very large default (2^20) effectively makes the queue unbounded; lowering it prevents excessive memory growth from queued tasks but may cause task submissions to block or fail when the queue is full. Tune together with `pk_index_parallel_get_threadpool_max_threads` based on workload concurrency and memory constraints.
 - Introduced in: -
 
+##### priority_exec_state_report_max_threads
+
+- Default: 2
+- Type: Int
+- Unit: Threads
+- Is mutable: Yes
+- Description: Maximum number of threads for the high-priority exec-state-report thread pool. This pool is used by `ExecStateReporter` to asynchronously send high-priority execution status reports (such as urgent fragment failures) from BE to FE via RPC. Unlike the normal exec-state-report pool, this pool has an unbounded task queue. The actual pool size at startup is `max(1, priority_exec_state_report_max_threads)`. Changing this config at runtime triggers `update_max_threads` on the priority pool in every executor set (shared and exclusive). Paired with `exec_state_report_max_threads` for the normal pool. Increase this value when high-priority reports are delayed under heavy concurrent query loads.
+- Introduced in: v4.1.0, v4.0.8, v3.5.15
+
 ##### priority_queue_remaining_tasks_increased_frequency
 
 - Default: 512
@@ -1248,6 +1268,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Unit: -
 - Is mutable: Yes
 - Description: Specifies whether to enable parallel spill merge within a single tablet. Enabling this can improve the performance of spill merge during data loading.
+- Introduced in: -
+
+##### enable_parallel_memtable_finalize
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Specifies whether to enable parallel memtable finalize when loading data to lake tables (shared-data mode). When enabled, the memtable finalize operation (sort/aggregate) is moved from the write thread to the flush thread, allowing the write thread to continue inserting data into a new memtable while the previous one is being finalized and flushed in parallel. This can significantly improve load throughput by overlapping CPU-intensive finalize operations with I/O-bound flush operations. Note that this optimization is automatically disabled when auto-increment columns need to be filled, as auto-increment ID assignment must happen before the memtable is submitted for flush.
 - Introduced in: -
 
 ##### enable_stream_load_verbose_log
@@ -2937,6 +2966,24 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ### Shared-data
 
+##### cloud_native_pk_index_rebuild_files_threshold
+
+- Default: 50
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of segment files that need to be rebuilt in cloud-native Primary Key index. If the number of files that need to be rebuilt during index recovery exceeds this threshold, StarRocks will flush the in-memory MemTable immediately to reduce the number of segments that must be replayed. Set to `0` to disable this early-flush strategy.
+- Introduced in: -
+
+##### cloud_native_pk_index_rebuild_rows_threshold
+
+- Default: 10000000
+- Type: Long
+- Unit: Rows
+- Is mutable: Yes
+- Description: The maximum number of rows that need to be rebuilt in cloud-native Primary Key index. If the number of rows that need to be rebuilt during index recovery exceeds this threshold, StarRocks will flush the in-memory MemTable immediately to reduce the rebuild overhead. Set to `0` to disable this early-flush strategy. Works in conjunction with `cloud_native_pk_index_rebuild_files_threshold`; a flush is triggered if either threshold is exceeded.
+- Introduced in: -
+
 ##### download_buffer_size
 
 - Default: 4194304
@@ -3464,3 +3511,13 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: No
 - Description: Maximum number of bytes to read from the INFO logfile and show on the BE debug webserver's log page. The handler uses this value to compute a seek offset (showing the last N bytes) to avoid reading or serving very large log files. If the logfile is smaller than this value the whole file is shown. Note: in the current implementation the code that reads and serves the INFO log is commented out and the handler reports that the INFO log file couldn't be opened, so this parameter may have no effect unless the log-serving code is enabled.
 - Introduced in: v3.2.0
+
+### Removed parameters
+
+##### enable_bit_unpack_simd
+
+- Status: Removed
+- Description: This parameter has been removed. Bit-unpack SIMD selection is now handled at compile time (AVX2/BMI2) with automatic fallback to the default implementation.
+- Removed in: -
+
+<EditionSpecificBEItem />

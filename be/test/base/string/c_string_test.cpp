@@ -80,4 +80,12 @@ TEST(CStringTest, test_all) {
     EXPECT_EQ("string 1", std::string_view(s6.data(), s6.size()));
 }
 
+TEST(CStringTest, test_long_string) {
+    std::string long_str(70000, 'x');
+    CString s;
+    s.assign(std::string_view(long_str));
+    EXPECT_EQ(long_str.size(), s.size());
+    EXPECT_EQ(long_str, std::string_view(s.data(), s.size()));
+}
+
 } // namespace starrocks

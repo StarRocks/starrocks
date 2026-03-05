@@ -43,6 +43,7 @@
 #include <utility>
 
 #include "base/concurrency/race_detect.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exec/pipeline/schedule/observer.h"
@@ -51,7 +52,6 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/query_statistics.h"
-#include "util/runtime_profile.h"
 
 namespace arrow {
 class RecordBatch;

@@ -40,16 +40,20 @@
 
 #include <memory>
 
+#include "base/failpoint/fail_point.h"
+#include "base/hash/crc32c.h"
 #include "base/string/slice.h"
 #include "base/utility/defer_op.h"
 #include "column/column_access_path.h"
 #include "column/schema.h"
+#include "common/config.h"
 #include "common/logging.h"
 #include "fs/key_cache.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "runtime/starrocks_metrics.h"
 #include "segment_iterator.h"
 #include "segment_options.h"
 #include "storage/lake/tablet_manager.h"
@@ -62,8 +66,6 @@
 #include "storage/rowset/segment_writer.h" // k_segment_magic_length
 #include "storage/tablet_schema.h"
 #include "storage/utils.h"
-#include "util/crc32c.h"
-#include "util/failpoint/fail_point.h"
 #include "util/json_flattener.h"
 
 bvar::Adder<int> g_open_segments;    // NOLINT
@@ -251,6 +253,9 @@ Status Segment::open(size_t* footer_length_hint, const FooterPointerPB* partial_
     }
 
     auto res = success_once(_open_once, [&] { return _open(footer_length_hint, partial_rowset_footer, lake_io_opts); });
+    if (res.status().is_not_found()) {
+        StarRocksMetrics::instance()->segment_file_not_found_total.increment(1);
+    }
 
     // move the cache size update out of the `success_once`,
     // so that the onceflag `_open_once` can be set before the cache_size is updated.
@@ -481,7 +486,22 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_defaul
     auto id = column.unique_id();
     if (_column_readers.contains(id)) {
         ASSIGN_OR_RETURN(auto source_iter, _column_readers[id]->new_iterator(path, &column));
-        if (_column_readers[id]->column_type() == column.type()) {
+        bool need_cast = false;
+        if (_column_readers[id]->column_type() != column.type()) {
+            need_cast = true;
+        } else if (column.type() == TYPE_CHAR) {
+            // if the column is a char column, we need to check if the length of the column is the same as
+            // the length stored in the segment footer (the original length when the segment was written).
+            // Because the char column is padded with 0 to the length of the tablet column and the storage
+            // bitmap index and zone map need it.
+            // In shared-data mode, segments may be opened with a new tablet schema that has a different
+            // CHAR length than what's stored on disk, so we must compare against the segment's stored length.
+            int32_t segment_column_length = _column_readers[id]->column_length();
+            if (segment_column_length != column.length()) {
+                need_cast = true;
+            }
+        }
+        if (!need_cast) {
             return source_iter;
         } else {
             auto nullable = _column_readers[id]->is_nullable();

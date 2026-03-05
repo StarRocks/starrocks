@@ -30,6 +30,11 @@ public:
     // Sets full_path to <STARROCKS_HOME>/<build><debug OR release>/path
     static void get_full_build_path(const std::string& path, std::string* full_path);
 
+#if defined(BE_TEST)
+    // Reset cached STARROCKS_HOME for tests.
+    static void reset_starrocks_home_for_test();
+#endif
+
 private:
     // Cache of env['STARROCKS_HOME']
     static const char* _s_starrocks_home;

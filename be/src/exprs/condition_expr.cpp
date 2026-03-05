@@ -24,11 +24,11 @@
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
+#include "exprs/dispatch.h"
 #include "gutil/casts.h"
-#include "runtime/types.h"
 #include "types/logical_type.h"
-#include "util/dispatch.h"
-#include "util/percentile_value.h"
+#include "types/percentile_value.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 

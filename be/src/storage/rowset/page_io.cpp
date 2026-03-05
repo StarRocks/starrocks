@@ -39,22 +39,25 @@
 #include <string>
 #include <string_view>
 
+#include "base/coding.h"
+#include "base/hash/crc32c.h"
 #include "base/string/faststring.h"
 #include "base/utility/scoped_cleanup.h"
 #include "cache/mem_cache/page_cache.h"
 #include "column/column.h"
+#include "common/config.h"
 #include "common/logging.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "fs/fs.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_starlet.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/raw_container_checked.h"
+#include "storage/olap_common.h"
 #include "storage/rowset/storage_page_decoder.h"
-#include "util/coding.h"
 #include "util/compression/block_compression.h"
-#include "util/crc32c.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 
@@ -156,7 +159,7 @@ Status drop_local_cache_data(const std::string& fname) {
     if (!is_starlet_uri(fname)) {
         return Status::NotSupported("only support starlet file");
     }
-    auto fs_or = FileSystem::CreateSharedFromString(fname);
+    auto fs_or = FileSystemFactory::CreateSharedFromString(fname);
     if (!fs_or.ok()) {
         LOG(INFO) << "clear corrupted cache for " << fname << ", error:" << fs_or.status();
         return fs_or.status();

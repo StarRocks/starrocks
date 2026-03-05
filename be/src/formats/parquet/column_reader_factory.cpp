@@ -14,13 +14,13 @@
 
 #include "formats/parquet/column_reader_factory.h"
 
+#include "base/failpoint/fail_point.h"
 #include "formats/parquet/complex_column_reader.h"
 #include "formats/parquet/scalar_column_reader.h"
 #include "formats/parquet/schema.h"
 #include "formats/parquet/utils.h"
 #include "formats/utils.h"
-#include "runtime/types.h"
-#include "util/failpoint/fail_point.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::parquet {
 
@@ -211,8 +211,9 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_variant_column_reader(cons
         }
     }
 
-    return std::make_unique<VariantColumnReader>(variant_field, std::move(_metadata_reader), std::move(_value_reader),
-                                                 std::move(typed_value_reader), std::move(typed_value_type));
+    return ColumnReaderPtr(
+            std::make_unique<VariantColumnReader>(variant_field, std::move(_metadata_reader), std::move(_value_reader),
+                                                  std::move(typed_value_reader), std::move(typed_value_type)));
 }
 
 StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(ColumnReaderPtr ori_reader, const GlobalDictMap* dict,

@@ -184,6 +184,49 @@ Use `#pragma once` instead of traditional include guards:
 - **Allowed deps only**: `be/src/common` may depend on `base/*`, `gutil/*`, `gen_cpp/*`, system headers, and third-party libraries.
 - **No other BE modules**: do not include headers from `util/*`, `runtime/*`, `storage/*`, `exec/*`, `service/*`, `http/*`, etc.
 
+### iocore (`IOCore` target)
+- **Allowed deps only**: code compiled into `IOCore` (currently `be/src/io/core/*`) may only depend on `common/*`, `base/*`, `gutil/*`, `gen_cpp/*`, `io/core/*`, system headers, and third-party libraries.
+- **No higher-level BE deps**: do not include headers from non-core `io/*` components (for example `s3_input_stream.h`, `cache_input_stream.h`), or from `fs/*`, `runtime/*`, `util/*`, `storage/*`, `exec/*`, `service/*`, `http/*`, `connector/*`, `exprs/*`.
+- **Goal**: keep `IOCore` minimal and independently buildable as a shared foundation for upper IO/FS layers.
+- **UT constraint**: keep IOCore-focused tests in `io_test`; avoid changes that force `io_test` to link full `FileSystem`, `Runtime`, or `Storage`.
+
+### fscore (`FSCore` target)
+- **Allowed deps only**: code compiled into `FSCore` (currently `be/src/fs/{fs.cpp,encrypt_file.cpp,bundle_file.cpp,fs_options.cpp,fs_options_helper.cpp}`) may only depend on `IOCore`, `common/*`, `base/*`, `gutil/*`, `gen_cpp/*`, `fs/*` core headers, system headers, and third-party libraries.
+- **Boundary with `FileSystem`**: keep factory/backend implementations in `FileSystem` (for example `fs_factory.cpp`, `fs_posix.cpp`, `fs_broker.cpp`, `fs_memory.cpp`, `fs_s3.cpp`, `hdfs/*`, `azure/*`, `s3/*`, `credential/*`, `fs_starlet.cpp`).
+- **Runtime dependency rule**: avoid adding `runtime/*` dependencies to `FSCore`. Existing dependency from `fs_options_helper.cpp` to `runtime/file_result_writer.h` is allowed; do not add more runtime coupling without updating this boundary.
+- **UT constraint**: keep core-only FS tests in `fs_core_test` and keep it linked to `FSCore` plus core dependencies only.
+
+### typecore (`TypesCore` target)
+- **Allowed deps only**: code compiled into `TypesCore` (for example, selected files under `be/src/types`) may only depend on `common/*`, `base/*`, `gutil/*`, `gen_cpp/*`, system headers, and third-party libraries.
+- **No higher-level BE deps**: do not include headers from `runtime/*`, `util/*`, `storage/*`, `exec/*`, `service/*`, `http/*`, `connector/*`, etc.
+- **UT constraint**: keep `TypesCore` unit tests in `types_test` and avoid introducing `Util`/`Runtime` link requirements unless a dedicated integration test is used.
+
+### columncore (`ColumnCore` target)
+- **Allowed deps only**: code compiled into `ColumnCore` (the `be/src/column` module) may only depend on `TypesCore`, `Common`, `Base`, `Gutils`, `gen_cpp/*`, system headers, and third-party libraries.
+- **No circular deps**: do **not** introduce dependencies from `ColumnCore` to `Util`, `Runtime`, `Storage`, `Exec`, or any other higher-level module. Circular dependencies between modules are strictly forbidden.
+- **Goal**: `ColumnCore` should be buildable with minimal dependencies so that `column_test` can be compiled and run without building the entire codebase. This enables fast AI-agent iteration loops.
+- **UT constraint**: keep `ColumnCore` unit tests in `column_test`. To verify changes quickly, run:
+  ```bash
+  STARROCKS_LINKER=lld STARROCKS_THIRDPARTY=/var/local/thirdparty \
+  ./run-be-ut.sh --clean --with-dynamic --build-target column_test
+  ```
+  This builds only `column_test` and its minimal dependencies, making it extremely fast for iterative development.
+
+### runtimecore (`RuntimeCore` target)
+- **Allowed deps only**: code compiled into `RuntimeCore` (currently selected files under `be/src/runtime`, starting with `mem_tracker.cpp`) may only depend on `chunkcore` (`ChunkCore`), `columncore` (`ColumnCore`), `typecore` (`TypesCore`), `common/*`, `base/*`, `gutil/*`, `gen_cpp/*`, system headers, and third-party libraries.
+- **No higher-level BE deps**: do not include headers from `runtime/*` components that require full `Runtime`, `util/*`, `storage/*`, `exec/*`, `service/*`, `http/*`, `connector/*`, `exprs/*`, etc.
+- **UT constraint**: keep `RuntimeCore` unit tests in `runtime_core_test`, and ensure that `runtime_core_test` links only `RuntimeCore` plus its allowed core dependencies (similar to `column_test`/`types_test` style minimal linkage).
+
+### exprcore (`ExprCore` target)
+- **Allowed deps only**: code compiled into `ExprCore` (currently selected files under `be/src/exprs`, starting with `function_context.cpp`) may only depend on `runtimecore` (`RuntimeCore`) and its transitive core dependencies (`ChunkCore`, `ColumnCore`, `TypesCore`, `Common`, `Base`, `Gutil`, `gen_cpp/*`), plus system headers and third-party libraries.
+- **No higher-level BE deps**: do not include headers from `exprs/*` components that require full `Exprs`, `util/*`, `storage/*`, `exec/*`, `service/*`, `http/*`, `connector/*`, or other non-core modules.
+- **Goal**: `ExprCore` should remain minimal and independently buildable, so core expression infrastructure can be tested quickly without linking the full `Exprs` stack.
+- **UT constraint**: keep `ExprCore` unit tests in `expr_core_test`, and ensure `expr_core_test` links only `ExprCore` plus its allowed core dependencies. To verify changes quickly, run:
+  ```bash
+  CMAKE_BUILD_PREFIX=/home/az/sr-build STARROCKS_LINKER=lld STARROCKS_THIRDPARTY=/var/local/thirdparty \
+  ./run-be-ut.sh --clean --with-dynamic --build-target expr_core_test --module expr_core_test --without-java-ext
+  ```
+
 ## Common Patterns
 
 ### Status and StatusOr

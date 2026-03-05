@@ -38,15 +38,15 @@
 #include <tuple>
 
 #include "base/hash/hash.h"
+#include "base/phmap/phmap.h"
 #include "base/testutil/sync_point.h"
+#include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "common/config.h"
 #include "gutil/strings/join.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
-#include "util/phmap/phmap.h"
-#include "util/time.h"
 
 namespace google {
 std::string GetStackTrace();
@@ -60,10 +60,6 @@ bool Symbolize(void* pc, char* out, unsigned long out_size, SymbolizeOptions opt
 } // namespace google::glog_internal_namespace_
 
 namespace starrocks {
-
-std::string get_stack_trace() {
-    return google::GetStackTrace();
-}
 
 struct StackTraceTask {
     std::thread::id id;

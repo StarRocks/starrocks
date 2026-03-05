@@ -15,9 +15,9 @@
 #pragma once
 
 #include "formats/parquet/column_reader.h"
-#include "runtime/types.h"
 #include "scalar_column_reader.h"
 #include "stored_column_reader.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::parquet {
 
@@ -338,7 +338,6 @@ private:
     ColumnReaderPtr _typed_value_reader;
     TypeDescriptor _typed_value_type;
     bool _has_typed_value{false};
-    VariantEncodingContext _ctx;
 };
 
 } // namespace starrocks::parquet

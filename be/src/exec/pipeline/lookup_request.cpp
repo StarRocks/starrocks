@@ -16,19 +16,21 @@
 
 #include <brpc/controller.h>
 
+#include "base/container/raw_container.h"
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
+#include "common/runtime_profile.h"
 #include "connector/hive_connector.h"
 #include "exec/pipeline/lookup_operator.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
 #include "exec/sorting/sorting.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 #include "runtime/descriptors.h"
 #include "serde/column_array_serde.h"
 #include "storage/range.h"
 #include "util/logging.h"
-#include "util/raw_container.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {
 
@@ -76,7 +78,8 @@ Status RemoteLookUpRequestContext::collect_input_columns(ChunkPtr chunk) {
         VLOG_FILE << "deserialize column, slot_id: " << slot_id << ", data_size: " << data_size
                   << ", column: " << col->get_name();
         const uint8_t* buff = reinterpret_cast<const uint8_t*>(pcolumn.data().data());
-        auto ret = serde::ColumnArraySerde::deserialize(buff, col.get());
+        const auto* end = buff + data_size;
+        auto ret = serde::ColumnArraySerde::deserialize(buff, end, col.get());
         if (!ret.ok()) {
             auto msg = fmt::format("deserialize column failed, slot_id: {}, data_size: {}", slot_id, data_size);
             LOG(WARNING) << msg;
@@ -530,11 +533,11 @@ StatusOr<ChunkPtr> IcebergV3LookUpTask::_get_data_from_storage(
         TExpr expr = create_row_id_filter_expr(_ctx->lookup_ref_slot_ids[1], *row_id_range);
 
         ExprContext* expr_ctx = nullptr;
-        RETURN_IF_ERROR(Expr::create_expr_tree(&obj_pool, expr, &expr_ctx, state, false));
+        RETURN_IF_ERROR(ExprFactory::create_expr_tree(&obj_pool, expr, &expr_ctx, state, false));
         std::vector<ExprContext*> conjunct_ctxs{expr_ctx};
 
-        RETURN_IF_ERROR(Expr::prepare(conjunct_ctxs, state));
-        RETURN_IF_ERROR(Expr::open(conjunct_ctxs, state));
+        RETURN_IF_ERROR(ExprExecutor::prepare(conjunct_ctxs, state));
+        RETURN_IF_ERROR(ExprExecutor::open(conjunct_ctxs, state));
 
         // Build HiveDataSource for this scan range
         auto glm_ctx = down_cast<pipeline::IcebergGlobalLateMaterilizationContext*>(

@@ -17,6 +17,8 @@
 #include <common/config.h>
 #include <gtest/gtest.h>
 
+#include "common/config.h"
+
 namespace starrocks {
 
 TEST(DiskRangeTest, TestMergeEmptyDiskRanges) {

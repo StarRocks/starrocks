@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include "base/hash/hash_std.hpp"
+#include "base/phmap/phmap.h"
 #include "base/string/slice.h"
 #include "column/chunk.h"
 #include "column/column_hash.h"
@@ -23,11 +25,10 @@
 #include "exec/except_hash_set.h"
 #include "exec/olap_common.h"
 #include "exec/pipeline/context_with_dependency.h"
+#include "exec/pipeline/schedule/observer.h"
 #include "exprs/expr_context.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
-#include "util/hash_util.hpp"
-#include "util/phmap/phmap.h"
 
 namespace starrocks::pipeline {
 

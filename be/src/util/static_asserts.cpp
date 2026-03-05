@@ -17,7 +17,8 @@
 
 #include <cstddef>
 
-#include "runtime/datetime_value.h"
+#include "base/string/slice.h"
+#include "types/datetime_value.h"
 
 namespace starrocks {
 // This class is unused.  It contains static (compile time) asserts.

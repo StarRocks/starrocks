@@ -24,12 +24,14 @@
 
 #include "base/testutil/assert.h"
 #include "column/datum_tuple.h"
+#include "common/config.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/split.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/chunk_helper.h"
 #include "storage/memtable_rowset_writer_sink.h"
 #include "storage/olap_common.h"
@@ -37,7 +39,6 @@
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -229,7 +230,7 @@ public:
         _vectorized_schema = MemTable::convert_schema(_schema, _slots);
         _mem_table =
                 std::make_unique<MemTable>(1, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker.get());
-        ASSERT_TRUE(_mem_table->prepare().ok());
+        ASSERT_TRUE(_mem_table->prepare(PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1).ok());
     }
 
     void TearDown() override {

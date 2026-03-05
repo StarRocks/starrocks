@@ -284,6 +284,11 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         schemaChangeHandler.getAlterJobsV2().remove(job.getJobId());
 
+        // Reset job state to PENDING if it has been changed by background scheduler before removal
+        if (job.getJobState() != JobState.PENDING) {
+            job.setJobState(JobState.PENDING);
+        }
+
         OnlineOptimizeJobV2 spy = Mockito.spy(job);
         Mockito.doReturn(true).when(spy).isPreviousLoadFinished();
         return spy;

@@ -38,7 +38,7 @@ class DeltaColumnGroupLoader;
 // Params for MetaReader
 // mainly include tablet
 struct MetaReaderParams {
-    MetaReaderParams() = default;
+    MetaReaderParams();
 
     int64_t tablet_id;
     Version version = Version(-1, 0);
@@ -49,7 +49,7 @@ struct MetaReaderParams {
     const DescriptorTbl* desc_tbl = nullptr;
     int32_t low_card_threshold;
 
-    int chunk_size = config::vector_chunk_size;
+    int chunk_size;
 
     void check_validation() const { LOG_IF(FATAL, version.first == -1) << "version is not set. tablet=" << tablet_id; }
 };
@@ -145,6 +145,7 @@ public:
 private:
     Status _init_return_column_iterators();
     Status _collect(const std::string& name, ColumnId cid, Column* column, LogicalType type);
+    Status _collect_virtual(const std::string& name, const std::string_view col_name, Column* column, LogicalType type);
     Status _collect_dict(ColumnId cid, Column* column, LogicalType type);
     Status _collect_dict_for_flatjson(ColumnId cid, Column* column);
     Status _collect_dict_for_column(ColumnIterator* column_iter, ColumnId cid, Column* column);
@@ -169,6 +170,7 @@ private:
     SegmentSharedPtr _segment;
     std::vector<std::unique_ptr<ColumnIterator>> _column_iterators;
     const SegmentMetaCollecterParams* _params = nullptr;
+    int32_t _tablet_id;
     std::unique_ptr<RandomAccessFile> _read_file;
     OlapReaderStatistics _stats;
     std::unordered_map<std::string, SegmentSharedPtr> _dcg_segments;

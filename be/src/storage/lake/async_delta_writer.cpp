@@ -22,11 +22,11 @@
 
 #include "base/testutil/sync_point.h"
 #include "common/compiler_util.h"
+#include "common/util/stack_trace_mutex.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/load_spill_block_manager.h"
 #include "storage/storage_engine.h"
-#include "util/stack_trace_mutex.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks::lake {
 
@@ -56,6 +56,8 @@ public:
     void flush(Callback cb);
 
     void finish(DeltaWriterFinishMode mode, FinishCallback cb);
+
+    void cancel(const Status& st);
 
     void close();
 
@@ -323,6 +325,10 @@ inline void AsyncDeltaWriterImpl::finish(DeltaWriterFinishMode mode, FinishCallb
     }
 }
 
+inline void AsyncDeltaWriterImpl::cancel(const Status& st) {
+    _writer->cancel(st);
+}
+
 inline void AsyncDeltaWriterImpl::close() {
     std::unique_lock l(_mtx);
     TEST_SYNC_POINT("AsyncDeltaWriterImpl::close:1");
@@ -346,20 +352,28 @@ inline void AsyncDeltaWriterImpl::close() {
 
         TEST_SYNC_POINT("AsyncDeltaWriterImpl::close:2");
 
-        // Wait for block merge finished.
-        if (_block_merge_token != nullptr) {
-            _block_merge_token->shutdown();
-            _block_merge_token.reset();
-        }
-
         // After the execution_queue been `stop()`ed all incoming `write()` and `finish()` requests
         // will fail immediately.
         int r = bthread::execution_queue_stop(old_id);
         PLOG_IF(WARNING, r != 0) << "Fail to stop execution queue";
 
+        // Shutdown (but do NOT reset) _block_merge_token to drain any running merge tasks.
+        // This must happen BEFORE execution_queue_join() because the join triggers the
+        // is_queue_stopped() handler which calls delta_writer->close(), and we need all
+        // merge tasks (which call finish_with_txnlog()) to complete before that.
+        // The token remains allocated (not null) so if execute() is still running and
+        // calls _block_merge_token->submit(), it gets a ServiceUnavailable error instead
+        // of SIGSEGV.
+        if (_block_merge_token != nullptr) {
+            _block_merge_token->shutdown();
+        }
+
         // Wait for all running tasks completed.
         r = bthread::execution_queue_join(old_id);
         PLOG_IF(WARNING, r != 0) << "Fail to join execution queue";
+
+        // Safe to destroy token now since both execution queue and merge tasks are done.
+        _block_merge_token.reset();
     }
 }
 
@@ -382,6 +396,10 @@ void AsyncDeltaWriter::flush(Callback cb) {
 void AsyncDeltaWriter::finish(DeltaWriterFinishMode mode, FinishCallback cb) {
     TEST_SYNC_POINT_CALLBACK("AsyncDeltaWriter:enter_finish", this);
     _impl->finish(mode, std::move(cb));
+}
+
+void AsyncDeltaWriter::cancel(const Status& st) {
+    _impl->cancel(st);
 }
 
 void AsyncDeltaWriter::close() {

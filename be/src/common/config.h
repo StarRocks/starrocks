@@ -34,6 +34,7 @@
 
 #pragma once
 
+#include "config_cow.h"
 #include "configbase.h"
 
 namespace starrocks::config {
@@ -1020,6 +1021,9 @@ CONF_Bool(pipeline_analytic_enable_streaming_process, "true");
 CONF_mBool(pipeline_analytic_enable_removable_cumulative_process, "true");
 CONF_Int32(pipline_limit_max_delivery, "4096");
 
+// only used in DCHECK
+CONF_mBool(enable_dcheck_on_serde_failure, "false");
+
 CONF_mBool(use_default_dop_when_shared_scan, "true");
 /// For parallel scan on the single tablet.
 // These three configs are used to calculate the minimum number of rows picked up from a segment at one time.
@@ -1311,6 +1315,10 @@ CONF_mBool(lake_clear_corrupted_cache_data, "false");
 // The maximum number of files which need to rebuilt in cloud native pk index.
 // If files which need to rebuilt larger than this, we will flush memtable immediately.
 CONF_mInt32(cloud_native_pk_index_rebuild_files_threshold, "50");
+// The maximum number of rows which need to be rebuilt in cloud native pk index.
+// If rows which need to be rebuilt exceed this threshold, we will flush memtable immediately
+// to reduce index rebuild cost. 0 means disabled.
+CONF_mInt64(cloud_native_pk_index_rebuild_rows_threshold, "10000000");
 // if set to true, CACHE SELECT will only read file, save CPU time
 // if set to false, CACHE SELECT will behave like SELECT
 CONF_mBool(lake_cache_select_in_physical_way, "true");
@@ -1367,6 +1375,11 @@ CONF_mDouble(spill_max_dir_bytes_ratio, "0.8"); // 80%
 // min bytes size of spill read buffer. if the buffer size is less than this value, we will disable buffer read
 CONF_Int64(spill_read_buffer_min_bytes, "1048576");
 CONF_mInt64(mem_limited_chunk_queue_block_size, "8388608");
+
+// The max number of threads for exec_state_report thread pool.
+CONF_mInt32(exec_state_report_max_threads, "2");
+// The max number of threads for priority_exec_state_report thread pool.
+CONF_mInt32(priority_exec_state_report_max_threads, "2");
 
 CONF_Int32(internal_service_query_rpc_thread_num, "-1");
 CONF_Int32(internal_service_datacache_rpc_thread_num, "-1");
@@ -1526,6 +1539,10 @@ CONF_mInt32(pindex_rebuild_load_wait_seconds, "20");
 
 // Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
 CONF_Int64(query_cache_capacity, "536870912");
+
+// Experimental internal switch: whether to enable lake capture_tablet_and_rowsets for query cache stale entries.
+// This config is temporary and may be removed after the related lake capture implementation is fixed.
+CONF_mBool(experimental_enable_lake_capture_tablet_and_rowsets, "false");
 
 // When query cache enabled, the operators in the drivers contains cache operator are multilane
 // operators, if the number of lanes is big, Fragment Instance would spend too much time to prepare
@@ -1807,8 +1824,6 @@ CONF_mInt32(tablet_write_log_buffer_size, "100000");
 
 CONF_mBool(skip_schema_in_rowset_meta, "true");
 
-CONF_mBool(enable_bit_unpack_simd, "true");
-
 CONF_mInt32(max_committed_without_schema_rowset, "1000");
 
 CONF_mInt32(apply_version_slow_log_sec, "30");
@@ -1846,6 +1861,15 @@ CONF_mInt64(load_spill_merge_memory_limit_percent, "30");
 CONF_mInt64(load_spill_merge_max_thread, "16");
 // Enable parallel spill merge inside single tablet
 CONF_mBool(enable_load_spill_parallel_merge, "true");
+// Enable parallel finalize memtable when loading to lake table.
+// When enabled, the memtable finalize operation (sort/aggregate) will be moved from the
+// write thread to the flush thread, allowing the write thread to continue inserting data
+// into a new memtable while the previous one is being finalized and flushed in parallel.
+// This can significantly improve load throughput by overlapping CPU-intensive finalize
+// operations with I/O-bound flush operations.
+// Note: This optimization is disabled when auto-increment columns need to be filled,
+// as auto-increment ID assignment must happen before the memtable is submitted for flush.
+CONF_mBool(enable_parallel_memtable_finalize, "true");
 // Do lazy load when PK column larger than this threshold. Default is 300MB.
 CONF_mInt64(pk_column_lazy_load_threshold_bytes, "314572800");
 // Batch size for column mode partial update when processing insert rows.
@@ -1904,11 +1928,6 @@ CONF_mBool(enable_fetch_local_pass_through, "true");
 CONF_mInt64(max_lookup_batch_request, "8");
 // For table schema service: max retry attempts for fetching schema from FE.
 CONF_mInt32(table_schema_service_max_retries, "3");
-
-// Enable cow optimization for column operations, used to avoid the overhead of reference counting when accessing columns.
-CONF_mBool(enable_cow_optimization, "true");
-// The diagnose level for cow optimization, 0 means no diagnose, 1 means diagnose when use_count > 1, 2 means diagnose when use_count > 2.
-CONF_Int32(cow_optimization_diagnose_level, "0");
 
 // If the first predicate column's selectivity is higher than this threshold, trigger sampling
 // to potentially find a better predicate order. When selectivity is already good (low), sampling

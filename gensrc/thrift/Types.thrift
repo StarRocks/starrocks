@@ -445,6 +445,12 @@ enum TKeysType {
     AGG_KEYS
 }
 
+enum TPrimaryKeyEncodingType {
+    PK_ENCODING_TYPE_NONE = 0,
+    PK_ENCODING_TYPE_V1 = 1,
+    PK_ENCODING_TYPE_V2 = 2
+}
+
 enum TPriority {
     NORMAL,
     HIGH

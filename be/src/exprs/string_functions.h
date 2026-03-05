@@ -16,17 +16,18 @@
 
 #include <hs/hs.h>
 #include <re2/re2.h>
-#include <runtime/decimalv3.h>
+#include <types/decimalv3.h>
 
 #include <iomanip>
 
+#include "base/phmap/phmap.h"
+#include "base/string/url_parser.h"
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
+#include "common/constexpr.h"
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"
 #include "runtime/current_thread.h"
-#include "util/phmap/phmap.h"
-#include "util/url_parser.h"
 
 namespace starrocks {
 class RegexpSplit;
@@ -55,6 +56,8 @@ template <LogicalType T>
 struct FieldFuncState {
     bool all_const = false;
     bool list_all_const = false;
+
+    int const_field_idx = 0;
     std::map<RunTimeCppType<T>, int> mp;
 };
 
@@ -649,6 +652,15 @@ public:
      */
     DEFINE_VECTORIZED_FN(format_bytes);
 
+    /**
+     * Raises a runtime error with the given message.
+     *
+     * @param: [message]
+     * @paramType: [StringColumn]
+     * @return: BooleanColumn (never returned for non-null input; always throws)
+     */
+    DEFINE_VECTORIZED_FN(raise_error);
+
     static Status ngram_search_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status ngram_search_case_insensitive_prepare(FunctionContext* context,
                                                         FunctionContext::FunctionStateScope scope);
@@ -782,9 +794,6 @@ Status StringFunctions::field_prepare(FunctionContext* context, FunctionContext:
     }
 
     if (state->list_all_const) {
-        if (context->is_constant_column(0)) {
-            state->all_const = true;
-        }
         for (int i = 1; i < context->get_num_args(); i++) {
             const auto list_col = context->get_constant_column(i);
             if (list_col->only_null()) {
@@ -792,6 +801,21 @@ Status StringFunctions::field_prepare(FunctionContext* context, FunctionContext:
             } else {
                 const auto list_val = ColumnHelper::get_const_value<Type>(list_col);
                 state->mp.emplace(list_val, i);
+            }
+        }
+        if (context->is_constant_column(0)) {
+            state->all_const = true;
+            auto const_column = context->get_constant_column(0);
+            if (const_column->only_null()) {
+                state->const_field_idx = 0;
+            } else {
+                auto const_value = ColumnHelper::get_const_value<Type>(const_column);
+                auto it = state->mp.find(const_value);
+                if (it != state->mp.end()) {
+                    state->const_field_idx = it->second;
+                } else {
+                    state->const_field_idx = 0;
+                }
             }
         }
     }
@@ -822,14 +846,7 @@ StatusOr<ColumnPtr> StringFunctions::field(FunctionContext* context, const Colum
         return result.build(true);
     } else if (state != nullptr) {
         if (state->all_const) {
-            const auto list_col = context->get_constant_column(0);
-            const auto list_val = ColumnHelper::get_const_value<Type>(list_col);
-            auto it = state->mp.find(list_val);
-            if (it != state->mp.end()) {
-                result.append(it->second);
-            } else {
-                result.append(0);
-            }
+            result.append(state->const_field_idx);
             return result.build(true);
         } else if (state->list_all_const) {
             const auto viewer = ColumnViewer<Type>(columns[0]);

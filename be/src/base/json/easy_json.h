@@ -84,6 +84,8 @@ public:
     // If index >= this->value().Size(), then the underlying
     // array's size is increased to index + 1 (new indices
     // are filled with Null values).
+    // If index < 0, returns a Null-valued EasyJson and does
+    // not mutate the underlying value.
     EasyJson Get(int index);
 
     // Same as Get(key).
@@ -163,6 +165,7 @@ private:
     public:
         rapidjson::Value& value() { return value_; }
         rapidjson::Document::AllocatorType& allocator() { return value_.GetAllocator(); }
+        rapidjson::Value& invalid_value() { return invalid_value_; }
 
     private:
         friend class RefCounted<EasyJsonAllocator>;
@@ -171,6 +174,7 @@ private:
         // The underlying rapidjson::Value object (Document is
         // a subclass of Value that has its own allocator).
         rapidjson::Document value_;
+        rapidjson::Value invalid_value_;
     };
 
     // Used to instantiate descendant objects.

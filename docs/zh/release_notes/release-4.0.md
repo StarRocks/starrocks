@@ -23,6 +23,90 @@ displayed_sidebar: docs
 
 :::
 
+## 4.0.6
+
+发布日期：2026 年 2 月 14 日
+
+### 功能优化
+
+- 创建 Iceberg 表时支持使用带括号的分区转换（例如，`PARTITION BY (bucket(k1, 3))`）。[#68945](https://github.com/StarRocks/starrocks/pull/68945)
+- 移除了 Iceberg 表中分区列必须位于列列表末尾的限制，现在可以在任意位置定义。[#68340](https://github.com/StarRocks/starrocks/pull/68340)
+- 为 Iceberg 表的 Sink 引入主机级排序功能，通过系统变量 `connector_sink_sort_scope` 控制（默认值：FILE），以优化数据布局并提升读取性能。[#68121](https://github.com/StarRocks/starrocks/pull/68121)
+- 改进了 Iceberg 分区转换函数（例如 `bucket`、`truncate`）在参数数量错误时的错误提示信息。[#68349](https://github.com/StarRocks/starrocks/pull/68349)
+- 重构了表属性处理逻辑，以增强对 Iceberg 表不同文件格式（ORC/Parquet）和压缩编码的支持。[#68588](https://github.com/StarRocks/starrocks/pull/68588)
+- 新增表级查询超时配置 `table_query_timeout`，支持更细粒度的控制（优先级：Session &gt; Table &gt; Cluster）。[#67547](https://github.com/StarRocks/starrocks/pull/67547)
+- 支持使用 `ADMIN SHOW AUTOMATED CLUSTER SNAPSHOT` 语句查看自动快照的状态和调度信息。[#68455](https://github.com/StarRocks/starrocks/pull/68455)
+- 在 `SHOW CREATE VIEW` 中支持显示包含注释的原始用户自定义 SQL。[#68040](https://github.com/StarRocks/starrocks/pull/68040)
+- 在 `information_schema.loads` 中暴露启用 Merge Commit 的 Stream Load 任务，以增强可观测性。[#67879](https://github.com/StarRocks/starrocks/pull/67879)
+- 新增 FE 内存评估工具 API `/api/memory_usage`。[#68287](https://github.com/StarRocks/starrocks/pull/68287)
+- 减少了 `CatalogRecycleBin` 在分区回收过程中的不必要日志输出。[#68533](https://github.com/StarRocks/starrocks/pull/68533)
+- 当基表执行 Swap/Drop/Replace Partition 操作时，触发相关异步物化视图的刷新。[#68430](https://github.com/StarRocks/starrocks/pull/68430)
+- `count distinct` 类聚合函数支持 `VARBINARY` 类型。[#68442](https://github.com/StarRocks/starrocks/pull/68442)
+- 增强表达式统计信息，对语义安全表达式（例如 `cast(k as bigint) + 10`）传播直方图 MCV 信息，以提升数据倾斜检测能力。[#68292](https://github.com/StarRocks/starrocks/pull/68292)
+
+### 问题修复
+
+修复了以下问题：
+
+- Skew Join V2 Runtime Filter 可能导致的崩溃问题。[#67611](https://github.com/StarRocks/starrocks/pull/67611)
+- 低基数重写导致的 Join 谓词类型不匹配问题（例如 INT = VARCHAR）。[#68568](https://github.com/StarRocks/starrocks/pull/68568)
+- 查询队列分配时间和等待超时逻辑相关问题。[#65802](https://github.com/StarRocks/starrocks/pull/65802)
+- Schema Change 后 Flat JSON 扩展列的 `unique_id` 冲突问题。[#68279](https://github.com/StarRocks/starrocks/pull/68279)
+- `OlapTableSink.complete()` 中的分区并发访问问题。[#68853](https://github.com/StarRocks/starrocks/pull/68853)
+- 手动下载的集群快照恢复时元数据跟踪不正确的问题。[#68368](https://github.com/StarRocks/starrocks/pull/68368)
+- 当仓库路径以 `/` 结尾时，备份路径中出现双斜杠的问题。[#68764](https://github.com/StarRocks/starrocks/pull/68764)
+- `SHOW CREATE CATALOG` 输出中的 OBS AK/SK 凭证未进行脱敏处理的问题。[#65462](https://github.com/StarRocks/starrocks/pull/65462)
+
+## 4.0.5
+
+发布日期：2026 年 2 月 3 日
+
+### 功能优化
+
+- 将 Paimon 版本升级至 1.3.1。[#67098](https://github.com/StarRocks/starrocks/pull/67098)
+- 恢复 DP 统计信息估算中缺失的优化，减少冗余计算。[#67852](https://github.com/StarRocks/starrocks/pull/67852)
+- 改进 DP Join 重排序中的剪枝逻辑，更早跳过代价高昂的候选执行计划。[#67828](https://github.com/StarRocks/starrocks/pull/67828)
+- 优化 JoinReorderDP 的分区枚举逻辑，减少对象分配，并新增原子数量上限（≤ 62）。[#67643](https://github.com/StarRocks/starrocks/pull/67643)
+- 优化 DP Join 重排序的剪枝逻辑，并在 BitSet 中增加检查以减少流式操作的开销。[#67644](https://github.com/StarRocks/starrocks/pull/67644)
+- 在 DP 统计信息估算过程中跳过谓词列的统计信息收集，以降低 CPU 开销。[#67663](https://github.com/StarRocks/starrocks/pull/67663)
+- 优化相关 Join 的行数估算，避免重复构建 `Statistics` 对象。[#67773](https://github.com/StarRocks/starrocks/pull/67773)
+- 减少 `Statistics.getUsedColumns` 中的内存分配。[#67786](https://github.com/StarRocks/starrocks/pull/67786)
+- 当仅更新行数时，避免冗余复制 `Statistics` 映射。[#67777](https://github.com/StarRocks/starrocks/pull/67777)
+- 当查询中不存在聚合时，跳过聚合下推逻辑以减少开销。[#67603](https://github.com/StarRocks/starrocks/pull/67603)
+- 改进窗口函数中的 COUNT DISTINCT，新增对融合多 DISTINCT 聚合的支持，并优化 CTE 生成。[#67453](https://github.com/StarRocks/starrocks/pull/67453)
+- Trino 方言中支持 `map_agg` 函数。[#66673](https://github.com/StarRocks/starrocks/pull/66673)
+- 在物理规划阶段支持批量获取 LakeTablet 位置信息，以减少存算分离集群中的 RPC 调用。[#67325](https://github.com/StarRocks/starrocks/pull/67325)
+- 在存算一体集群中为 Publish Version 事务新增线程池，以提升并发能力。[#67797](https://github.com/StarRocks/starrocks/pull/67797)
+- 优化 LocalMetastore 的锁粒度，将数据库级锁替换为表级锁。[#67658](https://github.com/StarRocks/starrocks/pull/67658)
+- 重构 MergeCommitTask 的生命周期管理，并新增任务取消支持。[#67425](https://github.com/StarRocks/starrocks/pull/67425)
+- 支持为自动化集群快照配置执行间隔。[#67525](https://github.com/StarRocks/starrocks/pull/67525)
+- 在 MemTrackerManager 中自动清理未使用的 `mem_pool` 条目。[#67347](https://github.com/StarRocks/starrocks/pull/67347)
+- 在仓库空闲检查中忽略 `information_schema` 查询。[#67958](https://github.com/StarRocks/starrocks/pull/67958)
+- 支持根据数据分布动态为 Iceberg 表写入启用全局 Shuffle。[#67442](https://github.com/StarRocks/starrocks/pull/67442)
+- 为 Connector Sink 模块新增 Profile 指标。[#67761](https://github.com/StarRocks/starrocks/pull/67761)
+- 改进 Profile 中加载（load）溢写指标的采集和展示，区分本地 I/O 与远端 I/O。[#67527](https://github.com/StarRocks/starrocks/pull/67527)
+- 将 Async-Profiler 的日志级别调整为 Error，避免重复打印警告日志。[#67297](https://github.com/StarRocks/starrocks/pull/67297)
+- 在 BE 关闭时通知 Starlet 向 StarMgr 上报 SHUTDOWN 状态。[#67461](https://github.com/StarRocks/starrocks/pull/67461)
+
+### 问题修复
+
+已修复以下问题：
+
+- 不支持包含连字符（`-`）的合法简单路径。[#67988](https://github.com/StarRocks/starrocks/pull/67988)
+- 当聚合下推发生在包含 JSON 类型的分组键上时出现运行时错误。[#68142](https://github.com/StarRocks/starrocks/pull/68142)
+- JSON 路径重写规则错误地裁剪了分区谓词中引用的分区列。[#67986](https://github.com/StarRocks/starrocks/pull/67986)
+- 使用统计信息重写简单聚合时出现类型不匹配问题。[#67829](https://github.com/StarRocks/starrocks/pull/67829)
+- 分区 Join 中可能存在堆缓冲区溢出风险。[#67435](https://github.com/StarRocks/starrocks/pull/67435)
+- 在下推复杂表达式时引入了重复的 `slot_ids`。[#67477](https://github.com/StarRocks/starrocks/pull/67477)
+- 由于缺少前置条件检查，ExecutionDAG 中的 Fragment 连接可能出现除零错误。[#67918](https://github.com/StarRocks/starrocks/pull/67918)
+- 在单 BE 场景下，Fragment 并行准备可能导致潜在问题。[#67798](https://github.com/StarRocks/starrocks/pull/67798)
+- RawValuesSourceOperator 缺少 `set_finished` 方法，导致算子异常终止。[#67609](https://github.com/StarRocks/starrocks/pull/67609)
+- 列聚合器中不支持 DECIMAL256 类型（精度 > 38）导致 BE 崩溃。[#68134](https://github.com/StarRocks/starrocks/pull/68134)
+- 存算分离集群在 DELETE 操作中未通过请求携带 `schema_key`，导致不支持 Fast Schema Evolution v2。[#67456](https://github.com/StarRocks/starrocks/pull/67456)
+- 存算分离集群在同步物化视图和传统 Schema 变更中不支持 Fast Schema Evolution v2。[#67443](https://github.com/StarRocks/starrocks/pull/67443)
+- 在 FE 降级且禁用文件打包时，Vacuum 可能误删文件。[#67849](https://github.com/StarRocks/starrocks/pull/67849)
+- MySQLReadListener 中优雅退出处理不正确。[#67917](https://github.com/StarRocks/starrocks/pull/67917)
+
 ## 4.0.4
 
 发布日期： 2026 年 1 月 16 日
@@ -40,7 +124,7 @@ displayed_sidebar: docs
 - 支持多 Warehouse 的 Backend 资源统计及并行度（DOP）计算，提升资源隔离能力。[#66632](https://github.com/StarRocks/starrocks/pull/66632)
 - 支持通过 StarRocks 会话变量 `connector_huge_file_size` 配置 Iceberg 的 Split 大小。[#67044](https://github.com/StarRocks/starrocks/pull/67044)
 - `QueryDumpDeserializer` 支持标签格式（Label-formatted）的统计信息。[#66656](https://github.com/StarRocks/starrocks/pull/66656)
-- 新增 FE 配置项 `lake_enable_fullvacuum`（默认值：`false`），用于在 Shared-data 集群中禁用 Full Vacuum。[#63859](https://github.com/StarRocks/starrocks/pull/63859)
+- 新增 FE 配置项 `lake_enable_fullvacuum`（默认值：`false`），用于在存算分离集群中禁用 Full Vacuum。[#63859](https://github.com/StarRocks/starrocks/pull/63859)
 - 将 lz4 依赖升级至 v1.10.0。[#67045](https://github.com/StarRocks/starrocks/pull/67045)
 - 当行数为 0 时，为基于采样的基数估计增加回退逻辑。[#65599](https://github.com/StarRocks/starrocks/pull/65599)
 - 验证 `array_sort` 中 Lambda Comparator 的 Strict Weak Ordering 属性。[#66951](https://github.com/StarRocks/starrocks/pull/66951)

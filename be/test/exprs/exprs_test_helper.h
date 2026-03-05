@@ -19,7 +19,10 @@
 #include "base/testutil/assert.h"
 #include "column/chunk.h"
 #include "exprs/array_expr.h"
+#include "exprs/expr_executor.h"
+#ifndef STARROCKS_EXPR_CORE_TEST_NO_JIT
 #include "exprs/jit/jit_expr.h"
+#endif
 #include "gen_cpp/Descriptors_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
@@ -157,6 +160,12 @@ public:
         // Verify the original result.
         test_func(ptr);
 
+#ifdef STARROCKS_EXPR_CORE_TEST_NO_JIT
+        (void)expr;
+        (void)runtime_state;
+        (void)need_jit;
+        return;
+#else
         if (!need_jit) {
             return;
         }
@@ -172,18 +181,25 @@ public:
         ExprContext exprContext(jit_expr);
         std::vector<ExprContext*> expr_ctxs = {&exprContext};
 
-        ASSERT_OK(Expr::prepare(expr_ctxs, runtime_state));
-        ASSERT_OK(Expr::open(expr_ctxs, runtime_state));
+        ASSERT_OK(ExprExecutor::prepare(expr_ctxs, runtime_state));
+        ASSERT_OK(ExprExecutor::open(expr_ctxs, runtime_state));
         ASSERT_TRUE(jit_expr->is_jit_compiled());
 
         ptr = jit_expr->evaluate(&exprContext, nullptr);
         // Verify the result after JIT.
         test_func(ptr);
 
-        Expr::close(expr_ctxs, runtime_state);
+        ExprExecutor::close(expr_ctxs, runtime_state);
+#endif
     }
 
     static void verify_result_with_jit(const ColumnPtr& ptr, Expr* expr, RuntimeState* runtime_state) {
+#ifdef STARROCKS_EXPR_CORE_TEST_NO_JIT
+        (void)ptr;
+        (void)expr;
+        (void)runtime_state;
+        return;
+#else
         auto jit_engine = JITEngine::get_instance();
         if (!jit_engine->support_jit()) {
             return;
@@ -196,8 +212,8 @@ public:
         ExprContext exprContext(jit_expr);
         std::vector<ExprContext*> expr_ctxs = {&exprContext};
 
-        ASSERT_OK(Expr::prepare(expr_ctxs, runtime_state));
-        ASSERT_OK(Expr::open(expr_ctxs, runtime_state));
+        ASSERT_OK(ExprExecutor::prepare(expr_ctxs, runtime_state));
+        ASSERT_OK(ExprExecutor::open(expr_ctxs, runtime_state));
         ASSERT_TRUE(jit_expr->is_jit_compiled());
 
         Chunk chunk;
@@ -213,7 +229,8 @@ public:
             ASSERT_TRUE(jit_ptr->equals(i, *ptr, i));
         }
 
-        Expr::close(expr_ctxs, runtime_state);
+        ExprExecutor::close(expr_ctxs, runtime_state);
+#endif
     }
 };
 

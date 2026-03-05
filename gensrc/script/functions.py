@@ -442,6 +442,11 @@ vectorized_functions = [
 
     [30460, 'format_bytes', True, False, 'VARCHAR', ['BIGINT'], 'StringFunctions::format_bytes'],
 
+    # raise_error always throws a RuntimeException at runtime for non-null input.
+    # BOOLEAN is used as a placeholder return type (consistent with Trino); the function
+    # returns NULL for NULL input and never produces a non-null BOOLEAN value.
+    [30461, 'raise_error', True, False, 'BOOLEAN', ['VARCHAR'], 'StringFunctions::raise_error'],
+
     # Binary Functions
     # to_binary
     [30600, 'to_binary', True, True, 'VARBINARY', ['VARCHAR', 'VARCHAR'], 'BinaryFunctions::to_binary',

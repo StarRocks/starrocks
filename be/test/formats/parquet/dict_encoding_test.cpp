@@ -12,8 +12,8 @@
 #include "formats/parquet/encoding_dict.h"
 #include "formats/parquet/utils.h"
 #include "runtime/mem_pool.h"
-#include "runtime/types.h"
 #include "types/logical_type.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::parquet {
 template <LogicalType LT>

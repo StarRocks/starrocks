@@ -18,8 +18,15 @@
 #include <memory>
 #include <numeric>
 
+#include "base/failpoint/fail_point.h"
+#include "base/time/time.h"
+#include "base/utility/pretty_printer.h"
+#include "common/config.h"
+#include "common/system/cpu_info.h"
+#include "fs/fs_factory.h"
 #include "gutil/endian.h"
 #include "runtime/current_thread.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/kv_store.h"
@@ -29,10 +36,7 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_meta_manager.h"
-#include "util/failpoint/fail_point.h"
-#include "util/pretty_printer.h"
-#include "util/starrocks_metrics.h"
-#include "util/time.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
@@ -309,7 +313,7 @@ StatusOr<size_t> UpdateManager::clear_delta_column_group_before_version(KVStore*
         }
     }
     RETURN_IF_ERROR(meta->write_batch(&wb));
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(tablet_path));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(tablet_path));
     for (const auto& filename : clear_filenames) {
         WARN_IF_ERROR(fs->delete_file(filename), "delete file fail, filename: " + filename);
     }

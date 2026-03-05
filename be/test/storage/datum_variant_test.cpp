@@ -19,7 +19,7 @@
 #include <string>
 
 #include "base/testutil/assert.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 

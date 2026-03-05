@@ -20,6 +20,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.SqlCredentialRedactor;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -106,10 +107,10 @@ public class SimpleExecutor {
             context.setQueryId(UUIDUtil.genUUID());
             context.getSessionVariable().setPipelineDop(dop);
             AuditLog.getInternalAudit().info("{} execute SQL | Query_id {} | {} {}",
-                    name, DebugUtil.printId(context.getQueryId()), type.name(), sql);
+                    name, DebugUtil.printId(context.getQueryId()), type.name(), SqlCredentialRedactor.redact(sql));
             executor.execute();
         } catch (Exception e) {
-            LOG.error(name + " execute SQL {} failed: {}", sql, e.getMessage(), e);
+            LOG.error(name + " execute SQL {} failed: {}", SqlCredentialRedactor.redact(sql), e.getMessage(), e);
             throw new SemanticException(String.format(name + " execute sql failed: %s", e.getMessage()), e);
         } finally {
             ConnectContext.remove();
@@ -142,15 +143,16 @@ public class SimpleExecutor {
             context.setQueryId(UUIDUtil.genUUID());
             context.getSessionVariable().setPipelineDop(dop);
             AuditLog.getInternalAudit()
-                    .info("{} execute SQL | Query_id {} | DQL {}", name, DebugUtil.printId(context.getQueryId()), sql);
+                    .info("{} execute SQL | Query_id {} | DQL {}", name, DebugUtil.printId(context.getQueryId()),
+                            SqlCredentialRedactor.redact(sql));
             Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(context, execPlan);
             if (!sqlResult.second.ok()) {
                 throw new SemanticException(name + "execute sql failed with status: " + sqlResult.second.getErrorMsg());
             }
             return sqlResult.first;
         } catch (Exception e) {
-            LOG.error(name + " execute SQL failed {}", sql, e);
-            throw new SemanticException(name + "execute sql failed: " + sql, e);
+            LOG.error(name + " execute SQL failed {}", SqlCredentialRedactor.redact(sql), e);
+            throw new SemanticException(name + "execute sql failed: " + SqlCredentialRedactor.redact(sql), e);
         }
     }
 
@@ -164,9 +166,9 @@ public class SimpleExecutor {
                 DDLStmtExecutor.execute(parsedStmt, context);
                 sql = formatSQL(sql, parsedStmts.get(0));
             }
-            AuditLog.getInternalAudit().info("{} execute DDL | DDL {}", name, sql);
+            AuditLog.getInternalAudit().info("{} execute DDL | DDL {}", name, SqlCredentialRedactor.redact(sql));
         } catch (Exception e) {
-            LOG.error(name + "execute DDL error: {}", sql, e);
+            LOG.error(name + "execute DDL error: {}", SqlCredentialRedactor.redact(sql), e);
             throw new RuntimeException(e);
         } finally {
             ConnectContext.remove();

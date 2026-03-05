@@ -16,6 +16,7 @@
 
 #include <cstdint>
 
+#include "base/bit/bit_util.h"
 #include "base/simd/byte_stream_split.h"
 #include "base/string/faststring.h"
 #include "base/string/slice.h"
@@ -24,7 +25,6 @@
 #include "common/status.h"
 #include "formats/parquet/encoding.h"
 #include "formats/parquet/types.h"
-#include "util/bit_util.h"
 
 namespace starrocks::parquet {
 

@@ -39,12 +39,14 @@
 #include <memory>
 #include <vector>
 
+#include "base/uid_util.h"
+#include "common/config.h"
+#include "common/thread/thread.h"
 #include "exec/pipeline/query_context.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/result_queue_mgr.h"
-#include "util/starrocks_metrics.h"
-#include "util/thread.h"
-#include "util/uid_util.h"
+#include "runtime/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
