@@ -115,11 +115,8 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
-<<<<<<< HEAD
-=======
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileContent;
->>>>>>> 9ada1d9de5 ([Enhancement] Optimize Iceberg read performance with position delete (#69717))
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.MetricsModes;
 import org.apache.iceberg.NullOrder;
@@ -148,11 +145,7 @@ import org.mockito.Mockito;
 
 import java.io.File;
 import java.io.IOException;
-<<<<<<< HEAD
-=======
 import java.lang.reflect.Method;
-import java.nio.ByteBuffer;
->>>>>>> 9ada1d9de5 ([Enhancement] Optimize Iceberg read performance with position delete (#69717))
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
