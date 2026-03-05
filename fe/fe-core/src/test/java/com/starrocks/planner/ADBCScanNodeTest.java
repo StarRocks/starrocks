@@ -16,7 +16,7 @@ package com.starrocks.planner;
 
 import com.starrocks.catalog.ADBCTable;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Type;
+import com.starrocks.type.IntegerType;
 import com.starrocks.thrift.TADBCScanNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPlanNode;
@@ -58,14 +58,14 @@ public class ADBCScanNodeTest {
 
         // Set up tuple descriptor with materialized slots
         mockTupleDesc = mock(TupleDescriptor.class);
-        when(mockTupleDesc.getId()).thenReturn(new com.starrocks.thrift.TTupleId(0));
+        when(mockTupleDesc.getId()).thenReturn(new TupleId(0));
     }
 
     private ADBCScanNode createScanNodeWithColumns(String... colNames) {
-        List<SlotDescriptor> slots = new ArrayList<>();
+        ArrayList<SlotDescriptor> slots = new ArrayList<>();
         for (String colName : colNames) {
             SlotDescriptor slot = mock(SlotDescriptor.class);
-            Column col = new Column(colName, Type.INT);
+            Column col = new Column(colName, IntegerType.INT);
             when(slot.isMaterialized()).thenReturn(true);
             when(slot.getColumn()).thenReturn(col);
             slots.add(slot);
@@ -96,7 +96,7 @@ public class ADBCScanNodeTest {
     @Test
     public void testGetADBCDriverName_FlightSql() {
         PlanNodeId planNodeId = new PlanNodeId(1);
-        when(mockTupleDesc.getSlots()).thenReturn(new ArrayList<>());
+        when(mockTupleDesc.getSlots()).thenReturn(new ArrayList<SlotDescriptor>());
         ADBCScanNode node = new ADBCScanNode(planNodeId, mockTupleDesc, mockTable);
         assertEquals("adbc_driver_flightsql", node.getADBCDriverName());
     }
@@ -105,7 +105,7 @@ public class ADBCScanNodeTest {
     public void testGetADBCDriverName_Custom() {
         tableProperties.put("adbc.driver", "my_custom_driver");
         PlanNodeId planNodeId = new PlanNodeId(1);
-        when(mockTupleDesc.getSlots()).thenReturn(new ArrayList<>());
+        when(mockTupleDesc.getSlots()).thenReturn(new ArrayList<SlotDescriptor>());
         ADBCScanNode node = new ADBCScanNode(planNodeId, mockTupleDesc, mockTable);
         assertEquals("my_custom_driver", node.getADBCDriverName());
     }
@@ -153,7 +153,7 @@ public class ADBCScanNodeTest {
     @Test
     public void testCanUseRuntimeAdaptiveDop() {
         PlanNodeId planNodeId = new PlanNodeId(1);
-        when(mockTupleDesc.getSlots()).thenReturn(new ArrayList<>());
+        when(mockTupleDesc.getSlots()).thenReturn(new ArrayList<SlotDescriptor>());
         ADBCScanNode node = new ADBCScanNode(planNodeId, mockTupleDesc, mockTable);
         assertEquals(false, node.canUseRuntimeAdaptiveDop());
     }

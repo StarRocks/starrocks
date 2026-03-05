@@ -42,7 +42,7 @@ public class ADBCScanImplementationRuleTest {
     @Test
     public void testRulePatternMatchesLogicalADBCScan() {
         ADBCScanImplementationRule rule = new ADBCScanImplementationRule();
-        Assertions.assertEquals(OperatorType.LOGICAL_ADBC_SCAN, rule.getPattern().getOpType());
+        Assertions.assertTrue(rule.getPattern().is(OperatorType.LOGICAL_ADBC_SCAN));
     }
 
     @Test
