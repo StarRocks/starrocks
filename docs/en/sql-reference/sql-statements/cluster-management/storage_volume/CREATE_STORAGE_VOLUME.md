@@ -289,7 +289,7 @@ Azure Data Lake Storage Gen1 is not supported.
 
 ##### Partitioned Prefix
 
-From v3.2.4, StarRocks supports creating storage volumes with the Partitioned Prefix feature for S3-compatible object storage systems. When this feature is enabled, StarRocks stores the data into multiple, uniformly prefixed partitions (sub-paths) under the bucket. It can easily multiply StarRocks' read and write performance on data files stored in the bucket because the QPS or throughput limit of the bucket is per partition.
+From v3.2.4, StarRocks supports creating storage volumes with the Partitioned Prefix feature for S3-compatible object storage systems. When this feature is enabled, StarRocks stores the data into multiple, uniformly prefixed partitions (sub-paths) under the bucket.
 
 To enable this feature, set the following properties in addition to the above credential-related parameters:
 
