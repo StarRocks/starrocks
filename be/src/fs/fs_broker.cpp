@@ -21,6 +21,7 @@
 #include <string>
 #include <thread>
 
+#include "common/config.h"
 #include "fs/fs.h"
 #include "gen_cpp/FileBrokerService_types.h"
 #include "gen_cpp/TFileBrokerService.h"
@@ -34,6 +35,7 @@ using namespace fmt::literals;
 namespace starrocks {
 
 using BrokerServiceClient = TFileBrokerServiceClient;
+const int DEFAULT_TIMEOUT_MS = config::broker_write_timeout_seconds * 1000;
 
 #ifdef BE_TEST
 namespace {

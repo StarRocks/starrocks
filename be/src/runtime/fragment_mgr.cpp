@@ -46,6 +46,7 @@
 #include "base/network/network_util.h"
 #include "base/uid_util.h"
 #include "base/url_coding.h"
+#include "common/config.h"
 #include "common/object_pool.h"
 #include "common/system/backend_options.h"
 #include "common/thread/thread.h"

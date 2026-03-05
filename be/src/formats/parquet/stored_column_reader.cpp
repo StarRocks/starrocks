@@ -26,6 +26,7 @@
 #include "column/column.h"
 #include "column_reader.h"
 #include "common/compiler_util.h"
+#include "common/config.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "formats/parquet/level_codec.h"
@@ -266,6 +267,14 @@ Status OptionalStoredColumnReader::_decode_levels(size_t* num_rows, size_t* num_
     *num_levels_parsed = std::min(*num_rows, avail_levels);
     _consume_levels(*num_levels_parsed);
     return Status::OK();
+}
+
+const FilterData* StoredColumnReaderImpl::_convert_filter_row_to_value(const Filter* filter, size_t row_readed) {
+    if (!filter || !config::parquet_push_down_filter_to_decoder_enable) {
+        return nullptr;
+    }
+    // based on benchmark we added some threshold here, selectivity < 0.2
+    return SIMD::count_nonzero(*filter) * 1.0 / filter->size() < 0.2 ? filter->data() + row_readed : nullptr;
 }
 
 Status StoredColumnReader::create(const ColumnReaderOptions& opts, const ParquetField* field,

@@ -51,6 +51,7 @@
 #include "base/simd/simd.h"
 #include "cache/datacache.h"
 #include "cache/datacache_utils.h"
+#include "common/config.h"
 #include "common/status.h"
 #include "common/system/backend_options.h"
 #include "common/thread/thread.h"

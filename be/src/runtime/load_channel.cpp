@@ -38,6 +38,7 @@
 
 #include "base/container/lru_cache.h"
 #include "base/string/faststring.h"
+#include "common/config.h"
 #include "common/runtime_profile.h"
 #include "common/tracer.h"
 #include "common/util/thrift_util.h"
