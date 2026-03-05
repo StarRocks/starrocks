@@ -807,6 +807,107 @@ public class ConnectContextTest {
     }
 
     /**
+     * On a follower FE, if fetchLeaderMaxJournalId returns -1 (leader unavailable),
+     * the waitOn call is skipped entirely. The inner db check still runs and throws
+     * ERR_BAD_DB_ERROR if the database is not found.
+     */
+    @Test
+    public void testChangeCatalogDb_followerSkipsWaitWhenLeaderJournalIdNegative(
+            @Mocked MetadataMgr metadataMgr,
+            @Mocked JournalObservable journalObservable) throws Exception {
+        new MockUp<LeaderOpExecutor>() {
+            @Mock
+            public static long fetchLeaderMaxJournalId(ConnectContext ctx) {
+                return -1L;
+            }
+        };
+
+        new Expectations() {
+            {
+                globalStateMgr.isLeader();
+                result = false;
+                minTimes = 0;
+
+                globalStateMgr.getMetadataMgr();
+                result = metadataMgr;
+                minTimes = 0;
+
+                globalStateMgr.getJournalObservable();
+                result = journalObservable;
+                minTimes = 0;
+
+                // Both calls return null: db not found
+                metadataMgr.getDb((ConnectContext) any, anyString, anyString);
+                result = null;
+
+                // waitOn must never be called when journalId <= 0
+                journalObservable.waitOn(anyLong, anyInt);
+                times = 0;
+            }
+        };
+
+        ConnectContext ctx = new ConnectContext(connection);
+        ctx.setGlobalStateMgr(globalStateMgr);
+
+        Assertions.assertThrows(DdlException.class, () -> ctx.changeCatalogDb("missingdb"));
+    }
+
+    /**
+     * On a follower FE, if fetchLeaderMaxJournalId returns -1 but the database
+     * actually exists on the second check (e.g. replayed in the meantime),
+     * changeCatalogDb() should succeed without calling waitOn.
+     */
+    @Test
+    public void testChangeCatalogDb_followerSucceedsWithoutWaitWhenDbAppearsAfterFetchFails(
+            @Mocked MetadataMgr metadataMgr,
+            @Mocked JournalObservable journalObservable) throws Exception {
+        Database mockDb = new Database(2L, "latedb");
+
+        new MockUp<LeaderOpExecutor>() {
+            @Mock
+            public static long fetchLeaderMaxJournalId(ConnectContext ctx) {
+                return -1L;
+            }
+        };
+
+        new MockUp<Authorizer>() {
+            @Mock
+            public void checkAnyActionOnOrInDb(ConnectContext ctx, String catalog, String db)
+                    throws AccessDeniedException {
+            }
+        };
+
+        new Expectations() {
+            {
+                globalStateMgr.isLeader();
+                result = false;
+                minTimes = 0;
+
+                globalStateMgr.getMetadataMgr();
+                result = metadataMgr;
+                minTimes = 0;
+
+                globalStateMgr.getJournalObservable();
+                result = journalObservable;
+                minTimes = 0;
+
+                // First call: null (enter wait block), second call: found
+                metadataMgr.getDb((ConnectContext) any, anyString, anyString);
+                returns(null, mockDb);
+
+                journalObservable.waitOn(anyLong, anyInt);
+                times = 0;
+            }
+        };
+
+        ConnectContext ctx = new ConnectContext(connection);
+        ctx.setGlobalStateMgr(globalStateMgr);
+
+        Assertions.assertDoesNotThrow(() -> ctx.changeCatalogDb("latedb"));
+        Assertions.assertEquals("latedb", ctx.getDatabase());
+    }
+
+    /**
      * On the leader FE, changeCatalogDb() should throw immediately without fetching
      * the leader journal ID or waiting for journal replay.
      */
