@@ -6612,17 +6612,34 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         return valuesRelation;
     }
 
-    @Override
-    public ParseNode visitNamedArguments(com.starrocks.sql.parser.StarRocksParser.NamedArgumentsContext context) {
-        String name = ((Identifier) visit(context.identifier())).getValue();
+    private NamedArgument buildNamedArgument(ParserRuleContext identifierCtx,
+                                              ParserRuleContext expressionCtx,
+                                              ParserRuleContext fullCtx) {
+        String name = ((Identifier) visit(identifierCtx)).getValue();
         if (name == null || name.isEmpty() || name.equals(" ")) {
             throw new ParsingException(PARSER_ERROR_MSG.unsupportedExpr(" The left of => shouldn't be empty"));
         }
-        Expr node = (Expr) visit(context.expression());
-        if (node == null) {
+        ParseNode parseNode = visit(expressionCtx);
+        if (parseNode == null) {
             throw new ParsingException(PARSER_ERROR_MSG.unsupportedExpr(" The right of => shouldn't be null"));
         }
-        return new NamedArgument(name, node);
+        if (!(parseNode instanceof Expr)) {
+            throw new ParsingException(PARSER_ERROR_MSG.unsupportedExpr(
+                    " Named argument value must be an expression, got " + parseNode.getClass().getSimpleName()),
+                    createPos(expressionCtx));
+        }
+        return new NamedArgument(name, (Expr) parseNode, createPos(fullCtx));
+    }
+
+    @Override
+    public ParseNode visitNamedArguments(com.starrocks.sql.parser.StarRocksParser.NamedArgumentsContext context) {
+        return buildNamedArgument(context.identifier(), context.expression(), context);
+    }
+
+    @Override
+    public ParseNode visitFunctionNamedArgument(
+            com.starrocks.sql.parser.StarRocksParser.FunctionNamedArgumentContext context) {
+        return buildNamedArgument(context.identifier(), context.expression(), context);
     }
 
     @Override
@@ -8169,6 +8186,22 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         if (context.over() != null) {
             return buildOverClause(functionCallExpr, context.over(), pos);
         }
+        return SyntaxSugars.parse(functionCallExpr);
+    }
+
+    @Override
+    public ParseNode visitNamedArgsFunctionCall(
+            com.starrocks.sql.parser.StarRocksParser.NamedArgsFunctionCallContext context) {
+        String fullFunctionName = getQualifiedName(context.qualifiedName()).toString();
+        NodePosition pos = createPos(context);
+
+        // Extract all named arguments - they will be processed by ExpressionAnalyzer
+        List<Expr> args = visit(context.functionNamedArgumentList().functionNamedArgument(), Expr.class);
+
+        // Create FunctionCallExpr with named arguments preserved
+        // ExpressionAnalyzer.reorderNamedArgAndAppendDefaults() will handle reordering
+        FunctionCallExpr functionCallExpr = new FunctionCallExpr(fullFunctionName,
+                new FunctionParams(false, args), pos);
         return SyntaxSugars.parse(functionCallExpr);
     }
 
