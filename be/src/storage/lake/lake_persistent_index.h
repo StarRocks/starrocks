@@ -149,6 +149,14 @@ public:
 
     Status sync_flush_all_memtables(int64_t wait_timeout_us);
 
+    // Publish-phase SST flush stats tracking
+    void reset_publish_sst_stats() {
+        _publish_sst_flush_count = 0;
+        _publish_sst_flush_bytes = 0;
+    }
+    int32_t publish_sst_flush_count() const { return _publish_sst_flush_count; }
+    int64_t publish_sst_flush_bytes() const { return _publish_sst_flush_bytes; }
+
 private:
     bool is_memtable_full() const;
 
@@ -195,6 +203,10 @@ private:
     int64_t _need_rebuild_row_cnt{0};
     // Collection of sstable fileset, from old to new.
     std::vector<std::unique_ptr<PersistentIndexSstableFileset>> _sstable_filesets;
+
+    // Counters for SST files flushed during publish phase
+    int32_t _publish_sst_flush_count{0};
+    int64_t _publish_sst_flush_bytes{0};
 };
 
 } // namespace lake

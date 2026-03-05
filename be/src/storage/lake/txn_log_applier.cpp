@@ -18,9 +18,12 @@
 
 #include <climits>
 
+#include "agent/master_info.h"
 #include "base/debug/trace.h"
 #include "base/phmap/phmap_fwd_decl.h"
 #include "base/testutil/sync_point.h"
+#include "base/time/time.h"
+#include "common/config.h"
 #include "gutil/strings/join.h"
 #include "runtime/current_thread.h"
 #include "storage/lake/lake_primary_index.h"
@@ -29,6 +32,7 @@
 #include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
+#include "storage/lake/tablet_write_log_manager.h"
 #include "storage/lake/update_manager.h"
 #include "util/dynamic_cache.h"
 
@@ -329,6 +333,17 @@ public:
         if (_index_entry != nullptr) {
             RETURN_IF_ERROR(_index_entry->value().commit(_metadata, &_builder));
             _tablet.update_mgr()->index_cache().update_object_size(_index_entry, _index_entry->value().memory_usage());
+            // Record publish-phase SST flush stats
+            if (config::enable_tablet_write_log) {
+                int32_t sst_count = _index_entry->value().publish_sst_flush_count();
+                int64_t sst_bytes = _index_entry->value().publish_sst_flush_bytes();
+                if (sst_count > 0) {
+                    int64_t finish_time = UnixMillis();
+                    TabletWriteLogManager::instance()->add_publish_log(
+                            get_backend_id().value_or(0), _max_txn_id, _tablet.id(), 0 /* table_id */,
+                            0 /* partition_id */, _publish_begin_time, finish_time, sst_count, sst_bytes);
+                }
+            }
         }
         _metadata->GetReflection()->MutableUnknownFields(_metadata.get())->Clear();
         RETURN_IF_ERROR(_builder.finalize(_max_txn_id, _skip_write_tablet_metadata));
@@ -379,6 +394,9 @@ private:
         if (_index_entry == nullptr) {
             ASSIGN_OR_RETURN(_index_entry, _tablet.update_mgr()->prepare_primary_index(
                                                    _metadata, &_builder, _base_version, _new_version, _guard));
+            // Reset publish SST stats so we only count SSTs flushed during this publish session
+            _index_entry->value().reset_publish_sst_stats();
+            _publish_begin_time = UnixMillis();
         }
         return Status::OK();
     }
@@ -715,6 +733,8 @@ private:
     bool _rebuild_pindex = false;
     // True when the transaction is a lake replication type (has tablet_metadata in op_replication).
     bool _is_lake_replication = false;
+    // Timestamp when prepare_primary_index was first called (for publish SST logging)
+    int64_t _publish_begin_time{0};
 };
 
 class NonPrimaryKeyTxnLogApplier : public TxnLogApplier {

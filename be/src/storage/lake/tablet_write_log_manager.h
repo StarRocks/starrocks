@@ -26,8 +26,9 @@ namespace starrocks::lake {
 
 // Log Type
 enum class LogType : uint8_t {
-    LOAD = 1,      // Data Load (Transaction Commit)
-    COMPACTION = 2 // Compaction
+    LOAD = 1,       // Data Load (Transaction Commit)
+    COMPACTION = 2, // Compaction
+    PUBLISH = 3     // Publish (PK index SST flush during publish)
 };
 
 // Single log entry
@@ -49,6 +50,10 @@ struct TabletWriteLogEntry {
     std::string label;           // Load label (For Load)
     int64_t compaction_score;    // Compaction score (For Compaction)
     std::string compaction_type; // Compaction type (For Compaction)
+    int32_t sst_input_files;    // PK index SST input file count (For Compaction)
+    int64_t sst_input_bytes;    // PK index SST input bytes (For Compaction)
+    int32_t sst_output_files;   // PK index SST output file count
+    int64_t sst_output_bytes;   // PK index SST output bytes
 
     TabletWriteLogEntry()
             : begin_time(0),
@@ -65,7 +70,11 @@ struct TabletWriteLogEntry {
               output_bytes(0),
               input_segments(0),
               output_segments(0),
-              compaction_score(0) {}
+              compaction_score(0),
+              sst_input_files(0),
+              sst_input_bytes(0),
+              sst_output_files(0),
+              sst_output_bytes(0) {}
 };
 
 // TabletWriteLogManager: Manages write logs in memory
@@ -82,14 +91,21 @@ public:
     // Record Load log
     void add_load_log(int64_t backend_id, int64_t txn_id, int64_t tablet_id, int64_t table_id, int64_t partition_id,
                       int64_t input_rows, int64_t input_bytes, int64_t output_rows, int64_t output_bytes,
-                      int32_t output_segments, const std::string& label, int64_t begin_time, int64_t finish_time);
+                      int32_t output_segments, const std::string& label, int64_t begin_time, int64_t finish_time,
+                      int32_t sst_output_files = 0, int64_t sst_output_bytes = 0);
+
+    // Record Publish log (PK index SST flush during publish)
+    void add_publish_log(int64_t backend_id, int64_t txn_id, int64_t tablet_id, int64_t table_id,
+                         int64_t partition_id, int64_t begin_time, int64_t finish_time, int32_t sst_output_files,
+                         int64_t sst_output_bytes);
 
     // Record Compaction log
     void add_compaction_log(int64_t backend_id, int64_t txn_id, int64_t tablet_id, int64_t table_id,
                             int64_t partition_id, int64_t input_rows, int64_t input_bytes, int64_t output_rows,
                             int64_t output_bytes, int32_t input_segments, int32_t output_segments,
                             int64_t compaction_score, const std::string& compaction_type, int64_t begin_time,
-                            int64_t finish_time);
+                            int64_t finish_time, int32_t sst_input_files = 0, int64_t sst_input_bytes = 0,
+                            int32_t sst_output_files = 0, int64_t sst_output_bytes = 0);
 
     // Get logs (For SchemaScanner query)
     // Optional filters: table_id, partition_id, tablet_id, log_type, start_finish_time, end_finish_time
