@@ -19,7 +19,7 @@
 
 ### Data Scanning
 
-- [ ] **SCAN-01**: FE uses Java ADBC API to fetch metadata (schemas, tables, columns, partitions)
+- [x] **SCAN-01**: FE uses Java ADBC API to fetch metadata (schemas, tables, columns, partitions)
 - [x] **SCAN-02**: BE uses native C++ ADBC to open connections and execute queries for data scanning
 - [x] **SCAN-03**: Arrow RecordBatch data converts directly to StarRocks Chunk/Column format in C++ (zero-copy where possible)
 - [ ] **SCAN-04**: Column pruning pushdown — only requested columns are fetched from remote
@@ -54,8 +54,8 @@
 
 ### Optimizer Integration
 
-- [ ] **OPT-01**: LogicalADBCScanOperator represents ADBC table scan in logical plan
-- [ ] **OPT-02**: PhysicalADBCScanOperator created via implementation rule
+- [x] **OPT-01**: LogicalADBCScanOperator represents ADBC table scan in logical plan
+- [x] **OPT-02**: PhysicalADBCScanOperator created via implementation rule
 - [ ] **OPT-03**: ADBCScanNode generates final SQL query with pushdowns for BE execution
 - [ ] **OPT-04**: EXPLAIN shows the pushed-down ADBC query string
 
@@ -114,15 +114,15 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TYPE-02 | Phase 1 | Complete |
 | TYPE-03 | Phase 1 | Complete |
 | TYPE-04 | Phase 1 | Complete |
-| SCAN-01 | Phase 2 | Pending |
+| SCAN-01 | Phase 2 | Complete |
 | SCAN-02 | Phase 2 | Complete |
 | SCAN-03 | Phase 2 | Complete |
 | SCAN-04 | Phase 2 | Pending |
 | SCAN-05 | Phase 2 | Pending |
 | SCAN-06 | Phase 2 | Pending |
 | SCAN-07 | Phase 2 | Complete |
-| OPT-01 | Phase 2 | Pending |
-| OPT-02 | Phase 2 | Pending |
+| OPT-01 | Phase 2 | Complete |
+| OPT-02 | Phase 2 | Complete |
 | OPT-03 | Phase 2 | Pending |
 | OPT-04 | Phase 2 | Pending |
 | PART-01 | Phase 3 | Pending |

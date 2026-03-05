@@ -10,29 +10,29 @@ See: .planning/PROJECT.md (updated 2026-03-04)
 ## Current Position
 
 Phase: 2 of 3 (Scanning)
-Plan: 2 of 5 in current phase
+Plan: 3 of 4 in current phase
 Status: Executing Phase 2
-Last activity: 2026-03-06 — Completed 02-02 (BE scanner + connector)
+Last activity: 2026-03-06 — Completed 02-01 (Thrift IDL + FE optimizer scaffolding)
 
-Progress: [███████░░░] 70% (7/10 plans)
+Progress: [████████░░] 80% (8/9 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 7
-- Average duration: 23 min
-- Total execution time: 2.7 hours
+- Total plans completed: 8
+- Average duration: 22 min
+- Total execution time: 2.8 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-foundation | 5 | 141 min | 28 min |
-| 02-scanning | 2 | 19 min | 10 min |
+| 02-scanning | 3 | 27 min | 9 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-03 (32 min), 01-04 (53 min), 01-05 (13 min), 02-01 (14 min), 02-02 (5 min)
-- Trend: Phase 2 executing well; BE C++ plans are fast
+- Last 5 plans: 01-04 (53 min), 01-05 (13 min), 02-01 (14 min), 02-02 (5 min), 02-01 (8 min)
+- Trend: Phase 2 executing well; FE optimizer scaffolding fast
 
 *Updated after each plan completion*
 
@@ -59,6 +59,8 @@ Recent decisions affecting current work:
 - Cache: ADBCMetaCache mirrors JDBCMetaCache with adbc_ property keys (adbc_meta_cache_enable, adbc_meta_cache_expire_sec)
 - SQL analysis: ADBC guards mirror JDBC pattern in AstToStringBuilder, MaterializedViewAnalyzer, DesensitizedSQLBuilder, RelationTransformer
 - Scan operator: RelationTransformer throws UNSUPPORTED for ADBC scan attempts; LogicalADBCScanOperator deferred to Phase 2
+- Thrift IDL: TADBCScanNode field 85 in TPlanNode, TADBCTable field 37 in TTableDescriptor
+- Optimizer: ADBC scan operators mirror JDBC pattern exactly for all visitor/rule/pattern registrations
 - BE Scanner: RETURN_ADBC_NOT_OK macro for C API error handling; round-robin partition assignment; RecordBatchQueue capacity 16
 - BE Scanner: Max 4 parallel reader threads; get_adbc_sql() as free function for testability
 - BE Scanner: ADBCConnector/ADBCDataSourceProvider/ADBCDataSource mirror JDBC connector pattern exactly
@@ -75,5 +77,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-06
-Stopped at: Completed 02-02-PLAN.md (BE scanner + connector)
+Stopped at: Completed 02-01-PLAN.md (Thrift IDL + FE optimizer scaffolding)
 Resume file: None
