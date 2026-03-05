@@ -2870,7 +2870,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Long
 - Unit: Milliseconds
 - Is mutable: Yes
-- Description: The minimum delay in milliseconds before erasing metadata after a database, table, or partition is dropped. This avoids the erase log being written ahead of the drop log.
+- Description: The minimum delay in milliseconds before the metadata is erased when a database, table, or partition is dropped. This avoids the erase log being written ahead of the drop log.
 - Introduced in: -
 
 ##### `catalog_recycle_bin_erase_max_operations_per_cycle`
