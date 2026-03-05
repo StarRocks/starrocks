@@ -13,7 +13,7 @@ Three phases deliver a fully JDBC-parity ADBC external catalog. Phase 1 wires up
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation** - Build dependencies compile, catalog DDL works, metadata browsable, Arrow types map correctly
-- [ ] **Phase 2: Scanning** - Full data path from FE query to BE Arrow scan to StarRocks Chunk, with column/predicate/limit pushdown and optimizer integration
+- [x] **Phase 2: Scanning** - Full data path from FE query to BE Arrow scan to StarRocks Chunk, with column/predicate/limit pushdown and optimizer integration
 - [ ] **Phase 3: JDBC Parity** - Materialized views refresh against ADBC tables, column statistics drive optimizer costs, partition discovery and pruning
 
 ## Phase Details
@@ -52,7 +52,7 @@ Plans:
 - [x] 02-01-PLAN.md — Thrift IDL additions + FE optimizer scaffolding (SCAN-01, OPT-01, OPT-02)
 - [x] 02-02-PLAN.md — BE native C++ ADBC connector and scanner (SCAN-02, SCAN-03, SCAN-07)
 - [x] 02-03-PLAN.md — ADBCScanNode SQL generation + PlanFragmentBuilder + RelationTransformer wiring (OPT-03, OPT-04, SCAN-04, SCAN-05, SCAN-06)
-- [ ] 02-04-PLAN.md — BE wiring (exec_factory, connector registration) + full build verification (SCAN-02, SCAN-03, SCAN-04, SCAN-05, SCAN-06, SCAN-07)
+- [x] 02-04-PLAN.md — BE wiring (exec_factory, connector registration) + full build verification (SCAN-02, SCAN-03, SCAN-04, SCAN-05, SCAN-06, SCAN-07)
 
 ### Phase 3: JDBC Parity
 **Goal**: Users can create materialized views over ADBC tables, refresh them incrementally, and the optimizer uses column statistics for cost-based decisions; partition discovery and pruning
@@ -75,5 +75,5 @@ Phases execute in numeric order: 1 → 2 → 3
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 5/5 | Complete | 2026-03-05 |
-| 2. Scanning | 3/4 | In progress | - |
+| 2. Scanning | 4/4 | Complete | 2026-03-06 |
 | 3. JDBC Parity | 0/TBD | Not started | - |

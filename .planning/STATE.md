@@ -9,30 +9,30 @@ See: .planning/PROJECT.md (updated 2026-03-04)
 
 ## Current Position
 
-Phase: 2 of 3 (Scanning)
-Plan: 4 of 4 in current phase
-Status: Executing Phase 2
-Last activity: 2026-03-06 — Completed 02-03 (ADBCScanNode SQL generation + FE data path wiring)
+Phase: 2 of 3 (Scanning) -- COMPLETE
+Plan: 4 of 4 in current phase (all done)
+Status: Phase 2 Complete, ready for Phase 3
+Last activity: 2026-03-06 — Completed 02-04 (BE wiring + full build verification)
 
-Progress: [█████████░] 90% (9/10 plans)
+Progress: [██████████] 100% (10/10 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 9
-- Average duration: 21 min
-- Total execution time: 2.9 hours
+- Total plans completed: 10
+- Average duration: 20 min
+- Total execution time: 3.2 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-foundation | 5 | 141 min | 28 min |
-| 02-scanning | 4 | 35 min | 9 min |
+| 02-scanning | 4 | 50 min | 13 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-05 (13 min), 02-01 (14 min), 02-02 (5 min), 02-01 (8 min), 02-03 (8 min)
-- Trend: Phase 2 executing well; consistent 8-9 min per plan
+- Last 5 plans: 02-01 (14 min), 02-02 (5 min), 02-01 (8 min), 02-03 (8 min), 02-04 (15 min)
+- Trend: Phase 2 complete; 02-04 slightly longer due to test fixes from prior plans
 
 *Updated after each plan completion*
 
@@ -67,6 +67,8 @@ Recent decisions affecting current work:
 - Scan Node: ADBCScanNode mirrors JDBCScanNode for SQL generation, filter pushdown, EXPLAIN output
 - Scan Node: Default identifier quote is double-quote (standard SQL), configurable via adbc.identifier.quote
 - Scan Node: Driver name mapping: flight_sql -> adbc_driver_flightsql; custom names pass through
+- BE Wiring: ConnectorType::ADBC = 9; ADBCConnector registered outside __APPLE__ guard
+- BE Wiring: ADBC_SCAN_NODE case mirrors JDBC_SCAN_NODE exactly in exec_factory and exec_node
 
 ### Pending Todos
 
@@ -80,5 +82,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-06
-Stopped at: Completed 02-03-PLAN.md (ADBCScanNode SQL generation + FE data path wiring)
+Stopped at: Completed 02-04-PLAN.md (BE wiring + full build verification). Phase 2 complete.
 Resume file: None
