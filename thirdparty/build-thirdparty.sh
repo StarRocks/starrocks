@@ -958,6 +958,7 @@ build_adbc() {
     mkdir -p build && cd build
     rm -rf CMakeCache.txt CMakeFiles/
     ${CMAKE_CMD} \
+        -DADBC_DRIVER_MANAGER=ON \
         -DADBC_DRIVER_FLIGHTSQL=ON \
         -DADBC_BUILD_SHARED=OFF \
         -DADBC_BUILD_STATIC=ON \
