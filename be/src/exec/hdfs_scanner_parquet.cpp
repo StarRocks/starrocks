@@ -27,6 +27,12 @@ namespace starrocks {
 static const std::string kParquetProfileSectionPrefix = "Parquet";
 
 Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
+    if (scanner_params.split_context != nullptr) {
+        auto split_ctx = down_cast<const parquet::SplitContext*>(scanner_params.split_context);
+        _skip_rows_ctx = split_ctx->skip_rows_ctx;
+        return Status::OK();
+    }
+
     if (!scanner_params.deletes.empty()) {
         SCOPED_RAW_TIMER(&_app_stats.iceberg_delete_file_build_ns);
         auto iceberg_delete_builder =
@@ -47,11 +53,6 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
                 new PaimonDeleteFileBuilder(scanner_params.fs, _skip_rows_ctx));
         RETURN_IF_ERROR(paimon_delete_file_builder->build(scanner_params.paimon_deletion_file.get()));
     } else if (scanner_params.deletion_vector_descriptor != nullptr) {
-        if (scanner_params.split_context != nullptr) {
-            auto split_ctx = down_cast<const parquet::SplitContext*>(scanner_params.split_context);
-            _skip_rows_ctx = split_ctx->skip_rows_ctx;
-            return Status::OK();
-        }
         SCOPED_RAW_TIMER(&_app_stats.deletion_vector_build_ns);
         std::unique_ptr<DeletionVector> dv = std::make_unique<DeletionVector>(scanner_params);
         RETURN_IF_ERROR(dv->fill_row_indexes(_skip_rows_ctx));
@@ -62,9 +63,11 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
 
 void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     RuntimeProfile* root = profile->runtime_profile;
+    ADD_COUNTER(root, kParquetProfileSectionPrefix, TUnit::NONE);
     // deletion vector build only in the first task which used for split sub-tasks,
     // and do not need to re-build in sub io tasks.
     do_update_deletion_vector_build_counter(root);
+    do_update_iceberg_v2_counter(root, kParquetProfileSectionPrefix);
     // if we have split tasks, we don't need to update counter
     // and we will update those counters in sub io tasks.
     if (has_split_tasks()) {
@@ -121,7 +124,6 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     RuntimeProfile::Counter* bloom_filter_tried_counter = nullptr;
     RuntimeProfile::Counter* bloom_filter_success_counter = nullptr;
 
-    ADD_COUNTER(root, kParquetProfileSectionPrefix, TUnit::NONE);
     request_bytes_read = ADD_CHILD_COUNTER(root, "RequestBytesRead", TUnit::BYTES, kParquetProfileSectionPrefix);
     request_bytes_read_uncompressed =
             ADD_CHILD_COUNTER(root, "RequestBytesReadUncompressed", TUnit::BYTES, kParquetProfileSectionPrefix);
@@ -207,8 +209,12 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     int64_t page_stats = _app_stats.has_page_statistics ? 1 : 0;
     COUNTER_UPDATE(has_page_statistics, page_stats);
     COUNTER_UPDATE(page_skip, _app_stats.page_skip);
+<<<<<<< HEAD:be/src/exec/hdfs_scanner_parquet.cpp
     group_min_round_cost->set(_app_stats.group_min_round_cost);
     do_update_iceberg_v2_counter(root, kParquetProfileSectionPrefix);
+=======
+    COUNTER_SET(group_min_round_cost, _app_stats.group_min_round_cost);
+>>>>>>> 9ada1d9de5 ([Enhancement] Optimize Iceberg read performance with position delete (#69717)):be/src/exec/hdfs_scanner/hdfs_scanner_parquet.cpp
     do_update_deletion_vector_filter_counter(root);
     COUNTER_UPDATE(rows_before_page_index, _app_stats.rows_before_page_index);
     COUNTER_UPDATE(page_index_timer, _app_stats.page_index_ns);
