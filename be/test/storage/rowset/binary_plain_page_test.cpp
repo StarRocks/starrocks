@@ -114,7 +114,7 @@ public:
         status = page_decoder.next_batch(read_range, column2.get());
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(2, column2->size());
-        ASSERT_EQ("[Hello, StarRocks]", column2->debug_string());
+        ASSERT_EQ("['Hello', 'StarRocks']", column2->debug_string());
     }
 };
 
@@ -212,7 +212,7 @@ TEST_F(BinaryPlainPageTest, TestNextBatchWithFilter) {
         ASSERT_EQ(1, selection[4]);
 
         ASSERT_EQ(3, column->size());
-        ASSERT_EQ("[c_300, d_400, e_500]", column->debug_string());
+        ASSERT_EQ("['c_300', 'd_400', 'e_500']", column->debug_string());
     }
 
     // Reset decoder
@@ -329,7 +329,7 @@ TEST_F(BinaryPlainPageTest, TestReadByRowids) {
     Status st = decoder.read_by_rowids(0, rowids, &num_read, column.get());
     ASSERT_TRUE(st.ok());
     ASSERT_EQ(4, num_read);
-    ASSERT_EQ("[val_1, val_3, val_5, val_8]", column->debug_string());
+    ASSERT_EQ("['val_1', 'val_3', 'val_5', 'val_8']", column->debug_string());
 }
 
 TEST_F(BinaryPlainPageTest, TestDictFilterSelectionLargeDictSize) {

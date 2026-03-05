@@ -297,7 +297,7 @@ TEST(ColumnAggregator, testStringMin) {
     aggregator->aggregate_values(0, 3, loops.data(), false);
 
     EXPECT_EQ(3, agg1->size());
-    ASSERT_EQ("[1000, 3000, 3003]", agg1->debug_string());
+    ASSERT_EQ("['1000', '1002', '3003']", agg1->debug_string());
 
     aggregator->update_source(src3);
 
@@ -310,7 +310,7 @@ TEST(ColumnAggregator, testStringMin) {
     aggregator->finalize();
 
     EXPECT_EQ(6, agg1->size());
-    ASSERT_EQ("[1000, 1002, 3003, 3103, 2000, 2001]", agg1->debug_string());
+    ASSERT_EQ("['1000', '1002', '3003', '3103', '2000', '2001']", agg1->debug_string());
 }
 
 TEST(ColumnAggregator, testNullBooleanMin) {
