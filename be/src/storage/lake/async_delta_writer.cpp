@@ -352,20 +352,28 @@ inline void AsyncDeltaWriterImpl::close() {
 
         TEST_SYNC_POINT("AsyncDeltaWriterImpl::close:2");
 
-        // Wait for block merge finished.
-        if (_block_merge_token != nullptr) {
-            _block_merge_token->shutdown();
-            _block_merge_token.reset();
-        }
-
         // After the execution_queue been `stop()`ed all incoming `write()` and `finish()` requests
         // will fail immediately.
         int r = bthread::execution_queue_stop(old_id);
         PLOG_IF(WARNING, r != 0) << "Fail to stop execution queue";
 
+        // Shutdown (but do NOT reset) _block_merge_token to drain any running merge tasks.
+        // This must happen BEFORE execution_queue_join() because the join triggers the
+        // is_queue_stopped() handler which calls delta_writer->close(), and we need all
+        // merge tasks (which call finish_with_txnlog()) to complete before that.
+        // The token remains allocated (not null) so if execute() is still running and
+        // calls _block_merge_token->submit(), it gets a ServiceUnavailable error instead
+        // of SIGSEGV.
+        if (_block_merge_token != nullptr) {
+            _block_merge_token->shutdown();
+        }
+
         // Wait for all running tasks completed.
         r = bthread::execution_queue_join(old_id);
         PLOG_IF(WARNING, r != 0) << "Fail to join execution queue";
+
+        // Safe to destroy token now since both execution queue and merge tasks are done.
+        _block_merge_token.reset();
     }
 }
 
