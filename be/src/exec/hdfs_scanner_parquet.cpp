@@ -209,12 +209,7 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     int64_t page_stats = _app_stats.has_page_statistics ? 1 : 0;
     COUNTER_UPDATE(has_page_statistics, page_stats);
     COUNTER_UPDATE(page_skip, _app_stats.page_skip);
-<<<<<<< HEAD:be/src/exec/hdfs_scanner_parquet.cpp
     group_min_round_cost->set(_app_stats.group_min_round_cost);
-    do_update_iceberg_v2_counter(root, kParquetProfileSectionPrefix);
-=======
-    COUNTER_SET(group_min_round_cost, _app_stats.group_min_round_cost);
->>>>>>> 9ada1d9de5 ([Enhancement] Optimize Iceberg read performance with position delete (#69717)):be/src/exec/hdfs_scanner/hdfs_scanner_parquet.cpp
     do_update_deletion_vector_filter_counter(root);
     COUNTER_UPDATE(rows_before_page_index, _app_stats.rows_before_page_index);
     COUNTER_UPDATE(page_index_timer, _app_stats.page_index_ns);
