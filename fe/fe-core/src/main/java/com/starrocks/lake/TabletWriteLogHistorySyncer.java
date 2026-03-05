@@ -50,7 +50,11 @@ public class TabletWriteLogHistorySyncer extends FrontendDaemon {
                             "output_segments int, " +
                             "label varchar(1024), " +
                             "compaction_score bigint, " +
-                            "compaction_type varchar(64)" +
+                            "compaction_type varchar(64), " +
+                            "sst_input_files int, " +
+                            "sst_input_bytes bigint, " +
+                            "sst_output_files int, " +
+                            "sst_output_bytes bigint" +
                             ") " +
                             "PARTITION BY date_trunc('DAY', finish_time) " +
                             "DISTRIBUTED BY HASH(tablet_id) BUCKETS 3 " +
@@ -64,7 +68,8 @@ public class TabletWriteLogHistorySyncer extends FrontendDaemon {
             "SELECT " +
             "be_id, begin_time, finish_time, txn_id, tablet_id, table_id, partition_id, log_type, " +
             "input_rows, input_bytes, output_rows, output_bytes, input_segments, output_segments, " +
-            "label, compaction_score, compaction_type " +
+            "label, compaction_score, compaction_type, " +
+            "sst_input_files, sst_input_bytes, sst_output_files, sst_output_bytes " +
             "FROM information_schema.be_tablet_write_log " +
             "WHERE finish_time > (SELECT COALESCE(MAX(finish_time), '0001-01-01 00:00:00') FROM %s) " +
             "AND finish_time < NOW() - INTERVAL 1 MINUTE";
