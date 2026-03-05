@@ -12,15 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+#include "common/brpc_helper.h"
 
-namespace brpc {
-class Controller;
-}
+#include <brpc/controller.h>
+
+#include "common/config.h"
 
 namespace starrocks {
 
-void set_ignore_overcrowded_for_query(brpc::Controller& cntl);
-void set_ignore_overcrowded_for_load(brpc::Controller& cntl);
+void set_ignore_overcrowded_for_query(brpc::Controller& cntl) {
+    if (config::brpc_query_ignore_overcrowded) {
+        cntl.ignore_eovercrowded();
+    }
+}
+
+void set_ignore_overcrowded_for_load(brpc::Controller& cntl) {
+    if (config::brpc_load_ignore_overcrowded) {
+        cntl.ignore_eovercrowded();
+    }
+}
 
 } // namespace starrocks

@@ -19,10 +19,8 @@
 #include <memory>
 #include <vector>
 
-#include "base/simd/simd.h"
 #include "column/vectorized_fwd.h"
 #include "column_reader.h"
-#include "common/config.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "formats/parquet/column_chunk_reader.h"
@@ -152,13 +150,7 @@ private:
                                           starrocks::Column* dst, bool append_default,
                                           const FilterData* filter = nullptr) = 0;
 
-    virtual const FilterData* _convert_filter_row_to_value(const Filter* filter, size_t row_readed) {
-        if (!filter || !config::parquet_push_down_filter_to_decoder_enable) {
-            return nullptr;
-        }
-        // based on benchmark we added some threshold here, selectivity < 0.2
-        return SIMD::count_nonzero(*filter) * 1.0 / filter->size() < 0.2 ? filter->data() + row_readed : nullptr;
-    }
+    virtual const FilterData* _convert_filter_row_to_value(const Filter* filter, size_t row_readed);
 };
 
 } // namespace starrocks::parquet

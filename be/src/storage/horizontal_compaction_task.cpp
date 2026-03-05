@@ -19,6 +19,7 @@
 #include "base/debug/trace.h"
 #include "base/time/time.h"
 #include "column/schema.h"
+#include "common/config.h"
 #include "common/statusor.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"

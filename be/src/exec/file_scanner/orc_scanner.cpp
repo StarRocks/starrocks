@@ -17,6 +17,7 @@
 #include <memory>
 
 #include "column/array_column.h"
+#include "common/config.h"
 #include "formats/orc/orc_chunk_reader.h"
 #include "formats/orc/orc_input_stream.h"
 #include "fs/fs.h"

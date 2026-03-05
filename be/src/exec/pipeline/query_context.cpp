@@ -19,6 +19,7 @@
 
 #include "agent/master_info.h"
 #include "base/utility/defer_op.h"
+#include "common/config.h"
 #include "common/status.h"
 #include "common/thread/thread.h"
 #include "exec/pipeline/fragment_context.h"

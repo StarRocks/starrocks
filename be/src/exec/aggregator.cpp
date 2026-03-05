@@ -22,6 +22,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
+#include "common/config.h"
 #include "common/logging.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
@@ -157,6 +158,13 @@ bool AggrAutoContext::is_low_reduction(const size_t agg_count, const size_t chun
 
 Status init_udaf_context(int64_t fid, const std::string& url, const std::string& checksum, const std::string& symbol,
                          FunctionContext* context);
+
+int64_t Aggregator::get_two_level_threahold() {
+    if (config::two_level_memory_threshold < 0) {
+        return agg::two_level_memory_threshold;
+    }
+    return config::two_level_memory_threshold;
+}
 
 AggregatorParamsPtr convert_to_aggregator_params(const TPlanNode& tnode) {
     auto params = std::make_shared<AggregatorParams>();

@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+#include "common/vlog_cntl.h"
 
-namespace brpc {
-class Controller;
-}
+#include "common/config.h"
 
 namespace starrocks {
 
-void set_ignore_overcrowded_for_query(brpc::Controller& cntl);
-void set_ignore_overcrowded_for_load(brpc::Controller& cntl);
+void VLogCntl::enable(const std::string& module) {
+    int32_t vlog_level = config::sys_log_verbose_level;
+    google::SetVLOGLevel(module.c_str(), vlog_level);
+}
 
 } // namespace starrocks

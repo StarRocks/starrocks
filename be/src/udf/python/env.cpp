@@ -39,6 +39,10 @@
 
 namespace starrocks {
 
+bool PyWorker::expired() {
+    return MonotonicSeconds() - _last_touch_time > config::python_worker_expire_time_sec;
+}
+
 void PyWorker::terminate() {
     if (_pid != -1) {
         kill(_pid, SIGKILL);
@@ -55,6 +59,21 @@ void PyWorker::wait() {
 
 void PyWorker::remove_unix_socket() {
     unlink(PyWorkerManager::unix_socket_path(_pid).c_str());
+}
+
+std::string PyWorkerManager::unix_socket(pid_t pid) {
+    std::string unix_socket = fmt::format("grpc+unix://{}/pyworker_{}", config::local_library_dir, pid);
+    return unix_socket;
+}
+
+std::string PyWorkerManager::unix_socket_prefix() {
+    std::string unix_socket = fmt::format("grpc+unix://{}/pyworker_", config::local_library_dir);
+    return unix_socket;
+}
+
+std::string PyWorkerManager::unix_socket_path(pid_t pid) {
+    std::string unix_socket_path = fmt::format("{}/pyworker_{}", config::local_library_dir, pid);
+    return unix_socket_path;
 }
 
 Status PyWorkerManager::_fork_py_worker(std::unique_ptr<PyWorker>* child_process) {

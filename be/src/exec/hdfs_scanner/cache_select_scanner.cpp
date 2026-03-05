@@ -14,6 +14,7 @@
 
 #include "exec/hdfs_scanner/cache_select_scanner.h"
 
+#include "common/config.h"
 #include "formats/orc/orc_chunk_reader.h"
 #include "formats/orc/orc_input_stream.h"
 #include "formats/parquet/file_reader.h"

@@ -39,6 +39,7 @@
 #include "base/time/date_func.h"
 #include "base/uid_util.h"
 #include "column/chunk.h"
+#include "common/config.h"
 #include "exec/local_file_writer.h"
 #include "exec/parquet_builder.h"
 #include "exec/plain_text_builder.h"

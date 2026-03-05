@@ -24,6 +24,7 @@
 #include "base/concurrency/countdown_latch.h"
 #include "base/debug/trace.h"
 #include "base/utility/defer_op.h"
+#include "common/config.h"
 #include "common/system/cpu_info.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"

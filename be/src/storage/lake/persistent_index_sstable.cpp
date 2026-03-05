@@ -18,6 +18,7 @@
 
 #include "base/debug/trace.h"
 #include "base/testutil/sync_point.h"
+#include "common/config.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
 #include "fs/key_cache.h"

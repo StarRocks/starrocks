@@ -18,7 +18,6 @@
 
 #include <string>
 
-#include "common/config.h"
 #include "gutil/macros.h"
 
 namespace starrocks {
@@ -33,10 +32,7 @@ public:
 
     void setLogLevel(const std::string& module, int level) { google::SetVLOGLevel(module.c_str(), level); }
 
-    void enable(const std::string& module) {
-        int32_t vlog_level = config::sys_log_verbose_level;
-        google::SetVLOGLevel(module.c_str(), vlog_level);
-    }
+    void enable(const std::string& module);
 
     void disable(const std::string& module) { google::SetVLOGLevel(module.c_str(), 0); }
 

@@ -17,6 +17,7 @@
 #include <memory>
 
 #include "base/utility/defer_op.h"
+#include "common/config.h"
 #include "runtime/exec_env.h"
 #include "storage/base_compaction.h"
 #include "storage/chunk_helper.h"

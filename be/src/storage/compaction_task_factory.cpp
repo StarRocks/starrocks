@@ -14,6 +14,7 @@
 
 #include "storage/compaction_task_factory.h"
 
+#include "common/config.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"

@@ -14,6 +14,7 @@
 
 #include "storage/lake/compaction_task.h"
 
+#include "common/config.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "runtime/exec_env.h"
 #include "storage/lake/tablet.h"

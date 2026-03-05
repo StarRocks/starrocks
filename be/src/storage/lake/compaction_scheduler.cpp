@@ -24,6 +24,7 @@
 
 #include "agent/master_info.h"
 #include "base/testutil/sync_point.h"
+#include "common/config.h"
 #include "common/status.h"
 #include "common/thread/threadpool.h"
 #include "common/util/misc.h"

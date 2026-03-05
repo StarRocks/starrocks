@@ -16,6 +16,7 @@
 
 #include <arrow/type.h>
 
+#include "common/config.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"

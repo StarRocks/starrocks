@@ -39,9 +39,11 @@
 
 #include "base/simd/simd.h"
 #include "column/nullable_column.h"
+#include "common/config.h"
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "storage/index/inverted/inverted_index_option.h"
+
 #ifndef __APPLE__
 #include "storage/index/inverted/inverted_plugin_factory.h"
 #endif
@@ -65,6 +67,8 @@
 #include "util/compression/block_compression.h"
 
 namespace starrocks {
+
+ColumnWriterOptions::ColumnWriterOptions() : data_page_size(config::data_page_size) {}
 
 #define INDEX_ADD_VALUES(index, data, size) \
     do {                                    \

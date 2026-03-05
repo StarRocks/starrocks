@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/exchange/exchange_source_operator.h"
 
+#include "common/config.h"
 #include "glog/logging.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/data_stream_recvr.h"

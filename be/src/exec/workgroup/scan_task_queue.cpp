@@ -14,6 +14,7 @@
 
 #include "exec/workgroup/scan_task_queue.h"
 
+#include "common/config.h"
 #include "common/status.h"
 #include "exec/workgroup/work_group.h"
 #include "exec/workgroup/work_group_fwd.h"

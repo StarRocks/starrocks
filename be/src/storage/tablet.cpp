@@ -47,6 +47,7 @@
 #include "base/time/ratelimit.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
+#include "common/config.h"
 #include "common/tracer.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "runtime/current_thread.h"

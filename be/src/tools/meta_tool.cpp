@@ -47,6 +47,7 @@
 #include "base/hash/crc32c.h"
 #include "base/path/path_util.h"
 #include "column/datum_convert.h"
+#include "common/config.h"
 #include "common/status.h"
 #include "common/util/debug_util.h"
 #include "fs/fs.h"

@@ -15,6 +15,7 @@
 #include "storage/lake/transactions.h"
 
 #include "base/container/lru_cache.h"
+#include "common/config.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/lake_types.pb.h"

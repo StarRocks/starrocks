@@ -18,6 +18,7 @@
 #include <utility>
 
 #include "column/datum_convert.h"
+#include "common/config.h"
 #include "common/status.h"
 #include "gutil/stl_util.h"
 #include "runtime/exec_env.h"

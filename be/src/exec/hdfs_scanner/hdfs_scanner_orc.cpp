@@ -18,6 +18,7 @@
 
 #include "base/simd/simd.h"
 #include "base/time/timezone_utils.h"
+#include "common/config.h"
 #include "common/runtime_profile.h"
 #include "exec/iceberg/iceberg_delete_builder.h"
 #include "exec/paimon/paimon_delete_file_builder.h"

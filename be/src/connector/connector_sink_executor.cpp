@@ -15,6 +15,7 @@
 #include "connector/connector_sink_executor.h"
 
 #include "column/chunk.h"
+#include "common/config.h"
 #include "common/status.h"
 #include "common/system/cpu_info.h"
 #include "connector/partition_chunk_writer.h"

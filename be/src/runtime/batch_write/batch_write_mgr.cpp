@@ -18,6 +18,7 @@
 #include "base/testutil/sync_point.h"
 #include "brpc/controller.h"
 #include "butil/endpoint.h"
+#include "common/config.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "http/http_common.h"
 #include "runtime/batch_write/batch_write_util.h"

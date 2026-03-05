@@ -14,6 +14,7 @@
 
 #include "runtime/profile_report_worker.h"
 
+#include "common/config.h"
 #include "common/util/misc.h"
 #include "exec/pipeline/query_context.h"
 #include "runtime/fragment_mgr.h"

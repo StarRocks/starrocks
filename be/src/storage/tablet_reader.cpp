@@ -21,6 +21,7 @@
 
 #include "column/column_access_path.h"
 #include "column/datum_convert.h"
+#include "common/config.h"
 #include "common/status.h"
 #include "common/system/backend_options.h"
 #include "gen_cpp/tablet_schema.pb.h"

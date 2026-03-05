@@ -17,6 +17,7 @@
 #include "cache/data_cache_hit_rate_counter.hpp"
 #include "column/column_helper.h"
 #include "column/type_traits.h"
+#include "common/config.h"
 #include "connector/deletion_vector/deletion_vector.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/chunk_predicate_evaluator.h"

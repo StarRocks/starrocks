@@ -44,6 +44,7 @@
 #include "base/string/faststring.h"
 #include "column/append_with_mask.h"
 #include "column/nullable_column.h"
+#include "common/config.h"
 #include "common/status.h"
 #include "gutil/strings/substitute.h"
 #include "storage/column_predicate.h"

@@ -14,6 +14,7 @@
 
 #include "storage/load_chunk_spiller.h"
 
+#include "common/config.h"
 #include "exec/spill/options.h"
 #include "exec/spill/serde.h"
 #include "exec/spill/spiller.h"

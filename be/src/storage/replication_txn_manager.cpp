@@ -25,6 +25,7 @@
 #include "agent/task_signatures_manager.h"
 #include "base/string/string_parser.hpp"
 #include "base/utility/defer_op.h"
+#include "common/config.h"
 #include "common/system/backend_options.h"
 #include "fs/fs.h"
 #include "fs/fs_memory.h"

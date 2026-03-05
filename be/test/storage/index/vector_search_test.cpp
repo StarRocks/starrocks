@@ -19,13 +19,12 @@
 #ifdef WITH_TENANN
 #include <tenann/factory/ann_searcher_factory.h>
 #include <tenann/factory/index_factory.h>
-
-#include "common/config.h"
 #endif
 
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
 #include "column/column_helper.h"
+#include "common/config.h"
 #include "runtime/mem_pool.h"
 #include "storage/index/index_descriptor.h"
 #include "storage/index/vector/tenann/del_id_filter.h"

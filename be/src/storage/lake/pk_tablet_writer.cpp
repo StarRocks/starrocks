@@ -17,6 +17,7 @@
 #include <fmt/format.h>
 
 #include "column/chunk.h"
+#include "common/config.h"
 #include "common/runtime_profile.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"

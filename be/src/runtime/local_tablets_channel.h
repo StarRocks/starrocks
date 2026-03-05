@@ -235,7 +235,7 @@ private:
     TupleDescriptor* _tuple_desc = nullptr;
 
     std::vector<Sender> _senders;
-    size_t _max_sliding_window_size = config::max_load_dop * 3;
+    size_t _max_sliding_window_size = 0;
 
     mutable bthread::Mutex _partitions_ids_lock;
     std::unordered_set<int64_t> _partition_ids;

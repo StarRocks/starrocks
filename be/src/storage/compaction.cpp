@@ -19,6 +19,7 @@
 #include "base/debug/trace.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
+#include "common/config.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"

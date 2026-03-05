@@ -18,6 +18,7 @@
 #include <chrono>
 
 #include "base/testutil/sync_point.h"
+#include "common/config.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/join.h"
 #include "storage/lake/tablet_manager.h"
