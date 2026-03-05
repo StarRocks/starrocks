@@ -26,7 +26,6 @@
 #include "column/column.h"
 #include "column/column_access_path.h"
 #include "column/column_helper.h"
-#include "column/datum.h"
 #include "column/type_traits.h"
 #include "common/config_scan_io_fwd.h"
 #include "column/vectorized_fwd.h"
@@ -56,8 +55,10 @@
 #include "storage/tablet_manager.h"
 #include "storage/type_traits.h"
 #include "types/date_value.h"
+#include "types/datum.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
+#include "types/time_types.h"
 #include "util/priority_thread_pool.hpp"
 
 // Print log with query id.
