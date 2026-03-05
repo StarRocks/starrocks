@@ -45,7 +45,6 @@
 
 #include "column/datum_convert.h"
 #include "common/status.h"
-#include "util/debug_util.h"
 #include "fs/fs.h"
 #include "fs/fs_posix.h"
 #include "fs/fs_s3.h"
@@ -85,6 +84,7 @@
 #include "storage/tablet_schema_map.h"
 #include "util/coding.h"
 #include "util/crc32c.h"
+#include "util/debug_util.h"
 #include "util/path_util.h"
 
 using starrocks::DataDir;
