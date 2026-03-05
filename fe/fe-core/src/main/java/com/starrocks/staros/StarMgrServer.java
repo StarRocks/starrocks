@@ -314,10 +314,4 @@ public class StarMgrServer {
     public void triggerNewImage() {
         journalSystem.getJournalWriter().setForceRollJournal();
     }
-
-    public void markLeaderTransferred() {
-        if (journalSystem != null) {
-            journalSystem.markLeaderTransferred();
-        }
-    }
 }
