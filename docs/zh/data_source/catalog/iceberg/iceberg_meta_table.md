@@ -40,7 +40,8 @@ SELECT _row_id, _last_updated_sequence_number, * FROM [<catalog>.][<database>.]t
 :::note
 
 - `_row_id` 列需要数据文件具备 `firstRowId` 元信息。如果数据文件缺失 `firstRowId`，查询将失败并报错。
-- `_last_updated_sequence_number` 列返回该数据文件的数据序列号（`dataSequenceNumber`）。
+- 对于新写入的数据，`_row_id` 通过 `firstRowId + row_position` 计算，`_last_updated_sequence_number` 取文件级别的 `dataSequenceNumber`。
+- 在 compaction（如 Iceberg OPTIMIZE / rewrite-data-files）后，如果 compactor 按照 Iceberg v3 规范将 `_row_id` 和 `_last_updated_sequence_number` 写入数据文件的物理列中，StarRocks 会读取每行的物理列值，从而在 compaction 后保留行血缘信息。
 - 这些元数据列仅对 Iceberg v3 表（format-version = 3）可用。
 
 :::

@@ -364,6 +364,9 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         boolean hasLateMaterializationColumns = false;
         for (SlotDescriptor slot : slots) {
             String name = slot.getColumn().getName();
+            // _row_id is handled as a reserved field in BE (not an extended column).
+            // It is computed as firstRowId + row_position, or read from the physical Parquet column
+            // if present (after compaction).
             if (name.equalsIgnoreCase(ROW_ID)) {
                 hasRowIdColumn = true;
                 continue;
@@ -378,7 +381,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
                 setExtendedColumns(slot, extendedColumns, value);
             } else if (name.equalsIgnoreCase(LAST_UPDATED_SEQUENCE_NUMBER)) {
                 value = LiteralExprFactory.create(String.valueOf(file.dataSequenceNumber()), IntegerType.BIGINT);
-                setExtendedColumns(slot, extendedColumns, value);
+                setExtendedColumns(slot, extendedColumns, value, false);
             } else if (name.equalsIgnoreCase(SPEC_ID)) {
                 value = LiteralExprFactory.create(String.valueOf(file.specId()), IntegerType.INT);
                 setExtendedColumns(slot, extendedColumns, value);
@@ -406,13 +409,13 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
         if (hasRowIdColumn) {
             // Only throw exception if user explicitly requested _row_id (not from late materialization)
+            // and the file has no firstRowId metadata.
             if (!hasLateMaterializationColumns) {
                 if (task.file() == null || task.file().firstRowId() == null) {
                     throw new StarRocksConnectorException(
                             "Iceberg v3 row lineage requires first_row_id for _row_id, file: %s", filePath);
                 }
             }
-            // Set first_row_id if available (for both user-requested and late materialization cases)
             if (task.file() != null && task.file().firstRowId() != null) {
                 hdfsScanRange.setFirst_row_id(task.file().firstRowId());
             }
@@ -424,8 +427,19 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     }
 
     private void setExtendedColumns(SlotDescriptor slot, Map<Integer, TExpr> extendedColumns, LiteralExpr value) {
+        setExtendedColumns(slot, extendedColumns, value, true);
+    }
+
+    /**
+     * Puts the value into the extended_columns map for BE to access.
+     * When registerExtendedSlot is false, the slot is NOT added to extendedColumnSlotIds,
+     * so BE treats it as a reserved field and can attempt physical column read first
+     * (e.g. _last_updated_sequence_number after compaction), falling back to the extended value.
+     */
+    private void setExtendedColumns(SlotDescriptor slot, Map<Integer, TExpr> extendedColumns, LiteralExpr value,
+                                    boolean registerExtendedSlot) {
         extendedColumns.put(slot.getId().asInt(), ExprToThrift.treeToThrift(value));
-        if (!extendedColumnSlotIds.contains(slot.getId().asInt())) {
+        if (registerExtendedSlot && !extendedColumnSlotIds.contains(slot.getId().asInt())) {
             extendedColumnSlotIds.add(slot.getId().asInt());
         }
     }
