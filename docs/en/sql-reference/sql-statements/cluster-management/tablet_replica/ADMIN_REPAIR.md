@@ -4,7 +4,15 @@ displayed_sidebar: docs
 
 # ADMIN REPAIR
 
+<<<<<<< HEAD
 ADMIN REPAIR is used to try and fix the specified tables or partitions first.
+=======
+Attempts to repair the specified table or partitions.
+
+For native tables in shared-nothing clusters, this statement attempts to prioritize scheduling the replica repairing operation.
+
+For cloud-native tables in shared-data clusters, it attempts to rollback to a historical available version when metadata or data files are lost. Please note that **this may result in the loss of the latest data for some tablets**.
+>>>>>>> 9d6586f1d4 ([Doc] Remove Problematic Links (#69829))
 
 :::tip
 
