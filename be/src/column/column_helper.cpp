@@ -17,6 +17,7 @@
 #include "base/simd/simd.h"
 #include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
+#include "column/binary_column.h"
 #include "column/column_view/column_view_helper.h"
 #include "column/column_visitor_adapter.h"
 #include "column/map_column.h"
@@ -542,4 +543,21 @@ std::tuple<UInt32Column::Ptr, ColumnPtr, NullColumnPtr> ColumnHelper::unpack_arr
     auto offsets_column = array_column->offsets_column();
     return {offsets_column, elements_column, null_column};
 }
+
+bool ColumnHelper::get_binary_slice_at(const Column* column, size_t row, Slice* out) {
+    if (column == nullptr || out == nullptr) return false;
+    if (column->is_constant()) {
+        column = down_cast<const ConstColumn*>(column)->data_column().get();
+        row = 0;
+    }
+    if (column->is_nullable()) {
+        const auto* nc = down_cast<const NullableColumn*>(column);
+        if (nc->is_null(row)) return false;
+        column = nc->data_column().get();
+    }
+    if (!column->is_binary()) return false;
+    *out = down_cast<const BinaryColumn*>(column)->get_slice(row);
+    return true;
+}
+
 } // namespace starrocks
