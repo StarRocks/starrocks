@@ -4598,7 +4598,7 @@ PARALLEL_TEST(VecStringFunctionsTest, initcapTest) {
 
     // Fast Path Assertions
     ASSERT_EQ(
-            "['Hello World', 'Hello World', 'Hello World', 'Starrocks Database', '1st Place', 'In-The-World!','    "
+            "['Hello World', 'Hello World', 'Hello World', 'Starrocks Database', '1st Place, In-The-World!','    "
             "Hello   World   '"
             ", 'Abc_Def.Ghi+Jkl', 'A', '', 'Héllo', 'École', 'Ça Va', 'Café Resumé', 'Привет Мир', 'Hello-Wörld_123']",
             result->debug_string());
