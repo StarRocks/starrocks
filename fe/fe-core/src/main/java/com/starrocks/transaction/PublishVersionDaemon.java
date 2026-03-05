@@ -332,6 +332,11 @@ public class PublishVersionDaemon extends FrontendDaemon {
             if (!allTaskFinished) {
                 shouldFinishTxn = globalTransactionMgr.canTxnFinished(transactionState,
                         publishErrorReplicaIds, unfinishedBackends);
+            } else {
+                // All publish tasks finished; the transaction was logically ready to finish as soon as the last
+                // publish task completed. Use publishVersionFinishTime so that publishCanFinishLatencyMs is not
+                // inflated by the daemon loop interval (which would happen if we used System.currentTimeMillis()).
+                transactionState.setReadyToFinishTimeIfUnset(transactionState.getPublishVersionFinishTime());
             }
 
             if (shouldFinishTxn) {
@@ -365,81 +370,6 @@ public class PublishVersionDaemon extends FrontendDaemon {
         } // end for readyTransactionStates
     }
 
-<<<<<<< HEAD
-=======
-    private void tryFinishTransaction(TransactionState transactionState) throws StarRocksException {
-        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
-
-        Map<Long, PublishVersionTask> transTasks = transactionState.getPublishVersionTasks();
-        Set<Long> publishErrorReplicaIds = Sets.newHashSet();
-        Set<Long> unfinishedBackends = Sets.newHashSet();
-        boolean allTaskFinished = true;
-        for (PublishVersionTask publishVersionTask : transTasks.values()) {
-            if (publishVersionTask.isFinished()) {
-                // sometimes backend finish publish version task, but it maybe failed to change
-                // transaction id to version for some tablets,
-                // and it will upload the failed tablet info to fe and fe will deal with them
-                Set<Long> errReplicas = publishVersionTask.getErrorReplicas();
-                if (!errReplicas.isEmpty()) {
-                    publishErrorReplicaIds.addAll(errReplicas);
-                }
-            } else {
-                allTaskFinished = false;
-                // Publish version task may succeed and finish in quorum replicas
-                // but not finish in one replica.
-                // here collect the backendId that do not finish publish version
-                unfinishedBackends.add(publishVersionTask.getBackendId());
-            }
-        }
-        boolean shouldFinishTxn = true;
-        if (!allTaskFinished) {
-            try {
-                shouldFinishTxn = globalTransactionMgr.canTxnFinished(transactionState,
-                        publishErrorReplicaIds, unfinishedBackends,
-                        Config.finish_transaction_default_lock_timeout_ms);
-            } catch (LockTimeoutException exception) {
-                LOG.info("Fail to get lock to check canTxnFinished for transaction {}, error: {}. Will retry later",
-                        transactionState.getTransactionId(), exception.getMessage());
-                return;
-            }
-        } else {
-            // All publish tasks finished; the transaction was logically ready to finish as soon as the last
-            // publish task completed. Use publishVersionFinishTime so that publishCanFinishLatencyMs is not
-            // inflated by the daemon loop interval (which would happen if we used System.currentTimeMillis()).
-            transactionState.setReadyToFinishTimeIfUnset(transactionState.getPublishVersionFinishTime());
-        }
-
-        if (shouldFinishTxn) {
-            try {
-                // Attempt to finish the transaction with a lock timeout. If it fails, it will be retried in the next cycle.
-                // This approach prevents blocking subsequent transactions due to the current one.
-                globalTransactionMgr.finishTransaction(transactionState.getDbId(),
-                        transactionState.getTransactionId(), publishErrorReplicaIds,
-                        Config.finish_transaction_default_lock_timeout_ms);
-            } catch (StarRocksException exception) {
-                if (exception.getErrorCode() == ErrorCode.ERR_LOCK_ERROR) {
-                    LOG.warn("Fail to get lock to finish transaction {}, error: {}. Will retry later",
-                            transactionState.getTransactionId(), exception.getMessage());
-                    return;
-                } else {
-                    throw exception;
-                }
-            }
-            if (transactionState.getTransactionStatus() != TransactionStatus.VISIBLE) {
-                transactionState.updateSendTaskTime();
-                LOG.debug("publish version for transaction {} failed, has {} error replicas during publish",
-                        transactionState, publishErrorReplicaIds.size());
-            } else {
-                for (PublishVersionTask task : transactionState.getPublishVersionTasks().values()) {
-                    AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.PUBLISH_VERSION, task.getSignature());
-                }
-                // clear publish version tasks to reduce memory usage when state changed to visible.
-                transactionState.clearAfterPublished();
-            }
-        }
-    }
-
->>>>>>> 4ce8f87284 ([Enhancement] Split txn publish latency and add publish daemon loop metric (#69747))
     private void publishVersionNew(GlobalTransactionMgr globalTransactionMgr, List<TransactionState> txns) {
         for (TransactionState transactionState : txns) {
             Set<Long> publishErrorReplicas = Sets.newHashSet();

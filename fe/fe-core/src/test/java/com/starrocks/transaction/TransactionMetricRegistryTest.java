@@ -130,15 +130,9 @@ public class TransactionMetricRegistryTest {
         TransactionMetricRegistry registry = newRegistry();
         // stream_load accumulates across three source types
         setReportGroups(registry, "stream_load");
-<<<<<<< HEAD
-        setupVisibleTxn(s1, TransactionState.LoadJobSourceType.BACKEND_STREAMING, 10, 20, 30, 40, 50);
-        setupVisibleTxn(s2, TransactionState.LoadJobSourceType.FRONTEND_STREAMING, 11, 21, 31, 41, 51);
-        setupVisibleTxn(s3, TransactionState.LoadJobSourceType.BACKEND_STREAMING, 12, 22, 32, 42, 52);
-=======
         setupVisibleTxn(s1, TransactionState.LoadJobSourceType.BACKEND_STREAMING, 10, 20, 30, 40, 45, 50);
         setupVisibleTxn(s2, TransactionState.LoadJobSourceType.FRONTEND_STREAMING, 11, 21, 31, 41, 46, 51);
-        setupVisibleTxn(s3, TransactionState.LoadJobSourceType.MULTI_STATEMENT_STREAMING, 12, 22, 32, 42, 47, 52);
->>>>>>> 4ce8f87284 ([Enhancement] Split txn publish latency and add publish daemon loop metric (#69747))
+        setupVisibleTxn(s3, TransactionState.LoadJobSourceType.BACKEND_STREAMING, 12, 22, 32, 42, 47, 52);
         registry.update(s1);
         registry.update(s2);
         registry.update(s3);
