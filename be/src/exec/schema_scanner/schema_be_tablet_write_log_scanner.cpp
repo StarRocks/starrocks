@@ -42,6 +42,10 @@ SchemaScanner::ColumnDesc SchemaBeTabletWriteLogScanner::_s_tbls_columns[] = {
         {"LABEL", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"COMPACTION_SCORE", TypeDescriptor(TYPE_BIGINT), sizeof(int64_t), true},
         {"COMPACTION_TYPE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"SST_INPUT_FILES", TypeDescriptor(TYPE_INT), sizeof(int32_t), true},
+        {"SST_INPUT_BYTES", TypeDescriptor(TYPE_BIGINT), sizeof(int64_t), true},
+        {"SST_OUTPUT_FILES", TypeDescriptor(TYPE_INT), sizeof(int32_t), true},
+        {"SST_OUTPUT_BYTES", TypeDescriptor(TYPE_BIGINT), sizeof(int64_t), true},
 };
 
 SchemaBeTabletWriteLogScanner::SchemaBeTabletWriteLogScanner()
@@ -119,7 +123,9 @@ Status SchemaBeTabletWriteLogScanner::get_next(ChunkPtr* chunk, bool* eos) {
         }
         // log_type
         {
-            std::string type_str = (log.log_type == lake::LogType::LOAD) ? "LOAD" : "COMPACTION";
+            std::string type_str = (log.log_type == lake::LogType::LOAD)         ? "LOAD"
+                                   : (log.log_type == lake::LogType::COMPACTION) ? "COMPACTION"
+                                                                                 : "PUBLISH";
             Slice s(type_str);
             Column* col = (Column*)(*chunk)->get_column_by_index(col_idx++).get();
             ColumnHelper::get_data_column(col)->append_datum(Datum(s));
@@ -187,6 +193,46 @@ Status SchemaBeTabletWriteLogScanner::get_next(ChunkPtr* chunk, bool* eos) {
             if (log.log_type == lake::LogType::COMPACTION) {
                 Slice s(log.compaction_type);
                 col->append_datum(Datum(s));
+            } else {
+                col->append_nulls(1);
+            }
+        }
+        // sst_input_files
+        {
+            auto& column = (*chunk)->get_column_by_index(col_idx++);
+            Column* col = (Column*)column.get();
+            if (log.sst_input_files > 0) {
+                col->append_datum(Datum(log.sst_input_files));
+            } else {
+                col->append_nulls(1);
+            }
+        }
+        // sst_input_bytes
+        {
+            auto& column = (*chunk)->get_column_by_index(col_idx++);
+            Column* col = (Column*)column.get();
+            if (log.sst_input_files > 0) {
+                col->append_datum(Datum(log.sst_input_bytes));
+            } else {
+                col->append_nulls(1);
+            }
+        }
+        // sst_output_files
+        {
+            auto& column = (*chunk)->get_column_by_index(col_idx++);
+            Column* col = (Column*)column.get();
+            if (log.sst_output_files > 0) {
+                col->append_datum(Datum(log.sst_output_files));
+            } else {
+                col->append_nulls(1);
+            }
+        }
+        // sst_output_bytes
+        {
+            auto& column = (*chunk)->get_column_by_index(col_idx++);
+            Column* col = (Column*)column.get();
+            if (log.sst_output_files > 0) {
+                col->append_datum(Datum(log.sst_output_bytes));
             } else {
                 col->append_nulls(1);
             }
