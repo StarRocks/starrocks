@@ -263,7 +263,7 @@ private:
     RuntimeState* _runtime_state = nullptr;
     TabletSinkProfile* _ts_profile = nullptr;
 
-    bool _enable_colocate_mv_index = config::enable_load_colocate_mv;
+    bool _enable_colocate_mv_index = false;
 
     WriteQuorumTypePB _write_quorum_type = WriteQuorumTypePB::MAJORITY;
 

@@ -18,6 +18,7 @@
 #include <unordered_map>
 
 #include "column/chunk.h"
+#include "common/config.h"
 #include "common/runtime_profile.h"
 #include "connector/utils.h"
 #include "exec/pipeline/exchange/shuffler.h"

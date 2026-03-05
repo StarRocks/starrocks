@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+#include "storage/flat_json_config.h"
 
-namespace brpc {
-class Controller;
-}
+#include "common/config.h"
 
 namespace starrocks {
 
-void set_ignore_overcrowded_for_query(brpc::Controller& cntl);
-void set_ignore_overcrowded_for_load(brpc::Controller& cntl);
+FlatJsonConfig::FlatJsonConfig()
+        : _flat_json_null_factor(config::json_flat_null_factor),
+          _flat_json_sparsity_factor(config::json_flat_sparsity_factor),
+          _flat_json_max_column_max(config::json_flat_column_max) {}
 
 } // namespace starrocks

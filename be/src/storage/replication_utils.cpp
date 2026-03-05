@@ -16,6 +16,8 @@
 
 #include <sys/stat.h>
 
+#include "common/config.h"
+
 #ifdef BE_TEST
 #include "agent/agent_server.h"
 #endif

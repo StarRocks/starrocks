@@ -45,6 +45,7 @@
 #include <vector>
 
 #include "base/utility/pretty_printer.h"
+#include "common/config.h"
 #include "common/configbase.h"
 #include "http/action/profile_utils.h"
 #include "http/web_page_handler.h"

@@ -15,6 +15,7 @@
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/common")
 
 set(COMMON_FILES
+  brpc_helper.cpp
   configbase.cpp
   config.cpp
   memory/column_allocator.cpp
@@ -40,6 +41,7 @@ set(COMMON_FILES
   util/thrift_client.cpp
   util/thrift_server.cpp
   util/thrift_util.cpp
+  vlog_cntl.cpp
 )
 
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")

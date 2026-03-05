@@ -18,6 +18,7 @@
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/pretty_printer.h"
+#include "common/config.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
@@ -83,6 +84,10 @@ UpdateManager::~UpdateManager() {
     _index_cache.clear();
     _update_state_cache.clear();
     _compaction_cache.clear();
+}
+
+UpdateManager::PkIndexShard& UpdateManager::_get_pk_index_shard(int64_t tabletId) {
+    return _pk_index_shards[tabletId & (config::pk_index_map_shard_size - 1)];
 }
 
 inline std::string cache_key(uint32_t tablet_id, int64_t txn_id) {
