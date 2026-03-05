@@ -777,6 +777,13 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         } else if (Table.TableType.TABLE_FUNCTION.equals(node.getTable().getType())) {
             scanOperator = new LogicalTableFunctionTableScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                     columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
+        } else if (Table.TableType.ADBC.equals(node.getTable().getType())) {
+            // Phase 2 will implement LogicalADBCScanOperator.
+            // For Phase 1, throw a descriptive error if scan is attempted.
+            throw new StarRocksPlannerException(
+                    "Scanning ADBC tables is not yet implemented (Phase 2). " +
+                            "Table: " + node.getTable().getName(),
+                    ErrorType.UNSUPPORTED);
         } else {
             throw new StarRocksPlannerException("Not support table type: " + node.getTable().getType(),
                     ErrorType.UNSUPPORTED);
