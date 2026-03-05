@@ -235,9 +235,9 @@ public:
     std::string debug_string() const override {
         std::stringstream out;
         auto expr_debug_string = Expr::debug_string();
-        out << "VectorizedBinaryPredicate (" << "lhs=" << _children[0]->type().debug_string()
-            << ", rhs=" << _children[1]->type().debug_string() << ", result=" << this->type().debug_string()
-            << ", lhs_is_constant=" << _children[0]->is_constant()
+        out << "VectorizedBinaryPredicate ("
+            << "lhs=" << _children[0]->type().debug_string() << ", rhs=" << _children[1]->type().debug_string()
+            << ", result=" << this->type().debug_string() << ", lhs_is_constant=" << _children[0]->is_constant()
             << ", rhs_is_constant=" << _children[1]->is_constant() << ", expr (" << expr_debug_string << ") )";
         return out.str();
     }
@@ -493,9 +493,9 @@ public:
     std::string debug_string() const override {
         std::stringstream out;
         auto expr_debug_string = Expr::debug_string();
-        out << "VectorizedNullSafeEqPredicate (" << "lhs=" << _children[0]->type().debug_string()
-            << ", rhs=" << _children[1]->type().debug_string() << ", result=" << this->type().debug_string()
-            << ", lhs_is_constant=" << _children[0]->is_constant()
+        out << "VectorizedNullSafeEqPredicate ("
+            << "lhs=" << _children[0]->type().debug_string() << ", rhs=" << _children[1]->type().debug_string()
+            << ", result=" << this->type().debug_string() << ", lhs_is_constant=" << _children[0]->is_constant()
             << ", rhs_is_constant=" << _children[1]->is_constant() << ", expr (" << expr_debug_string << ") )";
         return out.str();
     }
@@ -577,7 +577,6 @@ Expr* VectorizedBinaryPredicateFactory::from_thrift(const TExprNode& node) {
     } else {
         return type_dispatch_predicate<Expr*>(type, true, BinaryPredicateBuilder(), node);
     }
-    return type_dispatch_predicate<Expr*>(type, true, BinaryPredicateBuilder(), node);
 }
 
 } // namespace starrocks
