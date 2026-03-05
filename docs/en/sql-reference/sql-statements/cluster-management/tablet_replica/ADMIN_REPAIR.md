@@ -10,8 +10,6 @@ For native tables in shared-nothing clusters, this statement attempts to priorit
 
 For cloud-native tables in shared-data clusters, it attempts to rollback to a historical available version when metadata or data files are lost. Please note that **this may result in the loss of the latest data for some tablets**.
 
-For detailed instructions, see [Manage Replica](../../../../administration/management/resource_management/Replica.md).
-
 :::tip
 
 This operation requires the SYSTEM-level OPERATE privilege. You can follow the instructions in [GRANT](../../account-management/GRANT.md) to grant this privilege.
