@@ -1041,10 +1041,16 @@ public class CatalogRecycleBinTest {
                     "Should be capped at configured max erase operations per cycle");
 
             // Change the config and verify the new value takes effect
-            Config.catalog_recycle_bin_erase_max_operations_per_cycle = batchSize + 5;
+            // Re-populate the recycle bin since pickTablesToErase removes non-retryable tables
+            int newBatchSize = batchSize + 5;
+            Config.catalog_recycle_bin_erase_max_operations_per_cycle = newBatchSize;
+            for (int i = 0; i < newBatchSize + 5; i++) {
+                Table t = new Table(100 + i, String.format("t%d", 100 + i), Table.TableType.VIEW, null);
+                recycleBin.recycleTable(10000L, t, true);
+            }
             recycleTableInfos = recycleBin.pickTablesToErase(
                     System.currentTimeMillis() + Config.catalog_trash_expire_second * 1000 + 1);
-            Assertions.assertEquals(batchSize + 5, recycleTableInfos.size(),
+            Assertions.assertEquals(newBatchSize, recycleTableInfos.size(),
                     "Should reflect dynamically updated config value");
         } finally {
             Config.catalog_recycle_bin_erase_max_operations_per_cycle = origMaxOps;
