@@ -16,7 +16,6 @@
 
 #include <future>
 
-#include "util/trace.h"
 #include "storage/chunk_helper.h"
 #include "storage/delete_predicates.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
@@ -34,6 +33,7 @@
 #include "storage/tablet_schema_map.h"
 #include "storage/union_iterator.h"
 #include "types/logical_type.h"
+#include "util/trace.h"
 
 namespace starrocks::lake {
 
