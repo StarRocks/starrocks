@@ -125,9 +125,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | OPT-02 | Phase 2 | Pending |
 | OPT-03 | Phase 2 | Pending |
 | OPT-04 | Phase 2 | Pending |
-| PART-01 | Phase 2 | Pending |
-| PART-02 | Phase 2 | Pending |
-| PART-03 | Phase 2 | Pending |
+| PART-01 | Phase 3 | Pending |
+| PART-02 | Phase 3 | Pending |
+| PART-03 | Phase 3 | Pending |
 | MV-01 | Phase 3 | Pending |
 | MV-02 | Phase 3 | Pending |
 | MV-03 | Phase 3 | Pending |
@@ -136,10 +136,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | STAT-02 | Phase 3 | Pending |
 
 **Coverage:**
-- v1 requirements: 36 total (note: original count of 27 was incorrect)
+- v1 requirements: 36 total
 - Mapped to phases: 36
 - Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-04*
-*Last updated: 2026-03-04 after roadmap creation — all 36 requirements mapped*
+*Last updated: 2026-03-06 — PART-01/02/03 moved from Phase 2 to Phase 3 per CONTEXT.md deferred decisions*
