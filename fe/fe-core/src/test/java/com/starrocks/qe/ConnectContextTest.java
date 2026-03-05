@@ -770,7 +770,7 @@ public class ConnectContextTest {
     @Test
     public void testChangeCatalogDb_followerThrowsWhenDbStillMissingAfterWait(
             @Mocked MetadataMgr metadataMgr,
-            @Mocked JournalObservable journalObservable) {
+            @Mocked JournalObservable journalObservable) throws Exception {
         new MockUp<LeaderOpExecutor>() {
             @Mock
             public static long fetchLeaderMaxJournalId(ConnectContext ctx) {
