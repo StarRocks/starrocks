@@ -201,6 +201,7 @@ enum ConnectorType {
     ICEBERG = 7,
     BENCHMARK = 8,
     CACHE_STATS = 9,
+    ADBC = 10,
 };
 
 class Connector {
@@ -216,6 +217,7 @@ public:
     static const std::string ICEBERG;
     static const std::string BENCHMARK;
     static const std::string CACHE_STATS;
+    static const std::string ADBC;
 
     virtual ~Connector() = default;
     // First version we use TPlanNode to construct data source provider.
