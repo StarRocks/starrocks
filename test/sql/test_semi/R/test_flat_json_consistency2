@@ -1,10 +1,15 @@
--- name: test_flat_json_consistency2
+-- name: test_flat_json_consistency2 @sequential
+update information_schema.be_configs set value = "true" where name= "enable_json_flat";
+-- result:
+-- !result
+update information_schema.be_configs set value = "0.3" where name= "json_flat_sparsity_factor";
+-- result:
+-- !result
 drop table if exists test_json;
 -- result:
 -- !result
 create table test_json (c1 int, c2 json)
-distributed by random buckets 1
-properties("flat_json.enable"="true");
+distributed by random buckets 1;
 -- result:
 -- !result
 insert into test_json values
@@ -25,8 +30,7 @@ drop table if exists test_json;
 -- result:
 -- !result
 create table test_json (c1 int, c2 json)
-distributed by random buckets 1
-properties("flat_json.enable"="true");
+distributed by random buckets 1;
 -- result:
 -- !result
 insert into test_json values
@@ -47,8 +51,7 @@ drop table if exists test_json;
 -- result:
 -- !result
 create table test_json (c1 int, c2 json)
-distributed by random buckets 1
-properties("flat_json.enable"="true");
+distributed by random buckets 1;
 -- result:
 -- !result
 insert into test_json values
@@ -69,8 +72,7 @@ drop table if exists test_json;
 -- result:
 -- !result
 create table test_json (c1 int, c2 json)
-distributed by random buckets 1
-properties("flat_json.enable"="true");
+distributed by random buckets 1;
 -- result:
 -- !result
 insert into test_json values
@@ -91,8 +93,7 @@ drop table if exists test_json;
 -- result:
 -- !result
 create table test_json (c1 int, c2 json)
-distributed by random buckets 1
-properties("flat_json.enable"="true");
+distributed by random buckets 1;
 -- result:
 -- !result
 insert into test_json values
@@ -113,8 +114,7 @@ drop table if exists test_json;
 -- result:
 -- !result
 create table test_json (c1 int, c2 json)
-distributed by random buckets 1
-properties("flat_json.enable"="true");
+distributed by random buckets 1;
 -- result:
 -- !result
 insert into test_json values
@@ -135,8 +135,7 @@ drop table if exists test_json;
 -- result:
 -- !result
 create table test_json (c1 int, c2 json)
-distributed by random buckets 1
-properties("flat_json.enable"="true");
+distributed by random buckets 1;
 -- result:
 -- !result
 insert into test_json values
@@ -157,8 +156,7 @@ drop table if exists test_json;
 -- result:
 -- !result
 create table test_json (c1 int, c2 json)
-distributed by random buckets 1
-properties("flat_json.enable"="true");
+distributed by random buckets 1;
 -- result:
 -- !result
 insert into test_json values
@@ -179,8 +177,7 @@ drop table if exists test_json;
 -- result:
 -- !result
 create table test_json (c1 int, c2 json)
-distributed by random buckets 1
-properties("flat_json.enable"="true");
+distributed by random buckets 1;
 -- result:
 -- !result
 insert into test_json values
@@ -201,8 +198,7 @@ drop table if exists test_json;
 -- result:
 -- !result
 create table test_json (c1 int, c2 json)
-distributed by random buckets 1
-properties("flat_json.enable"="true");
+distributed by random buckets 1;
 -- result:
 -- !result
 insert into test_json values
@@ -223,8 +219,7 @@ drop table if exists test_json;
 -- result:
 -- !result
 create table test_json (c1 int, c2 json)
-distributed by random buckets 1
-properties("flat_json.enable"="true");
+distributed by random buckets 1;
 -- result:
 -- !result
 insert into test_json values
@@ -245,8 +240,7 @@ drop table if exists test_json;
 -- result:
 -- !result
 create table test_json (c1 int, c2 json)
-distributed by random buckets 1
-properties("flat_json.enable"="true");
+distributed by random buckets 1;
 -- result:
 -- !result
 insert into test_json values
@@ -267,8 +261,7 @@ drop table if exists test_json;
 -- result:
 -- !result
 create table test_json (c1 int, c2 json)
-distributed by random buckets 1
-properties("flat_json.enable"="true");
+distributed by random buckets 1;
 -- result:
 -- !result
 insert into test_json values
@@ -289,8 +282,7 @@ drop table if exists test_json;
 -- result:
 -- !result
 create table test_json (c1 int, c2 json)
-distributed by random buckets 1
-properties("flat_json.enable"="true");
+distributed by random buckets 1;
 -- result:
 -- !result
 insert into test_json values
@@ -306,4 +298,10 @@ select * from test_json order by c1;
 select flat_json_meta(c2) from test_json [_META_];
 -- result:
 []
+-- !result
+update information_schema.be_configs set value = "false" where name= "enable_json_flat";
+-- result:
+-- !result
+update information_schema.be_configs set value = "0.9" where name= "json_flat_sparsity_factor";
+-- result:
 -- !result
