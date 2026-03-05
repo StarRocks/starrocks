@@ -24,12 +24,8 @@
 #include "formats/orc/orc_file_writer.h"
 #include "formats/parquet/parquet_file_writer.h"
 #include "formats/utils.h"
-<<<<<<< HEAD
 #include "util/compression/compression_utils.h"
 #include "util/url_coding.h"
-=======
-#include "fs/fs_factory.h"
->>>>>>> 85a2748cd8 ([BugFix] Fix duplicated CSV compression suffix in file sink output names (#69749))
 #include "utils.h"
 
 namespace starrocks::connector {
@@ -63,36 +59,19 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> FileChunkSinkProvider::create_chun
     auto location_provider = std::make_unique<connector::LocationProvider>(
             ctx->path, print_id(ctx->fragment_context->query_id()), runtime_state->be_number(), driver_id, file_suffix);
 
-<<<<<<< HEAD
     std::unique_ptr<formats::FileWriterFactory> file_writer_factory;
-    if (boost::iequals(ctx->format, formats::PARQUET)) {
+    if (normalized_format == formats::PARQUET) {
         file_writer_factory = std::make_unique<formats::ParquetFileWriterFactory>(
                 std::move(fs), ctx->compression_type, ctx->options, ctx->column_names, std::move(column_evaluators),
                 std::nullopt, ctx->executor, runtime_state);
-    } else if (boost::iequals(ctx->format, formats::ORC)) {
+    } else if (normalized_format == formats::ORC) {
         file_writer_factory = std::make_unique<formats::ORCFileWriterFactory>(
                 std::move(fs), ctx->compression_type, ctx->options, ctx->column_names, std::move(column_evaluators),
                 ctx->executor, runtime_state);
-    } else if (boost::iequals(ctx->format, formats::CSV)) {
+    } else if (normalized_format == formats::CSV) {
         file_writer_factory = std::make_unique<formats::CSVFileWriterFactory>(
                 std::move(fs), ctx->compression_type, ctx->options, ctx->column_names, std::move(column_evaluators),
                 ctx->executor, runtime_state);
-=======
-    std::shared_ptr<formats::FileWriterFactory> file_writer_factory;
-    if (normalized_format == formats::PARQUET) {
-        file_writer_factory = std::make_shared<formats::ParquetFileWriterFactory>(
-                fs, ctx->compression_type, ctx->options, ctx->column_names,
-                std::make_shared<std::vector<std::unique_ptr<ColumnEvaluator>>>(std::move(column_evaluators)),
-                std::nullopt, ctx->executor, runtime_state);
-    } else if (normalized_format == formats::ORC) {
-        file_writer_factory = std::make_shared<formats::ORCFileWriterFactory>(
-                fs, ctx->compression_type, ctx->options, ctx->column_names, std::move(column_evaluators), ctx->executor,
-                runtime_state);
-    } else if (normalized_format == formats::CSV) {
-        file_writer_factory = std::make_shared<formats::CSVFileWriterFactory>(
-                fs, ctx->compression_type, ctx->options, ctx->column_names, std::move(column_evaluators), ctx->executor,
-                runtime_state);
->>>>>>> 85a2748cd8 ([BugFix] Fix duplicated CSV compression suffix in file sink output names (#69749))
     } else {
         file_writer_factory = std::make_unique<formats::UnknownFileWriterFactory>(ctx->format);
     }

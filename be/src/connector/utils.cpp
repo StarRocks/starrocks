@@ -14,25 +14,14 @@
 
 #include "connector/utils.h"
 
-<<<<<<< HEAD
-=======
 #include <boost/algorithm/string.hpp>
 
-#include "arrow/util/decimal.h"
-#include "base/url_coding.h"
-#include "base/utility/integer_util.h"
-#include "column/chunk_extra_data.h"
->>>>>>> 85a2748cd8 ([BugFix] Fix duplicated CSV compression suffix in file sink output names (#69749))
 #include "column/column.h"
 #include "column/datum.h"
 #include "exprs/expr.h"
 #include "formats/parquet/parquet_file_writer.h"
-<<<<<<< HEAD
-#include "util/url_coding.h"
-=======
-#include "types/datum.h"
 #include "util/compression/compression_utils.h"
->>>>>>> 85a2748cd8 ([BugFix] Fix duplicated CSV compression suffix in file sink output names (#69749))
+#include "util/url_coding.h"
 
 namespace starrocks::connector {
 
