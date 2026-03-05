@@ -51,7 +51,7 @@ Plans:
 Plans:
 - [x] 02-01-PLAN.md — Thrift IDL additions + FE optimizer scaffolding (SCAN-01, OPT-01, OPT-02)
 - [x] 02-02-PLAN.md — BE native C++ ADBC connector and scanner (SCAN-02, SCAN-03, SCAN-07)
-- [ ] 02-03-PLAN.md — ADBCScanNode SQL generation + PlanFragmentBuilder + RelationTransformer wiring (OPT-03, OPT-04, SCAN-04, SCAN-05, SCAN-06)
+- [x] 02-03-PLAN.md — ADBCScanNode SQL generation + PlanFragmentBuilder + RelationTransformer wiring (OPT-03, OPT-04, SCAN-04, SCAN-05, SCAN-06)
 - [ ] 02-04-PLAN.md — BE wiring (exec_factory, connector registration) + full build verification (SCAN-02, SCAN-03, SCAN-04, SCAN-05, SCAN-06, SCAN-07)
 
 ### Phase 3: JDBC Parity

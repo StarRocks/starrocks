@@ -10,29 +10,29 @@ See: .planning/PROJECT.md (updated 2026-03-04)
 ## Current Position
 
 Phase: 2 of 3 (Scanning)
-Plan: 3 of 4 in current phase
+Plan: 4 of 4 in current phase
 Status: Executing Phase 2
-Last activity: 2026-03-06 — Completed 02-01 (Thrift IDL + FE optimizer scaffolding)
+Last activity: 2026-03-06 — Completed 02-03 (ADBCScanNode SQL generation + FE data path wiring)
 
-Progress: [████████░░] 80% (8/9 plans)
+Progress: [█████████░] 90% (9/10 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 8
-- Average duration: 22 min
-- Total execution time: 2.8 hours
+- Total plans completed: 9
+- Average duration: 21 min
+- Total execution time: 2.9 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-foundation | 5 | 141 min | 28 min |
-| 02-scanning | 3 | 27 min | 9 min |
+| 02-scanning | 4 | 35 min | 9 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-04 (53 min), 01-05 (13 min), 02-01 (14 min), 02-02 (5 min), 02-01 (8 min)
-- Trend: Phase 2 executing well; FE optimizer scaffolding fast
+- Last 5 plans: 01-05 (13 min), 02-01 (14 min), 02-02 (5 min), 02-01 (8 min), 02-03 (8 min)
+- Trend: Phase 2 executing well; consistent 8-9 min per plan
 
 *Updated after each plan completion*
 
@@ -50,7 +50,7 @@ Recent decisions affecting current work:
 - Build: ADBC Java 0.19.0 matches Arrow 18.0.0; ADBC C++ 1.1.0 for BE thirdparty
 - Build: CMAKE_INSTALL_LIBDIR=lib64 needed for ADBC C++ to match StarRocks layout
 - Connector: ADBCSchemaResolver uses Arrow vector types (Field, Schema) not Flight SQL types for broader driver compatibility
-- Connector: ADBCTable.toThrift() returns null stub until TTableType.ADBC_TABLE added to Thrift IDL
+- Connector: ADBCTable.toThrift() returns TTableDescriptor with TTableType.ADBC_TABLE and TADBCTable
 - Type mapping: Concrete type classes (IntegerType, FloatType, etc.) used instead of ScalarType factory methods
 - Type mapping: Unsigned ints promoted to next-wider signed type (uint8->SMALLINT, uint64->LARGEINT)
 - Metadata: ADBCMetadata opens new AdbcConnection per operation via try-with-resources (not shared across threads)
@@ -58,12 +58,15 @@ Recent decisions affecting current work:
 - Metadata: Unknown adbc.driver values fall back to FlightSQLSchemaResolver with warning (not error)
 - Cache: ADBCMetaCache mirrors JDBCMetaCache with adbc_ property keys (adbc_meta_cache_enable, adbc_meta_cache_expire_sec)
 - SQL analysis: ADBC guards mirror JDBC pattern in AstToStringBuilder, MaterializedViewAnalyzer, DesensitizedSQLBuilder, RelationTransformer
-- Scan operator: RelationTransformer throws UNSUPPORTED for ADBC scan attempts; LogicalADBCScanOperator deferred to Phase 2
+- Scan operator: RelationTransformer creates LogicalADBCScanOperator for ADBC tables (Phase 2 stub replaced)
 - Thrift IDL: TADBCScanNode field 85 in TPlanNode, TADBCTable field 37 in TTableDescriptor
 - Optimizer: ADBC scan operators mirror JDBC pattern exactly for all visitor/rule/pattern registrations
 - BE Scanner: RETURN_ADBC_NOT_OK macro for C API error handling; round-robin partition assignment; RecordBatchQueue capacity 16
 - BE Scanner: Max 4 parallel reader threads; get_adbc_sql() as free function for testability
 - BE Scanner: ADBCConnector/ADBCDataSourceProvider/ADBCDataSource mirror JDBC connector pattern exactly
+- Scan Node: ADBCScanNode mirrors JDBCScanNode for SQL generation, filter pushdown, EXPLAIN output
+- Scan Node: Default identifier quote is double-quote (standard SQL), configurable via adbc.identifier.quote
+- Scan Node: Driver name mapping: flight_sql -> adbc_driver_flightsql; custom names pass through
 
 ### Pending Todos
 
@@ -77,5 +80,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-06
-Stopped at: Completed 02-01-PLAN.md (Thrift IDL + FE optimizer scaffolding)
+Stopped at: Completed 02-03-PLAN.md (ADBCScanNode SQL generation + FE data path wiring)
 Resume file: None
