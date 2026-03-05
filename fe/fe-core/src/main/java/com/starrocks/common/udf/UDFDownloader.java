@@ -42,7 +42,7 @@ public class UDFDownloader {
         synchronized (getLockForPath(localPath)) {
             setUpLocalPath(localPath);
             Status status = doDownload(sv, remotePath, localPath);
-            if (status.ok()) {
+            if (!status.ok()) {
                 LOG.error(status.getErrorMsg());
                 throw new RuntimeException(status.getErrorMsg());
             }
