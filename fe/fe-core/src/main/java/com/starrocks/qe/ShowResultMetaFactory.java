@@ -41,6 +41,7 @@ import com.starrocks.epack.sql.ast.ShowFailoverGroupsStmt;
 import com.starrocks.epack.sql.ast.ShowPasswordPolicyStmt;
 import com.starrocks.epack.sql.ast.ShowPolicyStmt;
 import com.starrocks.epack.sql.ast.ShowRoleMappingStatement;
+import com.starrocks.sql.ast.AdminRepairTableStmt;
 import com.starrocks.sql.ast.AdminShowAutomatedSnapshotStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
@@ -142,6 +143,7 @@ import com.starrocks.type.BooleanType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.StringType;
 import com.starrocks.type.TypeFactory;
 
 import java.util.List;
@@ -412,7 +414,18 @@ public class ShowResultMetaFactory implements AstVisitorEPack<ShowResultSetMetaD
                 .addColumn(new Column("Version", TypeFactory.createVarcharType(30)))
                 .addColumn(new Column("Status", TypeFactory.createVarcharType(30)))
                 .addColumn(new Column("MissingDataFileCount", TypeFactory.createVarcharType(30)))
-                .addColumn(new Column("MissingDataFiles", TypeFactory.createVarcharType(65535)))
+                .addColumn(new Column("MissingDataFiles", StringType.STRING))
+                .build();
+    }
+
+    @Override
+    public ShowResultSetMetaData visitAdminRepairTableStatement(AdminRepairTableStmt statement, Void context) {
+        return ShowResultSetMetaData.builder()
+                .addColumn(new Column("PartitionId", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("VisibleVersion", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("RepairStatus", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("TabletRecoverInfo", StringType.STRING))
+                .addColumn(new Column("ErrorMsg", StringType.STRING))
                 .build();
     }
 
