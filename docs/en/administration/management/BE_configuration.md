@@ -2883,6 +2883,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The expiration time of Update Cache.
 - Introduced in: -
 
+##### update_compaction_candidates_per_thread
+
+- Default: 32
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The number of cached update compaction candidates per thread per DataDir for Primary Key table update compaction. The actual top-N candidates cached per DataDir equals this value multiplied by `update_compaction_num_threads_per_disk`. A single background scan selects the top-N tablets by compaction score for each DataDir. Per-DataDir compaction threads then consume from this cached list, avoiding redundant full tablet scans.
+- Introduced in: v4.1.0, v4.0.9
+
 ##### update_compaction_check_interval_seconds
 
 - Default: 10
