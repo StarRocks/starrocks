@@ -144,6 +144,15 @@ public class AnalyzeFunctionTest {
     }
 
     @Test
+    public void testApproxCountDistinctWithVarbinary() {
+        analyzeSuccess("select approx_count_distinct(v_varbinary) from tbinary");
+        analyzeSuccess("select ndv(v_varbinary) from tbinary");
+        analyzeSuccess("select ds_hll_count_distinct(v_varbinary) from tbinary");
+        analyzeSuccess("select ds_theta_count_distinct(v_varbinary) from tbinary");
+        analyzeSuccess("select count(distinct v_varbinary) from tbinary");
+    }
+
+    @Test
     public void testMatrixTypeCast() {
         analyzeFail("select trim(b1) from test_object");
         analyzeFail("select trim(h1) from test_object");

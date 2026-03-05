@@ -242,7 +242,7 @@ struct AdaptiveSliceHashSet {
 };
 
 template <LogicalType LT, LogicalType SumLT>
-struct DistinctAggregateState<LT, SumLT, StringLTGuard<LT>> {
+struct DistinctAggregateState<LT, SumLT, StringOrBinaryGuard<LT>> {
     DistinctAggregateState() = default;
     using KeyType = typename SliceHashSet::key_type;
 
@@ -352,7 +352,7 @@ struct DistinctAggregateStateV2<LT, SumLT, FixedLengthLTGuard<LT>> {
 };
 
 template <LogicalType LT, LogicalType SumLT>
-struct DistinctAggregateStateV2<LT, SumLT, StringLTGuard<LT>> : public DistinctAggregateState<LT, SumLT> {};
+struct DistinctAggregateStateV2<LT, SumLT, StringOrBinaryGuard<LT>> : public DistinctAggregateState<LT, SumLT> {};
 
 // Dear god this template class as template parameter kills me!
 template <LogicalType LT, LogicalType SumLT,
