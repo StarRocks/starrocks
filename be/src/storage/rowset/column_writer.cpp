@@ -68,6 +68,8 @@
 
 namespace starrocks {
 
+ColumnWriterOptions::ColumnWriterOptions() : data_page_size(config::data_page_size) {}
+
 #define INDEX_ADD_VALUES(index, data, size) \
     do {                                    \
         if (index != nullptr) {             \
