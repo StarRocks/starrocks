@@ -17,7 +17,9 @@ package com.starrocks.catalog;
 import com.google.common.base.Strings;
 import com.google.common.collect.Sets;
 import com.starrocks.planner.DescriptorTable;
+import com.starrocks.thrift.TADBCTable;
 import com.starrocks.thrift.TTableDescriptor;
+import com.starrocks.thrift.TTableType;
 
 import java.util.List;
 import java.util.Map;
@@ -71,8 +73,32 @@ public class ADBCTable extends Table {
 
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
-        // TODO: Implement when TTableType.ADBC_TABLE is added to the Thrift IDL (Plan 04+)
-        return null;
+        TADBCTable tADBCTable = new TADBCTable();
+        if (properties != null) {
+            tADBCTable.setAdbc_driver(properties.get("adbc.driver"));
+            String uri = properties.getOrDefault("adbc.url", properties.get("uri"));
+            if (uri != null) {
+                tADBCTable.setAdbc_uri(uri);
+            }
+            String username = properties.getOrDefault("adbc.username", properties.get("username"));
+            if (username != null) {
+                tADBCTable.setAdbc_username(username);
+            }
+            String password = properties.getOrDefault("adbc.password", properties.get("password"));
+            if (password != null) {
+                tADBCTable.setAdbc_password(password);
+            }
+            String token = properties.getOrDefault("adbc.token", properties.get("token"));
+            if (token != null) {
+                tADBCTable.setAdbc_token(token);
+            }
+        }
+        tADBCTable.setCatalog_name(catalogName);
+
+        TTableDescriptor tTableDescriptor = new TTableDescriptor(getId(), TTableType.ADBC_TABLE,
+                fullSchema.size(), 0, getName(), "");
+        tTableDescriptor.setAdbcTable(tADBCTable);
+        return tTableDescriptor;
     }
 
     @Override

@@ -102,6 +102,7 @@ import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAssertOneRowOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalADBCScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalBenchmarkScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
@@ -778,12 +779,10 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
             scanOperator = new LogicalTableFunctionTableScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                     columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
         } else if (Table.TableType.ADBC.equals(node.getTable().getType())) {
-            // Phase 2 will implement LogicalADBCScanOperator.
-            // For Phase 1, throw a descriptive error if scan is attempted.
-            throw new StarRocksPlannerException(
-                    "Scanning ADBC tables is not yet implemented (Phase 2). " +
-                            "Table: " + node.getTable().getName(),
-                    ErrorType.UNSUPPORTED);
+            scanOperator =
+                    new LogicalADBCScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
+                            columnMetaToColRefMap, Operator.DEFAULT_LIMIT,
+                            null, null);
         } else {
             throw new StarRocksPlannerException("Not support table type: " + node.getTable().getType(),
                     ErrorType.UNSUPPORTED);
