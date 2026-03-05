@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-03-04)
 ## Current Position
 
 Phase: 1 of 3 (Foundation)
-Plan: 1 of 5 in current phase
+Plan: 2 of 5 in current phase
 Status: Executing
-Last activity: 2026-03-05 — Completed 01-01 (FE Maven + BE thirdparty ADBC build deps)
+Last activity: 2026-03-05 — Completed 01-02 (Connector skeleton: ConnectorType, ADBCConnector, ADBCTable, ADBCSchemaResolver)
 
-Progress: [██░░░░░░░░] 20%
+Progress: [████░░░░░░] 40%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1
-- Average duration: 6 min
-- Total execution time: 0.1 hours
+- Total plans completed: 2
+- Average duration: 22 min
+- Total execution time: 0.7 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01-foundation | 1 | 6 min | 6 min |
+| 01-foundation | 2 | 43 min | 22 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (6 min)
-- Trend: n/a (1 data point)
+- Last 5 plans: 01-01 (6 min), 01-02 (37 min)
+- Trend: n/a (2 data points)
 
 *Updated after each plan completion*
 
@@ -48,6 +48,9 @@ Recent decisions affecting current work:
 - Data path: Arrow RecordBatch -> StarRocks Chunk direct conversion in C++ (zero-copy where possible)
 - Build: ADBC Java 0.19.0 matches Arrow 18.0.0; ADBC C++ 1.1.0 for BE thirdparty
 - Build: CMAKE_INSTALL_LIBDIR=lib64 needed for ADBC C++ to match StarRocks layout
+- Connector: ADBCSchemaResolver uses Arrow vector types (Field, Schema) not Flight SQL types for broader driver compatibility
+- Connector: ADBCTable.toThrift() returns null stub until TTableType.ADBC_TABLE added to Thrift IDL
+- Connector: ADBCMetadata is a minimal stub; Plan 04 replaces with real ADBC API calls
 
 ### Pending Todos
 
@@ -61,5 +64,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-05
-Stopped at: Completed 01-01-PLAN.md (build deps)
+Stopped at: Completed 01-02-PLAN.md (connector skeleton)
 Resume file: None

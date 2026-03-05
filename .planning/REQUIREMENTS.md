@@ -7,11 +7,11 @@
 
 ### Catalog Infrastructure
 
-- [ ] **CAT-01**: User can CREATE CATALOG with type='adbc' and driver/connection properties
-- [ ] **CAT-02**: User can DROP CATALOG to remove an ADBC catalog
+- [x] **CAT-01**: User can CREATE CATALOG with type='adbc' and driver/connection properties
+- [x] **CAT-02**: User can DROP CATALOG to remove an ADBC catalog
 - [ ] **CAT-03**: User can ALTER CATALOG to update ADBC catalog properties
-- [ ] **CAT-04**: ADBC catalog accepts `adbc.driver` property to select driver (flight_sql initially)
-- [ ] **CAT-05**: ADBC catalog accepts connection properties (uri, user, password, driver-specific options)
+- [x] **CAT-04**: ADBC catalog accepts `adbc.driver` property to select driver (flight_sql initially)
+- [x] **CAT-05**: ADBC catalog accepts connection properties (uri, user, password, driver-specific options)
 - [ ] **CAT-06**: User can SHOW DATABASES to list remote schemas/databases
 - [ ] **CAT-07**: User can SHOW TABLES to list remote tables in a database
 - [ ] **CAT-08**: User can DESCRIBE table to see column metadata with StarRocks types
@@ -30,7 +30,7 @@
 ### Type System
 
 - [ ] **TYPE-01**: Arrow types map to StarRocks types (int8-64, float/double, decimal, utf8, binary, date32, timestamp, boolean)
-- [ ] **TYPE-02**: Schema resolver abstraction supports per-driver type mapping overrides
+- [x] **TYPE-02**: Schema resolver abstraction supports per-driver type mapping overrides
 - [ ] **TYPE-03**: FlightSQL schema resolver handles Arrow Flight SQL specific type conventions
 - [ ] **TYPE-04**: Unsupported Arrow types are gracefully handled (logged warning, column excluded or mapped to VARCHAR)
 
@@ -101,17 +101,17 @@ Which phases cover which requirements. Updated during roadmap creation.
 | BUILD-01 | Phase 1 | Complete |
 | BUILD-02 | Phase 1 | Complete |
 | BUILD-03 | Phase 1 | Complete |
-| CAT-01 | Phase 1 | Pending |
-| CAT-02 | Phase 1 | Pending |
+| CAT-01 | Phase 1 | Complete |
+| CAT-02 | Phase 1 | Complete |
 | CAT-03 | Phase 1 | Pending |
-| CAT-04 | Phase 1 | Pending |
-| CAT-05 | Phase 1 | Pending |
+| CAT-04 | Phase 1 | Complete |
+| CAT-05 | Phase 1 | Complete |
 | CAT-06 | Phase 1 | Pending |
 | CAT-07 | Phase 1 | Pending |
 | CAT-08 | Phase 1 | Pending |
 | CAT-09 | Phase 1 | Pending |
 | TYPE-01 | Phase 1 | Pending |
-| TYPE-02 | Phase 1 | Pending |
+| TYPE-02 | Phase 1 | Complete |
 | TYPE-03 | Phase 1 | Pending |
 | TYPE-04 | Phase 1 | Pending |
 | SCAN-01 | Phase 2 | Pending |
