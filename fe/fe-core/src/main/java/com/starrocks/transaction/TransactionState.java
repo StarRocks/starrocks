@@ -274,6 +274,8 @@ public class TransactionState implements Writable, GsonPreProcessable {
     private boolean hasSendTask;
     private long publishVersionTime = -1;
     private long publishVersionFinishTime = -1;
+    // The time when canTxnFinish() first returns true. -1 means unset.
+    private volatile long readyToFinishTime = -1;
 
     // The time of first commit attempt, i.e, the end time when ingestion write is completed.
     // Measured in milliseconds since epoch.
@@ -582,6 +584,26 @@ public class TransactionState implements Writable, GsonPreProcessable {
 
     public long getPublishVersionFinishTime() {
         return this.publishVersionFinishTime;
+    }
+
+    public long getReadyToFinishTime() {
+        return this.readyToFinishTime;
+    }
+
+    public void setReadyToFinishTimeIfUnset() {
+        setReadyToFinishTimeIfUnset(System.currentTimeMillis());
+    }
+
+    /**
+     * Sets readyToFinishTime to the given {@code timestamp} if it has not been set yet.
+     * Use this overload when the logical "ready" moment already has a known timestamp
+     * (e.g. {@code publishVersionFinishTime}) to avoid capturing the current daemon-loop
+     * iteration time, which would inflate publishCanFinishLatencyMs.
+     */
+    public void setReadyToFinishTimeIfUnset(long timestamp) {
+        if (this.readyToFinishTime == -1) {
+            this.readyToFinishTime = timestamp;
+        }
     }
 
     public boolean hasSendTask() {
@@ -974,7 +996,12 @@ public class TransactionState implements Writable, GsonPreProcessable {
             if (publishVersionFinishTime > publishVersionTime) {
                 sb.append(", publish rpc cost: ").append(publishVersionFinishTime - publishVersionTime).append("ms");
             }
-            if (finishTime > publishVersionFinishTime) {
+            if (readyToFinishTime != -1 && readyToFinishTime > publishVersionFinishTime) {
+                sb.append(", publish can finish cost: ").append(readyToFinishTime - publishVersionFinishTime).append("ms");
+            }
+            if (readyToFinishTime != -1 && finishTime > readyToFinishTime) {
+                sb.append(", publish ack cost: ").append(finishTime - readyToFinishTime).append("ms");
+            } else if (finishTime > publishVersionFinishTime) {
                 sb.append(", finish txn cost: ").append(finishTime - publishVersionFinishTime).append("ms");
             }
         }
@@ -1160,6 +1187,7 @@ public class TransactionState implements Writable, GsonPreProcessable {
         boolean ret = finishChecker.finished(finishState);
         if (ret) {
             txnSpan.addEvent("check_ok");
+            setReadyToFinishTimeIfUnset();
         }
         return ret;
     }
