@@ -51,8 +51,7 @@ TEST_F(SchemaBeTabletWriteLogScannerTest, test_normal) {
     mgr->cleanup_old_logs(std::numeric_limits<int64_t>::max());
 
     // Add logs (with SST stats)
-    mgr->add_load_log(1001, 100, 30, 10, 20, 100, 1000, 100, 2000, 5, "label1", 1686000000000, 1686000010000, 2,
-                      8192);
+    mgr->add_load_log(1001, 100, 30, 10, 20, 100, 1000, 100, 2000, 5, "label1", 1686000000000, 1686000010000, 2, 8192);
     mgr->add_compaction_log(1001, 200, 31, 11, 21, 200, 2000, 150, 1500, 10, 5, 80, "base", 1686000020000,
                             1686000030000, 3, 12288, 1, 4096);
 
@@ -99,8 +98,7 @@ TEST_F(SchemaBeTabletWriteLogScannerTest, test_sst_columns_with_values) {
     mgr->cleanup_old_logs(std::numeric_limits<int64_t>::max());
 
     // Load with SST output stats
-    mgr->add_load_log(1001, 100, 30, 10, 20, 100, 1000, 100, 2000, 5, "label1", 1686000000000, 1686000010000, 2,
-                      8192);
+    mgr->add_load_log(1001, 100, 30, 10, 20, 100, 1000, 100, 2000, 5, "label1", 1686000000000, 1686000010000, 2, 8192);
     // Compaction with both SST input and output stats
     mgr->add_compaction_log(1001, 200, 31, 11, 21, 200, 2000, 150, 1500, 10, 5, 80, "base", 1686000020000,
                             1686000030000, 3, 12288, 1, 4096);
@@ -153,8 +151,7 @@ TEST_F(SchemaBeTabletWriteLogScannerTest, test_sst_columns_null_when_zero) {
     mgr->cleanup_old_logs(std::numeric_limits<int64_t>::max());
 
     // Load without SST stats (non-PK table)
-    mgr->add_load_log(1001, 100, 30, 10, 20, 100, 1000, 100, 2000, 5, "label_no_sst", 1686000000000,
-                      1686000010000);
+    mgr->add_load_log(1001, 100, 30, 10, 20, 100, 1000, 100, 2000, 5, "label_no_sst", 1686000000000, 1686000010000);
 
     EXPECT_OK(scanner.init(&params, &pool));
     EXPECT_OK(scanner.start(&state));
@@ -213,8 +210,8 @@ TEST_F(SchemaBeTabletWriteLogScannerTest, test_publish_log_type) {
     EXPECT_EQ(3, chunk->get_column_by_index(19)->get(0).get_int32());
     EXPECT_EQ(12288, chunk->get_column_by_index(20)->get(0).get_int64());
     // SST input = NULL (no input for publish)
-    EXPECT_TRUE(chunk->get_column_by_index(17)->is_null(0));  // SST_INPUT_FILES
-    EXPECT_TRUE(chunk->get_column_by_index(18)->is_null(0));  // SST_INPUT_BYTES
+    EXPECT_TRUE(chunk->get_column_by_index(17)->is_null(0)); // SST_INPUT_FILES
+    EXPECT_TRUE(chunk->get_column_by_index(18)->is_null(0)); // SST_INPUT_BYTES
 }
 
 TEST_F(SchemaBeTabletWriteLogScannerTest, test_mixed_log_types) {
@@ -231,8 +228,7 @@ TEST_F(SchemaBeTabletWriteLogScannerTest, test_mixed_log_types) {
     mgr->cleanup_old_logs(std::numeric_limits<int64_t>::max());
 
     // All three log types
-    mgr->add_load_log(1001, 100, 30, 10, 20, 100, 1000, 100, 2000, 5, "label1", 1686000000000, 1686000010000, 2,
-                      8192);
+    mgr->add_load_log(1001, 100, 30, 10, 20, 100, 1000, 100, 2000, 5, "label1", 1686000000000, 1686000010000, 2, 8192);
     mgr->add_compaction_log(1001, 200, 31, 11, 21, 200, 2000, 150, 1500, 10, 5, 80, "base", 1686000020000,
                             1686000030000, 3, 12288, 1, 4096);
     mgr->add_publish_log(1001, 300, 32, 12, 22, 1686000040000, 1686000050000, 4, 16384);
