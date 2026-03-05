@@ -1850,6 +1850,12 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 ### Transaction Latency Metrics
 
+#### starrocks_fe_publish_version_daemon_loop_total
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of `publish-version-daemon` loop runs on this FE node.
+
 The following metrics are `summary`-type metrics that provide latency distributions for different phases of a transaction. These metrics are reported exclusively by the Leader FE node.
 
 Each metric includes the following outputs:
@@ -1877,7 +1883,7 @@ All transaction metrics share the following labels:
 
 - Unit: ms
 - Type: Summary
-- Description: The latency of the `publish` phase, from `commit` time to `finish` time. This is the duration it takes for a committed transaction to become visible to queries. It is the sum of the `schedule`, `execute`, and `ack` sub-phases.
+- Description: The latency of the `publish` phase, from `commit` time to `finish` time. This is the duration it takes for a committed transaction to become visible to queries. It is the sum of the `schedule`, `execute`, `can_finish`, and `ack` sub-phases.
 
 #### starrocks_fe_txn_publish_schedule_latency_ms
 
@@ -1891,11 +1897,17 @@ All transaction metrics share the following labels:
 - Type: Summary
 - Description: The active execution time of the `publish` task, from when the task is picked up to when it finishes. This metric represents the actual time being spent to make the transaction's changes visible.
 
+#### starrocks_fe_txn_publish_can_finish_latency_ms
+
+- Unit: ms
+- Type: Summary
+- Description: The latency from `publish` task completion to the moment `canTxnFinish()` first returns true, measured from `publish version finish` time to `ready-to-finish` time.
+
 #### starrocks_fe_txn_publish_ack_latency_ms
 
 - Unit: ms
 - Type: Summary
-- Description: The final acknowledgment latency, from when the `publish` task finishes to the final `finish` time when the transaction is marked as `VISIBLE`. This metric includes any final steps or acknowledgments required.
+- Description: The final acknowledgment latency, from `ready-to-finish` time to the final `finish` time when the transaction is marked as `VISIBLE`. This metric includes final acknowledgment steps after the transaction is ready to finish.
 
 ### Merge Commit BE Metrics
 

@@ -1093,6 +1093,7 @@ public class DatabaseTransactionMgr {
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.READ);
         }
+        txn.setReadyToFinishTimeIfUnset();
         return true;
     }
 
