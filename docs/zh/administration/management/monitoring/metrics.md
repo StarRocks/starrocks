@@ -1805,6 +1805,12 @@ displayed_sidebar: docs
 
 ### 事务延迟指标
 
+#### starrocks_fe_publish_version_daemon_loop_total
+
+- 单位：个
+- 类型：累积值
+- 描述：该 FE 节点上 `publish-version-daemon` 循环执行的总次数。
+
 以下 `summary` 类型的指标提供了事务不同阶段的延迟分布。这些指标仅由 Leader FE 节点上报。
 
 每个指标都包含以下输出：
@@ -1834,7 +1840,7 @@ displayed_sidebar: docs
 
 - 单位：毫秒
 - 类型：Summary
-- 描述：事务在 `publish` 阶段的总延迟，从 `commit` 时间到 `finish` 时间。这是已提交的事务对查询可见所需的时间。此指标是 `schedule`、`execute` 和 `ack` 三个子阶段的总和。
+- 描述：事务在 `publish` 阶段的总延迟，从 `commit` 时间到 `finish` 时间。这是已提交的事务对查询可见所需的时间。此指标是 `schedule`、`execute`、`can_finish` 和 `ack` 四个子阶段的总和。
 
 #### starrocks_fe_txn_publish_schedule_latency_ms
 
@@ -1848,11 +1854,17 @@ displayed_sidebar: docs
 - 类型：Summary
 - 描述：事务 Publish 任务的活动执行时间，从任务被执行到完成，代表了用于使事务的更改变为可见而实际花费的时间。
 
+#### starrocks_fe_txn_publish_can_finish_latency_ms
+
+- 单位：毫秒
+- 类型：Summary
+- 描述：从 `publish` 任务完成到 `canTxnFinish()` 首次返回 true 的延迟，即从 `publish version finish` 到 `ready-to-finish` 的耗时。
+
 #### starrocks_fe_txn_publish_ack_latency_ms
 
 - 单位：毫秒
 - 类型：Summary
-- 描述：事务最终确认的延迟，从发布任务完成到事务被标记为 `VISIBLE` 的最终 `finish` 时间。这包括任何最终步骤或所需的确认。
+- 描述：事务最终确认的延迟，从 `ready-to-finish` 到事务被标记为 `VISIBLE` 的最终 `finish` 时间。这包括事务进入可完成状态后的最终确认步骤。
 
 ### Merge Commit 指标
 

@@ -97,20 +97,20 @@ public class TransactionMetricRegistryTest {
         TransactionMetricRegistry registry = newRegistry();
         // no specific groups enabled
         setReportGroups(registry, "");
-        setupVisibleTxn(t1, TransactionState.LoadJobSourceType.INSERT_STREAMING, 10, 20, 30, 40, 50);
+        setupVisibleTxn(t1, TransactionState.LoadJobSourceType.INSERT_STREAMING, 10, 20, 30, 40, 45, 50);
         registry.update(t1);
         String outA = renderReport(registry);
         Assertions.assertEquals(1, extractCount(outA, "txn_total_latency_ms", "all", true));
         // specific group enabled and updated
         setReportGroups(registry, "stream_load");
-        setupVisibleTxn(t2, TransactionState.LoadJobSourceType.BACKEND_STREAMING, 11, 21, 31, 41, 51);
+        setupVisibleTxn(t2, TransactionState.LoadJobSourceType.BACKEND_STREAMING, 11, 21, 31, 41, 46, 51);
         registry.update(t2);
         String outB = renderReport(registry);
         Assertions.assertEquals(2, extractCount(outB, "txn_total_latency_ms", "all", true));
         Assertions.assertEquals(1, extractCount(outB, "txn_total_latency_ms", "stream_load", true));
         // disable group; updates should not create stream_load reporting
         setReportGroups(registry, "");
-        setupVisibleTxn(t3, TransactionState.LoadJobSourceType.BACKEND_STREAMING, 12, 22, 32, 42, 52);
+        setupVisibleTxn(t3, TransactionState.LoadJobSourceType.BACKEND_STREAMING, 12, 22, 32, 42, 47, 52);
         registry.update(t3);
         String outC = renderReport(registry);
         Assertions.assertEquals(3, extractCount(outC, "txn_total_latency_ms", "all", true));
@@ -130,9 +130,15 @@ public class TransactionMetricRegistryTest {
         TransactionMetricRegistry registry = newRegistry();
         // stream_load accumulates across three source types
         setReportGroups(registry, "stream_load");
+<<<<<<< HEAD
         setupVisibleTxn(s1, TransactionState.LoadJobSourceType.BACKEND_STREAMING, 10, 20, 30, 40, 50);
         setupVisibleTxn(s2, TransactionState.LoadJobSourceType.FRONTEND_STREAMING, 11, 21, 31, 41, 51);
         setupVisibleTxn(s3, TransactionState.LoadJobSourceType.BACKEND_STREAMING, 12, 22, 32, 42, 52);
+=======
+        setupVisibleTxn(s1, TransactionState.LoadJobSourceType.BACKEND_STREAMING, 10, 20, 30, 40, 45, 50);
+        setupVisibleTxn(s2, TransactionState.LoadJobSourceType.FRONTEND_STREAMING, 11, 21, 31, 41, 46, 51);
+        setupVisibleTxn(s3, TransactionState.LoadJobSourceType.MULTI_STATEMENT_STREAMING, 12, 22, 32, 42, 47, 52);
+>>>>>>> 4ce8f87284 ([Enhancement] Split txn publish latency and add publish daemon loop metric (#69747))
         registry.update(s1);
         registry.update(s2);
         registry.update(s3);
@@ -141,32 +147,50 @@ public class TransactionMetricRegistryTest {
         Assertions.assertEquals(3, extractCount(outS, "txn_total_latency_ms", "all", true));
         // routine_load
         setReportGroups(registry, "routine_load");
-        setupVisibleTxn(r1, TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK, 10, 20, 30, 40, 50);
+        setupVisibleTxn(r1, TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK, 10, 20, 30, 40, 45, 50);
         registry.update(r1);
         String outR = renderReport(registry);
         Assertions.assertEquals(1, extractCount(outR, "txn_total_latency_ms", "routine_load", true));
         Assertions.assertEquals(4, extractCount(outR, "txn_total_latency_ms", "all", true));
         // broker_load
         setReportGroups(registry, "broker_load");
-        setupVisibleTxn(b1, TransactionState.LoadJobSourceType.BATCH_LOAD_JOB, 10, 20, 30, 40, 50);
+        setupVisibleTxn(b1, TransactionState.LoadJobSourceType.BATCH_LOAD_JOB, 10, 20, 30, 40, 45, 50);
         registry.update(b1);
         String outB = renderReport(registry);
         Assertions.assertEquals(1, extractCount(outB, "txn_total_latency_ms", "broker_load", true));
         Assertions.assertEquals(5, extractCount(outB, "txn_total_latency_ms", "all", true));
         // insert
         setReportGroups(registry, "insert");
-        setupVisibleTxn(i1, TransactionState.LoadJobSourceType.INSERT_STREAMING, 10, 20, 30, 40, 50);
+        setupVisibleTxn(i1, TransactionState.LoadJobSourceType.INSERT_STREAMING, 10, 20, 30, 40, 45, 50);
         registry.update(i1);
         String outI = renderReport(registry);
         Assertions.assertEquals(1, extractCount(outI, "txn_total_latency_ms", "insert", true));
         Assertions.assertEquals(6, extractCount(outI, "txn_total_latency_ms", "all", true));
         // compaction
         setReportGroups(registry, "compaction");
-        setupVisibleTxn(c1, TransactionState.LoadJobSourceType.LAKE_COMPACTION, 10, 20, 30, 40, 50);
+        setupVisibleTxn(c1, TransactionState.LoadJobSourceType.LAKE_COMPACTION, 10, 20, 30, 40, 45, 50);
         registry.update(c1);
         String outC = renderReport(registry);
         Assertions.assertEquals(1, extractCount(outC, "txn_total_latency_ms", "compaction", true));
         Assertions.assertEquals(7, extractCount(outC, "txn_total_latency_ms", "all", true));
+    }
+
+    @Test
+    public void testPublishLatencyBreakdownMetrics(@Mocked GlobalStateMgr globalStateMgr,
+                                                    @Mocked TransactionState txn) {
+        setLeader(true, globalStateMgr);
+        TransactionMetricRegistry registry = newRegistry();
+        setReportGroups(registry, "insert");
+
+        setupVisibleTxn(txn, TransactionState.LoadJobSourceType.INSERT_STREAMING, 10, 20, 30, 40, 45, 50);
+        registry.update(txn);
+
+        String out = renderReport(registry);
+        Assertions.assertEquals(1, extractCount(out, "txn_publish_schedule_latency_ms", "all", true));
+        Assertions.assertEquals(1, extractCount(out, "txn_publish_execute_latency_ms", "all", true));
+        Assertions.assertEquals(1, extractCount(out, "txn_publish_can_finish_latency_ms", "all", true));
+        Assertions.assertEquals(1, extractCount(out, "txn_publish_ack_latency_ms", "all", true));
+        Assertions.assertEquals(1, extractCount(out, "txn_publish_can_finish_latency_ms", "insert", true));
     }
 
     @Test
@@ -212,7 +236,8 @@ public class TransactionMetricRegistryTest {
 
     private void setupVisibleTxn(@Mocked TransactionState txn,
                                  TransactionState.LoadJobSourceType type,
-                                 long prepare, long commit, long pub, long pubFinish, long finish) {
+                                 long prepare, long commit, long pub, long pubFinish,
+                                 long readyToFinish, long finish) {
         new Expectations() {
             {
                 txn.getTransactionStatus();
@@ -225,6 +250,8 @@ public class TransactionMetricRegistryTest {
                 result = pub;
                 txn.getPublishVersionFinishTime();
                 result = pubFinish;
+                txn.getReadyToFinishTime();
+                result = readyToFinish;
                 txn.getFinishTime();
                 result = finish;
                 txn.getSourceType();

@@ -170,6 +170,10 @@ public final class MetricRepo {
                     () -> new LongCounterMetric("failed_stats_collect_job", MetricUnit.REQUESTS,
                             "the number of failed statistics collect jobs"));
 
+    public static final LongCounterMetric COUNTER_PUBLISH_VERSION_DAEMON_LOOP =
+            new LongCounterMetric("publish_version_daemon_loop_total",
+                    MetricUnit.OPERATIONS, "counter of publish version daemon loop runs");
+
     /**
      * Histogram tracking the lock held time (in milliseconds) when slow locks are detected.
      * Updated when lock hold time exceeds the slow_lock_threshold_ms configuration.
@@ -617,7 +621,7 @@ public final class MetricRepo {
         COUNTER_TXN_FAILED =
                 new LeaderAwareCounterMetricLong("txn_failed", MetricUnit.REQUESTS, "counter of failed transactions");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TXN_FAILED);
-
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_PUBLISH_VERSION_DAEMON_LOOP);
         COUNTER_ROUTINE_LOAD_ROWS =
                 new LongCounterMetric("routine_load_rows", MetricUnit.ROWS, "total rows of routine load");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_ROUTINE_LOAD_ROWS);
