@@ -65,8 +65,10 @@ PARALLEL_TEST(VariantEncoderTest, encode_int_column) {
     ASSERT_FALSE(out_data->is_null(0));
     ASSERT_FALSE(out_data->is_null(1));
 
-    const VariantRowValue* row0 = out_data->get_object(0);
-    const VariantRowValue* row1 = out_data->get_object(1);
+    VariantRowValue row0_buf;
+    VariantRowValue row1_buf;
+    const VariantRowValue* row0 = out_data->get_row_value(0, &row0_buf);
+    const VariantRowValue* row1 = out_data->get_row_value(1, &row1_buf);
     ASSERT_NE(nullptr, row0);
     ASSERT_NE(nullptr, row1);
     auto json0 = row0->to_json();
