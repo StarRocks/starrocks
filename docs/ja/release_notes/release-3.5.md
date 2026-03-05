@@ -26,6 +26,57 @@ displayed_sidebar: docs
 
 :::
 
+# 3.5.14
+
+リリース日：2026年3月5日
+
+## 改善点
+
+- Lake テーブルの Primary Key インデックスに対して、SST の読み書き失敗メトリクスを追加しました。[#69513](https://github.com/StarRocks/starrocks/pull/69513)
+- 「segment file not found」エラーのカウンタメトリクスを追加しました。[#69543](https://github.com/StarRocks/starrocks/pull/69543)
+- `convert_tz` を含むスカラーサブクエリから範囲述語を抽出できるようにしました。[#69055](https://github.com/StarRocks/starrocks/pull/69055)
+- Paimon テーブルで複雑型をサポートしました。[#66784](https://github.com/StarRocks/starrocks/pull/66784)
+- リモート Load の Spill Directory 削除を遅延させました。[#68803](https://github.com/StarRocks/starrocks/pull/68803)
+- クラウドネイティブテーブルの修復をサポートしました。[#67108](https://github.com/StarRocks/starrocks/pull/67108)
+- CSV 形式の Hive テーブルへ ARRAY 型の挿入をサポートしました。[#67355](https://github.com/StarRocks/starrocks/pull/67355)
+
+## バグ修正
+
+以下の問題を修正しました：
+
+- `RowGroupWriter` の例外による予期しない動作。[#69568](https://github.com/StarRocks/starrocks/pull/69568)
+- Aggregate Key / Unique Key テーブルで Schema Change 実行後に、新しく追加された Key 列がソートキーに含まれない問題。[#69529](https://github.com/StarRocks/starrocks/pull/69529)
+- `resource_busy` 状態において、メトリクス `g_publish_version_failed_tasks` が実際の状況を正しく反映しない問題。[#69526](https://github.com/StarRocks/starrocks/pull/69526)
+- Primary Key Tablet をゴミ箱へ移動する際に Rowset ファイルが削除される問題。[#69438](https://github.com/StarRocks/starrocks/pull/69438)
+- 同時 SWAP 後の名前ベースのテーブル検索により `addPartitions` でロックリークが発生する問題。[#69284](https://github.com/StarRocks/starrocks/pull/69284)
+- `isInternalCancelError` が `equals` を使用しており、`startsWith` を使用していなかった問題。[#69523](https://github.com/StarRocks/starrocks/pull/69523)
+- `_writer->Close()` が `ParquetStatusException` 以外の例外をスローした場合に、Pipeline がブロックまたはクラッシュする問題。[#69492](https://github.com/StarRocks/starrocks/pull/69492)
+- Hadoop-client ライブラリの不具合。[#69503](https://github.com/StarRocks/starrocks/pull/69503)
+- 書き込み失敗時に誤って成功が返される問題。[#69473](https://github.com/StarRocks/starrocks/pull/69473)
+- CVE-2025-67721 の修正。[#69138](https://github.com/StarRocks/starrocks/pull/69138)
+- 共有データクラスタにおける低カーディナリティ最適化時の RuntimeFilter 問題。[#64669](https://github.com/StarRocks/starrocks/pull/64669)
+- マテリアライズドビューの Tablet メタデータが FE Leader と Follower 間で不一致となる問題。[#69428](https://github.com/StarRocks/starrocks/pull/69428)
+- Rollup ハンドラの active transaction ID が `computeMinActiveTxnId` で考慮されない問題。[#69285](https://github.com/StarRocks/starrocks/pull/69285)
+- 複数 FE 環境での Arrow Flight Proxy の問題。[#68300](https://github.com/StarRocks/starrocks/pull/68300)
+- 関数フィールドの並行性バグ。[#69315](https://github.com/StarRocks/starrocks/pull/69315)
+- `DROP FUNCTION IF EXISTS` が `ifExists` フラグを無視する問題。[#69216](https://github.com/StarRocks/starrocks/pull/69216)
+- LDAP 認証においてユーザー名の大文字・小文字を区別しない正規化が不足している問題。[#67966](https://github.com/StarRocks/starrocks/pull/67966)
+- 一部のパーティションが書き込み不可となる問題。[#68221](https://github.com/StarRocks/starrocks/pull/68221)
+- 共有ミュータブル状態により、マテリアライズドビューのリライト時に Projection が失われる問題。[#69063](https://github.com/StarRocks/starrocks/pull/69063)
+- クエリテーブルコピー時のパーティション大文字・小文字非区別検索の問題。[#69173](https://github.com/StarRocks/starrocks/pull/69173)
+- 同期マテリアライズドビューにおける全 NULL 値処理の不具合。[#69136](https://github.com/StarRocks/starrocks/pull/69136)
+- 外部カタログ参照時の `mv onReload` に関する問題。[#68926](https://github.com/StarRocks/starrocks/pull/68926)
+- 重複定数に対する DISTINCT ORDER BY エイリアスの問題。[#69014](https://github.com/StarRocks/starrocks/pull/69014)
+- 共有データクラスタで CHAR 列長変更後に誤ったクエリ結果が返される問題。[#68808](https://github.com/StarRocks/starrocks/pull/68808)
+- Azure ABFS/WASB FileSystem のキャッシュキー問題。[#68901](https://github.com/StarRocks/starrocks/pull/68901)
+- 定数側カラム参照を含む OUTER JOIN における述語リライトの誤り。[#67072](https://github.com/StarRocks/starrocks/pull/67072)
+- `IllegalArgumentException` によるコンパレータの推移律違反。[#68743](https://github.com/StarRocks/starrocks/pull/68743)
+- `report_fragment` においてクエリ寿命が Fragment より短い場合に発生する問題。[#67219](https://github.com/StarRocks/starrocks/pull/67219)
+- 共有 `DecodeInfo` による低カーディナリティリライト時の NPE。[#68799](https://github.com/StarRocks/starrocks/pull/68799)
+- `pcu_upt_cnt` メトリクスが欠落している問題。[#68845](https://github.com/StarRocks/starrocks/pull/68845)
+- JSON flatten で同一パス上の配列／オブジェクト競合問題。[#68804](https://github.com/StarRocks/starrocks/pull/68804)
+- `ClonExpr` の nullable 関連バグ。[#68800](https://github.com/StarRocks/starrocks/pull/68800)
+
 ## 3.5.13
 
 リリース日：2026年2月13日
