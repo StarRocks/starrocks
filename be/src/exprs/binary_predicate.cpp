@@ -235,9 +235,9 @@ public:
     std::string debug_string() const override {
         std::stringstream out;
         auto expr_debug_string = Expr::debug_string();
-        out << "VectorizedBinaryPredicate ("
-            << "lhs=" << _children[0]->type().debug_string() << ", rhs=" << _children[1]->type().debug_string()
-            << ", result=" << this->type().debug_string() << ", lhs_is_constant=" << _children[0]->is_constant()
+        out << "VectorizedBinaryPredicate (" << "lhs=" << _children[0]->type().debug_string()
+            << ", rhs=" << _children[1]->type().debug_string() << ", result=" << this->type().debug_string()
+            << ", lhs_is_constant=" << _children[0]->is_constant()
             << ", rhs_is_constant=" << _children[1]->is_constant() << ", expr (" << expr_debug_string << ") )";
         return out.str();
     }
@@ -493,9 +493,9 @@ public:
     std::string debug_string() const override {
         std::stringstream out;
         auto expr_debug_string = Expr::debug_string();
-        out << "VectorizedNullSafeEqPredicate ("
-            << "lhs=" << _children[0]->type().debug_string() << ", rhs=" << _children[1]->type().debug_string()
-            << ", result=" << this->type().debug_string() << ", lhs_is_constant=" << _children[0]->is_constant()
+        out << "VectorizedNullSafeEqPredicate (" << "lhs=" << _children[0]->type().debug_string()
+            << ", rhs=" << _children[1]->type().debug_string() << ", result=" << this->type().debug_string()
+            << ", lhs_is_constant=" << _children[0]->is_constant()
             << ", rhs_is_constant=" << _children[1]->is_constant() << ", expr (" << expr_debug_string << ") )";
         return out.str();
     }
@@ -504,6 +504,18 @@ public:
 struct BinaryPredicateBuilder {
     template <LogicalType data_type>
     Expr* operator()(const TExprNode& node) {
+        if constexpr (data_type == TYPE_VARIANT) {
+            switch (node.opcode) {
+            case TExprOpcode::EQ:
+                return new CommonEqualsPredicate<true>(node);
+            case TExprOpcode::NE:
+                return new CommonEqualsPredicate<false>(node);
+            case TExprOpcode::EQ_FOR_NULL:
+                return new CommonNullSafeEqualsPredicate(node);
+            default:
+                return nullptr;
+            }
+        }
         switch (node.opcode) {
         case TExprOpcode::EQ:
             return new VectorizedBinaryPredicate<data_type, BinaryPredFunc<EvalEq<data_type>>>(node);
@@ -552,9 +564,20 @@ Expr* VectorizedBinaryPredicateFactory::from_thrift(const TExprNode& node) {
         } else {
             return nullptr;
         }
+    } else if (type == TYPE_VARIANT) {
+        if (node.opcode == TExprOpcode::EQ) {
+            return new CommonEqualsPredicate<true>(node);
+        } else if (node.opcode == TExprOpcode::EQ_FOR_NULL) {
+            return new CommonNullSafeEqualsPredicate(node);
+        } else if (node.opcode == TExprOpcode::NE) {
+            return new CommonEqualsPredicate<false>(node);
+        } else {
+            return nullptr;
+        }
     } else {
         return type_dispatch_predicate<Expr*>(type, true, BinaryPredicateBuilder(), node);
     }
+    return type_dispatch_predicate<Expr*>(type, true, BinaryPredicateBuilder(), node);
 }
 
 } // namespace starrocks
