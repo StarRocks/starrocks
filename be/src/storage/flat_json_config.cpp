@@ -12,31 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+#include "storage/flat_json_config.h"
 
-#include <glog/logging.h>
-
-#include <string>
-
-#include "gutil/macros.h"
+#include "common/config.h"
 
 namespace starrocks {
-class VLogCntl {
-public:
-    static VLogCntl& getInstance() {
-        static VLogCntl log_module;
-        return log_module;
-    }
 
-    DISALLOW_COPY_AND_MOVE(VLogCntl);
+FlatJsonConfig::FlatJsonConfig()
+        : _flat_json_enable(false),
+          _flat_json_null_factor(config::json_flat_null_factor),
+          _flat_json_sparsity_factor(config::json_flat_sparsity_factor),
+          _flat_json_max_column_max(config::json_flat_column_max) {}
 
-    void setLogLevel(const std::string& module, int level) { google::SetVLOGLevel(module.c_str(), level); }
-
-    void enable(const std::string& module);
-
-    void disable(const std::string& module) { google::SetVLOGLevel(module.c_str(), 0); }
-
-private:
-    VLogCntl() = default;
-};
 } // namespace starrocks

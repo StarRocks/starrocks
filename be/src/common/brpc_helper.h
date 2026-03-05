@@ -14,10 +14,16 @@
 
 #pragma once
 
-#include "common/config.h"
+#include <string_view>
+
+namespace starrocks {
+
+bool brpc_ignore_overcrowded(std::string_view module);
 
 // Ignore BRPC overcrowded error when the corresponding module config is enabled.
-#define SET_IGNORE_OVERCROWDED(ctnl, module)          \
-    if (config::brpc_##module##_ignore_overcrowded) { \
-        ctnl.ignore_eovercrowded();                   \
+#define SET_IGNORE_OVERCROWDED(ctnl, module)             \
+    if (::starrocks::brpc_ignore_overcrowded(#module)) { \
+        ctnl.ignore_eovercrowded();                      \
     }
+
+} // namespace starrocks

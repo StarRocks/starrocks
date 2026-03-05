@@ -19,6 +19,7 @@
 #include "base/debug/trace.h"
 #include "base/time/time.h"
 #include "base/utility/scoped_cleanup.h"
+#include "common/config.h"
 #include "runtime/current_thread.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/starrocks_metrics.h"

@@ -12,31 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+#include "storage/lake/async_file_deleter.h"
 
-#include <glog/logging.h>
+#include "common/config.h"
+#include "common/logging.h"
 
-#include <string>
+namespace starrocks::lake {
 
-#include "gutil/macros.h"
-
-namespace starrocks {
-class VLogCntl {
-public:
-    static VLogCntl& getInstance() {
-        static VLogCntl log_module;
-        return log_module;
+Status AsyncSharedFileDeleter::finish() {
+    for (auto& [path, count] : _pending_files) {
+        if (_delay_delete_files.count(path) == 0) {
+            if (config::lake_print_delete_log) {
+                LOG(INFO) << "Deleting shared file: " << path << " ref count: " << count;
+            }
+            RETURN_IF_ERROR(AsyncFileDeleter::delete_file(path));
+        }
     }
+    return AsyncFileDeleter::finish();
+}
 
-    DISALLOW_COPY_AND_MOVE(VLogCntl);
-
-    void setLogLevel(const std::string& module, int level) { google::SetVLOGLevel(module.c_str(), level); }
-
-    void enable(const std::string& module);
-
-    void disable(const std::string& module) { google::SetVLOGLevel(module.c_str(), 0); }
-
-private:
-    VLogCntl() = default;
-};
-} // namespace starrocks
+} // namespace starrocks::lake

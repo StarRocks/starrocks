@@ -18,6 +18,7 @@
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/pretty_printer.h"
+#include "common/config.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"

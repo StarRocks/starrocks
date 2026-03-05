@@ -52,6 +52,7 @@
 #include "base/testutil/sync_point.h"
 #include "base/time/time.h"
 #include "base/utility/scoped_cleanup.h"
+#include "common/config.h"
 #include "common/status.h"
 #include "common/thread/thread.h"
 #include "common/util/bthreads/executor.h"

@@ -47,6 +47,7 @@
 #include "base/network/network_util.h"
 #include "base/string/string_parser.hpp"
 #include "base/utility/defer_op.h"
+#include "common/config.h"
 #include "common/status.h"
 #include "common/system/backend_options.h"
 #include "engine_storage_migration_task.h"

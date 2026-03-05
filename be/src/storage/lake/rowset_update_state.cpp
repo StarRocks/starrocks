@@ -18,6 +18,7 @@
 #include "base/phmap/phmap.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
+#include "common/config.h"
 #include "common/tracer.h"
 #include "fs/fs_factory.h"
 #include "fs/key_cache.h"

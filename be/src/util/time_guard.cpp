@@ -12,31 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+#include "util/time_guard.h"
 
-#include <glog/logging.h>
-
-#include <string>
-
-#include "gutil/macros.h"
+#include "common/config.h"
 
 namespace starrocks {
-class VLogCntl {
-public:
-    static VLogCntl& getInstance() {
-        static VLogCntl log_module;
-        return log_module;
-    }
 
-    DISALLOW_COPY_AND_MOVE(VLogCntl);
+int64_t pipeline_poller_timeout_guard_ms() {
+    return config::pipeline_poller_timeout_guard_ms;
+}
 
-    void setLogLevel(const std::string& module, int level) { google::SetVLOGLevel(module.c_str(), level); }
-
-    void enable(const std::string& module);
-
-    void disable(const std::string& module) { google::SetVLOGLevel(module.c_str(), 0); }
-
-private:
-    VLogCntl() = default;
-};
 } // namespace starrocks
