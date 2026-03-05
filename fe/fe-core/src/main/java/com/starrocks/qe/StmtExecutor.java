@@ -1391,6 +1391,8 @@ public class StmtExecutor {
         // if create table failed should not drop table. because table may already exist,
         // and for other cases the exception will throw and the rest of the code will not be executed.
         try {
+            // Set CTAS flag for metrics tracking
+            context.setCTAS(true);
             InsertStmt insertStmt = createTableAsSelectStmt.getInsertStmt();
             ExecPlan execPlan = StatementPlanner.plan(insertStmt, context);
             handleDMLStmtWithProfile(execPlan, ((CreateTableAsSelectStmt) parsedStmt).getInsertStmt());
@@ -1401,6 +1403,9 @@ public class StmtExecutor {
             LOG.warn("handle create table as select stmt fail", t);
             dropTableCreatedByCTAS(createTableAsSelectStmt);
             throw t;
+        } finally {
+            // Reset CTAS flag
+            context.setCTAS(false);
         }
     }
 

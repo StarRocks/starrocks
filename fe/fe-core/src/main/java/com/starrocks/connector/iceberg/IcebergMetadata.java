@@ -1756,6 +1756,17 @@ public class IcebergMetadata implements ConnectorMetadata {
                                      boolean isOverwrite, boolean isRewrite, Object extra,
                                      String dbName, String tableName,
                                      ConnectContext context) {
+        long startMs = System.currentTimeMillis();
+        // Determine write type: ctas, overwrite, insert (default)
+        String writeType;
+        if (context != null && context.isCTAS()) {
+            writeType = "ctas";
+        } else if (isOverwrite) {
+            writeType = "overwrite";
+        } else {
+            writeType = "insert";
+        }
+
         BatchWrite batchWrite = getBatchWrite(transaction, isOverwrite, isRewrite);
 
         if (branch != null) {
@@ -1802,10 +1813,34 @@ public class IcebergMetadata implements ConnectorMetadata {
                     context.getCurrentUserIdentity() != null ? context.getCurrentUserIdentity().getUser() : "None");
         }
 
-        commitWithCleanup(() -> {
-            batchWrite.commit();
-            transaction.commitTransaction();
-        }, () -> invalidateCacheAfterCommit(dbName, tableName), dataFiles, dbName, tableName);
+        try {
+            commitWithCleanup(() -> {
+                batchWrite.commit();
+                transaction.commitTransaction();
+            }, () -> invalidateCacheAfterCommit(dbName, tableName), dataFiles, dbName, tableName);
+
+            // Record metrics after successful commit
+            Snapshot newSnapshot = nativeTbl.currentSnapshot();
+            if (newSnapshot != null && newSnapshot.summary() != null) {
+                Map<String, String> summary = newSnapshot.summary();
+                long writtenRows = Long.parseLong(
+                        summary.getOrDefault(SnapshotSummary.ADDED_RECORDS_PROP, "0"));
+                long writtenBytes = Long.parseLong(
+                        summary.getOrDefault(SnapshotSummary.ADDED_FILE_SIZE_PROP, "0"));
+                IcebergMetricsMgr.increaseIcebergWriteTotalSuccess(writeType);
+                IcebergMetricsMgr.increaseIcebergWriteRows(writtenRows, writeType);
+                IcebergMetricsMgr.increaseIcebergWriteBytes(writtenBytes, writeType);
+                IcebergMetricsMgr.increaseIcebergWriteFiles(dataFiles.size(), writeType);
+            } else {
+                IcebergMetricsMgr.increaseIcebergWriteTotalSuccess(writeType);
+            }
+        } catch (Exception e) {
+            IcebergMetricsMgr.increaseIcebergWriteTotalFail(e, writeType);
+            throw e;
+        } finally {
+            IcebergMetricsMgr.increaseIcebergWriteDurationMsTotal(System.currentTimeMillis() - startMs, writeType);
+        }
+
         asyncRefreshOthersFeMetadataCache(dbName, tableName);
     }
 
