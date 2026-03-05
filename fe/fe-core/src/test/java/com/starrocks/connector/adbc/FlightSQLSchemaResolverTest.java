@@ -15,9 +15,17 @@
 package com.starrocks.connector.adbc;
 
 import com.starrocks.catalog.Column;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.DecimalType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.NullType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
+import com.starrocks.type.StringType;
 import com.starrocks.type.Type;
+import com.starrocks.type.VarbinaryType;
+import com.starrocks.type.VarcharType;
 import org.apache.arrow.vector.types.FloatingPointPrecision;
 import org.apache.arrow.vector.types.TimeUnit;
 import org.apache.arrow.vector.types.pojo.ArrowType;
@@ -52,25 +60,25 @@ public class FlightSQLSchemaResolverTest {
     @Test
     public void signedInt8_mapsTinyint() {
         Field field = makeField("col", new ArrowType.Int(8, true));
-        assertEquals(Type.TINYINT, resolver.convertArrowFieldToSRType(field));
+        assertEquals(IntegerType.TINYINT, resolver.convertArrowFieldToSRType(field));
     }
 
     @Test
     public void signedInt16_mapsSmallint() {
         Field field = makeField("col", new ArrowType.Int(16, true));
-        assertEquals(Type.SMALLINT, resolver.convertArrowFieldToSRType(field));
+        assertEquals(IntegerType.SMALLINT, resolver.convertArrowFieldToSRType(field));
     }
 
     @Test
     public void signedInt32_mapsInt() {
         Field field = makeField("col", new ArrowType.Int(32, true));
-        assertEquals(Type.INT, resolver.convertArrowFieldToSRType(field));
+        assertEquals(IntegerType.INT, resolver.convertArrowFieldToSRType(field));
     }
 
     @Test
     public void signedInt64_mapsBigint() {
         Field field = makeField("col", new ArrowType.Int(64, true));
-        assertEquals(Type.BIGINT, resolver.convertArrowFieldToSRType(field));
+        assertEquals(IntegerType.BIGINT, resolver.convertArrowFieldToSRType(field));
     }
 
     // --- Unsigned integer types (overflow promotion) ---
@@ -78,26 +86,25 @@ public class FlightSQLSchemaResolverTest {
     @Test
     public void unsignedInt8_mapsSmallint() {
         Field field = makeField("col", new ArrowType.Int(8, false));
-        assertEquals(Type.SMALLINT, resolver.convertArrowFieldToSRType(field));
+        assertEquals(IntegerType.SMALLINT, resolver.convertArrowFieldToSRType(field));
     }
 
     @Test
     public void unsignedInt16_mapsInt() {
         Field field = makeField("col", new ArrowType.Int(16, false));
-        assertEquals(Type.INT, resolver.convertArrowFieldToSRType(field));
+        assertEquals(IntegerType.INT, resolver.convertArrowFieldToSRType(field));
     }
 
     @Test
     public void unsignedInt32_mapsBigint() {
         Field field = makeField("col", new ArrowType.Int(32, false));
-        assertEquals(Type.BIGINT, resolver.convertArrowFieldToSRType(field));
+        assertEquals(IntegerType.BIGINT, resolver.convertArrowFieldToSRType(field));
     }
 
     @Test
     public void unsignedInt64_mapsLargeint() {
         Field field = makeField("col", new ArrowType.Int(64, false));
-        Type expected = ScalarType.createType(PrimitiveType.LARGEINT);
-        assertEquals(expected, resolver.convertArrowFieldToSRType(field));
+        assertEquals(IntegerType.LARGEINT, resolver.convertArrowFieldToSRType(field));
     }
 
     // --- Floating point types ---
@@ -105,13 +112,13 @@ public class FlightSQLSchemaResolverTest {
     @Test
     public void floatSingle_mapsFloat() {
         Field field = makeField("col", new ArrowType.FloatingPoint(FloatingPointPrecision.SINGLE));
-        assertEquals(Type.FLOAT, resolver.convertArrowFieldToSRType(field));
+        assertEquals(FloatType.FLOAT, resolver.convertArrowFieldToSRType(field));
     }
 
     @Test
     public void floatDouble_mapsDouble() {
         Field field = makeField("col", new ArrowType.FloatingPoint(FloatingPointPrecision.DOUBLE));
-        assertEquals(Type.DOUBLE, resolver.convertArrowFieldToSRType(field));
+        assertEquals(FloatType.DOUBLE, resolver.convertArrowFieldToSRType(field));
     }
 
     // --- Decimal type ---
@@ -119,7 +126,7 @@ public class FlightSQLSchemaResolverTest {
     @Test
     public void decimal128_mapsDecimal() {
         Field field = makeField("col", new ArrowType.Decimal(10, 2, 128));
-        Type expected = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 10, 2);
+        Type expected = new DecimalType(PrimitiveType.DECIMAL128, 10, 2);
         assertEquals(expected, resolver.convertArrowFieldToSRType(field));
     }
 
@@ -128,14 +135,14 @@ public class FlightSQLSchemaResolverTest {
     @Test
     public void utf8_mapsVarchar() {
         Field field = makeField("col", ArrowType.Utf8.INSTANCE);
-        Type expected = ScalarType.createVarcharType(ScalarType.DEFAULT_STRING_LENGTH);
+        Type expected = new VarcharType(StringType.DEFAULT_STRING_LENGTH);
         assertEquals(expected, resolver.convertArrowFieldToSRType(field));
     }
 
     @Test
     public void largeUtf8_mapsVarchar() {
         Field field = makeField("col", ArrowType.LargeUtf8.INSTANCE);
-        Type expected = ScalarType.createVarcharType(ScalarType.DEFAULT_STRING_LENGTH);
+        Type expected = new VarcharType(StringType.DEFAULT_STRING_LENGTH);
         assertEquals(expected, resolver.convertArrowFieldToSRType(field));
     }
 
@@ -144,13 +151,13 @@ public class FlightSQLSchemaResolverTest {
     @Test
     public void binary_mapsVarbinary() {
         Field field = makeField("col", ArrowType.Binary.INSTANCE);
-        assertEquals(Type.VARBINARY, resolver.convertArrowFieldToSRType(field));
+        assertEquals(VarbinaryType.VARBINARY, resolver.convertArrowFieldToSRType(field));
     }
 
     @Test
     public void largeBinary_mapsVarbinary() {
         Field field = makeField("col", ArrowType.LargeBinary.INSTANCE);
-        assertEquals(Type.VARBINARY, resolver.convertArrowFieldToSRType(field));
+        assertEquals(VarbinaryType.VARBINARY, resolver.convertArrowFieldToSRType(field));
     }
 
     // --- Boolean type ---
@@ -158,7 +165,7 @@ public class FlightSQLSchemaResolverTest {
     @Test
     public void bool_mapsBoolean() {
         Field field = makeField("col", ArrowType.Bool.INSTANCE);
-        assertEquals(Type.BOOLEAN, resolver.convertArrowFieldToSRType(field));
+        assertEquals(BooleanType.BOOLEAN, resolver.convertArrowFieldToSRType(field));
     }
 
     // --- Date type ---
@@ -166,7 +173,7 @@ public class FlightSQLSchemaResolverTest {
     @Test
     public void date_mapsDate() {
         Field field = makeField("col", new ArrowType.Date(org.apache.arrow.vector.types.DateUnit.DAY));
-        assertEquals(Type.DATE, resolver.convertArrowFieldToSRType(field));
+        assertEquals(DateType.DATE, resolver.convertArrowFieldToSRType(field));
     }
 
     // --- Timestamp types (all variants map to DATETIME) ---
@@ -174,19 +181,19 @@ public class FlightSQLSchemaResolverTest {
     @Test
     public void timestampMicrosecondNoTz_mapsDatetime() {
         Field field = makeField("col", new ArrowType.Timestamp(TimeUnit.MICROSECOND, null));
-        assertEquals(Type.DATETIME, resolver.convertArrowFieldToSRType(field));
+        assertEquals(DateType.DATETIME, resolver.convertArrowFieldToSRType(field));
     }
 
     @Test
     public void timestampMillisecondUtc_mapsDatetime() {
         Field field = makeField("col", new ArrowType.Timestamp(TimeUnit.MILLISECOND, "UTC"));
-        assertEquals(Type.DATETIME, resolver.convertArrowFieldToSRType(field));
+        assertEquals(DateType.DATETIME, resolver.convertArrowFieldToSRType(field));
     }
 
     @Test
     public void timestampSecond_mapsDatetime() {
         Field field = makeField("col", new ArrowType.Timestamp(TimeUnit.SECOND, null));
-        assertEquals(Type.DATETIME, resolver.convertArrowFieldToSRType(field));
+        assertEquals(DateType.DATETIME, resolver.convertArrowFieldToSRType(field));
     }
 
     // --- Null type ---
@@ -194,7 +201,7 @@ public class FlightSQLSchemaResolverTest {
     @Test
     public void null_mapsNullType() {
         Field field = makeField("col", ArrowType.Null.INSTANCE);
-        assertEquals(Type.NULL, resolver.convertArrowFieldToSRType(field));
+        assertEquals(NullType.NULL, resolver.convertArrowFieldToSRType(field));
     }
 
     // --- Unsupported types (return null) ---
