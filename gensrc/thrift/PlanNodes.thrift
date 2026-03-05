@@ -77,6 +77,7 @@ enum TPlanNodeType {
   TABLE_FUNCTION_NODE,
   DECODE_NODE,
   JDBC_SCAN_NODE,
+  ADBC_SCAN_NODE,
   LAKE_SCAN_NODE,
   NESTLOOP_JOIN_NODE,
 
@@ -674,6 +675,19 @@ struct TJDBCScanNode {
   3: optional list<string> columns
   4: optional list<string> filters
   5: optional i64 limit
+}
+
+struct TADBCScanNode {
+  1: optional Types.TTupleId tuple_id
+  2: optional string table_name
+  3: optional list<string> columns
+  4: optional list<string> filters
+  5: optional i64 limit
+  6: optional string adbc_driver
+  7: optional string adbc_uri
+  8: optional string adbc_username
+  9: optional string adbc_password
+  10: optional string adbc_token
 }
 
 // If you find yourself changing this struct, see also TOlapScanNode
@@ -1508,6 +1522,9 @@ struct TPlanNode {
   59: optional bool need_create_tuple_columns;
   // Scan node for jdbc
   60: optional TJDBCScanNode jdbc_scan_node;
+
+  // Scan node for adbc
+  85: optional TADBCScanNode adbc_scan_node;
 
   // generic scan node with connector.
   61: optional TConnectorScanNode connector_scan_node;
