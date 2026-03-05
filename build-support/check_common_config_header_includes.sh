@@ -15,10 +15,23 @@ CURRENT_FILE="$(mktemp)"
 ALLOWLIST_TMP_FILE="$(mktemp)"
 trap 'rm -f "${CURRENT_FILE}" "${ALLOWLIST_TMP_FILE}"' EXIT
 
-rg -n '#include "common/config.h"|#include <common/config.h>' "${BE_ROOT}/src" --glob '*.{h,hpp}' \
-    | awk -F: '{print $1}' \
-    | sed "s#^${BE_ROOT}/##" \
-    | sort -u > "${CURRENT_FILE}"
+INCLUDE_PATTERN='#include[[:space:]]*("common/config.h"|<common/config.h>)'
+
+if command -v rg >/dev/null 2>&1; then
+    rg -l "${INCLUDE_PATTERN}" "${BE_ROOT}/src" --glob '*.{h,hpp}' \
+        | sed "s#^${BE_ROOT}/##" \
+        | sort -u > "${CURRENT_FILE}"
+else
+    # Some CI images do not have ripgrep preinstalled.
+    find "${BE_ROOT}/src" -type f \( -name '*.h' -o -name '*.hpp' \) -print0 \
+        | while IFS= read -r -d '' file; do
+            if grep -Eq "${INCLUDE_PATTERN}" "${file}"; then
+                printf '%s\n' "${file}"
+            fi
+        done \
+        | sed "s#^${BE_ROOT}/##" \
+        | sort -u > "${CURRENT_FILE}"
+fi
 
 awk '
     /^[[:space:]]*#/ {next}
