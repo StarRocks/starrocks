@@ -145,7 +145,7 @@ public class IcebergScanNode extends ScanNode {
                 remoteFileInfoSource, morParams, desc, bucketProperties, true);
     }
 
-    public void setupScanRangeLocations(boolean enableIncrementalScanRanges) throws StarRocksException {
+    public void setupScanRangeLocations(boolean enableIncrementalScanRanges, long limit) throws StarRocksException {
         Preconditions.checkNotNull(snapshotId, "snapshot id is null");
         if (snapshotId.isEmpty()) {
             LOG.warn(String.format("Table %s has no snapshot!", icebergTable.getCatalogTableName()));
@@ -159,6 +159,8 @@ public class IcebergScanNode extends ScanNode {
                         .setTableVersionRange(TableVersionRange.withEnd(snapshotId))
                         .setPredicate(icebergJobPlanningPredicate)
                         .setEnableColumnStats(scanOptimizeOption.getCanUseMinMaxOpt())
+                        .setUseManifestCountOpt(scanOptimizeOption.getCanUseCountOpt())
+                        .setLimit(limit)
                         .build();
 
         RemoteFileInfoSource remoteFileInfoSource;
