@@ -324,6 +324,11 @@ jobs:
           export PATH=/var/lib/llvm/bin:$PATH
           bash build-support/check-format.sh
 
+      - name: Run Common Config Header Guardrail
+        if: steps.checkout_pr.outcome == 'success'
+        run: |
+          bash build-support/check_common_config_header_includes.sh
+
       - name: Clean ENV
         if: always()
         run: |
