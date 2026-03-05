@@ -39,6 +39,7 @@
 #include <set>
 
 #include "agent/master_info.h"
+#include "common/config.h"
 #include "common/logging.h"
 #include "fs/fs.h"
 #include "fs/fs_broker.h"
