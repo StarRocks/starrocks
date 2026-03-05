@@ -406,6 +406,8 @@ public:
 
     Status capacity_limit_reached() const override;
 
+    void build_slices(Container& slices) const;
+
 private:
     void _build_slices() const;
     void _build_german_strings() const;
