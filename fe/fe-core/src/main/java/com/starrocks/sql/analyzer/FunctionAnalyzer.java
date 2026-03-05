@@ -339,13 +339,17 @@ public class FunctionAnalyzer {
                     functionCallExpr.getPos());
         }
 
-        if ((fnName.getFunction().equals(FunctionSet.MIN)
-                || fnName.getFunction().equals(FunctionSet.MAX)
-                || fnName.getFunction().equals(FunctionSet.NDV)
+        if ((fnName.getFunction().equals(FunctionSet.MIN) || fnName.getFunction().equals(FunctionSet.MAX))
+                && !arg.getType().canApplyToNumeric()) {
+            throw new SemanticException(Type.NOT_SUPPORT_AGG_ERROR_MSG);
+        }
+
+        // ndv and approx_count_distinct cannot be applied to non-numeric types
+        if ((fnName.getFunction().equals(FunctionSet.NDV)
                 || fnName.getFunction().equals(FunctionSet.APPROX_COUNT_DISTINCT)
                 || fnName.getFunction().equals(FunctionSet.DS_THETA_COUNT_DISTINCT)
                 || fnName.getFunction().equals(FunctionSet.DS_HLL_COUNT_DISTINCT))
-                && !arg.getType().canApplyToNumeric()) {
+                && !(arg.getType().canApplyToNumeric() || arg.getType().isBinaryType())) {
             throw new SemanticException(Type.NOT_SUPPORT_AGG_ERROR_MSG);
         }
 
