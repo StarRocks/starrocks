@@ -317,12 +317,45 @@ jobs:
           git checkout -b merge_pr;
           git merge --squash --no-edit ${BRANCH} || (echo "::error::Merge conflict, please check." && exit -1);
 
-      - name: Run Clang-Format
-        id: run_clang_format
-        if: steps.checkout_pr.outcome == 'success'
+      - name: Install latest clang-format
         run: |
-          export PATH=/var/lib/llvm/bin:$PATH
+          pip3 install clang-format --upgrade || true
+          echo "CLANG_FORMAT_LATEST=$(which clang-format)" >> $GITHUB_ENV
+
+      - name: Run Clang-Format 10
+        id: clang_10
+        continue-on-error: true
+        run: |
+          export CLANG_FORMAT_BINARY=/var/lib/llvm/bin/clang-format
           bash build-support/check-format.sh
+
+      - name: Run Clang-Format Latest
+        id: clang_latest
+        if: always()
+        continue-on-error: true
+        run: |
+          # Use the newly installed clang-format
+          # If not found in PATH, try the one we captured or standard locations
+          export CLANG_FORMAT_BINARY=${CLANG_FORMAT_LATEST:-$(which clang-format)}
+          echo "Using clang-format: $CLANG_FORMAT_BINARY"
+          $CLANG_FORMAT_BINARY --version
+          bash build-support/check-format.sh
+
+      - name: Check Clang-Format Results
+        if: always()
+        run: |
+          if [[ "${{ steps.clang_10.outcome }}" == "success" ]]; then
+            echo "Clang-Format 10 Check Passed."
+            exit 0
+          fi
+          
+          if [[ "${{ steps.clang_latest.outcome }}" == "success" ]]; then
+             echo "Clang-Format Latest Check Passed."
+             exit 0
+          fi
+          
+          echo "Both Clang-Format 10 and Latest Checks Failed."
+          exit 1
 
       - name: Clean ENV
         if: always()

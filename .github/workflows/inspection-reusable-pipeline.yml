@@ -205,7 +205,7 @@ jobs:
       - name: Restart FE (${{needs.deploy.outputs.fe}})
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          ./bin/restart-fe.sh --repository ${{ github.repository }} --pr ${PR_NUMBER} --branch ${BRANCH} --build Release
+          ./bin/restart-fe.sh --repository ${{ github.repository }} --pr ${PR_NUMBER} --branch ${BRANCH} --build ${{ env.BUILD_TYPE }}
 
       - name: Clean ENV
         if: always()
@@ -236,7 +236,7 @@ jobs:
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           [[ "${WITH_FEATURE_COV}" != "true" ]] && skip_gcov="--skip-gcov"
-          ./bin/system-cov-be.sh --pr ${PR_NUMBER} --branch ${BRANCH} --repository ${{ github.repository }} ${skip_gcov}
+          ./bin/system-cov-be.sh --pr ${PR_NUMBER} --branch ${BRANCH} --repository ${{ github.repository }} --gcov_next_suffix admit ${skip_gcov}
 
       - name: Clean ENV
         if: always()
@@ -300,12 +300,79 @@ jobs:
         if: always()
         run: rm -rf ${{ github.workspace }}/*
 
+  restart-fe-after-admit:
+    runs-on: [self-hosted, normal]
+    name: Restart FE(Admit)
+    needs: 
+      - deploy
+      - admit
+    if: always() && needs.admit.result == 'success'
+    timeout-minutes: 20
+    env:
+      FE_NODE: ${{ needs.deploy.outputs.fe }}
+      BE_NODE: ${{ needs.deploy.outputs.be }}
+      BE_LIST: ${{ needs.deploy.outputs.be_list }}
+    steps:
+      - name: CLEAN
+        run: |
+          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+
+      - name: Restart FE (${{needs.deploy.outputs.be_list}})
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          ./bin/restart-fe.sh \
+            --pr ${PR_NUMBER} \
+            --branch ${{ inputs.BRANCH }} \
+            --build ${{ inputs.BUILD_TYPE }} \
+            --exec-module admit \
+            --repository ${{ github.repository }} \
+            --exec-module admit
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -rf ${{ github.workspace }}/*
+
+  restart-be-after-admit:
+    runs-on: [self-hosted, normal]
+    name: Restart BE(Admit)
+    needs: 
+      - deploy
+      - admit
+    if: always() && needs.admit.result == 'success'
+    timeout-minutes: 20
+    env:
+      FE_NODE: ${{ needs.deploy.outputs.fe }}
+      BE_NODE: ${{ needs.deploy.outputs.be }}
+      BE_LIST: ${{ needs.deploy.outputs.be_list }}
+    steps:
+      - name: CLEAN
+        run: |
+          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+
+      - name: Restart BE (${{needs.deploy.outputs.be_list}})
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          [[ "${WITH_FEATURE_COV}" != "true" ]] && skip_gcov="--skip-gcov"
+          ./bin/system-cov-be.sh \
+            --pr ${PR_NUMBER} \
+            --branch ${{ inputs.BRANCH }} \
+            --build ${{ env.BUILD_TYPE }} \
+            --repository ${{ github.repository }} \
+            --gcov_pre_suffix admit --restart-without-gcov ${skip_gcov}
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -rf ${{ github.workspace }}/*
+
   clean:
     runs-on: [self-hosted, normal]
     name: CLEAN ENV
     needs:
       - deploy
-      - admit
+      - restart-fe-after-admit
+      - restart-be-after-admit
       - SQL-Tester
     if: always()
     env:
