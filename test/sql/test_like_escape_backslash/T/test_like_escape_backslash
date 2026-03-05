@@ -1,0 +1,51 @@
+-- name: test_like_escape_backslash
+
+DROP TABLE IF EXISTS t_like_escape;
+
+CREATE TABLE IF NOT EXISTS t_like_escape (
+    c0 INT NOT NULL,
+    c1 VARCHAR(200) NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(c0)
+DISTRIBUTED BY HASH(c0) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t_like_escape (c0, c1) VALUES
+(1, 'abc'),
+(2, 'abc\\def'),
+(3, 'star\\'),
+(4, 'star%'),
+(5, 'starrocks'),
+(6, '\\asdf'),
+(7, 'test\\asdf'),
+(8, 'star\\test'),
+(9, 'abc_def');
+
+-- Test 1: substring match for literal backslash  (%\\%)
+SELECT c0, c1 FROM t_like_escape WHERE c1 LIKE '%\\\\%' ORDER BY c0;
+
+-- Test 2: ends-with match for literal "\asdf"  (%\\asdf)
+SELECT c0, c1 FROM t_like_escape WHERE c1 LIKE '%\\\\asdf' ORDER BY c0;
+
+-- Test 3: starts-with match for literal "star\"  (star\\%)
+SELECT c0, c1 FROM t_like_escape WHERE c1 LIKE 'star\\\\%' ORDER BY c0;
+
+-- Test 4: equals match for literal "star\"  (star\\)
+SELECT c0, c1 FROM t_like_escape WHERE c1 LIKE 'star\\\\' ORDER BY c0;
+
+-- Test 5: equals match for literal "star%"  (star\%)
+SELECT c0, c1 FROM t_like_escape WHERE c1 LIKE 'star\\%' ORDER BY c0;
+
+-- Test 6: using like() function form - substring backslash
+SELECT c0, c1 FROM t_like_escape WHERE like(c1, '%\\\\%') ORDER BY c0;
+
+-- Test 7: using like() function form - equals backslash
+SELECT c0, c1 FROM t_like_escape WHERE like(c1, 'star\\\\') ORDER BY c0;
+
+-- Test 8: combined - rows containing backslash OR starting with "star"
+SELECT c0, c1 FROM t_like_escape WHERE c1 LIKE '%\\\\%' OR c1 LIKE 'star%' ORDER BY c0;
+
+-- Test 9: equals match for literal "abc_def"  (abc\_def)
+SELECT c0, c1 FROM t_like_escape WHERE c1 LIKE 'abc\\_def' ORDER BY c0;
+
+DROP TABLE t_like_escape;
