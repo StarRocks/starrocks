@@ -19,8 +19,7 @@
 namespace starrocks {
 
 FlatJsonConfig::FlatJsonConfig()
-        : _flat_json_enable(false),
-          _flat_json_null_factor(config::json_flat_null_factor),
+        : _flat_json_null_factor(config::json_flat_null_factor),
           _flat_json_sparsity_factor(config::json_flat_sparsity_factor),
           _flat_json_max_column_max(config::json_flat_column_max) {}
 
