@@ -1238,7 +1238,7 @@ TEST_F(TimeFunctionsTest, fromUnixToDatetime) {
         //ASSERT_TRUE(result->is_numeric());
 
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        ASSERT_EQ("[2019-08-06 01:38:57, 2019-08-06 01:39:57, 2019-08-06 02:38:57]", result->debug_string());
+        ASSERT_EQ("['2019-08-06 01:38:57', '2019-08-06 01:39:57', '2019-08-06 02:38:57']", result->debug_string());
     }
 }
 
@@ -1269,7 +1269,7 @@ TEST_F(TimeFunctionsTest, fromUnixToDatetimeWithFormat) {
         //ASSERT_TRUE(result->is_numeric());
 
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        ASSERT_EQ("[1970-01-01 16:00:00, 1970-01-01 16:01:01, 1970-01-01 17:03:09]", result->debug_string());
+        ASSERT_EQ("['1970-01-01 16:00:00', '1970-01-01 16:01:01', '1970-01-01 17:03:09']", result->debug_string());
 
         ASSERT_TRUE(TimeFunctions::from_unix_close(_utils->get_fn_ctx(),
                                                    FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -1301,7 +1301,7 @@ TEST_F(TimeFunctionsTest, fromUnixToDatetimeWithConstFormat) {
         //ASSERT_TRUE(result->is_numeric());
 
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        ASSERT_EQ("[1970-01-01 16:00:00, 1970-01-01 16:01:01, 1970-01-01 17:03:09]", result->debug_string());
+        ASSERT_EQ("['1970-01-01 16:00:00', '1970-01-01 16:01:01', '1970-01-01 17:03:09']", result->debug_string());
 
         ASSERT_TRUE(TimeFunctions::from_unix_close(_utils->get_fn_ctx(),
                                                    FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -4365,6 +4365,10 @@ TEST_F(TimeFunctionsTest, unixtimeToDatetimeInvalidTimestamp) {
         if (result->is_nullable()) {
             auto nullable_col = ColumnHelper::as_column<NullableColumn>(result);
         }
+
+        ASSERT_TRUE(
+                TimeFunctions::unixtime_to_datetime_close(fn_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
 
         delete fn_ctx;
     }

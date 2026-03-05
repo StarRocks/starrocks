@@ -1542,7 +1542,7 @@ PARALLEL_TEST(VecStringFunctionsTest, charTest) {
     ASSERT_EQ(6, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-    ASSERT_EQ("[A, B, a, b, !, ~]", v->debug_string());
+    ASSERT_EQ("['A', 'B', 'a', 'b', '!', '~']", v->debug_string());
 }
 
 PARALLEL_TEST(VecStringFunctionsTest, inetAtonInvalidIPv4Test) {
@@ -4598,8 +4598,9 @@ PARALLEL_TEST(VecStringFunctionsTest, initcapTest) {
 
     // Fast Path Assertions
     ASSERT_EQ(
-            "[Hello World, Hello World, Hello World, Starrocks Database, 1st Place, In-The-World!,    Hello   World   "
-            ", Abc_Def.Ghi+Jkl, A, , Héllo, École, Ça Va, Café Resumé, Привет Мир, Hello-Wörld_123]",
+            "['Hello World', 'Hello World', 'Hello World', 'Starrocks Database', '1st Place', 'In-The-World!','    "
+            "Hello   World   '"
+            ", 'Abc_Def.Ghi+Jkl', 'A', '', 'Héllo', 'École', 'Ça Va', 'Café Resumé', 'Привет Мир', 'Hello-Wörld_123']",
             result->debug_string());
 
     // --- Error Path (Invalid UTF-8) ---

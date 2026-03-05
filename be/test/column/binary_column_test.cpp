@@ -59,7 +59,7 @@ GROUP_SLOW_PARALLEL_TEST(BinaryColumnTest, test_binary_column_upgrade_if_overflo
     }
 
     // row size overflow
-    // the case will allocate a lot of memory, so temp removes it
+    // this case will allocate a lot of memory, so it is temporarily disabled
     count = Column::MAX_CAPACITY_LIMIT + 5;
     column = BinaryColumn::create();
     column->reserve(count);
@@ -463,7 +463,8 @@ PARALLEL_TEST(BinaryColumnTest, test_move_assignment) {
     ASSERT_EQ("abc", slices[0]);
     ASSERT_EQ("def", slices[1]);
 
-    BinaryColumn c2 = std::move(*c1);
+    BinaryColumn c2;
+    c2 = std::move(*c1);
 
     c1.reset();
     slices = c2.immutable_data();
