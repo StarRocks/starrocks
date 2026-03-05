@@ -102,6 +102,7 @@ import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.PartitionSpecParser;
 import org.apache.iceberg.ReplacePartitions;
 import org.apache.iceberg.RewriteFiles;
+import org.apache.iceberg.Scan;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.SchemaParser;
 import org.apache.iceberg.Snapshot;
@@ -132,6 +133,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.net.URLDecoder;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -148,6 +150,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -968,52 +971,178 @@ public class IcebergMetadata implements ConnectorMetadata {
 
             private void ensureOpen() {
                 if (fileScanTaskIterator == null) {
-                    fileScanTaskIterable = TableScanUtil.splitFiles(tableScan.planFiles(), tableScan.targetSplitSize());
-                    fileScanTaskIterator = fileScanTaskIterable.iterator();
+                    openPlannedTaskIterator(tableScan);
                 }
-                if (!fileScanTaskIterator.hasNext()) {
-                    try {
-                        fileScanTaskIterable.close();
-                        fileScanTaskIterator.close();
-                    } catch (Exception e) {
-                        // ignore
-                    } finally {
-                        //record scan metrics profile
-                        if (tableScan instanceof StarRocksIcebergTableScan) {
-                            IcebergMetricsReporter metricsReporter =
-                                    ((StarRocksIcebergTableScan) tableScan).getMetricsReporter();
-                            if (metricsReporter.getScanReport() != null) {
-                                String name = "ICEBERG.ScanMetrics." +
-                                        ((StarRocksIcebergTableScan) tableScan).getIcebergTableName().toString();
-                                String value = metricsReporter.getScanReport().toString();
-                                Tracers.record(Tracers.Module.EXTERNAL, name, value);
-                            }
-                        }
-                    }
-                    hasMore = false;
+                if (fileScanTaskIterator.hasNext()) {
+                    return;
                 }
+                closePlannedTaskIterator();
+                recordScanMetrics(tableScan);
+                hasMore = false;
+            }
+
+            private void openPlannedTaskIterator(Scan tableScan) {
+                fileScanTaskIterable = normalizePlannedTaskIterable(tableScan.planFiles());
+                fileScanTaskIterator = buildSplitFileScanTaskIterator(
+                        fileScanTaskIterable, fileScanTaskIterable.iterator(), tableScan.targetSplitSize());
+            }
+
+            private void closePlannedTaskIterator() {
+                closeQuietly(fileScanTaskIterator);
+                closeQuietly(fileScanTaskIterable);
+                fileScanTaskIterator = null;
+                fileScanTaskIterable = null;
             }
 
             @Override
             public void close() {
-                try {
-                    if (fileScanTaskIterator != null) {
-                        fileScanTaskIterator.close();
-                    }
-                } catch (Exception ignore) {
-                }
-
-                try {
-                    if (fileScanTaskIterable != null) {
-                        fileScanTaskIterable.close();
-                    }
-                } catch (Exception ignore) {
-                } finally {
-                    fileScanTaskIterator = null;
-                    fileScanTaskIterable = null;
-                }
+                closePlannedTaskIterator();
             }
         };
+    }
+
+    private boolean hasPositionDeletes(FileScanTask task) {
+        for (DeleteFile deleteFile : task.deletes()) {
+            if (deleteFile.content() == FileContent.POSITION_DELETES) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private CloseableIterable<FileScanTask> splitFileScanTask(FileScanTask task, long targetSplitSize) {
+        if (!hasPositionDeletes(task)) {
+            return TableScanUtil.splitFiles(CloseableIterable.withNoopClose(task), targetSplitSize);
+        }
+
+        List<FileScanTask> splitTasks = Lists.newArrayList(task.split(targetSplitSize));
+        if (splitTasks.size() <= 1) {
+            return CloseableIterable.withNoopClose(task);
+        }
+
+        return CloseableIterable.withNoopClose(coalesceSplitTasks(task, splitTasks, targetSplitSize));
+    }
+
+    private List<FileScanTask> coalesceSplitTasks(FileScanTask task, List<FileScanTask> splitTasks, long targetSplitSize) {
+        List<FileScanTask> coalescedTasks = new ArrayList<>();
+        long currentOffset = -1;
+        long currentLength = 0;
+        long currentEnd = -1;
+        for (FileScanTask splitTask : splitTasks) {
+            if (currentOffset < 0) {
+                currentOffset = splitTask.start();
+                currentLength = splitTask.length();
+                currentEnd = splitTask.start() + splitTask.length();
+                continue;
+            }
+
+            if (currentLength < targetSplitSize && currentEnd == splitTask.start()) {
+                currentLength += splitTask.length();
+                currentEnd += splitTask.length();
+                continue;
+            }
+
+            coalescedTasks.add(buildCoalescedSplitTask(task, currentOffset, currentLength));
+            currentOffset = splitTask.start();
+            currentLength = splitTask.length();
+            currentEnd = splitTask.start() + splitTask.length();
+        }
+        coalescedTasks.add(buildCoalescedSplitTask(task, currentOffset, currentLength));
+        return coalescedTasks;
+    }
+
+    private FileScanTask buildCoalescedSplitTask(FileScanTask task, long offset, long length) {
+        if (offset == task.start() && length == task.length()) {
+            return task;
+        }
+        return new IcebergSplitScanTask(offset, length, task);
+    }
+
+    private CloseableIterator<FileScanTask> buildSplitFileScanTaskIterator(
+            CloseableIterable<FileScanTask> plannedTaskIterable,
+            CloseableIterator<FileScanTask> plannedTaskIterator,
+            long targetSplitSize) {
+        return new CloseableIterator<>() {
+            private CloseableIterable<FileScanTask> currentTaskIterable = CloseableIterable.empty();
+            private CloseableIterator<FileScanTask> currentTaskIterator = CloseableIterator.empty();
+
+            @Override
+            public void close() throws IOException {
+                currentTaskIterator.close();
+                currentTaskIterable.close();
+                plannedTaskIterator.close();
+                plannedTaskIterable.close();
+            }
+
+            @Override
+            public boolean hasNext() {
+                while (!currentTaskIterator.hasNext() && plannedTaskIterator.hasNext()) {
+                    openNextTask();
+                }
+                return currentTaskIterator.hasNext();
+            }
+
+            @Override
+            public FileScanTask next() {
+                if (!hasNext()) {
+                    throw new NoSuchElementException();
+                }
+                return currentTaskIterator.next();
+            }
+
+            private void openNextTask() {
+                closeCurrentTask();
+                FileScanTask task = plannedTaskIterator.next();
+                currentTaskIterable = splitFileScanTask(task, targetSplitSize);
+                currentTaskIterator = currentTaskIterable.iterator();
+            }
+
+            private void closeCurrentTask() {
+                closeUnchecked(currentTaskIterator);
+                closeUnchecked(currentTaskIterable);
+                currentTaskIterator = CloseableIterator.empty();
+                currentTaskIterable = CloseableIterable.empty();
+            }
+        };
+    }
+
+    private CloseableIterable<FileScanTask> normalizePlannedTaskIterable(CloseableIterable<FileScanTask> plannedTasks) {
+        return plannedTasks != null ? plannedTasks : CloseableIterable.empty();
+    }
+
+    private void recordScanMetrics(Scan tableScan) {
+        if (!(tableScan instanceof StarRocksIcebergTableScan)) {
+            return;
+        }
+
+        IcebergMetricsReporter metricsReporter = ((StarRocksIcebergTableScan) tableScan).getMetricsReporter();
+        if (metricsReporter.getScanReport() == null) {
+            return;
+        }
+
+        String name = "ICEBERG.ScanMetrics." + ((StarRocksIcebergTableScan) tableScan).getIcebergTableName();
+        String value = metricsReporter.getScanReport().toString();
+        Tracers.record(EXTERNAL, name, value);
+    }
+
+    private void closeUnchecked(AutoCloseable closeable) {
+        try {
+            closeable.close();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private void closeQuietly(AutoCloseable closeable) {
+        if (closeable == null) {
+            return;
+        }
+        try {
+            closeable.close();
+        } catch (Exception ignore) {
+        }
     }
 
     public Set<DeleteFile> getDeleteFiles(IcebergTable icebergTable, Long snapshotId,
