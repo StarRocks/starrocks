@@ -15,13 +15,18 @@
 package com.starrocks.lake;
 
 import com.starrocks.catalog.CatalogUtils;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.scheduler.history.TableKeeper;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 public class TabletWriteLogHistorySyncer extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(TabletWriteLogHistorySyncer.class);
@@ -74,7 +79,18 @@ public class TabletWriteLogHistorySyncer extends FrontendDaemon {
             "WHERE finish_time > (SELECT COALESCE(MAX(finish_time), '0001-01-01 00:00:00') FROM %s) " +
             "AND finish_time < NOW() - INTERVAL 1 MINUTE";
 
+    // Columns added in newer versions that may be missing on upgraded clusters.
+    // LinkedHashMap preserves insertion order for deterministic ALTER TABLE statements.
+    private static final Map<String, String> EXPECTED_COLUMNS = new LinkedHashMap<>();
+    static {
+        EXPECTED_COLUMNS.put("sst_input_files", "int");
+        EXPECTED_COLUMNS.put("sst_input_bytes", "bigint");
+        EXPECTED_COLUMNS.put("sst_output_files", "int");
+        EXPECTED_COLUMNS.put("sst_output_bytes", "bigint");
+    }
+
     private boolean firstSync = true;
+    private boolean schemaMigrated = false;
 
     private static final TableKeeper KEEPER =
             new TableKeeper(DB_NAME, TABLE_NAME, TABLE_CREATE, () -> RETAINED_DAYS);
@@ -105,11 +121,40 @@ public class TabletWriteLogHistorySyncer extends FrontendDaemon {
     }
 
     public void syncData() {
-        // TODO: Can add a switch to control whether to enable synchronization
+        // Ensure the table schema is up-to-date before syncing
+        if (!schemaMigrated) {
+            ensureTableSchema();
+            schemaMigrated = true;
+        }
         try {
             SimpleExecutor.getRepoExecutor().executeDML(SQLBuilder.buildSyncSql());
         } catch (Exception e) {
             LOG.error("Failed to sync tablet write log history", e);
+        }
+    }
+
+    private void ensureTableSchema() {
+        try {
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                    .getLocalMetastore().mayGetTable(DB_NAME, TABLE_NAME).orElse(null);
+            if (table == null) {
+                return;
+            }
+            for (Map.Entry<String, String> entry : EXPECTED_COLUMNS.entrySet()) {
+                if (table.getColumn(entry.getKey()) == null) {
+                    String sql = String.format("ALTER TABLE %s.%s ADD COLUMN %s %s",
+                            DB_NAME, TABLE_NAME, entry.getKey(), entry.getValue());
+                    try {
+                        SimpleExecutor.getRepoExecutor().executeDDL(sql);
+                        LOG.info("Added missing column {} to {}.{}", entry.getKey(), DB_NAME, TABLE_NAME);
+                    } catch (Exception e) {
+                        LOG.warn("Failed to add column {} to {}.{}: {}", entry.getKey(), DB_NAME, TABLE_NAME,
+                                e.getMessage());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to ensure table schema for {}.{}", DB_NAME, TABLE_NAME, e);
         }
     }
 

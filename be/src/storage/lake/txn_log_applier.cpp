@@ -231,8 +231,14 @@ public:
         SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(
                 config::enable_pk_strict_memcheck ? _tablet.update_mgr()->mem_tracker() : nullptr);
         _max_txn_id = std::max(_max_txn_id, log.txn_id());
+        if (log.has_partition_id()) {
+            _partition_id = log.partition_id();
+        }
         RETURN_IF_ERROR(check_rebuild_index());
         if (log.has_op_write()) {
+            if (log.op_write().has_schema_key() && log.op_write().schema_key().has_table_id()) {
+                _table_id = log.op_write().schema_key().table_id();
+            }
             RETURN_IF_ERROR(check_and_recover([&]() { return apply_write_log(log.op_write(), log.txn_id()); }));
         }
         if (log.has_op_compaction()) {
@@ -273,6 +279,13 @@ public:
             }
 
             _max_txn_id = std::max(_max_txn_id, log->txn_id());
+            if (log->has_partition_id()) {
+                _partition_id = log->partition_id();
+            }
+            if (log->has_op_write() && log->op_write().has_schema_key() &&
+                log->op_write().schema_key().has_table_id()) {
+                _table_id = log->op_write().schema_key().table_id();
+            }
 
             // Ensure this log has op_write
             if (!log->has_op_write()) {
@@ -340,8 +353,8 @@ public:
                 if (sst_count > 0) {
                     int64_t finish_time = UnixMillis();
                     TabletWriteLogManager::instance()->add_publish_log(
-                            get_backend_id().value_or(0), _max_txn_id, _tablet.id(), 0 /* table_id */,
-                            0 /* partition_id */, _publish_begin_time, finish_time, sst_count, sst_bytes);
+                            get_backend_id().value_or(0), _max_txn_id, _tablet.id(), _table_id, _partition_id,
+                            _publish_begin_time, finish_time, sst_count, sst_bytes);
                 }
             }
         }
@@ -735,6 +748,9 @@ private:
     bool _is_lake_replication = false;
     // Timestamp when prepare_primary_index was first called (for publish SST logging)
     int64_t _publish_begin_time{0};
+    // Table/partition IDs extracted from txn_logs during apply (for publish SST logging)
+    int64_t _table_id{0};
+    int64_t _partition_id{0};
 };
 
 class NonPrimaryKeyTxnLogApplier : public TxnLogApplier {
