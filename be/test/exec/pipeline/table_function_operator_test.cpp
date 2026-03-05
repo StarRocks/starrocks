@@ -1,5 +1,6 @@
 #include "exec/pipeline/table_function_operator.h"
 
+#include "common/config.h"
 #include "exec/chunk_buffer_memory_manager.h"
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"

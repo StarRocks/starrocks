@@ -19,6 +19,7 @@
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/assert.h"
 #include "column/datum_convert.h"
+#include "common/config.h"
 #include "exprs/expr_factory.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/Exprs_types.h"

@@ -20,6 +20,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/datum_tuple.h"
+#include "common/config.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"

@@ -14,6 +14,7 @@
 
 #include "storage/rowset/bitmap_index_evaluator.h"
 
+#include "common/config.h"
 #include "storage/chunk_helper.h"
 #include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/roaring2range.h"

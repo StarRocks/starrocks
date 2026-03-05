@@ -41,6 +41,7 @@
 #include <thrift/transport/TSocket.h>
 
 #include "base/time/monotime.h"
+#include "common/config.h"
 #include "common/util/thrift_server.h"
 #include "gen_cpp/Types_types.h"
 
@@ -56,11 +57,14 @@
 
 namespace starrocks {
 
+std::shared_ptr<apache::thrift::TConfiguration> create_thrift_configuration() {
+    return std::make_shared<apache::thrift::TConfiguration>(
+            config::thrift_max_message_size, config::thrift_max_frame_size, config::thrift_max_recursion_depth);
+}
+
 ThriftSerializer::ThriftSerializer(bool compact, int initial_buffer_size)
-        : _mem_buffer(new apache::thrift::transport::TMemoryBuffer(
-                  initial_buffer_size, std::make_shared<apache::thrift::TConfiguration>(
-                                               config::thrift_max_message_size, config::thrift_max_frame_size,
-                                               config::thrift_max_recursion_depth))) {
+        : _mem_buffer(
+                  new apache::thrift::transport::TMemoryBuffer(initial_buffer_size, create_thrift_configuration())) {
     if (compact) {
         apache::thrift::protocol::TCompactProtocolFactoryT<apache::thrift::transport::TMemoryBuffer> factory;
         _protocol = factory.getProtocol(_mem_buffer);

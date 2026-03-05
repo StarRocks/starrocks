@@ -122,14 +122,7 @@ public:
         return &_buffer;
     }
 
-    void reset() override {
-        _offsets.clear();
-        _buffer.reserve(_options.data_page_size == 0 ? config::data_page_size : _options.data_page_size);
-        _buffer.resize(_reserved_head_size);
-        _next_offset = 0;
-        _size_estimate = sizeof(uint32_t);
-        _finished = false;
-    }
+    void reset() override;
 
     uint32_t count() const override { return _offsets.size(); }
 
@@ -185,42 +178,7 @@ public:
     explicit BinaryPlainPageDecoder(Slice data)
             : _data(data), _parsed(false), _num_elems(0), _offsets_pos(0), _cur_idx(0) {}
 
-    Status init() override {
-        RETURN_IF(_parsed, Status::OK());
-
-        if (_data.size < sizeof(uint32_t)) {
-            std::stringstream ss;
-            ss << "file corruption: not enough bytes for trailer in BinaryPlainPageDecoder ."
-                  "invalid data size:"
-               << _data.size << ", trailer size:" << sizeof(uint32_t);
-            return Status::Corruption(ss.str());
-        }
-
-        // Decode trailer
-        _num_elems = decode_fixed32_le((const uint8_t*)&_data[_data.get_size() - sizeof(uint32_t)]);
-        _offsets_pos =
-                static_cast<uint32_t>(_data.get_size()) - (_num_elems + 1) * static_cast<uint32_t>(sizeof(uint32_t));
-        _offsets_ptr = reinterpret_cast<uint32_t*>(_data.data + _offsets_pos);
-        // TODO: align offset
-
-        if (_data.size < config::small_dictionary_page_size) {
-            _parsed_datas = std::vector<Slice>();
-            _parsed_datas->reserve(_num_elems);
-            for (uint32_t i = 0; i < _num_elems; i++) {
-                const uint32_t off1 = offset_uncheck(i);
-                const uint32_t off2 = offset(i + 1);
-                Slice s(&_data[off1], off2 - off1);
-                _parsed_datas->emplace_back(s);
-            }
-        }
-
-        _parsed = true;
-
-        uint32_t total_bytes = _offsets_pos;
-        _estimated_row_size = _num_elems == 0 ? 0 : total_bytes / _num_elems;
-
-        return Status::OK();
-    }
+    Status init() override;
 
     Status seek_to_position_in_page(uint32_t pos) override {
         DCHECK_LE(pos, _num_elems);

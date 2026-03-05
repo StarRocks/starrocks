@@ -23,6 +23,7 @@
 #include "base/testutil/assert.h"
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
+#include "common/config.h"
 #include "exec/avro_test.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/Descriptors_types.h"

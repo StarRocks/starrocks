@@ -35,6 +35,7 @@
 #include "storage/rowset/scalar_column_iterator.h"
 
 #include "base/bit/bitmap.h"
+#include "common/config.h"
 #include "common/status.h"
 #include "storage/column_predicate.h"
 #include "storage/rowset/binary_dict_page.h"

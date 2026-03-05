@@ -23,6 +23,7 @@
 #include <vector>
 
 #include "column/struct_column.h"
+#include "common/config.h"
 #include "common/object_pool.h"
 #include "exprs/expr_factory.h"
 #include "exprs/is_null_predicate.h"

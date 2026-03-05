@@ -116,6 +116,10 @@ Analytor::Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc,
     }
 }
 
+bool Analytor::is_chunk_buffer_full() {
+    return _buffer.size() >= config::pipeline_analytic_max_buffer_size;
+}
+
 Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile) {
     _state = state;
 

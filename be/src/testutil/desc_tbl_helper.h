@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "common/config.h"
 #include "common/status.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "runtime/descriptor_helper.h"

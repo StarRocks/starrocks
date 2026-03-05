@@ -35,6 +35,7 @@
 #include "http_service.h"
 
 #include "cache/datacache.h"
+#include "common/config.h"
 #include "fs/fs_util.h"
 #include "gutil/stl_util.h"
 #include "http/action/checksum_action.h"

@@ -18,6 +18,7 @@
 
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
+#include "common/config.h"
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
 #include "storage/lake/join_path.h"

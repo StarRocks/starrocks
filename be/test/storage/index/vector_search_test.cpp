@@ -19,6 +19,8 @@
 #ifdef WITH_TENANN
 #include <tenann/factory/ann_searcher_factory.h>
 #include <tenann/factory/index_factory.h>
+
+#include "common/config.h"
 #endif
 
 #include "base/testutil/assert.h"

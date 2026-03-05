@@ -21,6 +21,7 @@
 
 #include "base/testutil/assert.h"
 #include "column/datum_tuple.h"
+#include "common/config.h"
 #include "common/logging.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"

@@ -23,6 +23,7 @@
 #include "base/string/faststring.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/parallel_test.h"
+#include "common/config.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_memory.h"
 #include "fs/fs_util.h"
