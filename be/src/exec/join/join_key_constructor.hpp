@@ -25,7 +25,6 @@ namespace starrocks {
 // KeyConstructorForOneKey
 // ------------------------------------------------------------------------------------
 
-
 template <LogicalType LT>
 void BuildKeyConstructorForOneKey<LT>::build_key(RuntimeState* state, JoinHashTableItems* table_items) {
     // TODO: Going forward, if system testing verifies: the slice cache has no impact on join performance on all scene,
@@ -81,7 +80,7 @@ void ProbeKeyConstructorForOneKey<LT>::build_key(const JoinHashTableItems& table
 template <LogicalType LT>
 auto ProbeKeyConstructorForOneKey<LT>::get_key_data(const HashTableProbeState& probe_state)
         -> const ImmBuffer<CppType> {
-    if constexpr(lt_is_string<LT>) {
+    if constexpr (lt_is_string<LT>) {
         return probe_state.probe_slice;
     } else {
         const auto* data_column = ColumnHelper::get_data_column_by_type<LT>((*probe_state.key_columns)[0]);
