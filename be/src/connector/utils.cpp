@@ -14,6 +14,8 @@
 
 #include "connector/utils.h"
 
+#include <boost/algorithm/string.hpp>
+
 #include "arrow/util/decimal.h"
 #include "base/url_coding.h"
 #include "base/utility/integer_util.h"
@@ -24,8 +26,33 @@
 #include "exprs/expr.h"
 #include "formats/parquet/parquet_file_writer.h"
 #include "types/datum.h"
+#include "util/compression/compression_utils.h"
 
 namespace starrocks::connector {
+
+std::string normalize_format_name(std::string format) {
+    boost::algorithm::trim(format);
+    boost::algorithm::to_lower(format);
+    boost::algorithm::trim_left_if(format, boost::is_any_of("."));
+
+    // Strip any accidental extension chain like "csv.gz.csv" to keep format canonical.
+    auto dot = boost::algorithm::find_first(format, ".");
+    if (!dot.empty()) {
+        format.erase(dot.begin(), format.end());
+    }
+    return format;
+}
+
+StatusOr<std::string> build_canonical_file_suffix(const std::string& format, TCompressionType::type compression_type) {
+    if (format.empty()) {
+        return Status::InvalidArgument("file format is empty");
+    }
+    if (format == formats::CSV) {
+        ASSIGN_OR_RETURN(std::string compression_suffix, CompressionUtils::to_compression_ext(compression_type));
+        return format + compression_suffix;
+    }
+    return format;
+}
 
 StatusOr<std::string> HiveUtils::make_partition_name(
         const std::vector<std::string>& column_names,

@@ -85,6 +85,16 @@ public:
     }
 };
 
+// Normalize a raw format string (e.g. "csv.gz.csv", "  .Csv  ") to a canonical
+// lowercase base name (e.g. "csv").
+std::string normalize_format_name(std::string format);
+
+// Build canonical output file suffix for connector file sinks.
+// Expects a normalized format name (from normalize_format_name).
+// For CSV, append compression suffix (e.g. csv.gz); for self-describing formats
+// like parquet/orc, keep the format suffix only.
+StatusOr<std::string> build_canonical_file_suffix(const std::string& format, TCompressionType::type compression_type);
+
 // Location provider provides file location for every output file. The name format depends on if the write is partitioned or not.
 class LocationProvider {
 public:
