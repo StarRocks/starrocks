@@ -61,9 +61,9 @@
 
 ### Build & Dependencies
 
-- [ ] **BUILD-01**: FE Maven adds `org.apache.arrow.adbc:adbc-core` and `adbc-driver-flight-sql` dependencies
-- [ ] **BUILD-02**: BE CMake adds C++ ADBC library as thirdparty dependency
-- [ ] **BUILD-03**: Both FE and BE build cleanly with new dependencies
+- [x] **BUILD-01**: FE Maven adds `org.apache.arrow.adbc:adbc-core` and `adbc-driver-flight-sql` dependencies
+- [x] **BUILD-02**: BE CMake adds C++ ADBC library as thirdparty dependency
+- [x] **BUILD-03**: Both FE and BE build cleanly with new dependencies
 
 ## v2 Requirements
 
@@ -98,9 +98,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| BUILD-01 | Phase 1 | Pending |
-| BUILD-02 | Phase 1 | Pending |
-| BUILD-03 | Phase 1 | Pending |
+| BUILD-01 | Phase 1 | Complete |
+| BUILD-02 | Phase 1 | Complete |
+| BUILD-03 | Phase 1 | Complete |
 | CAT-01 | Phase 1 | Pending |
 | CAT-02 | Phase 1 | Pending |
 | CAT-03 | Phase 1 | Pending |
