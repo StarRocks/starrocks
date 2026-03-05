@@ -24,12 +24,8 @@
 #include "formats/orc/orc_file_writer.h"
 #include "formats/parquet/parquet_file_writer.h"
 #include "formats/utils.h"
-<<<<<<< HEAD
 #include "util/compression/compression_utils.h"
 #include "util/url_coding.h"
-=======
-#include "fs/fs_factory.h"
->>>>>>> 85a2748cd8 ([BugFix] Fix duplicated CSV compression suffix in file sink output names (#69749))
 #include "utils.h"
 
 namespace starrocks::connector {
