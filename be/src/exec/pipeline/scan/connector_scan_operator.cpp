@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/scan/connector_scan_operator.h"
 
+#include "common/config.h"
 #include "connector/lake_connector.h"
 #include "exec/connector_scan_node.h"
 #include "exec/pipeline/pipeline_driver.h"
