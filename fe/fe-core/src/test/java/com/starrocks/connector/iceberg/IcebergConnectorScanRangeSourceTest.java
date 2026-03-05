@@ -210,10 +210,13 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
         long partitionId = scanRangeSource.addPartition(fileScanTask);
         THdfsScanRange hdfsScanRange = scanRangeSource.buildScanRange(fileScanTask, fileScanTask.file(), partitionId);
 
+        // _last_updated_sequence_number is passed as an extended column (with dataSequenceNumber value)
+        // but NOT registered as an extended slot (so BE treats it as a reserved field).
         Assertions.assertTrue(
                 hdfsScanRange.getExtended_columns().containsKey(lastUpdatedSequenceNumberSlot.getId().asInt()));
-        Assertions.assertTrue(
-                scanRangeSource.getExtendedColumnSlotIds().contains(lastUpdatedSequenceNumberSlot.getId().asInt()));
+        // It should NOT be in the extendedColumnSlotIds list
+        Assertions.assertFalse(scanRangeSource.getExtendedColumnSlotIds().contains(
+                lastUpdatedSequenceNumberSlot.getId().asInt()));
     }
 
     @Test

@@ -40,7 +40,8 @@ SELECT _row_id, _last_updated_sequence_number, * FROM [<catalog>.][<database>.]t
 :::note
 
 - `_row_id` 列には、データファイルに `firstRowId` メタデータが必要です。データファイルに `firstRowId` がない場合、クエリはエラーで失敗します。
-- `_last_updated_sequence_number` 列は、データファイルのデータシーケンス番号（`dataSequenceNumber`）を返します。
+- 新規挿入データの場合、`_row_id` は `firstRowId + row_position` で計算され、`_last_updated_sequence_number` はファイルレベルの `dataSequenceNumber` になります。
+- コンパクション（Iceberg OPTIMIZE / rewrite-data-files など）後、コンパクターが Iceberg v3 仕様に従って `_row_id` と `_last_updated_sequence_number` をデータファイルの物理列として書き込んだ場合、StarRocks は各行の物理列値を読み取り、コンパクション後も行リネージ情報を保持します。
 - これらのメタデータ列は Iceberg v3 テーブル（format-version = 3）でのみ使用可能です。
 
 :::

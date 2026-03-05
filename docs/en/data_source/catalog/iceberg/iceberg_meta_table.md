@@ -40,7 +40,8 @@ SELECT _row_id, _last_updated_sequence_number, * FROM [<catalog>.][<database>.]t
 :::note
 
 - The `_row_id` column requires data files to have `firstRowId` metadata. If a data file is missing `firstRowId`, the query will fail with an error.
-- The `_last_updated_sequence_number` column returns the data sequence number (`dataSequenceNumber`) of the data file.
+- For newly inserted data, `_row_id` is computed as `firstRowId + row_position` and `_last_updated_sequence_number` is the file-level `dataSequenceNumber`.
+- After compaction (e.g., Iceberg OPTIMIZE / rewrite-data-files), if the compactor writes `_row_id` and `_last_updated_sequence_number` as physical columns in the data files (as required by the Iceberg v3 spec), StarRocks reads the per-row values from the physical columns, preserving row lineage across compaction.
 - These metadata columns are only available for Iceberg v3 tables (format-version = 3).
 
 :::
