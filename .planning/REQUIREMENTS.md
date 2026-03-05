@@ -29,10 +29,10 @@
 
 ### Type System
 
-- [ ] **TYPE-01**: Arrow types map to StarRocks types (int8-64, float/double, decimal, utf8, binary, date32, timestamp, boolean)
+- [x] **TYPE-01**: Arrow types map to StarRocks types (int8-64, float/double, decimal, utf8, binary, date32, timestamp, boolean)
 - [x] **TYPE-02**: Schema resolver abstraction supports per-driver type mapping overrides
-- [ ] **TYPE-03**: FlightSQL schema resolver handles Arrow Flight SQL specific type conventions
-- [ ] **TYPE-04**: Unsupported Arrow types are gracefully handled (logged warning, column excluded or mapped to VARCHAR)
+- [x] **TYPE-03**: FlightSQL schema resolver handles Arrow Flight SQL specific type conventions
+- [x] **TYPE-04**: Unsupported Arrow types are gracefully handled (logged warning, column excluded or mapped to VARCHAR)
 
 ### Partitioning
 
@@ -110,10 +110,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CAT-07 | Phase 1 | Pending |
 | CAT-08 | Phase 1 | Pending |
 | CAT-09 | Phase 1 | Pending |
-| TYPE-01 | Phase 1 | Pending |
+| TYPE-01 | Phase 1 | Complete |
 | TYPE-02 | Phase 1 | Complete |
-| TYPE-03 | Phase 1 | Pending |
-| TYPE-04 | Phase 1 | Pending |
+| TYPE-03 | Phase 1 | Complete |
+| TYPE-04 | Phase 1 | Complete |
 | SCAN-01 | Phase 2 | Pending |
 | SCAN-02 | Phase 2 | Pending |
 | SCAN-03 | Phase 2 | Pending |

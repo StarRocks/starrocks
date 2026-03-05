@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-03-04)
 ## Current Position
 
 Phase: 1 of 3 (Foundation)
-Plan: 2 of 5 in current phase
+Plan: 3 of 5 in current phase
 Status: Executing
-Last activity: 2026-03-05 — Completed 01-02 (Connector skeleton: ConnectorType, ADBCConnector, ADBCTable, ADBCSchemaResolver)
+Last activity: 2026-03-05 — Completed 01-03 (Arrow type mapping: FlightSQLSchemaResolver with 14 Arrow type cases)
 
-Progress: [████░░░░░░] 40%
+Progress: [██████░░░░] 60%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 2
-- Average duration: 22 min
-- Total execution time: 0.7 hours
+- Total plans completed: 3
+- Average duration: 25 min
+- Total execution time: 1.25 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01-foundation | 2 | 43 min | 22 min |
+| 01-foundation | 3 | 75 min | 25 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (6 min), 01-02 (37 min)
-- Trend: n/a (2 data points)
+- Last 5 plans: 01-01 (6 min), 01-02 (37 min), 01-03 (32 min)
+- Trend: stabilizing around 30-35 min for implementation plans
 
 *Updated after each plan completion*
 
@@ -51,6 +51,8 @@ Recent decisions affecting current work:
 - Connector: ADBCSchemaResolver uses Arrow vector types (Field, Schema) not Flight SQL types for broader driver compatibility
 - Connector: ADBCTable.toThrift() returns null stub until TTableType.ADBC_TABLE added to Thrift IDL
 - Connector: ADBCMetadata is a minimal stub; Plan 04 replaces with real ADBC API calls
+- Type mapping: Concrete type classes (IntegerType, FloatType, etc.) used instead of ScalarType factory methods
+- Type mapping: Unsigned ints promoted to next-wider signed type (uint8->SMALLINT, uint64->LARGEINT)
 
 ### Pending Todos
 
@@ -64,5 +66,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-05
-Stopped at: Completed 01-02-PLAN.md (connector skeleton)
+Stopped at: Completed 01-03-PLAN.md (Arrow type mapping)
 Resume file: None
