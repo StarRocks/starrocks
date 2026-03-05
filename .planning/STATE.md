@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-03-04)
 ## Current Position
 
 Phase: 1 of 3 (Foundation)
-Plan: 4 of 5 in current phase
-Status: Executing
-Last activity: 2026-03-05 — Completed 01-04 (ADBCMetadata + ADBCMetaCache with ADBC Java API)
+Plan: 5 of 5 in current phase
+Status: Phase 1 Complete
+Last activity: 2026-03-05 — Completed 01-05 (SQL analysis guards, Phase 1 certified)
 
-Progress: [████████░░] 80%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
-- Average duration: 32 min
-- Total execution time: 2.1 hours
+- Total plans completed: 5
+- Average duration: 28 min
+- Total execution time: 2.3 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01-foundation | 4 | 128 min | 32 min |
+| 01-foundation | 5 | 141 min | 28 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (6 min), 01-02 (37 min), 01-03 (32 min), 01-04 (53 min)
-- Trend: increasing complexity as implementation progresses
+- Last 5 plans: 01-01 (6 min), 01-02 (37 min), 01-03 (32 min), 01-04 (53 min), 01-05 (13 min)
+- Trend: Phase 1 complete; guard additions were straightforward
 
 *Updated after each plan completion*
 
@@ -56,6 +56,8 @@ Recent decisions affecting current work:
 - Metadata: getTableSchema uses null for catalog parameter; dbName is the Arrow Flight SQL schema
 - Metadata: Unknown adbc.driver values fall back to FlightSQLSchemaResolver with warning (not error)
 - Cache: ADBCMetaCache mirrors JDBCMetaCache with adbc_ property keys (adbc_meta_cache_enable, adbc_meta_cache_expire_sec)
+- SQL analysis: ADBC guards mirror JDBC pattern in AstToStringBuilder, MaterializedViewAnalyzer, DesensitizedSQLBuilder, RelationTransformer
+- Scan operator: RelationTransformer throws UNSUPPORTED for ADBC scan attempts; LogicalADBCScanOperator deferred to Phase 2
 
 ### Pending Todos
 
@@ -69,5 +71,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-05
-Stopped at: Completed 01-04-PLAN.md (ADBCMetadata + ADBCMetaCache)
+Stopped at: Completed 01-05-PLAN.md (SQL analysis guards - Phase 1 complete)
 Resume file: None

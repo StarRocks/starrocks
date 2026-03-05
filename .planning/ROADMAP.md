@@ -12,7 +12,7 @@ Three phases deliver a fully JDBC-parity ADBC external catalog. Phase 1 wires up
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation** - Build dependencies compile, catalog DDL works, metadata browsable, Arrow types map correctly
+- [x] **Phase 1: Foundation** - Build dependencies compile, catalog DDL works, metadata browsable, Arrow types map correctly
 - [ ] **Phase 2: Scanning** - Full data path from FE query to BE Arrow scan to StarRocks Chunk, with column/predicate/limit pushdown and partition pruning
 - [ ] **Phase 3: JDBC Parity** - Materialized views refresh against ADBC tables, column statistics drive optimizer costs
 
@@ -35,7 +35,7 @@ Plans:
 - [x] 01-02-PLAN.md — Connector skeleton: ConnectorType.ADBC, ADBCConnector, ADBCTable, ADBCSchemaResolver base, ADBCTableName (CAT-01, CAT-02, CAT-04, CAT-05, TYPE-02)
 - [x] 01-03-PLAN.md — Arrow type mapping: FlightSQLSchemaResolver TDD (TYPE-01, TYPE-02, TYPE-03, TYPE-04)
 - [x] 01-04-PLAN.md — Metadata operations: ADBCMetadata + ADBCMetaCache with ADBC Java API (CAT-03, CAT-04, CAT-05, CAT-06, CAT-07, CAT-08, CAT-09)
-- [ ] 01-05-PLAN.md — SQL analysis guards + full build verification (BUILD-03, CAT-01, CAT-02, CAT-03, CAT-06, CAT-07, CAT-08)
+- [x] 01-05-PLAN.md — SQL analysis guards + full build verification (BUILD-03, CAT-01, CAT-02, CAT-03, CAT-06, CAT-07, CAT-08)
 
 ### Phase 2: Scanning
 **Goal**: Users can SELECT from ADBC tables with full pushdown; Arrow data flows from BE native C++ ADBC to StarRocks Chunk; partitions are discovered and pruned
@@ -68,6 +68,6 @@ Phases execute in numeric order: 1 → 2 → 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 4/5 | Executing | - |
+| 1. Foundation | 5/5 | Complete | 2026-03-05 |
 | 2. Scanning | 0/TBD | Not started | - |
 | 3. JDBC Parity | 0/TBD | Not started | - |

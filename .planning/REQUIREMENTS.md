@@ -9,7 +9,7 @@
 
 - [x] **CAT-01**: User can CREATE CATALOG with type='adbc' and driver/connection properties
 - [x] **CAT-02**: User can DROP CATALOG to remove an ADBC catalog
-- [ ] **CAT-03**: User can ALTER CATALOG to update ADBC catalog properties
+- [x] **CAT-03**: User can ALTER CATALOG to update ADBC catalog properties
 - [x] **CAT-04**: ADBC catalog accepts `adbc.driver` property to select driver (flight_sql initially)
 - [x] **CAT-05**: ADBC catalog accepts connection properties (uri, user, password, driver-specific options)
 - [x] **CAT-06**: User can SHOW DATABASES to list remote schemas/databases
@@ -103,7 +103,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | BUILD-03 | Phase 1 | Complete |
 | CAT-01 | Phase 1 | Complete |
 | CAT-02 | Phase 1 | Complete |
-| CAT-03 | Phase 1 | Pending |
+| CAT-03 | Phase 1 | Complete |
 | CAT-04 | Phase 1 | Complete |
 | CAT-05 | Phase 1 | Complete |
 | CAT-06 | Phase 1 | Complete |
