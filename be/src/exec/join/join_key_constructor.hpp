@@ -27,9 +27,9 @@ namespace starrocks {
 
 template <LogicalType LT>
 void BuildKeyConstructorForOneKey<LT>::build_key(RuntimeState* state, JoinHashTableItems* table_items) {
-    // TODO: Going forward, if system testing verifies: the slice cache has no impact on join performance on all scene,
-    // we will ultimately avoid building the slice cache. According to the current simple benchmark results,
-    // it only has a minor performance optimization in mid-cardinality scenarios.
+    // TODO: Going forward, if system testing verifies that the slice cache has no impact on join performance
+    // in all scenarios, we will ultimately avoid building the slice cache. According to current simple benchmark
+    // results, it provides only minor performance benefits in medium-cardinality scenarios.
     if constexpr (lt_is_string<LT>) {
         const auto* data_column = ColumnHelper::get_data_column(table_items->key_columns[0]);
         if (UNLIKELY(data_column->is_large_binary())) {
