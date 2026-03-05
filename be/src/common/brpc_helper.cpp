@@ -14,18 +14,22 @@
 
 #include "common/brpc_helper.h"
 
+#include <brpc/controller.h>
+
 #include "common/config.h"
 
 namespace starrocks {
 
-bool brpc_ignore_overcrowded(std::string_view module) {
-    if (module == "query") {
-        return config::brpc_query_ignore_overcrowded;
+void set_ignore_overcrowded_for_query(brpc::Controller& cntl) {
+    if (config::brpc_query_ignore_overcrowded) {
+        cntl.ignore_eovercrowded();
     }
-    if (module == "load") {
-        return config::brpc_load_ignore_overcrowded;
+}
+
+void set_ignore_overcrowded_for_load(brpc::Controller& cntl) {
+    if (config::brpc_load_ignore_overcrowded) {
+        cntl.ignore_eovercrowded();
     }
-    return false;
 }
 
 } // namespace starrocks
