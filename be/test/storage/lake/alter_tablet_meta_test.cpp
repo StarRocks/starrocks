@@ -17,6 +17,7 @@
 #include "agent/agent_task.h"
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/id_generator.h"
+#include "common/config.h"
 #include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/schema_change.h"

@@ -125,7 +125,7 @@ public:
         std::lock_guard<std::mutex> l(_buffer_mutex);
         return _buffer.empty();
     }
-    bool is_chunk_buffer_full() { return _buffer.size() >= config::pipeline_analytic_max_buffer_size; }
+    bool is_chunk_buffer_full();
     bool reached_limit() const { return _limit != -1 && _num_rows_returned >= _limit; }
 
     void attach_sink_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {

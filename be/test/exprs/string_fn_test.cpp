@@ -23,6 +23,7 @@
 #include "base/types/int128.h"
 #include "column/array_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/config.h"
 #include "exprs/function_helper.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "exprs/string_functions.h"
