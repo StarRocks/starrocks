@@ -116,6 +116,7 @@ Usage: $0 <options>
      --without-tenann
                         build without vector index tenann library
      --configure-only   run CMake configure only for Backend/Format Lib and skip compilation
+                        (used by ci-tool changed-file clang-tidy mode)
      --with-compress-debug-symbol {ON|OFF}
                         build with compressing debug symbol. (default: $WITH_COMPRESS)
      --with-source-file-relative-path {ON|OFF}
