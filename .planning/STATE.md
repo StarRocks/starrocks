@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-03-04)
 ## Current Position
 
 Phase: 1 of 3 (Foundation)
-Plan: 3 of 5 in current phase
+Plan: 4 of 5 in current phase
 Status: Executing
-Last activity: 2026-03-05 — Completed 01-03 (Arrow type mapping: FlightSQLSchemaResolver with 14 Arrow type cases)
+Last activity: 2026-03-05 — Completed 01-04 (ADBCMetadata + ADBCMetaCache with ADBC Java API)
 
-Progress: [██████░░░░] 60%
+Progress: [████████░░] 80%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3
-- Average duration: 25 min
-- Total execution time: 1.25 hours
+- Total plans completed: 4
+- Average duration: 32 min
+- Total execution time: 2.1 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01-foundation | 3 | 75 min | 25 min |
+| 01-foundation | 4 | 128 min | 32 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (6 min), 01-02 (37 min), 01-03 (32 min)
-- Trend: stabilizing around 30-35 min for implementation plans
+- Last 5 plans: 01-01 (6 min), 01-02 (37 min), 01-03 (32 min), 01-04 (53 min)
+- Trend: increasing complexity as implementation progresses
 
 *Updated after each plan completion*
 
@@ -50,9 +50,12 @@ Recent decisions affecting current work:
 - Build: CMAKE_INSTALL_LIBDIR=lib64 needed for ADBC C++ to match StarRocks layout
 - Connector: ADBCSchemaResolver uses Arrow vector types (Field, Schema) not Flight SQL types for broader driver compatibility
 - Connector: ADBCTable.toThrift() returns null stub until TTableType.ADBC_TABLE added to Thrift IDL
-- Connector: ADBCMetadata is a minimal stub; Plan 04 replaces with real ADBC API calls
 - Type mapping: Concrete type classes (IntegerType, FloatType, etc.) used instead of ScalarType factory methods
 - Type mapping: Unsigned ints promoted to next-wider signed type (uint8->SMALLINT, uint64->LARGEINT)
+- Metadata: ADBCMetadata opens new AdbcConnection per operation via try-with-resources (not shared across threads)
+- Metadata: getTableSchema uses null for catalog parameter; dbName is the Arrow Flight SQL schema
+- Metadata: Unknown adbc.driver values fall back to FlightSQLSchemaResolver with warning (not error)
+- Cache: ADBCMetaCache mirrors JDBCMetaCache with adbc_ property keys (adbc_meta_cache_enable, adbc_meta_cache_expire_sec)
 
 ### Pending Todos
 
@@ -66,5 +69,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-05
-Stopped at: Completed 01-03-PLAN.md (Arrow type mapping)
+Stopped at: Completed 01-04-PLAN.md (ADBCMetadata + ADBCMetaCache)
 Resume file: None

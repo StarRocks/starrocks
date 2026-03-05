@@ -12,10 +12,10 @@
 - [ ] **CAT-03**: User can ALTER CATALOG to update ADBC catalog properties
 - [x] **CAT-04**: ADBC catalog accepts `adbc.driver` property to select driver (flight_sql initially)
 - [x] **CAT-05**: ADBC catalog accepts connection properties (uri, user, password, driver-specific options)
-- [ ] **CAT-06**: User can SHOW DATABASES to list remote schemas/databases
-- [ ] **CAT-07**: User can SHOW TABLES to list remote tables in a database
-- [ ] **CAT-08**: User can DESCRIBE table to see column metadata with StarRocks types
-- [ ] **CAT-09**: Metadata is cached with configurable TTL (database list, table list, table schema, partitions)
+- [x] **CAT-06**: User can SHOW DATABASES to list remote schemas/databases
+- [x] **CAT-07**: User can SHOW TABLES to list remote tables in a database
+- [x] **CAT-08**: User can DESCRIBE table to see column metadata with StarRocks types
+- [x] **CAT-09**: Metadata is cached with configurable TTL (database list, table list, table schema, partitions)
 
 ### Data Scanning
 
@@ -106,10 +106,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CAT-03 | Phase 1 | Pending |
 | CAT-04 | Phase 1 | Complete |
 | CAT-05 | Phase 1 | Complete |
-| CAT-06 | Phase 1 | Pending |
-| CAT-07 | Phase 1 | Pending |
-| CAT-08 | Phase 1 | Pending |
-| CAT-09 | Phase 1 | Pending |
+| CAT-06 | Phase 1 | Complete |
+| CAT-07 | Phase 1 | Complete |
+| CAT-08 | Phase 1 | Complete |
+| CAT-09 | Phase 1 | Complete |
 | TYPE-01 | Phase 1 | Complete |
 | TYPE-02 | Phase 1 | Complete |
 | TYPE-03 | Phase 1 | Complete |
