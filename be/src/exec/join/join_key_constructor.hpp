@@ -72,7 +72,7 @@ void ProbeKeyConstructorForOneKey<LT>::build_key(const JoinHashTableItems& table
         probe_state->null_array = std::nullopt;
     }
     if constexpr (lt_is_string<LT>) {
-        const auto* data_column = ColumnHelper::get_data_column_by_type<LT>((*probe_state.key_columns)[0]);
+        const auto* data_column = ColumnHelper::get_data_column_by_type<LT>((*probe_state->key_columns)[0]);
         data_column->build_slices(probe_state->probe_slice);
     }
 }
