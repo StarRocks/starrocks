@@ -50,7 +50,7 @@ Plans:
 
 Plans:
 - [ ] 02-01-PLAN.md — Thrift IDL additions + FE optimizer scaffolding (SCAN-01, OPT-01, OPT-02)
-- [ ] 02-02-PLAN.md — BE native C++ ADBC connector and scanner (SCAN-02, SCAN-03, SCAN-07)
+- [x] 02-02-PLAN.md — BE native C++ ADBC connector and scanner (SCAN-02, SCAN-03, SCAN-07)
 - [ ] 02-03-PLAN.md — ADBCScanNode SQL generation + PlanFragmentBuilder + RelationTransformer wiring (OPT-03, OPT-04, SCAN-04, SCAN-05, SCAN-06)
 - [ ] 02-04-PLAN.md — BE wiring (exec_factory, connector registration) + full build verification (SCAN-02, SCAN-03, SCAN-04, SCAN-05, SCAN-06, SCAN-07)
 
@@ -75,5 +75,5 @@ Phases execute in numeric order: 1 → 2 → 3
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 5/5 | Complete | 2026-03-05 |
-| 2. Scanning | 0/4 | In progress | - |
+| 2. Scanning | 2/4 | In progress | - |
 | 3. JDBC Parity | 0/TBD | Not started | - |
