@@ -987,4 +987,109 @@ public class CatalogRecycleBinTest {
         RecyclePartitionInfo p3Info = recycleBin.getRecyclePartitionInfo(p3.getId());
         Assertions.assertTrue(p3Info.isRecoverable(), "p3 is the newly added partition and should remain recoverable");
     }
+
+    @Test
+    public void testConfigMinEraseLatency() {
+        long origMinLatency = Config.catalog_recycle_bin_erase_min_latency_ms;
+        long origTrashExpire = Config.catalog_trash_expire_second;
+        try {
+            // Set a very short min erase latency (2 seconds) and short trash expire (1 second)
+            Config.catalog_recycle_bin_erase_min_latency_ms = 2000L;
+            Config.catalog_trash_expire_second = 1L;
+
+            CatalogRecycleBin recycleBin = new CatalogRecycleBin();
+            Database db = new Database(9001, "test_min_latency_db");
+            recycleBin.recycleDatabase(db, new HashSet<>(), true);
+
+            long now = System.currentTimeMillis();
+
+            // trash_expire_second (1s) < min_erase_latency (2s), so min_erase_latency should take effect
+            // Recycled 1.5 seconds ago: should NOT be erased (within min latency)
+            recycleBin.idToRecycleTime.put(db.getId(), now - 1500L);
+            recycleBin.eraseDatabase(now);
+            Assertions.assertNotNull(recycleBin.getDatabase(db.getId()),
+                    "DB should not be erased within min erase latency");
+
+            // Recycled 3 seconds ago: should be erased (exceeds min latency)
+            recycleBin.idToRecycleTime.put(db.getId(), now - 3000L);
+            recycleBin.eraseDatabase(now);
+            Assertions.assertNull(recycleBin.getDatabase(db.getId()),
+                    "DB should be erased after min erase latency");
+        } finally {
+            Config.catalog_recycle_bin_erase_min_latency_ms = origMinLatency;
+            Config.catalog_trash_expire_second = origTrashExpire;
+        }
+    }
+
+    @Test
+    public void testConfigMaxEraseOperationsPerCycle() {
+        int origMaxOps = Config.catalog_recycle_bin_erase_max_operations_per_cycle;
+        try {
+            // Set a small batch size
+            int batchSize = 10;
+            Config.catalog_recycle_bin_erase_max_operations_per_cycle = batchSize;
+
+            CatalogRecycleBin recycleBin = new CatalogRecycleBin();
+            for (int i = 0; i < batchSize + 5; i++) {
+                Table t = new Table(i, String.format("t%d", i), Table.TableType.VIEW, null);
+                recycleBin.recycleTable(10000L, t, true);
+            }
+
+            List<CatalogRecycleBin.RecycleTableInfo> recycleTableInfos = recycleBin.pickTablesToErase(
+                    System.currentTimeMillis() + Config.catalog_trash_expire_second * 1000 + 1);
+            Assertions.assertEquals(batchSize, recycleTableInfos.size(),
+                    "Should be capped at configured max erase operations per cycle");
+
+            // Change the config and verify the new value takes effect
+            Config.catalog_recycle_bin_erase_max_operations_per_cycle = batchSize + 5;
+            recycleTableInfos = recycleBin.pickTablesToErase(
+                    System.currentTimeMillis() + Config.catalog_trash_expire_second * 1000 + 1);
+            Assertions.assertEquals(batchSize + 5, recycleTableInfos.size(),
+                    "Should reflect dynamically updated config value");
+        } finally {
+            Config.catalog_recycle_bin_erase_max_operations_per_cycle = origMaxOps;
+        }
+    }
+
+    @Test
+    public void testConfigFailRetryInterval() {
+        long origRetryInterval = Config.catalog_recycle_bin_erase_fail_retry_interval_ms;
+        try {
+            Config.catalog_recycle_bin_erase_fail_retry_interval_ms = 5000L;
+            Assertions.assertEquals(5000L, CatalogRecycleBin.getFailRetryInterval(),
+                    "getFailRetryInterval should return the configured value");
+
+            Config.catalog_recycle_bin_erase_fail_retry_interval_ms = 120000L;
+            Assertions.assertEquals(120000L, CatalogRecycleBin.getFailRetryInterval(),
+                    "getFailRetryInterval should reflect runtime config change");
+        } finally {
+            Config.catalog_recycle_bin_erase_fail_retry_interval_ms = origRetryInterval;
+        }
+    }
+
+    @Test
+    public void testConfigGettersReflectRuntimeChanges() {
+        long origMinLatency = Config.catalog_recycle_bin_erase_min_latency_ms;
+        int origMaxOps = Config.catalog_recycle_bin_erase_max_operations_per_cycle;
+        long origRetryInterval = Config.catalog_recycle_bin_erase_fail_retry_interval_ms;
+        try {
+            // Verify default values
+            Assertions.assertEquals(10L * 60L * 1000L, origMinLatency);
+            Assertions.assertEquals(500, origMaxOps);
+            Assertions.assertEquals(60L * 1000L, origRetryInterval);
+
+            // Modify configs and verify getters return new values
+            Config.catalog_recycle_bin_erase_min_latency_ms = 30000L;
+            Config.catalog_recycle_bin_erase_max_operations_per_cycle = 100;
+            Config.catalog_recycle_bin_erase_fail_retry_interval_ms = 10000L;
+
+            Assertions.assertEquals(30000L, CatalogRecycleBin.getMinEraseLatency());
+            Assertions.assertEquals(100, CatalogRecycleBin.getMaxEraseOperationsPerCycle());
+            Assertions.assertEquals(10000L, CatalogRecycleBin.getFailRetryInterval());
+        } finally {
+            Config.catalog_recycle_bin_erase_min_latency_ms = origMinLatency;
+            Config.catalog_recycle_bin_erase_max_operations_per_cycle = origMaxOps;
+            Config.catalog_recycle_bin_erase_fail_retry_interval_ms = origRetryInterval;
+        }
+    }
 }
