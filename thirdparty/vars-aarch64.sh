@@ -40,7 +40,7 @@ JINDOSDK_SOURCE="jindosdk-4.6.8-linux-el7-aarch64"
 JINDOSDK_MD5SUM="27a4e2cd9a403c6e21079a866287d88b"
 
 # starcache
-STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v3.5-rc4/starcache-centos7_arm64.tar.gz"
+STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v3.5.3/starcache-centos7_arm64.tar.gz"
 STARCACHE_NAME="starcache.tar.gz"
 STARCACHE_SOURCE="starcache"
-STARCACHE_MD5SUM="652306980eb0a99d23823e75de807749"
+STARCACHE_MD5SUM="6a3648a7ea21c23a99696984d9cf846f"
