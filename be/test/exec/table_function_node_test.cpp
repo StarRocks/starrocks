@@ -1,5 +1,6 @@
 #include "exec/table_function_node.h"
 
+#include "common/config.h"
 #include "gtest/gtest.h"
 
 namespace starrocks {

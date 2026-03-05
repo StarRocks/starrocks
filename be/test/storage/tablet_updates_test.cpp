@@ -18,6 +18,7 @@
 
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/sync_point.h"
+#include "common/config.h"
 #include "fs/fs_factory.h"
 #include "script/script.h"
 #include "storage/local_primary_key_recover.h"

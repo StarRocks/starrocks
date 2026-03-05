@@ -40,6 +40,7 @@
 #include <string>
 #include <vector>
 
+#include "common/config.h"
 #include "common/system/mem_info.h"
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
