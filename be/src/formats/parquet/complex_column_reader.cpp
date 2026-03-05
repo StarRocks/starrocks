@@ -1120,6 +1120,32 @@ static bool _binding_requires_built_row_seek(const _TopBinding& binding) {
     return true;
 }
 
+static bool _has_non_null_typed_value_in_row(size_t row, const ShreddedFieldNode& node) {
+    if (node.typed_value_column != nullptr) {
+        const Column* typed_col = nullptr;
+        size_t typed_row = 0;
+        if (ParquetUtils::get_non_null_data_column_and_row(node.typed_value_column.get(), row, &typed_col,
+                                                           &typed_row)) {
+            return true;
+        }
+    }
+    for (const auto& child : node.children) {
+        if (_has_non_null_typed_value_in_row(row, child)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool _has_non_null_typed_value_in_row(size_t row, const std::vector<ShreddedFieldNode>& nodes) {
+    for (const auto& node : nodes) {
+        if (_has_non_null_typed_value_in_row(row, node)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static void _build_row_for_seek(size_t row, std::string_view metadata_raw, std::string_view value_raw,
                                 const std::vector<ShreddedFieldNode>& shredded_fields, std::string* out_metadata,
                                 std::string* out_value) {
@@ -1235,7 +1261,10 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
     // - requested-subset: keep top-level raw metadata/value and rebuild lazily for bindings that
     //   require full-row seek.
     for (size_t i = 0; i < num_rows; ++i) {
-        bool is_null = metadata_nulls[i] || value_nulls[i];
+        const bool has_typed_value = _has_non_null_typed_value_in_row(i, _shredded_fields);
+        // Iceberg shredded rows may carry payload only in typed_value with base `value` null.
+        // Keep those rows non-null so typed overlays can be reconstructed.
+        bool is_null = metadata_nulls[i] || (value_nulls[i] && !has_typed_value);
         if (is_null) {
             variant_column->append_shredded_null();
             reconstructed_nulls[i] = 1;

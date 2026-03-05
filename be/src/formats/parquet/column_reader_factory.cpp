@@ -17,6 +17,7 @@
 #include <unordered_set>
 
 #include "base/failpoint/fail_point.h"
+#include "column/variant_path_parser.h"
 #include "formats/parquet/complex_column_reader.h"
 #include "formats/parquet/scalar_column_reader.h"
 #include "formats/parquet/schema.h"
@@ -250,11 +251,11 @@ static TypeDescriptor _variant_typed_desc_from_parquet_field(const ParquetField*
 }
 
 static Status collect_variant_shredded_fields(const ColumnReaderOptions& opts, const ParquetField* typed_group,
-                                              const std::string& path_prefix,
+                                              VariantPath* current_path,
                                               const _NormalizedVariantShreddedReadHints& hints,
                                               std::vector<ShreddedFieldNode>* output) {
-    if (typed_group == nullptr || output == nullptr) {
-        return Status::InvalidArgument("typed_group/output should not be null");
+    if (typed_group == nullptr || current_path == nullptr || output == nullptr) {
+        return Status::InvalidArgument("typed_group/current_path/output should not be null");
     }
     if (typed_group->type != ColumnType::STRUCT) {
         return Status::InvalidArgument("typed_value group must be struct");
@@ -264,6 +265,18 @@ static Status collect_variant_shredded_fields(const ColumnReaderOptions& opts, c
     for (const auto& field_node : typed_group->children) {
         if (field_node.type != ColumnType::STRUCT) {
             continue;
+        }
+        current_path->segments.emplace_back(VariantSegment::make_object(field_node.name));
+        struct _PathPopGuard {
+            explicit _PathPopGuard(VariantPath* path) : path(path) {}
+            ~_PathPopGuard() { path->segments.pop_back(); }
+            VariantPath* path;
+        } path_pop_guard(current_path);
+
+        auto encoded_path = current_path->to_shredded_path();
+        if (!encoded_path.has_value()) {
+            return Status::InvalidArgument(
+                    strings::Substitute("failed to encode shredded path at key=$0", field_node.name));
         }
         const ParquetField* value_field = nullptr;
         const ParquetField* typed_value_field = nullptr;
@@ -282,7 +295,7 @@ static Status collect_variant_shredded_fields(const ColumnReaderOptions& opts, c
         const ParquetField* typed_field = typed_value_field;
         ShreddedFieldNode node;
         node.name = field_node.name;
-        node.full_path = path_prefix.empty() ? field_node.name : path_prefix + "." + field_node.name;
+        node.full_path = std::move(*encoded_path);
         if (fallback_field != nullptr) {
             node.value_reader = std::make_unique<ScalarColumnReader>(
                     fallback_field, &(column_chunks[fallback_field->physical_column_index]), &TYPE_VARBINARY_DESC,
@@ -332,7 +345,7 @@ static Status collect_variant_shredded_fields(const ColumnReaderOptions& opts, c
             }
             node.typed_value_reader = std::move(typed_reader_or).value();
         } else if (typed_field->type == ColumnType::STRUCT) {
-            RETURN_IF_ERROR(collect_variant_shredded_fields(opts, typed_field, node.full_path, hints, &node.children));
+            RETURN_IF_ERROR(collect_variant_shredded_fields(opts, typed_field, current_path, hints, &node.children));
         } else if (typed_field->type == ColumnType::ARRAY) {
             node.typed_kind = ShreddedTypedKind::ARRAY;
             TypeDescriptor file_type = _variant_typed_desc_from_parquet_field(typed_field);
@@ -380,7 +393,8 @@ static Status collect_variant_shredded_fields(const ColumnReaderOptions& opts, c
                     }
                 }
                 if (element_typed_value != nullptr && element_typed_value->type == ColumnType::STRUCT) {
-                    RETURN_IF_ERROR(collect_variant_shredded_fields(opts, element_typed_value, std::string{}, hints,
+                    VariantPath element_path;
+                    RETURN_IF_ERROR(collect_variant_shredded_fields(opts, element_typed_value, &element_path, hints,
                                                                     &node.children));
                 }
             }
@@ -577,7 +591,8 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_variant_column_reader(cons
     if (typed_value_index != -1) {
         const ParquetField* typed_value_field = &variant_field->children[typed_value_index];
         if (typed_value_field->type == ColumnType::STRUCT) {
-            RETURN_IF_ERROR(collect_variant_shredded_fields(opts, typed_value_field, std::string{}, normalized_hints,
+            VariantPath root_path;
+            RETURN_IF_ERROR(collect_variant_shredded_fields(opts, typed_value_field, &root_path, normalized_hints,
                                                             &shredded_fields));
         }
     }
