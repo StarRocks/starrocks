@@ -246,7 +246,7 @@ TEST_F(BinaryPlainPageTest, TestNextBatchWithFilter) {
         auto nullable_col = down_cast<NullableColumn*>(column.get());
         auto binary_col = down_cast<BinaryColumn*>(nullable_col->data_column_raw_ptr());
 
-        ASSERT_EQ("[c_300, d_400, e_500]", binary_col->debug_string());
+        ASSERT_EQ("['c_300', 'd_400', 'e_500']", binary_col->debug_string());
 
         ASSERT_EQ(3, nullable_col->null_column_raw_ptr()->size());
         ASSERT_EQ(0, nullable_col->null_column_data()[0]);
