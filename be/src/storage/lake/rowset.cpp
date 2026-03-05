@@ -33,6 +33,7 @@
 #include "storage/tablet_schema_map.h"
 #include "storage/union_iterator.h"
 #include "types/logical_type.h"
+#include "util/trace.h"
 
 namespace starrocks::lake {
 
@@ -358,6 +359,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
                                                                                       int64_t version,
                                                                                       const MetaFileBuilder* builder,
                                                                                       OlapReaderStatistics* stats) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("get_each_segment_iterator_with_delvec_us");
     std::vector<SegmentPtr> segments;
     RETURN_IF_ERROR(load_segments(&segments, false));
     auto root_loc = _tablet_mgr->tablet_root_location(tablet_id());
