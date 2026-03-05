@@ -24,9 +24,9 @@
 #include <vector>
 
 #include "runtime/current_thread.h"
-#include "runtime/memory/column_allocator.h"
+#include "common/memory/column_allocator.h"
 #include "runtime/memory/memory_allocator.h"
-#include "util/buffer.h"
+#include "column/buffer.h"
 
 namespace starrocks {
 
@@ -139,7 +139,7 @@ struct BufferOps {
     using ValueType = T;
     using Container = Buffer<T>;
 
-    static Container make() { return Container(&memory::kDefaultAllocator); }
+    static Container make() { return Container(memory::get_default_allocator()); }
     static void reserve(Container& c, int64_t n) { c.reserve(static_cast<size_t>(n)); }
     static void shrink_to_fit(Container& c) { c.shrink_to_fit(); }
     static void resize(Container& c, int64_t n) { c.resize(static_cast<size_t>(n)); }
@@ -480,7 +480,7 @@ void run_buffer_assign_zero_bench(benchmark::State& state) {
     reset_arena_state();
     const int64_t n = state.range(0);
     for (auto _ : state) {
-        Buffer<uint8_t> buffer(&memory::kDefaultAllocator);
+        Buffer<uint8_t> buffer(memory::get_default_allocator());
         buffer.assign(static_cast<size_t>(n), 0);
         benchmark::DoNotOptimize(buffer);
     }
@@ -491,7 +491,7 @@ void run_buffer_resize_memset_zero_bench(benchmark::State& state) {
     reset_arena_state();
     const int64_t n = state.range(0);
     for (auto _ : state) {
-        Buffer<uint8_t> buffer(&memory::kDefaultAllocator);
+        Buffer<uint8_t> buffer(memory::get_default_allocator());
         buffer.resize(static_cast<size_t>(n));
         if (n > 0) {
             std::memset(buffer.data(), 0, static_cast<size_t>(n));
