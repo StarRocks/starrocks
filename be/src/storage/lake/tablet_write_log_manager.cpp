@@ -61,8 +61,8 @@ void TabletWriteLogManager::add_load_log(int64_t backend_id, int64_t txn_id, int
 }
 
 void TabletWriteLogManager::add_publish_log(int64_t backend_id, int64_t txn_id, int64_t tablet_id, int64_t table_id,
-                                             int64_t partition_id, int64_t begin_time, int64_t finish_time,
-                                             int32_t sst_output_files, int64_t sst_output_bytes) {
+                                            int64_t partition_id, int64_t begin_time, int64_t finish_time,
+                                            int32_t sst_output_files, int64_t sst_output_bytes) {
     TabletWriteLogEntry entry;
     entry.begin_time = begin_time;
     entry.finish_time = finish_time;
