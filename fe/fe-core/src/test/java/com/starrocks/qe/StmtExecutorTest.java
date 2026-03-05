@@ -82,6 +82,10 @@ public class StmtExecutorTest {
                 minTimes = 0;
                 result = state;
 
+                GlobalStateMgr.getServingState();
+                minTimes = 0;
+                result = state;
+
                 state.getSqlParser();
                 minTimes = 0;
                 result = new SqlParser(AstBuilder.getInstance());
@@ -93,6 +97,10 @@ public class StmtExecutorTest {
                 state.isInTransferringToLeader();
                 minTimes = 0;
                 result = false;
+
+                state.isReady();
+                minTimes = 0;
+                result = true;
 
                 ctx.getSerializer();
                 minTimes = 0;

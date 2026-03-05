@@ -2037,7 +2037,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     // DEFAULT/ETL
     @VarAttr(name = EXEC_MODE)
-    private String execMode = SessionVariableConstants.DEFAULT;
+    private String execMode = SessionVariableConstants.ExecMode.DEFAULT.name();
 
     // 1: sort based, 2: hash based
     @VarAttr(name = WINDOW_PARTITION_MODE, flag = VariableMgr.INVISIBLE)
@@ -2483,20 +2483,45 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return windowPartitionMode;
     }
 
+    public SessionVariableConstants.ExecMode getExecMode() {
+        return SessionVariableConstants.ExecMode.parse(execMode);
+    }
+
+    public boolean isETLExecMode() {
+        return SessionVariableConstants.ETL.equalsIgnoreCase(execMode);
+    }
+
     public void setExecMode(String execMode) {
-        final SessionVariable sv = DEFAULT_SESSION_VARIABLE;
-        if (execMode.equalsIgnoreCase(SessionVariableConstants.ETL)) {
-            setEnableWaitDependentEvent(true);
-            setEnablePhasedScheduler(true);
-            setEnableSpill(true);
-            setEnableQueryQueue(Config.enable_query_queue_v2);
-        } else {
-            setEnableWaitDependentEvent(sv.enableWaitDependentEvent);
-            setEnablePhasedScheduler(sv.enablePhasedScheduler);
-            setEnableSpill(sv.enableSpill);
-            setEnableQueryQueue(sv.enableQueryQueue);
+        SessionVariableConstants.ExecMode result =
+                Enums.getIfPresent(SessionVariableConstants.ExecMode.class, StringUtils.upperCase(execMode))
+                        .orNull();
+        if (result == null) {
+            String legalValues = Joiner.on(" | ").join(SessionVariableConstants.ExecMode.values());
+            throw new IllegalArgumentException("Legal values of exec_mode are " + legalValues);
         }
-        this.execMode = execMode;
+        switch (result) {
+            case ETL: {
+                setEnableWaitDependentEvent(true);
+                setEnablePhasedScheduler(true);
+                setEnableSpill(true);
+                setEnableQueryQueue(Config.enable_query_queue_v2);
+                break;
+            }
+            case DEFAULT: {
+                // Reset ETL-tuned session flags to their default values when switching back from ETL mode
+                setEnableWaitDependentEvent(DEFAULT_SESSION_VARIABLE.enableWaitDependentEvent);
+                setEnablePhasedScheduler(DEFAULT_SESSION_VARIABLE.enablePhasedScheduler);
+                setEnableSpill(DEFAULT_SESSION_VARIABLE.enableSpill);
+                setEnableQueryQueue(DEFAULT_SESSION_VARIABLE.enableQueryQueue);
+                setSpillPartitionWiseAgg(DEFAULT_SESSION_VARIABLE.spillPartitionWiseAgg);
+                break;
+            }
+            default: {
+                // do nothing
+                break;
+            }
+        }
+        this.execMode = execMode.toUpperCase();
     }
 
     public void setEnableSortAggregate(boolean enableSortAggregate) {
