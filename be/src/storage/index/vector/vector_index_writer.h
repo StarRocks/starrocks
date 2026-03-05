@@ -35,7 +35,7 @@ public:
     static void create(const std::shared_ptr<TabletIndex>& tablet_index, const std::string& vector_index_file_path,
                        bool is_element_nullable, std::unique_ptr<VectorIndexWriter>* res);
 
-    VectorIndexWriter(const std::shared_ptr<TabletIndex>& tablet_index, std::string vector_index_file_path,
+    VectorIndexWriter(std::shared_ptr<TabletIndex> tablet_index, std::string vector_index_file_path,
                       bool is_element_nullable);
 
     Status init();

@@ -21,9 +21,9 @@
 
 namespace starrocks {
 
-VectorIndexWriter::VectorIndexWriter(const std::shared_ptr<TabletIndex>& tablet_index,
-                                     std::string vector_index_file_path, bool is_element_nullable)
-        : _tablet_index(tablet_index),
+VectorIndexWriter::VectorIndexWriter(std::shared_ptr<TabletIndex> tablet_index, std::string vector_index_file_path,
+                                     bool is_element_nullable)
+        : _tablet_index(std::move(tablet_index)),
           _vector_index_file_path(std::move(vector_index_file_path)),
           _start_vector_index_build_threshold(config::config_vector_index_default_build_threshold),
           _is_element_nullable(is_element_nullable) {
