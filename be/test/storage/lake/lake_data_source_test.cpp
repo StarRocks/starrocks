@@ -203,7 +203,7 @@ TEST_F(LakeDataSourceTest, test_convert_scan_range_to_morsel_queue) {
     auto data_source_provider = dynamic_cast<connector::LakeDataSourceProvider*>(scan_node->data_source_provider());
     data_source_provider->set_lake_tablet_manager(_tablet_mgr);
 
-    ASSERT_TRUE(data_source_provider->always_shared_scan());
+    ASSERT_FALSE(data_source_provider->always_shared_scan());
 
     config::tablet_internal_parallel_max_splitted_scan_bytes = 32;
     config::tablet_internal_parallel_min_splitted_scan_rows = 4;
@@ -222,9 +222,9 @@ TEST_F(LakeDataSourceTest, test_convert_scan_range_to_morsel_queue) {
     ASSERT_TRUE(data_source_provider->could_split());
     ASSERT_TRUE(data_source_provider->could_split_physically());
 
-    ASSERT_TRUE(morsel_queue_factory->is_shared());
-    auto morsel_queue = morsel_queue_factory->create(1);
-    ASSERT_TRUE(morsel_queue->max_degree_of_parallelism() > 1);
+    ASSERT_FALSE(morsel_queue_factory->is_shared());
+    auto morsel_queue = morsel_queue_factory->create(0);
+    ASSERT_TRUE(morsel_queue->max_degree_of_parallelism() == 1);
 }
 
 TEST_F(LakeDataSourceTest, get_tablet_schema) {

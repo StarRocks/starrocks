@@ -1117,19 +1117,20 @@ StatusOr<pipeline::MorselQueuePtr> LakeDataSourceProvider::convert_scan_range_to
         }
     }
 
-    return DataSourceProvider::convert_scan_range_to_morsel_queue(
-            scan_ranges, node_id, pipeline_dop, enable_tablet_internal_parallel, tablet_internal_parallel_mode,
-            num_total_scan_ranges, (size_t)lake_scan_parallelism);
+    ASSIGN_OR_RETURN(auto morsel_queue,
+                     DataSourceProvider::convert_scan_range_to_morsel_queue(
+                             scan_ranges, node_id, pipeline_dop, enable_tablet_internal_parallel,
+                             tablet_internal_parallel_mode, num_total_scan_ranges, (size_t)lake_scan_parallelism));
+    if (_could_split) {
+        morsel_queue->set_has_more_from_split(true);
+    }
+    return morsel_queue;
 }
 
 StatusOr<bool> LakeDataSourceProvider::_could_tablet_internal_parallel(
         const std::vector<TScanRangeParams>& scan_ranges, int32_t pipeline_dop, size_t num_total_scan_ranges,
         TTabletInternalParallelMode::type tablet_internal_parallel_mode, int64_t* scan_parallelism,
         int64_t* splitted_scan_rows) const {
-    //if (_t_lake_scan_node.use_pk_index) {
-    //    return false;
-    //}
-
     bool force_split = tablet_internal_parallel_mode == TTabletInternalParallelMode::type::FORCE_SPLIT;
     // The enough number of tablets shouldn't use tablet internal parallel.
     if (!force_split && num_total_scan_ranges >= pipeline_dop) {
@@ -1166,6 +1167,12 @@ StatusOr<bool> LakeDataSourceProvider::_could_tablet_internal_parallel(
 
     bool could =
             *scan_parallelism >= pipeline_dop || *scan_parallelism >= config::tablet_internal_parallel_min_scan_dop;
+    // if don't use tablet internal parallel scan, we choose the number of tablets as the dop of scan node
+    // which is the same as olap scan
+    if (!could) {
+        *scan_parallelism = scan_ranges.size();
+    }
+
     return could;
 }
 
