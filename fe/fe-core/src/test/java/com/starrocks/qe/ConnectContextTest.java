@@ -36,7 +36,6 @@ package com.starrocks.qe;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.mysql.MysqlCapability;
