@@ -9,8 +9,8 @@ import subprocess
 io_netty_clean_version = "4.1.128.Final"
 
 fixed_poms = [
-    ("com.fasterxml.jackson.core:jackson-core", "2.15.0"),
-    ("com.fasterxml.jackson.core:jackson-databind", "2.18.3"),
+    ("com.fasterxml.jackson.core:jackson-core", "2.21.1"),
+    ("com.fasterxml.jackson.core:jackson-databind", "2.21.1"),
     ("io.netty:netty-handler", io_netty_clean_version),
     ("io.netty:netty-codec-http2", io_netty_clean_version),
     ("io.netty:netty-codec-http", io_netty_clean_version),
@@ -29,6 +29,7 @@ fixed_poms = [
     ("org.eclipse.jetty:jetty-io", "10.0.24"),
     ("commons-beanutils:commons-beanutils", "1.11.0"),
     ("org.apache.httpcomponents.client5:httpclient5", "5.4.3"),
+    ("io.airlift:aircompressor", "2.0.3"),
 ]
 
 fixed_jars = [
