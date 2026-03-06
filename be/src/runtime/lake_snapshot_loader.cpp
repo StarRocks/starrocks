@@ -16,7 +16,7 @@
 
 #include "base/container/raw_container.h"
 #include "base/network/network_util.h"
-#include "common/config.h"
+#include "common/config_rpc_client_fwd.h"
 #include "fs/fs_broker.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/TFileBrokerService.h"

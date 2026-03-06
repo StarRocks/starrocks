@@ -27,7 +27,7 @@
 #include "base/time/time.h"
 #include "base/time/timezone_utils.h"
 #include "column/column_helper.h"
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
 #include "common/system/cpu_info.h"
 #include "common/system/disk_info.h"
 #include "common/system/mem_info.h"
