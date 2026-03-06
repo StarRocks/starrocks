@@ -369,24 +369,13 @@ MutableColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bo
 struct ColumnBuilder {
     template <LogicalType ltype>
     MutableColumnPtr operator()(const TypeDescriptor& type_desc, size_t size) {
-        switch (ltype) {
-        case TYPE_UNKNOWN:
-        case TYPE_NULL:
-        case TYPE_BINARY:
-        case TYPE_DECIMAL:
-        case TYPE_STRUCT:
-        case TYPE_ARRAY:
-        case TYPE_MAP:
+        if constexpr (ltype == TYPE_UNKNOWN || ltype == TYPE_NULL || ltype == TYPE_BINARY || ltype == TYPE_DECIMAL ||
+                      lt_is_collection<ltype>) {
             LOG(FATAL) << "Unsupported column type" << ltype;
-        case TYPE_DECIMAL32:
-            return Decimal32Column::create(type_desc.precision, type_desc.scale, size);
-        case TYPE_DECIMAL64:
-            return Decimal64Column::create(type_desc.precision, type_desc.scale, size);
-        case TYPE_DECIMAL128:
-            return Decimal128Column::create(type_desc.precision, type_desc.scale, size);
-        case TYPE_DECIMAL256:
-            return Decimal256Column::create(type_desc.precision, type_desc.scale, size);
-        default:
+            return nullptr;
+        } else if constexpr (lt_is_decimal<ltype>) {
+            return RunTimeColumnType<ltype>::create(type_desc.precision, type_desc.scale, size);
+        } else {
             return RunTimeColumnType<ltype>::create(size);
         }
     }
