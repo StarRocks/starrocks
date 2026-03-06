@@ -132,12 +132,12 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
         return Status::Corruption("No missing version");
     }
 
-#ifdef USE_STAROS
     std::string src_meta_dir;
     std::string src_data_dir;
     std::shared_ptr<FileSystem> shared_src_fs;
     TabletMetadataPtr src_tablet_meta;
 
+#ifdef USE_STAROS
     if (has_full_path) {
         // S3 storage type: FE provides full S3 path (supports partitioned prefix feature)
         // Use S3 raw path mode - starlet will use the path as-is without normalize_path
