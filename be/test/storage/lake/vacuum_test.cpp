@@ -4446,4 +4446,59 @@ TEST_P(LakeVacuumTest, test_version_chain_vacuum_partial_failure) {
     EXPECT_TRUE(file_exist(tablet_metadata_filename(9902, 5)));
 }
 
+// No progress at all: the very first data-delete batch fails.
+// vacuumed_version must NOT be final_retain_version so FE does not advance
+// lastSuccVacuumVersion and keeps scheduling retries.
+TEST_P(LakeVacuumTest, test_version_chain_vacuum_no_progress) {
+    config::lake_vacuum_enable_version_chain_mode = true;
+    auto saved_batch = config::lake_vacuum_min_batch_delete_size;
+    config::lake_vacuum_min_batch_delete_size = 1;
+    DeferOp defer_cfg([saved_batch]() {
+        config::lake_vacuum_enable_version_chain_mode = false;
+        config::lake_vacuum_min_batch_delete_size = saved_batch;
+    });
+
+    create_data_file("00000000009921_v2_orphan.dat");
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {"id":9903,"version":2,"prev_garbage_version":0,"commit_time":100,
+         "orphan_files":[{"name":"00000000009921_v2_orphan.dat","size":10}]}
+        )DEL")));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {"id":9903,"version":3,"prev_garbage_version":2,"commit_time":9999999999}
+        )DEL")));
+
+    // Fail every delete call so there is absolutely no progress.
+    SyncPoint::GetInstance()->SetCallBack("PosixFileSystem::delete_file", [](void* arg) {
+        auto* st = static_cast<Status*>(arg);
+        st->update(Status::IOError("injected error"));
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer_sp([&]() {
+        SyncPoint::GetInstance()->ClearCallBack("PosixFileSystem::delete_file");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    VacuumRequest request;
+    VacuumResponse response;
+    request.set_delete_txn_log(false);
+    request.add_tablet_ids(9903);
+    request.set_min_retain_version(3);
+    request.set_grace_timestamp(::time(nullptr) + 3600);
+    request.set_min_active_txn_id(12345);
+    vacuum(_tablet_mgr.get(), request, &response);
+
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+    // Nothing was deleted.
+    EXPECT_TRUE(file_exist("00000000009921_v2_orphan.dat"));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(9903, 2)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(9903, 3)));
+
+    // vacuumed_version must be min_version-1 (= 0), NOT final_retain_version (= 2).
+    // A value of 0 tells FE that no new versions were vacuumed this round.
+    EXPECT_EQ(0, response.vacuumed_version());
+}
+
 } // namespace starrocks::lake

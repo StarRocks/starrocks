@@ -641,9 +641,14 @@ static Status vacuum_tablet_chain(TabletManager* tablet_mgr, std::string_view ro
 
     // Advance min_version so the next vacuum skips already-cleaned versions.
     if (last_safe_version < 0) {
-        // No progress: leave min_version unchanged.
+        // No progress at all (e.g. the very first data-delete batch failed).
+        // Leave min_version unchanged so the next retry re-processes from the same point.
+        // Report vacuumed_version as min_version-1 (the last version confirmed clean in a
+        // prior run) rather than final_retain_version.  Reporting final_retain_version here
+        // would mislead FE into advancing lastSuccVacuumVersion and suppressing future
+        // autovacuum scheduling even though no garbage was actually removed this round.
         tablet_info.set_min_version(min_version);
-        *vacuumed_version = final_retain_version;
+        *vacuumed_version = min_version - 1;
     } else {
         bool all_done = (processed_versions.size() == garbage_versions.size()) &&
                         (confirmed >= datafile_deleter.total_queued());
