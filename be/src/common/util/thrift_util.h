@@ -36,16 +36,17 @@
 
 #include <thrift/TApplicationException.h>
 #include <thrift/TBase.h>
+#include <thrift/TConfiguration.h>
 #include <thrift/protocol/TBinaryProtocol.h>
 #include <thrift/protocol/TDebugProtocol.h>
 #include <thrift/protocol/TJSONProtocol.h>
 #include <thrift/transport/TBufferTransports.h>
 
+#include <cstring>
 #include <memory>
 #include <sstream>
 #include <vector>
 
-#include "common/config.h"
 #include "common/status.h"
 
 namespace starrocks {
@@ -142,6 +143,8 @@ enum TProtocolType {
 std::shared_ptr<apache::thrift::protocol::TProtocol> create_deserialize_protocol(
         const std::shared_ptr<apache::thrift::transport::TMemoryBuffer>& mem, TProtocolType type);
 
+std::shared_ptr<apache::thrift::TConfiguration> create_thrift_configuration();
+
 // Deserialize a thrift message from buf/len.  buf/len must at least contain
 // all the bytes needed to store the thrift message.  On return, len will be
 // set to the actual length of the header.
@@ -153,9 +156,7 @@ Status deserialize_thrift_msg(const uint8_t* buf, uint32_t* len, TProtocolType t
     std::shared_ptr<apache::thrift::transport::TMemoryBuffer> tmem_transport(
             new apache::thrift::transport::TMemoryBuffer(
                     const_cast<uint8_t*>(buf), *len, apache::thrift::transport::TMemoryBuffer::MemoryPolicy::OBSERVE,
-                    std::make_shared<apache::thrift::TConfiguration>(config::thrift_max_message_size,
-                                                                     config::thrift_max_frame_size,
-                                                                     config::thrift_max_recursion_depth)));
+                    create_thrift_configuration()));
     std::shared_ptr<apache::thrift::protocol::TProtocol> tproto = create_deserialize_protocol(tmem_transport, type);
 
     try {

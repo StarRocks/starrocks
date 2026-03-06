@@ -38,6 +38,7 @@
 
 #include <iostream>
 
+#include "common/config.h"
 #include "gen_cpp/segment.pb.h"
 #include "storage/olap_common.h"
 #include "storage/types.h"

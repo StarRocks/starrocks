@@ -15,6 +15,7 @@
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
+#include "common/config.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/fragment_context.h"
 #include "gen_cpp/DataSinks_types.h"

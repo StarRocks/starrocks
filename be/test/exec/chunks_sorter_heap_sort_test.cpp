@@ -26,6 +26,7 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/vectorized_fwd.h"
+#include "common/config.h"
 #include "common/object_pool.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"

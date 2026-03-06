@@ -40,6 +40,7 @@
 #include <memory>
 
 #include "base/concurrency/stopwatch.hpp"
+#include "common/config.h"
 #include "common/system/cpu_info.h"
 #include "common/thread/thread.h"
 #include "fs/key_cache.h"

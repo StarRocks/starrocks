@@ -20,6 +20,7 @@
 
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
+#include "common/config.h"
 #include "common/runtime_profile.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "exec/pipeline/pipeline_fwd.h"

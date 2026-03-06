@@ -23,6 +23,7 @@
 #include <memory>
 
 #include "base/testutil/assert.h"
+#include "common/config.h"
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_pool.h"

@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
+#include "common/config.h"
 #include "common/util/thrift_util.h"
 #include "exec/tablet_info.h"
 #include "exec/tablet_sink.h"

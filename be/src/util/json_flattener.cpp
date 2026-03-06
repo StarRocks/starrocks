@@ -371,9 +371,17 @@ StatusOr<size_t> JsonPathDeriver::check_null_factor(const std::vector<const Colu
     return total_rows - null_count;
 }
 
+JsonPathDeriver::JsonPathDeriver()
+        : _min_json_sparsity_factory(config::json_flat_sparsity_factor),
+          _max_json_null_factor(config::json_flat_null_factor),
+          _max_column(config::json_flat_column_max) {}
+
 JsonPathDeriver::JsonPathDeriver(const std::vector<std::string>& paths, const std::vector<LogicalType>& types,
                                  bool has_remain)
-        : _has_remain(has_remain), _paths(std::move(paths)), _types(types) {
+        : JsonPathDeriver() {
+    _has_remain = has_remain;
+    _paths = std::move(paths);
+    _types = types;
     for (size_t i = 0; i < _paths.size(); i++) {
         auto* leaf = JsonFlatPath::normalize_from_path(_paths[i], _path_root.get());
         leaf->type = types[i];

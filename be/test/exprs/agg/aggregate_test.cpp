@@ -18,6 +18,7 @@
 #include <cmath>
 #include <memory>
 
+#include "common/config.h"
 #include "exprs/agg/base_aggregate_test.h"
 
 namespace starrocks {

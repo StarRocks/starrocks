@@ -59,7 +59,9 @@ class PageBuilder;
 class WritableFile;
 
 struct IndexedColumnWriterOptions {
-    size_t index_page_size = config::data_page_size;
+    IndexedColumnWriterOptions();
+
+    size_t index_page_size = 0;
     bool write_ordinal_index = false;
     bool write_value_index = false;
     EncodingTypePB encoding = DEFAULT_ENCODING;

@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
+#include "common/config.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/global_dict/types.h"
 #include "storage/chunk_helper.h"

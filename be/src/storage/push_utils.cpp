@@ -14,6 +14,8 @@
 
 #include "storage/push_utils.h"
 
+#include "common/config.h"
+
 namespace starrocks {
 
 PushBrokerReader::~PushBrokerReader() {

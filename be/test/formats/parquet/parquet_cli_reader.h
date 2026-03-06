@@ -16,6 +16,7 @@
 
 #include <filesystem>
 
+#include "common/config.h"
 #include "common/status.h"
 #include "formats/parquet/file_reader.h"
 #include "fs/fs.h"

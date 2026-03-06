@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include "column/fixed_length_column.h"
+#include "common/config.h"
 
 namespace starrocks {
 class AnalytorTest : public ::testing::Test {

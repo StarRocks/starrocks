@@ -33,6 +33,7 @@
 #include "base/time/time.h"
 #include "base/uid_util.h"
 #include "base/utility/defer_op.h"
+#include "common/config.h"
 #include "common/logging.h"
 #include "common/util/debug_util.h"
 #include "common/utils.h"

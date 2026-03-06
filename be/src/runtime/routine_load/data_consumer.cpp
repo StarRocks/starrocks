@@ -41,6 +41,7 @@
 #include "base/concurrency/stopwatch.hpp"
 #include "base/uid_util.h"
 #include "base/utility/defer_op.h"
+#include "common/config.h"
 #include "common/status.h"
 #include "common/system/backend_options.h"
 #include "fmt/format.h"
