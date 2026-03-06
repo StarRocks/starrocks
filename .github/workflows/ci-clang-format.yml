@@ -83,10 +83,6 @@ jobs:
         run: bash build-support/clang-format-changed.sh
 
       - name: Commit and push formatting fixes
-        # Only push when running on a branch inside this repo (not a fork).
-        # For fork PRs the GITHUB_TOKEN cannot write to the fork, so we skip
-        # the push but still fail the job below if fixes were needed.
-        if: github.event.pull_request.head.repo.full_name == github.repository
         env:
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
@@ -102,18 +98,4 @@ jobs:
               echo "updated since this workflow started. Please rebase and retry."
               exit 1
             }
-          fi
-
-      - name: Fail for fork PRs with formatting issues
-        # For fork PRs we cannot push fixes back, so fail explicitly if
-        # clang-format made any changes so the contributor knows to fix locally.
-        if: github.event.pull_request.head.repo.full_name != github.repository
-        run: |
-          if git diff --quiet; then
-            echo "No formatting changes needed."
-          else
-            echo "Formatting issues detected. Please run the following locally and push the fixes:"
-            echo "  CLANG_FORMAT_BINARY=clang-format-10 bash build-support/clang-format-changed.sh"
-            git diff
-            exit 1
           fi
