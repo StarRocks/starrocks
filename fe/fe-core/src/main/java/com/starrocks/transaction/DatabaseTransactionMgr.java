@@ -501,7 +501,13 @@ public class DatabaseTransactionMgr {
             Span unprotectedCommitSpan = TraceManager.startSpan("unprotectedCommitPreparedTransaction", txnSpan);
 
             // transaction state transform
-            boolean txnOperated = unprotectedCommitPreparedTransaction(copiedState, db);
+            boolean txnOperated;
+            writeLock();
+            try {
+                txnOperated = unprotectedCommitPreparedTransaction(copiedState, db);
+            } finally {
+                writeUnlock();
+            }
             if (!txnOperated) {
                 return null;
             }
@@ -1115,7 +1121,7 @@ public class DatabaseTransactionMgr {
         return true;
     }
 
-    public void finishTransaction(long transactionId, Set<Long> errorReplicaIds, long lockTimeoutMs)
+    public TransactionState finishTransaction(long transactionId, Set<Long> errorReplicaIds, long lockTimeoutMs)
             throws StarRocksException {
         TransactionState transactionState = getTransactionState(transactionId);
         // add all commit errors and publish errors to a single set
@@ -1145,7 +1151,7 @@ public class DatabaseTransactionMgr {
                     }
                 });
 
-                return;
+                return copiedState;
             } finally {
                 transactionState.writeUnlock();
             }
@@ -1224,8 +1230,10 @@ public class DatabaseTransactionMgr {
                                             "wait for publishing partition %d version %d. self version: %d. table %d",
                                             physicalPartitionId, physicalPartition.getVisibleVersion() + 1,
                                             partitionCommitInfo.getVersion(), tableId);
-                            copiedState.setErrorMsg(errMsg);
-                            return;
+                            // set errMsg to transactionState instead of copiedState,
+                            // because copiedState will not be upserted in this case.
+                            transactionState.setErrorMsg(errMsg);
+                            return transactionState;
                         }
 
                         if (table.isCloudNativeTableOrMaterializedView()) {
@@ -1309,7 +1317,9 @@ public class DatabaseTransactionMgr {
                                             tablet.getId(), healthReplicaNum, quorumReplicaNum, tableId,
                                             physicalPartitionId,
                                             physicalPartition.getVisibleVersion() + 1);
-                                    copiedState.setErrorMsg(errMsg);
+                                    // set errMsg to transactionState instead of copiedState,
+                                    // because copiedState will not be upserted in this case.
+                                    transactionState.setErrorMsg(errMsg);
                                     hasError = true;
                                 }
 
@@ -1344,7 +1354,7 @@ public class DatabaseTransactionMgr {
                                     "version not equal to partition commit version or commit version - 1 if it's not a " +
                                     "upgrade stage, its a fatal error. ",
                             copiedState);
-                    return;
+                    return transactionState;
                 }
                 copiedState.setErrorReplicas(errorReplicaIds);
                 copiedState.setFinishTime(System.currentTimeMillis());
@@ -1397,6 +1407,7 @@ public class DatabaseTransactionMgr {
         GlobalStateMgr.getCurrentState().getLocalMetastore().handleMVRepair(copiedState);
         LOG.info("finish transaction {} successfully", copiedState);
         updateTransactionMetrics(copiedState);
+        return copiedState;
     }
 
     protected boolean unprotectedCommitPreparedTransaction(TransactionState transactionState, Database db) {
@@ -1405,7 +1416,7 @@ public class DatabaseTransactionMgr {
             return false;
         }
         // commit timestamps needs to be strictly monotonically increasing
-        long commitTs = Math.max(System.currentTimeMillis(), maxCommitTs + 1);
+        long commitTs = reserveCommitTs();
         transactionState.setCommitTime(commitTs);
         // update transaction state version
         transactionState.setTransactionStatus(TransactionStatus.COMMITTED);
@@ -1516,6 +1527,13 @@ public class DatabaseTransactionMgr {
         }
 
         return true;
+    }
+
+    private long reserveCommitTs() {
+        Preconditions.checkState(transactionLock.isWriteLockedByCurrentThread());
+        long commitTs = Math.max(System.currentTimeMillis(), maxCommitTs + 1);
+        maxCommitTs = commitTs;
+        return commitTs;
     }
 
     // for add/update/delete TransactionState
@@ -2052,7 +2070,7 @@ public class DatabaseTransactionMgr {
         return globalStateMgr;
     }
 
-    public void finishTransactionNew(TransactionState transactionState, Set<Long> publishErrorReplicas)
+    public TransactionState finishTransactionNew(TransactionState transactionState, Set<Long> publishErrorReplicas)
             throws StarRocksException {
         Database db = globalStateMgr.getLocalMetastore().getDb(transactionState.getDbId());
         if (db == null) {
@@ -2072,7 +2090,7 @@ public class DatabaseTransactionMgr {
                     }
                 });
 
-                return;
+                return copiedState;
             } finally {
                 transactionState.writeUnlock();
             }
@@ -2133,6 +2151,7 @@ public class DatabaseTransactionMgr {
         GlobalStateMgr.getCurrentState().getLocalMetastore().handleMVRepair(copiedState);
         LOG.info("finish transaction {} successfully", copiedState);
         updateTransactionMetrics(copiedState);
+        return copiedState;
     }
 
     // only for test
@@ -2194,7 +2213,7 @@ public class DatabaseTransactionMgr {
     }
 
 
-    public void finishTransactionBatch(TransactionStateBatch stateBatch, Set<Long> errorReplicaIds) {
+    public TransactionStateBatch finishTransactionBatch(TransactionStateBatch stateBatch, Set<Long> errorReplicaIds) {
         Database db = globalStateMgr.getLocalMetastore().getDb(stateBatch.getDbId());
         if (db == null) {
             stateBatch.writeLock();
@@ -2211,7 +2230,7 @@ public class DatabaseTransactionMgr {
                         writeUnlock();
                     }
                 });
-                return;
+                return copiedStateBatch;
             } finally {
                 stateBatch.writeUnlock();
             }
@@ -2231,7 +2250,7 @@ public class DatabaseTransactionMgr {
                 copiedStateBatch = new TransactionStateBatch(stateBatch);
                 // check whether version is consistent
                 if (!isTxnStateBatchConsistent(db, copiedStateBatch)) {
-                    return;
+                    return stateBatch;
                 }
 
                 copiedStateBatch.setTransactionVisibleInfo();
@@ -2264,6 +2283,7 @@ public class DatabaseTransactionMgr {
         for (TransactionState transactionState : copiedStateBatch.getTransactionStates()) {
             updateTransactionMetrics(transactionState);
         }
+        return copiedStateBatch;
     }
 
     private void updateTransactionMetrics(TransactionState txnState) {

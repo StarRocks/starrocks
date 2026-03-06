@@ -539,8 +539,12 @@ public class GlobalTransactionMgrTest {
         // Assert.assertNotEquals("label", routineLoadManager.getNeedScheduleTasksQueue().peek().getId());
         boolean oldValue = Config.lock_manager_enabled;
         Config.lock_manager_enabled = false;
-        transactionState = masterTransMgr.getTransactionState(1L, 1L);
-        masterTransMgr.finishTransactionNew(transactionState, Sets.newHashSet());
+        TransactionState originalState = masterTransMgr.getTransactionState(1L, 1L);
+        TransactionStatus originalStatus = originalState.getTransactionStatus();
+        transactionState = masterTransMgr.finishTransactionNew(originalState, Sets.newHashSet());
+        Assertions.assertNotSame(originalState, transactionState);
+        assertEquals(TransactionStatus.VISIBLE, transactionState.getTransactionStatus());
+        assertEquals(originalStatus, originalState.getTransactionStatus());
         TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(1L);
         assertEquals(100, entity.counterRoutineLoadRowsTotal.getValue().intValue());
         assertEquals(10000, entity.counterRoutineLoadBytesTotal.getValue().intValue());
@@ -668,8 +672,10 @@ public class GlobalTransactionMgrTest {
         assertEquals(TransactionStatus.COMMITTED, transactionState.getTransactionStatus());
         Set<Long> errorReplicaIds = Sets.newHashSet();
         errorReplicaIds.add(GlobalStateMgrTestUtil.testReplicaId1);
-        masterTransMgr.finishTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId, errorReplicaIds);
-        transactionState = fakeEditLog.getTransaction(transactionId);
+        TransactionState originalState = masterTransMgr.getTransactionState(GlobalStateMgrTestUtil.testDbId1, transactionId);
+        transactionState = masterTransMgr.finishTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId, errorReplicaIds);
+        Assertions.assertNotSame(originalState, transactionState);
+        assertEquals(TransactionStatus.COMMITTED, originalState.getTransactionStatus());
         assertEquals(TransactionStatus.VISIBLE, transactionState.getTransactionStatus());
         // check replica version
         Partition testPartition = masterGlobalStateMgr.getLocalMetastore()
