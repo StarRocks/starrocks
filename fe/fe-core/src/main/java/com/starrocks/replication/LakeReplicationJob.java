@@ -106,18 +106,6 @@ public class LakeReplicationJob extends ReplicationJob implements GsonPreProcess
         }
     }
 
-    protected LakeReplicationJob(LakeReplicationJob job) {
-        super(job);
-        this.virtualTabletId = job.virtualTabletId;
-        this.srcDatabaseId = job.srcDatabaseId;
-        this.srcTableId = job.srcTableId;
-        // Copy srcTableFilePathInfo and its serialized bytes for persistence
-        // Without this, gsonPreProcess() on the copy won't serialize the FilePathInfo,
-        // and after restart srcTableFilePathInfo will be null, breaking S3 partitioned-prefix replication
-        this.srcTableFilePathInfo = job.srcTableFilePathInfo;
-        this.srcTableFilePathInfoBytes = job.srcTableFilePathInfoBytes;
-    }
-
     @Override
     public void run() {
         try {

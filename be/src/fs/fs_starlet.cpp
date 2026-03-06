@@ -27,11 +27,6 @@
 #include <sys/stat.h>
 #include <worker.h>
 
-#include "base/concurrency/stopwatch.hpp"
-#include "base/container/lru_cache.h"
-#include "base/string/string_parser.hpp"
-#include "base/testutil/sync_point.h"
-#include "base/utility/defer_op.h"
 #include "common/config.h"
 #include "fs/encrypt_file.h"
 #include "fs/output_stream_adapter.h"
