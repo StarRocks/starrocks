@@ -510,6 +510,7 @@
                         "administration/management/monitor_manage_big_queries",
                         "administration/management/compaction",
                         "administration/management/graceful_exit",
+                        "administration/management/extensions",
                         {
                             "type": "category",
                             "label": "Resource management",
