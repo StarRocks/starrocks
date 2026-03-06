@@ -445,7 +445,6 @@ protected:
         auto col = ChunkHelper::column_from_field_type(TYPE_VARCHAR, true);
         auto nc = down_cast<NullableColumn*>(col.get());
         nc->reserve(count);
-        down_cast<BinaryColumn*>(nc->data_column_raw_ptr())->get_data().reserve(s1.size() * count);
         auto v = std::vector<Slice>{s1, s2, s1, s1, s2, s2, s1, s2, s1, s1, s2, s1, s2, s1, s1, s1};
         for (size_t i = 0; i < count; i += 16) {
             CHECK(col->append_strings(v));
@@ -472,7 +471,6 @@ protected:
         size_t count = (128 * 1024 / s1.size()) / 8 * 8;
         auto nc = down_cast<NullableColumn*>(col.get());
         nc->reserve(count);
-        down_cast<BinaryColumn*>(nc->data_column_raw_ptr())->get_data().reserve(count * s1.size());
         for (size_t i = 0; i < count; i += 8) {
             (void)col->append_strings(std::vector<Slice>{s1, s2, s3, s4, s5, s6, s7, s8});
 

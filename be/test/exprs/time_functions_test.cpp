@@ -61,10 +61,9 @@ public:
         _utils = std::make_shared<FunctionUtils>(_state.get());
     }
 
-public:
     TExprNode expr_node;
 
-private:
+protected:
     std::shared_ptr<RuntimeState> _state;
     std::shared_ptr<FunctionUtils> _utils;
 };
@@ -279,7 +278,7 @@ TEST_F(TimeFunctionsTest, dayOfYearTest) {
 
     auto year_days = ColumnHelper::cast_to<TYPE_INT>(result);
 
-    for (size_t i = 0; i < sizeof(days) / sizeof(days[0]); ++i) {
+    for (size_t i = 0; i < std::size(days); ++i) {
         ASSERT_EQ(days[i], year_days->get_data()[i]);
     }
 }
@@ -304,7 +303,7 @@ TEST_F(TimeFunctionsTest, weekOfYearTest) {
 
     auto year_weeks = ColumnHelper::cast_to<TYPE_INT>(result);
 
-    for (size_t i = 0; i < sizeof(weeks) / sizeof(weeks[0]); ++i) {
+    for (size_t i = 0; i < std::size(weeks); ++i) {
         ASSERT_EQ(weeks[i], year_weeks->get_data()[i]);
     }
 }
@@ -330,7 +329,7 @@ TEST_F(TimeFunctionsTest, weekOfYearIsoTest) {
     ColumnPtr result = TimeFunctions::week_of_year_iso(_utils->get_fn_ctx(), columns).value();
 
     auto year_weeks = ColumnHelper::cast_to<TYPE_INT>(result);
-    for (size_t i = 0; i < sizeof(weeks) / sizeof(weeks[0]); ++i) {
+    for (size_t i = 0; i < std::size(weeks); ++i) {
         ASSERT_EQ(weeks[i], year_weeks->get_data()[i]);
     }
 }
@@ -350,7 +349,7 @@ TEST_F(TimeFunctionsTest, weekWithDefaultModeTest) {
     ColumnPtr result = TimeFunctions::week_of_year_with_default_mode(_utils->get_fn_ctx(), columns).value();
 
     auto year_weeks = ColumnHelper::cast_to<TYPE_INT>(result);
-    for (size_t i = 0; i < sizeof(weeks) / sizeof(weeks[0]); ++i) {
+    for (size_t i = 0; i < std::size(weeks); ++i) {
         ASSERT_EQ(weeks[i], year_weeks->get_data()[i]);
     }
 }
@@ -369,7 +368,7 @@ TEST_F(TimeFunctionsTest, dayofweekisoTest) {
     ColumnPtr result = TimeFunctions::day_of_week_iso(_utils->get_fn_ctx(), columns).value();
 
     auto ret = ColumnHelper::cast_to<TYPE_INT>(result);
-    for (size_t i = 0; i < sizeof(days) / sizeof(days[0]); ++i) {
+    for (size_t i = 0; i < std::size(days); ++i) {
         ASSERT_EQ(days[i], ret->get_data()[i]);
     }
 }
@@ -388,7 +387,7 @@ TEST_F(TimeFunctionsTest, weekdayTest) {
     ColumnPtr result = TimeFunctions::week_day(_utils->get_fn_ctx(), columns).value();
 
     auto ret = ColumnHelper::cast_to<TYPE_INT>(result);
-    for (size_t i = 0; i < sizeof(days) / sizeof(days[0]); ++i) {
+    for (size_t i = 0; i < std::size(days); ++i) {
         ASSERT_EQ(days[i], ret->get_data()[i]);
     }
 }
@@ -423,7 +422,7 @@ TEST_F(TimeFunctionsTest, weekWithModeTest) {
     ColumnPtr result = TimeFunctions::week_of_year_with_mode(_utils->get_fn_ctx(), columns).value();
 
     auto year_weeks = ColumnHelper::cast_to<TYPE_INT>(result);
-    for (size_t i = 0; i < sizeof(weeks) / sizeof(weeks[0]); ++i) {
+    for (size_t i = 0; i < std::size(weeks); ++i) {
         ASSERT_EQ(weeks[i], year_weeks->get_data()[i]);
     }
 }
@@ -603,12 +602,7 @@ TEST_F(TimeFunctionsTest, dateAndDaysDiffTest) {
         ASSERT_TRUE(result->is_numeric());
 
         auto v = ColumnHelper::cast_to<TYPE_INT>(result);
-        ASSERT_EQ(6, v->get_data()[0]);
-        ASSERT_EQ(6, v->get_data()[1]);
-        ASSERT_EQ(8, v->get_data()[2]);
-        ASSERT_EQ(-1, v->get_data()[3]);
-        ASSERT_EQ(0, v->get_data()[4]);
-        ASSERT_EQ(0, v->get_data()[5]);
+        ASSERT_EQ("[6, 6, 8, -1, 0, 0]", result->debug_string());
     }
 
     // days_diff
@@ -617,12 +611,7 @@ TEST_F(TimeFunctionsTest, dateAndDaysDiffTest) {
         ASSERT_TRUE(result->is_numeric());
 
         auto v = ColumnHelper::cast_to<TYPE_BIGINT>(result);
-        ASSERT_EQ(5, v->get_data()[0]);
-        ASSERT_EQ(6, v->get_data()[1]);
-        ASSERT_EQ(8, v->get_data()[2]);
-        ASSERT_EQ(0, v->get_data()[3]);
-        ASSERT_EQ(0, v->get_data()[4]);
-        ASSERT_EQ(0, v->get_data()[5]);
+        ASSERT_EQ("[5, 6, 8, 0, 0, 0]", result->debug_string());
     }
 }
 
@@ -1249,9 +1238,7 @@ TEST_F(TimeFunctionsTest, fromUnixToDatetime) {
         //ASSERT_TRUE(result->is_numeric());
 
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        ASSERT_EQ("2019-08-06 01:38:57", v->get_data()[0]);
-        ASSERT_EQ("2019-08-06 01:39:57", v->get_data()[1]);
-        ASSERT_EQ("2019-08-06 02:38:57", v->get_data()[2]);
+        ASSERT_EQ("['2019-08-06 01:38:57', '2019-08-06 01:39:57', '2019-08-06 02:38:57']", result->debug_string());
     }
 }
 
@@ -1282,9 +1269,7 @@ TEST_F(TimeFunctionsTest, fromUnixToDatetimeWithFormat) {
         //ASSERT_TRUE(result->is_numeric());
 
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        ASSERT_EQ("1970-01-01 16:00:00", v->get_data()[0]);
-        ASSERT_EQ("1970-01-01 16:01:01", v->get_data()[1]);
-        ASSERT_EQ("1970-01-01 17:03:09", v->get_data()[2]);
+        ASSERT_EQ("['1970-01-01 16:00:00', '1970-01-01 16:01:01', '1970-01-01 17:03:09']", result->debug_string());
 
         ASSERT_TRUE(TimeFunctions::from_unix_close(_utils->get_fn_ctx(),
                                                    FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -1316,9 +1301,7 @@ TEST_F(TimeFunctionsTest, fromUnixToDatetimeWithConstFormat) {
         //ASSERT_TRUE(result->is_numeric());
 
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        ASSERT_EQ("1970-01-01 16:00:00", v->get_data()[0]);
-        ASSERT_EQ("1970-01-01 16:01:01", v->get_data()[1]);
-        ASSERT_EQ("1970-01-01 17:03:09", v->get_data()[2]);
+        ASSERT_EQ("['1970-01-01 16:00:00', '1970-01-01 16:01:01', '1970-01-01 17:03:09']", result->debug_string());
 
         ASSERT_TRUE(TimeFunctions::from_unix_close(_utils->get_fn_ctx(),
                                                    FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -1630,7 +1613,7 @@ TEST_F(TimeFunctionsTest, date_format) {
         ASSERT_TRUE(result->is_binary());
         ASSERT_EQ(1, result->size());
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        ASSERT_EQ(Slice("01,05,2013"), v->get_data()[0]);
+        ASSERT_EQ(Slice("01,05,2013"), v->get_slice(0));
     }
     {
         auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("%Y-%m-%d %H:%i:%s"), 1);
@@ -1645,7 +1628,7 @@ TEST_F(TimeFunctionsTest, date_format) {
         ASSERT_TRUE(result->is_binary());
         ASSERT_EQ(1, result->size());
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        ASSERT_EQ(Slice("2013-05-01 00:00:00"), v->get_data()[0]);
+        ASSERT_EQ(Slice("2013-05-01 00:00:00"), v->get_slice(0));
     }
     {
         auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("yyyyMMdd"), 1);
@@ -1660,7 +1643,7 @@ TEST_F(TimeFunctionsTest, date_format) {
         ASSERT_TRUE(result->is_binary());
         ASSERT_EQ(1, result->size());
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        ASSERT_EQ(Slice("20130501"), v->get_data()[0]);
+        ASSERT_EQ(Slice("20130501"), v->get_slice(0));
     }
     {
         auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("yyyy-MM-dd"), 1);
@@ -1675,7 +1658,7 @@ TEST_F(TimeFunctionsTest, date_format) {
         ASSERT_TRUE(result->is_binary());
         ASSERT_EQ(1, result->size());
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        ASSERT_EQ(Slice("2013-05-01"), v->get_data()[0]);
+        ASSERT_EQ(Slice("2013-05-01"), v->get_slice(0));
     }
     {
         auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("yyyy-MM-dd HH:mm:ss"), 1);
@@ -1690,7 +1673,7 @@ TEST_F(TimeFunctionsTest, date_format) {
         ASSERT_TRUE(result->is_binary());
         ASSERT_EQ(1, result->size());
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        ASSERT_EQ(Slice("2013-05-01 00:00:00"), v->get_data()[0]);
+        ASSERT_EQ(Slice("2013-05-01 00:00:00"), v->get_slice(0));
     }
     {
         auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("%Y-%m-%dT%H:%i:%s"), 1);
@@ -1705,7 +1688,7 @@ TEST_F(TimeFunctionsTest, date_format) {
         ASSERT_TRUE(result->is_binary());
         ASSERT_EQ(1, result->size());
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        ASSERT_EQ(Slice("2013-05-01T00:00:00"), v->get_data()[0]);
+        ASSERT_EQ(Slice("2013-05-01T00:00:00"), v->get_slice(0));
     }
     {
         auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("abcdef"), 1);
@@ -1720,7 +1703,7 @@ TEST_F(TimeFunctionsTest, date_format) {
         ASSERT_TRUE(result->is_binary());
         ASSERT_EQ(1, result->size());
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        ASSERT_EQ(Slice("abcdef"), v->get_data()[0]);
+        ASSERT_EQ(Slice("abcdef"), v->get_slice(0));
     }
 
     // datetime_format
@@ -1737,7 +1720,7 @@ TEST_F(TimeFunctionsTest, date_format) {
         ASSERT_TRUE(result->is_binary());
         ASSERT_EQ(1, result->size());
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        ASSERT_EQ(Slice("25,06,2020"), v->get_data()[0]);
+        ASSERT_EQ(Slice("25,06,2020"), v->get_slice(0));
     }
     {
         auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("%Y-%m-%d %H:%i:%s"), 1);
@@ -1754,7 +1737,7 @@ TEST_F(TimeFunctionsTest, date_format) {
         ASSERT_TRUE(result->is_binary());
         ASSERT_EQ(1, result->size());
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        ASSERT_EQ(Slice("2020-06-25 15:58:21"), v->get_data()[0]);
+        ASSERT_EQ(Slice("2020-06-25 15:58:21"), v->get_slice(0));
     }
     {
         auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("%Y-%m-%d %H:%i:%s"), 1);
@@ -1769,7 +1752,7 @@ TEST_F(TimeFunctionsTest, date_format) {
         ASSERT_TRUE(result->is_binary());
         ASSERT_EQ(1, result->size());
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        ASSERT_EQ(Slice("2020-06-25 15:58:21"), v->get_data()[0]);
+        ASSERT_EQ(Slice("2020-06-25 15:58:21"), v->get_slice(0));
     }
     {
         auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("yyyyMMdd"), 1);
@@ -1784,7 +1767,7 @@ TEST_F(TimeFunctionsTest, date_format) {
         ASSERT_TRUE(result->is_binary());
         ASSERT_EQ(1, result->size());
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        ASSERT_EQ(Slice("20200625"), v->get_data()[0]);
+        ASSERT_EQ(Slice("20200625"), v->get_slice(0));
     }
     {
         auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("yyyy-MM-dd"), 1);
@@ -1799,7 +1782,7 @@ TEST_F(TimeFunctionsTest, date_format) {
         ASSERT_TRUE(result->is_binary());
         ASSERT_EQ(1, result->size());
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        ASSERT_EQ(Slice("2020-06-25"), v->get_data()[0]);
+        ASSERT_EQ(Slice("2020-06-25"), v->get_slice(0));
     }
     {
         auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("yyyy-MM-dd HH:mm:ss"), 1);
@@ -1814,7 +1797,7 @@ TEST_F(TimeFunctionsTest, date_format) {
         ASSERT_TRUE(result->is_binary());
         ASSERT_EQ(1, result->size());
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        ASSERT_EQ(Slice("2020-06-25 15:58:21"), v->get_data()[0]);
+        ASSERT_EQ(Slice("2020-06-25 15:58:21"), v->get_slice(0));
     }
     {
         auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("%Y-%m-%dT%H:%i:%s"), 1);
@@ -1829,7 +1812,7 @@ TEST_F(TimeFunctionsTest, date_format) {
         ASSERT_TRUE(result->is_binary());
         ASSERT_EQ(1, result->size());
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        ASSERT_EQ(Slice("2020-06-25T15:58:21"), v->get_data()[0]);
+        ASSERT_EQ(Slice("2020-06-25T15:58:21"), v->get_slice(0));
     }
     {
         auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("abcdef"), 1);
@@ -1844,7 +1827,7 @@ TEST_F(TimeFunctionsTest, date_format) {
         ASSERT_TRUE(result->is_binary());
         ASSERT_EQ(1, result->size());
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        ASSERT_EQ(Slice("abcdef"), v->get_data()[0]);
+        ASSERT_EQ(Slice("abcdef"), v->get_slice(0));
     }
     {
         // stack-buffer-overflow test
@@ -1958,7 +1941,7 @@ TEST_F(TimeFunctionsTest, jodatime_format) {
         ASSERT_TRUE(result->is_binary());
         ASSERT_EQ(1, result->size());
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        ASSERT_EQ(Slice("01,05,13"), v->get_data()[0]);
+        ASSERT_EQ(Slice("01,05,13"), v->get_slice(0));
     }
     {
         auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("yyyyMMdd"), 1);
@@ -1973,7 +1956,7 @@ TEST_F(TimeFunctionsTest, jodatime_format) {
         ASSERT_TRUE(result->is_binary());
         ASSERT_EQ(1, result->size());
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        ASSERT_EQ(Slice("20130501"), v->get_data()[0]);
+        ASSERT_EQ(Slice("20130501"), v->get_slice(0));
     }
     {
         auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("yyyy-MM-dd"), 1);
@@ -1988,7 +1971,7 @@ TEST_F(TimeFunctionsTest, jodatime_format) {
         ASSERT_TRUE(result->is_binary());
         ASSERT_EQ(1, result->size());
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        ASSERT_EQ(Slice("2013-05-01"), v->get_data()[0]);
+        ASSERT_EQ(Slice("2013-05-01"), v->get_slice(0));
     }
     {
         auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("yyyy-MM-dd HH:mm:ss"), 1);
@@ -2003,7 +1986,7 @@ TEST_F(TimeFunctionsTest, jodatime_format) {
         ASSERT_TRUE(result->is_binary());
         ASSERT_EQ(1, result->size());
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        ASSERT_EQ(Slice("2013-05-01 00:00:00"), v->get_data()[0]);
+        ASSERT_EQ(Slice("2013-05-01 00:00:00"), v->get_slice(0));
     }
     {
         auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("yyyy-MM-ddTHH:mm:ss"), 1);
@@ -2018,7 +2001,7 @@ TEST_F(TimeFunctionsTest, jodatime_format) {
         ASSERT_TRUE(result->is_binary());
         ASSERT_EQ(1, result->size());
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        ASSERT_EQ(Slice("2013-05-01T00:00:00"), v->get_data()[0]);
+        ASSERT_EQ(Slice("2013-05-01T00:00:00"), v->get_slice(0));
     }
     {
         auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("bcfbcf"), 1);
@@ -2033,7 +2016,7 @@ TEST_F(TimeFunctionsTest, jodatime_format) {
         ASSERT_TRUE(result->is_binary());
         ASSERT_EQ(1, result->size());
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        ASSERT_EQ(Slice("bcfbcf"), v->get_data()[0]);
+        ASSERT_EQ(Slice("bcfbcf"), v->get_slice(0));
     }
     {
         auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("", 0), 1);
@@ -2060,7 +2043,7 @@ TEST_F(TimeFunctionsTest, jodatime_format) {
         ASSERT_TRUE(result->is_binary());
         ASSERT_EQ(1, result->size());
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        ASSERT_EQ(Slice("AD 20 2013 2013 18 3 Wed 2013 121 5 1"), v->get_data()[0]);
+        ASSERT_EQ(Slice("AD 20 2013 2013 18 3 Wed 2013 121 5 1"), v->get_slice(0));
     }
     {
         auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("yyyy MMM dd EEEE ee"), 1);
@@ -2075,7 +2058,7 @@ TEST_F(TimeFunctionsTest, jodatime_format) {
         ASSERT_TRUE(result->is_binary());
         ASSERT_EQ(1, result->size());
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        ASSERT_EQ(Slice("2013 May 01 Wednesday 03"), v->get_data()[0]);
+        ASSERT_EQ(Slice("2013 May 01 Wednesday 03"), v->get_slice(0));
     }
     {
         auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("yyyy MMM 'abcd'"), 1);
@@ -2090,7 +2073,7 @@ TEST_F(TimeFunctionsTest, jodatime_format) {
         ASSERT_TRUE(result->is_binary());
         ASSERT_EQ(1, result->size());
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        ASSERT_EQ(Slice("2013 May abcd"), v->get_data()[0]);
+        ASSERT_EQ(Slice("2013 May abcd"), v->get_slice(0));
     }
 
     {
@@ -2106,7 +2089,7 @@ TEST_F(TimeFunctionsTest, jodatime_format) {
         ASSERT_TRUE(result->is_binary());
         ASSERT_EQ(1, result->size());
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        ASSERT_EQ(Slice("abcd 201305"), v->get_data()[0]);
+        ASSERT_EQ(Slice("abcd 201305"), v->get_slice(0));
     }
 
     // datetime_format
@@ -2123,7 +2106,7 @@ TEST_F(TimeFunctionsTest, jodatime_format) {
         ASSERT_TRUE(result->is_binary());
         ASSERT_EQ(1, result->size());
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        ASSERT_EQ(Slice("25,06,20"), v->get_data()[0]);
+        ASSERT_EQ(Slice("25,06,20"), v->get_slice(0));
     }
     {
         auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("yyyyMMdd"), 1);
@@ -2138,7 +2121,7 @@ TEST_F(TimeFunctionsTest, jodatime_format) {
         ASSERT_TRUE(result->is_binary());
         ASSERT_EQ(1, result->size());
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        ASSERT_EQ(Slice("20200625"), v->get_data()[0]);
+        ASSERT_EQ(Slice("20200625"), v->get_slice(0));
     }
     {
         auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("yyyy-MM-dd"), 1);
@@ -2153,7 +2136,7 @@ TEST_F(TimeFunctionsTest, jodatime_format) {
         ASSERT_TRUE(result->is_binary());
         ASSERT_EQ(1, result->size());
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        ASSERT_EQ(Slice("2020-06-25"), v->get_data()[0]);
+        ASSERT_EQ(Slice("2020-06-25"), v->get_slice(0));
     }
     {
         auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("yyyy-MM-dd HH:mm:ss"), 1);
@@ -2168,7 +2151,7 @@ TEST_F(TimeFunctionsTest, jodatime_format) {
         ASSERT_TRUE(result->is_binary());
         ASSERT_EQ(1, result->size());
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        ASSERT_EQ(Slice("2020-06-25 15:58:21"), v->get_data()[0]);
+        ASSERT_EQ(Slice("2020-06-25 15:58:21"), v->get_slice(0));
     }
     {
         auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("yyyy-MM-ddTHH:mm:ss"), 1);
@@ -2183,7 +2166,7 @@ TEST_F(TimeFunctionsTest, jodatime_format) {
         ASSERT_TRUE(result->is_binary());
         ASSERT_EQ(1, result->size());
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        ASSERT_EQ(Slice("2020-06-25T15:58:21"), v->get_data()[0]);
+        ASSERT_EQ(Slice("2020-06-25T15:58:21"), v->get_slice(0));
     }
     {
         auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("bcfbcf"), 1);
@@ -2198,7 +2181,7 @@ TEST_F(TimeFunctionsTest, jodatime_format) {
         ASSERT_TRUE(result->is_binary());
         ASSERT_EQ(1, result->size());
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        ASSERT_EQ(Slice("bcfbcf"), v->get_data()[0]);
+        ASSERT_EQ(Slice("bcfbcf"), v->get_slice(0));
     }
     {
         // stack-buffer-overflow test
@@ -2245,7 +2228,7 @@ TEST_F(TimeFunctionsTest, jodatime_format) {
         ASSERT_TRUE(result->is_binary());
         ASSERT_EQ(1, result->size());
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        ASSERT_EQ(Slice("PM 3 3 15 15 58 21 0"), v->get_data()[0]);
+        ASSERT_EQ(Slice("PM 3 3 15 15 58 21 0"), v->get_slice(0));
     }
 
     {
@@ -2261,7 +2244,7 @@ TEST_F(TimeFunctionsTest, jodatime_format) {
         ASSERT_TRUE(result->is_binary());
         ASSERT_EQ(1, result->size());
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        ASSERT_EQ(Slice("PM 3 abcd"), v->get_data()[0]);
+        ASSERT_EQ(Slice("PM 3 abcd"), v->get_slice(0));
     }
 
     {
@@ -2277,7 +2260,7 @@ TEST_F(TimeFunctionsTest, jodatime_format) {
         ASSERT_TRUE(result->is_binary());
         ASSERT_EQ(1, result->size());
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        ASSERT_EQ(Slice("abcd 202006"), v->get_data()[0]);
+        ASSERT_EQ(Slice("abcd 202006"), v->get_slice(0));
     }
 }
 
@@ -2376,8 +2359,8 @@ TEST_F(TimeFunctionsTest, daynameTest) {
     ColumnPtr result = TimeFunctions::day_name(_utils->get_fn_ctx(), columns).value();
     auto day_names = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
-    for (size_t i = 0; i < sizeof(days) / sizeof(days[0]); ++i) {
-        ASSERT_EQ(days[i], day_names->get_data()[i].to_string());
+    for (size_t i = 0; i < std::size(days); ++i) {
+        ASSERT_EQ(days[i], day_names->get_slice(i).to_string());
     }
 }
 
@@ -2398,8 +2381,8 @@ TEST_F(TimeFunctionsTest, monthnameTest) {
     ColumnPtr result = TimeFunctions::month_name(_utils->get_fn_ctx(), columns).value();
     auto day_names = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
-    for (size_t i = 0; i < sizeof(months) / sizeof(months[0]); ++i) {
-        ASSERT_EQ(months[i], day_names->get_data()[i].to_string());
+    for (size_t i = 0; i < std::size(months); ++i) {
+        ASSERT_EQ(months[i], day_names->get_slice(i).to_string());
     }
 }
 
@@ -2442,7 +2425,7 @@ TEST_F(TimeFunctionsTest, convertTzGeneralTest) {
     ColumnPtr result = TimeFunctions::convert_tz(_utils->get_fn_ctx(), columns).value();
 
     auto day_names = ColumnHelper::cast_to<TYPE_DATETIME>(result);
-    for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) ASSERT_EQ(res[i], day_names->get_data()[i]);
+    for (int i = 0; i < std::size(res); ++i) ASSERT_EQ(res[i], day_names->get_data()[i]);
 
     ASSERT_TRUE(
             TimeFunctions::convert_tz_close(_utils->get_fn_ctx(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -2483,7 +2466,7 @@ TEST_F(TimeFunctionsTest, convertTzConstTest) {
     ColumnPtr result = TimeFunctions::convert_tz(_utils->get_fn_ctx(), columns).value();
 
     auto day_names = ColumnHelper::cast_to<TYPE_DATETIME>(result);
-    for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) ASSERT_EQ(res[i], day_names->get_data()[i]);
+    for (int i = 0; i < std::size(res); ++i) ASSERT_EQ(res[i], day_names->get_data()[i]);
 
     ASSERT_TRUE(
             TimeFunctions::convert_tz_close(_utils->get_fn_ctx(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
@@ -2565,7 +2548,7 @@ TEST_F(TimeFunctionsTest, hourTest) {
 
     auto year_days = ColumnHelper::cast_to<TYPE_INT>(result);
 
-    for (size_t i = 0; i < sizeof(days) / sizeof(days[0]); ++i) {
+    for (size_t i = 0; i < std::size(days); ++i) {
         ASSERT_EQ(days[i], year_days->get_data()[i]);
     }
 }
@@ -2590,7 +2573,7 @@ TEST_F(TimeFunctionsTest, minuteTest) {
 
     auto year_days = ColumnHelper::cast_to<TYPE_INT>(result);
 
-    for (size_t i = 0; i < sizeof(days) / sizeof(days[0]); ++i) {
+    for (size_t i = 0; i < std::size(days); ++i) {
         ASSERT_EQ(days[i], year_days->get_data()[i]);
     }
 }
@@ -2615,7 +2598,7 @@ TEST_F(TimeFunctionsTest, secondTest) {
 
     auto year_days = ColumnHelper::cast_to<TYPE_INT>(result);
 
-    for (size_t i = 0; i < sizeof(days) / sizeof(days[0]); ++i) {
+    for (size_t i = 0; i < std::size(days); ++i) {
         ASSERT_EQ(days[i], year_days->get_data()[i]);
     }
 }
@@ -2635,7 +2618,7 @@ TEST_F(TimeFunctionsTest, timestampTest) {
 
         TimestampValue check_result[] = {TimestampValue::create(2020, 1, 1, 21, 22, 51)};
 
-        for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
+        for (size_t i = 0; i < std::size(check_result); ++i) {
             ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
         }
     }
@@ -2678,7 +2661,7 @@ TEST_F(TimeFunctionsTest, datetimeTruncTest) {
                 TimestampValue::create(2020, 3, 6, 11, 54, 23), TimestampValue::create(2020, 4, 8, 9, 13, 19),
                 TimestampValue::create(2020, 5, 9, 8, 8, 16),   TimestampValue::create(2020, 11, 3, 23, 41, 37)};
 
-        for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
+        for (size_t i = 0; i < std::size(check_result); ++i) {
             ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
         }
     }
@@ -2711,7 +2694,7 @@ TEST_F(TimeFunctionsTest, datetimeTruncTest) {
                 TimestampValue::create(2020, 3, 6, 11, 54, 0), TimestampValue::create(2020, 4, 8, 9, 13, 0),
                 TimestampValue::create(2020, 5, 9, 8, 8, 0),   TimestampValue::create(2020, 11, 3, 23, 41, 0)};
 
-        for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
+        for (size_t i = 0; i < std::size(check_result); ++i) {
             ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
         }
     }
@@ -2744,7 +2727,7 @@ TEST_F(TimeFunctionsTest, datetimeTruncTest) {
                 TimestampValue::create(2020, 3, 6, 11, 0, 0), TimestampValue::create(2020, 4, 8, 9, 0, 0),
                 TimestampValue::create(2020, 5, 9, 8, 0, 0),  TimestampValue::create(2020, 11, 3, 23, 0, 0)};
 
-        for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
+        for (size_t i = 0; i < std::size(check_result); ++i) {
             ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
         }
     }
@@ -2777,7 +2760,7 @@ TEST_F(TimeFunctionsTest, datetimeTruncTest) {
                 TimestampValue::create(2020, 3, 6, 0, 0, 0), TimestampValue::create(2020, 4, 8, 0, 0, 0),
                 TimestampValue::create(2020, 5, 9, 0, 0, 0), TimestampValue::create(2020, 11, 3, 0, 0, 0)};
 
-        for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
+        for (size_t i = 0; i < std::size(check_result); ++i) {
             ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
         }
     }
@@ -2810,7 +2793,7 @@ TEST_F(TimeFunctionsTest, datetimeTruncTest) {
                 TimestampValue::create(2020, 3, 1, 0, 0, 0), TimestampValue::create(2020, 4, 1, 0, 0, 0),
                 TimestampValue::create(2020, 5, 1, 0, 0, 0), TimestampValue::create(2020, 11, 1, 0, 0, 0)};
 
-        for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
+        for (size_t i = 0; i < std::size(check_result); ++i) {
             ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
         }
     }
@@ -2843,7 +2826,7 @@ TEST_F(TimeFunctionsTest, datetimeTruncTest) {
                 TimestampValue::create(2020, 1, 1, 0, 0, 0), TimestampValue::create(2020, 1, 1, 0, 0, 0),
                 TimestampValue::create(2020, 1, 1, 0, 0, 0), TimestampValue::create(2020, 1, 1, 0, 0, 0)};
 
-        for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
+        for (size_t i = 0; i < std::size(check_result); ++i) {
             ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
         }
     }
@@ -2876,7 +2859,7 @@ TEST_F(TimeFunctionsTest, datetimeTruncTest) {
                 TimestampValue::create(2020, 3, 2, 0, 0, 0),   TimestampValue::create(2020, 4, 6, 0, 0, 0),
                 TimestampValue::create(2020, 5, 4, 0, 0, 0),   TimestampValue::create(2020, 11, 2, 0, 0, 0)};
 
-        for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
+        for (size_t i = 0; i < std::size(check_result); ++i) {
             ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
         }
     }
@@ -2909,7 +2892,7 @@ TEST_F(TimeFunctionsTest, datetimeTruncTest) {
                 TimestampValue::create(2020, 1, 1, 0, 0, 0), TimestampValue::create(2020, 4, 1, 0, 0, 0),
                 TimestampValue::create(2020, 4, 1, 0, 0, 0), TimestampValue::create(2020, 10, 1, 0, 0, 0)};
 
-        for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
+        for (size_t i = 0; i < std::size(check_result); ++i) {
             ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
         }
     }
@@ -3184,7 +3167,7 @@ TEST_F(TimeFunctionsTest, timeSliceFloorTest) {
                 TimestampValue::create(0001, 5, 6, 11, 54, 20), TimestampValue::create(2022, 7, 8, 9, 13, 15),
                 TimestampValue::create(2022, 9, 9, 8, 8, 15),   TimestampValue::create(2022, 11, 3, 23, 41, 35)};
 
-        for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
+        for (size_t i = 0; i < std::size(check_result); ++i) {
             ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
         }
     }
@@ -3229,7 +3212,7 @@ TEST_F(TimeFunctionsTest, timeSliceFloorTest) {
                 TimestampValue::create(0001, 5, 6, 11, 50, 0), TimestampValue::create(2022, 7, 8, 9, 10, 0),
                 TimestampValue::create(2022, 9, 9, 8, 5, 0),   TimestampValue::create(2022, 11, 3, 23, 40, 0)};
 
-        for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
+        for (size_t i = 0; i < std::size(check_result); ++i) {
             ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
         }
     }
@@ -3274,7 +3257,7 @@ TEST_F(TimeFunctionsTest, timeSliceFloorTest) {
                 TimestampValue::create(0001, 5, 6, 10, 0, 0), TimestampValue::create(2022, 7, 8, 8, 0, 0),
                 TimestampValue::create(2022, 9, 9, 6, 0, 0),  TimestampValue::create(2022, 11, 3, 21, 0, 0)};
 
-        for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
+        for (size_t i = 0; i < std::size(check_result); ++i) {
             ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
         }
     }
@@ -3319,7 +3302,7 @@ TEST_F(TimeFunctionsTest, timeSliceFloorTest) {
                 TimestampValue::create(0001, 5, 6, 0, 0, 0), TimestampValue::create(2022, 7, 5, 0, 0, 0),
                 TimestampValue::create(2022, 9, 8, 0, 0, 0), TimestampValue::create(2022, 11, 2, 0, 0, 0)};
 
-        for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
+        for (size_t i = 0; i < std::size(check_result); ++i) {
             ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
         }
     }
@@ -3364,7 +3347,7 @@ TEST_F(TimeFunctionsTest, timeSliceFloorTest) {
                 TimestampValue::create(0001, 1, 1, 0, 0, 0), TimestampValue::create(2022, 4, 1, 0, 0, 0),
                 TimestampValue::create(2022, 9, 1, 0, 0, 0), TimestampValue::create(2022, 9, 1, 0, 0, 0)};
 
-        for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
+        for (size_t i = 0; i < std::size(check_result); ++i) {
             ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
         }
     }
@@ -3409,7 +3392,7 @@ TEST_F(TimeFunctionsTest, timeSliceFloorTest) {
                 TimestampValue::create(0001, 1, 1, 0, 0, 0), TimestampValue::create(2021, 1, 1, 0, 0, 0),
                 TimestampValue::create(2021, 1, 1, 0, 0, 0), TimestampValue::create(2021, 1, 1, 0, 0, 0)};
 
-        for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
+        for (size_t i = 0; i < std::size(check_result); ++i) {
             ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
         }
     }
@@ -3454,7 +3437,7 @@ TEST_F(TimeFunctionsTest, timeSliceFloorTest) {
                 TimestampValue::create(0001, 4, 16, 0, 0, 0), TimestampValue::create(2022, 6, 20, 0, 0, 0),
                 TimestampValue::create(2022, 8, 29, 0, 0, 0), TimestampValue::create(2022, 10, 3, 0, 0, 0)};
 
-        for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
+        for (size_t i = 0; i < std::size(check_result); ++i) {
             ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
         }
     }
@@ -3499,7 +3482,7 @@ TEST_F(TimeFunctionsTest, timeSliceFloorTest) {
                 TimestampValue::create(0001, 1, 1, 0, 0, 0), TimestampValue::create(2022, 4, 1, 0, 0, 0),
                 TimestampValue::create(2022, 4, 1, 0, 0, 0), TimestampValue::create(2022, 4, 1, 0, 0, 0)};
 
-        for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
+        for (size_t i = 0; i < std::size(check_result); ++i) {
             ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
         }
     }
@@ -3559,7 +3542,7 @@ TEST_F(TimeFunctionsTest, timeSliceCeilTest) {
                 TimestampValue::create(0001, 5, 6, 11, 54, 25), TimestampValue::create(2022, 7, 8, 9, 13, 20),
                 TimestampValue::create(2022, 9, 9, 8, 8, 20),   TimestampValue::create(2022, 11, 3, 23, 41, 40)};
 
-        for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
+        for (size_t i = 0; i < std::size(check_result); ++i) {
             ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
         }
     }
@@ -3664,7 +3647,7 @@ TEST_F(TimeFunctionsTest, DateSliceFloorTest) {
                                      DateValue::create(0001, 5, 6), DateValue::create(2022, 7, 5),
                                      DateValue::create(2022, 9, 8), DateValue::create(2022, 11, 2)};
 
-        for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
+        for (size_t i = 0; i < std::size(check_result); ++i) {
             ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
         }
     }
@@ -3708,7 +3691,7 @@ TEST_F(TimeFunctionsTest, DateSliceFloorTest) {
                                      DateValue::create(0001, 1, 1), DateValue::create(2022, 4, 1),
                                      DateValue::create(2022, 9, 1), DateValue::create(2022, 9, 1)};
 
-        for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
+        for (size_t i = 0; i < std::size(check_result); ++i) {
             ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
         }
     }
@@ -3752,7 +3735,7 @@ TEST_F(TimeFunctionsTest, DateSliceFloorTest) {
                                      DateValue::create(0001, 1, 1), DateValue::create(2021, 1, 1),
                                      DateValue::create(2021, 1, 1), DateValue::create(2021, 1, 1)};
 
-        for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
+        for (size_t i = 0; i < std::size(check_result); ++i) {
             ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
         }
     }
@@ -3796,7 +3779,7 @@ TEST_F(TimeFunctionsTest, DateSliceFloorTest) {
                                      DateValue::create(0001, 4, 16), DateValue::create(2022, 6, 20),
                                      DateValue::create(2022, 8, 29), DateValue::create(2022, 10, 3)};
 
-        for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
+        for (size_t i = 0; i < std::size(check_result); ++i) {
             ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
         }
     }
@@ -3840,7 +3823,7 @@ TEST_F(TimeFunctionsTest, DateSliceFloorTest) {
                                      DateValue::create(0001, 1, 1), DateValue::create(2022, 4, 1),
                                      DateValue::create(2022, 4, 1), DateValue::create(2022, 4, 1)};
 
-        for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
+        for (size_t i = 0; i < std::size(check_result); ++i) {
             ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
         }
     }
@@ -3899,7 +3882,7 @@ TEST_F(TimeFunctionsTest, DateSliceCeilTest) {
                                      DateValue::create(0001, 5, 11), DateValue::create(2022, 7, 10),
                                      DateValue::create(2022, 9, 13), DateValue::create(2022, 11, 7)};
 
-        for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
+        for (size_t i = 0; i < std::size(check_result); ++i) {
             ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
         }
     }
@@ -4561,7 +4544,7 @@ TEST_F(TimeFunctionsTest, hourFromUnixTime) {
         ColumnPtr result = TimeFunctions::hour_from_unixtime(_utils->get_fn_ctx(), columns).value();
 
         auto hours = ColumnHelper::cast_to<TYPE_TINYINT>(result);
-        for (size_t i = 0; i < sizeof(expected) / sizeof(expected[0]); ++i) {
+        for (size_t i = 0; i < std::size(expected); ++i) {
             EXPECT_EQ(expected[i], hours->get_data()[i]) << "Failed for basic positive at index " << i;
         }
     }
@@ -4594,7 +4577,7 @@ TEST_F(TimeFunctionsTest, hourFromUnixTime) {
         ColumnPtr result = TimeFunctions::hour_from_unixtime(_utils->get_fn_ctx(), columns).value();
 
         auto hours = ColumnHelper::cast_to<TYPE_TINYINT>(result);
-        for (size_t i = 0; i < sizeof(expected_negative) / sizeof(expected_negative[0]); ++i) {
+        for (size_t i = 0; i < std::size(expected_negative); ++i) {
             EXPECT_EQ(expected_negative[i], hours->get_data()[i])
                     << "Failed for timezone offset at index " << i << " with value " << tc->get_data()[i];
         }
@@ -4629,7 +4612,7 @@ TEST_F(TimeFunctionsTest, hourFromUnixTime) {
         ColumnPtr result = TimeFunctions::hour_from_unixtime(_utils->get_fn_ctx(), columns).value();
 
         auto hours = ColumnHelper::cast_to<TYPE_TINYINT>(result);
-        for (size_t i = 0; i < sizeof(expected_mixed) / sizeof(expected_mixed[0]); ++i) {
+        for (size_t i = 0; i < std::size(expected_mixed); ++i) {
             EXPECT_EQ(expected_mixed[i], hours->get_data()[i])
                     << "Failed for mixed timezone offset at index " << i << " with value " << tc->get_data()[i];
         }

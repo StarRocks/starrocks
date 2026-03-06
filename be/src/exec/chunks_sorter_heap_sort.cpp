@@ -271,8 +271,7 @@ void ChunksSorterHeapSort::_do_filter_data_for_type(detail::ChunkHolder* chunk_h
                 }
             }
         } else {
-            // Use raw pointers for auto-vectorization to optimize performance with fixed-length values.
-            const auto* __restrict__ order_by_data = order_by_column->get_data().data();
+            const auto& order_by_data = order_by_column->immutable_data();
             if (sort_order_flag > 0) {
                 for (int i = 0; i < row_sz; ++i) {
                     filter_data[i] = order_by_data[i] < need_filter_data;
