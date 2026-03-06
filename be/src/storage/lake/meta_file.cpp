@@ -846,7 +846,8 @@ void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb, const std::m
             if (i >= first_segment_metas_size) {
                 _pending_rowset_data.rowset_pb.add_segment_metas();
             }
-            _pending_rowset_data.rowset_pb.mutable_segment_metas(i)->set_segment_idx(get_segment_idx(rowset_pb, i));
+            _pending_rowset_data.rowset_pb.mutable_segment_metas(i)->set_segment_idx(
+                    _pending_rowset_data.assigned_segment_idx + get_segment_idx(rowset_pb, i));
         }
     } else {
         // Merge segments
