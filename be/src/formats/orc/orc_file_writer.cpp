@@ -21,7 +21,7 @@
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/map_column.h"
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
 #include "common/http/content_type.h"
 #include "common/util/debug_util.h"
 #include "formats/column_evaluator.h"

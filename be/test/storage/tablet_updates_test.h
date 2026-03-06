@@ -26,7 +26,7 @@
 #include "base/utility/defer_op.h"
 #include "column/datum_tuple.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_storage_fwd.h"
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
