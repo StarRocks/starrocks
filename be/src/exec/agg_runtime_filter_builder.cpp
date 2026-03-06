@@ -280,4 +280,89 @@ void AggTopNRuntimeFilterBuilder::update(const Columns& group_by_columns, const 
                                   _build_desc->is_asc(), _build_desc->is_nulls_first());
 }
 
+// Implementation of AggMinMaxRuntimeFilterBuilder
+// This builder creates a MinMaxRuntimeFilter from MIN/MAX aggregation results.
+//
+// For queries with GROUP BY:
+//   - The agg_result_column contains MIN/MAX values for each group
+//   - We compute the overall min and max across all groups
+//   - The filter range is [min_value, max_value]
+//
+// For queries without GROUP BY (global aggregation):
+//   - The agg_result_column contains a single value (MIN or MAX result)
+//   - For MIN: the filter range is [MIN, +inf) - values < MIN are filtered
+//   - For MAX: the filter range is (-inf, MAX] - values > MAX are filtered
+//   - When both MIN and MAX are present, we create two filters that together form [MIN, MAX]
+struct AggMinMaxRuntimeFilterBuilderImpl {
+    template <LogicalType ltype>
+    RuntimeFilter* operator()(ObjectPool* pool, const Column* agg_result_column) {
+        using CppType = RunTimeCppType<ltype>;
+        auto* runtime_filter = MinMaxRuntimeFilter<ltype>::create_full_range_with_null(pool);
+        auto* minmax_filter = down_cast<MinMaxRuntimeFilter<ltype>*>(runtime_filter);
+
+        if (agg_result_column == nullptr || agg_result_column->size() == 0) {
+            return runtime_filter;
+        }
+
+        // Iterate through the aggregation result column to find min and max values
+        // For no-group-by case (single row), this will set min = max = the single value
+        if (agg_result_column->is_nullable()) {
+            const auto* nullable_column = down_cast<const NullableColumn*>(agg_result_column);
+            const auto* data_column = nullable_column->data_column().get();
+            const auto& null_data = nullable_column->null_column_data();
+            const auto data = GetContainer<ltype>::get_data(data_column);
+
+            bool has_value = false;
+            CppType min_val;
+            CppType max_val;
+
+            for (size_t i = 0; i < agg_result_column->size(); ++i) {
+                if (null_data[i]) {
+                    continue;
+                }
+                if (!has_value) {
+                    min_val = data[i];
+                    max_val = data[i];
+                    has_value = true;
+                } else {
+                    if (data[i] < min_val) {
+                        min_val = data[i];
+                    }
+                    if (data[i] > max_val) {
+                        max_val = data[i];
+                    }
+                }
+            }
+
+            if (has_value) {
+                minmax_filter->insert(min_val);
+                minmax_filter->insert(max_val);
+            }
+        } else {
+            const auto data = GetContainer<ltype>::get_data(agg_result_column);
+            if (agg_result_column->size() > 0) {
+                CppType min_val = data[0];
+                CppType max_val = data[0];
+                for (size_t i = 1; i < agg_result_column->size(); ++i) {
+                    if (data[i] < min_val) {
+                        min_val = data[i];
+                    }
+                    if (data[i] > max_val) {
+                        max_val = data[i];
+                    }
+                }
+                minmax_filter->insert(min_val);
+                minmax_filter->insert(max_val);
+            }
+        }
+
+        return runtime_filter;
+    }
+};
+
+RuntimeFilter* AggMinMaxRuntimeFilterBuilder::build(ObjectPool* pool, const Column* agg_result_column) {
+    return type_dispatch_predicate<RuntimeFilter*>(_type, false, AggMinMaxRuntimeFilterBuilderImpl(), pool,
+                                                   agg_result_column);
+}
+
 } // namespace starrocks

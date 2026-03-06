@@ -148,4 +148,19 @@ private:
     HeapBuilder* _heap_builder;
 };
 
+// Builder for MIN/MAX aggregation runtime filter.
+// This builder creates a MinMaxRuntimeFilter from the results of MIN/MAX aggregate functions.
+class AggMinMaxRuntimeFilterBuilder {
+public:
+    AggMinMaxRuntimeFilterBuilder(RuntimeFilterBuildDescriptor* build_desc, LogicalType type)
+            : _build_desc(build_desc), _type(type) {}
+    // Build the min/max runtime filter from aggregation results
+    // The agg_result_column contains the MIN/MAX values
+    RuntimeFilter* build(ObjectPool* pool, const Column* agg_result_column);
+
+private:
+    RuntimeFilterBuildDescriptor* _build_desc;
+    LogicalType _type{};
+};
+
 } // namespace starrocks
