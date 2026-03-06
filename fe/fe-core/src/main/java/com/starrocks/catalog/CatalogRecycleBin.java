@@ -1325,25 +1325,6 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     public static long getMinEraseLatency() {
         return Config.catalog_recycle_bin_erase_min_latency_ms;
     }
-<<<<<<< HEAD
-=======
-
-    // for test
-    protected void clear() {
-        idToDatabase.clear();
-        idToTableInfo.clear();
-        nameToTableInfo.clear();
-        idToPartition.clear();
-        idToRecycleTime.clear();
-        enableEraseLater.clear();
-        asyncDeleteForPartitions.clear();
-        asyncDeleteForTables.clear();
-    }
-
-    // for test
-    protected void setPartitionInfo(long partitionId, RecyclePartitionInfo partitionInfo) {
-        idToPartition.put(partitionId, partitionInfo);
-    }
 
     // for test
     protected void setDeleteFutureForPartition(RecyclePartitionInfo partitionInfo, CompletableFuture<Boolean> future) {
@@ -1354,31 +1335,4 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     protected void setDeleteFutureForTable(RecycleTableInfo tableInfo, CompletableFuture<Boolean> future) {
         asyncDeleteForTables.put(tableInfo, future);
     }
-
-    // for test
-    public void removePartitionFromRecycleBin(long partitionId) {
-        idToPartition.remove(partitionId);
-        idToRecycleTime.remove(partitionId);
-        enableEraseLater.remove(partitionId);
-    }
-
-    @Override
-    public synchronized Map<String, Long> estimateCount() {
-        return ImmutableMap.<String, Long>builder()
-                .put("Database", (long) idToDatabase.size())
-                .put("Table", (long) idToTableInfo.size())
-                .put("Partition", (long) idToPartition.size())
-                .put("AsyncDeletePartition", (long) asyncDeleteForPartitions.size())
-                .put("AsyncDeleteTable", (long) asyncDeleteForTables.size())
-                .build();
-    }
-
-    @Override
-    public synchronized long estimateSize() {
-        return Estimator.estimate(idToDatabase, 20) +
-                Estimator.estimate(idToTableInfo.rowMap(), 20) +
-                Estimator.estimate(idToPartition, 20) +
-                Estimator.estimate(idToRecycleTime, 20);
-    }
->>>>>>> cb59200aab ([Enhancement] Make some parameter of CatalogRecycleBin be configurable (#69838))
 }
