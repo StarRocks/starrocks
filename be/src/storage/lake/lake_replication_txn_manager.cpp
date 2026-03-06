@@ -184,19 +184,7 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
                          build_source_tablet_meta(src_tablet_id, src_visible_version, src_meta_dir, shared_src_fs));
     }
 #else
-<<<<<<< HEAD
-    auto src_meta_dir = "test_lake_replication/meta";
-    auto src_data_dir = "test_lake_replication/data";
-    auto shared_src_fs_st_or = FileSystem::CreateSharedFromString(src_data_dir);
-    if (!shared_src_fs_st_or.ok()) {
-        return Status::Corruption("Failed to create virtual starlet filesystem");
-    }
-    auto shared_src_fs = shared_src_fs_st_or.value();
-    ASSIGN_OR_RETURN(auto src_tablet_meta,
-                     _tablet_manager->get_tablet_metadata(src_tablet_id, src_visible_version, false, 0, nullptr));
-=======
     return Status::NotSupported("Lake replication remote storage requires build with shared-data support!");
->>>>>>> 0276850322 ([Enhancement] Support partitioned prefix for shared-data cross cluster migration (#67370))
 #endif
 
     VLOG(3) << "Lake replicate storage task, built source meta and data dir, meta dir: " << src_meta_dir

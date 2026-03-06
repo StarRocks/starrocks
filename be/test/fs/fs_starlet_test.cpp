@@ -25,12 +25,9 @@
 
 #include <fstream>
 
-<<<<<<< HEAD
-=======
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
->>>>>>> 0276850322 ([Enhancement] Support partitioned prefix for shared-data cross cluster migration (#67370))
 #include "common/config.h"
 #include "gutil/strings/join.h"
 #include "service/staros_worker.h"
