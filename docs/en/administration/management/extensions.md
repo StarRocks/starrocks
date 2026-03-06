@@ -6,6 +6,8 @@ displayed_sidebar: docs
 
 Static Extensions are StarRocks FE’s extension modules that allow you to add new features or optimize existing functionality without modifying the core code. Compared to dynamic plugins, static extensions are automatically loaded at system startup and provide more registrable extension points, covering the system’s core modules.
 
+This feature is supported from v4.1 onwards.
+
 ## Usage
 
 The following example demonstrates how to develop a static extension.
