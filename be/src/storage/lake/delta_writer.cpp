@@ -128,6 +128,16 @@ public:
 
     void close();
 
+    // Wait for all pending flush tasks to complete and close the tablet writer.
+    // This performs blocking I/O but does NOT reset/destroy internal state.
+    // Safe to call from a bthread (e.g., execution queue stop handler).
+    void flush_and_wait();
+
+    // Release internal resources (reset unique_ptrs). Non-blocking.
+    // Must be called after flush_and_wait() to avoid destroying state while
+    // it's still being accessed.
+    void release_resources();
+
     void cancel(const Status& st);
 
     [[nodiscard]] int64_t partition_id() const { return _partition_id; }
@@ -855,20 +865,21 @@ Status DeltaWriterImpl::fill_auto_increment_id(const Chunk& chunk) {
     return Status::OK();
 }
 
-void DeltaWriterImpl::close() {
+void DeltaWriterImpl::flush_and_wait() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
-    auto start_time = MonotonicNanos();
-    DeferOp defer([&] { ADD_COUNTER_RELAXED(_stats.close_time_ns, MonotonicNanos() - start_time); });
     if (_flush_token != nullptr) {
         auto st = _flush_token->wait();
         LOG_IF(WARNING, !st.ok()) << "flush token error: " << st;
         VLOG(3) << "Tablet_id: " << tablet_id() << ", flush stats: " << _flush_token->get_stats();
     }
-
-    // Destruct variables manually for counting memory usage into |_mem_tracker|
     if (_tablet_writer != nullptr) {
         _tablet_writer->close();
     }
+}
+
+void DeltaWriterImpl::release_resources() {
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
+    // Destruct variables manually for counting memory usage into |_mem_tracker|
     _tablet_writer.reset();
     _mem_table.reset();
     _mem_table_sink.reset();
@@ -881,6 +892,14 @@ void DeltaWriterImpl::close() {
     _tablet_schema.reset();
     _write_schema.reset();
     _merge_condition.clear();
+}
+
+void DeltaWriterImpl::close() {
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
+    auto start_time = MonotonicNanos();
+    DeferOp defer([&] { ADD_COUNTER_RELAXED(_stats.close_time_ns, MonotonicNanos() - start_time); });
+    flush_and_wait();
+    release_resources();
 }
 
 std::vector<FileInfo> DeltaWriterImpl::files() const {
@@ -953,6 +972,14 @@ Status DeltaWriter::finish() {
 void DeltaWriter::close() {
     DCHECK_EQ(0, bthread_self()) << "Should not invoke DeltaWriter::close() in a bthread";
     _impl->close();
+}
+
+void DeltaWriter::flush_and_wait() {
+    _impl->flush_and_wait();
+}
+
+void DeltaWriter::release_resources() {
+    _impl->release_resources();
 }
 
 void DeltaWriter::cancel(const Status& st) {
