@@ -443,8 +443,9 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
         IcebergTableProcedureContext tableProcedureContext =
                 new IcebergTableProcedureContext(icebergCatalog, table, context != null ? context : ConnectContext.get(),
                         transaction, hdfsEnvironment, stmt, clause);
-        actions.add(() -> tableProcedure.execute(tableProcedureContext, args));
-
+        actions.add(() -> {
+            super.resultSet = tableProcedure.execute(tableProcedureContext, args);
+        });
         return null;
     }
 

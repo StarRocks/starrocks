@@ -24,6 +24,7 @@ import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergPartitionData;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.ParseNode;
@@ -98,7 +99,7 @@ public class AddFilesProcedure extends IcebergTableProcedure {
     }
 
     @Override
-    public void execute(IcebergTableProcedureContext context, Map<String, ConstantOperator> args) {
+    public ShowResultSet execute(IcebergTableProcedureContext context, Map<String, ConstantOperator> args) {
         // Validate arguments - either source_table or location must be provided, but not both
         ConstantOperator sourceTableArg = args.get(SOURCE_TABLE);
         ConstantOperator tableLocationArg = args.get(LOCATION);
@@ -157,6 +158,8 @@ public class AddFilesProcedure extends IcebergTableProcedure {
             LOGGER.error("Failed to execute add_files procedure", e);
             throw new StarRocksConnectorException("Failed to add files: %s", e.getMessage(), e);
         }
+
+        return null;
     }
 
     private void addFilesFromLocation(IcebergTableProcedureContext context, Table table, Transaction transaction,
