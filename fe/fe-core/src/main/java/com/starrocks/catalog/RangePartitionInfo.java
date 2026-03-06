@@ -222,6 +222,10 @@ public class RangePartitionInfo extends PartitionInfo {
         }
         newRange = Range.closedOpen(lowKey, newRangeUpper);
 
+        if (lastRange != null) {
+            RangeUtils.checkRangeIntersect(newRange, lastRange);
+        }
+        
         if (currentRange != null) {
             // check if range intersected
             RangeUtils.checkRangeIntersect(newRange, currentRange);
