@@ -353,7 +353,10 @@ static Status collect_garbage_versions(TabletManager* tablet_mgr, int64_t tablet
     auto version = min_retain_version;
     auto skip_check_grace_timestamp = grace_timestamp <= 0;
     *final_retain_version = min_retain_version;
-    *extra_file_size = 0;
+    // NOTE: do NOT reset *extra_file_size here. The caller passes a partition-level
+    // accumulator shared across multiple tablets; resetting it would discard earlier
+    // tablets' contributions and could make the final value negative after the
+    // extra_file_size -= vacuumed_file_size adjustment in vacuum_tablet_metadata.
 
     while (version >= min_version) {
         auto res = tablet_mgr->get_tablet_metadata(tablet_id, version, false, false);
