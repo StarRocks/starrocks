@@ -2864,6 +2864,33 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The longest duration the metadata can be retained after a database, table, or partition is dropped. If this duration expires, the data will be deleted and cannot be recovered through the [RECOVER](../../sql-reference/sql-statements/backup_restore/RECOVER.md) command.
 - Introduced in: -
 
+##### `catalog_recycle_bin_erase_min_latency_ms`
+
+- Default: 600000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The minimum delay in milliseconds before the metadata is erased when a database, table, or partition is dropped. This avoids the erase log being written ahead of the drop log.
+- Introduced in: -
+
+##### `catalog_recycle_bin_erase_max_operations_per_cycle`
+
+- Default: 500
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of erase operations per cycle for actually deleting databases, tables, or partitions from the recycle bin. The erase operation holds a lock, so one batch should not be too large.
+- Introduced in: -
+
+##### `catalog_recycle_bin_erase_fail_retry_interval_ms`
+
+- Default: 60000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The retry interval in milliseconds when an erase operation in the recycle bin fails.
+- Introduced in: -
+
 ##### `check_consistency_default_timeout_second`
 
 - Default: 600
