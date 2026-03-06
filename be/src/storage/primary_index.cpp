@@ -995,6 +995,19 @@ public:
     }
 };
 
+template <LogicalType LT>
+std::unique_ptr<HashIndex> create_fixed_hash_index() {
+    if constexpr (LT == TYPE_DATE) {
+        return std::make_unique<HashIndexImpl<int32_t>>();
+    } else if constexpr (LT == TYPE_DATETIME) {
+        return std::make_unique<HashIndexImpl<int64_t>>();
+    } else if constexpr (LT == TYPE_CHAR || LT == TYPE_VARCHAR) {
+        return std::make_unique<ShardByLengthSliceHashIndex>();
+    } else {
+        return std::make_unique<HashIndexImpl<typename CppTypeTraits<LT>::CppType>>();
+    }
+}
+
 static std::unique_ptr<HashIndex> create_hash_index(LogicalType key_type, size_t fix_size) {
     if (key_type == TYPE_VARCHAR && fix_size > 0) {
         if (fix_size <= 8) {
@@ -1018,29 +1031,15 @@ static std::unique_ptr<HashIndex> create_hash_index(LogicalType key_type, size_t
         }
     }
 
-#define CASE_TYPE(type) \
-    case (type):        \
-        return std::make_unique<HashIndexImpl<typename CppTypeTraits<type>::CppType>>()
-
     switch (key_type) {
-        CASE_TYPE(TYPE_BOOLEAN);
-        CASE_TYPE(TYPE_TINYINT);
-        CASE_TYPE(TYPE_SMALLINT);
-        CASE_TYPE(TYPE_INT);
-        CASE_TYPE(TYPE_BIGINT);
-        CASE_TYPE(TYPE_LARGEINT);
-    case TYPE_CHAR:
-        return std::make_unique<ShardByLengthSliceHashIndex>();
-    case TYPE_VARCHAR:
-        return std::make_unique<ShardByLengthSliceHashIndex>();
-    case TYPE_DATE:
-        return std::make_unique<HashIndexImpl<int32_t>>();
-    case TYPE_DATETIME:
-        return std::make_unique<HashIndexImpl<int64_t>>();
+#define M(LT) \
+    case LT:  \
+        return create_fixed_hash_index<LT>();
+        APPLY_FOR_ALL_PK_SUPPORT_TYPE(M)
+#undef M
     default:
         return nullptr;
     }
-#undef CASE_TYPE
 }
 
 PrimaryIndex::PrimaryIndex() = default;
