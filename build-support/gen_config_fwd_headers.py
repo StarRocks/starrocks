@@ -32,6 +32,9 @@ DEFAULT_MANIFEST = REPO_ROOT / "build-support/config_fwd_headers_manifest.json"
 LOCAL_CONFIG_INCLUDE_RE = re.compile(r'^\s*#include\s+"(config_[^"]+\.h)"\s*$')
 NAMESPACE_OPEN_RE = re.compile(r'^\s*namespace\s+starrocks::config\s*\{\s*$')
 NAMESPACE_CLOSE_RE = re.compile(r'^\s*}\s*//\s*namespace\s+starrocks::config\s*$')
+CONDITIONAL_OPEN_RE = re.compile(r'^\s*#\s*(if|ifdef|ifndef)\b')
+CONDITIONAL_BRANCH_RE = re.compile(r'^\s*#\s*(elif|else)\b')
+CONDITIONAL_CLOSE_RE = re.compile(r'^\s*#\s*endif\b')
 CONF_NAME_RE = re.compile(r'^\s*CONF_[A-Za-z0-9_]+\(\s*([A-Za-z0-9_]+)\s*,', re.DOTALL)
 CONF_ALIAS_RE = re.compile(
     r'^\s*CONF_Alias\(\s*([A-Za-z0-9_]+)\s*,\s*([A-Za-z0-9_]+)\s*\)\s*;',
@@ -71,6 +74,21 @@ HEADER_POSTAMBLE = """
 class ConfigBlock:
     names: tuple[str, ...]
     text: str
+    guards: tuple["GuardFrame", ...] = ()
+
+
+@dataclass(frozen=True)
+class GuardFrame:
+    group_id: str
+    branch_lines: tuple[str, ...]
+    branch_index: int
+
+
+@dataclass
+class ActiveGuard:
+    group_id: str
+    branch_lines: list[str]
+    branch_index: int = 0
 
 
 def _trim_comment_block(lines: list[str]) -> list[str]:
@@ -101,6 +119,8 @@ def _extract_config_blocks(path: Path) -> list[ConfigBlock]:
     in_namespace = False
     pending: list[str] = []
     blocks: list[ConfigBlock] = []
+    guard_stack: list[ActiveGuard] = []
+    next_guard_id = 0
     index = 0
 
     while index < len(lines):
@@ -138,6 +158,32 @@ def _extract_config_blocks(path: Path) -> list[ConfigBlock]:
                 index += 1
             continue
 
+        if CONDITIONAL_OPEN_RE.match(line):
+            pending = []
+            guard_stack.append(
+                ActiveGuard(group_id=f"{path}:{next_guard_id}", branch_lines=[line], branch_index=0)
+            )
+            next_guard_id += 1
+            index += 1
+            continue
+
+        if CONDITIONAL_BRANCH_RE.match(line):
+            pending = []
+            if not guard_stack:
+                raise ValueError(f"unexpected conditional branch directive in {path}: {line.rstrip()}")
+            guard_stack[-1].branch_lines.append(line)
+            guard_stack[-1].branch_index = len(guard_stack[-1].branch_lines) - 1
+            index += 1
+            continue
+
+        if CONDITIONAL_CLOSE_RE.match(line):
+            pending = []
+            if not guard_stack:
+                raise ValueError(f"unexpected #endif in {path}: {line.rstrip()}")
+            guard_stack.pop()
+            index += 1
+            continue
+
         if stripped.startswith("CONF_"):
             macro_lines = [line]
             while not re.search(r'\)\s*;\s*(//.*)?$', macro_lines[-1]):
@@ -160,13 +206,29 @@ def _extract_config_blocks(path: Path) -> list[ConfigBlock]:
             text = "".join(block_lines + macro_lines)
             if not text.endswith("\n"):
                 text += "\n"
-            blocks.append(ConfigBlock(names=names, text=text))
+            blocks.append(
+                ConfigBlock(
+                    names=names,
+                    text=text,
+                    guards=tuple(
+                        GuardFrame(
+                            group_id=guard.group_id,
+                            branch_lines=tuple(guard.branch_lines),
+                            branch_index=guard.branch_index,
+                        )
+                        for guard in guard_stack
+                    ),
+                )
+            )
             pending = []
             index += 1
             continue
 
         pending = []
         index += 1
+
+    if guard_stack:
+        raise ValueError(f"unterminated conditional block in {path}")
 
     return blocks
 
@@ -189,11 +251,42 @@ def render_header(config_names: list[str], blocks: list[ConfigBlock]) -> str:
     selected = set(config_names)
     rendered: list[str] = []
     found: set[str] = set()
+    current_guards: tuple[GuardFrame, ...] = ()
 
     for block in blocks:
         if selected.intersection(block.names):
-            rendered.append(block.text.rstrip())
+            target_guards = block.guards
+            shared_prefix = 0
+            while shared_prefix < len(current_guards) and shared_prefix < len(target_guards):
+                if current_guards[shared_prefix].group_id != target_guards[shared_prefix].group_id:
+                    break
+                shared_prefix += 1
+
+            segment: list[str] = []
+
+            for _ in range(len(current_guards) - 1, shared_prefix - 1, -1):
+                segment.append("#endif\n")
+
+            for index in range(shared_prefix):
+                current = current_guards[index]
+                target = target_guards[index]
+                if target.branch_index < current.branch_index:
+                    raise ValueError(
+                        "selected config order regressed within conditional block "
+                        f"{target.group_id}: {target.branch_index} < {current.branch_index}"
+                    )
+                segment.extend(target.branch_lines[current.branch_index + 1 : target.branch_index + 1])
+
+            for target in target_guards[shared_prefix:]:
+                segment.extend(target.branch_lines)
+
+            segment.append(block.text.rstrip() + "\n")
+            rendered.append("".join(segment).rstrip())
             found.update(selected.intersection(block.names))
+            current_guards = target_guards
+
+    if current_guards:
+        rendered.append("".join("#endif\n" for _ in range(len(current_guards))).rstrip())
 
     missing = [name for name in config_names if name not in found]
     if missing:

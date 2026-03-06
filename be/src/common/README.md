@@ -27,9 +27,9 @@ The current design keeps `config.h` authoritative and derives smaller forward he
 - `build-support/config_fwd_headers_manifest.json`: selects which configs belong to which forward header
 - `build-support/gen_config_fwd_headers.py`: generates the committed `config_<domain>_fwd.h` files
 
-The generator preserves comments and declaration order from `config.h`. By default it only rewrites a generated file
-when the content actually changes, so unchanged forward headers keep their timestamps and do not trigger needless
-recompiles. Use `--force` only when you intentionally want to rewrite the generated files.
+The generator preserves comments, declaration order, and surrounding preprocessor guards from `config.h`. By default it
+only rewrites a generated file when the content actually changes, so unchanged forward headers keep their timestamps
+and do not trigger needless recompiles. Use `--force` only when you intentionally want to rewrite the generated files.
 
 ### Rules
 
