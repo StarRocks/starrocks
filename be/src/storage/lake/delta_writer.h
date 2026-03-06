@@ -123,6 +123,16 @@ public:
     // NOTE: Do NOT invoke this method in a bthread unless you are sure that `write()` has never been called.
     void close();
 
+    // Wait for all pending flush tasks to complete and close the tablet writer.
+    // Performs blocking I/O but does NOT reset/destroy internal state (_mem_table_sink, _flush_token, etc.).
+    // Safe to call from a bthread (e.g., execution queue stop handler).
+    void flush_and_wait();
+
+    // Release internal resources (reset unique_ptrs). Non-blocking.
+    // Must be called after flush_and_wait() and after all concurrent accessors (e.g., MergeBlockTask,
+    // profile readers) have completed.
+    void release_resources();
+
     [[nodiscard]] int64_t partition_id() const;
 
     [[nodiscard]] int64_t tablet_id() const;
