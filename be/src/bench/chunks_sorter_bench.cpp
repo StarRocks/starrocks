@@ -22,7 +22,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
 #include "common/runtime_profile.h"
 #include "exec/chunks_sorter.h"
 #include "exec/chunks_sorter_full_sort.h"

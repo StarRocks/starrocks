@@ -18,7 +18,7 @@
 #include <string>
 #include <vector>
 
-#include "common/config.h"
+#include "common/config_path_fwd.h"
 #include "common/logging.h"
 #include "gutil/strings/substitute.h"
 #include "http/action/profile_utils.h"

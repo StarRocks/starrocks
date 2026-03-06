@@ -14,7 +14,7 @@
 
 #include "exec/repeat_node.h"
 
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
 #include "exec/pipeline/aggregate/repeat/repeat_operator.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/operator.h"
