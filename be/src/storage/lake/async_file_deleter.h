@@ -103,10 +103,10 @@ private:
     }
 
     int64_t _batch_size;
-    int64_t _delete_count = 0;          // submitted count (original semantics, unchanged)
-    int64_t _success_delete_count = 0;  // confirmed-deleted count (only on batch success)
-    int64_t _total_queued = 0;          // total files ever passed to delete_file()
-    int64_t _inflight_size = 0;         // size of the currently in-flight async batch
+    int64_t _delete_count = 0;         // submitted count (original semantics, unchanged)
+    int64_t _success_delete_count = 0; // confirmed-deleted count (only on batch success)
+    int64_t _total_queued = 0;         // total files ever passed to delete_file()
+    int64_t _inflight_size = 0;        // size of the currently in-flight async batch
     std::vector<std::string> _batch;
     std::future<Status> _prev_task_status;
     DeleteCallback _cb;

@@ -4232,8 +4232,7 @@ TEST_P(LakeVacuumTest, test_delete_tablets_skip_txnlog_files_for_deleted_tablets
 
 TEST(LakeVacuumTest2, test_async_file_deleter_all_success) {
     // Create 3 small files that will be deleted successfully.
-    for (const auto& name :
-         {"test_afd_ok_1.txt", "test_afd_ok_2.txt", "test_afd_ok_3.txt"}) {
+    for (const auto& name : {"test_afd_ok_1.txt", "test_afd_ok_2.txt", "test_afd_ok_3.txt"}) {
         WritableFileOptions opts;
         opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
         ASSIGN_OR_ABORT(auto f, fs::new_writable_file(opts, name));
