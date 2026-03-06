@@ -12,10 +12,7 @@ scan:
     # kudu required
     - "**/kudu-client-1.17.1.jar"
     # paimon required
-<<<<<<< HEAD
-=======
     - "**/paimon-bundle-1.3.1.jar"
->>>>>>> 5b7aaa10e5 ([BugFix][CVE] clear known CVEs (#69863))
     - "**/paimon-bundle-1.2.0.jar"
     # aws sdk bundle
     - "**/bundle-2.29.52.jar"
