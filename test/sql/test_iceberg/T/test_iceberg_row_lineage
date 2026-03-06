@@ -213,3 +213,92 @@ drop database iceberg_v2v3_${uuid0}.iceberg_v2v3_db_${uuid0};
 drop catalog iceberg_v2v3_${uuid0};
 
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_catalog/test_iceberg_v2_v3/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+
+-- name: test_iceberg_v3_row_lineage_compaction
+-- Test that _row_id is preserved for each data row after compaction.
+-- The core invariant: the same row should have the same _row_id before and after compaction.
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_catalog/test_iceberg_row_lineage_compact/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+create external catalog `iceberg_rl_compact_${uuid0}`
+properties (
+"type"  =  "iceberg",
+"iceberg.catalog.type"  =  "hadoop",
+"iceberg.catalog.warehouse"="oss://${oss_bucket}/test_catalog/test_iceberg_row_lineage_compact/${uuid0}",
+"aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}"
+);
+
+create database iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0};
+
+-- Create v3 table
+create table iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_compact (
+    id int,
+    name string
+) properties (
+    "format-version" = "3"
+);
+
+-- Insert data in 3 batches to create 3 data files
+insert into iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_compact values (1, 'alice'), (2, 'bob');
+insert into iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_compact values (3, 'charlie'), (4, 'david');
+insert into iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_compact values (5, 'eve'), (6, 'frank');
+
+-- Verify 3 data files exist
+select count(*) from iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_compact$files;
+
+-- Save pre-compaction _row_id and _last_updated_sequence_number into a snapshot table
+create table iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_snapshot (
+    id int,
+    name string,
+    row_id_before bigint,
+    seq_num_before bigint
+) properties (
+    "format-version" = "3"
+);
+insert into iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_snapshot
+    select id, name, _row_id, _last_updated_sequence_number
+    from iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_compact;
+
+-- Verify pre-compaction: _row_id unique, 6 rows
+select count(*) as total_rows, count(distinct _row_id) as unique_row_ids from iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_compact;
+
+-- Trigger compaction
+[UC]ALTER TABLE iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_compact EXECUTE rewrite_data_files("min_file_size_bytes"= "134217728");
+
+-- Refresh metadata cache
+refresh external table iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_compact;
+
+-- Core check: compare _row_id before vs after compaction for each row (should be identical)
+-- If any row's _row_id changed, this query returns rows with mismatches
+select s.id, s.name, s.row_id_before, t._row_id as row_id_after
+    from iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_snapshot s
+    join iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_compact t on s.id = t.id
+    where s.row_id_before != t._row_id
+    order by s.id;
+
+-- Verify _row_id is still unique after compaction
+select count(*) as total_rows, count(distinct _row_id) as unique_row_ids from iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_compact;
+
+-- Verify data integrity
+select id, name from iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_compact order by id;
+
+-- Verify _last_updated_sequence_number is consistent after compaction (all same seq num)
+select count(distinct _last_updated_sequence_number) from iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_compact;
+
+-- Insert more data after compaction (mixed: compacted file + new non-compacted file)
+insert into iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_compact values (7, 'grace'), (8, 'henry');
+
+-- Verify _row_id uniqueness across mixed compacted + non-compacted files
+select count(*) as total_rows, count(distinct _row_id) as unique_row_ids from iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_compact;
+
+-- Verify new rows have different _last_updated_sequence_number from compacted rows
+select count(distinct _last_updated_sequence_number) from iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_compact;
+
+-- Cleanup
+drop table iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_snapshot;
+drop table iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_compact;
+drop database iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0};
+drop catalog iceberg_rl_compact_${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_catalog/test_iceberg_row_lineage_compact/${uuid0} >/dev/null || echo "exit 0" >/dev/null

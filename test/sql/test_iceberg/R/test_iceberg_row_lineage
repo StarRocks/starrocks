@@ -309,3 +309,119 @@ shell: ossutil64 rm -rf oss://${oss_bucket}/test_catalog/test_iceberg_v2_v3/${uu
 0
 
 -- !result
+-- name: test_iceberg_v3_row_lineage_compaction
+shell: ossutil64 mkdir oss://${oss_bucket}/test_catalog/test_iceberg_row_lineage_compact/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+create external catalog `iceberg_rl_compact_${uuid0}`
+properties (
+"type"  =  "iceberg",
+"iceberg.catalog.type"  =  "hadoop",
+"iceberg.catalog.warehouse"="oss://${oss_bucket}/test_catalog/test_iceberg_row_lineage_compact/${uuid0}",
+"aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+create database iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0};
+-- result:
+-- !result
+create table iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_compact (
+    id int,
+    name string
+) properties (
+    "format-version" = "3"
+);
+-- result:
+-- !result
+insert into iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_compact values (1, 'alice'), (2, 'bob');
+-- result:
+-- !result
+insert into iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_compact values (3, 'charlie'), (4, 'david');
+-- result:
+-- !result
+insert into iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_compact values (5, 'eve'), (6, 'frank');
+-- result:
+-- !result
+select count(*) from iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_compact$files;
+-- result:
+3
+-- !result
+create table iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_snapshot (
+    id int,
+    name string,
+    row_id_before bigint,
+    seq_num_before bigint
+) properties (
+    "format-version" = "3"
+);
+-- result:
+-- !result
+insert into iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_snapshot
+    select id, name, _row_id, _last_updated_sequence_number
+    from iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_compact;
+-- result:
+-- !result
+select count(*) as total_rows, count(distinct _row_id) as unique_row_ids from iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_compact;
+-- result:
+6	6
+-- !result
+[UC]ALTER TABLE iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_compact EXECUTE rewrite_data_files("min_file_size_bytes"= "134217728");
+-- result:
+-- !result
+refresh external table iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_compact;
+-- result:
+-- !result
+select s.id, s.name, s.row_id_before, t._row_id as row_id_after
+    from iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_snapshot s
+    join iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_compact t on s.id = t.id
+    where s.row_id_before != t._row_id
+    order by s.id;
+-- result:
+-- !result
+select count(*) as total_rows, count(distinct _row_id) as unique_row_ids from iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_compact;
+-- result:
+6	6
+-- !result
+select id, name from iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_compact order by id;
+-- result:
+1	alice
+2	bob
+3	charlie
+4	david
+5	eve
+6	frank
+-- !result
+select count(distinct _last_updated_sequence_number) from iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_compact;
+-- result:
+1
+-- !result
+insert into iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_compact values (7, 'grace'), (8, 'henry');
+-- result:
+-- !result
+select count(*) as total_rows, count(distinct _row_id) as unique_row_ids from iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_compact;
+-- result:
+8	8
+-- !result
+select count(distinct _last_updated_sequence_number) from iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_compact;
+-- result:
+2
+-- !result
+drop table iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_snapshot;
+-- result:
+-- !result
+drop table iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_compact;
+-- result:
+-- !result
+drop database iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0};
+-- result:
+-- !result
+drop catalog iceberg_rl_compact_${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_catalog/test_iceberg_row_lineage_compact/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result

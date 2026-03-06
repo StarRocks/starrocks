@@ -359,9 +359,6 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         List<SlotDescriptor> slots = desc.getSlots();
         Map<Integer, TExpr> extendedColumns = new HashMap<>();
         boolean hasRowIdColumn = false;
-        // Late materialization adds _row_source_id and _scan_range_id along with _row_id.
-        // We need to distinguish between user-requested _row_id and late materialization internal use.
-        boolean hasLateMaterializationColumns = false;
         for (SlotDescriptor slot : slots) {
             String name = slot.getColumn().getName();
             // _row_id is handled as a reserved field in BE (not an extended column).
@@ -372,7 +369,6 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
                 continue;
             }
             if (name.equalsIgnoreCase("_row_source_id") || name.equalsIgnoreCase("_scan_range_id")) {
-                hasLateMaterializationColumns = true;
                 continue;
             }
             LiteralExpr value;
@@ -408,17 +404,16 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         }
 
         if (hasRowIdColumn) {
-            // Only throw exception if user explicitly requested _row_id (not from late materialization)
-            // and the file has no firstRowId metadata.
-            if (!hasLateMaterializationColumns) {
-                if (task.file() == null || task.file().firstRowId() == null) {
-                    throw new StarRocksConnectorException(
-                            "Iceberg v3 row lineage requires first_row_id for _row_id, file: %s", filePath);
-                }
+            // Always validate firstRowId when _row_id is requested, regardless of whether
+            // late materialization columns are present. The optimizer may reuse a user-requested
+            // _row_id while also adding _row_source_id/_scan_range_id, so we cannot assume
+            // _row_id is purely internal. Without firstRowId, BE would produce NULL _row_id
+            // which violates the lookup path's non-null assumption (lookup_request.cpp).
+            if (task.file() == null || task.file().firstRowId() == null) {
+                throw new StarRocksConnectorException(
+                        "Iceberg v3 row lineage requires first_row_id for _row_id, file: %s", filePath);
             }
-            if (task.file() != null && task.file().firstRowId() != null) {
-                hdfsScanRange.setFirst_row_id(task.file().firstRowId());
-            }
+            hdfsScanRange.setFirst_row_id(task.file().firstRowId());
         } else if (task.file() != null && task.file().firstRowId() != null) {
             hdfsScanRange.setFirst_row_id(task.file().firstRowId());
         }

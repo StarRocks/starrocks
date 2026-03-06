@@ -295,11 +295,13 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
 
     /**
      * Test that when late materialization adds _row_id along with _row_source_id and _scan_range_id,
-     * and the file doesn't have firstRowId, the scan range building should NOT throw exception.
-     * This is because the _row_id is for internal use by late materialization, not user-requested.
+     * and the file doesn't have firstRowId, the scan range building MUST throw exception.
+     * The optimizer may reuse a user-requested _row_id while also adding late materialization columns,
+     * so we cannot assume _row_id is purely internal. Allowing NULL _row_id would violate the
+     * lookup path's non-null assumption (lookup_request.cpp DCHECK).
      */
     @Test
-    public void testBuildScanRangeWithLateMaterializationColumnsNotThrows() throws Exception {
+    public void testBuildScanRangeWithLateMaterializationColumnsThrowsWhenNoFirstRowId() throws Exception {
         // Use v2 table which doesn't have firstRowId in files
         TupleDescriptor localTupleDescriptor = new TupleDescriptor(new TupleId(5));
         SlotDescriptor idSlot = new SlotDescriptor(new SlotId(1), localTupleDescriptor);
@@ -342,11 +344,9 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
         FileScanTask fileScanTask = Lists.newArrayList(mockedNativeTableA.newScan().planFiles()).get(0);
         long partitionId = scanRangeSource.addPartition(fileScanTask);
 
-        // Should NOT throw exception because late materialization columns are present
-        // The file from v2 table doesn't have firstRowId
-        THdfsScanRange hdfsScanRange = scanRangeSource.buildScanRange(
-                fileScanTask, fileScanTask.file(), partitionId);
-        Assertions.assertNotNull(hdfsScanRange);
+        // Must throw: _row_id requires firstRowId regardless of late materialization columns
+        Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> scanRangeSource.buildScanRange(fileScanTask, fileScanTask.file(), partitionId));
     }
 
     /**
@@ -408,11 +408,187 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
     }
 
     /**
-     * Test that when only _row_source_id is present (partial late materialization columns),
-     * it's still recognized as late materialization and won't throw exception.
+     * Test that when both _row_id and _last_updated_sequence_number are requested (full row lineage query),
+     * the scan range contains both: first_row_id is set, and _last_updated_sequence_number is in extended_columns
+     * but not in extendedColumnSlotIds (so BE handles it as a reserved field that checks for physical column first).
      */
     @Test
-    public void testBuildScanRangeWithOnlyRowSourceIdNotThrows() throws Exception {
+    public void testBuildScanRangeWithFullRowLineageColumns() throws Exception {
+        TestTables.TestTable mockedNativeTableV3 = create(SCHEMA_A, SPEC_A, "tv3_full_lineage", 3);
+
+        TupleDescriptor localTupleDescriptor = new TupleDescriptor(new TupleId(10));
+        SlotDescriptor idSlot = new SlotDescriptor(new SlotId(1), localTupleDescriptor);
+        idSlot.setType(INT);
+        idSlot.setColumn(new Column("id", INT));
+        localTupleDescriptor.addSlot(idSlot);
+
+        SlotDescriptor dataSlot = new SlotDescriptor(new SlotId(2), localTupleDescriptor);
+        dataSlot.setType(VARCHAR);
+        dataSlot.setColumn(new Column("data", VARCHAR));
+        localTupleDescriptor.addSlot(dataSlot);
+
+        SlotDescriptor rowIdSlot = new SlotDescriptor(new SlotId(3), localTupleDescriptor);
+        rowIdSlot.setType(BIGINT);
+        rowIdSlot.setColumn(new Column(IcebergTable.ROW_ID, BIGINT));
+        localTupleDescriptor.addSlot(rowIdSlot);
+
+        SlotDescriptor seqSlot = new SlotDescriptor(new SlotId(4), localTupleDescriptor);
+        seqSlot.setType(BIGINT);
+        seqSlot.setColumn(new Column(IcebergTable.LAST_UPDATED_SEQUENCE_NUMBER, BIGINT));
+        localTupleDescriptor.addSlot(seqSlot);
+
+        mockedNativeTableV3.newFastAppend().appendFile(FILE_A).commit();
+        List<Column> schema = Lists.newArrayList(new Column("id", INT), new Column("data", VARCHAR));
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table_v3_full", "iceberg_catalog",
+                "resource", "db", "table", "", schema, mockedNativeTableV3, Maps.newHashMap());
+
+        IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
+                RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, localTupleDescriptor, Optional.empty(),
+                PartitionIdGenerator.of(), false, false);
+
+        FileScanTask fileScanTask = Lists.newArrayList(mockedNativeTableV3.newScan().planFiles()).get(0);
+        long partitionId = scanRangeSource.addPartition(fileScanTask);
+
+        if (fileScanTask.file().firstRowId() != null) {
+            THdfsScanRange hdfsScanRange = scanRangeSource.buildScanRange(
+                    fileScanTask, fileScanTask.file(), partitionId);
+
+            // _row_id: first_row_id should be set in scan range
+            Assertions.assertTrue(hdfsScanRange.isSetFirst_row_id());
+            Assertions.assertEquals(fileScanTask.file().firstRowId().longValue(),
+                    hdfsScanRange.getFirst_row_id());
+
+            // _last_updated_sequence_number: should be in extended_columns (fallback for BE)
+            Assertions.assertTrue(
+                    hdfsScanRange.getExtended_columns().containsKey(seqSlot.getId().asInt()));
+            // But NOT registered as an extended slot (so BE treats it as reserved field)
+            Assertions.assertFalse(
+                    scanRangeSource.getExtendedColumnSlotIds().contains(seqSlot.getId().asInt()));
+
+            // _row_id should NOT be in extended columns (it's a reserved field, not extended)
+            Assertions.assertFalse(
+                    hdfsScanRange.getExtended_columns().containsKey(rowIdSlot.getId().asInt()));
+        }
+    }
+
+    /**
+     * Test that _last_updated_sequence_number extended column value matches the file's dataSequenceNumber.
+     * This is the fallback value used by BE when the physical column is not present (non-compacted files).
+     */
+    @Test
+    public void testLastUpdatedSequenceNumberValueMatchesDataSequenceNumber() throws Exception {
+        TestTables.TestTable mockedNativeTableV3 = create(SCHEMA_A, SPEC_A, "tv3_seq_val", 3);
+
+        TupleDescriptor localTupleDescriptor = new TupleDescriptor(new TupleId(11));
+        SlotDescriptor idSlot = new SlotDescriptor(new SlotId(1), localTupleDescriptor);
+        idSlot.setType(INT);
+        idSlot.setColumn(new Column("id", INT));
+        localTupleDescriptor.addSlot(idSlot);
+
+        SlotDescriptor seqSlot = new SlotDescriptor(new SlotId(2), localTupleDescriptor);
+        seqSlot.setType(BIGINT);
+        seqSlot.setColumn(new Column(IcebergTable.LAST_UPDATED_SEQUENCE_NUMBER, BIGINT));
+        localTupleDescriptor.addSlot(seqSlot);
+
+        mockedNativeTableV3.newFastAppend().appendFile(FILE_A).commit();
+        List<Column> schema = Lists.newArrayList(new Column("id", INT), new Column("data", VARCHAR));
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table_v3_seqval", "iceberg_catalog",
+                "resource", "db", "table", "", schema, mockedNativeTableV3, Maps.newHashMap());
+
+        IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
+                RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, localTupleDescriptor, Optional.empty(),
+                PartitionIdGenerator.of(), false, false);
+
+        FileScanTask fileScanTask = Lists.newArrayList(mockedNativeTableV3.newScan().planFiles()).get(0);
+        long partitionId = scanRangeSource.addPartition(fileScanTask);
+        THdfsScanRange hdfsScanRange = scanRangeSource.buildScanRange(
+                fileScanTask, fileScanTask.file(), partitionId);
+
+        // The extended column value should contain the file's dataSequenceNumber
+        Assertions.assertTrue(
+                hdfsScanRange.getExtended_columns().containsKey(seqSlot.getId().asInt()));
+
+        // Verify the actual value: the TExpr should have an INT_LITERAL node
+        // with the file's dataSequenceNumber
+        var texpr = hdfsScanRange.getExtended_columns().get(seqSlot.getId().asInt());
+        Assertions.assertFalse(texpr.getNodes().isEmpty());
+        long expectedSeqNum = fileScanTask.file().dataSequenceNumber();
+        Assertions.assertEquals(expectedSeqNum, texpr.getNodes().get(0).getInt_literal().getValue());
+    }
+
+    /**
+     * Test that _row_id and _last_updated_sequence_number with late materialization columns
+     * on a V3 table correctly sets first_row_id and passes sequence number as extended column.
+     * This simulates what happens when StarRocks queries a V3 table that has been compacted
+     * (the BE will check for physical columns first, then fall back to these values).
+     */
+    @Test
+    public void testBuildScanRangeV3WithLateMaterializationAndRowLineage() throws Exception {
+        TestTables.TestTable mockedNativeTableV3 = create(SCHEMA_A, SPEC_A, "tv3_late_lineage", 3);
+
+        TupleDescriptor localTupleDescriptor = new TupleDescriptor(new TupleId(12));
+        SlotDescriptor idSlot = new SlotDescriptor(new SlotId(1), localTupleDescriptor);
+        idSlot.setType(INT);
+        idSlot.setColumn(new Column("id", INT));
+        localTupleDescriptor.addSlot(idSlot);
+
+        // _row_id
+        SlotDescriptor rowIdSlot = new SlotDescriptor(new SlotId(2), localTupleDescriptor);
+        rowIdSlot.setType(BIGINT);
+        rowIdSlot.setColumn(new Column(IcebergTable.ROW_ID, BIGINT));
+        localTupleDescriptor.addSlot(rowIdSlot);
+
+        // _last_updated_sequence_number
+        SlotDescriptor seqSlot = new SlotDescriptor(new SlotId(3), localTupleDescriptor);
+        seqSlot.setType(BIGINT);
+        seqSlot.setColumn(new Column(IcebergTable.LAST_UPDATED_SEQUENCE_NUMBER, BIGINT));
+        localTupleDescriptor.addSlot(seqSlot);
+
+        // Late materialization columns
+        SlotDescriptor rowSourceIdSlot = new SlotDescriptor(new SlotId(4), localTupleDescriptor);
+        rowSourceIdSlot.setType(INT);
+        rowSourceIdSlot.setColumn(new Column("_row_source_id", INT));
+        localTupleDescriptor.addSlot(rowSourceIdSlot);
+
+        SlotDescriptor scanRangeIdSlot = new SlotDescriptor(new SlotId(5), localTupleDescriptor);
+        scanRangeIdSlot.setType(INT);
+        scanRangeIdSlot.setColumn(new Column("_scan_range_id", INT));
+        localTupleDescriptor.addSlot(scanRangeIdSlot);
+
+        mockedNativeTableV3.newFastAppend().appendFile(FILE_A).commit();
+        List<Column> schema = Lists.newArrayList(new Column("id", INT), new Column("data", VARCHAR));
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table_v3_late_lin", "iceberg_catalog",
+                "resource", "db", "table", "", schema, mockedNativeTableV3, Maps.newHashMap());
+
+        IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
+                RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, localTupleDescriptor, Optional.empty(),
+                PartitionIdGenerator.of(), false, false);
+
+        FileScanTask fileScanTask = Lists.newArrayList(mockedNativeTableV3.newScan().planFiles()).get(0);
+        long partitionId = scanRangeSource.addPartition(fileScanTask);
+
+        // Should not throw even with late materialization columns
+        THdfsScanRange hdfsScanRange = scanRangeSource.buildScanRange(
+                fileScanTask, fileScanTask.file(), partitionId);
+
+        if (fileScanTask.file().firstRowId() != null) {
+            Assertions.assertTrue(hdfsScanRange.isSetFirst_row_id());
+        }
+
+        // _last_updated_sequence_number should be in extended_columns but NOT in extendedColumnSlotIds
+        Assertions.assertTrue(
+                hdfsScanRange.getExtended_columns().containsKey(seqSlot.getId().asInt()));
+        Assertions.assertFalse(
+                scanRangeSource.getExtendedColumnSlotIds().contains(seqSlot.getId().asInt()));
+    }
+
+    /**
+     * Test that when _row_id is present with only _row_source_id (partial late materialization),
+     * and the file has no firstRowId, it must throw exception.
+     * Late materialization presence does not exempt the firstRowId requirement.
+     */
+    @Test
+    public void testBuildScanRangeWithOnlyRowSourceIdThrowsWhenNoFirstRowId() throws Exception {
         // Use v2 table which doesn't have firstRowId in files
         TupleDescriptor localTupleDescriptor = new TupleDescriptor(new TupleId(7));
         SlotDescriptor idSlot = new SlotDescriptor(new SlotId(1), localTupleDescriptor);
@@ -431,7 +607,7 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
         rowIdSlot.setColumn(new Column(IcebergTable.ROW_ID, BIGINT));
         localTupleDescriptor.addSlot(rowIdSlot);
 
-        // Only _row_source_id - should still be recognized as late materialization
+        // Only _row_source_id
         SlotDescriptor rowSourceIdSlot = new SlotDescriptor(new SlotId(4), localTupleDescriptor);
         rowSourceIdSlot.setType(INT);
         rowSourceIdSlot.setColumn(new Column("_row_source_id", INT));
@@ -449,9 +625,8 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
         FileScanTask fileScanTask = Lists.newArrayList(mockedNativeTableA.newScan().planFiles()).get(0);
         long partitionId = scanRangeSource.addPartition(fileScanTask);
 
-        // Should NOT throw exception because _row_source_id indicates late materialization
-        THdfsScanRange hdfsScanRange = scanRangeSource.buildScanRange(
-                fileScanTask, fileScanTask.file(), partitionId);
-        Assertions.assertNotNull(hdfsScanRange);
+        // Must throw: _row_id requires firstRowId regardless of late materialization columns
+        Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> scanRangeSource.buildScanRange(fileScanTask, fileScanTask.file(), partitionId));
     }
 }
