@@ -84,13 +84,6 @@ import static java.lang.Math.max;
 
 public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     private static final Logger LOG = LogManager.getLogger(CatalogRecycleBin.class);
-    // erase meta at least after MIN_ERASE_LATENCY milliseconds
-    // to avoid erase log ahead of drop log
-    private static final long MIN_ERASE_LATENCY = 10L * 60L * 1000L;  // 10 min
-    // Maximum value of a batch of operations for actually delete database(table/partition)
-    // The erase operation will be locked, so one batch can not be too many.
-    private static final int MAX_ERASE_OPERATIONS_PER_CYCLE = 500;
-    private static final long FAIL_RETRY_INTERVAL = 60L * 1000L; // 1 min
 
     private final Map<Long, RecycleDatabaseInfo> idToDatabase;
     // The first Long type is DdId, the second Long is TableId
@@ -344,7 +337,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
      */
     private synchronized boolean timeExpired(long id, long currentTimeMs) {
         long latencyMs = currentTimeMs - getAdjustedRecycleTimestamp(id);
-        long expireMs = max(Config.catalog_trash_expire_second * 1000L, MIN_ERASE_LATENCY);
+        long expireMs = max(Config.catalog_trash_expire_second * 1000L, Config.catalog_recycle_bin_erase_min_latency_ms);
         // customize expireMs for partition that need to be retained for a configurable period
         if (idToPartition.containsKey(id)) {
             RecyclePartitionInfo recyclePartitionInfo = idToPartition.get(id);
@@ -352,7 +345,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 // retain the partition alive for `tabletReservePeriod` seconds
                 // while retention period is set, `catalog_trash_expire_second` will not take effect and the partition
                 // is assumed to have been set un-recoverable (i.e. partition is not recoverable)
-                expireMs = max(recyclePartitionInfo.getRetentionPeriod() * 1000, MIN_ERASE_LATENCY);
+                expireMs = max(recyclePartitionInfo.getRetentionPeriod() * 1000, Config.catalog_recycle_bin_erase_min_latency_ms);
             }
         }
         if (enableEraseLater.contains(id)) {
@@ -457,7 +450,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 GlobalStateMgr.getCurrentState().getEditLog().logEraseDb(db.getId());
                 LOG.info("erase db[{}-{}] finished", db.getId(), db.getOriginName());
                 currentEraseOpCnt++;
-                if (currentEraseOpCnt >= MAX_ERASE_OPERATIONS_PER_CYCLE) {
+                if (currentEraseOpCnt >= Config.catalog_recycle_bin_erase_max_operations_per_cycle) {
                     break;
                 }
             }
@@ -503,7 +496,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 } else {
                     l2.add(tableInfo);
                 }
-                if (l1.size()  + l2.size() >= MAX_ERASE_OPERATIONS_PER_CYCLE) {
+                if (l1.size()  + l2.size() >= Config.catalog_recycle_bin_erase_max_operations_per_cycle) {
                     break outerLoop;
                 }
             }
@@ -577,7 +570,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     }
 
     private synchronized void setNextEraseMinTime(long id, long eraseTime) {
-        long expireTime = max(Config.catalog_trash_expire_second * 1000L, MIN_ERASE_LATENCY);
+        long expireTime = max(Config.catalog_trash_expire_second * 1000L, Config.catalog_recycle_bin_erase_min_latency_ms);
         idToRecycleTime.replace(id, eraseTime - expireTime);
     }
 
@@ -626,7 +619,10 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 asyncDeleteForTables.remove(info);
             } else if (asyncDeleteForTables.get(info) == null) {
                 // treated as error if task is not running
-                setNextEraseMinTime(info.table.getId(), System.currentTimeMillis() + FAIL_RETRY_INTERVAL);
+                setNextEraseMinTime(
+                        info.table.getId(),
+                        System.currentTimeMillis() +
+                        Config.catalog_recycle_bin_erase_fail_retry_interval_ms);
             }
         }
 
@@ -697,13 +693,15 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 LOG.info("Removed partition '{}' from recycle bin. dbId: {} tableId: {} partitionId: {}",
                         partition.getName(), partitionInfo.getDbId(), partitionInfo.getTableId(), partitionId);
                 currentEraseOpCnt++;
-                if (currentEraseOpCnt >= MAX_ERASE_OPERATIONS_PER_CYCLE) {
+                if (currentEraseOpCnt >= Config.catalog_recycle_bin_erase_max_operations_per_cycle) {
                     break;
                 }
             } else if (asyncDeleteForPartitions.get(partitionInfo) == null) {
                 // treated as error if task is not running
                 Preconditions.checkState(!partitionInfo.isRecoverable());
-                setNextEraseMinTime(partitionId, System.currentTimeMillis() + FAIL_RETRY_INTERVAL);
+                setNextEraseMinTime(
+                        partitionId, System.currentTimeMillis() +
+                            Config.catalog_recycle_bin_erase_fail_retry_interval_ms);
             }
         } // end for partitions
     }
@@ -1317,14 +1315,70 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     }
 
     public static long getFailRetryInterval() {
-        return FAIL_RETRY_INTERVAL;
+        return Config.catalog_recycle_bin_erase_fail_retry_interval_ms;
     }
 
     public static long getMaxEraseOperationsPerCycle() {
-        return MAX_ERASE_OPERATIONS_PER_CYCLE;
+        return Config.catalog_recycle_bin_erase_max_operations_per_cycle;
     }
 
     public static long getMinEraseLatency() {
-        return MIN_ERASE_LATENCY;
+        return Config.catalog_recycle_bin_erase_min_latency_ms;
     }
+<<<<<<< HEAD
+=======
+
+    // for test
+    protected void clear() {
+        idToDatabase.clear();
+        idToTableInfo.clear();
+        nameToTableInfo.clear();
+        idToPartition.clear();
+        idToRecycleTime.clear();
+        enableEraseLater.clear();
+        asyncDeleteForPartitions.clear();
+        asyncDeleteForTables.clear();
+    }
+
+    // for test
+    protected void setPartitionInfo(long partitionId, RecyclePartitionInfo partitionInfo) {
+        idToPartition.put(partitionId, partitionInfo);
+    }
+
+    // for test
+    protected void setDeleteFutureForPartition(RecyclePartitionInfo partitionInfo, CompletableFuture<Boolean> future) {
+        asyncDeleteForPartitions.put(partitionInfo, future);
+    }
+
+    // for test
+    protected void setDeleteFutureForTable(RecycleTableInfo tableInfo, CompletableFuture<Boolean> future) {
+        asyncDeleteForTables.put(tableInfo, future);
+    }
+
+    // for test
+    public void removePartitionFromRecycleBin(long partitionId) {
+        idToPartition.remove(partitionId);
+        idToRecycleTime.remove(partitionId);
+        enableEraseLater.remove(partitionId);
+    }
+
+    @Override
+    public synchronized Map<String, Long> estimateCount() {
+        return ImmutableMap.<String, Long>builder()
+                .put("Database", (long) idToDatabase.size())
+                .put("Table", (long) idToTableInfo.size())
+                .put("Partition", (long) idToPartition.size())
+                .put("AsyncDeletePartition", (long) asyncDeleteForPartitions.size())
+                .put("AsyncDeleteTable", (long) asyncDeleteForTables.size())
+                .build();
+    }
+
+    @Override
+    public synchronized long estimateSize() {
+        return Estimator.estimate(idToDatabase, 20) +
+                Estimator.estimate(idToTableInfo.rowMap(), 20) +
+                Estimator.estimate(idToPartition, 20) +
+                Estimator.estimate(idToRecycleTime, 20);
+    }
+>>>>>>> cb59200aab ([Enhancement] Make some parameter of CatalogRecycleBin be configurable (#69838))
 }
