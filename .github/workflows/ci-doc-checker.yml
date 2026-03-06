@@ -96,7 +96,7 @@ jobs:
         with:
           node-version: 24
 
-      - uses: tj-actions/changed-files@v47
+      - uses: tj-actions/changed-files@22103cc46bda19c2b464ffe86db46df6922fd323
         id: changed-files
         with:
           files: |
@@ -165,7 +165,7 @@ jobs:
 
       - name: link check
         if: always()
-        uses: lycheeverse/lychee-action@v1.8.0
+        uses: lycheeverse/lychee-action@v2.8.0
         with:
           fail: true
           args: >
