@@ -20,7 +20,7 @@
 
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
 #include "common/global_types.h"
 #include "common/logging.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
