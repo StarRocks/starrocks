@@ -70,7 +70,6 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static com.starrocks.common.Config.STARROCKS_HOME_DIR;
-import static com.starrocks.connector.share.credential.CloudConfigurationConstants.OSS_UDF_PATH;
 import static com.starrocks.sql.ast.CreateFunctionStmt.STORAGE_VOLUME_NAME_KEY;
 
 public class CreateFunctionAnalyzer {
@@ -194,7 +193,7 @@ public class CreateFunctionAnalyzer {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                     String.format("Storage volume '%s' not found. Please create it first.", this.storageVolumeName));
         }
-        String objectFullPath = sv.getProperties().get(OSS_UDF_PATH) + "/udf/" + url;
+        String objectFullPath = sv.getLocations().get(0) + "/udf/" + url;
         String targetPath = String.format("%s/%s", STARROCKS_HOME_DIR + "/plugins/java_udf", url);
         String targetUrl = String.format("file://%s", targetPath);
         UDFDownloader.download2Local(sv, objectFullPath, targetPath);

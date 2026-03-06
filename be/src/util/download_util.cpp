@@ -107,7 +107,8 @@ Status DownloadUtil::get_java_udf_url(const std::string& url, std::string* real_
     if (starrocks_home == nullptr) {
         return Status::RuntimeError("STARROCKS_HOME is not set, cannot download Java UDF");
     }
-    std::string object_full_path = fmt::format("{}/udf/{}", options.cloud_configuration->cloud_properties.at(OSS_UDF_PATH) , url);
+    std::string object_full_path = fmt::format("{}/udf/{}",
+                                               options.cloud_configuration->cloud_properties.at(OSS_UDF_PATH), url);
     std::string target_path = fmt::format("{}/plugins/java_udf/{}", starrocks_home, url);
     std::string target_url = std::string("file://") + target_path;
     udf_downloder downloader;
