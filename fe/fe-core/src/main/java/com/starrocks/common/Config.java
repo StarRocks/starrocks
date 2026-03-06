@@ -1323,6 +1323,25 @@ public class Config extends ConfigBase {
     public static long partition_recycle_retention_period_secs = 30 * 60L; // 30mins
 
     /**
+     * Erase meta at least after this many milliseconds to avoid erase log ahead of drop log.
+     */
+    @ConfField(mutable = true)
+    public static long catalog_recycle_bin_erase_min_latency_ms = 10L * 60L * 1000L; // 10 min
+
+    /**
+     * Maximum number of erase operations per cycle for actually deleting database/table/partition.
+     * The erase operation will be locked, so one batch should not be too large.
+     */
+    @ConfField(mutable = true)
+    public static int catalog_recycle_bin_erase_max_operations_per_cycle = 500;
+
+    /**
+     * Retry interval in milliseconds when an erase operation fails.
+     */
+    @ConfField(mutable = true)
+    public static long catalog_recycle_bin_erase_fail_retry_interval_ms = 60L * 1000L; // 1 min
+
+    /**
      * Parallel load fragment instance num in single host
      */
     @ConfField(mutable = true)
