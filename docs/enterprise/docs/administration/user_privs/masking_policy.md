@@ -14,6 +14,18 @@ StarRocks can apply a column masking policy to a column to mask data at query ru
 
 A column masking policy can be added to a table or view either when the table is created or after the table is created.
 
+- **Objects of a policy**
+
+A policy can be applied to a table, view, materialized view, or external table. The SQL statements used to create, apply, alter, or drop a policy are similar for these objects.
+
+- **Impact scope of a policy**
+
+A policy affects all the queries that run against the column with the policy applied, including the SELECT, UPDATE, DELETE, CTAS, and INSERT INTO AS SELECT operations.
+
+:::note
+Please note that query results of the DML statements may vary in accordance with the policies applied to the user who submitted the statement.
+:::
+
 ## Create a masking policy
 
 A policy consists of column name, column type, conditions, and masking functions.
