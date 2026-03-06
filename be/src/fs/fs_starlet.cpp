@@ -40,6 +40,7 @@
 #include "service/staros_worker.h"
 #include "storage/lake/filenames.h"
 #include "storage/olap_common.h"
+#include "testutil/sync_point.h"
 #include "util/defer_op.h"
 #include "util/lru_cache.h"
 #include "util/stopwatch.hpp"
