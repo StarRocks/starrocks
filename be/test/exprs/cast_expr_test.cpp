@@ -638,7 +638,7 @@ TEST_F(VectorizedCastExprTest, decimalCastString) {
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
-            ASSERT_EQ(std::string("123"), v->get_data()[j]);
+            ASSERT_EQ(std::string("123"), v->get_slice(j));
         }
 
         // error cast
@@ -668,7 +668,7 @@ TEST_F(VectorizedCastExprTest, intCastString) {
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
-            ASSERT_EQ(std::string("12345"), v->get_data()[j]);
+            ASSERT_EQ(std::string("12345"), v->get_slice(j));
         }
 
         // error cast
@@ -698,7 +698,7 @@ TEST_F(VectorizedCastExprTest, booleanCastString) {
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
-            ASSERT_EQ(std::string("1"), v->get_data()[j]);
+            ASSERT_EQ(std::string("1"), v->get_slice(j));
         }
 
         // error cast
@@ -728,7 +728,7 @@ TEST_F(VectorizedCastExprTest, timestmapCastString) {
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
-            ASSERT_EQ(std::string("2020-02-03 01:23:45"), v->get_data()[j]);
+            ASSERT_EQ(std::string("2020-02-03 01:23:45"), v->get_slice(j));
         }
 
         // error cast
@@ -759,7 +759,7 @@ TEST_F(VectorizedCastExprTest, stringCastInt) {
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
-            ASSERT_EQ(1234, v->get_data()[j]);
+            ASSERT_EQ(1234, v->immutable_data()[j]);
         }
 
         // error cast
@@ -821,7 +821,7 @@ TEST_F(VectorizedCastExprTest, stringCastDouble) {
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
-            ASSERT_EQ(1234.1234, v->get_data()[j]);
+            ASSERT_EQ(1234.1234, v->immutable_data()[j]);
         }
 
         // error cast
@@ -887,7 +887,7 @@ TEST_F(VectorizedCastExprTest, stringCastDecimal) {
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
-            ASSERT_EQ(d, v->get_data()[j]);
+            ASSERT_EQ(d, v->immutable_data()[j]);
         }
 
         // error cast
@@ -952,7 +952,7 @@ TEST_F(VectorizedCastExprTest, stringCastDate) {
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
-            ASSERT_EQ(DateValue::create(2023, 12, 02), v->get_data()[j]);
+            ASSERT_EQ(DateValue::create(2023, 12, 02), v->immutable_data()[j]);
         }
 
         // error cast
@@ -983,7 +983,7 @@ TEST_F(VectorizedCastExprTest, stringCastDate2) {
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
-            ASSERT_EQ(DateValue::create(2023, 12, 02), v->get_data()[j]);
+            ASSERT_EQ(DateValue::create(2023, 12, 02), v->immutable_data()[j]);
         }
 
         // error cast
@@ -1045,7 +1045,7 @@ TEST_F(VectorizedCastExprTest, stringCastTimestmap) {
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
-            ASSERT_EQ(TimestampValue::create(2022, 02, 03, 11, 23, 45), v->get_data()[j]);
+            ASSERT_EQ(TimestampValue::create(2022, 02, 03, 11, 23, 45), v->immutable_data()[j]);
         }
 
         // error cast
@@ -1364,7 +1364,7 @@ TEST_F(VectorizedCastExprTest, stringCastTimestmap2) {
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
-            ASSERT_EQ(TimestampValue::create(2022, 02, 03, 11, 23, 45), v->get_data()[j]);
+            ASSERT_EQ(TimestampValue::create(2022, 02, 03, 11, 23, 45), v->immutable_data()[j]);
         }
 
         // error cast
@@ -1395,7 +1395,7 @@ TEST_F(VectorizedCastExprTest, stringCastTimestmap3) {
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
-            ASSERT_EQ(TimestampValue::create(2022, 02, 03, 11, 23, 45), v->get_data()[j]);
+            ASSERT_EQ(TimestampValue::create(2022, 02, 03, 11, 23, 45), v->immutable_data()[j]);
         }
 
         // error cast
@@ -1426,7 +1426,7 @@ TEST_F(VectorizedCastExprTest, stringCastTimestmap4) {
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
-            ASSERT_EQ(TimestampValue::create(2022, 02, 03, 11, 23, 45), v->get_data()[j]);
+            ASSERT_EQ(TimestampValue::create(2022, 02, 03, 11, 23, 45), v->immutable_data()[j]);
         }
 
         // error cast
@@ -1509,7 +1509,7 @@ TEST_F(VectorizedCastExprTest, BigIntCastToInt2) {
             ASSERT_EQ(10, v->size());
 
             for (int j = 0; j < v->size(); ++j) {
-                ASSERT_EQ(10, v->get_data()[j]);
+                ASSERT_EQ(10, v->immutable_data()[j]);
             }
         });
     }
@@ -1534,7 +1534,7 @@ TEST_F(VectorizedCastExprTest, IntCastToBigInt3) {
 
             auto p = ColumnHelper::cast_to<TYPE_BIGINT>(ptr);
             for (int j = 0; j < p->size(); ++j) {
-                ASSERT_EQ(INT_MAX, p->get_data()[j]);
+                ASSERT_EQ(INT_MAX, p->immutable_data()[j]);
             }
         });
     }
@@ -1561,7 +1561,7 @@ TEST_F(VectorizedCastExprTest, stringCastToTime) {
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
-            ASSERT_EQ(54915, v->get_data()[j]);
+            ASSERT_EQ(54915, v->immutable_data()[j]);
         }
     }
 }
@@ -1716,7 +1716,7 @@ TEST_F(VectorizedCastExprTest, bigintToTime) {
         auto d = ColumnHelper::cast_to<TYPE_TIME>(v->data_column());
 
         ASSERT_FALSE(v->is_null(0));
-        ASSERT_EQ(12020, d->get_data()[0]);
+        ASSERT_EQ(12020, d->immutable_data()[0]);
         ASSERT_TRUE(v->is_null(1));
     }
 }
@@ -1738,8 +1738,8 @@ TEST_F(VectorizedCastExprTest, dateToTime) {
         auto d = ColumnHelper::cast_to<TYPE_TIME>(ptr);
         ASSERT_EQ(2, d->size());
 
-        ASSERT_EQ(0, d->get_data()[0]);
-        ASSERT_EQ(0, d->get_data()[1]);
+        ASSERT_EQ(0, d->immutable_data()[0]);
+        ASSERT_EQ(0, d->immutable_data()[1]);
     }
 }
 
@@ -1759,8 +1759,8 @@ TEST_F(VectorizedCastExprTest, datetimeToTime) {
         auto d = ColumnHelper::cast_to<TYPE_TIME>(ptr);
         ASSERT_EQ(2, d->size());
 
-        ASSERT_EQ(45000, d->get_data()[0]);
-        ASSERT_EQ(45000, d->get_data()[1]);
+        ASSERT_EQ(45000, d->immutable_data()[0]);
+        ASSERT_EQ(45000, d->immutable_data()[1]);
     }
 }
 
@@ -1780,8 +1780,8 @@ TEST_F(VectorizedCastExprTest, timeToInt) {
         auto d = ColumnHelper::cast_to<TYPE_INT>(ptr);
         ASSERT_EQ(2, d->size());
 
-        ASSERT_EQ(212102, d->get_data()[0]);
-        ASSERT_EQ(212102, d->get_data()[1]);
+        ASSERT_EQ(212102, d->immutable_data()[0]);
+        ASSERT_EQ(212102, d->immutable_data()[1]);
     }
 }
 
@@ -1801,8 +1801,8 @@ TEST_F(VectorizedCastExprTest, timeToVarchar) {
         auto d = ColumnHelper::cast_to<TYPE_VARCHAR>(ptr);
         ASSERT_EQ(2, d->size());
 
-        ASSERT_EQ("02:22:01", d->get_data()[0]);
-        ASSERT_EQ("02:22:01", d->get_data()[1]);
+        ASSERT_EQ("02:22:01", d->immutable_data()[0]);
+        ASSERT_EQ("02:22:01", d->immutable_data()[1]);
     }
 }
 
@@ -1872,14 +1872,14 @@ TEST_F(VectorizedCastExprTest, jsonToValue) {
     EXPECT_EQ(1.1, evaluateCastFromJson<TYPE_DOUBLE>(cast_expr, 1.1)->get_data()[0]);
     EXPECT_EQ(true, evaluateCastFromJson<TYPE_BOOLEAN>(cast_expr, true)->get_data()[0]);
     EXPECT_EQ(false, evaluateCastFromJson<TYPE_BOOLEAN>(cast_expr, false)->get_data()[0]);
-    EXPECT_EQ("a", evaluateCastFromJson<TYPE_VARCHAR>(cast_expr, "\"a\"")->get_data()[0]);
-    EXPECT_EQ("1", evaluateCastFromJson<TYPE_VARCHAR>(cast_expr, "\"1\"")->get_data()[0]);
-    EXPECT_EQ("[1, 2, 3]", evaluateCastFromJson<TYPE_VARCHAR>(cast_expr, "[1,2,3]")->get_data()[0]);
-    EXPECT_EQ("1", evaluateCastFromJson<TYPE_VARCHAR>(cast_expr, "1")->get_data()[0]);
-    EXPECT_EQ("1.1", evaluateCastFromJson<TYPE_VARCHAR>(cast_expr, "1.1")->get_data()[0]);
-    EXPECT_EQ("true", evaluateCastFromJson<TYPE_VARCHAR>(cast_expr, "true")->get_data()[0]);
-    EXPECT_EQ("star", evaluateCastFromJson<TYPE_VARCHAR>(cast_expr, "\"star\"")->get_data()[0]);
-    EXPECT_EQ("{\"a\": 1}", evaluateCastFromJson<TYPE_VARCHAR>(cast_expr, "{\"a\": 1}")->get_data()[0]);
+    EXPECT_EQ("a", evaluateCastFromJson<TYPE_VARCHAR>(cast_expr, "\"a\"")->immutable_data()[0]);
+    EXPECT_EQ("1", evaluateCastFromJson<TYPE_VARCHAR>(cast_expr, "\"1\"")->immutable_data()[0]);
+    EXPECT_EQ("[1, 2, 3]", evaluateCastFromJson<TYPE_VARCHAR>(cast_expr, "[1,2,3]")->immutable_data()[0]);
+    EXPECT_EQ("1", evaluateCastFromJson<TYPE_VARCHAR>(cast_expr, "1")->immutable_data()[0]);
+    EXPECT_EQ("1.1", evaluateCastFromJson<TYPE_VARCHAR>(cast_expr, "1.1")->immutable_data()[0]);
+    EXPECT_EQ("true", evaluateCastFromJson<TYPE_VARCHAR>(cast_expr, "true")->immutable_data()[0]);
+    EXPECT_EQ("star", evaluateCastFromJson<TYPE_VARCHAR>(cast_expr, "\"star\"")->immutable_data()[0]);
+    EXPECT_EQ("{\"a\": 1}", evaluateCastFromJson<TYPE_VARCHAR>(cast_expr, "{\"a\": 1}")->immutable_data()[0]);
 
     EXPECT_EQ(true, evaluateCastFromJson<TYPE_BOOLEAN>(cast_expr, "\"1123\"")->get_data()[0]);
     EXPECT_EQ(true, evaluateCastFromJson<TYPE_BOOLEAN>(cast_expr, "\"true\"")->get_data()[0]);
