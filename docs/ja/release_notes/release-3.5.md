@@ -143,6 +143,7 @@ displayed_sidebar: docs
 - 空の Parquet または ORC ファイルに対する `files()` のスキーマ検出に関する問題。 [#67762](https://github.com/StarRocks/starrocks/pull/67762)
 - Hive テーブルで UNION ALL を使用した際に、Profile 内のメトリクス値が不正確になる問題。 [#67912](https://github.com/StarRocks/starrocks/pull/67912)
 - FE クエリにおいて、Arrow Flight プロキシ経由でのデータ取得がサポートされていない問題。 [#67794](https://github.com/StarRocks/starrocks/pull/67794)
+- `OlapTableSink::is_full()` における競合状態により、自動パーティション作成中に発生する SIGSEGV クラッシュ。[#67566](https://github.com/StarRocks/starrocks/pull/67566)
 
 ## 3.5.11
 
