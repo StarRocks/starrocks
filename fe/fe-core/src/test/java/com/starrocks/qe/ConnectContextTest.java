@@ -34,7 +34,6 @@
 
 package com.starrocks.qe;
 
-import com.google.common.collect.Lists;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Database;
