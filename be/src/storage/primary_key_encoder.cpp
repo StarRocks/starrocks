@@ -314,6 +314,17 @@ Status PrimaryKeyEncoder::create_column(const Schema& schema, MutableColumnPtr* 
 
 typedef void (*EncodeOp)(const void*, int, std::string*);
 
+template <LogicalType LT>
+void encode_pk_fixed_value(const void* data, int idx, std::string* buff) {
+    if constexpr (LT == TYPE_DATE) {
+        encode_integral((static_cast<const int32_t*>(data)[idx]), buff);
+    } else if constexpr (LT == TYPE_DATETIME) {
+        encode_integral(static_cast<const int64_t*>(data)[idx], buff);
+    } else {
+        encode_integral(static_cast<const RunTimeCppType<LT>*>(data)[idx], buff);
+    }
+}
+
 static void prepare_ops_datas(const Schema& schema, const std::vector<ColumnId>& sort_key_idxes, const Chunk& chunk,
                               std::vector<EncodeOp>* pops, std::vector<const void*>* pdatas) {
     DCHECK_EQ(pops->size(), pdatas->size());
@@ -323,11 +334,9 @@ static void prepare_ops_datas(const Schema& schema, const std::vector<ColumnId>&
     for (int j = 0; j < ncol; j++) {
         datas[j] = chunk.get_column_by_index(sort_key_idxes[j])->raw_data();
         switch (schema.field(sort_key_idxes[j])->type()->type()) {
-#define M(LT)                                                              \
-    case LT:                                                               \
-        ops[j] = [](const void* data, int idx, std::string* buff) {        \
-            encode_integral(((const RunTimeCppType<LT>*)data)[idx], buff); \
-        };                                                                 \
+#define M(LT)                               \
+    case LT:                                \
+        ops[j] = encode_pk_fixed_value<LT>; \
         break;
             APPLY_FOR_ALL_PK_SUPPORT_FIXED_TYPE(M)
 #undef M
