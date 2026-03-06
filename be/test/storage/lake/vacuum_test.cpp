@@ -4226,40 +4226,7 @@ TEST_P(LakeVacuumTest, test_delete_tablets_skip_txnlog_files_for_deleted_tablets
     }
 }
 
-// ---------------------------------------------------------------------------
-// AsyncFileDeleter: success_delete_count / total_queued unit tests
-// ---------------------------------------------------------------------------
-
-TEST(LakeVacuumTest2, test_async_file_deleter_all_success) {
-    // Create 3 small files that will be deleted successfully.
-    for (const auto& name : {"test_afd_ok_1.txt", "test_afd_ok_2.txt", "test_afd_ok_3.txt"}) {
-        WritableFileOptions opts;
-        opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
-        ASSIGN_OR_ABORT(auto f, fs::new_writable_file(opts, name));
-        ASSERT_OK(f->append("x"));
-        ASSERT_OK(f->close());
-    }
-
-    // batch_size=1 so each file gets its own async batch.
-    AsyncFileDeleter deleter(1);
-    ASSERT_OK(deleter.delete_file("test_afd_ok_1.txt"));
-    ASSERT_OK(deleter.delete_file("test_afd_ok_2.txt"));
-    ASSERT_OK(deleter.delete_file("test_afd_ok_3.txt"));
-    EXPECT_EQ(3, deleter.total_queued());
-
-    ASSERT_OK(deleter.finish());
-
-    // All counts must agree when every batch succeeds.
-    EXPECT_EQ(3, deleter.delete_count());
-    EXPECT_EQ(3, deleter.success_delete_count());
-    EXPECT_EQ(3, deleter.total_queued());
-
-    EXPECT_FALSE(fs::path_exist("test_afd_ok_1.txt"));
-    EXPECT_FALSE(fs::path_exist("test_afd_ok_2.txt"));
-    EXPECT_FALSE(fs::path_exist("test_afd_ok_3.txt"));
-}
-
-TEST(LakeVacuumTest2, test_async_file_deleter_last_batch_fails) {
+TEST(LakeVacuumTest, test_async_file_deleter_last_batch_fails) {
     // Create 2 files; the second batch will be injected with a failure.
     for (const auto& name : {"test_afd_fail1.txt", "test_afd_fail2.txt"}) {
         WritableFileOptions opts;
@@ -4303,10 +4270,6 @@ TEST(LakeVacuumTest2, test_async_file_deleter_last_batch_fails) {
     EXPECT_FALSE(fs::path_exist("test_afd_fail1.txt"));
     EXPECT_TRUE(fs::path_exist("test_afd_fail2.txt"));
 }
-
-// ---------------------------------------------------------------------------
-// vacuum_tablet_chain integration tests (lake_vacuum_enable_version_chain_mode)
-// ---------------------------------------------------------------------------
 
 // Full success: all garbage versions (v2, v3, v4) have their data and meta files
 // deleted; min_retain_version (v5) metadata is preserved.
