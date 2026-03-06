@@ -46,6 +46,7 @@
 #include "cache/datacache.h"
 #include "cache/datacache_utils.h"
 #include "cache/mem_cache/page_cache.h"
+#include "common/config.h"
 #include "common/configbase.h"
 #include "common/status.h"
 #include "common/system/cpu_info.h"

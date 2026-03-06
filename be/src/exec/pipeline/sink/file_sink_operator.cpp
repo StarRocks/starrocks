@@ -16,6 +16,7 @@
 
 #include <utility>
 
+#include "common/config.h"
 #include "exec/pipeline/sink/sink_io_buffer.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/scan_task_queue.h"

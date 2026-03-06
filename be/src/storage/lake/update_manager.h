@@ -264,9 +264,7 @@ private:
         mutable std::shared_mutex lock;
     };
 
-    PkIndexShard& _get_pk_index_shard(int64_t tabletId) {
-        return _pk_index_shards[tabletId & (config::pk_index_map_shard_size - 1)];
-    }
+    PkIndexShard& _get_pk_index_shard(int64_t tabletId);
 
     // decide whether use light publish compaction stategy or not
     bool _use_light_publish_primary_compaction(TabletManager* mgr, const TxnLogPB_OpCompaction& op_compaction,

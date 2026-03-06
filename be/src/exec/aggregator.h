@@ -630,12 +630,7 @@ protected:
     Status _create_aggregate_function(starrocks::RuntimeState* state, const TFunction& fn, bool is_result_nullable,
                                       const AggregateFunction** ret);
 
-    int64_t get_two_level_threahold() {
-        if (config::two_level_memory_threshold < 0) {
-            return agg::two_level_memory_threshold;
-        }
-        return config::two_level_memory_threshold;
-    }
+    int64_t get_two_level_threahold();
 
     template <class HashMapWithKey>
     friend struct AllocateState;

@@ -21,6 +21,7 @@
 
 #include "base/container/raw_container.h"
 #include "common/brpc_helper.h"
+#include "common/config.h"
 #include "fs/fs_posix.h"
 #include "gen_cpp/data.pb.h"
 #include "runtime/current_thread.h"
@@ -156,7 +157,7 @@ void ReplicateChannel::_send_request(SegmentPB* segment, butil::IOBuf& data, boo
     _closure->ref();
     _closure->reset();
     _closure->cntl.set_timeout_ms(_opt->timeout_ms);
-    SET_IGNORE_OVERCROWDED(_closure->cntl, load);
+    set_ignore_overcrowded_for_load(_closure->cntl);
 
     if (segment != nullptr) {
         request.set_allocated_segment(segment);

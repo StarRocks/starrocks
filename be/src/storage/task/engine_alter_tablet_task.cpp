@@ -35,6 +35,7 @@
 #include "storage/task/engine_alter_tablet_task.h"
 
 #include "base/utility/defer_op.h"
+#include "common/config.h"
 #include "io/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"

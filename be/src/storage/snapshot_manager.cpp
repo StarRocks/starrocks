@@ -40,6 +40,7 @@
 #include <map>
 #include <set>
 
+#include "common/config.h"
 #include "fs/fs.h"
 #include "gen_cpp/Types_constants.h"
 #include "gutil/strings/join.h"
@@ -47,6 +48,7 @@
 #include "runtime/exec_env.h"
 #include "storage/del_vector.h"
 #include "storage/index/index_descriptor.h"
+
 #ifndef __APPLE__
 #include "storage/index/inverted/clucene/clucene_plugin.h"
 #endif

@@ -14,6 +14,7 @@
 
 #include "storage/update_compaction_state.h"
 
+#include "common/config.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"

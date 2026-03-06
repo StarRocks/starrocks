@@ -40,6 +40,7 @@
 #include <vector>
 
 #include "base/uid_util.h"
+#include "common/config.h"
 #include "common/thread/thread.h"
 #include "exec/pipeline/query_context.h"
 #include "runtime/fragment_mgr.h"

@@ -18,6 +18,7 @@
 
 #include "base/string/string_parser.hpp"
 #include "column/column_access_path.h"
+#include "common/config.h"
 #include "exec/connector_scan_node.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/fragment_context.h"

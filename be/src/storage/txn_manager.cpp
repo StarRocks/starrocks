@@ -43,6 +43,7 @@
 
 #include "base/time/time.h"
 #include "base/utility/scoped_cleanup.h"
+#include "common/config.h"
 #include "common/runtime_profile.h"
 #include "common/thread/threadpool.h"
 #include "common/tracer.h"

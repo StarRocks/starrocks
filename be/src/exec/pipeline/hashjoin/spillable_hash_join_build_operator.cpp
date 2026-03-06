@@ -20,6 +20,7 @@
 #include "base/failpoint/fail_point.h"
 #include "base/utility/defer_op.h"
 #include "column/column_helper.h"
+#include "common/config.h"
 #include "common/statusor.h"
 #include "exec/hash_join_components.h"
 #include "exec/hash_join_node.h"

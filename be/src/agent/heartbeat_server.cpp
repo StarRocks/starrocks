@@ -45,6 +45,7 @@
 #include "agent/master_info.h"
 #include "agent/task_worker_pool.h"
 #include "base/network/network_util.h"
+#include "common/config.h"
 #include "common/process_exit.h"
 #include "common/status.h"
 #include "common/system/backend_options.h"

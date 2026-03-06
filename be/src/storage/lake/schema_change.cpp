@@ -18,6 +18,7 @@
 
 #include <memory>
 
+#include "common/config.h"
 #include "exprs/expr_factory.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"

@@ -29,6 +29,7 @@
 #include "base/string/faststring.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
+#include "common/config.h"
 #include "common/util/debug_util.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"

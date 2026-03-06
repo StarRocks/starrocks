@@ -15,6 +15,7 @@
 #include "storage/primary_key_compaction_conflict_resolver.h"
 
 #include "base/debug/trace.h"
+#include "common/config.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"

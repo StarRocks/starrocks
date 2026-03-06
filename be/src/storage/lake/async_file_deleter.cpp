@@ -12,15 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+#include "storage/lake/async_file_deleter.h"
 
-namespace brpc {
-class Controller;
+#include "common/config.h"
+#include "common/logging.h"
+
+namespace starrocks::lake {
+
+Status AsyncSharedFileDeleter::finish() {
+    for (auto& [path, count] : _pending_files) {
+        if (_delay_delete_files.count(path) == 0) {
+            if (config::lake_print_delete_log) {
+                LOG(INFO) << "Deleting shared file: " << path << " ref count: " << count;
+            }
+            RETURN_IF_ERROR(AsyncFileDeleter::delete_file(path));
+        }
+    }
+    return AsyncFileDeleter::finish();
 }
 
-namespace starrocks {
-
-void set_ignore_overcrowded_for_query(brpc::Controller& cntl);
-void set_ignore_overcrowded_for_load(brpc::Controller& cntl);
-
-} // namespace starrocks
+} // namespace starrocks::lake

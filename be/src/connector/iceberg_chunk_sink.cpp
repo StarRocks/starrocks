@@ -17,6 +17,7 @@
 #include <future>
 
 #include "base/url_coding.h"
+#include "common/config.h"
 #include "connector/async_flush_stream_poller.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/expr.h"

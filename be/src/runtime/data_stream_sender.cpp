@@ -46,6 +46,7 @@
 #include "base/brpc/ref_count_closure.h"
 #include "base/uid_util.h"
 #include "column/chunk.h"
+#include "common/config.h"
 #include "common/logging.h"
 #include "common/system/backend_options.h"
 #include "common/util/thrift_client.h"

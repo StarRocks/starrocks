@@ -12,15 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+#include "util/time_guard.h"
 
-namespace brpc {
-class Controller;
-}
+#include "common/config.h"
 
 namespace starrocks {
 
-void set_ignore_overcrowded_for_query(brpc::Controller& cntl);
-void set_ignore_overcrowded_for_load(brpc::Controller& cntl);
+int64_t pipeline_poller_timeout_guard_ms() {
+    return config::pipeline_poller_timeout_guard_ms;
+}
 
 } // namespace starrocks
