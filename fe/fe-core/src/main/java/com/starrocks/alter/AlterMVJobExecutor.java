@@ -782,6 +782,22 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                         "to refresh the whole base table.", columnName, mv.getName(), baseColumnName);
                 throw new SemanticException(MaterializedViewExceptions.unSupportedReasonForMVFSE(reason));
             }
+            // In force mode with clear partition enabled, invalidate all partitions since we don't know
+            // which partitions are affected when base column timestamp is unknown.
+            if (isMvFastSchemaChangeClearPartition() && baseTable.isNativeTable()) {
+                Map<Long, Map<String, MaterializedView.BasePartitionInfo>> olapTableVisiblePartitionMap =
+                        mvAsyncRefreshContext.getBaseTableVisibleVersionMap();
+                if (olapTableVisiblePartitionMap.containsKey(baseTable.getId())) {
+                    Map<String, MaterializedView.BasePartitionInfo> basePartitionInfoMap =
+                            olapTableVisiblePartitionMap.get(baseTable.getId());
+                    if (basePartitionInfoMap != null) {
+                        toRefreshPartitionNames.addAll(basePartitionInfoMap.keySet());
+                        LOG.info("Base column '{}' created time is unknown for materialized view {}, " +
+                                        "invalidating all {} partitions in force mode",
+                                baseColumnName, mv.getName(), toRefreshPartitionNames.size());
+                    }
+                }
+            }
         } else {
             checkMVVisibleVersionAffectedBySchemaChange(mv, baseTable,
                     mvAsyncRefreshContext, columnName, baseColumnCreatedTime, toRefreshPartitionNames);
