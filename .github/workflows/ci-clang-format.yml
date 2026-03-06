@@ -52,7 +52,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
-          token: ${{ secrets.FORMAT_BOT_PAT }}  # PAT instead of GITHUB_TOKEN
+          token: ${{ secrets.PAT }}  # PAT instead of GITHUB_TOKEN
 
       - name: Set up base branch reference
         env:
@@ -75,7 +75,7 @@ jobs:
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
           HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
           BASE_REPO: ${{ github.repository }}
-          PAT: ${{ secrets.FORMAT_BOT_PAT }}
+          PAT: ${{ secrets.PAT }}
         run: |
           if git diff --quiet; then
             echo "No formatting changes needed."
