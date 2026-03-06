@@ -20,16 +20,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <string_view>
-#include <unordered_map>
-#include <unordered_set>
-#include <vector>
 
 #include "base/decimal_types.h"
-#include "common/status.h"
+#include "base/status.h"
 
 namespace starrocks {
-
-struct VariantEncodingContext;
 
 enum class VariantType : uint8_t {
     // Primitive types
@@ -154,7 +149,6 @@ public:
     bool operator==(const VariantMetadata& other) const { return _metadata == other._metadata; }
 
 private:
-    friend struct VariantEncodingContext;
     static constexpr uint8_t kVersionMask = 0b1111;
     static constexpr uint8_t kSupportedVersion = 1;
     static constexpr size_t kHeaderSizeBytes = 1;
@@ -193,16 +187,6 @@ private:
     };
 
     mutable LookupIndex _lookup_index;
-};
-
-struct VariantEncodingContext {
-    std::unordered_set<std::string> keys;
-    std::unordered_map<std::string_view, uint32_t> key_to_id;
-    std::string_view metadata_raw;
-    bool metadata_built = false;
-
-    void reset();
-    Status use_metadata(const VariantMetadata& meta);
 };
 
 // Representing the details of a Variant of Object
@@ -278,7 +262,12 @@ public:
     static constexpr uint8_t kBasicTypeMask = 0b00000011;
     static constexpr uint8_t kValueHeaderBitShift = 2;
 
-    BasicType basic_type() const { return static_cast<VariantValue::BasicType>(_value[0] & kBasicTypeMask); }
+    BasicType basic_type() const {
+        if (UNLIKELY(_value.empty())) {
+            return VariantValue::BasicType::PRIMITIVE;
+        }
+        return static_cast<VariantValue::BasicType>(_value[0] & kBasicTypeMask);
+    }
     std::string_view raw() const { return _value; }
     VariantType type() const {
         switch (basic_type()) {
@@ -294,7 +283,7 @@ public:
             return VariantType::NULL_TYPE; // Should not happen, but return NULL_TYPE as a fallback.
         }
     }
-    bool is_null() const { return _value[0] == 0; }
+    bool is_null() const { return _value.empty() || _value[0] == 0; }
 
     // Get the primitive boolean value.
     StatusOr<bool> get_bool() const;
@@ -353,7 +342,9 @@ public:
     bool operator==(const VariantValue& other) const { return _value == other._value; }
 
 private:
-    uint8_t value_header() const { return static_cast<uint8_t>(_value[0]) >> kValueHeaderBitShift; }
+    uint8_t value_header() const {
+        return _value.empty() ? 0 : (static_cast<uint8_t>(_value[0]) >> kValueHeaderBitShift);
+    }
     Status validate_primitive_type(VariantType type, size_t size_required) const;
 
     template <typename PrimitiveType>

@@ -211,8 +211,9 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_variant_column_reader(cons
         }
     }
 
-    return std::make_unique<VariantColumnReader>(variant_field, std::move(_metadata_reader), std::move(_value_reader),
-                                                 std::move(typed_value_reader), std::move(typed_value_type));
+    return ColumnReaderPtr(
+            std::make_unique<VariantColumnReader>(variant_field, std::move(_metadata_reader), std::move(_value_reader),
+                                                  std::move(typed_value_reader), std::move(typed_value_type)));
 }
 
 StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(ColumnReaderPtr ori_reader, const GlobalDictMap* dict,

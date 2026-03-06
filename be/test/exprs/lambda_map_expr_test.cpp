@@ -20,6 +20,7 @@
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/map_column.h"
+#include "column/nullable_column.h"
 #include "exprs/arithmetic_expr.h"
 #include "exprs/cast_expr.h"
 #include "exprs/expr_context.h"
@@ -219,9 +220,14 @@ TEST_F(MapApplyExprTest, test_map_int_int) {
         ASSERT_OK(ExprExecutor::prepare(expr_ctxs, &_runtime_state));
         ASSERT_OK(ExprExecutor::open(expr_ctxs, &_runtime_state));
         ColumnPtr result = map_apply_expr->evaluate(&exprContext, &cur_chunk);
+        ColumnPtr result2 = map_apply_expr->evaluate(&exprContext, &cur_chunk);
 
         EXPECT_TRUE(result->is_nullable());
         EXPECT_TRUE(result->debug_string() == column->debug_string());
+        EXPECT_TRUE(result2->is_nullable());
+        EXPECT_TRUE(result2->debug_string() == column->debug_string());
+        auto* nullable_col = down_cast<NullableColumn*>(column.get());
+        EXPECT_EQ(nullable_col->data_column()->size(), nullable_col->null_column()->size());
 
         ExprExecutor::close(expr_ctxs, &_runtime_state);
     }
