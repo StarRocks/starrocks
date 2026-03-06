@@ -53,6 +53,11 @@ public class ADBCTable extends Table {
         return catalogName + "." + dbName;
     }
 
+    @Override
+    public String getCatalogTableName() {
+        return catalogName + "." + dbName + "." + name;
+    }
+
     public String getDbName() {
         return dbName;
     }
