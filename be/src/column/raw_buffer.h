@@ -71,6 +71,22 @@ inline size_t element_bytes_with_padding(size_t element_num, size_t element_size
     return bytes;
 }
 
+/// Contiguous buffer with allocator-driven memory, intended as the low-level building block
+/// for Column Buffer. Provides vector-like storage (size/capacity, push_back, resize, etc.)
+/// but with explicit memory::Allocator and no automatic deallocation in the destructor.
+/// Used as the default implementation backing for Column Buffer.
+///
+/// Differences from std::vector:
+/// - All mutating operations take (memory::Allocator* allocator); there is no default allocator.
+/// - Destructor does NOT free memory: the buffer must be released by calling release(allocator)
+///   before the object is destroyed. This allows ownership to be transferred or managed externally.
+/// - Empty buffer: data() returns a static empty buffer (empty_raw_buffer), not nullptr.
+/// - Copy is disabled (move-only). swap() is supported.
+/// - Optional tail padding via template parameter `padding` (e.g. for alignment or sentinels).
+/// - For relocatable T, realloc is used when growing to avoid extra copies where possible.
+/// - resize(allocator, count) without value: for trivially copyable (POD) T, new elements are
+///   NOT initialized (indeterminate values). Only non-POD types get value-initialization.
+///   Unlike std::vector::resize(count), which value-initializes (e.g. zero for PODs).
 template <class T, size_t padding>
 class RawBuffer {
 public:

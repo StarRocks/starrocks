@@ -18,6 +18,17 @@
 
 namespace starrocks::util {
 
+/// RAII wrapper around RawBuffer that holds a memory::Allocator* and forwards all mutating
+/// calls to RawBuffer with that allocator. Frees memory in the destructor via release().
+/// Intended as the default Column Buffer implementation when a fixed allocator is available.
+///
+/// Differences from std::vector:
+/// - No default constructor: must be constructed with Buffer(allocator) or
+///   Buffer(allocator, count[, value]).
+/// - allocator() returns the bound allocator; all allocations use it.
+/// - Copy is disabled (move-only). swap() also swaps the allocator.
+/// - Otherwise API matches vector (reserve, resize, push_back, assign, append, etc.)
+///   without passing allocator on every call.
 template <class T, size_t padding = 0>
 class Buffer : public RawBuffer<T, padding> {
 public:
