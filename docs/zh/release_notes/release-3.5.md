@@ -143,6 +143,7 @@ displayed_sidebar: docs
 - 空 Parquet 或 ORC 文件场景下，`files()` schema 检测存在的问题。 [#67762](https://github.com/StarRocks/starrocks/pull/67762)
 - 在 Hive 表上执行 UNION ALL 时，Profile 中的指标值不准确的问题。 [#67912](https://github.com/StarRocks/starrocks/pull/67912)
 - FE 查询场景下，缺乏通过 Arrow Flight 代理获取数据的支持。 [#67794](https://github.com/StarRocks/starrocks/pull/67794)
+- 由于 `OlapTableSink::is_full()` 中的竞争条件导致在自动创建分区时 SIGSEGV 崩溃。[#67566](https://github.com/StarRocks/starrocks/pull/67566)
 
 ## 3.5.11
 
