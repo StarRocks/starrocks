@@ -4,9 +4,9 @@ displayed_sidebar: docs
 
 # 静的拡張機能を開発する
 
-静的拡張機能は、StarRocks FEの拡張モジュールであり、コアコードを変更することなく新機能を追加したり、既存の機能を最適化したりできます。動的プラグインと比較して、静的拡張機能はシステム起動時に自動的にロードされ、システムのコアモジュールをカバーする、より多くの登録可能な拡張ポイントを提供します。
+静的拡張機能は、StarRocks FE の拡張モジュールであり、コアコードを変更することなく新機能を追加したり、既存の機能を最適化したりできます。動的プラグインと比較して、静的拡張機能はシステム起動時に自動的にロードされ、システムのコアモジュールをカバーする、より多くの登録可能な拡張ポイントを提供します。
 
-この機能はv4.1以降でサポートされています。
+この機能は v4.1 以降でサポートされています。
 
 ## 使用方法
 
@@ -14,7 +14,7 @@ displayed_sidebar: docs
 
 ### 前提条件
 
-StarRocks FE開発環境を次のように準備します。
+StarRocks FE 開発環境を次のように準備します。
 
 ```xml
 <plugin>
@@ -72,9 +72,9 @@ public class MultiWarehouseExtension implements StarRocksExtension {
 
 ### ログ
 
-拡張機能をビルドした後、`${your_extension_name}-ext.jar`ファイルを`Config.ext_dir`ディレクトリ（デフォルトは`FE/lib`）に配置し、FEを再起動します。
+拡張機能をビルドした後、`${your_extension_name}-ext.jar` ファイルを `Config.ext_dir` ディレクトリ（デフォルトは `FE/lib`）に配置し、FE を再起動します。
 
-起動後のFEログの例は次のとおりです。
+起動後の FE ログの例は次のとおりです。
 
 ```sh
 2025-12-26 12:47:46.047+08:00 INFO (main|1) [ExtensionManager.loadExtensionsFromDir():39] start to load extensions
@@ -82,6 +82,6 @@ public class MultiWarehouseExtension implements StarRocksExtension {
 2025-12-26 12:47:46.152+08:00 INFO (main|1) [ExtensionManager.loadExtensionsFromDir():42] all extensions loaded finished
 ```
 
-- `start to load extensions`: FEは拡張ディレクトリのスキャンを開始しました。
+- `start to load extensions`: FE は拡張ディレクトリのスキャンを開始しました。
 - `Loaded extension: extension_name`: 拡張機能は正常にロードされました。
 - `all extensions loaded finished`: ディレクトリ内のすべての拡張機能がロードされました。
