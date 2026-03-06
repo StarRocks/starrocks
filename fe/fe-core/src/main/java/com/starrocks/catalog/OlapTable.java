@@ -1753,7 +1753,9 @@ public class OlapTable extends Table {
     }
 
     public List<Partition> getNonEmptyPartitions() {
-        return idToPartition.values().stream().filter(Partition::hasData).collect(Collectors.toList());
+        return idToPartition.values().stream().filter(
+                        p -> !p.getName().startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX))
+                .filter(Partition::hasData).collect(Collectors.toList());
     }
 
     public int getNumberOfPartitions() {
