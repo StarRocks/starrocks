@@ -12,7 +12,19 @@ Row-level security allows you to apply a row access policy to a table or view to
 
 You can include conditions and functions in the policy expression of a row access policy to transform the data at query runtime when the conditions are met.
 
-A row access policy can be added to a table or view either when the table is created or after the table is created. 
+A row access policy can be added to a table or view either when the table is created or after the table is created.
+
+- **Objects of a policy**
+
+A policy can be applied to a table, view, materialized view, or external table. The SQL statements used to create, apply, alter, or drop a policy are similar for these objects.
+
+- **Impact scope of a policy**
+
+A policy affects all the queries that run against the column with the policy applied, including the SELECT, UPDATE, DELETE, CTAS, and INSERT INTO AS SELECT operations.
+
+:::note
+Please note that query results of the DML statements may vary in accordance with the policies applied to the user who submitted the statement.
+:::
 
 ## Create a row access policy
 
