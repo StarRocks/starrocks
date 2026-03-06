@@ -3621,6 +3621,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: 共有データクラスターのリーダー FE ノードのメモリに保持される最近の成功したコンパクションタスクレコードの数。`SHOW PROC '/compactions'` コマンドを使用して、最近の成功したコンパクションタスクレコードを表示できます。コンパクション履歴は FE プロセスメモリに格納され、FE プロセスが再起動されると失われることに注意してください。
 - Introduced in: v3.1.0
 
+##### `lake_compaction_max_parallel_default`
+
+- 默认值: 3
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 当建表时未指定 `lake_compaction_max_parallel` 表属性时，每个 tablet 的默认最大并行 Compaction 子任务数。`0` 表示禁用并行 Compaction。此配置作为表属性 `lake_compaction_max_parallel` 的默认值。
+
 ##### `lake_compaction_max_tasks`
 
 - Default: -1
@@ -3783,6 +3791,17 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: Yes
 - Description: ブローカーを使用しない HDFS またはオブジェクトストレージへの直接書き込みに使用される HDFS 書き込みバッファサイズ (KB 単位) を設定します。FE はこの値をバイト (`<< 10`) に変換し、`HdfsFsManager` でローカル書き込みバッファを初期化します。また、Thrift リクエスト (例: TUploadReq、TExportSink、シンクオプション) に伝播され、バックエンド/エージェントが同じバッファサイズを使用するようにします。この値を増やすと、大きなシーケンシャル書き込みのスループットが向上しますが、ライターごとのメモリが増加します。減らすと、ストリームごとのメモリ使用量が減少し、小さな書き込みのレイテンシーが低下する可能性があります。`hdfs_read_buffer_size_kb` と並行して調整し、利用可能なメモリと同時ライターを考慮してください。
 - Introduced in: v3.2.0
+
+
+##### `lake_enable_drop_tablet_cache`
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: Yes
+- 説明: shared-data モードで、実データが削除される前に BE/CN 上のキャッシュをクリーンアップします。
+- 導入バージョン: v4.0
+
 
 
 ##### `lake_enable_drop_tablet_cache`
