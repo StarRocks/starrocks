@@ -143,6 +143,7 @@ The following issues have been fixed:
 - Issue with the `f``iles()` schema detection for empty Parquet or ORC files. [#67762](https://github.com/StarRocks/starrocks/pull/67762)
 - Inaccurate value of metrics in Profile caused by UNION ALL on Hive tables. [#67912](https://github.com/StarRocks/starrocks/pull/67912)
 - Lacking support for data retrieval from Arrow Flight proxy for FE queries. [#67794](https://github.com/StarRocks/starrocks/pull/67794)
+- SIGSEGV crash during automatic partition creation caused by a race condition in `OlapTableSink::is_full()`. [#67566](https://github.com/StarRocks/starrocks/pull/67566)
 
 ## 3.5.11
 
