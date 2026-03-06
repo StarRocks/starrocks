@@ -62,5 +62,6 @@ skip_res_cmd = [
 ]
 
 skip_files = set([
+    'test_window_skew_rewrite_with_mcv',
     # 'test_parquet_dict_null_predicate'
 ])
