@@ -1646,7 +1646,8 @@ CONF_mBool(lake_vacuum_enable_version_chain_mode, "false");
 
 // Per-tablet time budget (in ms) for the version-chain-based lake vacuum path.
 // 0 means no timeout.
-CONF_mInt64(lake_vacuum_version_chain_timeout_ms, "600000");
+// default: 50 minutes
+CONF_mInt64(lake_vacuum_version_chain_timeout_ms, "3000000");
 
 // TOPN RuntimeFilter parameters
 CONF_mInt32(desc_hint_split_range, "10");
