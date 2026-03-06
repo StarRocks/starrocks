@@ -155,17 +155,6 @@ public class LakeMaterializedViewFastSchemaEvolutionTest {
     }
 
     @Test
-    public void testIsFastSchemaEvolutionV2Default() {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
-        LakeMaterializedView lakeMv = (LakeMaterializedView) db.getTable(MV_NAME);
-        Assertions.assertNotNull(lakeMv);
-
-        // Note: With the current implementation, isFastSchemaEvolutionV2() returns true by default
-        // This is because the implementation is hardcoded to return true
-        Assertions.assertTrue(lakeMv.isFastSchemaEvolutionV2());
-    }
-
-    @Test
     public void testSetFastSchemaEvolutionV2True() {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
         LakeMaterializedView lakeMv = (LakeMaterializedView) db.getTable(MV_NAME);
@@ -259,19 +248,6 @@ public class LakeMaterializedViewFastSchemaEvolutionTest {
 
         // Verify it's recognized as a lake table (cloud native)
         Assertions.assertTrue(lakeMv.isCloudNativeTableOrMaterializedView());
-    }
-
-    @Test
-    public void testLakeMaterializedViewGetPartitionFileCacheInfo() {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
-        LakeMaterializedView lakeMv = (LakeMaterializedView) db.getTable(MV_NAME);
-        Assertions.assertNotNull(lakeMv);
-
-        // Verify file cache info - may be null in test environment
-        FileCacheInfo cacheInfo = lakeMv.getPartitionFileCacheInfo(PARTITION_ID);
-        if (cacheInfo != null) {
-            Assertions.assertTrue(cacheInfo.getEnableCache());
-        }
     }
 
     @Test

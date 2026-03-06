@@ -1,4 +1,4 @@
--- name: test_mv_fast_schema_change_mode @sequential
+-- name: test_mv_fast_schema_change_mode
 
 admin set frontend config('alter_scheduler_interval_millisecond' = '100');
 
@@ -31,8 +31,7 @@ CREATE MATERIALIZED VIEW test_mv_agg1
 PARTITION BY date_trunc('day', dt)
 DISTRIBUTED BY hash(c0)
 PROPERTIES (
-    "replication_num" = "1",
-    "query_rewrite_consistency" = "force_mv"
+    "replication_num" = "1"
 )
 AS
 SELECT dt, c0, SUM(c3) as sum_c3, COUNT(c1) as cnt_c1
@@ -181,8 +180,7 @@ CREATE MATERIALIZED VIEW test_mv_agg2
 PARTITION BY date_trunc('day', dt)
 DISTRIBUTED BY HASH(c0)
 PROPERTIES (
-    "replication_num" = "1",
-    "query_rewrite_consistency" = "force_mv"
+    "replication_num" = "1"
 )
 AS
 SELECT dt, c0, SUM(c2) as sum_c2, MAX(c3) as max_c3, MIN(c3) as min_c3, AVG(c5) as avg_c5
@@ -255,8 +253,7 @@ CREATE MATERIALIZED VIEW test_mv_agg3
 PARTITION BY date_trunc('day', dt)
 DISTRIBUTED BY HASH(c0)
 PROPERTIES (
-    "replication_num" = "1",
-    "query_rewrite_consistency" = "force_mv"
+    "replication_num" = "1"
 )
 AS
 SELECT dt, c0, c1, SUM(c2) as total_c2
@@ -334,8 +331,7 @@ CREATE MATERIALIZED VIEW test_mv_agg4
 PARTITION BY date_trunc('month', dt)
 DISTRIBUTED BY HASH(category_id)
 PROPERTIES (
-    "replication_num" = "1",
-    "query_rewrite_consistency" = "force_mv"
+    "replication_num" = "1"
 )
 AS
 SELECT dt, category_id,

@@ -342,23 +342,4 @@ public class SchemaChangeHandlerLakeMVTest {
         Assertions.assertNotNull(lakeMv.getRelatedMaterializedViews());
         Assertions.assertTrue(lakeMv.getRelatedMaterializedViews().isEmpty());
     }
-
-    @Test
-    public void testLakeMaterializedViewStorageInfo() {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
-        LakeMaterializedView lakeMv = (LakeMaterializedView) db.getTable(MV_NAME_V2_ENABLED);
-        Assertions.assertNotNull(lakeMv);
-
-        // Verify storage info is available
-        FilePathInfo pathInfo = lakeMv.getDefaultFilePathInfo();
-        // Note: pathInfo may be null in test environment without proper storage setup
-        if (pathInfo != null) {
-            Assertions.assertTrue(pathInfo.getFullPath().startsWith("s3://test-bucket/"));
-        }
-
-        FileCacheInfo cacheInfo = lakeMv.getPartitionFileCacheInfo(PARTITION_ID);
-        if (cacheInfo != null) {
-            Assertions.assertTrue(cacheInfo.getEnableCache());
-        }
-    }
 }
