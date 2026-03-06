@@ -1,0 +1,119 @@
+# Copyright 2021-present StarRocks, Inc. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# CI - Clang Format Auto Fix
+#
+# This workflow runs clang-format-10 on every C/C++ file (.cpp/.h/.hpp/.cc)
+# changed in a pull request (against the PR base branch).  If any file needs
+# reformatting the workflow applies the fixes in-place and pushes an automatic
+# commit back to the PR branch so that the PR is always clean.
+#
+# For pull requests opened from forks the GITHUB_TOKEN cannot push to the
+# fork, so the auto-commit step is skipped for those PRs and the job simply
+# reports whether formatting is correct.
+#
+# To run the same fix locally before opening a PR:
+#
+#   CLANG_FORMAT_BINARY=clang-format-10 bash build-support/clang-format-changed.sh
+
+name: CI - Clang Format Auto Fix
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, synchronize]
+    # Only trigger when backend C/C++ source files are touched.
+    paths:
+      - 'be/src/**'
+      - 'be/test/**'
+
+permissions:
+  contents: write
+
+jobs:
+  clang-format:
+    name: Clang-Format
+    runs-on: ubuntu-latest
+    env:
+      # The local ref name expected by build-support/clang-format-changed.sh.
+      # We map the actual PR base branch to this name so the script works
+      # regardless of whether the target branch is literally called "main".
+      FORMAT_BASE_REF: refs/remotes/origin/main
+
+    steps:
+      - name: Checkout PR head branch
+        uses: actions/checkout@v4
+        with:
+          # Use the exact commit SHA so checkout works for both same-repo and
+          # fork pull requests.  For same-repo PRs the push step below uses
+          # "HEAD:<branch>" to write back to the correct branch without
+          # needing a symbolic branch checkout.
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up base branch reference
+        # build-support/clang-format-changed.sh computes the changed-file list
+        # via "git diff origin/main...HEAD".  Map the actual PR base branch to
+        # that well-known ref name so the script works for any target branch.
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch origin "${BASE_REF}:${FORMAT_BASE_REF}" --update-head-ok
+
+      - name: Install clang-format-10
+        run: |
+          wget https://github.com/muttleyxd/clang-tools-static-binaries/releases/download/master-5b56bb49/clang-format-10_linux-amd64 -O /usr/local/bin/clang-format-10
+          chmod +x /usr/local/bin/clang-format-10
+          
+
+      - name: Auto-fix formatting on changed C++ files
+        env:
+          CLANG_FORMAT_BINARY: /usr/local/bin/clang-format-10
+        run: bash build-support/clang-format-changed.sh
+
+      - name: Commit and push formatting fixes
+        # Only push when running on a branch inside this repo (not a fork).
+        # For fork PRs the GITHUB_TOKEN cannot write to the fork, so we skip
+        # the push but still fail the job below if fixes were needed.
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          if git diff --quiet; then
+            echo "No formatting changes needed."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add -u
+            git commit -m "style: auto-fix clang-format issues"
+            git push origin "HEAD:${HEAD_REF}" || {
+              echo "Failed to push formatting fixes. The PR branch may have been"
+              echo "updated since this workflow started. Please rebase and retry."
+              exit 1
+            }
+          fi
+
+      - name: Fail for fork PRs with formatting issues
+        # For fork PRs we cannot push fixes back, so fail explicitly if
+        # clang-format made any changes so the contributor knows to fix locally.
+        if: github.event.pull_request.head.repo.full_name != github.repository
+        run: |
+          if git diff --quiet; then
+            echo "No formatting changes needed."
+          else
+            echo "Formatting issues detected. Please run the following locally and push the fixes:"
+            echo "  CLANG_FORMAT_BINARY=clang-format-10 bash build-support/clang-format-changed.sh"
+            git diff
+            exit 1
+          fi
