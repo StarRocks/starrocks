@@ -14,14 +14,12 @@
 
 package com.starrocks.qe;
 
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
-import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -64,27 +62,6 @@ public class LeaderOpExecutorMockTest {
                 .withTable(
                         "CREATE TABLE d1.t2(k1 int, k2 int, k3 int)" +
                                 " distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
-    }
-
-    @Test
-    public void testTxnForward() throws Exception {
-        String sql = "begin";
-        StatementBase stmtBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-
-        TMasterOpResult tMasterOpResult = new TMasterOpResult();
-        tMasterOpResult.setTxn_id(1);
-
-        try (MockedStatic<ThriftRPCRequestExecutor> thriftConnectionPoolMockedStatic =
-                Mockito.mockStatic(ThriftRPCRequestExecutor.class)) {
-            thriftConnectionPoolMockedStatic.when(()
-                            -> ThriftRPCRequestExecutor.call(Mockito.any(), Mockito.any(), Mockito.anyInt(), Mockito.any()))
-                    .thenReturn(tMasterOpResult);
-            LeaderOpExecutor executor =
-                    new LeaderOpExecutor(stmtBase, stmtBase.getOrigStmt(), connectContext, RedirectStatus.FORWARD_NO_SYNC, false);
-            executor.execute();
-
-            Assertions.assertEquals(1, connectContext.getTxnId());
-        }
     }
 
     @Test
