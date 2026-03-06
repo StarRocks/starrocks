@@ -456,7 +456,7 @@ TEST_F(BitmapIndexTest, test_seek_dictionary_by_predicate) {
             auto res = BooleanColumn::create();
             const auto& binary_col = down_cast<const BinaryColumn&>(value_column);
             for (size_t i = 0; i < binary_col.size(); ++i) {
-                Slice s = binary_col.get_data()[i];
+                Slice s = binary_col.get_slice(i);
                 res->append(s.to_string().find('a') != std::string::npos);
             }
             return res;

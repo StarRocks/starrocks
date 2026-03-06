@@ -305,19 +305,6 @@ public:
         }
     }
 
-    Container& get_data() {
-        if (!_slices_cache) {
-            _build_slices();
-        }
-        return _slices;
-    }
-    const Container& get_data() const {
-        if (!_slices_cache) {
-            _build_slices();
-        }
-        return _slices;
-    }
-
     GermanStringContainer& get_german_strings() {
         if (!_german_strings_cache) {
             _build_german_strings();

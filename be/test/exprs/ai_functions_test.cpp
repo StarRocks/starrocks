@@ -19,7 +19,6 @@
 
 #include "column/array_column.h"
 #include "column/binary_column.h"
-#include "column/const_column.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "exprs/mock_vectorized_expr.h"
@@ -89,12 +88,12 @@ protected:
     }
 
     // Helper method to validate sentiment analysis responses
-    void validateSentimentResponses(const ColumnPtr& result_column, size_t expected_size) {
+    static void validateSentimentResponses(const ColumnPtr& result_column, size_t expected_size) {
         ASSERT_EQ(result_column->size(), expected_size);
         const auto* binary_column = down_cast<const BinaryColumn*>(result_column.get());
 
         for (size_t i = 0; i < expected_size; ++i) {
-            std::string response = binary_column->get_data()[i].to_string();
+            std::string response = binary_column->get_slice(i).to_string();
             ASSERT_TRUE(response == "positive" || response == "negative")
                     << "Response at index " << i << " is neither 'positive' nor 'negative': " << response;
         }
@@ -273,7 +272,7 @@ TEST_F(AiFunctionsTest, AiQueryWithNullValues) {
 
         // Verify that null inputs produce some predictable output (empty string or error message)
         for (size_t i = 0; i < 2; ++i) {
-            std::string response = binary_result->get_data()[i].to_string();
+            std::string response = binary_result->get_slice(i).to_string();
             EXPECT_TRUE(response.empty() || response.find("null") != std::string::npos ||
                         response.find("error") != std::string::npos)
                     << "Row " << i << " should handle null input appropriately, got: " << response;
@@ -298,7 +297,7 @@ TEST_F(AiFunctionsTest, DISABLED_SingleSentimentAnalysisCall) {
 
     // For this specific positive test case, we expect "positive"
     const auto* binary_column = down_cast<const BinaryColumn*>(result_column.get());
-    std::string response = binary_column->get_data()[0].to_string();
+    std::string response = binary_column->get_slice(0).to_string();
     ASSERT_EQ(response, "positive");
 }
 
@@ -326,7 +325,7 @@ TEST_F(AiFunctionsTest, DISABLED_MultipleSameSentimentAnalysisCalls) {
     // For these specific positive test cases, we expect all "positive"
     const auto* binary_column = down_cast<const BinaryColumn*>(result_column.get());
     for (int i = 0; i < num_calls; ++i) {
-        std::string response = binary_column->get_data()[i].to_string();
+        std::string response = binary_column->get_slice(i).to_string();
         ASSERT_EQ(response, "positive") << "Response at index " << i << " should be positive";
     }
 }
