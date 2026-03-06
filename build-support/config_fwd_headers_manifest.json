@@ -1,0 +1,48 @@
+{
+  "generated_headers": [
+    {
+      "path": "be/src/common/config_cow_fwd.h",
+      "configs": [
+        "enable_cow_optimization",
+        "cow_optimization_diagnose_level"
+      ]
+    },
+    {
+      "path": "be/src/common/config_exec_fwd.h",
+      "configs": [
+        "vector_chunk_size"
+      ]
+    },
+    {
+      "path": "be/src/common/config_path_fwd.h",
+      "configs": [
+        "local_library_dir",
+        "plugin_path",
+        "query_scratch_dirs",
+        "pprof_profile_dir",
+        "small_file_dir",
+        "pull_load_task_dir",
+        "sys_log_dir",
+        "user_function_dir"
+      ]
+    },
+    {
+      "path": "be/src/common/config_storage_fwd.h",
+      "configs": [
+        "storage_root_path",
+        "disable_storage_page_cache",
+        "enable_event_based_compaction_framework",
+        "enable_pk_size_tiered_compaction_strategy",
+        "storage_flood_stage_left_capacity_bytes",
+        "spill_local_storage_dir",
+        "l0_snapshot_size"
+      ]
+    },
+    {
+      "path": "be/src/common/config_cache_fwd.h",
+      "configs": [
+        "datacache_enable"
+      ]
+    }
+  ]
+}
