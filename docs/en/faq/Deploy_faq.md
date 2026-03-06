@@ -32,19 +32,6 @@ This error occurs because the web services port of the BE is occupied. Try to mo
 
 This error occurs when you run programs in Java Runtime Environment (JRE). To solve this problem, replace JRE with Java Development Kit (JDK). We recommend that you use Oracle's JDK 17 or later.
 
-<!-- ## Why does the error "Failed to Distribute files to node" occur when I deploy StarRocks of Enterprise Edition and configure nodes?
-
-This error occurs when Setuptools versions installed on multiple frontends (FEs) are inconsistent. To solve this problem, you can execute the following command as a root user.
-
-```plaintext
-yum remove python-setuptools
-
-rm /usr/lib/python2.7/site-packages/setuptool* -rf
-
-wget https://bootstrap.pypa.io/ez_setup.py -O - | python
-```
--->
-
 ## Can FE and BE configuration items be modified and then take effect without restarting the cluster?
 
 Yes. Perform the following steps to complete the modifications for an FE and a BE configuration item:
@@ -102,14 +89,6 @@ Check if OpenSSH Daemon (sshd) is enabled. If not, run the `/etc/init.d/sshd`` s
 ## Why does the error "Fail to get master client from `cache. ``host= port=0 code=THRIFT_RPC_ERROR`" occur when I start a BE?
 
 Run the `netstat -anp |grep port` command to check whether the ports in the `be.conf` file are occupied. If so, replace the occupied port with a free port and then restart the BE.
-
-<!--
-
-## Why does the error "Failed to transport upgrade files to agent host. src:…" occur when I upgrade a cluster of the Enterprise Edition?
-
-This error occurs when the disk space specified in the deployment directory is insufficient. During the cluster upgrade, the StarRocks Manager distributes the binary file of the new version to each node. If the disk space specified in the deployment directory is insufficient, the file cannot be distributed to each node. To solve this problem, add data disks.
-
--->
 
 ## Why does the FE node log on the diagnostics page of StarRocks Manager display "Search log failed." for a newly deployed FE node that is running properly?
 
