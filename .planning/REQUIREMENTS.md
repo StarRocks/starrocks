@@ -43,9 +43,9 @@
 ### Materialized Views
 
 - [x] **MV-01**: User can create materialized view against ADBC external tables
-- [ ] **MV-02**: Async MV refresh fetches data from ADBC tables
+- [x] **MV-02**: Async MV refresh fetches data from ADBC tables
 - [x] **MV-03**: Partition change tracking (PCT) enables incremental MV refresh
-- [ ] **MV-04**: Query optimizer rewrites queries to use MVs over ADBC tables
+- [x] **MV-04**: Query optimizer rewrites queries to use MVs over ADBC tables
 
 ### Statistics
 
@@ -129,9 +129,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PART-02 | Phase 3 | Complete |
 | PART-03 | Phase 3 | Complete |
 | MV-01 | Phase 3 | Complete |
-| MV-02 | Phase 3 | Pending |
+| MV-02 | Phase 3 | Complete |
 | MV-03 | Phase 3 | Complete |
-| MV-04 | Phase 3 | Pending |
+| MV-04 | Phase 3 | Complete |
 | STAT-01 | Phase 3 | Complete |
 | STAT-02 | Phase 3 | Complete |
 
