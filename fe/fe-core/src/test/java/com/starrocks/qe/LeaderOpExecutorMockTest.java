@@ -14,6 +14,7 @@
 
 package com.starrocks.qe;
 
+import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.pseudocluster.PseudoCluster;
