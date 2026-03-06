@@ -829,6 +829,73 @@ TEST_F(LakeAsyncDeltaWriterTest, test_block_merger_without_input_profile) {
     do_block_merger(false);
 }
 
+// Regression test: close() used to trigger the stop handler which called delta_writer->close(),
+// destroying _mem_table_sink while a MergeBlockTask was still running merge_blocks_to_segments().
+// This caused use-after-free (SIGSEGV in LoadChunkSpiller::empty() or heap-use-after-free on
+// _flush_token). The fix defers delta_writer->close() until after all tasks are drained.
+TEST_F(LakeAsyncDeltaWriterTest, test_close_does_not_destroy_writer_during_merge) {
+    static const int kChunkSize = 128;
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto txn_id = next_id();
+    auto tablet_id = _tablet_metadata->id();
+    StorageEngine::instance()->load_spill_block_merge_executor()->refresh_max_thread_num();
+    CountDownLatch flush_latch(10);
+    // flush multiple times to generate spill blocks
+    int64_t old_val = config::write_buffer_size;
+    config::write_buffer_size = 1;
+    ASSIGN_OR_ABORT(auto delta_writer, AsyncDeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .set_profile(&_dummy_runtime_profile)
+                                               .set_immutable_tablet_size(10000000)
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+    for (int i = 0; i < 10; i++) {
+        delta_writer->write(&chunk0, indexes.data(), indexes.size(), [&](const Status& st) { ASSERT_OK(st); });
+        delta_writer->flush([&](const Status& st) {
+            ASSERT_OK(st);
+            flush_latch.count_down();
+        });
+    }
+    flush_latch.wait();
+    config::write_buffer_size = old_val;
+
+    // Pause inside merge_blocks_to_segments() so the merge task is actively using
+    // _mem_table_sink when close() is called.
+    CountDownLatch merge_entered(1);
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("SpillMemTableSink::merge_blocks_to_segments", [&](void* arg) {
+        merge_entered.count_down();
+        // Wait long enough for close() to stop the execution queue and trigger the
+        // stop handler. Before the fix, the stop handler would call delta_writer->close()
+        // and destroy _mem_table_sink while we're still here.
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+    });
+    DeferOp defer([&]() {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    // Submit finish — this will spawn a MergeBlockTask that enters merge_blocks_to_segments()
+    delta_writer->finish([&](StatusOr<TxnLogPtr> res) {});
+
+    // Wait until merge task is inside merge_blocks_to_segments()
+    merge_entered.wait();
+
+    // Now close. Before the fix this would SIGSEGV or trigger ASAN heap-use-after-free.
+    // After the fix, close() waits for the merge task to complete before destroying writer state.
+    delta_writer->close();
+}
+
 // Test that write tasks are rejected after finish task completes
 TEST_F(LakeAsyncDeltaWriterTest, test_write_after_finish) {
     // Prepare data for writing
