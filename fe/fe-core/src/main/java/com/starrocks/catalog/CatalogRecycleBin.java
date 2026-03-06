@@ -1399,6 +1399,11 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable, Memor
     }
 
     // for test
+    protected void setDeleteFutureForTable(RecycleTableInfo tableInfo, CompletableFuture<Boolean> future) {
+        asyncDeleteForTables.put(tableInfo, future);
+    }
+
+    // for test
     public void removePartitionFromRecycleBin(long partitionId) {
         idToPartition.remove(partitionId);
         idToRecycleTime.remove(partitionId);
