@@ -1,0 +1,106 @@
+-- name: test_runtime_filter_min_max
+-- This test verifies MIN/MAX runtime filter functionality.
+-- MIN/MAX runtime filters are generated for global aggregations without GROUP BY.
+-- The filter represents the global MIN/MAX range and can be pushed down to scan nodes.
+
+-- # Prepare data for MIN/MAX runtime filter testing.
+-- Create a base table with various data types.
+CREATE TABLE t_minmax (
+    k1 INT NOT NULL,
+    c_int INT NULL,
+    c_bigint BIGINT NULL,
+    c_date DATE NULL,
+    c_string STRING NULL
+) ENGINE=OLAP
+DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 8
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+-- Insert test data: c_int values range from 1 to 100
+INSERT INTO t_minmax
+SELECT
+    idx,
+    idx % 100 + 1,           -- c_int: 1 to 100
+    idx * 2,                 -- c_bigint: 0, 2, 4, ...
+    CAST(date_add('2024-01-01', INTERVAL (idx % 30) DAY) AS DATE),  -- c_date: varies within Jan 2024
+    concat('str-', idx)      -- c_string: unique strings
+FROM TABLE(generate_series(0, 9999)) AS t(idx);
+
+-- Create probe table for join with MIN/MAX aggregation
+CREATE TABLE t_probe (
+    k1 INT NOT NULL,
+    probe_value INT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 8
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+INSERT INTO t_probe
+SELECT idx, idx % 50 FROM TABLE(generate_series(0, 999) AS t(idx));
+
+set enable_rewrite_simple_agg_to_meta_scan=false;
+-- # Test 1: MIN only query - should generate MIN runtime filter
+-- The global MIN of c_int is 1, so filter: c_int >= 1
+SELECT MIN(c_int) AS min_val FROM t_minmax;
+
+-- # Test 2: MAX only query - should generate MAX runtime filter
+-- The global MAX of c_int is 100, so filter: c_int <= 100
+SELECT MAX(c_int) AS max_val FROM t_minmax;
+
+-- # Test 3: Both MIN and MAX on same column - should generate combined range filter
+-- Range: c_int >= 1 AND c_int <= 100
+SELECT MIN(c_int) AS min_val, MAX(c_int) AS max_val FROM t_minmax;
+
+-- # Test 4: MIN and MAX on different columns
+SELECT MIN(c_int) AS min_int, MAX(c_bigint) AS max_bigint FROM t_minmax;
+
+-- # Test 5: MIN/MAX with WHERE clause - filter should still work
+-- The WHERE clause further restricts the range, but MIN/MAX RF still applies
+SELECT MIN(c_int) AS min_val FROM t_minmax WHERE c_int BETWEEN 20 AND 50;
+
+-- # Test 6: Join with MIN aggregation - probe side should benefit from MIN RF
+-- The MIN aggregation on t_probe produces a single value that can be used as filter
+-- When joining with t_minmax, the MIN value can filter t_minmax rows
+SELECT /*+SET_VAR(enable_min_max_runtime_filter=true)*/ COUNT(*)
+FROM t_probe p
+JOIN [broadcast] t_minmax m ON p.probe_value = m.c_int
+WHERE p.k1 < 100;
+
+-- # Test 7: Join with MAX aggregation
+SELECT /*+SET_VAR(enable_min_max_runtime_filter=true)*/ COUNT(*)
+FROM t_probe p
+JOIN [broadcast] t_minmax m ON p.probe_value = m.c_int
+WHERE p.k1 >= 900;
+
+-- # Test 8: Multiple MIN/MAX aggregations in one query
+SELECT
+    MIN(c_int) AS min_int,
+    MAX(c_int) AS max_int,
+    MIN(c_bigint) AS min_bigint,
+    MAX(c_bigint) AS max_bigint
+FROM t_minmax;
+
+-- # Test 9: MIN/MAX with date type
+SELECT MIN(c_date) AS earliest, MAX(c_date) AS latest FROM t_minmax;
+
+-- # Test 10: MIN/MAX with string type (lexicographic order)
+SELECT MIN(c_string) AS first_str, MAX(c_string) AS last_str FROM t_minmax;
+
+-- # Test 11: Aggregation without MIN/MAX - should NOT generate MIN/MAX RF
+SELECT COUNT(*), SUM(c_int) FROM t_minmax;
+
+-- # Test 12: MIN/MAX with GROUP BY - should NOT generate MIN/MAX RF
+-- This is expected behavior: MIN/MAX RF only works without GROUP BY
+SELECT c_int % 10 AS grp, MIN(c_bigint) AS min_bigint
+FROM t_minmax
+GROUP BY c_int % 10
+ORDER BY grp
+LIMIT 5;
+
+-- # Cleanup
+DROP TABLE IF EXISTS t_probe;
+DROP TABLE IF EXISTS t_minmax;

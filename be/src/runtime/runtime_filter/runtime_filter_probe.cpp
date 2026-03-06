@@ -39,7 +39,8 @@ Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilter
     _runtime_filter.store(nullptr);
     _join_mode = desc.build_join_mode;
     _is_stream_build_filter = desc.__isset.filter_type && (desc.filter_type == TRuntimeFilterBuildType::TOPN_FILTER ||
-                                                           desc.filter_type == TRuntimeFilterBuildType::AGG_FILTER);
+                                                           desc.filter_type == TRuntimeFilterBuildType::AGG_FILTER ||
+                                                           desc.filter_type == TRuntimeFilterBuildType::MIN_MAX_FILTER);
     _skip_wait = _is_stream_build_filter;
     _is_group_colocate_rf = desc.__isset.build_from_group_execution && desc.build_from_group_execution;
 

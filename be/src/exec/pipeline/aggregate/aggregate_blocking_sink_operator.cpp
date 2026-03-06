@@ -146,10 +146,20 @@ void AggregateBlockingSinkOperator::_build_in_runtime_filters(RuntimeState* stat
     const auto& build_runtime_filters = factory()->build_runtime_filters();
     for (size_t i = 0; i < build_runtime_filters.size(); ++i) {
         auto desc = build_runtime_filters[i];
-        auto* runtime_filter = _aggregator->build_in_filters(state, build_runtime_filters[i]);
-        auto* merger = factory()->in_filter_merger(build_runtime_filters[i]->filter_id());
-        if (merger->merge(_driver_sequence, desc, runtime_filter)) {
-            desc->set_runtime_filter(merger->merged_runtime_filter());
+        auto* runtime_filter = _aggregator->build_runtime_filter(state, build_runtime_filters[i]);
+        if (runtime_filter == nullptr) {
+            continue;
+        }
+
+        if (desc->type() == TRuntimeFilterBuildType::AGG_FILTER) {
+            // if it's in filter, try to merge with existing in filter
+            auto* merger = factory()->in_filter_merger(build_runtime_filters[i]->filter_id());
+            if (merger->merge(_driver_sequence, desc, runtime_filter)) {
+                desc->set_runtime_filter(merger->merged_runtime_filter());
+                merged_runtime_filters.emplace_back(desc);
+            }
+        } else {
+            desc->set_or_intersect_filter(runtime_filter);
             merged_runtime_filters.emplace_back(desc);
         }
     }
