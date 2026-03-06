@@ -210,6 +210,7 @@ jobs:
       src_filter: ${{ steps.path-filter.outputs.be }}
       test_filter: ${{ steps.path-filter.outputs.ut }}
       thirdparty_filter: ${{ steps.path-filter.outputs.thirdparty }}
+      clang_tidy_filter: ${{ steps.path-filter.outputs.clang_tidy }}
       only_test: ${{ needs.basic-checker.outputs.ONLY_BE_TEST }}
       pre_commit: ${{ needs.basic-checker.outputs.PRE_COMMIT }}
       pre_commit_conclusion: ${{ needs.basic-checker.outputs.PRE_COMMIT_CONCLUSION }}
@@ -236,6 +237,18 @@ jobs:
             thirdparty:
               - 'thirdparty/**'
               - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
+            clang_tidy:
+              - 'be/**/*.c'
+              - 'be/**/*.cc'
+              - 'be/**/*.cpp'
+              - 'be/**/*.cxx'
+              - 'be/**/*.h'
+              - 'be/**/*.hh'
+              - 'be/**/*.hpp'
+              - 'be/**/*.hxx'
+              - 'be/**/CMakeLists.txt'
+              - 'be/cmake_modules/**'
+              - 'gensrc/**'
 
       - name: Prepare info
         run: |
@@ -243,6 +256,7 @@ jobs:
           echo ${{ steps.path-filter.outputs.be }} > src_filter.txt
           echo ${{ steps.path-filter.outputs.ut }} > test_filter.txt
           echo ${{ steps.path-filter.outputs.thirdparty }} > thirdparty_filter.txt
+          echo ${{ steps.path-filter.outputs.clang_tidy }} > clang_tidy_filter.txt
 
       - name: Upload the BE Filter Info
         uses: actions/upload-artifact@v6
@@ -481,7 +495,7 @@ jobs:
   clang-tidy:
     runs-on: [self-hosted, normal]
     needs: [be-checker, thirdparty-info]
-    if: success() && needs.be-checker.outputs.src_filter == 'true' && (needs.be-checker.outputs.only_test != 'true' || needs.be-checker.outputs.pre_clang_conclusion != 'success')
+    if: success() && needs.be-checker.outputs.clang_tidy_filter == 'true' && (needs.be-checker.outputs.only_test != 'true' || needs.be-checker.outputs.pre_clang_conclusion != 'success')
     timeout-minutes: 90
     name: Clang-Tidy
     env:
@@ -511,7 +525,7 @@ jobs:
               export image_cache_id=${IMAGE_CACHE_ID}
               export image_tag=$BRANCH-$PR_NUMBER
           fi
-          ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --be --clang-tidy
+          ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --be --clang-tidy --clang-tidy-mode changed
 
       - name: clean ECI
         if: always() && steps.run_clang_tidy.outputs.ECI_ID != ''
