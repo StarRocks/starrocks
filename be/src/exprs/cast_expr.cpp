@@ -2214,8 +2214,8 @@ StatusOr<Expr*> VectorizedCastExprFactory::create_cast_expr(ObjectPool* pool, co
             int source_idx = it->second;
             source_field_indices[i] = source_idx;
 
-            ASSIGN_OR_RETURN(field_casts[i],
-                             create_cast_expr(pool, from_type.children[source_idx], to_type.children[i], allow_throw_exception));
+            ASSIGN_OR_RETURN(field_casts[i], create_cast_expr(pool, from_type.children[source_idx], to_type.children[i],
+                                                              allow_throw_exception));
             pool->add(field_casts[i]);
             auto cast_input = create_slot_ref(from_type.children[source_idx]);
             field_casts[i]->add_child(cast_input.get());
