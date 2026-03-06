@@ -314,7 +314,7 @@ public class ConnectContextTest {
 
         new MockUp<LeaderOpExecutor>() {
             @Mock
-            public static long fetchLeaderMaxJournalId(ConnectContext ctx) {
+            public long fetchLeaderMaxJournalId(ConnectContext ctx) {
                 return 100L;
             }
         };
@@ -342,7 +342,9 @@ public class ConnectContextTest {
 
         new MockUp<Authorizer>() {
             @Mock
-            public void checkAnyActionOnOrInDb(ConnectContext ctx, String catalog, String db)
+            public void checkAnyActionOnOrInDb(
+                    com.starrocks.authentication.UserIdentity currentUser,
+                    java.util.Set<Long> roleIds, String catalogName, String db)
                     throws AccessDeniedException {
             }
         };
@@ -360,7 +362,7 @@ public class ConnectContextTest {
             @Mocked JournalObservable journalObservable) throws Exception {
         new MockUp<LeaderOpExecutor>() {
             @Mock
-            public static long fetchLeaderMaxJournalId(ConnectContext ctx) {
+            public long fetchLeaderMaxJournalId(ConnectContext ctx) {
                 return 100L;
             }
         };
@@ -398,7 +400,7 @@ public class ConnectContextTest {
             @Mocked JournalObservable journalObservable) throws Exception {
         new MockUp<LeaderOpExecutor>() {
             @Mock
-            public static long fetchLeaderMaxJournalId(ConnectContext ctx) {
+            public long fetchLeaderMaxJournalId(ConnectContext ctx) {
                 return -1L;
             }
         };
@@ -439,14 +441,16 @@ public class ConnectContextTest {
 
         new MockUp<LeaderOpExecutor>() {
             @Mock
-            public static long fetchLeaderMaxJournalId(ConnectContext ctx) {
+            public long fetchLeaderMaxJournalId(ConnectContext ctx) {
                 return -1L;
             }
         };
 
         new MockUp<Authorizer>() {
             @Mock
-            public void checkAnyActionOnOrInDb(ConnectContext ctx, String catalog, String db)
+            public void checkAnyActionOnOrInDb(
+                    com.starrocks.authentication.UserIdentity currentUser,
+                    java.util.Set<Long> roleIds, String catalogName, String db)
                     throws AccessDeniedException {
             }
         };
@@ -513,7 +517,7 @@ public class ConnectContextTest {
             @Mocked JournalObservable journalObservable) throws DdlException {
         new MockUp<LeaderOpExecutor>() {
             @Mock
-            public static long fetchLeaderMaxJournalId(ConnectContext ctx) {
+            public long fetchLeaderMaxJournalId(ConnectContext ctx) {
                 return 100L;
             }
         };
