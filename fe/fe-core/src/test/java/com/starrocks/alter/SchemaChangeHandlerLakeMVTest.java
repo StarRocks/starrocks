@@ -14,7 +14,6 @@
 
 package com.starrocks.alter;
 
-import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
