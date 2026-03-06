@@ -49,8 +49,8 @@
 
 ### Statistics
 
-- [ ] **STAT-01**: Column statistics (min, max, ndv, null count) collected from ADBC metadata when available
-- [ ] **STAT-02**: Row count estimation available for query optimizer cost calculations
+- [x] **STAT-01**: Column statistics (min, max, ndv, null count) collected from ADBC metadata when available
+- [x] **STAT-02**: Row count estimation available for query optimizer cost calculations
 
 ### Optimizer Integration
 
@@ -132,8 +132,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MV-02 | Phase 3 | Pending |
 | MV-03 | Phase 3 | Pending |
 | MV-04 | Phase 3 | Pending |
-| STAT-01 | Phase 3 | Pending |
-| STAT-02 | Phase 3 | Pending |
+| STAT-01 | Phase 3 | Complete |
+| STAT-02 | Phase 3 | Complete |
 
 **Coverage:**
 - v1 requirements: 36 total

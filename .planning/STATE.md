@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-03-04)
 
 **Core value:** Users can CREATE EXTERNAL CATALOG with ADBC and query remote Arrow Flight SQL databases with full JDBC-parity features
-**Current focus:** Phase 2 - Scanning (Phase 1 complete)
+**Current focus:** Phase 3 - JDBC Parity (Phases 1-2 complete)
 
 ## Current Position
 
-Phase: 2 of 3 (Scanning) -- COMPLETE
-Plan: 4 of 4 in current phase (all done)
-Status: Phase 2 Complete, ready for Phase 3
-Last activity: 2026-03-06 — Completed 02-04 (BE wiring + full build verification)
+Phase: 3 of 4 (JDBC Parity)
+Plan: 2 of 3 in current phase (03-02 complete)
+Status: Executing Phase 3
+Last activity: 2026-03-07 — Completed 03-02 (table statistics with remote row count)
 
-Progress: [██████████] 100% (10/10 plans)
+Progress: [████████████████] 92% (12/13 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 10
+- Total plans completed: 12
 - Average duration: 20 min
-- Total execution time: 3.2 hours
+- Total execution time: 4.0 hours
 
 **By Phase:**
 
@@ -29,10 +29,11 @@ Progress: [██████████] 100% (10/10 plans)
 |-------|-------|-------|----------|
 | 01-foundation | 5 | 141 min | 28 min |
 | 02-scanning | 4 | 50 min | 13 min |
+| 03-jdbc-parity | 2 | 50 min | 25 min |
 
 **Recent Trend:**
-- Last 5 plans: 02-01 (14 min), 02-02 (5 min), 02-01 (8 min), 02-03 (8 min), 02-04 (15 min)
-- Trend: Phase 2 complete; 02-04 slightly longer due to test fixes from prior plans
+- Last 5 plans: 02-02 (5 min), 02-01 (8 min), 02-03 (8 min), 02-04 (15 min), 03-02 (25 min)
+- Trend: Phase 3 in progress; 03-02 involved build environment troubleshooting
 
 *Updated after each plan completion*
 
@@ -69,6 +70,12 @@ Recent decisions affecting current work:
 - Scan Node: Driver name mapping: flight_sql -> adbc_driver_flightsql; custom names pass through
 - BE Wiring: ConnectorType::ADBC = 9; ADBCConnector registered outside __APPLE__ guard
 - BE Wiring: ADBC_SCAN_NODE case mirrors JDBC_SCAN_NODE exactly in exec_factory and exec_node
+- Statistics: getTableStatistics() pushes COUNT(*) to remote for row count; columns default to unknown
+- Statistics: Per-column stats via ANALYZE TABLE through existing ExternalFullStatisticsCollectJob (no ADBC-specific code)
+
+### Roadmap Evolution
+
+- Phase 4 added: Integration Testing (MockedADBCMetadata plan tests + SQL test T/R files; E2E blocked on CI infra provisioning Flight SQL server)
 
 ### Pending Todos
 
@@ -81,6 +88,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-06
-Stopped at: Completed 02-04-PLAN.md (BE wiring + full build verification). Phase 2 complete.
+Last session: 2026-03-07
+Stopped at: Completed 03-02-PLAN.md (table statistics with remote row count)
 Resume file: None
