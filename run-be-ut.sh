@@ -408,6 +408,28 @@ resolve_be_ut_batch_jobs() {
     echo "$jobs"
 }
 
+wait_for_any_pid() {
+    local pid
+    local wait_status
+
+    WAITED_PID=
+    while true; do
+        for pid in "$@"; do
+            if ! kill -0 "$pid" 2>/dev/null; then
+                # Avoid `wait -p`, which is unavailable on some older CI bash versions.
+                if wait "$pid"; then
+                    wait_status=0
+                else
+                    wait_status=$?
+                fi
+                WAITED_PID="$pid"
+                return "$wait_status"
+            fi
+        done
+        sleep 0.1
+    done
+}
+
 discover_concrete_gtests() {
     local target="$1"
     local output_file="$2"
@@ -415,7 +437,7 @@ discover_concrete_gtests() {
     # Use the checked-in helper so the parsing logic is versioned and testable.
     python3 "${STARROCKS_HOME}/build-support/starrocks_test_batcher.py" discover \
         --binary "${STARROCKS_TEST_BINARY_DIR}/${target}" \
-        --gtest-filter "${TEST_NAME}" \
+        --gtest-filter="${TEST_NAME}" \
         --output "${output_file}"
 }
 
@@ -508,7 +530,6 @@ run_test_module_batches() {
     local batch_test_count
     local filter_bytes
     local pid
-    local finished_pid
     local wait_status
     local i
 
@@ -516,7 +537,7 @@ run_test_module_batches() {
         # Keep a fixed number of batch processes in flight so startup-heavy
         # tests still run concurrently without exploding process count.
         while (( ${#active_pids[@]} >= batch_jobs )); do
-            if wait -n -p finished_pid "${active_pids[@]}"; then
+            if wait_for_any_pid "${active_pids[@]}"; then
                 wait_status=0
             else
                 wait_status=$?
@@ -524,19 +545,19 @@ run_test_module_batches() {
 
             if (( wait_status != 0 )); then
                 overall_status=1
-                failed_batch_ids+=("${pid_to_batch_id[$finished_pid]}")
-                failed_log_paths+=("${pid_to_log_path[$finished_pid]}")
-                failed_manifests+=("${pid_to_manifest[$finished_pid]}")
+                failed_batch_ids+=("${pid_to_batch_id[$WAITED_PID]}")
+                failed_log_paths+=("${pid_to_log_path[$WAITED_PID]}")
+                failed_manifests+=("${pid_to_manifest[$WAITED_PID]}")
             fi
 
             local -a remaining_pids=()
             for pid in "${active_pids[@]}"; do
-                if [[ "$pid" != "$finished_pid" ]]; then
+                if [[ "$pid" != "$WAITED_PID" ]]; then
                     remaining_pids+=("$pid")
                 fi
             done
             active_pids=("${remaining_pids[@]}")
-            unset 'pid_to_batch_id[$finished_pid]' 'pid_to_log_path[$finished_pid]' 'pid_to_manifest[$finished_pid]'
+            unset 'pid_to_batch_id[$WAITED_PID]' 'pid_to_log_path[$WAITED_PID]' 'pid_to_manifest[$WAITED_PID]'
         done
 
         batch_id="${manifest##*/}"
@@ -559,7 +580,7 @@ run_test_module_batches() {
     done
 
     while (( ${#active_pids[@]} > 0 )); do
-        if wait -n -p finished_pid "${active_pids[@]}"; then
+        if wait_for_any_pid "${active_pids[@]}"; then
             wait_status=0
         else
             wait_status=$?
@@ -567,19 +588,19 @@ run_test_module_batches() {
 
         if (( wait_status != 0 )); then
             overall_status=1
-            failed_batch_ids+=("${pid_to_batch_id[$finished_pid]}")
-            failed_log_paths+=("${pid_to_log_path[$finished_pid]}")
-            failed_manifests+=("${pid_to_manifest[$finished_pid]}")
+            failed_batch_ids+=("${pid_to_batch_id[$WAITED_PID]}")
+            failed_log_paths+=("${pid_to_log_path[$WAITED_PID]}")
+            failed_manifests+=("${pid_to_manifest[$WAITED_PID]}")
         fi
 
         local -a remaining_pids=()
         for pid in "${active_pids[@]}"; do
-            if [[ "$pid" != "$finished_pid" ]]; then
+            if [[ "$pid" != "$WAITED_PID" ]]; then
                 remaining_pids+=("$pid")
             fi
         done
         active_pids=("${remaining_pids[@]}")
-        unset 'pid_to_batch_id[$finished_pid]' 'pid_to_log_path[$finished_pid]' 'pid_to_manifest[$finished_pid]'
+        unset 'pid_to_batch_id[$WAITED_PID]' 'pid_to_log_path[$WAITED_PID]' 'pid_to_manifest[$WAITED_PID]'
     done
 
     if (( overall_status != 0 )); then

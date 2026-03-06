@@ -19,11 +19,12 @@ import os
 import shutil
 import subprocess
 import sys
+from typing import List, Optional
 
 
-def parse_gtest_list_tests(output: str) -> list[str]:
-    tests: list[str] = []
-    suite = None
+def parse_gtest_list_tests(output: str) -> List[str]:
+    tests: List[str] = []
+    suite: Optional[str] = None
 
     for raw in output.splitlines():
         line = raw.split("#", 1)[0].rstrip()
@@ -80,8 +81,8 @@ def run_plan(args: argparse.Namespace) -> int:
     desired_batch_count = min(total_tests, max(args.jobs, args.jobs * args.factor))
     target_tests_per_batch = math.ceil(total_tests / desired_batch_count)
 
-    batches: list[list[str]] = []
-    current_batch: list[str] = []
+    batches: List[List[str]] = []
+    current_batch: List[str] = []
     current_filter_bytes = 0
 
     for test in tests:
@@ -112,11 +113,11 @@ def run_plan(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Helpers for batching starrocks_test gtests.")
+    parser = argparse.ArgumentParser(description="Helpers for batching monolithic BE UT gtests.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     discover = subparsers.add_parser("discover", help="List concrete gtests for a filtered binary run.")
-    discover.add_argument("--binary", required=True, help="Path to starrocks_test.")
+    discover.add_argument("--binary", required=True, help="Path to a monolithic BE UT binary.")
     discover.add_argument("--gtest-filter", required=True, help="Filter passed to --gtest_filter.")
     discover.add_argument("--output", required=True, help="Output file for concrete test names.")
     discover.set_defaults(func=run_discover)
