@@ -4,11 +4,22 @@ displayed_sidebar: docs
 
 # http_request
 
-Executes an HTTP request and returns the response as a JSON string. This function supports Named Parameters for improved readability and flexibility.
+Executes an HTTP request and returns the response as a JSON string. Supports both named and positional parameters.
+
+## Limits
+
+| Limit | Value |
+|-------|-------|
+| Maximum response size | 1 MB |
+| Maximum redirects | 20 |
+| Minimum timeout | 1 ms |
+| Maximum timeout | 300,000 ms (5 minutes) |
+| Supported protocols | HTTP, HTTPS only |
 
 ## Syntax
 
 ```sql
+-- Named parameters (recommended)
 http_request(
     url => <url>,
     [method => <method>,]
@@ -19,157 +30,47 @@ http_request(
     [username => <username>,]
     [password => <password>]
 )
+
+-- Positional parameters
+http_request(<url>[, <method>[, <body>[, <headers>[, <timeout_ms>[, <ssl_verify>[, <username>[, <password>]]]]]]])
 ```
 
 ## Parameters
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `url` | VARCHAR | Yes | - | Target URL for the HTTP request. Must be a valid HTTP or HTTPS URL. |
-| `method` | VARCHAR | No | `'GET'` | HTTP method. Supported: `GET`, `POST`, `PUT`, `DELETE`, `HEAD`, `OPTIONS`. |
+| `url` | VARCHAR | Yes | - | Target URL. Must be HTTP or HTTPS. |
+| `method` | VARCHAR | No | `'GET'` | HTTP method: `GET`, `POST`, `PUT`, `DELETE`, `HEAD`, `OPTIONS`. |
 | `body` | VARCHAR | No | `''` | Request body content. |
 | `headers` | VARCHAR | No | `'{}'` | Custom HTTP headers as a JSON object string. |
-| `timeout_ms` | INT | No | `30000` | Request timeout in milliseconds. Range: 1 ~ 300,000 (5 minutes). |
+| `timeout_ms` | INT | No | `30000` | Request timeout in milliseconds (1 ~ 300,000). |
 | `ssl_verify` | BOOLEAN | No | `true` | Enable SSL certificate verification. |
 | `username` | VARCHAR | No | `''` | HTTP Basic Authentication username. |
 | `password` | VARCHAR | No | `''` | HTTP Basic Authentication password. |
 
 ## Return value
 
-Returns a VARCHAR containing a JSON object:
+Returns a VARCHAR containing a JSON object.
 
-**Success response:**
+**Success:**
 ```json
 {"status": <http_code>, "body": <response_content>}
 ```
 
-**Error response:**
+**Error:**
 ```json
 {"status": -1, "body": null, "error": "<error_message>"}
 ```
 
-### Error cases
-
-The function returns a JSON error response (status: -1) for:
-
-- Invalid or empty URL
-- Unsupported protocol (only HTTP/HTTPS allowed)
-- Invalid HTTP method
-- Malformed headers JSON
-- Network/connection errors
-- DNS resolution failure
-- Response size exceeds 1MB limit
-- Request timeout
-- SSRF protection violation (blocked by security policy)
-
-## Security Configuration
-
-This function includes built-in SSRF (Server-Side Request Forgery) protection. Administrators can configure security settings using Frontend (FE) configuration options.
-
-### Security Levels
-
-| Level | Name | Description |
-|-------|------|-------------|
-| 1 | TRUSTED | Allow all requests including private IPs. Use only in trusted environments. |
-| 2 | PUBLIC | Block private IPs, allow all public hosts. |
-| 3 | RESTRICTED | Block private IPs, require allowlist for hosts. **(Default)** |
-| 4 | PARANOID | Block all requests. Useful for disabling the function entirely. |
-
-### Configuration Options
-
-```sql
--- Set security level (1-4)
-ADMIN SET FRONTEND CONFIG ("http_request_security_level" = "3");
-
--- Configure allowed hosts using regex pattern
-ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "api\\.example\\.com|.*\\.trusted\\.org");
-
--- Configure allowed IP addresses
-ADMIN SET FRONTEND CONFIG ("http_request_ip_allowlist" = "203.0.113.1,198.51.100.0");
-
--- Allow private IPs if explicitly in allowlist (default: false)
-ADMIN SET FRONTEND CONFIG ("http_request_allow_private_in_allowlist" = "true");
-
--- Enforce SSL verification (cannot be disabled by users)
-ADMIN SET FRONTEND CONFIG ("http_request_ssl_verification_required" = "true");
-```
-
-### Blocked IP Ranges
-
-The following IP ranges are blocked by default (security levels 2-4):
-
-- `127.0.0.0/8` - Loopback
-- `10.0.0.0/8` - Private Class A
-- `172.16.0.0/12` - Private Class B
-- `192.168.0.0/16` - Private Class C
-- `169.254.0.0/16` - Link-local (cloud metadata endpoints)
-- `0.0.0.0/8` - Current network
-- IPv6 loopback (`::1`)
-- IPv6 link-local (`fe80::/10`)
-- IPv6 unique local (`fc00::/7`)
-
-### Allowlist Behavior
-
-> **Important Notes:**
->
-> **For Public IPs/Hosts:**
-> - At security level 2 (PUBLIC): Allowlist is NOT required. All public hosts are allowed.
-> - At security level 3 (RESTRICTED): Only hosts/IPs in the allowlist are allowed.
->
-> **For Private IPs:**
-> - Private IPs are **always blocked by default**, even if they are in the allowlist.
-> - To allow a private IP, you must **BOTH**:
->   1. Add the IP to `http_request_ip_allowlist`
->   2. Set `http_request_allow_private_in_allowlist` to `true`
->
-> **Security level 4 (PARANOID):** All requests are blocked regardless of allowlist settings.
-
-**Example: Allow internal API server at `10.0.0.100`:**
-
-```sql
--- Step 1: Set security level
-ADMIN SET FRONTEND CONFIG ("http_request_security_level" = "3");
-
--- Step 2: Add private IP to allowlist
-ADMIN SET FRONTEND CONFIG ("http_request_ip_allowlist" = "10.0.0.100");
-
--- Step 3: Enable private IP allowlist (REQUIRED for private IPs)
-ADMIN SET FRONTEND CONFIG ("http_request_allow_private_in_allowlist" = "true");
-```
-
-**Allowlist Summary Table:**
-
-| Target | Level 2 (PUBLIC) | Level 3 (RESTRICTED) |
-|--------|------------------|---------------------|
-| Public IP (not in allowlist) | Allowed | Blocked |
-| Public IP (in allowlist) | Allowed | Allowed |
-| Private IP (not in allowlist) | Blocked | Blocked |
-| Private IP (in allowlist only) | Blocked | Blocked |
-| Private IP (in allowlist + `allow_private_in_allowlist=true`) | Allowed | Allowed |
-
-## Limits
-
-| Limit | Value |
-|-------|-------|
-| Maximum response size | 1 MB |
-| Minimum timeout | 1 ms |
-| Maximum timeout | 300,000 ms (5 minutes) |
-| Supported protocols | HTTP, HTTPS only |
-
 ## Examples
 
-### Example 1: Simple GET request
+### Simple GET request
 
 ```sql
 SELECT http_request(url => 'https://httpbin.org/get');
 ```
 
-Result:
-```json
-{"status": 200, "body": {"args": {}, "headers": {...}, "origin": "...", "url": "..."}}
-```
-
-### Example 2: Extract status code using json_query
+### Extract status code using json_query
 
 ```sql
 SELECT json_query(
@@ -178,16 +79,7 @@ SELECT json_query(
 ) AS status_code;
 ```
 
-Result:
-```
-+-------------+
-| status_code |
-+-------------+
-| 200         |
-+-------------+
-```
-
-### Example 3: POST request with JSON body
+### POST request with JSON body
 
 ```sql
 SELECT http_request(
@@ -198,7 +90,7 @@ SELECT http_request(
 );
 ```
 
-### Example 4: GET with custom headers
+### Custom headers
 
 ```sql
 SELECT http_request(
@@ -207,16 +99,7 @@ SELECT http_request(
 );
 ```
 
-### Example 5: Request with custom timeout
-
-```sql
-SELECT http_request(
-    url => 'https://slow-api.example.com/data',
-    timeout_ms => 60000
-);
-```
-
-### Example 6: HTTP Basic Authentication
+### HTTP Basic Authentication
 
 ```sql
 SELECT http_request(
@@ -226,38 +109,16 @@ SELECT http_request(
 );
 ```
 
-### Example 7: Disable SSL verification (for self-signed certificates)
+### Custom timeout
 
 ```sql
 SELECT http_request(
-    url => 'https://self-signed.example.com/api',
-    ssl_verify => false
+    url => 'https://slow-api.example.com/data',
+    timeout_ms => 60000
 );
 ```
 
-> **Warning:** Only disable SSL verification in development environments with self-signed certificates. If `http_request_ssl_verification_required` is set to `true` by the administrator, this option will be ignored and SSL verification will always be enabled.
-
-### Example 8: DELETE request
-
-```sql
-SELECT http_request(
-    url => 'https://api.example.com/resources/123',
-    method => 'DELETE'
-);
-```
-
-### Example 9: HEAD request (returns headers only)
-
-```sql
-SELECT http_request(
-    url => 'https://httpbin.org/get',
-    method => 'HEAD'
-);
-```
-
-### Example 10: Named parameters in any order
-
-Named parameters can be specified in any order:
+### Named parameters in any order
 
 ```sql
 SELECT http_request(
@@ -268,7 +129,13 @@ SELECT http_request(
 );
 ```
 
-### Example 11: Sending Slack webhook notification
+### Positional parameters
+
+```sql
+SELECT http_request('https://httpbin.org/post', 'POST', '{"key": "value"}');
+```
+
+### Sending Slack webhook notification
 
 ```sql
 SELECT http_request(
@@ -279,7 +146,7 @@ SELECT http_request(
 );
 ```
 
-### Example 12: Parse JSON response body
+### Parse nested JSON response
 
 ```sql
 SELECT json_query(
@@ -291,13 +158,59 @@ SELECT json_query(
 ) AS post_title;
 ```
 
-## Use Cases
+### Disable SSL verification
 
-- **API Integration:** Call external REST APIs directly from SQL queries
-- **Webhook Notifications:** Send alerts to Slack, Teams, or other services
-- **Data Enrichment:** Fetch additional data from external services during query execution
-- **Health Checks:** Monitor external service availability
+```sql
+SELECT http_request(
+    url => 'https://self-signed.example.com/api',
+    ssl_verify => false
+);
+```
 
-## Keywords
+> **Note:** If `http_request_ssl_verification_required` is set to `true` by the administrator, this option will be ignored.
 
-HTTP, HTTPS, REST, API, REQUEST, WEBHOOK, CURL
+## Security configuration
+
+This function includes built-in SSRF (Server-Side Request Forgery) protection with DNS rebinding prevention and redirect limits (max 20 hops).
+
+### Security levels
+
+| Level | Name | Description |
+|-------|------|-------------|
+| 1 | TRUSTED | Allow all requests including private IPs. |
+| 2 | PUBLIC | Block private IPs, allow all public hosts. |
+| 3 | RESTRICTED | Require allowlist for all hosts. **(Default)** |
+| 4 | PARANOID | Block all requests. |
+
+### Configuration options
+
+| Config | Type | Default | Description |
+|--------|------|---------|-------------|
+| `http_request_security_level` | INT | `3` | Security level (1-4). |
+| `http_request_host_allowlist_regexp` | VARCHAR | `''` | Regex pattern for allowed hostnames. |
+| `http_request_ip_allowlist` | VARCHAR | `''` | Comma-separated allowed IPv4 addresses. |
+| `http_request_allow_private_in_allowlist` | BOOLEAN | `false` | Allow private IPs if in allowlist. |
+| `http_request_ssl_verification_required` | BOOLEAN | `true` | Enforce SSL verification (cannot be disabled by users). |
+
+```sql
+ADMIN SET FRONTEND CONFIG ("http_request_security_level" = "3");
+ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "api\\.example\\.com|.*\\.trusted\\.org");
+ADMIN SET FRONTEND CONFIG ("http_request_ip_allowlist" = "203.0.113.1,198.51.100.0");
+```
+
+### Allowlist behavior
+
+| Target | Level 2 (PUBLIC) | Level 3 (RESTRICTED) |
+|--------|------------------|---------------------|
+| Public IP (not in allowlist) | Allowed | Blocked |
+| Public IP (in allowlist) | Allowed | Allowed |
+| Private IP (not in allowlist) | Blocked | Blocked |
+| Private IP (in allowlist + `allow_private=true`) | Allowed | Allowed |
+
+### Blocked IP ranges (levels 2-4)
+
+`127.0.0.0/8`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `169.254.0.0/16`, `0.0.0.0/8`, IPv6 loopback (`::1`), link-local (`fe80::/10`), unique local (`fc00::/7`).
+
+## keyword
+
+HTTP, REQUEST, API, CALL
