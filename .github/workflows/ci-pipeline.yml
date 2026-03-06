@@ -308,39 +308,20 @@ jobs:
         if: needs.be-checker.outputs.be_change == 'true' || needs.be-checker.outputs.pre_format_conclusion != 'success'
         uses: actions/checkout@v6
         with:
-          fetch-depth: 0
-
-      - name: BRANCH INFO
-        id: branch
-        if: steps.checkout_code.outcome == 'success'
-        run: |
-          echo ${{github.base_ref}}
-          echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
-
-      - name: Checkout PR
-        id: checkout_pr
-        if: steps.checkout_code.outcome == 'success'
-        run: |
-          BRANCH=${{steps.branch.outputs.branch}}
-          git config --global user.name "wanpengfei-git";
-          git config --global user.email "wanpengfei91@163.com";
-          git checkout $BRANCH;
-          git pull;
-          BRANCH_NAME="${BRANCH}-${PR_NUMBER}";
-          git fetch origin pull/${PR_NUMBER}/head:${BRANCH_NAME};
-          git checkout $BRANCH_NAME;
-          git checkout -b merge_pr;
-          git merge --squash --no-edit ${BRANCH} || (echo "::error::Merge conflict, please check." && exit -1);
+          # A shallow checkout of the PR merge ref avoids fetching every branch
+          # and tag in the repository while keeping the merged tree for linting.
+          ref: refs/pull/${{ github.event.pull_request.number }}/merge
+          fetch-depth: 1
 
       - name: Run Clang-Format
         id: run_clang_format
-        if: steps.checkout_pr.outcome == 'success'
+        if: steps.checkout_code.outcome == 'success'
         run: |
           export PATH=/var/lib/llvm/bin:$PATH
           bash build-support/check-format.sh
 
       - name: Run Common Config Header Guardrail
-        if: steps.checkout_pr.outcome == 'success'
+        if: steps.checkout_code.outcome == 'success'
         run: |
           bash build-support/check_common_config_header_includes.sh
 
