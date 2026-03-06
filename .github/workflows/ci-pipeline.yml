@@ -249,6 +249,7 @@ jobs:
               - 'be/**/CMakeLists.txt'
               - 'be/cmake_modules/**'
               - 'gensrc/**'
+              - '!be/test/**'
 
       - name: Prepare info
         run: |
