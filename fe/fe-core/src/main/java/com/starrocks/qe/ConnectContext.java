@@ -1615,8 +1615,32 @@ public class ConnectContext {
         dbName = normalizeName(dbName);
 
         if (!Strings.isNullOrEmpty(dbName) && metadataMgr.getDb(this, this.getCurrentCatalog(), dbName) == null) {
-            LOG.debug("Unknown catalog {} and db {}", this.getCurrentCatalog(), dbName);
-            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+            // On a follower FE, the database may have been created on the leader but the
+            // corresponding journal entry has not been replayed locally yet. Wait for the
+            // local replayer to catch up to the latest committed journal before giving up.
+            // This avoids spurious "Unknown database" errors when DDL statements are issued
+            // immediately after CREATE DATABASE hits a different FE pod.
+            if (!globalStateMgr.isLeader()) {
+                try {
+                    // Fetch the leader's current max journal ID via a lightweight forward RPC.
+                    // Using the local journal.getMaxJournalId() is insufficient because BDBJE
+                    // replication itself may not have delivered the latest entries to the local
+                    // BDB database yet. The leader's value is authoritative and guaranteed to be
+                    // >= any journal ID written before this USE/COM_INIT_DB arrived.
+                    long leaderMaxJournalId = LeaderOpExecutor.fetchLeaderMaxJournalId(this);
+                    if (leaderMaxJournalId > 0) {
+                        int timeoutMs = (int) (getSessionVariable().getQueryTimeoutS() * 1000L);
+                        globalStateMgr.getJournalObservable().waitOn(leaderMaxJournalId, timeoutMs);
+                    }
+                } catch (Exception e) {
+                    LOG.warn("Failed to wait for journal replay in changeCatalogDb, db={}: {}",
+                            dbName, e.getMessage());
+                }
+            }
+            if (metadataMgr.getDb(this, this.getCurrentCatalog(), dbName) == null) {
+                LOG.debug("Unknown catalog {} and db {}", this.getCurrentCatalog(), dbName);
+                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+            }
         }
 
         // Here we check the request permission that sent by the mysql client or jdbc.
