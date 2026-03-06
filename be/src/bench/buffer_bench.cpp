@@ -23,10 +23,10 @@
 #include <initializer_list>
 #include <vector>
 
-#include "runtime/current_thread.h"
-#include "common/memory/column_allocator.h"
-#include "runtime/memory/memory_allocator.h"
 #include "column/buffer.h"
+#include "common/memory/column_allocator.h"
+#include "runtime/current_thread.h"
+#include "runtime/memory/memory_allocator.h"
 
 namespace starrocks {
 

@@ -188,4 +188,3 @@ void Buffer<T, padding>::swap(Buffer& other) noexcept {
 }
 
 } // namespace starrocks::util
-

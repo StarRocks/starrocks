@@ -19,4 +19,3 @@ namespace starrocks::util {
 alignas(std::max_align_t) uint8_t empty_raw_buffer[empty_raw_buffer_size];
 
 } // namespace starrocks::util
-

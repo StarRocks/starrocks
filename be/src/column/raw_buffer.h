@@ -450,7 +450,7 @@ template <class InputIt, std::enable_if_t<std::is_base_of_v<std::forward_iterato
                                                             typename std::iterator_traits<InputIt>::iterator_category>,
                                           bool>>
 typename RawBuffer<T, padding>::iterator RawBuffer<T, padding>::append(memory::Allocator* allocator, InputIt first,
-                                                                        InputIt last) {
+                                                                       InputIt last) {
     size_t count = std::distance(first, last);
     if (UNLIKELY(count == 0)) {
         return end();
@@ -473,13 +473,13 @@ typename RawBuffer<T, padding>::iterator RawBuffer<T, padding>::append(memory::A
 
 template <class T, size_t padding>
 typename RawBuffer<T, padding>::iterator RawBuffer<T, padding>::append(memory::Allocator* allocator,
-                                                                        std::initializer_list<T> ilist) {
+                                                                       std::initializer_list<T> ilist) {
     return append(allocator, ilist.begin(), ilist.end());
 }
 
 template <class T, size_t padding>
 typename RawBuffer<T, padding>::iterator RawBuffer<T, padding>::append(memory::Allocator* allocator, size_t count,
-                                                                        const T& value) {
+                                                                       const T& value) {
     if (UNLIKELY(count == 0)) {
         return end();
     }
@@ -506,4 +506,3 @@ void RawBuffer<T, padding>::swap(RawBuffer& other) noexcept {
 }
 
 } // namespace starrocks::util
-
