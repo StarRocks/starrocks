@@ -14,11 +14,15 @@
 
 package com.starrocks.connector.adbc;
 
+import com.starrocks.catalog.ADBCPartitionKey;
 import com.starrocks.catalog.ADBCTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.NullablePartitionKey;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorPartitionTraits;
+import com.starrocks.connector.PartitionInfo;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
@@ -547,6 +551,56 @@ public class ADBCMetadataTest {
         List<String> partitionNames = metadata.listPartitionNames("mydb", "tbl1", null);
         assertNotNull(partitionNames);
         assertTrue(partitionNames.isEmpty());
+    }
+
+    // ==================== MV Support Verification Tests ====================
+    // These structural tests verify the wiring that enables materialized views
+    // over ADBC tables. Full behavioral MV tests (CREATE MV, REFRESH, EXPLAIN
+    // rewrite) require MockedADBCMetadata + ConnectorPlanTestBase and are
+    // deferred to Phase 4: Integration Testing.
+
+    @Test
+    public void testMVSupportedTableType() {
+        // ADBC must be in TRAITS_TABLE (registered in 03-01) for MV to work.
+        // ConnectorPartitionTraits.isSupported() is the proxy check: if traits
+        // are registered, MaterializedViewAnalyzer accepts the table type.
+        assertTrue(ConnectorPartitionTraits.isSupported(Table.TableType.ADBC));
+    }
+
+    @Test
+    public void testADBCPartitionTraitsGetTableName() {
+        // Create ADBCTable with known catalog/db/table names
+        List<Column> cols = Arrays.asList(new Column("id", IntegerType.INT));
+        ADBCTable adbcTable = new ADBCTable(1, "orders", cols, "sales_db", "flight_catalog", properties);
+
+        // Build traits via the static factory (mirrors production code path)
+        ConnectorPartitionTraits traits = ConnectorPartitionTraits.build(Table.TableType.ADBC);
+        // Set the table field (protected) via the buildWithoutCache path
+        ConnectorPartitionTraits fullTraits = ConnectorPartitionTraits.build(adbcTable);
+
+        assertEquals("flight_catalog.sales_db.orders", fullTraits.getTableName());
+    }
+
+    @Test
+    public void testADBCPartitionTraitsGetPartitions() {
+        List<Column> cols = Arrays.asList(new Column("id", IntegerType.INT));
+        ADBCTable adbcTable = new ADBCTable(1, "tbl", cols, "db", "cat", properties);
+
+        ConnectorPartitionTraits traits = ConnectorPartitionTraits.build(adbcTable);
+        List<PartitionInfo> partitions = traits.getPartitions(Arrays.asList("p1", "p2"));
+
+        assertNotNull(partitions);
+        assertTrue(partitions.isEmpty());
+    }
+
+    @Test
+    public void testADBCPartitionTraitsCreateEmptyKey() {
+        ConnectorPartitionTraits traits = ConnectorPartitionTraits.build(Table.TableType.ADBC);
+        PartitionKey key = traits.createEmptyKey();
+
+        assertNotNull(key);
+        assertInstanceOf(ADBCPartitionKey.class, key);
+        assertInstanceOf(NullablePartitionKey.class, key);
     }
 
     @Test
