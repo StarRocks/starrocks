@@ -20,6 +20,7 @@
 #include <random>
 
 #include "base/concurrency/await.h"
+#include "base/path/filesystem_util.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "base/testutil/scoped_updater.h"
@@ -32,7 +33,6 @@
 #include "storage/lake/update_manager.h"
 #include "storage/lake/versioned_tablet.h"
 #include "test_util.h"
-#include "util/filesystem_util.h"
 #include "util/thrift_rpc_helper.h"
 
 // NOLINTNEXTLINE
