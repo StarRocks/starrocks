@@ -36,15 +36,15 @@
 
 ### Partitioning
 
-- [ ] **PART-01**: ADBC connector discovers partitions from remote source metadata
-- [ ] **PART-02**: Partition names are listed and cached
-- [ ] **PART-03**: Partition pruning filters irrelevant partitions during query planning
+- [x] **PART-01**: ADBC connector discovers partitions from remote source metadata
+- [x] **PART-02**: Partition names are listed and cached
+- [x] **PART-03**: Partition pruning filters irrelevant partitions during query planning
 
 ### Materialized Views
 
-- [ ] **MV-01**: User can create materialized view against ADBC external tables
+- [x] **MV-01**: User can create materialized view against ADBC external tables
 - [ ] **MV-02**: Async MV refresh fetches data from ADBC tables
-- [ ] **MV-03**: Partition change tracking (PCT) enables incremental MV refresh
+- [x] **MV-03**: Partition change tracking (PCT) enables incremental MV refresh
 - [ ] **MV-04**: Query optimizer rewrites queries to use MVs over ADBC tables
 
 ### Statistics
@@ -125,12 +125,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | OPT-02 | Phase 2 | Complete |
 | OPT-03 | Phase 2 | Complete |
 | OPT-04 | Phase 2 | Complete |
-| PART-01 | Phase 3 | Pending |
-| PART-02 | Phase 3 | Pending |
-| PART-03 | Phase 3 | Pending |
-| MV-01 | Phase 3 | Pending |
+| PART-01 | Phase 3 | Complete |
+| PART-02 | Phase 3 | Complete |
+| PART-03 | Phase 3 | Complete |
+| MV-01 | Phase 3 | Complete |
 | MV-02 | Phase 3 | Pending |
-| MV-03 | Phase 3 | Pending |
+| MV-03 | Phase 3 | Complete |
 | MV-04 | Phase 3 | Pending |
 | STAT-01 | Phase 3 | Complete |
 | STAT-02 | Phase 3 | Complete |
