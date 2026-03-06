@@ -283,6 +283,38 @@ jobs:
           rm -rf ${{ steps.run_ut.outputs.COV_DIR }}
           rm -rf ${{ github.workspace }}/*
 
+  clang-tidy-full-ubuntu:
+    runs-on: [self-hosted, normal]
+    name: Clang-Tidy Full (Ubuntu)
+    needs:
+      - info
+    continue-on-error: true
+    env:
+      BRANCH: ${{ needs.info.outputs.BRANCH }}
+      PR_NUMBER: ${{ needs.info.outputs.PR_NUMBER }}
+    steps:
+      - name: UPDATE ECI & RUN CLANG-TIDY
+        id: run_clang_tidy
+        shell: bash
+        timeout-minutes: 120
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          ./bin/elastic-build.sh --repository ${{ github.repository }} --branch ${BRANCH} --pr ${PR_NUMBER} \
+            --build Release --linuxdistro ubuntu --be --clang-tidy --clang-tidy-mode full
+
+      - name: clean ECI
+        if: always()
+        run: |
+          echo ${{ steps.run_clang_tidy.outputs.ECI_ID }}
+          eci rm ${{ steps.run_clang_tidy.outputs.ECI_ID }}
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -f ${{ steps.run_clang_tidy.outputs.RES_FILE }}
+          rm -f ${{ steps.run_clang_tidy.outputs.RES_LOG }}
+          rm -rf ${{ github.workspace }}/*
+
   build:
     runs-on: [self-hosted, normal]
     name: BUILD
