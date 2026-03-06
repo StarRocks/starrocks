@@ -280,6 +280,7 @@ jobs:
 
   thirdparty-update:
     runs-on: [self-hosted, normal]
+    needs: [be-checker]
     name: Thirdparty Update
     continue-on-error: true
     strategy:
@@ -290,6 +291,10 @@ jobs:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
       REPO: ${{ github.repository }}
+      PRE_COMMIT: ${{ needs.be-checker.outputs.pre_commit }}
+      PRE_COMMIT_CONCLUSION: ${{ needs.be-checker.outputs.pre_commit_conclusion }}
+      ONLY_TEST: ${{ needs.be-checker.outputs.only_test }}
+      BE_CHANGE: ${{ needs.be-checker.outputs.be_change }}
 
     steps:
       - name: clean
