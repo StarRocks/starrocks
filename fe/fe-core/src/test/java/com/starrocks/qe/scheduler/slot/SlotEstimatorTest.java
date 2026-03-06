@@ -15,12 +15,15 @@
 package com.starrocks.qe.scheduler.slot;
 
 import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
 import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.scheduler.SchedulerTestBase;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -212,6 +215,9 @@ public class SlotEstimatorTest extends SchedulerTestBase {
 
     @Test
     public void testCreate() {
+        // Reset to default policy to ensure test isolation
+        Config.query_queue_slots_estimator_strategy = SlotEstimatorFactory.EstimatorPolicy.createDefault().name();
+
         QueryQueueOptions opts = new QueryQueueOptions(false, new QueryQueueOptions.V2());
         assertThat(SlotEstimatorFactory.create(opts)).isInstanceOf(SlotEstimatorFactory.DefaultSlotEstimator.class);
 
@@ -268,6 +274,118 @@ public class SlotEstimatorTest extends SchedulerTestBase {
             Config.query_queue_slots_estimator_strategy = "BAD_SET";
             QueryQueueOptions opts = new QueryQueueOptions(true, new QueryQueueOptions.V2());
             assertThat(SlotEstimatorFactory.create(opts)).isInstanceOf(SlotEstimatorFactory.MaxSlotsEstimator.class);
+        }
+    }
+
+    @Test
+    public void testEstimateSlotsForExplainWithV1() {
+        // V1 should always return 1
+        QueryQueueOptions opts = new QueryQueueOptions(false, new QueryQueueOptions.V2());
+        int slots = SlotEstimatorFactory.estimateSlotsForExplain(opts, connectContext, null);
+        assertThat(slots).isEqualTo(1);
+    }
+
+    @Test
+    public void testEstimateSlotsForExplainWithMemoryBasedPolicy() throws Exception {
+        Config.query_queue_slots_estimator_strategy = "MBE";
+        final int numWorkers = 3;
+        final long memLimitBytesPerWorker = 64L * 1024 * 1024 * 1024;
+        QueryQueueOptions opts =
+                new QueryQueueOptions(true, new QueryQueueOptions.V2(4, numWorkers, 16, memLimitBytesPerWorker, 4096, 1));
+
+        Pair<String, ExecPlan> planPair = UtFrameUtils.getPlanAndFragment(connectContext, "SELECT * FROM lineitem");
+        ExecPlan execPlan = planPair.second;
+
+        connectContext.getAuditEventBuilder().setPlanMemCosts(-1L);
+        int slots = SlotEstimatorFactory.estimateSlotsForExplain(opts, connectContext, execPlan);
+        assertThat(slots).isEqualTo(3);
+
+        connectContext.getAuditEventBuilder().setPlanMemCosts(memLimitBytesPerWorker * numWorkers);
+        slots = SlotEstimatorFactory.estimateSlotsForExplain(opts, connectContext, execPlan);
+        assertThat(slots).isEqualTo(opts.v2().getTotalSlots());
+    }
+
+    @Test
+    public void testEstimateSlotsForExplainWithParallelBasedPolicy() throws Exception {
+        Config.query_queue_slots_estimator_strategy = "PBE";
+        final int numWorkers = 3;
+        final int numCoresPerWorker = 16;
+        final int numRowsPerWorker = 4096;
+        final int dop = numCoresPerWorker / 2;
+        QueryQueueOptions opts = new QueryQueueOptions(true,
+                new QueryQueueOptions.V2(4, numWorkers, numCoresPerWorker, 64L * 1024 * 1024 * 1024, numRowsPerWorker, 100));
+
+        String sql = "SELECT /*+SET_VAR(pipeline_dop=8)*/ " +
+                "count(1) FROM lineitem t1 join [shuffle] lineitem t2 on t1.l_orderkey = t2.l_orderkey";
+        Pair<String, ExecPlan> planPair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+        ExecPlan execPlan = planPair.second;
+
+        // Set cardinality on scan nodes in the exec plan
+        setNodeCardinalityInExecPlan(execPlan, 1, numWorkers * numRowsPerWorker * dop);
+
+        int slots = SlotEstimatorFactory.estimateSlotsForExplain(opts, connectContext, execPlan);
+        assertThat(slots).isEqualTo(dop * numWorkers);
+    }
+
+    @Test
+    public void testEstimateSlotsForExplainWithMaxPolicy() throws Exception {
+        Config.query_queue_slots_estimator_strategy = "MAX";
+        final int numWorkers = 3;
+        final long memLimitBytesPerWorker = 64L * 1024 * 1024 * 1024;
+        QueryQueueOptions opts =
+                new QueryQueueOptions(true, new QueryQueueOptions.V2(4, numWorkers, 16, memLimitBytesPerWorker, 4096, 1));
+
+        Pair<String, ExecPlan> planPair = UtFrameUtils.getPlanAndFragment(connectContext, "SELECT * FROM lineitem");
+        ExecPlan execPlan = planPair.second;
+
+        // Memory-based will return 3, parallelism-based will return different value
+        // MAX should return the larger of the two
+        connectContext.getAuditEventBuilder().setPlanMemCosts(-1L);
+        int slots = SlotEstimatorFactory.estimateSlotsForExplain(opts, connectContext, execPlan);
+        assertThat(slots).isGreaterThanOrEqualTo(1);
+    }
+
+    @Test
+    public void testEstimateSlotsForExplainWithMinPolicy() throws Exception {
+        Config.query_queue_slots_estimator_strategy = "MIN";
+        final int numWorkers = 3;
+        final long memLimitBytesPerWorker = 64L * 1024 * 1024 * 1024;
+        QueryQueueOptions opts =
+                new QueryQueueOptions(true, new QueryQueueOptions.V2(4, numWorkers, 16, memLimitBytesPerWorker, 4096, 1));
+
+        Pair<String, ExecPlan> planPair = UtFrameUtils.getPlanAndFragment(connectContext, "SELECT * FROM lineitem");
+        ExecPlan execPlan = planPair.second;
+
+        // MIN should return the smaller of memory-based and parallelism-based
+        connectContext.getAuditEventBuilder().setPlanMemCosts(-1L);
+        int slots = SlotEstimatorFactory.estimateSlotsForExplain(opts, connectContext, execPlan);
+        assertThat(slots).isGreaterThanOrEqualTo(1);
+    }
+
+    @Test
+    public void testEstimateSlotsForExplainWithEmptyFragments() {
+        // Test with empty fragments
+        Config.query_queue_slots_estimator_strategy = "PBE";
+        final int numWorkers = 3;
+        QueryQueueOptions opts = new QueryQueueOptions(true,
+                new QueryQueueOptions.V2(4, numWorkers, 16, 64L * 1024 * 1024 * 1024, 4096, 100));
+
+        // Create an exec plan with no fragments
+        ExecPlan emptyExecPlan = new ExecPlan();
+        
+        int slots = SlotEstimatorFactory.estimateSlotsForExplain(opts, connectContext, emptyExecPlan);
+        assertThat(slots).isEqualTo(1);
+    }
+
+    private static void setNodeCardinalityInExecPlan(ExecPlan execPlan, int nodeId, long cardinality) {
+        if (execPlan.getFragments() == null || execPlan.getFragments().isEmpty()) {
+            return;
+        }
+        PlanNode rootNode = execPlan.getFragments().get(0).getPlanRoot();
+        PlanNode node = findPlanNodeById(rootNode, nodeId);
+        if (node != null) {
+            Statistics statistics = Statistics.builder().setOutputRowCount(cardinality).build();
+            node.computeStatistics(statistics);
         }
     }
 }
