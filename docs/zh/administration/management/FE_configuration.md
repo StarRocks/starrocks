@@ -3630,6 +3630,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 在共享数据集群中，Leader FE 内存中保留的最近成功 Compaction 任务记录数。您可以使用 `SHOW PROC '/compactions'` 命令查看最近成功的 Compaction 任务记录。请注意，Compaction 历史记录存储在 FE 进程内存中，如果 FE 进程重启，它将丢失。
 - 引入版本: v3.1.0
 
+##### `lake_compaction_max_parallel_default`
+
+- 默认值: 3
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 当建表时未指定 `lake_compaction_max_parallel` 表属性时，每个 tablet 的默认最大并行 Compaction 子任务数。`0` 表示禁用并行 Compaction。此配置作为表属性 `lake_compaction_max_parallel` 的默认值。
+
 ##### `lake_compaction_max_tasks`
 
 - 默认值: -1
