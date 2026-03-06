@@ -996,7 +996,7 @@ public:
 };
 
 template <LogicalType LT>
-std::unique_ptr<HashIndex> create_fixed_hash_index() {
+std::unique_ptr<HashIndex> create_hash_index() {
     if constexpr (LT == TYPE_DATE) {
         return std::make_unique<HashIndexImpl<int32_t>>();
     } else if constexpr (LT == TYPE_DATETIME) {
@@ -1034,7 +1034,7 @@ static std::unique_ptr<HashIndex> create_hash_index(LogicalType key_type, size_t
     switch (key_type) {
 #define M(LT) \
     case LT:  \
-        return create_fixed_hash_index<LT>();
+        return create_hash_index<LT>();
         APPLY_FOR_ALL_PK_SUPPORT_TYPE(M)
 #undef M
     default:
