@@ -173,6 +173,7 @@ public class RemoveOrphanFilesProcedure extends IcebergTableProcedure {
             ManifestFile.schema().select(
                     "manifest_path",
                     "manifest_length",
+                    "content",
                     "partition_spec_id",
                     "added_snapshot_id",
                     "deleted_data_files_count");
