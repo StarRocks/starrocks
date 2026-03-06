@@ -18,65 +18,58 @@ PROPERTIES (
     "replication_num" = "1"
 );
 
--- Insert test data: c_int values range from 1 to 100
 INSERT INTO t_minmax
 SELECT
     idx,
-    idx % 100 + 1,           -- c_int: 1 to 100
-    idx * 2,                 -- c_bigint: 0, 2, 4, ...
-    CAST(date_add('2024-01-01', INTERVAL (idx % 30) DAY) AS DATE),  -- c_date: varies within Jan 2024
-    concat('str-', idx)      -- c_string: unique strings
+    idx % 100 + 1,
+    idx * 2,
+    CAST(date_add('2024-01-01', INTERVAL (idx % 30) DAY) AS DATE),
+    concat('str-', idx)
 FROM TABLE(generate_series(0, 9999)) AS t(idx);
 
--- Create probe table for join with MIN/MAX aggregation
 CREATE TABLE t_probe (
     k1 INT NOT NULL,
     probe_value INT NULL
 ) ENGINE=OLAP
-DUPLICATE KEY(k1)
+PRIMARY KEY(k1)
 DISTRIBUTED BY HASH(k1) BUCKETS 8
 PROPERTIES (
     "replication_num" = "1"
 );
 
 INSERT INTO t_probe
-SELECT idx, idx % 50 FROM TABLE(generate_series(0, 999) AS t(idx));
+SELECT idx, idx % 50 FROM TABLE(generate_series(0, 999)) AS t(idx);
 
+-- delete some data to ensure some optimization based on metadata is not working, but runtime filter should still work
+DELETE FROM t_minmax WHERE k1 < 100;
+DELETE FROM t_probe WHERE k1 < 100;
+
+set enable_min_max_runtime_filter=true;
 set enable_rewrite_simple_agg_to_meta_scan=false;
--- # Test 1: MIN only query - should generate MIN runtime filter
--- The global MIN of c_int is 1, so filter: c_int >= 1
+
+function: assert_explain_verbose_contains('SELECT MIN(c_int) AS min_val FROM t_minmax', '- filter_id = 0', 'build_expr')
+function: assert_explain_verbose_contains('SELECT MAX(c_int) AS max_val FROM t_minmax', '- filter_id = 0', 'build_expr')
+
 SELECT MIN(c_int) AS min_val FROM t_minmax;
 
--- # Test 2: MAX only query - should generate MAX runtime filter
--- The global MAX of c_int is 100, so filter: c_int <= 100
 SELECT MAX(c_int) AS max_val FROM t_minmax;
 
--- # Test 3: Both MIN and MAX on same column - should generate combined range filter
--- Range: c_int >= 1 AND c_int <= 100
 SELECT MIN(c_int) AS min_val, MAX(c_int) AS max_val FROM t_minmax;
 
--- # Test 4: MIN and MAX on different columns
 SELECT MIN(c_int) AS min_int, MAX(c_bigint) AS max_bigint FROM t_minmax;
 
--- # Test 5: MIN/MAX with WHERE clause - filter should still work
--- The WHERE clause further restricts the range, but MIN/MAX RF still applies
 SELECT MIN(c_int) AS min_val FROM t_minmax WHERE c_int BETWEEN 20 AND 50;
 
--- # Test 6: Join with MIN aggregation - probe side should benefit from MIN RF
--- The MIN aggregation on t_probe produces a single value that can be used as filter
--- When joining with t_minmax, the MIN value can filter t_minmax rows
 SELECT /*+SET_VAR(enable_min_max_runtime_filter=true)*/ COUNT(*)
 FROM t_probe p
 JOIN [broadcast] t_minmax m ON p.probe_value = m.c_int
 WHERE p.k1 < 100;
 
--- # Test 7: Join with MAX aggregation
 SELECT /*+SET_VAR(enable_min_max_runtime_filter=true)*/ COUNT(*)
 FROM t_probe p
 JOIN [broadcast] t_minmax m ON p.probe_value = m.c_int
 WHERE p.k1 >= 900;
 
--- # Test 8: Multiple MIN/MAX aggregations in one query
 SELECT
     MIN(c_int) AS min_int,
     MAX(c_int) AS max_int,
@@ -84,23 +77,92 @@ SELECT
     MAX(c_bigint) AS max_bigint
 FROM t_minmax;
 
--- # Test 9: MIN/MAX with date type
 SELECT MIN(c_date) AS earliest, MAX(c_date) AS latest FROM t_minmax;
 
--- # Test 10: MIN/MAX with string type (lexicographic order)
 SELECT MIN(c_string) AS first_str, MAX(c_string) AS last_str FROM t_minmax;
 
--- # Test 11: Aggregation without MIN/MAX - should NOT generate MIN/MAX RF
 SELECT COUNT(*), SUM(c_int) FROM t_minmax;
 
--- # Test 12: MIN/MAX with GROUP BY - should NOT generate MIN/MAX RF
--- This is expected behavior: MIN/MAX RF only works without GROUP BY
 SELECT c_int % 10 AS grp, MIN(c_bigint) AS min_bigint
 FROM t_minmax
 GROUP BY c_int % 10
 ORDER BY grp
 LIMIT 5;
 
--- # Cleanup
+SELECT COUNT(*)
+FROM t_minmax m
+JOIN (
+    SELECT MIN(m2.c_int) AS min_int, MAX(m2.c_int) AS max_int
+    FROM t_minmax m2
+    JOIN t_probe p2 ON m2.c_int = p2.probe_value
+) s ON m.c_int BETWEEN s.min_int AND s.max_int;
+
+-- reinsert data
+INSERT INTO t_minmax
+SELECT
+    idx,
+    idx % 100 + 1,
+    idx * 2,
+    CAST(date_add('2024-01-01', INTERVAL (idx % 30) DAY) AS DATE),
+    concat('str-', idx)
+FROM TABLE(generate_series(9999, 10999)) AS t(idx);
+
+INSERT INTO t_probe
+SELECT idx, idx % 50 FROM TABLE(generate_series(10000, 10999)) AS t(idx);
+
+-- redelete data
+DELETE FROM t_minmax WHERE k1 < 100;
+DELETE FROM t_probe WHERE k1 < 100;
+
+function: assert_explain_verbose_contains('SELECT MIN(c_int) AS min_val FROM t_minmax', '- filter_id = 0', 'build_expr')
+function: assert_explain_verbose_contains('SELECT MAX(c_int) AS max_val FROM t_minmax', '- filter_id = 0', 'build_expr')
+
+SELECT MIN(c_int) AS min_val FROM t_minmax;
+
+SELECT MAX(c_int) AS max_val FROM t_minmax;
+
+SELECT MIN(c_int) AS min_val, MAX(c_int) AS max_val FROM t_minmax;
+
+SELECT MIN(c_int) AS min_int, MAX(c_bigint) AS max_bigint FROM t_minmax;
+
+SELECT MIN(c_int) AS min_val FROM t_minmax WHERE c_int BETWEEN 20 AND 50;
+
+SELECT /*+SET_VAR(enable_min_max_runtime_filter=true)*/ COUNT(*)
+FROM t_probe p
+JOIN [broadcast] t_minmax m ON p.probe_value = m.c_int
+WHERE p.k1 < 100;
+
+SELECT /*+SET_VAR(enable_min_max_runtime_filter=true)*/ COUNT(*)
+FROM t_probe p
+JOIN [broadcast] t_minmax m ON p.probe_value = m.c_int
+WHERE p.k1 >= 900;
+
+SELECT
+    MIN(c_int) AS min_int,
+    MAX(c_int) AS max_int,
+    MIN(c_bigint) AS min_bigint,
+    MAX(c_bigint) AS max_bigint
+FROM t_minmax;
+
+SELECT MIN(c_date) AS earliest, MAX(c_date) AS latest FROM t_minmax;
+
+SELECT MIN(c_string) AS first_str, MAX(c_string) AS last_str FROM t_minmax;
+
+SELECT COUNT(*), SUM(c_int) FROM t_minmax;
+
+SELECT c_int % 10 AS grp, MIN(c_bigint) AS min_bigint
+FROM t_minmax
+GROUP BY c_int % 10
+ORDER BY grp
+LIMIT 5;
+
+SELECT COUNT(*)
+FROM t_minmax m
+JOIN (
+    SELECT MIN(m2.c_int) AS min_int, MAX(m2.c_int) AS max_int
+    FROM t_minmax m2
+    JOIN t_probe p2 ON m2.c_int = p2.probe_value
+) s ON m.c_int BETWEEN s.min_int AND s.max_int;
+
 DROP TABLE IF EXISTS t_probe;
 DROP TABLE IF EXISTS t_minmax;
