@@ -34,14 +34,11 @@
 
 package com.starrocks.qe;
 
-<<<<<<< HEAD
-import com.starrocks.analysis.TableName;
-=======
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.TableName;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.DdlException;
->>>>>>> f375fda10a ([BugFix] Wait for journal replay in changeCatalogDb on follower FE (#69834))
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.jmockit.Deencapsulation;
