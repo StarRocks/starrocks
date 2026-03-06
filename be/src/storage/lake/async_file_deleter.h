@@ -40,8 +40,9 @@ public:
     virtual ~AsyncFileDeleter() = default;
 
     virtual Status delete_file(std::string path) {
+        _total_queued++;
         _batch.emplace_back(std::move(path));
-        if (_batch.size() < _batch_size) {
+        if (_batch.size() < static_cast<size_t>(_batch_size)) {
             return Status::OK();
         }
         return submit(&_batch);
@@ -51,29 +52,48 @@ public:
         if (!_batch.empty()) {
             RETURN_IF_ERROR(submit(&_batch));
         }
-        return wait();
+        return wait_and_account();
     }
 
+    // Total files submitted for deletion (incremented at submit time, not on success).
+    // Semantics unchanged from the original _delete_count.
     int64_t delete_count() const { return _delete_count; }
 
+    // Total files ever passed to delete_file(), including those still in the pending batch.
+    // Callers can snapshot this after each version to build a cumulative-count map, which
+    // is then compared against success_delete_count() to determine which versions had all
+    // their data files confirmed deleted after a partial failure.
+    int64_t total_queued() const { return _total_queued; }
+
+    // Files whose async delete batch completed successfully.
+    // Unlike delete_count(), this excludes the last batch if it failed.
+    int64_t success_delete_count() const { return _success_delete_count; }
+
 private:
-    // Wait for all submitted deletion tasks to finish and return task execution results.
-    Status wait() {
-        if (_prev_task_status.valid()) {
-            try {
-                return _prev_task_status.get();
-            } catch (const std::exception& e) {
-                return Status::InternalError(e.what());
-            }
-        } else {
+    // Wait for the in-flight batch; credit its size to _success_delete_count only on success.
+    Status wait_and_account() {
+        if (!_prev_task_status.valid()) {
             return Status::OK();
         }
+        Status st;
+        try {
+            st = _prev_task_status.get();
+        } catch (const std::exception& e) {
+            st = Status::InternalError(e.what());
+        }
+        if (st.ok()) {
+            _success_delete_count += _inflight_size;
+        }
+        _inflight_size = 0;
+        return st;
     }
 
     Status submit(std::vector<std::string>* files_to_delete) {
-        // Await previous task completion before submitting a new deletion.
-        RETURN_IF_ERROR(wait());
+        // Confirm the previous batch (and credit it to _success_delete_count if OK)
+        // before dispatching the next one.
+        RETURN_IF_ERROR(wait_and_account());
         _delete_count += files_to_delete->size();
+        _inflight_size = files_to_delete->size();
         if (_cb) {
             _cb(*files_to_delete);
         }
@@ -84,7 +104,10 @@ private:
     }
 
     int64_t _batch_size;
-    int64_t _delete_count = 0;
+    int64_t _delete_count = 0;          // submitted count (original semantics, unchanged)
+    int64_t _success_delete_count = 0;  // confirmed-deleted count (only on batch success)
+    int64_t _total_queued = 0;          // total files ever passed to delete_file()
+    int64_t _inflight_size = 0;         // size of the currently in-flight async batch
     std::vector<std::string> _batch;
     std::future<Status> _prev_task_status;
     DeleteCallback _cb;

@@ -1637,7 +1637,16 @@ CONF_mBool(enable_drop_tablet_if_unfinished_txn, "true");
 // 0 means no limit
 CONF_Int32(lake_service_max_concurrency, "0");
 
+// Minimum batch size for lake vacuum delete-file tasks.
 CONF_mInt64(lake_vacuum_min_batch_delete_size, "100");
+
+// Enable the lake vacuum implementation that walks tablet version chains
+// and deletes data files + metadata in a safer, failure-tolerant way.
+CONF_mBool(lake_vacuum_enable_version_chain_mode, "false");
+
+// Per-tablet time budget (in ms) for the version-chain-based lake vacuum path.
+// 0 means no timeout.
+CONF_mInt64(lake_vacuum_version_chain_timeout_ms, "600000");
 
 // TOPN RuntimeFilter parameters
 CONF_mInt32(desc_hint_split_range, "10");
