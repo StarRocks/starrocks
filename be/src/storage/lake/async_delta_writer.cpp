@@ -357,19 +357,14 @@ inline void AsyncDeltaWriterImpl::close() {
 
         TEST_SYNC_POINT("AsyncDeltaWriterImpl::close:2");
 
-<<<<<<< HEAD
-        // Wait for block merge finished.
-=======
         // Shutdown (but do NOT reset) _block_merge_token to drain any running merge tasks.
         // This must happen BEFORE execution_queue_stop() to ensure all merge tasks
         // (which access writer state like _mem_table_sink) complete before the queue
         // is torn down. The token remains allocated (not null) so if execute() is still
         // running and calls _block_merge_token->submit(), it gets a ServiceUnavailable
         // error instead of SIGSEGV.
->>>>>>> 2fb70519dc ([BugFix] Fix use-after-free race in AsyncDeltaWriter close/finish lifecycle (backport #69940) (#69958))
         if (_block_merge_token != nullptr) {
             _block_merge_token->shutdown();
-            _block_merge_token.reset();
         }
 
         // After the execution_queue been `stop()`ed all incoming `write()` and `finish()` requests
@@ -380,8 +375,6 @@ inline void AsyncDeltaWriterImpl::close() {
         // Wait for all running tasks completed.
         r = bthread::execution_queue_join(old_id);
         PLOG_IF(WARNING, r != 0) << "Fail to join execution queue";
-<<<<<<< HEAD
-=======
 
         // Safe to destroy token now since both execution queue and merge tasks are done.
         _block_merge_token.reset();
@@ -392,7 +385,6 @@ inline void AsyncDeltaWriterImpl::close() {
         // We only do the non-blocking resource cleanup here, which is safe because all
         // concurrent accessors (MergeBlockTask, profile readers) have been drained.
         _writer->release_resources();
->>>>>>> 2fb70519dc ([BugFix] Fix use-after-free race in AsyncDeltaWriter close/finish lifecycle (backport #69940) (#69958))
     }
 }
 
