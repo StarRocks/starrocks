@@ -606,33 +606,6 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
 
     private void buildMinMaxRuntimeFilters(IdGenerator<RuntimeFilterId> generator, DescriptorTable descTbl,
                                            ExecGroupSets execGroupSets) {
-        // Only generate min/max runtime filters for global/final aggregations without GROUP BY.
-        // 
-        // MIN/MAX runtime filters require a single global MIN/MAX value to generate a range filter.
-        // This is only possible for queries without GROUP BY:
-        //   - SELECT MIN(v1) FROM t0 -> One global MIN value
-        //   - SELECT MAX(v1) FROM t0 -> One global MAX value
-        //
-        // For queries with GROUP BY:
-        //   - SELECT v2, MIN(v1) FROM t0 GROUP BY v2 -> Different MIN for each group
-        //   Each group has its own MIN value, so we cannot generate a single runtime filter
-        //   that applies to all groups. The filter would need to express:
-        //   "for group A, v1 >= minA, for group B, v1 >= minB" which is not possible
-        //   with a single runtime filter.
-        //
-        // In multi-stage aggregation:
-        // - LOCAL stage (first stage): Computes local MIN/MAX on each node.
-        //   The results are partial and not suitable for global filtering.
-        // - MERGE stage: Merges partial results to get global MIN/MAX.
-        //   This is where we generate the runtime filter with the complete range.
-        //
-        // We use aggInfo.isMerge() to check if we're in the merge phase:
-        // - isMerge() == true: We're in MERGE stage, can generate MIN/MAX RF
-        // - isMerge() == false: We're in LOCAL stage, skip MIN/MAX RF
-        if (!aggInfo.isMerge()) {
-            return;
-        }
-        
         // MIN/MAX runtime filters only work for aggregations without GROUP BY
         if (!aggInfo.getGroupingExprs().isEmpty()) {
             return;
