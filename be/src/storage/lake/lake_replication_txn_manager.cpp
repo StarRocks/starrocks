@@ -135,7 +135,6 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
         return Status::Corruption("No missing version");
     }
 
-#ifdef USE_STAROS
     std::string src_meta_dir;
     std::string src_data_dir;
     std::shared_ptr<FileSystem> shared_src_fs;
