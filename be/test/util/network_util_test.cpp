@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/network_util.h"
+#include "base/network/network_util.h"
 
 #include <gtest/gtest.h>
 
 #include <string>
 
-#include "testutil/parallel_test.h"
+#include "base/testutil/parallel_test.h"
 
 namespace starrocks {
 

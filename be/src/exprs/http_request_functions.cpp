@@ -27,7 +27,7 @@
 #include "http/http_client.h"
 #include "http/http_method.h"
 #include "runtime/runtime_state.h"
-#include "util/network_util.h"
+#include "base/network/network_util.h"
 
 namespace starrocks {
 

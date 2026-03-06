@@ -23,8 +23,8 @@
 #include "exprs/mock_vectorized_expr.h"
 #include "exprs/http_request_functions.h"
 #include "runtime/runtime_state.h"
-#include "testutil/assert.h"
-#include "testutil/parallel_test.h"
+#include "base/testutil/assert.h"
+#include "base/testutil/parallel_test.h"
 
 namespace starrocks {
 
