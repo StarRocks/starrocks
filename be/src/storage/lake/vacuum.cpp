@@ -340,7 +340,14 @@ static size_t collect_extra_files_size(const TabletMetadataPB& metadata, int64_t
 
 // Collects garbage version entries for per-version vacuum. Walks the version chain from
 // min_retain_version down via prev_garbage_version, pushing entries (newest to oldest).
-// Stops when version < min_version or when size reaches max_versions (if > 0).
+//
+// The "final retain version" is the oldest version whose metadata must be preserved:
+//   - When grace_timestamp <= 0: it is min_retain_version itself.
+//   - When grace_timestamp > 0:  it is the first version encountered whose commit_time
+//     falls before the grace period.
+//
+// The final retain version is NOT added to garbage_versions; its metadata file must not
+// be deleted.  Only versions strictly below the final retain version are garbage candidates.
 static Status collect_garbage_versions(TabletManager* tablet_mgr, int64_t tablet_id, int64_t min_version,
                                        int64_t min_retain_version, int64_t grace_timestamp,
                                        const TabletRetainInfo& retain_info, std::vector<int64_t>* garbage_versions,
@@ -363,6 +370,9 @@ static Status collect_garbage_versions(TabletManager* tablet_mgr, int64_t tablet
         auto metadata = std::move(res).value();
         *extra_file_size += collect_extra_files_size(*metadata, min_retain_version);
 
+        CHECK_LT(metadata->prev_garbage_version(), version);
+        auto next_version = metadata->prev_garbage_version();
+
         if (!skip_check_grace_timestamp) {
             int64_t compare_time = 0;
             if (metadata->has_commit_time() && metadata->commit_time() > 0) {
@@ -371,26 +381,29 @@ static Status collect_garbage_versions(TabletManager* tablet_mgr, int64_t tablet
                 TEST_SYNC_POINT_CALLBACK("collect_garbage_versions:get_file_modified_time", &compare_time);
             }
 
+            *final_retain_version = version;
             if (compare_time < grace_timestamp) {
+                // This is the final retained version: its data garbage can be cleaned on
+                // a future pass, but its metadata file must not be deleted now.
                 skip_check_grace_timestamp = true;
-                *final_retain_version = version;
-            } else {
-                *final_retain_version = version;
-                DCHECK_LT(metadata->prev_garbage_version(), version);
-                version = metadata->prev_garbage_version();
-                continue;
             }
-        }
-
-        if (retain_info.contains_version(version)) {
-            auto next_version = metadata->prev_garbage_version();
-            DCHECK_LT(next_version, version);
+            // Whether this version is "too new" or is the final retain, it is never garbage.
             version = next_version;
             continue;
         }
 
-        auto next_version = metadata->prev_garbage_version();
-        CHECK_LT(next_version, version);
+        // skip_check_grace_timestamp is true here.
+        // The final_retain_version's metadata must be preserved — never push it to garbage.
+        if (version == *final_retain_version) {
+            version = next_version;
+            continue;
+        }
+
+        if (retain_info.contains_version(version)) {
+            version = next_version;
+            continue;
+        }
+
         garbage_versions->push_back(version);
         version = next_version;
     }
