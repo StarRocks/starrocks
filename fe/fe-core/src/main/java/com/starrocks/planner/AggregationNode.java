@@ -610,7 +610,11 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
         if (!aggInfo.getGroupingExprs().isEmpty()) {
             return;
         }
-        
+        // Only build MIN/MAX RF at the first (local) stage for early scan reduction.
+        // Skip the finalize/merge stage in multi-phase aggregation.
+        if (needsFinalize && aggInfo.isMerge()) {
+            return;
+        }
         buildMinMaxRuntimeFiltersNoGroupBy(generator, descTbl, execGroupSets);
     }
 
