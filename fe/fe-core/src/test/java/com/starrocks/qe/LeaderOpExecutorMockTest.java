@@ -80,8 +80,7 @@ public class LeaderOpExecutorMockTest {
                             -> ThriftRPCRequestExecutor.call(Mockito.any(), Mockito.any(), Mockito.anyInt(), Mockito.any()))
                     .thenReturn(tMasterOpResult);
             LeaderOpExecutor executor =
-                    new LeaderOpExecutor(stmtBase, stmtBase.getOrigStmt(), connectContext, RedirectStatus.FORWARD_NO_SYNC, false,
-                            null);
+                    new LeaderOpExecutor(stmtBase, stmtBase.getOrigStmt(), connectContext, RedirectStatus.FORWARD_NO_SYNC, false);
             executor.execute();
 
             Assertions.assertEquals(1, connectContext.getTxnId());

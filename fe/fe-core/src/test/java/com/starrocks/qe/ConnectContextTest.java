@@ -35,24 +35,17 @@
 package com.starrocks.qe;
 
 import com.starrocks.analysis.TableName;
-<<<<<<< HEAD
-=======
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
->>>>>>> cff8cb61f0 ([BugFix] Wait for journal replay in changeCatalogDb on follower FE (backport #69834) (#69901))
 import com.starrocks.common.Status;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.server.GlobalStateMgr;
-<<<<<<< HEAD
-=======
 import com.starrocks.server.MetadataMgr;
-import com.starrocks.server.RunMode;
->>>>>>> cff8cb61f0 ([BugFix] Wait for journal replay in changeCatalogDb on follower FE (backport #69834) (#69901))
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.InsertStmt;
@@ -63,10 +56,14 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.warehouse.DefaultWarehouse;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.mockito.Mockito;
 import org.xnio.StreamConnection;
 
 import java.util.List;
@@ -357,12 +354,6 @@ public class ConnectContextTest {
     // Tests for changeCatalogDb() journal-replay wait on follower FE
     // -----------------------------------------------------------------------
 
-    /**
-     * On a follower FE, if the database is not found locally on the first check
-     * (journal not yet replayed), the follower fetches the leader's max journal ID,
-     * waits for local replay, and retries. If the database exists after the wait,
-     * changeCatalogDb() should succeed.
-     */
     @Test
     public void testChangeCatalogDb_followerWaitsForJournalAndSucceeds(
             @Mocked MetadataMgr metadataMgr,
@@ -390,12 +381,9 @@ public class ConnectContextTest {
                 result = journalObservable;
                 minTimes = 0;
 
-                // First call (outer condition): null  → enter wait block
-                // Second call (inner condition): mockDb → no error thrown
-                metadataMgr.getDb((ConnectContext) any, anyString, anyString);
+                metadataMgr.getDb(anyString, anyString);
                 returns(null, mockDb);
 
-                // Simulate a successful journal replay (no-op)
                 journalObservable.waitOn(100L, anyInt);
             }
         };
@@ -414,10 +402,6 @@ public class ConnectContextTest {
         Assertions.assertEquals("testdb", ctx.getDatabase());
     }
 
-    /**
-     * On a follower FE, if the database is still missing after journal replay wait
-     * (the database genuinely does not exist), changeCatalogDb() should throw ERR_BAD_DB_ERROR.
-     */
     @Test
     public void testChangeCatalogDb_followerThrowsWhenDbStillMissingAfterWait(
             @Mocked MetadataMgr metadataMgr,
@@ -443,8 +427,7 @@ public class ConnectContextTest {
                 result = journalObservable;
                 minTimes = 0;
 
-                // Both calls return null: db genuinely does not exist
-                metadataMgr.getDb((ConnectContext) any, anyString, anyString);
+                metadataMgr.getDb(anyString, anyString);
                 result = null;
 
                 journalObservable.waitOn(100L, anyInt);
@@ -457,11 +440,6 @@ public class ConnectContextTest {
         Assertions.assertThrows(DdlException.class, () -> ctx.changeCatalogDb("nonexistent"));
     }
 
-    /**
-     * On a follower FE, if fetchLeaderMaxJournalId returns -1 (leader unavailable),
-     * the waitOn call is skipped entirely. The inner db check still runs and throws
-     * ERR_BAD_DB_ERROR if the database is not found.
-     */
     @Test
     public void testChangeCatalogDb_followerSkipsWaitWhenLeaderJournalIdNegative(
             @Mocked MetadataMgr metadataMgr,
@@ -487,11 +465,9 @@ public class ConnectContextTest {
                 result = journalObservable;
                 minTimes = 0;
 
-                // Both calls return null: db not found
-                metadataMgr.getDb((ConnectContext) any, anyString, anyString);
+                metadataMgr.getDb(anyString, anyString);
                 result = null;
 
-                // waitOn must never be called when journalId <= 0
                 journalObservable.waitOn(anyLong, anyInt);
                 times = 0;
             }
@@ -503,11 +479,6 @@ public class ConnectContextTest {
         Assertions.assertThrows(DdlException.class, () -> ctx.changeCatalogDb("missingdb"));
     }
 
-    /**
-     * On a follower FE, if fetchLeaderMaxJournalId returns -1 but the database
-     * actually exists on the second check (e.g. replayed in the meantime),
-     * changeCatalogDb() should succeed without calling waitOn.
-     */
     @Test
     public void testChangeCatalogDb_followerSucceedsWithoutWaitWhenDbAppearsAfterFetchFails(
             @Mocked MetadataMgr metadataMgr,
@@ -542,8 +513,7 @@ public class ConnectContextTest {
                 result = journalObservable;
                 minTimes = 0;
 
-                // First call: null (enter wait block), second call: found
-                metadataMgr.getDb((ConnectContext) any, anyString, anyString);
+                metadataMgr.getDb(anyString, anyString);
                 returns(null, mockDb);
 
                 journalObservable.waitOn(anyLong, anyInt);
@@ -558,10 +528,6 @@ public class ConnectContextTest {
         Assertions.assertEquals("latedb", ctx.getDatabase());
     }
 
-    /**
-     * On the leader FE, changeCatalogDb() should throw immediately without fetching
-     * the leader journal ID or waiting for journal replay.
-     */
     @Test
     public void testChangeCatalogDb_leaderDoesNotWaitForJournal(
             @Mocked MetadataMgr metadataMgr) {
@@ -575,10 +541,9 @@ public class ConnectContextTest {
                 result = metadataMgr;
                 minTimes = 0;
 
-                metadataMgr.getDb((ConnectContext) any, anyString, anyString);
+                metadataMgr.getDb(anyString, anyString);
                 result = null;
 
-                // getJournalObservable must never be called on the leader
                 globalStateMgr.getJournalObservable();
                 times = 0;
             }
@@ -590,10 +555,6 @@ public class ConnectContextTest {
         Assertions.assertThrows(DdlException.class, () -> ctx.changeCatalogDb("somedb"));
     }
 
-    /**
-     * On a follower FE, if the journal replay wait times out (DdlException from waitOn),
-     * the exception is swallowed and the inner db check still runs, throwing ERR_BAD_DB_ERROR.
-     */
     @Test
     public void testChangeCatalogDb_followerThrowsDbErrorAfterJournalWaitTimeout(
             @Mocked MetadataMgr metadataMgr,
@@ -619,11 +580,9 @@ public class ConnectContextTest {
                 result = journalObservable;
                 minTimes = 0;
 
-                // Both calls return null: db does not appear even after wait
-                metadataMgr.getDb((ConnectContext) any, anyString, anyString);
+                metadataMgr.getDb(anyString, anyString);
                 result = null;
 
-                // Simulate journal replay timeout
                 journalObservable.waitOn(100L, anyInt);
                 result = new DdlException("journal replay timeout");
             }
@@ -632,7 +591,6 @@ public class ConnectContextTest {
         ConnectContext ctx = new ConnectContext(connection);
         ctx.setGlobalStateMgr(globalStateMgr);
 
-        // The timeout exception is caught internally; ERR_BAD_DB_ERROR is still thrown
         Assertions.assertThrows(DdlException.class, () -> ctx.changeCatalogDb("nonexistent"));
     }
 }
