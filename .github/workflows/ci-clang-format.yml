@@ -1,37 +1,7 @@
-# Copyright 2021-present StarRocks, Inc. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     https://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-# CI - Clang Format Auto Fix
-#
-# This workflow runs clang-format-10 on every C/C++ file (.cpp/.h/.hpp/.cc)
-# changed in a pull request (against the PR base branch).  If any file needs
-# reformatting the workflow applies the fixes in-place and pushes an automatic
-# commit back to the PR branch so that the PR is always clean.
-#
-# For pull requests opened from forks the GITHUB_TOKEN cannot push to the
-# fork, so the auto-commit step is skipped for those PRs and the job simply
-# reports whether formatting is correct.
-#
-# To run the same fix locally before opening a PR:
-#
-#   CLANG_FORMAT_BINARY=clang-format-10 bash build-support/clang-format-changed.sh
-
 name: CI - Clang Format Auto Fix
 
 on:
   pull_request:
-    types: [opened, ready_for_review, synchronize]
     paths:
       - 'be/src/**'
       - 'be/test/**'
@@ -52,7 +22,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
-          token: ${{ secrets.PAT }}  # PAT instead of GITHUB_TOKEN
+          token: ${{ secrets.PAT }}
 
       - name: Set up base branch reference
         env:
@@ -74,7 +44,6 @@ jobs:
         env:
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
           HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
-          BASE_REPO: ${{ github.repository }}
           PAT: ${{ secrets.PAT }}
         run: |
           if git diff --quiet; then
@@ -93,7 +62,7 @@ jobs:
             git reset HEAD~1
             echo "::error::Auto-push failed. Files that need formatting:"
             git diff --name-only
-            if [ "${HEAD_REPO}" != "${BASE_REPO}" ]; then
+            if [ "${HEAD_REPO}" != "${{ github.repository }}" ]; then
               echo "::error::This is a fork PR. Please enable 'Allow edits from maintainers' on your PR."
             else
               echo "::error::Same-repo push failed unexpectedly. Check repository permissions."
