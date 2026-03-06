@@ -58,8 +58,8 @@ get_changed_be_files_for_tidy() {
         } | sed '/^$/d' | sort -u
     )
 
-    changed_be_files=$(printf '%s\n' "${changed_paths}" | grep -E '^be/.*\.(c|cc|cpp|cxx)$' || true)
-    changed_be_headers=$(printf '%s\n' "${changed_paths}" | grep -E '^be/.*\.(h|hh|hpp|hxx)$' || true)
+    changed_be_files=$(printf '%s\n' "${changed_paths}" | grep -E '^be/.*\.(c|cc|cpp|cxx)$' | grep -Ev '^be/test/' || true)
+    changed_be_headers=$(printf '%s\n' "${changed_paths}" | grep -E '^be/.*\.(h|hh|hpp|hxx)$' | grep -Ev '^be/test/' || true)
 
     for header in ${changed_be_headers}; do
         stem=${header%.*}
