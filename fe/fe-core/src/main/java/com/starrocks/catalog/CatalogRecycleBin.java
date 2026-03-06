@@ -1379,25 +1379,6 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable, Memor
         return Config.catalog_recycle_bin_erase_min_latency_ms;
     }
 
-<<<<<<< HEAD
-=======
-    // for test
-    protected void clear() {
-        idToDatabase.clear();
-        idToTableInfo.clear();
-        nameToTableInfo.clear();
-        idToPartition.clear();
-        idToRecycleTime.clear();
-        enableEraseLater.clear();
-        asyncDeleteForPartitions.clear();
-        asyncDeleteForTables.clear();
-    }
-
-    // for test
-    protected void setPartitionInfo(long partitionId, RecyclePartitionInfo partitionInfo) {
-        idToPartition.put(partitionId, partitionInfo);
-    }
-
     // for test
     protected void setDeleteFutureForPartition(RecyclePartitionInfo partitionInfo, CompletableFuture<Boolean> future) {
         asyncDeleteForPartitions.put(partitionInfo, future);
@@ -1408,14 +1389,6 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable, Memor
         asyncDeleteForTables.put(tableInfo, future);
     }
 
-    // for test
-    public void removePartitionFromRecycleBin(long partitionId) {
-        idToPartition.remove(partitionId);
-        idToRecycleTime.remove(partitionId);
-        enableEraseLater.remove(partitionId);
-    }
-
->>>>>>> cb59200aab ([Enhancement] Make some parameter of CatalogRecycleBin be configurable (#69838))
     @Override
     public synchronized Map<String, Long> estimateCount() {
         return ImmutableMap.<String, Long>builder()
