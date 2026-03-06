@@ -261,7 +261,7 @@ public class LeaderOpExecutor {
             params.setForward_times(1);
             params.setConnectionId(ctx.getConnectionId());
 
-            int timeoutMs = ctx.getExecTimeout() * 1000 + Config.thrift_rpc_timeout_ms;
+            int timeoutMs = (int) (ctx.getSessionVariable().getQueryTimeoutS() * 1000L) + Config.thrift_rpc_timeout_ms;
             TMasterOpResult leaderResult = ThriftRPCRequestExecutor.call(
                     ThriftConnectionPool.frontendPool,
                     thriftAddr,
