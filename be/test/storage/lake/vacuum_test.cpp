@@ -4228,9 +4228,12 @@ TEST_P(LakeVacuumTest, test_version_chain_vacuum_full_success) {
     // Garbage version metadata files must be gone.
     EXPECT_FALSE(file_exist(tablet_metadata_filename(9901, 2)));
     EXPECT_FALSE(file_exist(tablet_metadata_filename(9901, 3)));
-    EXPECT_FALSE(file_exist(tablet_metadata_filename(9901, 4)));
 
-    // The retained version metadata must be preserved.
+    // v4 is the final_retain_version (first version with commit_time < grace_timestamp):
+    // its orphan data files are cleaned but its metadata is preserved.
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(9901, 4)));
+
+    // The min_retain_version metadata must be preserved.
     EXPECT_TRUE(file_exist(tablet_metadata_filename(9901, 5)));
 }
 
@@ -4270,9 +4273,10 @@ TEST_P(LakeVacuumTest, test_version_chain_vacuum_partial_failure) {
 
     // Inject a failure on the 3rd data-file delete call (= v4's orphan file).
     // Batches are processed oldest-to-newest: v2→v3→v4.
+    // Use == 3 (not >= 3) so that subsequent metadata deletions are not affected.
     int delete_calls = 0;
     SyncPoint::GetInstance()->SetCallBack("PosixFileSystem::delete_file", [&](void* arg) {
-        if (++delete_calls >= 3) {
+        if (++delete_calls == 3) {
             auto* st = static_cast<Status*>(arg);
             st->update(Status::IOError("injected rate-limit error"));
         }

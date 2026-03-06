@@ -384,27 +384,23 @@ static Status collect_garbage_versions(TabletManager* tablet_mgr, int64_t tablet
 
             *final_retain_version = version;
             if (compare_time < grace_timestamp) {
-                // This is the final retained version: its data garbage can be cleaned on
-                // a future pass, but its metadata file must not be deleted now.
+                // This is the final retained version: its data garbage can be cleaned
+                // but its metadata file must not be deleted now.
                 skip_check_grace_timestamp = true;
+                // Add to garbage_versions so vacuum_tablet_chain collects its data files
+                // (same as the non-chain code path which calls collect_garbage_files for
+                // the final_retain_version).  Its metadata is preserved by vacuum_tablet_chain.
+                garbage_versions->push_back(version);
             }
-            // Whether this version is "too new" or is the final retain, it is never garbage.
             version = next_version;
             continue;
         }
 
         // skip_check_grace_timestamp is true here.
-        // The final_retain_version's metadata must be preserved — never push it to garbage.
-        if (version == *final_retain_version) {
-            version = next_version;
-            continue;
-        }
-
-        if (retain_info.contains_version(version)) {
-            version = next_version;
-            continue;
-        }
-
+        // NOTE: do NOT skip retained versions here.  Their data files must still be
+        // collected so that collect_garbage_files() can delete orphan/compaction files
+        // not referenced by the retained version (matching the non-chain code path).
+        // The metadata for retained versions is preserved in vacuum_tablet_chain.
         garbage_versions->push_back(version);
         version = next_version;
     }
@@ -630,18 +626,39 @@ static Status vacuum_tablet_chain(TabletManager* tablet_mgr, std::string_view ro
     int64_t last_safe_version = -1;
     int64_t tablet_vacuumed_size = 0;
 
+    // Determine which garbage versions had ALL their data files confirmed deleted,
+    // and delete metadata for those versions plus any intermediate versions between
+    // consecutive chain links (mirroring the non-chain code path).
     AsyncFileDeleter metafile_deleter(INT64_MAX, metafile_delete_cb);
+    int64_t prev_confirmed_version = -1;
     for (const auto& info : processed_versions) {
         if (info.cumulative_queued > confirmed) {
             // This version's data files were not all confirmed deleted; stop here.
             break;
         }
-        RETURN_IF_ERROR(
-                metafile_deleter.delete_file(join_path(meta_dir, tablet_metadata_filename(tablet_id, info.version))));
+        // Delete intermediate metadata between the previous confirmed version and
+        // this one.  These are versions not on the garbage chain but whose metadata
+        // files exist and should be cleaned up.
+        if (prev_confirmed_version >= 0) {
+            for (int64_t v = prev_confirmed_version + 1; v < info.version; v++) {
+                if (v == final_retain_version) continue;
+                if (tablet_retain_info.contains_version(v)) continue;
+                (void)metafile_deleter.delete_file(join_path(meta_dir, tablet_metadata_filename(tablet_id, v)));
+            }
+        }
+        // The final_retain_version's and retained versions' data files are cleaned,
+        // but their metadata must be preserved — same as the non-chain code path.
+        if (info.version != final_retain_version && !tablet_retain_info.contains_version(info.version)) {
+            (void)metafile_deleter.delete_file(join_path(meta_dir, tablet_metadata_filename(tablet_id, info.version)));
+        }
+        prev_confirmed_version = info.version;
         last_safe_version = info.version;
         tablet_vacuumed_size += info.data_size;
     }
-    RETURN_IF_ERROR(metafile_deleter.finish());
+    Status meta_status = metafile_deleter.finish();
+    if (!meta_status.ok()) {
+        LOG(WARNING) << "lake vacuum tablet " << tablet_id << " metadata deletion failed: " << meta_status;
+    }
 
     int64_t tablet_vacuumed_files = datafile_deleter.delete_count() + metafile_deleter.delete_count();
 
