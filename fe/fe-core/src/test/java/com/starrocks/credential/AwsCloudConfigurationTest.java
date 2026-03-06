@@ -75,6 +75,19 @@ public class AwsCloudConfigurationTest {
     }
 
     @Test
+    public void testUseWebIdentityProfile() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("aws.s3.use_web_identity_token_file", "true");
+        CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
+        Assert.assertNotNull(cloudConfiguration);
+        Assert.assertTrue(cloudConfiguration instanceof AwsCloudConfiguration);
+
+        Map<String, String> thriftProperties = new HashMap<>();
+        ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential().toThrift(thriftProperties);
+        Assert.assertEquals("true", thriftProperties.get("aws.s3.use_web_identity_token_file"));
+    }
+
+    @Test
     public void testUseAwsSDKDefaultBehaviorPlusAssumeRole() {
         // Test hadoop configuration
         Map<String, String>  properties = new HashMap<>();

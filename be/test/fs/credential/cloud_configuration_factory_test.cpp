@@ -22,6 +22,22 @@ namespace starrocks {
 
 class CloudConfigurationFactoryTest : public ::testing::Test {};
 
+TEST_F(CloudConfigurationFactoryTest, test_create_aws_web_identity) {
+    TCloudConfiguration t_cloud_configuration;
+    t_cloud_configuration.__set_cloud_type(TCloudType::AWS);
+
+    std::map<std::string, std::string> properties;
+    properties.emplace(AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE, "true");
+    t_cloud_configuration.__set_cloud_properties(properties);
+
+    const auto& cloud_configuration = CloudConfigurationFactory::create_aws(t_cloud_configuration);
+    const auto& cred = cloud_configuration.aws_cloud_credential;
+
+    EXPECT_TRUE(cred.use_web_identity_profile);
+    EXPECT_FALSE(cred.use_instance_profile);
+    EXPECT_FALSE(cred.use_aws_sdk_default_behavior);
+}
+
 TEST_F(CloudConfigurationFactoryTest, test_create_azure) {
     TCloudConfiguration t_cloud_configuration;
     t_cloud_configuration.__set_cloud_type(TCloudType::AZURE);
@@ -34,6 +50,7 @@ TEST_F(CloudConfigurationFactoryTest, test_create_azure) {
         const auto& cloud_configuration = CloudConfigurationFactory::create_azure(t_cloud_configuration);
         const auto& azure_cloud_credential = cloud_configuration.azure_cloud_credential;
 
+        EXPECT_OK(azure_cloud_credential.validate());
         EXPECT_STREQ(azure_cloud_credential.shared_key.c_str(), "shared_key");
     }
 
@@ -45,6 +62,7 @@ TEST_F(CloudConfigurationFactoryTest, test_create_azure) {
         const auto& cloud_configuration = CloudConfigurationFactory::create_azure(t_cloud_configuration);
         const auto& azure_cloud_credential = cloud_configuration.azure_cloud_credential;
 
+        EXPECT_OK(azure_cloud_credential.validate());
         EXPECT_STREQ(azure_cloud_credential.sas_token.c_str(), "sas_token");
     }
 
@@ -58,6 +76,7 @@ TEST_F(CloudConfigurationFactoryTest, test_create_azure) {
         const auto& cloud_configuration = CloudConfigurationFactory::create_azure(t_cloud_configuration);
         const auto& azure_cloud_credential = cloud_configuration.azure_cloud_credential;
 
+        EXPECT_OK(azure_cloud_credential.validate());
         EXPECT_STREQ(azure_cloud_credential.client_id.c_str(), "client_id");
         EXPECT_STREQ(azure_cloud_credential.client_secret.c_str(), "client_secret");
         EXPECT_STREQ(azure_cloud_credential.tenant_id.c_str(), "tenant_id");
@@ -71,7 +90,7 @@ TEST_F(CloudConfigurationFactoryTest, test_create_azure) {
         const auto& cloud_configuration = CloudConfigurationFactory::create_azure(t_cloud_configuration);
         const auto& azure_cloud_credential = cloud_configuration.azure_cloud_credential;
 
-        EXPECT_STREQ(azure_cloud_credential.client_id.c_str(), "client_id");
+        ASSERT_ERROR(azure_cloud_credential.validate());
     }
 }
 
