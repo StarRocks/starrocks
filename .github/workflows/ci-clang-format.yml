@@ -92,23 +92,20 @@ jobs:
             exit 0
           fi
 
-          # Detect fork PRs — we cannot push to a fork with GITHUB_TOKEN.
-          if [ "${HEAD_REPO}" != "${BASE_REPO}" ]; then
-            echo "::warning::This PR is from a fork (${HEAD_REPO})."
-            echo "::warning::Auto-push is not possible. Please run clang-format locally:"
-            echo "::warning::  CLANG_FORMAT_BINARY=clang-format-10 bash build-support/clang-format-changed.sh"
-            echo "Files that need formatting:"
-            git diff --name-only
-            exit 1   # Still fail the check so the contributor knows action is needed.
-          fi
-
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -u
           git commit -m "style: auto-fix clang-format issues"
+
           if git push https://x-access-token:${GITHUB_TOKEN}@github.com/${HEAD_REPO}.git HEAD:${HEAD_REF}; then
-            echo "Formatting fixes pushed."
+            echo "Formatting fixes pushed successfully."
           else
-            echo "::error::Push failed unexpectedly for a same-repo PR."
+            echo "::error::Auto-push failed. Files that need formatting:"
+            git diff HEAD~1 --name-only
+            if [ "${HEAD_REPO}" != "${BASE_REPO}" ]; then
+              echo "::error::This is a fork PR. If you want the bot to fix formatting automatically,"
+              echo "::error::please enable 'Allow edits from maintainers' on your PR."
+            fi
+            echo "::error::To fix locally: CLANG_FORMAT_BINARY=clang-format-10 bash build-support/clang-format-changed.sh"
             exit 1
           fi
