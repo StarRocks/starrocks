@@ -17,7 +17,7 @@
 namespace starrocks {
 
 struct DataCacheOptions {
-    bool enable_datacache = false;
+bool enable_datacache = false;
     bool enable_cache_select = false;
     bool enable_populate_datacache = false;
     bool enable_datacache_async_populate_mode = false;
