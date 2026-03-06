@@ -1,0 +1,13 @@
+Package: starrocks-be
+Version: 0.0.0
+Section: database
+Priority: optional
+Architecture: amd64
+Depends: bash, procps
+Conflicts: starrocks-cn
+Provides: starrocks-storage-node
+Maintainer: StarRocks Team <dev@starrocks.io>
+Description: StarRocks Backend (BE)
+ StarRocks is a next-generation real-time analytical warehouse.
+ This package contains the Backend (BE) nodes responsible for
+ data storage and query execution.
