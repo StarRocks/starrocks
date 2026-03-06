@@ -113,13 +113,15 @@ class WindowSkewTest extends PlanTestBase {
         return getFragmentPlan(sql, TExplainLevel.COSTS, "");
     }
 
-    private void assertPlanHasUnionAndAnalytic(String plan) {
+    private void assertPlanHasUnionAndAnalytic(String plan, int expectedAnalyticCount) {
         assertContains(plan, "UNION");
         long analyticCount = plan.lines().filter(l -> l.contains("ANALYTIC")).count();
-        assertEquals(2, analyticCount,
+        assertEquals(expectedAnalyticCount, analyticCount,
                 "Expected exactly 2 ANALYTIC operators after UNION split, but found " + analyticCount);
     }
-
+    private void assertPlanHasUnionAndAnalytic(String plan) {
+        assertPlanHasUnionAndAnalytic(plan, 2);
+    }
     private void assertPlanHasNoUnionButAnalytic(String plan) {
         assertNotContains(plan, "UNION");
         assertContains(plan, "ANALYTIC");
@@ -519,5 +521,136 @@ class WindowSkewTest extends PlanTestBase {
 
         Exception e = assertThrows(Exception.class, () -> getFragmentPlan(sql));
         assertContains(e.getMessage(), "Window skew hint value type mismatch");
+    }
+    @Test
+    void testWindowWithAggBug() throws Exception {
+        String sql = "with cte_0 as (\n" +
+                "    select  p, s as o,x+1 as s from window_skew_table\n" +
+                "),\n" +
+                "cte_1 as (\n" +
+                "    select p, s as o, sum(s) over ([skew|p(NULL)]partition by p order by s) as s from cte_0\n" +
+                "),\n" +
+                "cte_2 as (\n" +
+                "    select p, o, s from cte_1\n" +
+                "    union all\n" +
+                "    select p, o, s from cte_0\n" +
+                ")\n" +
+                "select count(distinct s), count(distinct o) from cte_2;";
+
+        setColumnStatForP(0.1);
+
+        String plan = getCostPlan(sql);
+        assertPlanHasUnionAndAnalytic(plan);
+    }
+
+    @Test
+    void testWindowSkewStatisticsBasedWithCTEAndMultiDistinct() throws Exception {
+        Histogram histogram = new Histogram(List.of(), Map.of("1", 300L));
+        refreshAndSetColumnStatForP(
+                ColumnStatistic.builder().setNullsFraction(0.0).setHistogram(histogram).build());
+
+        String sql = "with cte_0 as (\n" +
+                "    select p, s, x from window_skew_table\n" +
+                "),\n" +
+                "cte_1 as (\n" +
+                "    select p, s, sum(x) over (partition by p order by s) as wx from cte_0\n" +
+                "),\n" +
+                "cte_2 as (\n" +
+                "    select p, s, wx from cte_1\n" +
+                "    union all\n" +
+                "    select p, s, x from cte_0\n" +
+                ")\n" +
+                "select count(distinct wx), count(distinct s) from cte_2;";
+
+        String plan = getCostPlan(sql);
+        assertPlanHasUnionAndAnalytic(plan);
+    }
+
+    @Test
+    void testWindowSkewWithJoinedCTEConsumersAndMultiDistinct() throws Exception {
+        String sql = "with base as (\n" +
+                "    select p, s, x from window_skew_table\n" +
+                "),\n" +
+                "joined as (\n" +
+                "    select a.p, a.s, a.x + b.x as combined_x\n" +
+                "    from base a join base b on a.p = b.p\n" +
+                "),\n" +
+                "windowed as (\n" +
+                "    select p, s, sum(combined_x) over ([skew|p(NULL)] partition by p order by s) as wx from joined\n" +
+                ")\n" +
+                "select count(distinct wx), count(distinct s) from windowed;";
+
+        setColumnStatForP(0.1);
+
+        String plan = getCostPlan(sql);
+        assertContains(plan, "ANALYTIC");
+    }
+
+    @Test
+    void testWindowSkewWithCTEUsedInSubqueryAndMultiDistinct() throws Exception {
+        String sql = "with base as (\n" +
+                "    select p, s, x from window_skew_table\n" +
+                "),\n" +
+                "windowed as (\n" +
+                "    select p, s, sum(x) over ([skew|p(NULL)] partition by p order by s) as wx from base\n" +
+                "),\n" +
+                "agg_source as (\n" +
+                "    select w.p, w.s, w.wx, b.x as orig_x\n" +
+                "    from windowed w\n" +
+                "    join base b on w.p = b.p\n" +
+                ")\n" +
+                "select count(distinct wx), count(distinct orig_x) from agg_source;";
+
+        setColumnStatForP(0.1);
+
+        String plan = getCostPlan(sql);
+        assertPlanHasUnionAndAnalytic(plan);
+    }
+
+    @Test
+    void testWindowSkewMCVHintWithCTEAndMultiDistinct() throws Exception {
+        String sql = "with cte_0 as (\n" +
+                "    select p, s as o, x+1 as s from window_skew_table\n" +
+                "),\n" +
+                "cte_1 as (\n" +
+                "    select p, s as o, sum(s) over ([skew|p(1)] partition by p order by s) as s from cte_0\n" +
+                "),\n" +
+                "cte_2 as (\n" +
+                "    select p, o, s from cte_1\n" +
+                "    union all\n" +
+                "    select p, o, s from cte_0\n" +
+                ")\n" +
+                "select count(distinct s), count(distinct o) from cte_2;";
+
+        setColumnStatForP(0.1);
+
+        String plan = getCostPlan(sql);
+        assertPlanHasUnionAndAnalytic(plan);
+    }
+
+    @Test
+    void testTwoSkewedWindowsOverSharedCTEWithMultiDistinct() throws Exception {
+        String sql = "with shared as (\n" +
+                "    select p, s, x from window_skew_table\n" +
+                "),\n" +
+                "win1 as (\n" +
+                "    select p, s, sum(x) over ([skew|p(NULL)] partition by p order by s) as wx from shared\n" +
+                "),\n" +
+                "win2 as (\n" +
+                "    select p, s, avg(x) over ([skew|p(NULL)] partition by p order by s) as ax from shared\n" +
+                "),\n" +
+                "combined as (\n" +
+                "    select p, s, wx as val from win1\n" +
+                "    union all\n" +
+                "    select p, s, cast(ax as bigint) as val from win2\n" +
+                "    union all\n" +
+                "    select p, s, x from shared\n" +
+                ")\n" +
+                "select count(distinct val), count(distinct s) from combined;";
+
+        setColumnStatForP(0.1);
+
+        String plan = getCostPlan(sql);
+        assertPlanHasUnionAndAnalytic(plan,4);
     }
 }
