@@ -1871,6 +1871,12 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 
 ### トランザクション遅延メトリクス
 
+#### starrocks_fe_publish_version_daemon_loop_total
+
+- 単位: Count
+- タイプ: Cumulative
+- 説明: この FE ノードで `publish-version-daemon` ループが実行された総回数。
+
 以下のメトリクスは、トランザクションの各フェーズにおける遅延分布を提供する `summary` タイプのメトリクスです。これらのメトリクスはリーダー FE ノードのみが報告します。
 
 各メトリクスには以下の出力が含まれます。
@@ -1898,7 +1904,7 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 
 - 単位: ms
 - タイプ: Summary
-- 説明: `publish` フェーズのレイテンシ。`commit` 時点から `finish` 時点までの時間。これはコミットされたトランザクションがクエリから可視化されるまでの所要時間であり、`schedule`、`execute`、`ack` の各サブフェーズの合計である。
+- 説明: `publish` フェーズのレイテンシ。`commit` 時点から `finish` 時点までの時間。これはコミットされたトランザクションがクエリから可視化されるまでの所要時間であり、`schedule`、`execute`、`can_finish`、`ack` の各サブフェーズの合計である。
 
 #### starrocks_fe_txn_publish_schedule_latency_ms
 
@@ -1912,11 +1918,17 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 - タイプ: Summary
 - 説明: `publish` タスクのアクティブな実行時間。タスクがピックアップされてから完了するまでの時間。このメトリックは、トランザクションの変更を可視化するために実際に費やされた時間を表します。
 
+#### starrocks_fe_txn_publish_can_finish_latency_ms
+
+- 単位: ms
+- タイプ: Summary
+- 説明: `publish` タスク完了から `canTxnFinish()` が初めて true を返すまでの遅延（`publish version finish` から `ready-to-finish` までの時間）。
+
 #### starrocks_fe_txn_publish_ack_latency_ms
 
 - 単位: ms
 - タイプ: Summary
-- 説明: 最終的な確認遅延。`publish` タスクが完了してから、トランザクションが `VISIBLE` としてマークされる最終的な `finish` 時点までの時間。このメトリックには、必要な最終的なステップや確認が含まれます。
+- 説明: 最終的な確認遅延。`ready-to-finish` 時点から、トランザクションが `VISIBLE` としてマークされる最終的な `finish` 時点までの時間。このメトリックには、トランザクションが完了可能になった後の最終確認ステップが含まれます。
 
 ### Merge Commit メトリクス
 
