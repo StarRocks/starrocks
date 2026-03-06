@@ -382,7 +382,7 @@ Status LakePersistentIndexParallelCompactMgr::sample_keys_from_sstable(const Per
         ASSIGN_OR_RETURN(auto sstable,
                          PersistentIndexSstable::new_sstable(
                                  sstable_pb, _tablet_mgr->sst_location(metadata->id(), sstable_pb.filename()),
-                                 block_cache ? block_cache->cache() : nullptr, false));
+                                 block_cache ? block_cache->cache() : nullptr, false, nullptr, metadata, _tablet_mgr));
         RETURN_IF_ERROR(sstable->sample_keys(sample_keys, config::pk_index_sstable_sample_interval_bytes));
     }
     return Status::OK();
