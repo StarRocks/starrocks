@@ -126,6 +126,20 @@ namespace starrocks {
     M(TYPE_DECIMAL64)                             \
     M(TYPE_DATE)
 
+#define APPLY_FOR_ALL_PK_SUPPORT_FIXED_TYPE(M) \
+    M(TYPE_BOOLEAN)                            \
+    M(TYPE_TINYINT)                            \
+    M(TYPE_SMALLINT)                           \
+    M(TYPE_INT)                                \
+    M(TYPE_BIGINT)                             \
+    M(TYPE_LARGEINT)                           \
+    M(TYPE_DATE)                               \
+    M(TYPE_DATETIME)
+
+#define APPLY_FOR_ALL_PK_SUPPORT_TYPE(M)   \
+    APPLY_FOR_ALL_PK_SUPPORT_FIXED_TYPE(M) \
+    M(TYPE_VARCHAR)
+
 #define _TYPE_DISPATCH_CASE(type) \
     case type:                    \
         return fun.template operator()<type>(args...);
