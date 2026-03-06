@@ -170,11 +170,12 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
     auto async_writer = static_cast<AsyncDeltaWriterImpl*>(meta);
     auto delta_writer = async_writer->_writer.get();
     if (iter.is_queue_stopped()) {
-        // Do NOT call delta_writer->close() here. A MergeBlockTask may still be
-        // running in the merge thread pool and accessing writer state (e.g.,
-        // _mem_table_sink, _flush_token). Closing the writer here would destroy
-        // that state and cause use-after-free. The writer will be closed in
+        // Only perform blocking I/O (wait for flush, close tablet writer) here.
+        // Do NOT reset/destroy internal state (_mem_table_sink, _flush_token, etc.)
+        // because a MergeBlockTask may still be running in the merge thread pool
+        // and accessing that state. Resource cleanup is deferred to
         // AsyncDeltaWriterImpl::close() after all tasks have been drained.
+        delta_writer->flush_and_wait();
         return 0;
     }
     int num_tasks = 0;
@@ -378,11 +379,12 @@ inline void AsyncDeltaWriterImpl::close() {
         // Safe to destroy token now since both execution queue and merge tasks are done.
         _block_merge_token.reset();
 
-        // Close the writer AFTER all tasks (execution queue + merge tasks) have completed.
-        // Previously delta_writer->close() was called in the execution queue's stop handler,
-        // which could race with a still-running MergeBlockTask or external profile readers,
-        // destroying _mem_table_sink/_flush_token while they were still being accessed.
-        _writer->close();
+        // Release writer resources (reset _mem_table_sink, _flush_token, etc.) AFTER all
+        // tasks have completed. The blocking I/O (flush wait + tablet writer close) was
+        // already done in the execution queue's stop handler via flush_and_wait().
+        // We only do the non-blocking resource cleanup here, which is safe because all
+        // concurrent accessors (MergeBlockTask, profile readers) have been drained.
+        _writer->release_resources();
     }
 }
 
