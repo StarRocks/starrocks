@@ -23,21 +23,13 @@
 namespace starrocks::parquet {
 
 Status IcebergRowIdReader::read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) {
+    // Ignore filter and output all rows in range, consistent with other reserved column readers
+    // (FixedValueColumnReader, RowSourceReader, ParquetPosReader). The caller (GroupReader)
+    // applies chunk->filter_range() uniformly across all columns after reading.
     Column* dst_col = dst->as_mutable_raw_ptr();
-    if (filter == nullptr) {
-        for (uint64_t i = range.begin(); i < range.end(); ++i) {
-            int64_t row_id = _first_row_id + i;
-            dst_col->append_datum(Datum(row_id));
-        }
-    } else {
-        DCHECK_EQ(filter->size(), range.span_size()) << "Filter size must match range size";
-        for (uint64_t i = range.begin(); i < range.end(); ++i) {
-            size_t filter_index = i - range.begin();
-            if ((*filter)[filter_index]) {
-                int64_t row_id = _first_row_id + i;
-                dst_col->append_datum(Datum(row_id));
-            }
-        }
+    for (uint64_t i = range.begin(); i < range.end(); ++i) {
+        int64_t row_id = _first_row_id + i;
+        dst_col->append_datum(Datum(row_id));
     }
     return Status::OK();
 }

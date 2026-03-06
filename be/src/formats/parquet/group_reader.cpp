@@ -338,7 +338,7 @@ StatusOr<size_t> GroupReader::_read_range_round_by_round(const Range<uint64_t>& 
 }
 
 StatusOr<ColumnReaderPtr> GroupReader::_create_reserved_iceberg_column_reader(const SlotDescriptor* slot,
-                                                                               int32_t field_id) {
+                                                                              int32_t field_id) {
     // Try to find the physical column in the Parquet file by Iceberg spec field ID first (canonical),
     // then fall back to column name lookup for compatibility.
     int32_t field_idx = _param.file_metadata->schema().get_field_idx_by_field_id(field_id);
@@ -427,22 +427,21 @@ Status GroupReader::_create_column_readers() {
         for (const auto* slot : *_param.reserved_field_slots) {
             if (slot->col_name() == HdfsScanner::ICEBERG_ROW_ID) {
                 // Iceberg v3 row lineage: try physical column first (post-compaction files),
-                // fall back to computed row_id (firstRowId + position) for non-compacted files,
-                // or NULL when first_row_id is unavailable (e.g. late materialization on pre-v3 files).
-                ASSIGN_OR_RETURN(auto reader, _create_reserved_iceberg_column_reader(
-                                                      slot, HdfsScanner::ICEBERG_ROW_ID_COLUMN_ID));
+                // fall back to computed row_id (firstRowId + position) for non-compacted files.
+                // FE guarantees firstRowId is present when _row_id is requested.
+                ASSIGN_OR_RETURN(auto reader,
+                                 _create_reserved_iceberg_column_reader(slot, HdfsScanner::ICEBERG_ROW_ID_COLUMN_ID));
                 if (reader != nullptr) {
                     _column_readers.emplace(slot->id(), std::move(reader));
-                } else if (_param.scan_range != nullptr && !_param.scan_range->__isset.first_row_id) {
-                    _column_readers.emplace(slot->id(), std::make_unique<FixedValueColumnReader>(kNullDatum));
                 } else {
                     _column_readers.emplace(slot->id(), std::make_unique<IcebergRowIdReader>(_row_group_first_row_id));
                 }
             } else if (slot->col_name() == HdfsScanner::ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER) {
                 // Iceberg v3 row lineage: try physical column first (post-compaction files),
                 // fall back to file-level dataSequenceNumber passed via extended_columns from FE.
-                ASSIGN_OR_RETURN(auto reader, _create_reserved_iceberg_column_reader(
-                                                      slot, HdfsScanner::ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER_COLUMN_ID));
+                ASSIGN_OR_RETURN(auto reader,
+                                 _create_reserved_iceberg_column_reader(
+                                         slot, HdfsScanner::ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER_COLUMN_ID));
                 if (reader != nullptr) {
                     _column_readers.emplace(slot->id(), std::move(reader));
                 } else {
