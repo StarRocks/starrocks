@@ -2,7 +2,7 @@
 
 ## Overview
 
-Three phases deliver a fully JDBC-parity ADBC external catalog. Phase 1 wires up the catalog infrastructure end-to-end — build dependencies, DDL, metadata browsing, and the type system. Phase 2 delivers the actual data path — BE native C++ ADBC scanning, Arrow-to-Chunk conversion, pushdowns, and optimizer integration. Phase 3 completes JDBC parity with materialized view support and statistics collection.
+Four phases deliver a fully JDBC-parity ADBC external catalog. Phase 1 wires up the catalog infrastructure end-to-end — build dependencies, DDL, metadata browsing, and the type system. Phase 2 delivers the actual data path — BE native C++ ADBC scanning, Arrow-to-Chunk conversion, pushdowns, and optimizer integration. Phase 3 completes JDBC parity with materialized view support and statistics collection. Phase 4 adds MockedADBCMetadata plan tests and SQL integration test files (E2E requires CI infra team to provision Flight SQL server).
 
 ## Phases
 
@@ -15,6 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Foundation** - Build dependencies compile, catalog DDL works, metadata browsable, Arrow types map correctly
 - [x] **Phase 2: Scanning** - Full data path from FE query to BE Arrow scan to StarRocks Chunk, with column/predicate/limit pushdown and optimizer integration
 - [ ] **Phase 3: JDBC Parity** - Materialized views refresh against ADBC tables, column statistics drive optimizer costs, partition discovery and pruning
+- [ ] **Phase 4: Integration Testing** - MockedADBCMetadata + ConnectorPlanTestBase plan tests, SQL integration test T/R files for test_adbc_catalog
 
 ## Phase Details
 
@@ -55,16 +56,33 @@ Plans:
 - [x] 02-04-PLAN.md — BE wiring (exec_factory, connector registration) + full build verification (SCAN-02, SCAN-03, SCAN-04, SCAN-05, SCAN-06, SCAN-07)
 
 ### Phase 3: JDBC Parity
-**Goal**: Users can create materialized views over ADBC tables, refresh them incrementally, and the optimizer uses column statistics for cost-based decisions; partition discovery and pruning
+**Goal**: ADBC connector has partition traits registered for MV framework, optimizer uses row count statistics, materialized views work over ADBC tables with full refresh
 **Depends on**: Phase 2
 **Requirements**: MV-01, MV-02, MV-03, MV-04, STAT-01, STAT-02, PART-01, PART-02, PART-03
 **Success Criteria** (what must be TRUE):
   1. User can `CREATE MATERIALIZED VIEW mv AS SELECT ... FROM my_adbc.mydb.mytable` and the MV is created without error
   2. `REFRESH MATERIALIZED VIEW mv` successfully fetches data from the ADBC table and populates the MV
-  3. Incremental MV refresh (PCT) detects partition changes and refreshes only affected partitions
+  3. PCT refresh is explicitly unsupported (isSupportPCTRefresh=false) — full refresh only
   4. The query optimizer rewrites eligible queries to use the MV instead of scanning the ADBC table
-  5. `ANALYZE TABLE my_adbc.mydb.mytable` collects column statistics (min, max, ndv, null count) when the remote source provides them
-  6. Partition pruning filters irrelevant partitions during query planning (visible in EXPLAIN)
+  5. getTableStatistics() returns row count from remote COUNT(*) for optimizer cost estimation
+  6. Partition discovery returns empty list (minimal support); no partition pruning logic
+**Plans**: 3 plans
+
+Plans:
+- [ ] 03-01-PLAN.md — ADBCPartitionTraits + getCatalogTableName + TRAITS_TABLE registration (PART-01, PART-02, PART-03, MV-01, MV-03)
+- [ ] 03-02-PLAN.md — getTableStatistics() with remote row count via ADBC (STAT-01, STAT-02)
+- [ ] 03-03-PLAN.md — MV support verification tests + full build check (MV-01, MV-02, MV-04)
+
+### Phase 4: Integration Testing
+**Goal**: Add MockedADBCMetadata for FE plan tests via ConnectorPlanTestBase, write SQL integration test T/R files for test_adbc_catalog, and add sr.conf variables for Flight SQL endpoints
+**Depends on**: Phase 3
+**Requirements**: TEST-01, TEST-02, TEST-03, TEST-04
+**Success Criteria** (what must be TRUE):
+  1. MockedADBCMetadata registered in ConnectorPlanTestBase; ADBC plan tests pass (EXPLAIN shows ADBC_SCAN_NODE with pushdowns)
+  2. SQL integration test files exist in `test/sql/test_adbc_catalog/` with T/R pairs covering: CREATE CATALOG, SHOW DATABASES, DESCRIBE, SELECT with pushdowns, DROP CATALOG
+  3. `test/conf/sr.conf` has `[.flightsql]` section with `external_flightsql_ip`, `external_flightsql_port` variables
+  4. SQL integration tests pass when run against a manually provisioned Flight SQL server (e.g., DuckDB Flight SQL)
+**Note**: E2E tests in CI require infra team to add Flight SQL server provisioning to ci-tool. Local verification uses manually started DuckDB Flight SQL.
 **Plans**: TBD
 
 ## Progress
@@ -76,4 +94,5 @@ Phases execute in numeric order: 1 → 2 → 3
 |-------|----------------|--------|-----------|
 | 1. Foundation | 5/5 | Complete | 2026-03-05 |
 | 2. Scanning | 4/4 | Complete | 2026-03-06 |
-| 3. JDBC Parity | 0/TBD | Not started | - |
+| 3. JDBC Parity | 0/3 | In progress | - |
+| 4. Integration Testing | 0/TBD | Not started | - |
