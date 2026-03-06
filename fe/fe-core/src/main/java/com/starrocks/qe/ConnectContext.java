@@ -1184,14 +1184,7 @@ public class ConnectContext {
             dbName = parts[1];
         }
 
-<<<<<<< HEAD
         if (!Strings.isNullOrEmpty(dbName) && metadataMgr.getDb(this.getCurrentCatalog(), dbName) == null) {
-            LOG.debug("Unknown catalog {} and db {}", this.getCurrentCatalog(), dbName);
-            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
-=======
-        dbName = normalizeName(dbName);
-
-        if (!Strings.isNullOrEmpty(dbName) && metadataMgr.getDb(this, this.getCurrentCatalog(), dbName) == null) {
             // On a follower FE, the database may have been created on the leader but the
             // corresponding journal entry has not been replayed locally yet. Wait for the
             // local replayer to catch up to the latest committed journal before giving up.
@@ -1214,11 +1207,10 @@ public class ConnectContext {
                             dbName, e.getMessage());
                 }
             }
-            if (metadataMgr.getDb(this, this.getCurrentCatalog(), dbName) == null) {
+            if (metadataMgr.getDb(this.getCurrentCatalog(), dbName) == null) {
                 LOG.debug("Unknown catalog {} and db {}", this.getCurrentCatalog(), dbName);
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
             }
->>>>>>> cff8cb61f0 ([BugFix] Wait for journal replay in changeCatalogDb on follower FE (backport #69834) (#69901))
         }
 
         // Here we check the request permission that sent by the mysql client or jdbc.
