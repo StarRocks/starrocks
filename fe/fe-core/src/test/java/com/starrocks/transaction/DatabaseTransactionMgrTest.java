@@ -60,6 +60,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.persist.EditLog;
 import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Mock;
@@ -83,6 +84,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.spy;
 
 public class DatabaseTransactionMgrTest {
 
@@ -867,6 +871,41 @@ public class DatabaseTransactionMgrTest {
     }
 
     @Test
+    public void testFinishTransactionBatchEditLogException() throws StarRocksException {
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        DatabaseTransactionMgr masterDbTransMgr = masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        long txnId6 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable6);
+        long txnId7 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable7);
+        long txnId8 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable8);
+        TransactionStateBatch stateBatch = new TransactionStateBatch(List.of(
+                masterDbTransMgr.getTransactionState(txnId6),
+                masterDbTransMgr.getTransactionState(txnId7),
+                masterDbTransMgr.getTransactionState(txnId8)));
+
+        new MockUp<Table>() {
+            @Mock
+            public boolean isCloudNativeTableOrMaterializedView() {
+                return true;
+            }
+        };
+
+        EditLog spyEditLog = spy(masterGlobalStateMgr.getEditLog());
+        doThrow(new RuntimeException("EditLog write failed"))
+                .when(spyEditLog).logInsertTransactionStateBatch(any(TransactionStateBatch.class), any());
+        EditLog originalEditLog = replaceDatabaseTransactionMgrEditLog(masterDbTransMgr, spyEditLog);
+        try {
+            RuntimeException exception = Assertions.assertThrows(RuntimeException.class,
+                    () -> masterTransMgr.finishTransactionBatch(GlobalStateMgrTestUtil.testDbId1, stateBatch, null));
+            assertEditLogWriteFailed(exception);
+            assertEquals(TransactionStatus.COMMITTED, masterDbTransMgr.getTransactionState(txnId6).getTransactionStatus());
+            assertEquals(TransactionStatus.COMMITTED, masterDbTransMgr.getTransactionState(txnId7).getTransactionStatus());
+            assertEquals(TransactionStatus.COMMITTED, masterDbTransMgr.getTransactionState(txnId8).getTransactionStatus());
+        } finally {
+            replaceDatabaseTransactionMgrEditLog(masterDbTransMgr, originalEditLog);
+        }
+    }
+
+    @Test
     public void testPublishVersionMissing() throws StarRocksException {
         TransactionIdGenerator idGenerator = masterTransMgr.getTransactionIDGenerator();
         DatabaseTransactionMgr masterDbTransMgr =
@@ -1063,5 +1102,16 @@ public class DatabaseTransactionMgrTest {
                     Config.finish_transaction_default_lock_timeout_ms);
             Assertions.assertTrue(result);
         });
+    }
+
+    private EditLog replaceDatabaseTransactionMgrEditLog(DatabaseTransactionMgr dbTransactionMgr, EditLog editLog) {
+        EditLog originalEditLog = Deencapsulation.getField(dbTransactionMgr, "editLog");
+        Deencapsulation.setField(dbTransactionMgr, "editLog", editLog);
+        return originalEditLog;
+    }
+
+    private void assertEditLogWriteFailed(RuntimeException exception) {
+        Assertions.assertTrue(exception.getMessage().contains("EditLog write failed")
+                || exception.getCause() != null && exception.getCause().getMessage().contains("EditLog write failed"));
     }
 }
