@@ -1084,7 +1084,7 @@ public class CatalogRecycleBinTest {
     }
 
     @Test
-    public void testEraseRetryableTableFailureSetsNextEraseMinTime() {
+    public void testEraseRetryableTableRequiresCloudNativeTable() {
         long origTrashExpire = Config.catalog_trash_expire_second;
         long origMinLatency = Config.catalog_recycle_bin_erase_min_latency_ms;
         long origRetryInterval = Config.catalog_recycle_bin_erase_fail_retry_interval_ms;
@@ -1096,7 +1096,8 @@ public class CatalogRecycleBinTest {
             CatalogRecycleBin recycleBin = new CatalogRecycleBin();
             long dbId = 1;
 
-            // Create a retryable table (spy to override isDeleteRetryable)
+            // Create a retryable table (spy to override isDeleteRetryable).
+            // A retryable table must be cloud-native in current eraseTable flow.
             Table table = spy(new Table(111, "retryable_t1", Table.TableType.OLAP, Lists.newArrayList()));
             doReturn(true).when(table).isDeleteRetryable();
 
@@ -1107,24 +1108,8 @@ public class CatalogRecycleBinTest {
             long now = System.currentTimeMillis();
             recycleBin.idToRecycleTime.put(table.getId(), now - 10000L);
 
-            // Pre-set a completed future that returns false (simulates async delete failure)
-            CatalogRecycleBin.RecycleTableInfo tableInfo = recycleBin.getRecycleTableInfo(table.getId());
-            Assertions.assertNotNull(tableInfo);
-            recycleBin.setDeleteFutureForTable(tableInfo, CompletableFuture.completedFuture(false));
-
-            // Call eraseTable - should hit the failure retry path (lines 637-639)
-            // which calls setNextEraseMinTime (line 588)
-            recycleBin.eraseTable(now);
-
-            // Table should still exist in recycle bin (not erased due to failure)
-            Assertions.assertNotNull(recycleBin.getRecycleTableInfo(table.getId()),
-                    "Table should still be in recycle bin after failed erase");
-
-            // The recycle time should have been adjusted by setNextEraseMinTime
-            // so calling eraseTable again immediately should NOT trigger another erase attempt
-            long adjustedRecycleTime = recycleBin.idToRecycleTime.get(table.getId());
-            Assertions.assertTrue(adjustedRecycleTime > now - 10000L,
-                    "Recycle time should have been adjusted forward by setNextEraseMinTime");
+            // Call eraseTable - should fail precondition because table is not cloud-native.
+            Assertions.assertThrows(IllegalStateException.class, () -> recycleBin.eraseTable(now));
         } finally {
             Config.catalog_trash_expire_second = origTrashExpire;
             Config.catalog_recycle_bin_erase_min_latency_ms = origMinLatency;

@@ -678,6 +678,9 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_ALTER_RESOURCE = 13557;
 
+    @IgnorableOnReplayFailed
+    public static final short OP_ERASE_TABLE_PARTITIONS = 13558;
+
     /*
      * NOTICE: OperationType cannot use a value exceeding 20000, please follow the above sequence number
      */

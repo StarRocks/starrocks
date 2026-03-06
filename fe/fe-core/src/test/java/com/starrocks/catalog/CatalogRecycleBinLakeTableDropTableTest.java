@@ -16,6 +16,7 @@ package com.starrocks.catalog;
 
 import com.starrocks.common.Config;
 import com.starrocks.lake.LakeTableHelper;
+import com.starrocks.persist.EraseTablePartitionsLog;
 import com.starrocks.proto.DropTableRequest;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.BrpcProxy;
@@ -37,6 +38,8 @@ import org.assertj.core.util.Lists;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -197,6 +200,13 @@ public class CatalogRecycleBinLakeTableDropTableTest extends CatalogRecycleBinLa
         Assertions.assertTrue(recycleBin.isPartitionFromTableDeletion(p2.getId()));
         Assertions.assertNotNull(recycleBin.getRecyclePartitionInfo(p1.getId()));
         Assertions.assertNotNull(recycleBin.getRecyclePartitionInfo(p2.getId()));
+        // Simulate unflushed batch WAL pending IDs for this table.
+        java.lang.reflect.Field pendingField = CatalogRecycleBin.class.getDeclaredField("pendingBatchErasePartitionIds");
+        pendingField.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        Map<Long, List<Long>> pendingMap = (Map<Long, List<Long>>) pendingField.get(recycleBin);
+        pendingMap.put(table.getId(), Lists.newArrayList(p1.getId(), p2.getId()));
+        Assertions.assertEquals(2, recycleBin.getPendingBatchErasePartitionCount(table.getId()));
 
         // Simulate follower replay: replayEraseTable should clean up all tracking data
         recycleBin.replayEraseTable(Lists.newArrayList(table.getId()));
@@ -213,6 +223,8 @@ public class CatalogRecycleBinLakeTableDropTableTest extends CatalogRecycleBinLa
         // Verify recycle times are cleaned
         Assertions.assertFalse(recycleBin.isContainedInidToRecycleTime(p1.getId()));
         Assertions.assertFalse(recycleBin.isContainedInidToRecycleTime(p2.getId()));
+        // Verify pending batch partition IDs are also cleaned
+        Assertions.assertEquals(0, recycleBin.getPendingBatchErasePartitionCount(table.getId()));
     }
 
     /**
@@ -1520,5 +1532,434 @@ public class CatalogRecycleBinLakeTableDropTableTest extends CatalogRecycleBinLa
 
         // Clean up
         recycleBin.clear();
+    }
+
+    /**
+     * Test that batch WAL logging works correctly during Lake table partition erasure.
+     * With batch size = 2 and 3 partitions, we expect:
+     * - After 2 partitions are erased, a batch WAL is logged which removes those 2 partitions
+     *   from the table object in the recycle bin (via applyEraseTablePartitions).
+     * - After the 3rd partition is erased and cleanup happens, the table is fully erased.
+     */
+    @Test
+    public void testBatchErasePartitionWAL(@Mocked LakeService lakeService) throws Exception {
+        LOG.warn("Start test: {}, lakeService={}", currentCaseName, lakeService);
+        final String dbName = "batch_erase_partition_wal_test";
+        int originalBatchSize = Config.catalog_recycle_bin_batch_erase_partition_log_size;
+        try {
+            Config.catalog_recycle_bin_batch_erase_partition_log_size = 2;
+
+            CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
+            ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+
+            // Create database
+            String createDbStmtStr = String.format("create database %s;", dbName);
+            CreateDbStmt createDbStmt =
+                    (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+
+            // Create a table with 3 partitions
+            Table table = createTable(connectContext, String.format(
+                    "CREATE TABLE %s.t1" +
+                            "(" +
+                            "  k1 DATE," +
+                            "  v1 varchar(10)" +
+                            ")" +
+                            "DUPLICATE KEY(k1)\n" +
+                            "PARTITION BY RANGE(k1) (" +
+                            "  PARTITION p1 VALUES LESS THAN('2024-01-01')," +
+                            "  PARTITION p2 VALUES LESS THAN('2024-02-01')," +
+                            "  PARTITION p3 VALUES LESS THAN('2024-03-01')" +
+                            ")" +
+                            "DISTRIBUTED BY HASH(k1) BUCKETS 1\n" +
+                            "PROPERTIES('replication_num' = '1');", dbName));
+
+            Assertions.assertTrue(table.isCloudNativeTable());
+            Assertions.assertEquals(3, table.getPartitions().size());
+
+            // Force drop the table
+            dropTable(connectContext, String.format("DROP TABLE %s.t1 FORCE", dbName));
+            Assertions.assertNotNull(recycleBin.getTable(db.getId(), table.getId()));
+
+            new MockUp<BrpcProxy>() {
+                @Mock
+                public LakeService getLakeService(TNetworkAddress address) throws RpcException {
+                    return lakeService;
+                }
+            };
+            new MockUp<ConnectContext>() {
+                @Mock
+                public ComputeResource getCurrentComputeResource() {
+                    return WarehouseManager.DEFAULT_RESOURCE;
+                }
+            };
+
+            // All 3 partitions should be deleted successfully
+            new Expectations() {
+                {
+                    lakeService.dropTable((DropTableRequest) any);
+                    minTimes = 3;
+                    maxTimes = 3;
+                    result = buildDropTableResponse(0, "");
+                }
+            };
+
+            long delay = Math.max(Config.catalog_trash_expire_second * 1000,
+                    CatalogRecycleBin.getMinEraseLatency()) + 1;
+            long futureTime = System.currentTimeMillis() + delay;
+
+            // eraseTable: adds partitions to tracking
+            recycleBin.eraseTable(futureTime);
+            Assertions.assertTrue(recycleBin.isLakeTablePartitionsDeletionInProgress(table.getId()));
+            Assertions.assertEquals(3, recycleBin.getLakeTablePendingPartitionCount(table.getId()));
+
+            // Verify the table object in the recycle bin still has 3 partitions
+            Table tableInRecycleBin = recycleBin.getTable(db.getId(), table.getId());
+            Assertions.assertNotNull(tableInRecycleBin);
+            Assertions.assertEquals(3, tableInRecycleBin.getPartitions().size());
+
+            // erasePartition: submits async tasks and processes them
+            recycleBin.erasePartition(futureTime);
+            Thread.sleep(500);
+            recycleBin.erasePartition(futureTime);
+
+            // After processing all 3 partitions with batch size = 2:
+            // - A batch WAL for 2 partitions should have been logged and applied
+            // - The table object should have only 1 partition left (2 removed by WAL applier)
+            // - The 3rd partition is in pendingBatchErasePartitionIds (not yet logged)
+            tableInRecycleBin = recycleBin.getTable(db.getId(), table.getId());
+            Assertions.assertNotNull(tableInRecycleBin);
+            Assertions.assertEquals(1, tableInRecycleBin.getPartitions().size());
+
+            // All partitions should be removed from idToPartition tracking
+            Assertions.assertEquals(0, recycleBin.getLakeTablePendingPartitionCount(table.getId()));
+
+            // eraseTable: should clean up and finish (remaining pending batch is discarded,
+            // covered by table-level erase WAL)
+            recycleBin.eraseTable(futureTime);
+            Assertions.assertNull(recycleBin.getTable(db.getId(), table.getId()));
+            Assertions.assertFalse(recycleBin.isLakeTablePartitionsDeletionInProgress(table.getId()));
+        } finally {
+            Config.catalog_recycle_bin_batch_erase_partition_log_size = originalBatchSize;
+        }
+    }
+
+    /**
+     * Test that when batch size is 0 (disabled), no batch WAL is logged and the table object
+     * retains all partitions until the table-level erase WAL is written.
+     */
+    @Test
+    public void testBatchErasePartitionWALDisabled(@Mocked LakeService lakeService) throws Exception {
+        LOG.warn("Start test: {}, lakeService={}", currentCaseName, lakeService);
+        final String dbName = "batch_erase_wal_disabled_test";
+        int originalBatchSize = Config.catalog_recycle_bin_batch_erase_partition_log_size;
+        try {
+            Config.catalog_recycle_bin_batch_erase_partition_log_size = 0;
+
+            CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
+            ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+
+            // Create database
+            String createDbStmtStr = String.format("create database %s;", dbName);
+            CreateDbStmt createDbStmt =
+                    (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+
+            // Create a table with 2 partitions
+            Table table = createTable(connectContext, String.format(
+                    "CREATE TABLE %s.t1" +
+                            "(" +
+                            "  k1 DATE," +
+                            "  v1 varchar(10)" +
+                            ")" +
+                            "DUPLICATE KEY(k1)\n" +
+                            "PARTITION BY RANGE(k1) (" +
+                            "  PARTITION p1 VALUES LESS THAN('2024-01-01')," +
+                            "  PARTITION p2 VALUES LESS THAN('2024-02-01')" +
+                            ")" +
+                            "DISTRIBUTED BY HASH(k1) BUCKETS 1\n" +
+                            "PROPERTIES('replication_num' = '1');", dbName));
+
+            Assertions.assertTrue(table.isCloudNativeTable());
+
+            // Force drop the table
+            dropTable(connectContext, String.format("DROP TABLE %s.t1 FORCE", dbName));
+
+            new MockUp<BrpcProxy>() {
+                @Mock
+                public LakeService getLakeService(TNetworkAddress address) throws RpcException {
+                    return lakeService;
+                }
+            };
+            new MockUp<ConnectContext>() {
+                @Mock
+                public ComputeResource getCurrentComputeResource() {
+                    return WarehouseManager.DEFAULT_RESOURCE;
+                }
+            };
+            new Expectations() {
+                {
+                    lakeService.dropTable((DropTableRequest) any);
+                    minTimes = 2;
+                    maxTimes = 2;
+                    result = buildDropTableResponse(0, "");
+                }
+            };
+
+            long delay = Math.max(Config.catalog_trash_expire_second * 1000,
+                    CatalogRecycleBin.getMinEraseLatency()) + 1;
+            long futureTime = System.currentTimeMillis() + delay;
+
+            // eraseTable: adds partitions to tracking
+            recycleBin.eraseTable(futureTime);
+            Assertions.assertTrue(recycleBin.isLakeTablePartitionsDeletionInProgress(table.getId()));
+
+            // erasePartition: processes both partitions
+            recycleBin.erasePartition(futureTime);
+            Thread.sleep(500);
+            recycleBin.erasePartition(futureTime);
+
+            // With batch size = 0, no batch WAL should be logged.
+            // The table object should still have all 2 partitions
+            // (only the table-level erase will remove them).
+            Table tableInRecycleBin = recycleBin.getTable(db.getId(), table.getId());
+            Assertions.assertNotNull(tableInRecycleBin);
+            Assertions.assertEquals(2, tableInRecycleBin.getPartitions().size());
+
+            // All partitions removed from tracking
+            Assertions.assertEquals(0, recycleBin.getLakeTablePendingPartitionCount(table.getId()));
+
+            // eraseTable: should clean up and fully erase the table
+            recycleBin.eraseTable(futureTime);
+            Assertions.assertNull(recycleBin.getTable(db.getId(), table.getId()));
+        } finally {
+            Config.catalog_recycle_bin_batch_erase_partition_log_size = originalBatchSize;
+        }
+    }
+
+    /**
+     * Test that replayEraseTablePartitions correctly removes partitions from the table object
+     * in the recycle bin, so that they won't be re-added during addLakeTablePartitionsToRecycleBin
+     * after FE restart.
+     */
+    @Test
+    public void testReplayEraseTablePartitions(@Mocked LakeService lakeService) throws Exception {
+        LOG.warn("Start test: {}, lakeService={}", currentCaseName, lakeService);
+        final String dbName = "replay_erase_table_partitions_test";
+        CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+
+        // Create database
+        String createDbStmtStr = String.format("create database %s;", dbName);
+        CreateDbStmt createDbStmt =
+                (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+
+        // Create a table with 3 partitions
+        Table table = createTable(connectContext, String.format(
+                "CREATE TABLE %s.t1" +
+                        "(" +
+                        "  k1 DATE," +
+                        "  v1 varchar(10)" +
+                        ")" +
+                        "DUPLICATE KEY(k1)\n" +
+                        "PARTITION BY RANGE(k1) (" +
+                        "  PARTITION p1 VALUES LESS THAN('2024-01-01')," +
+                        "  PARTITION p2 VALUES LESS THAN('2024-02-01')," +
+                        "  PARTITION p3 VALUES LESS THAN('2024-03-01')" +
+                        ")" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 1\n" +
+                        "PROPERTIES('replication_num' = '1');", dbName));
+
+        Assertions.assertTrue(table.isCloudNativeTable());
+        Partition p1 = table.getPartition("p1");
+        Partition p2 = table.getPartition("p2");
+        Partition p3 = table.getPartition("p3");
+        Assertions.assertNotNull(p1);
+        Assertions.assertNotNull(p2);
+        Assertions.assertNotNull(p3);
+
+        // Force drop the table (puts it in recycle bin)
+        dropTable(connectContext, String.format("DROP TABLE %s.t1 FORCE", dbName));
+        Table tableInRecycleBin = recycleBin.getTable(db.getId(), table.getId());
+        Assertions.assertNotNull(tableInRecycleBin);
+        Assertions.assertEquals(3, tableInRecycleBin.getPartitions().size());
+
+        // Simulate replay of a batch erase for p1 and p2
+        EraseTablePartitionsLog log =
+                new EraseTablePartitionsLog(db.getId(), table.getId(), Arrays.asList(p1.getId(), p2.getId()));
+        recycleBin.replayEraseTablePartitions(log);
+
+        // After replay, the table object should have only 1 partition left (p3)
+        tableInRecycleBin = recycleBin.getTable(db.getId(), table.getId());
+        Assertions.assertNotNull(tableInRecycleBin);
+        Assertions.assertEquals(1, tableInRecycleBin.getPartitions().size());
+        Assertions.assertNull(tableInRecycleBin.getPartition("p1"));
+        Assertions.assertNull(tableInRecycleBin.getPartition("p2"));
+        Assertions.assertNotNull(tableInRecycleBin.getPartition("p3"));
+
+        // Clean up
+        recycleBin.clear();
+    }
+
+    /**
+     * Test that replay of EraseTablePartitionsLog is idempotent - replaying the same log twice
+     * should not cause errors.
+     */
+    @Test
+    public void testReplayEraseTablePartitionsIdempotent(@Mocked LakeService lakeService) throws Exception {
+        LOG.warn("Start test: {}, lakeService={}", currentCaseName, lakeService);
+        final String dbName = "replay_erase_partitions_idempotent_test";
+        CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+
+        // Create database
+        String createDbStmtStr = String.format("create database %s;", dbName);
+        CreateDbStmt createDbStmt =
+                (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+
+        // Create a table with 2 partitions
+        Table table = createTable(connectContext, String.format(
+                "CREATE TABLE %s.t1" +
+                        "(" +
+                        "  k1 DATE," +
+                        "  v1 varchar(10)" +
+                        ")" +
+                        "DUPLICATE KEY(k1)\n" +
+                        "PARTITION BY RANGE(k1) (" +
+                        "  PARTITION p1 VALUES LESS THAN('2024-01-01')," +
+                        "  PARTITION p2 VALUES LESS THAN('2024-02-01')" +
+                        ")" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 1\n" +
+                        "PROPERTIES('replication_num' = '1');", dbName));
+
+        Partition p1 = table.getPartition("p1");
+        Partition p2 = table.getPartition("p2");
+
+        // Force drop the table
+        dropTable(connectContext, String.format("DROP TABLE %s.t1 FORCE", dbName));
+
+        // Replay the same log twice - should not cause errors
+        EraseTablePartitionsLog log =
+                new EraseTablePartitionsLog(db.getId(), table.getId(), Arrays.asList(p1.getId()));
+        recycleBin.replayEraseTablePartitions(log);
+        recycleBin.replayEraseTablePartitions(log); // replay again (idempotent)
+
+        // Table should still exist with 1 partition (p2)
+        Table tableInRecycleBin = recycleBin.getTable(db.getId(), table.getId());
+        Assertions.assertNotNull(tableInRecycleBin);
+        Assertions.assertEquals(1, tableInRecycleBin.getPartitions().size());
+        Assertions.assertNotNull(tableInRecycleBin.getPartition("p2"));
+
+        // Replay for a non-existent table should also be safe
+        EraseTablePartitionsLog logForNonExistentTable =
+                new EraseTablePartitionsLog(db.getId(), 99999L, Arrays.asList(88888L));
+        recycleBin.replayEraseTablePartitions(logForNonExistentTable); // should not throw
+
+        // Clean up
+        recycleBin.clear();
+    }
+
+    /**
+     * Test batch WAL with batch size = 1, which means every partition deletion is logged individually.
+     */
+    @Test
+    public void testBatchErasePartitionWALWithBatchSizeOne(@Mocked LakeService lakeService) throws Exception {
+        LOG.warn("Start test: {}, lakeService={}", currentCaseName, lakeService);
+        final String dbName = "batch_erase_wal_size_one_test";
+        int originalBatchSize = Config.catalog_recycle_bin_batch_erase_partition_log_size;
+        try {
+            Config.catalog_recycle_bin_batch_erase_partition_log_size = 1;
+
+            CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
+            ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+
+            // Create database
+            String createDbStmtStr = String.format("create database %s;", dbName);
+            CreateDbStmt createDbStmt =
+                    (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+
+            // Create a table with 2 partitions
+            Table table = createTable(connectContext, String.format(
+                    "CREATE TABLE %s.t1" +
+                            "(" +
+                            "  k1 DATE," +
+                            "  v1 varchar(10)" +
+                            ")" +
+                            "DUPLICATE KEY(k1)\n" +
+                            "PARTITION BY RANGE(k1) (" +
+                            "  PARTITION p1 VALUES LESS THAN('2024-01-01')," +
+                            "  PARTITION p2 VALUES LESS THAN('2024-02-01')" +
+                            ")" +
+                            "DISTRIBUTED BY HASH(k1) BUCKETS 1\n" +
+                            "PROPERTIES('replication_num' = '1');", dbName));
+
+            Assertions.assertTrue(table.isCloudNativeTable());
+
+            // Force drop the table
+            dropTable(connectContext, String.format("DROP TABLE %s.t1 FORCE", dbName));
+
+            new MockUp<BrpcProxy>() {
+                @Mock
+                public LakeService getLakeService(TNetworkAddress address) throws RpcException {
+                    return lakeService;
+                }
+            };
+            new MockUp<ConnectContext>() {
+                @Mock
+                public ComputeResource getCurrentComputeResource() {
+                    return WarehouseManager.DEFAULT_RESOURCE;
+                }
+            };
+            new Expectations() {
+                {
+                    lakeService.dropTable((DropTableRequest) any);
+                    minTimes = 2;
+                    maxTimes = 2;
+                    result = buildDropTableResponse(0, "");
+                }
+            };
+
+            long delay = Math.max(Config.catalog_trash_expire_second * 1000,
+                    CatalogRecycleBin.getMinEraseLatency()) + 1;
+            long futureTime = System.currentTimeMillis() + delay;
+
+            // eraseTable: adds partitions to tracking
+            recycleBin.eraseTable(futureTime);
+            Assertions.assertTrue(recycleBin.isLakeTablePartitionsDeletionInProgress(table.getId()));
+            Assertions.assertEquals(2, recycleBin.getLakeTablePendingPartitionCount(table.getId()));
+
+            // Verify table has 2 partitions initially
+            Table tableInRecycleBin = recycleBin.getTable(db.getId(), table.getId());
+            Assertions.assertNotNull(tableInRecycleBin);
+            Assertions.assertEquals(2, tableInRecycleBin.getPartitions().size());
+
+            // erasePartition: processes both partitions
+            recycleBin.erasePartition(futureTime);
+            Thread.sleep(500);
+            recycleBin.erasePartition(futureTime);
+
+            // With batch size = 1, each partition should trigger an immediate batch WAL.
+            // Both partitions should be removed from the table object.
+            tableInRecycleBin = recycleBin.getTable(db.getId(), table.getId());
+            Assertions.assertNotNull(tableInRecycleBin);
+            Assertions.assertEquals(0, tableInRecycleBin.getPartitions().size());
+
+            // All partitions removed from tracking
+            Assertions.assertEquals(0, recycleBin.getLakeTablePendingPartitionCount(table.getId()));
+
+            // eraseTable: should clean up and fully erase the table
+            recycleBin.eraseTable(futureTime);
+            Assertions.assertNull(recycleBin.getTable(db.getId(), table.getId()));
+        } finally {
+            Config.catalog_recycle_bin_batch_erase_partition_log_size = originalBatchSize;
+        }
     }
 }

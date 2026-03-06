@@ -2890,6 +2890,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 回收站擦除操作失败后的重试间隔时间（毫秒）。
 - 引入版本: -
 
+##### `catalog_recycle_bin_batch_erase_partition_log_size`
+
+- 默认值: 10
+- 类型: Int
+- 单位: 分区数
+- 是否可变: Yes
+- 描述: 通过回收站删除 Lake 表分区时用于写入中间 edit log 的批次大小。表删除的分区擦除过程中，FE 每成功删除 N 个分区就写入一条 `OP_ERASE_TABLE_PARTITIONS` 日志；这样 FE 重启后只需重试尚未落日志的剩余分区。设置为 `0` 或负数可关闭中间批量日志（重启后会重试所有“已删但未记录”的分区）。
+- 引入版本: v4.1.0
+
 ##### `check_consistency_default_timeout_second`
 
 - 默认值: 600

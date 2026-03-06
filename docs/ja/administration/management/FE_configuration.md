@@ -2891,6 +2891,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: リサイクルビン内の削除操作が失敗した場合の再試行間隔（ミリ秒単位）。
 - Introduced in: -
 
+##### `catalog_recycle_bin_batch_erase_partition_log_size`
+
+- Default: 10
+- Type: Int
+- Unit: Partitions
+- Is mutable: Yes
+- Description: リサイクルビン経由で Lake テーブルのパーティションを削除する際に、中間 edit log を書き込むバッチサイズです。テーブル削除時のパーティション消去中、FE は N 個のパーティション削除に成功するたびに `OP_ERASE_TABLE_PARTITIONS` ログを 1 件書き込みます。これにより FE 再起動後は、未ログ分の残りパーティションだけを再試行します。`0` または負数を設定すると中間バッチログを無効化します（再起動後に「削除済みだが未ログ」のパーティションをすべて再試行）。
+- Introduced in: v4.1.0
+
 ##### `check_consistency_default_timeout_second`
 
 - Default: 600
