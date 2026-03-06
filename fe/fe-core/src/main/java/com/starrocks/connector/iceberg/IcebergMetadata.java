@@ -815,8 +815,10 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listPartitionNames(String dbName, String tblName, ConnectorMetadatRequestContext requestContext) {
-        Table table = getTable(new ConnectContext(), dbName, tblName);
-        return icebergCatalog.listPartitionNames((IcebergTable) table, requestContext, jobPlanningExecutor);
+        try (ConnectContext.ContextScope scope = ConnectContext.enterOnlyReadIcebergCacheScope(ConnectContext.get())) {
+            Table table = getTable(scope.getContext(), dbName, tblName);
+            return icebergCatalog.listPartitionNames((IcebergTable) table, requestContext, jobPlanningExecutor);
+        }
     }
 
     @Override
