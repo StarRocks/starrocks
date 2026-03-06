@@ -123,9 +123,9 @@ Status SchemaBeTabletWriteLogScanner::get_next(ChunkPtr* chunk, bool* eos) {
         }
         // log_type
         {
-            std::string type_str = (log.log_type == lake::LogType::LOAD)         ? "LOAD"
-                                   : (log.log_type == lake::LogType::COMPACTION) ? "COMPACTION"
-                                                                                 : "PUBLISH";
+            std::string type_str = (log.log_type == lake::LogType::LOAD)
+                                           ? "LOAD"
+                                           : (log.log_type == lake::LogType::COMPACTION) ? "COMPACTION" : "PUBLISH";
             Slice s(type_str);
             Column* col = (Column*)(*chunk)->get_column_by_index(col_idx++).get();
             ColumnHelper::get_data_column(col)->append_datum(Datum(s));
