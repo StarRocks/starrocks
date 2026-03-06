@@ -81,21 +81,23 @@ jobs:
         env:
           CLANG_FORMAT_BINARY: /usr/local/bin/clang-format-10
         run: bash build-support/clang-format-changed.sh
-
       - name: Commit and push formatting fixes
         env:
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
         run: |
           if git diff --quiet; then
             echo "No formatting changes needed."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -u
+          git commit -m "style: auto-fix clang-format issues"
+          if git push https://x-access-token:${GITHUB_TOKEN}@github.com/${HEAD_REPO}.git HEAD:${HEAD_REF}; then
+            echo "Formatting fixes pushed."
           else
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add -u
-            git commit -m "style: auto-fix clang-format issues"
-            git push origin "HEAD:${HEAD_REF}" || {
-              echo "Failed to push formatting fixes. The PR branch may have been"
-              echo "updated since this workflow started. Please rebase and retry."
-              exit 1
-            }
+            echo "Failed to push formatting fixes."
+            echo "Contributor may not allow maintainer edits or token lacks permission."
+            exit 1
           fi
