@@ -24,6 +24,7 @@
 
 #include "base/testutil/assert.h"
 #include "common/config.h"
+#include "fs/fs_factory.h"
 #include "gutil/strings/join.h"
 #include "service/staros_worker.h"
 #include "storage/rowset/page_io.h"
@@ -95,7 +96,7 @@ public:
         (void)g_worker->add_shard(shard_info);
 
         // Expect a clean root directory before testing
-        ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(StarletPath("/")));
+        ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(StarletPath("/")));
         fs->delete_dir_recursive(StarletPath("/"));
     }
     void TearDown() override {
@@ -157,7 +158,7 @@ TEST_P(StarletFileSystemTest, test_build_and_parse_uri) {
 
 TEST_P(StarletFileSystemTest, test_write_and_read) {
     auto uri = StarletPath("test1");
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(uri));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(uri));
     ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(uri));
     EXPECT_OK(wf->append("hello"));
     EXPECT_OK(wf->append(" world!"));
@@ -185,7 +186,7 @@ TEST_P(StarletFileSystemTest, test_write_and_read) {
 }
 
 TEST_P(StarletFileSystemTest, test_directory) {
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(StarletPath("/")));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(StarletPath("/")));
     bool created = false;
 
     //
@@ -305,7 +306,7 @@ TEST_P(StarletFileSystemTest, test_directory) {
 }
 
 TEST_P(StarletFileSystemTest, test_delete_dir_recursive) {
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(StarletPath("/")));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(StarletPath("/")));
 
     std::vector<std::string> entries;
     auto cb = [&](std::string_view name) -> bool {
@@ -348,12 +349,12 @@ TEST_P(StarletFileSystemTest, test_delete_dir_recursive) {
 }
 
 TEST_P(StarletFileSystemTest, test_delete_nonexist_file) {
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(StarletPath("/")));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(StarletPath("/")));
     ASSERT_OK(fs->delete_file(StarletPath("/nonexist.dat")));
 }
 
 TEST_P(StarletFileSystemTest, test_delete_files) {
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(StarletPath("/")));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(StarletPath("/")));
 
     auto uri1 = StarletPath("/f1");
     ASSIGN_OR_ABORT(auto wf1, fs->new_writable_file(uri1));
@@ -417,7 +418,7 @@ TEST_P(StarletFileSystemTest, test_tag) {
     bool old = config::starlet_write_file_with_tag;
     config::starlet_write_file_with_tag = true;
     auto uri1 = StarletPath("tag.dat");
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(uri1));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(uri1));
     ASSIGN_OR_ABORT(auto wf1, fs->new_writable_file(uri1));
 
     auto uri2 = StarletPath("tag.meta");
@@ -440,7 +441,7 @@ TEST_P(StarletFileSystemTest, test_drop_cache) {
     config::lake_clear_corrupted_cache_data = false;
     auto uri = StarletPath("cache.dat");
     ASSERT_TRUE(drop_local_cache_data(uri).is_not_supported());
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(uri));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(uri));
     ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(uri));
     ASSERT_OK(wf->append("hello"));
     ASSERT_OK(wf->append(" world!"));

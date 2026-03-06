@@ -47,6 +47,7 @@
 #include "common/logging.h"
 #include "common/tracer.h"
 #include "fs/fs.h"
+#include "fs/fs_factory.h"
 #include "fs/key_cache.h"
 #include "io/core/io_error.h"
 #include "runtime/load_fail_point.h"
@@ -130,7 +131,7 @@ Status RowsetWriter::init() {
         _rowset_txn_meta_pb = std::make_unique<RowsetTxnMetaPB>();
     }
 
-    ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_context.rowset_path_prefix));
+    ASSIGN_OR_RETURN(_fs, FileSystemFactory::CreateSharedFromString(_context.rowset_path_prefix));
 
     if (_context.is_pk_compaction) {
         TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_context.tablet_id);

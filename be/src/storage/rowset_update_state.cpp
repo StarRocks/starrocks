@@ -20,6 +20,7 @@
 #include "base/utility/defer_op.h"
 #include "column/binary_column.h"
 #include "common/tracer.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "gutil/strings/substitute.h"
@@ -73,7 +74,7 @@ Status RowsetUpdateState::_load_deletes(Rowset* rowset, uint32_t idx, Column* pk
         return Status::OK();
     }
 
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(rowset->rowset_path()));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(rowset->rowset_path()));
     auto path = Rowset::segment_del_file_path(rowset->rowset_path(), rowset->rowset_id(), idx);
     RandomAccessFileOptions opts;
     auto& encryption_meta = rowset->rowset_meta()->get_delfile_encryption_meta(idx);

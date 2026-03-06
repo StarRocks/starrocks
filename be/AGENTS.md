@@ -184,6 +184,18 @@ Use `#pragma once` instead of traditional include guards:
 - **Allowed deps only**: `be/src/common` may depend on `base/*`, `gutil/*`, `gen_cpp/*`, system headers, and third-party libraries.
 - **No other BE modules**: do not include headers from `util/*`, `runtime/*`, `storage/*`, `exec/*`, `service/*`, `http/*`, etc.
 
+### iocore (`IOCore` target)
+- **Allowed deps only**: code compiled into `IOCore` (currently `be/src/io/core/*`) may only depend on `common/*`, `base/*`, `gutil/*`, `gen_cpp/*`, `io/core/*`, system headers, and third-party libraries.
+- **No higher-level BE deps**: do not include headers from non-core `io/*` components (for example `s3_input_stream.h`, `cache_input_stream.h`), or from `fs/*`, `runtime/*`, `util/*`, `storage/*`, `exec/*`, `service/*`, `http/*`, `connector/*`, `exprs/*`.
+- **Goal**: keep `IOCore` minimal and independently buildable as a shared foundation for upper IO/FS layers.
+- **UT constraint**: keep IOCore-focused tests in `io_test`; avoid changes that force `io_test` to link full `FileSystem`, `Runtime`, or `Storage`.
+
+### fscore (`FSCore` target)
+- **Allowed deps only**: code compiled into `FSCore` (currently `be/src/fs/{fs.cpp,encrypt_file.cpp,bundle_file.cpp,fs_options.cpp,fs_options_helper.cpp}`) may only depend on `IOCore`, `common/*`, `base/*`, `gutil/*`, `gen_cpp/*`, `fs/*` core headers, system headers, and third-party libraries.
+- **Boundary with `FileSystem`**: keep factory/backend implementations in `FileSystem` (for example `fs_factory.cpp`, `fs_posix.cpp`, `fs_broker.cpp`, `fs_memory.cpp`, `fs_s3.cpp`, `hdfs/*`, `azure/*`, `s3/*`, `credential/*`, `fs_starlet.cpp`).
+- **Runtime dependency rule**: avoid adding `runtime/*` dependencies to `FSCore`. Existing dependency from `fs_options_helper.cpp` to `runtime/file_result_writer.h` is allowed; do not add more runtime coupling without updating this boundary.
+- **UT constraint**: keep core-only FS tests in `fs_core_test` and keep it linked to `FSCore` plus core dependencies only.
+
 ### typecore (`TypesCore` target)
 - **Allowed deps only**: code compiled into `TypesCore` (for example, selected files under `be/src/types`) may only depend on `common/*`, `base/*`, `gutil/*`, `gen_cpp/*`, system headers, and third-party libraries.
 - **No higher-level BE deps**: do not include headers from `runtime/*`, `util/*`, `storage/*`, `exec/*`, `service/*`, `http/*`, `connector/*`, etc.

@@ -14,6 +14,8 @@
 
 #include <gtest/gtest.h>
 
+#include "fs/fs_factory.h"
+
 #ifdef WITH_TENANN
 #include <tenann/factory/ann_searcher_factory.h>
 #include <tenann/factory/index_factory.h>
@@ -40,7 +42,7 @@ protected:
         srand(GetCurrentTimeMicros());
         CHECK_OK(fs::remove_all(test_vector_index_dir));
         CHECK_OK(fs::create_directories(test_vector_index_dir));
-        ASSIGN_OR_ABORT(_fs, FileSystem::CreateSharedFromString(test_vector_index_dir));
+        ASSIGN_OR_ABORT(_fs, FileSystemFactory::CreateSharedFromString(test_vector_index_dir));
     }
 
     void TearDown() override { fs::remove_all(test_vector_index_dir); }

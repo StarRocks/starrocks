@@ -49,6 +49,7 @@
 #include "common/runtime_profile.h"
 #include "common/status.h"
 #include "fs/fs.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_starlet.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
@@ -157,7 +158,7 @@ Status drop_local_cache_data(const std::string& fname) {
     if (!is_starlet_uri(fname)) {
         return Status::NotSupported("only support starlet file");
     }
-    auto fs_or = FileSystem::CreateSharedFromString(fname);
+    auto fs_or = FileSystemFactory::CreateSharedFromString(fname);
     if (!fs_or.ok()) {
         LOG(INFO) << "clear corrupted cache for " << fname << ", error:" << fs_or.status();
         return fs_or.status();

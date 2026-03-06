@@ -16,6 +16,7 @@
 
 #include <string_view>
 
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "glog/logging.h"
 #include "storage/lake/filenames.h"
@@ -34,8 +35,8 @@ Status copy_files(const Files& files, SrcFunc&& make_src, DstFunc&& make_dst, bo
         auto dst_path = make_dst(file);
         VLOG(3) << "src_file: " << src_path << ", dst_file: " << dst_path;
 
-        ASSIGN_OR_RETURN(auto src_fs, FileSystem::CreateSharedFromString(src_path));
-        ASSIGN_OR_RETURN(auto dst_fs, FileSystem::CreateSharedFromString(dst_path));
+        ASSIGN_OR_RETURN(auto src_fs, FileSystemFactory::CreateSharedFromString(src_path));
+        ASSIGN_OR_RETURN(auto dst_fs, FileSystemFactory::CreateSharedFromString(dst_path));
 
         if (skip_if_not_exists && src_fs->path_exists(src_path).is_not_found()) {
             continue;
@@ -103,7 +104,7 @@ Status SnapshotFileSyncer::delete_partition(int64_t tablet_id, int64_t db_id, in
     auto remote_starlet_location_provider = _env->remote_starlet_location_provider();
 #if defined(USE_STAROS) && !defined(BE_TEST)
     auto tablet_root = remote_starlet_location_provider->root_location(tablet_id);
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(tablet_root));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(tablet_root));
     auto dir_path = remote_starlet_location_provider->partition_directory_location(tablet_id, db_id, table_id,
                                                                                    physical_partition_id);
     RETURN_IF_ERROR(fs->delete_dir_recursive(dir_path));
@@ -115,7 +116,7 @@ Status SnapshotFileSyncer::delete_files(int64_t tablet_id, const ExternalCluster
     auto remote_starlet_location_provider = _env->remote_starlet_location_provider();
 #ifdef USE_STAROS
     auto tablet_root = remote_starlet_location_provider->root_location(tablet_id);
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(tablet_root));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(tablet_root));
 
     std::vector<std::string> files;
     files.reserve(log_pb.delete_data_files_size() + log_pb.delete_meta_files_size() +

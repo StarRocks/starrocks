@@ -29,6 +29,7 @@
 #include "common/statusor.h"
 #include "fmt/format.h"
 #include "gen_cpp/AgentService_types.h"
+#include "gen_cpp/MasterService_types.h"
 #include "gen_cpp/lake_service.pb.h"
 #include "glog/logging.h"
 #include "storage/lake/external_cluster_snapshot_task_helper.h"

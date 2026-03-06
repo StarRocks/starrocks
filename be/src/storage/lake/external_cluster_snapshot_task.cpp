@@ -32,6 +32,7 @@
 #include "common/statusor.h"
 #include "common/system/backend_options.h"
 #include "fmt/format.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/lake_service.pb.h"
@@ -283,7 +284,7 @@ void run_delete_files_task(const TExternalClusterSnapshotRequest& request, int64
     tablet_id = request.compute_node_tablets[0].tablets[0];
     auto log_path = location_provider->snapshot_log_location(tablet_id, request.job_id, request.physical_partition_id);
 
-    auto fs = FileSystem::CreateSharedFromString(log_path);
+    auto fs = FileSystemFactory::CreateSharedFromString(log_path);
     if (!fs.ok()) {
         LOG(WARNING) << "create file system failed, path=" << log_path << ", status=" << fs.status().to_string();
         task_status.__set_status_code(TStatusCode::RUNTIME_ERROR);

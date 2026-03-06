@@ -37,6 +37,7 @@
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
+#include "fs/fs_factory.h"
 #include "format_utils.h"
 #include "gen_cpp/QueryPlanExtra_types.h"
 #include "options.h"
@@ -90,7 +91,8 @@ public:
         auto fs_options = filter_map_by_key_prefix(_options, "fs.");
         auto provider = std::make_shared<FixedLocationProvider>(_tablet_root_path);
         auto metadata_location = provider->tablet_metadata_location(_tablet_id, _version);
-        FORMAT_ASSIGN_OR_RAISE_ARROW_STATUS(auto fs, FileSystem::Create(metadata_location, FSOptions(fs_options)));
+        FORMAT_ASSIGN_OR_RAISE_ARROW_STATUS(auto fs,
+                                            FileSystemFactory::Create(metadata_location, FSOptions(fs_options)));
         FORMAT_ASSIGN_OR_RAISE_ARROW_STATUS(auto metadata,
                                             _lake_tablet_manager->get_tablet_metadata(metadata_location, true, 0, fs));
 

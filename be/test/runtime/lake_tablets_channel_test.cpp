@@ -28,6 +28,7 @@
 #include "column/schema.h"
 #include "common/logging.h"
 #include "common/runtime_profile.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/load_channel.h"
@@ -212,7 +213,7 @@ protected:
 
     ChunkUniquePtr read_segment(int64_t tablet_id, const std::string& filename) {
         // Check segment file
-        ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(_test_directory));
+        ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(_test_directory));
         auto path = _location_provider->segment_location(tablet_id, filename);
         std::cerr << path << '\n';
 

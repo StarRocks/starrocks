@@ -31,6 +31,7 @@
 #include "common/statusor.h"
 #include "fmt/format.h"
 #include "fs/fs.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/AgentService_types.h"
 #include "runtime/exec_env.h"
@@ -254,7 +255,7 @@ Status reset_metadata_root(TabletManager* tablet_mgr, int64_t tablet_id,
     if (!cleared_roots->insert(cleared_key).second) {
         return Status::OK();
     }
-    ASSIGN_OR_RETURN(auto dst_meta_fs, FileSystem::CreateSharedFromString(meta_root));
+    ASSIGN_OR_RETURN(auto dst_meta_fs, FileSystemFactory::CreateSharedFromString(meta_root));
     Status st = dst_meta_fs->delete_dir_recursive(meta_root);
     if (!st.ok() && !st.is_not_found()) {
         return st;
@@ -437,8 +438,8 @@ Status copy_tablet_tree(TabletManager* tablet_mgr, int64_t src_tablet_id, int64_
 
     std::string src_root = tablet_mgr->tablet_root_location(src_tablet_id);
     std::string dst_root = tablet_mgr->tablet_root_location(dst_tablet_id);
-    ASSIGN_OR_RETURN(auto src_fs, FileSystem::CreateSharedFromString(src_root));
-    ASSIGN_OR_RETURN(auto dst_fs, FileSystem::CreateSharedFromString(dst_root));
+    ASSIGN_OR_RETURN(auto src_fs, FileSystemFactory::CreateSharedFromString(src_root));
+    ASSIGN_OR_RETURN(auto dst_fs, FileSystemFactory::CreateSharedFromString(dst_root));
 
     Status copy_status = Status::OK();
     auto iterate_status = src_fs->iterate_dir2(src_root, [&](DirEntry entry) {
@@ -516,7 +517,7 @@ Status rewrite_tablets_metadata(TabletManager* tablet_mgr, const std::vector<Res
 
     const RestoreTabletInfo& primary_tablet = tablets.front();
     std::string meta_root = tablet_mgr->tablet_metadata_root_location(primary_tablet.source_tablet_id);
-    ASSIGN_OR_RETURN(auto meta_fs, FileSystem::CreateSharedFromString(meta_root));
+    ASSIGN_OR_RETURN(auto meta_fs, FileSystemFactory::CreateSharedFromString(meta_root));
 
     std::list<std::string> regular_meta_files;
     std::list<std::string> bundle_meta_files;
