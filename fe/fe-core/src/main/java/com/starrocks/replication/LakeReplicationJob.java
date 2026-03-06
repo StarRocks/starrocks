@@ -106,8 +106,6 @@ public class LakeReplicationJob extends ReplicationJob implements GsonPreProcess
         }
     }
 
-<<<<<<< HEAD
-=======
     protected LakeReplicationJob(LakeReplicationJob job) {
         super(job);
         this.virtualTabletId = job.virtualTabletId;
@@ -120,7 +118,6 @@ public class LakeReplicationJob extends ReplicationJob implements GsonPreProcess
         this.srcTableFilePathInfoBytes = job.srcTableFilePathInfoBytes;
     }
 
->>>>>>> 0276850322 ([Enhancement] Support partitioned prefix for shared-data cross cluster migration (#67370))
     @Override
     public void run() {
         try {

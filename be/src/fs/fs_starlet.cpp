@@ -27,14 +27,11 @@
 #include <sys/stat.h>
 #include <worker.h>
 
-<<<<<<< HEAD
-=======
 #include "base/concurrency/stopwatch.hpp"
 #include "base/container/lru_cache.h"
 #include "base/string/string_parser.hpp"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
->>>>>>> 0276850322 ([Enhancement] Support partitioned prefix for shared-data cross cluster migration (#67370))
 #include "common/config.h"
 #include "fs/encrypt_file.h"
 #include "fs/output_stream_adapter.h"

@@ -20,8 +20,6 @@
 
 #include <random>
 
-<<<<<<< HEAD
-=======
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
@@ -31,7 +29,6 @@
 #include <fslib/file_system.h>
 #include <fslib/stat.h>
 #endif
->>>>>>> 0276850322 ([Enhancement] Support partitioned prefix for shared-data cross cluster migration (#67370))
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
