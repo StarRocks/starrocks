@@ -351,20 +351,11 @@ inline void AsyncDeltaWriterImpl::close() {
         TEST_SYNC_POINT("AsyncDeltaWriterImpl::close:2");
 
         // Shutdown (but do NOT reset) _block_merge_token to drain any running merge tasks.
-<<<<<<< HEAD
-        // This must happen BEFORE execution_queue_stop() because stop() triggers the
-        // is_queue_stopped() handler (on a bthread) which calls delta_writer->close()
-        // and destroys SpillMemTableSink. We need all merge tasks to complete before that.
-        // The token remains allocated (not null) so if execute() is still running and
-        // calls _block_merge_token->submit(), it gets a ServiceUnavailable error instead
-        // of SIGSEGV.
-=======
         // This must happen BEFORE execution_queue_stop() to ensure all merge tasks
         // (which access writer state like _mem_table_sink) complete before the queue
         // is torn down. The token remains allocated (not null) so if execute() is still
         // running and calls _block_merge_token->submit(), it gets a ServiceUnavailable
         // error instead of SIGSEGV.
->>>>>>> e315401cde ([BugFix] Fix use-after-free race in AsyncDeltaWriter close/finish lifecycle (#69940))
         if (_block_merge_token != nullptr) {
             _block_merge_token->shutdown();
         }
