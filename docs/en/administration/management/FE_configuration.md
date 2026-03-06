@@ -4130,6 +4130,33 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The timeout in milliseconds for JDBC network operations (socket read). This timeout applies to database metadata calls (e.g., getSchemas(), getTables(), getColumns()) to prevent indefinite blocking when the external database is unresponsive.
 - Introduced in: v3.5.13
 
+##### `jdbc_connection_max_lifetime_ms`
+
+- Default: 300000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: No
+- Description: Maximum lifetime of a connection in the JDBC connection pool. Connections are recycled before this timeout to prevent stale connections. Should be shorter than the external database's connection timeout. Minimum allowed value is 30000 (30 seconds).
+- Introduced in: -
+
+##### `jdbc_connection_keepalive_time_ms`
+
+- Default: 30000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: No
+- Description: Keepalive interval for idle JDBC connections. Idle connections are tested at this interval to detect stale connections proactively. Set to 0 to disable keepalive probing. When enabled, must be >= 30000 and less than `jdbc_connection_max_lifetime_ms`. Invalid enabled values are silently disabled (reset to 0).
+- Introduced in: -
+
+##### `jdbc_connection_leak_detection_threshold_ms`
+
+- Default: 0
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: No
+- Description: Threshold for JDBC connection leak detection. If a connection is held longer than this, a warning is logged. Set to 0 to disable. This is a debugging aid for identifying code paths that hold connections too long.
+- Introduced in: -
+
 ##### `jdbc_connection_pool_size`
 
 - Default: 8
