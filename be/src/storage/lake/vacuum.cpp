@@ -20,10 +20,12 @@
 #include <set>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "base/container/raw_container.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
+#include "common/config.h"
 #include "common/config_lake_fwd.h"
 #include "common/status.h"
 #include "fs/fs.h"
@@ -336,6 +338,69 @@ static size_t collect_extra_files_size(const TabletMetadataPB& metadata, int64_t
     return extra_file_size;
 }
 
+// Collects garbage version entries for per-version vacuum. Walks the version chain from
+// min_retain_version down via prev_garbage_version, pushing entries (newest to oldest).
+// Stops when version < min_version or when size reaches max_versions (if > 0).
+static Status collect_garbage_versions(TabletManager* tablet_mgr, int64_t tablet_id, int64_t min_version,
+                                       int64_t min_retain_version, int64_t grace_timestamp,
+                                       const TabletRetainInfo& retain_info, std::vector<int64_t>* garbage_versions,
+                                       int64_t* final_retain_version, int64_t* extra_file_size) {
+    auto version = min_retain_version;
+    auto skip_check_grace_timestamp = grace_timestamp <= 0;
+    *final_retain_version = min_retain_version;
+    *extra_file_size = 0;
+
+    while (version >= min_version) {
+        auto res = tablet_mgr->get_tablet_metadata(tablet_id, version, false, false);
+        TEST_SYNC_POINT_CALLBACK("collect_files_to_vacuum:get_tablet_metadata", &res);
+        if (res.status().is_not_found()) {
+            break;
+        }
+        if (!res.ok()) {
+            return res.status();
+        }
+
+        auto metadata = std::move(res).value();
+        *extra_file_size += collect_extra_files_size(*metadata, min_retain_version);
+
+        if (!skip_check_grace_timestamp) {
+            int64_t compare_time = 0;
+            if (metadata->has_commit_time() && metadata->commit_time() > 0) {
+                compare_time = metadata->commit_time();
+            } else {
+                TEST_SYNC_POINT_CALLBACK("collect_garbage_versions:get_file_modified_time", &compare_time);
+            }
+
+            if (compare_time < grace_timestamp) {
+                skip_check_grace_timestamp = true;
+                *final_retain_version = version;
+            } else {
+                *final_retain_version = version;
+                DCHECK_LT(metadata->prev_garbage_version(), version);
+                version = metadata->prev_garbage_version();
+                continue;
+            }
+        }
+
+        if (retain_info.contains_version(version)) {
+            auto next_version = metadata->prev_garbage_version();
+            DCHECK_LT(next_version, version);
+            version = next_version;
+            continue;
+        }
+
+        auto next_version = metadata->prev_garbage_version();
+        CHECK_LT(next_version, version);
+        garbage_versions->push_back(version);
+        version = next_version;
+    }
+
+    if (!skip_check_grace_timestamp) {
+        *final_retain_version = min_retain_version - 1;
+    }
+    return Status::OK();
+}
+
 static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_view root_dir, TabletInfoPB& tablet_info,
                                       int64_t grace_timestamp, int64_t min_retain_version,
                                       VacuumTabletMetaVerionRange* vacuum_version_range,
@@ -459,6 +524,127 @@ static void erase_tablet_metadata_from_metacache(TabletManager* tablet_mgr, cons
     }
 }
 
+// tablet-chain vacuum for non-file_bundling tablets.
+//
+// Submits all garbage-version data-file deletions in a single batched pass to maximise I/O
+// parallelism, then uses the confirmed-success count from AsyncFileDeleter to determine which
+// versions had every data file deleted, and only deletes the metadata files for those versions.
+//
+// On partial failure the function advances min_version past the last fully-cleaned version so
+// the next vacuum retry skips already-deleted files instead of re-issuing redundant deletes.
+static Status vacuum_tablet_chain(TabletManager* tablet_mgr, std::string_view root_dir, TabletInfoPB& tablet_info,
+                                  int64_t min_retain_version, int64_t grace_timestamp,
+                                  AsyncSharedFileDeleter* shared_file_deleter,
+                                  std::function<void(const std::vector<std::string>&)> metafile_delete_cb,
+                                  int64_t* vacuumed_files, int64_t* vacuumed_file_size, int64_t* vacuumed_version,
+                                  int64_t* extra_file_size, const std::unordered_set<int64_t>& retain_versions,
+                                  const TabletRetainInfo& tablet_retain_info, int64_t deadline_ms) {
+    auto tablet_id = tablet_info.tablet_id();
+    auto min_version = std::max(1L, tablet_info.min_version());
+    auto meta_dir = join_path(root_dir, kMetadataDirectoryName);
+    auto data_dir = join_path(root_dir, kSegmentDirectoryName);
+
+    std::vector<int64_t> garbage_versions;
+    int64_t final_retain_version = min_retain_version;
+    RETURN_IF_ERROR(collect_garbage_versions(tablet_mgr, tablet_id, min_version, min_retain_version, grace_timestamp,
+                                             tablet_retain_info, &garbage_versions, &final_retain_version,
+                                             extra_file_size));
+
+    if (garbage_versions.empty()) {
+        *vacuumed_version = final_retain_version;
+        return Status::OK();
+    }
+
+    // Per-version bookkeeping: cumulative data-file count queued up to (and including) each
+    // version, plus the garbage data size for that version.  Stored oldest-to-newest.
+    struct VersionInfo {
+        int64_t version;
+        int64_t cumulative_queued; // datafile_deleter.total_queued() after processing this version
+        int64_t data_size;
+    };
+    std::vector<VersionInfo> processed_versions;
+    processed_versions.reserve(garbage_versions.size());
+
+    AsyncFileDeleter datafile_deleter(config::lake_vacuum_min_batch_delete_size);
+
+    // Submit all data-file deletions in one batched pass (oldest→newest) to maximise parallelism.
+    // We re-fetch metadata here but do NOT re-fetch it again later for size accounting.
+    for (auto it = garbage_versions.rbegin(); it != garbage_versions.rend(); ++it) {
+        if (deadline_ms > 0 && butil::gettimeofday_ms() > deadline_ms) {
+            break;
+        }
+
+        int64_t v = *it;
+        auto res = tablet_mgr->get_tablet_metadata(tablet_id, v, false, false);
+        if (!res.ok()) {
+            LOG(WARNING) << "lake vacuum tablet " << tablet_id << " version " << v
+                         << " failed to read metadata: " << res.status();
+            break;
+        }
+        auto metadata = std::move(res).value();
+
+        int64_t version_data_size = 0;
+        Status st = collect_garbage_files(*metadata, data_dir, &datafile_deleter, shared_file_deleter,
+                                          &version_data_size, tablet_retain_info);
+        if (!st.ok()) {
+            LOG(WARNING) << "lake vacuum tablet " << tablet_id << " version " << v
+                         << " failed to collect garbage files: " << st;
+            break;
+        }
+        // Snapshot total_queued() after this version so we know the cumulative boundary.
+        processed_versions.push_back({v, datafile_deleter.total_queued(), version_data_size});
+    }
+
+    // Flush all pending data-file deletions and wait for completion.
+    // finish() may fail (e.g. rate-limit), but success_delete_count() will still reflect
+    // the number of files in batches that completed successfully before the failure.
+    Status data_status = datafile_deleter.finish();
+    if (!data_status.ok()) {
+        LOG(WARNING) << "lake vacuum tablet " << tablet_id << " data file deletion failed: " << data_status;
+    }
+
+    // Determine which versions had ALL their data files confirmed deleted.
+    // Because AsyncFileDeleter pipelines batches sequentially and success_delete_count() only
+    // credits a batch on confirmed success, any version whose cumulative_queued <=
+    // success_delete_count() is guaranteed to have all its data files removed.
+    int64_t confirmed = datafile_deleter.success_delete_count();
+    int64_t last_safe_version = -1;
+    int64_t tablet_vacuumed_size = 0;
+
+    AsyncFileDeleter metafile_deleter(INT64_MAX, metafile_delete_cb);
+    for (const auto& info : processed_versions) {
+        if (info.cumulative_queued > confirmed) {
+            // This version's data files were not all confirmed deleted; stop here.
+            break;
+        }
+        RETURN_IF_ERROR(
+                metafile_deleter.delete_file(join_path(meta_dir, tablet_metadata_filename(tablet_id, info.version))));
+        last_safe_version = info.version;
+        tablet_vacuumed_size += info.data_size;
+    }
+    RETURN_IF_ERROR(metafile_deleter.finish());
+
+    int64_t tablet_vacuumed_files = datafile_deleter.delete_count() + metafile_deleter.delete_count();
+
+    // Advance min_version so the next vacuum skips already-cleaned versions.
+    if (last_safe_version < 0) {
+        // No progress: leave min_version unchanged.
+        tablet_info.set_min_version(min_version);
+        *vacuumed_version = final_retain_version;
+    } else {
+        bool all_done = (processed_versions.size() == garbage_versions.size()) &&
+                        (confirmed >= datafile_deleter.total_queued());
+        int64_t new_min = all_done ? final_retain_version : last_safe_version + 1;
+        tablet_info.set_min_version(new_min);
+        *vacuumed_version = new_min;
+    }
+
+    *vacuumed_files += tablet_vacuumed_files;
+    *vacuumed_file_size += tablet_vacuumed_size;
+    // Always return OK: progress is captured in min_version for the completed versions.
+    return Status::OK();
+}
+
 static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view root_dir,
                                      std::vector<TabletInfoPB>& tablet_infos, int64_t min_retain_version,
                                      int64_t grace_timestamp, bool enable_file_bundling,
@@ -483,23 +669,40 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
     AsyncSharedFileDeleter shared_file_deleter(config::lake_vacuum_min_batch_delete_size);
     int64_t final_vacuum_version = std::numeric_limits<int64_t>::max();
     int64_t max_vacuum_version = 0;
+    int64_t deadline_ms = 0;
+    if (config::lake_vacuum_max_vacuum_time_ms > 0) {
+        deadline_ms = butil::gettimeofday_ms() + config::lake_vacuum_max_vacuum_time_ms;
+    }
+
     for (auto& tablet_info : tablet_infos) {
         TabletRetainInfo tablet_retain_info;
         RETURN_IF_ERROR(tablet_retain_info.init(tablet_info.tablet_id(), retain_versions, tablet_mgr));
 
         int64_t tablet_vacuumed_version = 0;
-        AsyncFileDeleter datafile_deleter(config::lake_vacuum_min_batch_delete_size);
-        AsyncFileDeleter metafile_deleter(INT64_MAX, metafile_delete_cb);
-        RETURN_IF_ERROR(collect_files_to_vacuum(tablet_mgr, root_dir, tablet_info, grace_timestamp, min_retain_version,
-                                                vacuum_version_range.get(), &datafile_deleter, &metafile_deleter,
-                                                &shared_file_deleter, vacuumed_file_size, &tablet_vacuumed_version,
-                                                extra_file_size, tablet_retain_info));
-        RETURN_IF_ERROR(datafile_deleter.finish());
-        (*vacuumed_files) += datafile_deleter.delete_count();
-        if (!enable_file_bundling) {
-            RETURN_IF_ERROR(metafile_deleter.finish());
-            (*vacuumed_files) += metafile_deleter.delete_count();
+
+        if (config::lake_vacuum_enable_version_chain_mode && !enable_file_bundling) {
+            if (deadline_ms > 0 && butil::gettimeofday_ms() > deadline_ms) {
+                return Status::Timeout("lake vacuum version chain mode timeout");
+            }
+            RETURN_IF_ERROR(vacuum_tablet_chain(tablet_mgr, root_dir, tablet_info, min_retain_version, grace_timestamp,
+                                                &shared_file_deleter, metafile_delete_cb, vacuumed_files,
+                                                vacuumed_file_size, &tablet_vacuumed_version, extra_file_size,
+                                                retain_versions, tablet_retain_info, deadline_ms));
+        } else {
+            AsyncFileDeleter datafile_deleter(config::lake_vacuum_min_batch_delete_size);
+            AsyncFileDeleter metafile_deleter(INT64_MAX, metafile_delete_cb);
+            RETURN_IF_ERROR(collect_files_to_vacuum(tablet_mgr, root_dir, tablet_info, grace_timestamp,
+                                                    min_retain_version, vacuum_version_range.get(), &datafile_deleter,
+                                                    &metafile_deleter, &shared_file_deleter, vacuumed_file_size,
+                                                    &tablet_vacuumed_version, extra_file_size, tablet_retain_info));
+            RETURN_IF_ERROR(datafile_deleter.finish());
+            (*vacuumed_files) += datafile_deleter.delete_count();
+            if (!enable_file_bundling) {
+                RETURN_IF_ERROR(metafile_deleter.finish());
+                (*vacuumed_files) += metafile_deleter.delete_count();
+            }
         }
+
         // set partition vacuumed_version to min tablet vacuumed version
         final_vacuum_version = std::min(final_vacuum_version, tablet_vacuumed_version);
         max_vacuum_version = std::max(max_vacuum_version, tablet_vacuumed_version);
