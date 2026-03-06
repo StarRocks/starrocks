@@ -65,6 +65,7 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
         return Status::Corruption("No missing version");
     }
 
+<<<<<<< HEAD
 #if !defined(BE_TEST) && defined(USE_STAROS)
     auto src_meta_dir =
             _remote_location_provider->metadata_root_location(src_tablet_id, src_db_id, src_table_id, src_partition_id);
@@ -74,6 +75,58 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     auto shared_src_fs = new_fs_starlet(virtual_tablet_id);
     if (shared_src_fs == nullptr) {
         return Status::Corruption("Failed to create virtual starlet filesystem");
+=======
+    std::string src_meta_dir;
+    std::string src_data_dir;
+    std::shared_ptr<FileSystem> shared_src_fs;
+    TabletMetadataPtr src_tablet_meta;
+
+#ifdef USE_STAROS
+    if (has_full_path) {
+        // S3 storage type: FE provides full S3 path (supports partitioned prefix feature)
+        // Use S3 raw path mode - starlet will use the path as-is without normalize_path
+        if (src_partition_full_path.find("s3://") != 0) {
+            return Status::InvalidArgument(
+                    fmt::format("Full path must be S3 type (start with 's3://'), got: {}", src_partition_full_path));
+        }
+        std::string src_partition_starlet_uri = convert_s3_path_to_starlet_uri(src_partition_full_path, src_tablet_id);
+
+        // Append metadata and segment directory names
+        src_meta_dir = join_path(src_partition_starlet_uri, kMetadataDirectoryName);
+        src_data_dir = join_path(src_partition_starlet_uri, kSegmentDirectoryName);
+
+        VLOG(3) << "S3 storage: converted S3 full path to starlet URI, original: " << src_partition_full_path
+                << ", starlet_uri: " << src_partition_starlet_uri << ", meta_dir: " << src_meta_dir
+                << ", data_dir: " << src_data_dir;
+
+        // Create filesystem with S3 raw path mode enabled
+        shared_src_fs = new_fs_starlet(virtual_tablet_id, true /* use_raw_path */);
+        if (shared_src_fs == nullptr) {
+            return Status::Corruption("Failed to create virtual starlet filesystem");
+        }
+
+        ASSIGN_OR_RETURN(src_tablet_meta,
+                         try_build_source_tablet_meta_with_fallback(src_tablet_id, src_visible_version, src_db_id,
+                                                                    txn_id, src_meta_dir, src_data_dir, shared_src_fs));
+    } else {
+        // Non-S3 storage type (OSS/Azure/HDFS/GFS): use RemoteStarletLocationProvider
+        // Use normal mode - starlet will use normalize_path to combine sys.root with relative path
+        src_meta_dir = _remote_location_provider->metadata_root_location(src_tablet_id, src_db_id, src_table_id,
+                                                                         src_partition_id);
+        src_data_dir = _remote_location_provider->segment_root_location(src_tablet_id, src_db_id, src_table_id,
+                                                                        src_partition_id);
+
+        LOG(INFO) << "Non-S3 storage: using RemoteStarletLocationProvider, meta_dir: " << src_meta_dir
+                  << ", data_dir: " << src_data_dir;
+
+        // Create filesystem with normal mode (no S3 raw path)
+        shared_src_fs = new_fs_starlet(virtual_tablet_id, false /* use_raw_path */);
+        if (shared_src_fs == nullptr) {
+            return Status::Corruption("Failed to create virtual starlet filesystem");
+        }
+        ASSIGN_OR_RETURN(src_tablet_meta,
+                         build_source_tablet_meta(src_tablet_id, src_visible_version, src_meta_dir, shared_src_fs));
+>>>>>>> a04d32f7fa ([BugFix] Fix lake replication variable declarition missing compiler error (#69923))
     }
     ASSIGN_OR_RETURN(auto src_tablet_meta,
                      build_source_tablet_meta(src_tablet_id, src_visible_version, src_meta_dir, shared_src_fs));
