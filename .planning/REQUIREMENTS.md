@@ -61,7 +61,7 @@
 
 ### Testing
 
-- [ ] **TEST-01**: MockedADBCMetadata registered in ConnectorPlanTestBase; ADBC plan tests pass
+- [x] **TEST-01**: MockedADBCMetadata registered in ConnectorPlanTestBase; ADBC plan tests pass
 - [x] **TEST-02**: SQL integration test T/R files exist in test/sql/test_adbc_catalog/ with DDL, query, and MV coverage
 - [x] **TEST-03**: test/conf/sr.conf has [.flightsql] section with external_flightsql_ip and external_flightsql_port
 - [x] **TEST-04**: DuckDB seed data script exists for deterministic E2E test results
@@ -142,7 +142,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | STAT-01 | Phase 3 | Complete |
 | STAT-02 | Phase 3 | Complete |
 
-| TEST-01 | Phase 4 | Planned |
+| TEST-01 | Phase 4 | Complete |
 | TEST-02 | Phase 4 | Complete |
 | TEST-03 | Phase 4 | Complete |
 | TEST-04 | Phase 4 | Complete |
