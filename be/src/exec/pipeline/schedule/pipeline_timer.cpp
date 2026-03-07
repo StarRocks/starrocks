@@ -71,4 +71,22 @@ int PipelineTimer::unschedule(PipelineTimerTask* task) {
     return _thr->unschedule(task->tid());
 }
 
+static void RunLightTimerTask(void* arg) {
+    auto* task = static_cast<LightTimerTask*>(arg);
+    task->Run();
+}
+
+Status PipelineTimer::schedule(LightTimerTask* task, const timespec& abstime) {
+    TaskId tid = _thr->schedule(RunLightTimerTask, task, abstime);
+    if (tid == 0) {
+        return Status::InternalError(fmt::format("pipeline timer schedule task error:{}", berror(errno)));
+    }
+    task->set_tid(tid);
+    return Status::OK();
+}
+
+int PipelineTimer::unschedule(LightTimerTask* task) {
+    return _thr->unschedule(task->tid());
+}
+
 } // namespace starrocks::pipeline
