@@ -17,10 +17,11 @@ package com.starrocks.proc;
 import com.starrocks.common.proc.FrontendsProcNode;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.system.Frontend;
-import mockit.Expectations;
-import mockit.Injectable;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -29,38 +30,25 @@ import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.mockito.Mockito.when;
+
 public class FrontendsProcNodeTest {
 
-    @Injectable
+    @Mock
     InetSocketAddress socketAddr1;
-    @Injectable
+    @Mock
     InetAddress addr1;
 
+    @BeforeEach
+    public void setUp() {
+        MockitoAnnotations.openMocks(this);
+    }
+
     private void mockAddress() {
-        new Expectations() {
-            {
-                socketAddr1.getAddress();
-                result = addr1;
-            }
-        };
-        new Expectations() {
-            {
-                socketAddr1.getPort();
-                result = 1000;
-            }
-        };
-        new Expectations() {
-            {
-                addr1.getHostAddress();
-                result = "127.0.0.1";
-            }
-        };
-        new Expectations() {
-            {
-                addr1.getHostName();
-                result = "sandbox";
-            }
-        };
+        when(socketAddr1.getAddress()).thenReturn(addr1);
+        when(socketAddr1.getPort()).thenReturn(1000);
+        when(addr1.getHostAddress()).thenReturn("127.0.0.1");
+        when(addr1.getHostName()).thenReturn("sandbox");
     }
 
     @Test
