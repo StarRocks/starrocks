@@ -48,6 +48,8 @@ import com.starrocks.sql.formatter.AST2StringVisitor;
 import com.starrocks.sql.formatter.FormatOptions;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang.NotImplementedException;
+import org.apache.commons.lang.StringEscapeUtils;
+import org.apache.commons.text.translate.UnicodeUnescaper;
 import org.apache.iceberg.SortDirection;
 import org.apache.iceberg.SortField;
 import org.apache.iceberg.SortOrder;
@@ -407,8 +409,8 @@ public class AstToStringBuilder {
                 .append(" (\n");
 
         // Columns
-        List<String> columns = table.getFullVisibleSchema().stream().map(AstToStringBuilder::toMysqlDDL).
-                collect(Collectors.toList());
+        List<String> columns = table.getFullVisibleSchema().stream().map(AstToStringBuilder::toMysqlDDL)
+                .collect(Collectors.toList());
         createTableSql.append(String.join(",\n", columns))
                 .append("\n)");
 
@@ -424,7 +426,6 @@ public class AstToStringBuilder {
                 createTableSql.append("\nPARTITION BY ").append(String.join(", ", partitionNames));
             }
         }
-
 
         // Comment
         if (!Strings.isNullOrEmpty(table.getComment())) {
@@ -473,6 +474,12 @@ public class AstToStringBuilder {
         } catch (NotImplementedException e) {
         }
 
+        // Iceberg format-version is not stored in properties, need to add it explicitly
+        if (table.isIcebergTable()) {
+            IcebergTable icebergTable = (IcebergTable) table;
+            properties.put("format-version", String.valueOf(icebergTable.getFormatVersion()));
+        }
+
         if (!properties.isEmpty()) {
             createTableSql.append("\nPROPERTIES (");
             createTableSql.append(new PrintableMap<>(properties, "=", true, false, true).toString());
@@ -513,7 +520,14 @@ public class AstToStringBuilder {
         StringBuilder sb = new StringBuilder();
         sb.append("  `").append(column.getName()).append("` ");
         sb.append(column.getType().toSql());
-        sb.append(" DEFAULT NULL");
+        String defaultValue = column.getMetaDefaultValue(Lists.newArrayList());
+        if (defaultValue == null) {
+            sb.append(" DEFAULT NULL");
+        } else {
+            sb.append(" DEFAULT \"")
+                    .append(new UnicodeUnescaper().translate(StringEscapeUtils.escapeJava(defaultValue)))
+                    .append("\"");
+        }
 
         if (!Strings.isNullOrEmpty(column.getComment())) {
             sb.append(" COMMENT \"").append(column.getDisplayComment()).append("\"");

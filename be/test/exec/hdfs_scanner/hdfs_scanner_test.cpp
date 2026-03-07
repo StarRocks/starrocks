@@ -69,6 +69,7 @@ protected:
 
     THdfsScanRange* _create_scan_range(const std::string& file, uint64_t offset, uint64_t length);
     TupleDescriptor* _create_tuple_desc(SlotDesc* descs);
+    TupleDescriptor* _create_tuple_desc_with_nullable(SlotDesc* descs, bool nullable);
 
     ObjectPool _pool;
     RuntimeProfile* _runtime_profile = nullptr;
@@ -164,12 +165,16 @@ void HdfsScannerTest::build_hive_column_names(HdfsScannerParams* params, const T
 }
 
 TupleDescriptor* HdfsScannerTest::_create_tuple_desc(SlotDesc* descs) {
+    return _create_tuple_desc_with_nullable(descs, true);
+}
+
+TupleDescriptor* HdfsScannerTest::_create_tuple_desc_with_nullable(SlotDesc* descs, bool nullable) {
     TDescriptorTableBuilder table_desc_builder;
     TSlotDescriptorBuilder slot_desc_builder;
     TTupleDescriptorBuilder tuple_desc_builder;
     int slot_id = 0;
     while (descs->name != "") {
-        slot_desc_builder.column_name(descs->name).type(descs->type).id(slot_id).nullable(true);
+        slot_desc_builder.column_name(descs->name).type(descs->type).id(slot_id).nullable(nullable);
         tuple_desc_builder.add_slot(slot_desc_builder.build());
         descs += 1;
         slot_id += 1;
@@ -258,6 +263,54 @@ TEST_F(HdfsScannerTest, TestParquetGetNext) {
     ASSERT_TRUE(status.is_end_of_file());
 
     scanner->close();
+}
+
+TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithDefaultValue) {
+    SlotDesc descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+                        {"c2", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+                        {""}};
+    auto* tuple_desc = _create_tuple_desc(descs);
+    HdfsScannerContext ctx;
+    ctx.not_existed_slots.push_back(tuple_desc->slots()[0]);
+    ctx.not_existed_slots.push_back(tuple_desc->slots()[1]);
+    ctx.materialize_slot_default_values.emplace(tuple_desc->slots()[0]->id(), "42");
+
+    ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    ASSERT_OK(ctx.append_or_update_not_existed_columns_to_chunk(&chunk, 1));
+    ASSERT_EQ(1, chunk->num_rows());
+    EXPECT_EQ("[42, NULL]", chunk->debug_row(0));
+}
+
+// Test filling not existed column with empty default value and nullable slot
+TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithEmptyDefaultNullable) {
+    SlotDesc descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)}, {""}};
+    auto* tuple_desc = _create_tuple_desc(descs);
+    HdfsScannerContext ctx;
+    ctx.not_existed_slots.push_back(tuple_desc->slots()[0]);
+    // Empty string means SQL NULL for nullable columns
+    ctx.materialize_slot_default_values.emplace(tuple_desc->slots()[0]->id(), "");
+
+    ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    ASSERT_OK(ctx.append_or_update_not_existed_columns_to_chunk(&chunk, 1));
+    ASSERT_EQ(1, chunk->num_rows());
+    // Should be NULL because empty default for nullable column
+    EXPECT_TRUE(chunk->get_column_by_index(0)->is_null(0));
+}
+
+// Test filling not existed column with empty default value and non-nullable slot
+TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithEmptyDefaultNonNullable) {
+    SlotDesc descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)}, {""}};
+    auto* tuple_desc = _create_tuple_desc_with_nullable(descs, false);
+    HdfsScannerContext ctx;
+    ctx.not_existed_slots.push_back(tuple_desc->slots()[0]);
+    // Empty string for non-nullable column should cause error
+    ctx.materialize_slot_default_values.emplace(tuple_desc->slots()[0]->id(), "");
+
+    ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    auto status = ctx.append_or_update_not_existed_columns_to_chunk(&chunk, 1);
+    // Should return error because non-nullable column has empty default value
+    EXPECT_FALSE(status.ok());
+    EXPECT_TRUE(status.message().find("non-nullable") != std::string::npos);
 }
 
 // ========================= ORC SCANNER ============================

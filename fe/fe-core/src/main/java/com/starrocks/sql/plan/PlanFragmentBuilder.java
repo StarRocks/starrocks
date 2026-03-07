@@ -1136,7 +1136,9 @@ public class PlanFragmentBuilder {
                 SlotDescriptor slotDescriptor =
                         context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
                 slotDescriptor.setColumn(entry.getValue());
-                slotDescriptor.setIsNullable(entry.getValue().isAllowNull());
+                // External table scan slots are always nullable because the source data
+                // is not governed by StarRocks NOT NULL constraints and may contain nulls.
+                slotDescriptor.setIsNullable(true);
                 slotDescriptor.setIsMaterialized(true);
                 slotDescriptor.setIsOutputColumn(node.getOutputColumns().contains(entry.getKey()));
                 if (slotDescriptor.getOriginType().isComplexType()) {

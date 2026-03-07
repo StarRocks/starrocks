@@ -84,10 +84,15 @@ HiveDataSource::HiveDataSource(const HiveDataSourceProvider* provider, const THd
 Status HiveDataSource::_check_all_slots_nullable() {
     for (const auto* slot : _tuple_desc->slots()) {
         if (!slot->is_nullable()) {
-            return Status::RuntimeError(fmt::format(
-                    "All columns must be nullable for external table. Column '{}' is not nullable, You can rebuild the"
-                    "external table and We strongly recommend that you use catalog to access external data.",
-                    slot->col_name()));
+            // Check if the non-nullable column has a default value
+            // If it has a default value, allow scanning as old data files can be filled with the default
+            if (_materialize_slot_default_values.find(slot->id()) == _materialize_slot_default_values.end()) {
+                return Status::RuntimeError(fmt::format(
+                        "All columns must be nullable for external table. Column '{}' is not nullable, You can rebuild "
+                        "the"
+                        "external table and We strongly recommend that you use catalog to access external data.",
+                        slot->col_name()));
+            }
         }
     }
     return Status::OK();
@@ -417,6 +422,12 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
         } else {
             _materialize_slots.push_back(slots[i]);
             _materialize_index_in_chunk.push_back(i);
+            if (_hive_table != nullptr) {
+                auto default_value = _hive_table->get_column_default_value(slots[i]);
+                if (default_value.has_value()) {
+                    _materialize_slot_default_values.emplace(slots[i]->id(), *default_value);
+                }
+            }
         }
     }
 
@@ -748,6 +759,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.tuple_desc = _tuple_desc;
     scanner_params.materialize_slots = _materialize_slots;
     scanner_params.materialize_index_in_chunk = _materialize_index_in_chunk;
+    scanner_params.materialize_slot_default_values = _materialize_slot_default_values;
     scanner_params.partition_slots = _partition_slots;
     scanner_params.partition_index_in_chunk = _partition_index_in_chunk;
     scanner_params._partition_index_in_hdfs_partition_columns = _partition_index_in_hdfs_partition_columns;
