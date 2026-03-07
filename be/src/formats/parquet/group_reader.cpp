@@ -41,6 +41,7 @@
 #include "formats/parquet/row_source_reader.h"
 #include "formats/parquet/scalar_column_reader.h"
 #include "formats/parquet/schema.h"
+#include "gen_cpp/Exprs_types.h"
 #include "gutil/strings/substitute.h"
 #include "storage/chunk_helper.h"
 #include "types/type_descriptor.h"
@@ -336,6 +337,53 @@ StatusOr<size_t> GroupReader::_read_range_round_by_round(const Range<uint64_t>& 
     return hit_count;
 }
 
+StatusOr<ColumnReaderPtr> GroupReader::_create_reserved_iceberg_column_reader(const SlotDescriptor* slot,
+                                                                              int32_t field_id) {
+    // Try to find the physical column in the Parquet file by Iceberg spec field ID first (canonical),
+    // then fall back to column name lookup for compatibility.
+    int32_t field_idx = _param.file_metadata->schema().get_field_idx_by_field_id(field_id);
+    if (field_idx < 0) {
+        field_idx = _param.file_metadata->schema().get_field_idx_by_column_name(slot->col_name());
+    }
+    if (field_idx < 0) {
+        return ColumnReaderPtr(nullptr);
+    }
+
+    const auto* schema_node = _param.file_metadata->schema().get_stored_column_by_field_idx(field_idx);
+    GroupReaderParam::Column column{};
+    column.idx_in_parquet = field_idx;
+    column.type_in_parquet = schema_node->physical_type;
+    column.slot_desc = const_cast<SlotDescriptor*>(slot);
+    column.t_lake_schema_field = nullptr;
+    column.decode_needed = true;
+    return _create_column_reader(column);
+}
+
+StatusOr<int64_t> GroupReader::_get_extended_bigint_value(SlotId slot_id) const {
+    if (_param.scan_range == nullptr || !_param.scan_range->__isset.extended_columns) {
+        return Status::NotFound(strings::Substitute("Cannot find extended column for slot $0", slot_id));
+    }
+
+    const auto& extended_columns = _param.scan_range->extended_columns;
+    auto it = extended_columns.find(slot_id);
+    if (it == extended_columns.end()) {
+        return Status::NotFound(strings::Substitute("Cannot find extended column value for slot $0", slot_id));
+    }
+
+    const auto& expr = it->second;
+    if (expr.nodes.empty()) {
+        return Status::InvalidArgument(strings::Substitute("Invalid extended column expression for slot $0", slot_id));
+    }
+
+    const auto& node = expr.nodes[0];
+    if (node.node_type != TExprNodeType::INT_LITERAL || !node.__isset.int_literal) {
+        return Status::InvalidArgument(
+                strings::Substitute("Unsupported extended column expression for slot $0", slot_id));
+    }
+
+    return node.int_literal.value;
+}
+
 Status GroupReader::_create_column_readers() {
     SCOPED_RAW_TIMER(&_param.stats->column_reader_init_ns);
     // ColumnReaderOptions is used by all column readers in one row group
@@ -378,7 +426,29 @@ Status GroupReader::_create_column_readers() {
     if (_param.reserved_field_slots != nullptr && !_param.reserved_field_slots->empty()) {
         for (const auto* slot : *_param.reserved_field_slots) {
             if (slot->col_name() == HdfsScanner::ICEBERG_ROW_ID) {
-                _column_readers.emplace(slot->id(), std::make_unique<IcebergRowIdReader>(_row_group_first_row_id));
+                // Iceberg v3 row lineage: try physical column first (post-compaction files),
+                // fall back to computed row_id (firstRowId + position) for non-compacted files.
+                // FE guarantees firstRowId is present when _row_id is requested.
+                ASSIGN_OR_RETURN(auto reader,
+                                 _create_reserved_iceberg_column_reader(slot, HdfsScanner::ICEBERG_ROW_ID_COLUMN_ID));
+                if (reader != nullptr) {
+                    _column_readers.emplace(slot->id(), std::move(reader));
+                } else {
+                    _column_readers.emplace(slot->id(), std::make_unique<IcebergRowIdReader>(_row_group_first_row_id));
+                }
+            } else if (slot->col_name() == HdfsScanner::ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER) {
+                // Iceberg v3 row lineage: try physical column first (post-compaction files),
+                // fall back to file-level dataSequenceNumber passed via extended_columns from FE.
+                ASSIGN_OR_RETURN(auto reader,
+                                 _create_reserved_iceberg_column_reader(
+                                         slot, HdfsScanner::ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER_COLUMN_ID));
+                if (reader != nullptr) {
+                    _column_readers.emplace(slot->id(), std::move(reader));
+                } else {
+                    ASSIGN_OR_RETURN(auto sequence_number, _get_extended_bigint_value(slot->id()));
+                    _column_readers.emplace(slot->id(),
+                                            std::make_unique<FixedValueColumnReader>(Datum(sequence_number)));
+                }
             } else if (slot->col_name() == "_row_source_id") {
                 if (auto opt = get_backend_id(); opt.has_value()) {
                     _column_readers.emplace(slot->id(), std::make_unique<RowSourceReader>(opt.value()));
