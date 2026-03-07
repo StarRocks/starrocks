@@ -48,9 +48,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import static com.starrocks.connector.share.credential.CloudConfigurationConstants.OSS_UDF_PATH;
-
 public class StorageVolume implements Writable, GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(StorageVolume.class);
 
@@ -126,7 +123,6 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         this.params = new HashMap<>(params);
         Map<String, String> configurationParams = new HashMap<>(params);
         preprocessAuthenticationIfNeeded(configurationParams);
-        preprocessOSSUdfPathIfNeeded(configurationParams);
         this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(configurationParams, true);
         if (!isValidCloudConfiguration()) {
             throw new SemanticException("Storage params is not valid " + dumpMaskedParams(params));
@@ -488,12 +484,6 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         if (svt == StorageVolumeType.AZBLOB) {
             String container = locations.get(0).split("/")[0];
             params.put(CloudConfigurationConstants.AZURE_BLOB_CONTAINER, container);
-        }
-    }
-
-    private void preprocessOSSUdfPathIfNeeded(Map<String, String> params) {
-        if (svt == StorageVolumeType.S3) {
-            params.put(OSS_UDF_PATH, locations.get(0) + "/udf/");
         }
     }
 

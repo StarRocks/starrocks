@@ -57,6 +57,7 @@ import java.io.InputStream;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Parameter;
+import java.net.URI;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.net.URLConnection;
@@ -172,10 +173,18 @@ public class CreateFunctionAnalyzer {
     }
 
     private String getRealUrl(String url) throws IOException {
-        if (!url.contains(":/")) {
-            return getJUdfUrl(url);
+        URI uri = URI.create(url);
+        String scheme = uri.getScheme();
+
+        if (scheme == null) {
+            return url;
         }
-        return url;
+
+        return switch (scheme.toLowerCase()) {
+            case "http", "https", "file" -> url;
+            case "s3" -> getJUdfUrl(url);
+            default -> throw new IOException("Unsupported UDF URL scheme: " + scheme);
+        };
     }
 
     private String getJUdfUrl(String url) throws IOException {
@@ -193,10 +202,10 @@ public class CreateFunctionAnalyzer {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                     String.format("Storage volume '%s' not found. Please create it first.", this.storageVolumeName));
         }
-        String objectFullPath = sv.getLocations().get(0) + "/udf/" + url;
-        String targetPath = String.format("%s/%s", STARROCKS_HOME_DIR + "/plugins/java_udf", url);
+        String objectPath = url.substring(url.indexOf("://") + 3);
+        String targetPath = String.format("%s/%s", STARROCKS_HOME_DIR + "/plugins/java_udf", objectPath);
         String targetUrl = String.format("file://%s", targetPath);
-        UDFDownloader.download2Local(sv, objectFullPath, targetPath);
+        UDFDownloader.download2Local(sv, url, targetPath);
         return targetUrl;
     }
 

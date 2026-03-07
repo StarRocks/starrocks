@@ -24,16 +24,12 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.HashMap;
 import java.util.Map;
-
-import static com.starrocks.connector.share.credential.CloudConfigurationConstants.OSS_UDF_PATH;
-
 public class CloudConfiguration {
     private static final Logger LOG = LogManager.getLogger(CloudConfiguration.class);
 
     private String configResources;
     private String runtimeJars;
     private String hadoopUsername;
-    private String ossUdfPath;
 
     public void toThrift(TCloudConfiguration tCloudConfiguration) {
         tCloudConfiguration.cloud_type = TCloudType.DEFAULT;
@@ -42,7 +38,6 @@ public class CloudConfiguration {
         properties.put(HadoopExt.HADOOP_RUNTIME_JARS, runtimeJars);
         properties.put(HadoopExt.HADOOP_CLOUD_CONFIGURATION_STRING, toConfString());
         properties.put(HadoopExt.HADOOP_USERNAME, hadoopUsername);
-        properties.put(OSS_UDF_PATH, ossUdfPath);
         tCloudConfiguration.setCloud_properties(properties);
     }
 
@@ -55,9 +50,6 @@ public class CloudConfiguration {
         }
         if (hadoopUsername != null) {
             configuration.set(HadoopExt.HADOOP_USERNAME, hadoopUsername);
-        }
-        if (ossUdfPath != null) {
-            configuration.set(OSS_UDF_PATH, ossUdfPath);
         }
 
         configuration.set(HadoopExt.HADOOP_CLOUD_CONFIGURATION_STRING, toConfString());
@@ -85,7 +77,6 @@ public class CloudConfiguration {
         configResources = properties.getOrDefault(HadoopExt.HADOOP_CONFIG_RESOURCES, "");
         runtimeJars = properties.getOrDefault(HadoopExt.HADOOP_RUNTIME_JARS, "");
         hadoopUsername = properties.getOrDefault(HadoopExt.HADOOP_USERNAME, "");
-        ossUdfPath = properties.getOrDefault(OSS_UDF_PATH, "");
     }
 
     public String getCommonFieldsString() {
