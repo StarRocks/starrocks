@@ -95,11 +95,20 @@ static std::string get_scheme(const std::string& url) {
 }
 
 Status DownloadUtil::get_real_url(const std::string& url, std::string* real_url, const FSOptions& options) {
-    if (url.find(":/") == std::string::npos) {
+
+    std::string scheme = get_scheme(url);
+
+    if (scheme.empty() || scheme == "http" || scheme == "https" || scheme == "file") {
+        *real_url = url;
+        return Status::OK();
+    }
+
+    if (scheme == "s3") {
         return get_java_udf_url(url, real_url, options);
     }
-    *real_url = url;
-    return Status::OK();
+
+    return Status::NotSupported(
+            strings::Substitute("Unsupported UDF URL scheme: $0", scheme));
 }
 
 Status DownloadUtil::get_java_udf_url(const std::string& url, std::string* real_url, const FSOptions& options) {
@@ -107,12 +116,14 @@ Status DownloadUtil::get_java_udf_url(const std::string& url, std::string* real_
     if (starrocks_home == nullptr) {
         return Status::RuntimeError("STARROCKS_HOME is not set, cannot download Java UDF");
     }
-    std::string object_full_path = fmt::format("{}/udf/{}",
-                                               options.cloud_configuration->cloud_properties.at(OSS_UDF_PATH), url);
-    std::string target_path = fmt::format("{}/plugins/java_udf/{}", starrocks_home, url);
+    std::string object_path;
+    std::size_t scheme_pos = url.find("://");
+    object_path = url.substr(scheme_pos + 3);
+
+    std::string target_path = fmt::format("{}/plugins/java_udf/{}", starrocks_home, object_path);
     std::string target_url = std::string("file://") + target_path;
     udf_downloder downloader;
-    Status status = downloader.download_remote_file_2_local(object_full_path, target_path, options);
+    Status status = downloader.download_remote_file_2_local(url, target_path, options);
     if (status.ok()) {
         *real_url = target_url;
         return Status::OK();
