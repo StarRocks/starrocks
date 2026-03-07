@@ -30,6 +30,7 @@ import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MockedMetadataMgr;
+import com.starrocks.connector.adbc.MockedADBCMetadata;
 import com.starrocks.connector.delta.DeltaLakeMetadata;
 import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
@@ -104,6 +105,7 @@ public class ConnectorPlanTestBase extends PlanTestBase {
         mockIcebergCatalogImpl(metadataMgr);
         mockDeltaLakeCatalog(metadataMgr);
         mockKuduCatalogImpl(metadataMgr);
+        mockADBCCatalogImpl(metadataMgr);
     }
 
     public static void mockCatalog(ConnectContext ctx, String catalogName) throws Exception {
@@ -134,6 +136,9 @@ public class ConnectorPlanTestBase extends PlanTestBase {
             case MOCK_KUDU_CATALOG_NAME:
                 mockKuduCatalogImpl(metadataMgr);
                 break;
+            case MockedADBCMetadata.MOCKED_ADBC_CATALOG_NAME:
+                mockADBCCatalogImpl(metadataMgr);
+                break;
             default:
                 throw new SemanticException("Unsupported catalog type:" + catalogName);
         }
@@ -146,6 +151,7 @@ public class ConnectorPlanTestBase extends PlanTestBase {
             dropCatalog(MOCK_PAIMON_CATALOG_NAME);
             dropCatalog(MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME);
             dropCatalog(MockedDeltaLakeMetadata.MOCKED_CATALOG_NAME);
+            dropCatalog(MockedADBCMetadata.MOCKED_ADBC_CATALOG_NAME);
         } catch (Exception e) {
             // ignore error
             e.printStackTrace();
@@ -369,6 +375,19 @@ public class ConnectorPlanTestBase extends PlanTestBase {
                 createCatalog("jdbc", MockedJDBCMetadata.MOCKED_JDBC_PG_CATALOG_NAME, "", pgProperties);
         metadataMgr.registerMockedMetadata(MockedJDBCMetadata.MOCKED_JDBC_PG_CATALOG_NAME,
                 new MockedJDBCMetadata(pgProperties));
+    }
+
+    private static void mockADBCCatalogImpl(MockedMetadataMgr metadataMgr) throws DdlException {
+        Map<String, String> properties = Maps.newHashMap();
+
+        properties.put("type", "adbc");
+        properties.put("adbc.driver", "flight_sql");
+        properties.put("adbc.url", "grpc://127.0.0.1:31337");
+        GlobalStateMgr.getCurrentState().getCatalogMgr().
+                createCatalog("adbc", MockedADBCMetadata.MOCKED_ADBC_CATALOG_NAME, "", properties);
+
+        MockedADBCMetadata mockedADBCMetadata = new MockedADBCMetadata(properties);
+        metadataMgr.registerMockedMetadata(MockedADBCMetadata.MOCKED_ADBC_CATALOG_NAME, mockedADBCMetadata);
     }
 
     private static void mockIcebergCatalogImpl(MockedMetadataMgr metadataMgr) throws DdlException {
