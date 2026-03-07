@@ -53,6 +53,7 @@ enum TRuntimeFilterBuildType {
   JOIN_FILTER,
   TOPN_FILTER,
   AGG_FILTER,
+  MIN_MAX_FILTER,
 }
 
 struct TRuntimeFilterDestination {

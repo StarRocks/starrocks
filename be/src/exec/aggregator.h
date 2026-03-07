@@ -339,6 +339,10 @@ public:
 
     RuntimeFilter* build_in_filters(RuntimeState* state, RuntimeFilterBuildDescriptor* desc);
     RuntimeFilter* build_topn_filters(RuntimeState* state, RuntimeFilterBuildDescriptor* desc);
+    RuntimeFilter* build_min_max_filters(RuntimeState* state, RuntimeFilterBuildDescriptor* desc,
+                                         const Column* agg_result_column);
+    RuntimeFilter* build_runtime_filter(RuntimeState* state, RuntimeFilterBuildDescriptor* desc,
+                                        const Column* agg_result_column = nullptr);
     AggTopNRuntimeFilterBuilder* topn_runtime_filter_builder() { return _topn_runtime_filter_builder; }
 
     // Convert one row agg states to chunk
