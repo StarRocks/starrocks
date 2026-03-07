@@ -151,6 +151,10 @@ TEST_F(ArrayFunctionsTest, array_length) {
         EXPECT_EQ(result->get(2), Datum(1));
         EXPECT_EQ(result->get(3), Datum(1));
         EXPECT_EQ(result->get(4), Datum(2));
+
+        // array_length should not mutate input nullable null bitmap.
+        auto* nullable = down_cast<NullableColumn*>(c.get());
+        EXPECT_EQ(nullable->data_column()->size(), nullable->null_column()->size());
     }
 
     // []
