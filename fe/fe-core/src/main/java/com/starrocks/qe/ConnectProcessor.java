@@ -233,6 +233,7 @@ public class ConnectProcessor {
         ctx.getAuditEventBuilder().setEventType(EventType.AFTER_QUERY)
                 .setState(ctx.getState().toString())
                 .setErrorCode(ctx.getNormalizedErrorCode())
+                .setErrorMsg(ctx.getState().getErrorMessage())
                 .setQueryTime(elapseMs)
                 .setReturnRows(ctx.getReturnRows())
                 .setStmtId(ctx.getStmtId())
