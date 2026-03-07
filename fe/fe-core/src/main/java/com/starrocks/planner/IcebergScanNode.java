@@ -33,9 +33,12 @@ import com.starrocks.connector.iceberg.IcebergRemoteSourceTrigger;
 import com.starrocks.connector.iceberg.IcebergTableMORParams;
 import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.connector.iceberg.QueueIcebergRemoteFileInfoSource;
+import com.starrocks.connector.iceberg.ScalarOperatorToIcebergExpr;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.TExplainLevel;
@@ -50,7 +53,10 @@ import org.apache.iceberg.metrics.ScanReportParser;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Deque;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -309,7 +315,39 @@ public class IcebergScanNode extends ScanNode {
         if (null != sortColumn) {
             output.append(prefix).append("SORT COLUMN: ").append(sortColumn).append("\n");
         }
-        if (!conjuncts.isEmpty()) {
+        if (detailLevel == TExplainLevel.VERBOSE && icebergJobPlanningPredicate != null) {
+            List<ScalarOperator> ops = Utils.extractConjuncts(icebergJobPlanningPredicate);
+            ScalarOperatorToIcebergExpr.IcebergContext icebergContext =
+                    new ScalarOperatorToIcebergExpr.IcebergContext(
+                            icebergTable.getNativeTable().schema().asStruct());
+            ScalarOperatorToIcebergExpr.ConvertResult convertResult =
+                    new ScalarOperatorToIcebergExpr().convertWithDetails(ops, icebergContext);
+
+            if (ops.size() == conjuncts.size()) {
+                Set<ScalarOperator> pushedSet = Collections.newSetFromMap(new IdentityHashMap<>());
+                pushedSet.addAll(convertResult.getPushedOperators());
+                List<Expr> pushed = new ArrayList<>();
+                List<Expr> nonPushed = new ArrayList<>();
+                for (int i = 0; i < ops.size(); i++) {
+                    if (pushedSet.contains(ops.get(i))) {
+                        pushed.add(conjuncts.get(i));
+                    } else {
+                        nonPushed.add(conjuncts.get(i));
+                    }
+                }
+                if (!pushed.isEmpty()) {
+                    output.append(prefix).append("PREDICATES: ").append(
+                            explainExpr(pushed)).append("\n");
+                }
+                if (!nonPushed.isEmpty()) {
+                    output.append(prefix).append("NON-PUSHED PREDICATES: ").append(
+                            explainExpr(nonPushed)).append("\n");
+                }
+            } else if (!conjuncts.isEmpty()) {
+                output.append(prefix).append("PREDICATES: ").append(
+                        explainExpr(conjuncts)).append("\n");
+            }
+        } else if (!conjuncts.isEmpty()) {
             output.append(prefix).append("PREDICATES: ").append(
                     explainExpr(conjuncts)).append("\n");
         }

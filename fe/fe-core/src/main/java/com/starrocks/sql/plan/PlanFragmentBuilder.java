@@ -1630,6 +1630,7 @@ public class PlanFragmentBuilder {
                 }
                 icebergScanNode.setupScanRangeLocations(
                         context.getConnectContext().getSessionVariable().isEnableConnectorIncrementalScanRanges());
+
                 if (!isEqDeleteScan) {
                     HDFSScanNodePredicates scanNodePredicates = icebergScanNode.getScanNodePredicates();
                     prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context, referenceTable);
