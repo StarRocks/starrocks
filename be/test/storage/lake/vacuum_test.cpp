@@ -4226,4 +4226,245 @@ TEST_P(LakeVacuumTest, test_delete_tablets_skip_txnlog_files_for_deleted_tablets
     }
 }
 
+TEST(LakeVacuumTest, test_async_file_deleter_last_batch_fails) {
+    // Create 2 files; the second batch will be injected with a failure.
+    for (const auto& name : {"test_afd_fail1.txt", "test_afd_fail2.txt"}) {
+        WritableFileOptions opts;
+        opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
+        ASSIGN_OR_ABORT(auto f, fs::new_writable_file(opts, name));
+        ASSERT_OK(f->append("x"));
+        ASSERT_OK(f->close());
+    }
+
+    int delete_calls = 0;
+    SyncPoint::GetInstance()->SetCallBack("PosixFileSystem::delete_file", [&](void* arg) {
+        if (++delete_calls >= 2) {
+            auto* st = static_cast<Status*>(arg);
+            st->update(Status::IOError("injected rate-limit error"));
+        }
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer_sp([&]() {
+        SyncPoint::GetInstance()->ClearCallBack("PosixFileSystem::delete_file");
+        SyncPoint::GetInstance()->DisableProcessing();
+        (void)fs::delete_file("test_afd_fail1.txt");
+        (void)fs::delete_file("test_afd_fail2.txt");
+    });
+
+    // batch_size=1: file1 → batch1 (succeeds), file2 → batch2 (fails).
+    AsyncFileDeleter deleter(1);
+    ASSERT_OK(deleter.delete_file("test_afd_fail1.txt"));
+    ASSERT_OK(deleter.delete_file("test_afd_fail2.txt"));
+    EXPECT_EQ(2, deleter.total_queued());
+
+    auto st = deleter.finish();
+    EXPECT_FALSE(st.ok());
+
+    // delete_count() reflects submitted batches (original semantics); batch2 was submitted.
+    EXPECT_EQ(2, deleter.delete_count());
+    // success_delete_count() credits only confirmed successes; only batch1 succeeded.
+    EXPECT_EQ(1, deleter.success_delete_count());
+    EXPECT_EQ(2, deleter.total_queued());
+
+    // File 1 was deleted by the successful batch; file 2 survives.
+    EXPECT_FALSE(fs::path_exist("test_afd_fail1.txt"));
+    EXPECT_TRUE(fs::path_exist("test_afd_fail2.txt"));
+}
+
+// Full success: all garbage versions (v2, v3, v4) have their data and meta files
+// deleted; min_retain_version (v5) metadata is preserved.
+TEST_P(LakeVacuumTest, test_version_chain_vacuum_full_success) {
+    config::lake_vacuum_enable_version_chain_mode = true;
+    DeferOp defer_cfg([]() { config::lake_vacuum_enable_version_chain_mode = false; });
+
+    // Orphan files – one per garbage version.
+    create_data_file("00000000009901_v2_orphan.dat");
+    create_data_file("00000000009902_v3_orphan.dat");
+    create_data_file("00000000009903_v4_orphan.dat");
+
+    // v2: orphan file, commit_time old enough to be garbage.
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {"id":9901,"version":2,"prev_garbage_version":0,"commit_time":100,
+         "orphan_files":[{"name":"00000000009901_v2_orphan.dat","size":10}]}
+        )DEL")));
+    // v3: orphan file, chains back to v2.
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {"id":9901,"version":3,"prev_garbage_version":2,"commit_time":200,
+         "orphan_files":[{"name":"00000000009902_v3_orphan.dat","size":10}]}
+        )DEL")));
+    // v4: orphan file, chains back to v3.
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {"id":9901,"version":4,"prev_garbage_version":3,"commit_time":300,
+         "orphan_files":[{"name":"00000000009903_v4_orphan.dat","size":10}]}
+        )DEL")));
+    // v5: the retained version (commit_time in the future relative to grace_timestamp).
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {"id":9901,"version":5,"prev_garbage_version":4,"commit_time":9999999999}
+        )DEL")));
+
+    VacuumRequest request;
+    VacuumResponse response;
+    request.set_delete_txn_log(false);
+    request.add_tablet_ids(9901);
+    request.set_min_retain_version(5);
+    // grace_timestamp < commit_time of v5 but > commit_time of v4, so v5 is "too new"
+    // and v4 becomes the final_retain_version trigger — with the fix, v4's meta is kept
+    // in that round.  Using a large grace_timestamp here makes v5 the first "too new"
+    // version (since its commit_time=9999999999 >> grace_timestamp=now+3600).
+    request.set_grace_timestamp(::time(nullptr) + 3600);
+    request.set_min_active_txn_id(12345);
+    vacuum(_tablet_mgr.get(), request, &response);
+
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+    // All three orphan data files must be gone.
+    EXPECT_FALSE(file_exist("00000000009901_v2_orphan.dat"));
+    EXPECT_FALSE(file_exist("00000000009902_v3_orphan.dat"));
+    EXPECT_FALSE(file_exist("00000000009903_v4_orphan.dat"));
+
+    // Garbage version metadata files must be gone.
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(9901, 2)));
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(9901, 3)));
+
+    // v4 is the final_retain_version (first version with commit_time < grace_timestamp):
+    // its orphan data files are cleaned but its metadata is preserved.
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(9901, 4)));
+
+    // The min_retain_version metadata must be preserved.
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(9901, 5)));
+}
+
+// Partial failure: data deletion fails for version v4's files.
+// Versions v2 and v3 (whose batches succeeded) must have their meta deleted and
+// min_version advanced; v4 must be left untouched so the next retry skips v2/v3.
+TEST_P(LakeVacuumTest, test_version_chain_vacuum_partial_failure) {
+    config::lake_vacuum_enable_version_chain_mode = true;
+    // Force batch_size=1 so each data file occupies its own async batch, giving
+    // deterministic per-version failure injection.
+    auto saved_batch = config::lake_vacuum_min_batch_delete_size;
+    config::lake_vacuum_min_batch_delete_size = 1;
+    DeferOp defer_cfg([saved_batch]() {
+        config::lake_vacuum_enable_version_chain_mode = false;
+        config::lake_vacuum_min_batch_delete_size = saved_batch;
+    });
+
+    create_data_file("00000000009911_v2_orphan.dat");
+    create_data_file("00000000009912_v3_orphan.dat");
+    create_data_file("00000000009913_v4_orphan.dat");
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {"id":9902,"version":2,"prev_garbage_version":0,"commit_time":100,
+         "orphan_files":[{"name":"00000000009911_v2_orphan.dat","size":10}]}
+        )DEL")));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {"id":9902,"version":3,"prev_garbage_version":2,"commit_time":200,
+         "orphan_files":[{"name":"00000000009912_v3_orphan.dat","size":10}]}
+        )DEL")));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {"id":9902,"version":4,"prev_garbage_version":3,"commit_time":300,
+         "orphan_files":[{"name":"00000000009913_v4_orphan.dat","size":10}]}
+        )DEL")));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {"id":9902,"version":5,"prev_garbage_version":4,"commit_time":9999999999}
+        )DEL")));
+
+    // Inject a failure on the 3rd data-file delete call (= v4's orphan file).
+    // Batches are processed oldest-to-newest: v2→v3→v4.
+    // Use == 3 (not >= 3) so that subsequent metadata deletions are not affected.
+    int delete_calls = 0;
+    SyncPoint::GetInstance()->SetCallBack("PosixFileSystem::delete_file", [&](void* arg) {
+        if (++delete_calls == 3) {
+            auto* st = static_cast<Status*>(arg);
+            st->update(Status::IOError("injected rate-limit error"));
+        }
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer_sp([&]() {
+        SyncPoint::GetInstance()->ClearCallBack("PosixFileSystem::delete_file");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    VacuumRequest request;
+    VacuumResponse response;
+    request.set_delete_txn_log(false);
+    request.add_tablet_ids(9902);
+    request.set_min_retain_version(5);
+    request.set_grace_timestamp(::time(nullptr) + 3600);
+    request.set_min_active_txn_id(12345);
+    vacuum(_tablet_mgr.get(), request, &response);
+
+    // vacuum_tablet_chain always returns OK — partial progress is encoded in min_version.
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+    // v2 and v3 were confirmed deleted (batch 1 and 2 succeeded).
+    EXPECT_FALSE(file_exist("00000000009911_v2_orphan.dat"));
+    EXPECT_FALSE(file_exist("00000000009912_v3_orphan.dat"));
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(9902, 2)));
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(9902, 3)));
+
+    // v4 data file and meta must survive (its batch failed).
+    EXPECT_TRUE(file_exist("00000000009913_v4_orphan.dat"));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(9902, 4)));
+
+    // The retained version is untouched.
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(9902, 5)));
+}
+
+// No progress at all: the very first data-delete batch fails.
+// vacuumed_version must NOT be final_retain_version so FE does not advance
+// lastSuccVacuumVersion and keeps scheduling retries.
+TEST_P(LakeVacuumTest, test_version_chain_vacuum_no_progress) {
+    config::lake_vacuum_enable_version_chain_mode = true;
+    auto saved_batch = config::lake_vacuum_min_batch_delete_size;
+    config::lake_vacuum_min_batch_delete_size = 1;
+    DeferOp defer_cfg([saved_batch]() {
+        config::lake_vacuum_enable_version_chain_mode = false;
+        config::lake_vacuum_min_batch_delete_size = saved_batch;
+    });
+
+    create_data_file("00000000009921_v2_orphan.dat");
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {"id":9903,"version":2,"prev_garbage_version":0,"commit_time":100,
+         "orphan_files":[{"name":"00000000009921_v2_orphan.dat","size":10}]}
+        )DEL")));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {"id":9903,"version":3,"prev_garbage_version":2,"commit_time":9999999999}
+        )DEL")));
+
+    // Fail every delete call so there is absolutely no progress.
+    SyncPoint::GetInstance()->SetCallBack("PosixFileSystem::delete_file", [](void* arg) {
+        auto* st = static_cast<Status*>(arg);
+        st->update(Status::IOError("injected error"));
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer_sp([&]() {
+        SyncPoint::GetInstance()->ClearCallBack("PosixFileSystem::delete_file");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    VacuumRequest request;
+    VacuumResponse response;
+    request.set_delete_txn_log(false);
+    request.add_tablet_ids(9903);
+    request.set_min_retain_version(3);
+    request.set_grace_timestamp(::time(nullptr) + 3600);
+    request.set_min_active_txn_id(12345);
+    vacuum(_tablet_mgr.get(), request, &response);
+
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+    // Nothing was deleted.
+    EXPECT_TRUE(file_exist("00000000009921_v2_orphan.dat"));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(9903, 2)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(9903, 3)));
+
+    // vacuumed_version must be min_version-1 (= 0), NOT final_retain_version (= 2).
+    // A value of 0 tells FE that no new versions were vacuumed this round.
+    EXPECT_EQ(0, response.vacuumed_version());
+}
+
 } // namespace starrocks::lake
