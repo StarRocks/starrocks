@@ -41,7 +41,7 @@
 #include <thrift/transport/TSocket.h>
 
 #include "base/time/monotime.h"
-#include "common/config.h"
+#include "common/config_thrift_server_fwd.h"
 #include "common/util/thrift_server.h"
 #include "gen_cpp/Types_types.h"
 

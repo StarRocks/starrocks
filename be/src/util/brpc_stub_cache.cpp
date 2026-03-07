@@ -14,7 +14,7 @@
 
 #include "util/brpc_stub_cache.h"
 
-#include "common/config.h"
+#include "common/config_network_fwd.h"
 #include "gen_cpp/internal_service.pb.h"
 #ifndef __APPLE__
 #include "gen_cpp/lake_service.pb.h"

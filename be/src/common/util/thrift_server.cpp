@@ -50,7 +50,7 @@
 #include <thread>
 #include <utility>
 
-#include "common/config.h"
+#include "common/config_thrift_server_fwd.h"
 #include "common/system/backend_options.h"
 #include "common/thread/thread.h"
 

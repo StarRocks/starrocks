@@ -23,6 +23,9 @@ namespace starrocks::config {
 // Broker write timeout in seconds.
 CONF_Int32(broker_write_timeout_seconds, "30");
 
+// Default thrift client retry interval (in milliseconds).
+CONF_mInt64(thrift_client_retry_interval_ms, "100");
+
 // Default thrift rpc timeout ms.
 CONF_mInt32(thrift_rpc_timeout_ms, "5000");
 

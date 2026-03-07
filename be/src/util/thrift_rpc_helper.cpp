@@ -39,7 +39,7 @@
 
 #include "base/network/network_util.h"
 #include "base/time/monotime.h"
-#include "common/config.h"
+#include "common/config_rpc_client_fwd.h"
 #include "common/status.h"
 #include "common/util/thrift_util.h"
 #include "gen_cpp/FrontendService.h"
