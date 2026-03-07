@@ -1,0 +1,97 @@
+-- name: test_adbc_select_all
+set catalog default_catalog;
+create external catalog adbc_catalog_${uuid0}
+properties
+(
+    "type"="adbc",
+    "adbc.driver"="flight_sql",
+    "adbc.url"="grpc://${external_flightsql_ip}:${external_flightsql_port}"
+);
+set catalog adbc_catalog_${uuid0};
+select * from test_db.test_types order by id;
+set catalog default_catalog;
+drop catalog adbc_catalog_${uuid0};
+
+-- name: test_adbc_column_pruning
+set catalog default_catalog;
+create external catalog adbc_catalog_${uuid0}
+properties
+(
+    "type"="adbc",
+    "adbc.driver"="flight_sql",
+    "adbc.url"="grpc://${external_flightsql_ip}:${external_flightsql_port}"
+);
+set catalog adbc_catalog_${uuid0};
+select id, name from test_db.test_types order by id;
+set catalog default_catalog;
+drop catalog adbc_catalog_${uuid0};
+
+-- name: test_adbc_predicate_pushdown
+set catalog default_catalog;
+create external catalog adbc_catalog_${uuid0}
+properties
+(
+    "type"="adbc",
+    "adbc.driver"="flight_sql",
+    "adbc.url"="grpc://${external_flightsql_ip}:${external_flightsql_port}"
+);
+set catalog adbc_catalog_${uuid0};
+select name from test_db.test_types where id > 3 order by name;
+set catalog default_catalog;
+drop catalog adbc_catalog_${uuid0};
+
+-- name: test_adbc_limit_pushdown
+set catalog default_catalog;
+create external catalog adbc_catalog_${uuid0}
+properties
+(
+    "type"="adbc",
+    "adbc.driver"="flight_sql",
+    "adbc.url"="grpc://${external_flightsql_ip}:${external_flightsql_port}"
+);
+set catalog adbc_catalog_${uuid0};
+select name from test_db.test_types order by id limit 2;
+set catalog default_catalog;
+drop catalog adbc_catalog_${uuid0};
+
+-- name: test_adbc_combined_pushdown
+set catalog default_catalog;
+create external catalog adbc_catalog_${uuid0}
+properties
+(
+    "type"="adbc",
+    "adbc.driver"="flight_sql",
+    "adbc.url"="grpc://${external_flightsql_ip}:${external_flightsql_port}"
+);
+set catalog adbc_catalog_${uuid0};
+select name from test_db.test_types where flag = true order by id limit 2;
+set catalog default_catalog;
+drop catalog adbc_catalog_${uuid0};
+
+-- name: test_adbc_explain_pushdown
+set catalog default_catalog;
+create external catalog adbc_catalog_${uuid0}
+properties
+(
+    "type"="adbc",
+    "adbc.driver"="flight_sql",
+    "adbc.url"="grpc://${external_flightsql_ip}:${external_flightsql_port}"
+);
+set catalog adbc_catalog_${uuid0};
+[UC]explain select name from test_db.test_types where id > 3;
+set catalog default_catalog;
+drop catalog adbc_catalog_${uuid0};
+
+-- name: test_adbc_subquery
+set catalog default_catalog;
+create external catalog adbc_catalog_${uuid0}
+properties
+(
+    "type"="adbc",
+    "adbc.driver"="flight_sql",
+    "adbc.url"="grpc://${external_flightsql_ip}:${external_flightsql_port}"
+);
+set catalog adbc_catalog_${uuid0};
+select name from test_db.test_types where id in (select id from test_db.test_join where category = 'A') order by name;
+set catalog default_catalog;
+drop catalog adbc_catalog_${uuid0};

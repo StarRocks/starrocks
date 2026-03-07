@@ -1,0 +1,44 @@
+-- name: test_adbc_create_and_show
+set catalog default_catalog;
+create external catalog adbc_catalog_${uuid0}
+properties
+(
+    "type"="adbc",
+    "adbc.driver"="flight_sql",
+    "adbc.url"="grpc://${external_flightsql_ip}:${external_flightsql_port}"
+);
+set catalog adbc_catalog_${uuid0};
+show databases;
+use test_db;
+show tables;
+desc test_types;
+set catalog default_catalog;
+drop catalog adbc_catalog_${uuid0};
+
+-- name: test_adbc_alter_catalog
+set catalog default_catalog;
+create external catalog adbc_catalog_${uuid0}
+properties
+(
+    "type"="adbc",
+    "adbc.driver"="flight_sql",
+    "adbc.url"="grpc://${external_flightsql_ip}:${external_flightsql_port}"
+);
+alter catalog adbc_catalog_${uuid0} set ("adbc.identifier.quote"="`");
+set catalog adbc_catalog_${uuid0};
+show databases;
+set catalog default_catalog;
+drop catalog adbc_catalog_${uuid0};
+
+-- name: test_adbc_drop_catalog
+set catalog default_catalog;
+create external catalog adbc_catalog_${uuid0}
+properties
+(
+    "type"="adbc",
+    "adbc.driver"="flight_sql",
+    "adbc.url"="grpc://${external_flightsql_ip}:${external_flightsql_port}"
+);
+[UC]show catalogs;
+drop catalog adbc_catalog_${uuid0};
+[UC]show catalogs;
