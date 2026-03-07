@@ -874,8 +874,10 @@ bool JsonFlattener::_flatten_json(const vpack::Slice& value, const JsonFlatPath*
             }
         }
 
-        if (child->second->children.empty()) {
-            // leaf node
+        // Type-conflict leaf: selected for output as TYPE_JSON but also has children from other rows.
+        const bool is_conflict_leaf = child->second->index >= 0 && child->second->type == LogicalType::TYPE_JSON;
+        if (child->second->children.empty() || is_conflict_leaf) {
+            // Treat as leaf if selected for output, even when it has children (e.g. type-conflict paths).
             auto index = child->second->index;
             DCHECK(_flat_columns.size() > index);
             DCHECK(_flat_columns[index]->is_nullable());
