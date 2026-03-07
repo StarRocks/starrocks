@@ -8,7 +8,7 @@ sidebar_position: 30
 
 本文介绍了 Bloom filter（布隆过滤器）索引的原理，以及如何创建和修改 Bloom filter 索引。
 
-Bloom filter 索引可以快速判断表的数据文件中是否可能包含要查询的数据，如果不包含就跳过，从而减少扫描的数据量。Bloom filter 索引空间效率高，适用于基数较高的列，如 ID 列。如果一个查询条件命中前缀索引列，StarRocks 会使用[前缀索引](./Prefix_index_sort_key.md)快速返回查询结果。但是前缀索引的长度有限，如果想要快速查询一个非前缀索引列且该列基数较高，即可为这个列创建 Bloom filter 索引。
+Bloom filter 索引可以快速判断表的数据文件中是否可能包含要查询的数据，如果不包含就跳过，从而减少扫描的数据量。Bloom filter 索引空间效率高，适用于基数较高的列，如 ID 列。如果一个查询条件命中前缀索引列，StarRocks 会使用[前缀索引](./Prefix_index_sort_key.md)快速返回查询结果。但是前缀索引的长度有限，如果想要快速查询一个**非前缀索引列**且该列**基数较高**，即可为这个列创建 Bloom filter 索引。
 
 ## 索引原理
 
@@ -29,20 +29,20 @@ Bloom filter 索引可以快速判断表的数据文件中是否可能包含要�
 
 ## 创建索引
 
-建表时，通过在 `PROPERTIES` 中指定 `bloom_filter_columns` 来创建索引。例如，如下语句为表 `table1` 的 `k1` 和 `k2` 列创建 Bloom filter 索引。
+建表时，通过在 `PROPERTIES` 中指定 `bloom_filter_columns` 来创建索引。例如，如下语句为表 `table1` 的 `v1` 列创建 Bloom filter 索引。
 
 ```SQL
 CREATE TABLE table1
 (
     k1 BIGINT,
     k2 LARGEINT,
-    v1 VARCHAR(2048) REPLACE,
+    v1 VARCHAR(2048),
     v2 SMALLINT DEFAULT "10"
 )
 ENGINE = olap
-PRIMARY KEY(k1, k2)
+DUPLICATE KEY(k1, k2)
 DISTRIBUTED BY HASH (k1, k2)
-PROPERTIES("bloom_filter_columns" = "k1,k2");
+PROPERTIES("bloom_filter_columns" = "v1");
 ```
 
 您可以同时创建多个索引，多个索引列之间需用逗号 (`,`) 隔开。关于建表的其他参数说明，请参见 [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md)。
@@ -59,16 +59,16 @@ SHOW CREATE TABLE table1;
 
 您可以使用 [ALTER TABLE](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md) 语句来增加，减少和删除索引。
 
-- 如下语句增加了一个 Bloom filter 索引列 `v1`。
+- 如下语句增加了一个 Bloom filter 索引列 `v2`。
 
     ```SQL
-    ALTER TABLE table1 SET ("bloom_filter_columns" = "k1,k2,v1");
+    ALTER TABLE table1 SET ("bloom_filter_columns" = "v1,v2");
     ```
 
-- 如下语句减少了一个 Bloom filter 索引列 `k2`。
+- 如下语句将 Bloom filter 索引缩减为仅 `v1` 列。
 
     ```SQL
-    ALTER TABLE table1 SET ("bloom_filter_columns" = "k1");
+    ALTER TABLE table1 SET ("bloom_filter_columns" = "v1");
     ```
 
 - 如下语句删除了 `table1` 的所有 Bloom filter 索引。
