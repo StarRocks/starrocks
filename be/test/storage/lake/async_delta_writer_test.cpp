@@ -14,6 +14,7 @@
 
 #include "storage/lake/async_delta_writer.h"
 
+#include <bthread/bthread.h>
 #include <gtest/gtest.h>
 
 #include <random>
@@ -896,6 +897,68 @@ TEST_F(LakeAsyncDeltaWriterTest, test_close_does_not_destroy_writer_during_merge
     // Now close. Before the fix this would SIGSEGV or trigger ASAN heap-use-after-free.
     // After the fix, close() waits for the merge task to complete before destroying writer state.
     delta_writer->close();
+}
+
+// Test that AsyncDeltaWriter::close() can be called from a bthread without
+// triggering DCHECK_EQ(0, bthread_self()) in DeltaWriter::close().
+// Before the fix, AsyncDeltaWriterImpl::close() called _writer->close() directly,
+// which has a DCHECK that forbids calling from bthread context. This caused crashes
+// in Debug builds when close() was called from brpc handlers (which run in bthread).
+// The fix splits close() into flush_and_wait() (runs in pthread stop handler) and
+// release_resources() (runs in AsyncDeltaWriterImpl::close(), safe from bthread).
+TEST_F(LakeAsyncDeltaWriterTest, test_close_from_bthread_no_dcheck_failure) {
+    static const int kChunkSize = 128;
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto txn_id = next_id();
+    auto tablet_id = _tablet_metadata->id();
+    ASSIGN_OR_ABORT(auto delta_writer, AsyncDeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+
+    // Write some data
+    CountDownLatch write_latch(1);
+    delta_writer->write(&chunk0, indexes.data(), indexes.size(), [&](const Status& st) {
+        ASSERT_OK(st);
+        write_latch.count_down();
+    });
+    write_latch.wait();
+
+    // Finish
+    CountDownLatch finish_latch(1);
+    delta_writer->finish([&](StatusOr<TxnLogPtr> res) {
+        ASSERT_TRUE(res.ok()) << res.status();
+        finish_latch.count_down();
+    });
+    finish_latch.wait();
+
+    // Close from a bthread — this simulates LakeTabletsChannel::abort() being called
+    // from a brpc handler. Before the fix, this would crash in Debug builds due to
+    // DCHECK_EQ(0, bthread_self()) in DeltaWriter::close().
+    auto raw_ptr = delta_writer.get();
+    bthread_t bt;
+    int ret = bthread_start_background(
+            &bt, nullptr,
+            [](void* arg) -> void* {
+                // Verify we are indeed running in a bthread
+                EXPECT_NE(0, bthread_self());
+                auto* writer = static_cast<AsyncDeltaWriter*>(arg);
+                writer->close();
+                return nullptr;
+            },
+            raw_ptr);
+    ASSERT_EQ(0, ret);
+    bthread_join(bt, nullptr);
 }
 
 // Test that write tasks are rejected after finish task completes
