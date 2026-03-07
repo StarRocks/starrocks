@@ -106,7 +106,7 @@ include = '\.pyi?$'
 
 
 [tool.pytest.ini_options]
-addopts = "--tb native -n4 -v -r fxX --maxfail=500 -p no:warnings"
+addopts = "--tb native -v -r fxX --maxfail=500 -p no:warnings"
 #python_files = "test/*test_*.py test/**/*test_*.py"
 python_files = "test/**/*test_*.py"
 #python_functions = "test_engine_and_comment"
