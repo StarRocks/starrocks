@@ -20,7 +20,7 @@
 #include "base/testutil/assert.h"
 #include "base/time/monotime.h"
 #include "brpc/controller.h"
-#include "common/config.h"
+#include "common/config_merge_commit_fwd.h"
 #include "common/thread/threadpool.h"
 #include "common/util/bthreads/executor.h"
 #include "gen_cpp/FrontendService.h"

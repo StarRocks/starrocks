@@ -14,7 +14,7 @@
 
 #include "exec/pipeline/exchange/exchange_merge_sort_source_operator.h"
 
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
 #include "exec/sort_exec_exprs.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/data_stream_recvr.h"
