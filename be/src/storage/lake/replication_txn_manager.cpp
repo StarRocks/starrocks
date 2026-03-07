@@ -40,6 +40,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "storage/delete_handler.h"
+#include "storage/delta_column_group.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/tablet.h"
@@ -280,6 +281,37 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
             auto* op_write = txn_log->mutable_op_replication()->add_op_writes();
             RETURN_IF_ERROR(convert_rowset_meta(*rowset_meta, request.transaction_id, op_write, &filename_map));
         }
+
+        // Handle delta column groups for non-PK tables.
+        // The .dcgs_snapshot file only exists when the source table uses partial update or generated columns.
+        // A NotFound error means the source has no DCGs (expected for most tables).
+        // Any other download failure (network, timeout) should be treated as a real error to prevent
+        // data inconsistency where rowsets are replicated but their DCG metadata is lost.
+        std::string remote_dcgs_snapshot_file_name = std::to_string(request.src_tablet_id) + ".dcgs_snapshot";
+        auto dcgs_snapshot_content_or = ReplicationUtils::download_remote_snapshot_file(
+                src_snapshot_info.backend.host, src_snapshot_info.backend.http_port, request.src_token,
+                src_snapshot_info.snapshot_path, request.src_tablet_id, request.src_schema_hash,
+                remote_dcgs_snapshot_file_name, config::download_low_speed_time);
+        if (dcgs_snapshot_content_or.ok()) {
+            DeltaColumnGroupSnapshotPB dcg_snapshot_pb;
+            RETURN_IF_ERROR(ProtobufFileWithHeader::load(&dcg_snapshot_pb, dcgs_snapshot_content_or.value()));
+
+            std::unordered_map<std::string, uint32_t> rowset_id_to_seg_id;
+            for (const auto& rowset_meta : rowset_metas) {
+                rowset_id_to_seg_id[rowset_meta->rowset_id().to_string()] = rowset_meta->get_rowset_seg_id();
+            }
+
+            RETURN_IF_ERROR(convert_dcg_snapshot_for_non_pk(
+                    dcg_snapshot_pb, rowset_id_to_seg_id, request.transaction_id,
+                    txn_log->mutable_op_replication()->mutable_dcg_meta(), &filename_map));
+        } else if (!dcgs_snapshot_content_or.status().is_not_found()) {
+            // NotFound means the source has no DCGs (expected for most tables).
+            LOG(WARNING) << "Failed to download dcgs_snapshot file: " << remote_dcgs_snapshot_file_name
+                         << ", status: " << dcgs_snapshot_content_or.status();
+            return dcgs_snapshot_content_or.status().clone_and_prepend("Failed to download dcgs_snapshot file: " +
+                                                                       remote_dcgs_snapshot_file_name);
+        }
+
         // None-pk table always has tablet schema in tablet meta
         tablet_meta.tablet_schema_ptr()->to_schema_pb(txn_log->mutable_op_replication()->mutable_source_schema());
         source_schema_pb = &txn_log->op_replication().source_schema();
@@ -322,6 +354,10 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
             delvec.save_to(delvec_data.mutable_data());
         }
 
+        // Handle delta column groups for PK tables
+        RETURN_IF_ERROR(convert_dcg_for_pk(snapshot_meta.delta_column_groups(), request.transaction_id,
+                                           txn_log->mutable_op_replication()->mutable_dcg_meta(), &filename_map));
+
         if (snapshot_meta.tablet_meta().has_schema()) {
             // Try to get source schema from tablet meta, only full snapshot has tablet meta
             txn_log->mutable_op_replication()->mutable_source_schema()->CopyFrom(snapshot_meta.tablet_meta().schema());
@@ -347,6 +383,12 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
     std::unordered_map<uint32_t, uint32_t> column_unique_id_map;
     ReplicationUtils::calc_column_unique_id_map(source_schema_pb->column(), tablet_metadata->schema().column(),
                                                 &column_unique_id_map);
+
+    // Convert column unique IDs in DCG metadata
+    if (txn_log->op_replication().has_dcg_meta()) {
+        RETURN_IF_ERROR(convert_dcg_column_unique_ids(txn_log->mutable_op_replication()->mutable_dcg_meta(),
+                                                      column_unique_id_map));
+    }
 
     std::vector<std::string> files_to_delete;
     CancelableDefer clean_files([&files_to_delete]() { lake::delete_files_async(std::move(files_to_delete)); });
@@ -389,10 +431,6 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
 Status ReplicationTxnManager::convert_rowset_meta(
         const RowsetMeta& rowset_meta, TTransactionId transaction_id, TxnLogPB::OpWrite* op_write,
         std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>* filename_map) {
-    if (rowset_meta.is_column_mode_partial_update()) {
-        return Status::NotSupported("Column mode partial update is not supported in shared-data mode");
-    }
-
     // Convert rowset metadata
     auto* rowset_metadata = op_write->mutable_rowset();
     rowset_metadata->set_id(rowset_meta.get_rowset_seg_id());
@@ -485,6 +523,115 @@ Status ReplicationTxnManager::convert_delete_predicate_pb(DeletePredicatePB* del
     return Status::OK();
 }
 
+Status ReplicationTxnManager::convert_dcg_snapshot_for_non_pk(
+        const DeltaColumnGroupSnapshotPB& dcg_snapshot_pb,
+        const std::unordered_map<std::string, uint32_t>& rowset_id_to_seg_id, TTransactionId transaction_id,
+        DeltaColumnGroupMetadataPB* dcg_meta,
+        std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>* filename_map) {
+    for (int i = 0; i < dcg_snapshot_pb.dcg_lists_size(); i++) {
+        auto it = rowset_id_to_seg_id.find(dcg_snapshot_pb.rowset_id(i));
+        if (it == rowset_id_to_seg_id.end()) {
+            continue;
+        }
+        uint32_t rssid = it->second + dcg_snapshot_pb.segment_id(i);
+        const auto& dcg_list_pb = dcg_snapshot_pb.dcg_lists(i);
+        auto& dcg_ver = (*dcg_meta->mutable_dcgs())[rssid];
+
+        if (dcg_list_pb.versions_size() != dcg_list_pb.dcgs_size()) {
+            return Status::Corruption(fmt::format(
+                    "Mismatch between versions_size ({}) and dcgs_size ({}) in DeltaColumnGroup list for rowset {}, "
+                    "segment {}",
+                    dcg_list_pb.versions_size(), dcg_list_pb.dcgs_size(), dcg_snapshot_pb.rowset_id(i),
+                    dcg_snapshot_pb.segment_id(i)));
+        }
+        for (int j = 0; j < dcg_list_pb.dcgs_size(); j++) {
+            const auto& dcg_pb = dcg_list_pb.dcgs(j);
+            int64_t version = dcg_list_pb.versions(j);
+            if (dcg_pb.column_ids_size() != dcg_pb.column_files_size()) {
+                return Status::Corruption(fmt::format(
+                        "Mismatch between column_ids_size ({}) and column_files_size ({}) in DeltaColumnGroup for "
+                        "rowset {}, segment {}, dcg index {}",
+                        dcg_pb.column_ids_size(), dcg_pb.column_files_size(), dcg_snapshot_pb.rowset_id(i),
+                        dcg_snapshot_pb.segment_id(i), j));
+            }
+            for (int k = 0; k < dcg_pb.column_files_size(); k++) {
+                const auto& old_cols_filename = dcg_pb.column_files(k);
+                std::string new_cols_filename = gen_cols_filename(transaction_id);
+
+                dcg_ver.add_column_files(new_cols_filename);
+                dcg_ver.add_versions(version);
+
+                dcg_ver.add_unique_column_ids()->CopyFrom(dcg_pb.column_ids(k));
+
+                FileEncryptionPair encryption_pair;
+                if (config::enable_transparent_data_encryption) {
+                    ASSIGN_OR_RETURN(encryption_pair,
+                                     KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+                    dcg_ver.add_encryption_metas(encryption_pair.encryption_meta);
+                }
+
+                auto result = filename_map->emplace(
+                        old_cols_filename, std::pair(std::move(new_cols_filename), std::move(encryption_pair)));
+                if (!result.second) {
+                    return Status::Corruption("Duplicated cols file: " + result.first->first);
+                }
+            }
+        }
+    }
+    return Status::OK();
+}
+
+Status ReplicationTxnManager::convert_dcg_for_pk(
+        const std::unordered_map<uint32_t, DeltaColumnGroupList>& delta_column_groups, TTransactionId transaction_id,
+        DeltaColumnGroupMetadataPB* dcg_meta,
+        std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>* filename_map) {
+    for (const auto& [segment_id, dcg_list] : delta_column_groups) {
+        auto& dcg_ver = (*dcg_meta->mutable_dcgs())[segment_id];
+
+        for (const auto& dcg : dcg_list) {
+            for (size_t i = 0; i < dcg->relative_column_files().size(); i++) {
+                const auto& old_cols_filename = dcg->relative_column_files()[i];
+                std::string new_cols_filename = gen_cols_filename(transaction_id);
+
+                dcg_ver.add_column_files(new_cols_filename);
+                dcg_ver.add_versions(dcg->version());
+
+                if (i < dcg->column_ids().size()) {
+                    auto* ucids = dcg_ver.add_unique_column_ids();
+                    for (auto cid : dcg->column_ids()[i]) {
+                        ucids->add_column_ids(cid);
+                    }
+                }
+
+                FileEncryptionPair encryption_pair;
+                if (config::enable_transparent_data_encryption) {
+                    ASSIGN_OR_RETURN(encryption_pair,
+                                     KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+                    dcg_ver.add_encryption_metas(encryption_pair.encryption_meta);
+                }
+
+                auto result = filename_map->emplace(
+                        old_cols_filename, std::pair(std::move(new_cols_filename), std::move(encryption_pair)));
+                if (!result.second) {
+                    return Status::Corruption("Duplicated cols file: " + result.first->first);
+                }
+            }
+        }
+    }
+    return Status::OK();
+}
+
+Status ReplicationTxnManager::convert_dcg_column_unique_ids(
+        DeltaColumnGroupMetadataPB* dcg_meta, const std::unordered_map<uint32_t, uint32_t>& column_unique_id_map) {
+    for (auto& [seg_id, dcg_ver] : *dcg_meta->mutable_dcgs()) {
+        for (int i = 0; i < dcg_ver.unique_column_ids_size(); i++) {
+            RETURN_IF_ERROR(ReplicationUtils::convert_column_unique_ids(
+                    dcg_ver.mutable_unique_column_ids(i)->mutable_column_ids(), column_unique_id_map));
+        }
+    }
+    return Status::OK();
+}
+
 // Helper function to create replication txn log with converted metadata
 FileConverterCreatorFunc ReplicationTxnManager::build_file_converters(
         const TabletManager* tablet_manager, const TReplicateSnapshotRequest& request,
@@ -516,7 +663,7 @@ FileConverterCreatorFunc ReplicationTxnManager::build_file_converters(
 
         files_to_delete.push_back(std::move(segment_location));
 
-        if (is_segment(file_name) && !column_unique_id_map.empty()) {
+        if ((is_segment(file_name) || is_cols(file_name)) && !column_unique_id_map.empty()) {
             return std::make_unique<SegmentStreamConverter>(file_name, file_size, std::move(output_file),
                                                             &column_unique_id_map);
         }
