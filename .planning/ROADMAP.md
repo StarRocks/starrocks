@@ -83,16 +83,20 @@ Plans:
   3. `test/conf/sr.conf` has `[.flightsql]` section with `external_flightsql_ip`, `external_flightsql_port` variables
   4. SQL integration tests pass when run against a manually provisioned Flight SQL server (e.g., DuckDB Flight SQL)
 **Note**: E2E tests in CI require infra team to add Flight SQL server provisioning to ci-tool. Local verification uses manually started DuckDB Flight SQL.
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 04-01-PLAN.md — MockedADBCMetadata + ConnectorPlanTestBase registration + ADBCScanPlanTest (TEST-01)
+- [ ] 04-02-PLAN.md — sr.conf Flight SQL section + SQL integration test T/R files + seed data script (TEST-02, TEST-03, TEST-04)
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3
+Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 5/5 | Complete | 2026-03-05 |
 | 2. Scanning | 4/4 | Complete | 2026-03-06 |
 | 3. JDBC Parity | 0/3 | In progress | - |
-| 4. Integration Testing | 0/TBD | Not started | - |
+| 4. Integration Testing | 0/2 | Not started | - |
