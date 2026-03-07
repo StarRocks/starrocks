@@ -1,8 +1,5 @@
--- name: test_mv_fast_schema_change_with_aggregate @slow @sequential
+-- name: test_mv_fast_schema_change_mode
 admin set frontend config('alter_scheduler_interval_millisecond' = '100');
--- result:
--- !result
-admin set frontend config('mv_fast_schema_change_mode' = 'strict');
 -- result:
 -- !result
 drop table if exists t1_agg;
@@ -37,8 +34,7 @@ CREATE MATERIALIZED VIEW test_mv_agg1
 PARTITION BY date_trunc('day', dt)
 DISTRIBUTED BY hash(c0)
 PROPERTIES (
-    "replication_num" = "1",
-    "query_rewrite_consistency" = "force_mv"
+    "replication_num" = "1"
 )
 AS
 SELECT dt, c0, SUM(c3) as sum_c3, COUNT(c1) as cnt_c1
@@ -48,7 +44,10 @@ GROUP BY dt, c0;
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg1 WITH SYNC MODE;
 -- result:
-019c2d99-e2ac-7e9f-933c-aa96e623c3b9
+019cc25f-6e1c-7bb1-bab2-6008fe428318
+-- !result
+admin set frontend config('mv_fast_schema_change_mode' = 'force');
+-- result:
 -- !result
 set enable_materialized_view_rewrite = false;
 -- result:
@@ -86,7 +85,7 @@ cnt_c2	bigint	YES	false	None	NONE
 -- !result
 function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), COUNT(c1), COUNT(c2) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
 -- result:
-True
+False
 -- !result
 SELECT dt, c0, SUM(c3) as sum_c3, COUNT(c1) as cnt_c1, COUNT(c2) as cnt_c2 FROM t1_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
 -- result:
@@ -105,7 +104,7 @@ INSERT INTO t1_agg VALUES ('2026-01-01', 0, 'val_0', 'desc_0', 10, 20);
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg1 WITH SYNC MODE;
 -- result:
-019c2d9a-0932-70e7-986e-9980c98ba35c
+019cc25f-84a9-7ec7-b5be-010121fbe635
 -- !result
 function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), COUNT(c1), COUNT(c2) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
 -- result:
@@ -163,7 +162,7 @@ INSERT INTO t1_agg VALUES ('2026-01-01', 0, 'val_1', 'desc_1', 'desc_2', 15, 30,
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg1 WITH SYNC MODE;
 -- result:
-019c2d9a-2603-7b4a-906a-dbce58e72224
+019cc25f-95d2-751f-9ea2-60ffef79b27d
 -- !result
 function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), COUNT(c1), COUNT(c2) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
 -- result:
@@ -193,7 +192,7 @@ sum_c6	bigint	YES	false	None	NONE
 -- !result
 function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), COUNT(c1), COUNT(c2), SUM(c6) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
 -- result:
-True
+False
 -- !result
 SELECT dt, c0, SUM(c3) as sum_c3, COUNT(c1) as cnt_c1, COUNT(c2) as cnt_c2, SUM(c6) as sum_c6 FROM t1_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
 -- result:
@@ -212,7 +211,7 @@ INSERT INTO t1_agg VALUES ('2026-01-01', 0, 'val_2', 'desc_2', 'desc_3', 20, 40,
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg1 WITH SYNC MODE;
 -- result:
-019c2d9a-3e97-71d3-a0c0-a4fa7accdea6
+019cc25f-a7f6-748b-b3b6-14493e4cd63e
 -- !result
 function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), COUNT(c1), COUNT(c2), SUM(c6) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
 -- result:
@@ -249,7 +248,7 @@ c5	varchar(1048576)	YES	false	None	NONE
 -- !result
 function: print_hit_materialized_view("SELECT dt, c0, c5, SUM(c3), COUNT(c1), COUNT(c2), SUM(c6) FROM t1_agg GROUP BY dt, c0, c5", "test_mv_agg1")
 -- result:
-True
+False
 -- !result
 SELECT dt, c0, c5, SUM(c3) as sum_c3, COUNT(c1) as cnt_c1, COUNT(c2) as cnt_c2, SUM(c6) as sum_c6 FROM t1_agg GROUP BY dt, c0, c5 ORDER BY ALL LIMIT 3;
 -- result:
@@ -268,7 +267,7 @@ INSERT INTO t1_agg VALUES ('2026-01-01', 0, 'val_3', 'desc_3', 'desc_4', 25, 50,
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg1 WITH SYNC MODE;
 -- result:
-019c2d9a-5b06-79e2-a705-4ebbf6be15bd
+019cc25f-b754-7a58-a4ed-81c22310c6b7
 -- !result
 function: print_hit_materialized_view("SELECT dt, c0, c5, SUM(c3), COUNT(c1), COUNT(c2), SUM(c6) FROM t1_agg GROUP BY dt, c0, c5", "test_mv_agg1")
 -- result:
@@ -323,7 +322,7 @@ INSERT INTO t1_agg VALUES ('2026-01-01', 0, 'val_4', 'desc_4', 'desc_5', 30, 60,
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg1 WITH SYNC MODE;
 -- result:
-019c2d9a-7ab3-7891-a68d-cfd9340c853a
+019cc25f-c745-76c0-b2c5-0148e9770224
 -- !result
 function: print_hit_materialized_view("SELECT dt, c0, c5, SUM(c3), COUNT(c1), SUM(c6) FROM t1_agg GROUP BY dt, c0, c5", "test_mv_agg1")
 -- result:
@@ -377,7 +376,7 @@ INSERT INTO t1_agg VALUES ('2026-01-01', 0, 'val_5', 'desc_5', 'desc_6', 35, 70,
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg1 WITH SYNC MODE;
 -- result:
-019c2d9a-8f6a-7634-b935-2b0f8bcf9cf6
+019cc25f-d5cf-7a18-b76b-3439d26fb969
 -- !result
 function: print_hit_materialized_view("SELECT dt, c0, c5, SUM(c3), COUNT(c1) FROM t1_agg GROUP BY dt, c0, c5", "test_mv_agg1")
 -- result:
@@ -397,14 +396,14 @@ SELECT * FROM test_mv_agg1 ORDER BY ALL LIMIT 3;
 -- !result
 [UC]ALTER MATERIALIZED VIEW test_mv_agg1 DROP COLUMN c5;
 -- result:
-[REGEX]E:.*
+E: (1064, "Getting analyzing error. Detail message: Cannot drop column 'c5' because it is used in GROUP BY clause.")
 -- !result
 INSERT INTO t1_agg VALUES ('2026-01-01', 0, 'val_6', 'desc_6', 'desc_7', 40, 80, 75);
 -- result:
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg1 WITH SYNC MODE;
 -- result:
-019c2d9a-9791-703b-9cb8-f3b8678a1fc0
+019cc25f-dd4d-7a18-8cc1-c422832f090f
 -- !result
 function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), COUNT(c1) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
 -- result:
@@ -461,8 +460,7 @@ CREATE MATERIALIZED VIEW test_mv_agg2
 PARTITION BY date_trunc('day', dt)
 DISTRIBUTED BY HASH(c0)
 PROPERTIES (
-    "replication_num" = "1",
-    "query_rewrite_consistency" = "force_mv"
+    "replication_num" = "1"
 )
 AS
 SELECT dt, c0, SUM(c2) as sum_c2, MAX(c3) as max_c3, MIN(c3) as min_c3, AVG(c5) as avg_c5
@@ -472,7 +470,7 @@ GROUP BY dt, c0;
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg2 WITH SYNC MODE;
 -- result:
-019c2d9a-a177-7c42-ada1-8457a8d4227c
+019cc25f-e6bf-7085-ad3d-f44ff75198bc
 -- !result
 SELECT * FROM test_mv_agg2 ORDER BY ALL LIMIT 3;
 -- result:
@@ -486,6 +484,9 @@ FROM t2_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
 2026-01-01	0	275	27500	27500	137.5
 2026-01-01	1	235	23500	23500	117.5
 2026-01-01	2	245	24500	24500	122.5
+-- !result
+admin set frontend config('mv_fast_schema_change_mode' = 'force_no_clear');
+-- result:
 -- !result
 ALTER MATERIALIZED VIEW test_mv_agg2 ADD COLUMN cnt_c1 AS COUNT(c1);
 -- result:
@@ -558,7 +559,7 @@ INSERT INTO t2_agg VALUES ('2026-01-01', 0, 'new_val', 100, 1000, 'replace_new',
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg2 WITH SYNC MODE;
 -- result:
-019c2d9a-b6c8-70e2-bf2e-45a3873e85d9
+019cc25f-fd14-7681-9c2c-1535f1b90be5
 -- !result
 SELECT dt, c0, sum_c2, max_c3, min_c3, avg_c5, cnt_c1, max_c6 FROM test_mv_agg2 ORDER BY ALL LIMIT 3;
 -- result:
@@ -620,8 +621,7 @@ CREATE MATERIALIZED VIEW test_mv_agg3
 PARTITION BY date_trunc('day', dt)
 DISTRIBUTED BY HASH(c0)
 PROPERTIES (
-    "replication_num" = "1",
-    "query_rewrite_consistency" = "force_mv"
+    "replication_num" = "1"
 )
 AS
 SELECT dt, c0, c1, SUM(c2) as total_c2
@@ -631,7 +631,7 @@ GROUP BY dt, c0, c1;
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg3 WITH SYNC MODE;
 -- result:
-019c2d9a-bf2f-741a-bda8-61783afb7549
+019cc260-0642-7c3e-9a13-e8ce9699bbb9
 -- !result
 SELECT * FROM test_mv_agg3 ORDER BY ALL LIMIT 3;
 -- result:
@@ -709,7 +709,7 @@ INSERT INTO t3_agg VALUES ('2026-01-01', 0, 'new_val', 200, 'new_desc', 50);
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg3 WITH SYNC MODE;
 -- result:
-019c2d9a-d622-7903-a3c7-5e5d80c27a30
+019cc260-1d90-7815-a047-5c1e84a9f812
 -- !result
 function: print_hit_materialized_view("SELECT dt, c0, c1, SUM(c2), SUM(c4) FROM t3_agg GROUP BY dt, c0, c1", "test_mv_agg3")
 -- result:
@@ -785,8 +785,7 @@ CREATE MATERIALIZED VIEW test_mv_agg4
 PARTITION BY date_trunc('month', dt)
 DISTRIBUTED BY HASH(category_id)
 PROPERTIES (
-    "replication_num" = "1",
-    "query_rewrite_consistency" = "force_mv"
+    "replication_num" = "1"
 )
 AS
 SELECT dt, category_id,
@@ -799,7 +798,7 @@ GROUP BY dt, category_id;
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg4 WITH SYNC MODE;
 -- result:
-019c2d9a-e20c-7cb9-afe1-66d0af724132
+019cc260-2d19-72cf-b490-16cacbbf2320
 -- !result
 SELECT * FROM test_mv_agg4 ORDER BY ALL;
 -- result:
@@ -856,7 +855,7 @@ INSERT INTO t4_agg VALUES ('2026-01-03', 3, 300, 5000.00, 30, 500.00, 1200.00, 1
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg4 WITH SYNC MODE;
 -- result:
-019c2d9a-f111-7add-9661-aced453a5624
+019cc260-4023-78b9-a7d0-e9676313b0cb
 -- !result
 SELECT dt, category_id, total_sales, total_quantity, total_discount, total_profit FROM test_mv_agg4 ORDER BY dt, category_id;
 -- result:
@@ -906,7 +905,7 @@ INSERT INTO t4_agg VALUES ('2026-01-03', 3, 300, "Product C", 5000.00, 30, 500.0
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg4 WITH SYNC MODE;
 -- result:
-019c2d9a-fe97-72a7-83c7-29b6c5ef0744
+019cc260-4d53-7e33-bcf1-82314fa6cd61
 -- !result
 function: print_hit_materialized_view("SELECT dt, category_id, region, SUM(sales_amount), SUM(quantity), SUM(profit) FROM t4_agg GROUP BY dt, category_id, region", "test_mv_agg4")
 -- result:
@@ -939,7 +938,7 @@ region	varchar(1048576)	YES	false	None	NONE
 -- !result
 ALTER MATERIALIZED VIEW test_mv_agg4 DROP COLUMN region;
 -- result:
-[REGEX]E:.*
+E: (1064, "Getting analyzing error. Detail message: Cannot drop column 'region' because it is used in GROUP BY clause.")
 -- !result
 function: wait_alter_table_finish()
 -- result:
@@ -958,5 +957,8 @@ DROP MATERIALIZED VIEW test_mv_agg4;
 -- result:
 -- !result
 DROP TABLE t4_agg;
+-- result:
+-- !result
+admin set frontend config('mv_fast_schema_change_mode' = 'strict');
 -- result:
 -- !result

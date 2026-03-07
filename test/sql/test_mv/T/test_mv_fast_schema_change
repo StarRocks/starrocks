@@ -1,5 +1,6 @@
--- name: test_mv_fast_schema_change
+-- name: test_mv_fast_schema_change @sequential
 admin set frontend config('alter_scheduler_interval_millisecond' = '100');
+admin set frontend config('mv_fast_schema_change_mode' = 'strict');
 
 drop table if exists t1;
 drop materialized view if exists test_mv1;

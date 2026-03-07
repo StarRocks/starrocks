@@ -1681,6 +1681,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to strictly check the length consistency of data types when activating an inactive materialized view. When this item is set to `false`, the activation of the materialized view is not affected if the length of the data types has changed in the base table.
 - Introduced in: v3.3.4
 
+##### `mv_fast_schema_change_mode`
+
+- Default: strict
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: Controls the behavior of Materialized View (MV) Fast Schema Evolution (FSE). Valid values are: `strict` (default) - only allow FSE when `isSupportFastSchemaEvolutionInDanger` is true and clear affected partition entries from the version map; `force` - allow FSE even when `isSupportFastSchemaEvolutionInDanger` is false and clear affected partition entries to trigger recomputation on refresh; `force_no_clear` - allow FSE even when `isSupportFastSchemaEvolutionInDanger` is false but do not clear partition entries.
+- Introduced in: v3.4.0
+
 ##### `enable_auto_collect_array_ndv`
 
 - Default: false
