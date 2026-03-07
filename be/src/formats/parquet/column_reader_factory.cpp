@@ -197,8 +197,7 @@ struct NormalizedVariantShreddedReadHints {
     bool strict_preferred_type = false;
 };
 
-NormalizedVariantShreddedReadHints normalize_variant_shredded_read_hints(
-        const VariantShreddedReadHints& hints) {
+NormalizedVariantShreddedReadHints normalize_variant_shredded_read_hints(const VariantShreddedReadHints& hints) {
     NormalizedVariantShreddedReadHints out;
     out.strict_preferred_type = hints.strict_preferred_type;
 
@@ -253,9 +252,8 @@ TypeDescriptor variant_typed_desc_from_parquet_field(const ParquetField* field) 
 }
 
 Status collect_variant_shredded_fields(const ColumnReaderOptions& opts, const ParquetField* typed_group,
-                                              VariantPath* current_path,
-                                              const NormalizedVariantShreddedReadHints& hints,
-                                              std::vector<ShreddedFieldNode>* output) {
+                                       VariantPath* current_path, const NormalizedVariantShreddedReadHints& hints,
+                                       std::vector<ShreddedFieldNode>* output) {
     if (typed_group == nullptr || current_path == nullptr || output == nullptr) {
         return Status::InvalidArgument("typed_group/current_path/output should not be null");
     }
@@ -708,9 +706,9 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_variant_column_reader(cons
                         // Keep fallback value path and skip root typed reader on failures.
                         root_typed_value_type.reset();
                     } else {
-                        return Status::InternalError(strings::Substitute(
-                                "build root variant typed reader failed, type=$0, err=$1",
-                                file_type.debug_string(), root_reader_or.status().to_string()));
+                        return Status::InternalError(
+                                strings::Substitute("build root variant typed reader failed, type=$0, err=$1",
+                                                    file_type.debug_string(), root_reader_or.status().to_string()));
                     }
                 } else {
                     root_typed_value_reader = std::move(root_reader_or).value();
@@ -719,8 +717,7 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_variant_column_reader(cons
         }
     }
     return std::make_unique<VariantColumnReader>(variant_field, std::move(_metadata_reader), std::move(_value_reader),
-                                                 std::move(shredded_fields),
-                                                 std::move(normalized_hints.shredded_paths),
+                                                 std::move(shredded_fields), std::move(normalized_hints.shredded_paths),
                                                  std::move(root_typed_value_reader), std::move(root_typed_value_type));
 }
 

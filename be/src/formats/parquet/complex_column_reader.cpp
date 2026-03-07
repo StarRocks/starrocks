@@ -1556,7 +1556,7 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
             const Column* root_typed_data = nullptr;
             size_t root_typed_row = 0;
             if (ParquetUtils::get_non_null_data_column_and_row(_root_typed_value_column.get(), i, &root_typed_data,
-                                                                &root_typed_row)) {
+                                                               &root_typed_row)) {
                 has_typed_value_bitmap[i] = true;
             }
         }
@@ -1593,7 +1593,7 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
             const Column* root_typed_data = nullptr;
             size_t root_typed_row = 0;
             if (ParquetUtils::get_non_null_data_column_and_row(_root_typed_value_column.get(), i, &root_typed_data,
-                                                                &root_typed_row)) {
+                                                               &root_typed_row)) {
                 DCHECK(_root_typed_value_type != nullptr);
                 auto encoded =
                         VariantEncoder::encode_datum(root_typed_data->get(root_typed_row), *_root_typed_value_type);
