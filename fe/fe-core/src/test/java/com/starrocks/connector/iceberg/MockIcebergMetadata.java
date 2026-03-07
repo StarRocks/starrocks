@@ -21,6 +21,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.IcebergView;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.tvr.TvrDeltaStats;
 import com.starrocks.common.tvr.TvrTableDelta;
@@ -501,7 +502,15 @@ public class MockIcebergMetadata implements ConnectorMetadata {
     public com.starrocks.catalog.Table getTable(ConnectContext context, String dbName, String tblName) {
         readLock();
         try {
-            MockIcebergTable t = MOCK_TABLE_MAP.get(dbName).get(tblName).icebergTable;
+            Map<String, IcebergTableInfo> dbTables = MOCK_TABLE_MAP.get(dbName);
+            if (dbTables == null) {
+                return getView(context, dbName, tblName);
+            }
+            IcebergTableInfo tableInfo = dbTables.get(tblName);
+            if (tableInfo == null) {
+                return getView(context, dbName, tblName);
+            }
+            MockIcebergTable t = tableInfo.icebergTable;
             MockIcebergTable t1 = new MockIcebergTable(t.getId(), t.getName(), t.getCatalogName(), t.getResourceName(),
                         t.getCatalogDBName(), t.getCatalogTableName(),
                         t.getBaseSchema(), t.getNativeTable(), t.getIcebergProperties(),
@@ -661,5 +670,20 @@ public class MockIcebergMetadata implements ConnectorMetadata {
 
     private void readUnlock() {
         lock.readLock().unlock();
+    }
+
+    public com.starrocks.catalog.Table getView(ConnectContext context, String dbName, String viewName) {
+        // Return a mock IcebergView for testing
+        if (dbName.equalsIgnoreCase("view_db") && viewName.equalsIgnoreCase("iceberg_view")) {
+            List<Column> schema = Lists.newArrayList(
+                    new Column("id", IntegerType.INT),
+                    new Column("data", VarcharType.VARCHAR),
+                    new Column("date", DateType.DATE)
+            );
+            return new IcebergView(1, MOCKED_ICEBERG_CATALOG_NAME, dbName, viewName, schema,
+                    "SELECT 1 as id, 'data' as data, CAST('2024-01-01' as DATE) as date", MOCKED_ICEBERG_CATALOG_NAME, dbName,
+                    "view_location", Maps.newHashMap());
+        }
+        return null;
     }
 }
