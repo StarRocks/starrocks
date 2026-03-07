@@ -653,6 +653,7 @@ ConnectorChunkSource::ConnectorChunkSource(ScanOperator* op, RuntimeProfile* run
     _data_source = scan_node->data_source_provider()->create_data_source(*scan_range);
     _data_source->set_driver_sequence(op->get_driver_sequence());
     _data_source->set_split_context(split_context);
+    _data_source->set_topn_rf_update_ctx(op->topn_rf_update_ctx());
 
     _data_source->set_morsel(scan_morsel);
     _data_source->set_predicates(_conjunct_ctxs);
@@ -660,6 +661,7 @@ ConnectorChunkSource::ConnectorChunkSource(ScanOperator* op, RuntimeProfile* run
     _data_source->set_read_limit(_limit);
     _data_source->set_runtime_profile(runtime_profile);
     _data_source->update_has_any_predicate();
+    _topn_rf_update_ctx = op->topn_rf_update_ctx();
 }
 
 ConnectorChunkSource::~ConnectorChunkSource() {
@@ -693,6 +695,33 @@ Status ConnectorChunkSource::_report_split_source_morsel_finished_once() {
     RETURN_IF_ERROR(scan_op->mark_split_source_morsel_finished());
     _split_source_morsel_reported = true;
     return Status::OK();
+}
+
+bool ConnectorChunkSource::_should_skip_chunk_accumulate() const {
+    if (_topn_rf_update_ctx != nullptr) {
+        return _topn_rf_update_ctx->should_skip_chunk_accumulate();
+    }
+    return false;
+}
+
+void ConnectorChunkSource::_update_topn_rf_update_ctx() {
+    if (_topn_rf_update_ctx == nullptr) {
+        return;
+    }
+    const int64_t raw_rows = _data_source->raw_rows_read();
+    const int64_t runtime_filtered = _data_source->runtime_stats_filtered();
+    int64_t raw_delta = raw_rows - _prev_raw_rows_read;
+    int64_t runtime_delta = runtime_filtered - _prev_runtime_filtered;
+    if (raw_delta < 0) {
+        raw_delta = raw_rows;
+    }
+    if (runtime_delta < 0) {
+        runtime_delta = runtime_filtered;
+    }
+    _topn_rf_update_ctx->update_stats(raw_delta, runtime_delta);
+    _prev_raw_rows_read = raw_rows;
+    _prev_runtime_filtered = runtime_filtered;
+    _topn_rf_update_ctx->on_chunk_output();
 }
 
 void ConnectorChunkSource::close(RuntimeState* state) {
@@ -821,6 +850,7 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
     ConnectorScanOperatorAdaptiveProcessor& P = *(scan_op->adaptive_processor());
 
     DeferOp defer_op([&]() { P.last_chunk_souce_finish_timestamp = GetCurrentTimeMicros(); });
+    bool skip_chunk_accumulate = _should_skip_chunk_accumulate();
     auto is_terminal_status = [](const Status& st) {
         return st.is_end_of_file() || st.is_cancelled() || (!st.ok() && !st.is_time_out() && !st.is_eagain());
     };
@@ -856,7 +886,7 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
                 if (_status.ok()) {
                     if (tmp->num_rows() == 0) continue;
                     _ck_acc.push(tmp);
-                    if (_ck_acc.has_output()) break;
+                    if (_ck_acc.has_output() || skip_chunk_accumulate) break;
                 } else if (!_status.is_end_of_file()) {
                     if (_status.is_time_out()) {
                         Status t = _status;
@@ -880,7 +910,7 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
             delta_scan_bytes = _scan_bytes - prev_scan_bytes;
         }
 
-        if (_ck_acc.has_output()) {
+        if (_ck_acc.has_output() || skip_chunk_accumulate) {
             *chunk = std::move(_ck_acc.pull());
             P.cs_total_running_time += total_time_ns;
             P.cs_total_io_time += delta_io_time_ns;
@@ -888,6 +918,7 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
             _chunk_rows_read += (*chunk)->num_rows();
             _chunk_mem_bytes += (*chunk)->memory_usage();
             _chunk_buffer.update_limiter(chunk->get());
+            _update_topn_rf_update_ctx();
             return Status::OK();
         }
         _ck_acc.reset();

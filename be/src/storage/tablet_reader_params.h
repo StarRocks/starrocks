@@ -27,6 +27,7 @@
 #include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/runtime_filter_predicate.h"
 #include "storage/runtime_range_pruner.h"
+#include "storage/topn_runtime_filter_update_context.h"
 
 namespace starrocks {
 
@@ -108,6 +109,7 @@ struct TabletReaderParams {
     TTableSampleOptions sample_options;
     bool enable_join_runtime_filter_pushdown = false;
     bool enable_predicate_col_late_materialize = false;
+    TopnRuntimeFilterUpdateContext* topn_rf_update_ctx = nullptr;
 
 public:
     std::string to_string() const;

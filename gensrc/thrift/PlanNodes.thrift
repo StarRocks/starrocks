@@ -660,6 +660,8 @@ struct TOlapScanNode {
 
   // This field is only used for flat json to provide a uniq id
   55: optional i32 next_uniq_id
+  // true if there is a TopN runtime filter on any sort key
+  56: optional bool topn_filter_on_sort_key
 }
 
 struct TJDBCScanNode {
@@ -708,6 +710,8 @@ struct TLakeScanNode {
   45: optional bool enable_gin_filter
 
   46: optional i32 next_uniq_id
+  // true if there is a TopN runtime filter on any sort key
+  47: optional bool topn_filter_on_sort_key
 }
 
 struct TEqJoinCondition {

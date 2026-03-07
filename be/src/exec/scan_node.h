@@ -124,6 +124,7 @@ public:
     virtual bool output_chunk_by_bucket() const { return false; }
     virtual bool is_asc_hint() const { return true; }
     virtual std::optional<bool> partition_order_hint() const { return std::nullopt; }
+    virtual bool topn_filter_on_sort_key() const { return false; }
 
     // TODO: support more share_scan strategy
     void enable_shared_scan(bool enable);

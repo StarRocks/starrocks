@@ -21,6 +21,8 @@ public class SessionVariableConstants {
     private SessionVariableConstants() {}
 
     public static final String AUTO = "auto";
+    public static final String OFF = "off";
+    public static final String FORCE = "force";
 
     public static final String FORCE_STREAMING = "force_streaming";
 

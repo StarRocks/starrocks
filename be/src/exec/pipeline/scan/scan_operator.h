@@ -24,6 +24,7 @@
 #include "exec/query_cache/lane_arbiter.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "exprs/chunk_predicate_evaluator.h"
+#include "storage/topn_runtime_filter_update_context.h"
 
 namespace starrocks {
 
@@ -92,6 +93,7 @@ public:
         _op_pull_rows += res->num_rows();
     }
     bool is_asc() const { return _is_asc; }
+    TopnRuntimeFilterUpdateContext* topn_rf_update_ctx() const { return _topn_rf_update_ctx.get(); }
     void end_pull_chunk(int64_t time) { _op_running_time_ns += time; }
     virtual void begin_driver_process() {}
     virtual void end_driver_process(PipelineDriver* driver) {}
@@ -289,6 +291,7 @@ private:
 
     RuntimeMembershipFilterEvalContext _topn_filter_eval_context;
     std::unique_ptr<TopnRfBackPressure> _topn_filter_back_pressure = nullptr;
+    std::unique_ptr<TopnRuntimeFilterUpdateContext> _topn_rf_update_ctx = nullptr;
 
     DECLARE_RACE_DETECTOR(race_pull_chunk)
 };
