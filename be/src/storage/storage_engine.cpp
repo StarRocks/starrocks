@@ -641,6 +641,7 @@ void StorageEngine::stop() {
 
     JOIN_THREADS(_base_compaction_threads)
     JOIN_THREADS(_cumulative_compaction_threads)
+    JOIN_THREAD(_update_compaction_scan_thread)
     JOIN_THREADS(_update_compaction_threads)
 
     JOIN_THREAD(_repair_compaction_thread)

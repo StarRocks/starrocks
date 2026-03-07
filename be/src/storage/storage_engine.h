@@ -320,6 +320,9 @@ public:
 
     bool enable_light_pk_compaction_publish();
 
+    // Compute the top-N candidate count for update compaction, with overflow-safe clamping.
+    static int32_t compute_update_compaction_topn();
+
 protected:
     static StorageEngine* _s_instance;
 
@@ -408,6 +411,8 @@ private:
 
     void* _schedule_apply_thread_callback(void* arg);
 
+    void* _update_compaction_scan_thread_callback(void* arg);
+
     void _start_clean_fd_cache();
     Status _perform_cumulative_compaction(DataDir* data_dir, std::pair<int32_t, int32_t> tablet_shards_range);
     Status _perform_base_compaction(DataDir* data_dir, std::pair<int32_t, int32_t> tablet_shards_range);
@@ -455,6 +460,8 @@ private:
     std::thread _pk_index_major_compaction_thread;
     // thread to generate pk dump
     std::thread _pk_dump_thread;
+    // thread to scan and cache update compaction candidates
+    std::thread _update_compaction_scan_thread;
     // thread to gc/evict local pk index in sharded_data
     std::thread _local_pk_index_shared_data_gc_evict_thread;
 

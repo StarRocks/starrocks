@@ -857,6 +857,9 @@ public:
     void update_and_recover(bool enable_persistent_index);
     void test_recover_rowset_sorter();
     void test_get_column_values_with_invalid_rssid(bool enable_persistent_index);
+    void test_build_and_consume_compaction_candidates();
+    void test_build_compaction_candidates_topn_limit();
+    void test_build_compaction_candidates_stale_tablet();
 
 protected:
     TabletSharedPtr _tablet;
