@@ -3,11 +3,11 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: completed
-stopped_at: Completed 04-01 (MockedADBCMetadata plan tests) — All phases complete
-last_updated: "2026-03-07T14:26:48.104Z"
+stopped_at: Phase 5 context gathered
+last_updated: "2026-03-07T19:44:47.733Z"
 last_activity: 2026-03-07 — Completed 04-01 (MockedADBCMetadata plan tests)
 progress:
-  total_phases: 4
+  total_phases: 5
   completed_phases: 4
   total_plans: 14
   completed_plans: 14
@@ -98,6 +98,7 @@ Recent decisions affecting current work:
 ### Roadmap Evolution
 
 - Phase 4 added: Integration Testing (MockedADBCMetadata plan tests + SQL test T/R files; E2E blocked on CI infra provisioning Flight SQL server)
+- Phase 5 added: Add TLS support for ADBC connector
 
 ### Pending Todos
 
@@ -110,6 +111,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-07T14:20:29.000Z
-Stopped at: Completed 04-01 (MockedADBCMetadata plan tests) — All phases complete
-Resume file: .planning/phases/04-integration-testing/04-01-SUMMARY.md
+Last session: 2026-03-07T19:44:47.729Z
+Stopped at: Phase 5 context gathered
+Resume file: .planning/phases/05-add-tls-support-for-adbc-connector/05-CONTEXT.md
