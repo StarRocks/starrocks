@@ -311,6 +311,11 @@ public class EditLog {
                     globalStateMgr.getLocalMetastore().replayErasePartition(erasePartitionLog.getPartitionId());
                     break;
                 }
+                case OperationType.OP_ERASE_TABLE_PARTITIONS: {
+                    EraseTablePartitionsLog log = (EraseTablePartitionsLog) journal.data();
+                    globalStateMgr.getLocalMetastore().replayEraseTablePartitions(log);
+                    break;
+                }
                 case OperationType.OP_RECOVER_TABLE_V2: {
                     RecoverInfo info = (RecoverInfo) journal.data();
                     globalStateMgr.getLocalMetastore().replayRecoverTable(info);
@@ -1557,6 +1562,10 @@ public class EditLog {
 
     public void logErasePartition(long partitionId, WALApplier walApplier) {
         logJsonObject(OperationType.OP_ERASE_PARTITION_V2, new ErasePartitionLog(partitionId), walApplier);
+    }
+
+    public void logEraseTablePartitions(EraseTablePartitionsLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ERASE_TABLE_PARTITIONS, log, walApplier);
     }
 
     public void logRecoverPartition(RecoverInfo info, WALApplier walApplier) {

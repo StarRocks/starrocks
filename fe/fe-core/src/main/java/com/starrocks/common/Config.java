@@ -1345,6 +1345,16 @@ public class Config extends ConfigBase {
     public static long catalog_recycle_bin_erase_fail_retry_interval_ms = 60L * 1000L; // 1 min
 
     /**
+     * Number of partition deletions between WAL checkpoints during Lake table deletion.
+     * When a Lake table with many partitions is being deleted, a WAL log is written every
+     * this many successfully deleted partitions. This reduces redundant retry work after
+     * FE restart (at most batch_size - 1 partitions may be retried).
+     * Set to 0 or a negative value to disable intermediate WAL logging (all partitions will be retried on restart).
+     */
+    @ConfField(mutable = true)
+    public static int catalog_recycle_bin_batch_erase_partition_log_size = 10;
+
+    /**
      * Parallel load fragment instance num in single host
      */
     @ConfField(mutable = true)

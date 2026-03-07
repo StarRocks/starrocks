@@ -243,6 +243,11 @@ public class LakeTableHelper {
 
     static boolean removePartitionDirectory(Partition partition, ComputeResource computeResource, boolean dropCache)
             throws StarClientException {
+        return removePartitionDirectory(partition, computeResource, dropCache, false);
+    }
+
+    static boolean removePartitionDirectory(Partition partition, ComputeResource computeResource, boolean dropCache,
+                                            boolean forceRemoveSharedDirectory) throws StarClientException {
         boolean ret = true;
 
         if (Config.lake_enable_drop_tablet_cache && dropCache) {
@@ -255,7 +260,8 @@ public class LakeTableHelper {
                 LOG.info("Skipped remove directory of empty partition {}", subPartition.getId());
                 continue;
             }
-            if (isSharedDirectory(shardInfo.getFilePath().getFullPath(), subPartition.getId())) {
+            if (!forceRemoveSharedDirectory &&
+                    isSharedDirectory(shardInfo.getFilePath().getFullPath(), subPartition.getId())) {
                 LOG.info("Skipped remove possible directory shared by multiple partitions: {}",
                         shardInfo.getFilePath().getFullPath());
                 continue;

@@ -284,6 +284,7 @@ public class EditLogDeserializer {
             .put(OperationType.OP_SAVE_NEXTID_V2, NextIdLog.class)
             .put(OperationType.OP_ERASE_DB_V2, EraseDbLog.class)
             .put(OperationType.OP_ERASE_PARTITION_V2, ErasePartitionLog.class)
+            .put(OperationType.OP_ERASE_TABLE_PARTITIONS, EraseTablePartitionsLog.class)
             .put(OperationType.OP_DROP_ALL_BROKER_V2, DropBrokerLog.class)
             .put(OperationType.OP_DROP_REPOSITORY_V2, DropRepositoryLog.class)
             .build();

@@ -2891,6 +2891,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The retry interval in milliseconds when an erase operation in the recycle bin fails.
 - Introduced in: -
 
+##### `catalog_recycle_bin_batch_erase_partition_log_size`
+
+- Default: 10
+- Type: Int
+- Unit: Partitions
+- Is mutable: Yes
+- Description: The batch size used to write intermediate edit logs when deleting Lake table partitions via the recycle bin. During table-drop partition erasure, FE writes one `OP_ERASE_TABLE_PARTITIONS` log every N successfully erased partitions, so after FE restart only the remaining (unlogged) partitions need to be retried. Set to `0` or a negative value to disable intermediate batch logging (all deleted-but-unlogged partitions are retried after restart).
+- Introduced in: v4.1.0
+
 ##### `check_consistency_default_timeout_second`
 
 - Default: 600

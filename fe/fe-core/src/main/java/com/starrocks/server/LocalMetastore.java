@@ -150,6 +150,7 @@ import com.starrocks.persist.DropDbInfo;
 import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.DropPartitionsInfo;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.EraseTablePartitionsLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.ListPartitionPersistInfo;
 import com.starrocks.persist.ModifyColumnCommentLog;
@@ -1666,6 +1667,10 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
     public void replayErasePartition(long partitionId) throws DdlException {
         recycleBin.replayErasePartition(partitionId);
+    }
+
+    public void replayEraseTablePartitions(EraseTablePartitionsLog log) {
+        recycleBin.replayEraseTablePartitions(log);
     }
 
     public void replayRecoverPartition(RecoverInfo info) {
