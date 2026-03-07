@@ -28,7 +28,7 @@
 #include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
 #include "formats/parquet/file_reader.h"
 #include "formats/parquet/parquet_test_util/util.h"
 #include "fs/fs.h"

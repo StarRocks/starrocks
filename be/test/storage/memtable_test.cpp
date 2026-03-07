@@ -24,7 +24,7 @@
 
 #include "base/testutil/assert.h"
 #include "column/datum_tuple.h"
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/split.h"
 #include "runtime/descriptor_helper.h"

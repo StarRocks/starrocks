@@ -22,7 +22,7 @@
 #include "base/testutil/assert.h"
 #include "column/array_column.h"
 #include "column/struct_column.h"
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
 #include "common/object_pool.h"
 #include "formats/column_evaluator.h"
 #include "formats/orc/orc_chunk_reader.h"

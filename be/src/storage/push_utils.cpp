@@ -14,7 +14,7 @@
 
 #include "storage/push_utils.h"
 
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
 
 namespace starrocks {
 

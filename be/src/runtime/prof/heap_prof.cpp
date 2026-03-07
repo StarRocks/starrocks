@@ -21,7 +21,7 @@
 #include <mutex>
 
 #include "base/process/lite_exec.h"
-#include "common/config.h"
+#include "common/config_path_fwd.h"
 #include "fmt/format.h"
 #include "jemalloc/jemalloc.h"
 

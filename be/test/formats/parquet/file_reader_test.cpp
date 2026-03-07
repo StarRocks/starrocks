@@ -31,7 +31,7 @@
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
 #include "common/logging.h"
 #include "common/util/thrift_util.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"

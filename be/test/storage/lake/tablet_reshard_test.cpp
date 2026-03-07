@@ -24,7 +24,7 @@
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "base/testutil/sync_point.h"
-#include "common/config.h"
+#include "common/config_storage_fwd.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"

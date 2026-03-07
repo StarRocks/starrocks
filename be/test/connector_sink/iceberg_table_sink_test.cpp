@@ -21,7 +21,7 @@
 #include <thread>
 
 #include "base/testutil/assert.h"
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
 #include "exec/pipeline/empty_set_operator.h"
 #include "exec/pipeline/fragment_context.h"
 #include "runtime/descriptor_helper.h"

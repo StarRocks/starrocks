@@ -42,7 +42,7 @@
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/assert.h"
 #include "column/datum_tuple.h"
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
 #include "common/logging.h"
 #include "fs/fs_memory.h"
 #include "fs/key_cache.h"

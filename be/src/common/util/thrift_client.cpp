@@ -25,7 +25,7 @@
 
 #include "base/time/monotime.h"
 #include "base/time/time.h"
-#include "common/config.h"
+#include "common/config_rpc_client_fwd.h"
 #include "gutil/strings/substitute.h"
 
 namespace starrocks {

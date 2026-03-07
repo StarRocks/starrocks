@@ -21,7 +21,7 @@
 #include <memory>
 
 #include "column/column_helper.h"
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "formats/parquet/column_reader_factory.h"
 #include "fs/fs.h"

@@ -20,7 +20,7 @@
 #include <utility>
 
 #include "base/testutil/assert.h"
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
 #include "common/object_pool.h"
 #include "exec/aggregate/aggregate_blocking_node.h"
 #include "exec/aggregate/aggregate_streaming_node.h"

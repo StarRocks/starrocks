@@ -14,7 +14,7 @@
 
 #include "exec/pipeline/runtime_filter_types.h"
 
-#include "common/config.h"
+#include "common/config_scan_io_fwd.h"
 #include "hashjoin/hash_joiner_fwd.h"
 #include "runtime/runtime_filter_builder.h"
 #include "runtime/runtime_filter_factory.h"

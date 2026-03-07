@@ -43,6 +43,36 @@
       "configs": [
         "datacache_enable"
       ]
+    },
+    {
+      "path": "be/src/common/config_metrics_fwd.h",
+      "configs": [
+        "enable_metric_calculator",
+        "enable_system_metrics",
+        "enable_table_metrics",
+        "max_table_metrics_num"
+      ]
+    },
+    {
+      "path": "be/src/common/config_rpc_client_fwd.h",
+      "configs": [
+        "brpc_connection_type",
+        "rpc_connect_timeout_ms",
+        "thrift_rpc_timeout_ms",
+        "thrift_rpc_connection_max_valid_time_ms",
+        "broker_write_timeout_seconds"
+      ]
+    },
+    {
+      "path": "be/src/common/config_scan_io_fwd.h",
+      "configs": [
+        "io_coalesce_read_max_buffer_size",
+        "io_coalesce_read_max_distance_size",
+        "max_pushdown_conditions_per_column",
+        "max_scan_key_num",
+        "avro_reader_buffer_size_bytes",
+        "enable_check_string_lengths"
+      ]
     }
   ]
 }

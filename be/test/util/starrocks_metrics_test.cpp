@@ -39,7 +39,7 @@
 #include "base/testutil/assert.h"
 #include "cache/mem_cache/lrucache_engine.h"
 #include "cache/mem_cache/page_cache.h"
-#include "common/config.h"
+#include "common/config_metrics_fwd.h"
 #include "util/global_metrics_registry.h"
 
 namespace starrocks {
