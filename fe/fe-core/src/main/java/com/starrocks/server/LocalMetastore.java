@@ -5373,16 +5373,17 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     }
 
     public void onErasePartition(Partition partition) {
-        // remove tablet in inverted index
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        // Collect all tablet IDs first, then batch delete to acquire lock only once
+        List<Long> tabletIds = Lists.newArrayList();
         for (PhysicalPartition subPartition : partition.getSubPartitions()) {
             for (MaterializedIndex index : subPartition.getAllMaterializedIndices(IndexExtState.ALL)) {
                 for (Tablet tablet : index.getTablets()) {
-                    long tabletId = tablet.getId();
-                    invertedIndex.deleteTablet(tabletId);
+                    tabletIds.add(tablet.getId());
                 }
             }
         }
+        // Batch delete tablets - acquires write lock only once
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteTablets(tabletIds);
     }
 
     // for test only

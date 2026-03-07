@@ -433,12 +433,16 @@ public class InsertOverwriteJobRunner {
         Preconditions.checkState(table instanceof OlapTable);
         OlapTable targetTable = (OlapTable) table;
 
+        // Collect tablets outside the lock scope for batch deletion
+        Set<Tablet> sourceTablets = Sets.newHashSet();
+        // Track whether partition drop succeeded - only mark tablets for deletion on success
+        boolean gcSucceeded = false;
+
         Locker locker = new Locker();
         if (!locker.lockTableAndCheckDbExist(db, tableId, LockType.WRITE)) {
             throw new DmlException("insert overwrite commit failed because locking db:%s failed", dbId);
         }
         try {
-            Set<Tablet> sourceTablets = Sets.newHashSet();
             // Drop temp partitions by partition IDs (for non-dynamic overwrite)
             List<String> partitionNamesToDrop = new ArrayList<>();
             if (job.getTmpPartitionIds() != null) {
@@ -469,9 +473,6 @@ public class InsertOverwriteJobRunner {
                 job.setTmpPartitionIds(tmpPartitionIds);
             }
 
-            // Mark all source tablet ids force delete to drop it directly on BE
-            sourceTablets.forEach(GlobalStateMgr.getCurrentState().getTabletInvertedIndex()::markTabletForceDelete);
-
             // Abort the transaction if it was created in prepare()
             if (job.isDynamicOverwrite() && job.getTxnId() > 0) {
                 try {
@@ -492,10 +493,20 @@ public class InsertOverwriteJobRunner {
                     targetTable.dropTempPartition(pName, true);
                 }
             });
+            // Mark success only after all operations completed without exception
+            gcSucceeded = true;
         } catch (Exception e) {
             LOG.warn("exception when gc insert overwrite job.", e);
+            // Do NOT mark tablets for force delete when gc fails - partitions may still exist
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE);
+        }
+
+        // Batch mark tablets for force delete outside the lock
+        // Only do this when gc succeeded to avoid deleting tablets of partitions that failed to drop
+        // gc() is only called in normal execution (not replay), so always run when gcSucceeded
+        if (gcSucceeded && !sourceTablets.isEmpty()) {
+            GlobalStateMgr.getCurrentState().getTabletInvertedIndex().markTabletsForceDelete(sourceTablets);
         }
     }
 
@@ -591,17 +602,21 @@ public class InsertOverwriteJobRunner {
         if (db == null) {
             throw new DmlException("database id:%s does not exist", dbId);
         }
-        Locker locker = new Locker();
-        if (!locker.lockTableAndCheckDbExist(db, tableId, LockType.WRITE)) {
-            throw new DmlException("insert overwrite commit failed because locking db:%s failed", dbId);
-        }
+
+        // Variables to be used outside the lock
         OlapTable tmpTargetTable = null;
+        Set<Tablet> sourceTablets = Sets.newHashSet();
         InsertOverwriteJobStats stats = new InsertOverwriteJobStats();
         stats.setSourcePartitionIds(job.getSourcePartitionIds());
         stats.setTargetPartitionIds(job.getTmpPartitionIds());
 
         // Collect partition tablet row counts for statistics sampling
         com.google.common.collect.Table<Long, Long, Long> partitionTabletRowCounts = HashBasedTable.create();
+
+        Locker locker = new Locker();
+        if (!locker.lockTableAndCheckDbExist(db, tableId, LockType.WRITE)) {
+            throw new DmlException("insert overwrite commit failed because locking db:%s failed", dbId);
+        }
 
         try {
             // try exception to release write lock finally
@@ -632,13 +647,18 @@ public class InsertOverwriteJobRunner {
                         return partition.getName();
                     })
                     .collect(Collectors.toList());
-            Set<Tablet> sourceTablets = Sets.newHashSet();
+
+            // Collect source tablets while holding the lock
             sourcePartitionNames.forEach(name -> {
                 Partition partition = targetTable.getPartition(name);
-                for (PhysicalPartition subPartition : partition.getSubPartitions()) {
-                    for (MaterializedIndex index : subPartition.getAllMaterializedIndices(IndexExtState.ALL)) {
-                        sourceTablets.addAll(index.getTablets());
+                if (partition != null) {
+                    for (PhysicalPartition subPartition : partition.getSubPartitions()) {
+                        for (MaterializedIndex index : subPartition.getAllMaterializedIndices(IndexExtState.ALL)) {
+                            sourceTablets.addAll(index.getTablets());
+                        }
                     }
+                } else {
+                    LOG.warn("partition {} is null when collecting source tablets for job {}", name, job.getJobId());
                 }
             });
             long sumSourceRows = job.getSourcePartitionIds().stream()
@@ -758,10 +778,8 @@ public class InsertOverwriteJobRunner {
 
             stats.setTargetRows(sumTargetRows);
             stats.setPartitionTabletRowCounts(partitionTabletRowCounts);
-            // mark all source tablet ids force delete to drop it directly on BE,
-            // not to move it to trash
-            sourceTablets.forEach(GlobalStateMgr.getCurrentState().getTabletInvertedIndex()::markTabletForceDelete);
 
+            // Write EditLog with WAL callback for replay; include txnId for dynamic overwrite
             InsertOverwriteStateChangeInfo info = new InsertOverwriteStateChangeInfo(job.getJobId(), job.getJobState(),
                     InsertOverwriteJobState.OVERWRITE_SUCCESS, job.getSourcePartitionIds(), job.getSourcePartitionNames(),
                     job.getTmpPartitionIds(), job.getTxnId());
@@ -771,6 +789,8 @@ public class InsertOverwriteJobRunner {
                 replacePartition(targetTable, finalSourcePartitionNames, finalTmpPartitionNames);
             });
 
+            targetTable.lastSchemaUpdateTime.set(System.nanoTime());
+
             try {
                 GlobalStateMgr.getCurrentState().getColocateTableIndex().updateLakeTableColocationInfo(targetTable,
                         true /* isJoin */, null /* expectGroupId */);
@@ -778,8 +798,6 @@ public class InsertOverwriteJobRunner {
                 // log an error if update colocation info failed, insert overwrite already succeeded
                 LOG.error("table {} update colocation info failed after insert overwrite, {}.", tableId, e.getMessage());
             }
-
-            targetTable.lastSchemaUpdateTime.set(System.nanoTime());
         } catch (Exception e) {
             LOG.warn("replace partitions failed when insert overwrite into dbId:{}, tableId:{}",
                     job.getTargetDbId(), job.getTargetTableId(), e);
@@ -787,6 +805,11 @@ public class InsertOverwriteJobRunner {
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE);
         }
+
+        // ===== Post-processing outside the lock =====
+        // Batch mark all source tablet ids for force delete to drop them directly on BE.
+        // Using batch method to acquire TabletInvertedIndex lock only once.
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().markTabletsForceDelete(sourceTablets);
 
         // trigger listeners after insert overwrite committed, trigger listeners after
         // write unlock to avoid holding lock too long
@@ -802,7 +825,7 @@ public class InsertOverwriteJobRunner {
             if (job.isDynamicOverwrite()) {
                 targetTable.replaceMatchPartitions(dbId, tmpPartitionNames);
             } else {
-                targetTable.replaceTempPartitionsWithoutCheck(dbId, sourcePartitionNames, tmpPartitionNames,  false);
+                targetTable.replaceTempPartitionsWithoutCheck(dbId, sourcePartitionNames, tmpPartitionNames, false);
             }
         } else {
             targetTable.replacePartition(dbId, sourcePartitionNames.get(0), tmpPartitionNames.get(0));

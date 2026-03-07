@@ -1450,6 +1450,8 @@ struct TCreatePartitionRequest {
     // for each partition column's partition values
     4: optional list<list<string>> partition_values
     5: optional bool is_temp
+    // timeout in seconds for partition creation
+    6: optional i32 timeout
 }
 
 struct TCreatePartitionResult {

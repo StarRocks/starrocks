@@ -86,6 +86,14 @@ public class TabletInvertedIndex implements MemoryTrackable {
     // Protects multi-map mutations; readers rely on higher level synchronization.
     private final ReentrantLock mutationLock = new ReentrantLock();
 
+    private void writeLock() {
+        mutationLock.lock();
+    }
+
+    private void writeUnlock() {
+        mutationLock.unlock();
+    }
+
     public TabletInvertedIndex() {
     }
 
@@ -149,6 +157,34 @@ public class TabletInvertedIndex implements MemoryTrackable {
         markTabletForceDelete(tablet.getId(), tablet.getBackendIds());
     }
 
+    /**
+     * Batch mark tablets for force delete. This method acquires the write lock only once
+     * for all tablets, which is more efficient than calling markTabletForceDelete for each tablet.
+     *
+     * @param tablets collection of tablets to mark for force delete
+     */
+    public void markTabletsForceDelete(java.util.Collection<Tablet> tablets) {
+        if (tablets == null || tablets.isEmpty()) {
+            return;
+        }
+        writeLock();
+        try {
+            for (Tablet tablet : tablets) {
+                // LakeTablet is managed by StarOS, no need to do this mark and clean up
+                if (tablet instanceof LakeTablet) {
+                    continue;
+                }
+                long tabletId = tablet.getId();
+                Set<Long> backendIds = tablet.getBackendIds();
+                if (backendIds != null && !backendIds.isEmpty()) {
+                    forceDeleteTablets.put(tabletId, backendIds);
+                }
+            }
+        } finally {
+            writeUnlock();
+        }
+    }
+
     public void eraseTabletForceDelete(long tabletId, long backendId) {
         forceDeleteTablets.computeIfPresent(tabletId, (id, backendSets) -> {
             backendSets.remove(backendId);
@@ -162,21 +198,52 @@ public class TabletInvertedIndex implements MemoryTrackable {
         }
         mutationLock.lock();
         try {
-            CopyOnWriteArrayList<Replica> replicas = tabletToReplicaList.remove(tabletId);
-            if (replicas != null) {
-                for (Replica replica : replicas) {
-                    Set<Long> tabletIds = backendToTabletIdList.get(replica.getBackendId());
-                    if (tabletIds != null) {
-                        tabletIds.remove(tabletId);
-                    }
-                }
-            }
-            tabletMetaMap.remove(tabletId);
-
-            LOG.debug("delete tablet: {}", tabletId);
+            deleteTabletUnlocked(tabletId);
         } finally {
             mutationLock.unlock();
         }
+    }
+
+    /**
+     * Batch delete tablets. This method acquires the write lock only once for all tablets,
+     * which is more efficient than calling deleteTablet for each tablet individually.
+     *
+     * @param tabletIds collection of tablet IDs to delete
+     */
+    public void deleteTablets(java.util.Collection<Long> tabletIds) {
+        if (tabletIds == null || tabletIds.isEmpty()) {
+            return;
+        }
+        if (GlobalStateMgr.isCheckpointThread()) {
+            return;
+        }
+        writeLock();
+        try {
+            for (long tabletId : tabletIds) {
+                deleteTabletUnlocked(tabletId);
+            }
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    /**
+     * Internal method to delete tablet without acquiring lock.
+     * Caller must hold the mutation lock.
+     */
+    private void deleteTabletUnlocked(long tabletId) {
+        CopyOnWriteArrayList<Replica> replicas = tabletToReplicaList.remove(tabletId);
+        if (replicas != null) {
+            for (Replica replica : replicas) {
+                Set<Long> tabletIds = backendToTabletIdList.get(replica.getBackendId());
+                if (tabletIds != null) {
+                    tabletIds.remove(tabletId);
+                }
+            }
+        }
+        tabletMetaMap.remove(tabletId);
+
+        LOG.debug("delete tablet: {}", tabletId);
     }
 
     // Only for test
