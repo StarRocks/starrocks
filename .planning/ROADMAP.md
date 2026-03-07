@@ -87,7 +87,7 @@ Plans:
 
 Plans:
 - [ ] 04-01-PLAN.md — MockedADBCMetadata + ConnectorPlanTestBase registration + ADBCScanPlanTest (TEST-01)
-- [ ] 04-02-PLAN.md — sr.conf Flight SQL section + SQL integration test T/R files + seed data script (TEST-02, TEST-03, TEST-04)
+- [x] 04-02-PLAN.md — sr.conf Flight SQL section + SQL integration test T/R files + seed data script (TEST-02, TEST-03, TEST-04)
 
 ## Progress
 
@@ -99,4 +99,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 1. Foundation | 5/5 | Complete | 2026-03-05 |
 | 2. Scanning | 4/4 | Complete | 2026-03-06 |
 | 3. JDBC Parity | 0/3 | In progress | - |
-| 4. Integration Testing | 0/2 | Not started | - |
+| 4. Integration Testing | 1/2 | In progress | - |

@@ -59,6 +59,13 @@
 - [x] **OPT-03**: ADBCScanNode generates final SQL query with pushdowns for BE execution
 - [x] **OPT-04**: EXPLAIN shows the pushed-down ADBC query string
 
+### Testing
+
+- [ ] **TEST-01**: MockedADBCMetadata registered in ConnectorPlanTestBase; ADBC plan tests pass
+- [x] **TEST-02**: SQL integration test T/R files exist in test/sql/test_adbc_catalog/ with DDL, query, and MV coverage
+- [x] **TEST-03**: test/conf/sr.conf has [.flightsql] section with external_flightsql_ip and external_flightsql_port
+- [x] **TEST-04**: DuckDB seed data script exists for deterministic E2E test results
+
 ### Build & Dependencies
 
 - [x] **BUILD-01**: FE Maven adds `org.apache.arrow.adbc:adbc-core` and `adbc-driver-flight-sql` dependencies
@@ -135,9 +142,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 | STAT-01 | Phase 3 | Complete |
 | STAT-02 | Phase 3 | Complete |
 
+| TEST-01 | Phase 4 | Planned |
+| TEST-02 | Phase 4 | Complete |
+| TEST-03 | Phase 4 | Complete |
+| TEST-04 | Phase 4 | Complete |
+
 **Coverage:**
-- v1 requirements: 36 total
-- Mapped to phases: 36
+- v1 requirements: 40 total
+- Mapped to phases: 40
 - Unmapped: 0
 
 ---
