@@ -21,7 +21,7 @@
 #include <string>
 #include <thread>
 
-#include "common/config.h"
+#include "common/config_rpc_client_fwd.h"
 #include "fs/fs.h"
 #include "gen_cpp/FileBrokerService_types.h"
 #include "gen_cpp/TFileBrokerService.h"

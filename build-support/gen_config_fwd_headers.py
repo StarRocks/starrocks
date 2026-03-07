@@ -27,7 +27,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BE_ROOT = REPO_ROOT / "be"
 COMMON_CONFIG = BE_ROOT / "src/common/config.h"
-DEFAULT_MANIFEST = REPO_ROOT / "build-support/config_fwd_headers_manifest.json"
+DEFAULT_MANIFEST = BE_ROOT / "src/common/config_fwd_headers_manifest.json"
 
 LOCAL_CONFIG_INCLUDE_RE = re.compile(r'^\s*#include\s+"(config_[^"]+\.h)"\s*$')
 NAMESPACE_OPEN_RE = re.compile(r'^\s*namespace\s+starrocks::config\s*\{\s*$')

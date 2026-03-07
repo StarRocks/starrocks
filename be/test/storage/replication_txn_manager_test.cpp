@@ -18,7 +18,7 @@
 
 #include "base/testutil/assert.h"
 #include "base/uuid/uuid_generator.h"
-#include "common/config.h"
+#include "common/config_storage_fwd.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/AgentService_types.h"

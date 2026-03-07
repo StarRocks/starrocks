@@ -20,7 +20,7 @@
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
 #include "common/object_pool.h"
 #include "gtest/gtest.h"
 #include "runtime/descriptor_helper.h"

@@ -23,7 +23,7 @@
 #include "base/testutil/id_generator.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
 #include "common/status.h"
 #include "exec/lake_meta_scan_node.h"
 #include "exec/pipeline/fragment_context.h"

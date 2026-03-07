@@ -17,7 +17,7 @@
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
 #include "exec/join/join_hash_map.hpp"
 #include "exec/join/join_hash_map_helper.h"
 #include "exec/join/join_hash_map_method.h"

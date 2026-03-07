@@ -15,7 +15,7 @@ and the config workflow in [`README.md`](./README.md).
 - `common/config.cpp` owns config definitions and must keep including `configbase_impl.h` before `config.h`.
 - `common/config_<domain>_fwd.h` files are generated. Never edit them by hand.
 - If a config needs to be visible through a forward header, update
-  `build-support/config_fwd_headers_manifest.json` and run `python3 build-support/gen_config_fwd_headers.py`.
+  `common/config_fwd_headers_manifest.json` and run `python3 build-support/gen_config_fwd_headers.py`.
 
 ## Include policy
 

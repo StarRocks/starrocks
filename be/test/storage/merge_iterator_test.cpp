@@ -22,7 +22,8 @@
 
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "storage/vector_chunk_iterator.h"
 
 namespace starrocks {

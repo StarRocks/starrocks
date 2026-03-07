@@ -16,7 +16,7 @@
 
 #include "base/string/utf8.h"
 #include "column/binary_column.h"
-#include "common/config.h"
+#include "common/config_scan_io_fwd.h"
 #include "gutil/strings/substitute.h"
 #include "types/type_descriptor.h"
 
