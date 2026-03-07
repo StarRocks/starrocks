@@ -17,7 +17,7 @@
 #include <memory>
 
 #include "base/concurrency/stopwatch.hpp"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/schedule/observer.h"
 #include "exec/pipeline/schedule/timeout_tasks.h"

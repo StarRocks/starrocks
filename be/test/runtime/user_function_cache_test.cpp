@@ -40,7 +40,7 @@
 #include <cstdlib>
 
 #include "base/crypto/md5.h"
-#include "common/config.h"
+#include "common/config_udf_fwd.h"
 #include "common/logging.h"
 #include "fmt/core.h"
 #include "fs/fs_util.h"

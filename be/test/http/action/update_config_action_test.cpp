@@ -22,7 +22,7 @@
 #include "cache/datacache.h"
 #include "cache/disk_cache/starcache_engine.h"
 #include "cache/disk_cache/test_cache_utils.h"
-#include "common/config.h"
+#include "common/config_cache_fwd.h"
 #include "common/system/cpu_info.h"
 #include "common/util/bthreads/executor.h"
 #include "fs/fs_util.h"

@@ -35,13 +35,80 @@
         "enable_pk_size_tiered_compaction_strategy",
         "storage_flood_stage_left_capacity_bytes",
         "spill_local_storage_dir",
-        "l0_snapshot_size"
+        "l0_snapshot_size",
+        "tablet_write_log_buffer_size"
       ]
     },
     {
       "path": "be/src/common/config_cache_fwd.h",
       "configs": [
-        "datacache_enable"
+        "datacache_enable",
+        "enable_datacache_disk_auto_adjust"
+      ]
+    },
+    {
+      "path": "be/src/common/config_exec_flow_fwd.h",
+      "configs": [
+        "exchg_node_buffer_size_bytes",
+        "local_exchange_buffer_mem_limit_per_driver",
+        "result_buffer_cancelled_interval_time",
+        "streaming_agg_limited_memory_size",
+        "spill_init_partition",
+        "spill_read_buffer_min_bytes",
+        "mem_limited_chunk_queue_block_size",
+        "split_exchanger_buffer_chunk_num",
+        "pipeline_enable_large_column_checker",
+        "max_lookup_batch_request"
+      ]
+    },
+    {
+      "path": "be/src/common/config_local_io_fwd.h",
+      "configs": [
+        "enable_zero_copy_from_page_cache",
+        "file_descriptor_cache_capacity",
+        "file_write_history_size"
+      ]
+    },
+    {
+      "path": "be/src/common/config_memory_allocator_fwd.h",
+      "configs": [
+        "use_mmap_allocate_chunk"
+      ]
+    },
+    {
+      "path": "be/src/common/config_json_flat_fwd.h",
+      "configs": [
+        "enable_lazy_dynamic_flat_json"
+      ]
+    },
+    {
+      "path": "be/src/common/config_connector_sink_fwd.h",
+      "configs": [
+        "enable_connector_sink_spill"
+      ]
+    },
+    {
+      "path": "be/src/common/config_avro_fwd.h",
+      "configs": [
+        "avro_ignore_union_type_tag"
+      ]
+    },
+    {
+      "path": "be/src/common/config_vector_index_fwd.h",
+      "configs": [
+        "config_vector_index_default_build_threshold"
+      ]
+    },
+    {
+      "path": "be/src/common/config_merge_commit_fwd.h",
+      "configs": [
+        "merge_commit_trace_log_enable"
+      ]
+    },
+    {
+      "path": "be/src/common/config_udf_fwd.h",
+      "configs": [
+        "clear_udf_cache_when_start"
       ]
     },
     {

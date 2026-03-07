@@ -23,4 +23,14 @@ namespace starrocks::config {
 // Configuration items for datacache
 CONF_Bool(datacache_enable, "true");
 
+// Whether enable automatically adjust data cache disk space quota.
+// If true, the cache will choose an appropriate quota based on the current remaining disk space as the quota.
+// and the quota also will be changed dynamically.
+// Once the disk space usage reach the high level, the quota will be decreased to keep the disk usage
+// around the disk safe level.
+// On the other hand, if the cache is full and the disk usage falls below the disk low level for a long time,
+// which is configured by `datacache_disk_idle_seconds_for_expansion`, the cache quota will be increased to keep the
+// disk usage around the disk safe level.
+CONF_mBool(enable_datacache_disk_auto_adjust, "true");
+
 } // namespace starrocks::config

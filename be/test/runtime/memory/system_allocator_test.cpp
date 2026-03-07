@@ -38,7 +38,7 @@
 
 #include <memory>
 
-#include "common/config.h"
+#include "common/config_memory_allocator_fwd.h"
 #include "runtime/mem_tracker.h"
 
 namespace starrocks {

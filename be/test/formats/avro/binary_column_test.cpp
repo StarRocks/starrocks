@@ -24,7 +24,7 @@
 #include "base/utility/defer_op.h"
 #include "column/binary_column.h"
 #include "column/fixed_length_column.h"
-#include "common/config.h"
+#include "common/config_avro_fwd.h"
 #include "exec/avro_test.h"
 #include "types/type_descriptor.h"
 
