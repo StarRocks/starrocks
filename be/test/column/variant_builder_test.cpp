@@ -306,7 +306,6 @@ PARALLEL_TEST(VariantBuilderTest, deep_overlay_with_array_and_object) {
     ASSERT_EQ(R"({"root":{"arr":[{"x":1,"y":2}],"obj":{"k":"v"}}})", json.value());
 }
 
-
 // =============================================================================
 // Tests for array overlay scenarios
 // Covers the logic exercised by _rebuild_array_overlay and
