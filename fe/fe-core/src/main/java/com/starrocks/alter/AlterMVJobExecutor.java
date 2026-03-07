@@ -47,6 +47,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
+import com.starrocks.persist.AlterTaskInfo;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.RenameMaterializedViewLog;
@@ -56,6 +57,7 @@ import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.TaskRun;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -561,6 +563,33 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         }
     }
 
+    private void alterTaskPriority(Map<String, String> properties, long mvId, TableProperty tableProperty,
+                                   List<Runnable> appliers) {
+        try {
+            String taskPriority = PropertyAnalyzer.analyzeTaskPriority(properties);
+            boolean taskPriorityChanged =
+                    !StringUtils.equals(tableProperty.getProperties().get(TaskRun.TASK_PRIORITY), taskPriority);
+            if (!taskPriorityChanged) {
+                return;
+            }
+            appliers.add(() -> {
+                tableProperty.modifyTableProperties(TaskRun.TASK_PRIORITY, taskPriority);
+                TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+                Task currentTask = taskManager.getTask(TaskBuilder.getMvTaskName(mvId));
+                if (currentTask == null) {
+                    return;
+                }
+                currentTask.getProperties().put(TaskRun.TASK_PRIORITY, taskPriority);
+                GlobalStateMgr.getCurrentState().getEditLog().logAlterTask(
+                        new AlterTaskInfo(currentTask.getName(), currentTask.getProperties()), wal -> {
+                        }
+                );
+            });
+        } catch (AnalysisException e) {
+            throw new AlterJobException(e.getMessage(), e);
+        }
+    }
+
     private void alterSessionVariables(Map<String, String> properties,
                                        TableProperty tableProperty,
                                        List<Runnable> appliers) {
@@ -663,6 +692,9 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         }
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
             alterColocateWith(properties, materializedView);
+        }
+        if (properties.containsKey(TaskRun.TASK_PRIORITY)) {
+            alterTaskPriority(properties, materializedView.getId(), tableProperty, appliers);
         }
         if (!properties.isEmpty()) {
             alterSessionVariables(properties, tableProperty, appliers);
