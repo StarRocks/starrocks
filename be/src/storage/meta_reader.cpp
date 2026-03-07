@@ -23,7 +23,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/datum_convert.h"
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
 #include "common/status.h"
 #include "fs/fs_factory.h"
 #include "runtime/global_dict/config.h"

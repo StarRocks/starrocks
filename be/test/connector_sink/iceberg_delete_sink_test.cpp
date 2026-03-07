@@ -25,7 +25,7 @@
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
 #include "common/status.h"
 #include "common/util/thrift_util.h"
 #include "exec/pipeline/fragment_context.h"
