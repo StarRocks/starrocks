@@ -3,8 +3,8 @@
 --
 -- Usage:
 --   1. duckdb test.db < setup_flightsql_data.sql
---   2. docker run -p 31337:31337 -v $(pwd)/test.db:/data/test.db voltrondata/sqlflite:latest /data/test.db
---   3. Configure sr.conf: external_flightsql_ip=127.0.0.1, external_flightsql_port=31337
+--   2. docker run -p 31337:31337 -v $(pwd)/test.db:/data/test.db voltrondata/sqlflite:latest -e SQLFLITE_PASSWORD=test -e SQLFLITE_USERNAME=test /data/test.db
+--   3. Configure sr.conf: external_flightsql_ip=127.0.0.1, external_flightsql_port=31337, external_flightsql_user=test, external_flightsql_password=test
 --   4. cd test && python3 run.py -d sql/test_adbc_catalog -v
 
 CREATE SCHEMA IF NOT EXISTS test_db;

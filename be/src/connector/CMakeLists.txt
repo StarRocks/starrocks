@@ -18,6 +18,7 @@ ADD_BE_LIB(Connector
         connector.cpp
         hive_connector.cpp
         es_connector.cpp
+        adbc_connector.cpp
         jdbc_connector.cpp
         lake_connector.cpp
         mysql_connector.cpp

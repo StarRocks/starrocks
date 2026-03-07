@@ -257,16 +257,16 @@ Status ADBCScanner::_convert_batch_to_chunk(const std::shared_ptr<arrow::RecordB
         Filter chunk_filter;
         if (is_nullable) {
             auto* nullable = down_cast<NullableColumn*>(column.get());
-            auto& null_column = nullable->null_column();
+            auto* null_column = nullable->null_column_raw_ptr();
             null_column->resize(num_rows);
-            auto* null_data = null_column->get_data().data();
-            fill_null_column(arrow_column.get(), 0, num_rows, null_column.get(), 0);
+            size_t null_count = fill_null_column(arrow_column.get(), 0, num_rows, null_column, 0);
+            nullable->set_has_null(null_count != 0);
+            uint8_t* null_data = &null_column->get_data().front();
 
-            auto* data_column = nullable->data_column().get();
-            data_column->resize(num_rows);
-            RETURN_IF_ERROR(converter(arrow_column.get(), 0, num_rows, data_column, 0, null_data, &chunk_filter,
+            Column* data_col = nullable->data_column_raw_ptr();
+            data_col->resize(num_rows);
+            RETURN_IF_ERROR(converter(arrow_column.get(), 0, num_rows, data_col, 0, null_data, &chunk_filter,
                                       nullptr, nullptr));
-            nullable->update_has_null();
         } else {
             column->resize(num_rows);
             RETURN_IF_ERROR(
@@ -277,7 +277,14 @@ Status ADBCScanner::_convert_batch_to_chunk(const std::shared_ptr<arrow::RecordB
         columns[i] = std::move(column);
     }
 
-    *chunk = std::make_shared<Chunk>(std::move(columns), _tuple_desc);
+    // Build slot map: slot_id -> column index
+    Chunk::SlotHashMap slot_map;
+    for (size_t i = 0; i < slots.size(); i++) {
+        if (slots[i]->is_materialized()) {
+            slot_map[slots[i]->id()] = i;
+        }
+    }
+    *chunk = std::make_shared<Chunk>(std::move(columns), std::move(slot_map));
     return Status::OK();
 }
 

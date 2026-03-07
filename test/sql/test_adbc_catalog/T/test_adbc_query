@@ -5,7 +5,9 @@ properties
 (
     "type"="adbc",
     "adbc.driver"="flight_sql",
-    "adbc.url"="grpc://${external_flightsql_ip}:${external_flightsql_port}"
+    "adbc.url"="grpc://${external_flightsql_ip}:${external_flightsql_port}",
+    "adbc.username"="${external_flightsql_user}",
+    "adbc.password"="${external_flightsql_password}"
 );
 set catalog adbc_catalog_${uuid0};
 select * from test_db.test_types order by id;
@@ -19,7 +21,9 @@ properties
 (
     "type"="adbc",
     "adbc.driver"="flight_sql",
-    "adbc.url"="grpc://${external_flightsql_ip}:${external_flightsql_port}"
+    "adbc.url"="grpc://${external_flightsql_ip}:${external_flightsql_port}",
+    "adbc.username"="${external_flightsql_user}",
+    "adbc.password"="${external_flightsql_password}"
 );
 set catalog adbc_catalog_${uuid0};
 select id, name from test_db.test_types order by id;
@@ -33,7 +37,9 @@ properties
 (
     "type"="adbc",
     "adbc.driver"="flight_sql",
-    "adbc.url"="grpc://${external_flightsql_ip}:${external_flightsql_port}"
+    "adbc.url"="grpc://${external_flightsql_ip}:${external_flightsql_port}",
+    "adbc.username"="${external_flightsql_user}",
+    "adbc.password"="${external_flightsql_password}"
 );
 set catalog adbc_catalog_${uuid0};
 select name from test_db.test_types where id > 3 order by name;
@@ -47,7 +53,9 @@ properties
 (
     "type"="adbc",
     "adbc.driver"="flight_sql",
-    "adbc.url"="grpc://${external_flightsql_ip}:${external_flightsql_port}"
+    "adbc.url"="grpc://${external_flightsql_ip}:${external_flightsql_port}",
+    "adbc.username"="${external_flightsql_user}",
+    "adbc.password"="${external_flightsql_password}"
 );
 set catalog adbc_catalog_${uuid0};
 select name from test_db.test_types order by id limit 2;
@@ -61,7 +69,9 @@ properties
 (
     "type"="adbc",
     "adbc.driver"="flight_sql",
-    "adbc.url"="grpc://${external_flightsql_ip}:${external_flightsql_port}"
+    "adbc.url"="grpc://${external_flightsql_ip}:${external_flightsql_port}",
+    "adbc.username"="${external_flightsql_user}",
+    "adbc.password"="${external_flightsql_password}"
 );
 set catalog adbc_catalog_${uuid0};
 select name from test_db.test_types where flag = true order by id limit 2;
@@ -75,7 +85,9 @@ properties
 (
     "type"="adbc",
     "adbc.driver"="flight_sql",
-    "adbc.url"="grpc://${external_flightsql_ip}:${external_flightsql_port}"
+    "adbc.url"="grpc://${external_flightsql_ip}:${external_flightsql_port}",
+    "adbc.username"="${external_flightsql_user}",
+    "adbc.password"="${external_flightsql_password}"
 );
 set catalog adbc_catalog_${uuid0};
 [UC]explain select name from test_db.test_types where id > 3;
@@ -89,7 +101,9 @@ properties
 (
     "type"="adbc",
     "adbc.driver"="flight_sql",
-    "adbc.url"="grpc://${external_flightsql_ip}:${external_flightsql_port}"
+    "adbc.url"="grpc://${external_flightsql_ip}:${external_flightsql_port}",
+    "adbc.username"="${external_flightsql_user}",
+    "adbc.password"="${external_flightsql_password}"
 );
 set catalog adbc_catalog_${uuid0};
 select name from test_db.test_types where id in (select id from test_db.test_join where category = 'A') order by name;

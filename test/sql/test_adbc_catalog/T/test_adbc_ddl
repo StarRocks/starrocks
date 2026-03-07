@@ -5,7 +5,9 @@ properties
 (
     "type"="adbc",
     "adbc.driver"="flight_sql",
-    "adbc.url"="grpc://${external_flightsql_ip}:${external_flightsql_port}"
+    "adbc.url"="grpc://${external_flightsql_ip}:${external_flightsql_port}",
+    "adbc.username"="${external_flightsql_user}",
+    "adbc.password"="${external_flightsql_password}"
 );
 set catalog adbc_catalog_${uuid0};
 show databases;
@@ -22,7 +24,9 @@ properties
 (
     "type"="adbc",
     "adbc.driver"="flight_sql",
-    "adbc.url"="grpc://${external_flightsql_ip}:${external_flightsql_port}"
+    "adbc.url"="grpc://${external_flightsql_ip}:${external_flightsql_port}",
+    "adbc.username"="${external_flightsql_user}",
+    "adbc.password"="${external_flightsql_password}"
 );
 alter catalog adbc_catalog_${uuid0} set ("adbc.identifier.quote"="`");
 set catalog adbc_catalog_${uuid0};
@@ -37,7 +41,9 @@ properties
 (
     "type"="adbc",
     "adbc.driver"="flight_sql",
-    "adbc.url"="grpc://${external_flightsql_ip}:${external_flightsql_port}"
+    "adbc.url"="grpc://${external_flightsql_ip}:${external_flightsql_port}",
+    "adbc.username"="${external_flightsql_user}",
+    "adbc.password"="${external_flightsql_password}"
 );
 [UC]show catalogs;
 drop catalog adbc_catalog_${uuid0};

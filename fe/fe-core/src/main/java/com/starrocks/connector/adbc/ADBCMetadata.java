@@ -33,6 +33,7 @@ import org.apache.arrow.adbc.core.AdbcDatabase;
 import org.apache.arrow.adbc.core.AdbcDriver;
 import org.apache.arrow.adbc.core.AdbcException;
 import org.apache.arrow.adbc.core.AdbcStatement;
+import org.apache.arrow.adbc.driver.flightsql.FlightSqlConnectionProperties;
 import org.apache.arrow.adbc.driver.flightsql.FlightSqlDriver;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.RootAllocator;
@@ -46,6 +47,8 @@ import org.apache.arrow.vector.types.pojo.Schema;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -104,6 +107,40 @@ public class ADBCMetadata implements ConnectorMetadata {
         if (properties.containsKey("adbc.password")) {
             AdbcDriver.PARAM_PASSWORD.set(params, properties.get("adbc.password"));
         }
+
+        // TLS options
+        String uri = properties.get(ADBCConnector.PROP_URL);
+        if (uri != null && uri.toLowerCase().startsWith("grpc+tls://")) {
+            String caCertFile = properties.get(ADBCConnector.PROP_TLS_CA_CERT_FILE);
+            if (caCertFile != null) {
+                try {
+                    FlightSqlConnectionProperties.TLS_ROOT_CERTS.set(params, new FileInputStream(caCertFile));
+                } catch (FileNotFoundException e) {
+                    throw new StarRocksConnectorException(
+                            "Cannot open CA cert file: " + caCertFile + ": " + e.getMessage(), e);
+                }
+            }
+
+            String clientCertFile = properties.get(ADBCConnector.PROP_TLS_CLIENT_CERT_FILE);
+            String clientKeyFile = properties.get(ADBCConnector.PROP_TLS_CLIENT_KEY_FILE);
+            if (clientCertFile != null && clientKeyFile != null) {
+                try {
+                    FlightSqlConnectionProperties.MTLS_CERT_CHAIN.set(params, new FileInputStream(clientCertFile));
+                    FlightSqlConnectionProperties.MTLS_PRIVATE_KEY.set(params, new FileInputStream(clientKeyFile));
+                } catch (FileNotFoundException e) {
+                    throw new StarRocksConnectorException(
+                            "Cannot open mTLS cert/key file: " + e.getMessage(), e);
+                }
+            }
+
+            String verify = properties.getOrDefault(ADBCConnector.PROP_TLS_VERIFY, "true");
+            if ("false".equalsIgnoreCase(verify)) {
+                FlightSqlConnectionProperties.TLS_SKIP_VERIFY.set(params, true);
+                LOG.warn("ADBC catalog '{}': TLS certificate verification DISABLED (insecure mode)",
+                        properties.getOrDefault("catalog_name", "unknown"));
+            }
+        }
+
         try {
             return driver.open(params);
         } catch (AdbcException e) {

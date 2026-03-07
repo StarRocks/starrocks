@@ -18,6 +18,7 @@ import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.ADBCTable;
+import com.starrocks.connector.adbc.ADBCConnector;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
@@ -226,6 +227,22 @@ public class ADBCScanNode extends ScanNode {
         if (token != null) {
             adbcScanNode.setAdbc_token(token);
         }
+
+        // TLS fields
+        String caCertFile = getPropertyValue(ADBCConnector.PROP_TLS_CA_CERT_FILE);
+        if (caCertFile != null) {
+            adbcScanNode.setAdbc_tls_ca_cert_file(caCertFile);
+        }
+        String clientCertFile = getPropertyValue(ADBCConnector.PROP_TLS_CLIENT_CERT_FILE);
+        if (clientCertFile != null) {
+            adbcScanNode.setAdbc_tls_client_cert_file(clientCertFile);
+        }
+        String clientKeyFile = getPropertyValue(ADBCConnector.PROP_TLS_CLIENT_KEY_FILE);
+        if (clientKeyFile != null) {
+            adbcScanNode.setAdbc_tls_client_key_file(clientKeyFile);
+        }
+        String tlsVerify = getPropertyValue(ADBCConnector.PROP_TLS_VERIFY);
+        adbcScanNode.setAdbc_tls_verify(!"false".equalsIgnoreCase(tlsVerify));
 
         msg.adbc_scan_node = adbcScanNode;
     }

@@ -7,7 +7,9 @@ properties
 (
     "type"="adbc",
     "adbc.driver"="flight_sql",
-    "adbc.url"="grpc://${external_flightsql_ip}:${external_flightsql_port}"
+    "adbc.url"="grpc://${external_flightsql_ip}:${external_flightsql_port}",
+    "adbc.username"="${external_flightsql_user}",
+    "adbc.password"="${external_flightsql_password}"
 );
 -- result:
 -- !result
@@ -53,7 +55,9 @@ properties
 (
     "type"="adbc",
     "adbc.driver"="flight_sql",
-    "adbc.url"="grpc://${external_flightsql_ip}:${external_flightsql_port}"
+    "adbc.url"="grpc://${external_flightsql_ip}:${external_flightsql_port}",
+    "adbc.username"="${external_flightsql_user}",
+    "adbc.password"="${external_flightsql_password}"
 );
 -- result:
 -- !result
