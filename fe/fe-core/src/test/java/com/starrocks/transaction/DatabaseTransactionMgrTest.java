@@ -37,14 +37,23 @@ package com.starrocks.transaction;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.catalog.FakeGlobalStateMgr;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
+import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.RandomDistributionInfo;
+import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
@@ -60,8 +69,17 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.persist.EditLog;
+import com.starrocks.persist.WALApplier;
 import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AggregateType;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.thrift.TStorageType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.AfterEach;
@@ -76,6 +94,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -83,6 +102,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.spy;
 
 public class DatabaseTransactionMgrTest {
 
@@ -277,11 +299,15 @@ public class DatabaseTransactionMgrTest {
     }
 
     private List<TabletCommitInfo> buildTabletCommitInfoList() {
-        TabletCommitInfo tabletCommitInfo1 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1,
+        return buildTabletCommitInfoList(GlobalStateMgrTestUtil.testTabletId1);
+    }
+
+    private List<TabletCommitInfo> buildTabletCommitInfoList(long tabletId) {
+        TabletCommitInfo tabletCommitInfo1 = new TabletCommitInfo(tabletId,
                 GlobalStateMgrTestUtil.testBackendId1);
-        TabletCommitInfo tabletCommitInfo2 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1,
+        TabletCommitInfo tabletCommitInfo2 = new TabletCommitInfo(tabletId,
                 GlobalStateMgrTestUtil.testBackendId2);
-        TabletCommitInfo tabletCommitInfo3 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1,
+        TabletCommitInfo tabletCommitInfo3 = new TabletCommitInfo(tabletId,
                 GlobalStateMgrTestUtil.testBackendId3);
         List<TabletCommitInfo> transTablets = Lists.newArrayList();
         transTablets.add(tabletCommitInfo1);
@@ -853,13 +879,181 @@ public class DatabaseTransactionMgrTest {
 
         assertEquals(3, masterDbTransMgr.getRunningTxnNums());
         assertEquals(4, masterDbTransMgr.getFinishedTxnNums());
-        assertEquals(TransactionStatus.VISIBLE, transactionState6.getTransactionStatus());
-        assertEquals(TransactionStatus.VISIBLE, transactionState7.getTransactionStatus());
-        assertEquals(TransactionStatus.VISIBLE, transactionState8.getTransactionStatus());
+        assertEquals(TransactionStatus.VISIBLE, masterDbTransMgr.getTransactionState(txnId6).getTransactionStatus());
+        assertEquals(TransactionStatus.VISIBLE, masterDbTransMgr.getTransactionState(txnId7).getTransactionStatus());
+        assertEquals(TransactionStatus.VISIBLE, masterDbTransMgr.getTransactionState(txnId8).getTransactionStatus());
 
         FakeGlobalStateMgr.setGlobalStateMgr(slaveGlobalStateMgr);
-        slaveTransMgr.replayUpsertTransactionStateBatch(stateBatch);
+        TransactionStateBatch replayStateBatch = new TransactionStateBatch(List.of(
+                fakeEditLog.getTransaction(txnId6),
+                fakeEditLog.getTransaction(txnId7),
+                fakeEditLog.getTransaction(txnId8)));
+        slaveTransMgr.replayUpsertTransactionStateBatch(replayStateBatch);
         assertEquals(4, masterDbTransMgr.getFinishedTxnNums());
+    }
+
+    @Test
+    public void testFinishTransactionBatchReturnsLatestStateBatch() throws StarRocksException {
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        DatabaseTransactionMgr masterDbTransMgr = masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        long txnId6 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable6);
+        long txnId7 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable7);
+        long txnId8 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable8);
+        TransactionState transactionState6 = masterDbTransMgr.getTransactionState(txnId6);
+        TransactionState transactionState7 = masterDbTransMgr.getTransactionState(txnId7);
+        TransactionState transactionState8 = masterDbTransMgr.getTransactionState(txnId8);
+
+        new MockUp<Table>() {
+            @Mock
+            public boolean isCloudNativeTableOrMaterializedView() {
+                return true;
+            }
+        };
+
+        TransactionStateBatch stateBatch = new TransactionStateBatch(
+                List.of(transactionState6, transactionState7, transactionState8));
+        Map<ComputeNode, List<Long>> nodeToTablets = Maps.newHashMap();
+        nodeToTablets.put(new ComputeNode(10001L, "host", 9050), Lists.newArrayList(10002L));
+        stateBatch.putBeTablets(10003L, nodeToTablets);
+
+        TransactionStateBatch latestStateBatch =
+                masterTransMgr.finishTransactionBatch(GlobalStateMgrTestUtil.testDbId1, stateBatch, null);
+
+        Assertions.assertNotSame(stateBatch, latestStateBatch);
+        assertEquals(TransactionStatus.COMMITTED, stateBatch.getTransactionStates().get(0).getTransactionStatus());
+        assertEquals(TransactionStatus.VISIBLE, latestStateBatch.getTransactionStates().get(0).getTransactionStatus());
+        Assertions.assertSame(stateBatch.getPartitionToTablets(), latestStateBatch.getPartitionToTablets());
+        Assertions.assertSame(masterDbTransMgr.getTransactionState(txnId6), latestStateBatch.getTransactionStates().get(0));
+        Assertions.assertSame(masterDbTransMgr.getTransactionState(txnId7), latestStateBatch.getTransactionStates().get(1));
+        Assertions.assertSame(masterDbTransMgr.getTransactionState(txnId8), latestStateBatch.getTransactionStates().get(2));
+    }
+
+    @Test
+    public void testFinishTransactionBatchEditLogException() throws StarRocksException {
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        DatabaseTransactionMgr masterDbTransMgr = masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        long txnId6 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable6);
+        long txnId7 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable7);
+        long txnId8 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable8);
+        TransactionStateBatch stateBatch = new TransactionStateBatch(List.of(
+                masterDbTransMgr.getTransactionState(txnId6),
+                masterDbTransMgr.getTransactionState(txnId7),
+                masterDbTransMgr.getTransactionState(txnId8)));
+
+        new MockUp<Table>() {
+            @Mock
+            public boolean isCloudNativeTableOrMaterializedView() {
+                return true;
+            }
+        };
+
+        EditLog spyEditLog = spy(masterGlobalStateMgr.getEditLog());
+        doThrow(new RuntimeException("EditLog write failed"))
+                .when(spyEditLog).logInsertTransactionStateBatch(any(TransactionStateBatch.class), any());
+        EditLog originalEditLog = replaceDatabaseTransactionMgrEditLog(masterDbTransMgr, spyEditLog);
+        try {
+            RuntimeException exception = Assertions.assertThrows(RuntimeException.class,
+                    () -> masterTransMgr.finishTransactionBatch(GlobalStateMgrTestUtil.testDbId1, stateBatch, null));
+            assertEditLogWriteFailed(exception);
+            assertEquals(TransactionStatus.COMMITTED, masterDbTransMgr.getTransactionState(txnId6).getTransactionStatus());
+            assertEquals(TransactionStatus.COMMITTED, masterDbTransMgr.getTransactionState(txnId7).getTransactionStatus());
+            assertEquals(TransactionStatus.COMMITTED, masterDbTransMgr.getTransactionState(txnId8).getTransactionStatus());
+        } finally {
+            replaceDatabaseTransactionMgrEditLog(masterDbTransMgr, originalEditLog);
+        }
+    }
+
+    @Test
+    public void testCommitPreparedTransactionCommitTimeIsStrictlyIncreasing() throws Exception {
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        Database db = masterGlobalStateMgr.getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDbId1);
+        DatabaseTransactionMgr masterDbTransMgr = masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        long maxCommitTsBefore = System.currentTimeMillis() + TimeUnit.DAYS.toMillis(1);
+        Deencapsulation.setField(masterDbTransMgr, "maxCommitTs", maxCommitTsBefore);
+        long secondTableId = 20001L;
+        long secondPartitionId = 20002L;
+        long secondIndexId = secondTableId;
+        long secondTabletId = 20003L;
+        createSimpleOlapTable(db, secondTableId, "testTableCommitTime2", secondPartitionId,
+                "testPartitionCommitTime2", secondIndexId, "testIndexCommitTime2", secondTabletId,
+                GlobalStateMgrTestUtil.testStartVersion, 20004L, 20005L, 20006L);
+
+        long transactionId1 = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                "test_commit_prepared_commit_time_1",
+                transactionSource,
+                TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        long transactionId2 = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(secondTableId),
+                "test_commit_prepared_commit_time_2",
+                transactionSource,
+                TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+
+        masterTransMgr.prepareTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId1, -1,
+                buildTabletCommitInfoList(), Lists.newArrayList(), null);
+        masterTransMgr.prepareTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId2, -1,
+                buildTabletCommitInfoList(secondTabletId), Lists.newArrayList(), null);
+
+        CountDownLatch firstPersistEntered = new CountDownLatch(1);
+        CountDownLatch releasePersist = new CountDownLatch(1);
+        CountDownLatch secondPersistEntered = new CountDownLatch(1);
+        AtomicInteger persistCallCount = new AtomicInteger(0);
+        try {
+            new MockUp<EditLog>() {
+                @Mock
+                public void logInsertTransactionState(TransactionState transactionState, WALApplier walApplier)
+                        throws InterruptedException {
+                    if (persistCallCount.incrementAndGet() == 1) {
+                        firstPersistEntered.countDown();
+                        assertTrue(releasePersist.await(10, TimeUnit.SECONDS));
+                    } else {
+                        secondPersistEntered.countDown();
+                    }
+                    if (walApplier != null) {
+                        walApplier.apply(transactionState);
+                    }
+                }
+            };
+
+            Throwable[] errors = new Throwable[2];
+            Thread thread1 = new Thread(() -> {
+                try {
+                    masterTransMgr.commitPreparedTransaction(db, transactionId1, 1000L);
+                } catch (Throwable t) {
+                    errors[0] = t;
+                }
+            });
+            Thread thread2 = new Thread(() -> {
+                try {
+                    masterTransMgr.commitPreparedTransaction(db, transactionId2, 1000L);
+                } catch (Throwable t) {
+                    errors[1] = t;
+                }
+            });
+
+            thread1.start();
+            assertTrue(firstPersistEntered.await(10, TimeUnit.SECONDS));
+            thread2.start();
+            assertTrue(secondPersistEntered.await(10, TimeUnit.SECONDS));
+
+            thread2.join(5000);
+            releasePersist.countDown();
+            thread1.join(5000);
+
+            assertPublishTimeoutOrNull(errors[0]);
+            assertPublishTimeoutOrNull(errors[1]);
+
+            TransactionState transactionState1 = masterDbTransMgr.getTransactionState(transactionId1);
+            TransactionState transactionState2 = masterDbTransMgr.getTransactionState(transactionId2);
+            assertEquals(TransactionStatus.COMMITTED, transactionState1.getTransactionStatus());
+            assertEquals(TransactionStatus.COMMITTED, transactionState2.getTransactionStatus());
+            assertEquals(2, Sets.newHashSet(transactionState1.getCommitTime(), transactionState2.getCommitTime()).size());
+            assertEquals(1, Math.abs(transactionState1.getCommitTime() - transactionState2.getCommitTime()));
+            assertTrue(transactionState1.getCommitTime() > maxCommitTsBefore);
+            assertTrue(transactionState2.getCommitTime() > maxCommitTsBefore);
+        } finally {
+            releasePersist.countDown();
+        }
     }
 
     @Test
@@ -949,7 +1143,8 @@ public class DatabaseTransactionMgrTest {
         // unlock the lock in lockThread
         Assertions.assertDoesNotThrow(
                 () -> masterTransMgr.finishTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId, null, 1000L));
-        assertEquals(TransactionStatus.VISIBLE, txnState.getTransactionStatus());
+        assertEquals(TransactionStatus.VISIBLE,
+                masterDbTransMgr.getTransactionState(transactionId).getTransactionStatus());
         lockThread.join();
     }
 
@@ -1058,5 +1253,68 @@ public class DatabaseTransactionMgrTest {
                     Config.finish_transaction_default_lock_timeout_ms);
             Assertions.assertTrue(result);
         });
+    }
+
+    private EditLog replaceDatabaseTransactionMgrEditLog(DatabaseTransactionMgr dbTransactionMgr, EditLog editLog) {
+        EditLog originalEditLog = Deencapsulation.getField(dbTransactionMgr, "editLog");
+        Deencapsulation.setField(dbTransactionMgr, "editLog", editLog);
+        return originalEditLog;
+    }
+
+    private void assertEditLogWriteFailed(RuntimeException exception) {
+        Assertions.assertTrue(exception.getMessage().contains("EditLog write failed")
+                || exception.getCause() != null && exception.getCause().getMessage().contains("EditLog write failed"));
+    }
+
+    private void assertPublishTimeoutOrNull(Throwable throwable) {
+        if (throwable == null) {
+            return;
+        }
+        Assertions.assertTrue(throwable instanceof StarRocksException);
+        Assertions.assertTrue(throwable.getMessage().contains("publish timeout"));
+    }
+
+    private void createSimpleOlapTable(Database db, long tableId, String tableName, long partitionId, String partitionName,
+                                       long indexId, String indexName, long tabletId, long version,
+                                       long replicaId1, long replicaId2, long replicaId3) {
+        Replica replica1 = new Replica(replicaId1, GlobalStateMgrTestUtil.testBackendId1, version, 0, 0L, 0L,
+                Replica.ReplicaState.NORMAL, -1, 0);
+        Replica replica2 = new Replica(replicaId2, GlobalStateMgrTestUtil.testBackendId2, version, 0, 0L, 0L,
+                Replica.ReplicaState.NORMAL, -1, 0);
+        Replica replica3 = new Replica(replicaId3, GlobalStateMgrTestUtil.testBackendId3, version, 0, 0L, 0L,
+                Replica.ReplicaState.NORMAL, -1, 0);
+
+        LocalTablet tablet = new LocalTablet(tabletId);
+        MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
+        TabletMeta tabletMeta = new TabletMeta(db.getId(), tableId, partitionId + 100, indexId, TStorageMedium.HDD);
+        index.addTablet(tablet, tabletMeta);
+        tablet.addReplica(replica1);
+        tablet.addReplica(replica2);
+        tablet.addReplica(replica3);
+
+        RandomDistributionInfo distributionInfo = new RandomDistributionInfo(10);
+        Partition partition = new Partition(partitionId, partitionId + 100, partitionName, index, distributionInfo);
+        partition.getDefaultPhysicalPartition().updateVisibleVersion(version);
+        partition.getDefaultPhysicalPartition().setNextVersion(version + 1);
+
+        List<Column> columns = new ArrayList<>();
+        Column key1 = new Column("k1", IntegerType.INT);
+        key1.setIsKey(true);
+        columns.add(key1);
+        Column key2 = new Column("k2", IntegerType.INT);
+        key2.setIsKey(true);
+        columns.add(key2);
+        columns.add(new Column("v", FloatType.DOUBLE, false, AggregateType.SUM, "0", ""));
+
+        PartitionInfo partitionInfo = new SinglePartitionInfo();
+        partitionInfo.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
+        partitionInfo.setReplicationNum(partitionId, (short) 3);
+        OlapTable table = new OlapTable(tableId, tableName, columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
+        table.addPartition(partition);
+        table.setIndexMeta(indexId, indexName, columns, 0, GlobalStateMgrTestUtil.testSchemaHash1 + 1, (short) 1,
+                TStorageType.COLUMN, KeysType.AGG_KEYS);
+        table.setBaseIndexMetaId(indexId);
+        table.setReplicationNum((short) 3);
+        db.registerTableUnlocked(table);
     }
 }
