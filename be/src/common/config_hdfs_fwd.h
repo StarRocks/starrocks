@@ -20,25 +20,17 @@
 #include "common/configbase.h"
 
 namespace starrocks::config {
-// direct read flat json
-CONF_mBool(enable_lazy_dynamic_flat_json, "true");
+// hdfs hedged read
+CONF_Bool(hdfs_client_enable_hedged_read, "false");
 
-// enable flat complex type (/array/object/hyper type), diables for save storage
-CONF_mBool(enable_json_flat_complex_type, "false");
+// dfs.client.hedged.read.threadpool.size
+CONF_Int32(hdfs_client_hedged_read_threadpool_size, "128");
 
-// if disable flat complex type, check complex type rate in hyper-type column
-CONF_mDouble(json_flat_complex_type_factor, "0.3");
+// dfs.client.hedged.read.threshold.millis
+CONF_Int32(hdfs_client_hedged_read_threshold_millis, "2500");
 
-// extract flat json column when row_num * null_factor > null_row_num
-CONF_mDouble(json_flat_null_factor, "0.3");
+CONF_Int32(hdfs_client_max_cache_size, "64");
 
-// extract flat json column when row_num * sparsity_factor < hit_row_num
-CONF_mDouble(json_flat_sparsity_factor, "0.3");
-
-// the maximum number of extracted JSON sub-field
-CONF_mInt32(json_flat_column_max, "100");
-
-// for whitelist on flat json remain data, max set 1kb
-CONF_mInt32(json_flat_remain_filter_max_bytes, "1024");
+CONF_Int32(hdfs_client_io_read_retry, "0");
 
 } // namespace starrocks::config

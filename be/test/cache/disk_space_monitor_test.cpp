@@ -24,7 +24,7 @@
 #include "base/utility/defer_op.h"
 #include "cache/disk_cache/block_cache.h"
 #include "cache/disk_cache/test_cache_utils.h"
-#include "common/config.h"
+#include "common/config_cache_fwd.h"
 #include "common/logging.h"
 #include "common/statusor.h"
 #include "fs/fs_util.h"

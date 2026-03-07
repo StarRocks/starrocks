@@ -22,7 +22,7 @@
 
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/sync_point.h"
-#include "common/config.h"
+#include "common/config_hdfs_fwd.h"
 #include "common/system/backend_options.h"
 #include "fs/encrypt_file.h"
 #include "fs/fs_util.h"

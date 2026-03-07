@@ -21,7 +21,7 @@
 #include <gtest/gtest.h>
 
 #include "base/failpoint/fail_point.h"
-#include "common/config.h"
+#include "common/config_network_fwd.h"
 #include "runtime/exec_env.h"
 
 namespace starrocks {
