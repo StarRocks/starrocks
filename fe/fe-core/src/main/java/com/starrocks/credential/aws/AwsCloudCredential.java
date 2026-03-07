@@ -281,6 +281,10 @@ public class AwsCloudCredential implements CloudCredential {
             return true;
         }
 
+        if (useWebIdentityProfile) {
+            return true;
+        }
+
         if (!accessKey.isEmpty() && !secretKey.isEmpty()) {
             return true;
         }
@@ -293,6 +297,8 @@ public class AwsCloudCredential implements CloudCredential {
                 String.valueOf(useAWSSDKDefaultBehavior));
         properties.put(CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE,
                 String.valueOf(useInstanceProfile));
+        properties.put(CloudConfigurationConstants.AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE,
+                String.valueOf(useWebIdentityProfile));
         properties.put(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, accessKey);
         properties.put(CloudConfigurationConstants.AWS_S3_SECRET_KEY, secretKey);
         properties.put(CloudConfigurationConstants.AWS_S3_SESSION_TOKEN, sessionToken);
