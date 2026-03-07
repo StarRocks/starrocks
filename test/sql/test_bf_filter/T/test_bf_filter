@@ -1,0 +1,43 @@
+-- name: test_bf_filter
+CREATE TABLE `test_ngram_bf` (
+  `id` bigint(20) NOT NULL,
+  `content` varchar(200) NOT NULL,
+  INDEX idx_content_ngrambf (`content`) USING NGRAMBF("bloom_filter_fpp" = "0.05", "case_sensitive" = "false", "gram_num" = "4")
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 3 
+PROPERTIES (
+"replication_num" = "1"
+);
+
+INSERT INTO test_ngram_bf VALUES
+(1, 'architecture'),
+(2, 'shared-nothing'),
+(3, 'consistent'),
+(4, 'StarRocks');
+
+INSERT INTO test_ngram_bf (id, content)
+SELECT
+    gs + 100000 AS id,
+    concat('irrelevant1-content1', gs) AS content
+FROM TABLE(generate_series(1, 10000)) AS t(gs);
+
+INSERT INTO test_ngram_bf (id, content)
+SELECT
+    gs + 100000 AS id,
+    concat('irrelevant2-content2', gs) AS content
+FROM TABLE(generate_series(1, 10000)) AS t(gs);
+
+create view profile_bloom_filter_filtered_rows as
+select trim(unnest) 
+from table(unnest(split(get_query_profile(last_query_id()), '\n')))
+where unnest like '%BloomFilterFilterRows%'
+order by unnest;
+
+set enable_profile = true;
+
+SELECT count(*) FROM test_ngram_bf WHERE content LIKE '%StarRocks%';
+select * from profile_bloom_filter_filtered_rows;
+
+SELECT count(*) FROM test_ngram_bf WHERE content LIKE '%StarRocks%' AND content LIKE '%irrelevant1-content1%';
+select * from profile_bloom_filter_filtered_rows;
