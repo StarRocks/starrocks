@@ -21,7 +21,7 @@
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/global_types.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
