@@ -16,7 +16,7 @@
 
 #include <gtest/gtest.h>
 
-#include "common/config.h"
+#include "common/config_storage_fwd.h"
 
 namespace starrocks::lake {
 

@@ -19,7 +19,7 @@
 #include <mutex>
 #include <unordered_map>
 
-#include "common/config.h"
+#include "common/config_local_io_fwd.h"
 #include "fs/bundle_file.h"
 #include "fs/encrypt_file.h"
 

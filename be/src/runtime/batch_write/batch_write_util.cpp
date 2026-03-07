@@ -16,7 +16,7 @@
 
 #include <vector>
 
-#include "common/config.h"
+#include "common/config_merge_commit_fwd.h"
 #include "http/http_common.h"
 #include "http/http_request.h"
 

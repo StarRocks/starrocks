@@ -14,7 +14,7 @@
 
 #include "storage/index/vector/vector_index_writer.h"
 
-#include "common/config.h"
+#include "common/config_vector_index_fwd.h"
 #include "common/runtime_profile.h"
 #include "fs/fs_util.h"
 #include "runtime/starrocks_metrics.h"
