@@ -92,7 +92,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -100,3 +100,15 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 2. Scanning | 4/4 | Complete | 2026-03-06 |
 | 3. JDBC Parity | 0/3 | In progress | - |
 | 4. Integration Testing | 2/2 | Complete | 2026-03-07 |
+| 5. TLS Support | 0/2 | Not started | - |
+
+### Phase 5: Add TLS support for ADBC connector
+
+**Goal:** Enable encrypted TLS connections between StarRocks ADBC connector and remote Arrow Flight SQL servers, with CA cert verification, mutual TLS (mTLS), and insecure mode for dev/testing
+**Requirements**: TLS-01, TLS-02, TLS-03, TLS-04, TLS-05, TLS-06, TLS-07, TLS-08, TLS-09, TLS-10
+**Depends on:** Phase 4
+**Plans:** 2 plans
+
+Plans:
+- [ ] 05-01-PLAN.md — FE TLS properties, validation, FlightSql TLS options, Thrift IDL, ScanNode toThrift + unit tests (TLS-01, TLS-02, TLS-03, TLS-04, TLS-05, TLS-06, TLS-07, TLS-08, TLS-10)
+- [ ] 05-02-PLAN.md — BE TLS cert file reading, ADBC C driver TLS options, Thrift field extraction (TLS-07, TLS-08, TLS-09)
