@@ -1556,6 +1556,10 @@ public class StmtExecutor {
                             PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
                 }
             }
+            if (!killConnection) {
+                // Expose a structured cancellation signal for query-level kill.
+                killCtx.getState().setErrorCode(ErrorCode.ERR_QUERY_INTERRUPTED);
+            }
             killCtx.kill(killConnection, "killed manually: " + originStmt.getOrigStmt());
         }
         context.getState().setOk();
