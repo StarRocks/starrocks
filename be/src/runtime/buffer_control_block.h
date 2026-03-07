@@ -87,7 +87,7 @@ struct GetResultBatchCtx {
     GetResultBatchCtx(brpc::Controller* cntl_, PFetchDataResult* result_, google::protobuf::Closure* done_)
             : cntl(cntl_), result(result_), done(done_) {}
 
-    void on_failure(const Status& status);
+    void on_failure(const Status& status, QueryStatistics* statistics = nullptr);
     void on_close(int64_t packet_seq, QueryStatistics* statistics = nullptr);
     void on_data(TFetchDataResult* t_result, int64_t packet_seq, bool eos = false);
     void on_data(SerializeRes* t_result, int64_t packet_seq, bool eos = false);
