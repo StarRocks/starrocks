@@ -48,8 +48,8 @@ class BitmapIndexEvaluator {
 public:
     using BitmapIndexIteratorSupplier = std::function<StatusOr<BitmapIndexIterator*>(ColumnId)>;
 
-    BitmapIndexEvaluator(const Schema& schema, const PredicateTree& pred_tree)
-            : _schema(schema), _pred_tree(pred_tree) {}
+    BitmapIndexEvaluator(const Schema& schema, const PredicateTree& pred_tree, int bitmap_max_filter_ratio)
+            : _schema(schema), _pred_tree(pred_tree), _bitmap_max_filter_ratio(bitmap_max_filter_ratio) {}
     ~BitmapIndexEvaluator() { close(); }
 
     Status init(BitmapIndexIteratorSupplier&& supplier);
@@ -72,6 +72,7 @@ private:
     BitmapContext _ctx;
     std::vector<BitmapIndexIterator*> _bitmap_index_iterators;
     bool _has_bitmap_index = false;
+    int _bitmap_max_filter_ratio = 0;
 
     bool _closed = false;
 };

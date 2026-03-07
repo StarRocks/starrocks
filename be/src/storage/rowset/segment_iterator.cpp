@@ -754,7 +754,7 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema
         : ChunkIterator(std::move(schema), options.chunk_size),
           _segment(std::move(segment)),
           _opts(std::move(options)),
-          _bitmap_index_evaluator(_schema, _opts.pred_tree),
+          _bitmap_index_evaluator(_schema, _opts.pred_tree, _opts.bitmap_max_filter_ratio),
           _predicate_columns(_opts.pred_tree.num_columns()),
           _enable_predicate_col_late_materialize(_opts.enable_predicate_col_late_materialize) {
     // Initialize vector index context only when needed
