@@ -145,7 +145,7 @@ public class InfoSchemaDbTest {
     public void testGrantUserOnDB() throws Exception {
         String sql = "grant DROP on database db to test_user";
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        authorizationManager.grant(grantStmt);
+        authorizationManager.grant(grantStmt, ctx);
 
         TGetGrantsToRolesOrUserRequest request = new TGetGrantsToRolesOrUserRequest();
         request.setType(TGrantsToType.USER);
@@ -161,12 +161,12 @@ public class InfoSchemaDbTest {
 
         sql = "revoke DROP on database db from test_user";
         RevokePrivilegeStmt revokePrivilegeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        authorizationManager.revoke(revokePrivilegeStmt);
+        authorizationManager.revoke(revokePrivilegeStmt, ctx);
         Assertions.assertFalse(GrantsTo.getGrantsTo(request).isSetGrants_to());
 
         sql = "grant drop on all databases to test_user";
         grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        authorizationManager.grant(grantStmt);
+        authorizationManager.grant(grantStmt, ctx);
         item = new TGetGrantsToRolesOrUserItem();
         item.setGrantee("'test_user'@'%'");
         item.setObject_catalog("default_catalog");
@@ -178,7 +178,7 @@ public class InfoSchemaDbTest {
 
         sql = "revoke DROP on all databases from test_user";
         revokePrivilegeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        authorizationManager.revoke(revokePrivilegeStmt);
+        authorizationManager.revoke(revokePrivilegeStmt, ctx);
         Assertions.assertFalse(GrantsTo.getGrantsTo(request).isSetGrants_to());
     }
 
@@ -186,7 +186,7 @@ public class InfoSchemaDbTest {
     public void testGrantUserOnTable() throws Exception {
         String sql = "grant select on Table db.tbl to test_user";
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        authorizationManager.grant(grantStmt);
+        authorizationManager.grant(grantStmt, ctx);
 
         TGetGrantsToRolesOrUserRequest request = new TGetGrantsToRolesOrUserRequest();
         request.setType(TGrantsToType.USER);
@@ -203,7 +203,7 @@ public class InfoSchemaDbTest {
 
         sql = "revoke select on db.tbl from test_user";
         RevokePrivilegeStmt revokePrivilegeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        authorizationManager.revoke(revokePrivilegeStmt);
+        authorizationManager.revoke(revokePrivilegeStmt, ctx);
         Assertions.assertFalse(GrantsTo.getGrantsTo(request).isSetGrants_to());
     }
 
@@ -211,7 +211,7 @@ public class InfoSchemaDbTest {
     public void testGrantUserOnView() throws Exception {
         String sql = "grant select on view db.v to test_user";
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        authorizationManager.grant(grantStmt);
+        authorizationManager.grant(grantStmt, ctx);
 
         TGetGrantsToRolesOrUserRequest request = new TGetGrantsToRolesOrUserRequest();
         request.setType(TGrantsToType.USER);
@@ -228,12 +228,12 @@ public class InfoSchemaDbTest {
 
         sql = "revoke select on view db.v from test_user";
         RevokePrivilegeStmt revokePrivilegeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        authorizationManager.revoke(revokePrivilegeStmt);
+        authorizationManager.revoke(revokePrivilegeStmt, ctx);
         Assertions.assertFalse(GrantsTo.getGrantsTo(request).isSetGrants_to());
 
         sql = "grant drop on all views in database db to test_user";
         grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        authorizationManager.grant(grantStmt);
+        authorizationManager.grant(grantStmt, ctx);
         item = new TGetGrantsToRolesOrUserItem();
         item.setGrantee("'test_user'@'%'");
         item.setObject_catalog("default_catalog");
@@ -246,7 +246,7 @@ public class InfoSchemaDbTest {
 
         sql = "revoke DROP on all views in database db from test_user";
         revokePrivilegeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        authorizationManager.revoke(revokePrivilegeStmt);
+        authorizationManager.revoke(revokePrivilegeStmt, ctx);
         Assertions.assertFalse(GrantsTo.getGrantsTo(request).isSetGrants_to());
     }
 
@@ -254,7 +254,7 @@ public class InfoSchemaDbTest {
     public void testGrantUserOnUser() throws Exception {
         String sql = "grant impersonate on user test_user2 to test_user";
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        authorizationManager.grant(grantStmt);
+        authorizationManager.grant(grantStmt, ctx);
 
         TGetGrantsToRolesOrUserRequest request = new TGetGrantsToRolesOrUserRequest();
         request.setType(TGrantsToType.USER);
@@ -269,7 +269,7 @@ public class InfoSchemaDbTest {
 
         sql = "revoke impersonate on user test_user2 from test_user";
         RevokePrivilegeStmt revokePrivilegeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        authorizationManager.revoke(revokePrivilegeStmt);
+        authorizationManager.revoke(revokePrivilegeStmt, ctx);
         Assertions.assertFalse(GrantsTo.getGrantsTo(request).isSetGrants_to());
     }
 
@@ -361,15 +361,15 @@ public class InfoSchemaDbTest {
 
         String sql = "grant usage on catalog hive_catalog_1 to test_user";
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        authorizationManager.grant(grantStmt);
+        authorizationManager.grant(grantStmt, ctx);
 
         sql = "grant all on all databases to test_user";
         grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        authorizationManager.grant(grantStmt);
+        authorizationManager.grant(grantStmt, ctx);
 
         sql = "grant all on all tables in all databases to test_user";
         grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        authorizationManager.grant(grantStmt);
+        authorizationManager.grant(grantStmt, ctx);
 
         TGetGrantsToRolesOrUserRequest request = new TGetGrantsToRolesOrUserRequest();
         request.setType(TGrantsToType.USER);
@@ -424,7 +424,7 @@ public class InfoSchemaDbTest {
     public void testView() throws Exception {
         String sql = "grant select on all tables in database db to test_user";
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        authorizationManager.grant(grantStmt);
+        authorizationManager.grant(grantStmt, ctx);
 
         TGetGrantsToRolesOrUserRequest request = new TGetGrantsToRolesOrUserRequest();
         request.setType(TGrantsToType.USER);
@@ -453,11 +453,11 @@ public class InfoSchemaDbTest {
 
         sql = "revoke select on all tables in database db from test_user";
         RevokePrivilegeStmt revokePrivilegeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        authorizationManager.revoke(revokePrivilegeStmt);
+        authorizationManager.revoke(revokePrivilegeStmt, ctx);
 
         sql = "grant select on all views in database db to test_user";
         grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        authorizationManager.grant(grantStmt);
+        authorizationManager.grant(grantStmt, ctx);
         Assertions.assertEquals(GrantsTo.getGrantsTo(request).grants_to.size(), 1);
         TGetGrantsToRolesOrUserItem item3 = new TGetGrantsToRolesOrUserItem();
         item3.setGrantee("'test_user'@'%'");
@@ -470,11 +470,11 @@ public class InfoSchemaDbTest {
         Assertions.assertTrue(GrantsTo.getGrantsTo(request).grants_to.contains(item3));
         sql = "revoke select on all views in database db from test_user";
         revokePrivilegeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        authorizationManager.revoke(revokePrivilegeStmt);
+        authorizationManager.revoke(revokePrivilegeStmt, ctx);
 
         sql = "grant select on all materialized views in database db to test_user";
         grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        authorizationManager.grant(grantStmt);
+        authorizationManager.grant(grantStmt, ctx);
         System.out.println(GrantsTo.getGrantsTo(request).grants_to);
         Assertions.assertEquals(GrantsTo.getGrantsTo(request).grants_to.size(), 1);
         TGetGrantsToRolesOrUserItem item4 = new TGetGrantsToRolesOrUserItem();
@@ -488,6 +488,6 @@ public class InfoSchemaDbTest {
         Assertions.assertTrue(GrantsTo.getGrantsTo(request).grants_to.contains(item4));
         sql = "revoke select on all materialized views in database db from test_user";
         revokePrivilegeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        authorizationManager.revoke(revokePrivilegeStmt);
+        authorizationManager.revoke(revokePrivilegeStmt, ctx);
     }
 }
