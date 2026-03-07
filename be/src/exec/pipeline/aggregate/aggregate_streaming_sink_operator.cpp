@@ -18,7 +18,7 @@
 
 #include "base/simd/simd.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "runtime/current_thread.h"
 namespace starrocks::pipeline {

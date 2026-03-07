@@ -14,7 +14,7 @@
 
 #include "exec/spill/operator_mem_resource_manager.h"
 
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
 #include "exec/pipeline/operator.h"
 
 namespace starrocks::spill {

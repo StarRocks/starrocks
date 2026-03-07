@@ -18,7 +18,7 @@
 
 #include "base/testutil/assert.h"
 #include "column/nullable_column.h"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/util/thrift_util.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/group_execution/execution_group_builder.h"

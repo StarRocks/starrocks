@@ -30,7 +30,7 @@
 #include "base/string/slice.h"
 #include "base/system/errno.h"
 #include "base/testutil/sync_point.h"
-#include "common/config.h"
+#include "common/config_local_io_fwd.h"
 #include "common/logging.h"
 #include "fs/encrypt_file.h"
 #include "fs/fd_cache.h"

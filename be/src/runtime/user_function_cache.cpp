@@ -42,7 +42,7 @@
 
 #include "base/concurrency/spinlock.h"
 #include "base/utility/dynamic_util.h"
-#include "common/config.h"
+#include "common/config_udf_fwd.h"
 #include "common/status.h"
 #include "fmt/compile.h"
 #include "fs/fs.h"

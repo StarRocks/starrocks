@@ -32,7 +32,7 @@
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
-#include "common/config.h"
+#include "common/config_json_flat_fwd.h"
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "common/statusor.h"
