@@ -39,6 +39,9 @@ CONF_String(query_scratch_dirs, "${STARROCKS_HOME}");
 // for pprof
 CONF_String(pprof_profile_dir, "${STARROCKS_HOME}/log");
 
+// The directory of the flamegraph tool, which should contains pprof, stackcollapse-go.pl, and flamegraph.pl.
+CONF_String(flamegraph_tool_dir, "${STARROCKS_HOME}/bin/flamegraph");
+
 // Dir to save files downloaded by SmallFileMgr
 CONF_String(small_file_dir, "${STARROCKS_HOME}/lib/small_file/");
 

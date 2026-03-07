@@ -20,6 +20,7 @@
         "plugin_path",
         "query_scratch_dirs",
         "pprof_profile_dir",
+        "flamegraph_tool_dir",
         "small_file_dir",
         "pull_load_task_dir",
         "sys_log_dir",
@@ -102,7 +103,18 @@
     {
       "path": "be/src/common/config_merge_commit_fwd.h",
       "configs": [
-        "merge_commit_trace_log_enable"
+        "merge_commit_trace_log_enable",
+        "merge_commit_stream_load_pipe_block_wait_us",
+        "merge_commit_stream_load_pipe_max_buffered_bytes",
+        "merge_commit_default_timeout_ms",
+        "merge_commit_rpc_reqeust_timeout_ms",
+        "merge_commit_rpc_request_retry_interval_ms",
+        "merge_commit_rpc_request_retry_num",
+        "merge_commit_txn_state_cache_capacity",
+        "merge_commit_txn_state_clean_interval_sec",
+        "merge_commit_txn_state_expire_time_sec",
+        "merge_commit_txn_state_poll_interval_ms",
+        "merge_commit_txn_state_poll_max_fail_times"
       ]
     },
     {
@@ -117,7 +129,34 @@
         "enable_metric_calculator",
         "enable_system_metrics",
         "enable_table_metrics",
-        "max_table_metrics_num"
+        "max_table_metrics_num",
+        "dump_metrics_with_bvar",
+        "enable_collect_table_metrics",
+        "periodic_counter_update_period_ms"
+      ]
+    },
+    {
+      "path": "be/src/common/config_ingest_fwd.h",
+      "configs": [
+        "be_http_num_workers",
+        "enable_http_stream_load_limit",
+        "streaming_load_max_mb",
+        "streaming_load_max_batch_size_mb",
+        "enable_stream_load_verbose_log",
+        "txn_commit_rpc_timeout_ms",
+        "streaming_load_rpc_max_alive_time_sec",
+        "enable_load_channel_rpc_async",
+        "load_channel_abort_clean_up_delay_seconds",
+        "enable_load_colocate_mv"
+      ]
+    },
+    {
+      "path": "be/src/common/config_http_fwd.h",
+      "configs": [
+        "download_low_speed_limit_kbps",
+        "download_low_speed_time",
+        "max_download_speed_kbps",
+        "enable_token_check"
       ]
     },
     {

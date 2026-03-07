@@ -40,7 +40,7 @@
 #include "base/path/filesystem_util.h"
 #include "base/path/path_util.h"
 #include "base/time/time.h"
-#include "common/config.h"
+#include "common/config_http_fwd.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "http/http_channel.h"

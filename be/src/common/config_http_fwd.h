@@ -20,26 +20,16 @@
 #include "common/configbase.h"
 
 namespace starrocks::config {
-// Period to update rate counters and sampling counters in ms.
-CONF_mInt32(periodic_counter_update_period_ms, "500");
+// The max download speed(KB/s).
+CONF_mInt32(max_download_speed_kbps, "50000");
 
-// to open/close system metrics
-CONF_Bool(enable_system_metrics, "true");
+// The download low speed limit(KB/s).
+CONF_mInt32(download_low_speed_limit_kbps, "50");
 
-// If set to true, metric calculator will run
-CONF_Bool(enable_metric_calculator, "true");
+// The download low speed time(seconds).
+CONF_mInt32(download_low_speed_time, "300");
 
-CONF_mBool(dump_metrics_with_bvar, "true");
-
-// used to control whether the metrics/ interface collects table metrics
-CONF_mBool(enable_collect_table_metrics, "true");
-
-// use to decide whether to enable the collection of table metrics
-CONF_Bool(enable_table_metrics, "false");
-
-// Used to limit the number of tables in table metrics.
-// the metrics/ interface returns metrics for at most max_table_metrics_num tables
-// to avoid including too much data in the response
-CONF_Int64(max_table_metrics_num, "100");
+// to forward compatibility, will be removed later
+CONF_mBool(enable_token_check, "true");
 
 } // namespace starrocks::config
