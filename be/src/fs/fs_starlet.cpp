@@ -32,7 +32,7 @@
 #include "base/string/string_parser.hpp"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
-#include "common/config.h"
+#include "common/config_starlet_fwd.h"
 #include "fs/encrypt_file.h"
 #include "fs/output_stream_adapter.h"
 #include "gutil/strings/util.h"
