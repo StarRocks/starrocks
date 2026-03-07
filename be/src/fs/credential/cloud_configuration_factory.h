@@ -69,6 +69,8 @@ static const std::string HUAWEI_OBS_ACCESS_KEY_DOT = "fs.obs.access.key";
 static const std::string HUAWEI_OBS_SECRET_KEY_DOT = "fs.obs.secret.key";
 static const std::string HUAWEI_OBS_ENDPOINT = "fs.obs.endpoint";
 
+static const std::string OSS_UDF_PATH = "oss.udf_path";
+
 class CloudConfigurationFactory {
 public:
     static const AWSCloudConfiguration create_aws(const TCloudConfiguration& t_cloud_configuration);

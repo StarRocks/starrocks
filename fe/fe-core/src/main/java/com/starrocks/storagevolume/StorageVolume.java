@@ -48,7 +48,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
 public class StorageVolume implements Writable, GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(StorageVolume.class);
 

@@ -24,7 +24,6 @@ public class CloudConfigurationConstants {
      * Refer this issue: <a href="https://issues.apache.org/jira/browse/HADOOP-17771">S3AFS creation fails "Unable to find a region via the region provider chain."</a>
      */
     public static final String DEFAULT_AWS_REGION = "us-east-1";
-
     // Credential for AWS s3
     public static final String AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR = "aws.s3.use_aws_sdk_default_behavior";
     public static final String AWS_S3_USE_INSTANCE_PROFILE = "aws.s3.use_instance_profile";

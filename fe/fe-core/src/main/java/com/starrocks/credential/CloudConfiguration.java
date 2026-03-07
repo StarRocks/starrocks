@@ -24,7 +24,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.HashMap;
 import java.util.Map;
-
 public class CloudConfiguration {
     private static final Logger LOG = LogManager.getLogger(CloudConfiguration.class);
 
@@ -52,6 +51,7 @@ public class CloudConfiguration {
         if (hadoopUsername != null) {
             configuration.set(HadoopExt.HADOOP_USERNAME, hadoopUsername);
         }
+
         configuration.set(HadoopExt.HADOOP_CLOUD_CONFIGURATION_STRING, toConfString());
         HadoopExt.getInstance().rewriteConfiguration(configuration);
     }
