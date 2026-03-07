@@ -101,22 +101,6 @@ inline AggDataPtr AllocateState<HashMapWithKey>::operator()(std::nullptr_t) {
     }
 }
 
-template <bool UseIntermediateAsOutput>
-bool AggFunctionTypes::is_result_nullable() const {
-    if constexpr (UseIntermediateAsOutput) {
-        // If using intermediate results as output, no output will be generated and only the input will be serialized.
-        // Therefore, only judge whether the input is nullable to decide whether to serialize null data.
-        return has_nullable_child || serialize_always_nullable;
-    } else {
-        // `is_nullable` means whether the output MAY be nullable. It will be false only when the output is always non-nullable.
-        // Therefore, we need to decide whether the output is really nullable case by case:
-        // 1. Same as input: `has_nullable_child` = `has_nullable_child && is_nullable(true)`.
-        // 2. Always non-nullable: `false` = `has_nullable_child && is_nullable(false)`, eg. count, count distinct, and bitmap_union_int.
-        // 3. Always nullable: `is_always_nullable_result`.
-        return (has_nullable_child && is_nullable) || is_always_nullable_result;
-    }
-}
-
 bool AggFunctionTypes::use_nullable_fn(bool use_intermediate_as_output) const {
     // The non-nullable version functions assume that both the input and output are non-nullable, while the nullable version
     // functions support nullable input or nullable output, which will judge whether the input and output are nullable.
