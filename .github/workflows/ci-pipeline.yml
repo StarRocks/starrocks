@@ -313,6 +313,12 @@ jobs:
           ref: refs/pull/${{ github.event.pull_request.number }}/merge
           fetch-depth: 1
 
+      - name: Check License Headers
+        uses: apache/skywalking-eyes/header@v0.7.0
+        with:
+          log: info
+          config: .github/.licenserc.yaml
+
       - name: Run Clang-Format
         id: run_clang_format
         if: steps.checkout_code.outcome == 'success'
