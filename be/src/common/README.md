@@ -24,7 +24,7 @@ The current design keeps `config.h` authoritative and derives smaller forward he
 
 - `common/config.h`: authoritative declarations
 - `common/config.cpp`: definitions
-- `build-support/config_fwd_headers_manifest.json`: selects which configs belong to which forward header
+- `common/config_fwd_headers_manifest.json`: selects which configs belong to which forward header
 - `build-support/gen_config_fwd_headers.py`: generates the committed `config_<domain>_fwd.h` files
 
 The generator preserves comments, declaration order, and surrounding preprocessor guards from `config.h`. By default it
@@ -46,7 +46,7 @@ From the repo root:
 
 1. Add the new `CONF_*` entry in `be/src/common/config.h` or an existing local config fragment.
 2. Decide whether the config should be exposed through an existing `config_<domain>_fwd.h`.
-3. If needed, update `build-support/config_fwd_headers_manifest.json`.
+3. If needed, update `be/src/common/config_fwd_headers_manifest.json`.
    - Add the config name to an existing header entry if the domain already fits.
    - Add a new header entry only when the config does not fit an existing domain cleanly.
 4. Regenerate forward headers:

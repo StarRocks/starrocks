@@ -17,7 +17,7 @@
 #include "base/time/monotime.h"
 #include "base/time/time.h"
 #include "column/chunk.h"
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
 #include "connector/async_flush_stream_poller.h"
 #include "connector/connector_sink_executor.h"
 #include "connector/sink_memory_manager.h"
