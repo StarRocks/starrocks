@@ -1242,6 +1242,18 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
      *  has broken from mv existed refreshed data.
      */
     public static void inactiveRelatedMaterializedViewsRecursive(Table olapTable, String reason) {
+        inactiveRelatedMaterializedViewsRecursive(olapTable, reason, true);
+    }
+
+    /**
+     * Inactive related materialized views because of base table/view is changed or dropped in the leader background.
+     *
+     * @param clearVersionMap true for schema-change / DROP TABLE events (version map must be cleared so MV is fully
+     *                        refreshed); false for DROP VIEW events (version map must be preserved — existing MV
+     *                        partition data is still valid).
+     */
+    public static void inactiveRelatedMaterializedViewsRecursive(Table olapTable, String reason,
+                                                                 boolean clearVersionMap) {
         if (olapTable == null) {
             return;
         }
@@ -1263,7 +1275,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 LOG.info("Ignore materialized view {} does not exists", mvId);
                 continue;
             }
-            doInactiveMaterializedViewRecursive(mv, reason, true, inactiveMVIds);
+            doInactiveMaterializedViewRecursive(mv, reason, clearVersionMap, inactiveMVIds);
         }
     }
 

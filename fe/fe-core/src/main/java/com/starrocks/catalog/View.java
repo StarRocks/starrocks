@@ -37,6 +37,8 @@ package com.starrocks.catalog;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.alter.AlterMVJobExecutor;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.SqlCredentialRedactor;
 import com.starrocks.server.GlobalStateMgr;
@@ -104,6 +106,17 @@ public class View extends Table {
 
     public View(long id, String name, List<Column> schema, TableType type) {
         super(id, name, type, schema);
+    }
+
+    @Override
+    public void onDrop(Database db, boolean force, boolean replay) {
+        // Inactivate dependent MVs but preserve their version maps: the view is a logical object,
+        // the MV's physical partition data is still valid on disk and should not be treated as
+        // fully stale on the next refresh (fix for issue #68875).
+        if (!replay) {
+            AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(this,
+                    MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(getName()), false);
+        }
     }
 
     public QueryStatement getQueryStatement() throws StarRocksPlannerException {
