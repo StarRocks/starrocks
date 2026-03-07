@@ -73,4 +73,12 @@ public class ADBCScanPlanTest extends ConnectorPlanTestBase {
         assertContains(plan, "SCAN ADBC");
         assertContains(plan, "OlapScanNode");
     }
+
+    @Test
+    public void testADBCTlsExplain() throws Exception {
+        // Verify that Thrift serialization works with TLS fields present (but null)
+        String sql = "select a from adbc0.test_db0.tbl0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "SCAN ADBC");
+    }
 }

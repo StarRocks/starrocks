@@ -159,4 +159,83 @@ public class ADBCConnectorTest {
         ADBCTable table = new ADBCTable(1L, "t", columns, "db", "cat", new HashMap<>());
         assertTrue(table.isSupported());
     }
+
+    // TLS validation tests
+
+    @Test
+    public void testTlsNonexistentCaCertFileThrows() {
+        Map<String, String> props = new HashMap<>();
+        props.put(ADBCConnector.PROP_DRIVER, "flight_sql");
+        props.put(ADBCConnector.PROP_URL, "grpc+tls://localhost:443");
+        props.put(ADBCConnector.PROP_TLS_CA_CERT_FILE, "/nonexistent/ca.pem");
+
+        StarRocksConnectorException ex = assertThrows(StarRocksConnectorException.class, () -> {
+            new ADBCConnector(createContext(props));
+        });
+        assertTrue(ex.getMessage().contains("does not exist"), "Expected 'does not exist' in: " + ex.getMessage());
+    }
+
+    @Test
+    public void testTlsMtlsMissingKeyThrows() {
+        Map<String, String> props = new HashMap<>();
+        props.put(ADBCConnector.PROP_DRIVER, "flight_sql");
+        props.put(ADBCConnector.PROP_URL, "grpc+tls://localhost:443");
+        props.put(ADBCConnector.PROP_TLS_CLIENT_CERT_FILE, "/tmp/some.pem");
+
+        StarRocksConnectorException ex = assertThrows(StarRocksConnectorException.class, () -> {
+            new ADBCConnector(createContext(props));
+        });
+        assertTrue(ex.getMessage().contains("must both be provided"), "Expected 'must both be provided' in: " + ex.getMessage());
+    }
+
+    @Test
+    public void testTlsMtlsMissingCertThrows() {
+        Map<String, String> props = new HashMap<>();
+        props.put(ADBCConnector.PROP_DRIVER, "flight_sql");
+        props.put(ADBCConnector.PROP_URL, "grpc+tls://localhost:443");
+        props.put(ADBCConnector.PROP_TLS_CLIENT_KEY_FILE, "/tmp/some.key");
+
+        StarRocksConnectorException ex = assertThrows(StarRocksConnectorException.class, () -> {
+            new ADBCConnector(createContext(props));
+        });
+        assertTrue(ex.getMessage().contains("must both be provided"), "Expected 'must both be provided' in: " + ex.getMessage());
+    }
+
+    @Test
+    public void testNonTlsUriWithCertPropsDoesNotThrow() {
+        Map<String, String> props = new HashMap<>();
+        props.put(ADBCConnector.PROP_DRIVER, "flight_sql");
+        props.put(ADBCConnector.PROP_URL, "grpc://localhost:31337");
+        props.put(ADBCConnector.PROP_TLS_CA_CERT_FILE, "/some/path");
+
+        // Should NOT throw -- certs are just ignored with warning for non-TLS URI
+        ADBCConnector connector = new ADBCConnector(createContext(props));
+        assertNotNull(connector);
+    }
+
+    @Test
+    public void testTlsVerifyFalseDoesNotThrow() {
+        Map<String, String> props = new HashMap<>();
+        props.put(ADBCConnector.PROP_DRIVER, "flight_sql");
+        props.put(ADBCConnector.PROP_URL, "grpc+tls://localhost:443");
+        props.put(ADBCConnector.PROP_TLS_VERIFY, "false");
+
+        // Should NOT throw -- insecure mode with no cert files
+        ADBCConnector connector = new ADBCConnector(createContext(props));
+        assertNotNull(connector);
+    }
+
+    @Test
+    public void testTlsUriCaseInsensitive() {
+        Map<String, String> props = new HashMap<>();
+        props.put(ADBCConnector.PROP_DRIVER, "flight_sql");
+        props.put(ADBCConnector.PROP_URL, "GRPC+TLS://localhost:443");
+        props.put(ADBCConnector.PROP_TLS_CA_CERT_FILE, "/nonexistent/ca.pem");
+
+        // Should detect TLS and validate the cert file (which doesn't exist)
+        StarRocksConnectorException ex = assertThrows(StarRocksConnectorException.class, () -> {
+            new ADBCConnector(createContext(props));
+        });
+        assertTrue(ex.getMessage().contains("does not exist"), "Expected 'does not exist' in: " + ex.getMessage());
+    }
 }

@@ -53,17 +53,18 @@ public class ADBCConnector implements Connector {
                     + " Certificates will be ignored. Use 'grpc+tls://' to enable TLS.", catalogName);
         }
         if (isTls) {
-            validateCertFile(PROP_TLS_CA_CERT_FILE);
-            validateCertFile(PROP_TLS_CLIENT_CERT_FILE);
-            validateCertFile(PROP_TLS_CLIENT_KEY_FILE);
-
-            // mTLS requires both cert and key
+            // mTLS requires both cert and key -- check structural validity first
             String clientCert = properties.get(PROP_TLS_CLIENT_CERT_FILE);
             String clientKey = properties.get(PROP_TLS_CLIENT_KEY_FILE);
             if ((clientCert != null) != (clientKey != null)) {
                 throw new StarRocksConnectorException(
                         "adbc.tls.client_cert_file and adbc.tls.client_key_file must both be provided for mTLS");
             }
+
+            // Then validate file existence/readability
+            validateCertFile(PROP_TLS_CA_CERT_FILE);
+            validateCertFile(PROP_TLS_CLIENT_CERT_FILE);
+            validateCertFile(PROP_TLS_CLIENT_KEY_FILE);
         }
 
         // Try to create ADBC metadata; if failed, it will be created later when getMetadata() is called.
