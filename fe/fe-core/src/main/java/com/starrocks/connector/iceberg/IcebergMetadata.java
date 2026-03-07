@@ -777,6 +777,10 @@ public class IcebergMetadata implements ConnectorMetadata {
         final Iterable<Snapshot> snapshots = SnapshotUtil.ancestorsBetween(
                 toSnapshotIdInclusive, fromSnapshotIdExclusive, nativeTable::snapshot);
         for (Snapshot snapshot : snapshots) {
+            // replace operations are the result of iceberg maintenance and do not change table data. Skip them.
+            if (snapshot.operation() != null && snapshot.operation().equals(DataOperations.REPLACE)) {
+                continue;
+            }
             long currentSnapshotId = snapshot.snapshotId();
             TvrTableDelta delta = TvrTableDelta.of(currentSnapshotId, lastSnapshotId);
             TvrDeltaStats stats = TvrDeltaStats.of(snapshot);
