@@ -40,6 +40,7 @@
 #include "service/staros_worker.h"
 #include "storage/lake/filenames.h"
 #include "storage/olap_common.h"
+#include "testutil/sync_point.h"
 #include "util/defer_op.h"
 #include "util/lru_cache.h"
 #include "util/stopwatch.hpp"
@@ -637,33 +638,58 @@ static void shard_fs_cache_deleter(const CacheKey& /*key*/, void* value) {
     delete static_cast<std::shared_ptr<staros::starlet::fslib::FileSystem>*>(value);
 }
 
-std::shared_ptr<FileSystem> new_fs_starlet(int64_t shard_id) {
-    // The cache here is used to store fslib's shard fs which is used for cross cluster migration,
-    // where each shard fs correspond to one storage volume on source cluster.
-    // We chose a small cache capacity size here, with expect that normally very few storage volumes are used.
+// Internal helper to get or create shard filesystem cache
+static Cache* get_shard_fs_cache() {
     constexpr size_t kDefaultCacheCapacity = 1024 * 10;
     static std::unique_ptr<Cache> g_shard_fs_cache(new_lru_cache(kDefaultCacheCapacity));
+    return g_shard_fs_cache.get();
+}
 
-    // Build cache key from shard_id
-    std::string key_str = std::to_string(shard_id);
+std::shared_ptr<FileSystem> new_fs_starlet(int64_t shard_id, bool use_raw_path) {
+    // The cache here is used to store fslib's shard fs which is used for cross cluster migration,
+    // where each shard fs correspond to one storage volume on source cluster.
+    Cache* cache = get_shard_fs_cache();
+
+    // Build cache key from shard_id, appending "_1" suffix for raw path mode
+    // to differentiate from normal mode entries within the same cache instance.
+    std::string key_str = use_raw_path ? fmt::format("{}_1", shard_id) : std::to_string(shard_id);
     CacheKey cache_key(key_str);
 
     // Try cache lookup
-    Cache::Handle* handle = g_shard_fs_cache->lookup(cache_key);
+    Cache::Handle* handle = cache->lookup(cache_key);
     if (handle != nullptr) {
-        auto* cached_ptr =
-                static_cast<std::shared_ptr<staros::starlet::fslib::FileSystem>*>(g_shard_fs_cache->value(handle));
+        auto* cached_ptr = static_cast<std::shared_ptr<staros::starlet::fslib::FileSystem>*>(cache->value(handle));
         std::shared_ptr<staros::starlet::fslib::FileSystem> shard_fs = *cached_ptr;
-        g_shard_fs_cache->release(handle);
+        cache->release(handle);
         return std::make_shared<StarletFileSystem>(shard_fs);
     }
 
     // Cache miss - create new shard filesystem
     staros::starlet::fslib::Configuration conf;
-    absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>> fs_st =
-            g_worker->get_shard_filesystem(shard_id, conf);
+    if (use_raw_path) {
+        // S3 raw path mode: use the input path as-is without normalize_path processing
+        // This is required for S3 storage type to support partitioned prefix feature
+        //
+        // The configuration is passed to StarOSWorker::build_conf_from_shard_info() which
+        // forwards it to ShardInfo::fslib_conf_from_this() as initial configuration.
+        // When cache is enabled, fslib_conf_from_this() will automatically add "cachefs."
+        // prefix to all configuration keys.
+        conf[staros::starlet::fslib::kS3UseRawPathWithScheme] = "true";
+    }
+    // For non-S3 storage types (use_raw_path=false), use default configuration
+    // Starlet will use normalize_path to combine sys.root with the relative path
+#ifdef BE_TEST
+    absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>> fs_st(absl::UnimplementedError(""));
+    TEST_SYNC_POINT_CALLBACK("new_fs_starlet::get_shard_filesystem", &fs_st);
+    if (absl::IsUnimplemented(fs_st.status())) {
+        fs_st = g_worker->get_shard_filesystem(shard_id, conf);
+    }
+#else
+    auto fs_st = g_worker->get_shard_filesystem(shard_id, conf);
+#endif
     if (!fs_st.ok()) {
-        LOG(WARNING) << "Failed to get shard filesystem, shard_id: " << shard_id << ", error: " << fs_st.status();
+        LOG(WARNING) << "Failed to get shard filesystem, shard_id: " << shard_id << ", use_raw_path: " << use_raw_path
+                     << ", error: " << fs_st.status();
         return nullptr;
     }
 
@@ -671,19 +697,20 @@ std::shared_ptr<FileSystem> new_fs_starlet(int64_t shard_id) {
 
     // Insert into cache
     auto* cache_value = new std::shared_ptr<staros::starlet::fslib::FileSystem>(shard_fs);
-    handle = g_shard_fs_cache->insert(cache_key, cache_value, 1, shard_fs_cache_deleter);
+    handle = cache->insert(cache_key, cache_value, 1, shard_fs_cache_deleter);
     if (handle != nullptr) {
-        g_shard_fs_cache->release(handle);
+        cache->release(handle);
     } else {
         delete cache_value;
     }
 
     LOG(INFO) << "Created new shard filesystem, shard_id: " << shard_id
-              << ", cache_inserts: " << g_shard_fs_cache->get_insert_count()
-              << ", cache_memory: " << g_shard_fs_cache->get_memory_usage() << " bytes";
+              << ", cache_inserts: " << cache->get_insert_count() << ", use_raw_path: " << use_raw_path
+              << ", cache_memory: " << cache->get_memory_usage() << " bytes";
 
     return std::make_shared<StarletFileSystem>(shard_fs);
 }
+
 } // namespace starrocks
 
 #endif // USE_STAROS
