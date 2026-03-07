@@ -3621,6 +3621,14 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The number of recent successful Compaction task records to keep in the memory of the Leader FE node in a shared-data cluster. You can view recent successful Compaction task records using the `SHOW PROC '/compactions'` command. Note that the Compaction history is stored in the FE process memory, and it will be lost if the FE process is restarted.
 - Introduced in: v3.1.0
 
+##### `lake_compaction_max_parallel_default`
+
+- Default: 3
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Default max parallel compaction subtasks per tablet when `lake_compaction_max_parallel` is not specified in table properties. `0` means disable parallel compaction. This config is used as the default value for the table property `lake_compaction_max_parallel`.
+
 ##### `lake_compaction_max_tasks`
 
 - Default: -1
