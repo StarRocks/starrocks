@@ -167,6 +167,9 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     // Virtual columns are not persisted and only exist during query analysis and planning.
     private transient boolean isVirtual = false;
 
+    // Indicates whether this column supports meta scan.
+    private transient boolean isSupportMetaScan = true;
+
     // The timestamp when this column is created, the unit should be the same as
     // PhysicalPartition#visibleVersionTime, which is milliseconds by default.
     @SerializedName(value = "createdTime")
@@ -467,6 +470,14 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     public void setIsVirtual(boolean virtual) {
         isVirtual = virtual;
+    }
+
+    public boolean isSupportMetaScan() {
+        return isSupportMetaScan;
+    }
+
+    public void setIsSupportMetaScan(boolean supportMetaScan) {
+        isSupportMetaScan = supportMetaScan;
     }
 
     public boolean isShadowColumn() {

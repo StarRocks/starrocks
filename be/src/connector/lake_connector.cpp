@@ -22,6 +22,7 @@
 #include "exec/connector_scan_node.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/scan/glm_manager.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr_factory.h"
 #include "exprs/jsonpath.h"
@@ -34,10 +35,8 @@
 #include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
 #include "storage/predicate_parser.h"
-#include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/projection_iterator.h"
 #include "storage/rowset/short_key_range_option.h"
-#include "storage/runtime_range_pruner.hpp"
 #include "storage/virtual_column_utils.h"
 
 namespace starrocks::connector {
@@ -396,6 +395,23 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
     std::vector<uint32_t> reader_columns;
 
     RETURN_IF_ERROR(get_tablet(_scan_range));
+
+    bool enable_glm = thrift_lake_scan_node.__isset.enable_global_late_materialization &&
+                      thrift_lake_scan_node.enable_global_late_materialization;
+    if (enable_glm) {
+        int32_t scan_node_id = _provider->_scan_node->id();
+        auto* glm_mgr = runtime_state->query_ctx()->global_late_materialization_ctx_mgr();
+        auto* obj_pool = runtime_state->query_ctx()->object_pool();
+        auto creator = [&]() {
+            auto* ctx = obj_pool->add(new LakeScanLazyMaterializationContext());
+            return ctx;
+        };
+        auto* glm_ctx = (LakeScanLazyMaterializationContext*)glm_mgr->get_or_create_ctx(scan_node_id, creator);
+        glm_ctx->set_scan_node(thrift_lake_scan_node);
+        int64_t version = strtoul(_scan_range.version.c_str(), nullptr, 10);
+        glm_ctx->capture_rowsets(_scan_range.tablet_id, version, _morsel->rowsets());
+    }
+
     RETURN_IF_ERROR(_extend_schema_by_access_paths());
     ASSIGN_OR_RETURN(_tablet_schema, extend_schema_by_virtual_columns(_tablet_schema, *_slots));
     RETURN_IF_ERROR(init_global_dicts(&_params));

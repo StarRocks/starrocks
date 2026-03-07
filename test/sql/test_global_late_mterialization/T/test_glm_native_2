@@ -1,0 +1,100 @@
+-- name: test_glm_native_2
+-- case from FE UT GlobalLateMaterializeNativeTest and GlobalLateMaterializationIcebergTest
+
+set enable_global_late_materialization = true;
+set cbo_cte_reuse_rate_v2 = 0;
+
+CREATE TABLE `t0` (
+	`id` int(11) NULL COMMENT "",
+	`data` int(11) NULL COMMENT "",
+	`date` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`id`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1");
+
+CREATE TABLE `t1` (
+	`id` int(11) NULL COMMENT "",
+	`data` int(11) NULL COMMENT "",
+	`date` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`id`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1");
+
+insert into t0 select generate_series, generate_series, generate_series from table(generate_series(1, 200));
+insert into t1 select generate_series, generate_series, generate_series from table(generate_series(1, 200));
+
+-- basic fetch placement
+select * from t0 order by id limit 10;
+insert into blackhole() select * from t0 limit 10;
+select * from t0 where id < 10 order by 1 limit 10;
+insert into blackhole() select * from t0 where id < 10 limit 10;
+
+-- projection
+select * from t0 where id < 10 order by upper(id) limit 10;
+select *,lower(id) from t0 order by upper(id) limit 10;
+
+-- cte
+insert into blackhole()
+with cte as (select id as kid,* from t0 limit 10)
+select * from cte l join cte r on l.kid=r.kid limit 10;
+
+insert into blackhole()
+with cte as (select id as kid,* from t0 limit 10)
+select * from cte where data < 10 limit 5;
+
+insert into blackhole()
+with cte as (select id as kid,* from t0 limit 10)
+select * from cte where data < 10 order by 1 limit 5;
+
+insert into blackhole()
+with cte as (select id as kid,* from t0 limit 10)
+select * from cte l join cte r on l.kid = r.kid order by l.kid limit 10;
+
+insert into blackhole()
+with cte as (select id as kid,* from t0)
+(select * from cte order by id ) union all (select * from cte limit 10) order by kid limit 10;
+
+insert into blackhole()
+with cte as (select id as kid,* from t0)
+(select * from cte order by id limit 10) union all (select * from cte limit 10);
+
+with cte as (select id as kid,* from t0 order by id limit 100)
+select * from cte order by date limit 10;
+
+-- join
+select * from t0 join t1 on t0.id = t1.id order by t0.id, t1.id limit 10;
+select * from t0 join t1 on t0.id = t1.id order by t0.date limit 10;
+select * from t0 join t1 on t0.id = t1.id order by t0.date, t0.data limit 10;
+select * from t0 join [shuffle] t1 on t0.id = t1.id order by t0.date, t0.data limit 10;
+
+-- window
+select *, row_number() over (partition by id) from t0 order by id, data limit 10;
+insert into blackhole() select *, row_number() over (partition by id) from t0 limit 10;
+select *, row_number() over (partition by id) from t0 ORDER BY 1 limit 10;
+
+-- local partition top n
+with cte as (select *, row_number() over (partition by id) rn from t0)
+select * from cte where rn = 1 order by id limit 10;
+with cte as (select *, row_number() over (partition by id) rn from t0)
+select * from cte where rn = 1 order by 1 limit 10;
+with cte as (select *, max(data) over (partition by id) rn from t0)
+select * from cte where rn = 1 order by 1 limit 10;
+
+-- group by
+insert into blackhole () select count(*) from t0 group by id limit 10;
+
+insert into blackhole() with cte as (select id,date from t0 limit 10)
+select distinct id,date from cte order by id, date limit 10;
+
+-- session variable control
+set global_late_materialization_max_fetch_ops = 1;
+set global_late_materialization_max_limit = 1024;
+insert into blackhole() select * from t0 order by id limit 1025;
+with cte as (select * from t0 order by id limit 10)
+select * from cte order by date limit 5;

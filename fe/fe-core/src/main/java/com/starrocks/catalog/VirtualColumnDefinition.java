@@ -24,8 +24,8 @@ public class VirtualColumnDefinition {
     private final String name;
     private final Type type;
     private final String description;
-    private final boolean enabled;
-    
+    private final boolean isSupportMetaScan;
+
     // Lazy-initialized column instance
     private volatile Column column = null;
 
@@ -33,11 +33,11 @@ public class VirtualColumnDefinition {
         this(name, type, description, true);
     }
 
-    public VirtualColumnDefinition(String name, Type type, String description, boolean enabled) {
+    public VirtualColumnDefinition(String name, Type type, String description, boolean supportMetaScan) {
         this.name = name;
         this.type = type;
         this.description = description;
-        this.enabled = enabled;
+        this.isSupportMetaScan = supportMetaScan;
     }
 
     public String getName() {
@@ -52,8 +52,8 @@ public class VirtualColumnDefinition {
         return description;
     }
 
-    public boolean isEnabled() {
-        return enabled;
+    public boolean isSupportMetaScan() {
+        return isSupportMetaScan;
     }
 
     /**
@@ -67,6 +67,7 @@ public class VirtualColumnDefinition {
                 if (column == null) {
                     Column col = new Column(name, type);
                     col.setIsVirtual(true);
+                    col.setIsSupportMetaScan(isSupportMetaScan);
                     column = col;
                 }
             }
@@ -76,6 +77,6 @@ public class VirtualColumnDefinition {
 
     @Override
     public String toString() {
-        return String.format("VirtualColumn(%s, %s, enabled=%s)", name, type, enabled);
+        return String.format("VirtualColumn(%s, %s)", name, type);
     }
 }

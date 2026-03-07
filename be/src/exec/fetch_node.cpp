@@ -16,9 +16,6 @@
 
 #include <protocol/TDebugProtocol.h>
 
-#include <stdexcept>
-
-#include "column/vectorized_fwd.h"
 #include "common/global_types.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/fetch_processor.h"
@@ -28,7 +25,6 @@
 #include "exec/tablet_info.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
-#include "types/logical_type.h"
 
 namespace starrocks {
 FetchNode::FetchNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
@@ -55,8 +51,6 @@ Status FetchNode::init(const TPlanNode& tnode, RuntimeState* state) {
         tuple_ids.emplace_back(tuple_id);
     }
 
-    _dispatcher = state->exec_env()->lookup_dispatcher_mgr()->create_dispatcher(state->query_id(), _target_node_id,
-                                                                                tuple_ids);
     for (const auto& tuple_id : tuple_ids) {
         const auto& tuple_desc = state->desc_tbl().get_tuple_descriptor(tuple_id);
         for (const auto& slot : tuple_desc->slots()) {
@@ -70,8 +64,8 @@ Status FetchNode::init(const TPlanNode& tnode, RuntimeState* state) {
 pipeline::OpFactories FetchNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     OpFactories operators = _children[0]->decompose_to_pipeline(context);
 
-    auto fetch_processor_factory = std::make_shared<pipeline::FetchProcessorFactory>(
-            _target_node_id, _row_pos_descs, _slot_id_to_desc, _nodes_info, _dispatcher);
+    auto fetch_processor_factory = std::make_shared<pipeline::FetchProcessorFactory>(_target_node_id, _row_pos_descs,
+                                                                                     _slot_id_to_desc, _nodes_info);
 
     auto sink_op = std::make_shared<pipeline::FetchSinkOperatorFactory>(context->next_operator_id(), id(),
                                                                         fetch_processor_factory);

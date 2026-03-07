@@ -783,9 +783,10 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     if (options.delete_predicates != nullptr) {
         seg_options.delete_predicates = options.delete_predicates->get_predicates(end_version());
     }
+    seg_options.rowset_id = rowset_meta()->get_rowset_seg_id();
+    seg_options.dynamic_rss_id_base = options.dynamic_rss_id_base;
     if (options.is_primary_keys) {
         seg_options.is_primary_keys = true;
-        seg_options.rowset_id = rowset_meta()->get_rowset_seg_id();
         seg_options.version = options.version;
         // Use _kvstore to ensure we access the correct metadata store for this rowset
         if (_kvstore == nullptr) {
@@ -796,6 +797,7 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     seg_options.rowset_path = _rowset_path;
     seg_options.tablet_id = rowset_meta()->tablet_id();
     seg_options.rowsetid = rowset_meta()->rowset_id();
+
     // Use _kvstore to ensure we access the correct metadata store for this rowset
     seg_options.dcg_loader = std::make_shared<LocalDeltaColumnGroupLoader>(_kvstore);
     if (options.short_key_ranges_option != nullptr) { // logical split.
