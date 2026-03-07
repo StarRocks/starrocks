@@ -370,20 +370,276 @@ test_files=`find ${STARROCKS_TEST_BINARY_DIR} -type f -perm -111 -name "*test" \
 
 echo "[INFO] gtest_filter: $TEST_NAME"
 
+# Helpers below only apply to the two monolithic BE UT binaries:
+# `starrocks_test` and `starrocks_dw_test`.
+is_positive_integer() {
+    [[ "$1" =~ ^[0-9]+$ ]] && (( $1 > 0 ))
+}
+
+run_test_module_parallel() {
+    local target="$1"
+
+    if [ -x "${GTEST_PARALLEL}" ]; then
+        ${GTEST_PARALLEL} ${STARROCKS_TEST_BINARY_DIR}/${target} \
+            --gtest_filter=${TEST_NAME} \
+            --serialize_test_cases ${GTEST_PARALLEL_OPTIONS}
+    else
+        ${STARROCKS_TEST_BINARY_DIR}/${target} $GTEST_OPTIONS --gtest_filter=${TEST_NAME}
+    fi
+}
+
+resolve_be_ut_batch_jobs() {
+    local jobs="${SR_BE_UT_BATCH_JOBS:-}"
+    local parallel_options="${GTEST_PARALLEL_OPTIONS:-}"
+
+    if [[ -z "$jobs" && "$parallel_options" =~ (^|[[:space:]])--workers=([0-9]+)($|[[:space:]]) ]]; then
+        jobs="${BASH_REMATCH[2]}"
+    elif [[ -z "$jobs" && "$parallel_options" =~ (^|[[:space:]])--workers[[:space:]]+([0-9]+)($|[[:space:]]) ]]; then
+        jobs="${BASH_REMATCH[2]}"
+    elif [[ -z "$jobs" ]]; then
+        jobs="$(nproc)"
+    fi
+
+    if ! is_positive_integer "$jobs"; then
+        echo "Error: invalid BE UT batch jobs: ${jobs}" >&2
+        return 1
+    fi
+
+    echo "$jobs"
+}
+
+wait_for_any_pid() {
+    local pid
+    local wait_status
+
+    WAITED_PID=
+    while true; do
+        for pid in "$@"; do
+            if ! kill -0 "$pid" 2>/dev/null; then
+                # Avoid `wait -p`, which is unavailable on some older CI bash versions.
+                if wait "$pid"; then
+                    wait_status=0
+                else
+                    wait_status=$?
+                fi
+                WAITED_PID="$pid"
+                return "$wait_status"
+            fi
+        done
+        sleep 0.1
+    done
+}
+
+discover_concrete_gtests() {
+    local target="$1"
+    local output_file="$2"
+
+    # Use the checked-in helper so the parsing logic is versioned and testable.
+    python3 "${STARROCKS_HOME}/build-support/starrocks_test_batcher.py" discover \
+        --binary "${STARROCKS_TEST_BINARY_DIR}/${target}" \
+        --gtest-filter="${TEST_NAME}" \
+        --output "${output_file}"
+}
+
+plan_test_module_batches() {
+    local tests_file="$1"
+    local manifest_dir="$2"
+    local jobs="$3"
+    local factor="$4"
+    local max_filter_bytes="$5"
+
+    python3 "${STARROCKS_HOME}/build-support/starrocks_test_batcher.py" plan \
+        --tests-file "${tests_file}" \
+        --manifest-dir "${manifest_dir}" \
+        --jobs "${jobs}" \
+        --factor "${factor}" \
+        --max-filter-bytes "${max_filter_bytes}"
+}
+
+run_test_module_batches() {
+    local target="$1"
+    local manifest_root="${STARROCKS_TEST_BINARY_BASE_DIR}/test_batch_manifest"
+    local manifest_dir="${manifest_root}/${target}"
+    local log_dir="${LOG_DIR}/${target}_batches"
+    local tests_file="${manifest_root}/${target}.all_tests.txt"
+    local batch_jobs
+    local batch_factor="${SR_BE_UT_BATCH_FACTOR:-4}"
+    local max_filter_bytes="${SR_BE_UT_BATCH_MAX_FILTER_BYTES:-32768}"
+    local total_tests
+    local manifest_count
+
+    if ! is_positive_integer "$batch_factor"; then
+        echo "Error: invalid BE UT batch factor: ${batch_factor}" >&2
+        return 1
+    fi
+    if ! is_positive_integer "$max_filter_bytes"; then
+        echo "Error: invalid BE UT batch max filter bytes: ${max_filter_bytes}" >&2
+        return 1
+    fi
+
+    # Batch mode reduces repeated process/bootstrap cost by running many tests
+    # per monolithic test process instead of one process per concrete gtest.
+    batch_jobs="$(resolve_be_ut_batch_jobs)" || return 1
+
+    mkdir -p "$manifest_root"
+    if ! discover_concrete_gtests "$target" "$tests_file"; then
+        return 1
+    fi
+
+    total_tests="$(wc -l < "$tests_file")"
+    if [[ -z "$total_tests" || "$total_tests" -eq 0 ]]; then
+        echo "[INFO] ${target} batching found zero concrete tests, falling back to direct execution"
+        ${STARROCKS_TEST_BINARY_DIR}/${target} $GTEST_OPTIONS --gtest_filter=${TEST_NAME}
+        return $?
+    fi
+
+    if ! plan_test_module_batches "$tests_file" "$manifest_dir" "$batch_jobs" "$batch_factor" "$max_filter_bytes"; then
+        return 1
+    fi
+
+    mkdir -p "$log_dir"
+    rm -f "${log_dir}"/batch_*.log
+
+    local -a manifests=()
+    local manifest
+    while IFS= read -r manifest; do
+        manifests+=("$manifest")
+    done < <(find "$manifest_dir" -maxdepth 1 -type f -name 'batch_*.txt' | sort)
+
+    manifest_count="${#manifests[@]}"
+    if (( manifest_count == 0 )); then
+        echo "[INFO] ${target} batch planner produced no manifests, falling back to direct execution"
+        ${STARROCKS_TEST_BINARY_DIR}/${target} $GTEST_OPTIONS --gtest_filter=${TEST_NAME}
+        return $?
+    fi
+
+    echo "[INFO] ${target} mode: batch"
+    echo "[INFO] ${target} batching ${total_tests} tests into ${manifest_count} batches with ${batch_jobs} concurrent jobs"
+
+    local -a active_pids=()
+    local -a failed_batch_ids=()
+    local -a failed_log_paths=()
+    local -a failed_manifests=()
+    local -A pid_to_batch_id=()
+    local -A pid_to_log_path=()
+    local -A pid_to_manifest=()
+    local overall_status=0
+    local batch_id
+    local log_file
+    local joined_filter
+    local batch_test_count
+    local filter_bytes
+    local pid
+    local wait_status
+    local i
+
+    for manifest in "${manifests[@]}"; do
+        # Keep a fixed number of batch processes in flight so startup-heavy
+        # tests still run concurrently without exploding process count.
+        while (( ${#active_pids[@]} >= batch_jobs )); do
+            if wait_for_any_pid "${active_pids[@]}"; then
+                wait_status=0
+            else
+                wait_status=$?
+            fi
+
+            if (( wait_status != 0 )); then
+                overall_status=1
+                failed_batch_ids+=("${pid_to_batch_id[$WAITED_PID]}")
+                failed_log_paths+=("${pid_to_log_path[$WAITED_PID]}")
+                failed_manifests+=("${pid_to_manifest[$WAITED_PID]}")
+            fi
+
+            local -a remaining_pids=()
+            for pid in "${active_pids[@]}"; do
+                if [[ "$pid" != "$WAITED_PID" ]]; then
+                    remaining_pids+=("$pid")
+                fi
+            done
+            active_pids=("${remaining_pids[@]}")
+            unset 'pid_to_batch_id[$WAITED_PID]' 'pid_to_log_path[$WAITED_PID]' 'pid_to_manifest[$WAITED_PID]'
+        done
+
+        batch_id="${manifest##*/}"
+        batch_id="${batch_id%.txt}"
+        log_file="${log_dir}/${batch_id}.log"
+        joined_filter="$(paste -sd: "$manifest")"
+        batch_test_count="$(wc -l < "$manifest")"
+        filter_bytes="${#joined_filter}"
+
+        echo "[INFO] Run ${target} ${batch_id}: tests=${batch_test_count} filter_bytes=${filter_bytes} log=${log_file}"
+
+        (
+            ${STARROCKS_TEST_BINARY_DIR}/${target} $GTEST_OPTIONS --gtest_filter="${joined_filter}"
+        ) >"${log_file}" 2>&1 &
+        pid=$!
+        active_pids+=("$pid")
+        pid_to_batch_id["$pid"]="$batch_id"
+        pid_to_log_path["$pid"]="$log_file"
+        pid_to_manifest["$pid"]="$manifest"
+    done
+
+    while (( ${#active_pids[@]} > 0 )); do
+        if wait_for_any_pid "${active_pids[@]}"; then
+            wait_status=0
+        else
+            wait_status=$?
+        fi
+
+        if (( wait_status != 0 )); then
+            overall_status=1
+            failed_batch_ids+=("${pid_to_batch_id[$WAITED_PID]}")
+            failed_log_paths+=("${pid_to_log_path[$WAITED_PID]}")
+            failed_manifests+=("${pid_to_manifest[$WAITED_PID]}")
+        fi
+
+        local -a remaining_pids=()
+        for pid in "${active_pids[@]}"; do
+            if [[ "$pid" != "$WAITED_PID" ]]; then
+                remaining_pids+=("$pid")
+            fi
+        done
+        active_pids=("${remaining_pids[@]}")
+        unset 'pid_to_batch_id[$WAITED_PID]' 'pid_to_log_path[$WAITED_PID]' 'pid_to_manifest[$WAITED_PID]'
+    done
+
+    if (( overall_status != 0 )); then
+        echo "[ERROR] ${target} batch execution failed"
+        echo "[ERROR] Failed batch ids: ${failed_batch_ids[*]}"
+        echo "[ERROR] Failed batch logs:"
+        for log_file in "${failed_log_paths[@]}"; do
+            echo "  ${log_file}"
+        done
+        for i in "${!failed_manifests[@]}"; do
+            echo "[ERROR] First 10 tests from ${failed_batch_ids[$i]}:"
+            head -n 10 "${failed_manifests[$i]}"
+        done
+    fi
+
+    return "$overall_status"
+}
+
 run_test_module() {
     TARGET=$1
-    # run cases in gunit test in parallel if has gtest-parallel script.
-    # reference: https://github.com/google/gtest-parallel
+    local ut_mode="${SR_BE_UT_MODE:-batch}"
+
+    # `run_test_module` is only used by the two monolithic BE UT binaries, so
+    # apply the same batch/parallel mode switch to both of them.
     if [[ $TEST_MODULE == '.*'  || $TEST_MODULE == $TARGET ]]; then
         echo "Run test: ${STARROCKS_TEST_BINARY_DIR}/$TARGET"
         if [ ${DRY_RUN} -eq 0 ]; then
-            if [ -x "${GTEST_PARALLEL}" ]; then
-                ${GTEST_PARALLEL} ${STARROCKS_TEST_BINARY_DIR}/$TARGET \
-                    --gtest_filter=${TEST_NAME} \
-                    --serialize_test_cases ${GTEST_PARALLEL_OPTIONS}
-            else
-                ${STARROCKS_TEST_BINARY_DIR}/$TARGET $GTEST_OPTIONS --gtest_filter=${TEST_NAME}
-            fi
+            case "$ut_mode" in
+                batch)
+                    run_test_module_batches "$TARGET"
+                    ;;
+                parallel)
+                    run_test_module_parallel "$TARGET"
+                    ;;
+                *)
+                    echo "Error: invalid SR_BE_UT_MODE: ${ut_mode}" >&2
+                    return 1
+                    ;;
+            esac
         fi
     fi
 }

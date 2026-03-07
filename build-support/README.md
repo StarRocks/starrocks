@@ -20,4 +20,5 @@ Brief notes on helper scripts in this directory.
 - `build-support/gen_notice.py`: Generate NOTICE file content from bundled licenses. Usage: `python3 build-support/gen_notice.py --help`
 - `build-support/lintutils.py`: Shared helpers for lint/format scripts. Imported by other scripts.
 - `build-support/run_clang_format.py`: Run clang-format in check or fix mode for given dirs. Usage: `python3 build-support/run_clang_format.py --help`
+- `build-support/starrocks_test_batcher.py`: Discover concrete `starrocks_test` gtests and split them into batch manifests for `run-be-ut.sh`. Usage: `python3 build-support/starrocks_test_batcher.py --help`
 - `build-support/sync_pom_to_gradle.py`: Sync Maven POM settings into Gradle config. Usage: `python3 build-support/sync_pom_to_gradle.py --help`
