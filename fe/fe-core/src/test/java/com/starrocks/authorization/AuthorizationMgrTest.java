@@ -1865,4 +1865,36 @@ public class AuthorizationMgrTest {
             Authorizer.checkSystemAction(ctx, PrivilegeType.GRANT);
         });
     }
+
+    @Test
+    public void testPublicRoleCacheInvalidation() throws Exception {
+        // Create a test user
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("create user cache_test_user", ctx), ctx);
+        UserIdentity cacheTestUser = UserIdentity.createAnalyzedUserIdentWithIp("cache_test_user", "%");
+
+        AuthorizationMgr manager = ctx.getGlobalStateMgr().getAuthorizationMgr();
+
+        // Switch to the test user and populate the privilege cache
+        setCurrentUserAndRoles(ctx, cacheTestUser);
+
+        // Verify the user does NOT have SELECT on tbl0 initially
+        Assertions.assertThrows(AccessDeniedException.class, () ->
+                Authorizer.checkTableAction(ctx, DB_NAME, TABLE_NAME_0, PrivilegeType.SELECT));
+
+        // Grant SELECT on tbl0 to PUBLIC role (as ROOT)
+        setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+        String grantSql = "GRANT SELECT ON " + DB_NAME + "." + TABLE_NAME_0 + " TO ROLE public";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantSql, ctx), ctx);
+
+        // Switch back to the test user - cache should be invalidated and new privileges should apply
+        setCurrentUserAndRoles(ctx, cacheTestUser);
+
+        // Verify the user now has SELECT on tbl0 through PUBLIC role
+        Authorizer.checkTableAction(ctx, DB_NAME, TABLE_NAME_0, PrivilegeType.SELECT);
+
+        // Cleanup: revoke the privilege from public role
+        setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+        String revokeSql = "REVOKE SELECT ON " + DB_NAME + "." + TABLE_NAME_0 + " FROM ROLE public";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(revokeSql, ctx), ctx);
+    }
 }
