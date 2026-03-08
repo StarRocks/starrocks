@@ -24,10 +24,15 @@
 #include "column/const_column.h"
 #include "common/config_exec_fwd.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 #include "formats/parquet/column_reader_factory.h"
+#include "formats/parquet/complex_column_reader.h"
 #include "formats/parquet/utils.h"
 #include "fs/fs.h"
 #include "runtime/descriptor_helper.h"
+#include "storage/column_expr_predicate.h"
+#include "testutil/exprs_test_helper.h"
 
 namespace starrocks::parquet {
 
@@ -133,6 +138,37 @@ private:
     tparquet::Type::type _type = tparquet::Type::type::INT32;
 };
 
+class MockPredicateErrorReader : public ColumnReader {
+public:
+    explicit MockPredicateErrorReader(const ParquetField* field) : ColumnReader(field) {}
+    ~MockPredicateErrorReader() override = default;
+
+    Status prepare() override { return Status::OK(); }
+
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst_col) override {
+        dst_col->as_mutable_ptr()->append_default(range.span_size());
+        return Status::OK();
+    }
+
+    void set_need_parse_levels(bool need_parse_levels) override {}
+    void get_levels(int16_t** def_levels, int16_t** rep_levels, size_t* num_levels) override {}
+    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+                                 ColumnIOTypeFlags types, bool active) override {}
+    void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override {}
+
+    StatusOr<bool> row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                             CompoundNodeType pred_relation, const uint64_t rg_first_row,
+                                             const uint64_t rg_num_rows) const override {
+        return Status::InternalError("mock row_group_zone_map_filter error");
+    }
+
+    StatusOr<bool> page_index_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                              SparseRange<uint64_t>* row_ranges, CompoundNodeType pred_relation,
+                                              const uint64_t rg_first_row, const uint64_t rg_num_rows) override {
+        return Status::InternalError("mock page_index_zone_map_filter error");
+    }
+};
+
 class GroupReaderTest : public ::testing::Test {
 protected:
     void SetUp() override {}
@@ -159,6 +195,62 @@ private:
 
     ObjectPool _pool;
 };
+
+static StatusOr<const ColumnPredicate*> create_struct_subfield_eq_predicate(ObjectPool* pool, RuntimeState* state,
+                                                                            ColumnId column_id, SlotId slot_id,
+                                                                            const std::vector<std::string>& subfield,
+                                                                            const std::string& value) {
+    std::vector<TExprNode> nodes;
+
+    TExprNode node0 = ExprsTestHelper::create_binary_pred_node(TPrimitiveType::VARCHAR, TExprOpcode::EQ);
+    node0.__set_is_monotonic(true);
+    nodes.emplace_back(node0);
+
+    TExprNode node1;
+    node1.node_type = TExprNodeType::SUBFIELD_EXPR;
+    node1.is_nullable = true;
+    node1.type = gen_type_desc(TPrimitiveType::VARCHAR);
+    node1.num_children = 1;
+    node1.used_subfield_names = subfield;
+    node1.__isset.used_subfield_names = true;
+    node1.__set_is_monotonic(true);
+    nodes.emplace_back(node1);
+
+    TExprNode node2;
+    node2.node_type = TExprNodeType::SLOT_REF;
+    node2.type = gen_type_desc(TPrimitiveType::VARCHAR);
+    node2.num_children = 0;
+    TSlotRef t_slot_ref;
+    t_slot_ref.slot_id = slot_id;
+    t_slot_ref.tuple_id = 0;
+    node2.__set_slot_ref(t_slot_ref);
+    node2.is_nullable = true;
+    node2.__set_is_monotonic(true);
+    nodes.emplace_back(node2);
+
+    TExprNode node3;
+    node3.node_type = TExprNodeType::STRING_LITERAL;
+    node3.type = gen_type_desc(TPrimitiveType::VARCHAR);
+    node3.num_children = 0;
+    TStringLiteral string_literal;
+    string_literal.value = value;
+    node3.__set_string_literal(string_literal);
+    node3.is_nullable = false;
+    node3.__set_is_monotonic(true);
+    nodes.emplace_back(node3);
+
+    TExpr t_expr;
+    t_expr.nodes = std::move(nodes);
+    std::vector<TExpr> t_conjuncts{t_expr};
+    std::vector<ExprContext*> conjunct_ctxs;
+    RETURN_IF_ERROR(ExprFactory::create_expr_trees(pool, t_conjuncts, &conjunct_ctxs, nullptr));
+    RETURN_IF_ERROR(ExprExecutor::prepare(conjunct_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(conjunct_ctxs, state));
+    ASSIGN_OR_RETURN(auto pred,
+                     ColumnExprPredicate::make_column_expr_predicate(get_type_info(LogicalType::TYPE_VARCHAR),
+                                                                     column_id, state, conjunct_ctxs[0], nullptr));
+    return pred;
+}
 
 ChunkPtr GroupReaderTest::_create_chunk(GroupReaderParam* param) {
     ChunkPtr chunk = std::make_shared<Chunk>();
@@ -1579,6 +1671,56 @@ TEST_F(GroupReaderTest, VariantColumnReaderWithTimeMillis) {
     auto st = ColumnReaderFactory::create(options, &field, variant_type);
     ASSERT_TRUE(st.ok()) << st.status().message();
     ASSERT_NE(st.value(), nullptr);
+}
+
+TEST_F(GroupReaderTest, StructColumnReaderRowGroupZoneMapFilterChildError) {
+    ParquetField field;
+    field.name = "col_struct";
+    field.type = ColumnType::STRUCT;
+
+    ParquetField child_field;
+    child_field.name = "a";
+    child_field.type = ColumnType::SCALAR;
+    child_field.physical_type = tparquet::Type::BYTE_ARRAY;
+    field.children.push_back(child_field);
+
+    std::map<std::string, ColumnReaderPtr> child_readers;
+    child_readers.emplace("a", std::make_unique<MockPredicateErrorReader>(&field.children[0]));
+    StructColumnReader reader(&field, std::move(child_readers));
+
+    RuntimeState runtime_state{TQueryGlobals()};
+    ASSIGN_OR_ABORT(auto* pred, create_struct_subfield_eq_predicate(&_pool, &runtime_state, 0, 0, {"a"}, "x"));
+    _pool.add(const_cast<ColumnPredicate*>(pred));
+
+    auto res = reader.row_group_zone_map_filter({pred}, CompoundNodeType::AND, 0, 10);
+    ASSERT_TRUE(res.ok());
+    ASSERT_FALSE(res.value());
+}
+
+TEST_F(GroupReaderTest, StructColumnReaderPageIndexZoneMapFilterChildError) {
+    ParquetField field;
+    field.name = "col_struct";
+    field.type = ColumnType::STRUCT;
+
+    ParquetField child_field;
+    child_field.name = "a";
+    child_field.type = ColumnType::SCALAR;
+    child_field.physical_type = tparquet::Type::BYTE_ARRAY;
+    field.children.push_back(child_field);
+
+    std::map<std::string, ColumnReaderPtr> child_readers;
+    child_readers.emplace("a", std::make_unique<MockPredicateErrorReader>(&field.children[0]));
+    StructColumnReader reader(&field, std::move(child_readers));
+
+    RuntimeState runtime_state{TQueryGlobals()};
+    ASSIGN_OR_ABORT(auto* pred, create_struct_subfield_eq_predicate(&_pool, &runtime_state, 0, 0, {"a"}, "x"));
+    _pool.add(const_cast<ColumnPredicate*>(pred));
+
+    SparseRange<uint64_t> row_ranges;
+    auto res = reader.page_index_zone_map_filter({pred}, &row_ranges, CompoundNodeType::AND, 0, 10);
+    ASSERT_TRUE(res.ok());
+    ASSERT_FALSE(res.value());
+    ASSERT_EQ(10, row_ranges.span_size());
 }
 
 } // namespace starrocks::parquet

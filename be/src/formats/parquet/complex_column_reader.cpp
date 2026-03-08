@@ -1359,8 +1359,9 @@ static void build_row_for_seek(size_t row, std::string_view metadata_raw, std::s
         return;
     }
 
+    const bool has_base_payload = !value_raw.empty();
     VariantRowRef base(metadata_raw, value_raw);
-    VariantBuilder builder(&base);
+    VariantBuilder builder(has_base_payload ? &base : nullptr);
     auto st = builder.set_overlays(std::move(overlays));
     if (!st.ok()) {
         out_metadata->assign(metadata_raw.data(), metadata_raw.size());
