@@ -20,6 +20,16 @@
 #include "common/configbase.h"
 
 namespace starrocks::config {
+// Used by vector query cache, 500MB in default
+CONF_Int64(vector_query_cache_capacity, "536870912");
+
+// vector index
+// Enable caching index blocks for IVF-family vector indexes
+CONF_mBool(enable_vector_index_block_cache, "true");
+
+// concurrency of building index
+CONF_mInt32(config_vector_index_build_concurrency, "8");
+
 // default not to build the empty index
 CONF_mInt32(config_vector_index_default_build_threshold, "100");
 

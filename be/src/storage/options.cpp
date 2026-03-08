@@ -38,7 +38,7 @@
 #include <filesystem>
 
 #include "base/path/path_util.h"
-#include "common/config.h"
+#include "common/config_storage_fwd.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "fs/fs.h"

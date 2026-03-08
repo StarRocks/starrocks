@@ -14,8 +14,7 @@
 
 #include "storage/flat_json_config.h"
 
-#include "common/config.h"
-
+#include "common/config_json_flat_fwd.h"
 namespace starrocks {
 
 FlatJsonConfig::FlatJsonConfig()

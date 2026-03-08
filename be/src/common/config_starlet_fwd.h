@@ -26,6 +26,13 @@ CONF_Int32(starlet_port, "9070");
 // Root dir used for cache if cache enabled.
 CONF_String(starlet_cache_dir, "");
 
+// Cache will start evict cache files if free space belows this value(percentage)
+CONF_mDouble(starlet_cache_evict_low_water, "0.1");
+
+// Buffer size in starlet fs buffer stream, size <= 0 means not use buffer stream.
+// Only support in S3/HDFS currently.
+CONF_mInt32(starlet_fs_stream_buffer_size_bytes, "1048576");
+
 CONF_mBool(starlet_write_file_with_tag, "false");
 
 #endif
