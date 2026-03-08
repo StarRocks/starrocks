@@ -20,11 +20,27 @@
 #include "common/configbase.h"
 
 namespace starrocks::config {
+// ======================= FLAT JSON start ==============================================
+// json flat flag
+CONF_mBool(enable_json_flat, "true");
+
+// enable compaction is base on flat json, not whole json
+CONF_mBool(enable_compaction_flat_json, "true");
+
 // direct read flat json
 CONF_mBool(enable_lazy_dynamic_flat_json, "true");
 
+// enable flat json remain filter
+CONF_mBool(enable_json_flat_remain_filter, "true");
+
 // enable flat complex type (/array/object/hyper type), diables for save storage
 CONF_mBool(enable_json_flat_complex_type, "false");
+
+// flat json use dict-encoding
+CONF_mBool(json_flat_use_dict_encoding, "true");
+
+// enable flat json create zonemap
+CONF_mBool(json_flat_create_zonemap, "true");
 
 // if disable flat complex type, check complex type rate in hyper-type column
 CONF_mDouble(json_flat_complex_type_factor, "0.3");

@@ -15,7 +15,7 @@
 #include "exec/dictionary_cache_writer.h"
 
 #include "common/brpc_helper.h"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
 #include "exec/tablet_info.h"
 #include "runtime/current_thread.h"
 #include "serde/protobuf_serde.h"

@@ -20,6 +20,21 @@
 #include "common/configbase.h"
 
 namespace starrocks::config {
+// process memory limit specified as number of bytes
+// ('<int>[bB]?'), megabytes ('<float>[mM]'), gigabytes ('<float>[gG]'),
+// or percentage of the physical memory ('<int>%').
+// defaults to bytes if no unit is given"
+// must larger than 0. and if larger than physical memory size,
+// it will be set to physical memory size.
+CONF_String(mem_limit, "90%");
+
+// Enable the jemalloc tracker, which is responsible for reserving memory
+CONF_Bool(enable_jemalloc_memory_tracker, "true");
+
+// Whether abort the process if a large memory allocation is detected which the requested
+// size is larger than the available physical memory without wrapping with TRY_CATCH_BAD_ALLOC
+CONF_mBool(abort_on_large_memory_allocation, "false");
+
 // Whether to allocate chunk using mmap. If you enable this, you'd better to
 // increase vm.max_map_count's value whose default value is 65530.
 // you can do it as root via "sysctl -w vm.max_map_count=262144" or

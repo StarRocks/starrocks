@@ -20,7 +20,7 @@
 
 #include "base/testutil/assert.h"
 #include "column/column_helper.h"
-#include "common/config.h"
+#include "common/config_primary_key_fwd.h"
 #include "fs/fs_util.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/persistent_index_sstable.h"

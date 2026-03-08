@@ -39,7 +39,7 @@
 #include "base/hash/unaligned_access.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
-#include "common/config.h"
+#include "common/config_rowset_fwd.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"

@@ -21,7 +21,7 @@
 #include <memory>
 #include <utility>
 
-#include "common/config.h"
+#include "common/config_scan_io_fwd.h"
 #include "common/logging.h"
 #include "common/runtime_profile.h"
 #include "exec/file_scanner/file_scanner.h"

@@ -45,6 +45,9 @@ CONF_Bool(datacache_enable, "true");
 
 CONF_mString(datacache_disk_size, "100%");
 
+// Whether to use block buffer to hold the datacache block data.
+CONF_Bool(datacache_block_buffer_enable, "true");
+
 // Whether enable automatically adjust data cache disk space quota.
 // If true, the cache will choose an appropriate quota based on the current remaining disk space as the quota.
 // and the quota also will be changed dynamically.

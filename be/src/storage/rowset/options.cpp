@@ -14,8 +14,7 @@
 
 #include "storage/rowset/options.h"
 
-#include "common/config.h"
-
+#include "common/config_rowset_fwd.h"
 namespace starrocks {
 
 PageBuilderOptions::PageBuilderOptions() : dict_page_size(config::dictionary_page_size) {}

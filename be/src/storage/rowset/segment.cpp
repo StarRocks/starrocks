@@ -46,7 +46,7 @@
 #include "base/utility/defer_op.h"
 #include "column/column_access_path.h"
 #include "column/schema.h"
-#include "common/config.h"
+#include "common/config_rowset_fwd.h"
 #include "common/logging.h"
 #include "fs/key_cache.h"
 #include "gutil/strings/split.h"

@@ -21,7 +21,8 @@
 
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
-#include "common/config.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_primary_key_fwd.h"
 #include "common/thread/threadpool.h"
 #include "fs/fs_factory.h"
 #include "storage/lake/compaction_scheduler.h"

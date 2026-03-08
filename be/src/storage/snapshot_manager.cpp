@@ -40,7 +40,7 @@
 #include <map>
 #include <set>
 
-#include "common/config.h"
+#include "common/config_storage_fwd.h"
 #include "fs/fs.h"
 #include "gen_cpp/Types_constants.h"
 #include "gutil/strings/join.h"

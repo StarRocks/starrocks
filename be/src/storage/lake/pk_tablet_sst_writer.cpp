@@ -17,7 +17,7 @@
 #include <fmt/format.h>
 
 #include "column/chunk.h"
-#include "common/config.h"
+#include "common/config_rowset_fwd.h"
 #include "fs/bundle_file.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"

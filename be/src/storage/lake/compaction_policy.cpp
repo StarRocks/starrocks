@@ -17,7 +17,8 @@
 #include <algorithm>
 #include <unordered_map>
 
-#include "common/config.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_primary_key_fwd.h"
 #include "common/logging.h"
 #include "gutil/strings/join.h"
 #include "runtime/exec_env.h"

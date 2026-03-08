@@ -42,7 +42,8 @@
 #include <memory>
 
 #include "base/path/path_util.h"
-#include "common/config.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"

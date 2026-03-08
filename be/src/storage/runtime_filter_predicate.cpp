@@ -17,7 +17,7 @@
 #include <cstring>
 
 #include "base/simd/simd.h"
-#include "common/config.h"
+#include "common/config_rowset_fwd.h"
 #include "gutil/strings/fastmem.h"
 #include "runtime/mem_tracker.h"
 #include "storage/rowset/column_iterator.h"

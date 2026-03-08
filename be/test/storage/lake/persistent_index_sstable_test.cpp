@@ -23,7 +23,7 @@
 #include "base/phmap/btree.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
-#include "common/config.h"
+#include "common/config_starlet_fwd.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "runtime/starrocks_metrics.h"

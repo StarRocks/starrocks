@@ -15,7 +15,8 @@
 #include "storage/lake/lake_persistent_index_key_value_merger.h"
 
 #include "base/debug/trace.h"
-#include "common/config.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_rowset_fwd.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "serde/column_array_serde.h"

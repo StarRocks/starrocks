@@ -18,7 +18,8 @@
 
 #include "base/debug/trace.h"
 #include "base/testutil/sync_point.h"
-#include "common/config.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_starlet_fwd.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
 #include "fs/key_cache.h"

@@ -17,7 +17,8 @@
 #include <cstdlib>
 #include <regex>
 
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "fs/fs_factory.h"
 #include "storage/options.h"
 #include "storage/storage_engine.h"
