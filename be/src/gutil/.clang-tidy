@@ -1,0 +1,2 @@
+# gutil (third-party): disable all clang-tidy checks.
+Checks: '-*'
