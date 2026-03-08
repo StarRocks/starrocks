@@ -176,7 +176,10 @@ public class LakeTableHelper {
         for (Partition partition : table.getAllPartitions()) {
             for (PhysicalPartition subPartition : partition.getSubPartitions()) {
                 for (MaterializedIndex index : subPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-                    shardGroupIds.add(index.getShardGroupId());
+                    long shardGroupId = index.getShardGroupId();
+                    if (shardGroupId != PhysicalPartition.INVALID_SHARD_GROUP_ID) {
+                        shardGroupIds.add(shardGroupId);
+                    }
                 }
             }
         }
