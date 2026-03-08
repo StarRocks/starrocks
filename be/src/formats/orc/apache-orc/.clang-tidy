@@ -1,4 +1,2 @@
----
-Checks: >
-    -*,
-    readability-identifier-naming,
+# Apache ORC vendored code: disable all clang-tidy checks.
+Checks: '-*'
