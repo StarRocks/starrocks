@@ -70,13 +70,11 @@ static const char* const kTestFilePath = "/.testfile";
 DataDir::DataDir(const std::string& path, TStorageMedium::type storage_medium, TabletManager* tablet_manager,
                  TxnManager* txn_manager)
         : _path(path),
-          _available_bytes(0),
-          _disk_capacity_bytes(0),
+
           _storage_medium(storage_medium),
           _tablet_manager(tablet_manager),
           _txn_manager(txn_manager),
-          _cluster_id_mgr(std::make_shared<ClusterIdMgr>(path)),
-          _current_shard(0) {}
+          _cluster_id_mgr(std::make_shared<ClusterIdMgr>(path)) {}
 
 DataDir::~DataDir() {
     delete _id_generator;

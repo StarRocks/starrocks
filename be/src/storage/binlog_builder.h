@@ -117,8 +117,8 @@ private:
     int64_t _next_file_id;
     // Whether to have used _params.active_file_writer to initialize
     // the current writer
-    bool _init_writer;
-    int64_t _next_seq_id;
+    bool _init_writer{false};
+    int64_t _next_seq_id{0};
     std::vector<std::string> _new_files;
     BinlogFileWriterPtr _current_writer;
     std::vector<std::shared_ptr<BinlogFileMetaPB>> _new_metas;

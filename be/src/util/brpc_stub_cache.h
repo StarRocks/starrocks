@@ -84,7 +84,7 @@ private:
         std::shared_ptr<PInternalService_RecoverableStub> get_or_create(const butil::EndPoint& endpoint);
 
         std::vector<std::shared_ptr<PInternalService_RecoverableStub>> _stubs;
-        int64_t _idx;
+        int64_t _idx{-1};
         std::shared_ptr<EndpointCleanupTask<BrpcStubCache>> _cleanup_task;
     };
 

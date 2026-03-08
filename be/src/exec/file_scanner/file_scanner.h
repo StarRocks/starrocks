@@ -148,14 +148,14 @@ protected:
 
     std::unique_ptr<RowDescriptor> _row_desc;
 
-    bool _strict_mode;
-    int64_t _error_counter;
+    bool _strict_mode{false};
+    int64_t _error_counter{0};
     // When column mismatch, files query/load and other type load have different behaviors.
     // Query returns error, while load counts the filtered rows, and return error or not is based on max filter ratio,
     // files load will not filter rows if file column count is larger that the schema,
     // so need to check files query/load or other type load in scanner.
     // Currently only used in csv scanner.
-    TFileScanType::type _file_scan_type;
+    TFileScanType::type _file_scan_type{TFileScanType::LOAD};
 
     // string of _params.format_type: "avro", "csv", "json", "parquet", "orc", etc.
     // NOTE: remember to check the labels defined in be/src/util/metrics/file_scan_metrics.cpp, update the labels when necessary.

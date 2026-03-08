@@ -27,7 +27,7 @@ namespace starrocks {
 // MAX USE 22 bits
 typedef int32_t JulianDate;
 
-// Timestamp: {Julian Date}{microsecond in one day, 0 ~ 86400000000}
+// Timestamp: {Julian Date}
 // JulianDate use high 22 bits, microsecond use low 40 bits
 typedef int64_t Timestamp;
 

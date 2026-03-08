@@ -72,7 +72,7 @@ const std::string META_POSTFIX = "/meta"; // NOLINT
 const std::string SECOND_POSTFIX = "_secondary";
 const size_t PREFIX_LENGTH = 4;
 
-KVStore::KVStore(std::string root_path) : _root_path(std::move(root_path)), _db(nullptr) {}
+KVStore::KVStore(std::string root_path) : _root_path(std::move(root_path)) {}
 
 KVStore::~KVStore() {
     for (auto& handle : _handles) {

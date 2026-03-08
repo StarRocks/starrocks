@@ -85,9 +85,7 @@ static void get_shutdown_tablets(std::ostream& os, void*) {
 bvar::PassiveStatus<std::string> g_shutdown_tablets("starrocks_shutdown_tablets", get_shutdown_tablets, nullptr);
 
 TabletManager::TabletManager(int64_t tablet_map_lock_shard_size)
-        : _tablets_shards(tablet_map_lock_shard_size),
-          _tablets_shards_mask(tablet_map_lock_shard_size - 1),
-          _last_update_stat_ms(0) {
+        : _tablets_shards(tablet_map_lock_shard_size), _tablets_shards_mask(tablet_map_lock_shard_size - 1) {
     CHECK_GT(_tablets_shards.size(), 0) << "tablets shard count greater than 0";
     CHECK_EQ(_tablets_shards.size() & _tablets_shards_mask, 0) << "tablets shard count must be power of two";
 }

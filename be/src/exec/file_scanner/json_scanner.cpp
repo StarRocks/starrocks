@@ -47,10 +47,9 @@ JsonScanner::JsonScanner(RuntimeState* state, RuntimeProfile* profile, const TBr
                          ScannerCounter* counter)
         : FileScanner(state, profile, scan_range.params, counter),
           _scan_range(scan_range),
-          _next_range(0),
+
           _max_chunk_size(state->chunk_size()),
-          _cur_file_reader(nullptr),
-          _cur_file_eof(true) {
+          _cur_file_reader(nullptr) {
     _file_format_str = "json";
 }
 
@@ -286,7 +285,7 @@ JsonReader::JsonReader(RuntimeState* state, ScannerCounter* counter, JsonScanner
           _file(std::move(file)),
           _slot_descs(std::move(slot_descs)),
           _type_descs(std::move(type_descs)),
-          _op_col_index(-1),
+
           _range_desc(range_desc) {
     int index = 0;
     for (size_t i = 0; i < _slot_descs.size(); ++i) {

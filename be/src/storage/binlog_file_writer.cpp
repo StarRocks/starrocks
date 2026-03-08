@@ -31,8 +31,7 @@ BinlogFileWriter::BinlogFileWriter(int64_t file_id, std::string file_path, int32
         : _file_id(file_id),
           _file_path(std::move(file_path)),
           _max_page_size(page_size),
-          _compression_type(compression_type),
-          _writer_state(WAITING_INIT) {}
+          _compression_type(compression_type) {}
 
 Status BinlogFileWriter::init() {
     VLOG(3) << "Init binlog writer: " << _file_path;

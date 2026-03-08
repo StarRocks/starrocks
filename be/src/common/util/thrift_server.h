@@ -91,7 +91,7 @@ public:
 
 private:
     // True if the server has been successfully started, for internal use only
-    bool _started;
+    bool _started{false};
 
     // True if the server has been stop()
     bool _stopped = false;

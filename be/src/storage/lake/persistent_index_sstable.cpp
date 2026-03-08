@@ -265,7 +265,7 @@ StatusOr<PersistentIndexSstableUniquePtr> PersistentIndexSstable::new_sstable(
 
 PersistentIndexSstableStreamBuilder::PersistentIndexSstableStreamBuilder(std::unique_ptr<WritableFile> wf,
                                                                          std::string encryption_meta)
-        : _wf(std::move(wf)), _finished(false), _encryption_meta(std::move(encryption_meta)) {
+        : _wf(std::move(wf)), _encryption_meta(std::move(encryption_meta)) {
     _filter_policy.reset(const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
     sstable::Options options;
     options.filter_policy = _filter_policy.get();

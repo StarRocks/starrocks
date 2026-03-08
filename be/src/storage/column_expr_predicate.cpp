@@ -22,7 +22,7 @@ namespace starrocks {
 
 ColumnExprPredicate::ColumnExprPredicate(TypeInfoPtr type_info, ColumnId column_id, RuntimeState* state,
                                          const SlotDescriptor* slot_desc)
-        : ColumnPredicate(std::move(type_info), column_id), _state(state), _slot_desc(slot_desc), _monotonic(true) {
+        : ColumnPredicate(std::move(type_info), column_id), _state(state), _slot_desc(slot_desc) {
     _is_expr_predicate = true;
 }
 

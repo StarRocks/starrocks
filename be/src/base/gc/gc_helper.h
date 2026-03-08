@@ -36,8 +36,8 @@ private:
 
     size_t _interval;                   // gc interval for period
     MonoTime _epoch;                    // last timestamp `bytes_should_gc` is called
-    size_t _bytes_limit;                // how many bytes should limit to
-    size_t _remained_bytes;             // how many bytes there are remained
+    size_t _bytes_limit{0};             // how many bytes should limit to
+    size_t _remained_bytes{0};          // how many bytes there are remained
     size_t _backlog[SMOOTHSTEP_NSTEPS]; // preserve last period gc info, each interval occupies one
 };
 

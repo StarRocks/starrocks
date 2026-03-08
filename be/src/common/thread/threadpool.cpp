@@ -66,7 +66,7 @@ private:
 
 ThreadPoolBuilder::ThreadPoolBuilder(string name)
         : _name(std::move(name)),
-          _min_threads(0),
+
           _max_threads(CpuInfo::num_cores()),
           _max_queue_size(std::numeric_limits<int>::max()),
           _idle_timeout(MonoDelta::FromMilliseconds(ThreadPoolDefaultIdleTimeoutMS)) {}
@@ -109,8 +109,7 @@ Status ThreadPoolBuilder::build(std::unique_ptr<ThreadPool>* pool) const {
     return Status::OK();
 }
 
-ThreadPoolToken::ThreadPoolToken(ThreadPool* pool, ThreadPool::ExecutionMode mode)
-        : _mode(mode), _pool(pool), _state(State::IDLE), _active_threads(0) {}
+ThreadPoolToken::ThreadPoolToken(ThreadPool* pool, ThreadPool::ExecutionMode mode) : _mode(mode), _pool(pool) {}
 
 ThreadPoolToken::~ThreadPoolToken() {
     shutdown();
@@ -262,10 +261,6 @@ ThreadPool::ThreadPool(const ThreadPoolBuilder& builder)
           _idle_timeout(builder._idle_timeout),
           _pool_status(Status::Uninitialized("The pool was not initialized.")),
 
-          _num_threads(0),
-          _num_threads_pending_start(0),
-          _active_threads(0),
-          _total_queued_tasks(0),
           _tokenless(new_token(ExecutionMode::CONCURRENT)),
           _cpuids(builder._cpuids),
           _borrowed_cpuids(builder._borrowed_cpuids) {}

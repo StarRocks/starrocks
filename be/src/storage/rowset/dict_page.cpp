@@ -33,10 +33,9 @@ using strings::Substitute;
 template <LogicalType Type>
 DictPageBuilder<Type>::DictPageBuilder(const PageBuilderOptions& options)
         : _options(options),
-          _finished(false),
+
           _data_page_builder(nullptr),
-          _dict_builder(nullptr),
-          _encoding_type(DICT_ENCODING) {
+          _dict_builder(nullptr) {
     // initially use DICT_ENCODING
     _data_page_builder = std::make_unique<BitshufflePageBuilder<DataTypeTraits<Type>::type>>(options);
     _data_page_builder->reserve_head(BINARY_DICT_PAGE_HEADER_SIZE);
@@ -161,8 +160,7 @@ bool DictPageBuilder<Type>::is_valid_global_dict(const GlobalDictMap* global_dic
 }
 
 template <LogicalType Type>
-DictPageDecoder<Type>::DictPageDecoder(Slice data)
-        : _data(data), _data_page_decoder(nullptr), _parsed(false), _encoding_type(UNKNOWN_ENCODING) {}
+DictPageDecoder<Type>::DictPageDecoder(Slice data) : _data(data), _data_page_decoder(nullptr) {}
 
 template <LogicalType Type>
 Status DictPageDecoder<Type>::init() {

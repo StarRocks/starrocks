@@ -79,7 +79,7 @@ private:
     Status open_file_writer(int timeout_ms);
     Status gen_file_name(std::string* file_name);
 
-    RuntimeState* _state;
+    RuntimeState* _state{nullptr};
 
     // owned by RuntimeState
     ObjectPool* _pool;
@@ -89,11 +89,11 @@ private:
 
     TExportSink _t_export_sink;
 
-    RuntimeProfile* _profile;
+    RuntimeProfile* _profile{nullptr};
 
-    RuntimeProfile::Counter* _bytes_written_counter;
-    RuntimeProfile::Counter* _rows_written_counter;
-    RuntimeProfile::Counter* _write_timer;
+    RuntimeProfile::Counter* _bytes_written_counter{nullptr};
+    RuntimeProfile::Counter* _rows_written_counter{nullptr};
+    RuntimeProfile::Counter* _write_timer{nullptr};
 
     std::unique_ptr<FileBuilder> _file_builder;
     bool _closed = false;
