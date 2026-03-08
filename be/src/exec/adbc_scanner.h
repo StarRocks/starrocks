@@ -32,7 +32,8 @@ class TupleDescriptor;
 class ADBCScanner {
 public:
     ADBCScanner(std::string driver, std::string uri, std::string username, std::string password, std::string token,
-                std::string sql, const TupleDescriptor* tuple_desc);
+                std::string sql, const TupleDescriptor* tuple_desc, std::string ca_cert_file,
+                std::string client_cert_file, std::string client_key_file, bool tls_verify);
     ~ADBCScanner();
 
     Status open(RuntimeState* state);
@@ -48,6 +49,7 @@ private:
     Status _try_parallel_read();
     Status _fallback_single_stream_read();
     Status _convert_batch_to_chunk(const std::shared_ptr<arrow::RecordBatch>& batch, ChunkPtr* chunk);
+    static Status _read_file_to_string(const std::string& path, std::string* content);
 
     // Connection parameters
     std::string _driver;
@@ -57,6 +59,12 @@ private:
     std::string _token;
     std::string _sql;
     const TupleDescriptor* _tuple_desc;
+
+    // TLS parameters
+    std::string _ca_cert_file;
+    std::string _client_cert_file;
+    std::string _client_key_file;
+    bool _tls_verify = true;
 
     // ADBC C API handles (must be released in reverse order)
     AdbcDatabase _database{};

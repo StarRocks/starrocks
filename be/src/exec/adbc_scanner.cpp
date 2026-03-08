@@ -17,6 +17,9 @@
 #include <arrow/c/bridge.h>
 #include <glog/logging.h>
 
+#include <fstream>
+#include <sstream>
+
 #include "base/time/time.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -43,14 +46,31 @@ namespace starrocks {
 // ================================
 
 ADBCScanner::ADBCScanner(std::string driver, std::string uri, std::string username, std::string password,
-                         std::string token, std::string sql, const TupleDescriptor* tuple_desc)
+                         std::string token, std::string sql, const TupleDescriptor* tuple_desc,
+                         std::string ca_cert_file, std::string client_cert_file, std::string client_key_file,
+                         bool tls_verify)
         : _driver(std::move(driver)),
           _uri(std::move(uri)),
           _username(std::move(username)),
           _password(std::move(password)),
           _token(std::move(token)),
           _sql(std::move(sql)),
-          _tuple_desc(tuple_desc) {}
+          _tuple_desc(tuple_desc),
+          _ca_cert_file(std::move(ca_cert_file)),
+          _client_cert_file(std::move(client_cert_file)),
+          _client_key_file(std::move(client_key_file)),
+          _tls_verify(tls_verify) {}
+
+Status ADBCScanner::_read_file_to_string(const std::string& path, std::string* content) {
+    std::ifstream file(path, std::ios::binary);
+    if (!file.is_open()) {
+        return Status::InvalidArgument(fmt::format("Cannot open certificate file: {}", path));
+    }
+    std::ostringstream ss;
+    ss << file.rdbuf();
+    *content = ss.str();
+    return Status::OK();
+}
 
 ADBCScanner::~ADBCScanner() {
     if (!_closed) {
@@ -99,6 +119,34 @@ Status ADBCScanner::_init_adbc() {
         RETURN_ADBC_NOT_OK(AdbcDatabaseSetOption(&_database, "adbc.flight.sql.authorization_header",
                                                  auth_header.c_str(), &error),
                            error);
+    }
+
+    // TLS options -- must be set before AdbcDatabaseInit
+    if (!_ca_cert_file.empty()) {
+        std::string pem_content;
+        RETURN_IF_ERROR(_read_file_to_string(_ca_cert_file, &pem_content));
+        RETURN_ADBC_NOT_OK(AdbcDatabaseSetOption(&_database, "adbc.flight.sql.client_option.tls_root_certs",
+                                                 pem_content.c_str(), &error),
+                           error);
+    }
+
+    if (!_client_cert_file.empty() && !_client_key_file.empty()) {
+        std::string cert_content, key_content;
+        RETURN_IF_ERROR(_read_file_to_string(_client_cert_file, &cert_content));
+        RETURN_IF_ERROR(_read_file_to_string(_client_key_file, &key_content));
+        RETURN_ADBC_NOT_OK(AdbcDatabaseSetOption(&_database, "adbc.flight.sql.client_option.mtls_cert_chain",
+                                                 cert_content.c_str(), &error),
+                           error);
+        RETURN_ADBC_NOT_OK(AdbcDatabaseSetOption(&_database, "adbc.flight.sql.client_option.mtls_private_key",
+                                                 key_content.c_str(), &error),
+                           error);
+    }
+
+    if (!_tls_verify) {
+        RETURN_ADBC_NOT_OK(AdbcDatabaseSetOption(&_database, "adbc.flight.sql.client_option.tls_skip_verify", "true",
+                                                 &error),
+                           error);
+        LOG(WARNING) << "ADBC TLS certificate verification DISABLED (insecure mode)";
     }
 
     RETURN_ADBC_NOT_OK(AdbcDatabaseInit(&_database, &error), error);

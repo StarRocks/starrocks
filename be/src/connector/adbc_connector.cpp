@@ -83,6 +83,16 @@ Status ADBCDataSource::open(RuntimeState* state) {
     std::string password = adbc_scan_node.__isset.adbc_password ? adbc_scan_node.adbc_password : "";
     std::string token = adbc_scan_node.__isset.adbc_token ? adbc_scan_node.adbc_token : "";
 
+    // Extract TLS parameters
+    std::string ca_cert_file =
+            adbc_scan_node.__isset.adbc_tls_ca_cert_file ? adbc_scan_node.adbc_tls_ca_cert_file : "";
+    std::string client_cert_file =
+            adbc_scan_node.__isset.adbc_tls_client_cert_file ? adbc_scan_node.adbc_tls_client_cert_file : "";
+    std::string client_key_file =
+            adbc_scan_node.__isset.adbc_tls_client_key_file ? adbc_scan_node.adbc_tls_client_key_file : "";
+    // CRITICAL: Default to true when field is not set (Thrift optional bool defaults to false)
+    bool tls_verify = adbc_scan_node.__isset.adbc_tls_verify ? adbc_scan_node.adbc_tls_verify : true;
+
     // Build SQL query string
     std::string sql = get_adbc_sql(adbc_scan_node.table_name, adbc_scan_node.columns, adbc_scan_node.filters,
                                    adbc_scan_node.__isset.limit ? adbc_scan_node.limit : -1);
@@ -92,7 +102,9 @@ Status ADBCDataSource::open(RuntimeState* state) {
 
     // Create scanner
     _scanner = std::make_unique<ADBCScanner>(std::move(driver), std::move(uri), std::move(username),
-                                             std::move(password), std::move(token), std::move(sql), tuple_desc);
+                                             std::move(password), std::move(token), std::move(sql), tuple_desc,
+                                             std::move(ca_cert_file), std::move(client_cert_file),
+                                             std::move(client_key_file), tls_verify);
 
     RETURN_IF_ERROR(_scanner->open(state));
 
