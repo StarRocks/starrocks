@@ -1,2 +1,2 @@
-# gutil (third-party): disable all clang-tidy checks.
-Checks: '-*'
+# gutil (third-party): keep only naming checks.
+Checks: '-*,readability-identifier-naming'

@@ -318,7 +318,7 @@ void PipelineBuilderContext::interpolate_spill_process(size_t plan_node_id,
     spill_process_operators.emplace_back(std::move(spill_process_factory));
     auto noop_sink_factory = std::make_shared<NoopSinkOperatorFactory>(next_operator_id(), plan_node_id);
     spill_process_operators.emplace_back(std::move(noop_sink_factory));
-    add_pipeline(std::move(spill_process_operators));
+    add_pipeline(spill_process_operators);
 }
 
 OpFactories PipelineBuilderContext::interpolate_grouped_exchange(int32_t plan_node_id, OpFactories& pred_operators) {
@@ -439,7 +439,7 @@ OpFactories PipelineBuilderContext::maybe_interpolate_collect_stats(RuntimeState
     auto last_plan_node_id = pred_operators[pred_operators.size() - 1]->plan_node_id();
     pred_operators.emplace_back(std::make_shared<CollectStatsSinkOperatorFactory>(next_operator_id(), last_plan_node_id,
                                                                                   collect_stats_ctx));
-    add_pipeline(std::move(pred_operators));
+    add_pipeline(pred_operators);
 
     auto downstream_source_op = std::make_shared<CollectStatsSourceOperatorFactory>(
             next_operator_id(), last_plan_node_id, std::move(collect_stats_ctx));

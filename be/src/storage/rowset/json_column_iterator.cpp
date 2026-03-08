@@ -52,11 +52,11 @@ public:
             : _reader(reader),
               _null_iter(std::move(null_iter)),
               _flat_iters(std::move(field_iters)),
-              _target_paths(std::move(target_paths)),
-              _target_types(std::move(target_types)),
-              _source_paths(std::move(source_paths)),
-              _source_types(std::move(source_types)),
-              _need_remain(need_remain){};
+              _target_paths(target_paths),
+              _target_types(target_types),
+              _source_paths(source_paths),
+              _source_types(source_types),
+              _need_remain(need_remain) {};
 
     ~JsonFlatColumnIterator() override {
         if (transformer != nullptr) {
@@ -197,7 +197,7 @@ Status JsonFlatColumnIterator::_read(JsonColumn* json_column, FUNC read_fn) {
     } else {
         // convert mutable columns to immutable columns
         Columns immutable_columns = ColumnHelper::to_columns(std::move(columns));
-        RETURN_IF_ERROR(transformer->trans(std::move(immutable_columns)));
+        RETURN_IF_ERROR(transformer->trans(immutable_columns));
         auto result = transformer->mutable_result();
         json_column->set_flat_columns(_target_paths, _target_types, std::move(result));
     }
@@ -449,8 +449,8 @@ public:
             : _reader(reader),
               _null_iter(std::move(null_iter)),
               _all_iter(std::move(all_iter)),
-              _src_paths(std::move(src_paths)),
-              _src_types(std::move(src_types)){};
+              _src_paths(src_paths),
+              _src_types(src_types) {};
 
     ~JsonMergeIterator() override = default;
 

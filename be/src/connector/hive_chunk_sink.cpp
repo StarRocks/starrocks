@@ -36,7 +36,7 @@ HiveChunkSink::HiveChunkSink(std::vector<std::string> partition_columns,
                              std::move(partition_chunk_writer_factory), state, false) {}
 
 void HiveChunkSink::callback_on_commit(const CommitResult& result) {
-    _rollback_actions.push_back(std::move(result.rollback_action));
+    _rollback_actions.push_back(result.rollback_action);
     if (result.io_status.ok()) {
         _state->update_num_rows_load_sink(result.file_statistics.record_count);
         THiveFileInfo hive_file_info;

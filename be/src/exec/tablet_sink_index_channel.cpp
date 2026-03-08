@@ -337,7 +337,7 @@ Status NodeChannel::_open_wait(RefCountClosure<PTabletWriterOpenResult>* open_cl
         TTabletFailInfo fail_info;
         fail_info.__set_tabletId(-1);
         fail_info.__set_backendId(_node_id);
-        _runtime_state->append_tablet_fail_infos(std::move(fail_info));
+        _runtime_state->append_tablet_fail_infos(fail_info);
 
         return _err_st;
     }
@@ -350,7 +350,7 @@ Status NodeChannel::_open_wait(RefCountClosure<PTabletWriterOpenResult>* open_cl
         TTabletFailInfo fail_info;
         fail_info.__set_tabletId(-1);
         fail_info.__set_backendId(_node_id);
-        _runtime_state->append_tablet_fail_infos(std::move(fail_info));
+        _runtime_state->append_tablet_fail_infos(fail_info);
 
         return _err_st;
     }
@@ -817,7 +817,7 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
         TTabletFailInfo fail_info;
         fail_info.__set_tabletId(-1);
         fail_info.__set_backendId(_node_id);
-        _runtime_state->append_tablet_fail_infos(std::move(fail_info));
+        _runtime_state->append_tablet_fail_infos(fail_info);
         _try_diagnose(error_text);
         return _err_st;
     }
@@ -838,7 +838,7 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
             } else {
                 fail_info.__set_backendId(_node_id);
             }
-            _runtime_state->append_tablet_fail_infos(std::move(fail_info));
+            _runtime_state->append_tablet_fail_infos(fail_info);
         }
 
         return _err_st;

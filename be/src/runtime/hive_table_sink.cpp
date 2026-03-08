@@ -115,7 +115,7 @@ Status HiveTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operators
                 runtime_state, pipeline::Operator::s_pseudo_plan_node_id_for_final_sink, prev_operators, sink_dop,
                 pipeline::LocalExchanger::PassThroughType::SCALE);
         ops.emplace_back(std::move(op));
-        context->add_pipeline(std::move(ops));
+        context->add_pipeline(ops);
     } else {
         std::vector<ExprContext*> partition_expr_ctxs;
         RETURN_IF_ERROR(ExprFactory::create_expr_trees(runtime_state->obj_pool(), partition_exprs, &partition_expr_ctxs,
@@ -124,7 +124,7 @@ Status HiveTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operators
                 runtime_state, pipeline::Operator::s_pseudo_plan_node_id_for_final_sink, prev_operators,
                 partition_expr_ctxs, sink_dop);
         ops.emplace_back(std::move(op));
-        context->add_pipeline(std::move(ops));
+        context->add_pipeline(ops);
     }
 
     return Status::OK();

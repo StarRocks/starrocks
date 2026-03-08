@@ -51,7 +51,7 @@ Status SchemaBeCompactionsScanner::start(RuntimeState* state) {
     info.cumulative_compaction_concurrency = compaction_manager->cumulative_compaction_concurrency();
     info.last_score = compaction_manager->last_score();
     info.max_score = compaction_manager->max_score();
-    _infos.emplace_back(std::move(info));
+    _infos.emplace_back(info);
     _cur_idx = 0;
     return Status::OK();
 }

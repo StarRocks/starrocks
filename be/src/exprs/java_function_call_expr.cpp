@@ -153,7 +153,7 @@ StatusOr<std::shared_ptr<JavaUDFContext>> JavaFunctionCallExpr::_build_udf_func_
         FunctionContext::FunctionStateScope scope, const std::string& libpath) {
     auto desc = std::make_shared<JavaUDFContext>();
     // init class loader and analyzer
-    desc->udf_classloader = std::make_unique<ClassLoader>(std::move(libpath));
+    desc->udf_classloader = std::make_unique<ClassLoader>(libpath);
     RETURN_IF_ERROR(desc->udf_classloader->init());
     desc->analyzer = std::make_unique<ClassAnalyzer>();
 
@@ -194,7 +194,7 @@ StatusOr<std::shared_ptr<JavaUDFContext>> JavaFunctionCallExpr::_build_udf_func_
                                                                                 ClassLoader::BATCH_EVALUATE));
     ASSIGN_OR_RETURN(auto method, desc->analyzer->get_method_object(update_stub_clazz.clazz(), stub_method_name));
     desc->call_stub = std::make_unique<BatchEvaluateStub>(desc->udf_handle.handle(), std::move(update_stub_clazz),
-                                                          JavaGlobalRef(std::move(method)));
+                                                          JavaGlobalRef(method));
 
     if (desc->prepare != nullptr) {
         // we only support fragment local scope to call prepare

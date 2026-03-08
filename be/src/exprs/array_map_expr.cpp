@@ -272,7 +272,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
         array_column->check_or_die();
         ColumnPtr result_column = array_column;
         if (result_null_column != nullptr) {
-            result_column = NullableColumn::create(std::move(array_column), std::move(result_null_column));
+            result_column = NullableColumn::create(std::move(array_column), result_null_column);
             result_column->check_or_die();
         }
         result_column = ConstColumn::create(result_column, chunk->num_rows());
@@ -283,7 +283,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
                 ArrayColumn::create(std::move(column), ColumnHelper::as_column<UInt32Column>(aligned_offsets->clone()));
         array_column->check_or_die();
         if (result_null_column != nullptr) {
-            return NullableColumn::create(std::move(array_column), std::move(result_null_column));
+            return NullableColumn::create(std::move(array_column), result_null_column);
         }
         return array_column;
     }

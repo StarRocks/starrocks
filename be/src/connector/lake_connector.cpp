@@ -115,7 +115,7 @@ Status LakeDataSource::open(RuntimeState* state) {
     opts.pred_tree_params = state->fragment_ctx()->pred_tree_params();
     opts.driver_sequence = runtime_membership_filter_eval_context.driver_sequence;
 
-    _conjuncts_manager = std::make_unique<ScanConjunctsManager>(std::move(opts));
+    _conjuncts_manager = std::make_unique<ScanConjunctsManager>(opts);
     ScanConjunctsManager& cm = *_conjuncts_manager;
 
     // Parse conjuncts via _conjuncts_manager.
@@ -688,7 +688,7 @@ Status prune_field_by_access_paths(Field* field, ColumnAccessPath* path) {
             }
         }
 
-        field->set_sub_fields(std::move(new_fields));
+        field->set_sub_fields(new_fields);
     }
     return Status::OK();
 }

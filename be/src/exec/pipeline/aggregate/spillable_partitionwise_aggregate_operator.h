@@ -52,7 +52,7 @@ public:
                                                   const AggregateBlockingSourceOperatorPtr non_pw_agg,
                                                   ConjugateOperatorPtr pw_agg)
             : SourceOperator(factory, id, "spillable_partitionwise_agg_source", plan_node_id, false, driver_sequence),
-              _non_pw_agg(std::move(non_pw_agg)),
+              _non_pw_agg(non_pw_agg),
               _pw_agg(std::move(pw_agg)) {}
 
     ~SpillablePartitionWiseAggregateSourceOperator() override = default;

@@ -125,8 +125,8 @@ Status DictionaryGetExpr::prepare(RuntimeState* state, ExprContext* context) {
         sub_columns.emplace_back(NullableColumn::create(column, std::move(sub_null_column)));
     }
     auto null_column = UInt8Column::create(0, 0);
-    _nullable_struct_column = NullableColumn::create(
-            StructColumn::create(std::move(sub_columns), std::move(value_columns_name)), std::move(null_column));
+    _nullable_struct_column = NullableColumn::create(StructColumn::create(sub_columns, std::move(value_columns_name)),
+                                                     std::move(null_column));
     DCHECK(_nullable_struct_column != nullptr);
 
     return Status::OK();

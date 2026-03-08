@@ -60,7 +60,7 @@ namespace starrocks {
 class ChannelOpenTask final : public Runnable {
 public:
     ChannelOpenTask(LoadChannelMgr* load_channel_mgr, LoadChannelOpenContext open_context)
-            : _load_channel_mgr(load_channel_mgr), _open_context(std::move(open_context)) {}
+            : _load_channel_mgr(load_channel_mgr), _open_context(open_context) {}
 
     ~ChannelOpenTask() override {
         if (!_is_done) {
@@ -164,7 +164,7 @@ void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest
         _open(open_context);
         return;
     }
-    auto task = std::make_shared<ChannelOpenTask>(this, std::move(open_context));
+    auto task = std::make_shared<ChannelOpenTask>(this, open_context);
     Status status = _async_rpc_pool->submit(task);
     if (!status.ok()) {
         task->cancel_task(status);

@@ -1,2 +1,2 @@
-# phmap (third-party): disable all clang-tidy checks.
-Checks: '-*'
+# phmap (third-party): keep only naming checks.
+Checks: '-*,readability-identifier-naming'
