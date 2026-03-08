@@ -100,7 +100,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 2. Scanning | 4/4 | Complete | 2026-03-06 |
 | 3. JDBC Parity | 0/3 | In progress | - |
 | 4. Integration Testing | 2/2 | Complete | 2026-03-07 |
-| 5. TLS Support | 1/2 | In progress | - |
+| 5. TLS Support | 2/2 | Complete | 2026-03-08 |
 
 ### Phase 5: Add TLS support for ADBC connector
 
@@ -111,4 +111,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 Plans:
 - [x] 05-01-PLAN.md — FE TLS properties, validation, FlightSql TLS options, Thrift IDL, ScanNode toThrift + unit tests (TLS-01, TLS-02, TLS-03, TLS-04, TLS-05, TLS-06, TLS-07, TLS-08, TLS-10)
-- [ ] 05-02-PLAN.md — BE TLS cert file reading, ADBC C driver TLS options, Thrift field extraction (TLS-07, TLS-08, TLS-09)
+- [x] 05-02-PLAN.md — BE TLS cert file reading, ADBC C driver TLS options, Thrift field extraction (TLS-07, TLS-08, TLS-09)
