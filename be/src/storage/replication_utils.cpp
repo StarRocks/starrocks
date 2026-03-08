@@ -16,8 +16,8 @@
 
 #include <sys/stat.h>
 
-#include "common/config.h"
-
+#include "common/config_lake_fwd.h"
+#include "common/config_storage_fwd.h"
 #ifdef BE_TEST
 #include "agent/agent_server.h"
 #endif

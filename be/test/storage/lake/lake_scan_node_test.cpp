@@ -20,7 +20,7 @@
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_scan_io_fwd.h"
 #include "common/logging.h"
 #include "connector/lake_connector.h"
 #include "exec/connector_scan_node.h"

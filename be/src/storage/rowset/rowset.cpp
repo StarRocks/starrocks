@@ -39,7 +39,8 @@
 
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_rowset_fwd.h"
 #include "fmt/format.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"

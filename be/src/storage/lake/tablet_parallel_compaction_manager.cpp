@@ -19,7 +19,8 @@
 #include <sstream>
 
 #include "base/utility/defer_op.h"
-#include "common/config.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_primary_key_fwd.h"
 #include "common/logging.h"
 #include "common/thread/threadpool.h"
 #include "gen_cpp/lake_types.pb.h"

@@ -20,6 +20,12 @@
 #include "common/configbase.h"
 
 namespace starrocks::config {
+// Single read execute fragment row size.
+CONF_mInt32(scanner_row_num, "16384");
+
+// Number of max hdfs scanners.
+CONF_Int32(max_hdfs_scanner_num, "50");
+
 // Number of max scan keys.
 CONF_mInt32(max_scan_key_num, "1024");
 
@@ -29,13 +35,99 @@ CONF_mInt32(max_pushdown_conditions_per_column, "1024");
 
 CONF_Bool(enable_check_string_lengths, "true");
 
+// Valid range: [0-1000].
+// `0` will disable late materialization.
+// `1000` will enable late materialization always.
+CONF_mInt32(late_materialization_ratio, "10");
+
+// Valid range: [0-1000].
+// `0` will disable late materialization select metric type.
+// `1000` will enable late materialization always select metric type.
+CONF_Int32(metric_late_materialization_ratio, "1000");
+
+// Do pre-aggregate if effect greater than the factor, factor range:[1-100].
+CONF_Int16(pre_aggregate_factor, "80");
+
+CONF_mBool(use_default_dop_when_shared_scan, "true");
+
+/// For parallel scan on the single tablet.
+// These three configs are used to calculate the minimum number of rows picked up from a segment at one time.
+// It is `splitted_scan_bytes/scan_row_bytes` and restricted in the range [min_splitted_scan_rows, max_splitted_scan_rows].
+CONF_mInt64(tablet_internal_parallel_min_splitted_scan_rows, "16384");
+
+// Default is 16384*64, where 16384 is the chunk size in pipeline.
+CONF_mInt64(tablet_internal_parallel_max_splitted_scan_rows, "1048576");
+
+// Default is 512MB.
+CONF_mInt64(tablet_internal_parallel_max_splitted_scan_bytes, "536870912");
+
+//
+// Only when scan_dop is not less than min_scan_dop, this table can use tablet internal parallel,
+// where scan_dop = estimated_scan_rows / splitted_scan_rows.
+CONF_mInt64(tablet_internal_parallel_min_scan_dop, "4");
+
+// The max hdfs file handle.
+CONF_mInt32(max_hdfs_file_handle, "1000");
+
+// Lake
+CONF_mBool(io_coalesce_lake_read_enable, "false");
+
+// orc reader
+CONF_Bool(enable_orc_late_materialization, "true");
+
+// For orc tiny stripe optimization
+// Default is 8MB for tiny stripe threshold size
+CONF_Int32(orc_tiny_stripe_threshold_size, "8388608");
+
+// When the ORC file size is smaller than orc_loading_buffer_size,
+// we'll read the whole file at once instead of reading a footer first.
+CONF_Int32(orc_loading_buffer_size, "8388608");
+
 CONF_Int32(io_coalesce_read_max_buffer_size, "8388608");
 
 CONF_Int32(io_coalesce_read_max_distance_size, "1048576");
 
 CONF_mBool(io_coalesce_adaptive_lazy_active, "true");
 
+CONF_Int32(io_tasks_per_scan_operator, "4");
+
+CONF_Int32(connector_io_tasks_per_scan_operator, "16");
+
+CONF_Int32(connector_io_tasks_min_size, "2");
+
+CONF_Int32(connector_io_tasks_adjust_interval_ms, "50");
+
+CONF_Int32(connector_io_tasks_adjust_step, "1");
+
+CONF_Int32(connector_io_tasks_adjust_smooth, "4");
+
+CONF_mDouble(scan_use_query_mem_ratio, "0.25");
+
+CONF_Double(connector_scan_use_query_mem_ratio, "0.3");
+
+// If your sort key cardinality is very high,
+// You could enable this config to speed up the point lookup query,
+// otherwise, StarRocks will use zone map for one column filter
+CONF_mBool(enable_short_key_for_one_column_filter, "false");
+
+// TOPN RuntimeFilter parameters
+CONF_mInt32(desc_hint_split_range, "10");
+
+// the max length supported for varchar type
+CONF_mInt32(olap_string_max_length, "1048576");
+
+CONF_mInt64(arrow_io_coalesce_read_max_buffer_size, "8388608");
+
+CONF_mInt64(arrow_io_coalesce_read_max_distance_size, "1048576");
+
+CONF_mInt64(arrow_read_batch_size, "4096");
+
 // larger buffer size means fewer reads, but higher memory usage
 CONF_mInt32(avro_reader_buffer_size_bytes, "8388608");
+
+// If the first predicate column's selectivity is higher than this threshold, trigger sampling
+// to potentially find a better predicate order. When selectivity is already good (low), sampling
+// is unlikely to help and will be skipped.
+CONF_mDouble(predicate_sampling_trigger_selectivity_threshold, "0.2");
 
 } // namespace starrocks::config

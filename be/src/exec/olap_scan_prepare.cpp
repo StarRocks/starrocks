@@ -19,7 +19,7 @@
 
 #include "base/orlp/pdqsort.h"
 #include "column/type_traits.h"
-#include "common/config.h"
+#include "common/config_scan_io_fwd.h"
 #include "exprs/binary_predicate.h"
 #include "exprs/compound_predicate.h"
 #include "exprs/dictmapping_expr.h"
