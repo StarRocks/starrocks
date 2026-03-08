@@ -245,6 +245,7 @@ std::vector<std::vector<RowsetPtr>> TabletParallelCompactionManager::_group_rows
 
         if (should_start_new_group) {
             std::vector<uint32_t> group_ids;
+            group_ids.reserve(current_group.size());
             for (const auto& r : current_group) {
                 group_ids.push_back(r->id());
             }
@@ -269,6 +270,7 @@ std::vector<std::vector<RowsetPtr>> TabletParallelCompactionManager::_group_rows
     // Add the last group if not empty
     if (!current_group.empty()) {
         std::vector<uint32_t> group_ids;
+        group_ids.reserve(current_group.size());
         for (const auto& r : current_group) {
             group_ids.push_back(r->id());
         }
@@ -338,6 +340,7 @@ StatusOr<std::vector<RowsetPtr>> TabletParallelCompactionManager::pick_rowsets_f
     // Log metadata details for debugging duplicate compaction issues
     std::vector<uint32_t> first_rowset_ids;
     int count = std::min(10, metadata->rowsets_size());
+    first_rowset_ids.reserve(count);
     for (int i = 0; i < count; i++) {
         first_rowset_ids.push_back(metadata->rowsets(i).id());
     }
@@ -394,6 +397,7 @@ std::vector<std::vector<RowsetPtr>> TabletParallelCompactionManager::split_rowse
 
     if (stats.total_bytes <= max_bytes || max_parallel <= 1 || stats.has_delete_predicate || not_enough_segments) {
         std::vector<uint32_t> group_ids;
+        group_ids.reserve(all_rowsets.size());
         for (const auto& r : all_rowsets) {
             group_ids.push_back(r->id());
         }

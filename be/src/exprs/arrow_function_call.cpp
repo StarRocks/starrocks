@@ -75,6 +75,7 @@ Status ArrowFunctionCallExpr::prepare(RuntimeState* state, ExprContext* context)
     FunctionContext::TypeDesc return_type = _type;
     std::vector<FunctionContext::TypeDesc> args_types;
 
+    args_types.reserve(_children.size());
     for (Expr* child : _children) {
         args_types.push_back(child->type());
     }

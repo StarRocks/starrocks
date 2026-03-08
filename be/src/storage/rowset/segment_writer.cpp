@@ -112,6 +112,7 @@ Status SegmentWriter::init() {
 
 Status SegmentWriter::init(bool has_key) {
     std::vector<uint32_t> all_column_indexes;
+    all_column_indexes.reserve(_tablet_schema->num_columns());
     for (uint32_t i = 0; i < _tablet_schema->num_columns(); ++i) {
         all_column_indexes.emplace_back(i);
     }

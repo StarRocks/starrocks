@@ -386,6 +386,7 @@ Status HdfsOrcScanner::build_io_ranges(ORCHdfsFileStream* file_stream, const std
         std::vector<DiskRange> merged_disk_ranges{};
         DiskRangeHelper::merge_adjacent_disk_ranges(stripes, config::io_coalesce_read_max_distance_size,
                                                     config::orc_tiny_stripe_threshold_size, merged_disk_ranges);
+        io_ranges.reserve(merged_disk_ranges.size());
         for (const auto& disk_range : merged_disk_ranges) {
             io_ranges.emplace_back(disk_range.offset(), disk_range.length());
         }

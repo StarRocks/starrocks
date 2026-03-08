@@ -198,6 +198,7 @@ static bool get_predicate_value(ObjectPool* obj_pool, const SlotDescriptor& slot
 
 static std::vector<BoxedExprContext> build_expr_context_containers(const std::vector<ExprContext*>& expr_contexts) {
     std::vector<BoxedExprContext> containers;
+    containers.reserve(expr_contexts.size());
     for (auto* expr_ctx : expr_contexts) {
         containers.emplace_back(expr_ctx);
     }
@@ -206,6 +207,7 @@ static std::vector<BoxedExprContext> build_expr_context_containers(const std::ve
 
 static std::vector<BoxedExpr> build_raw_expr_containers(const std::vector<Expr*>& exprs) {
     std::vector<BoxedExpr> containers;
+    containers.reserve(exprs.size());
     for (auto* expr : exprs) {
         containers.emplace_back(expr);
     }

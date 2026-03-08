@@ -566,6 +566,7 @@ void GroupReader::collect_io_ranges(std::vector<io::SharedBufferedInputStream::I
 
 Status GroupReader::_init_read_chunk() {
     std::vector<SlotDescriptor*> read_slots;
+    read_slots.reserve(_param.read_cols.size());
     for (const auto& column : _param.read_cols) {
         read_slots.emplace_back(column.slot_desc);
     }

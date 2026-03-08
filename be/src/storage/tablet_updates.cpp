@@ -1975,6 +1975,7 @@ Status TabletUpdates::_do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t
 
             std::map<uint32_t, std::vector<uint32_t>> new_rowids_by_rssid;
             std::vector<uint32_t> rowids;
+            rowids.reserve(upserts[upsert_idx]->size());
             for (int j = 0; j < upserts[upsert_idx]->size(); ++j) {
                 rowids.push_back(j);
             }
@@ -4078,6 +4079,7 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version, Ch
         // new added dcgs info for every segment in rowset.
         DeltaColumnGroupList dcgs;
         std::vector<int> last_dcg_counts;
+        last_dcg_counts.reserve(new_rowset_info.num_segments);
         for (uint32_t j = 0; j < new_rowset_info.num_segments; j++) {
             // check the lastest historical_dcgs version if it is equal to schema change version
             // of the rowset. If it is, we should merge the dcg info.
@@ -5661,6 +5663,7 @@ void TabletUpdates::to_rowset_meta_pb(const std::vector<RowsetMetaSharedPtr>& ro
 std::vector<std::string> TabletUpdates::get_version_list() const {
     std::lock_guard wl(_lock);
     std::vector<std::string> version_list;
+    version_list.reserve(_edit_version_infos.size());
     for (auto& edit_version_info : _edit_version_infos) {
         version_list.emplace_back(edit_version_info->version.to_string());
     }

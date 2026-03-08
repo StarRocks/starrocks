@@ -309,6 +309,7 @@ Status OlapTableSink::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(_init_node_channels(state, index_id_to_tablet_be_map));
 
     std::vector<IndexChannel*> index_channels;
+    index_channels.reserve(_channels.size());
     for (const auto& channel : _channels) {
         index_channels.emplace_back(channel.get());
     }

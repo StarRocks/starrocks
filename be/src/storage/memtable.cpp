@@ -53,6 +53,7 @@ Schema MemTable::convert_schema(const TabletSchemaCSPtr& tablet_schema,
             ncolumn--;
         }
         vector<ColumnId> column_idxes;
+        column_idxes.reserve(ncolumn);
         for (ColumnId i = 0; i < ncolumn; i++) {
             column_idxes.push_back(i);
         }
