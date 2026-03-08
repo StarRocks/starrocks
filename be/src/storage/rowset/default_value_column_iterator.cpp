@@ -82,7 +82,7 @@ static void _project_default_datum_by_path_if_needed(Datum* datum, const TypeInf
                 _project_default_datum_by_path_if_needed(&child_datum, element_type_info.get(), value_path);
                 projected.emplace_back(std::move(child_datum));
             }
-            datum->set_array(std::move(projected));
+            datum->set_array(projected);
             return;
         }
 

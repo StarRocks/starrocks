@@ -1,2 +1,2 @@
-# Apache ORC vendored code: disable all clang-tidy checks.
-Checks: '-*'
+# Apache ORC vendored code: keep only naming checks.
+Checks: '-*,readability-identifier-naming'

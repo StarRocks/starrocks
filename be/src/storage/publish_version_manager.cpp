@@ -119,9 +119,9 @@ void PublishVersionManager::wait_publish_task_apply_finish(std::vector<TFinishTa
     std::lock_guard wl(_lock);
     for (size_t i = 0; i < finish_task_requests.size(); i++) {
         if (_all_task_applied(finish_task_requests[i])) {
-            _finish_task_requests[finish_task_requests[i].signature] = std::move(finish_task_requests[i]);
+            _finish_task_requests[finish_task_requests[i].signature] = finish_task_requests[i];
         } else {
-            _waitting_finish_task_requests[finish_task_requests[i].signature] = std::move(finish_task_requests[i]);
+            _waitting_finish_task_requests[finish_task_requests[i].signature] = finish_task_requests[i];
         }
     }
     DCHECK(has_pending_task());
@@ -147,7 +147,7 @@ void PublishVersionManager::finish_publish_version_task() {
         for (auto& [signature, finish_task_request] : _finish_task_requests) {
             // submit finish task
             st = _finish_publish_version_thread_pool->submit_func(
-                    [this, finish_request = std::move(finish_task_request)]() mutable {
+                    [this, finish_request = finish_task_request]() mutable {
                         update_tablet_version(finish_request);
 #ifndef BE_TEST
                         finish_task(finish_request);
@@ -163,7 +163,7 @@ void PublishVersionManager::finish_publish_version_task() {
         for (auto& [signature, finish_task_request] : _waitting_finish_task_requests) {
             if (_left_task_applied(finish_task_request)) {
                 st = _finish_publish_version_thread_pool->submit_func(
-                        [this, finish_request = std::move(finish_task_request)]() mutable {
+                        [this, finish_request = finish_task_request]() mutable {
                             update_tablet_version(finish_request);
 #ifndef BE_TEST
                             finish_task(finish_request);

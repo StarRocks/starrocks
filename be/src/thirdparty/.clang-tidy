@@ -1,2 +1,2 @@
-# Third-party code: disable all clang-tidy checks.
-Checks: '-*'
+# Third-party code: keep only naming checks.
+Checks: '-*,readability-identifier-naming'

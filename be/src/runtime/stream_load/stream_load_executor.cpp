@@ -234,7 +234,7 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
     // set attachment if has
     TTxnCommitAttachment attachment;
     if (collect_load_stat(ctx, &attachment)) {
-        request.txnCommitAttachment = std::move(attachment);
+        request.txnCommitAttachment = attachment;
         request.__isset.txnCommitAttachment = true;
     }
 

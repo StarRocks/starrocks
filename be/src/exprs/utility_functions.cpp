@@ -596,7 +596,7 @@ StatusOr<ColumnPtr> UtilityFunctions::encode_sort_key(FunctionContext* context, 
     }
 
     for (size_t i = 0; i < num_rows; i++) {
-        result.append(std::move(buffs[i]));
+        result.append(buffs[i]);
     }
     return result.build(ColumnHelper::is_all_const(columns));
 }

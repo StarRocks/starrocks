@@ -41,8 +41,8 @@ public:
         ASSIGN_OR_RETURN(ColumnPtr arg1, _children[1]->evaluate_checked(context, chunk));
         size_t num_rows = std::max(arg0->size(), arg1->size());
         // No optimization for const column now.
-        arg0 = ColumnHelper::unfold_const_column(_children[0]->type(), num_rows, std::move(arg0));
-        arg1 = ColumnHelper::unfold_const_column(_children[1]->type(), num_rows, std::move(arg1));
+        arg0 = ColumnHelper::unfold_const_column(_children[0]->type(), num_rows, arg0);
+        arg1 = ColumnHelper::unfold_const_column(_children[1]->type(), num_rows, arg1);
         const auto* array_column = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(arg0.get()));
         auto* array_elements = array_column->elements_column().get();
         const auto* array_elements_data = ColumnHelper::get_data_column(array_elements);

@@ -453,7 +453,7 @@ Status ChunkPredicateBuilder<E, Type>::_build_bitset_in_predicates(PredicateComp
                 or_node.add_child(PredicateColumnNode{is_null_pred.get()});
                 col_preds_owner.emplace_back(std::move(is_null_pred));
 
-                or_node.add_child(std::move(bitset_in_pred_node));
+                or_node.add_child(bitset_in_pred_node);
                 tree_root.add_child(std::move(or_node));
             }
 
@@ -1250,7 +1250,7 @@ Status ChunkPredicateBuilder<E, Type>::_get_column_predicates(PredicateParser* p
         const SlotDescriptor* slot_desc = slots[slot_index];
         for (ExprContext* ctx : expr_ctxs) {
             ASSIGN_OR_RETURN(auto tmp, parser->parse_expr_ctx(*slot_desc, _opts.runtime_state, ctx));
-            std::unique_ptr<ColumnPredicate> p(std::move(tmp));
+            std::unique_ptr<ColumnPredicate> p(tmp);
             if (p == nullptr) {
                 std::stringstream ss;
                 ss << "invalid filter, slot=" << slot_desc->debug_string();
@@ -1443,7 +1443,7 @@ Expr* ChunkPredicateBuilder<E, Type>::_gen_and_pred(Expr* left, Expr* right) {
 // OlapScanConjunctsManager
 // ------------------------------------------------------------------------------------
 
-ScanConjunctsManager::ScanConjunctsManager(ScanConjunctsManagerOptions&& opts)
+ScanConjunctsManager::ScanConjunctsManager(const ScanConjunctsManagerOptions& opts)
         : _opts(opts), _root_builder(_opts, build_expr_context_containers(*_opts.conjunct_ctxs_ptr), true) {}
 
 Status ScanConjunctsManager::parse_conjuncts() {

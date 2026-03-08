@@ -1,2 +1,2 @@
-# moodycamel concurrentqueue (third-party): disable all clang-tidy checks.
-Checks: '-*'
+# moodycamel concurrentqueue (third-party): keep only naming checks.
+Checks: '-*,readability-identifier-naming'

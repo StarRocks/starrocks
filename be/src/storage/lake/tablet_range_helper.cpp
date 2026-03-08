@@ -82,7 +82,7 @@ StatusOr<SeekRange> TabletRangeHelper::create_seek_range_from(const TabletRangeP
             const int idx = sort_key_idxes[i];
             schema.append_sort_key_idx(idx);
             auto f = std::make_shared<Field>(ChunkHelper::convert_field(idx, tablet_schema->column(idx)));
-            schema.append(std::move(f));
+            schema.append(f);
 
             Datum datum;
             RETURN_IF_ERROR(DatumVariant::from_proto(tuple.values(i), &datum, nullptr, nullptr, mem_pool));

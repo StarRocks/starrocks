@@ -257,10 +257,10 @@ void JVMFunctionHelper::_init() {
     // init list meta
     auto list_clazz = JNI_FIND_CLASS("java/util/List");
     DCHECK(list_clazz);
-    _list_meta.list_class = new JVMClass(std::move(list_clazz));
+    _list_meta.list_class = new JVMClass(list_clazz);
     auto array_list_clazz = JNI_FIND_CLASS("java/util/ArrayList");
     DCHECK(array_list_clazz);
-    _list_meta.array_list_class = new JVMClass(std::move(array_list_clazz));
+    _list_meta.array_list_class = new JVMClass(array_list_clazz);
 
     SET_METHOD_ID(_list_meta.list_get, list_clazz, "get", "(I)Ljava/lang/Object;");
     SET_METHOD_ID(_list_meta.list_size, list_clazz, "size", "()I");
@@ -269,7 +269,7 @@ void JVMFunctionHelper::_init() {
     // init immutable map meta
     auto immutable_map_clazz = JNI_FIND_CLASS("com/starrocks/udf/ImmutableMap");
     DCHECK(immutable_map_clazz != nullptr);
-    _map_meta.immutable_map_class = new JVMClass(std::move(immutable_map_clazz));
+    _map_meta.immutable_map_class = new JVMClass(immutable_map_clazz);
     auto map_clazz = JNI_FIND_CLASS("java/util/Map");
     DCHECK(map_clazz);
     _map_meta.map_class = new JVMClass(map_clazz);
@@ -278,7 +278,7 @@ void JVMFunctionHelper::_init() {
 
     name = JVMFunctionHelper::to_jni_class_name(UDAFStateList::clazz_name);
     jclass loaded_clazz = JNI_FIND_CLASS(name.c_str());
-    _function_states_clazz = new JVMClass(std::move(loaded_clazz));
+    _function_states_clazz = new JVMClass(loaded_clazz);
 }
 
 jobjectArray JVMFunctionHelper::_build_object_array(jclass clazz, jobject* arr, int sz) {

@@ -273,7 +273,7 @@ struct HashTableProbeState {
         ProbeCoroutine(std::coroutine_handle<ProbePromise> h) : handle(h) {}
         ~ProbeCoroutine() = default;
         std::coroutine_handle<ProbePromise> handle;
-        operator std::coroutine_handle<promise_type>() const { return std::move(handle); }
+        operator std::coroutine_handle<promise_type>() const { return handle; }
     };
     uint32_t match_count = 0;
     int active_coroutines = 0;

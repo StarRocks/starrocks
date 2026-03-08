@@ -112,7 +112,7 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
                 task.partition_id = publish_version_req.partition_version_infos[i].partition_id;
                 task.tablet_id = itr.first.tablet_id;
                 task.version = publish_version_req.partition_version_infos[i].version;
-                task.rowset = std::move(itr.second.first);
+                task.rowset = itr.second.first;
                 task.is_shadow = itr.second.second;
                 // rowset can be nullptr if it just prepared but not committed
                 if (task.rowset != nullptr) {

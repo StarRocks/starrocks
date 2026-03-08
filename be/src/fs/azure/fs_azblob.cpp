@@ -476,8 +476,7 @@ private:
     AzBlobClientFactory* _factory;
 };
 
-AzBlobFileSystem::AzBlobFileSystem(const FSOptions& options)
-        : _options(std::move(options)), _factory(blob_client_factory()) {}
+AzBlobFileSystem::AzBlobFileSystem(const FSOptions& options) : _options(options), _factory(blob_client_factory()) {}
 
 StatusOr<BlobContainerClientPtr> AzBlobFileSystem::new_blob_container_client(const AzBlobURI& uri) {
     // Create azure cloud credential from TCloudConfiguration.cloud_properties

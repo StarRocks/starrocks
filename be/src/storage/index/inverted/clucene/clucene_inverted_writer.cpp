@@ -45,7 +45,7 @@ public:
 
     explicit CLuceneInvertedWriterImpl(const std::string& field_name, const std::string& directory,
                                        const TabletIndex* inverted_index)
-            : _directory(std::move(directory)), _inverted_index(inverted_index) {
+            : _directory(directory), _inverted_index(inverted_index) {
         _parser_type = get_inverted_index_parser_type_from_string(
                 get_parser_string_from_properties(_inverted_index->index_properties()));
         _field_name = std::wstring(field_name.begin(), field_name.end());
