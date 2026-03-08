@@ -14,8 +14,7 @@
 
 #include "storage/olap_define.h"
 
-#include "common/config.h"
-
+#include "common/config_scan_io_fwd.h"
 namespace starrocks {
 
 uint32_t get_olap_string_max_length() {

@@ -16,7 +16,10 @@
 
 #include <utility>
 
-#include "common/config.h"
+#include "common/config_cache_fwd.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "common/tracer.h"
 #include "io/io_profiler.h"
 #include "runtime/current_thread.h"

@@ -14,7 +14,7 @@
 
 #include "storage/persistent_index_load_executor.h"
 
-#include "common/config.h"
+#include "common/config_primary_key_fwd.h"
 #include "runtime/starrocks_metrics.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"

@@ -23,6 +23,7 @@
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
+#include "common/config_scan_io_fwd.h"
 #include "common/logging.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
@@ -35,11 +36,6 @@
 #include "exec/workgroup/work_group_fwd.h"
 #include "gen_cpp/InternalService_types.h"
 #include "storage/chunk_helper.h"
-
-namespace starrocks::config {
-// Keep this declaration in sync with common/config.h.
-extern int32_t io_tasks_per_scan_operator;
-} // namespace starrocks::config
 
 namespace starrocks::spill {
 DECLARE_FAIL_POINT(spill_restore_sleep);

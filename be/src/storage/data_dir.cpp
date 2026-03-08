@@ -43,7 +43,7 @@
 #include "base/system/errno.h"
 #include "base/time/monotime.h"
 #include "base/utility/defer_op.h"
-#include "common/config.h"
+#include "common/config_storage_fwd.h"
 #include "common/system/backend_options.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"

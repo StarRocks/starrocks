@@ -30,7 +30,7 @@
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_rowset_fwd.h"
 #include "gutil/casts.h"
 #include "storage/column_predicate.h"
 #include "types/logical_type.h"

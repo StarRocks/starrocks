@@ -17,7 +17,7 @@
 #include <utility>
 
 #include "column/chunk.h"
-#include "common/config.h"
+#include "common/config_ingest_fwd.h"
 #include "common/statusor.h"
 #include "exec/write_combined_txn_log.h"
 #include "exprs/expr.h"

@@ -27,7 +27,7 @@
 #include "base/testutil/sync_point.h"
 #include "base/uid_util.h"
 #include "base/utility/defer_op.h"
-#include "common/config.h"
+#include "common/config_lake_fwd.h"
 #include "fs/fs.h"
 #include "json2pb/json_to_pb.h"
 #include "storage/lake/fixed_location_provider.h"

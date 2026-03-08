@@ -14,7 +14,7 @@
 
 #include "exec/pipeline/pipeline_driver_queue.h"
 
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
 #include "exec/pipeline/pipeline_metrics.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/workgroup/work_group.h"

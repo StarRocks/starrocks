@@ -27,7 +27,7 @@
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "common/compiler_util.h"
-#include "common/config.h"
+#include "common/config_lake_fwd.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "fmt/format.h"
 #include "fs/fs.h"

@@ -39,7 +39,8 @@
 
 #include "base/simd/simd.h"
 #include "column/nullable_column.h"
-#include "common/config.h"
+#include "common/config_rowset_fwd.h"
+#include "common/config_scan_io_fwd.h"
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "storage/index/inverted/inverted_index_option.h"

@@ -19,7 +19,8 @@
 
 #include "base/debug/trace.h"
 #include "column/datum_convert.h"
-#include "common/config.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_lake_fwd.h"
 #include "fs/fs_factory.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"

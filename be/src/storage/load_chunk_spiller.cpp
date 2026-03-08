@@ -14,7 +14,8 @@
 
 #include "storage/load_chunk_spiller.h"
 
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_ingest_fwd.h"
 #include "exec/spill/options.h"
 #include "exec/spill/serde.h"
 #include "exec/spill/spiller.h"

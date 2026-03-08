@@ -15,7 +15,7 @@
 #include "storage/rows_mapper.h"
 
 #include "base/testutil/assert.h"
-#include "common/config.h"
+#include "common/config_storage_fwd.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"

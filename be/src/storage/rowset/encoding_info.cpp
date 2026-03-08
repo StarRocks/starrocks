@@ -37,7 +37,7 @@
 #include <cmath>
 #include <type_traits>
 
-#include "common/config.h"
+#include "common/config_rowset_fwd.h"
 #include "gutil/strings/substitute.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/binary_dict_page.h"

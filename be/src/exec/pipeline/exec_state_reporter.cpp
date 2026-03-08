@@ -21,7 +21,9 @@
 
 #include "agent/master_info.h"
 #include "base/network/network_util.h"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/config_network_fwd.h"
+#include "common/config_rpc_client_fwd.h"
 #include "common/system/backend_options.h"
 #include "exec/pipeline/pipeline_metrics.h"
 #include "runtime/client_cache.h"

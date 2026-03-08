@@ -43,7 +43,10 @@
 
 #include "base/utility/pretty_printer.h"
 #include "column/chunk.h"
-#include "common/config.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_rowset_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "common/logging.h"
 #include "common/tracer.h"
 #include "fs/fs.h"

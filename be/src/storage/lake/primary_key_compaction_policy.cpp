@@ -14,7 +14,8 @@
 
 #include "storage/lake/primary_key_compaction_policy.h"
 
-#include "common/config.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "gutil/strings/join.h"
 #include "storage/lake/update_manager.h"
 

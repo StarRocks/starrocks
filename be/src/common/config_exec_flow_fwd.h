@@ -20,22 +20,124 @@
 #include "common/configbase.h"
 
 namespace starrocks::config {
+// Compression related parameters
+// If true, compresses tuple data in Serialize.
+CONF_Bool(compress_rowbatches, "true");
+
+// Compress ratio when shuffle row_batches in network, not in storage engine.
+// If ratio is less than this value, use uncompressed data instead.
+CONF_mDouble(rpc_compress_ratio_threshold, "1.1");
+
 // (Advanced) Maximum size of per-query receive-side buffer.
 CONF_mInt32(exchg_node_buffer_size_bytes, "10485760");
 
 // Result buffer cancelled time (unit: second).
 CONF_mInt32(result_buffer_cancelled_interval_time, "300");
 
+// es scroll keep-alive.
+CONF_String(es_scroll_keepalive, "5m");
+
+// HTTP connection timeout for es.
+CONF_Int32(es_http_timeout_ms, "5000");
+
+// Max batched bytes for each transmit request. (256KB)
+CONF_Int64(max_transmit_batched_bytes, "262144");
+
+// pipeline process timeout guard. Suggested Value: 5000
+CONF_mInt64(pipeline_process_timeout_guard_ms, "-1");
+
+// pipeline scan timeout guard. Suggested Value: 10000
+CONF_mInt64(pipeline_scan_timeout_guard_ms, "-1");
+
 // whether to enable large column detection in the pipeline execution framework.
 CONF_mBool(pipeline_enable_large_column_checker, "false");
 
+// Queue size of scan thread pool for pipeline engine.
+CONF_Int64(pipeline_scan_thread_pool_queue_size, "102400");
+
+CONF_Int64(pipeline_prepare_thread_pool_queue_size, "102400");
+
+// The buffer size of SinkBuffer.
+CONF_Int64(pipeline_sink_buffer_size, "64");
+
+// The degree of parallelism of brpc.
+CONF_Int64(pipeline_sink_brpc_dop, "64");
+
+CONF_mBool(pipeline_print_profile, "false");
+
+CONF_mBool(pipeline_timeout_diagnostic, "false");
+
+// The arguments of multilevel feedback pipeline_driver_queue. It prioritizes small queries over larger ones,
+// when the value of level_time_slice_base_ns is smaller and queue_ratio_of_adjacent_queue is larger.
+CONF_Int64(pipeline_driver_queue_level_time_slice_base_ns, "200000000");
+
+CONF_Double(pipeline_driver_queue_ratio_of_adjacent_queue, "1.2");
+
+CONF_Int32(pipeline_analytic_max_buffer_size, "128");
+
+CONF_Int32(pipeline_analytic_removable_chunk_num, "128");
+
+CONF_Bool(pipeline_analytic_enable_streaming_process, "true");
+
+CONF_mBool(pipeline_analytic_enable_removable_cumulative_process, "true");
+
+CONF_Int32(pipline_limit_max_delivery, "4096");
+
+// the maximum number of connections in the connection pool for a single jdbc url
+CONF_Int16(jdbc_connection_pool_size, "8");
+
+// the minimum number of idle connections that connection pool tries to maintain.
+// if the idle connections dip below this value and the total connections in the pool are less than jdbc_connection_pool_size,
+// the connection pool will make a best effort to add additional connections quickly.
+CONF_Int16(jdbc_minimum_idle_connections, "1");
+
+// the maximum amount of time that a connection is allowed to sit idle in the pool.
+// this setting only applies when jdbc_minimum_idle_connections is less than jdbc_connection_pool_size.
+// The minimum allowed value is 10000(10 seconds).
+CONF_Int32(jdbc_connection_idle_timeout_ms, "600000");
+
+// when spill occurs, whether enable skip synchronous flush
+CONF_mBool(experimental_spill_skip_sync, "true");
+
 // spill Initial number of partitions
 CONF_mInt32(spill_init_partition, "16");
+
+// make sure 2^spill_max_partition_level < spill_max_partition_size
+CONF_Int32(spill_max_partition_level, "7");
+
+CONF_Int32(spill_max_partition_size, "1024");
+
+// The maximum size of a single log block container file, this is not a hard limit.
+// If the file size exceeds this limit, a new file will be created to store the block.
+CONF_Int64(spill_max_log_block_container_bytes, "10737418240"); // 10GB
+
+// The maximum size of a single spill directory, for some case the spill directory may
+// be the same with storage path. Spill will return with error when used size has exceeded
+// the limit.
+CONF_mDouble(spill_max_dir_bytes_ratio, "0.8"); // 80%
 
 // min bytes size of spill read buffer. if the buffer size is less than this value, we will disable buffer read
 CONF_Int64(spill_read_buffer_min_bytes, "1048576");
 
 CONF_mInt64(mem_limited_chunk_queue_block_size, "8388608");
+
+// The max number of threads for exec_state_report thread pool.
+CONF_mInt32(exec_state_report_max_threads, "2");
+
+// The max number of threads for priority_exec_state_report thread pool.
+CONF_mInt32(priority_exec_state_report_max_threads, "2");
+
+// The retry times of rpc request to report exec rpc request to FE. The default value is 10,
+// which means that the rpc request will be retried 10 times if it fails if it's fragment instatnce finish rpc.
+// Report exec rpc request is important for load job, if one fragment instance finish report failed,
+// the load job will be hang until timeout.
+CONF_mInt32(report_exec_rpc_request_retry_num, "10");
+
+// When query cache enabled, the operators in the drivers contains cache operator are multilane
+// operators, if the number of lanes is big, Fragment Instance would spend too much time to prepare
+// operators since the number of operators scale up with the number of lanes.
+// ranges in [1,16], default value is 4.
+CONF_mInt32(query_cache_num_lanes_per_driver, "4");
 
 // limit local exchange buffer's memory size per driver
 CONF_Int64(local_exchange_buffer_mem_limit_per_driver, "134217728"); // 128MB
@@ -43,7 +145,48 @@ CONF_Int64(local_exchange_buffer_mem_limit_per_driver, "134217728"); // 128MB
 // only used for test. default: 128M
 CONF_mInt64(streaming_agg_limited_memory_size, "134217728");
 
+// mem limit for partition hash join probe side buffer
+CONF_mInt64(partition_hash_join_probe_limit_size, "134217728");
+
+// pipeline streaming aggregate chunk buffer size
+CONF_mInt32(streaming_agg_chunk_buffer_size, "1024");
+
+// sink buffer memory limit per driver
+CONF_mInt64(sink_buffer_mem_limit_per_driver, "134217728");
+
+// Used by default mv resource group.
+// These parameters are deprecated because now FE store and persist default_mv_wg.
+CONF_Double(default_mv_resource_group_memory_limit, "0.8");
+
+CONF_Int32(default_mv_resource_group_cpu_limit, "1");
+
+CONF_Int32(default_mv_resource_group_concurrency_limit, "0");
+
+CONF_Double(default_mv_resource_group_spill_mem_limit_threshold, "0.8");
+
+CONF_mInt32(dictionary_cache_refresh_timeout_ms, "60000"); // 1 min
+
+// Min data processed when scaling connector sink writers, default value is the same as Trino
+CONF_mInt64(writer_scaling_min_size_mb, "128");
+
+// default batch size for simdjson lib
+CONF_mInt32(json_parse_many_batch_size, "1000000");
+
+CONF_mBool(enable_dynamic_batch_size_for_json_parse_many, "true");
+
+CONF_mInt32(big_query_sec, "1");
+
 CONF_mInt64(split_exchanger_buffer_chunk_num, "1000");
+
+// when to split hashmap/hashset into two level hashmap/hashset, negative number means use default value
+CONF_mInt64(two_level_memory_threshold, "-1");
+
+CONF_mBool(enable_pipeline_driver_parallel_prepare, "true");
+
+// used by global late materialization, may be removed in the future
+CONF_mInt64(fetch_max_buffer_chunk_num, "8");
+
+CONF_mInt64(max_batch_num_per_fetch_operator, "8");
 
 CONF_mInt64(max_lookup_batch_request, "8");
 
