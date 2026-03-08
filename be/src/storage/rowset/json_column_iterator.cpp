@@ -56,7 +56,7 @@ public:
               _target_types(target_types),
               _source_paths(source_paths),
               _source_types(source_types),
-              _need_remain(need_remain) {};
+              _need_remain(need_remain){};
 
     ~JsonFlatColumnIterator() override {
         if (transformer != nullptr) {
@@ -450,7 +450,7 @@ public:
               _null_iter(std::move(null_iter)),
               _all_iter(std::move(all_iter)),
               _src_paths(src_paths),
-              _src_types(src_types) {};
+              _src_types(src_types){};
 
     ~JsonMergeIterator() override = default;
 
