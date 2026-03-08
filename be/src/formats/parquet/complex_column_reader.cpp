@@ -717,12 +717,11 @@ static Status _read_shredded_field_node(const Range<uint64_t>& range, const Filt
     }
     // Sanity check: value and typed_value columns must have the same number of rows.
     // A mismatch indicates a corrupted file or a filter/range application bug.
-    if (node->value_column != nullptr && node->typed_value_column != nullptr) {
-        if (node->value_column->size() != node->typed_value_column->size()) {
-            return Status::InternalError(
-                    strings::Substitute("shredded field '$0': value_column size $1 != typed_value_column size $2",
-                                        node->name, node->value_column->size(), node->typed_value_column->size()));
-        }
+    if (node->value_column != nullptr && node->typed_value_column != nullptr &&
+        node->value_column->size() != node->typed_value_column->size()) {
+        return Status::InternalError(
+                strings::Substitute("shredded field '$0': value_column size $1 != typed_value_column size $2",
+                                    node->name, node->value_column->size(), node->typed_value_column->size()));
     }
     for (auto& child : node->children) {
         RETURN_IF_ERROR(_read_shredded_field_node(range, filter, &child));
