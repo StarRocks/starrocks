@@ -1126,18 +1126,18 @@ static std::vector<TopBinding> select_materialized_bindings(const std::vector<To
             if (binding.node == nullptr) {
                 continue;
             }
-            const bool has_typed = ParquetUtils::has_non_null_value(binding.node->typed_value_column.get(), num_rows);
-            const bool has_fallback =
-                    ParquetUtils::has_non_null_binary_value(binding.node->value_column.get(), num_rows);
-            if (has_typed && !has_fallback) {
+            VariantScalarMaterializeMode mode = decide_variant_scalar_materialize_mode(binding.node, num_rows);
+            if (mode == VariantScalarMaterializeMode::KEEP_SCALAR) {
                 // Fully-typed path: keep scalar materialization.
                 output.push_back(binding);
-            } else if (has_typed || has_fallback) {
+            } else if (mode == VariantScalarMaterializeMode::DEMOTE_VARIANT) {
                 // Mixed or fallback-only path: demote to VARIANT (see NOTE above).
                 TopBinding variant_binding = binding;
                 variant_binding.kind = TopBinding::Kind::VARIANT;
                 variant_binding.type = variant_type_desc();
                 output.push_back(std::move(variant_binding));
+            } else {
+                LOG_EVERY_N(WARNING, 100) << "drop scalar shredded binding due to missing node, path=" << binding.path;
             }
         } else {
             // VARIANT: always include; reconstruction is always valid.
@@ -1145,6 +1145,23 @@ static std::vector<TopBinding> select_materialized_bindings(const std::vector<To
         }
     }
     return output;
+}
+
+VariantScalarMaterializeMode decide_variant_scalar_materialize_mode(const ShreddedFieldNode* node, size_t num_rows) {
+    if (node == nullptr) {
+        return VariantScalarMaterializeMode::DROP;
+    }
+    const bool has_typed = ParquetUtils::has_non_null_value(node->typed_value_column.get(), num_rows);
+    const bool has_fallback = ParquetUtils::has_non_null_binary_value(node->value_column.get(), num_rows);
+    if (has_typed && !has_fallback) {
+        return VariantScalarMaterializeMode::KEEP_SCALAR;
+    }
+    if (has_typed || has_fallback) {
+        return VariantScalarMaterializeMode::DEMOTE_VARIANT;
+    }
+    // Keep all-null scalar bindings to preserve a stable shredded-path shape.
+    // append_top_scalar_binding_value() will append null for every row in this batch.
+    return VariantScalarMaterializeMode::KEEP_SCALAR;
 }
 
 static void append_top_scalar_binding_value(size_t row, const TopBinding& binding, Column* dst_column) {

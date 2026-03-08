@@ -1375,6 +1375,33 @@ TEST_F(GroupReaderTest, VariantColumnReaderFallbackOnly) {
     ASSERT_NE(st.value(), nullptr);
 }
 
+TEST_F(GroupReaderTest, VariantScalarMaterializeModeKeepsAllNullBinding) {
+    ShreddedFieldNode node;
+    node.typed_kind = ShreddedTypedKind::SCALAR;
+    node.typed_value_column = ColumnHelper::create_column(TYPE_INT_DESC, true);
+    node.value_column = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
+    node.typed_value_column->as_mutable_ptr()->append_nulls(3);
+    node.value_column->as_mutable_ptr()->append_nulls(3);
+
+    ASSERT_EQ(VariantScalarMaterializeMode::KEEP_SCALAR, decide_variant_scalar_materialize_mode(&node, 3));
+}
+
+TEST_F(GroupReaderTest, VariantScalarMaterializeModeDemotesMixedBinding) {
+    ShreddedFieldNode node;
+    node.typed_kind = ShreddedTypedKind::SCALAR;
+    node.typed_value_column = ColumnHelper::create_column(TYPE_INT_DESC, true);
+    node.value_column = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
+    node.typed_value_column->as_mutable_ptr()->append_datum(1);
+    Slice fallback("S1");
+    node.value_column->as_mutable_ptr()->append_datum(fallback);
+
+    ASSERT_EQ(VariantScalarMaterializeMode::DEMOTE_VARIANT, decide_variant_scalar_materialize_mode(&node, 1));
+}
+
+TEST_F(GroupReaderTest, VariantScalarMaterializeModeDropsNullNode) {
+    ASSERT_EQ(VariantScalarMaterializeMode::DROP, decide_variant_scalar_materialize_mode(nullptr, 1));
+}
+
 TEST_F(GroupReaderTest, VariantColumnReaderWithArrayShredding) {
     ParquetField field;
     field.name = "col_variant";
