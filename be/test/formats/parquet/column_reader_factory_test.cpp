@@ -65,6 +65,23 @@ ParquetField make_variant_field_with_typed_group(const std::vector<ParquetField>
     return variant;
 }
 
+ParquetField make_shredded_object_node_with_nested_scalar(const std::string& name, int value_idx, int nested_value_idx,
+                                                          int nested_typed_idx,
+                                                          tparquet::Type::type nested_typed_physical) {
+    ParquetField node;
+    node.name = name;
+    node.type = ColumnType::STRUCT;
+    node.children.emplace_back(make_scalar_field("value", value_idx, tparquet::Type::BYTE_ARRAY));
+
+    ParquetField typed_group;
+    typed_group.name = "typed_value";
+    typed_group.type = ColumnType::STRUCT;
+    typed_group.children.emplace_back(
+            make_shredded_scalar_node("k", nested_value_idx, nested_typed_idx, nested_typed_physical));
+    node.children.emplace_back(std::move(typed_group));
+    return node;
+}
+
 ColumnReaderOptions make_opts_with_num_cols(int num_cols) {
     static tparquet::RowGroup rg;
     rg.columns.clear();
@@ -314,6 +331,26 @@ TEST(ColumnReaderFactoryTest, VariantScalarTypeInferenceBranches) {
     auto st = ColumnReaderFactory::create_variant_column_reader(opts, &variant, {});
     ASSERT_TRUE(st.ok()) << st.status().to_string();
     ASSERT_NE(st.value(), nullptr);
+}
+
+TEST(ColumnReaderFactoryTest, VariantShreddedCollectIoRangeAndSelectOffsetIndex) {
+    auto obj = make_shredded_object_node_with_nested_scalar("obj", 2, 3, 4, tparquet::Type::INT32);
+    ParquetField variant = make_variant_field_with_typed_group({obj});
+    auto opts = make_opts_with_num_cols(5);
+
+    auto st = ColumnReaderFactory::create_variant_column_reader(opts, &variant, {});
+    ASSERT_TRUE(st.ok()) << st.status().to_string();
+    ASSERT_NE(st.value(), nullptr);
+
+    std::vector<io::SharedBufferedInputStream::IORange> ranges;
+    int64_t end_offset = 0;
+    st.value()->collect_column_io_range(&ranges, &end_offset, ColumnIOType::PAGES, true);
+    // metadata/value plus shredded typed/fallback readers should contribute extra ranges.
+    ASSERT_GT(ranges.size(), 2);
+
+    SparseRange<uint64_t> sparse_range;
+    sparse_range.add(Range<uint64_t>(0, 8));
+    st.value()->select_offset_index(sparse_range, 0);
 }
 
 } // namespace starrocks::parquet

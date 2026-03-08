@@ -1723,4 +1723,53 @@ TEST_F(GroupReaderTest, StructColumnReaderPageIndexZoneMapFilterChildError) {
     ASSERT_EQ(10, row_ranges.span_size());
 }
 
+TEST_F(GroupReaderTest, StructColumnReaderReadRangeMissingSubfieldReader) {
+    ParquetField field;
+    field.name = "col_struct";
+    field.type = ColumnType::STRUCT;
+
+    std::map<std::string, ColumnReaderPtr> child_readers;
+    child_readers.emplace("a", std::make_unique<MockColumnReader>(tparquet::Type::INT32));
+    StructColumnReader reader(&field, std::move(child_readers));
+
+    TypeDescriptor struct_type = TypeDescriptor::create_struct_type({"b"}, {TYPE_INT_DESC});
+    ColumnPtr dst = ColumnHelper::create_column(struct_type, true);
+    auto st = reader.read_range(Range<uint64_t>(0, 1), nullptr, dst);
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(st.is_internal_error());
+}
+
+TEST_F(GroupReaderTest, StructColumnReaderReadRangeAllSubfieldsMissingInFile) {
+    ParquetField field;
+    field.name = "col_struct";
+    field.type = ColumnType::STRUCT;
+
+    std::map<std::string, ColumnReaderPtr> child_readers;
+    child_readers.emplace("a", nullptr);
+    StructColumnReader reader(&field, std::move(child_readers));
+
+    TypeDescriptor struct_type = TypeDescriptor::create_struct_type({"a"}, {TYPE_INT_DESC});
+    ColumnPtr dst = ColumnHelper::create_column(struct_type, true);
+    auto st = reader.read_range(Range<uint64_t>(0, 1), nullptr, dst);
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(st.is_internal_error());
+}
+
+TEST_F(GroupReaderTest, StructColumnReaderFillDstColumnMissingSubfieldReader) {
+    ParquetField field;
+    field.name = "col_struct";
+    field.type = ColumnType::STRUCT;
+
+    std::map<std::string, ColumnReaderPtr> child_readers;
+    child_readers.emplace("a", std::make_unique<MockColumnReader>(tparquet::Type::INT32));
+    StructColumnReader reader(&field, std::move(child_readers));
+
+    TypeDescriptor struct_type = TypeDescriptor::create_struct_type({"b"}, {TYPE_INT_DESC});
+    ColumnPtr src = ColumnHelper::create_column(struct_type, true);
+    ColumnPtr dst = ColumnHelper::create_column(struct_type, true);
+    auto st = reader.fill_dst_column(dst, src);
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(st.is_internal_error());
+}
+
 } // namespace starrocks::parquet
