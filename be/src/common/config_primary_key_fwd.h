@@ -146,12 +146,14 @@ CONF_mInt64(cloud_native_pk_index_rebuild_rows_threshold, "10000000");
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
 
-// max wal file size in l0
-CONF_mInt64(l0_max_file_size, "209715200"); // 200MB
+// max wal file size in l0, 200MB
+CONF_mInt64(l0_max_file_size, "209715200");
 
-CONF_mInt64(l0_min_mem_usage, "2097152"); // 2MB
+// 2MB
+CONF_mInt64(l0_min_mem_usage, "2097152");
 
-CONF_mInt64(l0_max_mem_usage, "104857600"); // 100MB
+// 100MB
+CONF_mInt64(l0_max_mem_usage, "104857600");
 
 CONF_mInt64(max_tmp_l1_num, "10");
 

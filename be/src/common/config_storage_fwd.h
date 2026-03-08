@@ -165,7 +165,8 @@ CONF_Bool(manual_compact_before_data_dir_load, "false");
 CONF_String(spill_local_storage_dir, "${STARROCKS_HOME}/spill");
 
 // if l0_mem_size exceeds this value, l0 need snapshot
-CONF_mInt64(l0_snapshot_size, "16777216"); // 16MB
+// 16MB
+CONF_mInt64(l0_snapshot_size, "16777216");
 
 // PK table's tabletmeta object size may got very large(lot's of edit versions), so it may not fit into block cache
 // that may impact BE load dir time when restart. here we change num_shard_bits to 0 to disable block cache sharding,
