@@ -352,7 +352,7 @@ private:
 
     LRUCache _shards[kNumShards];
     mutable std::mutex _mutex;
-    uint64_t _last_id;
+    uint64_t _last_id{0};
     size_t _capacity;
 };
 

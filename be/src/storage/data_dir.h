@@ -185,9 +185,9 @@ private:
     std::string _path;
     int64_t _path_hash;
     // the actual available capacity of the disk of this data dir
-    int64_t _available_bytes;
+    int64_t _available_bytes{0};
     // the actual capacity of the disk of this data dir
-    int64_t _disk_capacity_bytes;
+    int64_t _disk_capacity_bytes{0};
     TStorageMedium::type _storage_medium;
     DiskState _state;
 
@@ -197,7 +197,7 @@ private:
 
     // used to protect _current_shard and _tablet_set
     std::mutex _mutex;
-    uint64_t _current_shard;
+    uint64_t _current_shard{0};
     std::set<TabletInfo> _tablet_set;
 
     static const uint32_t MAX_SHARD_NUM = 1024;

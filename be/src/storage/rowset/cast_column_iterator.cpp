@@ -25,7 +25,7 @@ CastColumnIterator::CastColumnIterator(std::unique_ptr<ColumnIterator> source_it
                                        const TypeDescriptor& target_type, bool nullable_source)
         : ColumnIteratorDecorator(source_iter.release(), kTakesOwnership),
           _obj_pool(new ObjectPool()),
-          _cast_expr(nullptr),
+
           _source_chunk() {
     auto slot_id = SlotId{0};
     auto column = ColumnHelper::create_column(source_type, nullable_source);

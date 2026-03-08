@@ -82,7 +82,7 @@ private:
     RuntimeState* _state;
     std::vector<ExprContext*> _expr_ctxs;
     const SlotDescriptor* _slot_desc;
-    bool _monotonic;
+    bool _monotonic{true};
     mutable std::vector<uint8_t> _tmp_select;
 };
 

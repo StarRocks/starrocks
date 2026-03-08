@@ -282,7 +282,7 @@ private:
     WritableFile* _wfile;
     uint32_t _curr_page_format;
     // total size of data page list
-    uint64_t _data_size;
+    uint64_t _data_size{0};
 
     // cached generated pages,
     PageHead _pages;

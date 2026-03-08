@@ -88,13 +88,13 @@ private:
     Status _append_array_val_from_source(const rapidjson::Value& val, const TypeDescriptor& child_type_desc,
                                          Column* column);
 
-    const TupleDescriptor* _tuple_desc;
-    const std::map<std::string, std::string>* _doc_value_context;
+    const TupleDescriptor* _tuple_desc{nullptr};
+    const std::map<std::string, std::string>* _doc_value_context{nullptr};
     std::string _timezone;
 
     std::string _scroll_id;
-    size_t _size;
-    rapidjson::SizeType _cur_line;
+    size_t _size{0};
+    rapidjson::SizeType _cur_line{0};
     rapidjson::Document _document_node;
     rapidjson::Value _inner_hits_node;
 

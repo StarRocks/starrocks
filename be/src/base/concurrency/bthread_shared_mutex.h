@@ -30,7 +30,7 @@ private:
     typedef bthread::ConditionVariable _cv_type;
 
 public:
-    BThreadSharedMutex() : _state(0) {}
+    BThreadSharedMutex() {}
     ~BThreadSharedMutex() { assert(_state == 0); }
 
     BThreadSharedMutex(const BThreadSharedMutex&) = delete;
@@ -111,7 +111,7 @@ private:
     _mutex_type _mutex;
     _cv_type _gate1_cv;
     _cv_type _gate2_cv;
-    unsigned _state;
+    unsigned _state{0};
 };
 
 } // namespace starrocks::bthreads

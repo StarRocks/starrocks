@@ -23,7 +23,7 @@
 namespace starrocks {
 
 LocalFileWriter::LocalFileWriter(std::string path, int64_t start_offset)
-        : _path(std::move(path)), _start_offset(start_offset), _fp(nullptr) {}
+        : _path(std::move(path)), _start_offset(start_offset) {}
 
 LocalFileWriter::~LocalFileWriter() {
     (void)close();

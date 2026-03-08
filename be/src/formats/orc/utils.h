@@ -66,7 +66,7 @@ public:
 // which liborc will do timestamp conversion for us efficiently. and we just handle mismatch of timestamp representation.
 
 // in the following code, seconds has already be adjusted according to timezone.
-// Timestamp: {Jualian Date}{microsecond in one day, 0 ~ 86400000000}
+// Timestamp: {Jualian Date}
 // JulianDate use high 22 bits, microsecond use low 40 bits
 class OrcTimestampHelper {
 public:

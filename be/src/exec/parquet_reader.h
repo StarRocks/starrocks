@@ -97,12 +97,12 @@ private:
     // For nested column type, it's consisting of multiple physical-columns
     std::map<std::string, std::vector<int>> _map_column_nested;
     std::vector<int> _parquet_column_ids;
-    int _total_groups; // groups in a parquet file
-    int _current_group;
+    int _total_groups{0}; // groups in a parquet file
+    int _current_group{0};
 
-    int _rows_of_group; // rows in a group.
-    int _current_line_of_group;
-    int _current_line_of_batch;
+    int _rows_of_group{0}; // rows in a group.
+    int _current_line_of_group{0};
+    int _current_line_of_batch{0};
 
     int64_t _read_offset;
     int64_t _read_size;
@@ -128,7 +128,7 @@ private:
     std::shared_ptr<ParquetReaderWrap> _parquet_reader;
     const std::vector<SlotDescriptor*>& _src_slot_descs;
     std::string _time_zone;
-    State _state;
+    State _state{State::UNINITIALIZED};
 };
 
 } // namespace starrocks

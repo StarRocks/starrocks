@@ -27,9 +27,9 @@ namespace starrocks {
 AssertNumRowsNode::AssertNumRowsNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ExecNode(pool, tnode, descs),
           _desired_num_rows(tnode.assert_num_rows_node.desired_num_rows),
-          _subquery_string(tnode.assert_num_rows_node.subquery_string),
+          _subquery_string(tnode.assert_num_rows_node.subquery_string)
 
-          _has_assert(false) {
+{
     if (tnode.assert_num_rows_node.__isset.assertion) {
         _assertion = tnode.assert_num_rows_node.assertion;
     } else {

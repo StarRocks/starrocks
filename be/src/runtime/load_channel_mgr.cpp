@@ -110,7 +110,7 @@ static int64_t calc_job_timeout_s(int64_t timeout_in_req_s) {
     return load_channel_timeout_s;
 }
 
-LoadChannelMgr::LoadChannelMgr() : _mem_tracker(nullptr), _load_channels_clean_thread(INVALID_BTHREAD) {
+LoadChannelMgr::LoadChannelMgr() {
     REGISTER_GAUGE_STARROCKS_METRIC(load_channel_count, [this]() {
         std::lock_guard l(_lock);
         return _load_channels.size();
