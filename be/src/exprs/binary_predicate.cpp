@@ -504,18 +504,6 @@ public:
 struct BinaryPredicateBuilder {
     template <LogicalType data_type>
     Expr* operator()(const TExprNode& node) {
-        if constexpr (data_type == TYPE_VARIANT) {
-            switch (node.opcode) {
-            case TExprOpcode::EQ:
-                return new CommonEqualsPredicate<true>(node);
-            case TExprOpcode::NE:
-                return new CommonEqualsPredicate<false>(node);
-            case TExprOpcode::EQ_FOR_NULL:
-                return new CommonNullSafeEqualsPredicate(node);
-            default:
-                return nullptr;
-            }
-        }
         switch (node.opcode) {
         case TExprOpcode::EQ:
             return new VectorizedBinaryPredicate<data_type, BinaryPredFunc<EvalEq<data_type>>>(node);
@@ -554,7 +542,7 @@ Expr* VectorizedBinaryPredicateFactory::from_thrift(const TExprNode& node) {
         } else {
             return new ArrayPredicate(node);
         }
-    } else if (type == TYPE_MAP || type == TYPE_STRUCT) {
+    } else if (type == TYPE_MAP || type == TYPE_STRUCT || type == TYPE_VARIANT) {
         if (node.opcode == TExprOpcode::EQ) {
             return new CommonEqualsPredicate<true>(node);
         } else if (node.opcode == TExprOpcode::EQ_FOR_NULL) {
@@ -565,9 +553,6 @@ Expr* VectorizedBinaryPredicateFactory::from_thrift(const TExprNode& node) {
             return nullptr;
         }
     } else {
-        // TYPE_VARIANT is handled inside BinaryPredicateBuilder::operator() via the
-        // `if constexpr (data_type == TYPE_VARIANT)` branch, so it falls through here
-        // without a separate explicit case — avoiding duplicated dispatch logic.
         return type_dispatch_predicate<Expr*>(type, true, BinaryPredicateBuilder(), node);
     }
 }
