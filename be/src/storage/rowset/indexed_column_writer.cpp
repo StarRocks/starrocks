@@ -39,7 +39,7 @@
 #include <utility>
 
 #include "base/coding.h"
-#include "common/config.h"
+#include "common/config_rowset_fwd.h"
 #include "common/logging.h"
 #include "fs/fs.h"
 #include "storage/key_coder.h"

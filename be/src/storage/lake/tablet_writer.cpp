@@ -14,7 +14,7 @@
 
 #include "storage/lake/tablet_writer.h"
 
-#include "common/config.h"
+#include "common/config_primary_key_fwd.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/rowset/segment_writer.h"
 

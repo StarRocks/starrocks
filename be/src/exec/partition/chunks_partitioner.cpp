@@ -17,7 +17,7 @@
 #include <memory>
 #include <utility>
 
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
 #include "exec/limited_pipeline_chunk_buffer.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"

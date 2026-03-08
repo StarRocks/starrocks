@@ -39,6 +39,16 @@ CONF_mBool(enable_load_channel_rpc_async, "true");
 // Default is 600 seconds.
 CONF_mInt32(load_channel_abort_clean_up_delay_seconds, "600");
 
+// Number of thread for async delta writer.
+// Default value is max(cpucores/2, 16)
+CONF_mInt32(number_tablet_writer_threads, "0");
+
+// Whether to use special thread pool for streaming load to avoid deadlock for
+// concurrent streaming loads. The maximum number of threads and queue size are
+// set INT32_MAX which indicate there is no limit for the thread pool. Note you
+// don't need to change these configurations in general.
+CONF_mBool(enable_streaming_load_thread_pool, "true");
+
 // The maximum amount of data that can be processed by a stream load
 CONF_mInt64(streaming_load_max_mb, "102400");
 
@@ -52,13 +62,97 @@ CONF_mInt64(streaming_load_max_batch_size_mb, "100");
 // the channel will be removed.
 CONF_Int32(streaming_load_rpc_max_alive_time_sec, "1200");
 
+// The timeout of a rpc to open the tablet writer in remote BE.
+// actual timeout is min(tablet_writer_open_rpc_timeout_sec, load_timeout_sec / 2)
+CONF_mInt32(tablet_writer_open_rpc_timeout_sec, "300");
+
+// Whether to enable load diagnose. The diagnosis is initiated by OlapTableSink when meeting brpc timeout
+// from LoadChannel. It will send rpc to LoadChannel to check the status.
+CONF_mBool(enable_load_diagnose, "true");
+
+// The timeout of the diagnosis rpc sent from OlapTableSink to LoadChannel
+CONF_mInt32(load_diagnose_send_rpc_timeout_ms, "2000");
+
+// If the rpc timeout exceeds this threshold, then profile diagnostics will be performed every time
+// a timeout occurs; if it is below this threshold, diagnostics will be performed once every 20 timeouts.
+// This is used to avoid frequent diagnostics for real-time loads which have a smaller brpc timeout.
+CONF_mInt32(load_diagnose_rpc_timeout_profile_threshold_ms, "60000");
+
+// If the rpc timeout exceeds this threshold, then stack trace diagnostics will be enabled.
+// OlapTableSink will send stack trace request to the target BE.
+CONF_mInt32(load_diagnose_rpc_timeout_stack_trace_threshold_ms, "600000");
+
+// Used in load fail point. The brpc timeout used to simulate brpc exception "[E1008]Reached timeout"
+CONF_mInt32(load_fp_brpc_timeout_ms, "-1");
+
+CONF_Bool(enable_load_segment_parallel, "false");
+
+// write buffer size before flush
+CONF_mInt64(write_buffer_size, "104857600");
+
+// It's hard limit ratio, when this limit is hit, new loading task will be rejected.
+// we can caculate and got the hard limit percent.
+// E.g.
+//  load_process_max_memory_limit_percent is 30%,
+//  load_process_max_memory_hard_limit_ratio is 2.
+//  then hard limit percent is 30% * 2 = 60%.
+//  And when hard limit percent is larger than process limit percent,
+//  use process limit percent as hard limit percent.
+CONF_mDouble(load_process_max_memory_hard_limit_ratio, "2");
+
+CONF_mBool(enable_new_load_on_memory_limit_exceeded, "false");
+
 // txn commit rpc timeout
 CONF_mInt32(txn_commit_rpc_timeout_ms, "60000");
 
+// max chunk size for each tablet write request. (512MB)
+// see: https://github.com/StarRocks/starrocks/pull/50302
+// NOTE: If there are a large number of columns when loading,
+// a too small max_tablet_write_chunk_bytes may cause more frequent RPCs, which may affect performance.
+// In this case, we can try to increase the value to avoid the problem.
+CONF_mInt64(max_tablet_write_chunk_bytes, "536870912");
+
+CONF_Int64(max_load_dop, "16");
+
 CONF_Bool(enable_load_colocate_mv, "true");
+
+// Used to limit buffer size of tablet send channel.
+CONF_mInt64(send_channel_buffer_limit, "67108864");
 
 CONF_mBool(enable_http_stream_load_limit, "false");
 
 CONF_mBool(enable_stream_load_verbose_log, "false");
+
+CONF_mBool(enable_load_spill, "true");
+
+// Max chunk bytes which allow to spill per flush. Default is 10MB.
+CONF_mInt64(load_spill_max_chunk_bytes, "10485760");
+
+// Max merge input bytes during spill merge. Default is 1024MB.
+CONF_mInt64(load_spill_max_merge_bytes, "1073741824");
+
+// Max memory usage per merge during spill merge. Default is 1024MB.
+CONF_mInt64(load_spill_memory_usage_per_merge, "1073741824");
+
+// Max memory used for merge load spill blocks.
+CONF_mInt64(load_spill_merge_memory_limit_percent, "30");
+
+// Upper bound of spill merge thread count
+CONF_mInt64(load_spill_merge_max_thread, "16");
+
+// Enable parallel spill merge inside single tablet
+CONF_mBool(enable_load_spill_parallel_merge, "true");
+
+// Enable parallel finalize memtable when loading to lake table.
+// When enabled, the memtable finalize operation (sort/aggregate) will be moved from the
+// write thread to the flush thread, allowing the write thread to continue inserting data
+// into a new memtable while the previous one is being finalized and flushed in parallel.
+// This can significantly improve load throughput by overlapping CPU-intensive finalize
+// operations with I/O-bound flush operations.
+// Note: This optimization is disabled when auto-increment columns need to be filled,
+// as auto-increment ID assignment must happen before the memtable is submitted for flush.
+CONF_mBool(enable_parallel_memtable_finalize, "true");
+
+CONF_mBool(enable_put_combinded_txn_log_parallel, "false");
 
 } // namespace starrocks::config

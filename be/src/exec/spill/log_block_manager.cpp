@@ -27,7 +27,7 @@
 #include "base/uid_util.h"
 #include "base/utility/defer_op.h"
 #include "block_manager.h"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/status.h"
 #include "exec/spill/block_manager.h"
 #include "exec/spill/common.h"
