@@ -30,7 +30,7 @@ public:
         VLOG_ROW << "AggStateCombinator constructor:" << _agg_state_desc.debug_string();
     }
 
-    ~AggStateCombinator() = default;
+    ~AggStateCombinator() override = default;
 
     bool support_nullable_immediate_input() const override { return _function->support_nullable_immediate_input(); }
 

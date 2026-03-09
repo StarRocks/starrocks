@@ -45,7 +45,7 @@ class PersistentIndexLoadExecutor;
 class LocalDelvecLoader : public DelvecLoader {
 public:
     LocalDelvecLoader(KVStore* meta) : _meta(meta) {}
-    Status load(const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec);
+    Status load(const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec) override;
 
 private:
     KVStore* _meta = nullptr;
@@ -54,9 +54,9 @@ private:
 class LocalDeltaColumnGroupLoader : public DeltaColumnGroupLoader {
 public:
     LocalDeltaColumnGroupLoader(KVStore* meta) : _meta(meta) {}
-    Status load(const TabletSegmentId& tsid, int64_t version, DeltaColumnGroupList* pdcgs);
+    Status load(const TabletSegmentId& tsid, int64_t version, DeltaColumnGroupList* pdcgs) override;
     Status load(int64_t tablet_id, RowsetId rowsetid, uint32_t segment_id, int64_t version,
-                DeltaColumnGroupList* pdcgs);
+                DeltaColumnGroupList* pdcgs) override;
     KVStore* meta() const { return _meta; }
 
 private:
