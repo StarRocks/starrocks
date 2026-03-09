@@ -6,15 +6,15 @@ displayed_sidebar: docs
 
 
 
-Sorts the elements of an array in ascending order.
+Sorts the elements of an array in ascending order. From v4.1, `array_sort` supports Lambda Comparator.
 
 ## Syntax
 
 ```Haskell
+-- Without Lambda Comparator
 array_sort(array)
-```
 
-```Haskell
+-- With Lambda Comparator
 array_sort(array, (x,y)->expr(x,y))
 ```
 
@@ -50,7 +50,10 @@ Returns an array.
   - **Irreflexivity**: For all `x`, `expr(x, x)` must return false (boolean) or non-negative (numeric)
   - **Asymmetry**: If `expr(x, y)` holds, then `expr(y, x)` must not hold
   - **Transitivity**: If `expr(x, y)` and `expr(y, z)` hold, then `expr(x, z)` must hold
-  - **Connectedness**: For all `x` and `y`, either `expr(x, y)` or `expr(y, x)` or `x = y` must be true
+  - **Connectedness**: For all `x` and `y`, one of the following must be true:
+    - `expr(x, y)`
+    - `expr(y, x)`
+    - `x = y`
 
 - The lambda comparator expression must:
   - Only depend on parameters `x` and `y`
@@ -60,29 +63,23 @@ Returns an array.
 
 ### Descending Order
 
-- If you want to sort the elements of an array in descending order, use the [reverse](../string-functions/reverse.md) function.
+If you want to sort the elements of an array in descending order, use the [reverse](../string-functions/reverse.md) function.
 
 ## Examples
+
+### Basic Examples
 
 The following table is used as an example:
 
 ```plaintext
 mysql> select * from test;
-
 +------+--------------+
-
 | c1   | c2           |
-
 +------+--------------+
-
 |    1 | [4,3,null,1] |
-
 |    2 | NULL         |
-
 |    3 | [null]       |
-
 |    4 | [8,5,1,4]    |
-
 +------+--------------+
 ```
 
@@ -90,21 +87,13 @@ Sort the values of column `c2` in ascending order.
 
 ```plaintext
 mysql> select c1, array_sort(c2) from test;
-
 +------+------------------+
-
 | c1   | array_sort(`c2`) |
-
 +------+------------------+
-
 |    1 | [null,1,3,4]     |
-
 |    2 | NULL             |
-
 |    3 | [null]           |
-
 |    4 | [1,4,5,8]        |
-
 +------+------------------+
 ```
 
