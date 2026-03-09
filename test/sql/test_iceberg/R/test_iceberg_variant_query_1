@@ -180,6 +180,22 @@ SELECT '=== Test 1: Basic Type <-> VARIANT Bidirectional Casting ===' as test_se
 SELECT
     id,
     test_case,
+    boolean_val as original_boolean,
+    variant_from_boolean,
+    variant_query(variant_from_boolean, '$') as extracted_variant_boolean,
+    CAST(variant_query(variant_from_boolean, '$') AS BOOLEAN) as extracted_boolean
+FROM variant_test_unified
+WHERE test_scenario = 'basic_types'
+ORDER BY id;
+-- result:
+1	positive_values	1	true	true	1
+2	negative_values	0	false	false	0
+3	zero_and_empty	None	null	null	None
+4	all_null	None	null	null	None
+-- !result
+SELECT
+    id,
+    test_case,
 
     -- INT
     int_val as original_int,

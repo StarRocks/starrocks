@@ -20,145 +20,13 @@
 #include <cstring>
 
 #include "base/hash/hash_std.hpp"
+#include "base/simd/simd.h"
+#include "column/const_column.h"
+#include "column/nullable_column.h"
 #include "formats/parquet/schema.h"
+#include "gutil/casts.h"
 
 namespace starrocks::parquet {
-
-static TypeDescriptor _decimal_type_from_field(const ParquetField& field) {
-    const int precision = field.precision > 0 ? field.precision : TypeDescriptor::MAX_DECIMAL8_PRECISION;
-    const int scale = field.scale >= 0 ? field.scale : 0;
-    if (precision <= TypeDescriptor::MAX_DECIMAL4_PRECISION) {
-        return TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, precision, scale);
-    }
-    if (precision <= TypeDescriptor::MAX_DECIMAL8_PRECISION) {
-        return TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, precision, scale);
-    }
-    return TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, precision, scale);
-}
-
-static LogicalType _logical_type_from_integer(const tparquet::IntType& int_type) {
-    const int bit_width = int_type.bitWidth;
-    if (!int_type.isSigned) {
-        if (bit_width <= 8) {
-            return TYPE_SMALLINT;
-        }
-        if (bit_width <= 16) {
-            return TYPE_INT;
-        }
-        return TYPE_BIGINT;
-    }
-    if (bit_width <= 8) {
-        return TYPE_TINYINT;
-    }
-    if (bit_width <= 16) {
-        return TYPE_SMALLINT;
-    }
-    if (bit_width <= 32) {
-        return TYPE_INT;
-    }
-    return TYPE_BIGINT;
-}
-
-static TypeDescriptor _primitive_type_from_field(const ParquetField& field) {
-    const auto& schema_element = field.schema_element;
-
-    if (schema_element.__isset.logicalType) {
-        const auto& logical_type = schema_element.logicalType;
-        if (logical_type.__isset.STRING) {
-            return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
-        }
-        if (logical_type.__isset.JSON) {
-            return TypeDescriptor::create_json_type();
-        }
-        if (logical_type.__isset.BSON) {
-            return TypeDescriptor::create_json_type();
-        }
-        if (logical_type.__isset.DATE) {
-            return TypeDescriptor(TYPE_DATE);
-        }
-        if (logical_type.__isset.TIME) {
-            return TypeDescriptor(TYPE_TIME);
-        }
-        if (logical_type.__isset.TIMESTAMP) {
-            return TypeDescriptor(TYPE_DATETIME);
-        }
-        if (logical_type.__isset.INTEGER) {
-            return TypeDescriptor(_logical_type_from_integer(logical_type.INTEGER));
-        }
-        if (logical_type.__isset.DECIMAL) {
-            return _decimal_type_from_field(field);
-        }
-        if (logical_type.__isset.UUID) {
-            return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
-        }
-    } else if (schema_element.__isset.converted_type) {
-        switch (schema_element.converted_type) {
-        case tparquet::ConvertedType::UTF8:
-            return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
-        case tparquet::ConvertedType::JSON:
-            return TypeDescriptor::create_json_type();
-        case tparquet::ConvertedType::DATE:
-            return TypeDescriptor(TYPE_DATE);
-        case tparquet::ConvertedType::TIME_MILLIS:
-        case tparquet::ConvertedType::TIME_MICROS:
-            return TypeDescriptor(TYPE_TIME);
-        case tparquet::ConvertedType::TIMESTAMP_MILLIS:
-        case tparquet::ConvertedType::TIMESTAMP_MICROS:
-            return TypeDescriptor(TYPE_DATETIME);
-        case tparquet::ConvertedType::DECIMAL:
-            return _decimal_type_from_field(field);
-        default:
-            break;
-        }
-    }
-
-    switch (field.physical_type) {
-    case tparquet::Type::BOOLEAN:
-        return TypeDescriptor(TYPE_BOOLEAN);
-    case tparquet::Type::INT32:
-        return TypeDescriptor(TYPE_INT);
-    case tparquet::Type::INT64:
-        return TypeDescriptor(TYPE_BIGINT);
-    case tparquet::Type::INT96:
-        return TypeDescriptor(TYPE_DATETIME);
-    case tparquet::Type::FLOAT:
-        return TypeDescriptor(TYPE_FLOAT);
-    case tparquet::Type::DOUBLE:
-        return TypeDescriptor(TYPE_DOUBLE);
-    case tparquet::Type::BYTE_ARRAY:
-    case tparquet::Type::FIXED_LEN_BYTE_ARRAY:
-        return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
-    default:
-        return TypeDescriptor(TYPE_UNKNOWN);
-    }
-}
-
-TypeDescriptor ParquetUtils::to_type_desc(const ParquetField& field) {
-    if (field.type == ColumnType::STRUCT) {
-        std::vector<std::string> field_names;
-        std::vector<TypeDescriptor> children;
-        field_names.reserve(field.children.size());
-        children.reserve(field.children.size());
-        for (const auto& child : field.children) {
-            field_names.emplace_back(child.name);
-            children.emplace_back(to_type_desc(child));
-        }
-        return TypeDescriptor::create_struct_type(field_names, children);
-    }
-    if (field.type == ColumnType::ARRAY) {
-        if (field.children.empty()) {
-            return TypeDescriptor::create_array_type(TypeDescriptor(TYPE_UNKNOWN));
-        }
-        return TypeDescriptor::create_array_type(to_type_desc(field.children[0]));
-    }
-    if (field.type == ColumnType::MAP) {
-        if (field.children.size() < 2) {
-            return TypeDescriptor::create_map_type(TypeDescriptor(TYPE_UNKNOWN), TypeDescriptor(TYPE_UNKNOWN));
-        }
-        return TypeDescriptor::create_map_type(to_type_desc(field.children[0]), to_type_desc(field.children[1]));
-    }
-    return _primitive_type_from_field(field);
-}
 
 CompressionTypePB ParquetUtils::convert_compression_codec(tparquet::CompressionCodec::type codec) {
     switch (codec) {
@@ -302,6 +170,73 @@ std::string ParquetUtils::get_file_cache_key(CacheType type, const std::string& 
         memcpy(data + 10, &size, sizeof(size));
     }
     return key;
+}
+
+bool ParquetUtils::get_non_null_data_column_and_row(const Column* column, size_t row, const Column** out_column,
+                                                    size_t* out_row) {
+    if (column == nullptr || out_column == nullptr || out_row == nullptr) {
+        return false;
+    }
+    if (column->is_constant()) {
+        column = down_cast<const ConstColumn*>(column)->data_column().get();
+        row = 0;
+    }
+    if (column->is_nullable()) {
+        const auto* nullable = down_cast<const NullableColumn*>(column);
+        if (nullable->is_null(row)) {
+            return false;
+        }
+        column = nullable->data_column().get();
+    }
+    *out_column = column;
+    *out_row = row;
+    return true;
+}
+
+bool ParquetUtils::has_non_null_value(const Column* input_column, size_t num_rows) {
+    if (input_column == nullptr || num_rows == 0) {
+        return false;
+    }
+    const Column* column = input_column;
+    bool is_const = false;
+    if (column->is_constant()) {
+        is_const = true;
+        column = down_cast<const ConstColumn*>(column)->data_column().get();
+    }
+    if (column->is_nullable()) {
+        const auto* nullable = down_cast<const NullableColumn*>(column);
+        const auto& nulls = nullable->null_column_data();
+        if (is_const) {
+            return nulls[0] == 0;
+        }
+        return SIMD::count_nonzero(nulls.data(), num_rows) < num_rows;
+    }
+    return true;
+}
+
+bool ParquetUtils::has_non_null_binary_value(const Column* input_column, size_t num_rows) {
+    if (input_column == nullptr || num_rows == 0) {
+        return false;
+    }
+    const Column* column = input_column;
+    bool is_const = false;
+    if (column->is_constant()) {
+        is_const = true;
+        column = down_cast<const ConstColumn*>(column)->data_column().get();
+    }
+    if (column->is_nullable()) {
+        const auto* nullable = down_cast<const NullableColumn*>(column);
+        const Column* data = nullable->data_column().get();
+        if (!data->is_binary()) {
+            return false;
+        }
+        const auto& nulls = nullable->null_column_data();
+        if (is_const) {
+            return nulls[0] == 0;
+        }
+        return SIMD::count_nonzero(nulls.data(), num_rows) < num_rows;
+    }
+    return column->is_binary();
 }
 
 } // namespace starrocks::parquet

@@ -543,9 +543,9 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
     }
 
     if (need_convert && *converter == nullptr) {
-        return Status::NotSupported(
-                strings::Substitute("parquet column reader: not supported convert from parquet `$0` to `$1`",
-                                    ::tparquet::to_string(parquet_type), type_to_string(col_type)));
+        return Status::NotSupported(strings::Substitute(
+                "parquet column reader: not supported convert from parquet `$0` to `$1`, field=$2",
+                ::tparquet::to_string(parquet_type), type_to_string(col_type), field.debug_string()));
     }
 
     if (!need_convert) {

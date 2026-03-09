@@ -542,7 +542,7 @@ Expr* VectorizedBinaryPredicateFactory::from_thrift(const TExprNode& node) {
         } else {
             return new ArrayPredicate(node);
         }
-    } else if (type == TYPE_MAP || type == TYPE_STRUCT) {
+    } else if (type == TYPE_MAP || type == TYPE_STRUCT || type == TYPE_VARIANT) {
         if (node.opcode == TExprOpcode::EQ) {
             return new CommonEqualsPredicate<true>(node);
         } else if (node.opcode == TExprOpcode::EQ_FOR_NULL) {
