@@ -326,6 +326,7 @@ Status CompactionAction::_handle_submit_repairs(HttpRequest* req, std::string* j
         // do all tablets
         for (auto& itr : tablets_with_small_segment_files) {
             vector<uint32_t> rowsetids;
+            rowsetids.reserve(itr.second.size());
             for (const auto& rowset_segments_pair : itr.second) {
                 rowsetids.emplace_back(rowset_segments_pair.first);
             }
