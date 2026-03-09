@@ -67,6 +67,17 @@ public class JDBCMetadata implements ConnectorMetadata {
     private HikariDataSource dataSource;
     private static final ExecutorService NETWORK_TIMEOUT_EXECUTOR = Executors.newSingleThreadExecutor(
             new ThreadFactoryBuilder().setDaemon(true).setNameFormat("jdbc-network-timeout-%d").build());
+<<<<<<< HEAD
+=======
+
+    // HikariCP connection lifecycle constants
+    static final long MINIMUM_MAX_LIFETIME_MS = 30_000L;
+    static final long DEFAULT_MAX_LIFETIME_MS = 300_000L;
+    static final long MINIMUM_KEEPALIVE_TIME_MS = 30_000L;
+    static final long KEEPALIVE_DISABLED = 0L;
+    private static final List<String> SUPPORTED_SCHEMA_RESOLVERS =
+            ImmutableList.of("postgresql", "mysql", "oracle", "sqlserver", "clickhouse");
+>>>>>>> 5272df890d ([Enhancement] Upgrade HikariCP and add connection lifecycle management for JDBC catalog (#69256))
 
     public JDBCMetadata(Map<String, String> properties, String catalogName) {
         this(properties, catalogName, null);
@@ -151,7 +162,37 @@ public class JDBCMetadata implements ConnectorMetadata {
         config.setMinimumIdle(Config.jdbc_minimum_idle_connections);
         config.setIdleTimeout(Config.jdbc_connection_idle_timeout_ms);
         config.setConnectionTimeout(Config.jdbc_connection_timeout_ms);
+
+        applyLifecycleConfig(config);
+
         return new HikariDataSource(config);
+    }
+
+    // Package-visible for testing
+    static void applyLifecycleConfig(HikariConfig config) {
+        long maxLifetime = Config.jdbc_connection_max_lifetime_ms;
+        if (maxLifetime < MINIMUM_MAX_LIFETIME_MS) {
+            LOG.warn("jdbc_connection_max_lifetime_ms={} is below minimum {}, using default {}",
+                    maxLifetime, MINIMUM_MAX_LIFETIME_MS, DEFAULT_MAX_LIFETIME_MS);
+            maxLifetime = DEFAULT_MAX_LIFETIME_MS;
+        }
+        config.setMaxLifetime(maxLifetime);
+
+        // keepaliveTime: 0 = disabled (HikariCP semantics), otherwise must be >= 30s and < maxLifetime
+        long keepaliveTime = Config.jdbc_connection_keepalive_time_ms;
+        if (keepaliveTime != KEEPALIVE_DISABLED) {
+            if (keepaliveTime < MINIMUM_KEEPALIVE_TIME_MS || keepaliveTime >= maxLifetime) {
+                LOG.warn("jdbc_connection_keepalive_time_ms={} is invalid (must be 0 or >= {} and < {}), disabling keepalive",
+                        keepaliveTime, MINIMUM_KEEPALIVE_TIME_MS, maxLifetime);
+                keepaliveTime = KEEPALIVE_DISABLED;
+            }
+        }
+        config.setKeepaliveTime(keepaliveTime);
+
+        // Connection leak detection (for debugging)
+        if (Config.jdbc_connection_leak_detection_threshold_ms > 0) {
+            config.setLeakDetectionThreshold(Config.jdbc_connection_leak_detection_threshold_ms);
+        }
     }
 
     public Connection getConnection() throws SQLException {
