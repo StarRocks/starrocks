@@ -127,6 +127,7 @@ Status ShortCircuitHybridScanNode::_process_key_chunk() {
     DCHECK(_tablets.size() > 0);
     _tablet_schema = _tablets[0]->tablet_schema();
     vector<uint32_t> pk_columns;
+    pk_columns.reserve(_tablet_schema->num_key_columns());
     for (size_t i = 0; i < _tablet_schema->num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }

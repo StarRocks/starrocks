@@ -40,6 +40,7 @@ Status PkTabletSSTWriter::append_sst_record(const Chunk& data) {
     ASSIGN_OR_RETURN(auto pk_encoding_type, _tablet_schema_ptr->primary_key_encoding_type_or_error());
     if (_pk_column == nullptr) {
         vector<uint32_t> pk_columns;
+        pk_columns.reserve(_tablet_schema_ptr->num_key_columns());
         for (size_t i = 0; i < _tablet_schema_ptr->num_key_columns(); i++) {
             pk_columns.push_back((uint32_t)i);
         }
