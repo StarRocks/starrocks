@@ -1667,11 +1667,6 @@ CONF_mInt64(lake_vacuum_min_batch_delete_size, "100");
 // and deletes data files + metadata in a safer, failure-tolerant way.
 CONF_mBool(lake_vacuum_enable_version_chain_mode, "false");
 
-// Per-tablet time budget (in ms) for the version-chain-based lake vacuum path.
-// 0 means no timeout.
-// default: 50 minutes
-CONF_mInt64(lake_vacuum_version_chain_timeout_ms, "3000000");
-
 // TOPN RuntimeFilter parameters
 CONF_mInt32(desc_hint_split_range, "10");
 
