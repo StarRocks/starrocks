@@ -5,7 +5,7 @@
 verbose = "info"
 
 # Show progress
-progress = false
+no_progress = true
 
 # Path to summary output file.
 # output = "report.md"
