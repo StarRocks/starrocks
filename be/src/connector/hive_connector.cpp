@@ -16,7 +16,7 @@
 
 #include <filesystem>
 
-#include "common/config.h"
+#include "common/config_scan_io_fwd.h"
 #include "connector/hive_chunk_sink.h"
 #include "exec/hdfs_scanner/cache_select_scanner.h"
 #include "exec/hdfs_scanner/hdfs_scanner_json.h"

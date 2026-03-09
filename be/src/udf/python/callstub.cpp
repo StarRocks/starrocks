@@ -23,7 +23,7 @@
 #include "arrow/type.h"
 #include "base/utility/arrow_utils.h"
 #include "base/utility/defer_op.h"
-#include "common/config.h"
+#include "common/config_udf_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/base64.h"
