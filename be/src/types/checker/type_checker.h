@@ -86,8 +86,8 @@ public:
         LogicalType return_type;  // What to return when this type is matched
     };
 
-    ConfigurableTypeChecker(std::string display_name, const std::vector<TypeRule>& rules)
-            : _display_name(std::move(display_name)), _rules(rules) {}
+    ConfigurableTypeChecker(std::string display_name, std::vector<TypeRule> rules)
+            : _display_name(std::move(display_name)), _rules(std::move(rules)) {}
 
     StatusOr<LogicalType> check(const std::string& java_class, const SlotDescriptor* slot_desc) const override;
 
