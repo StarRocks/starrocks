@@ -2970,13 +2970,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 是否为 StarRocks 集群中的所有表启用快速 schema 演进。有效值为 `TRUE` 和 `FALSE`（默认）。启用快速 schema 演进可以提高 schema 变更的速度，并在添加或删除列时减少资源使用。
+- 描述: 是否为 StarRocks 集群中的所有表启用 Fast Schema Evolution。有效值为 `TRUE` 和 `FALSE`（默认）。启用 Fast Schema Evolution 可以提高 schema 变更的速度，并在添加或删除列时减少资源使用。
 - 引入版本: v3.2.0
 
 > **NOTE**
 >
-> - StarRocks 共享数据集群从 v3.3.0 开始支持此参数。
-> - 如果您需要为特定表配置快速 schema 演进，例如禁用特定表的快速 schema 演进，您可以在表创建时设置表属性 [`fast_schema_evolution`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#set-fast-schema-evolution)。
+> - StarRocks 存算分离集群从 v3.3.0 开始支持此参数。
+> - 如果您需要为特定表配置 Fast Schema Evolution，例如禁用特定表的 Fast Schema Evolution，您可以在表创建时设置表属性 [`fast_schema_evolution`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#set-fast-schema-evolution)。
 
 ##### `enable_online_optimize_table`
 
