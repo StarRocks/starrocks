@@ -23,6 +23,7 @@
 #include <sstream>
 #include <unordered_map>
 
+#include "base/network/network_util.h"
 #include "runtime/current_thread.h"
 
 namespace starrocks::poco {
@@ -101,11 +102,23 @@ HTTPSessionPools& HTTPSessionPools::instance() {
     return instance;
 }
 
+// When resolve_host is true, use resolved IP as the session pool key and connection target.
+// This avoids binding all S3 traffic to a single node when using a VIP (virtual IP) that
+// resolves to one of several backend IPs: with hostname as key, the first TCP connection
+// is reused and traffic stays on one node; with resolved IP as key, different backend
+// IPs get different pools and connections are spread across nodes (e.g. DNS round-robin).
 PooledHTTPSessionPtr HTTPSessionPools::getSession(const Poco::URI& uri, const ConnectionTimeouts& timeouts,
                                                   bool resolve_host) {
-    const std::string& host = uri.getHost();
+    std::string host = uri.getHost();
     uint16_t port = uri.getPort();
     bool is_https = isHTTPS(uri);
+
+    if (resolve_host && !host.empty() && !starrocks::is_valid_ip(host)) {
+        std::string resolved_ip;
+        if (starrocks::hostname_to_ip(host, resolved_ip).ok()) {
+            host = std::move(resolved_ip);
+        }
+    }
 
     const Key key = {.host = host, .port = port, .is_https = is_https};
 

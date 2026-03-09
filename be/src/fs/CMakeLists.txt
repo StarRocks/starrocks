@@ -59,4 +59,4 @@ ADD_BE_LIB(FileSystem
     ${EXEC_FILES}
 )
 
-target_link_libraries(FileSystem PUBLIC FSCore)
+target_link_libraries(FileSystem PUBLIC FSCore Base)
