@@ -11,12 +11,13 @@ drop materialized view if exists test_mv_agg1;
 CREATE TABLE t1_agg (
     dt DATE,
     c0 INT,
-    c1 VARCHAR(20),
-    c2 VARCHAR(200),
+    c1 VARCHAR(20) REPLACE,
+    c2 VARCHAR(200) REPLACE,
     c3 INT SUM,
-    c4 INT SUM
+    c4 INT SUM,
+    row_cnt INT SUM
 ) ENGINE=OLAP
-AGGREGATE KEY(dt, c0, c1, c2)
+AGGREGATE KEY(dt, c0)
 PARTITION BY date_trunc('day', dt)
 DISTRIBUTED BY HASH(c0) BUCKETS 48
 PROPERTIES (
@@ -26,7 +27,7 @@ PROPERTIES (
 -- !result
 INSERT INTO t1_agg
 SELECT '2026-01-01', generate_series % 10, 'val_' || CAST(generate_series AS VARCHAR),
-       'desc_' || CAST(generate_series AS VARCHAR), generate_series, generate_series * 2
+       'desc_' || CAST(generate_series AS VARCHAR), generate_series, generate_series * 2, 1
 FROM TABLE(generate_series(1, 100));
 -- result:
 -- !result
@@ -37,14 +38,14 @@ PROPERTIES (
     "replication_num" = "1"
 )
 AS
-SELECT dt, c0, SUM(c3) as sum_c3, COUNT(c1) as cnt_c1
+SELECT dt, c0, SUM(c3) as sum_c3, SUM(row_cnt) as cnt_rows
 FROM t1_agg
 GROUP BY dt, c0;
 -- result:
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg1 WITH SYNC MODE;
 -- result:
-019cc25f-6e1c-7bb1-bab2-6008fe428318
+019cd129-5b99-7880-a539-d49cea24015e
 -- !result
 admin set frontend config('mv_fast_schema_change_mode' = 'force');
 -- result:
@@ -52,21 +53,21 @@ admin set frontend config('mv_fast_schema_change_mode' = 'force');
 set enable_materialized_view_rewrite = false;
 -- result:
 -- !result
-function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), COUNT(c1) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
+function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), SUM(row_cnt) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
 -- result:
 True
 -- !result
 SELECT * FROM test_mv_agg1 ORDER BY ALL LIMIT 3;
 -- result:
-2026-01-01	0	550	1
-2026-01-01	1	460	1
-2026-01-01	2	470	1
+2026-01-01	0	550	10
+2026-01-01	1	460	10
+2026-01-01	2	470	10
 -- !result
-SELECT dt, c0, SUM(c3) as sum_c3, COUNT(c1) as cnt_c1 FROM t1_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
+SELECT dt, c0, SUM(c3) as sum_c3, SUM(row_cnt) as cnt_rows FROM t1_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
 -- result:
-2026-01-01	0	550	1
-2026-01-01	1	460	1
-2026-01-01	2	470	1
+2026-01-01	0	550	10
+2026-01-01	1	460	10
+2026-01-01	2	470	10
 -- !result
 ALTER MATERIALIZED VIEW test_mv_agg1 ADD COLUMN cnt_c2 AS COUNT(c2);
 -- result:
@@ -80,49 +81,49 @@ DESC test_mv_agg1;
 dt	date	YES	true	None	
 c0	int	YES	true	None	
 sum_c3	bigint	YES	true	None	
-cnt_c1	bigint	NO	true	None	
+cnt_rows	bigint	YES	true	None	
 cnt_c2	bigint	YES	false	None	NONE
 -- !result
-function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), COUNT(c1), COUNT(c2) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
+function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), SUM(row_cnt), COUNT(c2) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
 -- result:
 False
 -- !result
-SELECT dt, c0, SUM(c3) as sum_c3, COUNT(c1) as cnt_c1, COUNT(c2) as cnt_c2 FROM t1_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
+SELECT dt, c0, SUM(c3) as sum_c3, SUM(row_cnt) as cnt_rows, COUNT(c2) as cnt_c2 FROM t1_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
 -- result:
-2026-01-01	0	550	1	1
-2026-01-01	1	460	1	1
-2026-01-01	2	470	1	1
+2026-01-01	0	550	10	1
+2026-01-01	1	460	10	1
+2026-01-01	2	470	10	1
 -- !result
 SELECT * FROM test_mv_agg1 ORDER BY ALL LIMIT 3;
 -- result:
-2026-01-01	0	550	1	None
-2026-01-01	1	460	1	None
-2026-01-01	2	470	1	None
+2026-01-01	0	550	10	None
+2026-01-01	1	460	10	None
+2026-01-01	2	470	10	None
 -- !result
-INSERT INTO t1_agg VALUES ('2026-01-01', 0, 'val_0', 'desc_0', 10, 20);
+INSERT INTO t1_agg VALUES ('2026-01-01', 0, 'val_0', 'desc_0', 10, 20, 1);
 -- result:
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg1 WITH SYNC MODE;
 -- result:
-019cc25f-84a9-7ec7-b5be-010121fbe635
+019cd129-7116-7abf-8d53-fe54a6a37342
 -- !result
-function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), COUNT(c1), COUNT(c2) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
+function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), SUM(row_cnt), COUNT(c2) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
 -- result:
 True
 -- !result
-SELECT dt, c0, SUM(c3) as sum_c3, COUNT(c1) as cnt_c1, COUNT(c2) as cnt_c2 FROM t1_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
+SELECT dt, c0, SUM(c3) as sum_c3, SUM(row_cnt) as cnt_rows, COUNT(c2) as cnt_c2 FROM t1_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
 -- result:
-2026-01-01	0	560	2	2
-2026-01-01	1	460	1	1
-2026-01-01	2	470	1	1
+2026-01-01	0	560	11	1
+2026-01-01	1	460	10	1
+2026-01-01	2	470	10	1
 -- !result
 SELECT * FROM test_mv_agg1 ORDER BY ALL LIMIT 3;
 -- result:
-2026-01-01	0	560	2	2
-2026-01-01	1	460	1	1
-2026-01-01	2	470	1	1
+2026-01-01	0	560	11	1
+2026-01-01	1	460	10	1
+2026-01-01	2	470	10	1
 -- !result
-ALTER TABLE t1_agg ADD COLUMN c5 VARCHAR(100);
+ALTER TABLE t1_agg ADD COLUMN c5 VARCHAR(100) REPLACE;
 -- result:
 -- !result
 function: wait_alter_table_finish()
@@ -133,11 +134,12 @@ DESC t1_agg;
 -- result:
 dt	date	YES	true	None	
 c0	int	YES	true	None	
-c1	varchar(20)	YES	true	None	
-c2	varchar(200)	YES	true	None	
-c5	varchar(100)	YES	true	None	
+c1	varchar(20)	YES	false	None	
+c2	varchar(200)	YES	false	None	
 c3	int	YES	false	None	
 c4	int	YES	false	None	
+row_cnt	int	YES	false	None	
+c5	varchar(100)	YES	false	None	
 -- !result
 ALTER TABLE t1_agg ADD COLUMN c6 INT SUM;
 -- result:
@@ -150,29 +152,30 @@ DESC t1_agg;
 -- result:
 dt	date	YES	true	None	
 c0	int	YES	true	None	
-c1	varchar(20)	YES	true	None	
-c2	varchar(200)	YES	true	None	
-c5	varchar(100)	YES	true	None	
+c1	varchar(20)	YES	false	None	
+c2	varchar(200)	YES	false	None	
 c3	int	YES	false	None	
 c4	int	YES	false	None	
+row_cnt	int	YES	false	None	
+c5	varchar(100)	YES	false	None	
 c6	int	YES	false	None	
 -- !result
-INSERT INTO t1_agg VALUES ('2026-01-01', 0, 'val_1', 'desc_1', 'desc_2', 15, 30, 25);
+INSERT INTO t1_agg VALUES ('2026-01-01', 0, 'val_1', 'desc_1', 15, 30, 1, 'desc_2', 25);
 -- result:
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg1 WITH SYNC MODE;
 -- result:
-019cc25f-95d2-751f-9ea2-60ffef79b27d
+019cd129-83c2-7e9b-96e6-1bae5d1c4334
 -- !result
-function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), COUNT(c1), COUNT(c2) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
+function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), SUM(row_cnt), COUNT(c2) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
 -- result:
 True
 -- !result
-SELECT dt, c0, SUM(c3) as sum_c3, COUNT(c1) as cnt_c1, COUNT(c2) as cnt_c2 FROM t1_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
+SELECT dt, c0, SUM(c3) as sum_c3, SUM(row_cnt) as cnt_rows, COUNT(c2) as cnt_c2 FROM t1_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
 -- result:
-2026-01-01	0	575	3	3
-2026-01-01	1	460	1	1
-2026-01-01	2	470	1	1
+2026-01-01	0	575	12	1
+2026-01-01	1	460	10	1
+2026-01-01	2	470	10	1
 -- !result
 ALTER MATERIALIZED VIEW test_mv_agg1 ADD COLUMN sum_c6 AS SUM(c6);
 -- result:
@@ -186,104 +189,48 @@ DESC test_mv_agg1;
 dt	date	YES	true	None	
 c0	int	YES	true	None	
 sum_c3	bigint	YES	true	None	
-cnt_c1	bigint	NO	true	None	
+cnt_rows	bigint	YES	true	None	
 cnt_c2	bigint	YES	false	None	NONE
 sum_c6	bigint	YES	false	None	NONE
 -- !result
-function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), COUNT(c1), COUNT(c2), SUM(c6) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
+function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), SUM(row_cnt), COUNT(c2), SUM(c6) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
 -- result:
 False
 -- !result
-SELECT dt, c0, SUM(c3) as sum_c3, COUNT(c1) as cnt_c1, COUNT(c2) as cnt_c2, SUM(c6) as sum_c6 FROM t1_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
+SELECT dt, c0, SUM(c3) as sum_c3, SUM(row_cnt) as cnt_rows, COUNT(c2) as cnt_c2, SUM(c6) as sum_c6 FROM t1_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
 -- result:
-2026-01-01	0	575	3	3	25
-2026-01-01	1	460	1	1	None
-2026-01-01	2	470	1	1	None
+2026-01-01	0	575	12	1	25
+2026-01-01	1	460	10	1	None
+2026-01-01	2	470	10	1	None
 -- !result
 SELECT * FROM test_mv_agg1 ORDER BY ALL LIMIT 3;
 -- result:
-2026-01-01	0	575	3	3	None
-2026-01-01	1	460	1	1	None
-2026-01-01	2	470	1	1	None
+2026-01-01	0	575	12	1	None
+2026-01-01	1	460	10	1	None
+2026-01-01	2	470	10	1	None
 -- !result
-INSERT INTO t1_agg VALUES ('2026-01-01', 0, 'val_2', 'desc_2', 'desc_3', 20, 40, 35);
+INSERT INTO t1_agg VALUES ('2026-01-01', 0, 'val_2', 'desc_2', 20, 40, 1, 'desc_3', 35);
 -- result:
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg1 WITH SYNC MODE;
 -- result:
-019cc25f-a7f6-748b-b3b6-14493e4cd63e
+019cd129-9816-70e0-b598-60f45c186129
 -- !result
-function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), COUNT(c1), COUNT(c2), SUM(c6) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
+function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), SUM(row_cnt), COUNT(c2), SUM(c6) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
 -- result:
 True
 -- !result
-SELECT dt, c0, SUM(c3) as sum_c3, COUNT(c1) as cnt_c1, COUNT(c2) as cnt_c2, SUM(c6) as sum_c6 FROM t1_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
+SELECT dt, c0, SUM(c3) as sum_c3, SUM(row_cnt) as cnt_rows, COUNT(c2) as cnt_c2, SUM(c6) as sum_c6 FROM t1_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
 -- result:
-2026-01-01	0	595	4	4	60
-2026-01-01	1	460	1	1	None
-2026-01-01	2	470	1	1	None
+2026-01-01	0	595	13	1	60
+2026-01-01	1	460	10	1	None
+2026-01-01	2	470	10	1	None
 -- !result
 SELECT * FROM test_mv_agg1 ORDER BY ALL LIMIT 3;
 -- result:
-2026-01-01	0	595	4	4	60
-2026-01-01	1	460	1	1	None
-2026-01-01	2	470	1	1	None
--- !result
-ALTER MATERIALIZED VIEW test_mv_agg1 ADD COLUMN c5 AS c5;
--- result:
--- !result
-function: wait_alter_table_finish()
--- result:
-None
--- !result
-DESC test_mv_agg1;
--- result:
-dt	date	YES	true	None	
-c0	int	YES	true	None	
-sum_c3	bigint	YES	true	None	
-cnt_c1	bigint	NO	true	None	
-cnt_c2	bigint	YES	false	None	NONE
-sum_c6	bigint	YES	false	None	NONE
-c5	varchar(1048576)	YES	false	None	NONE
--- !result
-function: print_hit_materialized_view("SELECT dt, c0, c5, SUM(c3), COUNT(c1), COUNT(c2), SUM(c6) FROM t1_agg GROUP BY dt, c0, c5", "test_mv_agg1")
--- result:
-False
--- !result
-SELECT dt, c0, c5, SUM(c3) as sum_c3, COUNT(c1) as cnt_c1, COUNT(c2) as cnt_c2, SUM(c6) as sum_c6 FROM t1_agg GROUP BY dt, c0, c5 ORDER BY ALL LIMIT 3;
--- result:
-2026-01-01	0	None	560	2	2	None
-2026-01-01	0	desc_2	15	1	1	25
-2026-01-01	0	desc_3	20	1	1	35
--- !result
-SELECT * FROM test_mv_agg1 ORDER BY ALL LIMIT 3;
--- result:
-2026-01-01	0	595	4	4	60	None
-2026-01-01	1	460	1	1	None	None
-2026-01-01	2	470	1	1	None	None
--- !result
-INSERT INTO t1_agg VALUES ('2026-01-01', 0, 'val_3', 'desc_3', 'desc_4', 25, 50, 45);
--- result:
--- !result
-[UC]REFRESH MATERIALIZED VIEW test_mv_agg1 WITH SYNC MODE;
--- result:
-019cc25f-b754-7a58-a4ed-81c22310c6b7
--- !result
-function: print_hit_materialized_view("SELECT dt, c0, c5, SUM(c3), COUNT(c1), COUNT(c2), SUM(c6) FROM t1_agg GROUP BY dt, c0, c5", "test_mv_agg1")
--- result:
-True
--- !result
-SELECT dt, c0, c5, SUM(c3) as sum_c3, COUNT(c1) as cnt_c1, COUNT(c2) as cnt_c2, SUM(c6) as sum_c6 FROM t1_agg GROUP BY dt, c0, c5 ORDER BY ALL LIMIT 3;
--- result:
-2026-01-01	0	None	560	2	2	None
-2026-01-01	0	desc_2	15	1	1	25
-2026-01-01	0	desc_3	20	1	1	35
--- !result
-SELECT * FROM test_mv_agg1 ORDER BY ALL LIMIT 3;
--- result:
-2026-01-01	0	15	1	1	25	desc_2
-2026-01-01	0	20	1	1	35	desc_3
-2026-01-01	0	25	1	1	45	desc_4
+2026-01-01	0	595	13	1	60
+2026-01-01	1	460	10	1	None
+2026-01-01	2	470	10	1	None
 -- !result
 ALTER MATERIALIZED VIEW test_mv_agg1 DROP COLUMN cnt_c2;
 -- result:
@@ -297,48 +244,47 @@ DESC test_mv_agg1;
 dt	date	YES	true	None	
 c0	int	YES	true	None	
 sum_c3	bigint	YES	true	None	
-cnt_c1	bigint	NO	true	None	
+cnt_rows	bigint	YES	true	None	
 sum_c6	bigint	YES	false	None	NONE
-c5	varchar(1048576)	YES	false	None	NONE
 -- !result
-function: print_hit_materialized_view("SELECT dt, c0, c5, SUM(c3), COUNT(c1), SUM(c6) FROM t1_agg GROUP BY dt, c0, c5", "test_mv_agg1")
+function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), SUM(row_cnt), SUM(c6) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
 -- result:
 True
 -- !result
-SELECT dt, c0, c5, SUM(c3) as sum_c3, COUNT(c1) as cnt_c1, SUM(c6) as sum_c6 FROM t1_agg GROUP BY dt, c0, c5 ORDER BY ALL LIMIT 3;
+SELECT dt, c0, SUM(c3) as sum_c3, SUM(row_cnt) as cnt_rows, SUM(c6) as sum_c6 FROM t1_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
 -- result:
-2026-01-01	0	None	560	2	None
-2026-01-01	0	desc_2	15	1	25
-2026-01-01	0	desc_3	20	1	35
+2026-01-01	0	595	13	60
+2026-01-01	1	460	10	None
+2026-01-01	2	470	10	None
 -- !result
 SELECT * FROM test_mv_agg1 ORDER BY ALL LIMIT 3;
 -- result:
-2026-01-01	0	15	1	25	desc_2
-2026-01-01	0	20	1	35	desc_3
-2026-01-01	0	25	1	45	desc_4
+2026-01-01	0	595	13	60
+2026-01-01	1	460	10	None
+2026-01-01	2	470	10	None
 -- !result
-INSERT INTO t1_agg VALUES ('2026-01-01', 0, 'val_4', 'desc_4', 'desc_5', 30, 60, 55);
+INSERT INTO t1_agg VALUES ('2026-01-01', 0, 'val_4', 'desc_4', 30, 60, 1, 'desc_5', 55);
 -- result:
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg1 WITH SYNC MODE;
 -- result:
-019cc25f-c745-76c0-b2c5-0148e9770224
+019cd129-ab43-70e4-8f4c-2ee07cc20cd8
 -- !result
-function: print_hit_materialized_view("SELECT dt, c0, c5, SUM(c3), COUNT(c1), SUM(c6) FROM t1_agg GROUP BY dt, c0, c5", "test_mv_agg1")
+function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), SUM(row_cnt), SUM(c6) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
 -- result:
 True
 -- !result
-SELECT dt, c0, c5, SUM(c3) as sum_c3, COUNT(c1) as cnt_c1, SUM(c6) as sum_c6 FROM t1_agg GROUP BY dt, c0, c5 ORDER BY ALL LIMIT 3;
+SELECT dt, c0, SUM(c3) as sum_c3, SUM(row_cnt) as cnt_rows, SUM(c6) as sum_c6 FROM t1_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
 -- result:
-2026-01-01	0	None	560	2	None
-2026-01-01	0	desc_2	15	1	25
-2026-01-01	0	desc_3	20	1	35
+2026-01-01	0	625	14	115
+2026-01-01	1	460	10	None
+2026-01-01	2	470	10	None
 -- !result
 SELECT * FROM test_mv_agg1 ORDER BY ALL LIMIT 3;
 -- result:
-2026-01-01	0	15	1	25	desc_2
-2026-01-01	0	20	1	35	desc_3
-2026-01-01	0	25	1	45	desc_4
+2026-01-01	0	625	14	115
+2026-01-01	1	460	10	None
+2026-01-01	2	470	10	None
 -- !result
 ALTER MATERIALIZED VIEW test_mv_agg1 DROP COLUMN sum_c6;
 -- result:
@@ -352,74 +298,69 @@ DESC test_mv_agg1;
 dt	date	YES	true	None	
 c0	int	YES	true	None	
 sum_c3	bigint	YES	true	None	
-cnt_c1	bigint	NO	true	None	
-c5	varchar(1048576)	YES	false	None	NONE
+cnt_rows	bigint	YES	true	None	
 -- !result
-function: print_hit_materialized_view("SELECT dt, c0, c5, SUM(c3), COUNT(c1) FROM t1_agg GROUP BY dt, c0, c5", "test_mv_agg1")
+function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), SUM(row_cnt) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
 -- result:
 True
 -- !result
-SELECT dt, c0, c5, SUM(c3) as sum_c3, COUNT(c1) as cnt_c1 FROM t1_agg GROUP BY dt, c0, c5 ORDER BY ALL LIMIT 3;
+SELECT dt, c0, SUM(c3) as sum_c3, SUM(row_cnt) as cnt_rows FROM t1_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
 -- result:
-2026-01-01	0	None	560	2
-2026-01-01	0	desc_2	15	1
-2026-01-01	0	desc_3	20	1
+2026-01-01	0	625	14
+2026-01-01	1	460	10
+2026-01-01	2	470	10
 -- !result
 SELECT * FROM test_mv_agg1 ORDER BY ALL LIMIT 3;
 -- result:
-2026-01-01	0	15	1	desc_2
-2026-01-01	0	20	1	desc_3
-2026-01-01	0	25	1	desc_4
+2026-01-01	0	625	14
+2026-01-01	1	460	10
+2026-01-01	2	470	10
 -- !result
-INSERT INTO t1_agg VALUES ('2026-01-01', 0, 'val_5', 'desc_5', 'desc_6', 35, 70, 65);
+INSERT INTO t1_agg VALUES ('2026-01-01', 0, 'val_5', 'desc_5', 35, 70, 1, 'desc_6', 65);
 -- result:
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg1 WITH SYNC MODE;
 -- result:
-019cc25f-d5cf-7a18-b76b-3439d26fb969
+019cd129-bd68-7cb1-89f8-adcb1eedb03c
 -- !result
-function: print_hit_materialized_view("SELECT dt, c0, c5, SUM(c3), COUNT(c1) FROM t1_agg GROUP BY dt, c0, c5", "test_mv_agg1")
+function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), SUM(row_cnt) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
 -- result:
 True
 -- !result
-SELECT dt, c0, c5, SUM(c3) as sum_c3, COUNT(c1) as cnt_c1 FROM t1_agg GROUP BY dt, c0, c5 ORDER BY ALL LIMIT 3;
+SELECT dt, c0, SUM(c3) as sum_c3, SUM(row_cnt) as cnt_rows FROM t1_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
 -- result:
-2026-01-01	0	None	560	2
-2026-01-01	0	desc_2	15	1
-2026-01-01	0	desc_3	20	1
+2026-01-01	0	660	15
+2026-01-01	1	460	10
+2026-01-01	2	470	10
 -- !result
 SELECT * FROM test_mv_agg1 ORDER BY ALL LIMIT 3;
 -- result:
-2026-01-01	0	15	1	desc_2
-2026-01-01	0	20	1	desc_3
-2026-01-01	0	25	1	desc_4
+2026-01-01	0	660	15
+2026-01-01	1	460	10
+2026-01-01	2	470	10
 -- !result
-[UC]ALTER MATERIALIZED VIEW test_mv_agg1 DROP COLUMN c5;
--- result:
-E: (1064, "Getting analyzing error. Detail message: Cannot drop column 'c5' because it is used in GROUP BY clause.")
--- !result
-INSERT INTO t1_agg VALUES ('2026-01-01', 0, 'val_6', 'desc_6', 'desc_7', 40, 80, 75);
+INSERT INTO t1_agg VALUES ('2026-01-01', 0, 'val_6', 'desc_6', 40, 80, 1, 'desc_7', 75);
 -- result:
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg1 WITH SYNC MODE;
 -- result:
-019cc25f-dd4d-7a18-8cc1-c422832f090f
+019cd129-c4c8-7d34-a6d9-067f2043d0c3
 -- !result
-function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), COUNT(c1) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
+function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), SUM(row_cnt) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
 -- result:
 True
 -- !result
-SELECT dt, c0, SUM(c3) as sum_c3, COUNT(c1) as cnt_c1 FROM t1_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
+SELECT dt, c0, SUM(c3) as sum_c3, SUM(row_cnt) as cnt_rows FROM t1_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
 -- result:
-2026-01-01	0	725	8
-2026-01-01	1	460	1
-2026-01-01	2	470	1
+2026-01-01	0	700	16
+2026-01-01	1	460	10
+2026-01-01	2	470	10
 -- !result
 SELECT * FROM test_mv_agg1 ORDER BY ALL LIMIT 3;
 -- result:
-2026-01-01	0	15	1	desc_2
-2026-01-01	0	20	1	desc_3
-2026-01-01	0	25	1	desc_4
+2026-01-01	0	700	16
+2026-01-01	1	460	10
+2026-01-01	2	470	10
 -- !result
 DROP MATERIALIZED VIEW test_mv_agg1;
 -- result:
@@ -436,13 +377,13 @@ drop materialized view if exists test_mv_agg2;
 CREATE TABLE t2_agg (
     dt DATE,
     c0 INT,
-    c1 VARCHAR(20),
+    c1 VARCHAR(20) REPLACE,
     c2 INT SUM,
     c3 BIGINT SUM,
     c4 VARCHAR(100) REPLACE,
     c5 DOUBLE SUM
 ) ENGINE=OLAP
-AGGREGATE KEY(dt, c0, c1)
+AGGREGATE KEY(dt, c0)
 PARTITION BY date_trunc('day', dt)
 DISTRIBUTED BY HASH(c0)
 PROPERTIES (
@@ -470,7 +411,7 @@ GROUP BY dt, c0;
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg2 WITH SYNC MODE;
 -- result:
-019cc25f-e6bf-7085-ad3d-f44ff75198bc
+019cd129-ceb6-70f1-b7ff-2a2487e8bca0
 -- !result
 SELECT * FROM test_mv_agg2 ORDER BY ALL LIMIT 3;
 -- result:
@@ -529,7 +470,7 @@ DESC t2_agg;
 -- result:
 dt	date	YES	true	None	
 c0	int	YES	true	None	
-c1	varchar(20)	YES	true	None	
+c1	varchar(20)	YES	false	None	
 c2	int	YES	false	None	
 c3	bigint	YES	false	None	
 c4	varchar(100)	YES	false	None	
@@ -559,11 +500,11 @@ INSERT INTO t2_agg VALUES ('2026-01-01', 0, 'new_val', 100, 1000, 'replace_new',
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg2 WITH SYNC MODE;
 -- result:
-019cc25f-fd14-7681-9c2c-1535f1b90be5
+019cd129-e591-7607-b56a-ecd7c9719faa
 -- !result
 SELECT dt, c0, sum_c2, max_c3, min_c3, avg_c5, cnt_c1, max_c6 FROM test_mv_agg2 ORDER BY ALL LIMIT 3;
 -- result:
-2026-01-01	0	375	27500	1000	74.0	2	50
+2026-01-01	0	375	28500	28500	148.0	1	50
 2026-01-01	1	235	23500	23500	117.5	1	None
 2026-01-01	2	245	24500	24500	122.5	1	None
 -- !result
@@ -599,11 +540,11 @@ drop materialized view if exists test_mv_agg3;
 CREATE TABLE t3_agg (
     dt DATE,
     c0 INT,
-    c1 VARCHAR(20),
+    c1 VARCHAR(20) REPLACE,
     c2 INT SUM,
     c3 VARCHAR(200) REPLACE
 ) ENGINE=OLAP
-AGGREGATE KEY(dt, c0, c1)
+AGGREGATE KEY(dt, c0)
 PARTITION BY date_trunc('day', dt)
 DISTRIBUTED BY HASH(c0)
 PROPERTIES (
@@ -624,26 +565,26 @@ PROPERTIES (
     "replication_num" = "1"
 )
 AS
-SELECT dt, c0, c1, SUM(c2) as total_c2
+SELECT dt, c0, SUM(c2) as total_c2
 FROM t3_agg
-GROUP BY dt, c0, c1;
+GROUP BY dt, c0;
 -- result:
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg3 WITH SYNC MODE;
 -- result:
-019cc260-0642-7c3e-9a13-e8ce9699bbb9
+019cd129-f282-767a-8027-ee51df8c9bb7
 -- !result
 SELECT * FROM test_mv_agg3 ORDER BY ALL LIMIT 3;
 -- result:
-2026-01-01	0	1	275
-2026-01-01	1	1	235
-2026-01-01	2	1	245
+2026-01-01	0	275
+2026-01-01	1	235
+2026-01-01	2	245
 -- !result
-SELECT dt, c0, c1, SUM(c2) as total_c2 FROM t3_agg GROUP BY dt, c0, c1 ORDER BY ALL LIMIT 3;
+SELECT dt, c0, SUM(c2) as total_c2 FROM t3_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
 -- result:
-2026-01-01	0	1	275
-2026-01-01	1	1	235
-2026-01-01	2	1	245
+2026-01-01	0	275
+2026-01-01	1	235
+2026-01-01	2	245
 -- !result
 ALTER MATERIALIZED VIEW test_mv_agg3 ADD COLUMN c3_expr AS approx_count_distinct(c3) DEFAULT "0";
 -- result:
@@ -656,21 +597,20 @@ DESC test_mv_agg3;
 -- result:
 dt	date	YES	true	None	
 c0	int	YES	true	None	
-c1	varchar(1048576)	YES	true	None	
-total_c2	bigint	YES	false	None	NONE
+total_c2	bigint	YES	true	None	
 c3_expr	bigint	YES	false	0	NONE
 -- !result
-SELECT dt, c0, c1, total_c2, c3_expr FROM test_mv_agg3 ORDER BY ALL LIMIT 3;
+SELECT dt, c0, total_c2, c3_expr FROM test_mv_agg3 ORDER BY ALL LIMIT 3;
 -- result:
-2026-01-01	0	1	275	0
-2026-01-01	1	1	235	0
-2026-01-01	2	1	245	0
+2026-01-01	0	275	0
+2026-01-01	1	235	0
+2026-01-01	2	245	0
 -- !result
-SELECT dt, c0, c1, SUM(c2) as total_c2, approx_count_distinct(c3) as c3_expr FROM t3_agg GROUP BY dt, c0, c1 ORDER BY ALL LIMIT 3;
+SELECT dt, c0, SUM(c2) as total_c2, approx_count_distinct(c3) as c3_expr FROM t3_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
 -- result:
-2026-01-01	0	1	275	1
-2026-01-01	1	1	235	1
-2026-01-01	2	1	245	1
+2026-01-01	0	275	1
+2026-01-01	1	235	1
+2026-01-01	2	245	1
 -- !result
 ALTER TABLE t3_agg ADD COLUMN c4 INT SUM;
 -- result:
@@ -683,7 +623,7 @@ DESC t3_agg;
 -- result:
 dt	date	YES	true	None	
 c0	int	YES	true	None	
-c1	varchar(20)	YES	true	None	
+c1	varchar(20)	YES	false	None	
 c2	int	YES	false	None	
 c3	varchar(200)	YES	false	None	
 c4	int	YES	false	None	
@@ -699,8 +639,7 @@ DESC test_mv_agg3;
 -- result:
 dt	date	YES	true	None	
 c0	int	YES	true	None	
-c1	varchar(1048576)	YES	true	None	
-total_c2	bigint	YES	false	None	NONE
+total_c2	bigint	YES	true	None	
 c3_expr	bigint	YES	false	0	NONE
 sum_c4	bigint	YES	false	None	NONE
 -- !result
@@ -709,23 +648,23 @@ INSERT INTO t3_agg VALUES ('2026-01-01', 0, 'new_val', 200, 'new_desc', 50);
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg3 WITH SYNC MODE;
 -- result:
-019cc260-1d90-7815-a047-5c1e84a9f812
+019cd12a-07d7-758a-bead-3b899cb88ce4
 -- !result
-function: print_hit_materialized_view("SELECT dt, c0, c1, SUM(c2), SUM(c4) FROM t3_agg GROUP BY dt, c0, c1", "test_mv_agg3")
+function: print_hit_materialized_view("SELECT dt, c0, SUM(c2), SUM(c4) FROM t3_agg GROUP BY dt, c0", "test_mv_agg3")
 -- result:
 True
 -- !result
-SELECT dt, c0, c1, total_c2, c3_expr, sum_c4 FROM test_mv_agg3 ORDER BY ALL LIMIT 3;
+SELECT dt, c0, total_c2, c3_expr, sum_c4 FROM test_mv_agg3 ORDER BY ALL LIMIT 3;
 -- result:
-2026-01-01	0	1	275	1	None
-2026-01-01	0	new_val	200	1	50
-2026-01-01	1	1	235	1	None
+2026-01-01	0	475	1	50
+2026-01-01	1	235	1	None
+2026-01-01	2	245	1	None
 -- !result
-SELECT dt, c0, c1, SUM(c2) as total_c2, approx_count_distinct(c3) as c3_expr, SUM(c4) as sum_c4 FROM t3_agg GROUP BY dt, c0, c1 ORDER BY ALL LIMIT 3;
+SELECT dt, c0, SUM(c2) as total_c2, approx_count_distinct(c3) as c3_expr, SUM(c4) as sum_c4 FROM t3_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
 -- result:
-2026-01-01	0	1	275	1	None
-2026-01-01	0	new_val	200	1	50
-2026-01-01	1	1	235	1	None
+2026-01-01	0	475	1	50
+2026-01-01	1	235	1	None
+2026-01-01	2	245	1	None
 -- !result
 ALTER MATERIALIZED VIEW test_mv_agg3 DROP COLUMN c3_expr;
 -- result:
@@ -738,8 +677,7 @@ DESC test_mv_agg3;
 -- result:
 dt	date	YES	true	None	
 c0	int	YES	true	None	
-c1	varchar(1048576)	YES	true	None	
-total_c2	bigint	YES	false	None	NONE
+total_c2	bigint	YES	true	None	
 sum_c4	bigint	YES	false	None	NONE
 -- !result
 DROP MATERIALIZED VIEW test_mv_agg3;
@@ -757,15 +695,15 @@ drop materialized view if exists test_mv_agg4;
 CREATE TABLE t4_agg (
     dt DATE,
     category_id INT,
-    product_id INT,
+    product_id INT REPLACE,
     sales_amount DECIMAL(20, 2) SUM,
     quantity INT SUM,
     discount_amount DECIMAL(20, 2) SUM,
     product_name VARCHAR(100) REPLACE
 ) ENGINE=OLAP
-AGGREGATE KEY(dt, category_id, product_id)
+AGGREGATE KEY(dt, category_id)
 PARTITION BY date_trunc('month', dt)
-DISTRIBUTED BY HASH(product_id) BUCKETS 16
+DISTRIBUTED BY HASH(category_id) BUCKETS 16
 PROPERTIES (
     "replication_num" = "1"
 );
@@ -798,7 +736,7 @@ GROUP BY dt, category_id;
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg4 WITH SYNC MODE;
 -- result:
-019cc260-2d19-72cf-b490-16cacbbf2320
+019cd12a-1540-77fd-b1a0-94a4d41927d1
 -- !result
 SELECT * FROM test_mv_agg4 ORDER BY ALL;
 -- result:
@@ -827,7 +765,7 @@ DESC t4_agg;
 -- result:
 dt	date	YES	true	None	
 category_id	int	YES	true	None	
-product_id	int	YES	true	None	
+product_id	int	YES	false	None	
 sales_amount	decimal(38,2)	YES	false	None	
 quantity	int	YES	false	None	
 discount_amount	decimal(38,2)	YES	false	None	
@@ -850,12 +788,12 @@ total_quantity	bigint	YES	true	None
 total_discount	decimal(38,2)	YES	false	None	NONE
 total_profit	decimal(38,2)	YES	false	None	NONE
 -- !result
-INSERT INTO t4_agg VALUES ('2026-01-03', 3, 300, 5000.00, 30, 500.00, 1200.00, 1.00);
+INSERT INTO t4_agg VALUES ('2026-01-03', 3, 300, 5000.00, 30, 500.00, 'Product C', 1.00);
 -- result:
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg4 WITH SYNC MODE;
 -- result:
-019cc260-4023-78b9-a7d0-e9676313b0cb
+019cd12a-27a0-73b6-a249-8d417a62481e
 -- !result
 SELECT dt, category_id, total_sales, total_quantity, total_discount, total_profit FROM test_mv_agg4 ORDER BY dt, category_id;
 -- result:
@@ -864,7 +802,7 @@ SELECT dt, category_id, total_sales, total_quantity, total_discount, total_profi
 2026-01-02	1	1800.25	12	150.00	None
 2026-01-03	3	5000.00	30	500.00	1.00
 -- !result
-ALTER TABLE t4_agg ADD COLUMN region VARCHAR(50);
+ALTER TABLE t4_agg ADD COLUMN region VARCHAR(50) REPLACE;
 -- result:
 -- !result
 function: wait_alter_table_finish()
@@ -875,13 +813,13 @@ DESC t4_agg;
 -- result:
 dt	date	YES	true	None	
 category_id	int	YES	true	None	
-product_id	int	YES	true	None	
-region	varchar(50)	YES	true	None	
+product_id	int	YES	false	None	
 sales_amount	decimal(38,2)	YES	false	None	
 quantity	int	YES	false	None	
 discount_amount	decimal(38,2)	YES	false	None	
 product_name	varchar(100)	YES	false	None	
 profit	decimal(38,2)	YES	false	None	
+region	varchar(50)	YES	false	None	
 -- !result
 ALTER MATERIALIZED VIEW test_mv_agg4 ADD COLUMN region AS region;
 -- result:
@@ -900,12 +838,12 @@ total_discount	decimal(38,2)	YES	false	None	NONE
 total_profit	decimal(38,2)	YES	false	None	NONE
 region	varchar(1048576)	YES	false	None	NONE
 -- !result
-INSERT INTO t4_agg VALUES ('2026-01-03', 3, 300, "Product C", 5000.00, 30, 500.00, 1200.00, 1.00);
+INSERT INTO t4_agg VALUES ('2026-01-03', 3, 300, 0, 0, 0, 'Product C', 0, 'north');
 -- result:
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg4 WITH SYNC MODE;
 -- result:
-019cc260-4d53-7e33-bcf1-82314fa6cd61
+019cd12a-335b-7efc-a733-c07d945d8efb
 -- !result
 function: print_hit_materialized_view("SELECT dt, category_id, region, SUM(sales_amount), SUM(quantity), SUM(profit) FROM t4_agg GROUP BY dt, category_id, region", "test_mv_agg4")
 -- result:
@@ -917,8 +855,7 @@ FROM test_mv_agg4 ORDER BY dt, category_id, region;
 2026-01-01	1	None	4001.25	25	300.75	None
 2026-01-01	2	None	3000.00	20	300.00	None
 2026-01-02	1	None	1800.25	12	150.00	None
-2026-01-03	3	None	5000.00	30	500.00	1.00
-2026-01-03	3	Product C	5000.00	30	500.00	1.00
+2026-01-03	3	north	5000.00	30	500.00	1.00
 -- !result
 ALTER MATERIALIZED VIEW test_mv_agg4 DROP COLUMN total_discount;
 -- result:
@@ -938,7 +875,7 @@ region	varchar(1048576)	YES	false	None	NONE
 -- !result
 ALTER MATERIALIZED VIEW test_mv_agg4 DROP COLUMN region;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Cannot drop column 'region' because it is used in GROUP BY clause.")
+[REGEX]E:.*
 -- !result
 function: wait_alter_table_finish()
 -- result:
