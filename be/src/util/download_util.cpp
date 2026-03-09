@@ -95,7 +95,6 @@ static std::string get_scheme(const std::string& url) {
 }
 
 Status DownloadUtil::get_real_url(const std::string& url, std::string* real_url, const FSOptions& options) {
-
     std::string scheme = get_scheme(url);
 
     if (scheme.empty() || scheme == "http" || scheme == "https" || scheme == "file") {
@@ -107,8 +106,7 @@ Status DownloadUtil::get_real_url(const std::string& url, std::string* real_url,
         return get_java_udf_url(url, real_url, options);
     }
 
-    return Status::NotSupported(
-            strings::Substitute("Unsupported UDF URL scheme: $0", scheme));
+    return Status::NotSupported(strings::Substitute("Unsupported UDF URL scheme: $0", scheme));
 }
 
 Status DownloadUtil::get_java_udf_url(const std::string& url, std::string* real_url, const FSOptions& options) {
