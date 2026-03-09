@@ -1,4 +1,4 @@
--- name: test_mv_fast_schema_change_mode
+-- name: test_mv_fast_schema_change_mode @sequential
 admin set frontend config('alter_scheduler_interval_millisecond' = '100');
 -- result:
 -- !result
