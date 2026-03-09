@@ -45,7 +45,6 @@ import org.apache.thrift.TException;
 import org.apache.thrift.meta_data.FieldValueMetaData;
 
 import java.util.ArrayList;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
