@@ -42,7 +42,7 @@ protected:
 
 // JsonDocumentStreamParser parse json in document stream (ndjson).
 // eg:
-// input: {"key":1} {"key":2}
+// input: {"key":1}
 class JsonDocumentStreamParser : public JsonParser {
 public:
     explicit JsonDocumentStreamParser(simdjson::ondemand::parser* parser);

@@ -352,8 +352,7 @@ ScalarColumnWriter::ScalarColumnWriter(const ColumnWriterOptions& opts, TypeInfo
         : ColumnWriter(std::move(type_info), opts.meta->length(), opts.meta->is_nullable()),
           _opts(opts),
           _wfile(wfile),
-          _curr_page_format(_opts.page_format),
-          _data_size(0) {
+          _curr_page_format(_opts.page_format) {
     // these opts.meta fields should be set by client
     DCHECK(opts.meta->has_column_id());
     DCHECK(opts.meta->has_unique_id());

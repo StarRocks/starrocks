@@ -53,13 +53,7 @@
 namespace starrocks {
 
 ExportSink::ExportSink(ObjectPool* pool, const RowDescriptor& row_desc, const std::vector<TExpr>& t_exprs)
-        : _state(nullptr),
-          _pool(pool),
-          _t_output_expr(t_exprs),
-          _profile(nullptr),
-          _bytes_written_counter(nullptr),
-          _rows_written_counter(nullptr),
-          _write_timer(nullptr) {}
+        : _pool(pool), _t_output_expr(t_exprs) {}
 
 Status ExportSink::init(const TDataSink& t_sink, RuntimeState* state) {
     RETURN_IF_ERROR(DataSink::init(t_sink, state));

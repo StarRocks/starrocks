@@ -54,12 +54,12 @@ private:
     friend class JsonReader;
 
     const TBrokerScanRange& _scan_range;
-    int _next_range;
+    int _next_range{0};
     const uint64_t _max_chunk_size;
 
     // used to hold current StreamLoadPipe
     std::unique_ptr<JsonReader> _cur_file_reader;
-    bool _cur_file_eof; // indicate the current file is eof
+    bool _cur_file_eof{true}; // indicate the current file is eof
 
     std::vector<std::shared_ptr<SequentialFile>> _files;
 
@@ -154,7 +154,7 @@ private:
     // record the parsed column index for current json object
     std::vector<uint8_t> _parsed_columns;
     // record the "__op" column's index
-    int _op_col_index;
+    int _op_col_index{-1};
 
     ByteBufferPtr _file_stream_buffer;
 

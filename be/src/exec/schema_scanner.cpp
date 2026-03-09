@@ -81,8 +81,7 @@ namespace starrocks {
 
 StarRocksServer* SchemaScanner::_s_starrocks_server;
 
-SchemaScanner::SchemaScanner(ColumnDesc* columns, int column_num)
-        : _is_init(false), _param(nullptr), _columns(columns), _column_num(column_num) {}
+SchemaScanner::SchemaScanner(ColumnDesc* columns, int column_num) : _columns(columns), _column_num(column_num) {}
 
 SchemaScanner::~SchemaScanner() = default;
 

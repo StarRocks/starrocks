@@ -64,16 +64,16 @@ struct PartialUpdateState {
 struct AutoIncrementPartialUpdateState {
     std::vector<uint64_t> src_rss_rowids;
     MutableColumnPtr write_column;
-    Rowset* rowset;
+    Rowset* rowset{nullptr};
     TabletSchemaCSPtr schema;
     // auto increment column id in partial segment file
     // but not in full tablet schema
-    uint32_t id;
-    uint32_t segment_id;
+    uint32_t id{0};
+    uint32_t segment_id{0};
     std::vector<uint32_t> rowids;
     MutableColumnPtr delete_pks;
-    bool skip_rewrite;
-    AutoIncrementPartialUpdateState() : rowset(nullptr), schema(nullptr), id(0), segment_id(0), skip_rewrite(false) {}
+    bool skip_rewrite{false};
+    AutoIncrementPartialUpdateState() : schema(nullptr) {}
 
     void init(Rowset* rowset, TabletSchemaCSPtr schema, uint32_t id, uint32_t segment_id) {
         this->rowset = rowset;

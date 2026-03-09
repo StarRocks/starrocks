@@ -18,7 +18,7 @@ namespace starrocks {
 
 MetaScanNode::MetaScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ScanNode(pool, tnode, descs),
-          _is_init(false),
+
           _desc_tbl(descs),
           _meta_scan_node(tnode.meta_scan_node),
           _tuple_id(tnode.olap_scan_node.tuple_id) {}

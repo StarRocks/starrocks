@@ -123,7 +123,7 @@ template <typename T, typename Container = std::deque<T>, typename Lock = std::m
           typename CV = std::condition_variable>
 class BlockingQueue {
 public:
-    explicit BlockingQueue(size_t capacity) : _capacity(capacity), _shutdown(false) {}
+    explicit BlockingQueue(size_t capacity) : _capacity(capacity) {}
     ~BlockingQueue() { shutdown(); }
 
     // Return false iff empty *AND* has been shutdown.
@@ -228,7 +228,7 @@ protected:
     CV _not_empty;
     CV _not_full;
     Container _items;
-    bool _shutdown;
+    bool _shutdown{false};
 };
 
 // An un-bounded blocking queue.

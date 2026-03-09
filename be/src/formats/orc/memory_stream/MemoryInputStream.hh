@@ -20,8 +20,7 @@
 namespace starrocks {
 class MemoryInputStream : public orc::InputStream {
 public:
-    MemoryInputStream(const char* _buffer, size_t _size)
-            : buffer(_buffer), size(_size), naturalReadSize(1024), name("MemoryInputStream") {}
+    MemoryInputStream(const char* _buffer, size_t _size) : buffer(_buffer), size(_size), name("MemoryInputStream") {}
 
     virtual ~MemoryInputStream() override;
 
@@ -37,7 +36,7 @@ public:
 
 private:
     const char* buffer;
-    uint64_t size, naturalReadSize;
+    uint64_t size, naturalReadSize{1024};
     std::string name;
 };
 } // namespace starrocks

@@ -101,7 +101,7 @@ class MemTracker;
 ///    delete p;
 class MemPool {
 public:
-    MemPool() : next_chunk_size_(INITIAL_CHUNK_SIZE) {}
+    MemPool() {}
 
     /// Frees all chunks of memory and subtracts the total allocated bytes
     /// from the registered limits.
@@ -241,7 +241,7 @@ private:
     int current_chunk_idx_{-1};
 
     /// The size of the next chunk to allocate.
-    int next_chunk_size_;
+    int next_chunk_size_{INITIAL_CHUNK_SIZE};
 
     /// sum of allocated_bytes_
     int64_t total_allocated_bytes_{0};

@@ -67,8 +67,8 @@ private:
     Status do_sync_if_needed();
 
     int _fd;
-    bool _sync_file_on_close;
-    bool _closed;
+    bool _sync_file_on_close{false};
+    bool _closed{false};
     std::string _sync_dir;
 };
 

@@ -101,8 +101,7 @@ BufferControlBlock::BufferControlBlock(const TUniqueId& id, int buffer_size)
           _buffer_bytes(0),
           _buffer_limit(buffer_size),
           _packet_num(0),
-          _arrow_rows_limit(buffer_size * 4096),
-          _arrow_rows(0) {}
+          _arrow_rows_limit(buffer_size * 4096) {}
 
 BufferControlBlock::~BufferControlBlock() {
     cancel();

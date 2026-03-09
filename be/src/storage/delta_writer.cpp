@@ -51,21 +51,19 @@ StatusOr<std::unique_ptr<DeltaWriter>> DeltaWriter::open(const DeltaWriterOption
 }
 
 DeltaWriter::DeltaWriter(DeltaWriterOptions opt, MemTracker* mem_tracker, StorageEngine* storage_engine)
-        : _state(kUninitialized),
-          _opt(std::move(opt)),
+        : _opt(std::move(opt)),
           _mem_tracker(mem_tracker),
           _storage_engine(storage_engine),
           _tablet(nullptr),
           _cur_rowset(nullptr),
           _rowset_writer(nullptr),
-          _schema_initialized(false),
+
           _mem_table(nullptr),
           _mem_table_sink(nullptr),
           _tablet_schema(nullptr),
           _flush_token(nullptr),
           _replicate_token(nullptr),
-          _segment_flush_token(nullptr),
-          _with_rollback_log(true) {}
+          _segment_flush_token(nullptr) {}
 
 DeltaWriter::~DeltaWriter() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);

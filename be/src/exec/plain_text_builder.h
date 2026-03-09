@@ -60,7 +60,7 @@ private:
     const std::vector<ExprContext*>& _output_expr_ctxs;
     std::unique_ptr<io::FormattedOutputStream> _output_stream;
     std::vector<std::unique_ptr<csv::Converter>> _converters;
-    bool _init;
+    bool _init{false};
 
     Status init();
 };

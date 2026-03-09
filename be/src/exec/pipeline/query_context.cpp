@@ -44,7 +44,7 @@ namespace starrocks::pipeline {
 
 QueryContext::QueryContext()
         : _fragment_mgr(new FragmentContextManager()),
-          _total_fragments(0),
+
           _num_fragments(0),
           _num_active_fragments(0),
           _wg_running_query_token_ptr(nullptr) {

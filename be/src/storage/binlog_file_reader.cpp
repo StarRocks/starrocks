@@ -26,11 +26,7 @@
 namespace starrocks {
 
 BinlogFileReader::BinlogFileReader(std::string file_name, std::shared_ptr<BinlogFileMetaPB> file_meta)
-        : _file_path(std::move(file_name)),
-          _file_meta(std::move(file_meta)),
-          _file_size(0),
-          _current_file_pos(0),
-          _next_page_index(0) {}
+        : _file_path(std::move(file_name)), _file_meta(std::move(file_meta)) {}
 
 Status BinlogFileReader::seek(int64_t version, int64_t seq_id) {
     VLOG(3) << "Seek binlog file reader: " << _file_path << ", version: " << version << ", seq_id: " << seq_id;

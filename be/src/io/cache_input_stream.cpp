@@ -38,7 +38,7 @@ CacheInputStream::CacheInputStream(const std::shared_ptr<SharedBufferedInputStre
         : SeekableInputStreamWrapper(stream.get(), kDontTakeOwnership),
           _filename(filename),
           _sb_stream(stream),
-          _offset(0),
+
           _size(size) {
     _cache = BlockCache::instance();
     _block_size = _cache->block_size();

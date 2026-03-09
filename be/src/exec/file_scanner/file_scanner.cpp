@@ -48,9 +48,7 @@ FileScanner::FileScanner(starrocks::RuntimeState* state, starrocks::RuntimeProfi
           _params(params),
           _counter(counter),
           _row_desc(nullptr),
-          _strict_mode(false),
-          _error_counter(0),
-          _file_scan_type(TFileScanType::LOAD),
+
           _file_format_str("UNKNOWN"),
           _schema_only(schema_only) {
     if (_params.__isset.file_scan_type) {

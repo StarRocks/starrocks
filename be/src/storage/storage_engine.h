@@ -325,7 +325,7 @@ protected:
 
     static StorageEngine* _p_instance;
 
-    int32_t _effective_cluster_id;
+    int32_t _effective_cluster_id{-1};
 
 private:
     // Instance should be inited from `static open()`
@@ -421,8 +421,8 @@ private:
     EngineOptions _options;
     std::mutex _store_lock;
     std::map<std::string, std::unique_ptr<DataDir>> _store_map;
-    uint32_t _available_storage_medium_type_count;
-    bool _is_all_cluster_id_exist;
+    uint32_t _available_storage_medium_type_count{0};
+    bool _is_all_cluster_id_exist{true};
 
     std::mutex _gc_mutex;
     // map<rowset_id(str), RowsetSharedPtr>, if we use RowsetId as the key, we need custom hash func
