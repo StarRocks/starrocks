@@ -41,6 +41,63 @@
 
 namespace starrocks {
 
+namespace detail {
+
+StatusOr<std::vector<ColumnAccessPathPtr>> init_access_paths(const std::vector<TColumnAccessPath>& column_access_paths,
+                                                             RuntimeState* state, ObjectPool* pool) {
+    std::vector<ColumnAccessPathPtr> access_paths;
+    for (int i = 0; i < column_access_paths.size(); ++i) {
+        auto st = ColumnAccessPath::create(column_access_paths[i], state, pool);
+        if (LIKELY(st.ok())) {
+            access_paths.emplace_back(std::move(st.value()));
+        } else {
+            LOG(WARNING) << "Failed to create column access path: " << column_access_paths[i].type << "index: " << i
+                         << ", error: " << st.status();
+        }
+    }
+    return access_paths;
+}
+
+Status init_global_dicts_for_scan_node(RuntimeState* state, ObjectPool* pool, const TabletSchemaCSPtr& tablet_schema,
+                                       const std::vector<SlotDescriptor*>& slots,
+                                       ColumnIdToGlobalDictMap** global_dicts) {
+    const auto* fragment_dict_state = state->fragment_dict_state();
+    DCHECK(fragment_dict_state != nullptr);
+    const auto& global_dict_map = fragment_dict_state->query_global_dicts();
+
+    auto dicts = pool->add(new ColumnIdToGlobalDictMap());
+    for (auto* slot : slots) {
+        int32_t index = tablet_schema->field_index(slot->col_name());
+        if (index < 0) {
+            return Status::InternalError(fmt::format("invalid field name: {}", slot->col_name()));
+        }
+        auto iter = global_dict_map.find(slot->id());
+        if (iter != global_dict_map.end()) {
+            auto& dict_map = iter->second.first;
+            dicts->emplace(index, const_cast<GlobalDictMap*>(&dict_map));
+        }
+    }
+    *global_dicts = dicts;
+    return Status::OK();
+}
+
+Status init_read_schema(const TabletSchemaCSPtr& tablet_schema, const std::vector<SlotDescriptor*>& slots,
+                        starrocks::Schema* read_schema) {
+    std::vector<uint32_t> scanner_columns;
+    for (const auto* slot : slots) {
+        int32_t index = tablet_schema->field_index(slot->col_name());
+        if (index < 0) {
+            return Status::InternalError(fmt::format("invalid field name: {}", slot->col_name()));
+        }
+        scanner_columns.push_back(static_cast<uint32_t>(index));
+    }
+    std::sort(scanner_columns.begin(), scanner_columns.end());
+    *read_schema = ChunkHelper::convert_schema(tablet_schema, scanner_columns);
+    return Status::OK();
+}
+
+} // namespace detail
+
 class OlapScanTabletAdaptor final : public LookUpTabletAdaptor {
 public:
     OlapScanTabletAdaptor() = default;
@@ -137,63 +194,24 @@ Status OlapScanTabletAdaptor::init_schema(RuntimeState* state) {
 }
 
 Status OlapScanTabletAdaptor::init_access_path(RuntimeState* state, ObjectPool* pool) {
-    const auto& olap_scan_node_desc = _glm_ctx->scan_node();
-    std::vector<ColumnAccessPathPtr> access_paths;
-    if (olap_scan_node_desc.__isset.column_access_paths) {
-        for (int i = 0; i < olap_scan_node_desc.column_access_paths.size(); ++i) {
-            auto st = ColumnAccessPath::create(olap_scan_node_desc.column_access_paths[i], state, pool);
-            if (LIKELY(st.ok())) {
-                access_paths.emplace_back(std::move(st.value()));
-            } else {
-                LOG(WARNING) << "Failed to create column access path: "
-                             << olap_scan_node_desc.column_access_paths[i].type << "index: " << i
-                             << ", error: " << st.status();
-            }
-        }
-    }
-    size_t next_uniq_id = olap_scan_node_desc.next_uniq_id;
-    _column_access_paths = std::move(access_paths);
-    ASSIGN_OR_RETURN(_tablet_schema, extend_schema_by_access_paths(_tablet_schema, next_uniq_id, _column_access_paths));
+    using namespace detail;
+    const auto& scan_node = _glm_ctx->scan_node();
+    size_t next_unique_id = scan_node.next_uniq_id;
+    ASSIGN_OR_RETURN(_column_access_paths, init_access_paths(scan_node.column_access_paths, state, pool));
+    ASSIGN_OR_RETURN(_tablet_schema,
+                     extend_schema_by_access_paths(_tablet_schema, next_unique_id, _column_access_paths));
     return Status::OK();
 }
 
 Status OlapScanTabletAdaptor::init_global_dicts(RuntimeState* state, ObjectPool* pool,
                                                 const std::vector<SlotDescriptor*>& slots) {
-    const auto* fragment_dict_state = state->fragment_dict_state();
-    DCHECK(fragment_dict_state != nullptr);
-    const auto& global_dict_map = fragment_dict_state->query_global_dicts();
-
-    auto global_dict = pool->add(new ColumnIdToGlobalDictMap());
-    for (auto* slot : slots) {
-        int32_t index = _tablet_schema->field_index(slot->col_name());
-        if (index < 0) {
-            return Status::InternalError(fmt::format("invalid field name: {}", slot->col_name()));
-        }
-        auto iter = global_dict_map.find(slot->id());
-        if (iter != global_dict_map.end()) {
-            auto& dict_map = iter->second.first;
-            global_dict->emplace(index, const_cast<GlobalDictMap*>(&dict_map));
-        }
-    }
-    _global_dicts = global_dict;
-
-    return Status::OK();
+    using namespace detail;
+    return init_global_dicts_for_scan_node(state, pool, _tablet_schema, slots, &_global_dicts);
 }
 
 Status OlapScanTabletAdaptor::init_read_columns(const std::vector<SlotDescriptor*>& slots) {
-    std::vector<uint32_t> scanner_columns;
-    for (const auto* slot : slots) {
-        int32_t index = _tablet_schema->field_index(slot->col_name());
-        if (index < 0) {
-            return Status::InternalError(fmt::format("invalid field name: {}", slot->col_name()));
-        }
-        scanner_columns.push_back(static_cast<uint32_t>(index));
-    }
-    std::sort(scanner_columns.begin(), scanner_columns.end());
-
-    _read_schema = ChunkHelper::convert_schema(_tablet_schema, scanner_columns);
-
-    return Status::OK();
+    using namespace detail;
+    return init_read_schema(_tablet_schema, slots, &_read_schema);
 }
 
 auto OlapScanTabletAdaptor::get_iterator(int64_t rssid, SparseRange<rowid_t> row_id_range)
@@ -267,62 +285,25 @@ Status LakeScanTabletAdaptor::init_schema(RuntimeState* state) {
 }
 
 Status LakeScanTabletAdaptor::init_access_path(RuntimeState* state, ObjectPool* pool) {
-    const auto& lake_scan_desc = _glm_ctx->scan_node();
-    std::vector<ColumnAccessPathPtr> access_paths;
-    if (lake_scan_desc.__isset.column_access_paths) {
-        for (int i = 0; i < lake_scan_desc.column_access_paths.size(); ++i) {
-            auto st = ColumnAccessPath::create(lake_scan_desc.column_access_paths[i], state, pool);
-            if (LIKELY(st.ok())) {
-                access_paths.emplace_back(std::move(st.value()));
-            } else {
-                LOG(WARNING) << "Failed to create column access path: " << lake_scan_desc.column_access_paths[i].type
-                             << "index: " << i << ", error: " << st.status();
-            }
-        }
-    }
-    _column_access_paths = std::move(access_paths);
-    size_t next_uniq_id = lake_scan_desc.next_uniq_id;
-    ASSIGN_OR_RETURN(_tablet_schema, extend_schema_by_access_paths(_tablet_schema, next_uniq_id, _column_access_paths));
+    using namespace detail;
+
+    const auto& scan_node = _glm_ctx->scan_node();
+    size_t next_unique_id = scan_node.next_uniq_id;
+    ASSIGN_OR_RETURN(_column_access_paths, init_access_paths(scan_node.column_access_paths, state, pool));
+    ASSIGN_OR_RETURN(_tablet_schema,
+                     extend_schema_by_access_paths(_tablet_schema, next_unique_id, _column_access_paths));
     return Status::OK();
 }
 
 Status LakeScanTabletAdaptor::init_global_dicts(RuntimeState* state, ObjectPool* pool,
                                                 const std::vector<SlotDescriptor*>& slots) {
-    const auto* fragment_dict_state = state->fragment_dict_state();
-    DCHECK(fragment_dict_state != nullptr);
-    const auto& global_dict_map = fragment_dict_state->query_global_dicts();
-
-    auto global_dict = pool->add(new ColumnIdToGlobalDictMap());
-    for (auto* slot : slots) {
-        int32_t index = _tablet_schema->field_index(slot->col_name());
-        if (index < 0) {
-            return Status::InternalError(fmt::format("invalid field name: {}", slot->col_name()));
-        }
-        auto iter = global_dict_map.find(slot->id());
-        if (iter != global_dict_map.end()) {
-            auto& dict_map = iter->second.first;
-            global_dict->emplace(index, const_cast<GlobalDictMap*>(&dict_map));
-        }
-    }
-    _global_dicts = global_dict;
-
-    return Status::OK();
+    using namespace detail;
+    return init_global_dicts_for_scan_node(state, pool, _tablet_schema, slots, &_global_dicts);
 }
 
 Status LakeScanTabletAdaptor::init_read_columns(const std::vector<SlotDescriptor*>& slots) {
-    std::vector<uint32_t> scanner_columns;
-    for (const auto* slot : slots) {
-        int32_t index = _tablet_schema->field_index(slot->col_name());
-        if (index < 0) {
-            return Status::InternalError(fmt::format("invalid field name: {}", slot->col_name()));
-        }
-        scanner_columns.push_back(static_cast<uint32_t>(index));
-    }
-    std::sort(scanner_columns.begin(), scanner_columns.end());
-
-    _read_schema = ChunkHelper::convert_schema(_tablet_schema, scanner_columns);
-
-    return Status::OK();
+    using namespace detail;
+    return init_read_schema(_tablet_schema, slots, &_read_schema);
 }
 
 auto LakeScanTabletAdaptor::get_iterator(int64_t rssid, SparseRange<rowid_t> row_id_range)
