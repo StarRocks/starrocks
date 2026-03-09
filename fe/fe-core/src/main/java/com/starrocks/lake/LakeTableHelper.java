@@ -76,7 +76,12 @@ public class LakeTableHelper {
         boolean succ = cleaner.cleanTable();
         if (succ) {
             table.removeTabletsFromInvertedIndex();
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentState().getWarehouseMgr().removeTableWarehouseInfo(table.getId());
+=======
+            // Best-effort deletion: StarMgrMetaSyncer will clean up any remaining orphaned shard groups.
+            deleteShardGroupMeta(table);
+>>>>>>> c753afcae9 ([BugFix] Delete shard group meta when erasing lake table from recycle bin (#69973))
         }
         return succ;
     }
@@ -163,6 +168,29 @@ public class LakeTableHelper {
             }
         }
         return ret;
+    }
+
+    /**
+     * Best-effort deletion of all shard group meta (shards meta included) of a table from StarManager.
+     * If some shard groups fail to be deleted, StarMgrMetaSyncer will eventually clean them up.
+     */
+    static void deleteShardGroupMeta(OlapTable table) {
+        StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
+        Set<Long> shardGroupIds = new HashSet<>();
+        for (Partition partition : table.getAllPartitions()) {
+            for (PhysicalPartition subPartition : partition.getSubPartitions()) {
+                for (MaterializedIndex index : subPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                    long shardGroupId = index.getShardGroupId();
+                    if (shardGroupId != PhysicalPartition.INVALID_SHARD_GROUP_ID) {
+                        shardGroupIds.add(shardGroupId);
+                    }
+                }
+            }
+        }
+        if (!shardGroupIds.isEmpty()) {
+            starOSAgent.deleteShardGroup(new ArrayList<>(shardGroupIds));
+            LOG.debug("Deleted shard groups of table {}, group ids: {}", table.getId(), shardGroupIds);
+        }
     }
 
     /**

@@ -160,6 +160,64 @@ public class LakeTableHelperTest {
     }
 
     @Test
+    public void testDeleteShardGroupMetaForTable(@Mocked StarOSAgent starOSAgent) {
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return starOSAgent;
+            }
+        };
+
+        long tableId = 2001L;
+        long partitionId1 = 2000L;
+        long physicalPartitionId1 = 2002L;
+        long partitionId2 = 2003L;
+        long physicalPartitionId2 = 2004L;
+        long groupId1 = 6100L;
+        long groupId2 = 6200L;
+
+        DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList());
+        PartitionInfo partitionInfo = new SinglePartitionInfo();
+
+        // Create table with two partitions, each with a different shard group
+        Partition partition1 =
+                new Partition(partitionId1, physicalPartitionId1, "p1", new MaterializedIndex(), distributionInfo);
+        partition1.getSubPartitions().forEach(sp -> {
+            sp.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL).get(0).setShardGroupId(groupId1);
+        });
+
+        Partition partition2 =
+                new Partition(partitionId2, physicalPartitionId2, "p2", new MaterializedIndex(), distributionInfo);
+        partition2.getSubPartitions().forEach(sp -> {
+            sp.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL).get(0).setShardGroupId(groupId2);
+        });
+
+        List<Column> columns = Lists.newArrayList(
+                new Column("k1", Type.INT, true, AggregateType.NONE, false, null, null));
+        LakeTable table = new LakeTable(tableId, "test_table", columns, KeysType.DUP_KEYS,
+                partitionInfo, distributionInfo);
+        table.addPartition(partition1);
+        table.addPartition(partition2);
+
+        List<ShardGroupInfo> shardGroupInfos = new ArrayList<>();
+        shardGroupInfos.add(ShardGroupInfo.newBuilder().setGroupId(groupId1).build());
+        shardGroupInfos.add(ShardGroupInfo.newBuilder().setGroupId(groupId2).build());
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public void deleteShardGroup(List<Long> groupIds) {
+                for (long groupId : groupIds) {
+                    shardGroupInfos.removeIf(item -> item.getGroupId() == groupId);
+                }
+            }
+        };
+
+        LakeTableHelper.deleteShardGroupMeta(table);
+        Assertions.assertEquals(0, shardGroupInfos.size());
+    }
+
+    @Test
     public void testRestoreColumnUniqueIdIfNeeded() throws Exception {
         String sql = "create table test_lake_table_helper.test_tb (k1 int, k2 int, k3 varchar)";
         LakeTable table = createTable(sql);
