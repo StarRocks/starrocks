@@ -617,6 +617,12 @@ displayed_sidebar: docs
 - 类型：瞬时值
 - 描述：Safe Mode 是否被开启 。取值：`0`（关闭）或 `1`（开启）。Safe Mode 开启时，集群不再接受任何数据导入请求。
 
+### starrocks_fe_license_expire_days
+
+- 单位：天
+- 类型：瞬时值
+- 描述：当前生效 license 距离过期的剩余整天数。如果存在多个有效 license，则取最晚的过期时间。在 free trial 期间，该指标返回剩余试用天数。如果当前没有有效 license 且 free trial 已结束，则返回 `0`。
+
 ### starrocks_fe_unfinished_backup_job
 
 - 单位：个

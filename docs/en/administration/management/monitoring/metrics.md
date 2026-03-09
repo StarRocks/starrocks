@@ -617,6 +617,12 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Type: Instantaneous
 - Description: Indicates whether Safe Mode is enabled. Valid values: `0` (disabled) and `1` (enabled). When Safe Mode is enabled, the cluster no longer accepts any loading requests.
 
+### starrocks_fe_license_expire_days
+
+- Unit: Days
+- Type: Instantaneous
+- Description: Remaining whole days before the current effective license expires. If multiple valid licenses exist, the latest expiration time is used. During the free trial period, this metric reports the remaining trial days. It returns `0` when no valid license or free trial is available.
+
 ### starrocks_fe_unfinished_backup_job
 
 - Unit: Count

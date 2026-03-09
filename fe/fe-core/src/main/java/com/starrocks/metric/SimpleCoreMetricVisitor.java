@@ -64,6 +64,7 @@ public class SimpleCoreMetricVisitor extends MetricVisitor {
 
     public static final String MAX_JOURNAL_ID = "max_journal_id";
     public static final String CONNECTION_TOTAL = "connection_total";
+    public static final String LICENSE_EXPIRE_DAYS = "license_expire_days";
     public static final String QUERY_LATENCY_MS = "query_latency_ms";
 
     public static final String QUERY_PER_SECOND = "qps";
@@ -79,6 +80,7 @@ public class SimpleCoreMetricVisitor extends MetricVisitor {
     static {
         CORE_METRICS.put(MAX_JOURNAL_ID, TYPE_LONG);
         CORE_METRICS.put(CONNECTION_TOTAL, TYPE_LONG);
+        CORE_METRICS.put(LICENSE_EXPIRE_DAYS, TYPE_LONG);
         CORE_METRICS.put(QUERY_LATENCY_MS, TYPE_LONG);
         CORE_METRICS.put(QUERY_PER_SECOND, TYPE_DOUBLE);
         CORE_METRICS.put(REQUEST_PER_SECOND, TYPE_DOUBLE);

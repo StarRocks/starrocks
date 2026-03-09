@@ -79,6 +79,24 @@ public class MetricRepoTest extends PlanTestBase {
     }
 
     @Test
+    public void testLicenseExpireDaysMetric() {
+        List<Metric> metrics = MetricRepo.getMetricsByName("license_expire_days");
+        Assertions.assertEquals(1, metrics.size());
+
+        Metric metric = metrics.get(0);
+        long expected = GlobalStateMgr.getCurrentState().getLicenseMgr().getLicenseExpireDays();
+        Assertions.assertEquals(expected, metric.getValue());
+
+        MetricVisitor prometheusVisitor = new PrometheusMetricVisitor("starrocks_fe");
+        prometheusVisitor.visit(metric);
+        Assertions.assertTrue(prometheusVisitor.build().contains("starrocks_fe_license_expire_days"));
+
+        MetricVisitor coreVisitor = new SimpleCoreMetricVisitor("starrocks_fe");
+        coreVisitor.visit(metric);
+        Assertions.assertTrue(coreVisitor.build().contains("starrocks_fe_license_expire_days"));
+    }
+
+    @Test
     public void testLeaderAwarenessMetric() {
         Assertions.assertTrue(GlobalStateMgr.getCurrentState().isLeader());
 

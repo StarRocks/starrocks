@@ -43,6 +43,7 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -237,6 +238,36 @@ public class LicenseMgr {
             }
         }
         return maxCpuCores;
+    }
+
+    public long getLicenseExpireDays() {
+        if (systemInfo == null) {
+            return 0L;
+        }
+
+        long maxExpire = 0;
+        try (CloseableLock ignored = CloseableLock.lock(this.lock.readLock())) {
+            for (String license : licenseList) {
+                try {
+                    LicenseInfo info = verifyLicense(license);
+                    verifyLicenseInfo(info);
+                    maxExpire = Math.max(maxExpire, info.getExpire());
+                } catch (InvalidLicenseException e) {
+                    // skip invalid license
+                }
+            }
+        }
+
+        if (maxExpire <= 0 && inFreeTrialPeriod()) {
+            maxExpire = systemInfo.getBuildTime() + FREE_TRIAL_EXPIRE_MS;
+        }
+
+        if (maxExpire <= 0) {
+            return 0L;
+        }
+
+        long remainingMillis = Math.max(0L, maxExpire - clock.millis());
+        return TimeUnit.MILLISECONDS.toDays(remainingMillis);
     }
 
     protected boolean inFreeTrialPeriod() {

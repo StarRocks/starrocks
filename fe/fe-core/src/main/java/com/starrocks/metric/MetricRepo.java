@@ -262,6 +262,7 @@ public final class MetricRepo {
     public static GaugeMetricImpl<Double> GAUGE_QUERY_LATENCY_P999;
     public static LeaderAwareGaugeMetric<Long> GAUGE_MAX_TABLET_COMPACTION_SCORE;
     public static GaugeMetricImpl<Long> GAUGE_STACKED_JOURNAL_NUM;
+    public static GaugeMetric<Long> GAUGE_LICENSE_EXPIRE_DAYS;
 
     public static GaugeMetricImpl<Long> GAUGE_ENCRYPTION_KEY_NUM;
 
@@ -384,6 +385,15 @@ public final class MetricRepo {
             }
         };
         STARROCKS_METRIC_REGISTER.addMetric(metaLogCount);
+
+        GAUGE_LICENSE_EXPIRE_DAYS = new GaugeMetric<Long>(
+                "license_expire_days", MetricUnit.NOUNIT, "remaining whole days before the effective license expires") {
+            @Override
+            public Long getValue() {
+                return GlobalStateMgr.getCurrentState().getLicenseMgr().getLicenseExpireDays();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_LICENSE_EXPIRE_DAYS);
 
         // routine load jobs
         for (RoutineLoadJob.JobState state : RoutineLoadJob.JobState.values()) {
