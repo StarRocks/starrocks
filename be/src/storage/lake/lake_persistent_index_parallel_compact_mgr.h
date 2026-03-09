@@ -74,18 +74,10 @@ public:
                                            const UniqueId& fileset_id, SstSeekRange seek_range)
             : _input_sstables(input_sstables),
               _tablet_mgr(tablet_mgr),
-              _metadata(std::move(std::move(std::move(std::move(std::move(
-                      std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(
-                              std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(
-                                      std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(
-                                              std::move(std::move(std::move(metadata))))))))))))))))))))))))))))))))))),
+              _metadata(std::move(metadata)),
               _merge_base_level(merge_base_level),
               _output_fileset_id(fileset_id),
-              _seek_range(std::move(std::move(std::move(std::move(std::move(std::move(
-                      std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(
-                              std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(
-                                      std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(
-                                              std::move(std::move(seek_range))))))))))))))))))))))))))))))))))) {}
+              _seek_range(std::move(seek_range)) {}
 
     void set_cb(AsyncCompactCB* cb) { _cb = cb; }
 

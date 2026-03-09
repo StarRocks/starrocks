@@ -89,10 +89,7 @@ public:
     // Constructor that initializes the LoadSpillBlockManager with a query ID and remote spill path.
     LoadSpillBlockManager(const TUniqueId& load_id, const TUniqueId& fragment_instance_id,
                           const std::string& remote_spill_path, std::shared_ptr<FileSystem> fs)
-            : _load_id(load_id),
-              _fragment_instance_id(fragment_instance_id),
-              _fs(std::move(std::move(std::move(
-                      std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(fs)))))))))))) {
+            : _load_id(load_id), _fragment_instance_id(fragment_instance_id), _fs(std::move(fs)) {
         _remote_spill_path = remote_spill_path + "/load_spill";
     }
 

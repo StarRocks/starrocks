@@ -47,7 +47,7 @@ public:
               _index(index),
               _txn_id(txn_id),
               _base_version(base_version),
-              _lcrm_file(std::move(std::move(lcrm_file))),
+              _lcrm_file(std::move(lcrm_file)),
               _segment_id_to_add_dels(segment_id_to_add_dels),
               _delvecs(delvecs) {}
     ~LakePrimaryKeyCompactionConflictResolver() {}

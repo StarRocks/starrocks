@@ -104,11 +104,7 @@ public:
                      std::string file_suffix)
             : _base_path(PathUtils::remove_trailing_slash(base_path)),
               _file_name_prefix(fmt::format("{}_{}_{}", query_id, be_number, driver_id)),
-              _file_name_suffix(std::move(std::move(std::move(std::move(std::move(std::move(std::move(
-                      std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(
-                              std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(
-                                      std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(
-                                              std::move(std::move(file_suffix)))))))))))))))))))))))))))))))))))) {}
+              _file_name_suffix(std::move(file_suffix)) {}
 
     // location = base_path/partition/{query_id}_{be_number}_{driver_id}_index.file_suffix
     std::string get(const std::string& partition) {

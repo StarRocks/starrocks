@@ -73,7 +73,7 @@ public:
                                    std::vector<std::string>&& string_values)
             : SourceOperatorFactory(id, "raw_values_source", plan_node_id),
               _dst_slots(dst_slots),
-              _constant_type(std::move(std::move(std::move(value_type)))),
+              _constant_type(std::move(value_type)),
               _long_values(std::move(long_values)),
               _string_values(std::move(string_values)) {
         DCHECK(_dst_slots.size() == 1);

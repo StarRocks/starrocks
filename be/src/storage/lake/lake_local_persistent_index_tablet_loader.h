@@ -38,7 +38,7 @@ public:
     LakeLocalPersistentIndexTabletLoader(TabletManager* tablet_mgr, TabletMetadataPtr metadata, int64_t base_version,
                                          const MetaFileBuilder* builder, LakeLocalPersistentIndex* index)
             : _tablet_mgr(tablet_mgr),
-              _metadata(std::move(std::move(metadata))),
+              _metadata(std::move(metadata)),
               _base_version(base_version),
               _builder(builder),
               _index(index) {}

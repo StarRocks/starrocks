@@ -87,7 +87,7 @@ public:
     };
 
     ConfigurableTypeChecker(std::string display_name, const std::vector<TypeRule>& rules)
-            : _display_name(std::move(std::move(std::move(std::move(display_name))))), _rules(rules) {}
+            : _display_name(std::move(display_name)), _rules(rules) {}
 
     StatusOr<LogicalType> check(const std::string& java_class, const SlotDescriptor* slot_desc) const override;
 

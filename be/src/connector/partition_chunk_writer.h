@@ -239,11 +239,7 @@ public:
 
 class BufferPartitionChunkWriterFactory final : public PartitionChunkWriterFactory {
 public:
-    BufferPartitionChunkWriterFactory(std::shared_ptr<BufferPartitionChunkWriterContext> ctx)
-            : _ctx(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(
-                      std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(
-                              std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(
-                                      std::move(std::move(std::move(std::move(ctx))))))))))))))))))))))))))))))))) {}
+    BufferPartitionChunkWriterFactory(std::shared_ptr<BufferPartitionChunkWriterContext> ctx) : _ctx(std::move(ctx)) {}
 
     ~BufferPartitionChunkWriterFactory() override = default;
 
@@ -261,11 +257,7 @@ private:
 
 class SpillPartitionChunkWriterFactory final : public PartitionChunkWriterFactory {
 public:
-    SpillPartitionChunkWriterFactory(std::shared_ptr<SpillPartitionChunkWriterContext> ctx)
-            : _ctx(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(
-                      std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(
-                              std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(
-                                      std::move(std::move(std::move(std::move(ctx))))))))))))))))))))))))))))))))) {}
+    SpillPartitionChunkWriterFactory(std::shared_ptr<SpillPartitionChunkWriterContext> ctx) : _ctx(std::move(ctx)) {}
 
     ~SpillPartitionChunkWriterFactory() override = default;
 

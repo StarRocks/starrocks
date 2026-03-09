@@ -43,7 +43,7 @@ class TabletManager;
 //
 class RowsMapperBuilder {
 public:
-    RowsMapperBuilder(std::string  filename) : _filename(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(filename)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))) {}
+    RowsMapperBuilder(std::string filename) : _filename(std::move(filename)) {}
     ~RowsMapperBuilder() {}
     // append rssid rowids to file
     Status append(const std::vector<uint64_t>& rssid_rowids);

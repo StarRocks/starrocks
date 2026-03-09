@@ -68,8 +68,7 @@ public:
         size_t total_cache_usage = 0;
     };
 
-    DiskSpace(std::string path, std::shared_ptr<FileSystemWrapper> fs)
-            : _path(std::move(std::move(std::move(path)))), _fs(std::move(std::move(std::move(fs)))) {}
+    DiskSpace(std::string path, std::shared_ptr<FileSystemWrapper> fs) : _path(std::move(path)), _fs(std::move(fs)) {}
 
     Status init_spaces(const std::vector<DirSpace>& dir_spaces);
 

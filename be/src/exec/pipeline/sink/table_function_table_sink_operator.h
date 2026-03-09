@@ -40,8 +40,8 @@ public:
                                    const TCloudConfiguration& cloud_conf, FragmentContext* fragment_ctx,
                                    std::shared_ptr<::parquet::schema::GroupNode> parquet_file_schema)
             : Operator(factory, id, "table_function_table_sink", plan_node_id, false, driver_sequence),
-              _path(std::move(std::move(path))),
-              _file_format(std::move(std::move(file_format))),
+              _path(std::move(path)),
+              _file_format(std::move(file_format)),
               _compression_type(compression_type),
               _output_exprs(output_exprs),
               _partition_exprs(partition_exprs),

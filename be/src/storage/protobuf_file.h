@@ -34,9 +34,7 @@ public:
     explicit ProtobufFile(std::string path) : _path(std::move(path)) {}
 
     explicit ProtobufFile(std::string path, std::shared_ptr<FileSystem> fs)
-            : _path(std::move(path)),
-              _fs(std::move(
-                      std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(fs)))))))))) {}
+            : _path(std::move(path)), _fs(std::move(fs)) {}
 
     DISALLOW_COPY_AND_MOVE(ProtobufFile);
 
@@ -54,9 +52,7 @@ public:
     explicit ProtobufFileWithHeader(std::string path) : _path(std::move(path)) {}
 
     explicit ProtobufFileWithHeader(std::string path, std::shared_ptr<FileSystem> fs)
-            : _path(std::move(path)),
-              _fs(std::move(
-                      std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(fs)))))))))) {}
+            : _path(std::move(path)), _fs(std::move(fs)) {}
 
     DISALLOW_COPY_AND_MOVE(ProtobufFileWithHeader);
 

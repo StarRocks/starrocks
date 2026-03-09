@@ -88,9 +88,7 @@ private:
         ShardInfo shard_info;
         std::shared_ptr<std::string> fs_cache_key;
 
-        ShardInfoDetails(ShardInfo info)
-                : shard_info(std::move(std::move(std::move(
-                          std::move(std::move(std::move(std::move(std::move(std::move(std::move(info))))))))))) {}
+        ShardInfoDetails(ShardInfo info) : shard_info(std::move(info)) {}
     };
 
     struct CacheValue {

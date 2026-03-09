@@ -24,9 +24,7 @@ class CopiedDatum {
 public:
     CopiedDatum() = default;
 
-    CopiedDatum(Datum  datum) : _datum(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(datum))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))) {
-        copy();
-    }
+    CopiedDatum(Datum datum) : _datum(std::move(datum)) { copy(); }
 
     CopiedDatum(const CopiedDatum& other) : CopiedDatum(other.get()) {}
 

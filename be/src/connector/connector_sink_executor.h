@@ -34,7 +34,7 @@ class SpillPartitionChunkWriter;
 
 class ConnectorSinkExecutor {
 public:
-    ConnectorSinkExecutor(std::string executor_name) : _executor_name(std::move(std::move(std::move(executor_name)))) {}
+    ConnectorSinkExecutor(std::string executor_name) : _executor_name(std::move(executor_name)) {}
     virtual ~ConnectorSinkExecutor() {}
 
     virtual Status init() = 0;
