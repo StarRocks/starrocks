@@ -27,6 +27,7 @@ import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.type.VarbinaryType;
+import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import mockit.Delegate;
 import mockit.Expectations;
@@ -36,6 +37,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Types;
@@ -54,6 +56,8 @@ public class JDBCMetadataTest {
 
     @Mocked
     Connection connection;
+    @Mocked
+    DatabaseMetaData metaData;
     @Mocked
     PreparedStatement preparedStatement;
     MockResultSet partitionsInfoTablesResult;
@@ -105,16 +109,20 @@ public class JDBCMetadataTest {
                 result = connection;
                 minTimes = 0;
 
-                connection.getMetaData().getCatalogs();
+                connection.getMetaData();
+                result = metaData;
+                minTimes = 0;
+
+                metaData.getCatalogs();
                 result = dbResult;
                 minTimes = 0;
 
-                connection.getMetaData().getTables("test", null, null,
+                metaData.getTables("test", null, null,
                         new String[] {"TABLE", "VIEW"});
                 result = tableResult;
                 minTimes = 0;
 
-                connection.getMetaData().getColumns("test", null, "tbl1", "%");
+                metaData.getColumns("test", null, "tbl1", "%");
                 result = columnResult;
                 minTimes = 0;
 
@@ -561,5 +569,248 @@ public class JDBCMetadataTest {
         // Most importantly: verify ResultSet was closed
         // This prevents cursor leaks (ORA-01000 in Oracle)
         Assertions.assertTrue(closed[0], "ResultSet must be closed after getTable() to prevent cursor leaks");
+    }
+
+    @Test
+    public void testApplyLifecycleConfigDefaults() {
+        // Verify default config values produce correct HikariConfig settings
+        long origMaxLifetime = Config.jdbc_connection_max_lifetime_ms;
+        long origKeepalive = Config.jdbc_connection_keepalive_time_ms;
+        long origLeakDetection = Config.jdbc_connection_leak_detection_threshold_ms;
+        try {
+            Config.jdbc_connection_max_lifetime_ms = 300000L;
+            Config.jdbc_connection_keepalive_time_ms = 30000L;
+            Config.jdbc_connection_leak_detection_threshold_ms = 0L;
+
+            HikariConfig config = new HikariConfig();
+            JDBCMetadata.applyLifecycleConfig(config);
+
+            Assertions.assertEquals(300000L, config.getMaxLifetime());
+            Assertions.assertEquals(30000L, config.getKeepaliveTime());
+            Assertions.assertEquals(0L, config.getLeakDetectionThreshold());
+        } finally {
+            Config.jdbc_connection_max_lifetime_ms = origMaxLifetime;
+            Config.jdbc_connection_keepalive_time_ms = origKeepalive;
+            Config.jdbc_connection_leak_detection_threshold_ms = origLeakDetection;
+        }
+    }
+
+    @Test
+    public void testApplyLifecycleConfigInvalidMaxLifetime() {
+        // maxLifetime < 30000 should fall back to 300000
+        long origMaxLifetime = Config.jdbc_connection_max_lifetime_ms;
+        long origKeepalive = Config.jdbc_connection_keepalive_time_ms;
+        long origLeakDetection = Config.jdbc_connection_leak_detection_threshold_ms;
+        try {
+            Config.jdbc_connection_max_lifetime_ms = 10000L; // too small
+            Config.jdbc_connection_keepalive_time_ms = 5000L;
+            Config.jdbc_connection_leak_detection_threshold_ms = 0L;
+
+            HikariConfig config = new HikariConfig();
+            JDBCMetadata.applyLifecycleConfig(config);
+
+            Assertions.assertEquals(300000L, config.getMaxLifetime(),
+                    "maxLifetime < 30000 should fall back to 300000");
+            Assertions.assertEquals(0L, config.getKeepaliveTime(),
+                    "keepaliveTime 5000 is below minimum 30000, should fall back to 0 (disabled)");
+        } finally {
+            Config.jdbc_connection_max_lifetime_ms = origMaxLifetime;
+            Config.jdbc_connection_keepalive_time_ms = origKeepalive;
+            Config.jdbc_connection_leak_detection_threshold_ms = origLeakDetection;
+        }
+    }
+
+    @Test
+    public void testApplyLifecycleConfigInvalidKeepaliveTime() {
+        // keepaliveTime >= maxLifetime or negative should fall back to 0 (disabled)
+        long origMaxLifetime = Config.jdbc_connection_max_lifetime_ms;
+        long origKeepalive = Config.jdbc_connection_keepalive_time_ms;
+        long origLeakDetection = Config.jdbc_connection_leak_detection_threshold_ms;
+        try {
+            // Case 1: keepaliveTime >= maxLifetime → disabled
+            Config.jdbc_connection_max_lifetime_ms = 60000L;
+            Config.jdbc_connection_keepalive_time_ms = 60000L; // equal to maxLifetime
+            Config.jdbc_connection_leak_detection_threshold_ms = 0L;
+
+            HikariConfig config1 = new HikariConfig();
+            JDBCMetadata.applyLifecycleConfig(config1);
+
+            Assertions.assertEquals(60000L, config1.getMaxLifetime());
+            Assertions.assertEquals(0L, config1.getKeepaliveTime(),
+                    "keepaliveTime >= maxLifetime should fall back to 0 (disabled)");
+
+            // Case 2: keepaliveTime == 0 → disabled (passthrough, HikariCP semantics)
+            Config.jdbc_connection_keepalive_time_ms = 0L;
+
+            HikariConfig config2 = new HikariConfig();
+            JDBCMetadata.applyLifecycleConfig(config2);
+
+            Assertions.assertEquals(0L, config2.getKeepaliveTime(),
+                    "keepaliveTime == 0 should be respected as disabled");
+
+            // Case 3: keepaliveTime negative → disabled
+            Config.jdbc_connection_keepalive_time_ms = -1L;
+
+            HikariConfig config3 = new HikariConfig();
+            JDBCMetadata.applyLifecycleConfig(config3);
+
+            Assertions.assertEquals(0L, config3.getKeepaliveTime(),
+                    "negative keepaliveTime should fall back to 0 (disabled)");
+        } finally {
+            Config.jdbc_connection_max_lifetime_ms = origMaxLifetime;
+            Config.jdbc_connection_keepalive_time_ms = origKeepalive;
+            Config.jdbc_connection_leak_detection_threshold_ms = origLeakDetection;
+        }
+    }
+
+    @Test
+    public void testApplyLifecycleConfigLeakDetection() {
+        // Verify leak detection is set when > 0, not set when <= 0
+        long origMaxLifetime = Config.jdbc_connection_max_lifetime_ms;
+        long origKeepalive = Config.jdbc_connection_keepalive_time_ms;
+        long origLeakDetection = Config.jdbc_connection_leak_detection_threshold_ms;
+        try {
+            Config.jdbc_connection_max_lifetime_ms = 300000L;
+            Config.jdbc_connection_keepalive_time_ms = 30000L;
+
+            // Enabled
+            Config.jdbc_connection_leak_detection_threshold_ms = 60000L;
+            HikariConfig config1 = new HikariConfig();
+            JDBCMetadata.applyLifecycleConfig(config1);
+            Assertions.assertEquals(60000L, config1.getLeakDetectionThreshold(),
+                    "Positive threshold should enable leak detection");
+
+            // Disabled (0)
+            Config.jdbc_connection_leak_detection_threshold_ms = 0L;
+            HikariConfig config2 = new HikariConfig();
+            JDBCMetadata.applyLifecycleConfig(config2);
+            Assertions.assertEquals(0L, config2.getLeakDetectionThreshold(),
+                    "Zero threshold should disable leak detection");
+        } finally {
+            Config.jdbc_connection_max_lifetime_ms = origMaxLifetime;
+            Config.jdbc_connection_keepalive_time_ms = origKeepalive;
+            Config.jdbc_connection_leak_detection_threshold_ms = origLeakDetection;
+        }
+    }
+
+    @Test
+    public void testApplyLifecycleConfigValidCustomValues() {
+        // Verify valid custom values are applied correctly
+        long origMaxLifetime = Config.jdbc_connection_max_lifetime_ms;
+        long origKeepalive = Config.jdbc_connection_keepalive_time_ms;
+        long origLeakDetection = Config.jdbc_connection_leak_detection_threshold_ms;
+        try {
+            Config.jdbc_connection_max_lifetime_ms = 120000L;
+            Config.jdbc_connection_keepalive_time_ms = 60000L;
+            Config.jdbc_connection_leak_detection_threshold_ms = 30000L;
+
+            HikariConfig config = new HikariConfig();
+            JDBCMetadata.applyLifecycleConfig(config);
+
+            Assertions.assertEquals(120000L, config.getMaxLifetime());
+            Assertions.assertEquals(60000L, config.getKeepaliveTime());
+            Assertions.assertEquals(30000L, config.getLeakDetectionThreshold());
+        } finally {
+            Config.jdbc_connection_max_lifetime_ms = origMaxLifetime;
+            Config.jdbc_connection_keepalive_time_ms = origKeepalive;
+            Config.jdbc_connection_leak_detection_threshold_ms = origLeakDetection;
+        }
+    }
+
+    @Test
+    public void testApplyLifecycleConfigKeepaliveDisabledExplicitly() {
+        // keepaliveTime = 0 should be respected as "disabled" (HikariCP semantics)
+        long origMaxLifetime = Config.jdbc_connection_max_lifetime_ms;
+        long origKeepalive = Config.jdbc_connection_keepalive_time_ms;
+        long origLeakDetection = Config.jdbc_connection_leak_detection_threshold_ms;
+        try {
+            Config.jdbc_connection_max_lifetime_ms = 300000L;
+            Config.jdbc_connection_keepalive_time_ms = 0L;
+            Config.jdbc_connection_leak_detection_threshold_ms = 0L;
+
+            HikariConfig config = new HikariConfig();
+            JDBCMetadata.applyLifecycleConfig(config);
+
+            Assertions.assertEquals(300000L, config.getMaxLifetime());
+            Assertions.assertEquals(0L, config.getKeepaliveTime(),
+                    "keepaliveTime=0 should mean disabled (no keepalive probing)");
+        } finally {
+            Config.jdbc_connection_max_lifetime_ms = origMaxLifetime;
+            Config.jdbc_connection_keepalive_time_ms = origKeepalive;
+            Config.jdbc_connection_leak_detection_threshold_ms = origLeakDetection;
+        }
+    }
+
+    @Test
+    public void testApplyLifecycleConfigMaxLifetimeAtMinimum() {
+        // When maxLifetime=30000, no valid enabled keepalive exists, so keepalive must be 0
+        long origMaxLifetime = Config.jdbc_connection_max_lifetime_ms;
+        long origKeepalive = Config.jdbc_connection_keepalive_time_ms;
+        long origLeakDetection = Config.jdbc_connection_leak_detection_threshold_ms;
+        try {
+            Config.jdbc_connection_max_lifetime_ms = 30000L;
+            Config.jdbc_connection_keepalive_time_ms = 30000L; // would equal maxLifetime
+            Config.jdbc_connection_leak_detection_threshold_ms = 0L;
+
+            HikariConfig config = new HikariConfig();
+            JDBCMetadata.applyLifecycleConfig(config);
+
+            Assertions.assertEquals(30000L, config.getMaxLifetime(),
+                    "maxLifetime=30000 is valid (at minimum)");
+            Assertions.assertEquals(0L, config.getKeepaliveTime(),
+                    "keepalive must be 0 (disabled) when maxLifetime=30000");
+        } finally {
+            Config.jdbc_connection_max_lifetime_ms = origMaxLifetime;
+            Config.jdbc_connection_keepalive_time_ms = origKeepalive;
+            Config.jdbc_connection_leak_detection_threshold_ms = origLeakDetection;
+        }
+    }
+
+    @Test
+    public void testApplyLifecycleConfigKeepaliveBelowMinimum() {
+        // keepalive > 0 but < 30000 should fall back to 0 (disabled)
+        long origMaxLifetime = Config.jdbc_connection_max_lifetime_ms;
+        long origKeepalive = Config.jdbc_connection_keepalive_time_ms;
+        long origLeakDetection = Config.jdbc_connection_leak_detection_threshold_ms;
+        try {
+            Config.jdbc_connection_max_lifetime_ms = 300000L;
+            Config.jdbc_connection_keepalive_time_ms = 15000L; // below 30000 minimum
+            Config.jdbc_connection_leak_detection_threshold_ms = 0L;
+
+            HikariConfig config = new HikariConfig();
+            JDBCMetadata.applyLifecycleConfig(config);
+
+            Assertions.assertEquals(300000L, config.getMaxLifetime());
+            Assertions.assertEquals(0L, config.getKeepaliveTime(),
+                    "keepalive=15000 is below 30000 minimum, should fall back to 0 (disabled)");
+        } finally {
+            Config.jdbc_connection_max_lifetime_ms = origMaxLifetime;
+            Config.jdbc_connection_keepalive_time_ms = origKeepalive;
+            Config.jdbc_connection_leak_detection_threshold_ms = origLeakDetection;
+        }
+    }
+
+    @Test
+    public void testApplyLifecycleConfigKeepaliveAlmostValid() {
+        // keepalive=29999 with maxLifetime=30000: below minimum AND below maxLifetime
+        long origMaxLifetime = Config.jdbc_connection_max_lifetime_ms;
+        long origKeepalive = Config.jdbc_connection_keepalive_time_ms;
+        long origLeakDetection = Config.jdbc_connection_leak_detection_threshold_ms;
+        try {
+            Config.jdbc_connection_max_lifetime_ms = 30000L;
+            Config.jdbc_connection_keepalive_time_ms = 29999L;
+            Config.jdbc_connection_leak_detection_threshold_ms = 0L;
+
+            HikariConfig config = new HikariConfig();
+            JDBCMetadata.applyLifecycleConfig(config);
+
+            Assertions.assertEquals(30000L, config.getMaxLifetime());
+            Assertions.assertEquals(0L, config.getKeepaliveTime(),
+                    "keepalive=29999 is below 30000 minimum, should fall back to 0 (disabled)");
+        } finally {
+            Config.jdbc_connection_max_lifetime_ms = origMaxLifetime;
+            Config.jdbc_connection_keepalive_time_ms = origKeepalive;
+            Config.jdbc_connection_leak_detection_threshold_ms = origLeakDetection;
+        }
     }
 }

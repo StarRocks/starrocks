@@ -26,11 +26,14 @@ public class JDBCScanContext {
     private int minimumIdleConnections;
     private int connectionIdleTimeoutMs;
     private int connectionTimeoutMs;
+    private long connectionMaxLifetimeMs;
+    private long connectionKeepaliveTimeMs;
 
     public JDBCScanContext() {}
     public JDBCScanContext(String driverClassName, String jdbcURL, String user, String password,
                            String sql, int statementFetchSize, int connectionPoolSize,
-                           int minimumIdleConnections, int connectionIdleTimeoutMs, int connectionTimeoutMs) {
+                           int minimumIdleConnections, int connectionIdleTimeoutMs, int connectionTimeoutMs,
+                           long connectionMaxLifetimeMs, long connectionKeepaliveTimeMs) {
         this.driverClassName = driverClassName;
         this.jdbcURL = jdbcURL;
         this.user = user;
@@ -41,6 +44,8 @@ public class JDBCScanContext {
         this.minimumIdleConnections = minimumIdleConnections;
         this.connectionIdleTimeoutMs = connectionIdleTimeoutMs;
         this.connectionTimeoutMs = connectionTimeoutMs;
+        this.connectionMaxLifetimeMs = connectionMaxLifetimeMs;
+        this.connectionKeepaliveTimeMs = connectionKeepaliveTimeMs;
     }
 
     public void setDriverClassName(String driverClassName) {
@@ -105,6 +110,14 @@ public class JDBCScanContext {
 
     public int getConnectionTimeoutMs() {
         return connectionTimeoutMs;
+    }
+
+    public long getConnectionMaxLifetimeMs() {
+        return connectionMaxLifetimeMs;
+    }
+
+    public long getConnectionKeepaliveTimeMs() {
+        return connectionKeepaliveTimeMs;
     }
 
 }
