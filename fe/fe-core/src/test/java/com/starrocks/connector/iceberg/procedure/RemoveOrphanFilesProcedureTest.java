@@ -25,16 +25,23 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.RemoteIterator;
+import org.apache.iceberg.DataFile;
 import org.apache.iceberg.InternalData;
+import org.apache.iceberg.ManifestContent;
+import org.apache.iceberg.ManifestFile;
+import org.apache.iceberg.ManifestFiles;
+import org.apache.iceberg.ManifestReader;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.io.CloseableIterable;
+import org.apache.iceberg.io.CloseableIterator;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.io.InputFile;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
+import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -45,6 +52,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.never;
@@ -376,6 +385,168 @@ public class RemoveOrphanFilesProcedureTest {
 
             verify(fileIO).newInputFile(MANIFEST_LIST_LOCATION);
             verify(snapshot, never()).allManifests(any(FileIO.class));
+        }
+    }
+
+    /**
+     * Covers: one snapshot with one manifest containing one content file;
+     * procedure iterates manifests, adds manifest path, opens ManifestReader and adds content file location,
+     * then calls metadataFileLocations and statisticsFilesLocations.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void testExecuteWithManifestContainingContentFile_addsContentFileToValidNames() throws Exception {
+        RemoveOrphanFilesProcedure procedure = RemoveOrphanFilesProcedure.getInstance();
+        ManifestFile manifest = mock(ManifestFile.class);
+        when(manifest.path()).thenReturn("s3://bucket/table/metadata/m1.avro");
+        when(manifest.content()).thenReturn(ManifestContent.DATA);
+
+        DataFile dataFile = mock(DataFile.class);
+        when(dataFile.location()).thenReturn("s3://bucket/table/data/file.parquet");
+
+        ManifestReader<DataFile> manifestReader = mock(ManifestReader.class);
+        when(manifestReader.iterator()).thenReturn(
+                CloseableIterable.withNoopClose(Collections.singletonList(dataFile)).iterator());
+
+        Snapshot snapshot = mock(Snapshot.class);
+        when(snapshot.manifestListLocation()).thenReturn(null);
+        when(snapshot.allManifests(any(FileIO.class))).thenReturn(Collections.singletonList(manifest));
+
+        FileIO fileIO = mock(FileIO.class);
+        Table table = mock(Table.class);
+        when(table.location()).thenReturn(TABLE_LOCATION);
+        when(table.currentSnapshot()).thenReturn(snapshot);
+        when(table.snapshots()).thenReturn(Collections.singletonList(snapshot));
+        when(table.io()).thenReturn(fileIO);
+
+        try (MockedStatic<ManifestFiles> mfStatic = mockStatic(ManifestFiles.class);
+                MockedStatic<org.apache.iceberg.ReachableFileUtil> reachableUtil =
+                        mockStatic(org.apache.iceberg.ReachableFileUtil.class);
+                MockedStatic<FileSystem> fsStatic = mockStatic(FileSystem.class)) {
+            mfStatic.when(() -> ManifestFiles.read(any(ManifestFile.class), any(FileIO.class)))
+                    .thenReturn(manifestReader);
+
+            reachableUtil.when(() -> org.apache.iceberg.ReachableFileUtil.metadataFileLocations(any(Table.class), eq(false)))
+                    .thenReturn(Collections.emptySet());
+            reachableUtil.when(() -> org.apache.iceberg.ReachableFileUtil.statisticsFilesLocations(any(Table.class)))
+                    .thenReturn(Collections.emptyList());
+
+            FileSystem mockFs = mock(FileSystem.class);
+            RemoteIterator<LocatedFileStatus> emptyIterator = new RemoteIterator<LocatedFileStatus>() {
+                @Override
+                public boolean hasNext() {
+                    return false;
+                }
+
+                @Override
+                public LocatedFileStatus next() {
+                    throw new java.util.NoSuchElementException();
+                }
+            };
+            when(mockFs.listFiles(any(Path.class), eq(true))).thenReturn(emptyIterator);
+            fsStatic.when(() -> FileSystem.get(any(), any())).thenReturn(mockFs);
+
+            IcebergTableProcedureContext context = createContext(table);
+            assertDoesNotThrow(() -> procedure.execute(context, Collections.emptyMap()));
+        }
+    }
+
+    /**
+     * Covers: when ManifestReader throws IOException on close(), procedure throws
+     * StarRocksConnectorException with "Unable to list manifest file content from".
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void testExecuteWhenManifestReaderThrows_throwsUnableToListManifestContent() throws Exception {
+        RemoveOrphanFilesProcedure procedure = RemoveOrphanFilesProcedure.getInstance();
+        String manifestPath = "s3://bucket/table/metadata/m1.avro";
+        ManifestFile manifest = mock(ManifestFile.class);
+        when(manifest.path()).thenReturn(manifestPath);
+        when(manifest.content()).thenReturn(ManifestContent.DATA);
+
+        ManifestReader<DataFile> manifestReader = mock(ManifestReader.class);
+        when(manifestReader.iterator()).thenReturn(
+                CloseableIterable.withNoopClose(Collections.<DataFile>emptyList()).iterator());
+        doThrow(new IOException("simulated read failure")).when(manifestReader).close();
+
+        Snapshot snapshot = mock(Snapshot.class);
+        when(snapshot.manifestListLocation()).thenReturn(null);
+        when(snapshot.allManifests(any(FileIO.class))).thenReturn(Collections.singletonList(manifest));
+
+        FileIO fileIO = mock(FileIO.class);
+        Table table = mock(Table.class);
+        when(table.location()).thenReturn(TABLE_LOCATION);
+        when(table.currentSnapshot()).thenReturn(snapshot);
+        when(table.snapshots()).thenReturn(Collections.singletonList(snapshot));
+        when(table.io()).thenReturn(fileIO);
+
+        try (MockedStatic<ManifestFiles> mfStatic = mockStatic(ManifestFiles.class)) {
+            mfStatic.when(() -> ManifestFiles.read(any(ManifestFile.class), any(FileIO.class)))
+                    .thenReturn(manifestReader);
+
+            IcebergTableProcedureContext context = createContext(table);
+
+            StarRocksConnectorException ex = assertThrows(StarRocksConnectorException.class,
+                    () -> procedure.execute(context, Collections.emptyMap()));
+
+            assertTrue(ex.getMessage().contains("Unable to list manifest file content from"));
+            assertTrue(ex.getMessage().contains(manifestPath));
+        }
+    }
+
+    /**
+     * Covers: when reading manifests (AVRO path) throws IOException on close,
+     * procedure throws StarRocksConnectorException with "Unable to read manifests for snapshot".
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void testExecuteWhenReadManifestsThrowsOnClose_throwsUnableToReadManifests() throws Exception {
+        RemoveOrphanFilesProcedure procedure = RemoveOrphanFilesProcedure.getInstance();
+        long snapshotId = 12345L;
+        Snapshot snapshot = mock(Snapshot.class);
+        when(snapshot.snapshotId()).thenReturn(snapshotId);
+        when(snapshot.manifestListLocation()).thenReturn(MANIFEST_LIST_LOCATION);
+
+        CloseableIterable<ManifestFile> empty = CloseableIterable.withNoopClose(Collections.<ManifestFile>emptyList());
+        CloseableIterable<ManifestFile> iterableThatThrowsOnClose = new CloseableIterable<ManifestFile>() {
+            @Override
+            public void close() throws IOException {
+                throw new IOException("simulated close failure");
+            }
+
+            @Override
+            public CloseableIterator<ManifestFile> iterator() {
+                return empty.iterator();
+            }
+        };
+
+        InternalData.ReadBuilder mockBuilder = mock(InternalData.ReadBuilder.class);
+        when(mockBuilder.setRootType(any(Class.class))).thenReturn(mockBuilder);
+        when(mockBuilder.project(any(org.apache.iceberg.Schema.class))).thenReturn(mockBuilder);
+        when(mockBuilder.reuseContainers()).thenReturn(mockBuilder);
+        doReturn(iterableThatThrowsOnClose).when(mockBuilder).build();
+
+        InputFile mockInputFile = mock(InputFile.class);
+        FileIO fileIO = mock(FileIO.class);
+        when(fileIO.newInputFile(MANIFEST_LIST_LOCATION)).thenReturn(mockInputFile);
+
+        Table table = mock(Table.class);
+        when(table.location()).thenReturn(TABLE_LOCATION);
+        when(table.currentSnapshot()).thenReturn(snapshot);
+        when(table.snapshots()).thenReturn(Collections.singletonList(snapshot));
+        when(table.io()).thenReturn(fileIO);
+
+        try (MockedStatic<InternalData> internalDataMock = mockStatic(InternalData.class)) {
+            internalDataMock.when(() -> InternalData.read(any(org.apache.iceberg.FileFormat.class), any(InputFile.class)))
+                    .thenReturn(mockBuilder);
+
+            IcebergTableProcedureContext context = createContext(table);
+
+            StarRocksConnectorException ex = assertThrows(StarRocksConnectorException.class,
+                    () -> procedure.execute(context, Collections.emptyMap()));
+
+            assertTrue(ex.getMessage().contains("Unable to read manifests for snapshot"));
+            assertTrue(ex.getMessage().contains(String.valueOf(snapshotId)));
         }
     }
 
