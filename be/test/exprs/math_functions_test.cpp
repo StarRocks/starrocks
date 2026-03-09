@@ -19,6 +19,10 @@
 
 #include <cmath>
 
+#include "column/array_column.h"
+#include "column/column_helper.h"
+#include "column/const_column.h"
+#include "column/nullable_column.h"
 #include "exprs/binary_functions.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "exprs/time_functions.h"
@@ -1813,6 +1817,139 @@ TEST_F(VecMathFunctionsTest, IcbergTransTest) {
         auto result = MathFunctions::iceberg_truncate_int<TYPE_INT>(ctx.get(), columns_const);
         ASSERT_EQ(result.status().message(), "Truncate to integer failed, because the result is overflow.");
     }
+}
+
+// Helper: build an ArrayColumn<float> from a vector of float vectors.
+static ColumnPtr build_float_array_column(const std::vector<std::vector<float>>& rows) {
+    auto elements = NullableColumn::create(FloatColumn::create(), NullColumn::create());
+    auto offsets = UInt32Column::create();
+    offsets->append(0);
+    for (const auto& row : rows) {
+        for (float v : row) {
+            elements->append_datum(Datum(v));
+        }
+        offsets->append(static_cast<uint32_t>(elements->size()));
+    }
+    return ArrayColumn::create(std::move(elements), std::move(offsets));
+}
+
+// cosine_similarity: both non-const columns
+TEST_F(VecMathFunctionsTest, cosineSimilarityBasic) {
+    // base = [[1, 0, 0], [0, 1, 0]], target = [[1, 0, 0], [0, 0, 1]]
+    auto base_col = build_float_array_column({{1, 0, 0}, {0, 1, 0}});
+    auto target_col = build_float_array_column({{1, 0, 0}, {0, 0, 1}});
+
+    Columns columns{base_col, target_col};
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto result = MathFunctions::cosine_similarity<TYPE_FLOAT, false>(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    auto* res = ColumnHelper::cast_to<TYPE_FLOAT>(result.value())->immutable_data().data();
+    ASSERT_FLOAT_EQ(res[0], 1.0f); // identical vectors
+    ASSERT_FLOAT_EQ(res[1], 0.0f); // orthogonal vectors
+}
+
+// cosine_similarity: const base, non-const target
+TEST_F(VecMathFunctionsTest, cosineSimilarityConstBase) {
+    auto base_arr = build_float_array_column({{1, 0, 0}});
+    auto base_const = ConstColumn::create(std::move(base_arr), 3);
+    auto target_col = build_float_array_column({{1, 0, 0}, {0, 1, 0}, {1, 1, 0}});
+
+    Columns columns{base_const, target_col};
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto result = MathFunctions::cosine_similarity<TYPE_FLOAT, false>(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    auto* res = ColumnHelper::cast_to<TYPE_FLOAT>(result.value())->immutable_data().data();
+    ASSERT_FLOAT_EQ(res[0], 1.0f);
+    ASSERT_FLOAT_EQ(res[1], 0.0f);
+    ASSERT_NEAR(res[2], 1.0f / std::sqrt(2.0f), 1e-5f);
+}
+
+// cosine_similarity: non-const base, const target
+TEST_F(VecMathFunctionsTest, cosineSimilarityConstTarget) {
+    auto base_col = build_float_array_column({{1, 0, 0}, {0, 1, 0}, {1, 1, 0}});
+    auto target_arr = build_float_array_column({{1, 0, 0}});
+    auto target_const = ConstColumn::create(std::move(target_arr), 3);
+
+    Columns columns{base_col, target_const};
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto result = MathFunctions::cosine_similarity<TYPE_FLOAT, false>(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    auto* res = ColumnHelper::cast_to<TYPE_FLOAT>(result.value())->immutable_data().data();
+    ASSERT_FLOAT_EQ(res[0], 1.0f);
+    ASSERT_FLOAT_EQ(res[1], 0.0f);
+    ASSERT_NEAR(res[2], 1.0f / std::sqrt(2.0f), 1e-5f);
+}
+
+// cosine_similarity: both const columns
+TEST_F(VecMathFunctionsTest, cosineSimilarityBothConst) {
+    auto base_arr = build_float_array_column({{1, 0, 0}});
+    auto base_const = ConstColumn::create(std::move(base_arr), 2);
+    auto target_arr = build_float_array_column({{0, 1, 0}});
+    auto target_const = ConstColumn::create(std::move(target_arr), 2);
+
+    Columns columns{base_const, target_const};
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto result = MathFunctions::cosine_similarity<TYPE_FLOAT, false>(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    auto* res = ColumnHelper::cast_to<TYPE_FLOAT>(result.value())->immutable_data().data();
+    ASSERT_FLOAT_EQ(res[0], 0.0f);
+    ASSERT_FLOAT_EQ(res[1], 0.0f);
+}
+
+// cosine_similarity with isNorm=true (pre-normalized vectors)
+TEST_F(VecMathFunctionsTest, cosineSimilarityNorm) {
+    float inv_sqrt2 = 1.0f / std::sqrt(2.0f);
+    auto base_col = build_float_array_column({{1, 0, 0}, {inv_sqrt2, inv_sqrt2, 0}});
+    auto target_col = build_float_array_column({{1, 0, 0}, {inv_sqrt2, 0, inv_sqrt2}});
+
+    Columns columns{base_col, target_col};
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto result = MathFunctions::cosine_similarity<TYPE_FLOAT, true>(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    auto* res = ColumnHelper::cast_to<TYPE_FLOAT>(result.value())->immutable_data().data();
+    ASSERT_FLOAT_EQ(res[0], 1.0f);
+    ASSERT_NEAR(res[1], 0.5f, 1e-5f);
+}
+
+// cosine_similarity: zero vector returns 0 (not NaN/inf)
+TEST_F(VecMathFunctionsTest, cosineSimilarityZeroVector) {
+    auto base_col = build_float_array_column({{0, 0, 0}});
+    auto target_col = build_float_array_column({{1, 0, 0}});
+
+    Columns columns{base_col, target_col};
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto result = MathFunctions::cosine_similarity<TYPE_FLOAT, false>(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    auto* res = ColumnHelper::cast_to<TYPE_FLOAT>(result.value())->immutable_data().data();
+    ASSERT_FLOAT_EQ(res[0], 0.0f);
+}
+
+// cosine_similarity: tiny magnitude vectors should not produce inf/nan
+TEST_F(VecMathFunctionsTest, cosineSimilarityTinyMagnitude) {
+    float tiny = 1e-20f;
+    auto base_arr = build_float_array_column({{tiny, tiny, tiny}});
+    auto base_const = ConstColumn::create(std::move(base_arr), 2);
+    auto target_col = build_float_array_column({{tiny, tiny, tiny}, {tiny, 0, 0}});
+
+    Columns columns{base_const, target_col};
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto result = MathFunctions::cosine_similarity<TYPE_FLOAT, false>(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    auto* res = ColumnHelper::cast_to<TYPE_FLOAT>(result.value())->immutable_data().data();
+    ASSERT_TRUE(std::isfinite(res[0]));
+    ASSERT_TRUE(std::isfinite(res[1]));
+    ASSERT_NEAR(res[0], 1.0f, 1e-3f); // same direction
+}
+
+// cosine_similarity: dimension mismatch should return error
+TEST_F(VecMathFunctionsTest, cosineSimilarityDimMismatch) {
+    auto base_col = build_float_array_column({{1, 0}});
+    auto target_col = build_float_array_column({{1, 0, 0}});
+
+    Columns columns{base_col, target_col};
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto result = MathFunctions::cosine_similarity<TYPE_FLOAT, false>(ctx.get(), columns);
+    ASSERT_FALSE(result.ok());
 }
 
 } // namespace starrocks
