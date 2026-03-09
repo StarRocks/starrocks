@@ -97,6 +97,9 @@ enum TabletDropFlag {
 // please uniformly name the method in "xxx_unlocked()" mode
 class TabletManager {
 public:
+    TabletManager(const TabletManager&) = delete;
+    const TabletManager& operator=(const TabletManager&) = delete;
+
     explicit TabletManager(int64_t tablet_map_lock_shard_size);
     ~TabletManager() = default;
 
@@ -234,9 +237,6 @@ private:
         SpinLock _latches[kNumShard];
         std::unordered_set<int64_t> _locks[kNumShard];
     };
-
-    TabletManager(const TabletManager&) = delete;
-    const TabletManager& operator=(const TabletManager&) = delete;
 
     // Add a tablet pointer to StorageEngine
     // If force, drop the existing tablet add this new one

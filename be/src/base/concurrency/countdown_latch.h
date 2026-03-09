@@ -52,6 +52,8 @@ class GenericCountDownLatch {
 public:
     // Initialize the latch with the given initial count.
     explicit GenericCountDownLatch(int count) : count_(count) {}
+    GenericCountDownLatch(const GenericCountDownLatch&) = delete;
+    const GenericCountDownLatch& operator=(const GenericCountDownLatch&) = delete;
 
     // REQUIRES: amount >= 0.
     // Decrement the count of this latch by 'amount'.
@@ -122,8 +124,6 @@ private:
     mutable Cond cond_;
 
     int64_t count_;
-    GenericCountDownLatch(const GenericCountDownLatch&) = delete;
-    const GenericCountDownLatch& operator=(const GenericCountDownLatch&) = delete;
 };
 
 using CountDownLatch = GenericCountDownLatch<std::mutex, std::condition_variable>;
@@ -134,11 +134,10 @@ class CountDownOnScopeExit {
 public:
     explicit CountDownOnScopeExit(T* latch) : latch_(latch) {}
     ~CountDownOnScopeExit() { latch_->count_down(); }
-
-private:
     CountDownOnScopeExit(const CountDownOnScopeExit&) = delete;
     const CountDownOnScopeExit& operator=(const CountDownOnScopeExit&) = delete;
 
+private:
     T* latch_;
 };
 

@@ -95,6 +95,9 @@ private:
 
 class HttpBrpcStubCache {
 public:
+    HttpBrpcStubCache(const HttpBrpcStubCache&) = delete;
+    HttpBrpcStubCache& operator=(const HttpBrpcStubCache&) = delete;
+
     static HttpBrpcStubCache* getInstance();
     StatusOr<std::shared_ptr<PInternalService_RecoverableStub>> get_http_stub(const TNetworkAddress& taddr);
     void cleanup_expired(const butil::EndPoint& endpoint);
@@ -102,8 +105,6 @@ public:
 
 private:
     HttpBrpcStubCache();
-    HttpBrpcStubCache(const HttpBrpcStubCache&) = delete;
-    HttpBrpcStubCache& operator=(const HttpBrpcStubCache&) = delete;
     ~HttpBrpcStubCache();
 
     SpinLock _lock;
@@ -116,6 +117,9 @@ private:
 #ifndef __APPLE__
 class LakeServiceBrpcStubCache {
 public:
+    LakeServiceBrpcStubCache(const LakeServiceBrpcStubCache&) = delete;
+    LakeServiceBrpcStubCache& operator=(const LakeServiceBrpcStubCache&) = delete;
+
     static LakeServiceBrpcStubCache* getInstance();
     StatusOr<std::shared_ptr<starrocks::LakeService_RecoverableStub>> get_stub(const std::string& host, int port);
     void cleanup_expired(const butil::EndPoint& endpoint);
@@ -123,8 +127,6 @@ public:
 
 private:
     LakeServiceBrpcStubCache();
-    LakeServiceBrpcStubCache(const LakeServiceBrpcStubCache&) = delete;
-    LakeServiceBrpcStubCache& operator=(const LakeServiceBrpcStubCache&) = delete;
     ~LakeServiceBrpcStubCache();
 
     SpinLock _lock;

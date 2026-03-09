@@ -115,6 +115,8 @@ enum class CachePriority { NORMAL = 0, DURABLE = 1 };
 class Cache {
 public:
     Cache() = default;
+    Cache(const Cache&) = delete;
+    const Cache& operator=(const Cache&) = delete;
 
     // Destroys all existing entries by calling the "deleter"
     // function that was passed to the constructor.
@@ -189,10 +191,6 @@ public:
 
     //  Decrease or increase cache capacity.
     virtual bool adjust_capacity(int64_t delta, size_t min_capacity = 0) = 0;
-
-private:
-    Cache(const Cache&) = delete;
-    const Cache& operator=(const Cache&) = delete;
 };
 
 // An entry is a variable length heap-allocated structure.  Entries
