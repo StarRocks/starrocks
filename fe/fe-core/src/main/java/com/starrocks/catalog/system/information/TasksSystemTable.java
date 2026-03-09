@@ -14,6 +14,7 @@
 package com.starrocks.catalog.system.information;
 
 import com.google.common.collect.Lists;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.PrimitiveType;
@@ -30,7 +31,6 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.thrift.TTaskInfo;
@@ -71,11 +71,7 @@ public class TasksSystemTable {
         List<TTaskInfo> result = Lists.newArrayList();
         ConnectContext context = new ConnectContext();
         if (params.isSetCurrent_user_ident()) {
-<<<<<<< HEAD
-            currentUser = UserIdentity.fromThrift(params.current_user_ident);
-=======
             UserIdentityUtils.setAuthInfoFromThrift(context, params.current_user_ident);
->>>>>>> 33ffb02a62 ([BugFix] Fix SET ROLE not propagating to information_schema queries (#69233))
         }
 
         for (Task task : taskList) {

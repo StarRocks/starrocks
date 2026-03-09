@@ -49,6 +49,7 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationHandler;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.CatalogUtils;
@@ -449,15 +450,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             catalogName = params.getCatalog_name();
         }
 
-<<<<<<< HEAD
-        UserIdentity currentUser;
-        if (params.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(params.current_user_ident);
-        } else {
-            currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
-        }
-=======
->>>>>>> 33ffb02a62 ([BugFix] Fix SET ROLE not propagating to information_schema queries (#69233))
         ConnectContext context = new ConnectContext();
         if (params.isSetCurrent_user_ident()) {
             UserIdentityUtils.setAuthInfoFromThrift(context, params.current_user_ident);
@@ -513,16 +505,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             catalogName = params.getCatalog_name();
         }
 
-<<<<<<< HEAD
-        UserIdentity currentUser = null;
-        if (params.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(params.current_user_ident);
-        } else {
-            currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
-        }
-
-=======
->>>>>>> 33ffb02a62 ([BugFix] Fix SET ROLE not propagating to information_schema queries (#69233))
         ConnectContext context = new ConnectContext();
         if (params.isSetCurrent_user_ident()) {
             UserIdentityUtils.setAuthInfoFromThrift(context, params.current_user_ident);
@@ -814,15 +796,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         result.setColumns(columns);
 
         // database privs should be checked in analysis phrase
-<<<<<<< HEAD
-        UserIdentity currentUser = null;
-        if (params.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(params.current_user_ident);
-        } else {
-            currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
-        }
-=======
->>>>>>> 33ffb02a62 ([BugFix] Fix SET ROLE not propagating to information_schema queries (#69233))
         ConnectContext context = new ConnectContext();
         if (params.isSetCurrent_user_ident()) {
             UserIdentityUtils.setAuthInfoFromThrift(context, params.current_user_ident);

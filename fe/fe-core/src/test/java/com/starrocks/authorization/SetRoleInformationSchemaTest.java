@@ -16,7 +16,6 @@ package com.starrocks.authorization;
 
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.UserIdentityUtils;
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.GlobalVariable;
@@ -27,6 +26,7 @@ import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TDescribeTableParams;
 import com.starrocks.thrift.TDescribeTableResult;
 import com.starrocks.thrift.TGetDbsParams;

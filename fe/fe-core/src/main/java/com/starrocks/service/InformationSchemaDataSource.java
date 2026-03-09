@@ -17,6 +17,7 @@ package com.starrocks.service;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.PrivilegeException;
@@ -115,15 +116,6 @@ public class InformationSchemaDataSource {
             catalogName = authInfo.getCatalog_name();
         }
 
-<<<<<<< HEAD
-        UserIdentity currentUser;
-        if (authInfo.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(authInfo.current_user_ident);
-        } else {
-            currentUser = UserIdentity.createAnalyzedUserIdentWithIp(authInfo.user, authInfo.user_ip);
-        }
-=======
->>>>>>> 33ffb02a62 ([BugFix] Fix SET ROLE not propagating to information_schema queries (#69233))
         ConnectContext context = new ConnectContext();
         if (authInfo.isSetCurrent_user_ident()) {
             UserIdentityUtils.setAuthInfoFromThrift(context, authInfo.getCurrent_user_ident());

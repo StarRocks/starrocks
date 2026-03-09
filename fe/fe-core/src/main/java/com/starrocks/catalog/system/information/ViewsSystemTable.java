@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.Column;
@@ -49,12 +50,7 @@ import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.thrift.TTableStatus;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TUserIdentity;
-<<<<<<< HEAD
-=======
 import com.starrocks.thrift.TUserRoles;
-import com.starrocks.type.Type;
-import com.starrocks.type.TypeFactory;
->>>>>>> 33ffb02a62 ([BugFix] Fix SET ROLE not propagating to information_schema queries (#69233))
 import org.apache.commons.lang3.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -134,16 +130,12 @@ public class ViewsSystemTable extends SystemTable {
     public List<List<ScalarOperator>> evaluate(ScalarOperator predicate) {
         final List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
         ConnectContext context = Preconditions.checkNotNull(ConnectContext.get(), "not a valid connection");
-<<<<<<< HEAD
-        TUserIdentity userIdentity = context.getCurrentUserIdentity().toThrift();
-=======
         TUserIdentity userIdentity = UserIdentityUtils.toThrift(context.getCurrentUserIdentity());
         if (context.getCurrentRoleIds() != null) {
             TUserRoles userRoles = new TUserRoles();
             userRoles.setRole_id_list(new ArrayList<>(context.getCurrentRoleIds()));
             userIdentity.setCurrent_role_ids(userRoles);
         }
->>>>>>> 33ffb02a62 ([BugFix] Fix SET ROLE not propagating to information_schema queries (#69233))
         TGetTablesParams params = new TGetTablesParams();
         params.setCurrent_user_ident(userIdentity);
         params.setType(VIEW);
@@ -257,11 +249,7 @@ public class ViewsSystemTable extends SystemTable {
             }
         }
         if (params.isSetCurrent_user_ident()) {
-<<<<<<< HEAD
-            currentUser = UserIdentity.fromThrift(params.current_user_ident);
-=======
             UserIdentityUtils.setAuthInfoFromThrift(context, params.getCurrent_user_ident());
->>>>>>> 33ffb02a62 ([BugFix] Fix SET ROLE not propagating to information_schema queries (#69233))
         } else {
             UserIdentity currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
             context.setCurrentUserIdentity(currentUser);

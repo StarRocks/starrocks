@@ -37,6 +37,7 @@ package com.starrocks.planner;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.TupleDescriptor;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
@@ -208,9 +209,6 @@ public class SchemaScanNode extends ScanNode {
         msg.schema_scan_node.setIp(frontendIP);
         msg.schema_scan_node.setPort(frontendPort);
 
-<<<<<<< HEAD
-        TUserIdentity tCurrentUser = ConnectContext.get().getCurrentUserIdentity().toThrift();
-=======
         ConnectContext currentCtx = ConnectContext.get();
         TUserIdentity tCurrentUser = UserIdentityUtils.toThrift(currentCtx.getCurrentUserIdentity());
         if (currentCtx.getCurrentRoleIds() != null) {
@@ -218,7 +216,6 @@ public class SchemaScanNode extends ScanNode {
             userRoles.setRole_id_list(new ArrayList<>(currentCtx.getCurrentRoleIds()));
             tCurrentUser.setCurrent_role_ids(userRoles);
         }
->>>>>>> 33ffb02a62 ([BugFix] Fix SET ROLE not propagating to information_schema queries (#69233))
         msg.schema_scan_node.setCurrent_user_ident(tCurrentUser);
 
         if (tableId != null) {

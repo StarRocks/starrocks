@@ -15,16 +15,11 @@
 package com.starrocks.authentication;
 
 import com.google.common.base.Strings;
-<<<<<<< HEAD
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.UserIdentity;
-import com.starrocks.sql.parser.NodePosition;
-=======
 import com.starrocks.authorization.PrivilegeException;
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
->>>>>>> 33ffb02a62 ([BugFix] Fix SET ROLE not propagating to information_schema queries (#69233))
+import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TUserIdentity;
 import org.apache.logging.log4j.LogManager;
