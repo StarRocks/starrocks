@@ -19,6 +19,7 @@
 #include <memory>
 #include <roaring/roaring.hh>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "common/status.h"
@@ -60,13 +61,35 @@ struct VectorQuery {
 };
 
 // ============================================================
-// VectorAnnIndex — vector ANN search interface, one modality of
-// BaseIndex.
-//
+// AnnIterator — stateful, lazy (row_id, score) stream
+
+// Vector-specific: ANN search is the modality with a lazy, best-first
+// traversal that can be advanced incrementally. Each VectorAnnIndex
+// implementation returns its own concrete subclass, holding the
+// algorithm-specific traversal state (HNSW visited set + candidate
+// heap, DiskANN beam, ...).
+// Lifetime: an iterator borrows the index it was created from and
+// must not outlive it.
+// ============================================================
+class AnnIterator {
+public:
+    virtual ~AnnIterator() = default;
+
+    // Whether at least one more result can be produced. May lazily
+    // advance the underlying traversal (expand ef_search / beam, fetch
+    // the next page)
+    virtual bool has_next() = 0;
+
+    // Produce the next (row_id, score) in best-first order.
+    // Precondition: has_next() == true.
+    virtual StatusOr<std::pair<int64_t, float>> next() = 0;
+};
+
+
 // Each implementation handles a single ANN algorithm and its own
 // index file I/O. The interface is stateless per one-shot search:
 // search() may be invoked multiple times. For lazy / iterative
-// retrieval, make_iterator() returns a stateful ScoredRowIterator.
+// retrieval, make_iterator() returns a stateful AnnIterator.
 //
 // Lifecycle: create -> init(path, meta) -> search/filtered_search
 //            / make_iterator -> close
@@ -89,12 +112,7 @@ public:
     // Default implementation falls back to unfiltered search + post-filter.
     virtual Status filtered_search(const VectorQuery& query, const RowIdFilter& filter, ScoredResult* result);
 
-    // Create a stateful, lazy result iterator. `filter` may be nullptr (no
-    // filtering). The returned iterator borrows *this and must not outlive it.
-    // In iterator semantics, query.top_k is an initial search-window hint
-    // rather than a hard cap — the caller pulls as many results as it wants.
-    virtual StatusOr<std::unique_ptr<ScoredRowIterator>> make_iterator(const VectorQuery& query,
-                                                                       const RowIdFilter* filter) = 0;
+    virtual StatusOr<std::unique_ptr<AnnIterator>> make_iterator(const VectorQuery& query) = 0;
 
     // BaseIndex contract. All vector indexes are the VECTOR category;
     // close()/mem_usage() stay pure and are implemented per algorithm.
