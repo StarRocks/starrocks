@@ -904,8 +904,10 @@ TEST_P(PkTabletSSTWriterBigintKeyTest, test_sst_build_single_bigint_pk_ascending
     auto location_provider = std::make_shared<FixedLocationProvider>(kTestDirectory);
     ASSERT_OK(pk_sst_writer->reset_sst_writer(location_provider, _fs));
 
-    // Generate ascending BIGINT data: 0, 1, 2, ..., 99
-    auto chunk = generate_bigint_data(100, 0);
+    // Generate ascending BIGINT data: 200, 201, ..., 299
+    // This range crosses the 255/256 byte boundary, where little-endian encoding
+    // breaks bytewise ascending order (255=[FF,00,...] > 256=[00,01,...])
+    auto chunk = generate_bigint_data(100, 200);
     auto st = pk_sst_writer->append_sst_record(chunk);
 
     if (GetParam() == PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2) {
