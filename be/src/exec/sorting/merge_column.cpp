@@ -387,7 +387,7 @@ std::pair<ChunkPtr, Columns> SortedRun::steal(bool steal_orderby, size_t size, s
                     auto copy = column->clone_empty();
                     copy->reserve(reserved_rows);
                     copy->append(*column, range.first + skipped_rows, reserved_rows);
-                    res_orderby.push_back(std::move(copy));
+                    res_orderby.emplace_back(std::move(copy));
                 }
             }
         }
@@ -406,7 +406,7 @@ std::pair<ChunkPtr, Columns> SortedRun::steal(bool steal_orderby, size_t size, s
                 auto copy = column->clone_empty();
                 copy->reserve(reserved_rows);
                 copy->append(*column, range.first + skipped_rows, required_rows);
-                res_orderby.push_back(std::move(copy));
+                res_orderby.emplace_back(std::move(copy));
             }
         }
 
@@ -608,10 +608,10 @@ Status merge_sorted_chunks_two_way_rowwise(const SortDescs& descs, const Columns
     while ((index_of_merging < limit) && (index_of_left < left_size) && (index_of_right < right_size)) {
         int cmp = compare_chunk_row(descs, left_columns, right_columns, index_of_left, index_of_right);
         if (cmp <= 0) {
-            output->emplace_back(PermutationItem(kLeftChunkIndex, index_of_left));
+            output->emplace_back(kLeftChunkIndex, index_of_left);
             ++index_of_left;
         } else {
-            output->emplace_back(PermutationItem(kRightChunkIndex, index_of_right));
+            output->emplace_back(kRightChunkIndex, index_of_right);
             ++index_of_right;
         }
         ++index_of_merging;
