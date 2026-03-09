@@ -61,9 +61,6 @@ require_https = true
 # Request method
 method = "get"
 
-# Custom request headers
-headers = []
-
 # Remap URI matching pattern to different URI.
 # remap = [ "https://example.com http://example.invalid" ]
 
