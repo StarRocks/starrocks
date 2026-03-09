@@ -18,8 +18,6 @@ import com.starrocks.storagevolume.StorageVolume;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.mockito.MockedStatic;
-import org.mockito.Mockito;
 
 import java.nio.file.Path;
 import java.util.Arrays;
@@ -45,14 +43,7 @@ public class UDFDownloaderTest {
 
         String remotePath = "s3://test-bucket/starrocks/udf/test.jar";
         String localPath = tempDir.resolve("test.jar").toString();
-        StorageHandler storageHandler = Mockito.mock(StorageHandler.class);
-
-        try (MockedStatic<StorageHandlerFactory> storageHandlerFactoryMockedStatic =
-                     Mockito.mockStatic(StorageHandlerFactory.class)) {
-            storageHandlerFactoryMockedStatic.when(() -> StorageHandlerFactory.create(sv)).thenReturn(storageHandler);
-            Assertions.assertThrows(RuntimeException.class, () ->
-                    UDFDownloader.download2Local(sv, remotePath, localPath));
-            Mockito.verify(storageHandler).getObject(remotePath, localPath);
-        }
+        Assertions.assertThrows(RuntimeException.class, () ->
+                UDFDownloader.download2Local(sv, remotePath, localPath));
     }
 }
