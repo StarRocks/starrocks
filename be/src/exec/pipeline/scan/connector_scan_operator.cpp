@@ -849,7 +849,8 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
     ConnectorScanOperatorAdaptiveProcessor& P = *(scan_op->adaptive_processor());
 
     DeferOp defer_op([&]() { P.last_chunk_souce_finish_timestamp = GetCurrentTimeMicros(); });
-    bool skip_chunk_accumulate = _should_skip_chunk_accumulate();
+    // Direct output is only safe when the accumulator is empty; otherwise we would use accumulator
+    bool skip_chunk_accumulate = _should_skip_chunk_accumulate() && _ck_acc.empty();
     auto is_terminal_status = [](const Status& st) {
         return st.is_end_of_file() || st.is_cancelled() || (!st.ok() && !st.is_time_out() && !st.is_eagain());
     };
@@ -858,6 +859,7 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
         int64_t total_time_ns = 0;
         int64_t delta_io_time_ns = 0;
         int64_t delta_scan_bytes = 0;
+        ChunkPtr direct_chunk;
         {
             SCOPED_RAW_TIMER(&total_time_ns);
             int64_t prev_io_time_ns = get_io_time_spent();
@@ -884,8 +886,12 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
                 _status = _data_source->get_next(state, &tmp);
                 if (_status.ok()) {
                     if (tmp->num_rows() == 0) continue;
+                    if (skip_chunk_accumulate) {
+                        direct_chunk = std::move(tmp);
+                        break;
+                    }
                     _ck_acc.push(tmp);
-                    if (_ck_acc.has_output() || skip_chunk_accumulate) break;
+                    if (_ck_acc.has_output()) break;
                 } else if (!_status.is_end_of_file()) {
                     if (_status.is_time_out()) {
                         Status t = _status;
@@ -909,8 +915,8 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
             delta_scan_bytes = _scan_bytes - prev_scan_bytes;
         }
 
-        if (_ck_acc.has_output() || skip_chunk_accumulate) {
-            *chunk = std::move(_ck_acc.pull());
+        if (direct_chunk != nullptr || _ck_acc.has_output()) {
+            *chunk = direct_chunk != nullptr ? std::move(direct_chunk) : std::move(_ck_acc.pull());
             P.cs_total_running_time += total_time_ns;
             P.cs_total_io_time += delta_io_time_ns;
             P.cs_total_scan_bytes += delta_scan_bytes;
