@@ -47,7 +47,7 @@ public:
                                         LogicalType field_type, std::unique_ptr<InvertedReader>* res) override;
 
 private:
-    CLucenePlugin() {}
+    CLucenePlugin() = default;
 };
 
 } // namespace starrocks
