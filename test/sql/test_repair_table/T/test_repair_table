@@ -1,0 +1,15 @@
+-- name: test_repair_table @cloud
+
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t1 (k1 int) distributed by hash(k1) buckets 1;
+insert into t1 values(1);
+insert into t1 values(2);
+
+admin repair table t1 partition (t1) properties("dry_run" = "true");
+
+admin repair table t1 partition (t1);
+
+admin show tablet status from t1 where status = "normal";
+

@@ -45,7 +45,7 @@ public class AdminShowTabletStatusStmtTest {
     @Test
     public void testWithPartitionAndProperties() {
         String sql = "ADMIN SHOW TABLET STATUS FROM db1.tbl1 PARTITION (p1, p2) " +
-                "PROPERTIES ('max_missing_data_files_to_show'='10') WHERE STATUS = 'MISSING_DATA'";
+                "WHERE STATUS = 'MISSING_DATA' PROPERTIES ('max_missing_data_files_to_show'='10')";
         AdminShowTabletStatusStmt stmt = (AdminShowTabletStatusStmt) AnalyzeTestUtil.analyzeSuccess(sql);
         Assertions.assertEquals("db1", stmt.getDbName());
         Assertions.assertEquals("tbl1", stmt.getTblName());

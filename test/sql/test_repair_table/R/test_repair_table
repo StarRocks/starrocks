@@ -1,0 +1,29 @@
+-- name: test_repair_table @cloud
+
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t1 (k1 int) distributed by hash(k1) buckets 1;
+-- result:
+-- !result
+insert into t1 values(1);
+-- result:
+-- !result
+insert into t1 values(2);
+-- result:
+-- !result
+
+admin repair table t1 partition (t1) properties("dry_run" = "true");
+-- result:
+[REGEX].*3	NORMAL.*
+-- !result
+
+admin repair table t1 partition (t1);
+-- result:
+-- !result
+
+admin show tablet status from t1 where status = "normal";
+-- result:
+[REGEX].*3	NORMAL	0.*
+-- !result
+
