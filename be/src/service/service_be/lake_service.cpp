@@ -26,7 +26,7 @@
 #include "base/testutil/sync_point.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
-#include "common/config.h"
+#include "common/config_lake_fwd.h"
 #include "common/status.h"
 #include "common/thread/thread.h"
 #include "common/thread/threadpool.h"

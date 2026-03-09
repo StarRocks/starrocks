@@ -35,6 +35,8 @@ CONF_Bool(enable_jemalloc_memory_tracker, "true");
 // size is larger than the available physical memory without wrapping with TRY_CATCH_BAD_ALLOC
 CONF_mBool(abort_on_large_memory_allocation, "false");
 
+CONF_Bool(disable_mem_pools, "false");
+
 // Whether to allocate chunk using mmap. If you enable this, you'd better to
 // increase vm.max_map_count's value whose default value is 65530.
 // you can do it as root via "sysctl -w vm.max_map_count=262144" or
@@ -42,5 +44,8 @@ CONF_mBool(abort_on_large_memory_allocation, "false");
 // NOTE: When this is set to true, you must set chunk_reserved_bytes_limit
 // to a relative large number or the performace is very very bad.
 CONF_Bool(use_mmap_allocate_chunk, "false");
+
+// Aligement
+CONF_Int32(memory_max_alignment, "16");
 
 } // namespace starrocks::config

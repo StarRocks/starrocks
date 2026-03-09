@@ -35,6 +35,11 @@ CONF_mInt32(max_pushdown_conditions_per_column, "1024");
 
 CONF_Bool(enable_check_string_lengths, "true");
 
+// es index max result window, and this value affects batch size.
+// if request batch size exceeds this value, ES will return bad request(400)
+// https://www.elastic.co/guide/en/elasticsearch/reference/current/index-modules.html
+CONF_Int32(es_index_max_result_window, "10000");
+
 // Valid range: [0-1000].
 // `0` will disable late materialization.
 // `1000` will enable late materialization always.
@@ -75,6 +80,12 @@ CONF_mBool(io_coalesce_lake_read_enable, "false");
 // orc reader
 CONF_Bool(enable_orc_late_materialization, "true");
 
+CONF_Bool(enable_orc_libdeflate_decompression, "true");
+
+CONF_Int32(orc_natural_read_size, "8388608");
+
+CONF_mBool(orc_coalesce_read_enable, "true");
+
 // For orc tiny stripe optimization
 // Default is 8MB for tiny stripe threshold size
 CONF_Int32(orc_tiny_stripe_threshold_size, "8388608");
@@ -82,6 +93,32 @@ CONF_Int32(orc_tiny_stripe_threshold_size, "8388608");
 // When the ORC file size is smaller than orc_loading_buffer_size,
 // we'll read the whole file at once instead of reading a footer first.
 CONF_Int32(orc_loading_buffer_size, "8388608");
+
+// orc writer
+// This is a workaround from SR side for a out-of-bound bug of hive orc reader.
+// Refer to https://issues.apache.org/jira/browse/ORC-125 for more detailed information.
+CONF_mInt32(orc_writer_version, "-1");
+
+// parquet reader
+CONF_mBool(parquet_coalesce_read_enable, "true");
+
+CONF_mBool(parquet_late_materialization_enable, "true");
+
+CONF_Bool(parquet_page_index_enable, "true");
+
+CONF_mBool(parquet_reader_bloom_filter_enable, "true");
+
+CONF_mBool(parquet_fast_timezone_conversion, "false");
+
+CONF_mBool(parquet_push_down_filter_to_decoder_enable, "true");
+
+CONF_mBool(parquet_cache_aware_dict_decoder_enable, "true");
+
+CONF_mBool(parquet_reader_enable_adpative_bloom_filter, "true");
+
+CONF_Double(parquet_page_cache_decompress_threshold, "1.5");
+
+CONF_mBool(enable_adjustment_page_cache_skip, "true");
 
 CONF_Int32(io_coalesce_read_max_buffer_size, "8388608");
 

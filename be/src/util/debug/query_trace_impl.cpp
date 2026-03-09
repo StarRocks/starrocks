@@ -18,7 +18,7 @@
 #include <utility>
 
 #include "base/time/time.h"
-#include "common/config.h"
+#include "common/config_diagnostic_fwd.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "fmt/printf.h"
 #include "io/fd_output_stream.h" // write trace to file

@@ -24,7 +24,7 @@
 #include <sched.h>
 #endif
 
-#include "common/config.h"
+#include "common/config_runtime_fwd.h"
 #include "common/thread/thread.h"
 
 namespace starrocks {

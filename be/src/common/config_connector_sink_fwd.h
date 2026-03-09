@@ -20,6 +20,13 @@
 #include "common/configbase.h"
 
 namespace starrocks::config {
+// connector sink memory watermark
+CONF_mDouble(connector_sink_mem_high_watermark_ratio, "0.3");
+
+CONF_mDouble(connector_sink_mem_low_watermark_ratio, "0.1");
+
+CONF_mDouble(connector_sink_mem_urgent_space_ratio, "0.05");
+
 // Whether enable spill intermediate data for connector sink.
 CONF_mBool(enable_connector_sink_spill, "true");
 

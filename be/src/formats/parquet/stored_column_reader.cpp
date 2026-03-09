@@ -26,7 +26,7 @@
 #include "column/column.h"
 #include "column_reader.h"
 #include "common/compiler_util.h"
-#include "common/config.h"
+#include "common/config_scan_io_fwd.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "formats/parquet/level_codec.h"

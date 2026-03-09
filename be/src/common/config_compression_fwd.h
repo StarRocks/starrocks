@@ -20,31 +20,13 @@
 #include "common/configbase.h"
 
 namespace starrocks::config {
-#ifdef USE_STAROS
-CONF_Int32(starlet_port, "9070");
+// Acceleration of LZ4 Compression, the larger the acceleration value, the faster the algorithm, but also the lesser the compression.
+// Default 1, MIN=1, MAX=65537
+CONF_mInt32(lz4_acceleration, "1");
 
-// Root dir used for cache if cache enabled.
-CONF_String(starlet_cache_dir, "");
+// If compression ratio is larger than this threshold, consider it as a good compresiosn
+CONF_mDouble(lz4_expected_compression_ratio, "2.1");
 
-// Cache will start evict cache files if free space belows this value(percentage)
-CONF_mDouble(starlet_cache_evict_low_water, "0.1");
-
-// Buffer size in starlet fs buffer stream, size <= 0 means not use buffer stream.
-// Only support in S3/HDFS currently.
-CONF_mInt32(starlet_fs_stream_buffer_size_bytes, "1048576");
-
-CONF_mBool(starlet_use_star_cache, "true");
-
-CONF_Int32(starlet_star_cache_disk_size_percent, "80");
-
-CONF_mBool(starlet_write_file_with_tag, "false");
-
-#endif
-CONF_mInt64(experimental_lake_wait_per_put_ms, "0");
-
-CONF_mInt64(experimental_lake_wait_per_get_ms, "0");
-
-// clear *.data cache for lake table
-CONF_mBool(lake_clear_corrupted_cache_data, "false");
+CONF_mDouble(lz4_expected_compression_speed_mbps, "600");
 
 } // namespace starrocks::config
