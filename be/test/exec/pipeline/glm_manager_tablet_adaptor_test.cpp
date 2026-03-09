@@ -18,12 +18,14 @@
 #include <vector>
 
 #include "common/config.h"
+#include "common/object_pool.h"
 #include "exec/pipeline/lookup/tablet_adaptor.h"
 #include "exec/pipeline/scan/glm_manager.h"
 #include "gtest/gtest.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_state.h"
+#include "storage/lake/rowset.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_meta.h"
 #include "storage/storage_engine.h"
@@ -284,6 +286,70 @@ TEST(PositionDesctiporTest, test) {
         tdesc.row_position_type = TRowPositionType::LAKE_ROW_POSITION;
         RowPositionDescriptor::from_thrift(tdesc, pool);
     }
+}
+
+// Build a lake::RowsetPtr with a given number of segments.
+// Mirrors make_test_rowset() but uses the lake::Rowset / BaseRowset hierarchy.
+static lake::RowsetPtr make_lake_rowset(int num_segments, ObjectPool* pool) {
+    static int64_t next_id = 10000;
+    auto meta = pool->add(new RowsetMetadataPB());
+    meta->set_num_rows(100);
+    for (int i = 0; i < num_segments; ++i) {
+        meta->add_segments("seg_" + std::to_string(i) + ".dat");
+    }
+    return std::make_shared<lake::Rowset>(nullptr, next_id++, std::move(meta), 0, nullptr);
+}
+
+static std::vector<BaseRowsetSharedPtr> as_base(const std::vector<lake::RowsetPtr>& rs) {
+    std::vector<BaseRowsetSharedPtr> res;
+    for (const auto& r : rs) {
+        res.emplace_back(std::static_pointer_cast<BaseRowset>(r));
+    }
+    return res;
+}
+
+TEST(LakeScanLazyMaterializationContextTest, SetScanNode) {
+    LakeScanLazyMaterializationContext ctx;
+    TLakeScanNode scan_node;
+    scan_node.__set_next_uniq_id(123);
+    ctx.set_scan_node(scan_node);
+    EXPECT_EQ(123, ctx.scan_node().next_uniq_id);
+}
+
+// Basic capture + version query.
+TEST(LakeScanLazyMaterializationContextTest, CaptureRowsetsStoresVersion) {
+    LakeScanLazyMaterializationContext ctx;
+    ObjectPool pool;
+    auto rs = make_lake_rowset(2, &pool);
+    ctx.capture_rowsets(100, /*version=*/42, as_base({rs}));
+    EXPECT_EQ(42, ctx.get_rowsets_version(100));
+}
+
+// Multiple tablets stored independently.
+TEST(LakeScanLazyMaterializationContextTest, VersionsIsolatedPerTablet) {
+    LakeScanLazyMaterializationContext ctx;
+    ObjectPool pool;
+    ctx.capture_rowsets(1, 10, as_base({make_lake_rowset(1, &pool)}));
+    ctx.capture_rowsets(2, 20, as_base({make_lake_rowset(1, &pool)}));
+    ctx.capture_rowsets(3, 30, as_base({make_lake_rowset(1, &pool)}));
+
+    EXPECT_EQ(10, ctx.get_rowsets_version(1));
+    EXPECT_EQ(20, ctx.get_rowsets_version(2));
+    EXPECT_EQ(30, ctx.get_rowsets_version(3));
+}
+
+// drssid 0 → first rowset, segment 0.
+TEST(LakeScanLazyMaterializationContextTest, GetRowsetFirstSegment) {
+    LakeScanLazyMaterializationContext ctx;
+    ObjectPool pool;
+    auto rs0 = make_lake_rowset(2, &pool);
+    ctx.capture_rowsets(100, 1, as_base({rs0}));
+
+    int32_t seg_idx = -1;
+    auto got = ctx.get_rowset(100, /*drssid=*/0, &seg_idx);
+    ASSERT_NE(nullptr, got);
+    EXPECT_EQ(rs0.get(), got.get());
+    EXPECT_EQ(0, seg_idx);
 }
 
 TEST(LakeScanTabletAdaptorTest, InvalidRssid) {
