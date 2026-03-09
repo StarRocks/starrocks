@@ -29,22 +29,20 @@ jobs:
   clang-format:
     name: Clang-Format
     runs-on: ubuntu-latest
-    env:
-      FORMAT_BASE_REF: refs/remotes/origin/main
 
     steps:
       - name: Checkout PR head branch
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 0
+          fetch-depth: 1
           token: ${{ secrets.PAT }}
 
       - name: Set up base branch reference
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
-          git fetch origin "${BASE_REF}:${FORMAT_BASE_REF}" --update-head-ok
+          git fetch origin "${BASE_REF}"
 
       - name: Install clang-format-10
         run: |
@@ -54,6 +52,7 @@ jobs:
       - name: Auto-fix formatting on changed C++ files
         env:
           CLANG_FORMAT_BINARY: /usr/local/bin/clang-format-10
+          FORMAT_BASE_REF: origin/${{ github.base_ref }}
         run: bash build-support/clang-format-changed.sh
 
       - name: Commit and push formatting fixes
