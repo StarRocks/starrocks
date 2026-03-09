@@ -23,15 +23,15 @@ public:
     MemoryInputStream(const char* _buffer, size_t _size)
             : buffer(_buffer), size(_size), naturalReadSize(1024), name("MemoryInputStream") {}
 
-    virtual ~MemoryInputStream() override;
+    ~MemoryInputStream() override;
 
-    virtual uint64_t getLength() const override { return size; }
+    uint64_t getLength() const override { return size; }
 
-    virtual uint64_t getNaturalReadSize() const override { return naturalReadSize; }
+    uint64_t getNaturalReadSize() const override { return naturalReadSize; }
 
-    virtual void read(void* buf, uint64_t length, uint64_t offset) override { memcpy(buf, buffer + offset, length); }
+    void read(void* buf, uint64_t length, uint64_t offset) override { memcpy(buf, buffer + offset, length); }
 
-    virtual const std::string& getName() const override { return name; }
+    const std::string& getName() const override { return name; }
 
     const char* getData() const { return buffer; }
 

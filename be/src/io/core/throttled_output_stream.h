@@ -26,7 +26,7 @@ public:
     explicit ThrottledOutputStream(std::unique_ptr<OutputStream> stream, int64_t wait_per_write)
             : OutputStreamWrapper(std::move(stream)), _wait_per_write(wait_per_write) {}
 
-    ~ThrottledOutputStream() = default;
+    ~ThrottledOutputStream() override = default;
 
     Status write(const void* data, int64_t size) override {
         std::this_thread::sleep_for(std::chrono::milliseconds(_wait_per_write));
