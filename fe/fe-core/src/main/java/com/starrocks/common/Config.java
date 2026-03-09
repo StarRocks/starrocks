@@ -3897,6 +3897,25 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Timeout in milliseconds for JDBC network operations (socket read)")
     public static long jdbc_network_timeout_ms = 30000L;
 
+    @ConfField(mutable = false, comment = "Maximum lifetime of a connection in the JDBC connection pool (ms). "
+            + "Connections are recycled before this timeout to prevent stale connections. "
+            + "Should be shorter than the external database's connection timeout. "
+            + "Minimum allowed value is 30000 (30 seconds). Default: 300000 (5 minutes)")
+    public static long jdbc_connection_max_lifetime_ms = 300000L;
+
+    @ConfField(mutable = false, comment = "Keepalive interval for idle JDBC connections (ms). "
+            + "Idle connections are tested at this interval to detect stale connections proactively. "
+            + "Set to 0 to disable keepalive probing. "
+            + "When enabled, must be >= 30000 and less than jdbc_connection_max_lifetime_ms. "
+            + "Invalid enabled values are silently disabled (reset to 0). "
+            + "Default: 30000 (30 seconds)")
+    public static long jdbc_connection_keepalive_time_ms = 30000L;
+
+    @ConfField(mutable = false, comment = "Threshold for JDBC connection leak detection (ms). "
+            + "If a connection is held longer than this, a warning is logged. "
+            + "Set to 0 to disable. Default: 0 (disabled)")
+    public static long jdbc_connection_leak_detection_threshold_ms = 0L;
+
     // The longest supported VARCHAR length.
     @ConfField(mutable = true)
     public static int max_varchar_length = 1048576;
