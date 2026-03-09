@@ -27,7 +27,7 @@ public:
     ExchangeSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence)
             : SourceOperator(factory, id, "exchange_source", plan_node_id, false, driver_sequence) {}
 
-    virtual ~ExchangeSourceOperator() = default;
+    ~ExchangeSourceOperator() override = default;
 
     Status prepare(RuntimeState* state) override;
 

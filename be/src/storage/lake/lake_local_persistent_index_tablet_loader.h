@@ -42,7 +42,7 @@ public:
               _base_version(base_version),
               _builder(builder),
               _index(index) {}
-    ~LakeLocalPersistentIndexTabletLoader() = default;
+    ~LakeLocalPersistentIndexTabletLoader() override = default;
     starrocks::Schema generate_pkey_schema() override;
     DataDir* data_dir() override;
     TTabletId tablet_id() override;

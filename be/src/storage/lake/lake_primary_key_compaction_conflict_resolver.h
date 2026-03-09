@@ -48,7 +48,7 @@ public:
               _lcrm_file(lcrm_file),
               _segment_id_to_add_dels(segment_id_to_add_dels),
               _delvecs(delvecs) {}
-    ~LakePrimaryKeyCompactionConflictResolver() {}
+    ~LakePrimaryKeyCompactionConflictResolver() override {}
 
     StatusOr<FileInfo> filename() const override;
     Schema generate_pkey_schema() override;

@@ -89,14 +89,14 @@ public:
     static constexpr uint8_t PREFETCHN = 8;
 
     DictionaryCacheImpl(DictionaryCacheEncoderType type) : DictionaryCache(type), _estimated_memory_useage(0) {}
-    virtual ~DictionaryCacheImpl() override = default;
+    ~DictionaryCacheImpl() override = default;
 
     using KeyCppType = typename DictionaryCacheTypeTraits<KeyLogicalType>::CppType;
     using ValueCppType = typename DictionaryCacheTypeTraits<ValueLogicalType>::CppType;
 
     using ValueColumnType = typename DictionaryCacheTypeTraits<ValueLogicalType>::ColumnType;
 
-    virtual inline Status insert(const Datum& k, const Datum& v, const uint8_t& flag) override {
+    inline Status insert(const Datum& k, const Datum& v, const uint8_t& flag) override {
         switch (_type) {
         case DictionaryCacheEncoderType::PK_ENCODE: {
             KeyCppType key;
@@ -157,8 +157,8 @@ public:
         return Status::OK();
     }
 
-    virtual inline Status lookup(Column* src, Column* dest, std::vector<uint8_t>& value_encode_flags,
-                                 Column* null_column) override {
+    inline Status lookup(Column* src, Column* dest, std::vector<uint8_t>& value_encode_flags,
+                         Column* null_column) override {
         switch (_type) {
         case DictionaryCacheEncoderType::PK_ENCODE: {
             size_t size = src->size();
@@ -307,9 +307,9 @@ public:
         return Status::OK();
     }
 
-    virtual inline size_t memory_usage() override { return _estimated_memory_useage.load(); }
+    inline size_t memory_usage() override { return _estimated_memory_useage.load(); }
 
-    virtual std::mutex& lock() override { return _lock; }
+    std::mutex& lock() override { return _lock; }
 
 private:
     // Avoid creating Datum

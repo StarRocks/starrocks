@@ -24,7 +24,7 @@ namespace starrocks {
 
 class RowStoreEncoderSimple : public RowStoreEncoder {
 public:
-    ~RowStoreEncoderSimple() {}
+    ~RowStoreEncoderSimple() override {}
 
 public:
     Status encode_chunk_to_full_row_column(const Schema& schema, const Chunk& chunk,

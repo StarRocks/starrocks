@@ -85,11 +85,11 @@ class CancellableRunnable : public Runnable {
 public:
     CancellableRunnable(std::function<void()> runner, std::function<void()> canceller)
             : _runnable(std::move(runner)), _canceller(std::move(canceller)) {}
-    virtual ~CancellableRunnable() = default;
+    ~CancellableRunnable() override = default;
 
-    virtual void run() override { _runnable(); }
+    void run() override { _runnable(); }
 
-    virtual void cancel() override { _canceller(); }
+    void cancel() override { _canceller(); }
 
 protected:
     std::function<void()> _runnable;

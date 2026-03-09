@@ -29,7 +29,7 @@ class EncryptWritableFile : public WritableFileWrapper {
 public:
     EncryptWritableFile(WritableFile* file, Ownership ownership, FileEncryptionInfo encryption_info);
 
-    ~EncryptWritableFile();
+    ~EncryptWritableFile() override;
 
     Status append(const Slice& data) override;
 
@@ -53,9 +53,9 @@ public:
 
     Status read_fully(void* data, int64_t count) override;
 
-    StatusOr<int64_t> read_at(int64_t offset, void* out, int64_t count);
+    StatusOr<int64_t> read_at(int64_t offset, void* out, int64_t count) override;
 
-    Status read_at_fully(int64_t offset, void* out, int64_t count);
+    Status read_at_fully(int64_t offset, void* out, int64_t count) override;
 
     StatusOr<std::string> read_all() override;
 

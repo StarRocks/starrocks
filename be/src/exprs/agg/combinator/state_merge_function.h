@@ -50,7 +50,7 @@ public:
         }
     }
 
-    virtual Status prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    Status prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) override {
         if (_function == nullptr) {
             return Status::InternalError("AggStateBaseFunction is nullptr  for " + _agg_state_desc.get_func_name());
         }

@@ -276,7 +276,7 @@ public:
         this->data(state).reset(kv.first, kv.second);
     }
 
-    void process_null(FunctionContext* ctx, AggDataPtr __restrict state) const {
+    void process_null(FunctionContext* ctx, AggDataPtr __restrict state) const override {
         init_state_if_necessary(ctx, state);
         this->data(state).process_null(1);
     }
@@ -441,7 +441,7 @@ public:
     }
 
     void update_single_state_null(FunctionContext* ctx, AggDataPtr __restrict state, int64_t peer_group_start,
-                                  int64_t peer_group_end) const {
+                                  int64_t peer_group_end) const override {
         this->data(state).process_null(1);
     }
 
