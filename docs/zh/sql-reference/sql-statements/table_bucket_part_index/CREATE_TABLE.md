@@ -796,7 +796,7 @@ PROPERTIES (
   - 自 v3.3 起，存算分离集群支持 Fast Schema Evolution，并默认启用。在存算分离集群中创建云原生表时，您无需指定此属性。FE 动态参数 `enable_fast_schema_evolution`（默认值：true）控制此行为。
   :::
 
-- `cloud_native_fast_schema_evolution_v2`：是否为**云原生表**启用 Fast Schema Evolution v2。自 v4.1 起支持。有效值为 `TRUE`（默认）或 `FALSE`。启用 Fast Schema Evolution v2 后，Schema Change 将转为同步过程。当 ALTER TABLE 语句成功返回时，新 Schema 立即生效。而在传统行为模式下，Schema Change 作为异步作业运行，会随时间推移逐步更新 Tablet 元数据。
+- `cloud_native_fast_schema_evolution_v2`：是否为**云原生表**启用 Fast Schema Evolution v2。自 v4.1 起支持。有效值为 `TRUE`（默认）或 `FALSE`。启用 Fast Schema Evolution v2 后，Schema Change 将转为同步过程。当 ALTER TABLE 语句成功返回时，新 Schema 立即生效。系统仅会修改 FE 元数据而非位于 S3 上的 Tablet 元数据，因此无论表中包含多少个分区或分片，始终能实现秒级延迟。而在传统行为模式下，Schema Change 作为异步作业运行，会随时间推移逐步更新 Tablet 元数据。
 
   :::note
   - Fast Schema Evolution v2 功能自 v4.1 版本起提供支持，且仅适用于存算分离集群中的**云原生表**。

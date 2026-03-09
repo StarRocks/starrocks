@@ -798,7 +798,7 @@ PROPERTIES (
   - Fast Schema Evolution is supported for shared-data clusters since v3.3 and is enabled by default. You do not need to specify this property when creating cloud-native tables in shared-data clusters. The FE dynamic parameter `enable_fast_schema_evolution` (Default: true) controls this behavior.
   :::
 
-- `cloud_native_fast_schema_evolution_v2`: Whether to enable Fast Schema Evolution v2 for the **cloud-native table**. Supported from v4.1 onwards. Valid values are `TRUE` (default) or `FALSE`. When Fast Schema Evolution v2 is enabled, schema changes become a synchronous process. When the ALTER TABLE statement returns successfully, the new schema is effective immediately. While in the legacy behavior, schema changes are run as an asynchronous job that updates tablet metadata over time.
+- `cloud_native_fast_schema_evolution_v2`: Whether to enable Fast Schema Evolution v2 for the **cloud-native table**. Supported from v4.1 onwards. Valid values are `TRUE` (default) or `FALSE`. When Fast Schema Evolution v2 is enabled, schema changes become a synchronous process. When the ALTER TABLE statement returns successfully, the new schema is effective immediately. The system will only modify FE metadata rather than tablet metadata located on S3, so it can always achieve second-level latency no matter how many partitions or tablets in the table. While in the legacy behavior, schema changes are run as an asynchronous job that updates tablet metadata over time.
 
   :::note
   - Fast Schema Evolution v2 is supported from v4.1 onwards and only for **cloud-native tables** in shared-data clusters.
