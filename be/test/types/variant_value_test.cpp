@@ -175,4 +175,40 @@ TEST(VariantRowValueTest, CompareOperatorsFollowRawOrdering) {
     EXPECT_EQ(compare(low, low_copy), 0);
 }
 
+TEST(VariantRowValueTest, CompareUsesSemanticJsonEqualityAcrossDifferentNumericEncodings) {
+    // Same semantic JSON number "2", but different binary encoding/type tags.
+    std::string int8_value = make_primitive_value(VariantType::INT8, std::string(1, static_cast<char>(2)));
+    std::string int16_value = make_primitive_value(VariantType::INT16, std::string_view("\x02\x00", 2));
+
+    VariantRowValue int8_row(VariantMetadata::kEmptyMetadata, int8_value);
+    VariantRowValue int16_row(VariantMetadata::kEmptyMetadata, int16_value);
+
+    EXPECT_EQ(compare(int8_row, int16_row), 0);
+    EXPECT_EQ(compare(int16_row, int8_row), 0);
+    EXPECT_TRUE(int8_row == int16_row);
+    EXPECT_FALSE(int8_row != int16_row);
+}
+
+TEST(VariantRowValueTest, CompareFallbackToRawWhenToJsonFails) {
+    // Valid metadata + unsupported variant type tag in value: to_json should fail
+    // and compare should fallback to deterministic raw ordering.
+    std::string value1;
+    std::string value2;
+    value1.push_back(static_cast<char>((63u << VariantValue::kValueHeaderBitShift)));
+    value1.push_back(static_cast<char>(1));
+    value2.push_back(static_cast<char>((63u << VariantValue::kValueHeaderBitShift)));
+    value2.push_back(static_cast<char>(2));
+
+    VariantRowValue row1(VariantMetadata::kEmptyMetadata, value1);
+    VariantRowValue row2(VariantMetadata::kEmptyMetadata, value2);
+
+    auto row1_json = row1.to_json();
+    auto row2_json = row2.to_json();
+    EXPECT_FALSE(row1_json.ok());
+    EXPECT_FALSE(row2_json.ok());
+
+    EXPECT_LT(compare(row1, row2), 0);
+    EXPECT_GT(compare(row2, row1), 0);
+}
+
 } // namespace starrocks

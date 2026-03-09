@@ -103,6 +103,8 @@ public:
     void resize(size_t n) override;
     void assign(size_t n, size_t idx) override;
     size_t filter_range(const Filter& filter, size_t from, size_t to) override;
+    int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
+    int equals(size_t left, const Column& rhs, size_t right, bool safe_eq = true) const override;
     void swap_column(Column& rhs) override;
     void reset_column() override;
     void check_or_die() const override;

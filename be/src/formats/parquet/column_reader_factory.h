@@ -13,9 +13,24 @@
 // limitations under the License.
 
 #pragma once
+#include <string>
+#include <vector>
+
 #include "formats/parquet/column_reader.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::parquet {
+
+struct VariantPathTypeHint {
+    std::string path;
+    // TYPE_UNKNOWN means no preferred type hint.
+    TypeDescriptor preferred_type = TYPE_UNKNOWN_DESC;
+};
+
+struct VariantShreddedReadHints {
+    std::vector<VariantPathTypeHint> path_type_hints;
+    bool strict_preferred_type = false;
+};
 
 class ColumnReaderFactory {
 public:
@@ -42,11 +57,9 @@ private:
                                                   std::vector<int32_t>& pos,
                                                   std::vector<const TIcebergSchemaField*>& lake_schema_subfield);
 
-    static bool _has_valid_subfield_column_reader(
-            const std::map<std::string, std::unique_ptr<ColumnReader>>& children_readers);
-
     static StatusOr<ColumnReaderPtr> create_variant_column_reader(const ColumnReaderOptions& opts,
-                                                                  const ParquetField* variant_field);
+                                                                  const ParquetField* variant_field,
+                                                                  const VariantShreddedReadHints& hints = {});
 };
 
 } // namespace starrocks::parquet
