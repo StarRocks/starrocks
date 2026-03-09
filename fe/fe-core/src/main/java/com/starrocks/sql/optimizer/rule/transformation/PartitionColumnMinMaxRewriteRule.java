@@ -170,8 +170,7 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
             if (checkRewritePartitionValues(aggregationOperator, scanOperator, table)) {
                 result = optimizeWithPartitionValues(aggregationOperator, table,
                         Pair.create(this::getMinListPartitionValue, this::getMaxListPartitionValue));
-            } else if (checkRewriteDateTruncDayPartition(aggregationOperator, scanOperator, table)
-                    || checkRewriteDayRangePartition(aggregationOperator, scanOperator, table)) {
+            } else if (checkRewriteDayRangePartition(aggregationOperator, scanOperator, table)) {
                 result = optimizeWithPartitionValues(aggregationOperator, table,
                         Pair.create(this::getRangePartitionValue, this::getRangePartitionValue));
             } else if (checkPartitionPrune(aggregationOperator, scanOperator, table)) {
@@ -383,19 +382,20 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
     /**
      * Apply this optimization if:
      * 1. DUPLICATED TABLE, no delete and no filter
-     * 2. RANGE-EXPRESSION-PARTITIONED table
-     * 3. Partition by date_trunc('day', column) and column is date type
+     * 2. RANGE-EXPRESSION-PARTITIONED table and Partition by date_trunc('day', column) and column is date type
+     * 3. Or RANGE-PARTITIONED table and Partition by date column and the min/max partition range size is 86400s
      */
-    public boolean checkRewriteDateTruncDayPartition(LogicalAggregationOperator aggregationOperator,
-                                                     LogicalScanOperator scanOperator,
-                                                     OlapTable olapTable) {
+    public boolean checkRewriteDayRangePartition(LogicalAggregationOperator aggregationOperator,
+                                                 LogicalScanOperator scanOperator,
+                                                 OlapTable olapTable) {
         if (!isRangePartitionValues(aggregationOperator, scanOperator, olapTable)) {
             return false;
         }
         RangePartitionInfo partitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
         if (partitionInfo.getType() != PartitionType.EXPR_RANGE &&
                 partitionInfo.getType() != PartitionType.EXPR_RANGE_V2) {
-            return false;
+            // check if day range partition
+            return partitionInfo.getIdToRange(false).values().stream().allMatch(this::isDayRange);
         }
 
         List<Expr> partitionExprs;
@@ -437,28 +437,6 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
         }
 
         return false;
-    }
-
-    /**
-     * Apply this optimization if:
-     * 1. DUPLICATED TABLE, no delete and no filter
-     * 2. RANGE-PARTITIONED table
-     * 3. Partition by date column
-     * 4. The min/max partition range size is 86400s
-     */
-    private boolean checkRewriteDayRangePartition(LogicalAggregationOperator aggregationOperator,
-                                                  LogicalScanOperator scanOperator,
-                                                  OlapTable olapTable) {
-        if (!isRangePartitionValues(aggregationOperator, scanOperator, olapTable)) {
-            return false;
-        }
-        RangePartitionInfo partitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
-        // expr partition is not handled here
-        if (partitionInfo.getType() == PartitionType.EXPR_RANGE ||
-                partitionInfo.getType() == PartitionType.EXPR_RANGE_V2) {
-            return false;
-        }
-        return partitionInfo.getIdToRange(false).values().stream().allMatch(this::isDayRange);
     }
 
     private boolean isDayRange(Range<PartitionKey> range) {
