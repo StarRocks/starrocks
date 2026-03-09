@@ -664,6 +664,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chu
 
 void ExchangeSinkOperator::_calc_hash_values_and_bucket_ids() {
     std::vector<const Column*> partitions_columns;
+    partitions_columns.reserve(_partitions_columns.size());
     for (size_t i = 0; i < _partitions_columns.size(); i++) {
         partitions_columns.emplace_back(_partitions_columns[i].get());
     }

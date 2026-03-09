@@ -104,6 +104,7 @@ Status JavaUDTFFunction::init(const TFunction& fn, TableFunctionState** state) c
     RETURN_IF_ERROR(instance->get_libpath(fn.fid, fn.hdfs_location, fn.checksum, TFunctionBinaryType::SRJAR, &libpath));
     // Now we only support one return types
     std::vector<TypeDescriptor> arg_typedescs;
+    arg_typedescs.reserve(fn.arg_types.size());
     for (auto& type : fn.arg_types) {
         arg_typedescs.push_back(TypeDescriptor::from_thrift(type));
     }

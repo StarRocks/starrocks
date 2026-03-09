@@ -115,6 +115,7 @@ Status SelectOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
     RETURN_IF_ERROR(ExprExecutor::prepare(_conjunct_ctxs, state));
     std::vector<ExprContext*> common_expr_ctxs;
+    common_expr_ctxs.reserve(_common_exprs.size());
     for (const auto& [_, ctx] : _common_exprs) {
         common_expr_ctxs.emplace_back(ctx);
     }

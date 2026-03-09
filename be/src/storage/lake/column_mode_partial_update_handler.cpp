@@ -176,6 +176,7 @@ Status ColumnModePartialUpdateHandler::_load_update_state(const RowsetUpdateStat
                                                -1 /*unused*/, params.tablet_schema);
     }
     vector<uint32_t> pk_columns;
+    pk_columns.reserve(params.tablet_schema->num_key_columns());
     for (size_t i = 0; i < params.tablet_schema->num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }
