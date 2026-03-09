@@ -3227,6 +3227,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：JDBC 连接池中最少的空闲连接数量。
 - 引入版本：-
 
+##### jdbc_connection_max_lifetime_ms
+
+- 默认值: 300000
+- 类型: Long
+- 单位: 毫秒
+- 可变: 否
+- 描述: JDBC 连接池中连接的最大生命周期。连接在此超时前会被回收，以防止出现陈旧连接。允许的最小值为 30000 (30 秒)。
+- 引入版本: -
+
+##### jdbc_connection_keepalive_time_ms
+
+- 默认值: 30000
+- 类型: Long
+- 单位: 毫秒
+- 可变: 否
+- 描述: 空闲 JDBC 连接的保活间隔。空闲连接会在此间隔进行测试，以主动检测陈旧连接。设置为 0 可禁用保活探测。启用时，必须 >= 30000 且小于 `jdbc_connection_max_lifetime_ms`。无效的启用值将被静默禁用（重置为 0）。
+- 引入版本: -
+
 ##### lake_clear_corrupted_cache_data
 
 - 默认值：false
