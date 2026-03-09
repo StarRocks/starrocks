@@ -326,6 +326,35 @@ public class MaterializedViewHandlerEditLogTest {
     }
 
     @Test
+    public void testProcessDropMaterializedViewForceDropEditLog() throws Exception {
+        MaterializedViewHandler handler = new MaterializedViewHandler();
+        long rollupIndexId = GlobalStateMgr.getCurrentState().getNextId();
+        String rollupName = "mv_force_drop";
+        addRollupIndex(table, rollupName, rollupIndexId, GlobalStateMgr.getCurrentState().getNextId());
+        Assertions.assertTrue(table.hasMaterializedIndex(rollupName));
+
+        DropMaterializedViewStmt stmt = new DropMaterializedViewStmt(false, true,
+                new TableRef(QualifiedName.of(rollupName), null, NodePosition.ZERO), NodePosition.ZERO);
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.WRITE);
+        try {
+            handler.processDropMaterializedView(stmt, db, table);
+        } finally {
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
+        }
+
+        Assertions.assertFalse(table.hasMaterializedIndex(rollupName));
+
+        DropInfo replayInfo = (DropInfo) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_DROP_ROLLUP_V2);
+        Assertions.assertNotNull(replayInfo);
+        Assertions.assertTrue(replayInfo.isForceDrop());
+        Assertions.assertEquals(db.getId(), replayInfo.getDbId());
+        Assertions.assertEquals(table.getId(), replayInfo.getTableId());
+        Assertions.assertEquals(rollupIndexId, replayInfo.getIndexMetaId());
+    }
+
+    @Test
     public void testProcessBatchDropRollupEditLogException() throws Exception {
         MaterializedViewHandler handler = new MaterializedViewHandler();
         long rollupIndexId1 = GlobalStateMgr.getCurrentState().getNextId();

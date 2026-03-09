@@ -38,6 +38,9 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
+import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -100,5 +103,14 @@ public class DropMaterializedViewStmtNewPlannerTest {
         String dropMvSql = "drop materialized view mv1;";
         DropMaterializedViewStmt dropMvStmt = (DropMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(dropMvSql, connectContext);
         Assertions.assertFalse(dropMvStmt.isForceDrop());
+    }
+
+    @Test
+    public void testTwoArgConstructor() {
+        TableRef tableRef = new TableRef(QualifiedName.of("test", "mv1"), null, NodePosition.ZERO);
+        DropMaterializedViewStmt stmt = new DropMaterializedViewStmt(false, tableRef);
+        Assertions.assertFalse(stmt.isForceDrop());
+        Assertions.assertEquals("test", stmt.getDbName());
+        Assertions.assertEquals("mv1", stmt.getMvName());
     }
 }
