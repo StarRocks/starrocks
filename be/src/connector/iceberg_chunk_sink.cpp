@@ -17,12 +17,14 @@
 #include <future>
 
 #include "base/url_coding.h"
+#include "common/config_connector_sink_fwd.h"
 #include "connector/async_flush_stream_poller.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/expr.h"
 #include "formats/orc/orc_file_writer.h"
 #include "formats/parquet/parquet_file_writer.h"
 #include "formats/utils.h"
+#include "fs/fs_factory.h"
 #include "types/datum.h"
 #include "utils.h"
 
@@ -85,7 +87,8 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergChunkSinkProvider::create_c
         std::shared_ptr<ConnectorChunkSinkContext> context, int32_t driver_id) {
     auto ctx = std::dynamic_pointer_cast<IcebergChunkSinkContext>(context);
     auto runtime_state = ctx->fragment_context->runtime_state();
-    std::shared_ptr<FileSystem> fs = FileSystem::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_conf)).value();
+    std::shared_ptr<FileSystem> fs =
+            FileSystemFactory::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_conf)).value();
     auto column_evaluators = std::make_shared<std::vector<std::unique_ptr<ColumnEvaluator>>>(
             ColumnEvaluator::clone(ctx->column_evaluators));
     auto location_provider = std::make_shared<connector::LocationProvider>(

@@ -21,6 +21,7 @@
 #include "base/testutil/assert.h"
 #include "cache/disk_cache/block_cache.h"
 #include "column/column_helper.h"
+#include "common/config_exec_fwd.h"
 #include "exec/hdfs_scanner/hdfs_scanner_orc.h"
 #include "exec/hdfs_scanner/hdfs_scanner_parquet.h"
 #include "exec/pipeline/fragment_context.h"

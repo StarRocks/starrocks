@@ -2863,6 +2863,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 数据库、表或分区删除后，元数据可保留的最长时间。如果此持续时间过期，数据将被删除，并且无法通过 [RECOVER](../../sql-reference/sql-statements/backup_restore/RECOVER.md) 命令恢复。
 - 引入版本: -
 
+##### `catalog_recycle_bin_erase_min_latency_ms`
+
+- 默认值: 600000
+- 类型: Long
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: 数据库、表或分区被删除后，擦除元数据前的最小延迟时间（毫秒）。用于避免擦除日志先于删除日志写入。
+- 引入版本: -
+
+##### `catalog_recycle_bin_erase_max_operations_per_cycle`
+
+- 默认值: 500
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 每个周期内从回收站中实际删除数据库、表或分区的最大擦除操作数。擦除操作会持有锁，因此单批次不宜过大。
+- 引入版本: -
+
+##### `catalog_recycle_bin_erase_fail_retry_interval_ms`
+
+- 默认值: 60000
+- 类型: Long
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: 回收站擦除操作失败后的重试间隔时间（毫秒）。
+- 引入版本: -
+
 ##### `check_consistency_default_timeout_second`
 
 - 默认值: 600
@@ -3602,6 +3629,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 在共享数据集群中，Leader FE 内存中保留的最近成功 Compaction 任务记录数。您可以使用 `SHOW PROC '/compactions'` 命令查看最近成功的 Compaction 任务记录。请注意，Compaction 历史记录存储在 FE 进程内存中，如果 FE 进程重启，它将丢失。
 - 引入版本: v3.1.0
+
+##### `lake_compaction_max_parallel_default`
+
+- 默认值: 3
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 当建表时未指定 `lake_compaction_max_parallel` 表属性时，每个 tablet 的默认最大并行 Compaction 子任务数。`0` 表示禁用并行 Compaction。此配置作为表属性 `lake_compaction_max_parallel` 的默认值。
 
 ##### `lake_compaction_max_tasks`
 

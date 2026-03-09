@@ -16,7 +16,7 @@
 
 #include "agent/finish_task.h"
 #include "agent/task_signatures_manager.h"
-#include "common/config.h"
+#include "common/config_primary_key_fwd.h"
 #include "common/system/cpu_info.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"

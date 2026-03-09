@@ -2803,6 +2803,28 @@ public class LowCardinalityTest2 extends PlanTestBase {
     }
 
     @Test
+    public void testUnionWithAllConstants() throws Exception {
+        String sql = """
+                  SELECT
+                      C_USER a, C_USER as b, C_USER as c
+                    FROM
+                      low_card_t1
+                  UNION ALL
+                  SELECT
+                    NULL, 'zzz', NULL
+                  FROM
+                      supplier
+                  """;
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [30, INT, true] | [31, INT, true] | [33, INT, true]\n" +
+                "  |  child exprs:\n" +
+                "  |      [29: c_user, INT, true] | [32: cast, INT, true] | [29: c_user, INT, true]\n" +
+                "  |      [35: expr, INT, true] | [34: expr, INT, false] | [36: expr, INT, true]", plan);
+    }
+  
+    @Test
     public void testLeadWindowFunctionLowCardinalityRewrite() throws Exception {
         String sql = "select S_SUPPKEY, S_ADDRESS, lead(S_ADDRESS, 1) over(order by S_SUPPKEY) from supplier";
         String plan = getFragmentPlan(sql);

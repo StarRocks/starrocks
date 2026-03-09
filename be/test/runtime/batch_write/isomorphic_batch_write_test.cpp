@@ -19,6 +19,7 @@
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
 #include "base/time/monotime.h"
+#include "common/config_merge_commit_fwd.h"
 #include "common/thread/threadpool.h"
 #include "common/util/bthreads/executor.h"
 #include "gen_cpp/FrontendService.h"

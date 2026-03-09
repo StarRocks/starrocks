@@ -21,6 +21,8 @@
 
 #include "column/column_access_path.h"
 #include "column/datum_convert.h"
+#include "common/config_json_flat_fwd.h"
+#include "common/config_scan_io_fwd.h"
 #include "common/status.h"
 #include "common/system/backend_options.h"
 #include "gen_cpp/tablet_schema.pb.h"
@@ -207,6 +209,7 @@ Status TabletReader::_init_collector_for_pk_index_read() {
     // get pk eq predicates, and convert these predicates to encoded pk column
     const auto& tablet_schema = _tablet_schema;
     vector<ColumnId> pk_column_ids;
+    pk_column_ids.reserve(tablet_schema->num_key_columns());
     for (size_t i = 0; i < tablet_schema->num_key_columns(); i++) {
         pk_column_ids.emplace_back(i);
     }

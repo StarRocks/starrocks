@@ -21,6 +21,7 @@
 #include "agent/task_signatures_manager.h"
 #include "base/testutil/sync_point.h"
 #include "boost/lexical_cast.hpp"
+#include "common/config_agent_fwd.h"
 #include "common/status.h"
 #include "common/system/backend_options.h"
 #include "gutil/strings/join.h"

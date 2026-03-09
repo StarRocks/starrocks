@@ -49,7 +49,8 @@
 #include "column/column_helper.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
-#include "common/config.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_scan_io_fwd.h"
 #include "common/statusor.h"
 #include "common/thread/thread.h"
 #include "common/tracer.h"
@@ -309,6 +310,7 @@ Status OlapTableSink::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(_init_node_channels(state, index_id_to_tablet_be_map));
 
     std::vector<IndexChannel*> index_channels;
+    index_channels.reserve(_channels.size());
     for (const auto& channel : _channels) {
         index_channels.emplace_back(channel.get());
     }

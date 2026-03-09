@@ -46,6 +46,7 @@
 #include "column/column_helper.h"
 #include "column/datum_convert.h"
 #include "common/compiler_util.h"
+#include "common/config_json_flat_fwd.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "common/statusor.h"

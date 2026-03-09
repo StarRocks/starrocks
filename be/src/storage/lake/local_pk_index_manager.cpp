@@ -18,6 +18,8 @@
 #include <chrono>
 
 #include "base/testutil/sync_point.h"
+#include "common/config_lake_fwd.h"
+#include "common/config_starlet_fwd.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/join.h"
 #include "storage/lake/tablet_manager.h"

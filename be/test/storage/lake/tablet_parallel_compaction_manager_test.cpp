@@ -21,8 +21,10 @@
 
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
-#include "common/config.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_primary_key_fwd.h"
 #include "common/thread/threadpool.h"
+#include "fs/fs_factory.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/compaction_task_context.h"
 #include "storage/lake/test_util.h"
@@ -171,7 +173,7 @@ protected:
             std::string path = _lp->segment_location(tablet_id, segment_name);
             std::string dir = std::filesystem::path(path).parent_path().string();
             CHECK_OK(fs::create_directories(dir));
-            auto fs = FileSystem::CreateSharedFromString(path);
+            auto fs = FileSystemFactory::CreateSharedFromString(path);
             WritableFileOptions opts;
             opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
             auto st = fs.value()->new_writable_file(opts, path);
@@ -2649,7 +2651,7 @@ protected:
             std::string path = _lp->segment_location(tablet_id, segment_name);
             std::string dir = std::filesystem::path(path).parent_path().string();
             CHECK_OK(fs::create_directories(dir));
-            auto fs = FileSystem::CreateSharedFromString(path);
+            auto fs = FileSystemFactory::CreateSharedFromString(path);
             auto st = fs.value()->new_writable_file(path);
             CHECK_OK(st.status());
             CHECK_OK(st.value()->append("dummy_segment_data"));
@@ -2688,7 +2690,7 @@ protected:
                 std::string path = _lp->segment_location(tablet_id, segment_name);
                 std::string dir = std::filesystem::path(path).parent_path().string();
                 CHECK_OK(fs::create_directories(dir));
-                auto fs = FileSystem::CreateSharedFromString(path);
+                auto fs = FileSystemFactory::CreateSharedFromString(path);
                 auto st = fs.value()->new_writable_file(path);
                 CHECK_OK(st.status());
                 CHECK_OK(st.value()->append("dummy_segment_data"));
@@ -3645,7 +3647,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_split_rowsets_into_groups_all_l
         std::string path = _lp->segment_location(tablet_id, "segment_" + std::to_string(i) + ".dat");
         std::string dir = std::filesystem::path(path).parent_path().string();
         CHECK_OK(fs::create_directories(dir));
-        auto fs = FileSystem::CreateSharedFromString(path);
+        auto fs = FileSystemFactory::CreateSharedFromString(path);
         auto st = fs.value()->new_writable_file(path);
         CHECK_OK(st.status());
         CHECK_OK(st.value()->append("dummy"));
@@ -3716,7 +3718,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_split_rowsets_into_groups_fallb
         std::string path = _lp->segment_location(tablet_id, "seg_" + std::to_string(i) + ".dat");
         std::string dir = std::filesystem::path(path).parent_path().string();
         CHECK_OK(fs::create_directories(dir));
-        auto fs = FileSystem::CreateSharedFromString(path);
+        auto fs = FileSystemFactory::CreateSharedFromString(path);
         auto st = fs.value()->new_writable_file(path);
         CHECK_OK(st.status());
         CHECK_OK(st.value()->append("dummy"));
@@ -3751,7 +3753,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_filter_compactable_rowsets_skip
         std::string path = _lp->segment_location(tablet_id, "s_" + std::to_string(i) + ".dat");
         std::string dir = std::filesystem::path(path).parent_path().string();
         CHECK_OK(fs::create_directories(dir));
-        auto fs = FileSystem::CreateSharedFromString(path);
+        auto fs = FileSystemFactory::CreateSharedFromString(path);
         auto st = fs.value()->new_writable_file(path);
         CHECK_OK(st.status());
         CHECK_OK(st.value()->append("dummy"));
@@ -4176,12 +4178,9 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_dup_keys_mixed_large
 
     // Check that we have both LARGE_ROWSET_PART and NORMAL subtasks
     bool has_large = false;
-    bool has_normal = false;
     for (const auto& [id, info] : state->running_subtasks) {
         if (info.type == SubtaskType::LARGE_ROWSET_PART) {
             has_large = true;
-        } else {
-            has_normal = true;
         }
     }
     EXPECT_TRUE(has_large) << "Should have LARGE_ROWSET_PART subtasks for the large rowset";

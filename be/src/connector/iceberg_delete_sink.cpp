@@ -22,6 +22,7 @@
 
 #include "base/url_coding.h"
 #include "column/column_helper.h"
+#include "common/config_exec_fwd.h"
 #include "connector/async_flush_stream_poller.h"
 #include "connector/partition_chunk_writer.h"
 #include "connector/sink_memory_manager.h"
@@ -31,6 +32,7 @@
 #include "formats/column_evaluator.h"
 #include "formats/parquet/parquet_file_writer.h"
 #include "formats/utils.h"
+#include "fs/fs_factory.h"
 #include "gutil/strings/fastmem.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
@@ -238,7 +240,7 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergDeleteSinkProvider::create_
 
     // Create filesystem
     std::shared_ptr<FileSystem> fs =
-            FileSystem::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_configuration)).value();
+            FileSystemFactory::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_configuration)).value();
 
     // For delete files, we only need file_path and row_position columns
     std::vector<std::string> column_names = {"file_path", "pos"};

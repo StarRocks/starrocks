@@ -45,6 +45,7 @@
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "fs/fs_broker.h"
+#include "fs/fs_factory.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -131,7 +132,7 @@ Status ExportSink::open_file_writer(int timeout_ms) {
     }
     case TFileType::FILE_BROKER: {
         if (_t_export_sink.__isset.use_broker && !_t_export_sink.use_broker) {
-            ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(file_path, FSOptions(&_t_export_sink)));
+            ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateUniqueFromString(file_path, FSOptions(&_t_export_sink)));
             ASSIGN_OR_RETURN(output_file, fs->new_writable_file(options, file_path));
             break;
         } else {

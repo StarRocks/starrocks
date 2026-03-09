@@ -18,6 +18,10 @@
 #include <utility>
 
 #include "column/datum_convert.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_json_flat_fwd.h"
+#include "common/config_lake_fwd.h"
+#include "common/config_scan_io_fwd.h"
 #include "common/status.h"
 #include "gutil/stl_util.h"
 #include "runtime/exec_env.h"

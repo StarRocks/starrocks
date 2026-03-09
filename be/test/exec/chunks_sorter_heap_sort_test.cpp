@@ -26,6 +26,7 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/vectorized_fwd.h"
+#include "common/config_exec_fwd.h"
 #include "common/object_pool.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
@@ -235,7 +236,8 @@ TEST_F(ChunksSorterHeapSortTest, single_column_order_by_notnull_test) {
             ASSERT_OK(sorter.get_next(&chunk, &eos));
             auto column = chunk->get_column_by_slot_id(1);
             auto* slice_col = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(column);
-            const auto& slice_data = slice_col->get_data();
+            BinaryColumn::Container slice_data;
+            slice_col->build_slices(slice_data);
             ASSERT_TRUE(std::is_sorted(slice_data.begin(), slice_data.end()));
         }
     }

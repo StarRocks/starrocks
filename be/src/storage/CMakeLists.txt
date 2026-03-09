@@ -25,6 +25,7 @@ set(STORAGE_FILES
     delete_handler.cpp
     del_vector.cpp
     delta_column_group.cpp
+    flat_json_config.cpp
     key_coder.cpp
     memtable_flush_executor.cpp
     segment_flush_executor.cpp
@@ -109,6 +110,7 @@ set(STORAGE_FILES
     rowset/parsed_page.cpp
     rowset/zone_map_index.cpp
     rowset/segment_iterator.cpp
+    rowset/options.cpp
     rowset/segment_options.cpp
     rowset/rowid_range_option.cpp
     rowset/rowset_meta.cpp
@@ -185,6 +187,7 @@ set(STORAGE_FILES
     primary_key_recover.cpp
     local_primary_key_recover.cpp
     lake/async_delta_writer.cpp
+    lake/async_file_deleter.cpp
     lake/compaction_policy.cpp
     lake/compaction_scheduler.cpp
     lake/compaction_task.cpp

@@ -21,7 +21,7 @@
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/global_types.h"
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/fragment_context.h"

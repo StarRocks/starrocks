@@ -420,11 +420,12 @@ set(STARROCKS_LINK_LIBS
     orc
     ${WL_END_GROUP}
     -Wl,--whole-archive ExprCore -Wl,--no-whole-archive
-    IOCore
     RuntimeCore
     ChunkCore
     ColumnCore
     TypesCore
+    FSCore
+    IOCore
     Common
     Base
     Gutil
@@ -565,10 +566,13 @@ if (${WITH_TENANN} STREQUAL "ON")
 endif()
 
 # enable global pch compiling
-add_library(StarRocksPCH INTERFACE)
-target_precompile_headers(StarRocksPCH INTERFACE ${SRC_DIR}/pch/starrocks_pch.h)
-if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    target_compile_options(StarRocksPCH INTERFACE "$<$<COMPILE_LANGUAGE:CXX>:SHELL:-Xclang -fno-pch-timestamp>")
+option(WITH_PCH "Enable precompiled headers for BE targets" ON)
+if (WITH_PCH)
+    add_library(StarRocksPCH INTERFACE)
+    target_precompile_headers(StarRocksPCH INTERFACE ${SRC_DIR}/pch/starrocks_pch.h)
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+        target_compile_options(StarRocksPCH INTERFACE "$<$<COMPILE_LANGUAGE:CXX>:SHELL:-Xclang -fno-pch-timestamp>")
+    endif()
 endif()
 
 
@@ -623,7 +627,9 @@ FUNCTION(ADD_BE_LIB LIB_NAME)
         )
     ELSE()
         ADD_LIBRARY(${LIB_NAME} STATIC ${ARGN})
-        target_link_libraries(${LIB_NAME} PRIVATE StarRocksPCH)
+        if (WITH_PCH)
+            target_link_libraries(${LIB_NAME} PRIVATE StarRocksPCH)
+        endif()
     ENDIF()
     set(ALL_BE_LIBS "${ALL_BE_LIBS};${LIB_NAME}" CACHE INTERNAL "All BE libraries")
 ENDFUNCTION()

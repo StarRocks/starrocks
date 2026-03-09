@@ -48,6 +48,7 @@
 #endif
 #include "base/metrics.h"
 #include "cache/mem_cache/page_cache.h"
+#include "common/config_cache_fwd.h"
 #include "gutil/strings/split.h" // for string split
 #include "gutil/strtoint.h"      //  for atoi64
 #include "io/io_profiler.h"

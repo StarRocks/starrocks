@@ -25,7 +25,7 @@
 #include "base/simd/simd.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
-#include "common/config.h"
+#include "common/config_scan_io_fwd.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/statusor.h"
@@ -566,6 +566,7 @@ void GroupReader::collect_io_ranges(std::vector<io::SharedBufferedInputStream::I
 
 Status GroupReader::_init_read_chunk() {
     std::vector<SlotDescriptor*> read_slots;
+    read_slots.reserve(_param.read_cols.size());
     for (const auto& column : _param.read_cols) {
         read_slots.emplace_back(column.slot_desc);
     }

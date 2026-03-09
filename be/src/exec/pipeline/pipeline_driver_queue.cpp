@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/pipeline_driver_queue.h"
 
+#include "common/config_exec_flow_fwd.h"
 #include "exec/pipeline/pipeline_metrics.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/workgroup/work_group.h"
@@ -22,7 +23,14 @@
 namespace starrocks::pipeline {
 
 /// QuerySharedDriverQueue.
-QuerySharedDriverQueue::QuerySharedDriverQueue(DriverQueueMetrics* metrics) : FactoryMethod(metrics) {
+double QuerySharedDriverQueue::ratio_of_adjacent_queue() {
+    return config::pipeline_driver_queue_ratio_of_adjacent_queue;
+}
+
+QuerySharedDriverQueue::QuerySharedDriverQueue(DriverQueueMetrics* metrics)
+        : FactoryMethod(metrics),
+          LEVEL_TIME_SLICE_BASE_NS(config::pipeline_driver_queue_level_time_slice_base_ns),
+          RATIO_OF_ADJACENT_QUEUE(ratio_of_adjacent_queue()) {
     double factor = 1;
     for (int i = QUEUE_SIZE - 1; i >= 0; --i) {
         // initialize factor for every sub queue,

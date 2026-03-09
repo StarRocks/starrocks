@@ -1,52 +1,81 @@
 name: Translation Status Check
 on:
-  pull_request_target: # <--- CHANGED: Gives Write Perms for Forks
-    paths: ['docs/en/**', 'docs/zh/**', 'docs/ja/**']
   workflow_run:
-    workflows: ["Translation Runner"]
+    workflows: 
+      - "CI DOC Checker"
     types: [completed]
 
 jobs:
   report:
     runs-on: ubuntu-latest
     permissions:
-      pull-requests: write # Explicitly request write access
-      contents: read       # We only need to read the code
+      pull-requests: write 
+      contents: read       
+      actions: read # Required to read the job status of the triggering workflow
     steps:
-      # Get PR number from workflow_run context if needed
+      - name: Verify Linting Passed
+        id: check_lint
+        uses: actions/github-script@v7
+        with:
+          result-encoding: string
+          script: |
+            // Query the jobs of the CI DOC Checker run
+            const { data: jobsData } = await github.rest.actions.listJobsForWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.payload.workflow_run.id,
+            });
+            
+            // Look for the exact name of your linting job
+            const lintJob = jobsData.jobs.find(j => j.name === 'markdownlint');
+            
+            // If the lint job doesn't exist or didn't succeed, we cancel.
+            if (!lintJob || lintJob.conclusion !== 'success') {
+              console.log("Markdownlint failed or was skipped. Canceled translation check.");
+              return 'false';
+            }
+            
+            console.log("Markdownlint succeeded! Proceeding with translation check.");
+            return 'true';
+
       - name: Get PR Number
+        if: steps.check_lint.outputs.result == 'true'
         id: pr_number
         uses: actions/github-script@v7
         with:
           script: |
-            let prNumber;
-            if (context.eventName === 'pull_request_target') {
-              prNumber = context.payload.pull_request.number;
-            } else if (context.eventName === 'workflow_run') {
-              const { data: pullRequests } = await github.rest.pulls.list({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                head: context.payload.workflow_run.head_branch,
-                state: 'open',
-              });
-              prNumber = pullRequests.length > 0 ? pullRequests[0].number : null;
-            }
-            if (!prNumber) {
-              core.setFailed('No open pull request found for this workflow_run head branch or unsupported event context.');
+            const { data: pullRequests } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              // Format as owner:branch to ensure we find PRs from external forks
+              head: context.payload.workflow_run.head_repository.owner.login + ':' + context.payload.workflow_run.head_branch,
+              state: 'open',
+            });
+            
+            if (pullRequests.length === 0) {
+              core.setFailed('No open pull request found for this workflow_run.');
               return;
             }
-            core.setOutput('pr_number', prNumber);
-      
-      # 1. Checkout the PR's Merge Commit so we can see the NEW files
+            core.setOutput('pr_number', pullRequests[0].number);
+
+      - name: Find Existing Comment
+        if: steps.check_lint.outputs.result == 'true'
+        uses: peter-evans/find-comment@v3
+        id: findcomment
+        with:
+          issue-number: ${{ steps.pr_number.outputs.pr_number }}
+          comment-author: 'github-actions[bot]'
+          body-includes: "### 🌎 Translation Required?"
+
       - name: Checkout PR Code
+        if: steps.check_lint.outputs.result == 'true'
         uses: actions/checkout@v4
         with:
-          # Critical: Checkout the merge commit, not the default 'main'
           ref: refs/pull/${{ steps.pr_number.outputs.pr_number }}/merge
           fetch-depth: 0
 
-      # Get PR details (base SHA etc)
       - name: Get PR Details
+        if: steps.check_lint.outputs.result == 'true'
         id: pr_details
         uses: actions/github-script@v7
         with:
@@ -59,10 +88,10 @@ jobs:
             });
             core.setOutput('base_sha', pr.base.sha);
 
-      # 2. Get Changed Files (Compares PR vs Base)
       - name: Get Changed Files
+        if: steps.check_lint.outputs.result == 'true'
         id: changed-files
-        uses: tj-actions/changed-files@v44
+        uses: tj-actions/changed-files@22103cc46bda19c2b464ffe86db46df6922fd323
         with:
           base_sha: ${{ steps.pr_details.outputs.base_sha }}
           json: true
@@ -71,10 +100,12 @@ jobs:
             docs/zh/**/*.md*
             docs/ja/**/*.md*
 
-
       - name: Generate Checklist Body
+        if: steps.check_lint.outputs.result == 'true'
         id: checklist
         uses: actions/github-script@v7
+        env:
+          HAS_COMMENT: ${{ steps.findcomment.outputs.comment-id != '' }}
         with:
           script: |
             const fs = require('fs');
@@ -83,44 +114,47 @@ jobs:
               files = JSON.parse('${{ steps.changed-files.outputs.all_changed_files }}');
             } catch (e) { console.log("No files detected"); }
 
-            // 1. Prepare the Header (Must match 'find-comment' criteria)
-            let body = "### 🌎 Translation Required?\n";
+            const hasComment = process.env.HAS_COMMENT === 'true';
             const timestamp = new Date().toUTCString();
 
-            // 2. logic to find missing files
+            // 1. SILENT ABORT: No doc changes and no prior comment? Stay completely quiet.
+            if (files.length === 0 && !hasComment) {
+              console.log("No translatable files and no prior comment. Cancelled all actions.");
+              core.setOutput('skip_commenting', 'true');
+              core.setOutput('needs_translation', 'false');
+              return;
+            }
+            
+            // We are proceeding, so don't skip commenting
+            core.setOutput('skip_commenting', 'false');
+            let body = "### 🌎 Translation Required?\n";
+
+            // 2. SUCCESS UPDATE: No doc changes, but we DO have a comment to update.
             if (files.length === 0) {
               body += "\n✅ **All translation files are up to date.**\n";
               body += "No translation actions are required for this PR.\n";
               body += `\n> 🕒 **Last updated:** ${timestamp}`;
               core.setOutput('body', body);
+              core.setOutput('needs_translation', 'false');
               return;
             }
 
-            // Translation rules:
-            // - English (en) can translate to: Chinese (zh), Japanese (ja)
-            // - Chinese (zh) can translate to: English (en) only
-            // - Japanese (ja) cannot be a source file
             const getValidTargets = (sourceLang) => {
               if (sourceLang === 'en') return ['zh', 'ja'];
               if (sourceLang === 'zh') return ['en'];
-              if (sourceLang === 'ja') return []; // Japanese files are not source files
+              if (sourceLang === 'ja') return [];
               return [];
             };
 
-            // Group files by base filename to check if all languages exist
             const filesByBase = {};
             files.forEach(file => {
               if (!fs.existsSync(file)) return;
-              
               const parts = file.split('/');
               if (parts.length < 3) return;
-              
               const lang = parts[1];
               if (!['en', 'zh', 'ja'].includes(lang)) return;
               
-              // Get base name: extract everything after the language folder
               const baseName = parts.slice(2).join('/');
-              
               if (!filesByBase[baseName]) {
                 filesByBase[baseName] = { en: false, zh: false, ja: false, paths: {} };
               }
@@ -135,41 +169,27 @@ jobs:
 
             Object.entries(filesByBase).forEach(([baseName, langData]) => {
               const allLanguagesPresent = langData.en && langData.zh && langData.ja;
-              
-              // If all three language versions exist in the PR, no translation needed
-              if (allLanguagesPresent) {
-                return;
-              }
+              if (allLanguagesPresent) return;
 
-              // Process each language that was changed
               ['en', 'zh', 'ja'].forEach(sourceLang => {
-                if (!langData[sourceLang]) return; // Only process changed files
+                if (!langData[sourceLang]) return;
                 
                 const file = langData.paths[sourceLang];
                 const validTargets = getValidTargets(sourceLang);
                 
                 if (validTargets.length === 0) {
-                  // Japanese files need manual translation from en or zh
-                  if (sourceLang === 'ja') {
-                    // Check if en or zh versions exist in repo
-                    const enExists = langData.en;
-                    const zhExists = langData.zh;
-                    
-                    if (!enExists && !zhExists) {
-                      manualTranslationBuffer += `- \`${file}\` (Japanese file - requires English or Chinese source)\n`;
-                      hasManualTranslations = true;
-                    }
+                  if (sourceLang === 'ja' && !langData.en && !langData.zh) {
+                    manualTranslationBuffer += `- \`${file}\` (Japanese file - requires English or Chinese source)\n`;
+                    hasManualTranslations = true;
                   }
                   return;
                 }
 
-                // Check which target translations are needed
                 let automatedChecklist = "";
                 let manualChecklist = "";
 
                 validTargets.forEach(lang => {
                   if (!langData[lang]) {
-                    // Target language doesn't exist
                     const status = "(New)";
                     const canAutomate = (sourceLang === 'en' || (sourceLang === 'zh' && lang === 'en'));
                     
@@ -193,13 +213,13 @@ jobs:
               });
             });
 
-            // 3. Output logic
+            // 3. FINAL OUTPUT LOGIC
             if (!hasAutomatedTranslations && !hasManualTranslations) {
-              // SUCCESS CASE: Keep the header so we find the comment next time!
               body += "\n✅ **All translation files are up to date.**\n";
               body += "Great job! No translation actions are required for this PR.\n";
+              core.setOutput('needs_translation', 'false');
             } else {
-              // ACTION REQUIRED CASE
+              core.setOutput('needs_translation', 'true');
               body += "Thanks for your doc contribution! The following languages are missing or outdated for your changes.\n\n";
               
               if (hasAutomatedTranslations) {
@@ -218,33 +238,40 @@ jobs:
             }
 
             body += `\n\n> 🕒 **Last updated:** ${timestamp}`;
-            
             core.setOutput('body', body);
 
-      - name: Find Comment
-        uses: peter-evans/find-comment@v3
-        id: findcheckboxcomment
-        with:
-          issue-number: ${{ steps.pr_number.outputs.pr_number }}
-          comment-author: 'github-actions[bot]'
-          body-includes: "### 🌎 Translation Required?"
-
       - name: Create or update comment
+        if: steps.check_lint.outputs.result == 'true' && steps.checklist.outputs.skip_commenting != 'true'
         uses: peter-evans/create-or-update-comment@v5
         with:
-          comment-id: ${{ steps.findcheckboxcomment.outputs.comment-id }}
+          comment-id: ${{ steps.findcomment.outputs.comment-id }}
           issue-number: ${{ steps.pr_number.outputs.pr_number }}
           body: ${{ steps.checklist.outputs.body }}
           edit-mode: replace
 
       - name: Label PR
-        if: steps.checklist.outputs.body != 'No translatable files detected.'
+        if: steps.check_lint.outputs.result == 'true' && steps.checklist.outputs.needs_translation == 'true'
         uses: actions/github-script@v7
         with:
           script: |
-            github.rest.issues.addLabels({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: ${{ steps.pr_number.outputs.pr_number }},
-              labels: ['docs-maintainer']
-            });
+            try {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: ${{ steps.pr_number.outputs.pr_number }},
+                labels: ['docs-maintainer']
+              });
+            } catch (error) {
+              const status = error?.status ?? error?.response?.status;
+              const message = String(error?.message ?? '').toLowerCase();
+              const hasAlreadyExistsCode = Array.isArray(error?.response?.data?.errors)
+                && error.response.data.errors.some(item => item?.code === 'already_exists');
+
+              // Ignore only idempotent duplicate-label errors; surface all other failures.
+              if (status === 422 && (message.includes('already exists') || hasAlreadyExistsCode)) {
+                core.info('docs-maintainer label already exists. Skipping.');
+                return;
+              }
+
+              throw error;
+            }

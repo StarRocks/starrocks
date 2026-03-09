@@ -14,7 +14,6 @@
 
 #include "storage/chunk_aggregator.h"
 
-#include "common/config.h"
 #include "exec/sorting/sorting.h"
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "gutil/casts.h"

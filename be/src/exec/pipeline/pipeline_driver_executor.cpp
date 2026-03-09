@@ -19,6 +19,7 @@
 #include "agent/master_info.h"
 #include "base/failpoint/fail_point.h"
 #include "base/utility/defer_op.h"
+#include "common/config_exec_flow_fwd.h"
 #include "exec/pipeline/pipeline_metrics.h"
 #include "exec/pipeline/stream_pipeline_driver.h"
 #include "exec/workgroup/work_group.h"

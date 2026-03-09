@@ -486,7 +486,7 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_string(FunctionContext* contex
     auto col = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(c0);
     MutableColumnPtr res = RunTimeColumnType<TYPE_UNSIGNED_INT>::create();
     res->resize_uninitialized(size);
-    auto raw_c0 = col->get_proxy_data();
+    auto raw_c0 = col->immutable_data();
     // result column is mutable, use non-const raw pointer
     RunTimeCppType<TYPE_UNSIGNED_INT>* raw_res =
             ColumnHelper::cast_to_raw<TYPE_UNSIGNED_INT>(res.get())->get_data().data();
@@ -1115,7 +1115,307 @@ static float sum_m256(__m256 v) {
     __m128 result = _mm_add_ss(vlow, vhigh);
     return _mm_cvtss_f32(result);
 }
+
+static inline float fast_rsqrt_nr(float x) {
+    // Guard against denormal/very-small inputs where _mm_rsqrt_ss produces infinity.
+    // Fall back to standard sqrt for such cases.
+    if (x < 1e-30f) {
+        return 1.0f / std::sqrt(x);
+    }
+    __m128 vx = _mm_set_ss(x);
+    __m128 y = _mm_rsqrt_ss(vx);
+    // One Newton-Raphson refinement step for better accuracy.
+    const __m128 half = _mm_set_ss(0.5f);
+    const __m128 three_halves = _mm_set_ss(1.5f);
+    y = _mm_mul_ss(y, _mm_sub_ss(three_halves, _mm_mul_ss(half, _mm_mul_ss(vx, _mm_mul_ss(y, y)))));
+    return _mm_cvtss_f32(y);
+}
 #endif
+
+#ifndef __AVX2__
+static inline bool offsets_equal_dim_scalar(const uint32_t* offsets, size_t num_rows, uint32_t dim) {
+    if (dim == 0) {
+        return false;
+    }
+    for (size_t i = 0; i < num_rows; ++i) {
+        if (offsets[i + 1] - offsets[i] != dim) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static inline bool offsets_equal_dim_two_scalar(const uint32_t* base_offsets, const uint32_t* target_offsets,
+                                                size_t num_rows, uint32_t dim) {
+    if (dim == 0) {
+        return false;
+    }
+    for (size_t i = 0; i < num_rows; ++i) {
+        if (base_offsets[i + 1] - base_offsets[i] != dim || target_offsets[i + 1] - target_offsets[i] != dim) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static inline bool offsets_equal_nonzero_scalar(const uint32_t* base_offsets, const uint32_t* target_offsets,
+                                                size_t num_rows) {
+    for (size_t i = 0; i < num_rows; ++i) {
+        uint32_t b_dim = base_offsets[i + 1] - base_offsets[i];
+        uint32_t t_dim = target_offsets[i + 1] - target_offsets[i];
+        if (b_dim == 0 || b_dim != t_dim) {
+            return false;
+        }
+    }
+    return true;
+}
+#else // __AVX2__
+static inline bool offsets_equal_dim_avx2(const uint32_t* offsets, size_t num_rows, uint32_t dim) {
+    if (dim == 0) {
+        return false;
+    }
+    __m256i dim_vec = _mm256_set1_epi32(static_cast<int>(dim));
+    size_t i = 0;
+    for (; i + 8 <= num_rows; i += 8) {
+        __m256i o0 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(offsets + i));
+        __m256i o1 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(offsets + i + 1));
+        __m256i diff = _mm256_sub_epi32(o1, o0);
+        __m256i eq = _mm256_cmpeq_epi32(diff, dim_vec);
+        if (_mm256_movemask_epi8(eq) != -1) {
+            return false;
+        }
+    }
+    for (; i < num_rows; ++i) {
+        if (offsets[i + 1] - offsets[i] != dim) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static inline bool offsets_equal_dim_two_avx2(const uint32_t* base_offsets, const uint32_t* target_offsets,
+                                              size_t num_rows, uint32_t dim) {
+    if (dim == 0) {
+        return false;
+    }
+    __m256i dim_vec = _mm256_set1_epi32(static_cast<int>(dim));
+    size_t i = 0;
+    for (; i + 8 <= num_rows; i += 8) {
+        __m256i b0 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(base_offsets + i));
+        __m256i b1 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(base_offsets + i + 1));
+        __m256i t0 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(target_offsets + i));
+        __m256i t1 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(target_offsets + i + 1));
+        __m256i bdiff = _mm256_sub_epi32(b1, b0);
+        __m256i tdiff = _mm256_sub_epi32(t1, t0);
+        __m256i b_eq = _mm256_cmpeq_epi32(bdiff, dim_vec);
+        __m256i t_eq = _mm256_cmpeq_epi32(tdiff, dim_vec);
+        __m256i ok = _mm256_and_si256(b_eq, t_eq);
+        if (_mm256_movemask_epi8(ok) != -1) {
+            return false;
+        }
+    }
+    for (; i < num_rows; ++i) {
+        if (base_offsets[i + 1] - base_offsets[i] != dim || target_offsets[i + 1] - target_offsets[i] != dim) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static inline bool offsets_equal_nonzero_avx2(const uint32_t* base_offsets, const uint32_t* target_offsets,
+                                              size_t num_rows) {
+    __m256i zero = _mm256_setzero_si256();
+    size_t i = 0;
+    for (; i + 8 <= num_rows; i += 8) {
+        __m256i b0 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(base_offsets + i));
+        __m256i b1 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(base_offsets + i + 1));
+        __m256i t0 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(target_offsets + i));
+        __m256i t1 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(target_offsets + i + 1));
+        __m256i bdiff = _mm256_sub_epi32(b1, b0);
+        __m256i tdiff = _mm256_sub_epi32(t1, t0);
+        __m256i eq = _mm256_cmpeq_epi32(bdiff, tdiff);
+        __m256i gt0 = _mm256_cmpgt_epi32(bdiff, zero);
+        __m256i ok = _mm256_and_si256(eq, gt0);
+        if (_mm256_movemask_epi8(ok) != -1) {
+            return false;
+        }
+    }
+    for (; i < num_rows; ++i) {
+        uint32_t b_dim = base_offsets[i + 1] - base_offsets[i];
+        uint32_t t_dim = target_offsets[i + 1] - target_offsets[i];
+        if (b_dim == 0 || b_dim != t_dim) {
+            return false;
+        }
+    }
+    return true;
+}
+#endif
+
+static inline bool offsets_equal_dim(const uint32_t* offsets, size_t num_rows, uint32_t dim) {
+#ifdef __AVX2__
+    return offsets_equal_dim_avx2(offsets, num_rows, dim);
+#else
+    return offsets_equal_dim_scalar(offsets, num_rows, dim);
+#endif
+}
+
+static inline bool offsets_equal_dim_two(const uint32_t* base_offsets, const uint32_t* target_offsets, size_t num_rows,
+                                         uint32_t dim) {
+#ifdef __AVX2__
+    return offsets_equal_dim_two_avx2(base_offsets, target_offsets, num_rows, dim);
+#else
+    return offsets_equal_dim_two_scalar(base_offsets, target_offsets, num_rows, dim);
+#endif
+}
+
+static inline bool offsets_equal_nonzero(const uint32_t* base_offsets, const uint32_t* target_offsets,
+                                         size_t num_rows) {
+#ifdef __AVX2__
+    return offsets_equal_nonzero_avx2(base_offsets, target_offsets, num_rows);
+#else
+    return offsets_equal_nonzero_scalar(base_offsets, target_offsets, num_rows);
+#endif
+}
+
+static inline float sum_squares_float(const float* data, size_t dim) {
+    float sum = 0.0f;
+#ifdef __AVX2__
+    __m256 sum_vec = _mm256_setzero_ps();
+    size_t j = 0;
+    for (; j + 7 < dim; j += 8) {
+        __m256 v = _mm256_loadu_ps(data + j);
+        sum_vec = _mm256_add_ps(sum_vec, _mm256_mul_ps(v, v));
+    }
+    sum += sum_m256(sum_vec);
+    for (; j < dim; ++j) {
+        sum += data[j] * data[j];
+    }
+#else
+    for (size_t j = 0; j < dim; ++j) {
+        sum += data[j] * data[j];
+    }
+#endif
+    return sum;
+}
+
+template <bool isNorm>
+static inline void vector_cosine_similarity(const float* base_vec, size_t dim, const float* column_data,
+                                            size_t num_rows, float* out) {
+    float base_sum = 0.0f;
+    float base_inv_norm = 0.0f;
+    if constexpr (!isNorm) {
+        base_sum = sum_squares_float(base_vec, dim);
+        if (base_sum == 0.0f) {
+            for (size_t i = 0; i < num_rows; ++i) {
+                out[i] = 0.0f;
+            }
+            return;
+        }
+#ifdef __AVX2__
+        base_inv_norm = fast_rsqrt_nr(base_sum);
+#else
+        base_inv_norm = 1.0f / std::sqrt(base_sum);
+#endif
+    }
+
+    for (size_t i = 0; i < num_rows; ++i) {
+        const float* target = column_data + i * dim;
+        float sum = 0.0f;
+        float target_sum = 0.0f;
+        size_t j = 0;
+#ifdef __AVX2__
+        __m256 sum_vec = _mm256_setzero_ps();
+        __m256 target_sum_vec = _mm256_setzero_ps();
+        for (; j + 7 < dim; j += 8) {
+            __m256 base_vec_data = _mm256_loadu_ps(base_vec + j);
+            __m256 target_vec_data = _mm256_loadu_ps(target + j);
+            __m256 mul_vec = _mm256_mul_ps(base_vec_data, target_vec_data);
+            sum_vec = _mm256_add_ps(sum_vec, mul_vec);
+            if constexpr (!isNorm) {
+                __m256 target_mul_vec = _mm256_mul_ps(target_vec_data, target_vec_data);
+                target_sum_vec = _mm256_add_ps(target_sum_vec, target_mul_vec);
+            }
+        }
+        sum += sum_m256(sum_vec);
+        if constexpr (!isNorm) {
+            target_sum += sum_m256(target_sum_vec);
+        }
+#endif
+        for (; j < dim; ++j) {
+            sum += base_vec[j] * target[j];
+            if constexpr (!isNorm) {
+                target_sum += target[j] * target[j];
+            }
+        }
+        if constexpr (isNorm) {
+            out[i] = sum;
+        } else {
+            if (target_sum == 0.0f) {
+                out[i] = 0.0f;
+            } else {
+#ifdef __AVX2__
+                float target_inv_norm = fast_rsqrt_nr(target_sum);
+                out[i] = sum * base_inv_norm * target_inv_norm;
+#else
+                out[i] = sum * base_inv_norm / std::sqrt(target_sum);
+#endif
+            }
+        }
+    }
+}
+
+template <bool isNorm>
+static inline void cosine_similarity_fixed_dim_float(const float* base_data, const float* target_data, size_t num_rows,
+                                                     size_t dim, float* out) {
+    for (size_t i = 0; i < num_rows; ++i) {
+        const float* base = base_data + i * dim;
+        const float* target = target_data + i * dim;
+        float sum = 0.0f;
+        float base_sum = 0.0f;
+        float target_sum = 0.0f;
+        size_t j = 0;
+#ifdef __AVX2__
+        __m256 sum_vec = _mm256_setzero_ps();
+        __m256 base_sum_vec = _mm256_setzero_ps();
+        __m256 target_sum_vec = _mm256_setzero_ps();
+        for (; j + 7 < dim; j += 8) {
+            __m256 base_data_vec = _mm256_loadu_ps(base + j);
+            __m256 target_data_vec = _mm256_loadu_ps(target + j);
+
+            __m256 mul_vec = _mm256_mul_ps(base_data_vec, target_data_vec);
+            sum_vec = _mm256_add_ps(sum_vec, mul_vec);
+
+            if constexpr (!isNorm) {
+                __m256 base_mul_vec = _mm256_mul_ps(base_data_vec, base_data_vec);
+                base_sum_vec = _mm256_add_ps(base_sum_vec, base_mul_vec);
+                __m256 target_mul_vec = _mm256_mul_ps(target_data_vec, target_data_vec);
+                target_sum_vec = _mm256_add_ps(target_sum_vec, target_mul_vec);
+            }
+        }
+        sum += sum_m256(sum_vec);
+        if constexpr (!isNorm) {
+            base_sum += sum_m256(base_sum_vec);
+            target_sum += sum_m256(target_sum_vec);
+        }
+#endif
+        for (; j < dim; ++j) {
+            sum += base[j] * target[j];
+            if constexpr (!isNorm) {
+                base_sum += base[j] * base[j];
+                target_sum += target[j] * target[j];
+            }
+        }
+        if constexpr (isNorm) {
+            out[i] = sum;
+        } else {
+            if (base_sum == 0.0f || target_sum == 0.0f) {
+                out[i] = 0.0f;
+            } else {
+                out[i] = sum / (std::sqrt(base_sum) * std::sqrt(target_sum));
+            }
+        }
+    }
+}
 
 template <LogicalType TYPE, bool isNorm>
 StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, const Columns& columns) {
@@ -1135,46 +1435,68 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
                 fmt::format("cosine_similarity does not support null values. {} array has null value.",
                             base->has_null() ? "base" : "target"));
     }
-    if (base->is_constant()) {
-        const auto* const_column = down_cast<const ConstColumn*>(base);
-        const_column->data_column()->as_mutable_raw_ptr()->assign(base->size(), 0);
-        base = const_column->data_column().get();
-    }
-    if (target->is_constant()) {
+
+    bool base_is_const = base->is_constant();
+    bool target_is_const = target->is_constant();
+
+    // If both are const, expand one side to N rows to reuse the single-const fast path.
+    // This avoids dereferencing size-1 offsets with target_size rows.
+    if (base_is_const && target_is_const) {
         const auto* const_column = down_cast<const ConstColumn*>(target);
-        const_column->data_column()->as_mutable_raw_ptr()->assign(target->size(), 0);
+        const_column->data_column()->as_mutable_raw_ptr()->assign(target_size, 0);
         target = const_column->data_column().get();
+        target_is_const = false;
     }
 
-    if (base->is_nullable()) {
+    // Helper: strip ConstColumn/NullableColumn wrappers to reach the underlying ArrayColumn.
+    // For const columns we intentionally do NOT call assign() to avoid copying dim*N floats.
+    // Instead we keep the original size-1 data_column and read its first-row pointer directly
+    // inside the const fast-paths below.
+    auto unwrap_to_array = [](const Column* col) -> const Column* {
+        if (col->is_constant()) {
+            col = down_cast<const ConstColumn*>(col)->data_column().get();
+        }
+        if (col->is_nullable()) {
+            col = down_cast<const NullableColumn*>(col)->data_column().get();
+        }
+        return col;
+    };
+
+    // For non-const columns we still need the full N-row view.
+    if (!base_is_const && base->is_nullable()) {
         base = down_cast<const NullableColumn*>(base)->data_column().get();
     }
-    if (target->is_nullable()) {
+    if (!target_is_const && target->is_nullable()) {
         target = down_cast<const NullableColumn*>(target)->data_column().get();
     }
 
     // check dimension equality.
-    const Column* base_flat = down_cast<const ArrayColumn*>(base)->elements_column().get();
-    const uint32_t* base_offset = down_cast<const ArrayColumn*>(base)->offsets().immutable_data().data();
-    size_t base_flat_size = base_flat->size();
+    // For const columns use the unwrapped size-1 ArrayColumn; for non-const use the N-row one.
+    const Column* base_arr_for_meta = base_is_const ? unwrap_to_array(columns[0].get()) : base;
+    const Column* target_arr_for_meta = target_is_const ? unwrap_to_array(columns[1].get()) : target;
 
-    const Column* target_flat = down_cast<const ArrayColumn*>(target)->elements_column().get();
-    size_t target_flat_size = target_flat->size();
-    const uint32_t* target_offset = down_cast<const ArrayColumn*>(target)->offsets().immutable_data().data();
+    const Column* base_flat_meta = down_cast<const ArrayColumn*>(base_arr_for_meta)->elements_column().get();
+    const uint32_t* base_offset_meta =
+            down_cast<const ArrayColumn*>(base_arr_for_meta)->offsets().immutable_data().data();
 
-    if (base_flat_size != target_flat_size) {
-        return Status::InvalidArgument("cosine_similarity requires equal length arrays");
-    }
+    const Column* target_flat_meta = down_cast<const ArrayColumn*>(target_arr_for_meta)->elements_column().get();
+    const uint32_t* target_offset_meta =
+            down_cast<const ArrayColumn*>(target_arr_for_meta)->offsets().immutable_data().data();
 
-    if (base_flat->has_null() || target_flat->has_null()) {
+    if (base_flat_meta->has_null() || target_flat_meta->has_null()) {
         return Status::InvalidArgument("cosine_similarity does not support null values");
     }
-    if (base_flat->is_nullable()) {
-        base_flat = down_cast<const NullableColumn*>(base_flat)->data_column().get();
+    if (base_flat_meta->is_nullable()) {
+        base_flat_meta = down_cast<const NullableColumn*>(base_flat_meta)->data_column().get();
     }
-    if (target_flat->is_nullable()) {
-        target_flat = down_cast<const NullableColumn*>(target_flat)->data_column().get();
+    if (target_flat_meta->is_nullable()) {
+        target_flat_meta = down_cast<const NullableColumn*>(target_flat_meta)->data_column().get();
     }
+
+    const Column* base_flat = base_flat_meta;
+    const uint32_t* base_offset = base_offset_meta;
+    const Column* target_flat = target_flat_meta;
+    const uint32_t* target_offset = target_offset_meta;
 
     using CppType = RunTimeCppType<TYPE>;
     using ColumnType = RunTimeColumnType<TYPE>;
@@ -1186,6 +1508,57 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
     MutableColumnPtr result = ColumnHelper::create_column(TypeDescriptor{TYPE}, false, false, target_size);
     ColumnType* data_result = down_cast<ColumnType*>(result.get());
     CppType* result_data = data_result->get_data().data();
+
+    if constexpr (std::is_same_v<CppType, float>) {
+        if (target_size == 0) {
+            return result;
+        }
+        // base is const (size-1), target has N rows.
+        // base_data_head points to the single base vector (dim floats, no copy needed).
+        if (base_is_const && !target_is_const) {
+            uint32_t dim = base_offset_meta[1] - base_offset_meta[0];
+            if (!offsets_equal_dim(target_offset, target_size, dim)) {
+                return Status::InvalidArgument(fmt::format(
+                        "cosine_similarity requires equal length arrays in each row. base array dimension size "
+                        "is {}, target array dimension size is {}.",
+                        dim, target_offset[1] - target_offset[0]));
+            }
+            const float* base_vec = reinterpret_cast<const float*>(base_data_head);
+            const float* target_data = reinterpret_cast<const float*>(target_data_head);
+            vector_cosine_similarity<isNorm>(base_vec, dim, target_data, target_size, result_data);
+            return result;
+        }
+        // target is const (size-1), base has N rows.
+        // target_data_head points to the single query vector (dim floats, no copy needed).
+        if (!base_is_const && target_is_const) {
+            uint32_t dim = target_offset_meta[1] - target_offset_meta[0];
+            if (!offsets_equal_dim(base_offset, target_size, dim)) {
+                return Status::InvalidArgument(fmt::format(
+                        "cosine_similarity requires equal length arrays in each row. base array dimension size "
+                        "is {}, target array dimension size is {}.",
+                        base_offset[1] - base_offset[0], dim));
+            }
+            const float* target_vec = reinterpret_cast<const float*>(target_data_head);
+            const float* base_data = reinterpret_cast<const float*>(base_data_head);
+            vector_cosine_similarity<isNorm>(target_vec, dim, base_data, target_size, result_data);
+            return result;
+        }
+        uint32_t dim = target_offset[1] - target_offset[0];
+        if (offsets_equal_dim_two(base_offset, target_offset, target_size, dim)) {
+            if (dim == 0) {
+                return Status::InvalidArgument("cosine_similarity requires non-empty arrays in each row");
+            }
+            cosine_similarity_fixed_dim_float<isNorm>(reinterpret_cast<const float*>(base_data_head),
+                                                      reinterpret_cast<const float*>(target_data_head), target_size,
+                                                      dim, result_data);
+            return result;
+        }
+        if (!offsets_equal_nonzero(base_offset, target_offset, target_size)) {
+            return Status::InvalidArgument(
+                    "cosine_similarity requires equal length arrays in each row. base array dimension size is "
+                    "inconsistent with target array dimension size");
+        }
+    }
 
     for (size_t i = 0; i < target_size; i++) {
         size_t t_dim_size = target_offset[i + 1] - target_offset[i];
@@ -1209,34 +1582,7 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
         CppType target_sum = 0;
         size_t dim_size = target_offset[i + 1] - target_offset[i];
         CppType result_value = 0;
-        size_t j = 0;
-#ifdef __AVX2__
-        if (std::is_same_v<CppType, float>) {
-            __m256 sum_vec = _mm256_setzero_ps();
-            __m256 base_sum_vec = _mm256_setzero_ps();
-            __m256 target_sum_vec = _mm256_setzero_ps();
-            for (; j + 7 < dim_size; j += 8) {
-                __m256 base_data_vec = _mm256_loadu_ps(base_data + j);
-                __m256 target_data_vec = _mm256_loadu_ps(target_data + j);
-
-                __m256 mul_vec = _mm256_mul_ps(base_data_vec, target_data_vec);
-                sum_vec = _mm256_add_ps(sum_vec, mul_vec);
-
-                if constexpr (!isNorm) {
-                    __m256 base_mul_vec = _mm256_mul_ps(base_data_vec, base_data_vec);
-                    base_sum_vec = _mm256_add_ps(base_sum_vec, base_mul_vec);
-                    __m256 target_mul_vec = _mm256_mul_ps(target_data_vec, target_data_vec);
-                    target_sum_vec = _mm256_add_ps(target_sum_vec, target_mul_vec);
-                }
-            }
-            sum += sum_m256(sum_vec);
-            if constexpr (!isNorm) {
-                base_sum += sum_m256(base_sum_vec);
-                target_sum += sum_m256(target_sum_vec);
-            }
-        }
-#endif
-        for (; j < dim_size; j++) {
+        for (size_t j = 0; j < dim_size; j++) {
             sum += base_data[j] * target_data[j];
             if constexpr (!isNorm) {
                 base_sum += base_data[j] * base_data[j];

@@ -39,6 +39,7 @@
 #include <utility>
 
 #include "base/coding.h"
+#include "common/config_rowset_fwd.h"
 #include "common/logging.h"
 #include "fs/fs.h"
 #include "storage/key_coder.h"
@@ -53,6 +54,8 @@
 #include "util/compression/block_compression.h"
 
 namespace starrocks {
+
+IndexedColumnWriterOptions::IndexedColumnWriterOptions() : index_page_size(config::data_page_size) {}
 
 IndexedColumnWriter::IndexedColumnWriter(const IndexedColumnWriterOptions& options, TypeInfoPtr typeinfo,
                                          WritableFile* wfile)

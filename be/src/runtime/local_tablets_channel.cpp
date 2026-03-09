@@ -28,6 +28,7 @@
 #include "base/string/faststring.h"
 #include "column/chunk.h"
 #include "common/brpc_helper.h"
+#include "common/config_ingest_fwd.h"
 #include "common/statusor.h"
 #include "exec/tablet_info.h"
 #include "gen_cpp/internal_service.pb.h"
@@ -70,6 +71,7 @@ LocalTabletsChannel::LocalTabletsChannel(LoadChannel* load_channel, const Tablet
           _load_channel(load_channel),
           _key(key),
           _mem_tracker(mem_tracker),
+          _max_sliding_window_size(config::max_load_dop * 3),
           _mem_pool(std::make_unique<MemPool>()) {
     static std::once_flag once_flag;
     std::call_once(once_flag, [] {
@@ -650,7 +652,7 @@ void LocalTabletsChannel::_abort_replica_tablets(
         auto closure = new DisposableClosure<PTabletWriterCancelResult, Context>(
                 {request.id(), _txn_id, endpoint.host(), node_abort_tablet_id_list_str});
         closure->cntl.set_timeout_ms(request.timeout_ms());
-        SET_IGNORE_OVERCROWDED(closure->cntl, load);
+        set_ignore_overcrowded_for_load(closure->cntl);
         closure->addSuccessHandler([](const Context& ctx, const PTabletWriterCancelResult& result) {
             VLOG(2) << "Success to cancel secondary replicas, txn_id: " << ctx.txn_id
                     << ", load_id: " << print_id(ctx.load_id) << ", replica_node: " << ctx.host
@@ -1327,7 +1329,7 @@ void SecondaryReplicasWaiter::_send_replica_status_request(int unfinished_tablet
     _replica_status_closure = new ReusableClosure<PLoadReplicaStatusResult>();
     _replica_status_closure->ref();
     _replica_status_closure->cntl.set_timeout_ms(config::load_diagnose_send_rpc_timeout_ms);
-    SET_IGNORE_OVERCROWDED(_replica_status_closure->cntl, load);
+    set_ignore_overcrowded_for_load(_replica_status_closure->cntl);
     PLoadReplicaStatusRequest request;
     request.mutable_load_id()->set_hi(_load_id.hi());
     request.mutable_load_id()->set_lo(_load_id.lo());
@@ -1436,7 +1438,7 @@ void SecondaryReplicasWaiter::_try_diagnose_stack_strace_on_primary(int unfinish
     }
     auto closure = new ReusableClosure<PLoadDiagnoseResult>();
     closure->cntl.set_timeout_ms(config::load_diagnose_send_rpc_timeout_ms);
-    SET_IGNORE_OVERCROWDED(closure->cntl, load);
+    set_ignore_overcrowded_for_load(closure->cntl);
     PLoadDiagnoseRequest request;
     request.mutable_id()->set_hi(_load_id.hi());
     request.mutable_id()->set_lo(_load_id.lo());

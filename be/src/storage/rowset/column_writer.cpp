@@ -39,9 +39,12 @@
 
 #include "base/simd/simd.h"
 #include "column/nullable_column.h"
+#include "common/config_rowset_fwd.h"
+#include "common/config_scan_io_fwd.h"
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "storage/index/inverted/inverted_index_option.h"
+
 #ifndef __APPLE__
 #include "storage/index/inverted/inverted_plugin_factory.h"
 #endif
@@ -65,6 +68,8 @@
 #include "util/compression/block_compression.h"
 
 namespace starrocks {
+
+ColumnWriterOptions::ColumnWriterOptions() : data_page_size(config::data_page_size) {}
 
 #define INDEX_ADD_VALUES(index, data, size) \
     do {                                    \
@@ -587,6 +592,7 @@ Status ScalarColumnWriter::write_inverted_index() {
 Status ScalarColumnWriter::_write_data_page(Page* page) {
     PagePointer pp;
     std::vector<Slice> compressed_body;
+    compressed_body.reserve(page->data.size());
     for (auto& data : page->data) {
         compressed_body.push_back(data.slice());
     }

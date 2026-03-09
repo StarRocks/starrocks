@@ -21,6 +21,8 @@
 #include <random>
 
 #include "base/testutil/assert.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_ingest_fwd.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/split.h"
 #include "runtime/descriptor_helper.h"

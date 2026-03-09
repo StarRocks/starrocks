@@ -20,6 +20,10 @@
 
 #include "base/testutil/assert.h"
 #include "column/datum_tuple.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "fs/fs_memory.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"

@@ -24,7 +24,9 @@
 #include "agent/master_info.h"
 #include "column/chunk.h"
 #include "column/column.h"
-#include "common/config.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "fs/bundle_file.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
@@ -926,6 +928,7 @@ Status DeltaWriterImpl::fill_auto_increment_id(Chunk& chunk) {
     ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(_tablet_id));
     // 1. get pk column from chunk
     vector<uint32_t> pk_columns;
+    pk_columns.reserve(_write_schema->num_key_columns());
     for (size_t i = 0; i < _write_schema->num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }

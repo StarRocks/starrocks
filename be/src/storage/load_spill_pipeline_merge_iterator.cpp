@@ -14,6 +14,7 @@
 
 #include "storage/load_spill_pipeline_merge_iterator.h"
 
+#include "common/config_ingest_fwd.h"
 #include "exec/spill/spiller.h"
 #include "exec/spill/spiller_factory.h"
 #include "runtime/runtime_state.h"

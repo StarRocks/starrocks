@@ -372,12 +372,14 @@ IF(ENABLE_MULTI_DYNAMIC_LIBS)
     set_property(TARGET join_hash_map_inst_objs PROPERTY POSITION_INDEPENDENT_CODE ON)
 ENDIF()
 
-target_precompile_headers(join_hash_map_inst_objs
-    PRIVATE
-    join/join_hash_map.h
-    join/join_hash_map.hpp
-    join/join_hash_map_method.hpp
-)
+if (WITH_PCH)
+    target_precompile_headers(join_hash_map_inst_objs
+        PRIVATE
+        join/join_hash_map.h
+        join/join_hash_map.hpp
+        join/join_hash_map_method.hpp
+    )
+endif()
 
 ADD_BE_LIB(Exec
     ${EXEC_FILES}

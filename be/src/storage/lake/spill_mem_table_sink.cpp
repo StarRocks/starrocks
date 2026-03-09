@@ -14,6 +14,8 @@
 
 #include "storage/lake/spill_mem_table_sink.h"
 
+#include "common/config_ingest_fwd.h"
+#include "common/config_primary_key_fwd.h"
 #include "common/runtime_profile.h"
 #include "exec/spill/options.h"
 #include "exec/spill/serde.h"

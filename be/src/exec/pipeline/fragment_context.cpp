@@ -23,6 +23,7 @@
 
 #include "base/time/time.h"
 #include "base/uid_util.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/logging.h"
 #include "common/thread/threadpool.h"
 #include "exec/data_sink.h"

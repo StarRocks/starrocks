@@ -42,7 +42,7 @@
 #include "base/testutil/sync_point.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
-#include "common/config.h"
+#include "common/config_diagnostic_fwd.h"
 #include "gutil/strings/join.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"

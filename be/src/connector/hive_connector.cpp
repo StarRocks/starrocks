@@ -16,7 +16,7 @@
 
 #include <filesystem>
 
-#include "common/config.h"
+#include "common/config_scan_io_fwd.h"
 #include "connector/hive_chunk_sink.h"
 #include "exec/hdfs_scanner/cache_select_scanner.h"
 #include "exec/hdfs_scanner/hdfs_scanner_json.h"
@@ -31,6 +31,7 @@
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
+#include "fs/fs_factory.h"
 #include "runtime/descriptors_ext.h"
 #include "runtime/global_dict/fragment_dict_state.h"
 #include "storage/chunk_helper.h"
@@ -728,7 +729,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     auto fsOptions =
             FSOptions(hdfs_scan_node.__isset.cloud_configuration ? &hdfs_scan_node.cloud_configuration : nullptr);
 
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(native_file_path, fsOptions));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateUniqueFromString(native_file_path, fsOptions));
     HdfsScannerParams scanner_params;
     RETURN_IF_ERROR(_init_global_dicts(&scanner_params));
     scanner_params.runtime_filter_collector = _runtime_filters;

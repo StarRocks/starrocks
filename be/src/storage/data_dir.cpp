@@ -43,9 +43,10 @@
 #include "base/system/errno.h"
 #include "base/time/monotime.h"
 #include "base/utility/defer_op.h"
-#include "common/config.h"
+#include "common/config_storage_fwd.h"
 #include "common/system/backend_options.h"
 #include "fs/fs.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
@@ -83,7 +84,7 @@ DataDir::~DataDir() {
 }
 
 Status DataDir::init(bool read_only) {
-    ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_path));
+    ASSIGN_OR_RETURN(_fs, FileSystemFactory::CreateSharedFromString(_path));
     RETURN_IF_ERROR(_fs->path_exists(_path));
     std::string align_tag_path = _path + ALIGN_TAG_PREFIX;
     if (access(align_tag_path.c_str(), F_OK) == 0) {

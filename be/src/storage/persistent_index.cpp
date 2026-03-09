@@ -29,8 +29,12 @@
 #include "base/string/faststring.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
+#include "common/config_cache_fwd.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "common/util/debug_util.h"
 #include "fs/fs.h"
+#include "fs/fs_factory.h"
 #include "gutil/strings/escaping.h"
 #include "gutil/strings/substitute.h"
 #include "io/io_profiler.h"
@@ -618,7 +622,7 @@ Status ImmutableIndexWriter::init(const string& idx_file_path, const EditVersion
     _version = version;
     _idx_file_path = idx_file_path;
     _idx_file_path_tmp = _idx_file_path + ".tmp";
-    ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_idx_file_path_tmp));
+    ASSIGN_OR_RETURN(_fs, FileSystemFactory::CreateSharedFromString(_idx_file_path_tmp));
     WritableFileOptions wblock_opts{.sync_on_close = sync_on_close, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     ASSIGN_OR_RETURN(_idx_wb, _fs->new_writable_file(wblock_opts, _idx_file_path_tmp));
 
@@ -2129,7 +2133,7 @@ static Status checksum_of_file(RandomAccessFile* file, uint64_t offset, uint32_t
 
 Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVersion& version, const CommitType& type) {
     std::shared_ptr<FileSystem> fs;
-    ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(_path));
+    ASSIGN_OR_RETURN(fs, FileSystemFactory::CreateSharedFromString(_path));
     switch (type) {
     case kFlush: {
         // create a new empty _l0 file because all data in _l0 has write into _l1 files
@@ -2252,7 +2256,7 @@ Status ShardByLengthMutableIndex::load(const MutableIndexMetaPB& meta) {
     }
     std::string index_file_name = get_l0_index_file_name(_path, start_version);
     std::shared_ptr<FileSystem> fs;
-    ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(_path));
+    ASSIGN_OR_RETURN(fs, FileSystemFactory::CreateSharedFromString(_path));
     ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(index_file_name));
     phmap::BinaryInputArchive ar(index_file_name.data());
     if (snapshot_size > 0) {
@@ -2385,7 +2389,7 @@ Status ShardByLengthMutableIndex::create_index_file(std::string& path) {
         std::string msg = strings::Substitute("l0 index file already exist: $0", _index_file->filename());
         return Status::InternalError(msg);
     }
-    ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_path));
+    ASSIGN_OR_RETURN(_fs, FileSystemFactory::CreateSharedFromString(_path));
     WritableFileOptions wblock_opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     ASSIGN_OR_RETURN(_index_file, _fs->new_writable_file(wblock_opts, path));
     return Status::OK();
@@ -3213,6 +3217,7 @@ StatusOr<std::unique_ptr<ImmutableIndex>> ImmutableIndex::load(std::unique_ptr<R
     size_t nshard_bf = meta.shard_bf_off_size();
     DCHECK(nshard_bf == 0 || nshard_bf == nshard + 1);
     std::vector<size_t> bf_off;
+    bf_off.reserve(nshard_bf);
     for (size_t i = 0; i < nshard_bf; i++) {
         bf_off.emplace_back(meta.shard_bf_off(i));
     }
@@ -3295,7 +3300,7 @@ Status PersistentIndex::create(size_t key_size, const EditVersion& version) {
         return st.status();
     }
     _l0 = std::move(st).value();
-    ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_path));
+    ASSIGN_OR_RETURN(_fs, FileSystemFactory::CreateSharedFromString(_path));
     return Status::OK();
 }
 
@@ -3308,7 +3313,7 @@ Status PersistentIndex::load(const PersistentIndexMetaPB& index_meta) {
         return st.status();
     }
     _l0 = std::move(st).value();
-    ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_path));
+    ASSIGN_OR_RETURN(_fs, FileSystemFactory::CreateSharedFromString(_path));
     RETURN_IF_ERROR(_load(index_meta));
     // delete expired _l0 file and _l1 file
     const MutableIndexMetaPB& l0_meta = index_meta.l0_meta();
@@ -5104,7 +5109,7 @@ Status PersistentIndex::major_compaction(DataDir* data_dir, int64_t tablet_id, s
         return Status::OK();
     }
     // 1. load current l2 vec
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_path));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(_path));
     std::vector<EditVersion> l2_versions;
     std::vector<std::unique_ptr<ImmutableIndex>> l2_vec;
     DCHECK(prev_index_meta.l2_versions_size() == prev_index_meta.l2_version_merged_size());
@@ -5359,7 +5364,7 @@ Status PersistentIndex::_load_by_loader(TabletLoader* loader) {
         return st.status();
     }
     _l0 = std::move(st).value();
-    ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_path));
+    ASSIGN_OR_RETURN(_fs, FileSystemFactory::CreateSharedFromString(_path));
     // set _dump_snapshot to true
     // In this case, only do flush or dump snapshot, set _dump_snapshot to avoid append wal
     _dump_snapshot = true;

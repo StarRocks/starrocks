@@ -55,7 +55,7 @@ TEST_F(StringFunctionTrimTest, trimTest) {
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
     for (int k = 0; k < 4096; ++k) {
-        ASSERT_EQ("abcd" + std::to_string(k), v->get_data()[k].to_string());
+        ASSERT_EQ("abcd" + std::to_string(k), v->get_slice(k).to_string());
     }
     ASSERT_OK(StringFunctions::trim_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
 }
@@ -81,7 +81,7 @@ TEST_F(StringFunctionTrimTest, trimCharTest) {
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
     for (int k = 0; k < 4096; ++k) {
-        ASSERT_EQ("cd" + std::to_string(k), v->get_data()[k].to_string());
+        ASSERT_EQ("cd" + std::to_string(k), v->get_slice(k).to_string());
     }
 
     ASSERT_OK(StringFunctions::trim_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
@@ -101,7 +101,7 @@ TEST_F(StringFunctionTrimTest, trimCharTest) {
             ASSERT_OK(StringFunctions::trim_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
             auto maybe_result = StringFunctions::trim(ctx.get(), columns);
             ASSERT_OK(maybe_result.status());
-            Slice result = *ColumnHelper::get_cpp_data<TYPE_VARCHAR>(maybe_result.value());
+            Slice result = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(maybe_result.value())->get_slice(0);
             ASSERT_EQ("abc🐱🐷", std::string(result));
             ASSERT_OK(StringFunctions::trim_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
         }
@@ -182,7 +182,7 @@ TEST_F(StringFunctionTrimTest, ltrimTest) {
 
     for (int k = 0; k < 4096; ++k) {
         std::string spaces(k, ' ');
-        ASSERT_EQ("abcd" + std::to_string(k) + spaces, v->get_data()[k].to_string());
+        ASSERT_EQ("abcd" + std::to_string(k) + spaces, v->get_slice(k).to_string());
     }
     ASSERT_OK(StringFunctions::trim_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
 }
@@ -207,7 +207,7 @@ TEST_F(StringFunctionTrimTest, rtrimTest) {
 
     for (int k = 0; k < 4096; ++k) {
         std::string spaces(k, ' ');
-        ASSERT_EQ(spaces + "abcd" + std::to_string(k), v->get_data()[k].to_string());
+        ASSERT_EQ(spaces + "abcd" + std::to_string(k), v->get_slice(k).to_string());
     }
     ASSERT_OK(StringFunctions::trim_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
 }

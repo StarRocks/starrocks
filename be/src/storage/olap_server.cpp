@@ -44,7 +44,10 @@
 
 #include "base/time/time.h"
 #include "cache/datacache.h"
-#include "common/config.h"
+#include "common/config_cache_fwd.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "common/status.h"
 #include "common/thread/thread.h"
 #include "fs/fs_util.h"
@@ -116,6 +119,7 @@ Status StorageEngine::start_bg_threads() {
 
     // convert store map to vector
     std::vector<DataDir*> data_dirs;
+    data_dirs.reserve(_store_map.size());
     for (auto& tmp_store : _store_map) {
         data_dirs.push_back(tmp_store.second.get());
     }

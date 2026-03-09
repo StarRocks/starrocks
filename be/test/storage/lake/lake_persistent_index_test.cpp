@@ -20,6 +20,7 @@
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/type_traits.h"
+#include "common/config_primary_key_fwd.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/tablet_range_helper.h"
@@ -801,6 +802,105 @@ TEST_F(LakePersistentIndexTest, test_tablet_range_infinite_bounds) {
 
     ASSERT_TRUE(sst_seek_range.seek_key.empty());
     ASSERT_TRUE(sst_seek_range.stop_key.empty());
+}
+
+// Helper: build a RowsetMetadataPB with given id, per-segment row counts (segment_metas populated),
+// and an optional del file count.
+static RowsetMetadataPB make_rowset(uint32_t id, const std::vector<int64_t>& seg_rows, int del_file_cnt = 0) {
+    RowsetMetadataPB rowset;
+    rowset.set_id(id);
+    int64_t total_rows = 0;
+    for (int64_t r : seg_rows) {
+        rowset.add_segments("seg.dat");
+        auto* meta = rowset.add_segment_metas();
+        meta->set_num_rows(r);
+        total_rows += r;
+    }
+    rowset.set_num_rows(total_rows);
+    for (int i = 0; i < del_file_cnt; ++i) {
+        rowset.add_del_files();
+    }
+    return rowset;
+}
+
+// Helper: build a RowsetMetadataPB without segment_metas (proportional fallback path).
+static RowsetMetadataPB make_rowset_no_meta(uint32_t id, int seg_cnt, int64_t total_rows) {
+    RowsetMetadataPB rowset;
+    rowset.set_id(id);
+    for (int i = 0; i < seg_cnt; ++i) {
+        rowset.add_segments("seg.dat");
+    }
+    rowset.set_num_rows(total_rows);
+    return rowset;
+}
+
+TEST_F(LakePersistentIndexTest, test_need_rebuild_counts) {
+    TabletMetadataPB metadata;
+    PersistentIndexSstableMetaPB sstable_meta;
+
+    // Case 1: no rowsets, no SSTs → {0, 0}
+    {
+        auto [file_cnt, row_cnt] = LakePersistentIndex::need_rebuild_counts(metadata, sstable_meta);
+        EXPECT_EQ(file_cnt, 0);
+        EXPECT_EQ(row_cnt, 0);
+    }
+
+    // Case 2: three rowsets, no SSTs → all segments need rebuild, exact row count via segment_metas.
+    // Rowset layout: id=0 (100 rows), id=1 (200 rows), id=2 (150 rows), each with 1 segment.
+    {
+        metadata.Clear();
+        sstable_meta.Clear();
+        *metadata.add_rowsets() = make_rowset(0, {100});
+        *metadata.add_rowsets() = make_rowset(1, {200});
+        *metadata.add_rowsets() = make_rowset(2, {150});
+
+        auto [file_cnt, row_cnt] = LakePersistentIndex::need_rebuild_counts(metadata, sstable_meta);
+        EXPECT_EQ(file_cnt, 3u);
+        EXPECT_EQ(row_cnt, 450);
+    }
+
+    // Case 3: SST covers rowsets 0 and 1 (max_rss_rowid has rss_id=2 in high 32 bits).
+    // Only rowset 2's segment (rssid=2) needs rebuild.
+    {
+        metadata.Clear();
+        sstable_meta.Clear();
+        *metadata.add_rowsets() = make_rowset(0, {100});
+        *metadata.add_rowsets() = make_rowset(1, {200});
+        *metadata.add_rowsets() = make_rowset(2, {150});
+        auto* sst = sstable_meta.add_sstables();
+        sst->set_max_rss_rowid(static_cast<int64_t>(2LL << 32)); // rebuild_rss_id = 2
+
+        auto [file_cnt, row_cnt] = LakePersistentIndex::need_rebuild_counts(metadata, sstable_meta);
+        EXPECT_EQ(file_cnt, 1u);
+        EXPECT_EQ(row_cnt, 150);
+    }
+
+    // Case 4: proportional fallback when segment_metas is absent.
+    // Rowset id=0 has 2 segments and 200 total rows; SST covers segment 0 (rssid=0),
+    // segment 1 (rssid=1) needs rebuild → proportional estimate: 200 * 1 / 2 = 100.
+    {
+        metadata.Clear();
+        sstable_meta.Clear();
+        *metadata.add_rowsets() = make_rowset_no_meta(0, 2, 200);
+        auto* sst = sstable_meta.add_sstables();
+        sst->set_max_rss_rowid(static_cast<int64_t>(1LL << 32)); // rebuild_rss_id = 1
+
+        auto [file_cnt, row_cnt] = LakePersistentIndex::need_rebuild_counts(metadata, sstable_meta);
+        EXPECT_EQ(file_cnt, 1u);
+        EXPECT_EQ(row_cnt, 100);
+    }
+
+    // Case 5: del files are counted in file_cnt but not in row_cnt.
+    // Rowset id=0: 1 segment (100 rows) + 2 del files.
+    {
+        metadata.Clear();
+        sstable_meta.Clear();
+        *metadata.add_rowsets() = make_rowset(0, {100}, /*del_file_cnt=*/2);
+
+        auto [file_cnt, row_cnt] = LakePersistentIndex::need_rebuild_counts(metadata, sstable_meta);
+        EXPECT_EQ(file_cnt, 3u); // 1 segment + 2 del files
+        EXPECT_EQ(row_cnt, 100);
+    }
 }
 
 } // namespace starrocks::lake

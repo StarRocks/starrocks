@@ -133,6 +133,7 @@ import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.DeleteFile;
+import org.apache.iceberg.FileContent;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.MetricsModes;
 import org.apache.iceberg.NullOrder;
@@ -150,13 +151,18 @@ import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.hive.HiveCatalog;
 import org.apache.iceberg.hive.HiveTableOperations;
+import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.types.Types;
+import org.apache.iceberg.util.TableScanUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -2983,5 +2989,78 @@ public class IcebergMetadataTest extends TableTestBase {
         // Verify a new snapshot was created after metadata delete
         org.apache.iceberg.Snapshot latestSnapshot = mockedNativeTableB.currentSnapshot();
         Assertions.assertNotNull(latestSnapshot, "Latest snapshot should exist after metadata delete");
+    }
+
+    @Test
+    public void testSplitFileScanTaskCoalescesPositionDeleteTasks() throws Exception {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+
+        FileScanTask task = Mockito.mock(FileScanTask.class);
+        DeleteFile deleteFile = Mockito.mock(DeleteFile.class);
+        Mockito.when(deleteFile.content()).thenReturn(FileContent.POSITION_DELETES);
+        Mockito.when(task.deletes()).thenReturn(List.of(deleteFile));
+        Mockito.when(task.start()).thenReturn(0L);
+        Mockito.when(task.length()).thenReturn(180L);
+
+        FileScanTask splitTask1 = Mockito.mock(FileScanTask.class);
+        Mockito.when(splitTask1.start()).thenReturn(0L);
+        Mockito.when(splitTask1.length()).thenReturn(64L);
+
+        FileScanTask splitTask2 = Mockito.mock(FileScanTask.class);
+        Mockito.when(splitTask2.start()).thenReturn(64L);
+        Mockito.when(splitTask2.length()).thenReturn(64L);
+
+        FileScanTask splitTask3 = Mockito.mock(FileScanTask.class);
+        Mockito.when(splitTask3.start()).thenReturn(128L);
+        Mockito.when(splitTask3.length()).thenReturn(52L);
+
+        Mockito.when(task.split(128L)).thenReturn(List.of(splitTask1, splitTask2, splitTask3));
+
+        Method splitMethod = IcebergMetadata.class.getDeclaredMethod("splitFileScanTask",
+                FileScanTask.class, long.class);
+        splitMethod.setAccessible(true);
+
+        CloseableIterable<FileScanTask> iterable =
+                (CloseableIterable<FileScanTask>) splitMethod.invoke(metadata, task, 128L);
+        List<FileScanTask> actualTasks = Lists.newArrayList(iterable);
+
+        Assertions.assertEquals(2, actualTasks.size());
+        Assertions.assertEquals(0L, actualTasks.get(0).start());
+        Assertions.assertEquals(128L, actualTasks.get(0).length());
+        Assertions.assertEquals(128L, actualTasks.get(1).start());
+        Assertions.assertEquals(52L, actualTasks.get(1).length());
+        Assertions.assertSame(task.deletes(), actualTasks.get(0).deletes());
+        Assertions.assertSame(task.deletes(), actualTasks.get(1).deletes());
+    }
+
+    @Test
+    public void testSplitFileScanTaskUsesTableScanUtilForNonPositionDeleteTasks() throws Exception {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+
+        FileScanTask task = Mockito.mock(FileScanTask.class);
+        DeleteFile deleteFile = Mockito.mock(DeleteFile.class);
+        Mockito.when(deleteFile.content()).thenReturn(FileContent.EQUALITY_DELETES);
+        Mockito.when(task.deletes()).thenReturn(List.of(deleteFile));
+
+        CloseableIterable<FileScanTask> expectedIterable = CloseableIterable.withNoopClose(List.of(task));
+        Method splitMethod = IcebergMetadata.class.getDeclaredMethod("splitFileScanTask",
+                FileScanTask.class, long.class);
+        splitMethod.setAccessible(true);
+
+        try (MockedStatic<TableScanUtil> tableScanUtilMock = Mockito.mockStatic(TableScanUtil.class)) {
+            tableScanUtilMock.when(() -> TableScanUtil.splitFiles(Mockito.any(), Mockito.eq(128L)))
+                    .thenReturn(expectedIterable);
+
+            CloseableIterable<FileScanTask> actualIterable =
+                    (CloseableIterable<FileScanTask>) splitMethod.invoke(metadata, task, 128L);
+
+            Assertions.assertSame(expectedIterable, actualIterable);
+            tableScanUtilMock.verify(() -> TableScanUtil.splitFiles(Mockito.any(), Mockito.eq(128L)),
+                    Mockito.times(1));
+        }
     }
 }

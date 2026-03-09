@@ -210,6 +210,7 @@ jobs:
       src_filter: ${{ steps.path-filter.outputs.be }}
       test_filter: ${{ steps.path-filter.outputs.ut }}
       thirdparty_filter: ${{ steps.path-filter.outputs.thirdparty }}
+      clang_tidy_filter: ${{ steps.path-filter.outputs.clang_tidy }}
       only_test: ${{ needs.basic-checker.outputs.ONLY_BE_TEST }}
       pre_commit: ${{ needs.basic-checker.outputs.PRE_COMMIT }}
       pre_commit_conclusion: ${{ needs.basic-checker.outputs.PRE_COMMIT_CONCLUSION }}
@@ -217,7 +218,6 @@ jobs:
       pre_ut_conclusion: ${{ steps.check_pre_commit_conclusion.outputs.pre_ut_conclusion }}
       pre_clang_conclusion: ${{ steps.check_pre_commit_conclusion.outputs.pre_clang_conclusion }}
       pre_thirdparty_conclusion: ${{ steps.check_pre_commit_conclusion.outputs.pre_thirdparty_conclusion }}
-      pre_format_conclusion: ${{ steps.check_pre_commit_conclusion.outputs.pre_format_conclusion }}
       be_change: ${{ needs.basic-checker.outputs.BE_CHANGE }}
     steps:
       - uses: dorny/paths-filter@v3
@@ -236,6 +236,19 @@ jobs:
             thirdparty:
               - 'thirdparty/**'
               - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
+            clang_tidy:
+              - 'be/**/*.c'
+              - 'be/**/*.cc'
+              - 'be/**/*.cpp'
+              - 'be/**/*.cxx'
+              - 'be/**/*.h'
+              - 'be/**/*.hh'
+              - 'be/**/*.hpp'
+              - 'be/**/*.hxx'
+              - 'be/**/CMakeLists.txt'
+              - 'be/cmake_modules/**'
+              - 'gensrc/**'
+              - '!be/test/**'
 
       - name: Prepare info
         run: |
@@ -243,6 +256,7 @@ jobs:
           echo ${{ steps.path-filter.outputs.be }} > src_filter.txt
           echo ${{ steps.path-filter.outputs.ut }} > test_filter.txt
           echo ${{ steps.path-filter.outputs.thirdparty }} > thirdparty_filter.txt
+          echo ${{ steps.path-filter.outputs.clang_tidy }} > clang_tidy_filter.txt
 
       - name: Upload the BE Filter Info
         uses: actions/upload-artifact@v6
@@ -259,79 +273,14 @@ jobs:
           pre_commit_job_status_dict='${{ env.PRE_COMMIT_JOB_STATUS_DICT }}'
           pre_ut_conclusion=$(echo $pre_commit_job_status_dict | jq -r '."BE UT"')
           pre_clang_conclusion=$(echo $pre_commit_job_status_dict | jq -r '."Clang-Tidy"')
-          pre_format_conclusion=$(echo $pre_commit_job_status_dict | jq -r '."Clang-Format"')
           pre_thirdparty_conclusion=$(echo $pre_commit_job_status_dict | jq -r '."Thirdparty Info"')
           echo "pre_ut_conclusion=${pre_ut_conclusion}" >> $GITHUB_OUTPUT
           echo "pre_clang_conclusion=${pre_clang_conclusion}" >> $GITHUB_OUTPUT
           echo "pre_thirdparty_conclusion=${pre_thirdparty_conclusion}" >> $GITHUB_OUTPUT
-          echo "pre_format_conclusion=${pre_format_conclusion}" >> $GITHUB_OUTPUT
-
-  clang-format:
-    runs-on: [self-hosted, light]
-    needs: be-checker
-    name: Clang-Format
-    env:
-      PR_NUMBER: ${{ github.event.number }}
-    outputs:
-      pre_commit: ${{ needs.be-checker.outputs.pre_commit }}
-      pre_commit_conclusion: ${{ needs.be-checker.outputs.pre_commit_conclusion }}
-      pre_ut_conclusion: ${{ needs.be-checker.outputs.pre_ut_conclusion }}
-      pre_clang_conclusion: ${{ needs.be-checker.outputs.pre_clang_conclusion }}
-      pre_thirdparty_conclusion: ${{ needs.be-checker.outputs.pre_thirdparty_conclusion }}
-      pre_format_conclusion: ${{ needs.be-checker.outputs.pre_format_conclusion }}
-      be_change: ${{ needs.be-checker.outputs.be_change }}
-      only_test: ${{ needs.be-checker.outputs.only_test }}
-    if: needs.be-checker.outputs.src_filter == 'true' || needs.be-checker.outputs.test_filter == 'true'
-    steps:
-      - name: clean
-        run: |
-          rm -rf ${{ github.workspace }}
-          mkdir -p ${{ github.workspace }}
-
-      - name: Checkout Code
-        id: checkout_code
-        if: needs.be-checker.outputs.be_change == 'true' || needs.be-checker.outputs.pre_format_conclusion != 'success'
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: BRANCH INFO
-        id: branch
-        if: steps.checkout_code.outcome == 'success'
-        run: |
-          echo ${{github.base_ref}}
-          echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
-
-      - name: Checkout PR
-        id: checkout_pr
-        if: steps.checkout_code.outcome == 'success'
-        run: |
-          BRANCH=${{steps.branch.outputs.branch}}
-          git config --global user.name "wanpengfei-git";
-          git config --global user.email "wanpengfei91@163.com";
-          git checkout $BRANCH;
-          git pull;
-          BRANCH_NAME="${BRANCH}-${PR_NUMBER}";
-          git fetch origin pull/${PR_NUMBER}/head:${BRANCH_NAME};
-          git checkout $BRANCH_NAME;
-          git checkout -b merge_pr;
-          git merge --squash --no-edit ${BRANCH} || (echo "::error::Merge conflict, please check." && exit -1);
-
-      - name: Run Clang-Format
-        id: run_clang_format
-        if: steps.checkout_pr.outcome == 'success'
-        run: |
-          export PATH=/var/lib/llvm/bin:$PATH
-          bash build-support/check-format.sh
-
-      - name: Clean ENV
-        if: always()
-        run: |
-          rm -rf ${{ github.workspace }}/*
 
   thirdparty-update:
     runs-on: [self-hosted, normal]
-    needs: [clang-format]
+    needs: [be-checker]
     name: Thirdparty Update
     continue-on-error: true
     strategy:
@@ -342,10 +291,10 @@ jobs:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
       REPO: ${{ github.repository }}
-      PRE_COMMIT: ${{ needs.clang-format.outputs.pre_commit }}
-      PRE_COMMIT_CONCLUSION: ${{ needs.clang-format.outputs.pre_commit_conclusion }}
-      ONLY_TEST: ${{ needs.clang-format.outputs.only_test }}
-      BE_CHANGE: ${{ needs.clang-format.outputs.be_change }}
+      PRE_COMMIT: ${{ needs.be-checker.outputs.pre_commit }}
+      PRE_COMMIT_CONCLUSION: ${{ needs.be-checker.outputs.pre_commit_conclusion }}
+      ONLY_TEST: ${{ needs.be-checker.outputs.only_test }}
+      BE_CHANGE: ${{ needs.be-checker.outputs.be_change }}
 
     steps:
       - name: clean
@@ -371,8 +320,7 @@ jobs:
       - name: Update Image (${{ matrix.linux }})
         id: update-image
         if: >
-          steps.parsing-path-filter.outputs.thirdparty_filter == 'true' && 
-          (needs.clang-format.outputs.only_test != 'true' || needs.clang-format.outputs.pre_thirdparty_conclusion != 'success')
+          steps.parsing-path-filter.outputs.thirdparty_filter == 'true'
         env:
           linux_distro: ${{ matrix.linux }}
         run: |
@@ -476,7 +424,7 @@ jobs:
   clang-tidy:
     runs-on: [self-hosted, normal]
     needs: [be-checker, thirdparty-info]
-    if: success() && needs.be-checker.outputs.src_filter == 'true' && (needs.be-checker.outputs.only_test != 'true' || needs.be-checker.outputs.pre_clang_conclusion != 'success')
+    if: success() && needs.be-checker.outputs.clang_tidy_filter == 'true' && (needs.be-checker.outputs.only_test != 'true' || needs.be-checker.outputs.pre_clang_conclusion != 'success')
     timeout-minutes: 90
     name: Clang-Tidy
     env:
@@ -506,7 +454,7 @@ jobs:
               export image_cache_id=${IMAGE_CACHE_ID}
               export image_tag=$BRANCH-$PR_NUMBER
           fi
-          ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --be --clang-tidy
+          ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --be --clang-tidy --clang-tidy-mode changed
 
       - name: clean ECI
         if: always() && steps.run_clang_tidy.outputs.ECI_ID != ''
@@ -746,7 +694,7 @@ jobs:
 
   build:
     runs-on: [self-hosted, normal]
-    needs: [basic-checker, test-checker, thirdparty-info, fe-codestyle-check, clang-format]
+    needs: [basic-checker, test-checker, thirdparty-info, fe-codestyle-check]
     name: BUILD
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -771,7 +719,6 @@ jobs:
       always() && 
       needs.thirdparty-info.result != 'failure' && 
       needs.fe-codestyle-check.result != 'failure' && 
-      needs.clang-format.result != 'failure' &&
       (needs.thirdparty-info.result == 'success' || needs.fe-codestyle-check.result == 'success' || needs.test-checker.outputs.test_change == 'true') &&
       (needs.thirdparty-info.result != 'cancelled' && needs.fe-codestyle-check.result != 'cancelled' && needs.test-checker.outputs.test_change != 'cancelled')
     steps:

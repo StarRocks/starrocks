@@ -38,7 +38,7 @@
 
 #include <cstdlib>
 
-#include "common/config.h"
+#include "common/config_memory_allocator_fwd.h"
 #include "common/logging.h"
 #include "runtime/mem_tracker.h"
 

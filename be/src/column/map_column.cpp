@@ -30,6 +30,23 @@
 #include "types/datum.h"
 
 namespace starrocks {
+static std::vector<uint32_t> _build_sorted_key_indices(const Column* keys, size_t offset, size_t map_size) {
+    std::vector<std::pair<DatumKey, uint32_t>> keyed_indices;
+    keyed_indices.reserve(map_size);
+    for (uint32_t i = 0; i < map_size; ++i) {
+        keyed_indices.emplace_back(keys->get(offset + i).convert2DatumKey(), i);
+    }
+    std::sort(keyed_indices.begin(), keyed_indices.end(),
+              [](const auto& lhs, const auto& rhs) { return lhs.first < rhs.first; });
+
+    std::vector<uint32_t> sorted_indices;
+    sorted_indices.reserve(map_size);
+    for (const auto& kv : keyed_indices) {
+        sorted_indices.emplace_back(kv.second);
+    }
+    return sorted_indices;
+}
+
 void MapColumn::check_or_die() const {
     const auto offsets = _offsets->immutable_data();
     CHECK_EQ(offsets.back(), _keys->size());
@@ -95,10 +112,27 @@ void MapColumn::resize(size_t n) {
 }
 
 void MapColumn::assign(size_t n, size_t idx) {
-    DCHECK_LE(idx, this->size()) << "Range error when assign MapColumn.";
+    DCHECK_LT(idx, this->size()) << "Range error when assign MapColumn.";
     auto desc = this->clone_empty();
-    auto datum = get(idx); // just reference
-    desc->append_value_multiple_times(&datum, n);
+
+    const auto& offsets_data = _offsets->immutable_data();
+    const uint32_t offset = offsets_data[idx];
+    const uint32_t map_size = offsets_data[idx + 1] - offset;
+    const auto sorted_indices = _build_sorted_key_indices(_keys.get(), offset, map_size);
+
+    auto* desc_map = down_cast<MapColumn*>(desc.get());
+    auto* desc_keys = desc_map->_keys.get();
+    auto* desc_values = desc_map->_values.get();
+    auto* desc_offsets = desc_map->_offsets.get();
+    for (size_t c = 0; c < n; ++c) {
+        for (uint32_t sorted_idx : sorted_indices) {
+            const uint32_t element_idx = offset + sorted_idx;
+            desc_keys->append(*_keys, element_idx, 1);
+            desc_values->append(*_values, element_idx, 1);
+        }
+        desc_offsets->append(desc_offsets->get_data().back() + map_size);
+    }
+
     swap_column(*desc);
     desc->reset_column();
 }

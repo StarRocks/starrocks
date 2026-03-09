@@ -1507,7 +1507,9 @@ public class OlapTable extends Table {
     }
 
     public List<Partition> getNonEmptyPartitions() {
-        return idToPartition.values().stream().filter(Partition::hasData).collect(Collectors.toList());
+        return idToPartition.values().stream().filter(
+                        p -> !p.getName().startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX))
+                .filter(Partition::hasData).collect(Collectors.toList());
     }
 
     public int getNumberOfPartitions() {
@@ -1725,7 +1727,7 @@ public class OlapTable extends Table {
         }
 
         if (partitionInfo instanceof ExpressionRangePartitionInfo) {
-            ((ExpressionRangePartitionInfo) partitionInfo).updateSlotRef(nameToColumn);
+            ((ExpressionRangePartitionInfo) partitionInfo).updateSlotRef(idToColumn);
         } else if (partitionInfo instanceof ListPartitionInfo) {
             ((ListPartitionInfo) partitionInfo).updateLiteralExprValues(idToColumn);
         }
@@ -3000,6 +3002,15 @@ public class OlapTable extends Table {
         if (getCompactionStrategy() != TCompactionStrategy.DEFAULT) {
             properties.put(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY,
                     TableProperty.compactionStrategyToString(getCompactionStrategy()));
+        }
+
+        // lake_compaction_max_parallel (only for cloud native table, only show when not default)
+        if (isCloudNativeTable()) {
+            int lakeCompactionMaxParallel = getLakeCompactionMaxParallel();
+            if (lakeCompactionMaxParallel != Config.lake_compaction_max_parallel_default) {
+                properties.put(PropertyAnalyzer.PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL,
+                        String.valueOf(lakeCompactionMaxParallel));
+            }
         }
 
         Map<String, String> tableProperties = tableProperty != null ? tableProperty.getProperties() : Maps.newLinkedHashMap();

@@ -16,6 +16,8 @@
 
 #include "base/debug/trace.h"
 #include "base/string/string_util.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_rowset_fwd.h"
 #include "fs/key_cache.h"
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/lake/tablet_manager.h"

@@ -15,6 +15,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cstdint>
 #include <mutex>
 #include <utility>
 
@@ -22,6 +23,7 @@
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
+#include "common/config_scan_io_fwd.h"
 #include "common/logging.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"

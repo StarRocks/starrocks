@@ -25,6 +25,7 @@
 #include "exprs/expr_factory.h"
 #include "formats/csv/converter.h"
 #include "fs/fs_broker.h"
+#include "fs/fs_factory.h"
 #include "io/formatted_output_stream.h"
 #include "runtime/runtime_state.h"
 
@@ -95,7 +96,7 @@ Status ExportSinkIOBuffer::_open_file_writer() {
     }
     case TFileType::FILE_BROKER: {
         if (_t_export_sink.__isset.use_broker && !_t_export_sink.use_broker) {
-            ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(file_path, FSOptions(&_t_export_sink)));
+            ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateUniqueFromString(file_path, FSOptions(&_t_export_sink)));
             ASSIGN_OR_RETURN(output_file, fs->new_writable_file(options, file_path));
         } else {
             if (_t_export_sink.broker_addresses.empty()) {

@@ -38,7 +38,7 @@ class DeltaColumnGroupLoader;
 // Params for MetaReader
 // mainly include tablet
 struct MetaReaderParams {
-    MetaReaderParams() = default;
+    MetaReaderParams();
 
     int64_t tablet_id;
     Version version = Version(-1, 0);
@@ -49,7 +49,7 @@ struct MetaReaderParams {
     const DescriptorTbl* desc_tbl = nullptr;
     int32_t low_card_threshold;
 
-    int chunk_size = config::vector_chunk_size;
+    int chunk_size;
 
     void check_validation() const { LOG_IF(FATAL, version.first == -1) << "version is not set. tablet=" << tablet_id; }
 };

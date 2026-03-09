@@ -14,6 +14,9 @@
 
 #pragma once
 
+#include <string>
+#include <vector>
+
 #include "formats/parquet/column_reader.h"
 #include "scalar_column_reader.h"
 #include "stored_column_reader.h"
@@ -249,22 +252,74 @@ private:
     const std::unique_ptr<ColumnReader>* _def_rep_level_child_reader = nullptr;
 };
 
+enum class ShreddedTypedKind : uint8_t { NONE = 0, SCALAR = 1, ARRAY = 2 };
+
+// ShreddedFieldNode holds both schema-time reader setup and batch-local column data.
+//
+// Schema-time fields (set once at construction, never modified):
+//   value_reader, typed_value_reader, typed_value_read_type, typed_kind, children
+//
+// Batch-local fields (reset per read_range call):
+//   value_column, typed_value_column
+//
+// IMPORTANT – vector resize safety:
+//   ScalarColumnReader inside value_reader stores a raw `const TypeDescriptor*` pointing
+//   to the heap-allocated object owned by typed_value_read_type (unique_ptr). Moving a
+//   ShreddedFieldNode transfers the unique_ptr but the heap object address is unchanged,
+//   so pointers remain valid after moves. However, the _shredded_fields vector must NOT
+//   be resized after any reader is constructed. Fill the vector fully before calling
+//   any reader construction that captures these addresses.
+struct ShreddedFieldNode {
+    std::string name;
+    std::string full_path;
+    std::unique_ptr<ScalarColumnReader> value_reader;
+    std::unique_ptr<ColumnReader> typed_value_reader;
+    // Heap-allocated to keep a stable address for reader-side pointer capture (ScalarColumnReader holds const TypeDescriptor*).
+    std::unique_ptr<TypeDescriptor> typed_value_read_type;
+    ShreddedTypedKind typed_kind = ShreddedTypedKind::NONE;
+    std::vector<ShreddedFieldNode> children;
+
+    // batch-local columns filled during read_range, reset each call.
+    ColumnPtr value_column;
+    ColumnPtr typed_value_column;
+};
+
+enum class VariantScalarMaterializeMode : uint8_t {
+    KEEP_SCALAR = 0,
+    DEMOTE_VARIANT = 1,
+    DROP = 2,
+};
+
+// Decide how to materialize a scalar shredded binding for the current batch.
+// Exposed for unit tests and reused by VariantColumnReader internal binding selection.
+VariantScalarMaterializeMode decide_variant_scalar_materialize_mode(const ShreddedFieldNode* node, size_t num_rows);
+
 // VariantColumnReader handles the reading of Parquet columns that represent variant types.
 // It uses two ScalarColumnReader instances: one for reading metadata (type information)
 // and another for reading the actual variant values.
+//
+// Thread-safety: NOT thread-safe. ShreddedFieldNode::value_column and
+// ShreddedFieldNode::typed_value_column are mutated per read_range() call. Concurrent
+// calls to read_range() on the same instance are not allowed.
 class VariantColumnReader final : public ColumnReader {
 public:
-    // Constructor that accepts pre-built ScalarColumnReader objects
+    // Constructor that accepts pre-built ScalarColumnReader objects and optional shredded paths.
+    // shredded_paths: exact leaf or array-boundary paths to expose as typed_columns.
+    // If empty, no typed_columns optimization is applied (overlay reconstruction still works).
     explicit VariantColumnReader(const ParquetField* parquet_field,
                                  std::unique_ptr<ScalarColumnReader>&& metadata_reader,
                                  std::unique_ptr<ScalarColumnReader>&& value_reader,
-                                 ColumnReaderPtr&& typed_value_reader, TypeDescriptor typed_value_type)
+                                 std::vector<ShreddedFieldNode>&& shredded_fields,
+                                 std::vector<std::string> shredded_paths = {},
+                                 ColumnReaderPtr&& root_typed_value_reader = nullptr,
+                                 std::unique_ptr<TypeDescriptor> root_typed_value_type = nullptr)
             : ColumnReader(parquet_field),
               _metadata_reader(std::move(metadata_reader)),
               _value_reader(std::move(value_reader)),
-              _typed_value_reader(std::move(typed_value_reader)),
-              _typed_value_type(std::move(typed_value_type)),
-              _has_typed_value(_typed_value_reader != nullptr) {
+              _shredded_fields(std::move(shredded_fields)),
+              _shredded_paths(std::move(shredded_paths)),
+              _root_typed_value_reader(std::move(root_typed_value_reader)),
+              _root_typed_value_type(std::move(root_typed_value_type)) {
         // Both readers must be non-null for VariantColumnReader to function correctly
         DCHECK(_metadata_reader != nullptr) << "VariantColumnReader: metadata reader cannot be null";
         DCHECK(_value_reader != nullptr) << "VariantColumnReader: value reader cannot be null";
@@ -272,73 +327,31 @@ public:
 
     ~VariantColumnReader() override = default;
 
-    Status prepare() override {
-        if (_metadata_reader == nullptr || _value_reader == nullptr) {
-            return Status::InternalError("Both metadata and value readers are required");
-        }
-        RETURN_IF_ERROR(_metadata_reader->prepare());
-        RETURN_IF_ERROR(_value_reader->prepare());
-        if (_typed_value_reader != nullptr) {
-            RETURN_IF_ERROR(_typed_value_reader->prepare());
-        }
-        return Status::OK();
-    }
+    Status prepare() override;
 
     Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override;
 
-    void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
-        if (_metadata_reader != nullptr) {
-            _metadata_reader->get_levels(def_levels, rep_levels, num_levels);
-        }
-        if (_value_reader != nullptr) {
-            _value_reader->get_levels(def_levels, rep_levels, num_levels);
-        }
-    }
+    void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override;
 
-    void set_need_parse_levels(bool need_parse_levels) override {
-        if (_metadata_reader != nullptr) {
-            _metadata_reader->set_need_parse_levels(need_parse_levels);
-        }
-        if (_value_reader != nullptr) {
-            _value_reader->set_need_parse_levels(need_parse_levels);
-        }
-        if (_typed_value_reader != nullptr) {
-            _typed_value_reader->set_need_parse_levels(need_parse_levels);
-        }
-    }
+    void set_need_parse_levels(bool need_parse_levels) override;
 
     void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
-                                 ColumnIOTypeFlags types, bool active) override {
-        if (_metadata_reader != nullptr) {
-            _metadata_reader->collect_column_io_range(ranges, end_offset, types, active);
-        }
-        if (_value_reader != nullptr) {
-            _value_reader->collect_column_io_range(ranges, end_offset, types, active);
-        }
-        if (_typed_value_reader != nullptr) {
-            _typed_value_reader->collect_column_io_range(ranges, end_offset, types, active);
-        }
-    }
+                                 ColumnIOTypeFlags types, bool active) override;
 
-    void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override {
-        if (_metadata_reader != nullptr) {
-            _metadata_reader->select_offset_index(range, rg_first_row);
-        }
-        if (_value_reader != nullptr) {
-            _value_reader->select_offset_index(range, rg_first_row);
-        }
-        if (_typed_value_reader != nullptr) {
-            _typed_value_reader->select_offset_index(range, rg_first_row);
-        }
-    }
+    void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override;
 
 private:
     std::unique_ptr<ScalarColumnReader> _metadata_reader;
     std::unique_ptr<ScalarColumnReader> _value_reader;
-    ColumnReaderPtr _typed_value_reader;
-    TypeDescriptor _typed_value_type;
-    bool _has_typed_value{false};
-    VariantEncodingContext _ctx;
+    std::vector<ShreddedFieldNode> _shredded_fields;
+    std::vector<std::string> _shredded_paths;
+    // Cached auto-discovered paths when _shredded_paths is empty (request-all-paths mode).
+    // _shredded_fields is fixed after construction, so this only needs to be computed once.
+    mutable std::vector<std::string> _cached_auto_paths;
+    mutable bool _auto_paths_cached = false;
+    ColumnReaderPtr _root_typed_value_reader;
+    std::unique_ptr<TypeDescriptor> _root_typed_value_type;
+    ColumnPtr _root_typed_value_column;
 };
 
 } // namespace starrocks::parquet

@@ -570,8 +570,22 @@ struct DecimalNonDecimalCast<overflow_mode, DecimalType, VariantType, DecimalLTG
 
         const auto variant_column = ColumnHelper::cast_to_raw<VariantType>(column);
         for (auto i = 0; i < num_rows; ++i) {
-            const VariantRowValue* variant = variant_column->get_object(i);
-            const VariantValue& value = variant->get_value();
+            const size_t variant_row = column->is_constant() ? 0 : i;
+            VariantRowRef row_ref;
+            VariantRowValue variant_buffer;
+            if (!variant_column->try_get_row_ref(variant_row, &row_ref)) {
+                const VariantRowValue* variant = variant_column->get_row_value(variant_row, &variant_buffer);
+                if (variant == nullptr) {
+                    if constexpr (check_overflow<overflow_mode>) {
+                        has_null = true;
+                        nulls[i] = DATUM_NULL;
+                        continue;
+                    }
+                    throw std::runtime_error("Failed to materialize variant row during cast to decimal");
+                }
+                row_ref = variant->as_ref();
+            }
+            const VariantValue& value = row_ref.get_value();
 
             if constexpr (check_overflow<overflow_mode>) {
                 if (value.type() == VariantType::NULL_TYPE) {

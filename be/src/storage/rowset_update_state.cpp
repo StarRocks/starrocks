@@ -19,7 +19,9 @@
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "column/binary_column.h"
+#include "common/config_primary_key_fwd.h"
 #include "common/tracer.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "gutil/strings/substitute.h"
@@ -73,7 +75,7 @@ Status RowsetUpdateState::_load_deletes(Rowset* rowset, uint32_t idx, Column* pk
         return Status::OK();
     }
 
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(rowset->rowset_path()));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(rowset->rowset_path()));
     auto path = Rowset::segment_del_file_path(rowset->rowset_path(), rowset->rowset_id(), idx);
     RandomAccessFileOptions opts;
     auto& encryption_meta = rowset->rowset_meta()->get_delfile_encryption_meta(idx);
@@ -108,6 +110,7 @@ Status RowsetUpdateState::_load_upserts(Rowset* rowset, uint32_t idx, Column* pk
     OlapReaderStatistics stats;
     const auto& schema = rowset->schema();
     vector<uint32_t> pk_columns;
+    pk_columns.reserve(schema->num_key_columns());
     for (size_t i = 0; i < schema->num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }
@@ -164,6 +167,7 @@ Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
     _tablet_id = tablet->tablet_id();
     const auto& schema = rowset->schema();
     vector<uint32_t> pk_columns;
+    pk_columns.reserve(schema->num_key_columns());
     for (size_t i = 0; i < schema->num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }
@@ -198,6 +202,7 @@ Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
 Status RowsetUpdateState::load_deletes(Rowset* rowset, uint32_t idx) {
     const auto& schema = rowset->schema();
     vector<uint32_t> pk_columns;
+    pk_columns.reserve(schema->num_key_columns());
     for (size_t i = 0; i < schema->num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }
@@ -211,6 +216,7 @@ Status RowsetUpdateState::load_deletes(Rowset* rowset, uint32_t idx) {
 Status RowsetUpdateState::load_upserts(Rowset* rowset, uint32_t upsert_id) {
     const auto& schema = rowset->schema();
     vector<uint32_t> pk_columns;
+    pk_columns.reserve(schema->num_key_columns());
     for (size_t i = 0; i < schema->num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }

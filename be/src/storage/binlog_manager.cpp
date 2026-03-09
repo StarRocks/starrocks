@@ -14,6 +14,7 @@
 
 #include "storage/binlog_manager.h"
 
+#include "fs/fs_factory.h"
 #include "storage/rowset/rowset.h"
 #include "storage/tablet.h"
 
@@ -464,7 +465,7 @@ bool BinlogManager::_check_alive_binlog_files(int64_t current_second, int64_t bi
 }
 
 void BinlogManager::delete_unused_binlog() {
-    StatusOr<std::shared_ptr<FileSystem>> status_or = FileSystem::CreateSharedFromString(_path);
+    StatusOr<std::shared_ptr<FileSystem>> status_or = FileSystemFactory::CreateSharedFromString(_path);
     if (!status_or.ok()) {
         LOG(ERROR) << "Failed to delete unused binlog, tablet: " << _tablet_id << ", " << status_or.status();
         return;

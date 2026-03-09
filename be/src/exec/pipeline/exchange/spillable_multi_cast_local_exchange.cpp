@@ -19,6 +19,7 @@
 #include "base/container/raw_container.h"
 #include "base/utility/defer_op.h"
 #include "common/compiler_util.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
 #include "exec/pipeline/exchange/mem_limited_chunk_queue.h"

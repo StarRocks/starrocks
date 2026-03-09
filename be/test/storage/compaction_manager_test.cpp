@@ -24,6 +24,8 @@
 #include <random>
 
 #include "base/testutil/assert.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "fs/fs_util.h"
 #include "runtime/mem_pool.h"
 #include "storage/compaction.h"

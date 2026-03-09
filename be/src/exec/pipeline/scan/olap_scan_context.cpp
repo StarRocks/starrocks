@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/scan/olap_scan_context.h"
 
+#include "common/config_scan_io_fwd.h"
 #include "exec/olap_scan_node.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/fragment_context.h"

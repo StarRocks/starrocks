@@ -37,6 +37,7 @@
 #include "base/container/raw_container.h"
 #include "base/phmap/phmap.h"
 #include "base/utility/defer_op.h"
+#include "common/config_expr_fwd.h"
 #include "gutil/strings/substitute.h"
 #include "types/bitmap_value_detail.h"
 

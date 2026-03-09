@@ -21,7 +21,8 @@
 #include <random>
 #include <utility>
 
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/config_network_fwd.h"
 #include "exec/pipeline/exchange/shuffler.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
 #include "exprs/expr.h"
@@ -663,6 +664,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chu
 
 void ExchangeSinkOperator::_calc_hash_values_and_bucket_ids() {
     std::vector<const Column*> partitions_columns;
+    partitions_columns.reserve(_partitions_columns.size());
     for (size_t i = 0; i < _partitions_columns.size(); i++) {
         partitions_columns.emplace_back(_partitions_columns[i].get());
     }

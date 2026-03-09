@@ -16,6 +16,10 @@
 
 #include <utility>
 
+#include "common/config_cache_fwd.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "common/tracer.h"
 #include "io/io_profiler.h"
 #include "runtime/current_thread.h"
@@ -886,6 +890,7 @@ const char* DeltaWriter::replica_state_name(ReplicaState state) {
 Status DeltaWriter::_fill_auto_increment_id(Chunk& chunk) {
     // 1. get pk column from chunk
     vector<uint32_t> pk_columns;
+    pk_columns.reserve(_tablet_schema->num_key_columns());
     for (size_t i = 0; i < _tablet_schema->num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }

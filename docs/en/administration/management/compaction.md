@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+keywords: ['compaction']
 ---
 
 # Compaction for Shared-data Clusters

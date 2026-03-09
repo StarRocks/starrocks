@@ -2864,6 +2864,33 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The longest duration the metadata can be retained after a database, table, or partition is dropped. If this duration expires, the data will be deleted and cannot be recovered through the [RECOVER](../../sql-reference/sql-statements/backup_restore/RECOVER.md) command.
 - Introduced in: -
 
+##### `catalog_recycle_bin_erase_min_latency_ms`
+
+- Default: 600000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The minimum delay in milliseconds before the metadata is erased when a database, table, or partition is dropped. This avoids the erase log being written ahead of the drop log.
+- Introduced in: -
+
+##### `catalog_recycle_bin_erase_max_operations_per_cycle`
+
+- Default: 500
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of erase operations per cycle for actually deleting databases, tables, or partitions from the recycle bin. The erase operation holds a lock, so one batch should not be too large.
+- Introduced in: -
+
+##### `catalog_recycle_bin_erase_fail_retry_interval_ms`
+
+- Default: 60000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The retry interval in milliseconds when an erase operation in the recycle bin fails.
+- Introduced in: -
+
 ##### `check_consistency_default_timeout_second`
 
 - Default: 600
@@ -3603,6 +3630,14 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: The number of recent successful Compaction task records to keep in the memory of the Leader FE node in a shared-data cluster. You can view recent successful Compaction task records using the `SHOW PROC '/compactions'` command. Note that the Compaction history is stored in the FE process memory, and it will be lost if the FE process is restarted.
 - Introduced in: v3.1.0
+
+##### `lake_compaction_max_parallel_default`
+
+- Default: 3
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Default max parallel compaction subtasks per tablet when `lake_compaction_max_parallel` is not specified in table properties. `0` means disable parallel compaction. This config is used as the default value for the table property `lake_compaction_max_parallel`.
 
 ##### `lake_compaction_max_tasks`
 

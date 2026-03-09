@@ -18,6 +18,8 @@
 
 #include <memory>
 
+#include "common/config_exec_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "exprs/expr_factory.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"

@@ -18,6 +18,7 @@
 #include "base/concurrency/countdown_latch.h"
 #include "base/testutil/assert.h"
 #include "base/utility/scoped_cleanup.h"
+#include "common/config_compaction_fwd.h"
 #include "storage/lake/compaction_task_context.h"
 #include "storage/lake/test_util.h"
 

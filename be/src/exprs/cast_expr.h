@@ -22,12 +22,12 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/type_traits.h"
+#include "column/variant_path_parser.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
 #include "jsonpath.h"
 #include "types/type_descriptor.h"
-#include "variant_path_parser.h"
 
 namespace starrocks {
 
