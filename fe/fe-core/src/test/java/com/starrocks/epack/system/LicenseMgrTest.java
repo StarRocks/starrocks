@@ -32,6 +32,7 @@ import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 public class LicenseMgrTest {
@@ -296,6 +297,43 @@ public class LicenseMgrTest {
         // Should have no license info entries after free trial
         Assertions.assertEquals(0, licenseInfos.size(), 
                 "Should have no license info entries after free trial period");
+    }
+
+    @Test
+    public void testGetLicenseExpireDays_WithFreeTrial() {
+        NodeMgr mockNodeMgr = Mockito.mock(NodeMgr.class);
+        Mockito.when(mockNodeMgr.getTotalCpuCores()).thenReturn(4L);
+
+        long buildTime = 1_000_000_000_000L;
+        long currentTime = buildTime + FREE_TRIAL_EXPIRE_MS / 2;
+        Clock fixedClock = Clock.fixed(Instant.ofEpochMilli(currentTime), ZoneOffset.UTC);
+
+        LicenseMgr licenseMgr = new LicenseMgr(mockNodeMgr);
+        licenseMgr.setClock(fixedClock);
+        licenseMgr.applyInitSystemInfo(new SystemInfo(SYSTEM_ID, buildTime));
+
+        long expectedDays = TimeUnit.MILLISECONDS.toDays(buildTime + FREE_TRIAL_EXPIRE_MS - currentTime);
+        Assertions.assertEquals(expectedDays, licenseMgr.getLicenseExpireDays());
+    }
+
+    @Test
+    public void testGetLicenseExpireDays_WithValidLicensesUsesLatestExpire() throws Exception {
+        NodeMgr mockNodeMgr = Mockito.mock(NodeMgr.class);
+        Mockito.when(mockNodeMgr.getTotalCpuCores()).thenReturn(4L);
+
+        LicenseMgr licenseMgr = new LicenseMgr(Clock.systemDefaultZone(), mockNodeMgr, LICENSE_ENCRYPTED_KEY_FOR_TEST);
+        LicenseInfo info1 = licenseMgr.verifyLicense(LICENSE1);
+        LicenseInfo info2 = licenseMgr.verifyLicense(LICENSE2);
+
+        long currentTime = info1.getExpire() - TimeUnit.DAYS.toMillis(1);
+        long buildTime = currentTime - FREE_TRIAL_EXPIRE_MS - 1000L;
+        licenseMgr.setClock(Clock.fixed(Instant.ofEpochMilli(currentTime), ZoneOffset.UTC));
+        licenseMgr.applyInitSystemInfo(new SystemInfo(info1.getSystemID(), buildTime));
+        licenseMgr.licenseList.add(LICENSE1);
+        licenseMgr.licenseList.add(LICENSE2);
+
+        long expectedDays = TimeUnit.MILLISECONDS.toDays(info2.getExpire() - currentTime);
+        Assertions.assertEquals(expectedDays, licenseMgr.getLicenseExpireDays());
     }
 
     @Test

@@ -617,6 +617,12 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 - タイプ: Instantaneous
 - 説明: セーフモードが有効かどうかを示します。有効な値: `0` (無効) と `1` (有効)。セーフモードが有効になると、クラスタはロードリクエストを受け付けなくなります。
 
+### starrocks_fe_license_expire_days
+
+- 単位: Days
+- タイプ: Instantaneous
+- 説明: 現在有効な license が期限切れになるまでの残り日数を整数日で示します。複数の有効な license が存在する場合は、最も遅い有効期限が使用されます。free trial 期間中は、残り試用日数を返します。有効な license がなく、free trial も終了している場合は `0` を返します。
+
 ### starrocks_fe_unfinished_backup_job
 
 - 単位: Count
