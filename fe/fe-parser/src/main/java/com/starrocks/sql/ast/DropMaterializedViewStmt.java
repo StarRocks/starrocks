@@ -30,6 +30,7 @@ import com.starrocks.sql.parser.NodePosition;
 public class DropMaterializedViewStmt extends DdlStmt {
 
     private final boolean ifExists;
+    /** True when FORCE is specified; used only for sync MVs. */
     private final boolean forceDrop;
     private TableRef tableRef;
 
