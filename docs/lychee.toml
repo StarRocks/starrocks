@@ -101,5 +101,5 @@ exclude_all_private = true
 # exclude_loopback = false
 
 # Exclude all mail addresses from checking
-exclude_mail = true
+include_mail = false
 
