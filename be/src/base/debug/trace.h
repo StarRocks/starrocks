@@ -127,6 +127,8 @@ struct TraceEntry;
 class Trace : public RefCountedThreadSafe<Trace> {
 public:
     Trace() = default;
+    Trace(const Trace&) = delete;
+    const Trace& operator=(const Trace&) = delete;
 
     // Logs a message into the trace buffer.
     //
@@ -223,9 +225,6 @@ private:
     TraceMetrics metrics_;
 
     uint32_t trace_level_ = 0;
-
-    Trace(const Trace&) = delete;
-    const Trace& operator=(const Trace&) = delete;
 };
 
 // Adopt a Trace object into the current thread for the duration
@@ -249,13 +248,12 @@ public:
         Trace::threadlocal_trace_ = old_trace_;
         DFAKE_SCOPED_LOCK_THREAD_LOCKED(ctor_dtor_);
     }
+    ScopedAdoptTrace(const ScopedAdoptTrace&) = delete;
+    const ScopedAdoptTrace& operator=(const ScopedAdoptTrace&) = delete;
 
 private:
     DFAKE_MUTEX(ctor_dtor_);
     Trace* old_trace_;
-
-    ScopedAdoptTrace(const ScopedAdoptTrace&) = delete;
-    const ScopedAdoptTrace& operator=(const ScopedAdoptTrace&) = delete;
 };
 
 // Implementation for TRACE_COUNTER_SCOPE_LATENCY_US(...) macro above.
@@ -264,12 +262,12 @@ public:
     explicit ScopedTraceLatencyCounter(const char* counter) : counter_(counter), start_time_(GetCurrentTimeMicros()) {}
 
     ~ScopedTraceLatencyCounter() { TRACE_COUNTER_INCREMENT(counter_, GetCurrentTimeMicros() - start_time_); }
+    ScopedTraceLatencyCounter(const ScopedTraceLatencyCounter&) = delete;
+    const ScopedTraceLatencyCounter& operator=(const ScopedTraceLatencyCounter&) = delete;
 
 private:
     const char* const counter_;
     MicrosecondsInt64 start_time_;
-    ScopedTraceLatencyCounter(const ScopedTraceLatencyCounter&) = delete;
-    const ScopedTraceLatencyCounter& operator=(const ScopedTraceLatencyCounter&) = delete;
 };
 
 } // namespace starrocks

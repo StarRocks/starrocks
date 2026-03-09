@@ -100,6 +100,8 @@ class RowsetUpdateState {
 public:
     RowsetUpdateState();
     ~RowsetUpdateState();
+    RowsetUpdateState(const RowsetUpdateState&) = delete;
+    const RowsetUpdateState& operator=(const RowsetUpdateState&) = delete;
 
     Status load(Tablet* tablet, Rowset* rowset);
 
@@ -189,9 +191,6 @@ private:
 
     std::vector<AutoIncrementPartialUpdateState> _auto_increment_partial_update_states;
     std::map<string, string> _column_to_expr_value;
-
-    RowsetUpdateState(const RowsetUpdateState&) = delete;
-    const RowsetUpdateState& operator=(const RowsetUpdateState&) = delete;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const RowsetUpdateState& o) {

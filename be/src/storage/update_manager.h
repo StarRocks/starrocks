@@ -68,6 +68,9 @@ private:
 // async apply thread pool.
 class UpdateManager {
 public:
+    UpdateManager(const UpdateManager&) = delete;
+    const UpdateManager& operator=(const UpdateManager&) = delete;
+
     UpdateManager(MemTracker* mem_tracker);
     ~UpdateManager();
 
@@ -191,9 +194,6 @@ private:
     std::unique_ptr<PersistentIndexLoadExecutor> _pindex_load_executor;
 
     bool _keep_pindex_bf = true;
-
-    UpdateManager(const UpdateManager&) = delete;
-    const UpdateManager& operator=(const UpdateManager&) = delete;
 };
 
 } // namespace starrocks

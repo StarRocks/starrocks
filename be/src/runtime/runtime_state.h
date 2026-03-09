@@ -93,6 +93,7 @@ class RuntimeState {
 public:
     // for ut only
     RuntimeState();
+    RuntimeState(const RuntimeState&) = delete;
     // for ut only
     RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
                  const TQueryGlobals& query_globals, ExecEnv* exec_env);
@@ -658,9 +659,6 @@ private:
 
     std::mutex _sink_commit_infos_lock;
     std::vector<TSinkCommitInfo> _sink_commit_infos;
-
-    // prohibit copies
-    RuntimeState(const RuntimeState&) = delete;
 
     RuntimeFilterPort* _runtime_filter_port = nullptr;
 

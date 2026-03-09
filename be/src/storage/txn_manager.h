@@ -91,6 +91,9 @@ struct TabletTxnInfo {
 // txn manager is used to manage mapping between tablet and txns
 class TxnManager {
 public:
+    TxnManager(const TxnManager&) = delete;
+    const TxnManager& operator=(const TxnManager&) = delete;
+
     TxnManager(int32_t txn_map_shard_size, int32_t txn_shard_size, uint32_t store_num);
 
     ~TxnManager() = default;
@@ -213,9 +216,6 @@ private:
 
     // Dynamic thread pool used to concurrently flush WAL to disk
     std::unique_ptr<ThreadPool> _flush_thread_pool;
-
-    TxnManager(const TxnManager&) = delete;
-    const TxnManager& operator=(const TxnManager&) = delete;
 }; // TxnManager
 
 inline std::shared_mutex& TxnManager::_get_txn_map_lock(TTransactionId transactionId) {
