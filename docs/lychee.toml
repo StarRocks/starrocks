@@ -100,5 +100,5 @@ exclude_all_private = true
 # # Exclude loopback IP address range and localhost from checking
 # exclude_loopback = false
 
-# Exclude all mail addresses from checking (don't include mailto links)
-include_mail = false
+# Exclude all mail addresses from checking
+exclude_mail = true
