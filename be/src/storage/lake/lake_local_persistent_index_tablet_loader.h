@@ -15,6 +15,7 @@
 #pragma once
 
 #include <string>
+#include <utility>
 
 #include "column/schema.h"
 #include "storage/edit_version.h"
@@ -34,11 +35,10 @@ class LakePrimaryIndex;
 
 class LakeLocalPersistentIndexTabletLoader : public TabletLoader {
 public:
-    LakeLocalPersistentIndexTabletLoader(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
-                                         int64_t base_version, const MetaFileBuilder* builder,
-                                         LakeLocalPersistentIndex* index)
+    LakeLocalPersistentIndexTabletLoader(TabletManager* tablet_mgr, TabletMetadataPtr metadata, int64_t base_version,
+                                         const MetaFileBuilder* builder, LakeLocalPersistentIndex* index)
             : _tablet_mgr(tablet_mgr),
-              _metadata(metadata),
+              _metadata(std::move(std::move(metadata))),
               _base_version(base_version),
               _builder(builder),
               _index(index) {}

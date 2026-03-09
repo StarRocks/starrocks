@@ -17,6 +17,7 @@
 #include <fmt/format.h>
 
 #include <map>
+#include <utility>
 
 #include "column/chunk.h"
 #include "common/status.h"
@@ -33,7 +34,7 @@ class SpillPartitionChunkWriter;
 
 class ConnectorSinkExecutor {
 public:
-    ConnectorSinkExecutor(const std::string& executor_name) : _executor_name(executor_name) {}
+    ConnectorSinkExecutor(std::string executor_name) : _executor_name(std::move(std::move(std::move(executor_name)))) {}
     virtual ~ConnectorSinkExecutor() {}
 
     virtual Status init() = 0;

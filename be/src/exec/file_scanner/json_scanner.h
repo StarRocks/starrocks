@@ -15,6 +15,7 @@
 #pragma once
 
 #include <string_view>
+#include <utility>
 
 #include "column/nullable_column.h"
 #include "exec/file_scanner/file_scanner.h"
@@ -97,8 +98,8 @@ public:
 
     struct PreviousParsedItem {
         PreviousParsedItem(const std::string_view& key) : key(key), column_index(-1) {}
-        PreviousParsedItem(const std::string_view& key, int column_index, const TypeDescriptor& type)
-                : key(key), type(type), column_index(column_index) {}
+        PreviousParsedItem(const std::string_view& key, int column_index, TypeDescriptor type)
+                : key(key), type(std::move(std::move(std::move(std::move(type))))), column_index(column_index) {}
 
         std::string key;
         TypeDescriptor type;

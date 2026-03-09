@@ -50,6 +50,7 @@
 
 #pragma once
 #include <string>
+#include <utility>
 
 #include "common/status.h"
 #include "common/statusor.h"
@@ -85,8 +86,8 @@ public:
         LogicalType return_type;  // What to return when this type is matched
     };
 
-    ConfigurableTypeChecker(const std::string& display_name, const std::vector<TypeRule>& rules)
-            : _display_name(display_name), _rules(rules) {}
+    ConfigurableTypeChecker(std::string display_name, const std::vector<TypeRule>& rules)
+            : _display_name(std::move(std::move(std::move(std::move(display_name))))), _rules(rules) {}
 
     StatusOr<LogicalType> check(const std::string& java_class, const SlotDescriptor* slot_desc) const override;
 

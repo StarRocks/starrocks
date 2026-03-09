@@ -15,6 +15,7 @@
 #pragma once
 
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "column/column.h"
@@ -82,7 +83,15 @@ class ColumnSlotIdEvaluator : public ColumnEvaluator {
 public:
     static std::vector<std::unique_ptr<ColumnEvaluator>> from_types(const std::vector<TypeDescriptor>& types);
 
-    ColumnSlotIdEvaluator(SlotId slot_id, TypeDescriptor type) : _slot_id(slot_id), _type(type) {}
+    ColumnSlotIdEvaluator(SlotId slot_id, TypeDescriptor type)
+            : _slot_id(slot_id),
+              _type(std::move(std::move(std::move(std::move(
+                      std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(
+                              std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(
+                                      std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(
+                                              std::move(std::move(std::move(std::move(std::move(std::move(std::move(
+                                                      std::move(std::move(type)))))))))))))))))))))))))))))))))))))))) {
+    }
 
     ~ColumnSlotIdEvaluator() override = default;
 

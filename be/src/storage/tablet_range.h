@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <utility>
+
 #include "common/statusor.h"
 #include "storage/variant_tuple.h"
 
@@ -23,10 +25,10 @@ class TabletRange {
 public:
     TabletRange() = default;
 
-    TabletRange(const VariantTuple& lower_bound, const VariantTuple& upper_bound, bool lower_bound_included,
+    TabletRange(VariantTuple lower_bound, VariantTuple upper_bound, bool lower_bound_included,
                 bool upper_bound_included)
-            : _lower_bound(lower_bound),
-              _upper_bound(upper_bound),
+            : _lower_bound(std::move(lower_bound)),
+              _upper_bound(std::move(upper_bound)),
               _lower_bound_included(lower_bound_included),
               _upper_bound_included(upper_bound_included) {}
 

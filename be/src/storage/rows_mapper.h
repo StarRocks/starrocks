@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include <utility>
+
 #include "common/status.h"
 #include "fs/fs.h"
 #include "gen_cpp/persistent_index.pb.h"
@@ -41,7 +43,7 @@ class TabletManager;
 //
 class RowsMapperBuilder {
 public:
-    RowsMapperBuilder(const std::string& filename) : _filename(filename) {}
+    RowsMapperBuilder(std::string  filename) : _filename(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(filename)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))) {}
     ~RowsMapperBuilder() {}
     // append rssid rowids to file
     Status append(const std::vector<uint64_t>& rssid_rowids);

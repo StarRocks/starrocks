@@ -17,6 +17,7 @@
 #include <future>
 #include <queue>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "common/statusor.h"
@@ -100,10 +101,14 @@ class LocationProvider {
 public:
     // file_name_prefix = {query_id}_{be_number}_{driver_id}
     LocationProvider(const std::string& base_path, const std::string& query_id, int be_number, int driver_id,
-                     const std::string& file_suffix)
+                     std::string file_suffix)
             : _base_path(PathUtils::remove_trailing_slash(base_path)),
               _file_name_prefix(fmt::format("{}_{}_{}", query_id, be_number, driver_id)),
-              _file_name_suffix(file_suffix) {}
+              _file_name_suffix(std::move(std::move(std::move(std::move(std::move(std::move(std::move(
+                      std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(
+                              std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(
+                                      std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(
+                                              std::move(std::move(file_suffix)))))))))))))))))))))))))))))))))))) {}
 
     // location = base_path/partition/{query_id}_{be_number}_{driver_id}_index.file_suffix
     std::string get(const std::string& partition) {

@@ -17,6 +17,7 @@
 #include <atomic>
 #include <memory>
 #include <mutex>
+#include <utility>
 #include <vector>
 
 #include "base/debug/trace.h"
@@ -69,15 +70,22 @@ using AsyncCompactCBPtr = std::unique_ptr<AsyncCompactCB>;
 class LakePersistentIndexParallelCompactTask : public Runnable {
 public:
     LakePersistentIndexParallelCompactTask(const std::vector<std::vector<PersistentIndexSstablePB>>& input_sstables,
-                                           TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
-                                           bool merge_base_level, const UniqueId& fileset_id,
-                                           const SstSeekRange& seek_range)
+                                           TabletManager* tablet_mgr, TabletMetadataPtr metadata, bool merge_base_level,
+                                           const UniqueId& fileset_id, SstSeekRange seek_range)
             : _input_sstables(input_sstables),
               _tablet_mgr(tablet_mgr),
-              _metadata(metadata),
+              _metadata(std::move(std::move(std::move(std::move(std::move(
+                      std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(
+                              std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(
+                                      std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(
+                                              std::move(std::move(std::move(metadata))))))))))))))))))))))))))))))))))),
               _merge_base_level(merge_base_level),
               _output_fileset_id(fileset_id),
-              _seek_range(seek_range) {}
+              _seek_range(std::move(std::move(std::move(std::move(std::move(std::move(
+                      std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(
+                              std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(
+                                      std::move(std::move(std::move(std::move(std::move(std::move(std::move(std::move(
+                                              std::move(std::move(seek_range))))))))))))))))))))))))))))))))))) {}
 
     void set_cb(AsyncCompactCB* cb) { _cb = cb; }
 

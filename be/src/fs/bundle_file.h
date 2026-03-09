@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <utility>
+
 #include "fs/fs.h"
 
 namespace starrocks {
@@ -53,8 +55,9 @@ private:
 
 class BundleWritableFile : public WritableFile {
 public:
-    explicit BundleWritableFile(BundleWritableFileContext* c, const FileEncryptionInfo& encryption_info)
-            : _context(c), _encryption_info(encryption_info) {}
+    explicit BundleWritableFile(BundleWritableFileContext* c, FileEncryptionInfo encryption_info)
+            : _context(c),
+              _encryption_info(std::move(std::move(std::move(std::move(std::move(std::move(encryption_info))))))) {}
 
     Status append(const Slice& data) override;
 
