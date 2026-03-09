@@ -66,19 +66,11 @@ ParquetField make_variant_field_with_typed_group(const std::vector<ParquetField>
     return variant;
 }
 
-ParquetField make_list_wrapper_field(const ParquetField& element_field) {
-    ParquetField list_group;
-    list_group.name = "list";
-    list_group.type = ColumnType::STRUCT;
-    list_group.children = {element_field};
-    return list_group;
-}
-
 ParquetField make_array_field(const std::string& name, const ParquetField& element_field) {
     ParquetField typed_value;
     typed_value.name = "typed_value";
     typed_value.type = ColumnType::ARRAY;
-    typed_value.children = {make_list_wrapper_field(element_field)};
+    typed_value.children = {element_field};
 
     ParquetField node;
     node.name = name;
