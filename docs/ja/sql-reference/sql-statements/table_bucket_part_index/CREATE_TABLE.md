@@ -786,14 +786,37 @@ PROPERTIES (
       この間隔を短縮するには、FE の動的設定 `lake_autovacuum_grace_period_minutes` の値を低く設定します。ただし、`file_bundling` プロパティを変更した後は、設定を元の値に戻すことを忘れないでください。
   :::
 
-### 高速スキーマ進化
+### Fast Schema Evolution
 
-`fast_schema_evolution`: テーブルに対して高速スキーマ進化を有効にするかどうか。 有効な値は `TRUE` または `FALSE` (デフォルト) です。高速スキーマ進化を有効にすると、スキーマ変更の速度が向上し、列の追加や削除時のリソース使用量が削減されます。現在、このプロパティはテーブル作成時にのみ有効にでき、テーブル作成後に [ALTER TABLE](ALTER_TABLE.md) を使用して変更することはできません。
+- `fast_schema_evolution`: テーブルに対して Fast Schema Evolution を有効にするかどうか。 有効な値は `TRUE` または `FALSE` (デフォルト) です。Fast Schema Evolution を有効にすると、スキーマ変更の速度が向上し、列の追加や削除時のリソース使用量が削減されます。現在、このプロパティはテーブル作成時にのみ有効にでき、テーブル作成後に ALTER TABLE を使用して変更することはできません。
 
   :::note
-  - 高速スキーマ進化は、v3.2.0 以降の共有なしクラスタでサポートされています。
-  - 高速スキーマ進化は、v3.3 以降の共有データクラスタでサポートされており、デフォルトで有効になっています。共有データクラスタでクラウドネイティブテーブルを作成する際にこのプロパティを指定する必要はありません。FE 動的パラメータ `enable_fast_schema_evolution` (デフォルト: true) がこの動作を制御します。
+  - Fast Schema Evolution は、v3.2.0 以降の共有なしクラスタでサポートされています。
+  - Fast Schema Evolution は、v3.3 以降の共有データクラスタでサポートされており、デフォルトで有効になっています。共有データクラスタでクラウドネイティブテーブルを作成する際にこのプロパティを指定する必要はありません。FE 動的パラメータ `enable_fast_schema_evolution` (デフォルト: true) がこの動作を制御します。
   :::
+
+- `cloud_native_fast_schema_evolution_v2`: **クラウドネイティブテーブル**に対して Fast Schema Evolution v2 を有効化するかどうか。v4.1 以降でサポートされています。有効な値は `TRUE`（デフォルト）または `FALSE` です。Fast Schema Evolution v2 を有効にすると、スキーマ変更は同期処理になります。ALTER TABLE ステートメントが正常に返されると、新しいスキーマは即時に有効になります。従来の動作では、スキーマ変更は非同期ジョブとして実行され、時間をかけてタブレットのメタデータを更新します。
+
+  :::note
+  - Fast Schema Evolution v2 は v4.1 以降でサポートされ、共有データクラスタ内の**クラウドネイティブテーブル**でのみ利用可能です。
+  - デフォルトの動作:
+    - v4.1 クラスタで新規作成されるテーブルでは、Fast Schema Evolution v2 がデフォルトで有効です。
+    - v4.1 にアップグレードされたクラスタの既存テーブルでは、Fast Schema Evolution v2 はデフォルトで無効です。[ALTER TABLE](ALTER_TABLE.md) でこのプロパティを明示的に `true` に設定することで有効化できます。
+  - ダウングレード要件:
+    - 共有データクラスターを v4.1 から v4.0.5 以降にダウングレードする場合、標準のダウングレード手順に従って直接ダウングレードできます。
+    - 共有データクラスターを v4.1 から v3.x または v4.0.5 より前のパッチバージョンにダウングレードする前に、ALTER TABLE で Fast Schema Evolution v2 を有効にしているテーブルについては、手動で `cloud_native_fast_schema_evolution_v2` を `false` に設定する必要があります。非同期ジョブが FINISHED 状態になるまで待機する必要があります。ジョブの状態は SHOW ALTER で追跡可能です。
+  :::
+
+スキーマ変更ジョブは [SHOW ALTER TABLE COLUMN](./SHOW_ALTER.md) で確認できます。
+
+例:
+
+```SQL
+-- テーブル内の最近のカラム/スキーマ変更ジョブを一覧表示する
+SHOW ALTER TABLE COLUMN FROM test_db WHERE TableName = "test_tbl";
+```
+
+Fast Schema Evolution v2 が有効化されたクラウドネイティブテーブルでは、スキーマ変更ジョブは通常 FINISHED として表示されます。これは変更が FE メタデータの更新のみで適用されるためです。
 
 ### ベースコンパクションの禁止
 
