@@ -205,6 +205,7 @@ std::future<Status> delete_files_callable(std::vector<std::string> files_to_dele
     if (UNLIKELY(files_to_delete.empty())) {
         return completed_future(Status::OK());
     }
+    TEST_SYNC_POINT_CALLBACK("delete_files_callable", &files_to_delete);
     auto task = std::make_shared<std::packaged_task<Status()>>(
             [files_to_delete = std::move(files_to_delete)]() { return delete_files(files_to_delete); });
     auto packaged_func = [task]() { (*task)(); };
