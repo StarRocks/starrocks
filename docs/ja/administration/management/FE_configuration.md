@@ -2971,13 +2971,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: StarRocks クラスター内のすべてのテーブルで高速スキーマ進化を有効にするかどうか。有効な値は `TRUE` と `FALSE` (デフォルト) です。高速スキーマ進化を有効にすると、スキーマ変更の速度が向上し、列の追加または削除時のリソース使用量が削減されます。
+- Description: StarRocks クラスター内のすべてのテーブルでFast Schema Evolutionを有効にするかどうか。有効な値は `TRUE` と `FALSE` (デフォルト) です。Fast Schema Evolutionを有効にすると、スキーマ変更の速度が向上し、列の追加または削除時のリソース使用量が削減されます。
 - Introduced in: v3.2.0
 
 > **NOTE**
 >
 > - StarRocks Shared-data クラスターは v3.3.0 以降でこのパラメーターをサポートしています。
-> - 特定のテーブルの高速スキーマ進化を設定する必要がある場合 (特定のテーブルの高速スキーマ進化を無効にするなど) は、テーブル作成時にテーブルプロパティ [`fast_schema_evolution`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#set-fast-schema-evolution) を設定できます。
+> - 特定のテーブルのFast Schema Evolutionを設定する必要がある場合 (特定のテーブルのFast Schema Evolutionを無効にするなど) は、テーブル作成時にテーブルプロパティ [`fast_schema_evolution`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#set-fast-schema-evolution) を設定できます。
 
 ##### `enable_online_optimize_table`
 
