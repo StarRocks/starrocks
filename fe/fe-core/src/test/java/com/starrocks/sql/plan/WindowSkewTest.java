@@ -16,14 +16,12 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Histogram;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.thrift.TExplainLevel;
-import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -39,6 +37,7 @@ class WindowSkewTest extends PlanTestBase {
     private static final List<String> ALL_COLUMNS = List.of("p", "s", "x");
     private static final String BASIC_WINDOW_SQL =
             "select p, s, sum(x) over (partition by p order by s) from " + TABLE_NAME;
+
     @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
@@ -89,6 +88,7 @@ class WindowSkewTest extends PlanTestBase {
         final var table = table();
         setTableStatistics(table, 1000);
     }
+
     private OlapTable table() {
         return getOlapTable(TABLE_NAME);
     }
@@ -119,9 +119,11 @@ class WindowSkewTest extends PlanTestBase {
         assertEquals(expectedAnalyticCount, analyticCount,
                 "Expected exactly 2 ANALYTIC operators after UNION split, but found " + analyticCount);
     }
+
     private void assertPlanHasUnionAndAnalytic(String plan) {
         assertPlanHasUnionAndAnalytic(plan, 2);
     }
+
     private void assertPlanHasNoUnionButAnalytic(String plan) {
         assertNotContains(plan, "UNION");
         assertContains(plan, "ANALYTIC");
@@ -522,6 +524,7 @@ class WindowSkewTest extends PlanTestBase {
         Exception e = assertThrows(Exception.class, () -> getFragmentPlan(sql));
         assertContains(e.getMessage(), "Window skew hint value type mismatch");
     }
+
     @Test
     void testWindowWithAggBug() throws Exception {
         String sql = "with cte_0 as (\n" +
@@ -651,6 +654,6 @@ class WindowSkewTest extends PlanTestBase {
         setColumnStatForP(0.1);
 
         String plan = getCostPlan(sql);
-        assertPlanHasUnionAndAnalytic(plan,4);
+        assertPlanHasUnionAndAnalytic(plan, 4);
     }
 }
