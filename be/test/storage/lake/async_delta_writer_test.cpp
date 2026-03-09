@@ -901,11 +901,10 @@ TEST_F(LakeAsyncDeltaWriterTest, test_close_does_not_destroy_writer_during_merge
 
 // Test that AsyncDeltaWriter::close() can be called from a bthread without
 // triggering DCHECK_EQ(0, bthread_self()) in DeltaWriter::close().
-// Before the fix, AsyncDeltaWriterImpl::close() called _writer->close() directly,
-// which has a DCHECK that forbids calling from bthread context. This caused crashes
-// in Debug builds when close() was called from brpc handlers (which run in bthread).
-// The fix splits close() into flush_and_wait() (runs in pthread stop handler) and
-// release_resources() (runs in AsyncDeltaWriterImpl::close(), safe from bthread).
+// Before the fix, calling close() from bthread context would crash in Debug builds
+// because DeltaWriter::close() has a DCHECK that forbids calling from bthread.
+// The fix moves _block_merge_token->shutdown() and delta_writer->close() into the
+// execution queue's stop handler, which runs in a pthread thread pool.
 TEST_F(LakeAsyncDeltaWriterTest, test_close_from_bthread_no_dcheck_failure) {
     static const int kChunkSize = 128;
     auto chunk0 = generate_data(kChunkSize);

@@ -144,10 +144,6 @@ public:
 
     void close();
 
-    void flush_and_wait();
-
-    void release_resources();
-
     void cancel(const Status& st);
 
     [[nodiscard]] int64_t partition_id() const { return _partition_id; }
@@ -200,6 +196,14 @@ public:
         return _flush_token == nullptr ? nullptr : &(_flush_token->get_stats());
     }
 
+    // Thread-safe accessor: returns a shared_ptr copy so the caller keeps the
+    // FlushToken alive while reading its stats, preventing use-after-free when
+    // close() concurrently resets _flush_token.
+    std::shared_ptr<FlushToken> get_flush_token() const {
+        std::shared_lock l(_cancel_lock);
+        return _flush_token;
+    }
+
     bool has_spill_block() const;
 
     const DictColumnsValidMap* global_dict_columns_valid_info() const;
@@ -247,7 +251,7 @@ private:
     std::unique_ptr<TabletWriter> _tablet_writer;
     std::unique_ptr<MemTable> _mem_table;
     std::unique_ptr<MemTableSink> _mem_table_sink;
-    std::unique_ptr<FlushToken> _flush_token;
+    std::shared_ptr<FlushToken> _flush_token;
 
     // The full list of columns defined
     std::shared_ptr<const TabletSchema> _tablet_schema;
@@ -995,40 +999,32 @@ Status DeltaWriterImpl::fill_auto_increment_id(Chunk& chunk) {
     return Status::OK();
 }
 
-void DeltaWriterImpl::flush_and_wait() {
+void DeltaWriterImpl::close() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     auto start_time = MonotonicNanos();
+    DeferOp defer([&] { ADD_COUNTER_RELAXED(_stats.close_time_ns, MonotonicNanos() - start_time); });
     if (_flush_token != nullptr) {
         auto st = _flush_token->wait();
         LOG_IF(WARNING, !st.ok()) << "flush token error: " << st;
         VLOG(3) << "Tablet_id: " << tablet_id() << ", flush stats: " << _flush_token->get_stats();
     }
+
+    // Destruct variables manually for counting memory usage into |_mem_tracker|
     if (_tablet_writer != nullptr) {
         _tablet_writer->close();
     }
-    ADD_COUNTER_RELAXED(_stats.close_time_ns, MonotonicNanos() - start_time);
-}
-
-void DeltaWriterImpl::release_resources() {
-    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
-    // Destruct variables manually for counting memory usage into |_mem_tracker|
     _tablet_writer.reset();
     _mem_table.reset();
     _mem_table_sink.reset();
     {
-        // Take exclusive lock before resetting _flush_token to prevent race with cancel(),
-        // which may be accessing _flush_token concurrently.
+        // Take exclusive lock before resetting _flush_token to prevent race with cancel()
+        // and get_flush_token(), which may be accessing _flush_token concurrently.
         std::unique_lock l(_cancel_lock);
         _flush_token.reset();
     }
     _tablet_schema.reset();
     _write_schema.reset();
     _merge_condition.clear();
-}
-
-void DeltaWriterImpl::close() {
-    flush_and_wait();
-    release_resources();
 }
 
 void DeltaWriterImpl::cancel(const Status& st) {
@@ -1080,11 +1076,8 @@ int64_t DeltaWriterImpl::num_rows() const {
 }
 
 int64_t DeltaWriterImpl::queueing_memtable_num() const {
-    if (_flush_token != nullptr) {
-        return _flush_token->get_stats().queueing_memtable_num;
-    } else {
-        return 0;
-    }
+    auto token = get_flush_token();
+    return token ? token->get_stats().queueing_memtable_num.load() : 0;
 }
 
 //// DeltaWriter
@@ -1115,15 +1108,6 @@ Status DeltaWriter::finish() {
 void DeltaWriter::close() {
     DCHECK_EQ(0, bthread_self()) << "Should not invoke DeltaWriter::close() in a bthread";
     _impl->close();
-}
-
-void DeltaWriter::flush_and_wait() {
-    DCHECK_EQ(0, bthread_self()) << "Should not invoke DeltaWriter::flush_and_wait() in a bthread";
-    _impl->flush_and_wait();
-}
-
-void DeltaWriter::release_resources() {
-    _impl->release_resources();
 }
 
 void DeltaWriter::cancel(const Status& st) {
@@ -1203,6 +1187,10 @@ const DeltaWriterStat& DeltaWriter::get_writer_stat() const {
 
 const FlushStatistic* DeltaWriter::get_flush_stats() const {
     return _impl->get_flush_stats();
+}
+
+std::shared_ptr<FlushToken> DeltaWriter::get_flush_token() const {
+    return _impl->get_flush_token();
 }
 
 bool DeltaWriter::has_spill_block() const {

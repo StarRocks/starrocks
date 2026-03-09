@@ -127,16 +127,6 @@ public:
     // NOTE: Do NOT invoke this method in a bthread unless you are sure that `write()` has never been called.
     void close();
 
-    // Wait for all pending flush tasks to complete and close the tablet writer.
-    // Performs blocking I/O but does NOT reset/destroy internal state (_mem_table_sink, _flush_token, etc.).
-    // Safe to call from a pthread (e.g., execution queue stop handler).
-    void flush_and_wait();
-
-    // Release internal resources (reset unique_ptrs). Non-blocking.
-    // Must be called after flush_and_wait() and after all concurrent accessors (e.g., MergeBlockTask,
-    // profile readers) have completed.
-    void release_resources();
-
     // Cancel the delta writer with the given status.
     // This method can be called concurrently and it is thread-safe.
     // After cancellation, subsequent write/flush operations will fail quickly.
@@ -177,6 +167,11 @@ public:
     const DeltaWriterStat& get_writer_stat() const;
 
     const FlushStatistic* get_flush_stats() const;
+
+    // Thread-safe accessor: returns a shared_ptr copy of the FlushToken.
+    // The caller holds the token alive while reading stats, preventing
+    // use-after-free when close() concurrently resets the token.
+    std::shared_ptr<FlushToken> get_flush_token() const;
 
     bool has_spill_block() const;
 
