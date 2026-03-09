@@ -449,15 +449,23 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             catalogName = params.getCatalog_name();
         }
 
+<<<<<<< HEAD
         UserIdentity currentUser;
         if (params.isSetCurrent_user_ident()) {
             currentUser = UserIdentity.fromThrift(params.current_user_ident);
         } else {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
         }
+=======
+>>>>>>> 33ffb02a62 ([BugFix] Fix SET ROLE not propagating to information_schema queries (#69233))
         ConnectContext context = new ConnectContext();
-        context.setCurrentUserIdentity(currentUser);
-        context.setCurrentRoleIds(currentUser);
+        if (params.isSetCurrent_user_ident()) {
+            UserIdentityUtils.setAuthInfoFromThrift(context, params.current_user_ident);
+        } else {
+            UserIdentity currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
+            context.setCurrentUserIdentity(currentUser);
+            context.setCurrentRoleIds(currentUser);
+        }
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
         List<String> dbNames = metadataMgr.listDbNames(context, catalogName);
@@ -505,6 +513,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             catalogName = params.getCatalog_name();
         }
 
+<<<<<<< HEAD
         UserIdentity currentUser = null;
         if (params.isSetCurrent_user_ident()) {
             currentUser = UserIdentity.fromThrift(params.current_user_ident);
@@ -512,9 +521,16 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
         }
 
+=======
+>>>>>>> 33ffb02a62 ([BugFix] Fix SET ROLE not propagating to information_schema queries (#69233))
         ConnectContext context = new ConnectContext();
-        context.setCurrentUserIdentity(currentUser);
-        context.setCurrentRoleIds(currentUser);
+        if (params.isSetCurrent_user_ident()) {
+            UserIdentityUtils.setAuthInfoFromThrift(context, params.current_user_ident);
+        } else {
+            UserIdentity currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
+            context.setCurrentUserIdentity(currentUser);
+            context.setCurrentRoleIds(currentUser);
+        }
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
         Database db = metadataMgr.getDb(context, catalogName, params.db);
@@ -798,15 +814,23 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         result.setColumns(columns);
 
         // database privs should be checked in analysis phrase
+<<<<<<< HEAD
         UserIdentity currentUser = null;
         if (params.isSetCurrent_user_ident()) {
             currentUser = UserIdentity.fromThrift(params.current_user_ident);
         } else {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
         }
+=======
+>>>>>>> 33ffb02a62 ([BugFix] Fix SET ROLE not propagating to information_schema queries (#69233))
         ConnectContext context = new ConnectContext();
-        context.setCurrentUserIdentity(currentUser);
-        context.setCurrentRoleIds(currentUser);
+        if (params.isSetCurrent_user_ident()) {
+            UserIdentityUtils.setAuthInfoFromThrift(context, params.current_user_ident);
+        } else {
+            UserIdentity currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
+            context.setCurrentUserIdentity(currentUser);
+            context.setCurrentRoleIds(currentUser);
+        }
 
         long limit = params.isSetLimit() ? params.getLimit() : -1;
 
@@ -815,7 +839,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         // describe_table interface only once, which can reduce RPC time from BE to FE, and
         // the amount of data. In additional,we need add db_name & table_name values to TColumnDesc.
         if (!params.isSetDb() && StringUtils.isBlank(params.getTable_name())) {
-            describeWithoutDbAndTable(currentUser, columns, limit);
+            describeWithoutDbAndTable(context, columns, limit);
             return result;
         }
 
@@ -850,11 +874,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     // get describeTable without db name and table name parameter, so we need iterate over
     // dbs and tables, when reach limit, we break;
-    private void describeWithoutDbAndTable(UserIdentity currentUser, List<TColumnDef> columns, long limit) {
+    private void describeWithoutDbAndTable(ConnectContext context, List<TColumnDef> columns, long limit) {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        ConnectContext context = new ConnectContext();
-        context.setCurrentUserIdentity(currentUser);
-        context.setCurrentRoleIds(currentUser);
 
         List<String> dbNames = globalStateMgr.getLocalMetastore().listDbNames(context);
         boolean reachLimit;

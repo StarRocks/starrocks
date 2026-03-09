@@ -15,16 +15,28 @@
 package com.starrocks.authentication;
 
 import com.google.common.base.Strings;
+<<<<<<< HEAD
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.parser.NodePosition;
+=======
+import com.starrocks.authorization.PrivilegeException;
+import com.starrocks.catalog.UserIdentity;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+>>>>>>> 33ffb02a62 ([BugFix] Fix SET ROLE not propagating to information_schema queries (#69233))
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TUserIdentity;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 public class UserIdentityUtils {
-    
+    private static final Logger LOG = LogManager.getLogger(UserIdentityUtils.class);
+
     public static UserIdentity fromString(String userIdentStr) {
         if (Strings.isNullOrEmpty(userIdentStr)) {
             return null;
@@ -80,7 +92,16 @@ public class UserIdentityUtils {
         UserIdentity userIdentity = UserIdentityUtils.fromThrift(tUserIdent);
         context.setCurrentUserIdentity(userIdentity);
         if (tUserIdent.isSetCurrent_role_ids()) {
-            context.setCurrentRoleIds(new HashSet<>(tUserIdent.current_role_ids.getRole_id_list()));
+            List<Long> roleIdList = tUserIdent.current_role_ids.getRole_id_list();
+            Set<Long> requestedRoleIds = roleIdList != null ? new HashSet<>(roleIdList) : new HashSet<>();
+            try {
+                Set<Long> actualRoleIds =
+                        GlobalStateMgr.getCurrentState().getAuthorizationMgr().getRoleIdsByUser(userIdentity);
+                requestedRoleIds.retainAll(actualRoleIds);
+            } catch (PrivilegeException e) {
+                LOG.warn("Failed to validate role IDs for user {}: {}", userIdentity, e.getMessage());
+            }
+            context.setCurrentRoleIds(requestedRoleIds);
         } else {
             context.setCurrentRoleIds(userIdentity);
         }

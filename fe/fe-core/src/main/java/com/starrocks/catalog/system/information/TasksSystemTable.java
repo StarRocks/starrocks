@@ -69,9 +69,13 @@ public class TasksSystemTable {
         TaskManager taskManager = globalStateMgr.getTaskManager();
         List<Task> taskList = taskManager.filterTasks(params);
         List<TTaskInfo> result = Lists.newArrayList();
-        UserIdentity currentUser = null;
+        ConnectContext context = new ConnectContext();
         if (params.isSetCurrent_user_ident()) {
+<<<<<<< HEAD
             currentUser = UserIdentity.fromThrift(params.current_user_ident);
+=======
+            UserIdentityUtils.setAuthInfoFromThrift(context, params.current_user_ident);
+>>>>>>> 33ffb02a62 ([BugFix] Fix SET ROLE not propagating to information_schema queries (#69233))
         }
 
         for (Task task : taskList) {
@@ -81,9 +85,6 @@ public class TasksSystemTable {
             }
 
             try {
-                ConnectContext context = new ConnectContext();
-                context.setCurrentUserIdentity(currentUser);
-                context.setCurrentRoleIds(currentUser);
                 Authorizer.checkAnyActionOnOrInDb(context, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                         task.getDbName());
             } catch (AccessDeniedException e) {

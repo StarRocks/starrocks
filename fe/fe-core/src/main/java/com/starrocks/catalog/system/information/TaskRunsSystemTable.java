@@ -21,7 +21,10 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
 import com.starrocks.catalog.Type;
+=======
+>>>>>>> 33ffb02a62 ([BugFix] Fix SET ROLE not propagating to information_schema queries (#69233))
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.cluster.ClusterNamespace;
@@ -44,12 +47,19 @@ import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.thrift.TTaskRunInfo;
 import com.starrocks.thrift.TUserIdentity;
+<<<<<<< HEAD
+=======
+import com.starrocks.thrift.TUserRoles;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
+>>>>>>> 33ffb02a62 ([BugFix] Fix SET ROLE not propagating to information_schema queries (#69233))
 import org.apache.commons.lang3.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.util.Strings;
 import org.apache.thrift.meta_data.FieldValueMetaData;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -138,7 +148,16 @@ public class TaskRunsSystemTable extends SystemTable {
         }
 
         ConnectContext context = Preconditions.checkNotNull(ConnectContext.get(), "not a valid connection");
+<<<<<<< HEAD
         TUserIdentity userIdentity = context.getCurrentUserIdentity().toThrift();
+=======
+        TUserIdentity userIdentity = UserIdentityUtils.toThrift(context.getCurrentUserIdentity());
+        if (context.getCurrentRoleIds() != null) {
+            TUserRoles userRoles = new TUserRoles();
+            userRoles.setRole_id_list(new ArrayList<>(context.getCurrentRoleIds()));
+            userIdentity.setCurrent_role_ids(userRoles);
+        }
+>>>>>>> 33ffb02a62 ([BugFix] Fix SET ROLE not propagating to information_schema queries (#69233))
         params.setCurrent_user_ident(userIdentity);
         // Evaluate result
         TGetTaskRunInfoResult info = query(params);
@@ -165,9 +184,13 @@ public class TaskRunsSystemTable extends SystemTable {
         List<TTaskRunInfo> tasksResult = Lists.newArrayList();
         result.setTask_runs(tasksResult);
 
-        UserIdentity currentUser = null;
+        ConnectContext context = new ConnectContext();
         if (params.isSetCurrent_user_ident()) {
+<<<<<<< HEAD
             currentUser = UserIdentity.fromThrift(params.current_user_ident);
+=======
+            UserIdentityUtils.setAuthInfoFromThrift(context, params.current_user_ident);
+>>>>>>> 33ffb02a62 ([BugFix] Fix SET ROLE not propagating to information_schema queries (#69233))
         }
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         TaskManager taskManager = globalStateMgr.getTaskManager();
@@ -180,9 +203,6 @@ public class TaskRunsSystemTable extends SystemTable {
             }
 
             try {
-                ConnectContext context = new ConnectContext();
-                context.setCurrentUserIdentity(currentUser);
-                context.setCurrentRoleIds(currentUser);
                 Authorizer.checkAnyActionOnOrInDb(context, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                         status.getDbName());
             } catch (AccessDeniedException e) {
