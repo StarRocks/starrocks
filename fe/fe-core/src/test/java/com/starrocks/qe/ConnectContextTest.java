@@ -389,7 +389,7 @@ public class ConnectContextTest {
         new MockUp<Authorizer>() {
             @Mock
             public void checkAnyActionOnOrInDb(
-                    com.starrocks.authentication.UserIdentity currentUser,
+                    com.starrocks.sql.ast.UserIdentity currentUser,
                     java.util.Set<Long> roleIds, String catalogName, String db)
                     throws AccessDeniedException {
             }
@@ -495,7 +495,7 @@ public class ConnectContextTest {
         new MockUp<Authorizer>() {
             @Mock
             public void checkAnyActionOnOrInDb(
-                    com.starrocks.authentication.UserIdentity currentUser,
+                    com.starrocks.sql.ast.UserIdentity currentUser,
                     java.util.Set<Long> roleIds, String catalogName, String db)
                     throws AccessDeniedException {
             }
