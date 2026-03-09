@@ -203,7 +203,7 @@ Output:
 +----+---------+-------+-------------+
 ```
 
-The distinct average is 85.00 ((80 + 85 + 90) / 3).
+The distinct average is 85.00 (`(80 + 85 + 90) / 3`).
 
 **Example 3: Using AVG(DISTINCT) over framed window with RANGE frame**
 
@@ -247,7 +247,7 @@ This function is supported from v3.4.
 :::tip
 **Window frame limitation:**
 
-ARRAY_AGG() as a window function **only supports RANGE window frames**. ROWS window frames are NOT supported. If no window frame is specified, the default `RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW` is used.
+ARRAY_AGG() as a window function only supports RANGE window frames. ROWS window frames are NOT supported. If no window frame is specified, the default `RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW` is used.
 :::
 
 **Syntax:**
@@ -277,7 +277,7 @@ Returns an ARRAY containing all values in the window.
 
 These examples use the data in the [Sample table](#window-function-sample-table) `scores`.
 
-**Example 1: Basic ARRAY_AGG() over window**
+**Example 1: Basic usage**
 
 Collect all scores within each subject partition:
 
@@ -604,7 +604,7 @@ CUME_DIST() OVER (partition_by_clause order_by_clause)
 
 CUME_DIST() contains NULL values and treats them as the lowest values.
 
-**Examples:**
+**Examples**
 
 The following example shows the cumulative distribution of each score within each `subject` group. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -654,7 +654,7 @@ The DENSE_RANK() function is used to represent rankings. Unlike RANK(), DENSE_RA
 DENSE_RANK() OVER(partition_by_clause order_by_clause)
 ```
 
-**Examples:**
+**Examples**
 
 The following example shows the ranking of math scores (sorted in descending order). This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -697,7 +697,7 @@ FIRST_VALUE(expr [IGNORE NULLS]) OVER(partition_by_clause order_by_clause [windo
 
 ARRAY types are supported from StarRocks v3.5. You can use FIRST_VALUE() with ARRAY columns to get the first array value in the window.
 
-**Examples:**
+**Examples**
 
 **Example 1: Basic usage**
 
@@ -796,7 +796,7 @@ By default, LAST_VALUE() calculates `rows between unbounded preceding and curren
 
 ARRAY types are supported from StarRocks v3.5. You can use LAST_VALUE() with ARRAY columns to get the last array value in the window.
 
-**Examples:**
+**Examples**
 
 **Example 1: Basic usage**
 
@@ -1201,7 +1201,7 @@ Returns the maximum value of the specified rows in the current window.
 MAX(expr) [OVER (analytic_clause)]
 ```
 
-**Examples:**
+**Examples**
 
 Calculate the maximum value of rows from the first row to the row after the current row. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -1269,7 +1269,7 @@ Returns the minimum value of the specified rows in the current window.
 MIN(expr) [OVER (analytic_clause)]
 ```
 
-**Examples:**
+**Examples**
 
 Calculate the lowest score among all rows for the math subject. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -1334,7 +1334,7 @@ Window clause is not allowed in NTILE() function.
 
 NTILE() function returns BIGINT type of data.
 
-**Examples:**
+**Examples**
 
 The following example divides all rows in the partition into two buckets. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -1402,7 +1402,7 @@ PERCENT_RANK() OVER (partition_by_clause order_by_clause)
 PERCENT_RANK() must be used with ORDER BY to sort partition rows into the desired order.
 :::
 
-**Examples:**
+**Examples**
 
 The following example shows the relative rank of each `score` within the group of `math`. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -1439,7 +1439,7 @@ The RANK() function is used to represent rankings. Unlike DENSE_RANK(), RANK() w
 RANK() OVER(partition_by_clause order_by_clause)
 ```
 
-**Examples:**
+**Examples**
 
 Ranking math scores in the group. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -1477,7 +1477,7 @@ Returns a continuously increasing integer starting from 1 for each row of a Part
 ROW_NUMBER() OVER(partition_by_clause order_by_clause)
 ```
 
-**Examples:**
+**Examples**
 
 Rank math scores in the group. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -1548,7 +1548,7 @@ QUALIFY <window_function>
 
 `<window_function>`: The `QUALIFY` clause can only be followed by a window function, including ROW_NUMBER(), RANK(), and DENSE_RANK().
 
-**Examples:**
+**Examples**
 
 ```SQL
 -- Create a table.
@@ -1577,7 +1577,7 @@ select * from sales_record order by city_id;
 +---------+--------+-------+
 ```
 
-Example 1: Obtain records whose row number is greater than 1 from the table.
+**Example 1: Obtain records whose row number is greater than 1 from the table**
 
 ```SQL
 SELECT city_id, item, sales
@@ -1592,7 +1592,9 @@ QUALIFY row_number() OVER (ORDER BY city_id) > 1;
 +---------+--------+-------+
 ```
 
-Example 2: Obtain records whose row number is 1 from each partition of the table. The table is divided into two partitions by `item` and the first row in each partition is returned.
+**Example 2: Obtain records whose row number is 1 from each partition of the table**
+
+The table is divided into two partitions by `item` and the first row in each partition is returned.
 
 ```SQL
 SELECT city_id, item, sales
@@ -1657,7 +1659,7 @@ SUM([DISTINCT] expr) [OVER (analytic_clause)]
 When using SUM(DISTINCT) as a window function, only RANGE frames are supported. ROWS frames are NOT supported.
 :::
 
-**Examples:**
+**Examples**
 
 These examples use the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -1777,7 +1779,7 @@ From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY an
 
 If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, or DECIMAL.
 
-**Examples:**
+**Examples**
 
 This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -1819,7 +1821,7 @@ From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY an
 
 If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, or DECIMAL.
 
-**Examples:**
+**Examples**
 
 This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -1859,7 +1861,7 @@ From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY an
 
 If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, or DECIMAL.
 
-**Examples:**
+**Examples**
 
 This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -1899,7 +1901,7 @@ From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY an
 
 If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, or DECIMAL.
 
-**Examples:**
+**Examples**
 
 This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -1957,7 +1959,7 @@ From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY an
 
 If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, or DECIMAL.
 
-**Examples:**
+**Examples**
 
 This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -2013,7 +2015,7 @@ From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY an
 
 If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, or DECIMAL.
 
-**Examples:**
+**Examples**
 
 This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -2053,7 +2055,7 @@ From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY an
 
 If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, or DECIMAL.
 
-**Examples:**
+**Examples**
 
 This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 

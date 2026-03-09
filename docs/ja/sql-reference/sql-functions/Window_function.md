@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-keywords: ['analytic']
+keywords: ['ウィンドウ関数', 'ウィンドウ']
 sidebar_position: 0.9
 ---
 
@@ -179,7 +179,7 @@ from stock_ticker;
 
 **例2: 全体ウィンドウでのAVG(DISTINCT)の使用**
 
-この例では、[サンプルテーブル](#window-function-sample-table)`scores`のデータを使用します。
+この例では、[示例表](#ウィンドウ関数サンプルテーブル) `scores` のデータを使用します。
 
 すべての行で重複しないスコアの平均を計算します。
 
@@ -204,11 +204,11 @@ FROM test_scores;
 +----+---------+-------+-------------+
 ```
 
-重複しない平均は85.00です ((80 + 85 + 90) / 3)。
+重複しない平均は85.00です (`(80 + 85 + 90) / 3`)。
 
 **例3: RANGEフレームを持つフレーム付きウィンドウでAVG(DISTINCT)を使用する**
 
-この例では、[サンプルテーブル](#window-function-sample-table) `scores` のデータを使用します。
+この例では、[示例表](#ウィンドウ関数サンプルテーブル) `scores` のデータを使用します。
 
 RANGEフレームを使用して、各科目パーティション内で重複しないスコアの平均を計算します。
 
@@ -248,7 +248,7 @@ FROM test_scores;
 :::tip
 **ウィンドウフレームの制限:**
 
-ウィンドウ関数としてのARRAY_AGG()は**RANGEウィンドウフレームのみをサポートします**。ROWSウィンドウフレームはサポートされていません。ウィンドウフレームが指定されていない場合、デフォルトの `RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW` が使用されます。
+ウィンドウ関数としての ARRAY_AGG() は RANGE ウィンドウフレームのみをサポートします。ROWS ウィンドウフレームはサポートされていません。ウィンドウフレームが指定されていない場合、デフォルトの `RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW` が使用されます。
 :::
 
 **構文:**
@@ -276,9 +276,9 @@ ARRAY_AGG([DISTINCT] expr [ORDER BY expr [ASC | DESC]]) OVER([partition_by_claus
 
 **例**
 
-これらの例では、[サンプルテーブル](#window-function-sample-table) `scores` のデータを使用します。
+これらの例では、[示例表](#ウィンドウ関数サンプルテーブル) `scores` のデータを使用します。
 
-**例1: ウィンドウでの基本的なARRAY_AGG()**
+**例1: 基本的な使用法**
 
 各科目パーティション内のすべてのスコアを収集します。
 
@@ -310,7 +310,7 @@ WHERE subject = 'math';
 
 注: 同じ `score` 値を持つ行（トムとエイミーは両方とも80）は、RANGEフレームのセマンティクスにより同じ配列を受け取ります。
 
-**例2: ウィンドウでのARRAY_AGG(DISTINCT)**
+**例2: ウィンドウでの ARRAY_AGG(DISTINCT)**
 
 各科目パーティション内で重複しないスコアを収集します。
 
@@ -340,7 +340,7 @@ WHERE subject = 'math';
 +------+-------+---------+-------+-------------------+
 ```
 
-**例3: ORDER BY句を使用したARRAY_AGG()**
+**例3: ORDER BY 句を使用した ARRAY_AGG()**
 
 配列内でスコアを降順にソートして収集します。
 
@@ -484,11 +484,11 @@ count(distinct col) OVER (PARTITION BY x ORDER BY y ROWS BETWEEN 1 PRECEDING AND
 
 **例**
 
-これらの例では、[サンプルテーブル](#window-function-sample-table)`scores`のデータを使用します。
+これらの例では、[示例表](#ウィンドウ関数サンプルテーブル)`scores`のデータを使用します。
 
 **例1: 基本的な使用法**
 
-現在の行から数学パーティションの最初の行まで、90より大きい数学のスコアの出現回数をカウントします。この例では、[サンプルテーブル](#window-function-sample-table)`scores`のデータを使用します。
+現在の行から数学パーティションの最初の行まで、90より大きい数学のスコアの出現回数をカウントします。この例では、[示例表](#ウィンドウ関数サンプルテーブル)`scores`のデータを使用します。
 
 ```SQL
 select *,
@@ -606,9 +606,9 @@ CUME_DIST() OVER (partition_by_clause order_by_clause)
 
 CUME_DIST()はNULL値を含み、それらを最低値として扱います。
 
-**例:**
+**例**
 
-次の例は、各`subject`グループ内の各スコアの累積分布を示しています。この例では、次のデータを使用します。[サンプルテーブル](#window-function-sample-table) `scores`。
+次の例は、各`subject`グループ内の各スコアの累積分布を示しています。この例では、次のデータを使用します。[示例表](#ウィンドウ関数サンプルテーブル) `scores`。
 
 ```plaintext
 SELECT *, 
@@ -656,9 +656,9 @@ DENSE_RANK()関数はランキングを表すために使用されます。RANK(
 DENSE_RANK() OVER(partition_by_clause order_by_clause)
 ```
 
-**例:**
+**例**
 
-次の例は、数学のスコアのランキング（降順にソート）を示しています。この例では、次のデータを使用します。[サンプルテーブル](#window-function-sample-table) `scores`。
+次の例は、数学のスコアのランキング（降順にソート）を示しています。この例では、次のデータを使用します。[示例表](#ウィンドウ関数サンプルテーブル) `scores`。
 
 ```SQL
 select *,
@@ -699,11 +699,11 @@ FIRST_VALUE(expr [IGNORE NULLS]) OVER(partition_by_clause order_by_clause [windo
 
 ARRAY型はStarRocks v3.5以降でサポートされています。FIRST_VALUE()をARRAY列で使用して、ウィンドウ内の最初の配列値を取得できます。
 
-**例:**
+**例**
 
 **例1: 基本的な使用法**
 
-各グループの各メンバーについて、`subject`でグループ化し、最初の`score`値を返します（降順）。この例では、次のデータを使用します。[サンプルテーブル](#window-function-sample-table) `scores`。
+各グループの各メンバーについて、`subject`でグループ化し、最初の`score`値を返します（降順）。この例では、次のデータを使用します。[示例表](#ウィンドウ関数サンプルテーブル) `scores`。
 
 ```SQL
 select *,
@@ -798,11 +798,11 @@ LAST_VALUE(expr [IGNORE NULLS]) OVER(partition_by_clause order_by_clause [window
 
 ARRAY型はStarRocks v3.5からサポートされています。LAST_VALUE()をARRAY列で使用して、ウィンドウ内の最後の配列値を取得できます。
 
-**例:**
+**例**
 
 **例 1: 基本的な使用法**
 
-グループ内の各メンバーの最後の`score`を返します（降順）。`subject`でグループ化します。この例では、[サンプルテーブル](#window-function-sample-table)`scores`のデータを使用します。
+グループ内の各メンバーの最後の`score`を返します（降順）。`subject`でグループ化します。この例では、[示例表](#ウィンドウ関数サンプルテーブル)`scores`のデータを使用します。
 
 ```SQL
 select *,
@@ -1203,9 +1203,9 @@ FROM test_array_value;
 MAX(expr) [OVER (analytic_clause)]
 ```
 
-**例:**
+**例**
 
-最初の行から現在の行の次の行までの行の最大値を計算します。この例では、次のデータを使用します。[サンプルテーブル](#window-function-sample-table) `scores`。
+最初の行から現在の行の次の行までの行の最大値を計算します。この例では、次のデータを使用します。[示例表](#ウィンドウ関数サンプルテーブル) `scores`。
 
 ```SQL
 select *,
@@ -1271,9 +1271,9 @@ where subject in ('math');
 MIN(expr) [OVER (analytic_clause)]
 ```
 
-**例:**
+**例**
 
-数学の科目のすべての行の中で最低スコアを計算します。この例では、次のデータを使用します。[サンプルテーブル](#window-function-sample-table) `scores`。
+数学の科目のすべての行の中で最低スコアを計算します。この例では、次のデータを使用します。[示例表](#ウィンドウ関数サンプルテーブル) `scores`。
 
 ```SQL
 select *, 
@@ -1336,9 +1336,9 @@ NTILE()関数ではウィンドウ句は許可されません。
 
 NTILE()関数はBIGINT型のデータを返します。
 
-**例:**
+**例**
 
-次の例では、パーティション内のすべての行を2つのバケットに分割します。この例では、次のデータを使用します。[サンプルテーブル](#window-function-sample-table) `scores`。
+次の例では、パーティション内のすべての行を2つのバケットに分割します。この例では、次のデータを使用します。[示例表](#ウィンドウ関数サンプルテーブル) `scores`。
 
 ```sql
 select *,
@@ -1404,9 +1404,9 @@ PERCENT_RANK() OVER (partition_by_clause order_by_clause)
 PERCENT_RANK() は、パーティションの行を目的の順序に並べ替えるために ORDER BY と一緒に使用する必要があります。
 :::
 
-**例:**
+**例**
 
-次の例は、`math` のグループ内における各 `score` の相対的なランクを示しています。この例では、[サンプルテーブル](#window-function-sample-table) `scores` のデータを使用しています。
+次の例は、`math` のグループ内における各 `score` の相対的なランクを示しています。この例では、[示例表](#ウィンドウ関数サンプルテーブル) `scores` のデータを使用しています。
 
 ```SQL
 SELECT *,
@@ -1441,9 +1441,9 @@ RANK() 関数はランキングを表すために使用されます。DENSE_RANK
 RANK() OVER(partition_by_clause order_by_clause)
 ```
 
-**例:**
+**例**
 
-グループ内の数学のスコアをランク付けします。この例では、[サンプルテーブル](#window-function-sample-table) `scores` のデータを使用しています。
+グループ内の数学のスコアをランク付けします。この例では、[示例表](#ウィンドウ関数サンプルテーブル) `scores` のデータを使用しています。
 
 ```SQL
 select *, 
@@ -1479,9 +1479,9 @@ from scores where subject in ('math');
 ROW_NUMBER() OVER(partition_by_clause order_by_clause)
 ```
 
-**例:**
+**例**
 
-グループ内の数学のスコアをランク付けします。この例では、[サンプルテーブル](#window-function-sample-table) `scores` のデータを使用しています。
+グループ内の数学のスコアをランク付けします。この例では、[示例表](#ウィンドウ関数サンプルテーブル) `scores` のデータを使用しています。
 
 ```SQL
 select *, row_number() over(
@@ -1550,7 +1550,7 @@ QUALIFY <window_function>
 
 `<window_function>`: `QUALIFY`句の後には、ROW_NUMBER()、RANK()、DENSE_RANK()を含むウィンドウ関数のみが続きます。
 
-**例:**
+**例**
 
 ```SQL
 -- テーブルを作成します。
@@ -1659,9 +1659,9 @@ SUM([DISTINCT] expr) [OVER (analytic_clause)]
 ウィンドウ関数としてSUM(DISTINCT)を使用する場合、RANGEフレームのみがサポートされます。ROWSフレームはサポートされません。
 :::
 
-**例:**
+**例**
 
-これらの例では、[サンプルテーブル](#window-function-sample-table)`scores`のデータを使用します。
+これらの例では、[示例表](#ウィンドウ関数サンプルテーブル)`scores`のデータを使用します。
 
 **例1: 基本的な使用法**
 
@@ -1779,9 +1779,9 @@ VARIANCE(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause win
 
 `expr`がテーブル列の場合、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、またはDECIMALに評価される必要があります。
 
-**例:**
+**例**
 
-この例では、次のデータを使用します。[サンプルテーブル](#window-function-sample-table) `scores`。
+この例では、次のデータを使用します。[示例表](#ウィンドウ関数サンプルテーブル) `scores`。
 
 ```plaintext
 select *,
@@ -1821,9 +1821,9 @@ VAR_SAMP(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause win
 
 `expr`がテーブル列の場合、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、またはDECIMALに評価される必要があります。
 
-**例:**
+**例**
 
-この例では、次のデータを使用します。[サンプルテーブル](#window-function-sample-table) `scores`。
+この例では、次のデータを使用します。[示例表](#ウィンドウ関数サンプルテーブル) `scores`。
 
 ```plaintext
 select *,
@@ -1861,9 +1861,9 @@ STD(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_c
 
 `expr`がテーブル列の場合、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、またはDECIMALに評価される必要があります。
 
-**例:**
+**例**
 
-この例では、次のデータを使用します。[サンプルテーブル](#window-function-sample-table) `scores`。
+この例では、次のデータを使用します。[示例表](#ウィンドウ関数サンプルテーブル) `scores`。
 
 ```plaintext
 select *, STD(score)
@@ -1901,9 +1901,9 @@ STDDEV_SAMP(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause 
 
 `expr`がテーブル列の場合、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、またはDECIMALに評価される必要があります。
 
-**例:**
+**例**
 
-この例では、[サンプルテーブル](#window-function-sample-table) `scores` のデータを使用します。
+この例では、[示例表](#ウィンドウ関数サンプルテーブル) `scores` のデータを使用します。
 
 ```plaintext
 select *, STDDEV_SAMP(score)
@@ -1959,9 +1959,9 @@ COVAR_SAMP(expr1,expr2) OVER([partition_by_clause] [order_by_clause] [order_by_c
 
 もし `expr` がテーブル列である場合、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、またはDECIMALに評価される必要があります。
 
-**例:**
+**例**
 
-この例では、[サンプルテーブル](#window-function-sample-table) `scores` のデータを使用します。
+この例では、[示例表](#ウィンドウ関数サンプルテーブル) `scores` のデータを使用します。
 
 ```plaintext
 select *, COVAR_SAMP(id, score) 
@@ -2015,9 +2015,9 @@ COVAR_POP(expr1, expr2) OVER([partition_by_clause] [order_by_clause] [order_by_c
 
 もし `expr` がテーブル列である場合、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、またはDECIMALに評価される必要があります。
 
-**例:**
+**例**
 
-この例では、[サンプルテーブル](#window-function-sample-table) `scores` のデータを使用します。
+この例では、[示例表](#ウィンドウ関数サンプルテーブル) `scores` のデータを使用します。
 
 ```plaintext
 select *, COVAR_POP(id, score)
@@ -2055,9 +2055,9 @@ CORR(expr1, expr2) OVER([partition_by_clause] [order_by_clause] [order_by_clause
 
 もし `expr` がテーブル列である場合、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、またはDECIMALに評価される必要があります。
 
-**例:**
+**例**
 
-この例では、[サンプルテーブル](#window-function-sample-table) `scores` のデータを使用します。
+この例では、[示例表](#ウィンドウ関数サンプルテーブル) `scores` のデータを使用します。
 
 ```plaintext
 select *, CORR(id, score)
