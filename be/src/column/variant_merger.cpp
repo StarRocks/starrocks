@@ -318,6 +318,10 @@ Status VariantMerger::arbitrate_type_conflicts(VariantColumn* dst, VariantColumn
         LogicalType common_type = common_type_desc.type;
 
         if (common_type == TYPE_VARIANT) {
+            // Cast both sides before mutating either, to avoid leaving dst in an inconsistent
+            // state if the src cast fails after dst has already been replaced.
+            MutableColumnPtr new_dst_col;
+            MutableColumnPtr new_src_col;
             if (dst_type != TYPE_VARIANT) {
                 auto casted_dst_st = cast_column_to_variant(*dst_typed_columns[dst_index], dst_types[dst_index]);
                 if (!casted_dst_st.ok()) {
@@ -326,9 +330,7 @@ Status VariantMerger::arbitrate_type_conflicts(VariantColumn* dst, VariantColumn
                             path, logical_type_to_string(src_type), logical_type_to_string(dst_type),
                             casted_dst_st.status().to_string()));
                 }
-                auto casted_dst = std::move(casted_dst_st).value();
-                dst_typed_columns[dst_index] = std::move(casted_dst);
-                dst_types[dst_index] = TypeDescriptor(TYPE_VARIANT);
+                new_dst_col = std::move(casted_dst_st).value();
             }
             if (src_type != TYPE_VARIANT) {
                 auto casted_src_st = cast_column_to_variant(*src_typed_columns[src_index], src_types[src_index]);
@@ -338,14 +340,23 @@ Status VariantMerger::arbitrate_type_conflicts(VariantColumn* dst, VariantColumn
                             path, logical_type_to_string(src_type), logical_type_to_string(dst_type),
                             casted_src_st.status().to_string()));
                 }
-                auto casted_src = std::move(casted_src_st).value();
-                src_typed_columns[src_index] = std::move(casted_src);
+                new_src_col = std::move(casted_src_st).value();
+            }
+            if (new_dst_col) {
+                dst_typed_columns[dst_index] = std::move(new_dst_col);
+                dst_types[dst_index] = TypeDescriptor(TYPE_VARIANT);
+            }
+            if (new_src_col) {
+                src_typed_columns[src_index] = std::move(new_src_col);
                 src_types[src_index] = TypeDescriptor(TYPE_VARIANT);
             }
             continue;
         }
 
         if (common_type_desc.is_decimalv3_type()) {
+            // Cast both sides before mutating either.
+            MutableColumnPtr new_dst_col;
+            MutableColumnPtr new_src_col;
             if (dst_types[dst_index] != common_type_desc) {
                 auto casted_dst_st =
                         cast_decimalv3_column(*dst_typed_columns[dst_index], dst_types[dst_index], common_type_desc);
@@ -355,8 +366,7 @@ Status VariantMerger::arbitrate_type_conflicts(VariantColumn* dst, VariantColumn
                             dst_types[dst_index].debug_string(), common_type_desc.debug_string(),
                             casted_dst_st.status().to_string()));
                 }
-                dst_typed_columns[dst_index] = std::move(casted_dst_st).value();
-                dst_types[dst_index] = common_type_desc;
+                new_dst_col = std::move(casted_dst_st).value();
             }
             if (src_types[src_index] != common_type_desc) {
                 auto casted_src_st =
@@ -367,12 +377,22 @@ Status VariantMerger::arbitrate_type_conflicts(VariantColumn* dst, VariantColumn
                             src_types[src_index].debug_string(), common_type_desc.debug_string(),
                             casted_src_st.status().to_string()));
                 }
-                src_typed_columns[src_index] = std::move(casted_src_st).value();
+                new_src_col = std::move(casted_src_st).value();
+            }
+            if (new_dst_col) {
+                dst_typed_columns[dst_index] = std::move(new_dst_col);
+                dst_types[dst_index] = common_type_desc;
+            }
+            if (new_src_col) {
+                src_typed_columns[src_index] = std::move(new_src_col);
                 src_types[src_index] = common_type_desc;
             }
             continue;
         }
 
+        // Cast both sides before mutating either.
+        MutableColumnPtr new_dst_col;
+        MutableColumnPtr new_src_col;
         if (dst_type != common_type) {
             auto casted_dst_st = cast_numeric_column(*dst_typed_columns[dst_index], dst_type, common_type);
             if (!casted_dst_st.ok()) {
@@ -381,9 +401,7 @@ Status VariantMerger::arbitrate_type_conflicts(VariantColumn* dst, VariantColumn
                                             logical_type_to_string(dst_type), logical_type_to_string(common_type),
                                             casted_dst_st.status().to_string()));
             }
-            auto casted_dst = std::move(casted_dst_st).value();
-            dst_typed_columns[dst_index] = std::move(casted_dst);
-            dst_types[dst_index] = TypeDescriptor(common_type);
+            new_dst_col = std::move(casted_dst_st).value();
         }
         if (src_type != common_type) {
             auto casted_src_st = cast_numeric_column(*src_typed_columns[src_index], src_type, common_type);
@@ -393,8 +411,14 @@ Status VariantMerger::arbitrate_type_conflicts(VariantColumn* dst, VariantColumn
                                             logical_type_to_string(src_type), logical_type_to_string(common_type),
                                             casted_src_st.status().to_string()));
             }
-            auto casted_src = std::move(casted_src_st).value();
-            src_typed_columns[src_index] = std::move(casted_src);
+            new_src_col = std::move(casted_src_st).value();
+        }
+        if (new_dst_col) {
+            dst_typed_columns[dst_index] = std::move(new_dst_col);
+            dst_types[dst_index] = TypeDescriptor(common_type);
+        }
+        if (new_src_col) {
+            src_typed_columns[src_index] = std::move(new_src_col);
             src_types[src_index] = TypeDescriptor(common_type);
         }
     }
