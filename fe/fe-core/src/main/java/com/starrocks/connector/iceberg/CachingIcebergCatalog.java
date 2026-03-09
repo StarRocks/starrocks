@@ -563,7 +563,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
             }
             IcebergTableName that = (IcebergTableName) o;
             return dbName.equalsIgnoreCase(that.dbName) && tableName.equalsIgnoreCase(that.tableName) &&
-                    (ignoreSnapshotId || snapshotId == that.snapshotId);
+                    (ignoreSnapshotId || that.ignoreSnapshotId || snapshotId == that.snapshotId);
         }
 
         @Override
