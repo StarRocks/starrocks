@@ -170,12 +170,11 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
     auto async_writer = static_cast<AsyncDeltaWriterImpl*>(meta);
     auto delta_writer = async_writer->_writer.get();
     if (iter.is_queue_stopped()) {
-        // Only perform blocking I/O (wait for flush, close tablet writer) here.
-        // Do NOT reset/destroy internal state (_mem_table_sink, _flush_token, etc.)
-        // because a MergeBlockTask may still be running in the merge thread pool
-        // and accessing that state. Resource cleanup is deferred to
-        // AsyncDeltaWriterImpl::close() after all tasks have been drained.
-        delta_writer->flush_and_wait();
+        // We're in the execution queue's pthread thread pool — safe to block.
+        // Merge tasks have already been drained by _block_merge_token->shutdown()
+        // in AsyncDeltaWriterImpl::close() before execution_queue_stop().
+        // close() runs here in pthread context, avoiding DCHECK_EQ(0, bthread_self()).
+        delta_writer->close();
         return 0;
     }
     int num_tasks = 0;
@@ -357,12 +356,12 @@ inline void AsyncDeltaWriterImpl::close() {
 
         TEST_SYNC_POINT("AsyncDeltaWriterImpl::close:2");
 
-        // Shutdown (but do NOT reset) _block_merge_token to drain any running merge tasks.
-        // This must happen BEFORE execution_queue_stop() to ensure all merge tasks
-        // (which access writer state like _mem_table_sink) complete before the queue
-        // is torn down. The token remains allocated (not null) so if execute() is still
-        // running and calls _block_merge_token->submit(), it gets a ServiceUnavailable
-        // error instead of SIGSEGV.
+        // Shutdown merge token first to drain any running/pending merge tasks.
+        // This must happen BEFORE execution_queue_stop() so that merge tasks
+        // (which access writer state like _mem_table_sink, _flush_token) complete
+        // before the stop handler calls delta_writer->close().
+        // Queued FinishTasks that try to submit new merge tasks will get
+        // ServiceUnavailable — that's fine since we're aborting anyway.
         if (_block_merge_token != nullptr) {
             _block_merge_token->shutdown();
         }
@@ -372,19 +371,14 @@ inline void AsyncDeltaWriterImpl::close() {
         int r = bthread::execution_queue_stop(old_id);
         PLOG_IF(WARNING, r != 0) << "Fail to stop execution queue";
 
-        // Wait for all running tasks completed.
+        // Wait for all running tasks to complete. The stop handler runs in the
+        // execution queue's pthread thread pool and calls delta_writer->close(),
+        // which avoids DCHECK_EQ(0, bthread_self()) failure.
         r = bthread::execution_queue_join(old_id);
         PLOG_IF(WARNING, r != 0) << "Fail to join execution queue";
 
-        // Safe to destroy token now since both execution queue and merge tasks are done.
+        // Safe to destroy token now since shutdown() already drained it.
         _block_merge_token.reset();
-
-        // Release writer resources (reset _mem_table_sink, _flush_token, etc.) AFTER all
-        // tasks have completed. The blocking I/O (flush wait + tablet writer close) was
-        // already done in the execution queue's stop handler via flush_and_wait().
-        // We only do the non-blocking resource cleanup here, which is safe because all
-        // concurrent accessors (MergeBlockTask, profile readers) have been drained.
-        _writer->release_resources();
     }
 }
 
