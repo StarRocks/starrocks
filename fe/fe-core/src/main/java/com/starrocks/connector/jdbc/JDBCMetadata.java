@@ -67,17 +67,12 @@ public class JDBCMetadata implements ConnectorMetadata {
     private HikariDataSource dataSource;
     private static final ExecutorService NETWORK_TIMEOUT_EXECUTOR = Executors.newSingleThreadExecutor(
             new ThreadFactoryBuilder().setDaemon(true).setNameFormat("jdbc-network-timeout-%d").build());
-<<<<<<< HEAD
-=======
 
     // HikariCP connection lifecycle constants
     static final long MINIMUM_MAX_LIFETIME_MS = 30_000L;
     static final long DEFAULT_MAX_LIFETIME_MS = 300_000L;
     static final long MINIMUM_KEEPALIVE_TIME_MS = 30_000L;
     static final long KEEPALIVE_DISABLED = 0L;
-    private static final List<String> SUPPORTED_SCHEMA_RESOLVERS =
-            ImmutableList.of("postgresql", "mysql", "oracle", "sqlserver", "clickhouse");
->>>>>>> 5272df890d ([Enhancement] Upgrade HikariCP and add connection lifecycle management for JDBC catalog (#69256))
 
     public JDBCMetadata(Map<String, String> properties, String catalogName) {
         this(properties, catalogName, null);
