@@ -21,6 +21,7 @@
 namespace starrocks::pipeline {
 class QueryContext;
 using QueryContextPtr = std::shared_ptr<QueryContext>;
+class QueryContextManager;
 class FragmentContext;
 using FragmentContextPtr = std::shared_ptr<FragmentContext>;
 class FragmentContextManager;

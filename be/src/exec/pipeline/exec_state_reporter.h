@@ -16,18 +16,21 @@
 
 #include <memory>
 
+#include "common/status.h"
 #include "common/system/backend_options.h"
 #include "common/thread/threadpool.h"
-#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "gen_cpp/FrontendService.h"
-#include "gen_cpp/InternalService_types.h"
+#include "gen_cpp/FrontendService_types.h"
+#include "gen_cpp/MVMaintenance_types.h"
 #include "gen_cpp/Types_types.h"
-#include "runtime/exec_env.h"
-#include "runtime/runtime_state.h"
 
-namespace starrocks::pipeline {
+namespace starrocks {
+class ExecEnv;
+class RuntimeProfile;
+
+namespace pipeline {
 class ExecStateReporterMetrics;
+
 class ExecStateReporter {
 public:
     explicit ExecStateReporter(const CpuUtil::CpuIds& cpuids, ExecStateReporterMetrics* metrics);
@@ -64,4 +67,5 @@ private:
     std::unique_ptr<ThreadPool> _thread_pool;
     std::unique_ptr<ThreadPool> _priority_thread_pool;
 };
-} // namespace starrocks::pipeline
+} // namespace pipeline
+} // namespace starrocks
