@@ -55,7 +55,7 @@ subprojects {
         set("grpc.version", "1.63.0")
         set("hadoop.version", "3.4.3")
         set("hbase.version", "2.6.2")
-        set("hikaricp.version", "3.4.5")
+        set("hikaricp.version", "7.0.2")
         set("hive-apache.version", "3.1.2-22")
         set("hudi.version", "1.0.2")
         set("iceberg.version", "1.10.0")
