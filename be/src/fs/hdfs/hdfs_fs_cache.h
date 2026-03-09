@@ -45,6 +45,8 @@ public:
 class HdfsFsCache {
 public:
     ~HdfsFsCache() = default;
+    HdfsFsCache(const HdfsFsCache&) = delete;
+    const HdfsFsCache& operator=(const HdfsFsCache&) = delete;
     static HdfsFsCache* instance() {
         static HdfsFsCache s_instance;
         return &s_instance;
@@ -61,8 +63,6 @@ private:
     Random _rand{(uint32_t)time(nullptr)};
 
     HdfsFsCache() = default;
-    HdfsFsCache(const HdfsFsCache&) = delete;
-    const HdfsFsCache& operator=(const HdfsFsCache&) = delete;
 };
 
 } // namespace starrocks
