@@ -789,14 +789,37 @@ PROPERTIES (
       You can foreshorten this interval by setting a lower value for the FE dynamic configuration `lake_autovacuum_grace_period_minutes`. However, remember to reset the configuration to its original value after you modify the `file_bundling` property.
   :::
 
-### Fast schema evolution
+### Fast Schema Evolution
 
-`fast_schema_evolution`: Whether to enable fast schema evolution for the table. Valid values are `TRUE` or `FALSE` (default). Enabling fast schema evolution can increase the speed of schema changes and reduce resource usage when columns are added or dropped. Currently, this property can only be enabled at table creation, and it cannot be modified using [ALTER TABLE](ALTER_TABLE.md) after table creation.
+- `fast_schema_evolution`: Whether to enable Fast Schema Evolution for the table. Valid values are `TRUE` or `FALSE` (default). Enabling Fast Schema Evolution can increase the speed of schema changes and reduce resource usage when columns are added or dropped. Currently, this property can only be enabled at table creation, and it cannot be modified using ALTER TABLE after table creation.
 
   :::note
-  - Fast schema evolution is supported for shared-nothing clusters since v3.2.0.
-  - Fast schema evolution is supported for shared-data clusters since v3.3 and is enabled by default. You do not need to specify this property when creating cloud-native tables in shared-data clusters. The FE dynamic parameter `enable_fast_schema_evolution` (Default: true) controls this behavior.
+  - Fast Schema Evolution is supported for shared-nothing clusters since v3.2.0.
+  - Fast Schema Evolution is supported for shared-data clusters since v3.3 and is enabled by default. You do not need to specify this property when creating cloud-native tables in shared-data clusters. The FE dynamic parameter `enable_fast_schema_evolution` (Default: true) controls this behavior.
   :::
+
+- `cloud_native_fast_schema_evolution_v2`: Whether to enable Fast Schema Evolution v2 for the **cloud-native table**. Supported from v4.1 onwards. Valid values are `TRUE` (default) or `FALSE`. When Fast Schema Evolution v2 is enabled, schema changes become a synchronous process. When the ALTER TABLE statement returns successfully, the new schema is effective immediately. The system will only modify FE metadata rather than tablet metadata located on S3, so it can always achieve second-level latency no matter how many partitions or tablets in the table. While in the legacy behavior, schema changes are run as an asynchronous job that updates tablet metadata over time.
+
+  :::note
+  - Fast Schema Evolution v2 is supported from v4.1 onwards and only for **cloud-native tables** in shared-data clusters.
+  - Default behaviors:
+    - For new tables created in a v4.1 cluster, Fast Schema Evolution v2 is enabled by default.
+    - For existing tables from a cluster upgraded to v4.1, Fast Schema Evolution v2 is disabled by default. You can enable it by explicitly setting this property to `true` via [ALTER TABLE](ALTER_TABLE.md).
+  - Downgrade requirements:
+    - To downgrade a shared-data cluster from v4.1 to v4.0.5 or later, you can directly downgrade it following the standard downgrade procedures.
+    - Before downgrading a shared-data cluster from v4.1 to v3.x or patch versions earlier than v4.0.5, you must manually set `cloud_native_fast_schema_evolution_v2` to `false` for any tables that have enabled Fast Schema Evolution v2 via ALTER TABLE. You must wait until the asynchronous jobs become FINISHED. You can track the job status via SHOW ALTER.
+  :::
+
+You can inspect the schema change jobs via [SHOW ALTER TABLE COLUMN](./SHOW_ALTER.md).
+
+Example:
+
+```SQL
+-- List recent column/schema change jobs in the table
+SHOW ALTER TABLE COLUMN FROM test_db WHERE TableName = "test_tbl";
+```
+
+For cloud-native tables with Fast Schema Evolution v2 enabled, schema change jobs will typically appear as FINISHED, because the change is applied by updating FE metadata only.
 
 ### Forbid Base Compaction
 

@@ -2961,13 +2961,13 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to enable fast schema evolution for all tables within the StarRocks cluster. Valid values are `TRUE` and `FALSE` (default). Enabling fast schema evolution can increase the speed of schema changes and reduce resource usage when columns are added or dropped.
+- Description: Whether to enable Fast Schema Evolution for all tables within the StarRocks cluster. Valid values are `TRUE` and `FALSE` (default). Enabling Fast Schema Evolution can increase the speed of schema changes and reduce resource usage when columns are added or dropped.
 - Introduced in: v3.2.0
 
 > **NOTE**
 >
 > - StarRocks shared-data clusters supports this parameter from v3.3.0.
-> - If you need to configure the fast schema evolution for a specific table, such as disabling fast schema evolution for a specific table, you can set the table property [`fast_schema_evolution`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#set-fast-schema-evolution) at table creation.
+> - If you need to configure the Fast Schema Evolution for a specific table, such as disabling Fast Schema Evolution for a specific table, you can set the table property [`fast_schema_evolution`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#set-fast-schema-evolution) at table creation.
 
 ##### `enable_online_optimize_table`
 

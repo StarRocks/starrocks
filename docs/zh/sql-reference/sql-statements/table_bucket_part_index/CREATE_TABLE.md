@@ -787,14 +787,37 @@ PROPERTIES (
       您可以通过将 FE 动态配置 `lake_autovacuum_grace_period_minutes` 的值设置为较小的数值来缩短此间隔。但在修改 `file_bundling` 属性后，请务必将该配置恢复为原始值。
   :::
 
-### 快速模式架构演进
+### Fast Schema Evolution
 
-`fast_schema_evolution`：是否为表启用快速模式架构演进。有效值为 `TRUE` 或 `FALSE`（默认）。启用快速模式架构演进可以在添加或删除列时提高架构更改的速度并减少资源使用。目前，此属性只能在创建表时启用，不能在创建表后使用 [ALTER TABLE](ALTER_TABLE.md) 修改。
+- `fast_schema_evolution`：是否为表启用 Fast Schema Evolution。有效值为 `TRUE` 或 `FALSE`（默认）。启用 Fast Schema Evolution 可以在添加或删除列时提高 Schema Change 的速度并减少资源使用。目前，此属性只能在创建表时启用，不能在创建表后使用 ALTER TABLE 修改。
 
   :::note
-  - 自 v3.2.0 起，存算一体集群支持快速模式架构演进。
-  - 自 v3.3 起，存算分离集群支持快速模式架构演进，并默认启用。在存算分离集群中创建云原生表时，您无需指定此属性。FE 动态参数 `enable_fast_schema_evolution`（默认值：true）控制此行为。
+  - 自 v3.2.0 起，存算一体集群支持 Fast Schema Evolution。
+  - 自 v3.3 起，存算分离集群支持 Fast Schema Evolution，并默认启用。在存算分离集群中创建云原生表时，您无需指定此属性。FE 动态参数 `enable_fast_schema_evolution`（默认值：true）控制此行为。
   :::
+
+- `cloud_native_fast_schema_evolution_v2`：是否为**云原生表**启用 Fast Schema Evolution v2。自 v4.1 起支持。有效值为 `TRUE`（默认）或 `FALSE`。启用 Fast Schema Evolution v2 后，Schema Change 将转为同步过程。当 ALTER TABLE 语句成功返回时，新 Schema 立即生效。系统仅会修改 FE 元数据而非位于 S3 上的 Tablet 元数据，因此无论表中包含多少个分区或分片，始终能实现秒级延迟。而在传统行为模式下，Schema Change 作为异步作业运行，会随时间推移逐步更新 Tablet 元数据。
+
+  :::note
+  - Fast Schema Evolution v2 功能自 v4.1 版本起提供支持，且仅适用于存算分离集群中的**云原生表**。
+  - 默认行为：
+    - 在 v4.1 集群中创建的新表默认启用 Fast Schema Evolution v2。
+    - 升级至 v4.1 集群中的已有表默认禁用 Fast Schema Evolution v2。可通过 [ALTER TABLE](ALTER_TABLE.md) 将此属性显式设置为 `true` 来启用该功能。
+  - 降级要求：
+    - 若需将存算分离集群从 v4.1 降级至 v4.0.5 或更高版本，可直接遵循标准降级流程操作。
+    - 在将存算分离集群从 v4.1 降级至 v3.x 或低于 v4.0.5 的补丁版本前，必须通过 ALTER TABLE 手动将所有启用 Fast Schema Evolution v2 的表的 `cloud_native_fast_schema_evolution_v2` 参数设置为 `false`，并等待异步作业状态变为 FINISHED。可通过 SHOW ALTER 命令追踪作业状态。
+  :::
+
+您可以通过 [SHOW ALTER TABLE COLUMN](./SHOW_ALTER.md) 查看 Schema Change 作业。
+
+示例：
+
+```SQL
+-- 列出表中最近的列/Schema Change 作业
+SHOW ALTER TABLE COLUMN FROM test_db WHERE TableName = "test_tbl";
+```
+
+对于启用了 Fast Schema Evolution v2 的云原生表，Schema Change 作业通常会显示为 FINISHED，因为变更仅通过更新 FE 元数据来应用。
 
 ### 禁止 Base Compaction
 
