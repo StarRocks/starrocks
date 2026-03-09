@@ -178,6 +178,11 @@ public:
 
     const FlushStatistic* get_flush_stats() const;
 
+    // Thread-safe accessor: returns a shared_ptr copy of the FlushToken.
+    // The caller holds the token alive while reading stats, preventing
+    // use-after-free when close() concurrently resets the token.
+    std::shared_ptr<FlushToken> get_flush_token() const;
+
     bool has_spill_block() const;
 
     const DictColumnsValidMap* global_dict_columns_valid_info() const;
