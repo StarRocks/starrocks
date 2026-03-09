@@ -144,6 +144,8 @@ protected:
 class ThreadPoolBuilder {
 public:
     explicit ThreadPoolBuilder(std::string name);
+    ThreadPoolBuilder(const ThreadPoolBuilder&) = delete;
+    const ThreadPoolBuilder& operator=(const ThreadPoolBuilder&) = delete;
 
     // Note: We violate the style guide by returning mutable references here
     // in order to provide traditional Builder pattern conveniences.
@@ -166,9 +168,6 @@ private:
     MonoDelta _idle_timeout;
     CpuUtil::CpuIds _cpuids;
     std::vector<CpuUtil::CpuIds> _borrowed_cpuids;
-
-    ThreadPoolBuilder(const ThreadPoolBuilder&) = delete;
-    const ThreadPoolBuilder& operator=(const ThreadPoolBuilder&) = delete;
 };
 
 // Thread pool with a variable number of threads.
@@ -208,6 +207,9 @@ private:
 //    thread_pool->SubmitFunc(std::bind(&Func, 10));
 class ThreadPool {
 public:
+    ThreadPool(const ThreadPool&) = delete;
+    const ThreadPool& operator=(const ThreadPool&) = delete;
+
     enum Priority {
         LOW_PRIORITY = 0,
         HIGH_PRIORITY,
@@ -435,9 +437,6 @@ private:
 
     // Total time in nanoseconds to execute tasks.
     CoreLocalCounter<int64_t> _total_execute_time_ns{MetricUnit::NOUNIT};
-
-    ThreadPool(const ThreadPool&) = delete;
-    const ThreadPool& operator=(const ThreadPool&) = delete;
 };
 
 // Entry point for token-based task submission and blocking for a particular
@@ -447,6 +446,9 @@ private:
 // ThreadPool's lock.
 class ThreadPoolToken {
 public:
+    ThreadPoolToken(const ThreadPoolToken&) = delete;
+    const ThreadPoolToken& operator=(const ThreadPoolToken&) = delete;
+
     // Destroys the token.
     //
     // May be called on a token with outstanding tasks, as Shutdown() will be
@@ -545,9 +547,6 @@ private:
     // Number of worker threads currently executing tasks belonging to this
     // token.
     int _active_threads;
-
-    ThreadPoolToken(const ThreadPoolToken&) = delete;
-    const ThreadPoolToken& operator=(const ThreadPoolToken&) = delete;
 };
 
 // A class use to limit the number of tasks submitted to the thread pool.
