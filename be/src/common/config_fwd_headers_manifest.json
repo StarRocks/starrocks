@@ -117,7 +117,19 @@
         "enable_datacache_mem_auto_adjust",
         "datacache_mem_adjust_period",
         "datacache_mem_adjust_interval_seconds",
-        "datacache_unified_instance_enable"
+        "datacache_unified_instance_enable",
+        "datacache_mem_size",
+        "datacache_block_size",
+        "datacache_checksum_enable",
+        "datacache_direct_io_enable",
+        "datacache_max_concurrent_inserts",
+        "datacache_max_flying_memory_mb",
+        "datacache_skip_read_factor",
+        "datacache_scheduler_threads_per_cpu",
+        "datacache_persistence_enable",
+        "datacache_inline_item_count_limit",
+        "datacache_eviction_policy",
+        "block_cache_enable"
       ]
     },
     {
@@ -180,7 +192,14 @@
         "enable_pipeline_driver_parallel_prepare",
         "fetch_max_buffer_chunk_num",
         "max_batch_num_per_fetch_operator",
-        "max_lookup_batch_request"
+        "max_lookup_batch_request",
+        "pipeline_poller_timeout_guard_ms",
+        "pipeline_prepare_timeout_guard_ms",
+        "pipeline_rf_worker_timeout_guard_ms",
+        "pipeline_datastream_timeout_guard_ms",
+        "profile_report_interval",
+        "max_memory_sink_batch_count",
+        "diagnose_stack_trace_interval_ms"
       ]
     },
     {
@@ -197,7 +216,9 @@
         "mem_limit",
         "enable_jemalloc_memory_tracker",
         "abort_on_large_memory_allocation",
-        "use_mmap_allocate_chunk"
+        "use_mmap_allocate_chunk",
+        "disable_mem_pools",
+        "memory_max_alignment"
       ]
     },
     {
@@ -220,7 +241,10 @@
     {
       "path": "be/src/common/config_connector_sink_fwd.h",
       "configs": [
-        "enable_connector_sink_spill"
+        "enable_connector_sink_spill",
+        "connector_sink_mem_high_watermark_ratio",
+        "connector_sink_mem_low_watermark_ratio",
+        "connector_sink_mem_urgent_space_ratio"
       ]
     },
     {
@@ -258,7 +282,11 @@
     {
       "path": "be/src/common/config_udf_fwd.h",
       "configs": [
-        "clear_udf_cache_when_start"
+        "clear_udf_cache_when_start",
+        "create_child_worker_timeout_ms",
+        "report_python_worker_error",
+        "python_worker_reuse",
+        "python_worker_expire_time_sec"
       ]
     },
     {
@@ -270,7 +298,9 @@
         "dump_metrics_with_bvar",
         "enable_collect_table_metrics",
         "enable_table_metrics",
-        "max_table_metrics_num"
+        "max_table_metrics_num",
+        "enable_jvm_metrics",
+        "report_datacache_metrics_interval_ms"
       ]
     },
     {
@@ -309,7 +339,27 @@
         "load_spill_merge_max_thread",
         "enable_load_spill_parallel_merge",
         "enable_parallel_memtable_finalize",
-        "enable_put_combinded_txn_log_parallel"
+        "enable_put_combinded_txn_log_parallel",
+        "upload_buffer_size",
+        "download_buffer_size",
+        "load_data_reserve_hours",
+        "load_error_log_reserve_hours",
+        "load_channel_rpc_thread_pool_num",
+        "load_channel_rpc_thread_pool_queue_size",
+        "max_queueing_memtable_per_tablet",
+        "stale_memtable_flush_time_sec",
+        "load_replica_status_check_interval_ms_on_success",
+        "load_replica_status_check_interval_ms_on_failure",
+        "load_rpc_slow_log_frequency_threshold_seconds",
+        "load_fp_tablets_channel_add_chunk_block_ms",
+        "get_txn_status_internal_sec",
+        "max_consumer_num_per_group",
+        "max_pulsar_consumer_num_per_group",
+        "routine_load_kafka_timeout_second",
+        "routine_load_pulsar_timeout_second",
+        "dependency_librdkafka_debug_enable",
+        "dependency_librdkafka_debug",
+        "pulsar_client_log_level"
       ]
     },
     {
@@ -329,7 +379,8 @@
         "thrift_rpc_timeout_ms",
         "thrift_rpc_connection_max_valid_time_ms",
         "brpc_connection_type",
-        "rpc_connect_timeout_ms"
+        "rpc_connect_timeout_ms",
+        "thrift_connect_timeout_seconds"
       ]
     },
     {
@@ -371,7 +422,22 @@
         "arrow_io_coalesce_read_max_distance_size",
         "arrow_read_batch_size",
         "avro_reader_buffer_size_bytes",
-        "predicate_sampling_trigger_selectivity_threshold"
+        "predicate_sampling_trigger_selectivity_threshold",
+        "es_index_max_result_window",
+        "parquet_page_index_enable",
+        "parquet_reader_bloom_filter_enable",
+        "parquet_reader_enable_adpative_bloom_filter",
+        "parquet_fast_timezone_conversion",
+        "parquet_cache_aware_dict_decoder_enable",
+        "parquet_coalesce_read_enable",
+        "parquet_late_materialization_enable",
+        "enable_adjustment_page_cache_skip",
+        "parquet_page_cache_decompress_threshold",
+        "parquet_push_down_filter_to_decoder_enable",
+        "orc_coalesce_read_enable",
+        "orc_natural_read_size",
+        "enable_orc_libdeflate_decompression",
+        "orc_writer_version"
       ]
     },
     {
@@ -387,7 +453,19 @@
         "be_http_port",
         "be_http_port",
         "brpc_query_ignore_overcrowded",
-        "brpc_load_ignore_overcrowded"
+        "brpc_load_ignore_overcrowded",
+        "thrift_port",
+        "heartbeat_service_port",
+        "heartbeat_service_thread_count",
+        "arrow_flight_port",
+        "be_service_threads",
+        "brpc_num_threads",
+        "enable_https",
+        "ssl_certificate_path",
+        "ssl_private_key_path",
+        "brpc_max_body_size",
+        "brpc_socket_max_unwritten_bytes",
+        "brpc_socket_keepalive"
       ]
     },
     {
@@ -421,7 +499,11 @@
         "s3_use_list_objects_v1",
         "experimental_s3_max_single_part_size",
         "experimental_s3_min_upload_part_size",
-        "object_storage_request_timeout_ms"
+        "object_storage_request_timeout_ms",
+        "aws_sdk_logging_trace_enabled",
+        "aws_sdk_logging_trace_level",
+        "aws_sdk_enable_compliant_rfc3986_encoding",
+        "enable_poco_client_for_aws_sdk"
       ]
     },
     {
@@ -444,7 +526,9 @@
         "starlet_write_file_with_tag",
         "experimental_lake_wait_per_put_ms",
         "experimental_lake_wait_per_get_ms",
-        "lake_clear_corrupted_cache_data"
+        "lake_clear_corrupted_cache_data",
+        "starlet_use_star_cache",
+        "starlet_star_cache_disk_size_percent"
       ]
     },
     {
@@ -629,7 +713,110 @@
         "lake_enable_vertical_compaction_fill_data_cache",
         "lake_enable_alter_struct",
         "table_schema_service_max_retries",
-        "lake_publish_version_slow_log_ms"
+        "lake_publish_version_slow_log_ms",
+        "lake_metadata_cache_limit",
+        "lake_cache_select_in_physical_way",
+        "lake_enable_publish_version_trace_log",
+        "lake_service_max_concurrency"
+      ]
+    },
+    {
+      "path": "be/src/common/config_agent_fwd.h",
+      "configs": [
+        "create_tablet_worker_count",
+        "drop_tablet_worker_count",
+        "push_worker_count_normal_priority",
+        "push_worker_count_high_priority",
+        "clear_transaction_task_worker_count",
+        "delete_worker_count_normal_priority",
+        "delete_worker_count_high_priority",
+        "alter_tablet_worker_count",
+        "parallel_clone_task_per_path",
+        "storage_medium_migrate_count",
+        "update_schema_worker_count",
+        "update_tablet_meta_info_worker_count",
+        "upload_worker_count",
+        "download_worker_count",
+        "make_snapshot_worker_count",
+        "release_snapshot_worker_count",
+        "report_task_interval_seconds",
+        "report_disk_state_interval_seconds",
+        "report_tablet_interval_seconds",
+        "report_workgroup_interval_seconds",
+        "report_resource_usage_interval_ms",
+        "sleep_one_second",
+        "transaction_publish_version_thread_pool_idle_time_ms",
+        "transaction_publish_version_thread_pool_num_min",
+        "replication_threads",
+        "max_batch_publish_latency_ms",
+        "wait_apply_time",
+        "enable_drop_tablet_if_unfinished_txn"
+      ]
+    },
+    {
+      "path": "be/src/common/config_runtime_fwd.h",
+      "configs": [
+        "num_cores",
+        "enable_resource_group_bind_cpus",
+        "enable_resource_group_cpu_borrowing",
+        "scan_context_gc_interval_min",
+        "fragment_pool_thread_num_min",
+        "fragment_pool_thread_num_max",
+        "fragment_pool_queue_size",
+        "enable_profile_for_external_plan",
+        "deliver_broadcast_rf_passthrough_bytes_limit",
+        "deliver_broadcast_rf_passthrough_inflight_num",
+        "send_rpc_runtime_filter_timeout_ms",
+        "send_runtime_filter_via_http_rpc_min_size",
+        "runtime_filter_queue_limit"
+      ]
+    },
+    {
+      "path": "be/src/common/config_diagnostic_fwd.h",
+      "configs": [
+        "be_exit_after_disk_write_hang_second",
+        "jaeger_endpoint",
+        "web_log_bytes",
+        "sys_log_verbose_level",
+        "sys_log_roll_mode",
+        "sys_log_roll_num",
+        "sys_log_verbose_modules",
+        "log_buffer_level",
+        "sys_log_timezone",
+        "sys_minidump_enable",
+        "sys_minidump_dir",
+        "sys_minidump_max_files",
+        "sys_minidump_limit",
+        "dump_trace_info",
+        "pipeline_gcore_timeout_threshold_sec",
+        "pipeline_gcore_output_dir",
+        "enable_core_file_size_optimization",
+        "try_release_resource_before_core_dump",
+        "query_debug_trace_dir",
+        "sys_mlock_modules",
+        "exception_stack_black_list",
+        "exception_stack_level",
+        "exception_stack_white_list",
+        "enable_dcheck_on_serde_failure"
+      ]
+    },
+    {
+      "path": "be/src/common/config_expr_fwd.h",
+      "configs": [
+        "bitmap_serialize_version",
+        "enable_bitmap_union_disk_format_with_set",
+        "jit_lru_cache_size",
+        "jit_lru_object_cache_size",
+        "max_length_for_bitmap_function",
+        "max_length_for_to_base64"
+      ]
+    },
+    {
+      "path": "be/src/common/config_compression_fwd.h",
+      "configs": [
+        "lz4_acceleration",
+        "lz4_expected_compression_ratio",
+        "lz4_expected_compression_speed_mbps"
       ]
     }
   ]

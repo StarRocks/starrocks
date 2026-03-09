@@ -43,10 +43,39 @@ CONF_mInt64(disk_low_level, "60");
 // Configuration items for datacache
 CONF_Bool(datacache_enable, "true");
 
+CONF_mString(datacache_mem_size, "20%");
+
 CONF_mString(datacache_disk_size, "100%");
+
+CONF_Int64(datacache_block_size, "262144"); // 256K
+
+CONF_Bool(datacache_checksum_enable, "false");
+
+CONF_Bool(datacache_direct_io_enable, "false");
+
+// Maximum number of concurrent inserts we allow globally for datacache.
+// 0 means unlimited.
+CONF_Int64(datacache_max_concurrent_inserts, "1500000");
+
+// Total memory limit for in-flight cache jobs.
+// Once this is reached, cache population will be rejected until the flying memory usage gets under the limit.
+// If zero, the datacache module will automatically calculate a reasonable default value based on block size.
+CONF_Int64(datacache_max_flying_memory_mb, "2");
+
+// An io adaptor factor to control the io traffic between cache and network.
+// The larger this parameter, the more requests will be sent to the network.
+// Usually there is no need to modify it.
+CONF_Double(datacache_skip_read_factor, "1.0");
 
 // Whether to use block buffer to hold the datacache block data.
 CONF_Bool(datacache_block_buffer_enable, "true");
+
+// To control how many threads will be created for datacache synchronous tasks.
+// For the default value, it means for every 8 cpu, one thread will be created.
+CONF_Double(datacache_scheduler_threads_per_cpu, "0.125");
+
+// Whether to persist cached data
+CONF_Bool(datacache_persistence_enable, "true");
 
 // Whether enable automatically adjust data cache disk space quota.
 // If true, the cache will choose an appropriate quota based on the current remaining disk space as the quota.
@@ -82,7 +111,29 @@ CONF_mInt64(datacache_mem_adjust_period, "20");
 // Sleep time in seconds between datacache adjust iterations.
 CONF_mInt64(datacache_mem_adjust_interval_seconds, "10");
 
+CONF_mInt32(datacache_inline_item_count_limit, "130172");
+
 // Whether use an unified datacache instance.
 CONF_Bool(datacache_unified_instance_enable, "true");
+
+// The eviction policy for datacache, alternatives: [lru, slru].
+// * lru: the typical `Least Recently Used` eviction policy.
+// * slru: segment lru eviction policies, which can better reduce cache pollution problem.
+CONF_String(datacache_eviction_policy, "slru");
+
+// The BlockCache stores the raw data blocks of external tables and shared-data internal tables.
+// It shares the same limit (datacache_disk_size, datacache_mem_size) with the PageCache.
+// Currently, the disk space used by BlockCache cannot be individually configured
+// using block_cache_disk_size and block_cache_mem_size.
+// However, these two configuration items are retained for future support.
+CONF_Bool(block_cache_enable, "true");
+
+CONF_Alias(datacache_block_size, block_cache_block_size);
+
+CONF_Alias(datacache_max_concurrent_inserts, block_cache_max_concurrent_inserts);
+
+CONF_Alias(datacache_checksum_enable, block_cache_checksum_enable);
+
+CONF_Alias(datacache_direct_io_enable, block_cache_direct_io_enable);
 
 } // namespace starrocks::config

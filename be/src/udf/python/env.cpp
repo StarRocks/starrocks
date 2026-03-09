@@ -34,7 +34,8 @@
 #include "base/utility/defer_op.h"
 #include "butil/fd_guard.h"
 #include "butil/fd_utility.h"
-#include "common/config.h"
+#include "common/config_path_fwd.h"
+#include "common/config_udf_fwd.h"
 #include "common/util/misc.h"
 
 namespace starrocks {

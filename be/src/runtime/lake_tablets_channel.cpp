@@ -24,7 +24,7 @@
 #include "base/concurrency/countdown_latch.h"
 #include "column/chunk.h"
 #include "common/compiler_util.h"
-#include "common/config.h"
+#include "common/config_ingest_fwd.h"
 #include "common/runtime_profile.h"
 #include "common/statusor.h"
 #include "common/system/backend_options.h"
