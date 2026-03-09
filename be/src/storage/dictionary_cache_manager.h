@@ -448,12 +448,6 @@ public:
             // Dictionary cache currently only works with share-nothing PK tables which always use V1.
             std::vector<uint32_t> idxes;
             idxes.reserve(schema.fields().size());
-            idxes.reserve(schema.fields().size());
-            idxes.reserve(schema.fields().size());
-            idxes.reserve(schema.fields().size());
-            idxes.reserve(schema.fields().size());
-            idxes.reserve(schema.fields().size());
-            idxes.reserve(schema.fields().size());
             for (uint32_t i = 0; i < schema.fields().size(); i++) {
                 idxes.push_back((uint32_t)i);
             }
