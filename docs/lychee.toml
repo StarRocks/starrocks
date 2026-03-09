@@ -102,3 +102,4 @@ exclude_all_private = true
 
 # Exclude all mail addresses from checking
 exclude_mail = true
+
