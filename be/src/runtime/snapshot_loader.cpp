@@ -39,7 +39,8 @@
 #include <set>
 
 #include "agent/master_info.h"
-#include "common/config.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_rpc_client_fwd.h"
 #include "common/logging.h"
 #include "fs/fs.h"
 #include "fs/fs_broker.h"

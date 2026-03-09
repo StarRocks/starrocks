@@ -20,12 +20,32 @@
 #include "common/configbase.h"
 
 namespace starrocks::config {
+// The buffer size to upload.
+CONF_mInt32(upload_buffer_size, "4194304");
+
+// The buffer size to download.
+CONF_mInt32(download_buffer_size, "4194304");
+
 // Number of http workers in BE
 CONF_Int32(be_http_num_workers, "48");
+
+// Used for mini Load. mini load data file will be removed after this time.
+CONF_Int64(load_data_reserve_hours, "4");
+
+// log error log will be removed after this time
+CONF_mInt64(load_error_log_reserve_hours, "48");
 
 // Whether to execute load channel RPC requests asynchronously, that is,
 // to run RPCs in a separate thread pool instead of within BRPC workers
 CONF_mBool(enable_load_channel_rpc_async, "true");
+
+// Maximum threads in load channel RPC thread pool. Default: -1 (auto-set to CPU cores),
+// aligning with brpc workers' default (brpc_num_threads) to keep compatible after
+// switching from sync to async mode
+CONF_mInt32(load_channel_rpc_thread_pool_num, "-1");
+
+// The queue size for Load channel rpc thread pool
+CONF_Int32(load_channel_rpc_thread_pool_queue_size, "1024000");
 
 // Time(seconds) for load channel to wait for clean up load id after aborted.
 //
@@ -42,6 +62,12 @@ CONF_mInt32(load_channel_abort_clean_up_delay_seconds, "600");
 // Number of thread for async delta writer.
 // Default value is max(cpucores/2, 16)
 CONF_mInt32(number_tablet_writer_threads, "0");
+
+CONF_mInt64(max_queueing_memtable_per_tablet, "2");
+
+// when memory limit exceed and memtable last update time exceed this time, memtable will be flushed
+// 0 means disable
+CONF_mInt64(stale_memtable_flush_time_sec, "0");
 
 // Whether to use special thread pool for streaming load to avoid deadlock for
 // concurrent streaming loads. The maximum number of threads and queue size are
@@ -66,6 +92,17 @@ CONF_Int32(streaming_load_rpc_max_alive_time_sec, "1200");
 // actual timeout is min(tablet_writer_open_rpc_timeout_sec, load_timeout_sec / 2)
 CONF_mInt32(tablet_writer_open_rpc_timeout_sec, "300");
 
+// The interval that the secondary replica checks it's status on the primary replica if the last check rpc successes.
+CONF_mInt32(load_replica_status_check_interval_ms_on_success, "15000");
+
+// The interval that the secondary replica checks it's status on the primary replica if the last check rpc fails.
+CONF_mInt32(load_replica_status_check_interval_ms_on_failure, "2000");
+
+// If load rpc timeout is larger than this value, slow log will be printed every time,
+// if smaller than this value, will reduce slow log print frequency.
+// 0 is print slow log every time.
+CONF_mInt32(load_rpc_slow_log_frequency_threshold_seconds, "60");
+
 // Whether to enable load diagnose. The diagnosis is initiated by OlapTableSink when meeting brpc timeout
 // from LoadChannel. It will send rpc to LoadChannel to check the status.
 CONF_mBool(enable_load_diagnose, "true");
@@ -84,6 +121,9 @@ CONF_mInt32(load_diagnose_rpc_timeout_stack_trace_threshold_ms, "600000");
 
 // Used in load fail point. The brpc timeout used to simulate brpc exception "[E1008]Reached timeout"
 CONF_mInt32(load_fp_brpc_timeout_ms, "-1");
+
+// Used in load fail point. The block time to simulate TabletsChannel::add_chunk spends much time
+CONF_mInt32(load_fp_tablets_channel_add_chunk_block_ms, "-1");
 
 CONF_Bool(enable_load_segment_parallel, "false");
 
@@ -105,6 +145,18 @@ CONF_mBool(enable_new_load_on_memory_limit_exceeded, "false");
 // txn commit rpc timeout
 CONF_mInt32(txn_commit_rpc_timeout_ms, "60000");
 
+// Max consumer num in one data consumer group, for routine load.
+CONF_mInt32(max_consumer_num_per_group, "3");
+
+// Max pulsar consumer num in one data consumer group, for routine load.
+CONF_mInt32(max_pulsar_consumer_num_per_group, "10");
+
+// kafka request timeout
+CONF_Int32(routine_load_kafka_timeout_second, "10");
+
+// pulsar request timeout
+CONF_Int32(routine_load_pulsar_timeout_second, "10");
+
 // max chunk size for each tablet write request. (512MB)
 // see: https://github.com/StarRocks/starrocks/pull/50302
 // NOTE: If there are a large number of columns when loading,
@@ -116,12 +168,26 @@ CONF_Int64(max_load_dop, "16");
 
 CONF_Bool(enable_load_colocate_mv, "true");
 
+CONF_mBool(dependency_librdkafka_debug_enable, "false");
+
+// A comma-separated list of debug contexts to enable.
+// Producer debug context: broker, topic, msg
+// Consumer debug context: consumer, cgrp, topic, fetch
+// Other debug context: generic, metadata, feature, queue, protocol, security, interceptor, plugin
+// admin, eos, mock, assigner, conf
+CONF_String(dependency_librdkafka_debug, "all");
+
+// DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3, WARN by default
+CONF_mInt16(pulsar_client_log_level, "2");
+
 // Used to limit buffer size of tablet send channel.
 CONF_mInt64(send_channel_buffer_limit, "67108864");
 
 CONF_mBool(enable_http_stream_load_limit, "false");
 
 CONF_mBool(enable_stream_load_verbose_log, "false");
+
+CONF_mInt32(get_txn_status_internal_sec, "10");
 
 CONF_mBool(enable_load_spill, "true");
 

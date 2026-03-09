@@ -26,8 +26,13 @@ CONF_mInt32(periodic_counter_update_period_ms, "500");
 // to open/close system metrics
 CONF_Bool(enable_system_metrics, "true");
 
+CONF_Bool(enable_jvm_metrics, "false");
+
 // If set to true, metric calculator will run
 CONF_Bool(enable_metric_calculator, "true");
+
+// The interval time (millisecond) for agent report datacache metrics to FE.
+CONF_mInt32(report_datacache_metrics_interval_ms, "60000");
 
 CONF_mBool(dump_metrics_with_bvar, "true");
 

@@ -31,8 +31,21 @@ CONF_mDouble(rpc_compress_ratio_threshold, "1.1");
 // (Advanced) Maximum size of per-query receive-side buffer.
 CONF_mInt32(exchg_node_buffer_size_bytes, "10485760");
 
+CONF_mInt32(profile_report_interval, "30");
+
+// The interval for performing stack trace to control the frequency.
+CONF_mInt64(diagnose_stack_trace_interval_ms, "1800000");
+
 // Result buffer cancelled time (unit: second).
 CONF_mInt32(result_buffer_cancelled_interval_time, "300");
+
+// Is set to true, index loading failure will not cause BE exit,
+// and the tablet will be marked as bad, so that FE will try to repair it.
+// CONF_Bool(auto_recover_index_loading_failure, "false");
+
+// Max external scan cache batch count, means cache max_memory_cache_batch_count * batch_size row
+// default is 20, batch_size's defualt value is 1024 means 20 * 1024 rows will be cached
+CONF_mInt32(max_memory_sink_batch_count, "20");
 
 // es scroll keep-alive.
 CONF_String(es_scroll_keepalive, "5m");
@@ -43,11 +56,23 @@ CONF_Int32(es_http_timeout_ms, "5000");
 // Max batched bytes for each transmit request. (256KB)
 CONF_Int64(max_transmit_batched_bytes, "262144");
 
+// pipeline poller timeout guard. Suggested Value: 500
+CONF_mInt64(pipeline_poller_timeout_guard_ms, "-1");
+
+// pipeline fragment prepare timeout guard. Suggested Value: 1000
+CONF_mInt64(pipeline_prepare_timeout_guard_ms, "-1");
+
 // pipeline process timeout guard. Suggested Value: 5000
 CONF_mInt64(pipeline_process_timeout_guard_ms, "-1");
 
 // pipeline scan timeout guard. Suggested Value: 10000
 CONF_mInt64(pipeline_scan_timeout_guard_ms, "-1");
+
+// pipeline runtime filter worker timeout guard. Suggested Value: 2000
+CONF_mInt64(pipeline_rf_worker_timeout_guard_ms, "-1");
+
+// pipeline datastream timeout guard. Suggested Value: 2000
+CONF_mInt64(pipeline_datastream_timeout_guard_ms, "-1");
 
 // whether to enable large column detection in the pipeline execution framework.
 CONF_mBool(pipeline_enable_large_column_checker, "false");

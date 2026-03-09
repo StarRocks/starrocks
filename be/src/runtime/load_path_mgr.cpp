@@ -40,7 +40,7 @@
 
 #include <string>
 
-#include "common/config.h"
+#include "common/config_ingest_fwd.h"
 #include "common/thread/thread.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"

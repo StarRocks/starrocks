@@ -40,7 +40,7 @@
 
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
-#include "common/config.h"
+#include "common/config_compaction_fwd.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "common/tracer.h"

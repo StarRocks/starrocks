@@ -21,7 +21,9 @@
 #include <utility>
 
 #include "base/time/time.h"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/config_network_fwd.h"
+#include "common/config_runtime_fwd.h"
 #include "common/system/backend_options.h"
 #include "common/thread/thread.h"
 #include "exec/pipeline/query_context.h"

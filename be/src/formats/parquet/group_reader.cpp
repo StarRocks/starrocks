@@ -25,7 +25,7 @@
 #include "base/simd/simd.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
-#include "common/config.h"
+#include "common/config_scan_io_fwd.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/statusor.h"

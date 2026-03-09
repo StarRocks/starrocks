@@ -20,6 +20,9 @@
 #include "common/configbase.h"
 
 namespace starrocks::config {
+// Default thrift client connect timeout(in seconds).
+CONF_Int32(thrift_connect_timeout_seconds, "3");
+
 // Broker write timeout in seconds.
 CONF_Int32(broker_write_timeout_seconds, "30");
 

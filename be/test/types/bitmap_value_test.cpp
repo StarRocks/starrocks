@@ -22,7 +22,7 @@
 #include <vector>
 
 #include "base/coding.h"
-#include "common/config.h"
+#include "common/config_expr_fwd.h"
 #include "types/bitmap_value_detail.h"
 
 namespace starrocks {

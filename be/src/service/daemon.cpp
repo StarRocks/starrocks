@@ -37,7 +37,10 @@
 #include <gflags/gflags.h>
 
 #include "column/column_helper.h"
-#include "common/config.h"
+#include "common/config_diagnostic_fwd.h"
+#include "common/config_memory_allocator_fwd.h"
+#include "common/config_metrics_fwd.h"
+#include "common/config_path_fwd.h"
 #include "common/process_exit.h"
 #include "common/status.h"
 #include "common/util/minidump.h"
