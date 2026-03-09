@@ -336,3 +336,7 @@ test/util/brpc_stub_cache_test.cpp
 test/util/json_flattener_test.cpp
 test/util/llm_query_service_test.cpp
 test/util/system_metrics_test.cpp
+
+src/fs/key_cache.cpp
+src/storage/lake/tablet_warmup_manager.cpp
+test/common/path/path_util_test.cpp
