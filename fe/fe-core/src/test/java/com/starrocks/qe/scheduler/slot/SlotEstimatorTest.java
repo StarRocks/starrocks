@@ -323,6 +323,9 @@ public class SlotEstimatorTest extends SchedulerTestBase {
         // Set cardinality on scan nodes in the exec plan
         setNodeCardinalityInExecPlan(execPlan, 1, numWorkers * numRowsPerWorker * dop);
 
+        // Set planCpuCosts high enough to not be clamped by the CPU-cost clamp
+        connectContext.getAuditEventBuilder().setPlanCpuCosts(100 * 10000);
+
         int slots = SlotEstimatorFactory.estimateSlotsForExplain(opts, connectContext, execPlan);
         assertThat(slots).isEqualTo(dop * numWorkers);
     }
