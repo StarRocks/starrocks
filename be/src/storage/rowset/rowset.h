@@ -150,7 +150,7 @@ public:
     Rowset(const Rowset&) = delete;
     const Rowset& operator=(const Rowset&) = delete;
 
-    virtual ~Rowset();
+    ~Rowset() override;
 
     static std::shared_ptr<Rowset> create(const TabletSchemaCSPtr& schema, std::string rowset_path,
                                           RowsetMetaSharedPtr rowset_meta, KVStore* kvstore) {

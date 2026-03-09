@@ -45,7 +45,7 @@ class LakePersistentIndex : public PersistentIndex {
 public:
     explicit LakePersistentIndex(TabletManager* tablet_mgr, int64_t tablet_id);
 
-    ~LakePersistentIndex();
+    ~LakePersistentIndex() override;
 
     DISALLOW_COPY(LakePersistentIndex);
 
