@@ -76,4 +76,29 @@ public class DropMaterializedViewStmtNewPlannerTest {
         DropMaterializedViewStmt dropMvStmt = (DropMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(dropMvSql, connectContext);
         Assertions.assertEquals(true, dropMvStmt.isSetIfExists());
     }
+
+    @Test
+    public void testForceDropNormal() throws Exception {
+        String dropMvSql = "drop materialized view mv1 FORCE;";
+        DropMaterializedViewStmt dropMvStmt = (DropMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(dropMvSql, connectContext);
+        Assertions.assertEquals("test", dropMvStmt.getDbName());
+        Assertions.assertEquals("mv1", dropMvStmt.getMvName());
+        Assertions.assertFalse(dropMvStmt.isSetIfExists());
+        Assertions.assertTrue(dropMvStmt.isForceDrop());
+    }
+
+    @Test
+    public void testForceDropIfExists() throws Exception {
+        String dropMvSql = "drop materialized view if exists mv1 FORCE;";
+        DropMaterializedViewStmt dropMvStmt = (DropMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(dropMvSql, connectContext);
+        Assertions.assertTrue(dropMvStmt.isSetIfExists());
+        Assertions.assertTrue(dropMvStmt.isForceDrop());
+    }
+
+    @Test
+    public void testNormalDropNotForce() throws Exception {
+        String dropMvSql = "drop materialized view mv1;";
+        DropMaterializedViewStmt dropMvStmt = (DropMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(dropMvSql, connectContext);
+        Assertions.assertFalse(dropMvStmt.isForceDrop());
+    }
 }
