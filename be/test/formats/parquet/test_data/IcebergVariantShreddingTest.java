@@ -107,6 +107,8 @@ public class IcebergVariantShreddingTest {
                         org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
                         metricsTyped))
                 .named("typed_value");
+        // Intentionally omit one field from typed_value so array element.value keeps
+        // a non-empty base object for overlay reconstruction tests.
         Type eventObjectTyped = org.apache.parquet.schema.Types.optionalGroup()
                 .addField(shreddedField("type",
                         org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
@@ -122,6 +124,8 @@ public class IcebergVariantShreddingTest {
         Type scoresTypedValue = shreddedScalarArrayTypedValue(
                 org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
                 org.apache.parquet.schema.Types.optional(PrimitiveTypeName.INT32).named("typed_value"));
+        // Same idea for groups: keep one unshredded element field so list.element.value
+        // is materialized in the Parquet file.
         Type groupElementTyped = org.apache.parquet.schema.Types.optionalGroup()
                 .addField(shreddedField("name",
                         org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
@@ -297,11 +301,9 @@ public class IcebergVariantShreddingTest {
 
     private static List<Record> buildRecords(boolean multiTypes) {
         List<Record> records = new ArrayList<>();
-        VariantMetadata metadata = Variants.metadata(
-                "id", "age", "city", "score", "status", "name", "email", "profile",
-                "salary", "department", "rank", "metrics", "views", "ratio",
-                "events", "type", "count", "numbers",
-                "groups", "scores");
+        VariantMetadata metadata = Variants.metadata("id", "age", "city", "score", "status", "name", "email", "profile",
+                "salary", "department", "rank", "metrics", "views", "ratio", "events", "type", "count", "numbers",
+                "groups", "scores", "detail", "note");
         for (int i = 0; i < 5; i++) {
             Record rec = GenericRecord.create(SCHEMA.asStruct());
             ShreddedObject obj = Variants.object(metadata);
@@ -320,10 +322,12 @@ public class IcebergVariantShreddingTest {
             ShreddedObject event0 = Variants.object(metadata);
             event0.put("type", Variants.of("view"));
             event0.put("count", Variants.of(i + 1));
+            event0.put("detail", Variants.of("detail_view_" + i));
             events.add(event0);
             ShreddedObject event1 = Variants.object(metadata);
             event1.put("type", Variants.of("click"));
             event1.put("count", Variants.of((i + 1) * 2));
+            event1.put("detail", Variants.of("detail_click_" + i));
             events.add(event1);
             obj.put("events", events);
             // Add scalar array for testing fully-typed array reconstruction
@@ -351,6 +355,7 @@ public class IcebergVariantShreddingTest {
             for (int g = 0; g < 2; g++) {
                 ShreddedObject groupObj = Variants.object(metadata);
                 groupObj.put("name", Variants.of("group_" + g));
+                groupObj.put("note", Variants.of("note_" + i + "_" + g));
                 org.apache.iceberg.variants.ValueArray scores = Variants.array();
                 scores.add(Variants.of(10 + i + g * 30));
                 scores.add(Variants.of(20 + i + g * 30));

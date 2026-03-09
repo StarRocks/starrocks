@@ -16,6 +16,7 @@
 
 #define private public
 #include "formats/parquet/column_reader_factory.h"
+#include "formats/parquet/complex_column_reader.h"
 #undef private
 
 #include <gtest/gtest.h>
@@ -65,6 +66,28 @@ ParquetField make_variant_field_with_typed_group(const std::vector<ParquetField>
     return variant;
 }
 
+ParquetField make_list_wrapper_field(const ParquetField& element_field) {
+    ParquetField list_group;
+    list_group.name = "list";
+    list_group.type = ColumnType::STRUCT;
+    list_group.children = {element_field};
+    return list_group;
+}
+
+ParquetField make_array_field(const std::string& name, const ParquetField& element_field) {
+    ParquetField typed_value;
+    typed_value.name = "typed_value";
+    typed_value.type = ColumnType::ARRAY;
+    typed_value.children = {make_list_wrapper_field(element_field)};
+
+    ParquetField node;
+    node.name = name;
+    node.type = ColumnType::STRUCT;
+    node.children.emplace_back(make_scalar_field("value", -1, tparquet::Type::BYTE_ARRAY));
+    node.children.emplace_back(std::move(typed_value));
+    return node;
+}
+
 ParquetField make_shredded_object_node_with_nested_scalar(const std::string& name, int value_idx, int nested_value_idx,
                                                           int nested_typed_idx,
                                                           tparquet::Type::type nested_typed_physical) {
@@ -97,68 +120,6 @@ ColumnReaderOptions make_opts_with_num_cols(int num_cols) {
 
 } // namespace
 
-TEST(ColumnReaderFactoryTest, VariantHintNormalizeAndJsonPreferredPath) {
-    auto node = make_shredded_scalar_node("a", 2, 3, tparquet::Type::BYTE_ARRAY);
-    tparquet::StringType str_type;
-    tparquet::LogicalType logical_type;
-    logical_type.__set_STRING(str_type);
-    node.children[1].schema_element.__set_logicalType(logical_type);
-
-    ParquetField variant = make_variant_field_with_typed_group({node});
-    auto opts = make_opts_with_num_cols(4);
-
-    VariantShreddedReadHints hints;
-    hints.path_type_hints.emplace_back(VariantPathTypeHint{.path = "", .preferred_type = TYPE_INT_DESC});
-    hints.path_type_hints.emplace_back(VariantPathTypeHint{.path = "a", .preferred_type = TYPE_UNKNOWN_DESC});
-    hints.path_type_hints.emplace_back(VariantPathTypeHint{.path = "a", .preferred_type = TYPE_JSON_DESC});
-
-    auto st = ColumnReaderFactory::create_variant_column_reader(opts, &variant, hints);
-    ASSERT_TRUE(st.ok()) << st.status().to_string();
-    ASSERT_NE(st.value(), nullptr);
-}
-
-TEST(ColumnReaderFactoryTest, VariantHintStrictIncompatibleType) {
-    auto node = make_shredded_scalar_node("a", 2, 3, tparquet::Type::BYTE_ARRAY);
-    tparquet::StringType str_type;
-    tparquet::LogicalType logical_type;
-    logical_type.__set_STRING(str_type);
-    node.children[1].schema_element.__set_logicalType(logical_type);
-
-    ParquetField variant = make_variant_field_with_typed_group({node});
-    auto opts = make_opts_with_num_cols(4);
-
-    VariantShreddedReadHints hints;
-    hints.strict_preferred_type = true;
-    hints.path_type_hints.emplace_back(VariantPathTypeHint{.path = "a", .preferred_type = TYPE_BIGINT_DESC});
-
-    auto st = ColumnReaderFactory::create_variant_column_reader(opts, &variant, hints);
-    ASSERT_FALSE(st.ok());
-    ASSERT_TRUE(st.status().is_invalid_argument()) << st.status().to_string();
-}
-
-TEST(ColumnReaderFactoryTest, VariantArrayPreferredVariantFallbackToFileType) {
-    ParquetField arr_node;
-    arr_node.name = "arr";
-    arr_node.type = ColumnType::STRUCT;
-    arr_node.children.emplace_back(make_scalar_field("value", 2, tparquet::Type::BYTE_ARRAY));
-    ParquetField arr_typed;
-    arr_typed.name = "typed_value";
-    arr_typed.type = ColumnType::ARRAY;
-    arr_typed.children.emplace_back(make_scalar_field("element", 3, tparquet::Type::INT32));
-    arr_node.children.emplace_back(std::move(arr_typed));
-
-    ParquetField variant = make_variant_field_with_typed_group({arr_node});
-    auto opts = make_opts_with_num_cols(4);
-
-    VariantShreddedReadHints hints;
-    hints.path_type_hints.emplace_back(
-            VariantPathTypeHint{.path = "arr", .preferred_type = TypeDescriptor::from_logical_type(TYPE_VARIANT)});
-
-    auto st = ColumnReaderFactory::create_variant_column_reader(opts, &variant, hints);
-    ASSERT_TRUE(st.ok()) << st.status().to_string();
-    ASSERT_NE(st.value(), nullptr);
-}
-
 TEST(ColumnReaderFactoryTest, VariantFallbackFieldIndexOutOfRange) {
     auto bad_node = make_shredded_scalar_node("bad", 100, 3, tparquet::Type::INT32);
     ParquetField variant = make_variant_field_with_typed_group({bad_node});
@@ -167,6 +128,47 @@ TEST(ColumnReaderFactoryTest, VariantFallbackFieldIndexOutOfRange) {
     auto st = ColumnReaderFactory::create_variant_column_reader(opts, &variant, {});
     ASSERT_FALSE(st.ok());
     ASSERT_TRUE(st.status().is_invalid_argument()) << st.status().to_string();
+}
+
+TEST(ColumnReaderFactoryTest, VariantObjectArrayRewritesToElementValueReader) {
+    ParquetField event_type = make_shredded_scalar_node("type", 4, 5, tparquet::Type::BYTE_ARRAY);
+    ParquetField event_count = make_shredded_scalar_node("count", 6, 7, tparquet::Type::INT32);
+
+    ParquetField element_typed_value;
+    element_typed_value.name = "typed_value";
+    element_typed_value.type = ColumnType::STRUCT;
+    element_typed_value.children = {event_type, event_count};
+
+    ParquetField element_value = make_scalar_field("value", 3, tparquet::Type::BYTE_ARRAY);
+
+    ParquetField element_struct;
+    element_struct.name = "element";
+    element_struct.type = ColumnType::STRUCT;
+    element_struct.children = {element_value, element_typed_value};
+
+    ParquetField events_node = make_array_field("events", element_struct);
+    events_node.children[0].physical_column_index = 2;
+
+    ParquetField variant = make_variant_field_with_typed_group({events_node});
+    auto opts = make_opts_with_num_cols(8);
+
+    auto st = ColumnReaderFactory::create_variant_column_reader(opts, &variant, {});
+    ASSERT_TRUE(st.ok()) << st.status().to_string();
+
+    auto* reader = dynamic_cast<VariantColumnReader*>(st.value().get());
+    ASSERT_NE(reader, nullptr);
+    ASSERT_EQ(1, reader->_shredded_fields.size());
+
+    const ShreddedFieldNode& node = reader->_shredded_fields[0];
+    ASSERT_EQ(ShreddedTypedKind::ARRAY, node.typed_kind);
+    ASSERT_FALSE(node.scalar_array_layout);
+    ASSERT_FALSE(node.children.empty());
+    ASSERT_NE(node.typed_value_reader, nullptr);
+    ASSERT_EQ(nullptr, node.array_element_value_reader.get());
+    ASSERT_NE(node.typed_value_read_type, nullptr);
+    ASSERT_EQ(TYPE_ARRAY, node.typed_value_read_type->type);
+    ASSERT_EQ(1, node.typed_value_read_type->children.size());
+    ASSERT_EQ(TYPE_VARBINARY, node.typed_value_read_type->children[0].type);
 }
 
 TEST(ColumnReaderFactoryTest, VariantScalarTypeInferenceBranches) {

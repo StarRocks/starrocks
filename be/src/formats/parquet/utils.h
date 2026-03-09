@@ -31,6 +31,8 @@ class Column;
 
 namespace starrocks::parquet {
 
+struct ParquetField;
+
 enum ColumnContentType { VALUE, DICT_CODE };
 
 enum ColumnIOType { INVALID = 0, PAGE_INDEX = 1, PAGES = 2, BLOOM_FILTER = 4 };
@@ -69,6 +71,11 @@ public:
 private:
     inline static const std::vector<std::string> cache_key_prefix{"ft", "pg"};
 };
+
+// Infer typed descriptor for variant typed_value Parquet field (scalar/array/map/struct).
+// Falls back to TYPE_VARIANT when the source type cannot be represented safely.
+// This function always returns a concrete descriptor and never TYPE_UNKNOWN.
+TypeDescriptor variant_typed_desc_from_parquet_field(const ParquetField* field);
 
 struct NullInfos {
     // The number of nulls contained in the null vector.
