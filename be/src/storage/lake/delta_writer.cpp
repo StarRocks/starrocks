@@ -997,6 +997,7 @@ Status DeltaWriterImpl::fill_auto_increment_id(Chunk& chunk) {
 
 void DeltaWriterImpl::flush_and_wait() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
+    auto start_time = MonotonicNanos();
     if (_flush_token != nullptr) {
         auto st = _flush_token->wait();
         LOG_IF(WARNING, !st.ok()) << "flush token error: " << st;
@@ -1005,6 +1006,7 @@ void DeltaWriterImpl::flush_and_wait() {
     if (_tablet_writer != nullptr) {
         _tablet_writer->close();
     }
+    ADD_COUNTER_RELAXED(_stats.close_time_ns, MonotonicNanos() - start_time);
 }
 
 void DeltaWriterImpl::release_resources() {
@@ -1025,9 +1027,6 @@ void DeltaWriterImpl::release_resources() {
 }
 
 void DeltaWriterImpl::close() {
-    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
-    auto start_time = MonotonicNanos();
-    DeferOp defer([&] { ADD_COUNTER_RELAXED(_stats.close_time_ns, MonotonicNanos() - start_time); });
     flush_and_wait();
     release_resources();
 }
@@ -1119,6 +1118,7 @@ void DeltaWriter::close() {
 }
 
 void DeltaWriter::flush_and_wait() {
+    DCHECK_EQ(0, bthread_self()) << "Should not invoke DeltaWriter::flush_and_wait() in a bthread";
     _impl->flush_and_wait();
 }
 
