@@ -141,7 +141,7 @@ public:
     AdaptiveDopParam& adaptive_dop_param() { return _adaptive_dop_param; }
 
     const PredicateTreeParams& pred_tree_params() const { return _pred_tree_params; }
-    void set_pred_tree_params(PredicateTreeParams&& params) { _pred_tree_params = params; }
+    void set_pred_tree_params(PredicateTreeParams&& params) { _pred_tree_params = std::move(params); }
 
     size_t next_driver_id() { return _next_driver_id++; }
 
