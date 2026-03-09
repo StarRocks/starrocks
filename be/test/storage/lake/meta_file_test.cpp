@@ -1092,4 +1092,126 @@ TEST_F(MetaFileTest, test_sstable_delvec_integration) {
     auto final_version_iter = final_version_to_file_map.find(version1);
     EXPECT_TRUE(final_version_iter == final_version_to_file_map.end());
 }
+// Test that remove_compacted_sst skips SST files that appear in both input and output,
+// which happens when parallel compaction's "full contain" optimization reuses input SSTs.
+TEST_F(MetaFileTest, test_remove_compacted_sst_skip_reused_sst) {
+    const int64_t tablet_id = 10010;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(110);
+    metadata->set_enable_persistent_index(true);
+    metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+
+    // Setup: 3 input SSTs, where "reused.sst" appears in both input and output
+    // (simulating the "full contain" optimization in parallel compaction)
+    TxnLogPB_OpCompaction op_compaction;
+
+    auto* input1 = op_compaction.add_input_sstables();
+    input1->set_filename("old1.sst");
+    input1->set_filesize(100);
+
+    auto* input2 = op_compaction.add_input_sstables();
+    input2->set_filename("reused.sst");
+    input2->set_filesize(200);
+
+    auto* input3 = op_compaction.add_input_sstables();
+    input3->set_filename("old2.sst");
+    input3->set_filesize(150);
+
+    // Output contains "reused.sst" (full contain) and a new merged file
+    auto* output1 = op_compaction.add_output_sstables();
+    output1->set_filename("reused.sst");
+    output1->set_filesize(200);
+
+    auto* output2 = op_compaction.add_output_sstables();
+    output2->set_filename("merged_new.sst");
+    output2->set_filesize(250);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    builder.remove_compacted_sst(op_compaction);
+
+    // Verify: only "old1.sst" and "old2.sst" should be in orphan_files.
+    // "reused.sst" must NOT be in orphan_files since it's also an output.
+    ASSERT_EQ(metadata->orphan_files_size(), 2);
+    std::set<std::string> orphan_names;
+    for (const auto& f : metadata->orphan_files()) {
+        orphan_names.insert(f.name());
+    }
+    EXPECT_TRUE(orphan_names.count("old1.sst") > 0);
+    EXPECT_TRUE(orphan_names.count("old2.sst") > 0);
+    EXPECT_TRUE(orphan_names.count("reused.sst") == 0);
+}
+
+// Test that remove_compacted_sst also handles output_sstable (singular, from major_compact)
+TEST_F(MetaFileTest, test_remove_compacted_sst_skip_reused_sst_singular_output) {
+    const int64_t tablet_id = 10011;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(110);
+    metadata->set_enable_persistent_index(true);
+    metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+
+    TxnLogPB_OpCompaction op_compaction;
+
+    auto* input1 = op_compaction.add_input_sstables();
+    input1->set_filename("reused_single.sst");
+    input1->set_filesize(100);
+
+    auto* input2 = op_compaction.add_input_sstables();
+    input2->set_filename("old.sst");
+    input2->set_filesize(200);
+
+    // Singular output_sstable reuses one of the input files
+    op_compaction.mutable_output_sstable()->set_filename("reused_single.sst");
+    op_compaction.mutable_output_sstable()->set_filesize(100);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    builder.remove_compacted_sst(op_compaction);
+
+    ASSERT_EQ(metadata->orphan_files_size(), 1);
+    EXPECT_EQ(metadata->orphan_files(0).name(), "old.sst");
+}
+
+// Test that when no SSTs are reused, all inputs go to orphan_files (original behavior)
+TEST_F(MetaFileTest, test_remove_compacted_sst_no_reuse) {
+    const int64_t tablet_id = 10012;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(110);
+    metadata->set_enable_persistent_index(true);
+    metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+
+    TxnLogPB_OpCompaction op_compaction;
+
+    auto* input1 = op_compaction.add_input_sstables();
+    input1->set_filename("a.sst");
+    input1->set_filesize(100);
+
+    auto* input2 = op_compaction.add_input_sstables();
+    input2->set_filename("b.sst");
+    input2->set_filesize(200);
+
+    auto* output = op_compaction.add_output_sstables();
+    output->set_filename("c.sst");
+    output->set_filesize(300);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    builder.remove_compacted_sst(op_compaction);
+
+    // All inputs should be orphaned since output is a new file
+    ASSERT_EQ(metadata->orphan_files_size(), 2);
+    std::set<std::string> orphan_names;
+    for (const auto& f : metadata->orphan_files()) {
+        orphan_names.insert(f.name());
+    }
+    EXPECT_TRUE(orphan_names.count("a.sst") > 0);
+    EXPECT_TRUE(orphan_names.count("b.sst") > 0);
+}
+
 } // namespace starrocks::lake
