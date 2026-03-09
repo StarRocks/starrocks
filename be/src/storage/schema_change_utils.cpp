@@ -760,9 +760,11 @@ Status SchemaChangeUtils::parse_request_for_sort_key(const TabletSchemaCSPtr& ba
     const auto& new_sort_key_idxes = new_schema->sort_key_idxes();
     std::vector<int32_t> base_sort_key_unique_ids;
     std::vector<int32_t> new_sort_key_unique_ids;
+    base_sort_key_unique_ids.reserve(base_sort_key_idxes.size());
     for (auto idx : base_sort_key_idxes) {
         base_sort_key_unique_ids.emplace_back(base_schema->column(idx).unique_id());
     }
+    new_sort_key_unique_ids.reserve(new_sort_key_idxes.size());
     for (auto idx : new_sort_key_idxes) {
         new_sort_key_unique_ids.emplace_back(new_schema->column(idx).unique_id());
     }

@@ -508,6 +508,7 @@ CreateIndexDecision ZoneMapIndexQualityJudgerImpl<type>::make_decision() const {
     }
 
     std::vector<ZoneMapWrapper<type>> parsed_zonemap;
+    parsed_zonemap.reserve(_page_zone_maps.size());
     for (auto& zonemap : _page_zone_maps) {
         parsed_zonemap.emplace_back(zonemap);
     }

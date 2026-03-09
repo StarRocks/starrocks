@@ -1075,6 +1075,7 @@ Status Rowset::verify() {
     vector<ColumnId> key_columns;
     vector<ColumnId> order_columns;
     bool is_pk_ordered = false;
+    key_columns.reserve(_schema->num_key_columns());
     for (int i = 0; i < _schema->num_key_columns(); i++) {
         key_columns.push_back(i);
     }

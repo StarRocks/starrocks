@@ -1974,6 +1974,7 @@ StatusOr<ColumnPtr> ArrayFunctions::arrays_zip(FunctionContext* ctx, const Colum
 
     // Create result array with struct elements
     std::vector<std::string> field_names;
+    field_names.reserve(num_arrays);
     for (size_t i = 0; i < num_arrays; ++i) {
         field_names.push_back("col" + std::to_string(i + 1));
     }

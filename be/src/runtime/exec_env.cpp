@@ -286,6 +286,7 @@ Status GlobalEnv::_init_mem_tracker() {
 
 std::vector<std::shared_ptr<MemTracker>> GlobalEnv::mem_trackers() const {
     std::vector<std::shared_ptr<MemTracker>> mem_trackers;
+    mem_trackers.reserve(_mem_tracker_map.size());
     for (auto& item : _mem_tracker_map) {
         mem_trackers.emplace_back(item.second);
     }

@@ -337,6 +337,7 @@ std::string KeyCache::to_string() const {
     std::stringstream ss;
     std::lock_guard lg(_lock);
     std::vector<EncryptionKey*> ordered;
+    ordered.reserve(_identifier_to_keys.size());
     for (const auto& e : _identifier_to_keys) {
         ordered.push_back(e.second.get());
     }
