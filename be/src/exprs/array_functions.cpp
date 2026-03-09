@@ -60,7 +60,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_length([[maybe_unused]] FunctionContex
         if (arg0->has_null()) {
             // Copy null flags.
             return NullableColumn::create(std::move(col_result),
-                                          down_cast<const NullableColumn*>(arg0)->null_column()->clone());
+                                          std::move(*(down_cast<const NullableColumn*>(arg0)->null_column())).mutate());
         } else {
             return col_result;
         }
