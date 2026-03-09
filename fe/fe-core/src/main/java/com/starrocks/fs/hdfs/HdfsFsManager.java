@@ -23,6 +23,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
@@ -60,10 +61,16 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 class ConfigurationWrap extends Configuration {
     private static final Logger LOG = LogManager.getLogger(ConfigurationWrap.class);
@@ -355,6 +362,21 @@ public class HdfsFsManager {
     protected static final String FS_TOS_REGION = "fs.tos.region";
 
     private final ScheduledExecutorService handleManagementPool = Executors.newScheduledThreadPool(1);
+
+    private long fileSystemCloseTimeoutSecs = 60L;
+
+    private final ExecutorService fileSystemClosePool = createFileSystemClosePool();
+
+    private static ThreadPoolExecutor createFileSystemClosePool() {
+        String name = "hdfs-fs-close";
+        ThreadPoolExecutor pool = ThreadPoolManager.newDaemonThreadPool(
+                5, 5, 60L, TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>(1024),
+                new ThreadPoolManager.LogDiscardPolicy(name),
+                name, true);
+        pool.allowCoreThreadTimeOut(true);
+        return pool;
+    }
 
     private int readBufferSize = 128 << 10; // 128k
     private int writeBufferSize = 128 << 10; // 128k
@@ -1624,19 +1646,49 @@ public class HdfsFsManager {
         @Override
         public void run() {
             try {
+                int expireSeconds = Config.hdfs_file_system_expire_seconds;
+
+                List<HdfsFs> expiredFsList = new ArrayList<>();
                 for (HdfsFs fileSystem : cachedFileSystem.values()) {
-                    if (fileSystem.isExpired(Config.hdfs_file_system_expire_seconds)) {
-                        LOG.info("file system " + fileSystem + " is expired, close and remove it");
+                    if (fileSystem.isExpired(expireSeconds)) {
+                        expiredFsList.add(fileSystem);
+                    }
+                }
+
+                for (HdfsFs fileSystem : expiredFsList) {
+                    CompletableFuture<Void> cf = new CompletableFuture<>();
+                    Future<?> closeTask = fileSystemClosePool.submit(() -> {
                         fileSystem.getLock().lock();
                         try {
+                            // check expired again
+                            if (!fileSystem.isExpired(expireSeconds)) {
+                                cf.complete(null);
+                                return;
+                            }
+                            if (!cachedFileSystem.containsKey(fileSystem.getIdentity())) {
+                                cf.complete(null);
+                                return;
+                            }
+
+                            LOG.info("file system {} is expired, close and remove it", fileSystem);
                             fileSystem.closeFileSystem();
+                            cachedFileSystem.remove(fileSystem.getIdentity());
+                            cf.complete(null);
                         } catch (Throwable t) {
                             LOG.error("errors while close file system", t);
-                        } finally {
                             cachedFileSystem.remove(fileSystem.getIdentity());
+                            cf.completeExceptionally(t);
+                        } finally {
                             fileSystem.getLock().unlock();
                         }
-                    }
+                    });
+
+                    cf.orTimeout(fileSystemCloseTimeoutSecs, TimeUnit.SECONDS).whenComplete((res, ex) -> {
+                        if (ex instanceof TimeoutException) {
+                            LOG.warn("Closing file system timed out for {}, interrupting...", fileSystem);
+                            closeTask.cancel(true);
+                        }
+                    });
                 }
             } finally {
                 HdfsFsManager.this.handleManagementPool.schedule(this, 60, TimeUnit.SECONDS);

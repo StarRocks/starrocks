@@ -219,7 +219,7 @@ public class ThreadPoolManager {
     /**
      * A handler for rejected task that discards and log it, used for cached thread pool
      */
-    static class LogDiscardPolicy implements RejectedExecutionHandler {
+    public static class LogDiscardPolicy implements RejectedExecutionHandler {
 
         private static final Logger LOG = LogManager.getLogger(LogDiscardPolicy.class);
 

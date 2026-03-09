@@ -20,8 +20,10 @@ package com.starrocks.fs;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.fs.hdfs.HdfsFs;
+import com.starrocks.fs.hdfs.HdfsFsIdentity;
 import com.starrocks.fs.hdfs.HdfsFsManager;
 import com.starrocks.thrift.THdfsProperties;
 import org.apache.hadoop.fs.FileStatus;
@@ -36,6 +38,9 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -275,4 +280,149 @@ public class HdfsFsManagerTest {
             fs4.getDFSFileSystem().close();
         }
     }
+
+    @Test
+    public void testFileSystemExpirationChecker() throws Exception {
+        HdfsFsManager hdfsFsManager = new HdfsFsManager();
+        ReentrantLock lock = new ReentrantLock();
+        CountDownLatch closeLatch = new CountDownLatch(1);
+
+        // Mock an expired HdfsFs
+        HdfsFs expiredFs = Mockito.mock(HdfsFs.class);
+        Mockito.when(expiredFs.isExpired(Mockito.anyLong())).thenReturn(true);
+        HdfsFsIdentity expiredIdentity = new HdfsFsIdentity("hdfs://expired", "user");
+        Mockito.when(expiredFs.getIdentity()).thenReturn(expiredIdentity);
+        Mockito.when(expiredFs.getLock()).thenReturn(lock);
+        Mockito.doAnswer(inv -> {
+            closeLatch.countDown();
+            return null;
+        }).when(expiredFs).closeFileSystem();
+
+        // Mock a non-expired HdfsFs
+        HdfsFs normalFs = Mockito.mock(HdfsFs.class);
+        Mockito.when(normalFs.isExpired(Mockito.anyLong())).thenReturn(false);
+        HdfsFsIdentity normalIdentity = new HdfsFsIdentity("hdfs://normal", "user");
+        Mockito.when(normalFs.getIdentity()).thenReturn(normalIdentity);
+        Mockito.when(normalFs.getLock()).thenReturn(lock);
+
+        // Add them to cachedFileSystem
+        Map<HdfsFsIdentity, HdfsFs> cache = Deencapsulation.getField(hdfsFsManager, "cachedFileSystem");
+        cache.put(expiredIdentity, expiredFs);
+        cache.put(normalIdentity, normalFs);
+
+        // Run the checker
+        Class<?> checkerClass = Class.forName("com.starrocks.fs.hdfs.HdfsFsManager$FileSystemExpirationChecker");
+        Runnable checker = (Runnable) Deencapsulation.newInstance(checkerClass, hdfsFsManager);
+
+        checker.run();
+
+        // Wait for closeFileSystem(), then poll until the subsequent cache.remove() also completes
+        Assertions.assertTrue(closeLatch.await(5, TimeUnit.SECONDS), "closeFileSystem was not called in time");
+        long deadline = System.currentTimeMillis() + 2000;
+        while (cache.containsKey(expiredIdentity) && System.currentTimeMillis() < deadline) {
+            Thread.sleep(10);
+        }
+
+        // Verify expired fs is removed and closed
+        Assertions.assertFalse(cache.containsKey(expiredIdentity));
+        Mockito.verify(expiredFs, Mockito.times(1)).closeFileSystem();
+
+        // Verify normal fs is still there and not closed
+        Assertions.assertTrue(cache.containsKey(normalIdentity));
+        Mockito.verify(normalFs, Mockito.never()).closeFileSystem();
+    }
+
+    @Test
+    public void testFileSystemExpirationCheckerBranches() throws Exception {
+        HdfsFsManager hdfsFsManager = new HdfsFsManager();
+        Deencapsulation.setField(hdfsFsManager, "fileSystemCloseTimeoutSecs", 1L);
+
+        Map<HdfsFsIdentity, HdfsFs> cache = Deencapsulation.getField(hdfsFsManager, "cachedFileSystem");
+
+        // Case 1: isExpired becomes false during double check
+        HdfsFs fs1 = Mockito.mock(HdfsFs.class);
+        Mockito.when(fs1.isExpired(Mockito.anyLong())).thenReturn(true).thenReturn(false);
+        HdfsFsIdentity id1 = new HdfsFsIdentity("hdfs://fs1", "user");
+        Mockito.when(fs1.getIdentity()).thenReturn(id1);
+        Mockito.when(fs1.getLock()).thenReturn(new ReentrantLock());
+        cache.put(id1, fs1);
+
+        // Case 2: no longer in cache
+        HdfsFs fs2 = Mockito.mock(HdfsFs.class);
+        Mockito.when(fs2.isExpired(Mockito.anyLong())).thenReturn(true);
+        HdfsFsIdentity id2 = new HdfsFsIdentity("hdfs://fs2", "user");
+        Mockito.when(fs2.getIdentity()).thenReturn(id2);
+        Mockito.when(fs2.getLock()).thenReturn(new ReentrantLock() {
+            @Override
+            public void lock() {
+                super.lock();
+                cache.remove(id2);
+            }
+        });
+        cache.put(id2, fs2);
+
+        // Case 3: exception thrown during close
+        CountDownLatch fs3Latch = new CountDownLatch(1);
+        HdfsFs fs3 = Mockito.mock(HdfsFs.class);
+        Mockito.when(fs3.isExpired(Mockito.anyLong())).thenReturn(true);
+        HdfsFsIdentity id3 = new HdfsFsIdentity("hdfs://fs3", "user");
+        Mockito.when(fs3.getIdentity()).thenReturn(id3);
+        Mockito.when(fs3.getLock()).thenReturn(new ReentrantLock());
+        Mockito.doAnswer(inv -> {
+            fs3Latch.countDown();
+            throw new RuntimeException("Test Exception");
+        }).when(fs3).closeFileSystem();
+        cache.put(id3, fs3);
+
+        // Case 4: timeout — blocks until interrupted, then signals via latch
+        CountDownLatch fs4InterruptedLatch = new CountDownLatch(1);
+        HdfsFs fs4 = Mockito.mock(HdfsFs.class);
+        Mockito.when(fs4.isExpired(Mockito.anyLong())).thenReturn(true);
+        HdfsFsIdentity id4 = new HdfsFsIdentity("hdfs://fs4", "user");
+        Mockito.when(fs4.getIdentity()).thenReturn(id4);
+        Mockito.when(fs4.getLock()).thenReturn(new ReentrantLock());
+        Mockito.doAnswer(invocation -> {
+            try {
+                Thread.sleep(20000);
+            } catch (InterruptedException e) {
+                fs4InterruptedLatch.countDown();
+                throw new RuntimeException(e);
+            }
+            return null;
+        }).when(fs4).closeFileSystem();
+        cache.put(id4, fs4);
+
+        // Run the checker
+        Class<?> checkerClass = Class.forName("com.starrocks.fs.hdfs.HdfsFsManager$FileSystemExpirationChecker");
+        Runnable checker = (Runnable) Deencapsulation.newInstance(checkerClass, hdfsFsManager);
+
+        checker.run();
+
+        // Wait for case 3 (exception) and case 4 (timeout interrupt) to complete
+        Assertions.assertTrue(fs3Latch.await(5, TimeUnit.SECONDS), "fs3 closeFileSystem was not called in time");
+        Assertions.assertTrue(fs4InterruptedLatch.await(5, TimeUnit.SECONDS), "fs4 was not interrupted in time");
+
+        // Allow a short window for whenComplete callbacks to update the cache
+        long deadline = System.currentTimeMillis() + 2000;
+        while (cache.containsKey(id4) && System.currentTimeMillis() < deadline) {
+            Thread.sleep(10);
+        }
+
+        // Verify case 1
+        Mockito.verify(fs1, Mockito.never()).closeFileSystem();
+        Assertions.assertTrue(cache.containsKey(id1));
+
+        // Verify case 2
+        Mockito.verify(fs2, Mockito.never()).closeFileSystem();
+        Assertions.assertFalse(cache.containsKey(id2));
+
+        // Verify case 3
+        Mockito.verify(fs3, Mockito.times(1)).closeFileSystem();
+        Assertions.assertFalse(cache.containsKey(id3));
+
+        // Verify case 4
+        Mockito.verify(fs4, Mockito.times(1)).closeFileSystem();
+        Assertions.assertFalse(cache.containsKey(id4));
+    }
+
 }
