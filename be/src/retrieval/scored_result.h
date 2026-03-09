@@ -15,10 +15,7 @@
 #pragma once
 
 #include <cstdint>
-#include <utility>
 #include <vector>
-
-#include "common/status.h"
 
 namespace starrocks {
 
@@ -49,38 +46,6 @@ struct ScoredResult {
         scores.push_back(score);
         ++result_count;
     }
-};
-
-// ============================================================
-// ScoredRowIterator — stateful, lazy (row_id, score) stream
-//                      (Milvus/Knowhere IndexIterator style)
-//
-// Query-agnostic: each index implementation returns its own concrete
-// subclass, holding the algorithm-specific traversal state (HNSW
-// visited set + candidate heap, DiskANN beam, full-text posting-list
-// cursor, ...). Results are produced one at a time in best-first
-// (non-increasing relevance) order.
-//
-// When a row filter is supplied at creation time, the iterator
-// validates each candidate against it lazily and keeps advancing the
-// underlying traversal until a matching result is found — this is the
-// native "iterative filter" path.
-//
-// Lifetime: an iterator borrows the index it was created from and
-// must not outlive it.
-// ============================================================
-class ScoredRowIterator {
-public:
-    virtual ~ScoredRowIterator() = default;
-
-    // Whether at least one more result can be produced. May lazily
-    // advance the underlying traversal (expand ef_search / beam, fetch
-    // the next page), hence non-const.
-    virtual bool has_next() = 0;
-
-    // Produce the next (row_id, score) in best-first order.
-    // Precondition: has_next() == true.
-    virtual StatusOr<std::pair<int64_t, float>> next() = 0;
 };
 
 } // namespace starrocks

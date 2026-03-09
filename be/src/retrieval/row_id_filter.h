@@ -20,23 +20,6 @@
 
 namespace starrocks {
 
-// ============================================================
-// RowIdFilter — abstract row filter (faiss IDSelector-inspired)
-//
-// Query-agnostic: a vector ANN index and a full-text index both
-// filter the same way — by row id. Shared across all retrieval
-// modalities.
-//
-// Hot-path interface: a single virtual is_member(). ANN graph
-// traversal may invoke this hundreds of millions of times per
-// search, so the base interface is intentionally minimal — a
-// single vtable indirection per call, no variant tag check, no
-// std::function indirection.
-//
-// Open for extension: callers may add new subclasses; index
-// implementations may dynamic_cast to a known concrete subclass
-// to take a specialized fast path.
-// ============================================================
 class RowIdFilter {
 public:
     virtual ~RowIdFilter() = default;
