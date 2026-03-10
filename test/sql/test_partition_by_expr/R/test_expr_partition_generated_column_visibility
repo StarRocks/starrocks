@@ -1,0 +1,39 @@
+-- name: test_expr_partition_desc_filter_generated_column
+-- Multi-column expression partition creates __generated_partition_column_
+-- DESC/information_schema.columns should filter it, SHOW CREATE TABLE should show user DDL form
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+-- Multi-column list partition: (k1, date_trunc('month', dt)) creates __generated_partition_column_0
+create table t1 (
+    k1 int,
+    dt datetime
+)
+duplicate key(k1, dt)
+partition by (k1, date_trunc('month', dt))
+distributed by hash(k1) buckets 1
+properties("replication_num" = "1");
+-- result:
+-- !result
+desc t1;
+-- result:
+[REGEX](?s)^k1\t.*\ndt\t.*$
+-- !result
+show create table t1;
+-- result:
+[REGEX](?s).*date_trunc\s*\(\s*['"]month['"]\s*,\s*`?dt`?\).*
+-- !result
+select COLUMN_NAME from information_schema.columns where table_schema = 'db_${uuid0}' and table_name = 't1' order by ORDINAL_POSITION;
+-- result:
+k1
+dt
+-- !result
+drop table t1;
+-- result:
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

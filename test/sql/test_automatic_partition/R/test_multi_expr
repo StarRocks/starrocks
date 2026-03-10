@@ -404,11 +404,10 @@ show create table multi_level_expr_par_tbl_1;
 multi_level_expr_par_tbl_1	CREATE TABLE `multi_level_expr_par_tbl_1` (
   `c1` bigint(20) NOT NULL COMMENT "",
   `c2` varchar(1048576) NULL COMMENT "",
-  `c3` date NULL COMMENT "",
-  `__generated_partition_column_0` varchar(1048576) NULL AS from_unixtime(c1) COMMENT ""
+  `c3` date NULL COMMENT ""
 ) ENGINE=OLAP 
 PRIMARY KEY(`c1`)
-PARTITION BY (`__generated_partition_column_0`)
+PARTITION BY (from_unixtime(c1))
 DISTRIBUTED BY HASH(`c1`) BUCKETS 3 
 PROPERTIES (
 "compression" = "LZ4",
@@ -459,13 +458,11 @@ multi_level_expr_par_tbl_2	CREATE TABLE `multi_level_expr_par_tbl_2` (
   `k10` largeint(40) NULL COMMENT "",
   `k11` decimal(38, 9) NULL COMMENT "",
   `k12` decimal(38, 9) NULL COMMENT "",
-  `k13` decimal(27, 9) NULL COMMENT "",
-  `__generated_partition_column_0` varchar(1048576) NULL AS substring(k4, 1, 5) COMMENT "",
-  `__generated_partition_column_1` date NULL AS date_trunc('month', k1) COMMENT ""
+  `k13` decimal(27, 9) NULL COMMENT ""
 ) ENGINE=OLAP 
 PRIMARY KEY(`k1`, `k2`, `k3`, `k4`, `k5`)
 COMMENT "OLAP"
-PARTITION BY (`__generated_partition_column_0`,`k3`,`__generated_partition_column_1`)
+PARTITION BY (substring(k4, 1, 5),`k3`,date_trunc('month', k1))
 DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) BUCKETS 3 
 PROPERTIES (
 "compression" = "LZ4",
@@ -599,13 +596,11 @@ base_tbl	CREATE TABLE `base_tbl` (
   `k10` largeint(40) NULL COMMENT "",
   `k11` float NULL COMMENT "",
   `k12` double NULL COMMENT "",
-  `k13` decimal(27, 9) NULL COMMENT "",
-  `__generated_partition_column_0` varchar(1048576) NULL AS substring(`k4`, 1, 5) COMMENT "",
-  `__generated_partition_column_1` date NULL AS date_trunc('month', `k1`) COMMENT ""
+  `k13` decimal(27, 9) NULL COMMENT ""
 ) ENGINE=OLAP 
 DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`)
 COMMENT "OLAP"
-PARTITION BY (`__generated_partition_column_0`,`k3`,`__generated_partition_column_1`)
+PARTITION BY (substring(k4, 1, 5),`k3`,date_trunc('month', k1))
 DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) BUCKETS 3 
 PROPERTIES (
 "compression" = "LZ4",
@@ -632,13 +627,11 @@ t1	CREATE TABLE `t1` (
   `k10` largeint(40) NULL COMMENT "",
   `k11` float NULL COMMENT "",
   `k12` double NULL COMMENT "",
-  `k13` decimal(27, 9) NULL COMMENT "",
-  `__generated_partition_column_0` varchar(1048576) NULL AS substring(`k4`, 1, 5) COMMENT "",
-  `__generated_partition_column_1` date NULL AS date_trunc('month', `k1`) COMMENT ""
+  `k13` decimal(27, 9) NULL COMMENT ""
 ) ENGINE=OLAP 
 DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`)
 COMMENT "OLAP"
-PARTITION BY (`__generated_partition_column_0`,`k3`,`__generated_partition_column_1`)
+PARTITION BY (substring(k4, 1, 5),`k3`,date_trunc('month', k1))
 DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) BUCKETS 3 
 PROPERTIES (
 "compression" = "LZ4",
