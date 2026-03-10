@@ -354,7 +354,7 @@ void WorkGroupManager::add_metrics_unlocked(const WorkGroupPtr& wg, UniqueLockTy
         // mem use bytes.
         auto resource_group_mem_allocated_bytes = std::make_unique<IntGauge>(MetricUnit::BYTES);
         bool mem_inuse_registered = GlobalMetricsRegistry::instance()->metrics()->register_metric(
-                "resource_group_mem_allocated_bytes", MetricLabels().add("name", wg->name()),
+                "resource_group_mem_inuse_bytes", MetricLabels().add("name", wg->name()),
                 resource_group_mem_allocated_bytes.get());
         // connector scan use bytes.
         auto resource_group_connector_scan_bytes = std::make_unique<IntGauge>(MetricUnit::BYTES);
