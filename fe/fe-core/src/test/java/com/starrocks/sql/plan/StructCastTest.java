@@ -31,8 +31,6 @@ public class StructCastTest extends PlanTestBase {
         sql = "select cast(named_struct('key',1,'value',1) as struct<key1 int,value1 int>)";
         plan = getFragmentPlan(sql);
 
-        System.out.println("plan = " + plan);
-
         assertContains(plan, "CAST(named_struct('key', 1, 'value', 1) AS struct<key1 int(11), value1 int(11)>)");
     }
 
