@@ -94,6 +94,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.hamcrest.CoreMatchers.containsString;
@@ -1269,28 +1270,27 @@ public class DatabaseTransactionMgrTest {
             }
         };
 
-        class InspectPersistedBatch extends TransactionStateBatch {
-            private boolean persistedWhenAfterVisible = false;
-
-            InspectPersistedBatch(List<TransactionState> transactionStates) {
-                super(transactionStates);
+        // With COW, the original stateBatch is copied internally, so we verify via callbacks
+        // that the transaction is persisted before afterVisible is called.
+        AtomicBoolean persistedWhenAfterVisible = new AtomicBoolean(false);
+        long checkCallbackId = 99999L;
+        states.get(0).addCallbackId(checkCallbackId);
+        masterTransMgr.getCallbackFactory().addCallback(new AbstractTxnStateChangeCallback() {
+            @Override
+            public long getId() {
+                return checkCallbackId;
             }
 
             @Override
-            public void afterVisible(TransactionStatus transactionStatus, boolean txnOperated) {
-                long txnId = getTransactionStates().get(0).getTransactionId();
-                persistedWhenAfterVisible = fakeEditLog.getTransaction(txnId) != null;
-                super.afterVisible(transactionStatus, txnOperated);
+            public void afterVisible(TransactionState txnState) {
+                persistedWhenAfterVisible.set(
+                        fakeEditLog.getTransaction(txnState.getTransactionId()) != null);
             }
+        });
 
-            boolean isPersistedWhenAfterVisible() {
-                return persistedWhenAfterVisible;
-            }
-        }
-
-        InspectPersistedBatch stateBatch = new InspectPersistedBatch(states);
+        TransactionStateBatch stateBatch = new TransactionStateBatch(states);
         masterTransMgr.finishTransactionBatch(GlobalStateMgrTestUtil.testDbId1, stateBatch, null);
-        assertTrue(stateBatch.isPersistedWhenAfterVisible());
+        assertTrue(persistedWhenAfterVisible.get());
     }
 
     @Test
@@ -1306,21 +1306,25 @@ public class DatabaseTransactionMgrTest {
             }
         };
 
-        class ThrowingBatch extends TransactionStateBatch {
-            ThrowingBatch(List<TransactionState> transactionStates) {
-                super(transactionStates);
+        // Register a throwing callback to verify exception is swallowed
+        long throwCallbackId = 99998L;
+        states.get(0).addCallbackId(throwCallbackId);
+        masterTransMgr.getCallbackFactory().addCallback(new AbstractTxnStateChangeCallback() {
+            @Override
+            public long getId() {
+                return throwCallbackId;
             }
 
             @Override
-            public void afterVisible(TransactionStatus transactionStatus, boolean txnOperated) {
+            public void afterVisible(TransactionState txnState) {
                 throw new RuntimeException("mock afterVisible failure");
             }
-        }
+        });
 
-        TransactionStateBatch stateBatch = new ThrowingBatch(states);
-        Assertions.assertDoesNotThrow(
+        TransactionStateBatch stateBatch = new TransactionStateBatch(states);
+        TransactionStateBatch result = Assertions.assertDoesNotThrow(
                 () -> masterTransMgr.finishTransactionBatch(GlobalStateMgrTestUtil.testDbId1, stateBatch, null));
-        for (TransactionState state : states) {
+        for (TransactionState state : result.getTransactionStates()) {
             assertEquals(TransactionStatus.VISIBLE, state.getTransactionStatus());
             assertNotNull(fakeEditLog.getTransaction(state.getTransactionId()));
         }
@@ -1350,11 +1354,11 @@ public class DatabaseTransactionMgrTest {
         };
 
         TransactionStateBatch stateBatch = new TransactionStateBatch(states);
-        Assertions.assertDoesNotThrow(
+        TransactionStateBatch result = Assertions.assertDoesNotThrow(
                 () -> masterTransMgr.finishTransactionBatch(GlobalStateMgrTestUtil.testDbId1, stateBatch, null));
 
         assertEquals(2, callbackInvokeCount.get());
-        for (TransactionState state : states) {
+        for (TransactionState state : result.getTransactionStates()) {
             assertEquals(TransactionStatus.VISIBLE, state.getTransactionStatus());
         }
     }
