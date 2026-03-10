@@ -22,6 +22,7 @@
 #include "common/status.h"
 #include "exprs/expr_context.h"
 #include "gen_cpp/Descriptors_types.h"
+#include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/descriptors.h"
 
