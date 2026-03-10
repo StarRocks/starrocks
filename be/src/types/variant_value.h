@@ -19,6 +19,7 @@
 #include <functional>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "base/container/raw_container.h"
 #include "base/statusor.h"
@@ -36,7 +37,8 @@ class VariantRowValue;
 class VariantRowRef {
 public:
     VariantRowRef(std::string_view metadata, std::string_view value) : _metadata(metadata), _value(value) {}
-    VariantRowRef(const VariantMetadata& metadata, const VariantValue& value) : _metadata(metadata), _value(value) {}
+    VariantRowRef(VariantMetadata metadata, const VariantValue& value)
+            : _metadata(std::move(metadata)), _value(value) {}
     VariantRowRef() : _metadata(VariantMetadata::kEmptyMetadata), _value(VariantValue::kEmptyValue) {}
 
     const VariantMetadata& get_metadata() const { return _metadata; }

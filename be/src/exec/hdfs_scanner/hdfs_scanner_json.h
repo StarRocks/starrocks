@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <utility>
+
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exec/json_parser.h"
 #include "util/byte_buffer.h"
@@ -27,8 +29,8 @@ public:
 
     struct PreviousParsedItem {
         explicit PreviousParsedItem(const std::string_view& key) : key(key), column_index(-1) {}
-        PreviousParsedItem(const std::string_view& key, int column_index, const TypeDescriptor& type)
-                : key(key), type(type), column_index(column_index) {}
+        PreviousParsedItem(const std::string_view& key, int column_index, TypeDescriptor type)
+                : key(key), type(std::move(type)), column_index(column_index) {}
 
         std::string key;
         TypeDescriptor type;

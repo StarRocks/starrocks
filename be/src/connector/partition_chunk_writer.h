@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <utility>
+
 #include "base/uid_util.h"
 #include "column/vectorized_fwd.h"
 #include "common/thread/threadpool.h"
@@ -237,7 +239,7 @@ public:
 
 class BufferPartitionChunkWriterFactory final : public PartitionChunkWriterFactory {
 public:
-    BufferPartitionChunkWriterFactory(std::shared_ptr<BufferPartitionChunkWriterContext> ctx) : _ctx(ctx) {}
+    BufferPartitionChunkWriterFactory(std::shared_ptr<BufferPartitionChunkWriterContext> ctx) : _ctx(std::move(ctx)) {}
 
     ~BufferPartitionChunkWriterFactory() override = default;
 
@@ -255,7 +257,7 @@ private:
 
 class SpillPartitionChunkWriterFactory final : public PartitionChunkWriterFactory {
 public:
-    SpillPartitionChunkWriterFactory(std::shared_ptr<SpillPartitionChunkWriterContext> ctx) : _ctx(ctx) {}
+    SpillPartitionChunkWriterFactory(std::shared_ptr<SpillPartitionChunkWriterContext> ctx) : _ctx(std::move(ctx)) {}
 
     ~SpillPartitionChunkWriterFactory() override = default;
 
