@@ -1004,7 +1004,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: When true, the BE resolves the S3 endpoint hostname to an IP address before creating or reusing HTTP sessions. Use this when the endpoint is a VIP or DNS name that resolves to multiple backend IPs, so that connections are spread across nodes (each IP gets its own session pool) instead of sticking to a single node. When false, the session pool key is the hostname, so all traffic may reuse the same connection(s) to one backend.
+- Description: When true, the BE resolves the S3 endpoint hostname to an IP address before creating or reusing HTTP sessions. This applies to **HTTP only**; HTTPS always uses the hostname so that TLS SNI and certificate verification work (certificates are issued for hostnames, not backend IPs). Use this when the endpoint is a VIP or DNS name that resolves to multiple backend IPs, so that HTTP connections are spread across nodes (each IP gets its own session pool) instead of sticking to a single node. When false, the session pool key is the hostname.
 - Introduced in: -
 
 ##### parquet_late_materialization_enable

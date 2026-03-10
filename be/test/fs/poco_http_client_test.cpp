@@ -212,8 +212,11 @@ TEST_F(S3PocoHttpClientTest, TestNotFoundKey) {
 // --- resolve_host behavior: avoid sticking to a single S3 node when using VIP ---
 // When resolve_host=false, session pool key is the endpoint hostname (e.g. VIP), so
 // all connections reuse the same pool and traffic goes to one node. When resolve_host=true,
-// we resolve hostname to IP and use IP as pool key, so multiple backend IPs get separate
-// pools and traffic is spread (e.g. DNS round-robin).
+// we resolve hostname to IP and use IP as pool key (HTTP only), so multiple backend IPs
+// get separate pools and traffic is spread. For HTTPS we never resolve so TLS SNI and
+// certificate hostname verification keep using the hostname. Resolve failure fallback
+// (use hostname as pool key + VLOG) is in resolveHostWithCache() and not unit-tested
+// here (would require mocking DNS).
 
 TEST_F(S3PocoHttpClientTest, ResolveHostFalse_KeepsOriginalHost) {
     Poco::URI uri("http://my.vip.host:80");
@@ -241,6 +244,16 @@ TEST_F(S3PocoHttpClientTest, ResolveHostTrue_WhenHostIsLocalhost_ResolvesToIP) {
     // Session pool key and connection target must be the resolved IP, not "localhost".
     EXPECT_TRUE(starrocks::is_valid_ip(session->getHost())) << "expected resolved IP, got: " << session->getHost();
     EXPECT_EQ(session->getPort(), 80);
+}
+
+// HTTPS never resolves host to IP so that TLS SNI and certificate verification use the hostname.
+TEST_F(S3PocoHttpClientTest, ResolveHostTrue_WhenHTTPS_KeepsHostname) {
+    Poco::URI uri("https://my.vip.host:443");
+    ConnectionTimeouts timeouts(Poco::Timespan(5000000), Poco::Timespan(5000000), Poco::Timespan(5000000));
+    auto session = makeHTTPSession(uri, timeouts, true);
+    ASSERT_NE(session.operator->(), nullptr);
+    EXPECT_EQ(session->getHost(), "my.vip.host");
+    EXPECT_EQ(session->getPort(), 443);
 }
 
 } // namespace starrocks::poco
