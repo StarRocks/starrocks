@@ -267,6 +267,13 @@ Status VariantBuilder::set_overlays(std::vector<Overlay>&& overlays) {
     return Status::OK();
 }
 
+StatusOr<VariantRowValue> VariantBuilder::build_row_from_overlays(std::optional<VariantRowRef> base,
+                                                                  std::vector<Overlay> overlays) {
+    VariantBuilder builder(base.has_value() ? &base.value() : nullptr);
+    RETURN_IF_ERROR(builder.set_overlays(std::move(overlays)));
+    return builder.build();
+}
+
 StatusOr<VariantRowValue> VariantBuilder::build() const {
     VariantNode root;
     bool has_content = false;
