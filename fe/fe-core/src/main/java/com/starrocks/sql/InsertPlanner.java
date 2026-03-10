@@ -305,10 +305,24 @@ public class InsertPlanner {
         }
 
         if (targetTable.isIcebergTable()) {
+            // For v3+ tables with row lineage enabled, preserve _row_id and
+            // _last_updated_sequence_number so compaction can write them as physical columns.
+            boolean preserveRowLineage = false;
+            if (targetTable instanceof IcebergTable) {
+                IcebergTable iceTable = (IcebergTable) targetTable;
+                preserveRowLineage = iceTable.getFormatVersion() >= 3
+                        && session.getSessionVariable().isEnableIcebergCompactionWithRowLineage();
+            }
+            Set<String> columnsToFilter = preserveRowLineage
+                    ? IcebergTable.ICEBERG_META_COLUMNS.stream()
+                            .filter(col -> !col.equals(IcebergTable.ROW_ID)
+                                    && !col.equals(IcebergTable.LAST_UPDATED_SEQUENCE_NUMBER))
+                            .collect(java.util.stream.Collectors.toSet())
+                    : IcebergTable.ICEBERG_META_COLUMNS;
             outputBaseSchema = outputBaseSchema.stream().filter(col ->
-                    !IcebergTable.ICEBERG_META_COLUMNS.contains(col.getName())).toList();
+                    !columnsToFilter.contains(col.getName())).toList();
             outputFullSchema = outputFullSchema.stream().filter(col ->
-                    !IcebergTable.ICEBERG_META_COLUMNS.contains(col.getName())).toList();
+                    !columnsToFilter.contains(col.getName())).toList();
         }
 
         refreshExternalTable(insertStmt.getQueryStatement(), session);

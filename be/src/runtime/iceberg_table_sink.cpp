@@ -15,6 +15,7 @@
 #include "iceberg_table_sink.h"
 
 #include "common/runtime_profile.h"
+#include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
@@ -213,6 +214,32 @@ Status IcebergTableSink::create_data_sink_context(const TDataSink& thrift_sink, 
     data_sink_ctx->parquet_field_ids =
             connector::IcebergUtils::generate_parquet_field_ids(iceberg_table_desc->get_iceberg_schema()->fields);
     data_sink_ctx->column_evaluators = ColumnExprEvaluator::from_exprs(this->get_output_expr(), runtime_state);
+
+    // When compaction includes row lineage columns (_row_id, _last_updated_sequence_number),
+    // the output expressions will have more columns than the table descriptor.
+    // Extend column_names and parquet_field_ids to match.
+    size_t num_evaluators = data_sink_ctx->column_evaluators.size();
+    if (num_evaluators > data_sink_ctx->column_names.size()) {
+        TupleDescriptor* tuple_desc =
+                runtime_state->desc_tbl().get_tuple_descriptor(t_iceberg_sink.tuple_id);
+        if (tuple_desc != nullptr) {
+            const auto& slots = tuple_desc->slots();
+            for (size_t i = data_sink_ctx->column_names.size(); i < num_evaluators && i < slots.size(); i++) {
+                const std::string& col_name = slots[i]->col_name();
+                data_sink_ctx->column_names.push_back(col_name);
+
+                formats::FileColumnId field_id;
+                if (col_name == "_row_id") {
+                    field_id.field_id = HdfsScannerParams::ICEBERG_ROW_ID_COLUMN_ID;
+                } else if (col_name == "_last_updated_sequence_number") {
+                    field_id.field_id =
+                            HdfsScannerParams::ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER_COLUMN_ID;
+                }
+                data_sink_ctx->parquet_field_ids.push_back(field_id);
+            }
+        }
+    }
+
     data_sink_ctx->transform_exprs = iceberg_table_desc->get_transform_exprs();
     data_sink_ctx->fragment_context = fragment_ctx;
     data_sink_ctx->tuple_desc_id = t_iceberg_sink.tuple_id;
