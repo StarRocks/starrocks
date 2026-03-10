@@ -282,36 +282,44 @@ TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithDefaultValue) {
     EXPECT_EQ("[42, NULL]", chunk->debug_row(0));
 }
 
-// Test filling not existed column with empty default value and nullable slot
+// Empty string defaults should be preserved for string columns.
 TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithEmptyDefaultNullable) {
-    SlotDesc descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)}, {""}};
+    SlotDesc descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)}, {""}};
     auto* tuple_desc = _create_tuple_desc(descs);
     HdfsScannerContext ctx;
     ctx.not_existed_slots.push_back(tuple_desc->slots()[0]);
-    // Empty string means SQL NULL for nullable columns
     ctx.materialize_slot_default_values.emplace(tuple_desc->slots()[0]->id(), "");
 
     ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
     ASSERT_OK(ctx.append_or_update_not_existed_columns_to_chunk(&chunk, 1));
     ASSERT_EQ(1, chunk->num_rows());
-    // Should be NULL because empty default for nullable column
-    EXPECT_TRUE(chunk->get_column_by_index(0)->is_null(0));
+    EXPECT_EQ("['']", chunk->debug_row(0));
 }
 
-// Test filling not existed column with empty default value and non-nullable slot
+// Empty string defaults should also work for non-nullable string columns.
 TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithEmptyDefaultNonNullable) {
-    SlotDesc descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)}, {""}};
+    SlotDesc descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)}, {""}};
     auto* tuple_desc = _create_tuple_desc_with_nullable(descs, false);
     HdfsScannerContext ctx;
     ctx.not_existed_slots.push_back(tuple_desc->slots()[0]);
-    // Empty string for non-nullable column should cause error
+    ctx.materialize_slot_default_values.emplace(tuple_desc->slots()[0]->id(), "");
+
+    ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    ASSERT_OK(ctx.append_or_update_not_existed_columns_to_chunk(&chunk, 1));
+    ASSERT_EQ(1, chunk->num_rows());
+    EXPECT_EQ("['']", chunk->debug_row(0));
+}
+
+TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithEmptyDefaultNonString) {
+    SlotDesc descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)}, {""}};
+    auto* tuple_desc = _create_tuple_desc(descs);
+    HdfsScannerContext ctx;
+    ctx.not_existed_slots.push_back(tuple_desc->slots()[0]);
     ctx.materialize_slot_default_values.emplace(tuple_desc->slots()[0]->id(), "");
 
     ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
     auto status = ctx.append_or_update_not_existed_columns_to_chunk(&chunk, 1);
-    // Should return error because non-nullable column has empty default value
     EXPECT_FALSE(status.ok());
-    EXPECT_TRUE(status.message().find("non-nullable") != std::string::npos);
 }
 
 // ========================= ORC SCANNER ============================

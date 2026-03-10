@@ -38,7 +38,7 @@ TEST_F(HiveConnectorTest, test_connector_type) {
 // Test HiveDataSourceProvider creates data source
 TEST_F(HiveConnectorTest, test_create_data_source) {
     THdfsScanNode hdfs_scan_node;
-    HiveDataSourceProvider provider(nullptr, hdfs_scan_node);
+    HiveDataSourceProvider provider(nullptr, 0, hdfs_scan_node);
 
     TScanRange scan_range;
     scan_range.__set_hdfs_scan_range(THdfsScanRange());
@@ -52,7 +52,7 @@ TEST_F(HiveConnectorTest, test_create_data_source) {
 TEST_F(HiveConnectorTest, test_open_no_data) {
     THdfsScanNode hdfs_scan_node;
     hdfs_scan_node.__set_tuple_id(0);
-    HiveDataSourceProvider provider(nullptr, hdfs_scan_node);
+    HiveDataSourceProvider provider(nullptr, 0, hdfs_scan_node);
 
     THdfsScanRange hdfs_scan_range;
     hdfs_scan_range.file_length = 0; // Triggers early return before _check_all_slots_nullable
@@ -75,7 +75,7 @@ TEST_F(HiveConnectorTest, test_bucket_properties) {
     THdfsScanNode hdfs_scan_node;
     hdfs_scan_node.__isset.bucket_properties = true;
 
-    HiveDataSourceProvider provider(nullptr, hdfs_scan_node);
+    HiveDataSourceProvider provider(nullptr, 0, hdfs_scan_node);
 
     TScanRange scan_range;
     scan_range.__set_hdfs_scan_range(THdfsScanRange());
@@ -90,7 +90,7 @@ TEST_F(HiveConnectorTest, test_extended_column_index) {
     hdfs_scan_node.__isset.extended_slot_ids = true;
     hdfs_scan_node.extended_slot_ids = {10, 20, 30};
 
-    HiveDataSourceProvider provider(nullptr, hdfs_scan_node);
+    HiveDataSourceProvider provider(nullptr, 0, hdfs_scan_node);
 
     THdfsScanRange hdfs_scan_range;
     auto data_source = std::make_unique<HiveDataSource>(&provider, hdfs_scan_range);
@@ -105,7 +105,7 @@ TEST_F(HiveConnectorTest, test_extended_column_index) {
 TEST_F(HiveConnectorTest, test_scan_range_indicate_const_column_index) {
     THdfsScanNode hdfs_scan_node;
 
-    HiveDataSourceProvider provider(nullptr, hdfs_scan_node);
+    HiveDataSourceProvider provider(nullptr, 0, hdfs_scan_node);
 
     THdfsScanRange hdfs_scan_range;
     hdfs_scan_range.__isset.identity_partition_slot_ids = true;

@@ -44,18 +44,10 @@ static Status fill_default_value_for_not_existed_slot(SlotDescriptor* slot_desc,
     if (type_info == nullptr) {
         return Status::InternalError(fmt::format("failed to get type info for slot {}", slot_desc->col_name()));
     }
-
-    // For Iceberg: treat the default value string literally
-    // - Empty string means SQL NULL (when IcebergApiConverter returns null in Java)
-    // - "NULL" is a literal string, not SQL null
-    if (default_value.empty()) {
-        if (!slot_desc->is_nullable()) {
-            return Status::InternalError(
-                    fmt::format("non-nullable column {} has empty default value", slot_desc->col_name()));
-        }
-        [[maybe_unused]] bool ok = column->append_nulls(row_count);
-        DCHECK(ok) << "cannot append null to non-nullable column";
-        return Status::OK();
+    if (default_value.empty() && !slot_desc->type().is_string_type()) {
+        return Status::InvalidArgument(
+                fmt::format("empty default value is only supported for string-like columns, col_name={}",
+                            slot_desc->col_name()));
     }
 
     // Parse default value into Datum using TypeInfo::from_string
