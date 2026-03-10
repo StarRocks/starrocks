@@ -584,7 +584,10 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable, Memor
             Set<Long> partitionIds = lakeTableToPartitions.remove(tableId);
             if (partitionIds != null) {
                 if (!partitionIds.isEmpty()) {
-                    LOG.warn("Invariant violation: lakeTableToPartitions for tableId {} is not empty when erasing table. "
+                    // This is expected in follower replay scenario: leader has already deleted
+                    // partitions physically, follower just replays the table erase edit log
+                    // and cleans up the in-memory tracking data.
+                    LOG.info("Cleaning up lakeTableToPartitions for tableId {} during table erase. "
                                     + "pendingPartitionCount={}, partitionIds={}",
                             tableId, partitionIds.size(), partitionIds);
                 }
@@ -725,10 +728,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable, Memor
                 // First time processing this table, add its partitions to idToPartition
                 if (!addLakeTablePartitionsToRecycleBin(info)) {
                     // No partitions, table is ready to be erased
-                    // Note: removeTableBinds() was already called in addLakeTablePartitionsToRecycleBin()
-                    OlapTable table = (OlapTable) info.getTable();
-                    table.removeTabletsFromInvertedIndex();
-                    GlobalStateMgr.getCurrentState().getWarehouseMgr().removeTableWarehouseInfo(tableId);
+                    cleanupLakeTableAfterPartitionsDeletion(info);
                     finishedTables.add(tableId);
                     continue;
                 }
@@ -1184,8 +1184,12 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable, Memor
     @Override
     protected void runAfterCatalogReady() {
         long currentTimeMs = System.currentTimeMillis();
-        // should follow the partition/table/db order
-        // in case of partition(table) is still in recycle bin but table(db) is missing
+        // Must follow the partition -> table -> db order for two reasons:
+        // 1. Avoid dangling references: partition(table) should be erased before its parent table(db).
+        // 2. Lake table deletion flow: eraseTable() converts table deletion into partition-level
+        //    deletions (adding partitions to idToPartition), and erasePartition() processes them.
+        //    On the next daemon cycle, erasePartition() runs first to delete the partitions,
+        //    then eraseTable() checks completion and finalizes the table cleanup.
         try {
             erasePartition(currentTimeMs);
             // synchronized is unfair lock, sleep here allows other high-priority operations to obtain a lock

@@ -51,16 +51,22 @@ public abstract class RecyclePartitionInfo extends JsonWriter {
      * This is set when the partition is being deleted as part of a table deletion,
      * where all partitions are being removed and shared directories should also be cleaned up.
      * This field is transient and not serialized.
+     *
+     * Marked volatile because it is written in synchronized eraseTable() but read by
+     * async delete tasks submitted in erasePartition() on a different thread.
      */
-    protected transient boolean forceRemoveDirectory = false;
+    protected transient volatile boolean forceRemoveDirectory = false;
 
     /**
      * Whether this partition is generated from table-level deletion flow.
      * Used to skip partition-level erase edit log because table-level erase log
      * will be recorded after all related partitions are deleted.
      * This field is transient and not serialized.
+     *
+     * Marked volatile because it is written in synchronized eraseTable() but read by
+     * async delete tasks submitted in erasePartition() on a different thread.
      */
-    protected transient boolean fromTableDeletion = false;
+    protected transient volatile boolean fromTableDeletion = false;
 
     public RecyclePartitionInfo() {
         recoverable = true;
