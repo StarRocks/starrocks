@@ -1163,21 +1163,31 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
                     for (const auto& rowset : (*tablet_metadata)->rowsets()) {
                         int64_t num_deletes = 0;
                         if (is_pk_tablet) {
-                            if (config::lake_enable_accurate_pk_row_count) {
-                                // Accurate mode: fetch delete vectors from object storage.
+                            if (accurate_mode) {
+                                // Accurate mode (default): fetch delete vectors from object storage.
                                 // NOTE!! Each segment incurs a remote metadata read - expensive for large tablets.
                                 num_deletes = static_cast<int64_t>(
                                         _tablet_mgr->update_mgr()->get_rowset_num_deletes(tablet_id, version, rowset));
                             } else {
-                                // Approximate mode (default): use the pre-stored num_dels field in the rowset
-                                // metadata. This avoids any additional I/O while still providing a reasonable
-                                // row count estimate. Rows deleted but not yet compacted may be slightly
-                                // overcounted until the next compaction.
-                                num_deletes = rowset.num_dels();
+                                // Approximate mode: prefer the pre-stored num_dels field in rowset
+                                // metadata. This avoids additional I/O while still providing a reasonable estimate.
+                                // Rows deleted but not yet compacted may be slightly overcounted.
+                                if (rowset.has_num_dels()) {
+                                    num_deletes = rowset.num_dels();
+                                } else {
+                                    // Fallback for old metadata without num_dels.
+                                    num_deletes = static_cast<int64_t>(
+                                            _tablet_mgr->update_mgr()->get_rowset_num_deletes(tablet_id, version, rowset));
+                                }
                             }
                         }
                         // For non-PK tablets, num_deletes stays 0: they have no delete vectors.
-                        num_rows += rowset.num_rows() - num_deletes;
+                        // Clamp to avoid negative contribution when approximate num_dels overcounts.
+                        int64_t rowset_live_rows = rowset.num_rows() - num_deletes;
+                        if (UNLIKELY(rowset_live_rows < 0)) {
+                            rowset_live_rows = 0;
+                        }
+                        num_rows += rowset_live_rows;
                         data_size += rowset.data_size();
                     }
                     for (const auto& [_, file] : (*tablet_metadata)->delvec_meta().version_to_file()) {
@@ -1186,6 +1196,7 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
 
                     auto elapsed_ms = (butil::gettimeofday_us() - task_start_us) / 1000;
                     if (elapsed_ms >= config::lake_tablet_stat_slow_log_ms) {
+                        TEST_SYNC_POINT_CALLBACK("LakeServiceImpl::get_tablet_stats:slow_log", nullptr);
                         LOG(WARNING) << "Slow tablet stat collection. tablet_id: " << tablet_id
                                      << ", version: " << version << ", is_pk_tablet: " << is_pk_tablet
                                      << ", accurate_mode: " << accurate_mode << ", num_rowsets: " << num_rowsets

@@ -2872,8 +2872,10 @@ TEST_F(LakeServiceTest, test_get_tablet_stats) {
 
     // get_tablet_stats() should not fill the metadata cache (fill_cache=false) to avoid polluting
     // the precious LRU metacache with stat-collection workloads.
-    auto cache_key = _tablet_mgr->tablet_metadata_location(_tablet_id, 1);
-    ASSERT_TRUE(_tablet_mgr->metacache()->lookup_tablet_metadata(cache_key) == nullptr);
+    auto cache_key_v1 = _tablet_mgr->tablet_metadata_location(_tablet_id, 1);
+    auto cache_key_v3 = _tablet_mgr->tablet_metadata_location(_tablet_id, 3);
+    ASSERT_TRUE(_tablet_mgr->metacache()->lookup_tablet_metadata(cache_key_v1) == nullptr);
+    ASSERT_TRUE(_tablet_mgr->metacache()->lookup_tablet_metadata(cache_key_v3) == nullptr);
 
     // test timeout
     response.clear_tablet_stats();
@@ -3023,8 +3025,8 @@ TEST_F(LakeServiceTest, test_get_tablet_stats_pk_accurate_mode) {
     ASSERT_EQ(1, response.tablet_stats_size());
     EXPECT_EQ(pk_tablet_id, response.tablet_stats(0).tablet_id());
     // In accurate mode, get_rowset_num_deletes() reads actual delete vectors.
-    // Without actual delete vectors written, the result should be num_rows (no deletes deducted).
-    EXPECT_GE(response.tablet_stats(0).num_rows(), 0);
+    // Without actual delete vectors written, no deletes should be deducted.
+    EXPECT_EQ(200, response.tablet_stats(0).num_rows());
     EXPECT_EQ(8192, response.tablet_stats(0).data_size());
 }
 
@@ -3035,6 +3037,14 @@ TEST_F(LakeServiceTest, test_get_tablet_stats_slow_log) {
     int64_t old_threshold = config::lake_tablet_stat_slow_log_ms;
     config::lake_tablet_stat_slow_log_ms = 0; // 0 ms: any task should be logged as slow
     DeferOp restore_config([old_threshold] { config::lake_tablet_stat_slow_log_ms = old_threshold; });
+    std::atomic<bool> slow_log_triggered = false;
+    SyncPoint::GetInstance()->SetCallBack("LakeServiceImpl::get_tablet_stats:slow_log",
+                                          [&](void* /*arg*/) { slow_log_triggered.store(true); });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_sync_point([&]() {
+        SyncPoint::GetInstance()->ClearCallBack("LakeServiceImpl::get_tablet_stats:slow_log");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
 
     TabletStatRequest request;
     TabletStatResponse response;
@@ -3043,10 +3053,9 @@ TEST_F(LakeServiceTest, test_get_tablet_stats_slow_log) {
     info->set_version(1);
 
     _tablet_mgr->metacache()->prune();
-    // The test verifies that get_tablet_stats completes successfully even when the
-    // slow log code path is exercised. The actual WARNING log can be observed in test output.
     _lake_service.get_tablet_stats(nullptr, &request, &response, nullptr);
     ASSERT_EQ(1, response.tablet_stats_size());
+    ASSERT_TRUE(slow_log_triggered.load());
     EXPECT_EQ(_tablet_id, response.tablet_stats(0).tablet_id());
     EXPECT_EQ(0, response.tablet_stats(0).num_rows());
     EXPECT_EQ(0, response.tablet_stats(0).data_size());
