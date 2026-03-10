@@ -29,6 +29,7 @@ namespace starrocks {
 // forehead declar class, because jni function init in StarRocksServer.
 class StarRocksServer;
 class RuntimeState;
+class TAuthInfo;
 } // namespace starrocks
 
 namespace starrocks {

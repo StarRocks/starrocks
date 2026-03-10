@@ -24,6 +24,7 @@
 #include "cache/data_cache_hit_rate_counter.hpp"
 #include "cache/disk_cache/local_disk_cache_engine.h"
 #include "cache/mem_cache/local_mem_cache_engine.h"
+#include "gutil/strings/substitute.h"
 #include "http/http_channel.h"
 #include "http/http_headers.h"
 #include "http/http_request.h"

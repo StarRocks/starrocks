@@ -79,6 +79,8 @@ class EngineTask;
 class MemTableFlushExecutor;
 class Tablet;
 class ReplicationTxnManager;
+class TAllocateAutoIncrementIdParam;
+class TAllocateAutoIncrementIdResult;
 class UpdateManager;
 class CompactionManager;
 class PublishVersionManager;
