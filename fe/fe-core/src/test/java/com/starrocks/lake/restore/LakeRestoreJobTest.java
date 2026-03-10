@@ -188,7 +188,7 @@ public class LakeRestoreJobTest {
         local.getLocalMetastore().replayCreateDb(new CreateDbInfo(dbId, "target_db"));
 
         EditLog editLog = spy(new EditLog(null));
-        doNothing().when(editLog).logCreateTable(any());
+        doNothing().when(editLog).logCreateTable(any(), any());
         local.setEditLog(editLog);
 
         SnapshotRestoreJob job = new SnapshotRestoreJob(1L, "job_register", dbId, tableId, Lists.newArrayList(), table);

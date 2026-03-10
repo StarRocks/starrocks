@@ -369,22 +369,18 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
 
                 LOG.info("before handle alter task tablet {}, replica: {}, task version: {}", getSignature(), replica,
                         getVersion());
-                boolean versionChanged = false;
                 if (replica.getVersion() <= getVersion()) {
-                    // Case 1, Case 2.1 or Case 3
-                    replica.updateRowCount(getVersion(), replica.getDataSize(),
-                            replica.getRowCount());
-                    versionChanged = true;
-                }
-
-                if (versionChanged) {
                     ReplicaPersistInfo info = ReplicaPersistInfo.createForClone(getDbId(), getTableId(),
                             getPartitionId(), getIndexId(), getTabletId(), getBackendId(),
-                            replica.getId(), replica.getVersion(), -1,
+                            replica.getId(), getVersion(), -1,
                             replica.getDataSize(), replica.getRowCount(),
                             replica.getLastFailedVersion(),
                             replica.getLastSuccessVersion(), 0);
-                    GlobalStateMgr.getCurrentState().getEditLog().logUpdateReplica(info);
+                    GlobalStateMgr.getCurrentState().getEditLog().logUpdateReplica(info, wal -> {
+                        // Case 1, Case 2.1 or Case 3
+                        replica.updateRowCount(getVersion(), replica.getDataSize(),
+                                replica.getRowCount());
+                    });
                 }
 
                 LOG.info("after handle alter task tablet: {}, replica: {}", getSignature(), replica);

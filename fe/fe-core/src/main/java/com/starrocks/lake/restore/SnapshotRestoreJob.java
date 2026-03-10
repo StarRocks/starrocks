@@ -415,8 +415,6 @@ public class SnapshotRestoreJob extends AbstractJob {
 
         Locker locker = new Locker();
         locker.lockDatabase(targetDatabase.getId(), LockType.WRITE);
-        boolean registered = false;
-        OlapTable tableForRestore = null;
         try {
             if (!targetDatabase.isExist()) {
                 throw new StarRocksException(String.format("Database '%s' has been dropped",
@@ -426,36 +424,22 @@ public class SnapshotRestoreJob extends AbstractJob {
                 return;
             }
 
-            tableForRestore = loadPendingTable();
+            OlapTable tableForRestore = loadPendingTable();
             tableForRestore.maySetDatabaseId(targetDatabase.getId());
 
-            registered = targetDatabase.registerTableUnlocked(tableForRestore);
-            if (!registered) {
-                throw new StarRocksException(String.format("Failed to register table '%s.%s'",
-                        targetDatabase.getFullName(), tableForRestore.getName()));
-            }
+            String storageVolumeId = tableForRestore.getTableProperty() != null
+                    ? tableForRestore.getTableProperty().getStorageVolume() : null;
+            CreateTableInfoEPack createInfo = new CreateTableInfoEPack(targetDatabase.getFullName(),
+                    tableForRestore, storageVolumeId, null, null);
+            globalStateMgr.getEditLog().logCreateTable(createInfo, wal -> {
+                targetDatabase.registerTableUnlocked(tableForRestore);
+            });
 
             tableForRestore.onCreate(targetDatabase);
             registerTabletsInInvertedIndex(targetDatabase, tableForRestore);
-        } catch (StarRocksException e) {
-            if (registered && tableForRestore != null) {
-                targetDatabase.unRegisterTableUnlocked(tableForRestore);
-            }
-            throw e;
-        } catch (Throwable t) {
-            if (registered && tableForRestore != null) {
-                targetDatabase.unRegisterTableUnlocked(tableForRestore);
-            }
-            throw new StarRocksException("Failed to register restored table: " + t.getMessage(), t);
         } finally {
             locker.unLockDatabase(targetDatabase.getId(), LockType.WRITE);
         }
-
-        String storageVolumeId = tableForRestore.getTableProperty() != null
-                ? tableForRestore.getTableProperty().getStorageVolume() : null;
-        CreateTableInfoEPack createInfo = new CreateTableInfoEPack(targetDatabase.getFullName(),
-                tableForRestore, storageVolumeId, null, null);
-        globalStateMgr.getEditLog().logCreateTable(createInfo);
     }
 
     private void registerTabletsInInvertedIndex(Database targetDatabase, OlapTable tableForRestore) {

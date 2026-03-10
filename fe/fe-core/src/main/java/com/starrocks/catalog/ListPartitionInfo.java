@@ -26,6 +26,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.persist.ListPartitionPersistInfo;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionValue;
@@ -530,41 +531,66 @@ public class ListPartitionInfo extends PartitionInfo {
 
     }
 
-    public void handleNewListPartitionDescs(Map<ColumnId, Column> idToColumn,
-                                            List<Pair<Partition, PartitionDesc>> partitionList,
-                                            Set<String> existPartitionNameSet, boolean isTempPartition)
+    public void checkNewListPartitionDescs(Map<ColumnId, Column> idToColumn,
+                                           List<Pair<Partition, PartitionDesc>> partitionList,
+                                           Map<Long, List<LiteralExpr>> idToLiteralExprValues,
+                                           Map<Long, List<List<LiteralExpr>>> idToMultiLiteralExprValues)
             throws DdlException {
         try {
+            List<Column> partitionColumns = MetaUtils.getColumnsByColumnIds(idToColumn, this.partitionColumnIds);
             for (Pair<Partition, PartitionDesc> entry : partitionList) {
                 Partition partition = entry.first;
-                String name = partition.getName();
-                if (!existPartitionNameSet.contains(name)) {
-                    long partitionId = partition.getId();
-                    PartitionDesc partitionDesc = entry.second;
-                    Preconditions.checkArgument(partitionDesc instanceof SinglePartitionDesc);
-                    if (partitionDesc instanceof MultiItemListPartitionDesc) {
-                        MultiItemListPartitionDesc multiItemListPartitionDesc =
-                                (MultiItemListPartitionDesc) partitionDesc;
-                        this.idToMultiValues.put(partitionId, multiItemListPartitionDesc.getMultiValues());
-                        this.setMultiLiteralExprValues(idToColumn, partitionId,
-                                multiItemListPartitionDesc.getMultiValues());
-                    } else if (partitionDesc instanceof SingleItemListPartitionDesc) {
-                        SingleItemListPartitionDesc singleItemListPartitionDesc =
-                                (SingleItemListPartitionDesc) partitionDesc;
-                        this.idToValues.put(partitionId, singleItemListPartitionDesc.getValues());
-                        this.setLiteralExprValues(idToColumn, partitionId, singleItemListPartitionDesc.getValues());
-                    } else {
-                        throw new DdlException(
-                                "add list partition only support single item or multi item list partition now");
+                long partitionId = partition.getId();
+                PartitionDesc partitionDesc = entry.second;
+                Preconditions.checkArgument(partitionDesc instanceof SinglePartitionDesc);
+                if (partitionDesc instanceof MultiItemListPartitionDesc multiItemListPartitionDesc) {
+                    List<List<String>> multiValues = multiItemListPartitionDesc.getMultiValues();
+                    List<List<LiteralExpr>> multiLiteralExprValues = new ArrayList<>(multiValues.size());
+                    for (List<String> values : multiValues) {
+                        multiLiteralExprValues.add(checkPartitionValues(values, partitionColumns));
                     }
-                    this.idToIsTempPartition.put(partitionId, isTempPartition);
-                    super.addPartition(partitionId, partitionDesc.getPartitionDataProperty(),
-                            partitionDesc.getReplicationNum(), partitionDesc.getDataCacheInfo());
+                    idToMultiLiteralExprValues.put(partitionId, multiLiteralExprValues);
+                } else if (partitionDesc instanceof SingleItemListPartitionDesc singleItemListPartitionDesc) {
+                    idToLiteralExprValues.put(partitionId,
+                            checkPartitionValues(singleItemListPartitionDesc.getValues(), partitionColumns.get(0)));
+                } else {
+                    throw new DdlException(
+                            "add list partition only support single item or multi item list partition now");
                 }
             }
         } catch (Exception e) {
             throw new DdlException(e.getMessage());
         }
+    }
+
+    private static List<LiteralExpr> checkPartitionValues(List<String> values, Column partitionColumn) throws
+            SemanticException {
+        List<LiteralExpr> result = new ArrayList<>(values.size());
+        for (int i = 0; i < values.size(); i++) {
+            String value = values.get(i);
+            Type type = partitionColumn.getType();
+            try {
+                result.add(new PartitionValue(value).getValue(type));
+            } catch (AnalysisException e) {
+                throw new SemanticException(e.getMessage());
+            }
+        }
+        return result;
+    }
+
+    private static List<LiteralExpr> checkPartitionValues(List<String> values, List<Column> partitionColumns) throws
+            SemanticException {
+        List<LiteralExpr> result = new ArrayList<>(values.size());
+        for (int i = 0; i < values.size(); i++) {
+            String value = values.get(i);
+            Type type = partitionColumns.get(i).getType();
+            try {
+                result.add(new PartitionValue(value).getValue(type));
+            } catch (AnalysisException e) {
+                throw new SemanticException(e.getMessage());
+            }
+        }
+        return result;
     }
 
     public void unprotectHandleNewPartitionDesc(Map<ColumnId, Column> idToColumn,

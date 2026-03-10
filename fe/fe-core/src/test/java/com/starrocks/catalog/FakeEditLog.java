@@ -63,6 +63,7 @@ import com.starrocks.persist.AutoIncrementInfo;
 import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.BatchDeleteReplicaInfo;
 import com.starrocks.persist.CancelDecommissionDiskInfo;
+import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.persist.ClusterSnapshotLog;
 import com.starrocks.persist.ClusterSnapshotRestoredVersionLog;
 import com.starrocks.persist.ColumnRenameInfo;
@@ -762,6 +763,11 @@ public class FakeEditLog extends MockUp<EditLog> {
     }
 
     @Mock
+    public void logMvChangeRefreshScheme(ChangeMaterializedViewRefreshSchemeLog log, WALApplier walApplier) {
+        apply(walApplier, log);
+    }
+
+    @Mock
     public void logAlterMaterializedViewProperties(ModifyTablePropertyOperationLog log, WALApplier walApplier) {
         apply(walApplier, log);
     }
@@ -989,6 +995,16 @@ public class FakeEditLog extends MockUp<EditLog> {
     @Mock
     public void logDropGroupProvider(GroupProviderLog groupProviderLog, WALApplier walApplier) {
         apply(walApplier, groupProviderLog);
+    }
+
+    @Mock
+    public void logUpdateReplica(ReplicaPersistInfo info, WALApplier walApplier) {
+        apply(walApplier, info);
+    }
+
+    @Mock
+    public void logAddReplica(ReplicaPersistInfo info, WALApplier walApplier) {
+        apply(walApplier, info);
     }
 
     public TransactionState getTransaction(long transactionId) {

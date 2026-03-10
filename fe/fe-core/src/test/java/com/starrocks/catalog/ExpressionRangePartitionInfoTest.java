@@ -713,13 +713,5 @@ public class ExpressionRangePartitionInfoTest {
             Assertions.assertTrue(e.getMessage().contains("Getting syntax error at line 1, column 10. " +
                     "Detail message: Unexpected input '(', the most similar input is {<EOF>}."));
         }
-
-        //the table still create successfully.
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        Table table = db.getTable("table_reserverd_keyword_partition1");
-        ExpressionRangePartitionInfo expressionRangePartitionInfo =
-                (ExpressionRangePartitionInfo) ((OlapTable) table).getPartitionInfo();
-        String exprToSql = expressionRangePartitionInfo.getPartitionExprs().get(0).toSql();
-        Assertions.assertEquals("date_trunc('day', partition)", exprToSql);
     }
 }

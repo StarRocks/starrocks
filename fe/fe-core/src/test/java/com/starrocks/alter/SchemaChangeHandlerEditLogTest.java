@@ -20,6 +20,7 @@ import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.Index;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -37,6 +38,7 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ModifyColumnCommentLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.OperationType;
+import com.starrocks.persist.TableColumnAlterInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
@@ -422,6 +424,85 @@ public class SchemaChangeHandlerEditLogTest {
             handler.updateTableConstraint(db, "non_existent_table", properties);
         });
         Assertions.assertTrue(exception.getMessage().contains("does not exist"));
+    }
+
+    @Test
+    public void testApplyFastSchemaEvolutionMetaChangeNormalCase() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        OlapTable table = (OlapTable) db.getTable(TABLE_NAME);
+        Assertions.assertNotNull(table);
+
+        Map<Long, List<Column>> indexSchemaMap = new HashMap<>();
+        Map<Long, Long> indexToNewSchemaId = new HashMap<>();
+        for (Map.Entry<Long, List<Column>> entry : table.getIndexMetaIdToSchema().entrySet()) {
+            indexSchemaMap.put(entry.getKey(), new LinkedList<>(entry.getValue()));
+            indexToNewSchemaId.put(entry.getKey(), GlobalStateMgr.getCurrentState().getNextId());
+        }
+        List<Index> newIndexes = table.getCopiedIndexes();
+        long jobId = GlobalStateMgr.getCurrentState().getNextId();
+
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        handler.applyFastSchemaEvolutionMetaChange(db, table, indexSchemaMap, newIndexes, jobId, indexToNewSchemaId);
+
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+
+        TableColumnAlterInfo replayInfo = (TableColumnAlterInfo) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_FAST_ALTER_TABLE_COLUMNS);
+        Assertions.assertNotNull(replayInfo);
+        Assertions.assertEquals(db.getId(), replayInfo.getDbId());
+        Assertions.assertEquals(table.getId(), replayInfo.getTableId());
+        Assertions.assertEquals(jobId, replayInfo.getJobId());
+
+        LocalMetastore followerMetastore = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
+        Database followerDb = new Database(DB_ID, DB_NAME);
+        followerMetastore.unprotectCreateDb(followerDb);
+        OlapTable followerTable = createHashOlapTable(TABLE_ID, TABLE_NAME, 3);
+        followerDb.registerTableUnlocked(followerTable);
+
+        LocalMetastore originalMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        GlobalStateMgr.getCurrentState().setLocalMetastore(followerMetastore);
+        try {
+            SchemaChangeHandler followerHandler = new SchemaChangeHandler();
+            followerHandler.replayFastSchemaEvolutionMetaChange(replayInfo);
+            Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, followerTable.getState());
+        } finally {
+            GlobalStateMgr.getCurrentState().setLocalMetastore(originalMetastore);
+        }
+    }
+
+    @Test
+    public void testApplyFastSchemaEvolutionMetaChangeEditLogException() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        OlapTable table = (OlapTable) db.getTable(TABLE_NAME);
+        Assertions.assertNotNull(table);
+
+        Map<Long, List<Column>> indexSchemaMap = new HashMap<>();
+        Map<Long, Long> indexToNewSchemaId = new HashMap<>();
+        for (Map.Entry<Long, List<Column>> entry : table.getIndexMetaIdToSchema().entrySet()) {
+            indexSchemaMap.put(entry.getKey(), new LinkedList<>(entry.getValue()));
+            indexToNewSchemaId.put(entry.getKey(), GlobalStateMgr.getCurrentState().getNextId());
+        }
+        List<Index> newIndexes = table.getCopiedIndexes();
+        long jobId = GlobalStateMgr.getCurrentState().getNextId();
+
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        int beforeJobSize = handler.getUnfinishedAlterJobV2ByTableId(table.getId()).size();
+
+        EditLog originalEditLog = GlobalStateMgr.getCurrentState().getEditLog();
+        EditLog spyEditLog = spy(originalEditLog);
+        doThrow(new RuntimeException("EditLog write failed"))
+                .when(spyEditLog).logModifyTableAddOrDrop(any(TableColumnAlterInfo.class), any());
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+
+        try {
+            RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () ->
+                    handler.applyFastSchemaEvolutionMetaChange(db, table, indexSchemaMap, newIndexes, jobId, indexToNewSchemaId));
+            Assertions.assertEquals("EditLog write failed", exception.getMessage());
+            Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+            Assertions.assertEquals(beforeJobSize, handler.getUnfinishedAlterJobV2ByTableId(table.getId()).size());
+        } finally {
+            GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);
+        }
     }
 
     private static OlapTable createHashOlapTable(long tableId, String tableName, int bucketNum) {

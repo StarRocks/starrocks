@@ -741,23 +741,24 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
                     LOG.info("merge partitions job {} replace partition dbId:{}, tableId:{},"
                             + "source partitions:{}, target partition:{}",
                             jobId, dbId, tableId, sourcePartitionNames, tmpPartitionName);
-                    targetTable.replaceTempPartitions(
-                            db.getId(),
-                            new ArrayList<>(sourcePartitionNames), 
-                            Collections.singletonList(tmpPartitionName), 
-                            false, true);
+                    List<String> sourcePartitions = new ArrayList<>(sourcePartitionNames);
+                    List<String> tempPartitions = Collections.singletonList(tmpPartitionName);
+                    targetTable.checkReplaceTempPartitions(sourcePartitions, tempPartitions, false);
 
                     // write log
                     ReplacePartitionOperationLog info = new ReplacePartitionOperationLog(
                             db.getId(),
                             targetTable.getId(),
-                            new ArrayList<>(sourcePartitionNames),
-                            Collections.singletonList(tmpPartitionName),
+                            sourcePartitions,
+                            tempPartitions,
                             false,
                             true,
                             partitionInfo instanceof SinglePartitionInfo);
 
-                    GlobalStateMgr.getCurrentState().getEditLog().logReplaceTempPartition(info);
+                    GlobalStateMgr.getCurrentState().getEditLog().logReplaceTempPartition(info, wal -> {
+                        targetTable.replaceTempPartitionsWithoutCheck(
+                                db.getId(), sourcePartitions, tempPartitions, true);
+                    });
                 }
             } else {
                 throw new AlterCancelException("partition type " + partitionInfo.getType() + " is not supported");

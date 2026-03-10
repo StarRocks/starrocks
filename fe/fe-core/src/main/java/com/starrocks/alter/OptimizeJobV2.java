@@ -568,17 +568,23 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
             PartitionInfo partitionInfo = targetTable.getPartitionInfo();
             if (partitionInfo.isRangePartition() || partitionInfo.getType() == PartitionType.LIST) {
-                targetTable.replaceTempPartitions(db.getId(), sourcePartitionNames, tmpPartitionNames, true, false);
+                targetTable.checkReplaceTempPartitions(sourcePartitionNames, tmpPartitionNames, true);
             } else if (partitionInfo instanceof SinglePartitionInfo) {
                 Preconditions.checkState(sourcePartitionNames.size() == 1 && tmpPartitionNames.size() == 1);
-                targetTable.replacePartition(db.getId(), sourcePartitionNames.get(0), tmpPartitionNames.get(0));
             } else {
                 throw new AlterCancelException("partition type " + partitionInfo.getType() + " is not supported");
             }
             // write log
             ReplacePartitionOperationLog info = new ReplacePartitionOperationLog(db.getId(), targetTable.getId(),
                     sourcePartitionNames, tmpPartitionNames, true, false, partitionInfo instanceof SinglePartitionInfo);
-            GlobalStateMgr.getCurrentState().getEditLog().logReplaceTempPartition(info);
+            GlobalStateMgr.getCurrentState().getEditLog().logReplaceTempPartition(info, wal -> {
+                if (partitionInfo.isRangePartition() || partitionInfo.getType() == PartitionType.LIST) {
+                    targetTable.replaceTempPartitionsWithoutCheck(
+                            db.getId(), sourcePartitionNames, tmpPartitionNames, false);
+                } else {
+                    targetTable.replacePartition(db.getId(), sourcePartitionNames.get(0), tmpPartitionNames.get(0));
+                }
+            });
             // mark all source tablet ids force delete to drop it directly on BE,
             // not to move it to trash
             sourceTablets.forEach(GlobalStateMgr.getCurrentState().getTabletInvertedIndex()::markTabletForceDelete);

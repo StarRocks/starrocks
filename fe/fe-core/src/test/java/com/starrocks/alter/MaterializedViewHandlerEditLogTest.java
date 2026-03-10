@@ -23,9 +23,14 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.persist.BatchDropInfo;
+import com.starrocks.persist.DropInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;
 import com.starrocks.qe.ConnectContext;
@@ -34,7 +39,12 @@ import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.DropMaterializedViewStmt;
+import com.starrocks.sql.ast.DropRollupClause;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -48,6 +58,7 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Set;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
@@ -175,6 +186,193 @@ public class MaterializedViewHandlerEditLogTest {
         } finally {
             GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);
         }
+    }
+
+    @Test
+    public void testProcessDropMaterializedViewEditLog() throws Exception {
+        MaterializedViewHandler handler = new MaterializedViewHandler();
+        long rollupIndexId = GlobalStateMgr.getCurrentState().getNextId();
+        String rollupName = "mv_drop_1";
+        addRollupIndex(table, rollupName, rollupIndexId, GlobalStateMgr.getCurrentState().getNextId());
+        Assertions.assertTrue(table.hasMaterializedIndex(rollupName));
+
+        DropMaterializedViewStmt stmt = new DropMaterializedViewStmt(false,
+                new TableRef(QualifiedName.of(rollupName), null, NodePosition.ZERO));
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.WRITE);
+        try {
+            handler.processDropMaterializedView(stmt, db, table);
+        } finally {
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
+        }
+
+        Assertions.assertFalse(table.hasMaterializedIndex(rollupName));
+
+        DropInfo replayInfo = (DropInfo) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_DROP_ROLLUP_V2);
+        Assertions.assertNotNull(replayInfo);
+        Assertions.assertEquals(db.getId(), replayInfo.getDbId());
+        Assertions.assertEquals(table.getId(), replayInfo.getTableId());
+        Assertions.assertEquals(rollupIndexId, replayInfo.getIndexMetaId());
+
+        LocalMetastore followerMetastore = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
+        Database followerDb = new Database(db.getId(), DB_NAME);
+        followerMetastore.unprotectCreateDb(followerDb);
+        Partition leaderPartition = table.getPartitions().iterator().next();
+        long basePartitionId = leaderPartition.getId();
+        long basePhysicalPartitionId = leaderPartition.getDefaultPhysicalPartition().getId();
+        long baseIndexId = table.getBaseIndexMetaId();
+        long baseTabletId = leaderPartition.getDefaultPhysicalPartition().getIndex(baseIndexId).getTablets().get(0).getId();
+        OlapTable followerTable = createHashOlapTable(db.getId(), table.getId(), baseIndexId, TABLE_NAME,
+                basePartitionId, basePhysicalPartitionId, baseTabletId, backendId, replicaId);
+        addRollupIndex(followerTable, rollupName, rollupIndexId, GlobalStateMgr.getCurrentState().getNextId());
+        followerDb.registerTableUnlocked(followerTable);
+
+        LocalMetastore originalMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        GlobalStateMgr.getCurrentState().setLocalMetastore(followerMetastore);
+        try {
+            handler.replayDropRollup(replayInfo, GlobalStateMgr.getCurrentState());
+        } finally {
+            GlobalStateMgr.getCurrentState().setLocalMetastore(originalMetastore);
+        }
+        Assertions.assertFalse(followerTable.hasMaterializedIndex(rollupName));
+    }
+
+    @Test
+    public void testProcessDropMaterializedViewEditLogException() throws Exception {
+        MaterializedViewHandler handler = new MaterializedViewHandler();
+        long rollupIndexId = GlobalStateMgr.getCurrentState().getNextId();
+        String rollupName = "mv_drop_error";
+        addRollupIndex(table, rollupName, rollupIndexId, GlobalStateMgr.getCurrentState().getNextId());
+        Assertions.assertTrue(table.hasMaterializedIndex(rollupName));
+
+        EditLog originalEditLog = GlobalStateMgr.getCurrentState().getEditLog();
+        EditLog spyEditLog = spy(originalEditLog);
+        doThrow(new RuntimeException("EditLog write failed"))
+                .when(spyEditLog).logDropRollup(any(DropInfo.class), any());
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+
+        try {
+            DropMaterializedViewStmt stmt = new DropMaterializedViewStmt(false,
+                    new TableRef(QualifiedName.of(rollupName), null, NodePosition.ZERO));
+            Locker locker = new Locker();
+            locker.lockDatabase(db.getId(), LockType.WRITE);
+            try {
+                RuntimeException exception = Assertions.assertThrows(RuntimeException.class,
+                        () -> handler.processDropMaterializedView(stmt, db, table));
+                Assertions.assertEquals("EditLog write failed", exception.getMessage());
+            } finally {
+                locker.unLockDatabase(db.getId(), LockType.WRITE);
+            }
+            Assertions.assertTrue(table.hasMaterializedIndex(rollupName));
+        } finally {
+            GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);
+        }
+    }
+
+    @Test
+    public void testProcessBatchDropRollupEditLog() throws Exception {
+        MaterializedViewHandler handler = new MaterializedViewHandler();
+        long rollupIndexId1 = GlobalStateMgr.getCurrentState().getNextId();
+        long rollupIndexId2 = GlobalStateMgr.getCurrentState().getNextId();
+        String rollupName1 = "r_drop_1";
+        String rollupName2 = "r_drop_2";
+        addRollupIndex(table, rollupName1, rollupIndexId1, GlobalStateMgr.getCurrentState().getNextId());
+        addRollupIndex(table, rollupName2, rollupIndexId2, GlobalStateMgr.getCurrentState().getNextId());
+        Assertions.assertTrue(table.hasMaterializedIndex(rollupName1));
+        Assertions.assertTrue(table.hasMaterializedIndex(rollupName2));
+
+        List<AlterClause> alterClauses = List.of(
+                new DropRollupClause(rollupName1, new HashMap<>()),
+                new DropRollupClause(rollupName2, new HashMap<>()));
+        handler.processBatchDropRollup(alterClauses, db, table);
+
+        Assertions.assertFalse(table.hasMaterializedIndex(rollupName1));
+        Assertions.assertFalse(table.hasMaterializedIndex(rollupName2));
+
+        BatchDropInfo replayInfo = (BatchDropInfo) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_BATCH_DROP_ROLLUP);
+        Assertions.assertNotNull(replayInfo);
+        Assertions.assertEquals(db.getId(), replayInfo.getDbId());
+        Assertions.assertEquals(table.getId(), replayInfo.getTableId());
+        Assertions.assertEquals(Set.of(rollupIndexId1, rollupIndexId2), replayInfo.getIndexMetaIdSet());
+
+        LocalMetastore followerMetastore = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
+        Database followerDb = new Database(db.getId(), DB_NAME);
+        followerMetastore.unprotectCreateDb(followerDb);
+        Partition leaderPartition = table.getPartitions().iterator().next();
+        long basePartitionId = leaderPartition.getId();
+        long basePhysicalPartitionId = leaderPartition.getDefaultPhysicalPartition().getId();
+        long baseIndexId = table.getBaseIndexMetaId();
+        long baseTabletId = leaderPartition.getDefaultPhysicalPartition().getIndex(baseIndexId).getTablets().get(0).getId();
+        OlapTable followerTable = createHashOlapTable(db.getId(), table.getId(), baseIndexId, TABLE_NAME,
+                basePartitionId, basePhysicalPartitionId, baseTabletId, backendId, replicaId);
+        addRollupIndex(followerTable, rollupName1, rollupIndexId1, GlobalStateMgr.getCurrentState().getNextId());
+        addRollupIndex(followerTable, rollupName2, rollupIndexId2, GlobalStateMgr.getCurrentState().getNextId());
+        followerDb.registerTableUnlocked(followerTable);
+
+        LocalMetastore originalMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        GlobalStateMgr.getCurrentState().setLocalMetastore(followerMetastore);
+        try {
+            for (long indexMetaId : replayInfo.getIndexMetaIdSet()) {
+                handler.replayDropRollup(new DropInfo(replayInfo.getDbId(), replayInfo.getTableId(), indexMetaId, false),
+                        GlobalStateMgr.getCurrentState());
+            }
+        } finally {
+            GlobalStateMgr.getCurrentState().setLocalMetastore(originalMetastore);
+        }
+        Assertions.assertFalse(followerTable.hasMaterializedIndex(rollupName1));
+        Assertions.assertFalse(followerTable.hasMaterializedIndex(rollupName2));
+    }
+
+    @Test
+    public void testProcessBatchDropRollupEditLogException() throws Exception {
+        MaterializedViewHandler handler = new MaterializedViewHandler();
+        long rollupIndexId1 = GlobalStateMgr.getCurrentState().getNextId();
+        long rollupIndexId2 = GlobalStateMgr.getCurrentState().getNextId();
+        String rollupName1 = "r_drop_error_1";
+        String rollupName2 = "r_drop_error_2";
+        addRollupIndex(table, rollupName1, rollupIndexId1, GlobalStateMgr.getCurrentState().getNextId());
+        addRollupIndex(table, rollupName2, rollupIndexId2, GlobalStateMgr.getCurrentState().getNextId());
+        Assertions.assertTrue(table.hasMaterializedIndex(rollupName1));
+        Assertions.assertTrue(table.hasMaterializedIndex(rollupName2));
+
+        EditLog originalEditLog = GlobalStateMgr.getCurrentState().getEditLog();
+        EditLog spyEditLog = spy(originalEditLog);
+        doThrow(new RuntimeException("EditLog write failed"))
+                .when(spyEditLog).logBatchDropRollup(any(BatchDropInfo.class), any());
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+
+        try {
+            List<AlterClause> alterClauses = List.of(
+                    new DropRollupClause(rollupName1, new HashMap<>()),
+                    new DropRollupClause(rollupName2, new HashMap<>()));
+            RuntimeException exception = Assertions.assertThrows(RuntimeException.class,
+                    () -> handler.processBatchDropRollup(alterClauses, db, table));
+            Assertions.assertEquals("EditLog write failed", exception.getMessage());
+            Assertions.assertTrue(table.hasMaterializedIndex(rollupName1));
+            Assertions.assertTrue(table.hasMaterializedIndex(rollupName2));
+        } finally {
+            GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);
+        }
+    }
+
+    private void addRollupIndex(OlapTable targetTable, String rollupName, long rollupIndexId, long rollupTabletId) {
+        List<Column> rollupColumns = List.of(targetTable.getColumn("k1"), targetTable.getColumn("v1"));
+        targetTable.setIndexMeta(rollupIndexId, rollupName, rollupColumns, 0, 0, (short) 1,
+                TStorageType.COLUMN, KeysType.DUP_KEYS);
+
+        MaterializedIndex rollupIndex = new MaterializedIndex(rollupIndexId, MaterializedIndex.IndexState.NORMAL);
+        LocalTablet rollupTablet = new LocalTablet(rollupTabletId);
+        Partition basePartition = targetTable.getPartitions().iterator().next();
+        long basePhysicalPartitionId = basePartition.getDefaultPhysicalPartition().getId();
+        TabletMeta rollupTabletMeta = new TabletMeta(db.getId(), targetTable.getId(), basePhysicalPartitionId,
+                rollupIndexId, TStorageMedium.HDD);
+        rollupIndex.addTablet(rollupTablet, rollupTabletMeta);
+        rollupTablet.addReplica(new Replica(GlobalStateMgr.getCurrentState().getNextId(), backendId,
+                Replica.ReplicaState.NORMAL, 1, 0), false);
+
+        basePartition.getDefaultPhysicalPartition().createRollupIndex(rollupIndex);
     }
 
     private static OlapTable createHashOlapTable(long dbId, long tableId, long indexId, String tableName,

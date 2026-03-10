@@ -1046,7 +1046,6 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                                 if (replica.getLastFailedVersion() < 0) {
                                     // last failed version < 0 means this replica becomes health after sync,
                                     // so we write an edit log to sync this operation
-                                    replica.setBad(false);
                                     ReplicaPersistInfo info = ReplicaPersistInfo.createForClone(dbId, tableId,
                                             physicalPartitionId, indexId, tabletId, backendId, replica.getId(),
                                             replica.getVersion(), schemaHash,
@@ -1054,7 +1053,9 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                                             replica.getLastFailedVersion(),
                                             replica.getLastSuccessVersion(),
                                             replica.getMinReadableVersion());
-                                    GlobalStateMgr.getCurrentState().getEditLog().logUpdateReplica(info);
+                                    GlobalStateMgr.getCurrentState().getEditLog().logUpdateReplica(info, wal -> {
+                                        replica.setBad(false);
+                                    });
                                     ++logSyncCounter;
                                 }
 
@@ -2154,10 +2155,6 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 }
 
                 long replicaId = GlobalStateMgr.getCurrentState().getNextId();
-                Replica replica = new Replica(replicaId, backendId, version, schemaHash,
-                        dataSize, rowCount, ReplicaState.NORMAL,
-                        lastFailedVersion, version);
-                tablet.addReplica(replica);
 
                 // write edit log
                 ReplicaPersistInfo info = ReplicaPersistInfo.createForAdd(dbId, tableId, physicalPartitionId, indexId,
@@ -2165,7 +2162,12 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                         version, schemaHash, dataSize, rowCount,
                         lastFailedVersion, version, minReadableVersion);
 
-                GlobalStateMgr.getCurrentState().getEditLog().logAddReplica(info);
+                Replica replica = new Replica(replicaId, backendId, version, schemaHash,
+                        dataSize, rowCount, ReplicaState.NORMAL,
+                        lastFailedVersion, version);
+                GlobalStateMgr.getCurrentState().getEditLog().logAddReplica(info, wal -> {
+                    tablet.addReplica(replica);
+                });
 
                 LOG.info("add replica[{}-{}] to globalStateMgr. backend:[{}] replicas: {}", tabletId, replicaId, backendId,
                         tablet.getReplicaInfos());
