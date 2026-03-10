@@ -38,8 +38,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.alter.AlterHandler;
-import com.starrocks.alter.AlterJobV2;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
@@ -1137,6 +1135,35 @@ public class MaterializedViewHandler extends AlterHandler {
                 onJobDone(materializedViewJob);
             }
         }
+    }
+
+    /**
+     * Cancel unfinished rollup jobs for a specific MV name on one table.
+     * Returns true if at least one matching unfinished job is found.
+     */
+    public boolean cancelRollupJobsForForceDrop(long tableId, String mvName, String reason) {
+        boolean foundMatchingJob = false;
+        List<AlterJobV2> rollupJobs = getUnfinishedAlterJobV2ByTableId(tableId);
+        for (AlterJobV2 alterJob : rollupJobs) {
+            if (alterJob instanceof RollupJobV2) {
+                if (!((RollupJobV2) alterJob).getRollupIndexName().equals(mvName)) {
+                    continue;
+                }
+            } else if (alterJob instanceof LakeRollupJob) {
+                if (!((LakeRollupJob) alterJob).getRollupIndexName().equals(mvName)) {
+                    continue;
+                }
+            } else {
+                continue;
+            }
+
+            foundMatchingJob = true;
+            alterJob.cancel(reason);
+            if (alterJob.isDone()) {
+                onJobDone(alterJob);
+            }
+        }
+        return foundMatchingJob;
     }
 
     // just for ut

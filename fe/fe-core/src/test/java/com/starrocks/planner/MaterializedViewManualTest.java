@@ -357,14 +357,35 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                 "group by ds;";
         starRocksAssert.withMaterializedView(mv);
 
-        // Query uses date_trunc('minute') so it must not match MV defined with date_trunc('hour').
-        sql("SELECT \n" +
-                "count(DISTINCT `order_id`) AS `order_num`, \n" +
-                "date_trunc('minute', `dt`) AS ds \n" +
-                "FROM `test_partition_expr_tbl1`\n" +
-                "WHERE `dt` BETWEEN '2023-04-11' AND '2023-04-12'\n" +
-                "group by ds")
-                .nonMatch("test_partition_expr_mv1");
+        {
+            sql("SELECT \n" +
+                    "count(DISTINCT `order_id`) AS `order_num`, \n" +
+                    "date_trunc('day', `dt`) AS ds \n" +
+                    "FROM `test_partition_expr_tbl1`\n" +
+                    "WHERE date_trunc('day', `dt`) = '2023-04-01'\n" +
+                    "group by ds")
+                    .nonMatch("test_partition_expr_mv1");
+        }
+        UtFrameUtils.mockLogicalScanIsEmptyOutputRows(false);
+        {
+            sql("SELECT \n" +
+                    "count(DISTINCT `order_id`) AS `order_num`, \n" +
+                    "date_trunc('day', `dt`) AS ds \n" +
+                    "FROM `test_partition_expr_tbl1`\n" +
+                    "WHERE date_trunc('day', `dt`) BETWEEN '2023-04-01' AND '2023-05-01'\n" +
+                    "group by ds")
+                    .match("test_partition_expr_mv1");
+        }
+
+        {
+            sql("SELECT \n" +
+                    "count(DISTINCT `order_id`) AS `order_num`, \n" +
+                    "date_trunc('day', `dt`) AS ds \n" +
+                    "FROM `test_partition_expr_tbl1`\n" +
+                    "WHERE `dt` BETWEEN '2023-04-11' AND '2023-04-12'\n" +
+                    "group by ds")
+                    .match("test_partition_expr_mv1");
+        }
 
         starRocksAssert.dropMaterializedView("test_partition_expr_mv1");
         starRocksAssert.dropTable("test_partition_expr_tbl1");

@@ -185,21 +185,11 @@ public class AlterJobMgr {
             // check table state
             if (targetTable.getState() != OlapTableState.NORMAL) {
                 if (stmt.isForceDrop()) {
-                    List<AlterJobV2> jobs =
-                            materializedViewHandler.getUnfinishedAlterJobV2ByTableId(targetTable.getId());
-                    String mvName = stmt.getMvName();
-                    for (AlterJobV2 job : jobs) {
-                        if (job instanceof RollupJobV2
-                                && ((RollupJobV2) job).getRollupIndexName().equals(mvName)) {
-                            job.cancel("force drop materialized view");
-                        } else if (job instanceof LakeRollupJob
-                                && ((LakeRollupJob) job).getRollupIndexName().equals(mvName)) {
-                            job.cancel("force drop materialized view");
-                        }
+                    boolean foundMvRollupJob = materializedViewHandler.cancelRollupJobsForForceDrop(
+                            targetTable.getId(), stmt.getMvName(), "force drop materialized view");
+                    if (!foundMvRollupJob) {
+                        throw InvalidOlapTableStateException.of(targetTable.getState(), targetTable.getName());
                     }
-                    targetTable.setState(OlapTableState.NORMAL);
-                    LOG.info("Force drop MV: cancelled stuck jobs and set table {} to NORMAL for MV {}",
-                            targetTable.getName(), mvName);
                 } else {
                     throw InvalidOlapTableStateException.of(targetTable.getState(), targetTable.getName());
                 }
@@ -220,6 +210,9 @@ public class AlterJobMgr {
             throw new AlterJobException("alter materialized failed. database:" + db.getFullName() + " not exist");
         }
         try {
+            if (targetTable.getState() != OlapTableState.NORMAL) {
+                throw InvalidOlapTableStateException.of(targetTable.getState(), targetTable.getName());
+            }
             // drop materialized view
             materializedViewHandler.processDropMaterializedView(stmt, db, targetTable);
         } finally {
