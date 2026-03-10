@@ -78,6 +78,17 @@ jobs:
            | jq -r '.searches | to_entries[] | "- [ ] \(.value.search)", "  failures this week: \(.value.count)"' \
            >> feedback.md
 
+      - name: Add Dependabot reminder for docs
+        run: |
+          set -eo pipefail # Ensure the script fails on any command error
+          manual_dependabot_url="https://github.com/${GITHUB_REPOSITORY}/security/dependabot?q=is%3Aopen+sort%3Anewest+docs"
+
+          echo " " >> feedback.md
+          echo "## Dependabot alerts reminder" >> feedback.md
+          echo "- [ ] Check open Dependabot alerts for docs:" >> feedback.md
+          echo "  ${manual_dependabot_url}" >> feedback.md
+          echo " " >> feedback.md
+
       - name: Create issue from file
         if: always()
         id: weekly-feedback-report
