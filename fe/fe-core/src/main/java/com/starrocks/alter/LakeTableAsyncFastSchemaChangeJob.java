@@ -138,31 +138,7 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
         updateCatalogUnprotected(db, table, isReplay);
     }
 
-<<<<<<< HEAD
-    private void updateCatalogUnprotected(Database db, LakeTable table, boolean isReplay) {
-=======
-    @Override
-    protected void prepareForPersist(Database db, OlapTable table) {
-        if (disableFastSchemaEvolutionV2) {
-            return;
-        }
-        // Create historySchema before persistStateChange so it can be included in copyForPersist
-        OlapTableHistorySchema.Builder historySchemaBuilder = OlapTableHistorySchema.newBuilder();
-        for (IndexSchemaInfo indexSchemaInfo : schemaInfos) {
-            long indexMetaId = indexSchemaInfo.getIndexMetaId();
-            MaterializedIndexMeta indexMeta = requireNonNull(table.getIndexMetaByMetaId(indexMetaId)).shallowCopy();
-            SchemaInfo oldSchemaInfo = SchemaInfo.fromMaterializedIndex(table, indexMetaId, indexMeta);
-            historySchemaBuilder.addIndexSchema(
-                    new IndexSchemaInfo(indexMetaId, table.getIndexNameByMetaId(indexMetaId), oldSchemaInfo));
-        }
-        long txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator()
-                .getNextTransactionId();
-        historySchemaBuilder.setHistoryTxnIdThreshold(txnId);
-        this.historySchema = historySchemaBuilder.build();
-    }
-
     private void updateCatalogUnprotected(Database db, OlapTable table, boolean isReplay) {
->>>>>>> 78e24e6d15 ([Enhancement] [BugFix] Support MV Fast Schema Evolution in SharedData run mode (#69915))
         if (disableFastSchemaEvolutionV2) {
             // only update the property, no need to update schema which is actually not changed
             setFastSchemaEvolutionV2(table, false);

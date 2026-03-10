@@ -82,8 +82,6 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         super(jobId, jobType, dbId, tableId, tableName, timeoutMs);
     }
 
-<<<<<<< HEAD
-=======
     protected LakeTableAlterMetaJobBase(LakeTableAlterMetaJobBase job) {
         super(job);
         this.watershedTxnId = job.watershedTxnId;
@@ -120,7 +118,6 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         return table instanceof OlapTable ? (OlapTable) table : null;
     }
 
->>>>>>> 78e24e6d15 ([Enhancement] [BugFix] Support MV Fast Schema Evolution in SharedData run mode (#69915))
     @Override
     protected void runPendingJob() throws AlterCancelException {
         // send task to be
@@ -168,18 +165,6 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
 
     protected abstract void updateCatalog(Database db, OlapTable table, boolean isReplay);
 
-<<<<<<< HEAD
-=======
-    /**
-     * Hook method to prepare data that needs to be persisted before calling persistStateChange.
-     * This method is called before copyForPersist(), so any data created here will be included
-     * in the persisted job.
-     */
-    protected void prepareForPersist(Database db, OlapTable table) {
-        // Default implementation is empty. Subclasses can override this to prepare data.
-    }
-
->>>>>>> 78e24e6d15 ([Enhancement] [BugFix] Support MV Fast Schema Evolution in SharedData run mode (#69915))
     protected abstract void restoreState(LakeTableAlterMetaJobBase job);
 
     protected abstract boolean enableFileBundling();
