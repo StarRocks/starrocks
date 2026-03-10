@@ -29,6 +29,7 @@ import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.JDBCTable;
+import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
@@ -40,6 +41,7 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.credential.CredentialUtil;
 import com.starrocks.sql.ast.KeysType;
@@ -146,6 +148,10 @@ public class AstToStringBuilder {
         sb.append("`").append(table.getName()).append("` (\n");
         int idx = 0;
         for (Column column : table.getBaseSchema()) {
+            // Skip expression partition generated columns to show user-created DDL
+            if (column.isNameWithPrefix(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
+                continue;
+            }
             if (idx++ != 0) {
                 sb.append(",\n");
             }
@@ -196,7 +202,14 @@ public class AstToStringBuilder {
                 partitionId = Lists.newArrayList();
             }
             if (partitionInfo.isRangePartition() || partitionInfo.getType() == PartitionType.LIST) {
-                sb.append("\n").append(partitionInfo.toSql(olapTable, partitionId));
+                // Use expression (not generated column name) for user-created DDL display
+                if (partitionInfo instanceof ListPartitionInfo) {
+                    ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
+                    sb.append("\n").append(listPartitionInfo.toSql(olapTable,
+                            listPartitionInfo.isAutomaticPartition(), false));
+                } else {
+                    sb.append("\n").append(partitionInfo.toSql(olapTable, partitionId));
+                }
             }
 
             // distribution
