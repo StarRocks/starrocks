@@ -41,11 +41,7 @@ import GrantWarehouse from '../../../_assets/commonMarkdown/grant_warehouse.mdx'
 GRANT
     { ALTER | DROP | ALL [PRIVILEGES] } 
     ON { RESOURCE GROUP <resource_group_name> [, <resource_group_name >,...] ｜ ALL RESOURCE GROUPS} 
-<<<<<<< HEAD
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
-=======
-    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
->>>>>>> a961d44470 ([Doc] Remove Grant Priv to External Group (#68276))
 ```
 
 #### Resource 相关
@@ -54,11 +50,7 @@ GRANT
 GRANT
     { USAGE | ALTER | DROP | ALL [PRIVILEGES] } 
     ON { RESOURCE <resource_name> [, < resource_name >,...] ｜ ALL RESOURCES} 
-<<<<<<< HEAD
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
-=======
-    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
->>>>>>> a961d44470 ([Doc] Remove Grant Priv to External Group (#68276))
 ```
 
 #### Global UDF 相关
@@ -68,11 +60,7 @@ GRANT
     { USAGE | DROP | ALL [PRIVILEGES]} 
     ON { GLOBAL FUNCTION <function_name>(input_data_type) [, <function_name>(input_data_type),...]    
        | ALL GLOBAL FUNCTIONS }
-<<<<<<< HEAD
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
-=======
-    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
->>>>>>> a961d44470 ([Doc] Remove Grant Priv to External Group (#68276))
 ```
 
 示例：`GRANT usage ON GLOBAL FUNCTION a(string) to kevin;`
@@ -83,11 +71,7 @@ GRANT
 GRANT
     { USAGE | CREATE DATABASE | ALL [PRIVILEGES]} 
     ON CATALOG default_catalog
-<<<<<<< HEAD
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
-=======
-    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
->>>>>>> a961d44470 ([Doc] Remove Grant Priv to External Group (#68276))
 ```
 
 #### External catalog 相关
@@ -96,11 +80,7 @@ GRANT
 GRANT
    { USAGE | DROP | ALL [PRIVILEGES] } 
    ON { CATALOG <catalog_name> [, <catalog_name>,...] | ALL CATALOGS}
-<<<<<<< HEAD
    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
-=======
-   TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
->>>>>>> a961d44470 ([Doc] Remove Grant Priv to External Group (#68276))
 ```
 
 #### Database 相关
@@ -109,11 +89,7 @@ GRANT
 GRANT
     { ALTER | DROP | CREATE TABLE | CREATE VIEW | CREATE FUNCTION | CREATE MATERIALIZED VIEW | ALL [PRIVILEGES] } 
     ON { DATABASE <database_name> [, <database_name>,...] | ALL DATABASES }
-<<<<<<< HEAD
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
-=======
-    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
->>>>>>> a961d44470 ([Doc] Remove Grant Priv to External Group (#68276))
 ```
 
 **注意**
@@ -128,21 +104,13 @@ GRANT
   GRANT
     { ALTER | DROP | SELECT | INSERT | EXPORT | UPDATE | DELETE | ALL [PRIVILEGES]}
     ON TABLE <table_name> [, < table_name >,...]
-<<<<<<< HEAD
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
-=======
-    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
->>>>>>> a961d44470 ([Doc] Remove Grant Priv to External Group (#68276))
 
 -- 赋予特定或所有 Database 中的**所有表**的权限。
   GRANT
     { ALTER | DROP | SELECT | INSERT | EXPORT | UPDATE | DELETE | ALL [PRIVILEGES]}
     ON ALL TABLES IN { { DATABASE <database_name> } | ALL DATABASES }
-<<<<<<< HEAD
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
-=======
-    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
->>>>>>> a961d44470 ([Doc] Remove Grant Priv to External Group (#68276))
 ```
 
 > **注意**
@@ -151,11 +119,7 @@ GRANT
 > 2. 所有 Internal Catalog 和 External Catalog 下的表，都支持赋予 SELECT 权限。Hive 和 Iceberg catalog 下的表，还支持赋予 INSERT 权限 (从 3.1 版本起，支持赋予 Iceberg 表的 INSERT 权限；从 3.2 版本起，支持赋予 Hive 表的 INSERT 权限)。
 
 ```SQL
-<<<<<<< HEAD
 GRANT <priv> ON TABLE <db_name>.<table_name> TO {ROLE <role_name> | USER <user_name>}
-=======
-GRANT <priv> ON TABLE <db_name>.<table_name> TO { ROLE <role_name> | USER <user_name> }
->>>>>>> a961d44470 ([Doc] Remove Grant Priv to External Group (#68276))
 ```
 
 #### View 相关
@@ -166,11 +130,7 @@ GRANT
     ON { VIEW <view_name> [, < view_name >,...]
        ｜ ALL VIEWS IN 
            { { DATABASE <database_name> }| ALL DATABASES }}
-<<<<<<< HEAD
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
-=======
-    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
->>>>>>> a961d44470 ([Doc] Remove Grant Priv to External Group (#68276))
 ```
 
 > **注意**
@@ -179,11 +139,7 @@ GRANT
 > 2. 对于 External Catalog，仅 Hive 表视图支持 SELECT 权限。（3.1 及以后）
 
 ```SQL
-<<<<<<< HEAD
 GRANT <priv> ON VIEW <db_name>.<view_name> TO {ROLE <role_name> | USER <user_name>}
-=======
-GRANT <priv> ON VIEW <db_name>.<view_name> TO { ROLE <role_name> | USER <user_name> }
->>>>>>> a961d44470 ([Doc] Remove Grant Priv to External Group (#68276))
 ```
 
 #### Materialized view 相关
@@ -194,21 +150,13 @@ GRANT
     ON { MATERIALIZED VIEW <mv_name> [, < mv_name >,...]
        ｜ ALL MATERIALIZED VIEWS IN 
            { { DATABASE <database_name> }| ALL DATABASES }}
-<<<<<<< HEAD
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
-=======
-    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
->>>>>>> a961d44470 ([Doc] Remove Grant Priv to External Group (#68276))
 ```
 
 *注意：需要执行 SET CATALOG 之后才能使用。物化视图还可以用 `<db_name>.<mv_name>` 的方式来进行表示。
 
 ```SQL
-<<<<<<< HEAD
 GRANT <priv> ON MATERIALIZED VIEW <db_name>.<mv_name> TO {ROLE <role_name> | USER <user_name>};
-=======
-GRANT <priv> ON MATERIALIZED VIEW <db_name>.<mv_name> TO { ROLE <role_name> | USER <user_name> };
->>>>>>> a961d44470 ([Doc] Remove Grant Priv to External Group (#68276))
 ```
 
 #### Function 相关
@@ -225,11 +173,7 @@ GRANT
 *注意：需要执行 SET CATALOG 之后才能使用。function 还可以用 `<db_name>.<function_name>` 的方式来进行表示。
 
 ```SQL
-<<<<<<< HEAD
 GRANT <priv> ON FUNCTION <db_name>.<function_name>(input_data_type) TO {ROLE <role_name> | USER <user_name>}
-=======
-GRANT <priv> ON FUNCTION <db_name>.<function_name>(input_data_type) TO { ROLE <role_name> | USER <user_name> }
->>>>>>> a961d44470 ([Doc] Remove Grant Priv to External Group (#68276))
 ```
 
 #### User 相关
@@ -244,11 +188,7 @@ GRANT IMPERSONATE ON USER <user_identity> TO USER <user_identity_1> [ WITH GRANT
 GRANT
     { USAGE | ALTER | DROP | ALL [PRIVILEGES] } 
     ON { STORAGE VOLUME < name > [, < name >,...] ｜ ALL STORAGE VOLUMES} 
-<<<<<<< HEAD
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
-=======
-    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
->>>>>>> a961d44470 ([Doc] Remove Grant Priv to External Group (#68276))
 ```
 
 <GrantWarehouse />
