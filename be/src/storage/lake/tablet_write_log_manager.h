@@ -49,10 +49,6 @@ struct TabletWriteLogEntry {
     std::string label;               // Load label (For Load)
     int64_t compaction_score{0};     // Compaction score (For Compaction)
     std::string compaction_type;     // Compaction type (For Compaction)
-
-    TabletWriteLogEntry()
-
-    {}
 };
 
 // TabletWriteLogManager: Manages write logs in memory
