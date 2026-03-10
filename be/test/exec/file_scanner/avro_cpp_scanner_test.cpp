@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
+#include "column/chunk.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "exec/file_scanner/file_scanner.h"

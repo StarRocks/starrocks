@@ -50,7 +50,7 @@ class PipelineObserver;
 
 class RuntimeFilterProbeDescriptor : public WithLayoutMixin {
 public:
-    RuntimeFilterProbeDescriptor() = default;
+    RuntimeFilterProbeDescriptor();
     ~RuntimeFilterProbeDescriptor();
 
     Status init(ObjectPool* pool, const TRuntimeFilterDescription& desc, TPlanNodeId node_id, RuntimeState* state);

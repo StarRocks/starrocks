@@ -18,6 +18,7 @@
 #include "common/status.h"
 #include "exec/workgroup/work_group.h"
 #include "exec/workgroup/work_group_fwd.h"
+#include "runtime/exec_env.h"
 
 namespace starrocks::workgroup {
 

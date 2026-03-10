@@ -105,11 +105,7 @@ class Analytor final : public pipeline::ContextWithDependency {
     };
 
 public:
-    ~Analytor() override {
-        if (_state != nullptr) {
-            close(_state);
-        }
-    }
+    ~Analytor() override;
     Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc, const TupleDescriptor* result_tuple_desc,
              bool use_hash_based_partition);
 

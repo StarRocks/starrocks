@@ -24,6 +24,7 @@
 
 #include "agent/master_info.h"
 #include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/status.h"

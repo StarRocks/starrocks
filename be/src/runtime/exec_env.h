@@ -42,11 +42,8 @@
 #include "common/thread/threadpool.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/schedule/pipeline_timer.h"
-#include "exec/query_cache/cache_manager.h"
-#include "exec/spill/query_spill_manager.h"
+#include "exec/query_cache/cache_manager_fwd.h"
 #include "exec/workgroup/work_group_fwd.h"
-#include "runtime/base_load_path_mgr.h"
-#include "runtime/lookup_stream_mgr.h"
 #include "runtime/mem_tracker.h"
 #include "storage/options.h"
 // NOTE: Be careful about adding includes here. This file is included by many files.
@@ -61,6 +58,7 @@ class DataStreamMgr;
 class EvHttpServer;
 class ExternalScanContextMgr;
 class FragmentMgr;
+class BaseLoadPathMgr;
 class LoadPathMgr;
 class LoadStreamMgr;
 class LookUpDispatcherMgr;
@@ -108,7 +106,8 @@ class LakePersistentIndexParallelCompactMgr;
 } // namespace lake
 namespace spill {
 class DirManager;
-}
+class GlobalSpillManager;
+} // namespace spill
 
 namespace connector {
 class ConnectorSinkSpillExecutor;

@@ -29,6 +29,7 @@
 #include "exprs/expr_factory.h"
 #include "gutil/strings/substitute.h"
 #include "http/action/update_config_action.h"
+#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "types/datum.h"
 #include "util/brpc_stub_cache.h"

@@ -39,6 +39,7 @@
 #include "exec/query_cache/conjugate_operator.h"
 #include "exec/query_cache/lane_arbiter.h"
 #include "exec/query_cache/multilane_operator.h"
+#include "runtime/exec_env.h"
 
 namespace starrocks::pipeline {
 

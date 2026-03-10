@@ -50,12 +50,8 @@
 #include "cctz/time_zone.h"
 #include "common/global_types.h"
 #include "common/logging.h"
-#include "common/object_pool.h"
-#include "common/runtime_profile.h"
-#include "gen_cpp/FrontendService.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
-#include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 
 namespace starrocks {
@@ -66,11 +62,13 @@ class Status;
 class ExecEnv;
 class Expr;
 class DateTimeValue;
+class MemPool;
 class MemTracker;
 class DataStreamRecvr;
 class ResultBufferMgr;
 class LoadErrorHub;
 class RowDescriptor;
+class RuntimeProfile;
 class RuntimeFilterPort;
 class QueryStatistics;
 class QueryStatisticsRecvr;

@@ -74,6 +74,7 @@
 #include "fs/fs_util.h"
 #include "gutil/cpu.h"
 #include "jemalloc/jemalloc.h"
+#include "runtime/exec_env.h"
 #include "runtime/starrocks_metrics.h"
 #include "runtime/user_function_cache.h"
 #include "service/mem_hook.h"

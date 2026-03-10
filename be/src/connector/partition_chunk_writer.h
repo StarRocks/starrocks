@@ -27,6 +27,10 @@
 #include "runtime/exec_env.h"
 #include "storage/load_chunk_spiller.h"
 
+namespace starrocks {
+class TupleDescriptor;
+}
+
 namespace starrocks::connector {
 
 using CommitResult = formats::FileWriter::CommitResult;

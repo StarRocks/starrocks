@@ -20,6 +20,7 @@
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks::pipeline {

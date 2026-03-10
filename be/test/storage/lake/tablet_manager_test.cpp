@@ -25,6 +25,7 @@
 #include "base/path/filesystem_util.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
+#include "base/utility/defer_op.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "fs/fs.h"

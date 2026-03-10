@@ -47,8 +47,11 @@
 #include "common/config_storage_fwd.h"
 #include "common/constexpr.h"
 #include "common/logging.h"
+#include "common/object_pool.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "exec/pipeline/fragment_context.h"
+#include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "types/datetime_value.h"
 

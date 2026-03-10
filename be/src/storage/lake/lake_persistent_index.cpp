@@ -15,6 +15,7 @@
 #include "storage/lake/lake_persistent_index.h"
 
 #include "base/debug/trace.h"
+#include "base/utility/defer_op.h"
 #include "common/config_cache_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "fs/fs_util.h"

@@ -21,6 +21,7 @@
 #include "agent/task_signatures_manager.h"
 #include "agent/task_worker_pool.h"
 #include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "base/uuid/uuid_generator.h"
 #include "common/config_storage_fwd.h"
 #include "fs/fs.h"

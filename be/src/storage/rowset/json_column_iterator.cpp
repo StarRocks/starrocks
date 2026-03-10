@@ -18,6 +18,7 @@
 #include <utility>
 #include <vector>
 
+#include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
