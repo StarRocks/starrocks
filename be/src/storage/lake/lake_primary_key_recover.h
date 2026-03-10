@@ -16,6 +16,7 @@
 
 #include <deque>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "column/schema.h"
@@ -36,7 +37,7 @@ class MetaFileBuilder;
 class LakePrimaryKeyRecover : public PrimaryKeyRecover {
 public:
     explicit LakePrimaryKeyRecover(MetaFileBuilder* builder, Tablet* tablet, MutableTabletMetadataPtr metadata)
-            : _builder(builder), _tablet(tablet), _metadata(metadata) {}
+            : _builder(builder), _tablet(tablet), _metadata(std::move(metadata)) {}
     ~LakePrimaryKeyRecover() {}
 
     // clean old state, include pk index and delvec
