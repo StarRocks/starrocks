@@ -391,6 +391,10 @@ public:
         return _query_options.__isset.overflow_mode && _query_options.overflow_mode == TOverflowMode::REPORT_ERROR;
     }
 
+    bool error_for_division_by_zero() const {
+        return _query_options.__isset.error_for_division_by_zero && _query_options.error_for_division_by_zero;
+    }
+
     bool enable_hyperscan_vec() const {
         return _query_options.__isset.enable_hyperscan_vec && _query_options.enable_hyperscan_vec;
     }

@@ -122,7 +122,7 @@ public:
     bool is_index_only_filter() const;
 
     bool error_if_overflow() const;
-
+    bool error_for_division_by_zero() const;
     void set_build_from_only_in_filter(bool build_from_only_in_filter) {
         _build_from_only_in_filter = build_from_only_in_filter;
     }
@@ -130,7 +130,6 @@ public:
 
 private:
     friend class Expr;
-    friend class OlapScanNode;
     friend class OlapScanNode;
     friend class EsPredicate;
 
