@@ -14,6 +14,12 @@
 
 #pragma once
 
+<<<<<<< HEAD:be/src/storage/lake/load_spill_block_manager.h
+=======
+#include <utility>
+
+#include "common/thread/threadpool.h"
+>>>>>>> f80dc35228 ([Refactor] Fix clang-tidy modernize-pass-by-value errors (#69996)):be/src/storage/load_spill_block_manager.h
 #include "exec/spill/block_manager.h"
 #include "exec/spill/dir_manager.h"
 #include "exec/spill/input_stream.h"
@@ -60,9 +66,15 @@ private:
 class LoadSpillBlockManager {
 public:
     // Constructor that initializes the LoadSpillBlockManager with a query ID and remote spill path.
+<<<<<<< HEAD:be/src/storage/lake/load_spill_block_manager.h
     LoadSpillBlockManager(const TUniqueId& load_id, int64_t tablet_id, int64_t txn_id,
                           const std::string& remote_spill_path)
             : _load_id(load_id), _tablet_id(tablet_id), _txn_id(txn_id) {
+=======
+    LoadSpillBlockManager(const TUniqueId& load_id, const TUniqueId& fragment_instance_id,
+                          const std::string& remote_spill_path, std::shared_ptr<FileSystem> fs)
+            : _load_id(load_id), _fragment_instance_id(fragment_instance_id), _fs(std::move(fs)) {
+>>>>>>> f80dc35228 ([Refactor] Fix clang-tidy modernize-pass-by-value errors (#69996)):be/src/storage/load_spill_block_manager.h
         _remote_spill_path = remote_spill_path + "/load_spill";
     }
 

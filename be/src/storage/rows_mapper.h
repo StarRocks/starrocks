@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include <utility>
+
 #include "common/status.h"
 #include "gen_cpp/persistent_index.pb.h"
 
@@ -32,7 +34,7 @@ class Tablet;
 //
 class RowsMapperBuilder {
 public:
-    RowsMapperBuilder(const std::string& filename) : _filename(filename) {}
+    RowsMapperBuilder(std::string filename) : _filename(std::move(filename)) {}
     ~RowsMapperBuilder() {}
     // append rssid rowids to file
     Status append(const std::vector<uint64_t>& rssid_rowids);

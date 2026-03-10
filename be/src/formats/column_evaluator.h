@@ -14,7 +14,14 @@
 
 #pragma once
 
+<<<<<<< HEAD
 #include "column/chunk.h"
+=======
+#include <memory>
+#include <utility>
+#include <vector>
+
+>>>>>>> f80dc35228 ([Refactor] Fix clang-tidy modernize-pass-by-value errors (#69996))
 #include "column/column.h"
 #include "common/statusor.h"
 #include "exprs/expr.h"
@@ -128,7 +135,7 @@ public:
         return es;
     }
 
-    ColumnSlotIdEvaluator(SlotId slot_id, TypeDescriptor type) : _slot_id(slot_id), _type(type) {}
+    ColumnSlotIdEvaluator(SlotId slot_id, TypeDescriptor type) : _slot_id(slot_id), _type(std::move(type)) {}
 
     ~ColumnSlotIdEvaluator() override = default;
 

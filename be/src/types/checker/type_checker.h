@@ -14,6 +14,7 @@
 
 #pragma once
 #include <string>
+#include <utility>
 
 #include "common/status.h"
 #include "common/statusor.h"
@@ -33,8 +34,13 @@ public:
         StatusOr<LogicalType> check(const std::string& java_class, const SlotDescriptor* slot_desc) const override; \
     };
 
+<<<<<<< HEAD
 // Define type checker for java.lang.Byte
 DEFINE_TYPE_CHECKER(ByteTypeChecker)
+=======
+    ConfigurableTypeChecker(std::string display_name, std::vector<TypeRule> rules)
+            : _display_name(std::move(display_name)), _rules(std::move(rules)) {}
+>>>>>>> f80dc35228 ([Refactor] Fix clang-tidy modernize-pass-by-value errors (#69996))
 
 // Define type checker for com.clickhouse.data.value.UnsignedByte
 DEFINE_TYPE_CHECKER(ClickHouseUnsignedByteTypeChecker)

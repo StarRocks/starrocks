@@ -18,6 +18,7 @@
 #include <mutex>
 #include <thread>
 #include <unordered_map>
+#include <utility>
 
 #include "cache/block_cache/cache_options.h"
 #include "common/status.h"
@@ -55,8 +56,12 @@ public:
         size_t total_cache_usage = 0;
     };
 
+<<<<<<< HEAD:be/src/cache/block_cache/disk_space_monitor.h
     DiskSpace(dev_t device_id, const std::string& path, std::shared_ptr<FileSystemWrapper> fs)
             : _device_id(device_id), _path(path), _fs(fs) {}
+=======
+    DiskSpace(std::string path, std::shared_ptr<FileSystemWrapper> fs) : _path(std::move(path)), _fs(std::move(fs)) {}
+>>>>>>> f80dc35228 ([Refactor] Fix clang-tidy modernize-pass-by-value errors (#69996)):be/src/cache/disk_space_monitor.h
 
     Status init_spaces(const std::vector<DirSpace>& dir_spaces);
 

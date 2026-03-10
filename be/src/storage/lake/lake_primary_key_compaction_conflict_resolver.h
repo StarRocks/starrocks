@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <utility>
+
 #include "storage/lake/tablet_metadata.h"
 #include "storage/primary_key_compaction_conflict_resolver.h"
 #include "storage/tablet_manager.h"
@@ -30,6 +32,10 @@ public:
     explicit LakePrimaryKeyCompactionConflictResolver(const TabletMetadata* metadata, Rowset* rowset,
                                                       TabletManager* tablet_mgr, MetaFileBuilder* builder,
                                                       LakePrimaryIndex* index, int64_t txn_id, int64_t base_version,
+<<<<<<< HEAD
+=======
+                                                      FileMetaPB lcrm_file,
+>>>>>>> f80dc35228 ([Refactor] Fix clang-tidy modernize-pass-by-value errors (#69996))
                                                       std::map<uint32_t, size_t>* segment_id_to_add_dels,
                                                       std::vector<std::pair<uint32_t, DelVectorPtr>>* delvecs)
             : _metadata(metadata),
@@ -39,6 +45,10 @@ public:
               _index(index),
               _txn_id(txn_id),
               _base_version(base_version),
+<<<<<<< HEAD
+=======
+              _lcrm_file(std::move(lcrm_file)),
+>>>>>>> f80dc35228 ([Refactor] Fix clang-tidy modernize-pass-by-value errors (#69996))
               _segment_id_to_add_dels(segment_id_to_add_dels),
               _delvecs(delvecs) {}
     ~LakePrimaryKeyCompactionConflictResolver() {}
