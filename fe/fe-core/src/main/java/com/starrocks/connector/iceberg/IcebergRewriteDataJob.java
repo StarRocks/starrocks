@@ -159,7 +159,7 @@ public class IcebergRewriteDataJob {
                 .get(0);
 
         this.rewriteStmt = new IcebergRewriteStmt((InsertStmt) parsedStmt, rewriteAll);
-        this.execPlan = StatementPlanner.plan(parsedStmt, context);
+        this.execPlan = StatementPlanner.plan(rewriteStmt, context);
         this.scanNodes = execPlan.getFragments().stream()
                 .flatMap(fragment -> fragment.collectScanNodes().values().stream())
                 .filter(scan -> scan instanceof IcebergScanNode && "IcebergScanNode".equals(scan.getPlanNodeName()))
@@ -236,7 +236,7 @@ public class IcebergRewriteDataJob {
                     ConnectContext subCtx = buildSubConnectContext(context);
                     try (var scope = subCtx.bindScope()) {
                         IcebergRewriteStmt localStmt = new IcebergRewriteStmt((InsertStmt) parsedStmt, rewriteAll);
-                        ExecPlan localPlan = StatementPlanner.plan(parsedStmt, subCtx);
+                        ExecPlan localPlan = StatementPlanner.plan(localStmt, subCtx);
         
                         List<IcebergScanNode> localScanNodes = localPlan.getFragments().stream()
                                 .flatMap(f -> f.collectScanNodes().values().stream())
