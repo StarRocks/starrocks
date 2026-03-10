@@ -22,6 +22,7 @@
 #include "column/type_traits.h"
 #include "column/variant_column.h"
 #include "column/variant_converter.h"
+#include "column/variant_merger.h"
 #include "column/variant_path_parser.h"
 #include "exprs/variant_path_reader.h"
 #include "runtime/runtime_state.h"
@@ -146,6 +147,14 @@ template <LogicalType ResultType>
 static ColumnPtr _build_typed_cast_result(FunctionContext* context, const Column* typed_col,
                                           const TypeDescriptor& typed_type_desc, const Column* variant_col,
                                           size_t num_rows) {
+    if constexpr (ResultType == TYPE_BIGINT || ResultType == TYPE_DOUBLE) {
+        TypeDescriptor result_type_desc = TypeDescriptor::from_logical_type(ResultType);
+        auto casted = VariantColumnMerger::cast_typed_column(*typed_col, typed_type_desc, result_type_desc);
+        if (casted.ok()) {
+            return _build_typed_bulk_result<ResultType>(casted.value().get(), variant_col, num_rows);
+        }
+    }
+
     const RuntimeState* state = context->state();
     cctz::time_zone zone = (state == nullptr) ? cctz::local_time_zone() : state->timezone_obj();
 
@@ -210,18 +219,16 @@ StatusOr<ColumnPtr> VariantFunctions::_do_variant_query(FunctionContext* context
 
     // BATCH / COLUMNAR FAST-PATH: const path + typed match + no suffix + non-const variant column.
     // kTypedNoSuffix means the path maps directly to a typed column with no additional seek.
-    // - typed_type == ResultType: bulk Column::append() (zero-copy for fixed-length)
+    // - typed_type == ResultType: bulk Column::append()
     // - typed_type != ResultType: reuse the row-level variant cast semantics via `_build_typed_cast_result`
-    // ConstColumn typed columns are excluded because FixedLengthColumn::append() doesn't handle them.
-    if constexpr (ResultType != TYPE_VARIANT) {
-        if (cached_path != nullptr && !columns[0]->is_constant() && reader.is_typed_exact() &&
-            !reader.typed_column()->is_constant()) {
-            if (reader.typed_type() == ResultType) {
-                return _build_typed_bulk_result<ResultType>(reader.typed_column(), columns[0].get(), num_rows);
-            } else {
-                return _build_typed_cast_result<ResultType>(context, reader.typed_column(), reader.typed_type_desc(),
-                                                            columns[0].get(), num_rows);
-            }
+    // ConstColumn typed columns are excluded because this path assumes row-wise indexing into the source column.
+    if (cached_path != nullptr && !columns[0]->is_constant() && reader.is_typed_exact() &&
+        !reader.typed_column()->is_constant()) {
+        if (reader.typed_type() == ResultType) {
+            return _build_typed_bulk_result<ResultType>(reader.typed_column(), columns[0].get(), num_rows);
+        } else {
+            return _build_typed_cast_result<ResultType>(context, reader.typed_column(), reader.typed_type_desc(),
+                                                        columns[0].get(), num_rows);
         }
     }
 
