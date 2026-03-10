@@ -62,6 +62,8 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 import java.io.File;
 import java.io.IOException;
@@ -699,6 +701,87 @@ public class StatisticsCalculatorTest {
         Statistics statistics = builder.build();
         Assertions.assertThrows(StarRocksPlannerException.class, () -> statistics.getColumnStatistic(v3));
     }
+
+    public enum OuterJoin {
+        LEFT_OUTER_JOIN,
+        RIGHT_OUTER_JOIN
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = OuterJoin.class)
+    public void testOuterJoinPreservesOuterSideNullFraction(OuterJoin outerJoin) {
+        // GIVEN
+        ColumnRefOperator outerJoinKey = columnRefFactory.create("nullable_col", Type.INT, true);
+        ColumnRefOperator outerOtherCol = columnRefFactory.create("other_col", Type.INT, true);
+
+        final double outerNullFraction = 0.755;
+        Statistics.Builder outerBuilder = Statistics.builder();
+        outerBuilder.setOutputRowCount(1000000);
+        outerBuilder.addColumnStatistics(ImmutableMap.of(
+                outerJoinKey, new ColumnStatistic(1, 100000, outerNullFraction, 8, 50000)));
+        outerBuilder.addColumnStatistics(ImmutableMap.of(
+                outerOtherCol, new ColumnStatistic(0, 100, 0.1, 8, 50)));
+
+        Group outerGroup = new Group(0);
+        outerGroup.setStatistics(outerBuilder.build());
+        outerGroup.setLogicalProperty(new LogicalProperty(
+                new ColumnRefSet(Lists.newArrayList(outerJoinKey, outerOtherCol))));
+
+        ColumnRefOperator innerKey = columnRefFactory.create("dim_id", Type.INT, true);
+        ColumnRefOperator innerVal = columnRefFactory.create("dim_val", Type.INT, true);
+
+        Statistics.Builder innerBuilder = Statistics.builder();
+        innerBuilder.setOutputRowCount(200000);
+        innerBuilder.addColumnStatistics(ImmutableMap.of(
+                innerKey, new ColumnStatistic(1, 200000, 0, 8, 200000)));
+        innerBuilder.addColumnStatistics(ImmutableMap.of(
+                innerVal, new ColumnStatistic(0, 100, 0, 8, 50)));
+
+        Group innerGroup = new Group(1);
+        innerGroup.setStatistics(innerBuilder.build());
+        innerGroup.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(innerKey, innerVal))));
+
+        // LEFT JOIN: outer.nullable_col = inner.dim1_id
+        // RIGHT JOIN: inner.dim1_id = outer.nullable_col
+        JoinOperator joinType;
+        if (outerJoin == OuterJoin.LEFT_OUTER_JOIN) {
+            joinType = JoinOperator.LEFT_OUTER_JOIN;
+        } else {
+            joinType = JoinOperator.RIGHT_OUTER_JOIN;
+        }
+
+        BinaryPredicateOperator joinPred;
+        GroupExpression groupExpr;
+        if (joinType == JoinOperator.LEFT_OUTER_JOIN) {
+            joinPred = new BinaryPredicateOperator(BinaryType.EQ, outerJoinKey, innerKey);
+        } else {
+            joinPred = new BinaryPredicateOperator(BinaryType.EQ, innerKey, outerJoinKey);
+        }
+
+        LogicalJoinOperator joinOp = new LogicalJoinOperator(joinType, joinPred);
+
+        if (joinType == JoinOperator.LEFT_OUTER_JOIN) {
+            groupExpr = new GroupExpression(joinOp, Lists.newArrayList(outerGroup, innerGroup));
+        } else {
+            groupExpr = new GroupExpression(joinOp, Lists.newArrayList(innerGroup, outerGroup));
+        }
+
+        Group joinGroup = new Group(2);
+        groupExpr.setGroup(joinGroup);
+        ExpressionContext exprCtx = new ExpressionContext(groupExpr);
+        StatisticsCalculator calc = new StatisticsCalculator(exprCtx, columnRefFactory, optimizerContext);
+
+        // WHEN
+        // The outer side join key's null fraction should be preserved after LEFT JOIN
+        calc.estimatorStats();
+        Statistics joinStats = exprCtx.getStatistics();
+        ColumnStatistic outerJoinKeyStatAfterJoin = joinStats.getColumnStatistic(outerJoinKey);
+
+        // THEN
+        Assertions.assertEquals(outerNullFraction, outerJoinKeyStatAfterJoin.getNullsFraction(), 0.001,
+                "Outer join key null fraction should be preserved after " + outerJoin.name());
+    }
+
 
     private static File newFolder(File root, String... subDirs) throws IOException {
         String subFolder = String.join("/", subDirs);

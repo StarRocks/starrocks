@@ -1295,7 +1295,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             case LEFT_OUTER_JOIN:
                 joinStatsBuilder = Statistics.buildFrom(innerJoinStats);
                 joinStatsBuilder.setOutputRowCount(max(innerRowCount, leftRowCount));
-                computeNullFractionForOuterJoin(leftRowCount, innerRowCount, rightStatistics, joinStatsBuilder);
+                computeNullFractionForOuterJoin(leftRowCount, innerRowCount, leftStatistics, rightStatistics,
+                        joinStatsBuilder);
                 break;
             case ASOF_LEFT_OUTER_JOIN:
                 joinStatsBuilder = Statistics.buildFrom(innerJoinStats);
@@ -1320,7 +1321,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             case RIGHT_OUTER_JOIN:
                 joinStatsBuilder = Statistics.buildFrom(innerJoinStats);
                 joinStatsBuilder.setOutputRowCount(max(innerRowCount, rightRowCount));
-                computeNullFractionForOuterJoin(rightRowCount, innerRowCount, leftStatistics, joinStatsBuilder);
+                computeNullFractionForOuterJoin(rightRowCount, innerRowCount, rightStatistics, leftStatistics,
+                        joinStatsBuilder);
                 break;
             case RIGHT_ANTI_JOIN:
                 joinStatsBuilder = Statistics.buildFrom(innerJoinStats);
@@ -1332,9 +1334,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 joinStatsBuilder = Statistics.buildFrom(innerJoinStats);
                 joinStatsBuilder.setOutputRowCount(max(1, leftRowCount + rightRowCount - innerRowCount));
                 computeNullFractionForOuterJoin(leftRowCount + rightRowCount, innerRowCount, leftStatistics,
-                        joinStatsBuilder);
+                        leftStatistics, joinStatsBuilder);
                 computeNullFractionForOuterJoin(leftRowCount + rightRowCount, innerRowCount, rightStatistics,
-                        joinStatsBuilder);
+                        rightStatistics, joinStatsBuilder);
                 break;
             default:
                 throw new StarRocksPlannerException("Not support join type : " + joinType,
@@ -1419,11 +1421,29 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         return builder.build();
     }
 
+    // In an outer join, all rows from the outer (preserved) side are kept, including those with NULLs
+    // in the join key. The inner join estimation sets the null fraction to 0 for eq-join columns,
+    // which is correct for inner joins but not for the outer side of outer joins.
+    // This method first restores the original null fractions for the outer side's columns, then computes
+    // the new null fractions for the inner (nullable) side's columns to account for additional null rows.
     private void computeNullFractionForOuterJoin(double outerTableRowCount, double innerJoinRowCount,
-                                                 Statistics statistics, Statistics.Builder builder) {
+                                                 Statistics outerSideStatistics, Statistics innerSideStatistics,
+                                                 Statistics.Builder builder) {
+        // Restore the original null fractions for the outer (preserved) side's columns
+        for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : outerSideStatistics.getColumnStatistics().entrySet()) {
+            ColumnStatistic originalStat = entry.getValue();
+            ColumnStatistic currentStat = builder.getColumnStatistics(entry.getKey());
+            if (currentStat != null) {
+                builder.addColumnStatistic(entry.getKey(), buildFrom(currentStat) //
+                        .setNullsFraction(originalStat.getNullsFraction()) //
+                        .build());
+            }
+        }
+
+        // Compute new null fractions for the inner (nullable) side's columns
         if (outerTableRowCount > innerJoinRowCount) {
             double nullRowCount = outerTableRowCount - innerJoinRowCount;
-            for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : statistics.getColumnStatistics().entrySet()) {
+            for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : innerSideStatistics.getColumnStatistics().entrySet()) {
                 ColumnStatistic columnStatistic = entry.getValue();
                 double columnNullCount = columnStatistic.getNullsFraction() * innerJoinRowCount;
                 double newNullFraction = (columnNullCount + nullRowCount) / outerTableRowCount;
