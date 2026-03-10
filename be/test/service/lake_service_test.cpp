@@ -2857,6 +2857,10 @@ TEST_F(LakeServiceTest, test_get_tablet_stats) {
         ASSERT_EQ(0, response.failed_tablets_size());
     }
 
+    // Prune the metacache so we can verify that get_tablet_stats() itself does not refill it.
+    // publish_version() above may have cached v3 metadata.
+    _tablet_mgr->metacache()->prune();
+
     { // get the tablet stat again
         TabletStatRequest request;
         TabletStatResponse response;
