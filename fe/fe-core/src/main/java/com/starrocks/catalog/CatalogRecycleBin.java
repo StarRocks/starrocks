@@ -587,6 +587,11 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable, Memor
             // Clean up Lake Table partition tracking if exists
             Set<Long> partitionIds = lakeTableToPartitions.remove(tableId);
             if (partitionIds != null) {
+                if (!partitionIds.isEmpty()) {
+                    LOG.warn("Invariant violation: lakeTableToPartitions for tableId {} is not empty when erasing table. "
+                                    + "pendingPartitionCount={}, partitionIds={}",
+                            tableId, partitionIds.size(), partitionIds);
+                }
                 for (Long partitionId : partitionIds) {
                     RecyclePartitionInfo partitionInfo = idToPartition.remove(partitionId);
                     if (partitionInfo != null) {
