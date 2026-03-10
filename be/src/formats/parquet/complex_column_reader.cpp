@@ -996,8 +996,8 @@ static bool _collect_overlays_for_array_element(size_t element_row, const std::v
                                                                &typed_row)) {
                 auto typed_value = VariantEncoder::encode_datum(typed_col->get(typed_row), *node.typed_value_read_type);
                 if (typed_value.ok()) {
-                    overlays.emplace_back(
-                            VariantBuilder::Overlay{.path = node.parsed_full_path, .value = std::move(typed_value).value()});
+                    overlays.emplace_back(VariantBuilder::Overlay{.path = node.parsed_full_path,
+                                                                  .value = std::move(typed_value).value()});
                     continue;
                 }
             }
@@ -1014,11 +1014,11 @@ static bool _collect_overlays_for_array_element(size_t element_row, const std::v
             }
             auto array_overlay = _rebuild_array_overlay(element_row, node, metadata_raw, base_array_raw, depth + 1);
             if (array_overlay.ok()) {
-                overlays.emplace_back(
-                        VariantBuilder::Overlay{.path = node.parsed_full_path, .value = std::move(array_overlay).value()});
+                overlays.emplace_back(VariantBuilder::Overlay{.path = node.parsed_full_path,
+                                                              .value = std::move(array_overlay).value()});
             } else if (base_array_raw != VariantValue::kEmptyValue) {
-                overlays.emplace_back(
-                        VariantBuilder::Overlay{.path = node.parsed_full_path, .value = VariantRowValue(metadata_raw, base_array_raw)});
+                overlays.emplace_back(VariantBuilder::Overlay{.path = node.parsed_full_path,
+                                                              .value = VariantRowValue(metadata_raw, base_array_raw)});
             }
             continue;
         }
@@ -1047,8 +1047,8 @@ static bool _collect_overlays_for_row(size_t row, std::string_view metadata_raw,
                                                            &typed_row)) {
             auto typed_value = VariantEncoder::encode_datum(typed_col->get(typed_row), *node.typed_value_read_type);
             if (typed_value.ok()) {
-                overlays.emplace_back(
-                        VariantBuilder::Overlay{.path = node.parsed_full_path, .value = std::move(typed_value).value()});
+                overlays.emplace_back(VariantBuilder::Overlay{.path = node.parsed_full_path,
+                                                              .value = std::move(typed_value).value()});
                 return true;
             }
             // encode_datum failed (e.g., type mismatch or overflow). Fall through to binary fallback.
@@ -1080,8 +1080,8 @@ static bool _collect_overlays_for_row(size_t row, std::string_view metadata_raw,
             return true;
         }
         if (base_array_raw != VariantValue::kEmptyValue) {
-            overlays.emplace_back(
-                    VariantBuilder::Overlay{.path = node.parsed_full_path, .value = VariantRowValue(metadata_raw, base_array_raw)});
+            overlays.emplace_back(VariantBuilder::Overlay{.path = node.parsed_full_path,
+                                                          .value = VariantRowValue(metadata_raw, base_array_raw)});
         }
         return true;
     }
@@ -1686,9 +1686,8 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
             if (ParquetUtils::get_non_null_data_column_and_row(_top_level.root_typed_value_column.get(), i,
                                                                &root_typed_data, &root_typed_row)) {
                 DCHECK(_top_level.root_typed_value_type != nullptr);
-                auto encoded =
-                        VariantEncoder::encode_datum(root_typed_data->get(root_typed_row),
-                                                     *_top_level.root_typed_value_type);
+                auto encoded = VariantEncoder::encode_datum(root_typed_data->get(root_typed_row),
+                                                            *_top_level.root_typed_value_type);
                 if (encoded.ok()) {
                     auto metadata_raw = encoded.value().get_metadata().raw();
                     auto value_raw = encoded.value().get_value().raw();
