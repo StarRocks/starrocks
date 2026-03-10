@@ -996,8 +996,8 @@ static bool _collect_overlays_for_array_element(size_t element_row, const std::v
                                                                &typed_row)) {
                 auto typed_value = VariantEncoder::encode_datum(typed_col->get(typed_row), *node.typed_value_read_type);
                 if (typed_value.ok()) {
-                    overlays.emplace_back(
-                            VariantBuilder::Overlay{.path = node.parsed_full_path, .value = std::move(typed_value).value()});
+                    overlays.emplace_back(VariantBuilder::Overlay{.path = node.parsed_full_path,
+                                                                  .value = std::move(typed_value).value()});
                     continue;
                 }
             }
@@ -1014,11 +1014,11 @@ static bool _collect_overlays_for_array_element(size_t element_row, const std::v
             }
             auto array_overlay = _rebuild_array_overlay(element_row, node, metadata_raw, base_array_raw, depth + 1);
             if (array_overlay.ok()) {
-                overlays.emplace_back(
-                        VariantBuilder::Overlay{.path = node.parsed_full_path, .value = std::move(array_overlay).value()});
+                overlays.emplace_back(VariantBuilder::Overlay{.path = node.parsed_full_path,
+                                                              .value = std::move(array_overlay).value()});
             } else if (base_array_raw != VariantValue::kEmptyValue) {
-                overlays.emplace_back(
-                        VariantBuilder::Overlay{.path = node.parsed_full_path, .value = VariantRowValue(metadata_raw, base_array_raw)});
+                overlays.emplace_back(VariantBuilder::Overlay{.path = node.parsed_full_path,
+                                                              .value = VariantRowValue(metadata_raw, base_array_raw)});
             }
             continue;
         }
@@ -1047,8 +1047,8 @@ static bool _collect_overlays_for_row(size_t row, std::string_view metadata_raw,
                                                            &typed_row)) {
             auto typed_value = VariantEncoder::encode_datum(typed_col->get(typed_row), *node.typed_value_read_type);
             if (typed_value.ok()) {
-                overlays.emplace_back(
-                        VariantBuilder::Overlay{.path = node.parsed_full_path, .value = std::move(typed_value).value()});
+                overlays.emplace_back(VariantBuilder::Overlay{.path = node.parsed_full_path,
+                                                              .value = std::move(typed_value).value()});
                 return true;
             }
             // encode_datum failed (e.g., type mismatch or overflow). Fall through to binary fallback.
@@ -1080,8 +1080,8 @@ static bool _collect_overlays_for_row(size_t row, std::string_view metadata_raw,
             return true;
         }
         if (base_array_raw != VariantValue::kEmptyValue) {
-            overlays.emplace_back(
-                    VariantBuilder::Overlay{.path = node.parsed_full_path, .value = VariantRowValue(metadata_raw, base_array_raw)});
+            overlays.emplace_back(VariantBuilder::Overlay{.path = node.parsed_full_path,
+                                                          .value = VariantRowValue(metadata_raw, base_array_raw)});
         }
         return true;
     }
@@ -1254,13 +1254,65 @@ static void append_top_scalar_binding_value(size_t row, const TopBinding& bindin
     }
 }
 
+static StatusOr<VariantPath> make_relative_variant_path(const VariantPath& full_path, size_t prefix_segments) {
+    if (full_path.segments.size() < prefix_segments) {
+        return Status::InternalError("variant overlay path shorter than subtree prefix");
+    }
+    std::vector<VariantSegment> relative_segments;
+    relative_segments.reserve(full_path.segments.size() - prefix_segments);
+    for (size_t i = prefix_segments; i < full_path.segments.size(); ++i) {
+        relative_segments.emplace_back(full_path.segments[i]);
+    }
+    return VariantPath(std::move(relative_segments));
+}
+
+static StatusOr<VariantRowValue> build_variant_binding_from_node(size_t row, const ShreddedFieldNode& node,
+                                                                 std::string_view metadata_raw) {
+    std::optional<VariantRowRef> base;
+    if (node.value_column != nullptr) {
+        Slice fallback_slice;
+        if (ColumnHelper::get_binary_slice_at(node.value_column.get(), row, &fallback_slice)) {
+            base.emplace(metadata_raw, std::string_view(fallback_slice.data, fallback_slice.size));
+        }
+    }
+
+    if (node.children.empty()) {
+        if (base.has_value()) {
+            return base->to_owned();
+        }
+        return Status::NotFound("variant binding node has no subtree payload");
+    }
+
+    std::vector<VariantBuilder::Overlay> overlays;
+    overlays.reserve(node.children.size() * 2);
+    const size_t prefix_segments = node.parsed_full_path.segments.size();
+    for (const auto& child : node.children) {
+        std::vector<VariantBuilder::Overlay> child_overlays;
+        _collect_overlays_for_row(row, metadata_raw, child, child_overlays);
+        for (auto& overlay : child_overlays) {
+            ASSIGN_OR_RETURN(auto relative_path, make_relative_variant_path(overlay.path, prefix_segments));
+            overlays.emplace_back(
+                    VariantBuilder::Overlay{.path = std::move(relative_path), .value = std::move(overlay.value)});
+        }
+    }
+
+    if (overlays.empty()) {
+        if (base.has_value()) {
+            return base->to_owned();
+        }
+        return Status::NotFound("variant binding node has no subtree overlays");
+    }
+
+    ASSIGN_OR_RETURN(auto built, VariantBuilder::build_row_from_overlays(base, std::move(overlays)));
+    return built;
+}
+
 // Append one row of a VARIANT binding to dst (a NullableColumn<VariantColumn>).
-// For ARRAY nodes: reconstructs the full array binary via _rebuild_array_overlay (file-local).
-// For other nodes (struct/fallback-only): uses the node's value_column fallback binary.
+// For shredded bindings, materializes the requested subtree directly from that node.
+// For non-shredded bindings (node == nullptr), seeks the requested path from the current row payload.
 // dst is kept in object mode (VariantRowValue per entry); no nested typed_columns inside.
-static void append_variant_binding_row_from_built_row(size_t row, const TopBinding& binding,
-                                                      std::string_view raw_metadata, std::string_view built_metadata,
-                                                      std::string_view built_value, Column* dst) {
+static void append_variant_binding_row(size_t row, const TopBinding& binding, std::string_view raw_metadata,
+                                       std::string_view row_metadata, std::string_view row_value, Column* dst) {
     if (dst == nullptr) return;
     auto* nullable = down_cast<NullableColumn*>(dst);
     auto* inner_variant = down_cast<VariantColumn*>(nullable->data_column()->as_mutable_raw_ptr());
@@ -1344,39 +1396,35 @@ static void append_variant_binding_row_from_built_row(size_t row, const TopBindi
         return;
     }
 
-    auto parsed_path = VariantPathParser::parse_shredded_path(std::string_view(binding.path));
-    if (!parsed_path.ok()) {
-        if (append_fallback_from_node()) return;
+    if (binding.node != nullptr) {
+        auto built = build_variant_binding_from_node(row, *binding.node, raw_metadata);
+        if (built.ok()) {
+            append_value(std::move(built).value());
+            return;
+        }
+        VLOG(3) << "variant shredded subtree build failed for path '" << binding.path
+                << "': " << built.status().to_string() << "; falling back";
+        if (append_fallback_from_node()) {
+            return;
+        }
         append_null();
         return;
     }
 
-    VariantRowRef full_row(built_metadata, built_value);
+    auto parsed_path = VariantPathParser::parse_shredded_path(std::string_view(binding.path));
+    if (!parsed_path.ok()) {
+        append_null();
+        return;
+    }
+
+    VariantRowRef full_row(row_metadata, row_value);
     auto field = VariantPath::seek_view(full_row, parsed_path.value(), 0);
     if (!field.ok()) {
-        VLOG(3) << "variant shredded seek failed for path '" << binding.path << "': " << field.status().to_string()
-                << "; falling back";
-        if (append_fallback_from_node()) return;
+        VLOG(3) << "variant row seek failed for path '" << binding.path << "': " << field.status().to_string();
         append_null();
         return;
     }
     append_value_ref(field.value());
-}
-
-static bool binding_requires_built_row_seek(const TopBinding& binding) {
-    if (binding.kind == TopBinding::Kind::SCALAR) {
-        return false;
-    }
-    if (binding.node == nullptr) {
-        return false;
-    }
-    if (binding.node->typed_kind == ShreddedTypedKind::SCALAR) {
-        return false;
-    }
-    if (binding.node->typed_kind == ShreddedTypedKind::ARRAY && binding.node->typed_value_column != nullptr) {
-        return false;
-    }
-    return true;
 }
 
 // Collect all top-row-indexed typed_value_column pointers from the shredded field tree.
@@ -1434,9 +1482,9 @@ static void build_has_typed_value_bitmap(const std::vector<ShreddedFieldNode>& s
     }
 }
 
-static void build_row_for_seek(size_t row, std::string_view metadata_raw, std::string_view value_raw,
-                               const std::vector<ShreddedFieldNode>& shredded_fields, std::string* out_metadata,
-                               std::string* out_value) {
+static void build_full_row_from_shredded_fields(size_t row, std::string_view metadata_raw, std::string_view value_raw,
+                                                const std::vector<ShreddedFieldNode>& shredded_fields,
+                                                std::string* out_metadata, std::string* out_value) {
     if (out_metadata == nullptr || out_value == nullptr) {
         return;
     }
@@ -1467,6 +1515,169 @@ static void build_row_for_seek(size_t row, std::string_view metadata_raw, std::s
     out_metadata->assign(metadata_built.data(), metadata_built.size());
     out_value->assign(value_built.data(), value_built.size());
 }
+
+enum class VariantTopLevelReadMode {
+    ALL_PATHS,
+    SELECTED_PATHS,
+};
+
+class VariantReadRangeBatchContext {
+public:
+    VariantReadRangeBatchContext(const VariantColumnReader::VariantTopLevelReaders& top_level,
+                                 const std::vector<ShreddedFieldNode>& shredded_fields,
+                                 const std::vector<TopBinding>& materialized_bindings,
+                                 VariantTopLevelReadMode read_mode, const BinaryColumn* metadata_column,
+                                 const BinaryColumn* value_column, ImmutableNullData metadata_nulls,
+                                 ImmutableNullData value_nulls)
+            : top_level(top_level),
+              shredded_fields(shredded_fields),
+              materialized_bindings(materialized_bindings),
+              read_mode(read_mode),
+              metadata_column(metadata_column),
+              value_column(value_column),
+              metadata_nulls(metadata_nulls),
+              value_nulls(value_nulls),
+              has_typed_value_bitmap(metadata_column != nullptr ? metadata_column->size() : 0, false) {
+        const size_t num_rows = has_typed_value_bitmap.size();
+        if (!shredded_fields.empty()) {
+            build_has_typed_value_bitmap(shredded_fields, num_rows, &has_typed_value_bitmap);
+        }
+        if (top_level.root_typed_value_column != nullptr) {
+            for (size_t i = 0; i < num_rows; ++i) {
+                if (has_typed_value_bitmap[i]) {
+                    continue;
+                }
+                const Column* root_typed_data = nullptr;
+                size_t root_typed_row = 0;
+                if (ParquetUtils::get_non_null_data_column_and_row(top_level.root_typed_value_column.get(), i,
+                                                                   &root_typed_data, &root_typed_row)) {
+                    has_typed_value_bitmap[i] = true;
+                }
+            }
+        }
+    }
+
+    const VariantColumnReader::VariantTopLevelReaders& top_level;
+    const std::vector<ShreddedFieldNode>& shredded_fields;
+    const std::vector<TopBinding>& materialized_bindings;
+    const VariantTopLevelReadMode read_mode;
+    const BinaryColumn* metadata_column;
+    const BinaryColumn* value_column;
+    ImmutableNullData metadata_nulls;
+    ImmutableNullData value_nulls;
+    std::vector<bool> has_typed_value_bitmap;
+};
+
+class VariantReadRangeRowMaterializer {
+public:
+    VariantReadRangeRowMaterializer(const VariantReadRangeBatchContext& batch_ctx, size_t row,
+                                    VariantColumn* variant_column)
+            : _batch_ctx(batch_ctx), _row(row), _variant_column(variant_column) {}
+
+    bool prepare() {
+        const bool has_typed_value = _batch_ctx.has_typed_value_bitmap[_row];
+        // Iceberg shredded rows may carry payload only in typed_value with base `value` null.
+        if (_batch_ctx.metadata_nulls[_row] || (_batch_ctx.value_nulls[_row] && !has_typed_value)) {
+            return false;
+        }
+
+        const Slice raw_metadata_slice = _batch_ctx.metadata_column->get_slice(_row);
+        const Slice raw_value_slice = _batch_ctx.value_column->get_slice(_row);
+        if ((raw_metadata_slice.size == 0 || raw_value_slice.size == 0) && !has_typed_value) {
+            return false;
+        }
+
+        _raw_metadata = std::string_view(raw_metadata_slice.data, raw_metadata_slice.size);
+        _raw_value = std::string_view(raw_value_slice.data, raw_value_slice.size);
+        _row_metadata = _raw_metadata;
+        _row_value = _raw_value;
+
+        if (_try_use_root_typed_row()) {
+            return true;
+        }
+
+        if (_batch_ctx.read_mode == VariantTopLevelReadMode::ALL_PATHS && !_try_build_full_row()) {
+            return false;
+        }
+        return true;
+    }
+
+    void append_top_level_row() const {
+        DCHECK(_variant_column != nullptr);
+        const Slice output_metadata(_row_metadata.data(), _row_metadata.size());
+        const Slice output_value(_row_value.data(), _row_value.size());
+        _variant_column->metadata_column()->append_datum(Datum(output_metadata));
+        _variant_column->remain_value_column()->append_datum(Datum(output_value));
+    }
+
+    void append_binding(size_t binding_idx) const {
+        const auto& binding = _batch_ctx.materialized_bindings[binding_idx];
+        Column* typed_col_dst = _variant_column->mutable_typed_columns()[binding_idx].get();
+        if (binding.kind == TopBinding::Kind::SCALAR) {
+            append_top_scalar_binding_value(_row, binding, typed_col_dst);
+        } else {
+            append_variant_binding_row(_row, binding, _raw_metadata, _row_metadata, _row_value, typed_col_dst);
+        }
+    }
+
+    void append_bindings() const {
+        for (size_t i = 0; i < _batch_ctx.materialized_bindings.size(); ++i) {
+            append_binding(i);
+        }
+    }
+
+private:
+    bool _try_use_root_typed_row() {
+        if (_batch_ctx.top_level.root_typed_value_column == nullptr) {
+            return false;
+        }
+
+        const Column* root_typed_data = nullptr;
+        size_t root_typed_row = 0;
+        if (!ParquetUtils::get_non_null_data_column_and_row(_batch_ctx.top_level.root_typed_value_column.get(), _row,
+                                                            &root_typed_data, &root_typed_row)) {
+            return false;
+        }
+
+        DCHECK(_batch_ctx.top_level.root_typed_value_type != nullptr);
+        auto encoded = VariantEncoder::encode_datum(root_typed_data->get(root_typed_row),
+                                                    *_batch_ctx.top_level.root_typed_value_type);
+        if (!encoded.ok()) {
+            return false;
+        }
+
+        auto metadata_raw = encoded.value().get_metadata().raw();
+        auto value_raw = encoded.value().get_value().raw();
+        _root_typed_metadata_buf.assign(metadata_raw.data(), metadata_raw.size());
+        _root_typed_value_buf.assign(value_raw.data(), value_raw.size());
+        _row_metadata = std::string_view(_root_typed_metadata_buf.data(), _root_typed_metadata_buf.size());
+        _row_value = std::string_view(_root_typed_value_buf.data(), _root_typed_value_buf.size());
+        return true;
+    }
+
+    bool _try_build_full_row() {
+        _built_metadata_buf.clear();
+        _built_value_buf.clear();
+        build_full_row_from_shredded_fields(_row, _raw_metadata, _raw_value, _batch_ctx.shredded_fields,
+                                            &_built_metadata_buf, &_built_value_buf);
+        _row_metadata = std::string_view(_built_metadata_buf.data(), _built_metadata_buf.size());
+        _row_value = std::string_view(_built_value_buf.data(), _built_value_buf.size());
+        return !_row_metadata.empty() && !_row_value.empty();
+    }
+
+    const VariantReadRangeBatchContext& _batch_ctx;
+    size_t _row;
+    VariantColumn* _variant_column;
+
+    std::string_view _raw_metadata;
+    std::string_view _raw_value;
+    std::string_view _row_metadata;
+    std::string_view _row_value;
+    std::string _built_metadata_buf;
+    std::string _built_value_buf;
+    std::string _root_typed_metadata_buf;
+    std::string _root_typed_value_buf;
+};
 
 Status VariantColumnReader::prepare() {
     if (_top_level.metadata_reader == nullptr || _top_level.value_reader == nullptr) {
@@ -1605,8 +1816,8 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
     std::vector<TopBinding> collected_bindings;
     collect_top_bindings(_shredded_fields, effective_paths, &collected_bindings);
     std::vector<TopBinding> materialized_bindings = select_materialized_bindings(collected_bindings, num_rows);
-    const bool request_all_paths = _shredded_paths.empty();
-
+    const auto read_mode =
+            _shredded_paths.empty() ? VariantTopLevelReadMode::ALL_PATHS : VariantTopLevelReadMode::SELECTED_PATHS;
     std::vector<std::string> typed_paths;
     std::vector<TypeDescriptor> typed_types;
     MutableColumns typed_columns;
@@ -1625,127 +1836,24 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
     NullColumn reconstructed_null_column(num_rows);
     auto& reconstructed_nulls = reconstructed_null_column.get_data();
     bool has_reconstructed_null = false;
-    // Pre-allocate row-build buffers outside the loop to amortize string allocations.
-    std::string built_metadata_buf;
-    std::string built_value_buf;
-    std::string root_typed_metadata_buf;
-    std::string root_typed_value_buf;
 
-    // Pre-compute per-row typed-value presence bitmap using a column-level scan.
-    // Iterates over each leaf typed_value_column once, marking non-null rows, which is more
-    // cache-friendly than the previous per-row tree traversal (O(rows*fields) with tree walk
-    // vs O(leaf_cols*rows) with flat null-bitmap scans).
-    std::vector<bool> has_typed_value_bitmap(num_rows, false);
-    if (!_shredded_fields.empty()) {
-        build_has_typed_value_bitmap(_shredded_fields, num_rows, &has_typed_value_bitmap);
-    }
-    if (_top_level.root_typed_value_column != nullptr) {
-        for (size_t i = 0; i < num_rows; ++i) {
-            if (has_typed_value_bitmap[i]) {
-                continue;
-            }
-            const Column* root_typed_data = nullptr;
-            size_t root_typed_row = 0;
-            if (ParquetUtils::get_non_null_data_column_and_row(_top_level.root_typed_value_column.get(), i,
-                                                               &root_typed_data, &root_typed_row)) {
-                has_typed_value_bitmap[i] = true;
-            }
-        }
-    }
+    VariantReadRangeBatchContext batch_ctx(_top_level, _shredded_fields, materialized_bindings, read_mode,
+                                           metadata_column, value_column, metadata_nulls, value_nulls);
 
     // Materialize output columns.
     // - request-all-paths: emit rebuilt top-level metadata/value.
-    // - requested-subset: keep top-level raw metadata/value and rebuild lazily for bindings that
-    //   require full-row seek.
+    // - requested-subset: keep the current row payload as-is; individual bindings are materialized
+    //   from their shredded subtree or via direct raw-row seek when the path is unshredded.
     for (size_t i = 0; i < num_rows; ++i) {
-        const bool has_typed_value = has_typed_value_bitmap[i];
-        // Iceberg shredded rows may carry payload only in typed_value with base `value` null.
-        // Keep those rows non-null so typed overlays can be reconstructed.
-        bool is_null = metadata_nulls[i] || (value_nulls[i] && !has_typed_value);
-        if (is_null) {
+        VariantReadRangeRowMaterializer materializer(batch_ctx, i, variant_column);
+        if (!materializer.prepare()) {
             variant_column->append_shredded_null();
             reconstructed_nulls[i] = 1;
             has_reconstructed_null = true;
             continue;
         }
-        const Slice raw_metadata_slice = metadata_column->get_slice(i);
-        const Slice raw_value_slice = value_column->get_slice(i);
-        if ((raw_metadata_slice.size == 0 || raw_value_slice.size == 0) && !has_typed_value) {
-            variant_column->append_shredded_null();
-            reconstructed_nulls[i] = 1;
-            has_reconstructed_null = true;
-            continue;
-        }
-        std::string_view raw_metadata(raw_metadata_slice.data, raw_metadata_slice.size);
-        std::string_view raw_value(raw_value_slice.data, raw_value_slice.size);
-
-        bool use_root_typed_row = false;
-        if (_top_level.root_typed_value_column != nullptr) {
-            const Column* root_typed_data = nullptr;
-            size_t root_typed_row = 0;
-            if (ParquetUtils::get_non_null_data_column_and_row(_top_level.root_typed_value_column.get(), i,
-                                                               &root_typed_data, &root_typed_row)) {
-                DCHECK(_top_level.root_typed_value_type != nullptr);
-                auto encoded =
-                        VariantEncoder::encode_datum(root_typed_data->get(root_typed_row),
-                                                     *_top_level.root_typed_value_type);
-                if (encoded.ok()) {
-                    auto metadata_raw = encoded.value().get_metadata().raw();
-                    auto value_raw = encoded.value().get_value().raw();
-                    root_typed_metadata_buf.assign(metadata_raw.data(), metadata_raw.size());
-                    root_typed_value_buf.assign(value_raw.data(), value_raw.size());
-                    use_root_typed_row = true;
-                }
-            }
-        }
-
-        built_metadata_buf.clear();
-        built_value_buf.clear();
-        bool built_ready = false;
-        auto ensure_built_row = [&]() {
-            if (built_ready) {
-                return;
-            }
-            build_row_for_seek(i, raw_metadata, raw_value, _shredded_fields, &built_metadata_buf, &built_value_buf);
-            built_ready = true;
-        };
-        std::string_view row_metadata = raw_metadata;
-        std::string_view row_value = raw_value;
-        if (use_root_typed_row) {
-            row_metadata = std::string_view(root_typed_metadata_buf.data(), root_typed_metadata_buf.size());
-            row_value = std::string_view(root_typed_value_buf.data(), root_typed_value_buf.size());
-        } else if (request_all_paths) {
-            ensure_built_row();
-            row_metadata = std::string_view(built_metadata_buf.data(), built_metadata_buf.size());
-            row_value = std::string_view(built_value_buf.data(), built_value_buf.size());
-            if (row_metadata.empty() || row_value.empty()) {
-                variant_column->append_shredded_null();
-                reconstructed_nulls[i] = 1;
-                has_reconstructed_null = true;
-                continue;
-            }
-        }
-        const Slice output_metadata(row_metadata.data(), row_metadata.size());
-        const Slice output_value(row_value.data(), row_value.size());
-        variant_column->metadata_column()->append_datum(Datum(output_metadata));
-        variant_column->remain_value_column()->append_datum(Datum(output_value));
-
-        for (size_t j = 0; j < materialized_bindings.size(); ++j) {
-            Column* typed_col_dst = variant_column->mutable_typed_columns()[j].get();
-            if (materialized_bindings[j].kind == TopBinding::Kind::SCALAR) {
-                append_top_scalar_binding_value(i, materialized_bindings[j], typed_col_dst);
-            } else {
-                std::string_view built_metadata = row_metadata;
-                std::string_view built_value = row_value;
-                if (!request_all_paths && binding_requires_built_row_seek(materialized_bindings[j])) {
-                    ensure_built_row();
-                    built_metadata = std::string_view(built_metadata_buf.data(), built_metadata_buf.size());
-                    built_value = std::string_view(built_value_buf.data(), built_value_buf.size());
-                }
-                append_variant_binding_row_from_built_row(i, materialized_bindings[j], raw_metadata, built_metadata,
-                                                          built_value, typed_col_dst);
-            }
-        }
+        materializer.append_top_level_row();
+        materializer.append_bindings();
         reconstructed_nulls[i] = 0;
     }
     DCHECK_EQ(variant_column->size(), num_rows)

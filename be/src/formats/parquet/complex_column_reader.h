@@ -311,6 +311,26 @@ VariantScalarMaterializeMode decide_variant_scalar_materialize_mode(const Shredd
 // calls to read_range() on the same instance are not allowed.
 class VariantColumnReader final : public ColumnReader {
 public:
+    // Top-level variant payload readers and batch-local typed buffer.
+    // `metadata` and `value` are required for variant files.
+    // `root_typed_value_*` is optional and used when top-level typed_value is non-STRUCT.
+    struct VariantTopLevelReaders {
+        VariantTopLevelReaders(std::unique_ptr<ScalarColumnReader>&& metadata_reader,
+                               std::unique_ptr<ScalarColumnReader>&& value_reader,
+                               ColumnReaderPtr&& root_typed_value_reader,
+                               std::unique_ptr<TypeDescriptor> root_typed_value_type)
+                : metadata_reader(std::move(metadata_reader)),
+                  value_reader(std::move(value_reader)),
+                  root_typed_value_reader(std::move(root_typed_value_reader)),
+                  root_typed_value_type(std::move(root_typed_value_type)) {}
+
+        std::unique_ptr<ScalarColumnReader> metadata_reader;
+        std::unique_ptr<ScalarColumnReader> value_reader;
+        ColumnReaderPtr root_typed_value_reader;
+        std::unique_ptr<TypeDescriptor> root_typed_value_type;
+        ColumnPtr root_typed_value_column;
+    };
+
     // Constructor that accepts pre-built ScalarColumnReader objects and optional shredded paths.
     // shredded_paths: exact leaf or array-boundary paths to expose as typed_columns.
     // If empty, no typed_columns optimization is applied (overlay reconstruction still works).
@@ -347,26 +367,6 @@ public:
     void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override;
 
 private:
-    // Top-level variant payload readers and batch-local typed buffer.
-    // `metadata` and `value` are required for variant files.
-    // `root_typed_value_*` is optional and used when top-level typed_value is non-STRUCT.
-    struct VariantTopLevelReaders {
-        VariantTopLevelReaders(std::unique_ptr<ScalarColumnReader>&& metadata_reader,
-                               std::unique_ptr<ScalarColumnReader>&& value_reader,
-                               ColumnReaderPtr&& root_typed_value_reader,
-                               std::unique_ptr<TypeDescriptor> root_typed_value_type)
-                : metadata_reader(std::move(metadata_reader)),
-                  value_reader(std::move(value_reader)),
-                  root_typed_value_reader(std::move(root_typed_value_reader)),
-                  root_typed_value_type(std::move(root_typed_value_type)) {}
-
-        std::unique_ptr<ScalarColumnReader> metadata_reader;
-        std::unique_ptr<ScalarColumnReader> value_reader;
-        ColumnReaderPtr root_typed_value_reader;
-        std::unique_ptr<TypeDescriptor> root_typed_value_type;
-        ColumnPtr root_typed_value_column;
-    };
-
     VariantTopLevelReaders _top_level;
     std::vector<ShreddedFieldNode> _shredded_fields;
     std::vector<std::string> _shredded_paths;
