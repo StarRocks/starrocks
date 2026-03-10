@@ -35,13 +35,18 @@
 package com.starrocks.qe;
 
 import com.starrocks.analysis.TableName;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.catalog.Database;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.ValuesRelation;
@@ -50,10 +55,13 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.warehouse.DefaultWarehouse;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 import org.xnio.StreamConnection;
 
 import java.util.List;
@@ -373,5 +381,311 @@ public class ConnectContextTest {
         // set globalStateMgr explicitly
         connectContext.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         Assertions.assertNotNull(ConnectContext.get().getGlobalStateMgr());
+    }
+
+    @Test
+    public void testOnQueryFinished_withListeners() {
+        ConnectContext ctx = new ConnectContext(connection);
+
+        // Mock listener
+        ConnectContext.Listener listener1 = Mockito.mock(ConnectContext.Listener.class);
+        ConnectContext.Listener listener2 = Mockito.mock(ConnectContext.Listener.class);
+
+        ctx.registerListener(listener1);
+        ctx.registerListener(listener2);
+
+        // Execute
+        ctx.onQueryFinished();
+
+        // Verify all listeners are called
+        Mockito.verify(listener1).onQueryFinished(ctx);
+        Mockito.verify(listener2).onQueryFinished(ctx);
+    }
+
+    @Test
+    public void testOnQueryFinished_listenerThrowsException() {
+        ConnectContext ctx = new ConnectContext(connection);
+
+        ConnectContext.Listener listener1 = Mockito.mock(ConnectContext.Listener.class);
+        ConnectContext.Listener listener2 = Mockito.mock(ConnectContext.Listener.class);
+
+        Mockito.doThrow(new RuntimeException("listener error")).when(listener1).onQueryFinished(ctx);
+
+        ctx.registerListener(listener1);
+        ctx.registerListener(listener2);
+
+        // Should not throw exception, other listeners should still be called
+        ctx.onQueryFinished();
+
+        Mockito.verify(listener1).onQueryFinished(ctx);
+        Mockito.verify(listener2).onQueryFinished(ctx);
+    }
+
+    @Test
+    public void testOnQueryFinished_clearsListeners() {
+        ConnectContext ctx = new ConnectContext(connection);
+
+        ConnectContext.Listener listener = Mockito.mock(ConnectContext.Listener.class);
+        ctx.registerListener(listener);
+
+        // First call
+        ctx.onQueryFinished();
+        Mockito.verify(listener, Mockito.times(1)).onQueryFinished(ctx);
+
+        // Second call - listener should not be called again (cleared after first call)
+        ctx.onQueryFinished();
+        Mockito.verify(listener, Mockito.times(1)).onQueryFinished(ctx);
+    }
+
+    @Test
+    public void testOnQueryFinished_withoutListeners() {
+        ConnectContext ctx = new ConnectContext(connection);
+
+        // Should not throw exception when no listeners
+        Assertions.assertDoesNotThrow(() -> ctx.onQueryFinished());
+    }
+
+    // -----------------------------------------------------------------------
+    // Tests for changeCatalogDb() journal-replay wait on follower FE
+    // -----------------------------------------------------------------------
+
+    @Test
+    public void testChangeCatalogDb_followerWaitsForJournalAndSucceeds(
+            @Mocked MetadataMgr metadataMgr,
+            @Mocked JournalObservable journalObservable) throws Exception {
+        Database mockDb = new Database(1L, "testdb");
+
+        new MockUp<LeaderOpExecutor>() {
+            @Mock
+            public static long fetchLeaderMaxJournalId(ConnectContext ctx) {
+                return 100L;
+            }
+        };
+
+        new Expectations() {
+            {
+                globalStateMgr.isLeader();
+                result = false;
+                minTimes = 0;
+
+                globalStateMgr.getMetadataMgr();
+                result = metadataMgr;
+                minTimes = 0;
+
+                globalStateMgr.getJournalObservable();
+                result = journalObservable;
+                minTimes = 0;
+
+                metadataMgr.getDb((ConnectContext) any, anyString, anyString);
+                returns(null, mockDb);
+
+                journalObservable.waitOn(100L, anyInt);
+            }
+        };
+
+        new MockUp<Authorizer>() {
+            @Mock
+            public void checkAnyActionOnOrInDb(ConnectContext ctx, String catalog, String db)
+                    throws AccessDeniedException {
+            }
+        };
+
+        ConnectContext ctx = new ConnectContext(connection);
+        ctx.setGlobalStateMgr(globalStateMgr);
+
+        Assertions.assertDoesNotThrow(() -> ctx.changeCatalogDb("testdb"));
+        Assertions.assertEquals("testdb", ctx.getDatabase());
+    }
+
+    @Test
+    public void testChangeCatalogDb_followerThrowsWhenDbStillMissingAfterWait(
+            @Mocked MetadataMgr metadataMgr,
+            @Mocked JournalObservable journalObservable) throws Exception {
+        new MockUp<LeaderOpExecutor>() {
+            @Mock
+            public static long fetchLeaderMaxJournalId(ConnectContext ctx) {
+                return 100L;
+            }
+        };
+
+        new Expectations() {
+            {
+                globalStateMgr.isLeader();
+                result = false;
+                minTimes = 0;
+
+                globalStateMgr.getMetadataMgr();
+                result = metadataMgr;
+                minTimes = 0;
+
+                globalStateMgr.getJournalObservable();
+                result = journalObservable;
+                minTimes = 0;
+
+                metadataMgr.getDb((ConnectContext) any, anyString, anyString);
+                result = null;
+
+                journalObservable.waitOn(100L, anyInt);
+            }
+        };
+
+        ConnectContext ctx = new ConnectContext(connection);
+        ctx.setGlobalStateMgr(globalStateMgr);
+
+        Assertions.assertThrows(DdlException.class, () -> ctx.changeCatalogDb("nonexistent"));
+    }
+
+    @Test
+    public void testChangeCatalogDb_followerSkipsWaitWhenLeaderJournalIdNegative(
+            @Mocked MetadataMgr metadataMgr,
+            @Mocked JournalObservable journalObservable) throws Exception {
+        new MockUp<LeaderOpExecutor>() {
+            @Mock
+            public static long fetchLeaderMaxJournalId(ConnectContext ctx) {
+                return -1L;
+            }
+        };
+
+        new Expectations() {
+            {
+                globalStateMgr.isLeader();
+                result = false;
+                minTimes = 0;
+
+                globalStateMgr.getMetadataMgr();
+                result = metadataMgr;
+                minTimes = 0;
+
+                globalStateMgr.getJournalObservable();
+                result = journalObservable;
+                minTimes = 0;
+
+                metadataMgr.getDb((ConnectContext) any, anyString, anyString);
+                result = null;
+
+                journalObservable.waitOn(anyLong, anyInt);
+                times = 0;
+            }
+        };
+
+        ConnectContext ctx = new ConnectContext(connection);
+        ctx.setGlobalStateMgr(globalStateMgr);
+
+        Assertions.assertThrows(DdlException.class, () -> ctx.changeCatalogDb("missingdb"));
+    }
+
+    @Test
+    public void testChangeCatalogDb_followerSucceedsWithoutWaitWhenDbAppearsAfterFetchFails(
+            @Mocked MetadataMgr metadataMgr,
+            @Mocked JournalObservable journalObservable) throws Exception {
+        Database mockDb = new Database(2L, "latedb");
+
+        new MockUp<LeaderOpExecutor>() {
+            @Mock
+            public static long fetchLeaderMaxJournalId(ConnectContext ctx) {
+                return -1L;
+            }
+        };
+
+        new MockUp<Authorizer>() {
+            @Mock
+            public void checkAnyActionOnOrInDb(ConnectContext ctx, String catalog, String db)
+                    throws AccessDeniedException {
+            }
+        };
+
+        new Expectations() {
+            {
+                globalStateMgr.isLeader();
+                result = false;
+                minTimes = 0;
+
+                globalStateMgr.getMetadataMgr();
+                result = metadataMgr;
+                minTimes = 0;
+
+                globalStateMgr.getJournalObservable();
+                result = journalObservable;
+                minTimes = 0;
+
+                metadataMgr.getDb((ConnectContext) any, anyString, anyString);
+                returns(null, mockDb);
+
+                journalObservable.waitOn(anyLong, anyInt);
+                times = 0;
+            }
+        };
+
+        ConnectContext ctx = new ConnectContext(connection);
+        ctx.setGlobalStateMgr(globalStateMgr);
+
+        Assertions.assertDoesNotThrow(() -> ctx.changeCatalogDb("latedb"));
+        Assertions.assertEquals("latedb", ctx.getDatabase());
+    }
+
+    @Test
+    public void testChangeCatalogDb_leaderDoesNotWaitForJournal(
+            @Mocked MetadataMgr metadataMgr) {
+        new Expectations() {
+            {
+                globalStateMgr.isLeader();
+                result = true;
+                minTimes = 0;
+
+                globalStateMgr.getMetadataMgr();
+                result = metadataMgr;
+                minTimes = 0;
+
+                metadataMgr.getDb((ConnectContext) any, anyString, anyString);
+                result = null;
+
+                globalStateMgr.getJournalObservable();
+                times = 0;
+            }
+        };
+
+        ConnectContext ctx = new ConnectContext(connection);
+        ctx.setGlobalStateMgr(globalStateMgr);
+
+        Assertions.assertThrows(DdlException.class, () -> ctx.changeCatalogDb("somedb"));
+    }
+
+    @Test
+    public void testChangeCatalogDb_followerThrowsDbErrorAfterJournalWaitTimeout(
+            @Mocked MetadataMgr metadataMgr,
+            @Mocked JournalObservable journalObservable) throws DdlException {
+        new MockUp<LeaderOpExecutor>() {
+            @Mock
+            public static long fetchLeaderMaxJournalId(ConnectContext ctx) {
+                return 100L;
+            }
+        };
+
+        new Expectations() {
+            {
+                globalStateMgr.isLeader();
+                result = false;
+                minTimes = 0;
+
+                globalStateMgr.getMetadataMgr();
+                result = metadataMgr;
+                minTimes = 0;
+
+                globalStateMgr.getJournalObservable();
+                result = journalObservable;
+                minTimes = 0;
+
+                metadataMgr.getDb((ConnectContext) any, anyString, anyString);
+                result = null;
+
+                journalObservable.waitOn(100L, anyInt);
+                result = new DdlException("journal replay timeout");
+            }
+        };
+
+        ConnectContext ctx = new ConnectContext(connection);
+        ctx.setGlobalStateMgr(globalStateMgr);
+
+        Assertions.assertThrows(DdlException.class, () -> ctx.changeCatalogDb("nonexistent"));
     }
 }
