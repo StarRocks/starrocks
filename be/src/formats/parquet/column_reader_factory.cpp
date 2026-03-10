@@ -528,28 +528,28 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_variant_column_reader(cons
                                                  std::move(root_typed_value_reader), std::move(root_typed_value_type));
 }
 
-StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(ColumnReaderPtr ori_reader, const GlobalDictMap* dict,
+StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(ColumnReaderPtr raw_reader, const GlobalDictMap* dict,
                                                       SlotId slot_id, int64_t num_rows) {
     FAIL_POINT_TRIGGER_EXECUTE(parquet_reader_returns_global_dict_not_match_status, {
         return Status::GlobalDictNotMatch(
                 fmt::format("SlotId: {}, Not dict encoded and not low rows on global dict column. ", slot_id));
     });
 
-    if (ori_reader->get_column_parquet_field()->type == ColumnType::ARRAY) {
+    if (raw_reader->get_column_parquet_field()->type == ColumnType::ARRAY) {
         ASSIGN_OR_RETURN(ColumnReaderPtr child_reader,
                          ColumnReaderFactory::create(
-                                 std::move((down_cast<ListColumnReader*>(ori_reader.get()))->get_element_reader()),
+                                 std::move((down_cast<ListColumnReader*>(raw_reader.get()))->get_element_reader()),
                                  dict, slot_id, num_rows));
-        return std::make_unique<ListColumnReader>(ori_reader->get_column_parquet_field(), std::move(child_reader));
+        return std::make_unique<ListColumnReader>(raw_reader->get_column_parquet_field(), std::move(child_reader));
     } else {
-        RawColumnReader* raw_reader = dynamic_cast<RawColumnReader*>(ori_reader.get());
-        if (raw_reader == nullptr) {
+        RawColumnReader* scalar_reader = dynamic_cast<RawColumnReader*>(raw_reader.get());
+        if (scalar_reader == nullptr) {
             return Status::InternalError("Error on reader transform for low cardinality reader");
         }
-        if (raw_reader->column_all_pages_dict_encoded()) {
-            return std::make_unique<LowCardColumnReader>(*raw_reader, dict, slot_id);
+        if (scalar_reader->column_all_pages_dict_encoded()) {
+            return std::make_unique<LowCardColumnReader>(*scalar_reader, dict, slot_id);
         } else if (num_rows <= dict->size()) {
-            return std::make_unique<LowRowsColumnReader>(*raw_reader, dict, slot_id);
+            return std::make_unique<LowRowsColumnReader>(*scalar_reader, dict, slot_id);
         } else {
             return Status::GlobalDictNotMatch(
                     fmt::format("SlotId: {}, Not dict encoded and not low rows on global dict column. ", slot_id));
