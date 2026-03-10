@@ -16,6 +16,7 @@
 
 #include <arrow-adbc/adbc.h>
 #include <arrow/record_batch.h>
+#include <arrow/type.h>
 
 #include <memory>
 #include <string>
@@ -74,8 +75,11 @@ private:
     bool _connection_initialized = false;
     bool _statement_initialized = false;
 
-    // Arrow reader (single-stream fallback)
-    std::shared_ptr<arrow::RecordBatchReader> _batch_reader;
+    // Arrow C stream (single-stream fallback) — managed directly instead of via
+    // ImportRecordBatchReader to work around Go ADBC driver not nulling release callback.
+    ArrowArrayStream _c_stream{};
+    std::shared_ptr<arrow::Schema> _arrow_schema;
+    bool _stream_initialized = false;
 
     // Parallel reader (multi-endpoint)
     std::unique_ptr<ADBCParallelReader> _parallel_reader;

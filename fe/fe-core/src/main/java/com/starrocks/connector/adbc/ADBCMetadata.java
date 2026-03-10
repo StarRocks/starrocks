@@ -16,6 +16,7 @@ package com.starrocks.connector.adbc;
 
 import com.starrocks.catalog.ADBCTable;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.tvr.TvrVersionRange;
@@ -158,6 +159,26 @@ public class ADBCMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public Table.TableType getTableType() {
+        return Table.TableType.ADBC;
+    }
+
+    @Override
+    public Database getDb(ConnectContext context, String name) {
+        try {
+            List<String> dbNames = listDbNames(context);
+            if (dbNames.contains(name)) {
+                return new Database(0, name);
+            }
+            return null;
+        } catch (Exception e) {
+            LOG.warn("Failed to check database existence for {}.{}: {}",
+                    catalogName, name, e.getMessage());
+            return null;
+        }
+    }
+
+    @Override
     public List<String> listDbNames(ConnectContext context) {
         return dbNamesCache.get(catalogName, k -> {
             try (AdbcConnection conn = adbcDatabase.connect()) {
@@ -177,10 +198,22 @@ public class ADBCMetadata implements ConnectorMetadata {
     public List<String> listTableNames(ConnectContext context, String dbName) {
         return tableNamesCache.get(dbName, k -> {
             try (AdbcConnection conn = adbcDatabase.connect()) {
+                // First try with table type filter
                 try (ArrowReader reader = conn.getObjects(
                         AdbcConnection.GetObjectsDepth.TABLES,
                         null, dbName, null,
                         new String[] {"TABLE", "VIEW"},
+                        null)) {
+                    List<String> result = parseTableNames(reader);
+                    if (!result.isEmpty()) {
+                        return result;
+                    }
+                }
+                // Retry without table type filter (some servers use non-standard type strings)
+                try (ArrowReader reader = conn.getObjects(
+                        AdbcConnection.GetObjectsDepth.TABLES,
+                        null, dbName, null,
+                        null,
                         null)) {
                     return parseTableNames(reader);
                 }
@@ -194,25 +227,60 @@ public class ADBCMetadata implements ConnectorMetadata {
     @Override
     public Table getTable(ConnectContext context, String dbName, String tblName) {
         ADBCTableName key = ADBCTableName.of(catalogName, dbName, tblName);
-        return tableInstanceCache.get(key, k -> {
-            try (AdbcConnection conn = adbcDatabase.connect()) {
-                // CRITICAL: first arg is null (catalog); dbName is the "schema" in Arrow Flight SQL
-                Schema arrowSchema = conn.getTableSchema(null, dbName, tblName);
-                if (arrowSchema == null) {
-                    return null;
+        try {
+            return tableInstanceCache.get(key, k -> {
+                try (AdbcConnection conn = adbcDatabase.connect()) {
+                    Schema arrowSchema = getTableSchema(conn, dbName, tblName);
+                    if (arrowSchema == null) {
+                        throw new StarRocksConnectorException(
+                                "No schema returned for table " + dbName + "." + tblName);
+                    }
+                    List<Column> fullSchema = schemaResolver.convertToSRTable(arrowSchema);
+                    if (fullSchema.isEmpty()) {
+                        throw new StarRocksConnectorException(
+                                "Empty schema for table " + dbName + "." + tblName);
+                    }
+                    int tableId = tableIdCache.getPersistentCache(k,
+                            j -> ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt());
+                    return new ADBCTable(tableId, tblName, fullSchema, dbName, catalogName, properties);
+                } catch (StarRocksConnectorException e) {
+                    throw e;
+                } catch (Exception e) {
+                    throw new StarRocksConnectorException(
+                            "ADBC getTable failed for " + dbName + "." + tblName + ": " + e.getMessage(), e);
                 }
-                List<Column> fullSchema = schemaResolver.convertToSRTable(arrowSchema);
-                if (fullSchema.isEmpty()) {
-                    return null;
-                }
-                int tableId = tableIdCache.getPersistentCache(k,
-                        j -> ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt());
-                return new ADBCTable(tableId, tblName, fullSchema, dbName, catalogName, properties);
-            } catch (Exception e) {
-                LOG.warn("ADBC getTable failed for {}.{}: {}", dbName, tblName, e.getMessage());
-                return null;
+            });
+        } catch (StarRocksConnectorException e) {
+            LOG.warn(e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Get table schema, trying getTableSchema() first, then falling back to a query.
+     */
+    private Schema getTableSchema(AdbcConnection conn, String dbName, String tblName) throws Exception {
+        // Try the standard ADBC getTableSchema API first
+        try {
+            Schema schema = conn.getTableSchema(null, dbName, tblName);
+            if (schema != null) {
+                return schema;
             }
-        });
+        } catch (Exception e) {
+            LOG.debug("getTableSchema not supported, falling back to query for {}.{}: {}",
+                    dbName, tblName, e.getMessage());
+        }
+
+        // Fallback: infer schema from an empty query result
+        String sql = "SELECT * FROM \"" + dbName + "\".\"" + tblName + "\" WHERE 1=0";
+        try (AdbcStatement stmt = conn.createStatement()) {
+            stmt.setSqlQuery(sql);
+            AdbcStatement.QueryResult result = stmt.executeQuery();
+            try (ArrowReader reader = result.getReader()) {
+                reader.loadNextBatch();
+                return reader.getVectorSchemaRoot().getSchema();
+            }
+        }
     }
 
     @Override

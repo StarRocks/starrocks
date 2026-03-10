@@ -97,8 +97,13 @@ Status ADBCDataSource::open(RuntimeState* state) {
     std::string sql = get_adbc_sql(adbc_scan_node.table_name, adbc_scan_node.columns, adbc_scan_node.filters,
                                    adbc_scan_node.__isset.limit ? adbc_scan_node.limit : -1);
 
-    // Get tuple descriptor
-    const TupleDescriptor* tuple_desc = state->desc_tbl().get_tuple_descriptor(adbc_scan_node.tuple_id);
+    // Get tuple descriptor (also set base class member for _init_chunk_if_needed)
+    auto* tuple_desc = state->desc_tbl().get_tuple_descriptor(adbc_scan_node.tuple_id);
+    _tuple_desc = tuple_desc;
+    LOG(INFO) << "ADBC connector: tuple_desc=" << (void*)tuple_desc
+              << " tuple_id=" << adbc_scan_node.tuple_id
+              << " slots=" << (tuple_desc ? tuple_desc->slots().size() : 0)
+              << " sql=" << sql;
 
     // Create scanner
     _scanner = std::make_unique<ADBCScanner>(std::move(driver), std::move(uri), std::move(username),
@@ -106,7 +111,9 @@ Status ADBCDataSource::open(RuntimeState* state) {
                                              std::move(ca_cert_file), std::move(client_cert_file),
                                              std::move(client_key_file), tls_verify);
 
+    LOG(INFO) << "ADBC connector: calling scanner->open()";
     RETURN_IF_ERROR(_scanner->open(state));
+    LOG(INFO) << "ADBC connector: scanner->open() OK";
 
     // Capture connect_time_ms for EXPLAIN ANALYZE stats
     _connect_time_ms = _scanner->connect_time_ms();
@@ -122,18 +129,22 @@ void ADBCDataSource::close(RuntimeState* state) {
 }
 
 Status ADBCDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
+    LOG(INFO) << "ADBC connector: get_next called, _tuple_desc=" << (void*)_tuple_desc;
     bool eos = false;
     RETURN_IF_ERROR(_init_chunk_if_needed(chunk, 0));
+    LOG(INFO) << "ADBC connector: _init_chunk_if_needed OK, chunk=" << (void*)chunk->get();
     do {
         RETURN_IF_ERROR(_scanner->get_next(state, chunk, &eos));
     } while (!eos && (*chunk)->num_rows() == 0);
 
     if (eos) {
+        LOG(INFO) << "ADBC connector: EOS reached";
         return Status::EndOfFile("");
     }
 
     _rows_read += (*chunk)->num_rows();
     _bytes_read += (*chunk)->bytes_usage();
+    LOG(INFO) << "ADBC connector: get_next returning " << (*chunk)->num_rows() << " rows";
     return Status::OK();
 }
 
