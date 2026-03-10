@@ -1,8 +1,5 @@
--- name: test_mv_fast_schema_change_with_aggregate @sequential @slow
+-- name: test_mv_fast_schema_change_mode @sequential
 admin set frontend config('alter_scheduler_interval_millisecond' = '100');
--- result:
--- !result
-admin set frontend config('mv_fast_schema_change_mode' = 'strict');
 -- result:
 -- !result
 drop table if exists t1_agg;
@@ -38,8 +35,7 @@ CREATE MATERIALIZED VIEW test_mv_agg1
 PARTITION BY date_trunc('day', dt)
 DISTRIBUTED BY hash(c0)
 PROPERTIES (
-    "replication_num" = "1",
-    "query_rewrite_consistency" = "force_mv"
+    "replication_num" = "1"
 )
 AS
 SELECT dt, c0, SUM(c3) as sum_c3, SUM(row_cnt) as cnt_rows
@@ -49,7 +45,10 @@ GROUP BY dt, c0;
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg1 WITH SYNC MODE;
 -- result:
-019cd122-0f5b-72bd-a3f7-f35a32f0ccb2
+019cd129-5b99-7880-a539-d49cea24015e
+-- !result
+admin set frontend config('mv_fast_schema_change_mode' = 'force');
+-- result:
 -- !result
 set enable_materialized_view_rewrite = false;
 -- result:
@@ -87,7 +86,7 @@ cnt_c2	bigint	YES	false	None	NONE
 -- !result
 function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), SUM(row_cnt), COUNT(c2) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
 -- result:
-True
+False
 -- !result
 SELECT dt, c0, SUM(c3) as sum_c3, SUM(row_cnt) as cnt_rows, COUNT(c2) as cnt_c2 FROM t1_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
 -- result:
@@ -106,7 +105,7 @@ INSERT INTO t1_agg VALUES ('2026-01-01', 0, 'val_0', 'desc_0', 10, 20, 1);
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg1 WITH SYNC MODE;
 -- result:
-019cd122-2472-7cbe-a97d-5c271e8f80ad
+019cd129-7116-7abf-8d53-fe54a6a37342
 -- !result
 function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), SUM(row_cnt), COUNT(c2) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
 -- result:
@@ -166,7 +165,7 @@ INSERT INTO t1_agg VALUES ('2026-01-01', 0, 'val_1', 'desc_1', 15, 30, 1, 'desc_
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg1 WITH SYNC MODE;
 -- result:
-019cd122-3390-7d79-99d4-0803acb89d0c
+019cd129-83c2-7e9b-96e6-1bae5d1c4334
 -- !result
 function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), SUM(row_cnt), COUNT(c2) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
 -- result:
@@ -196,7 +195,7 @@ sum_c6	bigint	YES	false	None	NONE
 -- !result
 function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), SUM(row_cnt), COUNT(c2), SUM(c6) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
 -- result:
-True
+False
 -- !result
 SELECT dt, c0, SUM(c3) as sum_c3, SUM(row_cnt) as cnt_rows, COUNT(c2) as cnt_c2, SUM(c6) as sum_c6 FROM t1_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
 -- result:
@@ -215,7 +214,7 @@ INSERT INTO t1_agg VALUES ('2026-01-01', 0, 'val_2', 'desc_2', 20, 40, 1, 'desc_
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg1 WITH SYNC MODE;
 -- result:
-019cd122-438a-77dd-afb0-c321db424af2
+019cd129-9816-70e0-b598-60f45c186129
 -- !result
 function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), SUM(row_cnt), COUNT(c2), SUM(c6) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
 -- result:
@@ -269,7 +268,7 @@ INSERT INTO t1_agg VALUES ('2026-01-01', 0, 'val_4', 'desc_4', 30, 60, 1, 'desc_
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg1 WITH SYNC MODE;
 -- result:
-019cd122-52f9-7361-890c-ed7e5b6462e5
+019cd129-ab43-70e4-8f4c-2ee07cc20cd8
 -- !result
 function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), SUM(row_cnt), SUM(c6) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
 -- result:
@@ -322,7 +321,7 @@ INSERT INTO t1_agg VALUES ('2026-01-01', 0, 'val_5', 'desc_5', 35, 70, 1, 'desc_
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg1 WITH SYNC MODE;
 -- result:
-019cd122-61ed-719c-9e6d-7e6549c31f82
+019cd129-bd68-7cb1-89f8-adcb1eedb03c
 -- !result
 function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), SUM(row_cnt) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
 -- result:
@@ -337,6 +336,29 @@ SELECT dt, c0, SUM(c3) as sum_c3, SUM(row_cnt) as cnt_rows FROM t1_agg GROUP BY 
 SELECT * FROM test_mv_agg1 ORDER BY ALL LIMIT 3;
 -- result:
 2026-01-01	0	660	15
+2026-01-01	1	460	10
+2026-01-01	2	470	10
+-- !result
+INSERT INTO t1_agg VALUES ('2026-01-01', 0, 'val_6', 'desc_6', 40, 80, 1, 'desc_7', 75);
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv_agg1 WITH SYNC MODE;
+-- result:
+019cd129-c4c8-7d34-a6d9-067f2043d0c3
+-- !result
+function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), SUM(row_cnt) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
+-- result:
+True
+-- !result
+SELECT dt, c0, SUM(c3) as sum_c3, SUM(row_cnt) as cnt_rows FROM t1_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
+-- result:
+2026-01-01	0	700	16
+2026-01-01	1	460	10
+2026-01-01	2	470	10
+-- !result
+SELECT * FROM test_mv_agg1 ORDER BY ALL LIMIT 3;
+-- result:
+2026-01-01	0	700	16
 2026-01-01	1	460	10
 2026-01-01	2	470	10
 -- !result
@@ -379,8 +401,7 @@ CREATE MATERIALIZED VIEW test_mv_agg2
 PARTITION BY date_trunc('day', dt)
 DISTRIBUTED BY HASH(c0)
 PROPERTIES (
-    "replication_num" = "1",
-    "query_rewrite_consistency" = "force_mv"
+    "replication_num" = "1"
 )
 AS
 SELECT dt, c0, SUM(c2) as sum_c2, MAX(c3) as max_c3, MIN(c3) as min_c3, AVG(c5) as avg_c5
@@ -390,7 +411,7 @@ GROUP BY dt, c0;
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg2 WITH SYNC MODE;
 -- result:
-019cd122-6ab0-7875-b5e7-b6e4f7042c2d
+019cd129-ceb6-70f1-b7ff-2a2487e8bca0
 -- !result
 SELECT * FROM test_mv_agg2 ORDER BY ALL LIMIT 3;
 -- result:
@@ -404,6 +425,9 @@ FROM t2_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
 2026-01-01	0	275	27500	27500	137.5
 2026-01-01	1	235	23500	23500	117.5
 2026-01-01	2	245	24500	24500	122.5
+-- !result
+admin set frontend config('mv_fast_schema_change_mode' = 'force_no_clear');
+-- result:
 -- !result
 ALTER MATERIALIZED VIEW test_mv_agg2 ADD COLUMN cnt_c1 AS COUNT(c1);
 -- result:
@@ -476,7 +500,7 @@ INSERT INTO t2_agg VALUES ('2026-01-01', 0, 'new_val', 100, 1000, 'replace_new',
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg2 WITH SYNC MODE;
 -- result:
-019cd122-7dee-71be-8b7d-dee7c7cccb7f
+019cd129-e591-7607-b56a-ecd7c9719faa
 -- !result
 SELECT dt, c0, sum_c2, max_c3, min_c3, avg_c5, cnt_c1, max_c6 FROM test_mv_agg2 ORDER BY ALL LIMIT 3;
 -- result:
@@ -538,8 +562,7 @@ CREATE MATERIALIZED VIEW test_mv_agg3
 PARTITION BY date_trunc('day', dt)
 DISTRIBUTED BY HASH(c0)
 PROPERTIES (
-    "replication_num" = "1",
-    "query_rewrite_consistency" = "force_mv"
+    "replication_num" = "1"
 )
 AS
 SELECT dt, c0, SUM(c2) as total_c2
@@ -549,7 +572,7 @@ GROUP BY dt, c0;
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg3 WITH SYNC MODE;
 -- result:
-019cd122-864b-7cd0-aa65-1ea48a10331b
+019cd129-f282-767a-8027-ee51df8c9bb7
 -- !result
 SELECT * FROM test_mv_agg3 ORDER BY ALL LIMIT 3;
 -- result:
@@ -625,7 +648,7 @@ INSERT INTO t3_agg VALUES ('2026-01-01', 0, 'new_val', 200, 'new_desc', 50);
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg3 WITH SYNC MODE;
 -- result:
-019cd122-98a6-7688-be8d-90c50df1352b
+019cd12a-07d7-758a-bead-3b899cb88ce4
 -- !result
 function: print_hit_materialized_view("SELECT dt, c0, SUM(c2), SUM(c4) FROM t3_agg GROUP BY dt, c0", "test_mv_agg3")
 -- result:
@@ -700,8 +723,7 @@ CREATE MATERIALIZED VIEW test_mv_agg4
 PARTITION BY date_trunc('month', dt)
 DISTRIBUTED BY HASH(category_id)
 PROPERTIES (
-    "replication_num" = "1",
-    "query_rewrite_consistency" = "force_mv"
+    "replication_num" = "1"
 )
 AS
 SELECT dt, category_id,
@@ -714,7 +736,7 @@ GROUP BY dt, category_id;
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg4 WITH SYNC MODE;
 -- result:
-019cd122-a566-7053-9bd6-d19fa5579610
+019cd12a-1540-77fd-b1a0-94a4d41927d1
 -- !result
 SELECT * FROM test_mv_agg4 ORDER BY ALL;
 -- result:
@@ -771,7 +793,7 @@ INSERT INTO t4_agg VALUES ('2026-01-03', 3, 300, 5000.00, 30, 500.00, 'Product C
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg4 WITH SYNC MODE;
 -- result:
-019cd122-b42d-77db-b19d-436e169802a7
+019cd12a-27a0-73b6-a249-8d417a62481e
 -- !result
 SELECT dt, category_id, total_sales, total_quantity, total_discount, total_profit FROM test_mv_agg4 ORDER BY dt, category_id;
 -- result:
@@ -821,7 +843,7 @@ INSERT INTO t4_agg VALUES ('2026-01-03', 3, 300, 0, 0, 0, 'Product C', 0, 'north
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg4 WITH SYNC MODE;
 -- result:
-019cd122-bfdd-7d1d-a8f1-eec5782f3d7b
+019cd12a-335b-7efc-a733-c07d945d8efb
 -- !result
 function: print_hit_materialized_view("SELECT dt, category_id, region, SUM(sales_amount), SUM(quantity), SUM(profit) FROM t4_agg GROUP BY dt, category_id, region", "test_mv_agg4")
 -- result:
@@ -872,5 +894,8 @@ DROP MATERIALIZED VIEW test_mv_agg4;
 -- result:
 -- !result
 DROP TABLE t4_agg;
+-- result:
+-- !result
+admin set frontend config('mv_fast_schema_change_mode' = 'strict');
 -- result:
 -- !result
