@@ -1176,8 +1176,9 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
                                     num_deletes = rowset.num_dels();
                                 } else {
                                     // Fallback for old metadata without num_dels.
-                                    num_deletes = static_cast<int64_t>(
-                                            _tablet_mgr->update_mgr()->get_rowset_num_deletes(tablet_id, version, rowset));
+                                    num_deletes =
+                                            static_cast<int64_t>(_tablet_mgr->update_mgr()->get_rowset_num_deletes(
+                                                    tablet_id, version, rowset));
                                 }
                             }
                         }
