@@ -14,7 +14,10 @@
 
 #include "iceberg_table_sink.h"
 
+#include <unordered_map>
+
 #include "common/runtime_profile.h"
+#include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
@@ -23,6 +26,51 @@
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
+
+namespace {
+
+std::unordered_map<std::string, formats::FileColumnId> build_top_level_field_id_map(
+        const std::vector<TIcebergSchemaField>& fields) {
+    std::unordered_map<std::string, formats::FileColumnId> field_ids_by_name;
+    auto field_ids = connector::IcebergUtils::generate_parquet_field_ids(fields);
+    field_ids_by_name.reserve(fields.size());
+    for (size_t i = 0; i < fields.size(); ++i) {
+        field_ids_by_name.emplace(fields[i].name, field_ids[i]);
+    }
+    return field_ids_by_name;
+}
+
+Status append_iceberg_sink_column(const SlotDescriptor* slot,
+                                  const std::unordered_map<std::string, formats::FileColumnId>& field_ids_by_name,
+                                  std::vector<std::string>* column_names,
+                                  std::vector<formats::FileColumnId>* parquet_field_ids) {
+    if (slot == nullptr) {
+        return Status::InternalError("Iceberg sink columns do not match output expressions");
+    }
+
+    const std::string& col_name = slot->col_name();
+    column_names->push_back(col_name);
+
+    auto it = field_ids_by_name.find(col_name);
+    if (it != field_ids_by_name.end()) {
+        parquet_field_ids->push_back(it->second);
+        return Status::OK();
+    }
+
+    formats::FileColumnId field_id;
+    if (col_name == HdfsScanner::ICEBERG_ROW_ID) {
+        field_id.field_id = HdfsScanner::ICEBERG_ROW_ID_COLUMN_ID;
+    } else if (col_name == HdfsScanner::ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER) {
+        field_id.field_id = HdfsScanner::ICEBERG_LAST_UPDATED_SEQUENCE_NUMBER_COLUMN_ID;
+    } else {
+        return Status::InternalError("Iceberg sink field ids do not match output expressions");
+    }
+
+    parquet_field_ids->push_back(field_id);
+    return Status::OK();
+}
+
+} // namespace
 
 IcebergTableSink::IcebergTableSink(ObjectPool* pool, const std::vector<TExpr>& t_exprs)
         : _pool(pool), _t_output_expr(t_exprs) {}
@@ -203,7 +251,6 @@ Status IcebergTableSink::create_data_sink_context(const TDataSink& thrift_sink, 
                                   ? t_iceberg_sink.data_location
                                   : t_iceberg_sink.location + connector::IcebergUtils::DATA_DIRECTORY;
     data_sink_ctx->cloud_conf = t_iceberg_sink.cloud_configuration;
-    data_sink_ctx->column_names = iceberg_table_desc->full_column_names();
     data_sink_ctx->partition_column_names = iceberg_table_desc->partition_column_names();
     data_sink_ctx->executor = ExecEnv::GetInstance()->pipeline_sink_io_pool();
     data_sink_ctx->format = t_iceberg_sink.file_format; // iceberg sink only supports parquet
@@ -211,9 +258,32 @@ Status IcebergTableSink::create_data_sink_context(const TDataSink& thrift_sink, 
     if (t_iceberg_sink.__isset.target_max_file_size) {
         data_sink_ctx->max_file_size = t_iceberg_sink.target_max_file_size;
     }
-    data_sink_ctx->parquet_field_ids =
-            connector::IcebergUtils::generate_parquet_field_ids(iceberg_table_desc->get_iceberg_schema()->fields);
     data_sink_ctx->column_evaluators = ColumnExprEvaluator::from_exprs(this->get_output_expr(), runtime_state);
+
+    size_t num_evaluators = data_sink_ctx->column_evaluators.size();
+    TupleDescriptor* tuple_desc = runtime_state->desc_tbl().get_tuple_descriptor(t_iceberg_sink.tuple_id);
+    const auto* slots = tuple_desc != nullptr ? &tuple_desc->slots() : nullptr;
+    if (slots == nullptr || slots->size() < num_evaluators) {
+        return Status::InternalError("Iceberg sink columns do not match output expressions");
+    }
+
+    // Build sink schema from the actual output tuple. TIcebergTable.columns may still contain
+    // hidden metadata columns such as _file/_pos that are not written by compaction.
+    auto field_ids_by_name = build_top_level_field_id_map(iceberg_table_desc->get_iceberg_schema()->fields);
+    data_sink_ctx->column_names.clear();
+    data_sink_ctx->parquet_field_ids.clear();
+    data_sink_ctx->column_names.reserve(num_evaluators);
+    data_sink_ctx->parquet_field_ids.reserve(num_evaluators);
+    for (size_t i = 0; i < num_evaluators; ++i) {
+        RETURN_IF_ERROR(append_iceberg_sink_column((*slots)[i], field_ids_by_name,
+                                                   &data_sink_ctx->column_names, &data_sink_ctx->parquet_field_ids));
+    }
+
+    if (data_sink_ctx->column_names.size() != num_evaluators ||
+        data_sink_ctx->parquet_field_ids.size() != num_evaluators) {
+        return Status::InternalError("Iceberg sink schema metadata does not match output expressions");
+    }
+
     data_sink_ctx->transform_exprs = iceberg_table_desc->get_transform_exprs();
     data_sink_ctx->fragment_context = fragment_ctx;
     data_sink_ctx->tuple_desc_id = t_iceberg_sink.tuple_id;

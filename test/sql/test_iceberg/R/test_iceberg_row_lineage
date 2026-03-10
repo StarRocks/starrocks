@@ -408,6 +408,13 @@ select count(distinct _last_updated_sequence_number) from iceberg_rl_compact_${u
 -- result:
 2
 -- !result
+select s.id, s.name, s.seq_num_before, t._last_updated_sequence_number as seq_num_after
+    from iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_snapshot s
+    join iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_compact t on s.id = t.id
+    where s.seq_num_before != t._last_updated_sequence_number
+    order by s.id;
+-- result:
+-- !result
 drop table iceberg_rl_compact_${uuid0}.iceberg_rl_compact_db_${uuid0}.t_snapshot;
 -- result:
 -- !result
