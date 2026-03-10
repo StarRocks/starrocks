@@ -24,9 +24,11 @@
 #include <cctz/time_zone.h>
 #include <ryu/ryu.h>
 
+#include <algorithm>
 #include <limits>
 #include <stdexcept>
 #include <type_traits>
+#include <unordered_map>
 #include <utility>
 
 #include "base/time/date_func.h"
@@ -2182,22 +2184,58 @@ StatusOr<Expr*> VectorizedCastExprFactory::create_cast_expr(ObjectPool* pool, co
         return new CastMapExpr(node, key_cast, value_cast);
     }
     if (from_type.is_struct_type() && to_type.is_struct_type()) {
-        if (from_type.children.size() != to_type.children.size()) {
-            return Status::NotSupported("Not support cast struct with different number of children.");
+        bool cast_by_name = node.__isset.cast_struct_by_name && node.cast_struct_by_name;
+        if (cast_by_name) {
+            // Name-based: match each target field by name in the source; counts may differ.
+            // Source fields not referenced in the target are ignored.
+            std::unordered_map<std::string, int> from_field_name_to_index;
+            for (int i = 0; i < (int)from_type.field_names.size(); ++i) {
+                std::string lower_name = from_type.field_names[i];
+                std::transform(lower_name.begin(), lower_name.end(), lower_name.begin(), ::tolower);
+                from_field_name_to_index[lower_name] = i;
+            }
+
+            std::vector<Expr*> field_casts(to_type.children.size());
+            std::vector<int> source_field_indices(to_type.children.size());
+            for (int i = 0; i < (int)to_type.children.size(); ++i) {
+                std::string target_name = to_type.field_names[i];
+                std::transform(target_name.begin(), target_name.end(), target_name.begin(), ::tolower);
+                auto it = from_field_name_to_index.find(target_name);
+                if (it == from_field_name_to_index.end()) {
+                    return Status::NotSupported(
+                            fmt::format("Struct field '{}' not found in source struct.", to_type.field_names[i]));
+                }
+                int source_idx = it->second;
+                source_field_indices[i] = source_idx;
+                ASSIGN_OR_RETURN(field_casts[i],
+                                 create_cast_expr(pool, from_type.children[source_idx], to_type.children[i],
+                                                  allow_throw_exception, /*cast_by_name=*/true));
+                pool->add(field_casts[i]);
+                auto cast_input = create_slot_ref(from_type.children[source_idx]);
+                field_casts[i]->add_child(cast_input.get());
+                pool->add(cast_input.release());
+            }
+            return new CastStructExpr(node, std::move(field_casts), std::move(source_field_indices));
+        } else {
+            // Position-based: match fields by index; counts must be equal.
+            if (from_type.children.size() != to_type.children.size()) {
+                return Status::NotSupported("Not support cast struct with different number of children.");
+            }
+
+            std::vector<Expr*> field_casts(to_type.children.size());
+            std::vector<int> source_field_indices(to_type.children.size());
+            for (int i = 0; i < (int)to_type.children.size(); ++i) {
+                source_field_indices[i] = i;
+                ASSIGN_OR_RETURN(field_casts[i],
+                                 create_cast_expr(pool, from_type.children[i], to_type.children[i],
+                                                  allow_throw_exception));
+                pool->add(field_casts[i]);
+                auto cast_input = create_slot_ref(from_type.children[i]);
+                field_casts[i]->add_child(cast_input.get());
+                pool->add(cast_input.release());
+            }
+            return new CastStructExpr(node, std::move(field_casts), std::move(source_field_indices));
         }
-        if (to_type.field_names.empty() || from_type.field_names.size() != to_type.field_names.size()) {
-            return Status::NotSupported("Not support cast struct with different field of children.");
-        }
-        std::vector<Expr*> field_casts{from_type.children.size()};
-        for (int i = 0; i < from_type.children.size(); ++i) {
-            ASSIGN_OR_RETURN(field_casts[i],
-                             create_cast_expr(pool, from_type.children[i], to_type.children[i], allow_throw_exception));
-            pool->add(field_casts[i]);
-            auto cast_input = create_slot_ref(from_type.children[i]);
-            field_casts[i]->add_child(cast_input.get());
-            pool->add(cast_input.release());
-        }
-        return new CastStructExpr(node, std::move(field_casts));
     }
     if ((from_type.type == TYPE_NULL || from_type.type == TYPE_BOOLEAN) && to_type.is_complex_type()) {
         return new MustNullExpr(node);
@@ -2228,12 +2266,16 @@ Expr* VectorizedCastExprFactory::from_thrift(ObjectPool* pool, const TExprNode& 
 
 // Need add result to pool by caller.
 StatusOr<Expr*> VectorizedCastExprFactory::create_cast_expr(ObjectPool* pool, const TypeDescriptor& from_type,
-                                                            const TypeDescriptor& to_type, bool allow_throw_exception) {
+                                                            const TypeDescriptor& to_type, bool allow_throw_exception,
+                                                            bool cast_by_name) {
     TExprNode cast_node;
     cast_node.node_type = TExprNodeType::CAST_EXPR;
     cast_node.type = to_type.to_thrift();
     cast_node.__set_child_type(to_thrift(from_type.type));
     cast_node.__set_child_type_desc(from_type.to_thrift());
+    if (cast_by_name) {
+        cast_node.__set_cast_struct_by_name(true);
+    }
     return create_cast_expr(pool, cast_node, from_type, to_type, allow_throw_exception);
 }
 

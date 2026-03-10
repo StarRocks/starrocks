@@ -256,6 +256,10 @@ struct TExprNode {
 
   // lambda function contain non-deterministic sub-exprs
   58: optional bool is_nondeterministic
+
+  // When true, STRUCT cast matches fields by name instead of by position.
+  // Set by the FE when SQLMode contains STRUCT_CAST_BY_NAME.
+  59: optional bool cast_struct_by_name
 }
 
 struct TPartitionLiteral {
