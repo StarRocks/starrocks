@@ -1668,7 +1668,7 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Bytes
 - Description: Memory limit for each resource group, measured in bytes. This is an instantaneous value.
 
-### resource_group_mem_inuse_bytes
+### resource_group_mem_allocated_bytes
 
 - Unit: Bytes
 - Description: Currently used memory by each resource group, measured in bytes. This is an instantaneous value.

@@ -432,7 +432,7 @@ ALTER RESOURCE GROUP <group_name> DROP ALL;
 | resource_group_bigquery_count             | 个     | 瞬时值 | 该资源组触发大查询限制的查询数量。                           |
 | resource_group_concurrency_overflow_count | 个     | 瞬时值 | 该资源组触发 `concurrency_limit` 限制的查询数量。              |
 | resource_group_mem_limit_bytes            | Bytes  | 瞬时值 | 该资源组的内存上限。                                         |
-| resource_group_mem_inuse_bytes            | Bytes  | 瞬时值 | 该资源组正在使用的内存。                                     |
+| resource_group_mem_allocated_bytes        | Bytes  | 瞬时值 | 该资源组正在使用的内存。                                     |
 | resource_group_cpu_limit_ratio            | 百分比 | 瞬时值 | 该资源组的 `cpu_core_limit` 占所有资源组 `cpu_core_limit` 的比例。 |
 | resource_group_inuse_cpu_cores            | 个     | 平均值 | 该资源组正在使用的 CPU 核数，该值为一个估计值。统计的是两次获取 Metric 时间间隔内的平均值。该指标自 v3.1.4 起支持。 |
 | resource_group_cpu_use_ratio              | 百分比 | 平均值 | **Deprecated** 该资源组使用的 Pipeline 线程时间片占所有资源组 Pipeline 线程时间片的比例。统计的是两次获取指标时间间隔内的平均值。 |

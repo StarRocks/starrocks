@@ -429,7 +429,7 @@ ALTER RESOURCE GROUP <group_name> DROP ALL;
 | resource_group_bigquery_count             | カウント    | 瞬時値 | このリソースグループで大規模クエリ制限をトリガーしたクエリの数。 |
 | resource_group_concurrency_overflow_count | カウント    | 瞬時値 | このリソースグループで `concurrency_limit` 制限をトリガーしたクエリの数。 |
 | resource_group_mem_limit_bytes            | バイト    | 瞬時値 | このリソースグループのメモリ制限。                         |
-| resource_group_mem_inuse_bytes            | バイト    | 瞬時値 | このリソースグループが現在使用しているメモリ。               |
+| resource_group_mem_allocated_bytes        | バイト    | 瞬時値 | このリソースグループが現在使用しているメモリ。               |
 | resource_group_cpu_limit_ratio            | パーセンテージ | 瞬時値 | このリソースグループの `cpu_core_limit` がすべてのリソースグループの `cpu_core_limit` に対する割合。 |
 | resource_group_inuse_cpu_cores            | カウント     | 平均     | このリソースグループが使用している CPU コアの推定数。この値はおおよその推定値です。これは、2 回の連続したメトリック収集からの統計に基づいて計算された平均値を表します。このメトリクスは v3.1.4 以降でサポートされています。 |
 | resource_group_cpu_use_ratio              | パーセンテージ | 平均     | **非推奨** このリソースグループが使用した Pipeline スレッドのタイムスライスがすべてのリソースグループが使用した Pipeline スレッドのタイムスライスに対する割合。これは、2 回の連続したメトリック収集からの統計に基づいて計算された平均値を表します。 |

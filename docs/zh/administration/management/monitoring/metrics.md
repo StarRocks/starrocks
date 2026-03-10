@@ -1668,7 +1668,7 @@ displayed_sidebar: docs
 - 单位：Byte
 - 描述：每个资源组的内存限制（瞬时值）。单位：字节。
 
-### resource_group_mem_inuse_bytes
+### resource_group_mem_allocated_bytes
 
 - 单位：Byte
 - 描述：每个资源组当前使用的内存（瞬时值）。单位：字节。

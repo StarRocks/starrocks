@@ -435,7 +435,7 @@ The following FE metrics only provide statistics within the current FE node:
 | resource_group_bigquery_count             | Count    | Instantaneous | The number of queries in this resource group that triggered the big query limit. |
 | resource_group_concurrency_overflow_count | Count    | Instantaneous | The number of queries in this resource group that triggered the `concurrency_limit` limit. |
 | resource_group_mem_limit_bytes            | Bytes    | Instantaneous | The memory limit for this resource group.                         |
-| resource_group_mem_inuse_bytes            | Bytes    | Instantaneous | The memory currently in use by this resource group.               |
+| resource_group_mem_allocated_bytes        | Bytes    | Instantaneous | The memory currently in use by this resource group.               |
 | resource_group_cpu_limit_ratio            | Percentage | Instantaneous | The ratio of this resource group's `cpu_core_limit` to the total `cpu_core_limit` across all resource groups. |
 | resource_group_inuse_cpu_cores            | Count     | Average     | The estimated number of CPU cores in use by this resource group. This value is an approximate estimate. It represents the average value calculated based on the statistics from two consecutive metric collections. This metric is supported from v3.1.4 onwards. |
 | resource_group_cpu_use_ratio              | Percentage | Average     | **Deprecated** The ratio of the Pipeline thread time slices used by this resource group to the total Pipeline thread time slices used by all resource groups. It represents the average value calculated based on the statistics from two consecutive metric collections. |
