@@ -22,6 +22,7 @@
 #include "column/type_traits.h"
 #include "column/variant_column.h"
 #include "column/variant_converter.h"
+#include "column/variant_merger.h"
 #include "column/variant_path_parser.h"
 #include "exprs/variant_path_reader.h"
 #include "runtime/runtime_state.h"
@@ -97,7 +98,7 @@ static void append_variant_field_to_result(FunctionContext* context, VariantRowV
     } else {
         const RuntimeState* state = context->state();
         cctz::time_zone zone = (state == nullptr) ? cctz::local_time_zone() : context->state()->timezone_obj();
-        Status casted = VariantConverter::cast_to<ResultType, true>(field.as_ref(), zone, *result);
+        Status casted = VariantRowConverter::cast_to<ResultType, true>(field.as_ref(), zone, *result);
         if (!casted.ok()) {
             result->append_null();
         }
@@ -140,20 +141,25 @@ static ColumnPtr _build_typed_bulk_result(const Column* typed_col, const Column*
     return col;
 }
 
-// Columnar cast fast-path: const path + typed match (no suffix) + typed_type != ResultType.
-// Encodes each typed datum to a VariantRowValue and then casts to ResultType.
-// This avoids the full row-by-row encode→VariantRowValue→VariantConverter pipeline.
-// The typed null / variant null masks are merged into the result.
+// Row-level typed cast helper: encode each typed datum to VariantRowValue and
+// reuse VariantRowConverter for query cast semantics.
 template <LogicalType ResultType>
 static ColumnPtr _build_typed_cast_result(FunctionContext* context, const Column* typed_col,
                                           const TypeDescriptor& typed_type_desc, const Column* variant_col,
                                           size_t num_rows) {
+    if constexpr (ResultType == TYPE_BIGINT || ResultType == TYPE_DOUBLE) {
+        TypeDescriptor result_type_desc = TypeDescriptor::from_logical_type(ResultType);
+        auto casted = VariantColumnMerger::cast_typed_column(*typed_col, typed_type_desc, result_type_desc);
+        if (casted.ok()) {
+            return _build_typed_bulk_result<ResultType>(casted.value().get(), variant_col, num_rows);
+        }
+    }
+
     const RuntimeState* state = context->state();
     cctz::time_zone zone = (state == nullptr) ? cctz::local_time_zone() : state->timezone_obj();
 
     ColumnBuilder<ResultType> result(num_rows);
 
-    // Compute the merged null mask upfront: variant_null | typed_null.
     std::vector<uint8_t> null_mask(num_rows, 0);
     if (variant_col->is_nullable()) {
         const uint8_t* vn = down_cast<const NullableColumn*>(variant_col)->null_column()->get_data().data();
@@ -170,7 +176,6 @@ static ColumnPtr _build_typed_cast_result(FunctionContext* context, const Column
             continue;
         }
         const size_t typed_row = typed_col->is_constant() ? 0 : i;
-        // Encode the typed datum as a VariantRowValue, then cast to ResultType.
         auto encode_result = VariantColumn::encode_typed_row_as_variant(typed_col, typed_row, typed_type_desc);
         if (!encode_result.ok()) {
             result.append_null();
@@ -181,7 +186,7 @@ static ColumnPtr _build_typed_cast_result(FunctionContext* context, const Column
             result.append_null();
             continue;
         }
-        Status cast_status = VariantConverter::cast_to<ResultType, true>(encoded.value.as_ref(), zone, result);
+        Status cast_status = VariantRowConverter::cast_to<ResultType, true>(encoded.value.as_ref(), zone, result);
         if (!cast_status.ok()) {
             result.append_null();
         }
@@ -214,18 +219,16 @@ StatusOr<ColumnPtr> VariantFunctions::_do_variant_query(FunctionContext* context
 
     // BATCH / COLUMNAR FAST-PATH: const path + typed match + no suffix + non-const variant column.
     // kTypedNoSuffix means the path maps directly to a typed column with no additional seek.
-    // - typed_type == ResultType: bulk Column::append() (zero-copy for fixed-length)
-    // - typed_type != ResultType: columnar cast (per-datum, avoids VariantRowValue round-trip)
-    // ConstColumn typed columns are excluded because FixedLengthColumn::append() doesn't handle them.
-    if constexpr (ResultType != TYPE_VARIANT) {
-        if (cached_path != nullptr && !columns[0]->is_constant() && reader.is_typed_exact() &&
-            !reader.typed_column()->is_constant()) {
-            if (reader.typed_type() == ResultType) {
-                return _build_typed_bulk_result<ResultType>(reader.typed_column(), columns[0].get(), num_rows);
-            } else {
-                return _build_typed_cast_result<ResultType>(context, reader.typed_column(), reader.typed_type_desc(),
-                                                            columns[0].get(), num_rows);
-            }
+    // - typed_type == ResultType: bulk Column::append()
+    // - typed_type != ResultType: reuse the row-level variant cast semantics via `_build_typed_cast_result`
+    // ConstColumn typed columns are excluded because this path assumes row-wise indexing into the source column.
+    if (cached_path != nullptr && !columns[0]->is_constant() && reader.is_typed_exact() &&
+        !reader.typed_column()->is_constant()) {
+        if (reader.typed_type() == ResultType) {
+            return _build_typed_bulk_result<ResultType>(reader.typed_column(), columns[0].get(), num_rows);
+        } else {
+            return _build_typed_cast_result<ResultType>(context, reader.typed_column(), reader.typed_type_desc(),
+                                                        columns[0].get(), num_rows);
         }
     }
 

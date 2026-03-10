@@ -92,6 +92,55 @@ SELECT
 FROM test_shredding_variant
 ORDER BY id;
 
+SELECT
+    get_variant_int(data, '$.id') as id,
+    get_variant_string(data, '$.groups[0].name') as group0_name,
+    get_variant_int(data, '$.groups[0].scores[0]') as group0_score0,
+    get_variant_int(data, '$.groups[0].scores[1]') as group0_score1,
+    get_variant_string(data, '$.groups[1].name') as group1_name,
+    get_variant_int(data, '$.groups[1].scores[0]') as group1_score0
+FROM test_shredding_variant
+ORDER BY id;
+
+-- ========================================
+-- Query 5b: Array element fallback fields
+-- Verifies fields intentionally left in list.element.value are still visible.
+-- ========================================
+SELECT
+    get_variant_int(data, '$.id') as id,
+    get_variant_string(data, '$.events[0].detail') as event0_detail,
+    get_variant_string(data, '$.events[1].detail') as event1_detail,
+    get_variant_string(data, '$.groups[0].note') as group0_note,
+    get_variant_string(data, '$.groups[1].note') as group1_note
+FROM test_shredding_variant
+ORDER BY id;
+
+SELECT
+    get_variant_int(data, '$.id') as id,
+    get_variant_string(data, '$.events[0].detail') as event0_detail,
+    get_variant_string(data, '$.events[1].detail') as event1_detail,
+    get_variant_string(data, '$.groups[0].note') as group0_note,
+    get_variant_string(data, '$.groups[1].note') as group1_note
+FROM test_noshredding_variant
+ORDER BY id;
+
+-- ========================================
+-- Query 5c: Array element fallback consistency
+-- ========================================
+SELECT 'Check Array Element Fallback Consistency' as task;
+(SELECT 'shredded' as label,
+        get_variant_string(data, '$.events[0].detail') as event0_detail,
+        get_variant_string(data, '$.groups[0].note') as group0_note
+ FROM test_shredding_variant
+ WHERE get_variant_int(data, '$.id') = 1000)
+UNION ALL
+(SELECT 'noshred' as label,
+        get_variant_string(data, '$.events[0].detail') as event0_detail,
+        get_variant_string(data, '$.groups[0].note') as group0_note
+ FROM test_noshredding_variant
+ WHERE get_variant_int(data, '$.id') = 1000)
+order by label;
+
 -- ========================================
 -- Query 6: Direct Data Comparison (Shredded vs No-Shredded)
 -- ========================================

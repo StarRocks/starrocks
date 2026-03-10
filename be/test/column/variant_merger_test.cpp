@@ -186,7 +186,24 @@ static void assert_variant_row_json(const VariantColumn* col, size_t row, std::s
     ASSERT_EQ(expected_json, json.value());
 }
 
-PARALLEL_TEST(VariantMergerTest, merge_shredded_schema_union) {
+PARALLEL_TEST(VariantColumnMergerTest, choose_common_type_numeric_and_decimal_cases) {
+    auto numeric = VariantColumnMerger::choose_common_type(TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_DOUBLE));
+    ASSERT_TRUE(numeric.ok());
+    ASSERT_EQ(TypeDescriptor(TYPE_DOUBLE), numeric.value());
+
+    auto decimal =
+            VariantColumnMerger::choose_common_type(TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 9, 2),
+                                                    TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 18, 2));
+    ASSERT_TRUE(decimal.ok());
+    ASSERT_EQ(TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 18, 2), decimal.value());
+
+    auto array_conflict = VariantColumnMerger::choose_common_type(
+            TypeDescriptor::create_array_type(TypeDescriptor(TYPE_BIGINT)), TypeDescriptor(TYPE_BIGINT));
+    ASSERT_TRUE(array_conflict.ok());
+    ASSERT_EQ(TypeDescriptor(TYPE_VARIANT), array_conflict.value());
+}
+
+PARALLEL_TEST(VariantColumnMergerTest, merge_shredded_schema_union) {
     auto src0 = VariantColumn::create();
     auto src0_metadata = BinaryColumn::create();
     auto src0_remain = BinaryColumn::create();
@@ -208,7 +225,7 @@ PARALLEL_TEST(VariantMergerTest, merge_shredded_schema_union) {
                                std::move(src1_typed), std::move(src1_metadata), std::move(src1_remain));
 
     Columns inputs{src0, src1};
-    auto merged_status = VariantMerger::merge(inputs);
+    auto merged_status = VariantColumnMerger::merge(inputs);
     ASSERT_TRUE(merged_status.ok()) << merged_status.status().to_string();
 
     auto* merged = down_cast<VariantColumn*>(merged_status.value().get());
@@ -226,7 +243,7 @@ PARALLEL_TEST(VariantMergerTest, merge_shredded_schema_union) {
     ASSERT_TRUE(typed_a->get(1).is_null());
 }
 
-PARALLEL_TEST(VariantMergerTest, merge_shredded_type_conflict_hoist_variant) {
+PARALLEL_TEST(VariantColumnMergerTest, merge_shredded_type_conflict_hoist_variant) {
     auto src0 = VariantColumn::create();
     auto src0_metadata = BinaryColumn::create();
     auto src0_remain = BinaryColumn::create();
@@ -246,7 +263,7 @@ PARALLEL_TEST(VariantMergerTest, merge_shredded_type_conflict_hoist_variant) {
                                std::move(src1_remain));
 
     Columns inputs{src0, src1};
-    auto merged_status = VariantMerger::merge(inputs);
+    auto merged_status = VariantColumnMerger::merge(inputs);
     ASSERT_TRUE(merged_status.ok()) << merged_status.status().to_string();
 
     auto* merged = down_cast<VariantColumn*>(merged_status.value().get());
@@ -256,7 +273,7 @@ PARALLEL_TEST(VariantMergerTest, merge_shredded_type_conflict_hoist_variant) {
     assert_variant_row_json(merged, 1, R"({"a":"x"})");
 }
 
-PARALLEL_TEST(VariantMergerTest, merge_shredded_numeric_widen) {
+PARALLEL_TEST(VariantColumnMergerTest, merge_shredded_numeric_widen) {
     auto src0 = VariantColumn::create();
     auto src0_metadata = BinaryColumn::create();
     auto src0_remain = BinaryColumn::create();
@@ -280,7 +297,7 @@ PARALLEL_TEST(VariantMergerTest, merge_shredded_numeric_widen) {
                                std::move(src2_remain));
 
     Columns inputs{src0, src2};
-    auto merged_status = VariantMerger::merge(inputs);
+    auto merged_status = VariantColumnMerger::merge(inputs);
     ASSERT_TRUE(merged_status.ok()) << merged_status.status().to_string();
 
     auto* merged = down_cast<VariantColumn*>(merged_status.value().get());
@@ -292,7 +309,7 @@ PARALLEL_TEST(VariantMergerTest, merge_shredded_numeric_widen) {
     ASSERT_DOUBLE_EQ(30.5, typed_a->get(1).get_double());
 }
 
-PARALLEL_TEST(VariantMergerTest, merge_shredded_array_conflict_hoist_variant) {
+PARALLEL_TEST(VariantColumnMergerTest, merge_shredded_array_conflict_hoist_variant) {
     auto src0 = VariantColumn::create();
     auto src0_metadata = BinaryColumn::create();
     auto src0_remain = BinaryColumn::create();
@@ -316,7 +333,7 @@ PARALLEL_TEST(VariantMergerTest, merge_shredded_array_conflict_hoist_variant) {
                                std::move(src1_remain));
 
     Columns inputs{src0, src1};
-    auto merged_status = VariantMerger::merge(inputs);
+    auto merged_status = VariantColumnMerger::merge(inputs);
     ASSERT_TRUE(merged_status.ok()) << merged_status.status().to_string();
 
     auto* merged = down_cast<VariantColumn*>(merged_status.value().get());
@@ -326,7 +343,7 @@ PARALLEL_TEST(VariantMergerTest, merge_shredded_array_conflict_hoist_variant) {
     assert_variant_row_json(merged, 1, R"({"a":[30.5]})");
 }
 
-PARALLEL_TEST(VariantMergerTest, merge_shredded_array_nonarray_conflict_hoist_variant) {
+PARALLEL_TEST(VariantColumnMergerTest, merge_shredded_array_nonarray_conflict_hoist_variant) {
     auto src0 = VariantColumn::create();
     auto src0_metadata = BinaryColumn::create();
     auto src0_remain = BinaryColumn::create();
@@ -348,7 +365,7 @@ PARALLEL_TEST(VariantMergerTest, merge_shredded_array_nonarray_conflict_hoist_va
                                std::move(src1_remain));
 
     Columns inputs{src0, src1};
-    auto merged_status = VariantMerger::merge(inputs);
+    auto merged_status = VariantColumnMerger::merge(inputs);
     ASSERT_TRUE(merged_status.ok()) << merged_status.status().to_string();
 
     auto* merged = down_cast<VariantColumn*>(merged_status.value().get());
@@ -358,15 +375,15 @@ PARALLEL_TEST(VariantMergerTest, merge_shredded_array_nonarray_conflict_hoist_va
     assert_variant_row_json(merged, 1, R"({"a":7})");
 }
 
-PARALLEL_TEST(VariantMergerTest, merge_invalid_input_fail) {
+PARALLEL_TEST(VariantColumnMergerTest, merge_invalid_input_fail) {
     Columns inputs;
     inputs.emplace_back(Int64Column::create());
-    auto merged_status = VariantMerger::merge(inputs);
+    auto merged_status = VariantColumnMerger::merge(inputs);
     ASSERT_FALSE(merged_status.ok());
     ASSERT_TRUE(merged_status.status().is_invalid_argument());
 }
 
-PARALLEL_TEST(VariantMergerTest, merge_into_row_dst_with_existing_rows_and_shredded_src_ok) {
+PARALLEL_TEST(VariantColumnMergerTest, merge_into_row_dst_with_existing_rows_and_shredded_src_ok) {
     auto dst = VariantColumn::create();
     auto row = VariantEncoder::encode_json_text_to_variant(R"({"keep":1})");
     ASSERT_TRUE(row.ok());
@@ -374,7 +391,7 @@ PARALLEL_TEST(VariantMergerTest, merge_into_row_dst_with_existing_rows_and_shred
 
     auto src = build_single_path_bigint_shredded_variant("a", 10);
 
-    auto st = VariantMerger::merge_into(dst.get(), *down_cast<const VariantColumn*>(src.get()));
+    auto st = VariantColumnMerger::merge_into(dst.get(), *down_cast<const VariantColumn*>(src.get()));
     ASSERT_TRUE(st.ok()) << st.to_string();
     ASSERT_EQ(2, dst->size());
     ASSERT_EQ((std::vector<std::string>{"a"}), dst->shredded_paths());
@@ -383,7 +400,7 @@ PARALLEL_TEST(VariantMergerTest, merge_into_row_dst_with_existing_rows_and_shred
     assert_variant_row_json(dst.get(), 1, R"({"a":10})");
 }
 
-PARALLEL_TEST(VariantMergerTest, merge_into_empty_row_dst_with_shredded_src_ok) {
+PARALLEL_TEST(VariantColumnMergerTest, merge_into_empty_row_dst_with_shredded_src_ok) {
     auto dst = VariantColumn::create();
 
     auto src = VariantColumn::create();
@@ -395,7 +412,7 @@ PARALLEL_TEST(VariantMergerTest, merge_into_empty_row_dst_with_shredded_src_ok) 
     src->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(src_typed), std::move(src_metadata),
                               std::move(src_remain));
 
-    auto st = VariantMerger::merge_into(dst.get(), *down_cast<const VariantColumn*>(src.get()));
+    auto st = VariantColumnMerger::merge_into(dst.get(), *down_cast<const VariantColumn*>(src.get()));
     ASSERT_TRUE(st.ok()) << st.to_string();
     ASSERT_EQ(1, dst->size());
     ASSERT_EQ((std::vector<std::string>{"a"}), dst->shredded_paths());
@@ -404,7 +421,7 @@ PARALLEL_TEST(VariantMergerTest, merge_into_empty_row_dst_with_shredded_src_ok) 
     ASSERT_EQ(10, typed_a->get(0).get_int64());
 }
 
-PARALLEL_TEST(VariantMergerTest, merge_shredded_decimal_conflict_hoist_variant) {
+PARALLEL_TEST(VariantColumnMergerTest, merge_shredded_decimal_conflict_hoist_variant) {
     auto src0 = VariantColumn::create();
     auto src0_metadata = BinaryColumn::create();
     auto src0_remain = BinaryColumn::create();
@@ -424,7 +441,7 @@ PARALLEL_TEST(VariantMergerTest, merge_shredded_decimal_conflict_hoist_variant) 
                                std::move(src1_remain));
 
     Columns inputs{src0, src1};
-    auto merged_status = VariantMerger::merge(inputs);
+    auto merged_status = VariantColumnMerger::merge(inputs);
     ASSERT_TRUE(merged_status.ok()) << merged_status.status().to_string();
 
     auto* merged = down_cast<VariantColumn*>(merged_status.value().get());
@@ -432,7 +449,7 @@ PARALLEL_TEST(VariantMergerTest, merge_shredded_decimal_conflict_hoist_variant) 
     ASSERT_EQ((std::vector<TypeDescriptor>{TypeDescriptor(TYPE_VARIANT)}), merged->shredded_types());
 }
 
-PARALLEL_TEST(VariantMergerTest, merge_shredded_decimalv3_widen_same_scale) {
+PARALLEL_TEST(VariantColumnMergerTest, merge_shredded_decimalv3_widen_same_scale) {
     auto src0 = VariantColumn::create();
     auto src0_metadata = BinaryColumn::create();
     auto src0_remain = BinaryColumn::create();
@@ -452,7 +469,7 @@ PARALLEL_TEST(VariantMergerTest, merge_shredded_decimalv3_widen_same_scale) {
                                std::move(src1_typed), std::move(src1_metadata), std::move(src1_remain));
 
     Columns inputs{src0, src1};
-    auto merged_status = VariantMerger::merge(inputs);
+    auto merged_status = VariantColumnMerger::merge(inputs);
     ASSERT_TRUE(merged_status.ok()) << merged_status.status().to_string();
 
     auto* merged = down_cast<VariantColumn*>(merged_status.value().get());
@@ -465,7 +482,7 @@ PARALLEL_TEST(VariantMergerTest, merge_shredded_decimalv3_widen_same_scale) {
     ASSERT_EQ(typed_a->get(1).get_int64(), 67890);
 }
 
-PARALLEL_TEST(VariantMergerTest, merge_shredded_decimalv3_scale_mismatch_hoist_variant) {
+PARALLEL_TEST(VariantColumnMergerTest, merge_shredded_decimalv3_scale_mismatch_hoist_variant) {
     auto src0 = VariantColumn::create();
     auto src0_metadata = BinaryColumn::create();
     auto src0_remain = BinaryColumn::create();
@@ -485,14 +502,14 @@ PARALLEL_TEST(VariantMergerTest, merge_shredded_decimalv3_scale_mismatch_hoist_v
                                std::move(src1_typed), std::move(src1_metadata), std::move(src1_remain));
 
     Columns inputs{src0, src1};
-    auto merged_status = VariantMerger::merge(inputs);
+    auto merged_status = VariantColumnMerger::merge(inputs);
     ASSERT_TRUE(merged_status.ok()) << merged_status.status().to_string();
 
     auto* merged = down_cast<VariantColumn*>(merged_status.value().get());
     ASSERT_EQ((std::vector<TypeDescriptor>{TypeDescriptor(TYPE_VARIANT)}), merged->shredded_types());
 }
 
-PARALLEL_TEST(VariantMergerTest, merge_root_typed_only_with_base_shredded_ok) {
+PARALLEL_TEST(VariantColumnMergerTest, merge_root_typed_only_with_base_shredded_ok) {
     auto root_typed_only = VariantColumn::create();
     MutableColumns root_typed_only_typed;
     root_typed_only_typed.emplace_back(build_nullable_root_int64_typed_only_column({7}, {0}));
@@ -509,7 +526,7 @@ PARALLEL_TEST(VariantMergerTest, merge_root_typed_only_with_base_shredded_ok) {
                                         std::move(full_metadata), std::move(full_remain));
 
     Columns inputs{root_typed_only, base_shredded};
-    auto merged_status = VariantMerger::merge(inputs);
+    auto merged_status = VariantColumnMerger::merge(inputs);
     ASSERT_TRUE(merged_status.ok()) << merged_status.status().to_string();
 
     auto* merged = down_cast<VariantColumn*>(merged_status.value().get());
@@ -532,7 +549,7 @@ PARALLEL_TEST(VariantMergerTest, merge_root_typed_only_with_base_shredded_ok) {
     ASSERT_EQ(R"({"a":10})", json1.value());
 }
 
-PARALLEL_TEST(VariantMergerTest, merge_root_typed_only_with_root_typed_only_ok) {
+PARALLEL_TEST(VariantColumnMergerTest, merge_root_typed_only_with_root_typed_only_ok) {
     auto src0 = VariantColumn::create();
     MutableColumns src0_typed;
     src0_typed.emplace_back(build_nullable_root_int64_typed_only_column({7}, {0}));
@@ -544,7 +561,7 @@ PARALLEL_TEST(VariantMergerTest, merge_root_typed_only_with_root_typed_only_ok) 
     src1->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(src1_typed), nullptr, nullptr);
 
     Columns inputs{src0, src1};
-    auto merged_status = VariantMerger::merge(inputs);
+    auto merged_status = VariantColumnMerger::merge(inputs);
     ASSERT_TRUE(merged_status.ok()) << merged_status.status().to_string();
 
     auto* merged = down_cast<VariantColumn*>(merged_status.value().get());
@@ -567,7 +584,7 @@ PARALLEL_TEST(VariantMergerTest, merge_root_typed_only_with_root_typed_only_ok) 
     ASSERT_EQ(R"({"a":8})", json1.value());
 }
 
-PARALLEL_TEST(VariantMergerTest, merge_prefers_shredded_even_when_row_input_comes_first) {
+PARALLEL_TEST(VariantColumnMergerTest, merge_prefers_shredded_even_when_row_input_comes_first) {
     auto row_src = VariantColumn::create();
     row_src->append_default();
 
@@ -581,7 +598,7 @@ PARALLEL_TEST(VariantMergerTest, merge_prefers_shredded_even_when_row_input_come
                                        std::move(remain));
 
     Columns inputs{row_src, shredded_src};
-    auto merged_status = VariantMerger::merge(inputs);
+    auto merged_status = VariantColumnMerger::merge(inputs);
     ASSERT_TRUE(merged_status.ok()) << merged_status.status().to_string();
 
     auto* merged = down_cast<VariantColumn*>(merged_status.value().get());
@@ -590,7 +607,7 @@ PARALLEL_TEST(VariantMergerTest, merge_prefers_shredded_even_when_row_input_come
     ASSERT_EQ((std::vector<TypeDescriptor>{TypeDescriptor(TYPE_BIGINT)}), merged->shredded_types());
 }
 
-PARALLEL_TEST(VariantMergerTest, merge_rejects_duplicate_shredded_paths) {
+PARALLEL_TEST(VariantColumnMergerTest, merge_rejects_duplicate_shredded_paths) {
     auto bad_src = VariantColumn::create();
     auto bad_metadata = BinaryColumn::create();
     auto bad_remain = BinaryColumn::create();
@@ -615,12 +632,12 @@ PARALLEL_TEST(VariantMergerTest, merge_rejects_duplicate_shredded_paths) {
     bad_paths[1] = "a";
 
     Columns inputs{bad_src, ok_src};
-    auto merged_status = VariantMerger::merge(inputs);
+    auto merged_status = VariantColumnMerger::merge(inputs);
     ASSERT_FALSE(merged_status.ok());
     ASSERT_TRUE(merged_status.status().is_invalid_argument());
 }
 
-PARALLEL_TEST(VariantMergerTest, merge_into_rejects_duplicate_paths_in_src) {
+PARALLEL_TEST(VariantColumnMergerTest, merge_into_rejects_duplicate_paths_in_src) {
     auto dst = VariantColumn::create();
     auto dst_metadata = BinaryColumn::create();
     auto dst_remain = BinaryColumn::create();
@@ -642,12 +659,12 @@ PARALLEL_TEST(VariantMergerTest, merge_into_rejects_duplicate_paths_in_src) {
     auto& src_paths = const_cast<std::vector<std::string>&>(src->shredded_paths());
     src_paths[1] = "a";
 
-    auto st = VariantMerger::merge_into(dst.get(), *down_cast<const VariantColumn*>(src.get()));
+    auto st = VariantColumnMerger::merge_into(dst.get(), *down_cast<const VariantColumn*>(src.get()));
     ASSERT_FALSE(st.ok());
     ASSERT_TRUE(st.is_not_supported() || st.is_invalid_argument());
 }
 
-PARALLEL_TEST(VariantMergerTest, merge_into_rejects_duplicate_paths_in_dst) {
+PARALLEL_TEST(VariantColumnMergerTest, merge_into_rejects_duplicate_paths_in_dst) {
     auto dst = VariantColumn::create();
     auto dst_metadata = BinaryColumn::create();
     auto dst_remain = BinaryColumn::create();
@@ -669,7 +686,7 @@ PARALLEL_TEST(VariantMergerTest, merge_into_rejects_duplicate_paths_in_dst) {
     src->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(src_typed), std::move(src_metadata),
                               std::move(src_remain));
 
-    auto st = VariantMerger::merge_into(dst.get(), *down_cast<const VariantColumn*>(src.get()));
+    auto st = VariantColumnMerger::merge_into(dst.get(), *down_cast<const VariantColumn*>(src.get()));
     ASSERT_FALSE(st.ok());
     ASSERT_TRUE(st.is_invalid_argument());
 }
