@@ -215,7 +215,14 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
                 copied.setCloudConfiguration(params);
             }
 
-            checkStorageVolumeAccessIfNeeded(copied.getName(), copied.getType(), copied.getLocations(), copied.getProperties());
+            // Only check storage volume accessibility when connectivity-affecting properties are changed
+            // (type, locations, or cloud credentials). Skip the check for metadata-only changes
+            // (enabled, comment) so that operators can still disable a volume when storage is unreachable.
+            boolean connectivityChanged = !Strings.isNullOrEmpty(svType) || locations != null || !params.isEmpty();
+            if (connectivityChanged) {
+                checkStorageVolumeAccessIfNeeded(copied.getName(), copied.getType(),
+                        copied.getLocations(), copied.getProperties());
+            }
             updateInternalNoLock(copied);
         }
     }

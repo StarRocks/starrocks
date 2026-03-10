@@ -1078,6 +1078,67 @@ public class SharedDataStorageVolumeMgrTest {
     }
 
     @Test
+    public void testUpdateMetadataOnlySkipsAccessCheck() throws DdlException, AlreadyExistsException,
+            MetaNotFoundException {
+        String svName = "test";
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        List<String> locations = Arrays.asList("s3://abc");
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AWS_S3_REGION, "region");
+        storageParams.put(AWS_S3_ENDPOINT, "endpoint");
+        storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedDataMode() {
+                return true;
+            }
+        };
+
+        new MockUp<StorageVolumeAccessChecker>() {
+            @Mock
+            public void check(String name, String svType, List<String> checkedLocations, Map<String, String> params)
+                    throws DdlException {
+                throw new DdlException("access check should not be called for metadata-only update");
+            }
+        };
+
+        // Create with access check mocked to fail - need to bypass for creation
+        new MockUp<StorageVolumeAccessChecker>() {
+            @Mock
+            public void check(String name, String svType, List<String> checkedLocations, Map<String, String> params) {
+                // allow creation
+            }
+        };
+        svm.createStorageVolume(svName, "S3", locations, storageParams, Optional.empty(), "");
+
+        // Now mock access check to throw - metadata-only updates should NOT trigger it
+        new MockUp<StorageVolumeAccessChecker>() {
+            @Mock
+            public void check(String name, String svType, List<String> checkedLocations, Map<String, String> params)
+                    throws DdlException {
+                throw new DdlException("access check should not be called for metadata-only update");
+            }
+        };
+
+        // Update only comment - should succeed without access check
+        svm.updateStorageVolume(svName, null, null, new HashMap<>(), Optional.empty(), "new comment");
+        Assertions.assertEquals("new comment", svm.getStorageVolumeByName(svName).getComment());
+
+        // Update only enabled - should succeed without access check
+        svm.updateStorageVolume(svName, null, null, new HashMap<>(), Optional.of(true), "");
+
+        // Update with params - should trigger access check and fail
+        Map<String, String> updateParams = new HashMap<>();
+        updateParams.put(AWS_S3_REGION, "region2");
+        updateParams.put(AWS_S3_ENDPOINT, "endpoint");
+        updateParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+        DdlException ex = Assertions.assertThrows(DdlException.class,
+                () -> svm.updateStorageVolume(svName, null, null, updateParams, Optional.empty(), ""));
+        Assertions.assertEquals("access check should not be called for metadata-only update", ex.getMessage());
+    }
+
+    @Test
     public void testUpgrade() throws IOException, SRMetaBlockException, SRMetaBlockEOFException,
             DdlException, AlreadyExistsException {
         StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
