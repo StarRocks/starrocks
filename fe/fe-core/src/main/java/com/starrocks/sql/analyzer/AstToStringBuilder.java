@@ -72,11 +72,8 @@ import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.JDBCTable;
-<<<<<<< HEAD
 import com.starrocks.catalog.KeysType;
-=======
 import com.starrocks.catalog.ListPartitionInfo;
->>>>>>> ad22161a2d ([BugFix] Hide expression partition generated columns in DESC/SHOW CREATE TABLE (#69793))
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
@@ -88,12 +85,9 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
-<<<<<<< HEAD
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.ParseUtil;
-=======
-import com.starrocks.common.FeConstants;
->>>>>>> ad22161a2d ([BugFix] Hide expression partition generated columns in DESC/SHOW CREATE TABLE (#69793))
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.SqlCredentialRedactor;
 import com.starrocks.credential.CredentialUtil;
