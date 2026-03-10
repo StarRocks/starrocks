@@ -161,6 +161,8 @@
         "jdbc_connection_pool_size",
         "jdbc_minimum_idle_connections",
         "jdbc_connection_idle_timeout_ms",
+        "jdbc_connection_max_lifetime_ms",
+        "jdbc_connection_keepalive_time_ms",
         "experimental_spill_skip_sync",
         "spill_init_partition",
         "spill_max_partition_level",
