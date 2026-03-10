@@ -108,7 +108,7 @@ jobs:
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           [[ "${IS_ARM}" == "true" ]] && arm_arg="--arm"
-          ./bin/elastic-cluster.sh --template ${CLUSTER_NAME} --linuxdistro ${LINUX_DISTRO} ${arm_arg}
+          ./bin/elastic-cluster.sh --template ci-admit --linuxdistro ${LINUX_DISTRO} ${arm_arg}
           conf_name=/var/local/env/${PR_NUMBER}-${BUILD_TYPE}-${LINUX_DISTRO}-${SYSTEM_TEST_MODE}-starrocks_deploy.conf
           cp conf/starrocks_deploy.conf ${conf_name}
           echo "deploy_conf_file=${conf_name}" >> $GITHUB_OUTPUT
@@ -122,7 +122,7 @@ jobs:
           echo "##### Package(FE): ${FE_OUTPUT_TAR}" >> $GITHUB_STEP_SUMMARY
           echo "##### System Test Mode: ${SYSTEM_TEST_MODE}" >> $GITHUB_STEP_SUMMARY
           [[ "${IS_ARM}" == "true" ]] && arm_arg="--arm"
-          ./bin/deploy-cluster.sh -c ci-admit --with-coverage ${arm_arg}
+          ./bin/deploy-cluster.sh -c ${CLUSTER_NAME} --with-coverage ${arm_arg}
 
       - name: Clean ENV
         if: always()
