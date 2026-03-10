@@ -127,7 +127,7 @@ private:
 
     std::mutex _mutex;
     std::unordered_map<Key, EndpointPoolPtr, Hasher> _endpoint_pools;
-    std::list<Key> _pool_order;  // insertion order for eviction when over cap
+    std::list<Key> _pool_order; // insertion order for eviction when over cap
     std::unordered_map<std::string, ResolveCacheEntry> _resolve_cache;
 };
 
