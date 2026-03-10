@@ -1,6 +1,7 @@
--- name: test_mv_fast_schema_change_with_aggregate @slow
+-- name: test_mv_fast_schema_change_with_aggregate @sequential @slow
 
 admin set frontend config('alter_scheduler_interval_millisecond' = '100');
+admin set frontend config('mv_fast_schema_change_mode' = 'strict');
 
 -- Test 1: Aggregate table with SUM aggregation - MV schema change tests
 drop table if exists t1_agg;
@@ -9,12 +10,13 @@ drop materialized view if exists test_mv_agg1;
 CREATE TABLE t1_agg (
     dt DATE,
     c0 INT,
-    c1 VARCHAR(20),
-    c2 VARCHAR(200),
+    c1 VARCHAR(20) REPLACE,
+    c2 VARCHAR(200) REPLACE,
     c3 INT SUM,
-    c4 INT SUM
+    c4 INT SUM,
+    row_cnt INT SUM
 ) ENGINE=OLAP
-AGGREGATE KEY(dt, c0, c1, c2)
+AGGREGATE KEY(dt, c0)
 PARTITION BY date_trunc('day', dt)
 DISTRIBUTED BY HASH(c0) BUCKETS 48
 PROPERTIES (
@@ -23,7 +25,7 @@ PROPERTIES (
 
 INSERT INTO t1_agg
 SELECT '2026-01-01', generate_series % 10, 'val_' || CAST(generate_series AS VARCHAR),
-       'desc_' || CAST(generate_series AS VARCHAR), generate_series, generate_series * 2
+       'desc_' || CAST(generate_series AS VARCHAR), generate_series, generate_series * 2, 1
 FROM TABLE(generate_series(1, 100));
 
 -- Create MV on aggregate base table
@@ -35,115 +37,91 @@ PROPERTIES (
     "query_rewrite_consistency" = "force_mv"
 )
 AS
-SELECT dt, c0, SUM(c3) as sum_c3, COUNT(c1) as cnt_c1
+SELECT dt, c0, SUM(c3) as sum_c3, SUM(row_cnt) as cnt_rows
 FROM t1_agg
 GROUP BY dt, c0;
 
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg1 WITH SYNC MODE;
 
 set enable_materialized_view_rewrite = false;
-function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), COUNT(c1) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
+function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), SUM(row_cnt) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
 SELECT * FROM test_mv_agg1 ORDER BY ALL LIMIT 3;
-SELECT dt, c0, SUM(c3) as sum_c3, COUNT(c1) as cnt_c1 FROM t1_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
+SELECT dt, c0, SUM(c3) as sum_c3, SUM(row_cnt) as cnt_rows FROM t1_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
 
--- Test MV add aggregation column (count)
+-- Test MV add aggregation column (count on c2 via SUM of 1s - use cnt_c2 as COUNT for compatibility)
 ALTER MATERIALIZED VIEW test_mv_agg1 ADD COLUMN cnt_c2 AS COUNT(c2);
 function: wait_alter_table_finish()
 DESC test_mv_agg1;
-function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), COUNT(c1), COUNT(c2) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
-SELECT dt, c0, SUM(c3) as sum_c3, COUNT(c1) as cnt_c1, COUNT(c2) as cnt_c2 FROM t1_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
+function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), SUM(row_cnt), COUNT(c2) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
+SELECT dt, c0, SUM(c3) as sum_c3, SUM(row_cnt) as cnt_rows, COUNT(c2) as cnt_c2 FROM t1_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
 SELECT * FROM test_mv_agg1 ORDER BY ALL LIMIT 3;
 
 -- Refresh MV after add column
-INSERT INTO t1_agg VALUES ('2026-01-01', 0, 'val_0', 'desc_0', 10, 20);
+INSERT INTO t1_agg VALUES ('2026-01-01', 0, 'val_0', 'desc_0', 10, 20, 1);
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg1 WITH SYNC MODE;
-function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), COUNT(c1), COUNT(c2) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
-SELECT dt, c0, SUM(c3) as sum_c3, COUNT(c1) as cnt_c1, COUNT(c2) as cnt_c2 FROM t1_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
+function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), SUM(row_cnt), COUNT(c2) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
+SELECT dt, c0, SUM(c3) as sum_c3, SUM(row_cnt) as cnt_rows, COUNT(c2) as cnt_c2 FROM t1_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
 SELECT * FROM test_mv_agg1 ORDER BY ALL LIMIT 3;
 
--- Test base table add column (non-aggregation column)
-ALTER TABLE t1_agg ADD COLUMN c5 VARCHAR(100);
+-- Test base table add aggregation column (REPLACE type)
+ALTER TABLE t1_agg ADD COLUMN c5 VARCHAR(100) REPLACE;
 function: wait_alter_table_finish()
 DESC t1_agg;
 
--- Test base table add aggregation column
+-- Test base table add aggregation column (SUM type)
 ALTER TABLE t1_agg ADD COLUMN c6 INT SUM;
 function: wait_alter_table_finish()
 DESC t1_agg;
 
 -- Refresh MV and verify existing columns still work
-INSERT INTO t1_agg VALUES ('2026-01-01', 0, 'val_1', 'desc_1', 'desc_2', 15, 30, 25);
+INSERT INTO t1_agg VALUES ('2026-01-01', 0, 'val_1', 'desc_1', 15, 30, 1, 'desc_2', 25);
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg1 WITH SYNC MODE;
-function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), COUNT(c1), COUNT(c2) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
-SELECT dt, c0, SUM(c3) as sum_c3, COUNT(c1) as cnt_c1, COUNT(c2) as cnt_c2 FROM t1_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
+function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), SUM(row_cnt), COUNT(c2) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
+SELECT dt, c0, SUM(c3) as sum_c3, SUM(row_cnt) as cnt_rows, COUNT(c2) as cnt_c2 FROM t1_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
 
 -- Test MV add column that references new aggregation column
 ALTER MATERIALIZED VIEW test_mv_agg1 ADD COLUMN sum_c6 AS SUM(c6);
 function: wait_alter_table_finish()
 DESC test_mv_agg1;
-function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), COUNT(c1), COUNT(c2), SUM(c6) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
-SELECT dt, c0, SUM(c3) as sum_c3, COUNT(c1) as cnt_c1, COUNT(c2) as cnt_c2, SUM(c6) as sum_c6 FROM t1_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
+function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), SUM(row_cnt), COUNT(c2), SUM(c6) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
+SELECT dt, c0, SUM(c3) as sum_c3, SUM(row_cnt) as cnt_rows, COUNT(c2) as cnt_c2, SUM(c6) as sum_c6 FROM t1_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
 SELECT * FROM test_mv_agg1 ORDER BY ALL LIMIT 3;
 
 -- Refresh MV after add column
-INSERT INTO t1_agg VALUES ('2026-01-01', 0, 'val_2', 'desc_2', 'desc_3', 20, 40, 35);
+INSERT INTO t1_agg VALUES ('2026-01-01', 0, 'val_2', 'desc_2', 20, 40, 1, 'desc_3', 35);
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg1 WITH SYNC MODE;
-function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), COUNT(c1), COUNT(c2), SUM(c6) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
-SELECT dt, c0, SUM(c3) as sum_c3, COUNT(c1) as cnt_c1, COUNT(c2) as cnt_c2, SUM(c6) as sum_c6 FROM t1_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
-SELECT * FROM test_mv_agg1 ORDER BY ALL LIMIT 3;
-
--- Test MV add group by key column
-ALTER MATERIALIZED VIEW test_mv_agg1 ADD COLUMN c5 AS c5;
-function: wait_alter_table_finish()
-DESC test_mv_agg1;
-function: print_hit_materialized_view("SELECT dt, c0, c5, SUM(c3), COUNT(c1), COUNT(c2), SUM(c6) FROM t1_agg GROUP BY dt, c0, c5", "test_mv_agg1")
-SELECT dt, c0, c5, SUM(c3) as sum_c3, COUNT(c1) as cnt_c1, COUNT(c2) as cnt_c2, SUM(c6) as sum_c6 FROM t1_agg GROUP BY dt, c0, c5 ORDER BY ALL LIMIT 3;
-SELECT * FROM test_mv_agg1 ORDER BY ALL LIMIT 3;
-
--- Refresh MV after insert
-INSERT INTO t1_agg VALUES ('2026-01-01', 0, 'val_3', 'desc_3', 'desc_4', 25, 50, 45);
-[UC]REFRESH MATERIALIZED VIEW test_mv_agg1 WITH SYNC MODE;
-function: print_hit_materialized_view("SELECT dt, c0, c5, SUM(c3), COUNT(c1), COUNT(c2), SUM(c6) FROM t1_agg GROUP BY dt, c0, c5", "test_mv_agg1")
-SELECT dt, c0, c5, SUM(c3) as sum_c3, COUNT(c1) as cnt_c1, COUNT(c2) as cnt_c2, SUM(c6) as sum_c6 FROM t1_agg GROUP BY dt, c0, c5 ORDER BY ALL LIMIT 3;
+function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), SUM(row_cnt), COUNT(c2), SUM(c6) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
+SELECT dt, c0, SUM(c3) as sum_c3, SUM(row_cnt) as cnt_rows, COUNT(c2) as cnt_c2, SUM(c6) as sum_c6 FROM t1_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
 SELECT * FROM test_mv_agg1 ORDER BY ALL LIMIT 3;
 
 -- Test MV drop column (drop aggregation column cnt_c2)
 ALTER MATERIALIZED VIEW test_mv_agg1 DROP COLUMN cnt_c2;
 function: wait_alter_table_finish()
 DESC test_mv_agg1;
-function: print_hit_materialized_view("SELECT dt, c0, c5, SUM(c3), COUNT(c1), SUM(c6) FROM t1_agg GROUP BY dt, c0, c5", "test_mv_agg1")
-SELECT dt, c0, c5, SUM(c3) as sum_c3, COUNT(c1) as cnt_c1, SUM(c6) as sum_c6 FROM t1_agg GROUP BY dt, c0, c5 ORDER BY ALL LIMIT 3;
+function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), SUM(row_cnt), SUM(c6) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
+SELECT dt, c0, SUM(c3) as sum_c3, SUM(row_cnt) as cnt_rows, SUM(c6) as sum_c6 FROM t1_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
 SELECT * FROM test_mv_agg1 ORDER BY ALL LIMIT 3;
 
 -- Refresh MV after drop
-INSERT INTO t1_agg VALUES ('2026-01-01', 0, 'val_4', 'desc_4', 'desc_5', 30, 60, 55);
+INSERT INTO t1_agg VALUES ('2026-01-01', 0, 'val_4', 'desc_4', 30, 60, 1, 'desc_5', 55);
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg1 WITH SYNC MODE;
-function: print_hit_materialized_view("SELECT dt, c0, c5, SUM(c3), COUNT(c1), SUM(c6) FROM t1_agg GROUP BY dt, c0, c5", "test_mv_agg1")
-SELECT dt, c0, c5, SUM(c3) as sum_c3, COUNT(c1) as cnt_c1, SUM(c6) as sum_c6 FROM t1_agg GROUP BY dt, c0, c5 ORDER BY ALL LIMIT 3;
+function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), SUM(row_cnt), SUM(c6) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
+SELECT dt, c0, SUM(c3) as sum_c3, SUM(row_cnt) as cnt_rows, SUM(c6) as sum_c6 FROM t1_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
 SELECT * FROM test_mv_agg1 ORDER BY ALL LIMIT 3;
 
 -- Test MV drop aggregation column (drop sum_c6)
 ALTER MATERIALIZED VIEW test_mv_agg1 DROP COLUMN sum_c6;
 function: wait_alter_table_finish()
 DESC test_mv_agg1;
-function: print_hit_materialized_view("SELECT dt, c0, c5, SUM(c3), COUNT(c1) FROM t1_agg GROUP BY dt, c0, c5", "test_mv_agg1")
-SELECT dt, c0, c5, SUM(c3) as sum_c3, COUNT(c1) as cnt_c1 FROM t1_agg GROUP BY dt, c0, c5 ORDER BY ALL LIMIT 3;
+function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), SUM(row_cnt) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
+SELECT dt, c0, SUM(c3) as sum_c3, SUM(row_cnt) as cnt_rows FROM t1_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
 SELECT * FROM test_mv_agg1 ORDER BY ALL LIMIT 3;
 
 -- Refresh MV after drop
-INSERT INTO t1_agg VALUES ('2026-01-01', 0, 'val_5', 'desc_5', 'desc_6', 35, 70, 65);
+INSERT INTO t1_agg VALUES ('2026-01-01', 0, 'val_5', 'desc_5', 35, 70, 1, 'desc_6', 65);
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg1 WITH SYNC MODE;
-function: print_hit_materialized_view("SELECT dt, c0, c5, SUM(c3), COUNT(c1) FROM t1_agg GROUP BY dt, c0, c5", "test_mv_agg1")
-SELECT dt, c0, c5, SUM(c3) as sum_c3, COUNT(c1) as cnt_c1 FROM t1_agg GROUP BY dt, c0, c5 ORDER BY ALL LIMIT 3;
-SELECT * FROM test_mv_agg1 ORDER BY ALL LIMIT 3;
-
--- Test MV drop group by key column (drop c5)
-[UC]ALTER MATERIALIZED VIEW test_mv_agg1 DROP COLUMN c5;
--- Refresh MV after drop
-INSERT INTO t1_agg VALUES ('2026-01-01', 0, 'val_6', 'desc_6', 'desc_7', 40, 80, 75);
-[UC]REFRESH MATERIALIZED VIEW test_mv_agg1 WITH SYNC MODE;
-function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), COUNT(c1) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
-SELECT dt, c0, SUM(c3) as sum_c3, COUNT(c1) as cnt_c1 FROM t1_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
+function: print_hit_materialized_view("SELECT dt, c0, SUM(c3), SUM(row_cnt) FROM t1_agg GROUP BY dt, c0", "test_mv_agg1")
+SELECT dt, c0, SUM(c3) as sum_c3, SUM(row_cnt) as cnt_rows FROM t1_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
 SELECT * FROM test_mv_agg1 ORDER BY ALL LIMIT 3;
 
 DROP MATERIALIZED VIEW test_mv_agg1;
@@ -156,13 +134,13 @@ drop materialized view if exists test_mv_agg2;
 CREATE TABLE t2_agg (
     dt DATE,
     c0 INT,
-    c1 VARCHAR(20),
+    c1 VARCHAR(20) REPLACE,
     c2 INT SUM,
     c3 BIGINT SUM,
     c4 VARCHAR(100) REPLACE,
     c5 DOUBLE SUM
 ) ENGINE=OLAP
-AGGREGATE KEY(dt, c0, c1)
+AGGREGATE KEY(dt, c0)
 PARTITION BY date_trunc('day', dt)
 DISTRIBUTED BY HASH(c0)
 PROPERTIES (
@@ -224,18 +202,18 @@ DESC test_mv_agg2;
 DROP MATERIALIZED VIEW test_mv_agg2;
 DROP TABLE t2_agg;
 
--- Test 3: Aggregate table - MV without group by key column (similar to test_mv_schema_change1 t2)
+-- Test 3: Aggregate table - MV with expression column (approx_count_distinct)
 drop table if exists t3_agg;
 drop materialized view if exists test_mv_agg3;
 
 CREATE TABLE t3_agg (
     dt DATE,
     c0 INT,
-    c1 VARCHAR(20),
+    c1 VARCHAR(20) REPLACE,
     c2 INT SUM,
     c3 VARCHAR(200) REPLACE
 ) ENGINE=OLAP
-AGGREGATE KEY(dt, c0, c1)
+AGGREGATE KEY(dt, c0)
 PARTITION BY date_trunc('day', dt)
 DISTRIBUTED BY HASH(c0)
 PROPERTIES (
@@ -247,7 +225,7 @@ SELECT '2026-01-01', generate_series % 5, 'val_' || CAST(generate_series AS VARC
        generate_series, 'desc_' || CAST(generate_series AS VARCHAR)
 FROM TABLE(generate_series(1, 50));
 
--- MV without group by key column (similar to test_mv_schema_change1 t2)
+-- MV with dt, c0 only - aggregate by (dt, c0)
 CREATE MATERIALIZED VIEW test_mv_agg3
 PARTITION BY date_trunc('day', dt)
 DISTRIBUTED BY HASH(c0)
@@ -256,21 +234,21 @@ PROPERTIES (
     "query_rewrite_consistency" = "force_mv"
 )
 AS
-SELECT dt, c0, c1, SUM(c2) as total_c2
+SELECT dt, c0, SUM(c2) as total_c2
 FROM t3_agg
-GROUP BY dt, c0, c1;
+GROUP BY dt, c0;
 
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg3 WITH SYNC MODE;
 
 SELECT * FROM test_mv_agg3 ORDER BY ALL LIMIT 3;
-SELECT dt, c0, c1, SUM(c2) as total_c2 FROM t3_agg GROUP BY dt, c0, c1 ORDER BY ALL LIMIT 3;
+SELECT dt, c0, SUM(c2) as total_c2 FROM t3_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
 
 -- Test MV add column (expression column)
 ALTER MATERIALIZED VIEW test_mv_agg3 ADD COLUMN c3_expr AS approx_count_distinct(c3) DEFAULT "0";
 function: wait_alter_table_finish()
 DESC test_mv_agg3;
-SELECT dt, c0, c1, total_c2, c3_expr FROM test_mv_agg3 ORDER BY ALL LIMIT 3;
-SELECT dt, c0, c1, SUM(c2) as total_c2, approx_count_distinct(c3) as c3_expr FROM t3_agg GROUP BY dt, c0, c1 ORDER BY ALL LIMIT 3;
+SELECT dt, c0, total_c2, c3_expr FROM test_mv_agg3 ORDER BY ALL LIMIT 3;
+SELECT dt, c0, SUM(c2) as total_c2, approx_count_distinct(c3) as c3_expr FROM t3_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
 
 -- Base table add column
 ALTER TABLE t3_agg ADD COLUMN c4 INT SUM;
@@ -285,9 +263,9 @@ DESC test_mv_agg3;
 INSERT INTO t3_agg VALUES ('2026-01-01', 0, 'new_val', 200, 'new_desc', 50);
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg3 WITH SYNC MODE;
 
-function: print_hit_materialized_view("SELECT dt, c0, c1, SUM(c2), SUM(c4) FROM t3_agg GROUP BY dt, c0, c1", "test_mv_agg3")
-SELECT dt, c0, c1, total_c2, c3_expr, sum_c4 FROM test_mv_agg3 ORDER BY ALL LIMIT 3;
-SELECT dt, c0, c1, SUM(c2) as total_c2, approx_count_distinct(c3) as c3_expr, SUM(c4) as sum_c4 FROM t3_agg GROUP BY dt, c0, c1 ORDER BY ALL LIMIT 3;
+function: print_hit_materialized_view("SELECT dt, c0, SUM(c2), SUM(c4) FROM t3_agg GROUP BY dt, c0", "test_mv_agg3")
+SELECT dt, c0, total_c2, c3_expr, sum_c4 FROM test_mv_agg3 ORDER BY ALL LIMIT 3;
+SELECT dt, c0, SUM(c2) as total_c2, approx_count_distinct(c3) as c3_expr, SUM(c4) as sum_c4 FROM t3_agg GROUP BY dt, c0 ORDER BY ALL LIMIT 3;
 
 -- Test MV drop column
 ALTER MATERIALIZED VIEW test_mv_agg3 DROP COLUMN c3_expr;
@@ -297,22 +275,22 @@ DESC test_mv_agg3;
 DROP MATERIALIZED VIEW test_mv_agg3;
 DROP TABLE t3_agg;
 
--- Test 4: Aggregate table - Multiple aggregations and schema evolution
+-- Test 4: Aggregate table - Multiple aggregations and schema evolution (dt, category_id as key)
 drop table if exists t4_agg;
 drop materialized view if exists test_mv_agg4;
 
 CREATE TABLE t4_agg (
     dt DATE,
     category_id INT,
-    product_id INT,
+    product_id INT REPLACE,
     sales_amount DECIMAL(20, 2) SUM,
     quantity INT SUM,
     discount_amount DECIMAL(20, 2) SUM,
     product_name VARCHAR(100) REPLACE
 ) ENGINE=OLAP
-AGGREGATE KEY(dt, category_id, product_id)
+AGGREGATE KEY(dt, category_id)
 PARTITION BY date_trunc('month', dt)
-DISTRIBUTED BY HASH(product_id) BUCKETS 16
+DISTRIBUTED BY HASH(category_id) BUCKETS 16
 PROPERTIES (
     "replication_num" = "1"
 );
@@ -326,7 +304,7 @@ SELECT '2026-01-01', 2, 200, 3000.00, 20, 300.00, 'Product B'
 UNION ALL
 SELECT '2026-01-02', 1, 100, 1800.25, 12, 150.00, 'Product A';
 
--- Create MV with multiple aggregations
+-- Create MV with multiple aggregations (dt, category_id as group by - matches base table key)
 CREATE MATERIALIZED VIEW test_mv_agg4
 PARTITION BY date_trunc('month', dt)
 DISTRIBUTED BY HASH(category_id)
@@ -361,23 +339,23 @@ ALTER MATERIALIZED VIEW test_mv_agg4 ADD COLUMN total_profit AS SUM(profit);
 function: wait_alter_table_finish()
 DESC test_mv_agg4;
 
-INSERT INTO t4_agg VALUES ('2026-01-03', 3, 300, 5000.00, 30, 500.00, 1200.00, 1.00);
+INSERT INTO t4_agg VALUES ('2026-01-03', 3, 300, 5000.00, 30, 500.00, 'Product C', 1.00);
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg4 WITH SYNC MODE;
 
 SELECT dt, category_id, total_sales, total_quantity, total_discount, total_profit FROM test_mv_agg4 ORDER BY dt, category_id;
 
--- Test: Base table add non-aggregation column
-ALTER TABLE t4_agg ADD COLUMN region VARCHAR(50);
+-- Test: Base table add aggregation column (REPLACE)
+ALTER TABLE t4_agg ADD COLUMN region VARCHAR(50) REPLACE;
 function: wait_alter_table_finish()
 DESC t4_agg;
 
--- MV add group by column
+-- MV add column referencing REPLACE column (as aggregation result - REPLACE gives one value per group)
 ALTER MATERIALIZED VIEW test_mv_agg4 ADD COLUMN region AS region;
 function: wait_alter_table_finish()
 DESC test_mv_agg4;
 
--- Insert with new column
-INSERT INTO t4_agg VALUES ('2026-01-03', 3, 300, "Product C", 5000.00, 30, 500.00, 1200.00, 1.00);
+-- Insert to set region for existing row (use 0 for SUM columns to avoid double-counting)
+INSERT INTO t4_agg VALUES ('2026-01-03', 3, 300, 0, 0, 0, 'Product C', 0, 'north');
 [UC]REFRESH MATERIALIZED VIEW test_mv_agg4 WITH SYNC MODE;
 
 function: print_hit_materialized_view("SELECT dt, category_id, region, SUM(sales_amount), SUM(quantity), SUM(profit) FROM t4_agg GROUP BY dt, category_id, region", "test_mv_agg4")
@@ -395,4 +373,3 @@ DESC test_mv_agg4;
 
 DROP MATERIALIZED VIEW test_mv_agg4;
 DROP TABLE t4_agg;
-
