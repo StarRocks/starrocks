@@ -20,7 +20,6 @@
 
 #include "column/column_builder.h"
 #include "column/column_helper.h"
-#include "column/variant_builder.h"
 #include "column/variant_column.h"
 #include "column/variant_encoder.h"
 #include "gutil/casts.h"
@@ -236,7 +235,7 @@ static StatusOr<MutableColumnPtr> cast_decimalv3_column(const Column& src_col, c
     return dst_col;
 }
 
-StatusOr<TypeDescriptor> VariantMergerPolicy::choose_common_type(const TypeDescriptor& lhs, const TypeDescriptor& rhs) {
+StatusOr<TypeDescriptor> VariantColumnMerger::choose_common_type(const TypeDescriptor& lhs, const TypeDescriptor& rhs) {
     if (lhs == rhs) {
         return lhs;
     }
@@ -256,7 +255,7 @@ StatusOr<TypeDescriptor> VariantMergerPolicy::choose_common_type(const TypeDescr
     return TypeDescriptor(common_type);
 }
 
-StatusOr<MutableColumnPtr> VariantMergerPolicy::cast_typed_column(const Column& src_col,
+StatusOr<MutableColumnPtr> VariantColumnMerger::cast_typed_column(const Column& src_col,
                                                                   const TypeDescriptor& src_type_desc,
                                                                   const TypeDescriptor& dst_type_desc) {
     if (src_type_desc == dst_type_desc) {
@@ -274,20 +273,6 @@ StatusOr<MutableColumnPtr> VariantMergerPolicy::cast_typed_column(const Column& 
     }
     return Status::NotSupported(strings::Substitute("unsupported typed column cast for variant merge: $0 -> $1",
                                                     src_type_desc.debug_string(), dst_type_desc.debug_string()));
-}
-
-StatusOr<VariantRowValue> VariantMergerPolicy::build_row_from_overlays(std::optional<VariantRowRef> base,
-                                                                       std::vector<VariantOverlayInput> overlays) {
-    std::vector<VariantBuilder::Overlay> builder_overlays;
-    builder_overlays.reserve(overlays.size());
-    for (auto& overlay : overlays) {
-        builder_overlays.emplace_back(
-                VariantBuilder::Overlay{.path = std::move(overlay.path), .value = std::move(overlay.value)});
-    }
-
-    VariantBuilder builder(base.has_value() ? &base.value() : nullptr);
-    RETURN_IF_ERROR(builder.set_overlays(std::move(builder_overlays)));
-    return builder.build();
 }
 
 static Status build_path_index(const VariantColumn& column, std::unordered_map<std::string_view, size_t>* out) {
@@ -343,7 +328,7 @@ Status VariantColumnMerger::arbitrate_type_conflicts(VariantColumn* dst, Variant
         }
 
         ASSIGN_OR_RETURN(TypeDescriptor common_type_desc,
-                         VariantMergerPolicy::choose_common_type(dst_types[dst_index], src_types[src_index]));
+                         VariantColumnMerger::choose_common_type(dst_types[dst_index], src_types[src_index]));
         LogicalType common_type = common_type_desc.type;
 
         if (common_type == TYPE_VARIANT) {
@@ -352,7 +337,7 @@ Status VariantColumnMerger::arbitrate_type_conflicts(VariantColumn* dst, Variant
             MutableColumnPtr new_dst_col;
             MutableColumnPtr new_src_col;
             if (dst_type != TYPE_VARIANT) {
-                auto casted_dst_st = VariantMergerPolicy::cast_typed_column(
+                auto casted_dst_st = VariantColumnMerger::cast_typed_column(
                         *dst_typed_columns[dst_index], dst_types[dst_index], TypeDescriptor(TYPE_VARIANT));
                 if (!casted_dst_st.ok()) {
                     return Status::NotSupported(strings::Substitute(
@@ -363,7 +348,7 @@ Status VariantColumnMerger::arbitrate_type_conflicts(VariantColumn* dst, Variant
                 new_dst_col = std::move(casted_dst_st).value();
             }
             if (src_type != TYPE_VARIANT) {
-                auto casted_src_st = VariantMergerPolicy::cast_typed_column(
+                auto casted_src_st = VariantColumnMerger::cast_typed_column(
                         *src_typed_columns[src_index], src_types[src_index], TypeDescriptor(TYPE_VARIANT));
                 if (!casted_src_st.ok()) {
                     return Status::NotSupported(strings::Substitute(
@@ -389,7 +374,7 @@ Status VariantColumnMerger::arbitrate_type_conflicts(VariantColumn* dst, Variant
             MutableColumnPtr new_dst_col;
             MutableColumnPtr new_src_col;
             if (dst_types[dst_index] != common_type_desc) {
-                auto casted_dst_st = VariantMergerPolicy::cast_typed_column(*dst_typed_columns[dst_index],
+                auto casted_dst_st = VariantColumnMerger::cast_typed_column(*dst_typed_columns[dst_index],
                                                                             dst_types[dst_index], common_type_desc);
                 if (!casted_dst_st.ok()) {
                     return Status::NotSupported(strings::Substitute(
@@ -400,7 +385,7 @@ Status VariantColumnMerger::arbitrate_type_conflicts(VariantColumn* dst, Variant
                 new_dst_col = std::move(casted_dst_st).value();
             }
             if (src_types[src_index] != common_type_desc) {
-                auto casted_src_st = VariantMergerPolicy::cast_typed_column(*src_typed_columns[src_index],
+                auto casted_src_st = VariantColumnMerger::cast_typed_column(*src_typed_columns[src_index],
                                                                             src_types[src_index], common_type_desc);
                 if (!casted_src_st.ok()) {
                     return Status::NotSupported(strings::Substitute(
@@ -425,7 +410,7 @@ Status VariantColumnMerger::arbitrate_type_conflicts(VariantColumn* dst, Variant
         MutableColumnPtr new_dst_col;
         MutableColumnPtr new_src_col;
         if (dst_type != common_type) {
-            auto casted_dst_st = VariantMergerPolicy::cast_typed_column(
+            auto casted_dst_st = VariantColumnMerger::cast_typed_column(
                     *dst_typed_columns[dst_index], dst_types[dst_index], TypeDescriptor(common_type));
             if (!casted_dst_st.ok()) {
                 return Status::NotSupported(
@@ -436,7 +421,7 @@ Status VariantColumnMerger::arbitrate_type_conflicts(VariantColumn* dst, Variant
             new_dst_col = std::move(casted_dst_st).value();
         }
         if (src_type != common_type) {
-            auto casted_src_st = VariantMergerPolicy::cast_typed_column(
+            auto casted_src_st = VariantColumnMerger::cast_typed_column(
                     *src_typed_columns[src_index], src_types[src_index], TypeDescriptor(common_type));
             if (!casted_src_st.ok()) {
                 return Status::NotSupported(

@@ -28,7 +28,6 @@
 #include "column/variant_builder.h"
 #include "column/variant_column.h"
 #include "column/variant_encoder.h"
-#include "column/variant_merger.h"
 #include "exprs/literal.h"
 #include "formats/parquet/predicate_filter_evaluator.h"
 #include "formats/parquet/schema.h"
@@ -50,6 +49,11 @@ static const TypeDescriptor& array_varbinary_type_desc() {
     static const TypeDescriptor k = TypeDescriptor::create_array_type(TYPE_VARBINARY_DESC);
     return k;
 }
+
+struct VariantOverlayInput {
+    VariantPath path;
+    VariantRowValue value;
+};
 
 template <typename TOffset, typename TIsNull>
 static void def_rep_to_offset(const LevelInfo& level_info, const level_t* def_levels, const level_t* rep_levels,
@@ -888,7 +892,13 @@ static StatusOr<VariantRowValue> _rebuild_array_overlay(size_t row, const Shredd
             }
 
             if (!element_overlays.empty() || base_element.has_value()) {
-                auto built = VariantMergerPolicy::build_row_from_overlays(base_element, std::move(element_overlays));
+                std::vector<VariantBuilder::Overlay> builder_overlays;
+                builder_overlays.reserve(element_overlays.size());
+                for (auto& overlay : element_overlays) {
+                    builder_overlays.emplace_back(
+                            VariantBuilder::Overlay{.path = std::move(overlay.path), .value = std::move(overlay.value)});
+                }
+                auto built = VariantBuilder::build_row_from_overlays(base_element, std::move(builder_overlays));
                 if (built.ok()) {
                     array_builder.add(std::move(built).value());
                     continue;
@@ -1456,7 +1466,13 @@ static void build_row_for_seek(size_t row, std::string_view metadata_raw, std::s
     const bool has_base_payload = !value_raw.empty();
     std::optional<VariantRowRef> base =
             has_base_payload ? std::optional<VariantRowRef>(VariantRowRef(metadata_raw, value_raw)) : std::nullopt;
-    auto built = VariantMergerPolicy::build_row_from_overlays(base, std::move(overlays));
+    std::vector<VariantBuilder::Overlay> builder_overlays;
+    builder_overlays.reserve(overlays.size());
+    for (auto& overlay : overlays) {
+        builder_overlays.emplace_back(
+                VariantBuilder::Overlay{.path = std::move(overlay.path), .value = std::move(overlay.value)});
+    }
+    auto built = VariantBuilder::build_row_from_overlays(base, std::move(builder_overlays));
     if (!built.ok()) {
         out_metadata->assign(metadata_raw.data(), metadata_raw.size());
         out_value->assign(value_raw.data(), value_raw.size());

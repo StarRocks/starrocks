@@ -28,10 +28,6 @@
 
 namespace starrocks {
 
-static VariantPath make_overlay_path(const char* path) {
-    return VariantPathParser::parse_shredded_path(std::string_view(path)).value();
-}
-
 static uint8_t primitive_header(VariantType type) {
     return static_cast<uint8_t>(type) << 2;
 }
@@ -190,41 +186,21 @@ static void assert_variant_row_json(const VariantColumn* col, size_t row, std::s
     ASSERT_EQ(expected_json, json.value());
 }
 
-PARALLEL_TEST(VariantMergerPolicyTest, choose_common_type_numeric_and_decimal_cases) {
-    auto numeric = VariantMergerPolicy::choose_common_type(TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_DOUBLE));
+PARALLEL_TEST(VariantColumnMergerTest, choose_common_type_numeric_and_decimal_cases) {
+    auto numeric = VariantColumnMerger::choose_common_type(TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_DOUBLE));
     ASSERT_TRUE(numeric.ok());
     ASSERT_EQ(TypeDescriptor(TYPE_DOUBLE), numeric.value());
 
     auto decimal =
-            VariantMergerPolicy::choose_common_type(TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 9, 2),
+            VariantColumnMerger::choose_common_type(TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 9, 2),
                                                     TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 18, 2));
     ASSERT_TRUE(decimal.ok());
     ASSERT_EQ(TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 18, 2), decimal.value());
 
-    auto array_conflict = VariantMergerPolicy::choose_common_type(
+    auto array_conflict = VariantColumnMerger::choose_common_type(
             TypeDescriptor::create_array_type(TypeDescriptor(TYPE_BIGINT)), TypeDescriptor(TYPE_BIGINT));
     ASSERT_TRUE(array_conflict.ok());
     ASSERT_EQ(TypeDescriptor(TYPE_VARIANT), array_conflict.value());
-}
-
-PARALLEL_TEST(VariantMergerPolicyTest, build_row_from_overlays_merges_base_and_children) {
-    auto base = VariantEncoder::encode_json_text_to_variant(R"({"a":{"x":1},"keep":2})");
-    ASSERT_TRUE(base.ok());
-    auto overlay_b = VariantEncoder::encode_json_text_to_variant("3");
-    ASSERT_TRUE(overlay_b.ok());
-    auto overlay_c = VariantEncoder::encode_json_text_to_variant(R"([4,5])");
-    ASSERT_TRUE(overlay_c.ok());
-
-    std::vector<VariantOverlayInput> overlays{
-            {.path = make_overlay_path("a.b"), .value = std::move(overlay_b).value()},
-            {.path = make_overlay_path("c"), .value = std::move(overlay_c).value()},
-    };
-    auto built = VariantMergerPolicy::build_row_from_overlays(base->as_ref(), std::move(overlays));
-    ASSERT_TRUE(built.ok());
-
-    auto json = built->to_json();
-    ASSERT_TRUE(json.ok());
-    ASSERT_EQ(R"({"a":{"b":3,"x":1},"c":[4,5],"keep":2})", json.value());
 }
 
 PARALLEL_TEST(VariantColumnMergerTest, merge_shredded_schema_union) {
