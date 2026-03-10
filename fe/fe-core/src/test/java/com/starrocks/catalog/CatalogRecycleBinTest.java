@@ -53,7 +53,6 @@ import java.util.stream.Collectors;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doNothing;
-import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.spy;
 
 public class CatalogRecycleBinTest {
@@ -1084,52 +1083,41 @@ public class CatalogRecycleBinTest {
     }
 
     @Test
-    public void testEraseRetryableTableFailureSetsNextEraseMinTime() {
-        long origTrashExpire = Config.catalog_trash_expire_second;
-        long origMinLatency = Config.catalog_recycle_bin_erase_min_latency_ms;
-        long origRetryInterval = Config.catalog_recycle_bin_erase_fail_retry_interval_ms;
-        try {
-            Config.catalog_trash_expire_second = 1L;
-            Config.catalog_recycle_bin_erase_min_latency_ms = 1000L;
-            Config.catalog_recycle_bin_erase_fail_retry_interval_ms = 5000L;
+    public void testRemoveTableFromRecycleBinAlsoCleansLakeTableTracking() {
+        CatalogRecycleBin recycleBin = new CatalogRecycleBin();
+        long dbId = 1L;
+        long tableId = 111L;
+        long partitionId = 222L;
 
-            CatalogRecycleBin recycleBin = new CatalogRecycleBin();
-            long dbId = 1;
+        Table table = new Table(tableId, "t1", Table.TableType.VIEW, Lists.newArrayList());
+        recycleBin.recycleTable(dbId, table, false);
 
-            // Create a retryable table (spy to override isDeleteRetryable)
-            Table table = spy(new Table(111, "retryable_t1", Table.TableType.OLAP, Lists.newArrayList()));
-            doReturn(true).when(table).isDeleteRetryable();
+        DataProperty dataProperty = new DataProperty(TStorageMedium.HDD);
+        Partition partition = new Partition(partitionId, partitionId + 1, "p1", new MaterializedIndex(), null);
+        RecyclePartitionInfo partitionInfo =
+                new RecycleRangePartitionInfo(dbId, tableId, partition, null, dataProperty, (short) 1, null);
+        recycleBin.setPartitionInfo(partitionId, partitionInfo);
+        recycleBin.idToRecycleTime.put(partitionId, System.currentTimeMillis());
+        recycleBin.setDeleteFutureForPartition(partitionInfo, CompletableFuture.completedFuture(true));
 
-            // Recycle as non-recoverable
-            recycleBin.recycleTable(dbId, table, false);
+        java.util.Map<Long, java.util.Set<Long>> lakeTableToPartitions =
+                Deencapsulation.getField(recycleBin, "lakeTableToPartitions");
+        lakeTableToPartitions.put(tableId, Sets.newHashSet(partitionId));
+        java.util.Set<Long> partitionsFromTableDeletion =
+                Deencapsulation.getField(recycleBin, "partitionsFromTableDeletion");
+        partitionsFromTableDeletion.add(partitionId);
 
-            // Set recycle time to be expired
-            long now = System.currentTimeMillis();
-            recycleBin.idToRecycleTime.put(table.getId(), now - 10000L);
+        List<CatalogRecycleBin.RecycleTableInfo> removed =
+                recycleBin.removeTableFromRecycleBin(Collections.singletonList(tableId));
+        Assertions.assertEquals(1, removed.size());
+        Assertions.assertEquals(tableId, removed.get(0).getTable().getId());
 
-            // Pre-set a completed future that returns false (simulates async delete failure)
-            CatalogRecycleBin.RecycleTableInfo tableInfo = recycleBin.getRecycleTableInfo(table.getId());
-            Assertions.assertNotNull(tableInfo);
-            recycleBin.setDeleteFutureForTable(tableInfo, CompletableFuture.completedFuture(false));
-
-            // Call eraseTable - should hit the failure retry path (lines 637-639)
-            // which calls setNextEraseMinTime (line 588)
-            recycleBin.eraseTable(now);
-
-            // Table should still exist in recycle bin (not erased due to failure)
-            Assertions.assertNotNull(recycleBin.getRecycleTableInfo(table.getId()),
-                    "Table should still be in recycle bin after failed erase");
-
-            // The recycle time should have been adjusted by setNextEraseMinTime
-            // so calling eraseTable again immediately should NOT trigger another erase attempt
-            long adjustedRecycleTime = recycleBin.idToRecycleTime.get(table.getId());
-            Assertions.assertTrue(adjustedRecycleTime > now - 10000L,
-                    "Recycle time should have been adjusted forward by setNextEraseMinTime");
-        } finally {
-            Config.catalog_trash_expire_second = origTrashExpire;
-            Config.catalog_recycle_bin_erase_min_latency_ms = origMinLatency;
-            Config.catalog_recycle_bin_erase_fail_retry_interval_ms = origRetryInterval;
-        }
+        Assertions.assertNull(recycleBin.getRecycleTableInfo(tableId));
+        Assertions.assertNull(recycleBin.getRecyclePartitionInfo(partitionId));
+        Assertions.assertFalse(recycleBin.isContainedInidToRecycleTime(partitionId));
+        Assertions.assertFalse(recycleBin.isPartitionFromTableDeletion(partitionId));
+        Assertions.assertFalse(recycleBin.isLakeTablePartitionsDeletionInProgress(tableId));
+        Assertions.assertFalse(recycleBin.isDeletingPartition(partitionId));
     }
 
     @Test
