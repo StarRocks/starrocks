@@ -18,6 +18,7 @@
 #include <fmt/format.h>
 
 #include <memory>
+#include <shared_mutex>
 #include <utility>
 
 #include "column/chunk.h"
@@ -267,6 +268,9 @@ private:
     // 2. After finish completes, txnlog is generated with all data files. Any subsequent write
     //    tasks will have their data discarded, resulting in data loss.
     bool _already_finished = false;
+
+    // Protects _flush_token from concurrent access between get_flush_token() and release_resources().
+    mutable std::shared_mutex _cancel_lock;
 };
 
 bool DeltaWriterImpl::is_immutable() const {
