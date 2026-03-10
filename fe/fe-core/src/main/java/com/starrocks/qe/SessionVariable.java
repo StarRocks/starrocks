@@ -5765,6 +5765,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         if (SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_ERROR_IF_OVERFLOW)) {
             tResult.setOverflow_mode(TOverflowMode.REPORT_ERROR);
         }
+        if (SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_ERROR_FOR_DIVISION_BY_ZERO)) {
+            tResult.setError_for_division_by_zero(true);
+        }
 
         tResult.setEnable_spill(enableSpill);
         if (enableSpill) {

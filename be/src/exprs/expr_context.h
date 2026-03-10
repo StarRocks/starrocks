@@ -121,6 +121,7 @@ public:
     bool is_index_only_filter() const;
 
     bool error_if_overflow() const;
+    bool error_for_division_by_zero() const;
 
     Status rewrite_jit_expr(ObjectPool* pool);
 
@@ -131,7 +132,6 @@ public:
 
 private:
     friend class Expr;
-    friend class OlapScanNode;
     friend class OlapScanNode;
     friend class EsPredicate;
 
