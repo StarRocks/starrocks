@@ -84,8 +84,7 @@ env:
   BUILD_TYPE: ${{ inputs.BUILD_TYPE }}
   LINUX_DISTRO: ${{ inputs.LINUX_DISTRO }}
   SYSTEM_TEST_MODE: ${{ inputs.SYSTEM_TEST_MODE }}
-  CLUSTER_NAME: ${{ inputs.CLUSTER_NAME }}
-  RESOLVED_CLUSTER_NAME: ${{ inputs.SYSTEM_TEST_MODE == 'cloud' && (inputs.CLUSTER_NAME == 'ci-admit' && 'ci-admit-cloud' || inputs.CLUSTER_NAME) || inputs.CLUSTER_NAME }}
+  CLUSTER_NAME: ${{ inputs.SYSTEM_TEST_MODE == 'cloud' && (inputs.CLUSTER_NAME == 'ci-admit' && 'ci-admit-cloud' || inputs.CLUSTER_NAME) || inputs.CLUSTER_NAME }}
   IS_SELF_BUILD: ${{ inputs.IS_SELF_BUILD }}
   INCLUDE_ADMIT: ${{ inputs.INCLUDE_ADMIT }}
   WITH_FEATURE_COV: ${{ inputs.WITH_FEATURE_COV }}
@@ -109,7 +108,7 @@ jobs:
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           [[ "${IS_ARM}" == "true" ]] && arm_arg="--arm"
-          ./bin/elastic-cluster.sh --template ${RESOLVED_CLUSTER_NAME} --linuxdistro ${LINUX_DISTRO} ${arm_arg}
+          ./bin/elastic-cluster.sh --template ${CLUSTER_NAME} --linuxdistro ${LINUX_DISTRO} ${arm_arg}
           conf_name=/var/local/env/${PR_NUMBER}-${BUILD_TYPE}-${LINUX_DISTRO}-${SYSTEM_TEST_MODE}-starrocks_deploy.conf
           cp conf/starrocks_deploy.conf ${conf_name}
           echo "deploy_conf_file=${conf_name}" >> $GITHUB_OUTPUT
@@ -123,7 +122,7 @@ jobs:
           echo "##### Package(FE): ${FE_OUTPUT_TAR}" >> $GITHUB_STEP_SUMMARY
           echo "##### System Test Mode: ${SYSTEM_TEST_MODE}" >> $GITHUB_STEP_SUMMARY
           [[ "${IS_ARM}" == "true" ]] && arm_arg="--arm"
-          ./bin/deploy-cluster.sh -c ${RESOLVED_CLUSTER_NAME} --with-coverage ${arm_arg}
+          ./bin/deploy-cluster.sh -c ci-admit --with-coverage ${arm_arg}
 
       - name: Clean ENV
         if: always()
