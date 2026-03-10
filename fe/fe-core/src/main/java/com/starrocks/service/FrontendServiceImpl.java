@@ -92,6 +92,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.DuplicatedRequestException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
@@ -896,6 +897,17 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             tableKeysType = olapTable.getKeysType().name().substring(0, 3).toUpperCase();
         }
         for (Column column : table.getBaseSchema()) {
+<<<<<<< HEAD
+=======
+            if (column.isHidden()) {
+                continue;
+            }
+            // Filter out expression partition generated columns in DESC and information_schema.columns.
+            // SHOW CREATE TABLE also filters them in AstToStringBuilder to display user-created DDL.
+            if (column.isNameWithPrefix(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
+                continue;
+            }
+>>>>>>> ad22161a2d ([BugFix] Hide expression partition generated columns in DESC/SHOW CREATE TABLE (#69793))
             final TColumnDesc desc =
                     new TColumnDesc(column.getName(), column.getPrimitiveType().toThrift());
             final Integer precision = column.getType().getPrecision();
