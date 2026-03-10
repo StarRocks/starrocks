@@ -82,24 +82,6 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         super(jobId, jobType, dbId, tableId, tableName, timeoutMs);
     }
 
-    protected LakeTableAlterMetaJobBase(LakeTableAlterMetaJobBase job) {
-        super(job);
-        this.watershedTxnId = job.watershedTxnId;
-        this.watershedGtid = job.watershedGtid;
-        if (job.physicalPartitionIndexMap != null) {
-            this.physicalPartitionIndexMap = HashBasedTable.create();
-            this.physicalPartitionIndexMap.putAll(job.physicalPartitionIndexMap);
-        } else {
-            this.physicalPartitionIndexMap = null;
-        }
-        if (job.commitVersionMap != null) {
-            this.commitVersionMap = new HashMap<>();
-            this.commitVersionMap.putAll(job.commitVersionMap);
-        } else {
-            this.commitVersionMap = null;
-        }
-    }
-
     /**
      * Gets the table as OlapTable. LakeTableAlterMetaJobBase supports both LakeTable and LakeMaterializedView,
      * which are subclasses of OlapTable. Returns null if the table does not exist or is not an OlapTable.
