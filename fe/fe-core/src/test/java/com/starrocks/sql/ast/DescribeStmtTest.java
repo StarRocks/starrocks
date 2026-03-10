@@ -16,6 +16,7 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
+import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
@@ -68,7 +69,18 @@ public class DescribeStmtTest {
                         " AS\n" +
                         "SELECT store_id, SUM(sale_amt) as sale_amt\n" +
                         "FROM sales_records\n" +
-                        "GROUP BY store_id;");
+                        "GROUP BY store_id;")
+                .withTable("CREATE TABLE expr_part_tbl (\n" +
+                        "    event_day DATETIME,\n" +
+                        "    site_id INT,\n" +
+                        "    pv BIGINT DEFAULT '0'\n" +
+                        ")\n" +
+                        "DUPLICATE KEY(event_day, site_id)\n" +
+                        "PARTITION BY site_id, date_trunc('day', event_day)\n" +
+                        "DISTRIBUTED BY HASH(event_day, site_id)\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ");");
     }
 
     @AfterAll
@@ -236,6 +248,39 @@ public class DescribeStmtTest {
         Assertions.assertEquals("sale_amt", resultRows.get(1).get(2));
         Assertions.assertEquals("bigint", resultRows.get(1).get(3));
         Assertions.assertEquals("YES", resultRows.get(1).get(4));
+    }
+
+    @Test
+    public void testDescExprPartitionTableHidesGeneratedColumns() throws Exception {
+        String sql = "desc expr_part_tbl";
+        DescribeStmt describeStmt = (DescribeStmt) UtFrameUtils.parseStmtWithNewParser(sql,
+                starRocksAssert.getCtx());
+        ShowResultSet result = ShowExecutor.execute(describeStmt, connectContext);
+        List<List<String>> rows = result.getResultRows();
+        for (List<String> row : rows) {
+            Assertions.assertFalse(row.get(0).startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX),
+                    "DESC should not show generated partition column: " + row.get(0));
+        }
+        Assertions.assertEquals(3, rows.size());
+        Assertions.assertEquals("event_day", rows.get(0).get(0));
+        Assertions.assertEquals("site_id", rows.get(1).get(0));
+        Assertions.assertEquals("pv", rows.get(2).get(0));
+    }
+
+    @Test
+    public void testDescAllExprPartitionTableHidesGeneratedColumns() throws Exception {
+        String sql = "desc expr_part_tbl all";
+        DescribeStmt describeStmt = (DescribeStmt) UtFrameUtils.parseStmtWithNewParser(sql,
+                starRocksAssert.getCtx());
+        ShowResultSet result = ShowExecutor.execute(describeStmt, connectContext);
+        List<List<String>> rows = result.getResultRows();
+        for (List<String> row : rows) {
+            String fieldName = row.get(2);
+            if (fieldName != null && !fieldName.isEmpty()) {
+                Assertions.assertFalse(fieldName.startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX),
+                        "DESC ALL should not show generated partition column: " + fieldName);
+            }
+        }
     }
 
     @Test
