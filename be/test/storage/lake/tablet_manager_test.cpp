@@ -1349,6 +1349,96 @@ TEST_F(LakeTabletManagerTest, test_in_writing_data_size) {
     ASSERT_EQ(_tablet_manager->in_writing_data_size(1), 0);
 }
 
+TEST_F(LakeTabletManagerTest, test_in_writing_data_size_with_cached_metadata) {
+    auto tablet_id = next_id();
+
+    // Put a tablet metadata with known data_size into the cache
+    starrocks::TabletMetadata metadata;
+    metadata.set_id(tablet_id);
+    metadata.set_version(2);
+    auto* rowset1 = metadata.add_rowsets();
+    rowset1->set_id(1);
+    rowset1->set_data_size(500);
+    rowset1->set_num_rows(10);
+    auto* rowset2 = metadata.add_rowsets();
+    rowset2->set_id(2);
+    rowset2->set_data_size(300);
+    rowset2->set_num_rows(5);
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
+
+    // First call to add_in_writing_data_size should pick up the cached
+    // metadata data_size (500 + 300 = 800) as the base, rather than
+    // triggering list_tablet_metadata (object storage LIST).
+    auto result = _tablet_manager->add_in_writing_data_size(tablet_id, 100);
+    EXPECT_EQ(result, 900); // base_size(800) + size(100)
+
+    // Subsequent call should just accumulate
+    result = _tablet_manager->add_in_writing_data_size(tablet_id, 200);
+    EXPECT_EQ(result, 1100); // 900 + 200
+
+    // in_writing_data_size should return the same accumulated value
+    EXPECT_EQ(_tablet_manager->in_writing_data_size(tablet_id), 1100);
+}
+
+TEST_F(LakeTabletManagerTest, test_in_writing_data_size_without_cached_metadata) {
+    auto tablet_id = next_id();
+    // No metadata exists for this tablet_id.
+    auto result = _tablet_manager->add_in_writing_data_size(tablet_id, 100);
+    EXPECT_EQ(result, 100);
+}
+
+TEST_F(LakeTabletManagerTest, test_in_writing_data_size_cache_miss_fallback_list_configurable) {
+    auto make_meta = [&](int64_t tablet_id) {
+        starrocks::TabletMetadata metadata;
+        metadata.set_id(tablet_id);
+        metadata.set_version(2);
+        auto* rowset1 = metadata.add_rowsets();
+        rowset1->set_id(1);
+        rowset1->set_data_size(500);
+        rowset1->set_num_rows(10);
+        auto* rowset2 = metadata.add_rowsets();
+        rowset2->set_id(2);
+        rowset2->set_data_size(300);
+        rowset2->set_num_rows(5);
+        return metadata;
+    };
+
+    auto put_meta_without_latest_cache = [&](const TabletMetadata& metadata) {
+        SyncPoint::GetInstance()->EnableProcessing();
+        DeferOp defer([]() {
+            SyncPoint::GetInstance()->ClearCallBack("TabletManager::skip_cache_latest_metadata");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+        SyncPoint::GetInstance()->SetCallBack("TabletManager::skip_cache_latest_metadata",
+                                              [](void* arg) { *(bool*)arg = true; });
+        EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
+        _tablet_manager->metacache()->prune();
+    };
+
+    bool old = config::allow_list_object_for_random_bucketing_on_cache_miss;
+    DeferOp config_guard([old] { config::allow_list_object_for_random_bucketing_on_cache_miss = old; });
+
+    // cache miss + LIST fallback enabled -> list metadata and recover base_size from meta files.
+    {
+        auto tablet_id = next_id();
+        auto metadata = make_meta(tablet_id);
+        put_meta_without_latest_cache(metadata);
+        config::allow_list_object_for_random_bucketing_on_cache_miss = true;
+        auto result = _tablet_manager->add_in_writing_data_size(tablet_id, 100);
+        EXPECT_EQ(result, 900);
+    }
+
+    // cache miss + LIST fallback disabled -> skip LIST, base_size stays 0.
+    {
+        auto tablet_id = next_id();
+        auto metadata = make_meta(tablet_id);
+        put_meta_without_latest_cache(metadata);
+        config::allow_list_object_for_random_bucketing_on_cache_miss = false;
+        auto result = _tablet_manager->add_in_writing_data_size(tablet_id, 100);
+        EXPECT_EQ(result, 100);
+    }
+}
+
 TEST_F(LakeTabletManagerTest, test_get_output_rorwset_schema) {
     std::shared_ptr<TabletMetadata> tablet_metadata = lake::generate_simple_tablet_metadata(DUP_KEYS);
     for (int i = 0; i < 5; i++) {
