@@ -81,7 +81,7 @@ jobs:
       - name: Add Dependabot reminder for docs
         run: |
           set -eo pipefail # Ensure the script fails on any command error
-          manual_dependabot_url="https://github.com/${GITHUB_REPOSITORY}/security/dependabot?q=is%3Aopen+sort%3Anewest+docs"
+          manual_dependabot_url="https://github.com/${GITHUB_REPOSITORY}/security/dependabot?q=is%3Aopen+sort%3Anewest+severity%3Ahigh+docs"
 
           echo " " >> feedback.md
           echo "## Dependabot alerts reminder" >> feedback.md
