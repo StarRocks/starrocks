@@ -3505,6 +3505,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: StarRocks が FE 設定ファイルで指定されたオブジェクトストレージ関連プロパティを使用して、組み込みストレージボリュームを作成することを許可するかどうか。デフォルト値は v3.4.1 以降 `true` から `false` に変更されました。
 - Introduced in: v3.1.0
 
+デフォルト値: true
+タイプ: Boolean
+単位: -
+変更可否: Yes
+説明: 共有データモードにおいて、CREATE STORAGE VOLUME および ALTER STORAGE VOLUME を実行する前に、ストレージボリュームのアクセス可否を検証するかどうかを指定します。認証情報やエンドポイントの設定に誤りがある場合に早期にエラーを検出できるため、有効のまま維持することを推奨します。オブジェクトストレージへの接続に一時的な障害が発生した場合は、緊急ロールバックの手段として一時的に無効化することができます。
+導入バージョン: v4.1.0, v4.0.7, v3.5.15
+
 ##### `gcp_gcs_impersonation_service_account`
 
 - Default: Empty string

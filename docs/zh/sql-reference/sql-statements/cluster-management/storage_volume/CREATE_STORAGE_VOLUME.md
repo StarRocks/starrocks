@@ -14,6 +14,7 @@ displayed_sidebar: docs
 >
 > - 仅拥有 SYSTEM 级 CREATE STORAGE VOLUME 权限的用户可以执行该操作。
 > - 如果您需要基于 HDFS 创建存储卷，建议您不要随意修改 **HADOOP_CONF** 和 **core-site.xml/hdfs-site.xml**。如果以上文件中的参数与创建 Storage Volume 的参数存在差异，可能导致系统发生未知行为。
+> - 在 shared_data 模式下，StarRocks 会在执行 `CREATE STORAGE VOLUME` 时对每个 `LOCATION` 做存储可访问性校验。若凭证、端点或网络访问异常，语句会立即失败。
 
 ## 语法
 

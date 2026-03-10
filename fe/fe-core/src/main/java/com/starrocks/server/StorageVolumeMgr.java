@@ -20,6 +20,7 @@ import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.AlreadyExistsException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.InvalidConfException;
 import com.starrocks.common.MetaNotFoundException;
@@ -126,6 +127,7 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
             if (exists(name)) {
                 throw new AlreadyExistsException(String.format("Storage volume '%s' already exists", name));
             }
+            checkStorageVolumeAccessIfNeeded(name, svType, locations, params);
             return createInternalNoLock(name, svType, locations, params, enabled, comment);
         }
     }
@@ -213,6 +215,7 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
                 copied.setCloudConfiguration(params);
             }
 
+            checkStorageVolumeAccessIfNeeded(copied.getName(), copied.getType(), copied.getLocations(), copied.getProperties());
             updateInternalNoLock(copied);
         }
     }
@@ -458,6 +461,13 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
             } catch (URISyntaxException e) {
                 throw new DdlException(String.format("Invalid location %s, error: %s", location, e.getMessage()));
             }
+        }
+    }
+
+    private void checkStorageVolumeAccessIfNeeded(String name, String svType, List<String> locations, Map<String, String> params)
+            throws DdlException {
+        if (RunMode.isSharedDataMode() && Config.enable_storage_volume_access_check) {
+            StorageVolumeAccessChecker.check(name, svType, locations, params);
         }
     }
 

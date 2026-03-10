@@ -12,6 +12,7 @@ Check the BE log (`be.INFO`) to identify the exact cause. Common causes include:
 
 - Misconfigured object storage settings (for example, `aws_s3_path`, `endpoint`, `authentication`).
 - Object storage service instability or exceptions.
+- For `CREATE STORAGE VOLUME` or `ALTER STORAGE VOLUME`, StarRocks validates storage accessibility in shared-data mode. If validation fails, fix credentials, endpoint, or network access first, and then retry.
 
 Other errors:
 

@@ -3504,6 +3504,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 是否允许 StarRocks 使用 FE 配置文件中指定的对象存储相关属性创建内置存储卷。从 v3.4.1 开始，默认值从 `true` 更改为 `false`。
 - 引入版本: v3.1.0
 
+##### `enable_storage_volume_access_check`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否在共享数据模式下执行 `CREATE STORAGE VOLUME` 和 `ALTER STORAGE VOLUME` 前校验存储卷可访问性。建议保持开启，以便在凭证或端点错误时提前失败；当对象存储连通性出现临时抖动时，可临时关闭用于应急回滚。
+- 引入版本: v4.1.0, v4.0.7, v3.5.15
+
 ##### `gcp_gcs_impersonation_service_account`
 
 - 默认值: 空字符串
