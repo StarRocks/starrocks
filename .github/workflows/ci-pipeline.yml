@@ -283,6 +283,7 @@ jobs:
     needs: [be-checker]
     name: Thirdparty Update
     continue-on-error: true
+    if: needs.be-checker.outputs.src_filter == 'true' || needs.be-checker.outputs.test_filter == 'true'
     strategy:
       fail-fast: false
       matrix:
