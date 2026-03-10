@@ -1296,25 +1296,23 @@ public class LocalMetastore implements ConnectorMetadata {
 
     private void cleanExistPartitionNameSet(Set<String> existPartitionNameSet,
                                             HashMap<String, Set<Long>> partitionNameToTabletSet) {
+        Set<Long> allTabletIds = Sets.newHashSet();
         for (String partitionName : existPartitionNameSet) {
             Set<Long> existPartitionTabletSet = partitionNameToTabletSet.get(partitionName);
             if (existPartitionTabletSet == null) {
                 // should not happen
                 continue;
             }
-            for (Long tabletId : existPartitionTabletSet) {
-                // createPartitionWithIndices create duplicate tablet that if not exists scenario
-                // so here need to clean up those created tablets which partition already exists from invert index
-                GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
-            }
+            // createPartitionWithIndices create duplicate tablet that if not exists scenario
+            // so here need to clean up those created tablets which partition already exists from invert index
+            allTabletIds.addAll(existPartitionTabletSet);
         }
+        GlobalStateMgr.getCurrentInvertedIndex().deleteTablets(allTabletIds);
     }
 
     private void cleanTabletIdSetForAll(Set<Long> tabletIdSetForAll) {
         // Cleanup of shards for LakeTable is taken care by ShardDeleter
-        for (Long tabletId : tabletIdSetForAll) {
-            stateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
-        }
+        stateMgr.getCurrentInvertedIndex().deleteTablets(tabletIdSetForAll);
     }
 
     private void addPartitions(Database db, String tableName, List<PartitionDesc> partitionDescs,
@@ -2456,9 +2454,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     tableName, DynamicPartitionScheduler.LAST_UPDATE_TIME, TimeUtils.getCurrentFormatTime());
         } finally {
             if (!createTblSuccess) {
-                for (Long tabletId : tabletIdSet) {
-                    stateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
-                }
+                stateMgr.getCurrentInvertedIndex().deleteTablets(tabletIdSet);
             }
             // only remove from memory, because we have not persist it
             if (colocateTableIndex.isColocateTable(tableId) && !addToColocateGroupSuccess) {
@@ -3495,9 +3491,7 @@ public class LocalMetastore implements ConnectorMetadata {
             }
             createMvSuccess = db.createMaterializedWithLock(materializedView, false);
             if (!createMvSuccess) {
-                for (Long tabletId : tabletIdSet) {
-                    GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
-                }
+                GlobalStateMgr.getCurrentInvertedIndex().deleteTablets(tabletIdSet);
                 if (!stmt.isIfNotExists()) {
                     ErrorReport
                             .reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, materializedView,
@@ -4610,9 +4604,7 @@ public class LocalMetastore implements ConnectorMetadata {
     private void deleteUselessTablets(Set<Long> tabletIdSet) {
         // create partition failed, remove all newly created tablets.
         // For lakeTable, shards cleanup is taken care in ShardDeleter.
-        for (Long tabletId : tabletIdSet) {
-            GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
-        }
+        GlobalStateMgr.getCurrentInvertedIndex().deleteTablets(tabletIdSet);
     }
 
     private void truncateTableInternal(OlapTable olapTable, List<Partition> newPartitions,
@@ -4635,15 +4627,13 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         // remove the tablets in old partitions
-        for (Long tabletId : oldTabletIds) {
-            GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
-            // Ensure that only the leader records truncate information.
-            // TODO(yangzaorang): the information will be lost when failover occurs. The probability of this case
-            // happening is small, and the trash data will be deleted by BE anyway, but we need to find a better
-            // solution.
-            if (!isReplay) {
-                GlobalStateMgr.getCurrentInvertedIndex().markTabletForceDelete(tabletId);
-            }
+        GlobalStateMgr.getCurrentInvertedIndex().deleteTablets(oldTabletIds);
+        // Ensure that only the leader records truncate information.
+        // TODO(yangzaorang): the information will be lost when failover occurs. The probability of this case
+        // happening is small, and the trash data will be deleted by BE anyway, but we need to find a better
+        // solution.
+        if (!isReplay) {
+            GlobalStateMgr.getCurrentInvertedIndex().markTabletsForceDelete(oldTabletIds);
         }
     }
 
@@ -4897,13 +4887,15 @@ public class LocalMetastore implements ConnectorMetadata {
     public void onEraseTable(@NotNull OlapTable olapTable, boolean isReplay) {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         Collection<Partition> allPartitions = olapTable.getAllPartitions();
+        List<Long> tabletIds = new ArrayList<>();
         for (Partition partition : allPartitions) {
             for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                 for (Tablet tablet : index.getTablets()) {
-                    invertedIndex.deleteTablet(tablet.getId());
+                    tabletIds.add(tablet.getId());
                 }
             }
         }
+        invertedIndex.deleteTablets(tabletIds);
 
         colocateTableIndex.removeTable(olapTable.getId(), olapTable, isReplay);
     }
@@ -4911,12 +4903,13 @@ public class LocalMetastore implements ConnectorMetadata {
     public void onErasePartition(Partition partition) {
         // remove tablet in inverted index
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        List<Long> tabletIds = new ArrayList<>();
         for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
             for (Tablet tablet : index.getTablets()) {
-                long tabletId = tablet.getId();
-                invertedIndex.deleteTablet(tabletId);
+                tabletIds.add(tablet.getId());
             }
         }
+        invertedIndex.deleteTablets(tabletIds);
     }
 
     // for test only
@@ -5003,9 +4996,7 @@ public class LocalMetastore implements ConnectorMetadata {
             buildPartitions(db, copiedTbl, newPartitions);
         } catch (Exception e) {
             // create partition failed, remove all newly created tablets
-            for (Long tabletId : tabletIdSet) {
-                GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
-            }
+            GlobalStateMgr.getCurrentInvertedIndex().deleteTablets(tabletIdSet);
             LOG.warn("create partitions from partitions failed.", e);
             throw new RuntimeException("create partitions failed", e);
         }

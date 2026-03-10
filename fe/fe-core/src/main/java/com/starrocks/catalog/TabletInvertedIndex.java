@@ -61,6 +61,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -435,7 +436,11 @@ public class TabletInvertedIndex {
     public void markTabletForceDelete(long tabletId) {
         forceDeleteTablets.add(tabletId);
     }
-    
+
+    public void markTabletsForceDelete(Collection<Long> tabletIds) {
+        forceDeleteTablets.addAll(tabletIds);
+    }
+
     public void eraseTabletForceDelete(long tabletId) {
         forceDeleteTablets.remove(tabletId);
     }
@@ -446,22 +451,44 @@ public class TabletInvertedIndex {
         }
         writeLock();
         try {
-            Map<Long, Replica> replicas = replicaMetaTable.rowMap().remove(tabletId);
-            if (replicas != null) {
-                for (Replica replica : replicas.values()) {
-                    replicaToTabletMap.remove(replica.getId());
-                }
-
-                for (long backendId : replicas.keySet()) {
-                    backingReplicaMetaTable.remove(backendId, tabletId);
-                }
-            }
-            tabletMetaMap.remove(tabletId);
-
-            LOG.debug("delete tablet: {}", tabletId);
+            deleteTabletUnlocked(tabletId);
         } finally {
             writeUnlock();
         }
+    }
+
+    /**
+     * Batch delete tablets with a single write lock acquisition, reducing lock contention
+     * compared to calling deleteTablet() in a loop.
+     */
+    public void deleteTablets(Collection<Long> tabletIds) {
+        if (GlobalStateMgr.isCheckpointThread()) {
+            return;
+        }
+        writeLock();
+        try {
+            for (long tabletId : tabletIds) {
+                deleteTabletUnlocked(tabletId);
+            }
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    private void deleteTabletUnlocked(long tabletId) {
+        Map<Long, Replica> replicas = replicaMetaTable.rowMap().remove(tabletId);
+        if (replicas != null) {
+            for (Replica replica : replicas.values()) {
+                replicaToTabletMap.remove(replica.getId());
+            }
+
+            for (long backendId : replicas.keySet()) {
+                backingReplicaMetaTable.remove(backendId, tabletId);
+            }
+        }
+        tabletMetaMap.remove(tabletId);
+
+        LOG.debug("delete tablet: {}", tabletId);
     }
 
     public void addReplica(long tabletId, Replica replica) {
