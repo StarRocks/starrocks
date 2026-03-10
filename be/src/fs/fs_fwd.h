@@ -12,18 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "blackhole_table_sink.h"
-
-#include "runtime/runtime_state.h"
+#pragma once
 
 namespace starrocks {
 
-Status BlackHoleTableSink::prepare(RuntimeState* state) {
-    RETURN_IF_ERROR(DataSink::prepare(state));
-    std::stringstream title;
-    title << "BlackHoleTableSink (frag_id=" << state->fragment_instance_id() << ")";
-    _profile = _pool->add(new RuntimeProfile(title.str()));
-    return Status::OK();
-}
+class FileSystem;
+class RandomAccessFile;
+class SequentialFile;
+class WritableFile;
 
 } // namespace starrocks

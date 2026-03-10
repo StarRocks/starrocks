@@ -25,6 +25,7 @@
 #include "formats/parquet/parquet_file_writer.h"
 #include "formats/utils.h"
 #include "fs/fs_factory.h"
+#include "runtime/runtime_state.h"
 #include "types/datum.h"
 #include "utils.h"
 

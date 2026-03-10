@@ -23,8 +23,7 @@
 #include "connector/utils.h"
 #include "exec/sorting/sorting.h"
 #include "formats/file_writer.h"
-#include "fs/fs.h"
-#include "runtime/exec_env.h"
+#include "fs/fs_fwd.h"
 #include "storage/load_chunk_spiller.h"
 
 namespace starrocks {
