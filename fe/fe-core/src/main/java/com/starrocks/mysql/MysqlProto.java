@@ -43,7 +43,6 @@ import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
@@ -187,7 +186,12 @@ public class MysqlProto {
         if (!Strings.isNullOrEmpty(db)) {
             try {
                 context.changeCatalogDb(db);
-            } catch (DdlException e) {
+            } catch (Exception e) {
+                LOG.warn("Set database [{}] failed during negotiate, user={}, reason={}",
+                        db, authPacket.getUser(), e.getMessage(), e);
+                if (!context.getState().isError()) {
+                    context.getState().setError(e.getMessage());
+                }
                 sendResponsePacket(context);
                 return new NegotiateResult(authPacket, NegotiateState.SET_DATABASE_FAILED);
             }
@@ -253,9 +257,12 @@ public class MysqlProto {
         if (!Strings.isNullOrEmpty(db)) {
             try {
                 context.changeCatalogDb(db);
-            } catch (DdlException e) {
-                LOG.error("Command `Change user` failed at stage changing db, from [{}] to [{}], err[{}] ",
-                        previousQualifiedUser, changeUserPacket.getUser(), e.getMessage());
+            } catch (Exception e) {
+                LOG.warn("Command `Change user` failed at stage changing db, from [{}] to [{}], err[{}] ",
+                        previousQualifiedUser, changeUserPacket.getUser(), e.getMessage(), e);
+                if (!context.getState().isError()) {
+                    context.getState().setError(e.getMessage());
+                }
                 sendResponsePacket(context);
                 // reconstruct serializer with context capability
                 context.getSerializer().setCapability(context.getCapability());
@@ -283,8 +290,11 @@ public class MysqlProto {
             if (!context.getDatabase().equals(originalDb)) {
                 try {
                     context.changeCatalogDb(originalDb);
-                } catch (DdlException e) {
-                    LOG.error("recover original database fail", e);
+                } catch (Exception e) {
+                    LOG.warn("recover original database fail", e);
+                    if (!context.getState().isError()) {
+                        context.getState().setError(e.getMessage());
+                    }
                     return false;
                 }
             }

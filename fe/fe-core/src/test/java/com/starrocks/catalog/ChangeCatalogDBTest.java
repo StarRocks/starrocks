@@ -14,12 +14,18 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -129,5 +135,51 @@ public class ChangeCatalogDBTest {
         Assertions.assertThrows(DdlException.class, () -> {
             ctx.changeCatalogDb("hive_catalog.nonexistent_db");
         });
+    }
+
+    // Reproduces the root cause of MySQL ERROR 2013 (Lost connection at 'reading authorization packet').
+    // When a user has no privilege on the target DB, changeCatalogDb() throws ErrorReportException
+    // (a RuntimeException) via AccessDeniedException.reportAccessDenied(), NOT a DdlException.
+    // In MysqlProto.negotiate(), only DdlException is caught for the "set database" step,
+    // so this RuntimeException bubbles up uncaught, causing FE to close the connection
+    // without sending a MySQL ERR packet — the client then sees ERROR 2013.
+    @Test
+    void testChangeCatalogDbAccessDeniedThrowsRuntimeException(@Mocked MetadataMgr metadataMgr) {
+        new Expectations() {
+            {
+                metadataMgr.getDb((ConnectContext) any, "default_catalog", "secret_db");
+                result = new Database(201, "secret_db");
+            }
+        };
+
+        // Mock Authorizer.checkAnyActionOnOrInDb to always throw AccessDeniedException,
+        // simulating a user with zero privileges on the target database.
+        new MockUp<Authorizer>() {
+            @Mock
+            public void checkAnyActionOnOrInDb(ConnectContext ctx,
+                                               String catalogName, String db) throws AccessDeniedException {
+                throw new AccessDeniedException();
+            }
+        };
+
+        ctx.setCurrentCatalog("default_catalog");
+        ctx.setThreadLocalInfo();
+
+        // The key assertion: changeCatalogDb throws ErrorReportException (RuntimeException),
+        // NOT DdlException. This is exactly why MysqlProto.negotiate() fails to catch it.
+        ErrorReportException ex = Assertions.assertThrows(ErrorReportException.class, () -> {
+            ctx.changeCatalogDb("secret_db");
+        });
+
+        // Assert the exception carries the correct ErrorCode (most robust check)
+        Assertions.assertEquals(ErrorCode.ERR_ACCESS_DENIED, ex.getErrorCode(),
+                "Expected ERR_ACCESS_DENIED error code on exception");
+
+        // Assert that ConnectContext.state has been set to ERR with the correct ErrorCode.
+        // This is the prerequisite for MysqlProto.sendResponsePacket() to send a MySQL ERR packet.
+        Assertions.assertTrue(ctx.getState().isError(),
+                "QueryState should be ERR after access denied");
+        Assertions.assertEquals(ErrorCode.ERR_ACCESS_DENIED, ctx.getState().getErrorCode(),
+                "QueryState should carry ERR_ACCESS_DENIED error code");
     }
 }
