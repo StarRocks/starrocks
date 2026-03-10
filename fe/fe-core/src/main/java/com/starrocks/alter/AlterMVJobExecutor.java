@@ -776,11 +776,27 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         if (baseColumnCreatedTime == -1) {
             // If the new column's definition requires re-calculating historical data to maintain consistency,
             // FSE will throw an exception.
-            if (!mv.isSupportFastSchemaEvolutionInDanger()) {
+            if (!mv.isSupportFastSchemaEvolutionInDanger() && !isMvFastSchemaChangeForceMode()) {
                 String reason = String.format("Cannot add column " +
                         "'%s' to materialized view '%s' because the base column '%s' created time is unknown and needs " +
                         "to refresh the whole base table.", columnName, mv.getName(), baseColumnName);
                 throw new SemanticException(MaterializedViewExceptions.unSupportedReasonForMVFSE(reason));
+            }
+            // In force mode with clear partition enabled, invalidate all partitions since we don't know
+            // which partitions are affected when base column timestamp is unknown.
+            if (isMvFastSchemaChangeClearPartition() && baseTable.isNativeTable()) {
+                Map<Long, Map<String, MaterializedView.BasePartitionInfo>> olapTableVisiblePartitionMap =
+                        mvAsyncRefreshContext.getBaseTableVisibleVersionMap();
+                if (olapTableVisiblePartitionMap.containsKey(baseTable.getId())) {
+                    Map<String, MaterializedView.BasePartitionInfo> basePartitionInfoMap =
+                            olapTableVisiblePartitionMap.get(baseTable.getId());
+                    if (basePartitionInfoMap != null) {
+                        toRefreshPartitionNames.addAll(basePartitionInfoMap.keySet());
+                        LOG.info("Base column '{}' created time is unknown for materialized view {}, " +
+                                        "invalidating all {} partitions in force mode",
+                                baseColumnName, mv.getName(), toRefreshPartitionNames.size());
+                    }
+                }
             }
         } else {
             checkMVVisibleVersionAffectedBySchemaChange(mv, baseTable,
@@ -799,22 +815,19 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         }
 
         try {
-            // TODO(fixme): clear affected partition entries from the version map when FSE is allowed in danger mode
-            // will cause a full refresh for the affected partitions.
-
-            // Clear affected partition entries from the version map when FSE is allowed in danger mode
-            // so that MV refresh will recompute data for those partitions
-            // if (!toRefreshPartitionNames.isEmpty()) {
-            //     LOG.info("Clearing affected partition versions for materialized view {} after adding column: {}",
-            //             mv.getName(), toRefreshPartitionNames);
-            //     Map<String, MaterializedView.BasePartitionInfo> basePartitionInfoMap =
-            //             mvAsyncRefreshContext.getBaseTableVisibleVersionMap().get(baseTable.getId());
-            //     if (basePartitionInfoMap != null) {
-            //         for (String partitionName : toRefreshPartitionNames) {
-            //             basePartitionInfoMap.remove(partitionName);
-            //         }
-            //     }
-            // }
+            // Clear affected partition entries from the version map when enabled by config,
+            // so that MV refresh will recompute data for those partitions.
+            if (isMvFastSchemaChangeClearPartition() && !toRefreshPartitionNames.isEmpty()) {
+                LOG.info("Clearing affected partition versions for materialized view {} after adding column: {}",
+                        mv.getName(), toRefreshPartitionNames);
+                Map<String, MaterializedView.BasePartitionInfo> basePartitionInfoMap =
+                        mvAsyncRefreshContext.getBaseTableVisibleVersionMap().get(baseTable.getId());
+                if (basePartitionInfoMap != null) {
+                    for (String partitionName : toRefreshPartitionNames) {
+                        basePartitionInfoMap.remove(partitionName);
+                    }
+                }
+            }
 
             // renew materialized view's defined query
             String newDefinedSql = AST2SQLVisitor.withOptions(FormatOptions.allEnable()
@@ -883,7 +896,9 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 }
             }
             // if toRefreshPartitionNames's not empty, throw exception when all partitions are affected
-            if (!toRefreshPartitionNames.isEmpty() && !mv.isSupportFastSchemaEvolutionInDanger()) {
+            if (!toRefreshPartitionNames.isEmpty()
+                    && !mv.isSupportFastSchemaEvolutionInDanger()
+                    && !isMvFastSchemaChangeForceMode()) {
                 LOG.warn("After adding column to materialized view {}, to remove partition infos {} " +
                                 "to trigger full refresh, base column created time: {}, " +
                                 "partition visible version time: {}, to-refresh partitions: {}",
@@ -896,7 +911,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 throw new SemanticException(MaterializedViewExceptions.unSupportedReasonForMVFSE(reason));
             }
         } else {
-            if (!mv.isSupportFastSchemaEvolutionInDanger()) {
+            if (!mv.isSupportFastSchemaEvolutionInDanger() && !isMvFastSchemaChangeForceMode()) {
                 String reason = String.format("Cannot add column " +
                         "'%s' to materialized view '%s' because the base table '%s' is not an olap table and " +
                         "we cannot determine which partitions are affected by this schema change.",
@@ -904,6 +919,17 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 throw new SemanticException(MaterializedViewExceptions.unSupportedReasonForMVFSE(reason));
             }
         }
+    }
+
+    private static boolean isMvFastSchemaChangeForceMode() {
+        String mode = Config.mv_fast_schema_change_mode;
+        return "force".equalsIgnoreCase(mode) || "force_no_clear".equalsIgnoreCase(mode);
+    }
+
+    private static boolean isMvFastSchemaChangeClearPartition() {
+        // TODO: support clear partition entries in `strict` mode
+        String mode = Config.mv_fast_schema_change_mode;
+        return "force".equalsIgnoreCase(mode);
     }
 
     @Override
