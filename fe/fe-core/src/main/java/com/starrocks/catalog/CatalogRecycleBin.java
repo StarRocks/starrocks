@@ -102,9 +102,6 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable, Memor
     // Key: tableId, Value: Set of partitionIds that belong to this table
     private final Map<Long, Set<Long>> lakeTableToPartitions;
 
-    // Track partitions that come from table deletion (should not log individual partition erase)
-    private final Set<Long> partitionsFromTableDeletion;
-
     private static final ExecutorService ASYNC_REMOVE_PARTITION_EXECUTOR = ThreadPoolManager.newDaemonFixedThreadPool(
                 Config.lake_remove_partition_thread_num, Integer.MAX_VALUE, "lake-remove-partition-pool", true);
 
@@ -128,7 +125,6 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable, Memor
         enableEraseLater = new HashSet<>();
         asyncDeleteForPartitions = Maps.newHashMap();
         lakeTableToPartitions = Maps.newHashMap();
-        partitionsFromTableDeletion = new HashSet<>();
     }
 
     private void removeRecycleMarkers(Long id) {
@@ -598,7 +594,6 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable, Memor
                         asyncDeleteForPartitions.remove(partitionInfo);
                     }
                     idToRecycleTime.remove(partitionId);
-                    partitionsFromTableDeletion.remove(partitionId);
                 }
             }
         }
@@ -651,7 +646,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable, Memor
             // Use the table's recycle time to maintain consistency with ClusterSnapshot safety checks
             idToRecycleTime.put(partitionId, partitionRecycleTime);
             // Mark this partition as coming from table deletion
-            partitionsFromTableDeletion.add(partitionId);
+            recyclePartitionInfo.setFromTableDeletion(true);
             partitionIds.add(partitionId);
         }
 
@@ -693,12 +688,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable, Memor
      */
     private void cleanupLakeTableAfterPartitionsDeletion(RecycleTableInfo info) {
         long tableId = info.getTable().getId();
-        Set<Long> partitionIds = lakeTableToPartitions.remove(tableId);
-        if (partitionIds != null) {
-            for (Long partitionId : partitionIds) {
-                partitionsFromTableDeletion.remove(partitionId);
-            }
-        }
+        lakeTableToPartitions.remove(tableId);
         // Clean up table-level resources
         // Note: removeTableBinds() was already called in addLakeTablePartitionsToRecycleBin()
         OlapTable table = (OlapTable) info.getTable();
@@ -810,8 +800,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable, Memor
 
             if (finished) {
                 // Check if this partition comes from table deletion
-                boolean fromTableDeletion = partitionsFromTableDeletion.contains(partitionId);
-                if (fromTableDeletion) {
+                if (partitionInfo.isFromTableDeletion()) {
                     // Partition from table deletion: don't log individual partition erase
                     // The table's edit log will be recorded when all partitions are deleted
                     iterator.remove();
@@ -1346,7 +1335,8 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable, Memor
 
     @VisibleForTesting
     synchronized boolean isPartitionFromTableDeletion(long partitionId) {
-        return partitionsFromTableDeletion.contains(partitionId);
+        RecyclePartitionInfo info = idToPartition.get(partitionId);
+        return info != null && info.isFromTableDeletion();
     }
 
     @VisibleForTesting
@@ -1550,7 +1540,6 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable, Memor
         enableEraseLater.clear();
         asyncDeleteForPartitions.clear();
         lakeTableToPartitions.clear();
-        partitionsFromTableDeletion.clear();
     }
 
     // for test

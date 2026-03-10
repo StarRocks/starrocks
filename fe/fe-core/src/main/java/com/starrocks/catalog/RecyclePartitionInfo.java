@@ -54,6 +54,14 @@ public abstract class RecyclePartitionInfo extends JsonWriter {
      */
     protected transient boolean forceRemoveDirectory = false;
 
+    /**
+     * Whether this partition is generated from table-level deletion flow.
+     * Used to skip partition-level erase edit log because table-level erase log
+     * will be recorded after all related partitions are deleted.
+     * This field is transient and not serialized.
+     */
+    protected transient boolean fromTableDeletion = false;
+
     public RecyclePartitionInfo() {
         recoverable = true;
     }
@@ -115,6 +123,14 @@ public abstract class RecyclePartitionInfo extends JsonWriter {
 
     public void setForceRemoveDirectory(boolean forceRemoveDirectory) {
         this.forceRemoveDirectory = forceRemoveDirectory;
+    }
+
+    public boolean isFromTableDeletion() {
+        return fromTableDeletion;
+    }
+
+    public void setFromTableDeletion(boolean fromTableDeletion) {
+        this.fromTableDeletion = fromTableDeletion;
     }
 
     public boolean delete() {
