@@ -21,15 +21,10 @@
 
 namespace starrocks::parquet {
 
-struct VariantPathTypeHint {
-    std::string path;
-    // TYPE_UNKNOWN means no preferred type hint.
-    TypeDescriptor preferred_type = TYPE_UNKNOWN_DESC;
-};
-
 struct VariantShreddedReadHints {
-    std::vector<VariantPathTypeHint> path_type_hints;
-    bool strict_preferred_type = false;
+    // Exact shredded paths to materialize as typed_columns.
+    // Empty means auto-discover from file shredded schema.
+    std::vector<std::string> shredded_paths;
 };
 
 class ColumnReaderFactory {

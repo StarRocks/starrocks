@@ -346,7 +346,7 @@ const VariantColumn* VariantColumn::_prepare_append_source(const VariantColumn& 
     if (!is_equal_schema(&src)) {
         *src_working_copy = deep_copy_shredded(src);
         auto* src_cloned = down_cast<VariantColumn*>(src_working_copy->get());
-        Status arbitrate_st = VariantMerger::arbitrate_type_conflicts(this, src_cloned);
+        Status arbitrate_st = VariantColumnMerger::arbitrate_type_conflicts(this, src_cloned);
         DCHECK(arbitrate_st.ok()) << "append type arbitration failed: " << arbitrate_st;
         if (!arbitrate_st.ok()) {
             LOG(ERROR) << "append type arbitration failed, err=" << arbitrate_st;
