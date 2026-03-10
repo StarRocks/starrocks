@@ -35,6 +35,7 @@
 #include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/global_dict/miscs.h"
 #include "runtime/global_dict/types.h"
+#include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "runtime/runtime_state_helper.h"
 #include "types/logical_type.h"

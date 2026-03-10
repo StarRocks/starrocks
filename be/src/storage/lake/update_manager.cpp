@@ -14,6 +14,7 @@
 
 #include "storage/lake/update_manager.h"
 
+#include "base/container/lru_cache.h"
 #include "base/debug/trace.h"
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/sync_point.h"
