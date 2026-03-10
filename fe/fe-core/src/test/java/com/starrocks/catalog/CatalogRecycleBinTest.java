@@ -836,12 +836,6 @@ public class CatalogRecycleBinTest {
                 Deencapsulation.getField(recycleBin, "lakeTableToPartitions");
         Assertions.assertTrue(lakeTableToPartitions.isEmpty(),
                 "lakeTableToPartitions should be empty for non-retryable tables");
-
-        // Verify partitionsFromTableDeletion is also empty
-        java.util.Set<?> partitionsFromTableDeletion =
-                Deencapsulation.getField(recycleBin, "partitionsFromTableDeletion");
-        Assertions.assertTrue(partitionsFromTableDeletion.isEmpty(),
-                "partitionsFromTableDeletion should be empty for non-retryable tables");
     }
 
     /**
@@ -1103,9 +1097,6 @@ public class CatalogRecycleBinTest {
         java.util.Map<Long, java.util.Set<Long>> lakeTableToPartitions =
                 Deencapsulation.getField(recycleBin, "lakeTableToPartitions");
         lakeTableToPartitions.put(tableId, Sets.newHashSet(partitionId));
-        java.util.Set<Long> partitionsFromTableDeletion =
-                Deencapsulation.getField(recycleBin, "partitionsFromTableDeletion");
-        partitionsFromTableDeletion.add(partitionId);
 
         List<CatalogRecycleBin.RecycleTableInfo> removed =
                 recycleBin.removeTableFromRecycleBin(Collections.singletonList(tableId));
