@@ -75,10 +75,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -835,4 +837,293 @@ public class DatabaseTransactionMgrTest {
         assertEquals(TransactionStatus.VISIBLE, txnState.getTransactionStatus());
         lockThread.join();
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testCanTxnFinishedWithLockTimeoutNoContention() throws Exception {
+        String testTxnLabel = StringUtils.generateRandomString(10);
+
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        while (true) { // clean up previous committed transactions
+            List<TransactionState> txnList = masterDbTransMgr.getCommittedTxnList();
+            if (txnList.isEmpty()) {
+                break;
+            }
+            for (TransactionState state : txnList) {
+                if (masterTransMgr.canTxnFinished(state, Sets.newHashSet(), null)) {
+                    masterTransMgr.finishTransaction(GlobalStateMgrTestUtil.testDbId1, state.getTransactionId(), null);
+                }
+            }
+        }
+
+        long transactionId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                testTxnLabel,
+                transactionSource,
+                TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+
+        List<TabletCommitInfo> transTablets = buildTabletCommitInfoList();
+        masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId, transTablets,
+                Lists.newArrayList(), null);
+
+        TransactionState txnState = masterDbTransMgr.getTransactionState(transactionId);
+        assertEquals(TransactionStatus.COMMITTED, txnState.getTransactionStatus());
+
+        // Should succeed with a generous timeout when there is no lock contention
+        Assertions.assertDoesNotThrow(() -> {
+            boolean result = masterTransMgr.canTxnFinished(txnState, Sets.newHashSet(), null,
+                    Config.finish_transaction_default_lock_timeout_ms);
+            Assertions.assertTrue(result);
+        });
+    }
+
+    @Test
+    public void testCanTxnFinishedWithLockTimeout() throws Exception {
+        String testTxnLabel = StringUtils.generateRandomString(10);
+
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        while (true) { // clean up previous committed transactions
+            List<TransactionState> txnList = masterDbTransMgr.getCommittedTxnList();
+            if (txnList.isEmpty()) {
+                break;
+            }
+            for (TransactionState state : txnList) {
+                if (masterTransMgr.canTxnFinished(state, Sets.newHashSet(), null)) {
+                    masterTransMgr.finishTransaction(GlobalStateMgrTestUtil.testDbId1, state.getTransactionId(), null);
+                }
+            }
+        }
+
+        long transactionId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                testTxnLabel,
+                transactionSource,
+                TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+
+        List<TabletCommitInfo> transTablets = buildTabletCommitInfoList();
+        masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId, transTablets,
+                Lists.newArrayList(), null);
+
+        TransactionState txnState = masterDbTransMgr.getTransactionState(transactionId);
+        assertEquals(TransactionStatus.COMMITTED, txnState.getTransactionStatus());
+
+        // Hold a conflicting WRITE lock in a background thread to trigger the read-lock timeout
+        CountDownLatch latchLock = new CountDownLatch(1);
+        CountDownLatch latchUnlock = new CountDownLatch(1);
+        Thread lockThread = new Thread(() -> {
+            Locker locker = new Locker();
+            locker.lockTableWithIntensiveDbLock(GlobalStateMgrTestUtil.testDbId1,
+                    GlobalStateMgrTestUtil.testTableId1, LockType.WRITE);
+            latchLock.countDown();
+            try {
+                latchUnlock.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                // ignore
+            }
+            locker.unLockTableWithIntensiveDbLock(GlobalStateMgrTestUtil.testDbId1,
+                    GlobalStateMgrTestUtil.testTableId1, LockType.WRITE);
+        });
+        lockThread.start();
+
+        latchLock.await();
+        // WRITE lock is held — canTxnFinished should time out and throw ERR_LOCK_ERROR
+        LockTimeoutException exception = Assertions.assertThrows(LockTimeoutException.class,
+                () -> masterTransMgr.canTxnFinished(txnState, Sets.newHashSet(), null,
+                        Config.finish_transaction_default_lock_timeout_ms));
+
+        latchUnlock.countDown();
+        lockThread.join();
+
+        // After the WRITE lock is released, canTxnFinished should succeed
+        Assertions.assertDoesNotThrow(() -> {
+            boolean result = masterTransMgr.canTxnFinished(txnState, Sets.newHashSet(), null,
+                    Config.finish_transaction_default_lock_timeout_ms);
+            Assertions.assertTrue(result);
+        });
+    }
+
+    @Test
+    public void testFinishTransactionBatchPersistVisibleStateBeforeAfterVisible() throws StarRocksException {
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        DatabaseTransactionMgr masterDbTransMgr = masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        List<TransactionState> states = getDefaultBatchTxnStates(masterDbTransMgr);
+
+        new MockUp<Table>() {
+            @Mock
+            public boolean isCloudNativeTableOrMaterializedView() {
+                return true;
+            }
+        };
+
+        class InspectPersistedBatch extends TransactionStateBatch {
+            private boolean persistedWhenAfterVisible = false;
+
+            InspectPersistedBatch(List<TransactionState> transactionStates) {
+                super(transactionStates);
+            }
+
+            @Override
+            public void afterVisible(TransactionStatus transactionStatus, boolean txnOperated) {
+                long txnId = getTransactionStates().get(0).getTransactionId();
+                persistedWhenAfterVisible = fakeEditLog.getTransaction(txnId) != null;
+                super.afterVisible(transactionStatus, txnOperated);
+            }
+
+            boolean isPersistedWhenAfterVisible() {
+                return persistedWhenAfterVisible;
+            }
+        }
+
+        InspectPersistedBatch stateBatch = new InspectPersistedBatch(states);
+        masterTransMgr.finishTransactionBatch(GlobalStateMgrTestUtil.testDbId1, stateBatch, null);
+        assertTrue(stateBatch.isPersistedWhenAfterVisible());
+    }
+
+    @Test
+    public void testFinishTransactionBatchSwallowsBatchAfterVisibleException() throws StarRocksException {
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        DatabaseTransactionMgr masterDbTransMgr = masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        List<TransactionState> states = getDefaultBatchTxnStates(masterDbTransMgr);
+
+        new MockUp<Table>() {
+            @Mock
+            public boolean isCloudNativeTableOrMaterializedView() {
+                return true;
+            }
+        };
+
+        class ThrowingBatch extends TransactionStateBatch {
+            ThrowingBatch(List<TransactionState> transactionStates) {
+                super(transactionStates);
+            }
+
+            @Override
+            public void afterVisible(TransactionStatus transactionStatus, boolean txnOperated) {
+                throw new RuntimeException("mock afterVisible failure");
+            }
+        }
+
+        TransactionStateBatch stateBatch = new ThrowingBatch(states);
+        Assertions.assertDoesNotThrow(
+                () -> masterTransMgr.finishTransactionBatch(GlobalStateMgrTestUtil.testDbId1, stateBatch, null));
+        for (TransactionState state : states) {
+            assertEquals(TransactionStatus.VISIBLE, state.getTransactionStatus());
+            assertNotNull(fakeEditLog.getTransaction(state.getTransactionId()));
+        }
+    }
+
+    @Test
+    public void testFinishTransactionBatchAfterVisibleCallbackFailureIsolation() throws StarRocksException {
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        DatabaseTransactionMgr masterDbTransMgr = masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        List<TransactionState> states = getDefaultBatchTxnStates(masterDbTransMgr);
+        AtomicInteger callbackInvokeCount = new AtomicInteger(0);
+
+        long failedCallbackId = 90001L;
+        long normalCallbackId = 90002L;
+        states.get(0).addCallbackId(failedCallbackId);
+        states.get(1).addCallbackId(normalCallbackId);
+        masterTransMgr.getCallbackFactory().addCallback(
+                new TestTxnStateChangeCallback(failedCallbackId, true, callbackInvokeCount));
+        masterTransMgr.getCallbackFactory().addCallback(
+                new TestTxnStateChangeCallback(normalCallbackId, false, callbackInvokeCount));
+
+        new MockUp<Table>() {
+            @Mock
+            public boolean isCloudNativeTableOrMaterializedView() {
+                return true;
+            }
+        };
+
+        TransactionStateBatch stateBatch = new TransactionStateBatch(states);
+        Assertions.assertDoesNotThrow(
+                () -> masterTransMgr.finishTransactionBatch(GlobalStateMgrTestUtil.testDbId1, stateBatch, null));
+
+        assertEquals(2, callbackInvokeCount.get());
+        for (TransactionState state : states) {
+            assertEquals(TransactionStatus.VISIBLE, state.getTransactionStatus());
+        }
+    }
+
+    private List<TransactionState> getDefaultBatchTxnStates(DatabaseTransactionMgr masterDbTransMgr) {
+        long txnId6 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable6);
+        TransactionState transactionState6 = masterDbTransMgr.getTransactionState(txnId6);
+        long txnId7 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable7);
+        TransactionState transactionState7 = masterDbTransMgr.getTransactionState(txnId7);
+        long txnId8 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable8);
+        TransactionState transactionState8 = masterDbTransMgr.getTransactionState(txnId8);
+        return Lists.newArrayList(transactionState6, transactionState7, transactionState8);
+    }
+
+    private static class TestTxnStateChangeCallback implements TxnStateChangeCallback {
+        private final long id;
+        private final boolean throwInAfterVisible;
+        private final AtomicInteger callbackInvokeCount;
+
+        private TestTxnStateChangeCallback(long id, boolean throwInAfterVisible, AtomicInteger callbackInvokeCount) {
+            this.id = id;
+            this.throwInAfterVisible = throwInAfterVisible;
+            this.callbackInvokeCount = callbackInvokeCount;
+        }
+
+        @Override
+        public long getId() {
+            return id;
+        }
+
+        @Override
+        public void beforeCommitted(TransactionState txnState) throws TransactionException {
+        }
+
+        @Override
+        public void beforeAborted(TransactionState txnState) throws TransactionException {
+        }
+
+        @Override
+        public void afterCommitted(TransactionState txnState, boolean txnOperated) throws StarRocksException {
+        }
+
+        @Override
+        public void replayOnCommitted(TransactionState txnState) {
+        }
+
+        @Override
+        public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason)
+                throws StarRocksException {
+        }
+
+        @Override
+        public void replayOnAborted(TransactionState txnState) {
+        }
+
+        @Override
+        public void afterVisible(TransactionState txnState, boolean txnOperated) {
+            callbackInvokeCount.incrementAndGet();
+            if (throwInAfterVisible) {
+                throw new RuntimeException("mock callback failure");
+            }
+        }
+
+        @Override
+        public void replayOnVisible(TransactionState txnState) {
+        }
+
+        @Override
+        public void beforePrepared(TransactionState txnState) throws TransactionException {
+        }
+
+        @Override
+        public void afterPrepared(TransactionState txnState, boolean txnOperated) throws StarRocksException {
+        }
+
+        @Override
+        public void replayOnPrepared(TransactionState txnState) {
+        }
+    }
+>>>>>>> 79eccdbe42 ([BugFix] Fix race condition missing write transaction finished editlog (#69899))
 }
