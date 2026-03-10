@@ -36,6 +36,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.QualifiedName;
@@ -112,5 +113,14 @@ public class DropMaterializedViewStmtNewPlannerTest {
         Assertions.assertFalse(stmt.isForceDrop());
         Assertions.assertEquals("test", stmt.getDbName());
         Assertions.assertEquals("mv1", stmt.getMvName());
+    }
+
+    @Test
+    public void testDropMaterializedViewForceToSql() throws Exception {
+        String dropMvSql = "drop materialized view mv1 FORCE;";
+        DropMaterializedViewStmt stmt = (DropMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(dropMvSql, connectContext);
+        String sql = AstToStringBuilder.toString(stmt);
+        Assertions.assertTrue(stmt.isForceDrop());
+        Assertions.assertTrue(sql.contains(" FORCE"), "Formatted SQL should contain FORCE: " + sql);
     }
 }

@@ -15,6 +15,9 @@
 package com.starrocks.alter;
 
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.OlapTable.OlapTableState;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
@@ -352,6 +355,89 @@ public class MaterializedViewHandlerEditLogTest {
         Assertions.assertEquals(db.getId(), replayInfo.getDbId());
         Assertions.assertEquals(table.getId(), replayInfo.getTableId());
         Assertions.assertEquals(rollupIndexId, replayInfo.getIndexMetaId());
+    }
+
+    @Test
+    public void testForceDropWhenMvNameEqualsTableName() {
+        MaterializedViewHandler handler = new MaterializedViewHandler();
+        // Force drop with MV name same as base table name should throw
+        DropMaterializedViewStmt stmt = new DropMaterializedViewStmt(false, true,
+                new TableRef(QualifiedName.of(TABLE_NAME), null, NodePosition.ZERO), NodePosition.ZERO);
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.WRITE);
+        try {
+            DdlException e = Assertions.assertThrows(DdlException.class,
+                    () -> handler.processDropMaterializedView(stmt, db, table));
+            Assertions.assertTrue(e.getMessage().contains("Cannot drop base index"));
+        } finally {
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
+        }
+    }
+
+    @Test
+    public void testForceDropWhenMvNotExist() {
+        MaterializedViewHandler handler = new MaterializedViewHandler();
+        String nonexistentMv = "nonexistent_mv";
+        DropMaterializedViewStmt stmt = new DropMaterializedViewStmt(false, true,
+                new TableRef(QualifiedName.of(nonexistentMv), null, NodePosition.ZERO), NodePosition.ZERO);
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.WRITE);
+        try {
+            MetaNotFoundException e = Assertions.assertThrows(MetaNotFoundException.class,
+                    () -> handler.processDropMaterializedView(stmt, db, table));
+            Assertions.assertTrue(e.getMessage().contains(nonexistentMv));
+        } finally {
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
+        }
+    }
+
+    @Test
+    public void testCancelRollupJobsForForceDropNoMatchingJob() {
+        MaterializedViewHandler handler = new MaterializedViewHandler();
+        boolean found = handler.cancelRollupJobsForForceDrop(table.getId(), "no_such_mv", "reason");
+        Assertions.assertFalse(found);
+    }
+
+    @Test
+    public void testCancelRollupJobsForForceDropWithMatchingJob() throws Exception {
+        MaterializedViewHandler handler = new MaterializedViewHandler();
+        String rollupName = "mv_cancel_test";
+        long jobId = GlobalStateMgr.getCurrentState().getNextId();
+        RollupJobV2 job = new RollupJobV2(jobId, db.getId(), table.getId(), TABLE_NAME, 3600000,
+                0, 0, TABLE_NAME, rollupName, 1,
+                null, null, 1, 1, null, (short) 0,
+                null, null, false);
+        handler.addAlterJobV2(job);
+        boolean found = handler.cancelRollupJobsForForceDrop(table.getId(), rollupName, "force drop test");
+        Assertions.assertTrue(found);
+        Assertions.assertTrue(job.isDone());
+    }
+
+    @Test
+    public void testAlterJobMgrForceDropWithStuckRollupJob() throws Exception {
+        String rollupName = "mv_force_integration";
+        long rollupIndexId = GlobalStateMgr.getCurrentState().getNextId();
+        addRollupIndex(table, rollupName, rollupIndexId, GlobalStateMgr.getCurrentState().getNextId());
+        Assertions.assertTrue(table.hasMaterializedIndex(rollupName));
+        table.setState(OlapTableState.ROLLUP);
+
+        long jobId = GlobalStateMgr.getCurrentState().getNextId();
+        RollupJobV2 job = new RollupJobV2(jobId, db.getId(), table.getId(), TABLE_NAME, 3600000,
+                0, 0, TABLE_NAME, rollupName, 1,
+                null, null, 1, 1, null, (short) 0,
+                null, null, false);
+        GlobalStateMgr.getCurrentState().getAlterJobMgr().getMaterializedViewHandler().addAlterJobV2(job);
+
+        DropMaterializedViewStmt stmt = new DropMaterializedViewStmt(false, true,
+                new TableRef(QualifiedName.of(DB_NAME, rollupName), null, NodePosition.ZERO), NodePosition.ZERO);
+        // cancelRollupJobsForForceDrop cancels the job, which removes the rollup index. Then
+        // processDropMaterializedView throws MetaNotFoundException because the index is already gone.
+        try {
+            GlobalStateMgr.getCurrentState().getAlterJobMgr().processDropMaterializedView(stmt);
+        } catch (MetaNotFoundException e) {
+            // Expected: cancel already removed the index before we tried to drop it.
+        }
+        Assertions.assertFalse(table.hasMaterializedIndex(rollupName));
     }
 
     @Test
