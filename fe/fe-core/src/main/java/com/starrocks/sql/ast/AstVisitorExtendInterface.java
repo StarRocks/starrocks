@@ -161,6 +161,10 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    default R visitAlterTaskStatement(AlterTaskStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     // ---------------------------------------- Partition Statement ----------------------------------------------------
 
     default R visitRecoverPartitionStatement(RecoverPartitionStmt statement, C context) {
