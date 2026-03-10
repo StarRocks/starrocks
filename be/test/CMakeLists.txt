@@ -489,6 +489,7 @@ SET(DW_TEST_FILES
     ./storage/rowset/column_iterator_decorator_test.cpp
     ./storage/rowset_column_partial_update_test.cpp
     ./storage/rowset/column_reader_writer_test.cpp
+    ./storage/rowset/object_column_writer_test.cpp
     ./storage/rowset_column_update_state_test.cpp
     ./storage/rowset/data_sample_test.cpp
     ./storage/rowset/default_value_column_iterator_test.cpp

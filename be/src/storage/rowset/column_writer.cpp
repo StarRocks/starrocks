@@ -43,6 +43,7 @@
 #include "common/config_scan_io_fwd.h"
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
+#include "object_column_writer.h"
 #include "storage/index/inverted/inverted_index_option.h"
 
 #ifndef __APPLE__
@@ -325,9 +326,14 @@ StatusOr<std::unique_ptr<ColumnWriter>> ColumnWriter::create(const ColumnWriterO
         dict_opts.need_speculate_encoding = true;
         auto column_writer = std::make_unique<ScalarColumnWriter>(dict_opts, type_info, wfile);
         return std::make_unique<DictColumnWriter>(dict_opts, std::move(type_info), std::move(column_writer));
-    } else if (column->type() == LogicalType::TYPE_JSON) {
+    } else if (is_object_type(column->type())) {
         auto column_writer = std::make_unique<ScalarColumnWriter>(opts, type_info, wfile);
-        return create_json_column_writer(opts, std::move(type_info), wfile, std::move(column_writer));
+        auto object_writer = std::make_unique<ObjectColumnWriter>(opts, std::move(type_info), std::move(column_writer));
+        if (column->type() == TYPE_JSON) {
+            return create_json_column_writer(opts, std::move(type_info), wfile, std::move(object_writer));
+        } else {
+            return std::move(object_writer);
+        }
     } else if (is_scalar_field_type(delegate_type(column->type()))) {
         ColumnWriterOptions str_opts = opts;
         str_opts.field_name = column->name();

@@ -240,6 +240,8 @@ public:
 
     uint64_t total_mem_footprint() const override { return _total_mem_footprint; }
 
+    Status append(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null);
+
 private:
     // All Pages will be organized into a linked list
     struct Page {
@@ -273,8 +275,6 @@ private:
         // estimate (page footer + footer size + checksum) took 20 bytes
         _data_size += 20;
     }
-
-    Status append(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null);
 
     Status _write_data_page(Page* page);
 
