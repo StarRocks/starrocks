@@ -56,6 +56,12 @@ namespace starrocks {
 Status window_init_jvm_context(int64_t fid, const std::string& url, const std::string& checksum,
                                const std::string& symbol, FunctionContext* context);
 
+Analytor::~Analytor() {
+    if (_state != nullptr) {
+        close(_state);
+    }
+}
+
 Analytor::Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc,
                    const TupleDescriptor* result_tuple_desc, bool use_hash_based_partition)
         : _tnode(tnode),
