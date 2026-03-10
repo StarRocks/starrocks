@@ -27,6 +27,7 @@
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/stream_epoch_manager.h"
 #include "exec/workgroup/work_group.h"
+#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 

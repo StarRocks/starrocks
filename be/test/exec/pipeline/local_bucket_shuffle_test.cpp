@@ -23,6 +23,7 @@
 #include "exec/pipeline/query_context.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
+#include "runtime/exec_env.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
 
