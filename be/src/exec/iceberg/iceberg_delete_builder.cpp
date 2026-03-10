@@ -17,7 +17,7 @@
 #include <storage/chunk_helper.h>
 
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_scan_io_fwd.h"
 #include "formats/orc/orc_chunk_reader.h"
 #include "formats/orc/orc_input_stream.h"
 #include "formats/parquet/file_reader.h"

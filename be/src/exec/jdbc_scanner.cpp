@@ -21,7 +21,7 @@
 #include "column/column_viewer.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/statusor.h"
 #include "exprs/cast_expr.h"
 #include "exprs/clone_expr.h"
@@ -114,7 +114,7 @@ Status JDBCScanner::_init_jdbc_scan_context(RuntimeState* state) {
 
     jmethodID constructor = env->GetMethodID(
             scan_context_cls, "<init>",
-            "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IIIII)V");
+            "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IIIIIJJ)V");
     jstring driver_class_name = env->NewStringUTF(_scan_ctx.driver_class_name.c_str());
     LOCAL_REF_GUARD_ENV(env, driver_class_name);
     jstring jdbc_url = env->NewStringUTF(_scan_ctx.jdbc_url.c_str());
@@ -145,9 +145,29 @@ Status JDBCScanner::_init_jdbc_scan_context(RuntimeState* state) {
     // some driver (like sqlserver) needs connection timeout less than 65536
     connection_timeout_ms = std::max(connection_timeout_ms, 30 * 1000);
     connection_timeout_ms = std::min(connection_timeout_ms, 65535 * 1000);
+
+    // maximum lifetime of a connection in the pool
+    int64_t max_lifetime_ms = config::jdbc_connection_max_lifetime_ms;
+    if (max_lifetime_ms < MINIMUM_MAX_LIFETIME_MS) {
+        LOG(WARNING) << "jdbc_connection_max_lifetime_ms=" << max_lifetime_ms << " is below minimum "
+                     << MINIMUM_MAX_LIFETIME_MS << ", using default " << DEFAULT_MAX_LIFETIME_MS;
+        max_lifetime_ms = DEFAULT_MAX_LIFETIME_MS;
+    }
+
+    // keepalive frequency: 0 = disabled (HikariCP semantics), otherwise must be >= 30s and < maxLifetime
+    int64_t keepalive_time_ms = config::jdbc_connection_keepalive_time_ms;
+    if (keepalive_time_ms != KEEPALIVE_DISABLED) {
+        if (keepalive_time_ms < MINIMUM_KEEPALIVE_TIME_MS || keepalive_time_ms >= max_lifetime_ms) {
+            LOG(WARNING) << "jdbc_connection_keepalive_time_ms=" << keepalive_time_ms
+                         << " is invalid (must be 0 or >= " << MINIMUM_KEEPALIVE_TIME_MS << " and < " << max_lifetime_ms
+                         << "), disabling keepalive";
+            keepalive_time_ms = KEEPALIVE_DISABLED;
+        }
+    }
+
     auto scan_ctx = env->NewObject(scan_context_cls, constructor, driver_class_name, jdbc_url, user, passwd, sql,
                                    statement_fetch_size, connection_pool_size, minimum_idle_connections,
-                                   idle_timeout_ms, connection_timeout_ms);
+                                   idle_timeout_ms, connection_timeout_ms, max_lifetime_ms, keepalive_time_ms);
     _jdbc_scan_context = env->NewGlobalRef(scan_ctx);
     LOCAL_REF_GUARD_ENV(env, scan_ctx);
     CHECK_JAVA_EXCEPTION(env, "construct JDBCScanContext failed")

@@ -19,7 +19,8 @@
 #include "base/time/time.h"
 #include "column/binary_column.h"
 #include "column/json_column.h"
-#include "common/config.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_primary_key_fwd.h"
 #include "common/logging.h"
 #include "exec/sorting/sorting.h"
 #include "gutil/strings/substitute.h"
@@ -53,6 +54,7 @@ Schema MemTable::convert_schema(const TabletSchemaCSPtr& tablet_schema,
             ncolumn--;
         }
         vector<ColumnId> column_idxes;
+        column_idxes.reserve(ncolumn);
         for (ColumnId i = 0; i < ncolumn; i++) {
             column_idxes.push_back(i);
         }

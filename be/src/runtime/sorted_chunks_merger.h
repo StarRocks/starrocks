@@ -114,7 +114,7 @@ protected:
 class CascadeChunkMerger : public ChunkMerger {
 public:
     CascadeChunkMerger(RuntimeState* state);
-    ~CascadeChunkMerger() = default;
+    ~CascadeChunkMerger() override = default;
 
     Status init(const std::vector<ChunkProvider>& has_suppliers, const std::vector<ExprContext*>* sort_exprs,
                 const SortDescs& _sort_desc) override;
@@ -135,7 +135,7 @@ private:
 class ConstChunkMerger : public ChunkMerger {
 public:
     ConstChunkMerger(RuntimeState* state);
-    ~ConstChunkMerger() = default;
+    ~ConstChunkMerger() override = default;
 
     Status init(const std::vector<ChunkProvider>& has_suppliers, const std::vector<ExprContext*>* sort_exprs,
                 const SortDescs& _sort_desc) override;

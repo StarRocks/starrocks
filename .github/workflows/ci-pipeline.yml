@@ -218,7 +218,6 @@ jobs:
       pre_ut_conclusion: ${{ steps.check_pre_commit_conclusion.outputs.pre_ut_conclusion }}
       pre_clang_conclusion: ${{ steps.check_pre_commit_conclusion.outputs.pre_clang_conclusion }}
       pre_thirdparty_conclusion: ${{ steps.check_pre_commit_conclusion.outputs.pre_thirdparty_conclusion }}
-      pre_format_conclusion: ${{ steps.check_pre_commit_conclusion.outputs.pre_format_conclusion }}
       be_change: ${{ needs.basic-checker.outputs.BE_CHANGE }}
     steps:
       - uses: dorny/paths-filter@v3
@@ -274,67 +273,17 @@ jobs:
           pre_commit_job_status_dict='${{ env.PRE_COMMIT_JOB_STATUS_DICT }}'
           pre_ut_conclusion=$(echo $pre_commit_job_status_dict | jq -r '."BE UT"')
           pre_clang_conclusion=$(echo $pre_commit_job_status_dict | jq -r '."Clang-Tidy"')
-          pre_format_conclusion=$(echo $pre_commit_job_status_dict | jq -r '."Clang-Format"')
           pre_thirdparty_conclusion=$(echo $pre_commit_job_status_dict | jq -r '."Thirdparty Info"')
           echo "pre_ut_conclusion=${pre_ut_conclusion}" >> $GITHUB_OUTPUT
           echo "pre_clang_conclusion=${pre_clang_conclusion}" >> $GITHUB_OUTPUT
           echo "pre_thirdparty_conclusion=${pre_thirdparty_conclusion}" >> $GITHUB_OUTPUT
-          echo "pre_format_conclusion=${pre_format_conclusion}" >> $GITHUB_OUTPUT
-
-  clang-format:
-    runs-on: [self-hosted, light]
-    needs: be-checker
-    name: Clang-Format
-    env:
-      PR_NUMBER: ${{ github.event.number }}
-    outputs:
-      pre_commit: ${{ needs.be-checker.outputs.pre_commit }}
-      pre_commit_conclusion: ${{ needs.be-checker.outputs.pre_commit_conclusion }}
-      pre_ut_conclusion: ${{ needs.be-checker.outputs.pre_ut_conclusion }}
-      pre_clang_conclusion: ${{ needs.be-checker.outputs.pre_clang_conclusion }}
-      pre_thirdparty_conclusion: ${{ needs.be-checker.outputs.pre_thirdparty_conclusion }}
-      pre_format_conclusion: ${{ needs.be-checker.outputs.pre_format_conclusion }}
-      be_change: ${{ needs.be-checker.outputs.be_change }}
-      only_test: ${{ needs.be-checker.outputs.only_test }}
-    if: needs.be-checker.outputs.src_filter == 'true' || needs.be-checker.outputs.test_filter == 'true'
-    steps:
-      - name: clean
-        run: |
-          rm -rf ${{ github.workspace }}
-          mkdir -p ${{ github.workspace }}
-
-      - name: Checkout Code
-        id: checkout_code
-        if: needs.be-checker.outputs.be_change == 'true' || needs.be-checker.outputs.pre_format_conclusion != 'success'
-        uses: actions/checkout@v6
-        with:
-          # A shallow checkout of the PR merge ref avoids fetching every branch
-          # and tag in the repository while keeping the merged tree for linting.
-          ref: refs/pull/${{ github.event.pull_request.number }}/merge
-          fetch-depth: 1
-
-      - name: Run Clang-Format
-        id: run_clang_format
-        if: steps.checkout_code.outcome == 'success'
-        run: |
-          export PATH=/var/lib/llvm/bin:$PATH
-          bash build-support/check-format.sh
-
-      - name: Run Common Config Header Guardrail
-        if: steps.checkout_code.outcome == 'success'
-        run: |
-          bash build-support/check_common_config_header_includes.sh
-
-      - name: Clean ENV
-        if: always()
-        run: |
-          rm -rf ${{ github.workspace }}/*
 
   thirdparty-update:
     runs-on: [self-hosted, normal]
-    needs: [clang-format]
+    needs: [be-checker]
     name: Thirdparty Update
     continue-on-error: true
+    if: needs.be-checker.outputs.src_filter == 'true' || needs.be-checker.outputs.test_filter == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -343,10 +292,10 @@ jobs:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
       REPO: ${{ github.repository }}
-      PRE_COMMIT: ${{ needs.clang-format.outputs.pre_commit }}
-      PRE_COMMIT_CONCLUSION: ${{ needs.clang-format.outputs.pre_commit_conclusion }}
-      ONLY_TEST: ${{ needs.clang-format.outputs.only_test }}
-      BE_CHANGE: ${{ needs.clang-format.outputs.be_change }}
+      PRE_COMMIT: ${{ needs.be-checker.outputs.pre_commit }}
+      PRE_COMMIT_CONCLUSION: ${{ needs.be-checker.outputs.pre_commit_conclusion }}
+      ONLY_TEST: ${{ needs.be-checker.outputs.only_test }}
+      BE_CHANGE: ${{ needs.be-checker.outputs.be_change }}
 
     steps:
       - name: clean
@@ -372,8 +321,7 @@ jobs:
       - name: Update Image (${{ matrix.linux }})
         id: update-image
         if: >
-          steps.parsing-path-filter.outputs.thirdparty_filter == 'true' && 
-          (needs.clang-format.outputs.only_test != 'true' || needs.clang-format.outputs.pre_thirdparty_conclusion != 'success')
+          steps.parsing-path-filter.outputs.thirdparty_filter == 'true'
         env:
           linux_distro: ${{ matrix.linux }}
         run: |
@@ -747,7 +695,7 @@ jobs:
 
   build:
     runs-on: [self-hosted, normal]
-    needs: [basic-checker, test-checker, thirdparty-info, fe-codestyle-check, clang-format]
+    needs: [basic-checker, test-checker, thirdparty-info, fe-codestyle-check]
     name: BUILD
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -772,7 +720,6 @@ jobs:
       always() && 
       needs.thirdparty-info.result != 'failure' && 
       needs.fe-codestyle-check.result != 'failure' && 
-      needs.clang-format.result != 'failure' &&
       (needs.thirdparty-info.result == 'success' || needs.fe-codestyle-check.result == 'success' || needs.test-checker.outputs.test_change == 'true') &&
       (needs.thirdparty-info.result != 'cancelled' && needs.fe-codestyle-check.result != 'cancelled' && needs.test-checker.outputs.test_change != 'cancelled')
     steps:

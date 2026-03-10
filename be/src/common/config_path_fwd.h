@@ -26,6 +26,9 @@ CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
 // The user function dir.
 CONF_String(user_function_dir, "${STARROCKS_HOME}/lib/udf");
 
+// The sys log level, INFO, WARNING, ERROR, FATAL.
+CONF_mString(sys_log_level, "INFO");
+
 // Pull load task dir.
 CONF_String(pull_load_task_dir, "${STARROCKS_HOME}/var/pull_load");
 
@@ -38,6 +41,9 @@ CONF_String(query_scratch_dirs, "${STARROCKS_HOME}");
 
 // for pprof
 CONF_String(pprof_profile_dir, "${STARROCKS_HOME}/log");
+
+// The directory of the flamegraph tool, which should contains pprof, stackcollapse-go.pl, and flamegraph.pl.
+CONF_String(flamegraph_tool_dir, "${STARROCKS_HOME}/bin/flamegraph");
 
 // Dir to save files downloaded by SmallFileMgr
 CONF_String(small_file_dir, "${STARROCKS_HOME}/lib/small_file/");

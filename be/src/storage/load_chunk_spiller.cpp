@@ -14,11 +14,13 @@
 
 #include "storage/load_chunk_spiller.h"
 
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_ingest_fwd.h"
 #include "exec/spill/options.h"
 #include "exec/spill/serde.h"
 #include "exec/spill/spiller.h"
 #include "exec/spill/spiller_factory.h"
+#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "runtime/runtime_state_helper.h"
 #include "runtime/starrocks_metrics.h"

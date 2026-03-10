@@ -19,7 +19,7 @@
 #include <ctime>
 
 #include "column/column_helper.h"
-#include "common/config.h"
+#include "common/config_rowset_fwd.h"
 #include "common/object_pool.h"
 #include "exprs/cast_expr.h"
 #include "exprs/expr.h"

@@ -294,7 +294,8 @@ static ColumnPtr cast_from_variant_fn(ColumnPtr& column) {
             row_ref = variant->as_ref();
         }
 
-        auto status = VariantConverter::cast_to<ToType, AllowThrowException>(row_ref, cctz::local_time_zone(), builder);
+        auto status =
+                VariantRowConverter::cast_to<ToType, AllowThrowException>(row_ref, cctz::local_time_zone(), builder);
         if (!status.ok()) {
             if constexpr (AllowThrowException) {
                 THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, row_ref.to_owned().to_string());

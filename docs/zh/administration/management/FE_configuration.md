@@ -1680,6 +1680,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 激活非活动物化视图时是否严格检查数据类型的长度一致性。当此项设置为 `false` 时，如果基表中的数据类型长度发生变化，物化视图的激活不受影响。
 - 引入版本: v3.3.4
 
+##### `mv_fast_schema_change_mode`
+
+- 默认值: strict
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: 控制物化视图快速模式变更（FSE）的行为。有效值为：`strict`（默认）- 仅在 `isSupportFastSchemaEvolutionInDanger` 为 true 时允许 FSE，并清除版本映射中受影响的分区条目；`force` - 即使 `isSupportFastSchemaEvolutionInDanger` 为 false 也允许 FSE，并清除受影响的分区条目以在刷新时触发重新计算；`force_no_clear` - 即使 `isSupportFastSchemaEvolutionInDanger` 为 false 也允许 FSE，但不清除分区条目。
+- 引入版本: v3.4.0
+
 ##### `enable_auto_collect_array_ndv`
 
 - 默认值: false
@@ -2970,13 +2979,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 是否为 StarRocks 集群中的所有表启用快速 schema 演进。有效值为 `TRUE` 和 `FALSE`（默认）。启用快速 schema 演进可以提高 schema 变更的速度，并在添加或删除列时减少资源使用。
+- 描述: 是否为 StarRocks 集群中的所有表启用 Fast Schema Evolution。有效值为 `TRUE` 和 `FALSE`（默认）。启用 Fast Schema Evolution 可以提高 schema 变更的速度，并在添加或删除列时减少资源使用。
 - 引入版本: v3.2.0
 
 > **NOTE**
 >
-> - StarRocks 共享数据集群从 v3.3.0 开始支持此参数。
-> - 如果您需要为特定表配置快速 schema 演进，例如禁用特定表的快速 schema 演进，您可以在表创建时设置表属性 [`fast_schema_evolution`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#set-fast-schema-evolution)。
+> - StarRocks 存算分离集群从 v3.3.0 开始支持此参数。
+> - 如果您需要为特定表配置 Fast Schema Evolution，例如禁用特定表的 Fast Schema Evolution，您可以在表创建时设置表属性 [`fast_schema_evolution`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#set-fast-schema-evolution)。
 
 ##### `enable_online_optimize_table`
 
@@ -3665,7 +3674,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 共享数据集群中分区的 Compaction Score 上限。`0` 表示无上限。此项仅在 `lake_enable_ingest_slowdown` 设置为 `true` 时生效。当分区的 Compaction Score 达到或超过此上限时，传入的加载任务将被拒绝。从 v3.3.6 开始，默认值从 `0` 更改为 `2000`。
 - 引入版本: v3.2.0
 
-
 ##### `lake_compaction_interval_ms_on_success`
 
 - 默认值：10000
@@ -4136,6 +4144,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: JDBC 网络操作（套接字读取）的超时时间（毫秒）。此超时应用于数据库元数据调用（例如，getSchemas()、getTables()、getColumns()），以防止外部数据库无响应时无限期阻塞。
 - 引入版本: v3.5.13
+
+##### `jdbc_connection_max_lifetime_ms`
+
+- 默认值: 300000
+- 类型: Long
+- 单位: 毫秒
+- 可变: 否
+- 描述: JDBC 连接池中连接的最大生命周期。连接在此超时前会被回收，以防止连接失效。应短于外部数据库的连接超时。允许的最小值为 30000 (30 秒)。
+- 引入版本: -
+
+##### `jdbc_connection_keepalive_time_ms`
+
+- 默认值: 30000
+- 类型: Long
+- 单位: 毫秒
+- 可变: 否
+- 描述: 空闲 JDBC 连接的保活间隔。空闲连接会在此间隔进行测试，以主动检测失效连接。设置为 0 可禁用保活探测。启用时，必须 >= 30000 且小于 `jdbc_connection_max_lifetime_ms`。无效的启用值将被静默禁用（重置为 0）。
+- 引入版本: -
+
+##### `jdbc_connection_leak_detection_threshold_ms`
+
+- 默认值: 0
+- 类型: Long
+- 单位: 毫秒
+- 可变: 否
+- 描述: JDBC 连接泄漏检测的阈值。如果连接保持时间超过此值，将记录警告。设置为 0 可禁用。这是一个调试辅助工具，用于识别持有连接时间过长的代码路径。
+- 引入版本: -
 
 ##### `jdbc_connection_pool_size`
 

@@ -22,7 +22,8 @@
 #include "base/debug/trace.h"
 #include "base/hash/crc32c.h"
 #include "base/utility/defer_op.h"
-#include "common/config.h"
+#include "common/config_lake_fwd.h"
+#include "common/config_primary_key_fwd.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "runtime/starrocks_metrics.h"
@@ -981,6 +982,7 @@ void MetaFileBuilder::batch_apply_opwrite(const TxnLogPB_OpWrite& op_write,
     std::vector<std::string> del_encryption_metas;
 
     // Collect del files
+    dels.reserve(op_write.dels_size());
     for (int i = 0; i < op_write.dels_size(); i++) {
         dels.push_back(op_write.dels(i));
     }

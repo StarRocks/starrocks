@@ -14,7 +14,7 @@
 
 #include "exec/hdfs_scanner/cache_select_scanner.h"
 
-#include "common/config.h"
+#include "common/config_scan_io_fwd.h"
 #include "formats/orc/orc_chunk_reader.h"
 #include "formats/orc/orc_input_stream.h"
 #include "formats/parquet/file_reader.h"
@@ -188,6 +188,7 @@ Status CacheSelectScanner::_fetch_parquet() {
     RETURN_IF_ERROR(reader->collect_scan_io_ranges(&io_ranges));
 
     std::vector<DiskRange> disk_ranges{};
+    disk_ranges.reserve(io_ranges.size());
     for (const auto& io_range : io_ranges) {
         disk_ranges.emplace_back(io_range.offset, io_range.size);
     }
@@ -255,6 +256,7 @@ Status CacheSelectScanner::_write_disk_ranges(std::shared_ptr<io::SharedBuffered
                                                 config::io_coalesce_read_max_buffer_size, merged_disk_ranges);
 
     std::vector<io::SharedBufferedInputStream::IORange> io_ranges{};
+    io_ranges.reserve(merged_disk_ranges.size());
     for (const DiskRange& disk_range : merged_disk_ranges) {
         io_ranges.emplace_back(disk_range.offset(), disk_range.length());
     }

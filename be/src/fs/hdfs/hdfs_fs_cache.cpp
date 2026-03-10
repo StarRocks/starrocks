@@ -16,7 +16,7 @@
 
 #include <memory>
 
-#include "common/config.h"
+#include "common/config_hdfs_fwd.h"
 #include "fs/fs_options_helper.h"
 #include "gutil/strings/substitute.h"
 #include "udf/java/java_udf.h"

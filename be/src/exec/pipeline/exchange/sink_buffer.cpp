@@ -24,7 +24,7 @@
 #include "base/uid_util.h"
 #include "base/utility/defer_op.h"
 #include "common/brpc_helper.h"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
 #include "fmt/core.h"
 #include "runtime/exec_env.h"
 #include "util/brpc_stub_cache.h"

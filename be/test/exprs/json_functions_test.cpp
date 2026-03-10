@@ -31,7 +31,7 @@
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_json_flat_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/mock_vectorized_expr.h"
@@ -144,6 +144,63 @@ TEST_F(JsonFunctionsTest, get_json_string_casting) {
     ASSERT_TRUE(JsonFunctions::native_json_path_close(
                         ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
+}
+
+TEST_F(JsonFunctionsTest, get_json_string_scalar) {
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        Columns columns;
+        auto strings = BinaryColumn::create();
+        auto strings2 = BinaryColumn::create();
+
+        std::string values[] = {
+                R"({"k1":    1})",          // int, 1 key
+                R"({"k1":    1, "k2": 2})", // 2 keys, get the former
+                R"({"k0":    0, "k1": 1})", // 2 keys, get  the latter
+
+                R"({"k1":    3.14159})",                    // double, 1 key
+                R"({"k0":    2.71828, "k1":  3.14159})",    // 2 keys, get  the former
+                R"({"k1":    3.14159, "k2":  2.71828})",    // 2 keys, get  the latter
+                R"({"k1":    "{\"k11\":       \"v11\"}"})", // string, 1 key
+                R"({"k0":    "{\"k01\":       \"v01\"}",  "k1":     "{\"k11\":       \"v11\"}"})", // 2 keys, get  the former
+                R"({"k1":    "{\"k11\":       \"v11\"}",  "k2":     "{\"k21\": \"v21\"}"})"}; // 2 keys, get  the latter
+
+        std::string strs[] = {"$.k1", "$.k1", "$.k1", "$.k1", "$.k1", "$.k1", "$.k1", "$.k1", "$.k1"};
+        std::string length_strings[] = {"1",
+                                        "1",
+                                        "1",
+                                        "3.14159",
+                                        "3.14159",
+                                        "3.14159",
+                                        R"({"k11":       "v11"})",
+                                        R"({"k11":       "v11"})",
+                                        R"({"k11":       "v11"})"};
+
+        for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
+            strings->append(values[j]);
+            strings2->append(strs[j]);
+        }
+
+        columns.emplace_back(strings);
+        columns.emplace_back(strings2);
+
+        ctx.get()->set_constant_columns(columns);
+        ASSERT_TRUE(
+                JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+
+        ColumnPtr result = JsonFunctions::get_json_scalar_string(ctx.get(), columns).value();
+
+        auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+
+        for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
+            ASSERT_EQ(length_strings[j], v->get_data()[j].to_string());
+        }
+
+        ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                            ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                            .ok());
+    }
 }
 
 TEST_F(JsonFunctionsTest, get_json_string_array) {
@@ -315,6 +372,45 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
         auto v = ColumnHelper::as_column<NullableColumn>(result);
 
         for (int j = 0; j < std::size(values); ++j) {
+            ASSERT_TRUE(v->is_null(j));
+        }
+
+        ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                            ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                            .ok());
+    }
+
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        Columns columns;
+        auto strings = BinaryColumn::create();
+        auto strings2 = BinaryColumn::create();
+
+        std::string values[] = {
+                R"({"k1":    {"k11":       "v11"}})",                             //object, 1 key
+                R"({"k0":    {"k01":       "v01"},  "k1":     {"k11": "v11"}})",  // 2 keys, get  the former
+                R"({"k1":    {"k11":       "v11"},  "k2":     {"k21": "v21"}})"}; // 2 keys, get  the latter
+
+        std::string strs[] = {"$.k1", "$.k1", "$.k1"};
+
+        for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
+            strings->append(values[j]);
+            strings2->append(strs[j]);
+        }
+
+        columns.emplace_back(strings);
+        columns.emplace_back(strings2);
+
+        ctx.get()->set_constant_columns(columns);
+        ASSERT_TRUE(
+                JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+
+        ColumnPtr result = JsonFunctions::get_json_scalar_string(ctx.get(), columns).value();
+
+        auto v = ColumnHelper::as_column<NullableColumn>(result);
+
+        for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
             ASSERT_TRUE(v->is_null(j));
         }
 

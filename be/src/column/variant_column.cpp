@@ -346,7 +346,7 @@ const VariantColumn* VariantColumn::_prepare_append_source(const VariantColumn& 
     if (!is_equal_schema(&src)) {
         *src_working_copy = deep_copy_shredded(src);
         auto* src_cloned = down_cast<VariantColumn*>(src_working_copy->get());
-        Status arbitrate_st = VariantMerger::arbitrate_type_conflicts(this, src_cloned);
+        Status arbitrate_st = VariantColumnMerger::arbitrate_type_conflicts(this, src_cloned);
         DCHECK(arbitrate_st.ok()) << "append type arbitration failed: " << arbitrate_st;
         if (!arbitrate_st.ok()) {
             LOG(ERROR) << "append type arbitration failed, err=" << arbitrate_st;
@@ -559,6 +559,85 @@ size_t VariantColumn::filter_range(const Filter& filter, size_t from, size_t to)
         return to - from;
     }
     return result_size;
+}
+
+int VariantColumn::compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const {
+    const auto& rhs_variant = down_cast<const VariantColumn&>(rhs);
+
+    VariantRowRef left_ref;
+    VariantRowRef right_ref;
+    if (try_get_row_ref(left, &left_ref) && rhs_variant.try_get_row_ref(right, &right_ref)) {
+        if (left_ref.get_metadata().raw() == right_ref.get_metadata().raw() &&
+            left_ref.get_value().raw() == right_ref.get_value().raw()) {
+            return 0;
+        }
+    }
+
+    VariantRowValue left_buffer;
+    VariantRowValue right_buffer;
+    const VariantRowValue* left_row = get_row_value(left, &left_buffer);
+    const VariantRowValue* right_row = rhs_variant.get_row_value(right, &right_buffer);
+
+    if (UNLIKELY(left_row == nullptr || right_row == nullptr)) {
+        if (left_row == nullptr && right_row == nullptr) {
+            return 0;
+        }
+        // Keep Column::compare_at null-direction contract: nan_direction_hint > 0 means null sorts after
+        // non-null. When left is null, it compares "greater" (or "lesser") per the hint direction.
+        if (left_row == nullptr) {
+            return nan_direction_hint;
+        }
+        return -nan_direction_hint;
+    }
+
+    // Delegate to compare() which already has:
+    //   1. byte-identical fast path
+    //   2. JSON semantic comparison
+    //   3. raw-byte deterministic fallback
+    // NOTE: JSON serialization is inherently expensive. If variant columns are used
+    // as sort keys or join keys at large scale, consider a dedicated binary comparison
+    // path that avoids JSON serialization.
+    return compare(*left_row, *right_row);
+}
+
+int VariantColumn::equals(size_t left, const Column& rhs, size_t right, bool safe_eq) const {
+    const auto& rhs_variant = down_cast<const VariantColumn&>(rhs);
+
+    VariantRowRef left_ref;
+    VariantRowRef right_ref;
+    if (try_get_row_ref(left, &left_ref) && rhs_variant.try_get_row_ref(right, &right_ref)) {
+        if (!safe_eq && (left_ref.is_null() || right_ref.is_null())) {
+            return EQUALS_NULL;
+        }
+        if (left_ref.get_metadata().raw() == right_ref.get_metadata().raw() &&
+            left_ref.get_value().raw() == right_ref.get_value().raw()) {
+            return EQUALS_TRUE;
+        }
+    }
+
+    VariantRowValue left_buffer;
+    VariantRowValue right_buffer;
+    const VariantRowValue* left_row = get_row_value(left, &left_buffer);
+    const VariantRowValue* right_row = rhs_variant.get_row_value(right, &right_buffer);
+
+    // A nullptr row means the row could not be materialized (degraded/corrupted), treat as null.
+    // This is consistent with the fast-path: is_null() on a VariantRowRef also represents a
+    // variant null value. Both map to EQUALS_NULL under non-safe-eq semantics.
+    if (UNLIKELY(left_row == nullptr || right_row == nullptr)) {
+        return safe_eq ? EQUALS_FALSE : EQUALS_NULL;
+    }
+
+    if (!safe_eq && (left_row->get_value().is_null() || right_row->get_value().is_null())) {
+        return EQUALS_NULL;
+    }
+    // Note: fast-path left_ref.is_null() also checks get_value().is_null(), so both paths
+    // apply the same null-value check before reaching the content comparison below.
+    auto left_json = left_row->to_json(cctz::utc_time_zone());
+    auto right_json = right_row->to_json(cctz::utc_time_zone());
+    if (left_json.ok() && right_json.ok()) {
+        return (left_json.value() == right_json.value()) ? EQUALS_TRUE : EQUALS_FALSE;
+    }
+    return (*left_row == *right_row) ? EQUALS_TRUE : EQUALS_FALSE;
 }
 
 void VariantColumn::swap_column(Column& rhs) {

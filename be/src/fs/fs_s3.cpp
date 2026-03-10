@@ -32,7 +32,7 @@
 #include <ctime>
 #include <limits>
 
-#include "common/config.h"
+#include "common/config_object_storage_fwd.h"
 #include "common/http/content_type.h"
 #include "common/s3_uri.h"
 #include "fs/credential/cloud_configuration_factory.h"

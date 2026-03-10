@@ -20,10 +20,15 @@
 #include <utility>
 
 #include "base/simd/simd.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/datum_tuple.h"
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_rowset_fwd.h"
+#include "common/config_scan_io_fwd.h"
+#include "common/config_starlet_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "common/status.h"
 #include "fs/fs.h"
 #include "glog/logging.h"

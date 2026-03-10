@@ -21,7 +21,7 @@
 #include "base/failpoint/fail_point.h"
 #include "base/time/time.h"
 #include "base/utility/pretty_printer.h"
-#include "common/config.h"
+#include "common/config_primary_key_fwd.h"
 #include "common/system/cpu_info.h"
 #include "fs/fs_factory.h"
 #include "gutil/endian.h"

@@ -35,7 +35,8 @@
 #include "http_service.h"
 
 #include "cache/datacache.h"
-#include "common/config.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_path_fwd.h"
 #include "fs/fs_util.h"
 #include "gutil/stl_util.h"
 #include "http/action/checksum_action.h"
@@ -69,6 +70,7 @@
 #include "http/ev_http_server.h"
 #include "http/http_method.h"
 #include "http/web_page_handler.h"
+#include "runtime/base_load_path_mgr.h"
 #include "runtime/exec_env.h"
 #include "runtime/starrocks_metrics.h"
 #include "util/global_metrics_registry.h"

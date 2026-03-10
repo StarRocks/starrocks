@@ -18,6 +18,7 @@
 #include <unordered_map>
 
 #include "base/hash/hash_std.hpp"
+#include "base/time/time.h"
 #include "base/uid_util.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/adaptive/adaptive_dop_param.h"

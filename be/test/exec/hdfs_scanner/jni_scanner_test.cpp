@@ -16,7 +16,7 @@
 
 #include <gtest/gtest.h>
 
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
 #include "common/util/thrift_util.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors_ext.h"

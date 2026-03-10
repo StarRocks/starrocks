@@ -17,7 +17,7 @@
 #include <cmath>
 #include <random>
 
-#include "common/config.h"
+#include "common/config_compression_fwd.h"
 
 namespace starrocks::serde {
 

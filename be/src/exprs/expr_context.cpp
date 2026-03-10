@@ -217,4 +217,7 @@ bool ExprContext::error_if_overflow() const {
     return _runtime_state != nullptr && _runtime_state->error_if_overflow();
 }
 
+bool ExprContext::error_for_division_by_zero() const {
+    return _runtime_state != nullptr && _runtime_state->error_for_division_by_zero();
+}
 } // namespace starrocks

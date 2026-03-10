@@ -73,7 +73,7 @@
 #include "base/path/file_util.h"
 #include "base/string/string_parser.hpp"
 #include "base/system/errno.h"
-#include "common/config.h"
+#include "common/config_runtime_fwd.h"
 #include "common/logging.h"
 #include "gflags/gflags.h"
 #include "gutil/strings/split.h"

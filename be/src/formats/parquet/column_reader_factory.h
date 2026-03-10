@@ -13,9 +13,19 @@
 // limitations under the License.
 
 #pragma once
+#include <string>
+#include <vector>
+
 #include "formats/parquet/column_reader.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::parquet {
+
+struct VariantShreddedReadHints {
+    // Exact shredded paths to materialize as typed_columns.
+    // Empty means auto-discover from file shredded schema.
+    std::vector<std::string> shredded_paths;
+};
 
 class ColumnReaderFactory {
 public:
@@ -42,11 +52,9 @@ private:
                                                   std::vector<int32_t>& pos,
                                                   std::vector<const TIcebergSchemaField*>& lake_schema_subfield);
 
-    static bool _has_valid_subfield_column_reader(
-            const std::map<std::string, std::unique_ptr<ColumnReader>>& children_readers);
-
     static StatusOr<ColumnReaderPtr> create_variant_column_reader(const ColumnReaderOptions& opts,
-                                                                  const ParquetField* variant_field);
+                                                                  const ParquetField* variant_field,
+                                                                  const VariantShreddedReadHints& hints = {});
 };
 
 } // namespace starrocks::parquet

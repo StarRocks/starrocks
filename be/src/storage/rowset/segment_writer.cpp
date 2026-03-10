@@ -44,7 +44,9 @@
 #include "column/datum_tuple.h"
 #include "column/nullable_column.h"
 #include "column/schema.h"
-#include "common/config.h"
+#include "common/config_json_flat_fwd.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_rowset_fwd.h"
 #include "common/logging.h" // LOG
 #include "fs/fs.h"          // FileSystem
 #include "gen_cpp/segment.pb.h"
@@ -112,6 +114,7 @@ Status SegmentWriter::init() {
 
 Status SegmentWriter::init(bool has_key) {
     std::vector<uint32_t> all_column_indexes;
+    all_column_indexes.reserve(_tablet_schema->num_columns());
     for (uint32_t i = 0; i < _tablet_schema->num_columns(); ++i) {
         all_column_indexes.emplace_back(i);
     }
