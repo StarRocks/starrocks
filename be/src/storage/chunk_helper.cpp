@@ -860,7 +860,7 @@ public:
         Columns data_columns, null_columns;
         for (auto& column : _segment_column->columns()) {
             NullableColumn::Ptr nullable = ColumnHelper::as_column<NullableColumn>(column);
-            data_columns.push_back(nullable->data_column());
+            data_columns.emplace_back(nullable->data_column());
             null_columns.emplace_back(nullable->null_column());
         }
 

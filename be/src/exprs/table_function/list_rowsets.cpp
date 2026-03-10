@@ -106,7 +106,7 @@ std::pair<Columns, UInt32Column::Ptr> ListRowsets::process(RuntimeState* runtime
     result.emplace_back(Int64Column::create());                                  // rows
     result.emplace_back(Int64Column::create());                                  // size
     result.emplace_back(BooleanColumn::create());                                // overlapped
-    result.push_back(NullableColumn::wrap_if_necessary(BinaryColumn::create())); // delete_predicate
+    result.emplace_back(NullableColumn::wrap_if_necessary(BinaryColumn::create())); // delete_predicate
 
     while (result[0]->size() < max_column_size && curr_row < num_rows) {
         offsets->append_datum(Datum((uint32_t)result[0]->size()));
