@@ -124,9 +124,7 @@ void ObjectColumnWriterTest::read_and_verify_object_column(ColumnMetaPB* meta, c
     ASSERT_OK(iter->next_batch(&rows_read, dst.get()));
     ASSERT_EQ(src.size(), rows_read);
 
-    for (size_t i = 0; i < rows_read; ++i) {
-        ASSERT_EQ(src.debug_string(), dst->debug_string()) << "mismatch at row " << i;
-    }
+    ASSERT_EQ(src.debug_string(), dst->debug_string());
 }
 
 template <LogicalType type>

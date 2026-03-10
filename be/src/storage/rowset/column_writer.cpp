@@ -328,11 +328,11 @@ StatusOr<std::unique_ptr<ColumnWriter>> ColumnWriter::create(const ColumnWriterO
         return std::make_unique<DictColumnWriter>(dict_opts, std::move(type_info), std::move(column_writer));
     } else if (is_object_type(column->type())) {
         auto column_writer = std::make_unique<ScalarColumnWriter>(opts, type_info, wfile);
-        auto object_writer = std::make_unique<ObjectColumnWriter>(opts, std::move(type_info), std::move(column_writer));
         if (column->type() == TYPE_JSON) {
+            auto object_writer = std::make_unique<ObjectColumnWriter>(opts, type_info, std::move(column_writer));
             return create_json_column_writer(opts, std::move(type_info), wfile, std::move(object_writer));
         } else {
-            return std::move(object_writer);
+            return std::make_unique<ObjectColumnWriter>(opts, std::move(type_info), std::move(column_writer));
         }
     } else if (is_scalar_field_type(delegate_type(column->type()))) {
         ColumnWriterOptions str_opts = opts;
