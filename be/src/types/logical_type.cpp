@@ -16,6 +16,7 @@
 
 #include <algorithm>
 
+#include "common/logging.h"
 #include "gen_cpp/Types_types.h"
 #include "types/logical_type_infra.h"
 

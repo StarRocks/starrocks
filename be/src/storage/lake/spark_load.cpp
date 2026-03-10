@@ -14,6 +14,7 @@
 
 #include "storage/lake/spark_load.h"
 
+#include "base/utility/defer_op.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"

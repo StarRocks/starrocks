@@ -22,6 +22,7 @@
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/pipeline_metrics.h"
 #include "exec/workgroup/work_group.h"
+#include "runtime/exec_env.h"
 
 namespace starrocks::pipeline {
 
