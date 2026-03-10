@@ -14,15 +14,39 @@
 
 #pragma once
 
+#include <optional>
+#include <vector>
+
 #include "base/status.h"
 #include "base/statusor.h"
 #include "column/column.h"
+#include "column/variant_path_parser.h"
+#include "types/variant_value.h"
 
 namespace starrocks {
 
 class VariantColumn;
 
-// VariantMerger centralizes VariantColumn merge orchestration.
+struct VariantOverlayInput {
+    VariantPath path;
+    VariantRowValue value;
+};
+
+// VariantMergerPolicy keeps merge-time type arbitration and row overlay rebuild
+// in one place so reader-side and merge-side prefix handling can share the same
+// rules without coupling their orchestration code.
+class VariantMergerPolicy {
+public:
+    static StatusOr<TypeDescriptor> choose_common_type(const TypeDescriptor& lhs, const TypeDescriptor& rhs);
+
+    static StatusOr<MutableColumnPtr> cast_typed_column(const Column& src_col, const TypeDescriptor& src_type_desc,
+                                                        const TypeDescriptor& dst_type_desc);
+
+    static StatusOr<VariantRowValue> build_row_from_overlays(std::optional<VariantRowRef> base,
+                                                             std::vector<VariantOverlayInput> overlays);
+};
+
+// VariantColumnMerger centralizes VariantColumn merge orchestration.
 //
 // Why this class exists:
 // - Keep merge policy in one place instead of scattering checks across callers.
@@ -47,7 +71,7 @@ class VariantColumn;
 //
 // Full type arbitration policy is intentionally incremental and will continue
 // to expand in later stages.
-class VariantMerger {
+class VariantColumnMerger {
 public:
     // Reconcile overlapping shredded path type conflicts between dst and src.
     // Numeric/decimalv3 paths are widened when possible; unsupported conflicts are hoisted to TYPE_VARIANT.

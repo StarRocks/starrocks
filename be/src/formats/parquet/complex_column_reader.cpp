@@ -28,6 +28,7 @@
 #include "column/variant_builder.h"
 #include "column/variant_column.h"
 #include "column/variant_encoder.h"
+#include "column/variant_merger.h"
 #include "exprs/literal.h"
 #include "formats/parquet/predicate_filter_evaluator.h"
 #include "formats/parquet/schema.h"
@@ -686,7 +687,9 @@ void StructColumnReader::_handle_null_rows(uint8_t* is_nulls, bool* has_null, si
     }
 }
 
+// ==================================================================
 // VariantColumnReader
+// ==================================================================
 
 static Status _prepare_shredded_field_node(ShreddedFieldNode* node) {
     if (node == nullptr) {
@@ -782,15 +785,6 @@ static void _select_shredded_field_offset_index(const ShreddedFieldNode& node, c
     }
 }
 
-static bool _append_overlay(const VariantPath& parsed_path, VariantRowValue&& value,
-                            std::vector<VariantBuilder::Overlay>* overlays) {
-    if (overlays == nullptr) {
-        return false;
-    }
-    overlays->emplace_back(VariantBuilder::Overlay{.path = parsed_path, .value = std::move(value)});
-    return true;
-}
-
 // Maximum nesting depth for mutually-recursive array overlay reconstruction.
 // Prevents stack-overflow on pathological / malformed Parquet files where
 // typed_value fields nest arrays inside arrays beyond reasonable depth.
@@ -801,7 +795,7 @@ static constexpr int kMaxShreddedArrayNestingDepth = 32;
 // Returns true for traversal completion; parse/append failures are ignored per-field.
 static bool _collect_overlays_for_array_element(size_t element_row, const std::vector<ShreddedFieldNode>& nodes,
                                                 std::string_view metadata_raw,
-                                                std::vector<VariantBuilder::Overlay>* overlays, int depth = 0);
+                                                std::vector<VariantOverlayInput>& overlays, int depth = 0);
 
 // Rebuild one ARRAY value for `row` by merging:
 // 1) typed array elements (and their child overlays), and
@@ -887,20 +881,17 @@ static StatusOr<VariantRowValue> _rebuild_array_overlay(size_t row, const Shredd
                 }
             }
 
-            std::vector<VariantBuilder::Overlay> element_overlays;
+            std::vector<VariantOverlayInput> element_overlays;
             if (i < typed_count) {
                 _collect_overlays_for_array_element(typed_begin + i, array_node.children, metadata_raw,
-                                                    &element_overlays, depth + 1);
+                                                    element_overlays, depth + 1);
             }
 
             if (!element_overlays.empty() || base_element.has_value()) {
-                VariantBuilder builder(base_element.has_value() ? &base_element.value() : nullptr);
-                if (builder.set_overlays(std::move(element_overlays)).ok()) {
-                    auto built = builder.build();
-                    if (built.ok()) {
-                        array_builder.add(std::move(built).value());
-                        continue;
-                    }
+                auto built = VariantMergerPolicy::build_row_from_overlays(base_element, std::move(element_overlays));
+                if (built.ok()) {
+                    array_builder.add(std::move(built).value());
+                    continue;
                 }
                 // Build failed: fall back to the raw base element if available rather than
                 // losing data entirely. This can happen when overlay encoding fails but the
@@ -992,7 +983,7 @@ static StatusOr<VariantRowValue> _rebuild_array_overlay(size_t row, const Shredd
 // It walks child shredded nodes, preferring typed scalar data and falling back to remain-binary slices.
 static bool _collect_overlays_for_array_element(size_t element_row, const std::vector<ShreddedFieldNode>& nodes,
                                                 std::string_view metadata_raw,
-                                                std::vector<VariantBuilder::Overlay>* overlays, int depth) {
+                                                std::vector<VariantOverlayInput>& overlays, int depth) {
     if (depth > kMaxShreddedArrayNestingDepth) {
         LOG(WARNING) << "variant shredded array element nesting depth exceeded limit (" << kMaxShreddedArrayNestingDepth
                      << "); skipping sub-overlays";
@@ -1006,7 +997,8 @@ static bool _collect_overlays_for_array_element(size_t element_row, const std::v
                                                                &typed_row)) {
                 auto typed_value = VariantEncoder::encode_datum(typed_col->get(typed_row), *node.typed_value_read_type);
                 if (typed_value.ok()) {
-                    _append_overlay(node.parsed_full_path, std::move(typed_value).value(), overlays);
+                    overlays.emplace_back(VariantOverlayInput{.path = node.parsed_full_path,
+                                                              .value = std::move(typed_value).value()});
                     continue;
                 }
             }
@@ -1023,9 +1015,11 @@ static bool _collect_overlays_for_array_element(size_t element_row, const std::v
             }
             auto array_overlay = _rebuild_array_overlay(element_row, node, metadata_raw, base_array_raw, depth + 1);
             if (array_overlay.ok()) {
-                _append_overlay(node.parsed_full_path, std::move(array_overlay).value(), overlays);
+                overlays.emplace_back(
+                        VariantOverlayInput{.path = node.parsed_full_path, .value = std::move(array_overlay).value()});
             } else if (base_array_raw != VariantValue::kEmptyValue) {
-                _append_overlay(node.parsed_full_path, VariantRowValue(metadata_raw, base_array_raw), overlays);
+                overlays.emplace_back(VariantOverlayInput{.path = node.parsed_full_path,
+                                                          .value = VariantRowValue(metadata_raw, base_array_raw)});
             }
             continue;
         }
@@ -1033,10 +1027,10 @@ static bool _collect_overlays_for_array_element(size_t element_row, const std::v
         // NONE node (or SCALAR/ARRAY with no typed data): emit fallback binary then recurse children.
         Slice fallback_slice;
         if (ColumnHelper::get_binary_slice_at(node.value_column.get(), element_row, &fallback_slice)) {
-            _append_overlay(node.parsed_full_path,
-                            VariantRowValue(std::string_view(metadata_raw),
-                                            std::string_view(fallback_slice.data, fallback_slice.size)),
-                            overlays);
+            overlays.emplace_back(VariantOverlayInput{
+                    .path = node.parsed_full_path,
+                    .value = VariantRowValue(std::string_view(metadata_raw),
+                                             std::string_view(fallback_slice.data, fallback_slice.size))});
         }
         if (!node.children.empty()) {
             _collect_overlays_for_array_element(element_row, node.children, metadata_raw, overlays, depth + 1);
@@ -1046,7 +1040,7 @@ static bool _collect_overlays_for_array_element(size_t element_row, const std::v
 }
 
 static bool _collect_overlays_for_row(size_t row, std::string_view metadata_raw, const ShreddedFieldNode& node,
-                                      std::vector<VariantBuilder::Overlay>* overlays) {
+                                      std::vector<VariantOverlayInput>& overlays) {
     if (node.typed_kind == ShreddedTypedKind::SCALAR && node.typed_value_column != nullptr) {
         const Column* typed_col = nullptr;
         size_t typed_row = 0;
@@ -1054,7 +1048,8 @@ static bool _collect_overlays_for_row(size_t row, std::string_view metadata_raw,
                                                            &typed_row)) {
             auto typed_value = VariantEncoder::encode_datum(typed_col->get(typed_row), *node.typed_value_read_type);
             if (typed_value.ok()) {
-                _append_overlay(node.parsed_full_path, std::move(typed_value).value(), overlays);
+                overlays.emplace_back(
+                        VariantOverlayInput{.path = node.parsed_full_path, .value = std::move(typed_value).value()});
                 return true;
             }
             // encode_datum failed (e.g., type mismatch or overflow). Fall through to binary fallback.
@@ -1063,10 +1058,10 @@ static bool _collect_overlays_for_row(size_t row, std::string_view metadata_raw,
         }
         Slice fallback_slice;
         if (ColumnHelper::get_binary_slice_at(node.value_column.get(), row, &fallback_slice)) {
-            _append_overlay(node.parsed_full_path,
-                            VariantRowValue(std::string_view(metadata_raw),
-                                            std::string_view(fallback_slice.data, fallback_slice.size)),
-                            overlays);
+            overlays.emplace_back(VariantOverlayInput{
+                    .path = node.parsed_full_path,
+                    .value = VariantRowValue(std::string_view(metadata_raw),
+                                             std::string_view(fallback_slice.data, fallback_slice.size))});
             return true;
         }
         // No typed value and no fallback binary: field is absent for this row (valid per spec).
@@ -1081,11 +1076,13 @@ static bool _collect_overlays_for_row(size_t row, std::string_view metadata_raw,
         }
         auto array_overlay = _rebuild_array_overlay(row, node, metadata_raw, base_array_raw);
         if (array_overlay.ok()) {
-            _append_overlay(node.parsed_full_path, std::move(array_overlay).value(), overlays);
+            overlays.emplace_back(
+                    VariantOverlayInput{.path = node.parsed_full_path, .value = std::move(array_overlay).value()});
             return true;
         }
         if (base_array_raw != VariantValue::kEmptyValue) {
-            _append_overlay(node.parsed_full_path, VariantRowValue(metadata_raw, base_array_raw), overlays);
+            overlays.emplace_back(VariantOverlayInput{.path = node.parsed_full_path,
+                                                      .value = VariantRowValue(metadata_raw, base_array_raw)});
         }
         return true;
     }
@@ -1105,10 +1102,10 @@ static bool _collect_overlays_for_row(size_t row, std::string_view metadata_raw,
     // not conflicting with it. This ordering (parent before children) is mandatory.
     Slice fallback_slice;
     if (ColumnHelper::get_binary_slice_at(node.value_column.get(), row, &fallback_slice)) {
-        _append_overlay(node.parsed_full_path,
-                        VariantRowValue(std::string_view(metadata_raw),
-                                        std::string_view(fallback_slice.data, fallback_slice.size)),
-                        overlays);
+        overlays.emplace_back(VariantOverlayInput{
+                .path = node.parsed_full_path,
+                .value = VariantRowValue(std::string_view(metadata_raw),
+                                         std::string_view(fallback_slice.data, fallback_slice.size))});
     }
     for (const auto& child : node.children) {
         _collect_overlays_for_row(row, metadata_raw, child, overlays);
@@ -1445,10 +1442,10 @@ static void build_row_for_seek(size_t row, std::string_view metadata_raw, std::s
         return;
     }
 
-    std::vector<VariantBuilder::Overlay> overlays;
+    std::vector<VariantOverlayInput> overlays;
     overlays.reserve(16);
     for (const auto& node : shredded_fields) {
-        _collect_overlays_for_row(row, metadata_raw, node, &overlays);
+        _collect_overlays_for_row(row, metadata_raw, node, overlays);
     }
     if (overlays.empty()) {
         out_metadata->assign(metadata_raw.data(), metadata_raw.size());
@@ -1457,16 +1454,9 @@ static void build_row_for_seek(size_t row, std::string_view metadata_raw, std::s
     }
 
     const bool has_base_payload = !value_raw.empty();
-    VariantRowRef base(metadata_raw, value_raw);
-    VariantBuilder builder(has_base_payload ? &base : nullptr);
-    auto st = builder.set_overlays(std::move(overlays));
-    if (!st.ok()) {
-        out_metadata->assign(metadata_raw.data(), metadata_raw.size());
-        out_value->assign(value_raw.data(), value_raw.size());
-        return;
-    }
-
-    auto built = builder.build();
+    std::optional<VariantRowRef> base =
+            has_base_payload ? std::optional<VariantRowRef>(VariantRowRef(metadata_raw, value_raw)) : std::nullopt;
+    auto built = VariantMergerPolicy::build_row_from_overlays(base, std::move(overlays));
     if (!built.ok()) {
         out_metadata->assign(metadata_raw.data(), metadata_raw.size());
         out_value->assign(value_raw.data(), value_raw.size());
