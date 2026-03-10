@@ -100,7 +100,12 @@ public class TransactionStateBatch implements Writable {
                         .getCallbackFactory().getCallback(callbackId);
                 if (callback != null) {
                     if (Objects.requireNonNull(transactionStatus) == TransactionStatus.VISIBLE) {
-                        callback.afterVisible(transactionState, txnOperated);
+                        try {
+                            callback.afterVisible(transactionState, txnOperated);
+                        } catch (Throwable t) {
+                            LOG.warn("afterVisible callback failed for txn {}, callbackId {}",
+                                    transactionState.getTransactionId(), callbackId, t);
+                        }
                     }
                 }
             }
