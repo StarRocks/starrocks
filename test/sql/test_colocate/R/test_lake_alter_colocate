@@ -1,0 +1,40 @@
+-- name: test_lake_alter_colocate @cloud
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t1 (
+    c0 int,
+    c1 varchar(20)
+) DUPLICATE KEY(c0)
+DISTRIBUTED BY HASH(c0) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+ALTER TABLE t1 SET ("colocate_with" = "${uuid0}_group1");
+-- result:
+-- !result
+SHOW CREATE TABLE t1;
+-- result:
+[REGEX].*colocate_with. = .[0-9a-f]+_group1.*
+-- !result
+CREATE TABLE t2 (
+    c0 int,
+    c1 varchar(20)
+) DUPLICATE KEY(c0)
+DISTRIBUTED BY HASH(c0) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+ALTER TABLE t2 SET ("colocate_with" = "${uuid0}_group1");
+-- result:
+-- !result
+SHOW CREATE TABLE t2;
+-- result:
+[REGEX].*colocate_with. = .[0-9a-f]+_group1.*
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result

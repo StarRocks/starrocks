@@ -38,8 +38,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class ColocateTableIndexTest {
     private static final Logger LOG = LogManager.getLogger(ColocateTableIndexTest.class);
@@ -311,6 +313,82 @@ public class ColocateTableIndexTest {
 
         colocateTableIndex.removeTable(tableId, null, false /* isReplay */);
         Assertions.assertFalse(colocateTableIndex.isLakeColocateTable(tableId));
+    }
+
+    // Regression test: when addTableToGroup is called with a non-null assignedGroupId
+    // for a brand new group (not in groupName2Id), it should call createMetaGroup,
+    // not updateMetaGroup. The bug was introduced by the refactoring that splits
+    // modifyTableColocate into prepare + apply: prepareModifyTableColocate always
+    // generates assignedGroupId via getNextId(), but addTableToGroup misinterprets
+    // non-null assignedGroupId as "the group already exists" and calls updateMetaGroup
+    // (join) instead of createMetaGroup (create), causing StarOS NOT_EXIST error.
+    @Test
+    public void testLakeTableNewGroupShouldCallCreateMetaGroup(
+            @Mocked LakeTable olapTable) throws Exception {
+        ColocateTableIndex colocateTableIndex = new ColocateTableIndex();
+
+        AtomicBoolean createMetaGroupCalled = new AtomicBoolean(false);
+        AtomicBoolean updateMetaGroupCalled = new AtomicBoolean(false);
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public void createMetaGroup(long metaGroupId, List<Long> shardGroupIds) {
+                createMetaGroupCalled.set(true);
+            }
+
+            @Mock
+            public void updateMetaGroup(long metaGroupId, List<Long> shardGroupIds, boolean isJoin) {
+                updateMetaGroupCalled.set(true);
+            }
+        };
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return new StarOSAgent();
+            }
+        };
+
+        long dbId = 100;
+        long tableId = 200;
+        new MockUp<OlapTable>() {
+            @Mock
+            public long getId() {
+                return tableId;
+            }
+
+            @Mock
+            public boolean isCloudNativeTableOrMaterializedView() {
+                return true;
+            }
+
+            @Mock
+            public DistributionInfo getDefaultDistributionInfo() {
+                return new HashDistributionInfo();
+            }
+        };
+
+        new MockUp<LakeTable>() {
+            @Mock
+            public List<Long> getShardGroupIds() {
+                return Arrays.asList(5001L, 5002L, 5003L);
+            }
+        };
+
+        // Simulate the modifyTableColocate (ALTER TABLE SET colocate_with) path on sr11073:
+        // prepareModifyTableColocate generates a new assignedGroupId via getNextId(),
+        // then passes it to addTableToGroup. The group "newGroup" does NOT exist yet.
+        ColocateTableIndex.GroupId assignedGroupId = new ColocateTableIndex.GroupId(dbId, 99999);
+        colocateTableIndex.addTableToGroup(
+                dbId, (OlapTable) olapTable, "newGroup", assignedGroupId, false /* isReplay */);
+
+        // For a brand new group, createMetaGroup should be called, NOT updateMetaGroup
+        Assertions.assertTrue(createMetaGroupCalled.get(),
+                "createMetaGroup should be called for a brand new colocate group");
+        Assertions.assertFalse(updateMetaGroupCalled.get(),
+                "updateMetaGroup should NOT be called for a brand new colocate group, " +
+                "but it was called due to groupAlreadyExist being incorrectly true " +
+                "when assignedGroupId is non-null");
     }
 
     @Test
